@@ -2,7 +2,7 @@ import React, { forwardRef } from 'react';
 import { getBezierPath, getSmoothStepPath } from 'reactflow';
 import { LinkStyle } from '../../types/flowTypes';
 import { Highlight } from '../../executionHighlight/executionHighlightConstants';
-import { buildPathFromVertices } from '../utils/pathUtils';
+import { buildPathFromVertices, PathSegment } from '../utils/pathUtils';
 import { getAutoOrthoPath, getVHVPath, getHVHPath } from '../utils/edgeRouting';
 
 export interface EdgePathRendererProps {
@@ -30,6 +30,7 @@ export interface EdgePathRendererProps {
   onContextMenu?: (e: React.MouseEvent) => void;
   onCtrlClick?: (e: React.MouseEvent) => void;
   onShiftClick?: (e: React.MouseEvent) => void;
+  highlightedSegment?: PathSegment | null; // ✅ NUOVO: segmento da evidenziare durante drag label
 }
 
 /**
@@ -58,6 +59,7 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
       onMouseLeave,
       onContextMenu,
       onShiftClick,
+      highlightedSegment, // ✅ NUOVO
     },
     ref
   ) => {
@@ -74,8 +76,6 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
       edgePath = buildPathFromVertices(allVertices);
     } else {
       // Otherwise, use link style
-      // ✅ DEBUG: Log linkStyle to verify it's being received correctly
-      console.log('[EdgePathRenderer] Rendering path', { id, linkStyle });
       switch (linkStyle) {
       case LinkStyle.AutoOrtho:
         edgePath = getAutoOrthoPath(sourceX, sourceY, targetX, targetY);
@@ -166,27 +166,50 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
         ? 3
         : 1.5;
 
+    // ✅ NUOVO: Genera path per segmento evidenziato
+    const highlightPath = highlightedSegment
+      ? `M ${highlightedSegment.start.x},${highlightedSegment.start.y} L ${highlightedSegment.end.x},${highlightedSegment.end.y}`
+      : null;
+
     return (
-      <path
-        ref={ref}
-        id={id}
-        className="react-flow__edge-path"
-        d={edgePath}
-        style={{
-          ...style,
-          strokeDasharray: undefined,
-          stroke: strokeColor,
-          strokeWidth,
-          opacity: hovered || selected ? 0.95 : 0.85,
-          transition: 'stroke 0.15s',
-          cursor: 'default', // Normal cursor, not pointer
-        }}
-        markerEnd={markerEnd ? `url(#${getNormalizedMarkerEnd(markerEnd)})` : undefined}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        onContextMenu={handleContextMenu}
-        onClick={handleClick}
-      />
+      <>
+        {/* Path principale */}
+        <path
+          ref={ref}
+          id={id}
+          className="react-flow__edge-path"
+          d={edgePath}
+          style={{
+            ...style,
+            strokeDasharray: undefined,
+            stroke: strokeColor,
+            strokeWidth,
+            opacity: hovered || selected ? 0.95 : 0.85,
+            transition: 'stroke 0.15s',
+            cursor: 'default', // Normal cursor, not pointer
+          }}
+          markerEnd={markerEnd ? `url(#${getNormalizedMarkerEnd(markerEnd)})` : undefined}
+          onMouseEnter={onMouseEnter}
+          onMouseLeave={onMouseLeave}
+          onContextMenu={handleContextMenu}
+          onClick={handleClick}
+        />
+
+        {/* ✅ NUOVO: Overlay segmento evidenziato */}
+        {highlightPath && (
+          <path
+            d={highlightPath}
+            stroke="#8b5cf6"
+            strokeWidth={5}
+            fill="none"
+            opacity={0.6}
+            style={{
+              pointerEvents: 'none',
+              transition: 'opacity 0.15s',
+            }}
+          />
+        )}
+      </>
     );
   }
 );

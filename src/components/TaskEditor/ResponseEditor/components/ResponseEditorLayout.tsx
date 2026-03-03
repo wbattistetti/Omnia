@@ -967,18 +967,25 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ 2. Usa il setter direttamente invece di getState()
   const setDataSchema = useWizardStore((state) => state.setDataSchema);
 
-  // ✅ 3. Rimuovi useMemo - calcolo diretto (non blocca gli aggiornamenti)
-  const effectiveMainList = taskWizardMode === 'full' && wizardDataSchema && wizardDataSchema.length > 0
-    ? wizardDataSchema
-    : mainList;
+  // ✅ 3. ARCHITECTURE: When wizard is active, ALWAYS use wizardDataSchema (even if empty)
+  // This ensures sidebar is cleared immediately when opening a new task
+  // mainList should NEVER be used as fallback when wizard is active, as it contains stale data
+  const effectiveMainList = taskWizardMode === 'full'
+    ? (wizardDataSchema || [])  // ✅ Always use wizardDataSchema when wizard is active
+    : mainList;  // ✅ Only use mainList when wizard is not active
 
   // ✅ NEW: Wrapper handlers that update ONLY dataSchema when wizard is active
   // ✅ Usa setter direttamente con updater function (reattivo, React capisce)
+  // ✅ ARCHITECTURE: When wizard is active, handlers MUST update wizardDataSchema
+  // This ensures edits are saved to wizard store, not to stale mainList
   const wrappedSidebarHandlers = React.useMemo(() => {
-    if (taskWizardMode !== 'full' || !wizardDataSchema || wizardDataSchema.length === 0) {
-      // Normal mode: use handlers as-is
+    if (taskWizardMode !== 'full') {
+      // Normal mode: use handlers as-is (they update taskTree/mainList)
       return sidebar;
     }
+
+    // ✅ Wizard mode: ALWAYS wrap handlers to update wizardDataSchema
+    // Even if wizardDataSchema is empty, we must update it (not mainList)
 
     return {
       ...sidebar,

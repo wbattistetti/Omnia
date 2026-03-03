@@ -1,12 +1,8 @@
-import { useState, useCallback, useEffect, useRef, RefObject, useMemo } from 'react';
-import {
-  getPathSegments,
-  findClosestSegment,
-  getCurrentSegment,
-  getSegmentMidpoint,
-  projectPointToSegment,
-  PathSegment,
-} from '../utils/pathUtils';
+import { useState, useCallback, useEffect, useRef, RefObject } from 'react';
+import { findClosestSegment, getSegmentMidpoint, projectPointToSegment, getPathSegments, PathSegment } from '../utils/pathUtils';
+import { CoordinateConverter } from '../utils/coordinateUtils';
+import { useReactFlow } from 'reactflow';
+import { useEdgeHoverDuringLabelDrag } from './useEdgeHoverDuringLabelDrag';
 
 export interface UseLabelDragOptions {
   labelRef: RefObject<HTMLElement>;
@@ -15,18 +11,25 @@ export interface UseLabelDragOptions {
   pathRef: RefObject<SVGPathElement>;
   savedLabelSvgPosition?: { x: number; y: number } | null;
   enabled?: boolean;
-  snapThreshold?: number; // Default 15-20px
+  snapThreshold?: number; // Fascia di aggancio (default 30px)
+  midpointThreshold?: number; // Soglia per magnetismo al midpoint (default 15px)
+  edgeId: string; // ✅ NUOVO: ID dell'edge corrente
 }
 
 export interface UseLabelDragReturn {
   isDragging: boolean;
   dragPosition: { x: number; y: number } | null;
   onMouseDown: (e: React.MouseEvent) => void;
+  highlightedEdgeId: string | null;
+  highlightedSegmentIndex: number | null;
+  highlightedSegment: PathSegment | null;
+  distanceToSegment: number | null; // ✅ NUOVO
+  distanceToMidpoint: number | null; // ✅ NUOVO
 }
 
 /**
- * Hook for intelligent edge label dragging
- * Automatically handles snap to segments, fine adjustment, and free positioning
+ * Hook for intelligent edge label dragging with free movement and magnetic zones
+ * La caption segue liberamente il mouse, con highlight dei segmenti e validazione al rilascio
  */
 export function useLabelDrag(
   options: UseLabelDragOptions
@@ -38,17 +41,34 @@ export function useLabelDrag(
     pathRef,
     savedLabelSvgPosition,
     enabled = true,
-    snapThreshold = 18, // Default 18px
+    snapThreshold = 30, // Fascia di aggancio
+    midpointThreshold = 15, // Soglia per magnetismo al midpoint
+    edgeId,
   } = options;
+
+  const reactFlowInstance = useReactFlow();
+  const converter = new CoordinateConverter(reactFlowInstance, pathRef);
 
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
-  const [pathSegments, setPathSegments] = useState<PathSegment[]>([]);
-  const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
-  const currentSegmentRef = useRef<PathSegment | null>(null);
-  const finalSvgPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const [pathSegments, setPathSegments] = useState<any[]>([]);
+  const [mouseSvgPosition, setMouseSvgPosition] = useState<{ x: number; y: number } | null>(null); // ✅ NUOVO
 
-  // Aggiorna i segmenti quando il path cambia
+  const dragStartRef = useRef<{
+    startScreen: { x: number; y: number };
+    startSvg: { x: number; y: number };
+    currentSvg: { x: number; y: number };
+    originalSvg: { x: number; y: number }; // ✅ NUOVO: per ripristino
+  } | null>(null);
+
+  // ✅ NUOVO: Hook per highlight durante drag
+  const highlightResult = useEdgeHoverDuringLabelDrag(
+    mouseSvgPosition,
+    edgeId,
+    snapThreshold
+  );
+
+  // Aggiorna segmenti quando cambia il path
   useEffect(() => {
     if (pathRef.current) {
       setPathSegments(getPathSegments(pathRef.current));
@@ -57,142 +77,97 @@ export function useLabelDrag(
     }
   }, [pathRef]);
 
-  // Identifica il segmento corrente all'inizio del drag
-  useEffect(() => {
-    if (isDragging && pathRef.current && savedLabelSvgPosition) {
-      currentSegmentRef.current = getCurrentSegment(
-        savedLabelSvgPosition,
-        pathSegments,
-        snapThreshold
-      );
-    } else if (!isDragging) {
-      currentSegmentRef.current = null;
-    }
-  }, [isDragging, pathRef, savedLabelSvgPosition, pathSegments, snapThreshold]);
-
-  // Converti coordinate schermo → SVG
-  const screenToSvg = useCallback(
-    (screenX: number, screenY: number): { x: number; y: number } | null => {
-      const svg = pathRef.current?.ownerSVGElement;
-      if (!svg) return null;
-
-      const pt = svg.createSVGPoint();
-      pt.x = screenX;
-      pt.y = screenY;
-
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return null;
-
-      const svgPoint = pt.matrixTransform(ctm.inverse());
-      return { x: svgPoint.x, y: svgPoint.y };
-    },
-    [pathRef]
-  );
-
-  // Converti coordinate SVG → schermo
-  const svgToScreen = useCallback(
-    (svgX: number, svgY: number): { x: number; y: number } | null => {
-      const svg = pathRef.current?.ownerSVGElement;
-      if (!svg) return null;
-
-      const pt = svg.createSVGPoint();
-      pt.x = svgX;
-      pt.y = svgY;
-
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return null;
-
-      const screenPoint = pt.matrixTransform(ctm);
-      return { x: screenPoint.x, y: screenPoint.y };
-    },
-    [pathRef]
-  );
-
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      if (!enabled) return;
+      if (!enabled || !labelRef.current || !pathRef.current) return;
 
       e.preventDefault();
       e.stopPropagation();
 
-      if (!labelRef.current) return;
+      const startScreen = { x: e.clientX, y: e.clientY };
+      const startSvg = converter.screenToSvg(startScreen) || savedLabelSvgPosition || { x: 0, y: 0 };
 
-      const rect = labelRef.current.getBoundingClientRect();
-      const offsetX = e.clientX - rect.left - rect.width / 2;
-      const offsetY = e.clientY - rect.top - rect.height / 2;
+      // ✅ CRITICO: salva posizione originale per ripristino
+      const originalSvg = savedLabelSvgPosition || startSvg;
 
       dragStartRef.current = {
-        x: e.clientX,
-        y: e.clientY,
-        offsetX,
-        offsetY,
+        startScreen,
+        startSvg,
+        currentSvg: startSvg,
+        originalSvg, // ✅ Salva per ripristino
       };
 
       setIsDragging(true);
       setDragPosition(initialPosition);
+      setMouseSvgPosition(startSvg); // ✅ Inizializza posizione mouse
     },
-    [enabled, labelRef, initialPosition]
+    [enabled, labelRef, initialPosition, converter, savedLabelSvgPosition]
   );
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (!isDragging || !dragStartRef.current || !pathRef.current) return;
 
-      // Converti posizione mouse in coordinate SVG
-      const mouseSvg = screenToSvg(e.clientX, e.clientY);
+      const mouseScreen = { x: e.clientX, y: e.clientY };
+      const mouseSvg = converter.screenToSvg(mouseScreen);
       if (!mouseSvg) return;
 
-      // Trova il segmento più vicino
-      const closest = findClosestSegment(mouseSvg, pathSegments, snapThreshold);
+      // ✅ CRITICO: La caption segue liberamente il mouse
+      // Aggiorna posizione mouse per highlight cross-edge
+      setMouseSvgPosition(mouseSvg);
 
-      let finalPositionSvg: { x: number; y: number };
+      // ✅ La posizione della caption è sempre quella del mouse (libero movimento)
+      dragStartRef.current.currentSvg = mouseSvg;
 
-      if (closest) {
-        // CASO 1 o 2: Entro la soglia di snap
-        const isNewSegment = currentSegmentRef.current
-          ? closest.segment.index !== currentSegmentRef.current.index
-          : true;
-
-        if (isNewSegment) {
-          // CASO 1: Segmento diverso → snap al centro
-          finalPositionSvg = getSegmentMidpoint(closest.segment);
-        } else {
-          // CASO 2: Stesso segmento → proiezione fine
-          finalPositionSvg = projectPointToSegment(mouseSvg, closest.segment);
-        }
-      } else {
-        // CASO 3: Fuori dalla soglia → posizione libera
-        finalPositionSvg = mouseSvg;
-      }
-
-      // Salva la posizione SVG finale per il salvataggio
-      finalSvgPositionRef.current = finalPositionSvg;
-
-      // Converti SVG → schermo per il rendering
-      const screenPos = svgToScreen(finalPositionSvg.x, finalPositionSvg.y);
+      // Converti per rendering
+      const screenPos = converter.svgToScreen(mouseSvg);
       if (screenPos) {
         setDragPosition(screenPos);
       }
     },
-    [isDragging, pathRef, pathSegments, snapThreshold, screenToSvg, svgToScreen]
+    [isDragging, pathRef, converter]
   );
 
   const handleMouseUp = useCallback(() => {
-    if (!isDragging) return;
+    if (!isDragging || !dragStartRef.current) return;
 
-    // Usa la posizione SVG finale salvata durante il drag
-    if (finalSvgPositionRef.current) {
-      onPositionChange(finalSvgPositionRef.current);
+    const currentMouseSvg = dragStartRef.current.currentSvg;
+
+    // ✅ CRITICO: Validazione rilascio con 3 casi
+    if (highlightResult.highlightedSegment && highlightResult.distanceToSegment !== null) {
+      // CASO A e B: Rilascio dentro la fascia di un segmento
+      let positionToSave: { x: number; y: number };
+
+      // CASO B: Se vicino al midpoint → magnetismo
+      if (
+        highlightResult.distanceToMidpoint !== null &&
+        highlightResult.distanceToMidpoint < midpointThreshold
+      ) {
+        // Snap al midpoint
+        const midpoint = getSegmentMidpoint(highlightResult.highlightedSegment);
+        positionToSave = midpoint;
+      } else {
+        // CASO A: Rilascio dentro fascia ma non vicino al midpoint → posizione esatta del mouse
+        positionToSave = currentMouseSvg;
+      }
+
+      // Salva la posizione
+      onPositionChange(positionToSave);
+    } else {
+      // CASO C: Rilascio fuori da qualsiasi fascia → ripristina posizione originale
+      const positionToRestore = dragStartRef.current.originalSvg;
+      if (positionToRestore) {
+        onPositionChange(positionToRestore);
+      }
     }
 
     setIsDragging(false);
     setDragPosition(null);
+    setMouseSvgPosition(null);
     dragStartRef.current = null;
-    currentSegmentRef.current = null;
-    finalSvgPositionRef.current = null;
-  }, [isDragging, onPositionChange]);
+  }, [isDragging, onPositionChange, highlightResult.highlightedSegment, highlightResult.distanceToSegment, highlightResult.distanceToMidpoint, midpointThreshold]);
 
-  // Attach global mouse events when dragging
+  // Attach global mouse events
   useEffect(() => {
     if (isDragging) {
       window.addEventListener('mousemove', handleMouseMove);
@@ -208,5 +183,10 @@ export function useLabelDrag(
     isDragging,
     dragPosition,
     onMouseDown,
+    highlightedEdgeId: highlightResult.highlightedEdgeId,
+    highlightedSegmentIndex: highlightResult.highlightedSegmentIndex,
+    highlightedSegment: highlightResult.highlightedSegment,
+    distanceToSegment: highlightResult.distanceToSegment,
+    distanceToMidpoint: highlightResult.distanceToMidpoint,
   };
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { EdgeProps } from 'reactflow';
 import { createPortal } from 'react-dom';
 import { useProjectDataUpdate, useProjectData } from '../../../context/ProjectDataContext';
@@ -14,9 +14,12 @@ import { EdgeLabel } from './components/EdgeLabel';
 import { EdgeControls } from './components/EdgeControls';
 import { EdgeControlPoints } from './components/EdgeControlPoints';
 import { EdgeContextMenu } from './components/EdgeContextMenu';
-import { ControlPoint } from './hooks/useControlPointDrag';
-import { extractPathVertices } from './utils/pathUtils';
 import { useLabelDrag } from './hooks/useLabelDrag';
+import { useControlPointDrag } from './hooks/useControlPointDrag';
+import { ControlPointRelative } from './types/edgeTypes';
+import { isLegacyControlPoint, migrateControlPoints } from './utils/dataMigration';
+import { useReactFlow } from 'reactflow';
+import { CoordinateConverter } from './utils/coordinateUtils';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -38,6 +41,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     onDeleteEdge,
     data,
   } = props;
+
+  const reactFlowInstance = useReactFlow();
 
   // ✅ EXECUTION HIGHLIGHT: Get execution highlight styles for edge
   const allEdges = typeof window !== 'undefined' ? (window as any).__flowEdges : [];
@@ -61,71 +66,116 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
 
   // Get link style
   const linkStyle = (data as any)?.linkStyle ?? DEFAULT_LINK_STYLE;
-  // ✅ DEBUG: Log linkStyle to verify it's being read correctly
-  useEffect(() => {
-    console.log('[CustomEdge] Render', { id, linkStyle, dataLinkStyle: (data as any)?.linkStyle });
-  }, [id, linkStyle, data]);
   const label = props.data?.label || props.label;
 
-  // Get saved label position from data (now in SVG coordinates)
+  // Get saved label position from data (SVG coordinates)
   const savedLabelSvgPosition = (data as any)?.labelPositionSvg;
 
-  // Debug: log when position changes or when data changes
-  useEffect(() => {
-    console.log('[CustomEdge][useEffect] 📖 Reading saved label position', {
-      edgeId: id,
-      savedLabelSvgPosition,
-      hasData: !!data,
-      dataKeys: data ? Object.keys(data) : [],
-      fullData: data
-    });
-  }, [savedLabelSvgPosition?.x, savedLabelSvgPosition?.y, id, data]);
-
-  // ✅ Use positioning hook (eliminates polling)
-  // Note: pathRef will be populated by EdgePathRenderer after first render
+  // ✅ Use positioning hook
   const positions = useEdgePositioning(
     pathRef,
-    '', // edgePath is calculated in EdgePathRenderer
     sourceX,
     sourceY,
-    sourcePosition,
     savedLabelSvgPosition
   );
 
-  // ✅ Use hover hook (stable toolbar)
+  // ✅ Use hover hook
   const hover = useEdgeHover({
     toolbarTransitionDelay: 200,
   });
 
-  // Calculate edge path for positioning (needed for midpoint calculation)
-  // This is a simplified version - actual path is calculated in EdgePathRenderer
-  const getEdgePathString = () => {
-    // We need to calculate a temporary path to get the midpoint
-    // This is used only for positioning calculations
-    const midX = (sourceX + targetX) / 2;
-    const midY = (sourceY + targetY) / 2;
-    return `M ${sourceX},${sourceY} L ${midX},${midY} L ${targetX},${targetY}`;
-  };
-
-  // Update pathRef when path changes (for positioning hook)
-  useEffect(() => {
-    if (pathRef.current) {
-      // Path will be updated by EdgePathRenderer
-      // This effect ensures positioning hook can access the path
+  // ✅ Get control points from data with migration support
+  const controlPointsRelative = useMemo((): ControlPointRelative[] => {
+    const dataControlPoints = (data as any)?.controlPoints;
+    if (!dataControlPoints || !Array.isArray(dataControlPoints) || dataControlPoints.length === 0) {
+      return [];
     }
-  }, [sourceX, sourceY, targetX, targetY, linkStyle]);
 
-  // Track mouse position for hover detection (needed for portal elements)
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      (window as any).__lastMouseX = e.clientX;
-      (window as any).__lastMouseY = e.clientY;
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, []);
+    // Check if we need to migrate legacy format
+    const needsMigration = dataControlPoints.some(isLegacyControlPoint);
+
+    if (needsMigration && pathRef.current) {
+      // Migrate legacy points
+      const legacyPoints = dataControlPoints.filter(isLegacyControlPoint);
+      const migrated = migrateControlPoints(legacyPoints, pathRef.current);
+
+      // If migration successful, save back to data
+      if (migrated.length > 0 && props.data && typeof props.data.onUpdate === 'function') {
+        // Migrate in background (don't block render)
+        setTimeout(() => {
+          props.data.onUpdate({
+            data: {
+              controlPoints: migrated,
+            }
+          });
+        }, 0);
+      }
+
+      return migrated;
+    }
+
+    // Already in relative format
+    return dataControlPoints.filter((cp: any): cp is ControlPointRelative =>
+      typeof cp.t === 'number' && typeof cp.offset === 'number'
+    );
+  }, [data, pathRef, props.data]);
+
+  // ✅ Control points drag hook
+  const controlPointDrag = useControlPointDrag({
+    controlPointsRelative,
+    onControlPointsChange: useCallback((points: ControlPointRelative[]) => {
+      if (props.data && typeof props.data.onUpdate === 'function') {
+        props.data.onUpdate({
+          data: {
+            controlPoints: points,
+          }
+        });
+      }
+    }, [props.data]),
+    pathRef,
+    enableSnapping: false,
+    snapDistance: 10,
+  });
+
+  // ✅ Convert control points to absolute for EdgePathRenderer
+  // CRITICO: Aggiorna quando cambiano i nodi (sourceX/sourceY/targetX/targetY)
+  // perché il path cambia e i control points relativi devono essere riconvertiti
+  const controlPointsAbsolute = useMemo(() => {
+    if (!pathRef.current || controlPointsRelative.length === 0) return undefined;
+
+    const converter = new CoordinateConverter(reactFlowInstance, pathRef);
+    return controlPointsRelative
+      .map((rel) => {
+        const abs = converter.relativeToAbsolute(rel);
+        return abs ? { x: abs.x, y: abs.y } : null;
+      })
+      .filter((p): p is { x: number; y: number } => p !== null);
+  }, [controlPointsRelative, pathRef, reactFlowInstance, sourceX, sourceY, targetX, targetY]);
+
+  // Label drag hook
+  const handleLabelPositionChange = useCallback((newSvgPosition: { x: number; y: number }) => {
+    if (props.data && typeof props.data.onUpdate === 'function') {
+      props.data.onUpdate({
+        data: {
+          labelPositionSvg: newSvgPosition,
+        }
+      });
+    }
+  }, [props.data]);
+
+  const labelDrag = useLabelDrag({
+    labelRef: hoverRefs.labelRef,
+    initialPosition: positions.labelScreenPosition,
+    pathRef: pathRef,
+    savedLabelSvgPosition: savedLabelSvgPosition,
+    onPositionChange: handleLabelPositionChange,
+    enabled: !!label,
+    snapThreshold: 30,
+    edgeId: id, // ✅ NUOVO: passa ID edge
+  });
+
+  // ✅ NUOVO: Determina se questo edge deve mostrare highlight
+  const shouldShowHighlight = labelDrag.highlightedEdgeId === id && labelDrag.highlightedSegment;
 
   // Handlers
   const handleOpenIntellisense = (x: number, y: number) => {
@@ -206,8 +256,6 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
-    // Only show menu on right-click (context menu)
-    // This should NOT be called on left click
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({ x: e.clientX, y: e.clientY });
@@ -301,167 +349,65 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     }
   };
 
-  // Get control points from data or extract from path
-  const getControlPoints = useCallback((): ControlPoint[] => {
-    // If controlPoints exist in data, use them
-    const dataControlPoints = (data as any)?.controlPoints;
-    if (dataControlPoints && Array.isArray(dataControlPoints) && dataControlPoints.length > 0) {
-      return dataControlPoints.map((cp: { x: number; y: number }, idx: number) => ({
-        x: cp.x,
-        y: cp.y,
-        id: `cp-${idx}`,
-      }));
-    }
-
-    // Otherwise, extract vertices from path
-    if (pathRef.current) {
-      const pathString = pathRef.current.getAttribute('d') || '';
-      const vertices = extractPathVertices(pathString);
-      // Filter out source and target points (keep only intermediate vertices)
-      return vertices.slice(1, -1).map((v, idx) => ({
-        ...v,
-        id: `v-${idx}`,
-      }));
-    }
-
-    return [];
-  }, [data, pathRef]);
-
-  const [controlPoints, setControlPoints] = useState<ControlPoint[]>([]);
-
-  // Update control points when path or data changes
-  useEffect(() => {
-    const points = getControlPoints();
-    setControlPoints(points);
-  }, [getControlPoints, pathRef.current, (data as any)?.controlPoints]);
-
-  const handleControlPointsChange = useCallback(
-    (points: ControlPoint[]) => {
-      setControlPoints(points);
-      if (props.data && typeof props.data.onUpdate === 'function') {
-        const controlPointsData = points.map((p) => ({ x: p.x, y: p.y }));
-        props.data.onUpdate({
-          data: {
-            ...props.data,
-            controlPoints: controlPointsData,
-          }
-        });
-      }
-    },
-    [props.data]
-  );
-
-  // Label drag hook with intelligent snap logic
-  const handleLabelPositionChange = useCallback((newSvgPosition: { x: number; y: number }) => {
-    // La posizione è già in coordinate SVG
-    console.log('[CustomEdge][handleLabelPositionChange] 🎯 START', {
-      edgeId: id,
-      newSvgPosition,
-      hasOnUpdate: !!(props.data && typeof props.data.onUpdate === 'function'),
-      currentData: props.data,
-      currentLabelPosition: (props.data as any)?.labelPositionSvg
-    });
-
-    if (props.data && typeof props.data.onUpdate === 'function') {
-      // ✅ CRITICAL: Pass only labelPositionSvg, not the entire props.data
-      // useEdgeDataManager will merge this with existing edge.data, preserving
-      // all other properties (linkStyle, controlPoints, isElse, etc.)
-      console.log('[CustomEdge][handleLabelPositionChange] 📤 Calling onUpdate', {
-        edgeId: id,
-        updates: {
-          data: {
-            labelPositionSvg: newSvgPosition,
-          }
-        }
-      });
-
-      props.data.onUpdate({
-        data: {
-          labelPositionSvg: newSvgPosition,
-        }
-      });
-
-      console.log('[CustomEdge][handleLabelPositionChange] ✅ onUpdate called');
-    } else {
-      console.error('[CustomEdge][handleLabelPositionChange] ❌ onUpdate not available', {
-        edgeId: id,
-        hasData: !!props.data,
-        onUpdateType: typeof props.data?.onUpdate
-      });
-    }
-  }, [props.data, id]);
-
-  const labelDrag = useLabelDrag({
-    labelRef: hoverRefs.labelRef,
-    initialPosition: positions.labelScreenPosition,
-    pathRef: pathRef,
-    savedLabelSvgPosition: savedLabelSvgPosition,
-    onPositionChange: handleLabelPositionChange,
-    enabled: !!label, // Only enable if label exists
-    snapThreshold: 30, // 30px threshold for snap detection (increased from 18px)
-  });
-
+  // ✅ Add new control point on Shift+Click
   const handleShiftClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // Convert click position to SVG coordinates
-    const svg = pathRef.current?.ownerSVGElement;
-    if (!svg) return;
+    if (!pathRef.current) return;
 
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
+    const converter = new CoordinateConverter(reactFlowInstance, pathRef);
+    const clickScreen = { x: e.clientX, y: e.clientY };
+    const clickSvg = converter.screenToSvg(clickScreen);
+    if (!clickSvg) return;
 
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return;
+    const path = pathRef.current;
+    const pathLength = path.getTotalLength();
+    if (pathLength === 0) return;
 
-    const svgPoint = pt.matrixTransform(ctm.inverse());
+    // Find closest point on path
+    let minDistance = Infinity;
+    let bestT = 0.5;
 
-    // Find the closest point on the path
-    if (pathRef.current) {
-      const path = pathRef.current;
-      const pathLength = path.getTotalLength();
-      let minDistance = Infinity;
-      let closestPoint = { x: svgPoint.x, y: svgPoint.y };
-      let closestT = 0;
-
-      // Sample points along the path
-      for (let i = 0; i <= 100; i++) {
-        const t = i / 100;
-        const point = path.getPointAtLength(pathLength * t);
-        const dist = Math.sqrt(
-          Math.pow(point.x - svgPoint.x, 2) + Math.pow(point.y - svgPoint.y, 2)
-        );
-        if (dist < minDistance) {
-          minDistance = dist;
-          closestPoint = point;
-          closestT = t;
-        }
+    const samples = 100;
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      const point = path.getPointAtLength(pathLength * t);
+      const dist = Math.sqrt(
+        Math.pow(clickSvg.x - point.x, 2) + Math.pow(clickSvg.y - point.y, 2)
+      );
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestT = t;
       }
+    }
 
-      // Only add if not too close to existing points
-      const tooClose = controlPoints.some((cp) => {
-        const dist = Math.sqrt(
-          Math.pow(cp.x - closestPoint.x, 2) + Math.pow(cp.y - closestPoint.y, 2)
-        );
-        return dist < 20; // 20px threshold
-      });
+    // Check if too close to existing points
+    const converterForCheck = new CoordinateConverter(reactFlowInstance, pathRef);
+    const tooClose = controlPointsRelative.some((rel) => {
+      const abs = converterForCheck.relativeToAbsolute(rel);
+      if (!abs) return false;
+      const dist = Math.sqrt(
+        Math.pow(clickSvg.x - abs.x, 2) + Math.pow(clickSvg.y - abs.y, 2)
+      );
+      return dist < 20; // 20px threshold
+    });
 
-      if (!tooClose && minDistance < 50) {
-        // Add new control point
-        const newPoint: ControlPoint = {
-          x: closestPoint.x,
-          y: closestPoint.y,
-          id: `cp-${Date.now()}`,
-        };
-        const updatedPoints = [...controlPoints, newPoint].sort((a, b) => {
-          // Sort by position along path (approximate)
-          const distA = Math.sqrt(Math.pow(a.x - sourceX, 2) + Math.pow(a.y - sourceY, 2));
-          const distB = Math.sqrt(Math.pow(b.x - sourceX, 2) + Math.pow(b.y - sourceY, 2));
-          return distA - distB;
+    if (!tooClose && minDistance < 50) {
+      // Add new control point in relative format
+      const newPoint: ControlPointRelative = {
+        t: bestT,
+        offset: 0, // On path initially
+      };
+
+      const updatedPoints = [...controlPointsRelative, newPoint].sort((a, b) => a.t - b.t);
+
+      if (props.data && typeof props.data.onUpdate === 'function') {
+        props.data.onUpdate({
+          data: {
+            controlPoints: updatedPoints,
+          }
         });
-        handleControlPointsChange(updatedPoints);
       }
     }
   };
@@ -478,17 +424,18 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         sourcePosition={sourcePosition}
         targetPosition={targetPosition}
         linkStyle={linkStyle}
-        controlPoints={controlPoints.length > 0 ? controlPoints.map((cp) => ({ x: cp.x, y: cp.y })) : undefined}
+        controlPoints={controlPointsAbsolute}
         style={style}
         markerEnd={markerEnd}
         hovered={hover.state.hovered}
         selected={props.selected}
         executionHighlight={edgeHighlight}
         trashHovered={hover.state.trashHovered}
-          onShiftClick={handleShiftClick}
+        onShiftClick={handleShiftClick}
         onContextMenu={handleContextMenu}
         onMouseEnter={() => hover.setHovered(true)}
         onMouseLeave={() => hover.setHovered(false)}
+        highlightedSegment={shouldShowHighlight ? labelDrag.highlightedSegment : null}
       />
 
       <EdgeControls
@@ -508,16 +455,16 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         trashHovered={hover.state.trashHovered}
       />
 
-      {/* Control Points (Phase 2) */}
+      {/* Control Points */}
       {(hover.state.hovered || props.selected) && (
         <EdgeControlPoints
-          controlPoints={controlPoints}
-          onControlPointsChange={handleControlPointsChange}
+          controlPointsAbsolute={controlPointDrag.controlPointsAbsolute}
+          draggingPointId={controlPointDrag.draggingPointId}
+          onMouseDown={controlPointDrag.onMouseDown}
+          onMouseUp={controlPointDrag.onMouseUp}
           pathRef={pathRef}
           hovered={hover.state.hovered}
           selected={props.selected}
-          enableSnapping={false}
-          snapDistance={10}
           showDistance={10}
         />
       )}

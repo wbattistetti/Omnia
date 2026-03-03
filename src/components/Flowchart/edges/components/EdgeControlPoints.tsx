@@ -1,84 +1,39 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { useControlPointDrag, ControlPoint } from '../hooks/useControlPointDrag';
+import { ControlPointAbsolute } from '../types/edgeTypes';
+import { CoordinateConverter } from '../utils/coordinateUtils';
+import { useReactFlow } from 'reactflow';
 
 export interface EdgeControlPointsProps {
-  controlPoints: ControlPoint[];
-  onControlPointsChange: (points: ControlPoint[]) => void;
+  controlPointsAbsolute: ControlPointAbsolute[];
+  draggingPointId: string | null;
+  onMouseDown: (pointId: string, e: React.MouseEvent) => void;
+  onMouseUp: () => void;
   pathRef: React.RefObject<SVGPathElement>;
   hovered?: boolean;
   selected?: boolean;
-  enableSnapping?: boolean;
-  snapDistance?: number;
   showDistance?: number; // Distance in pixels to show control point (default 10px)
 }
 
 /**
  * Edge control points component
  * Shows circles at vertices when mouse is near, allows dragging to modify path
+ * Uses absolute coordinates for rendering (converted from relative in parent)
  */
 export const EdgeControlPoints: React.FC<EdgeControlPointsProps> = ({
-  controlPoints,
-  onControlPointsChange,
+  controlPointsAbsolute,
+  draggingPointId,
+  onMouseDown,
+  onMouseUp,
   pathRef,
   hovered = false,
   selected = false,
-  enableSnapping = false,
-  snapDistance = 10,
   showDistance = 10,
 }) => {
+  const reactFlowInstance = useReactFlow();
+  const converter = new CoordinateConverter(reactFlowInstance, pathRef);
+
   const [visiblePoints, setVisiblePoints] = useState<Set<string>>(new Set());
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
-
-  const {
-    draggingPointId,
-    onMouseDown,
-    onMouseUp,
-    getSnappedPosition,
-  } = useControlPointDrag({
-    controlPoints,
-    onControlPointsChange,
-    enableSnapping,
-    snapDistance,
-    pathRef,
-  });
-
-  // Convert SVG coordinates to screen coordinates
-  const svgToScreen = useCallback(
-    (svgX: number, svgY: number): { x: number; y: number } | null => {
-      const svg = pathRef.current?.ownerSVGElement;
-      if (!svg) return null;
-
-      const pt = svg.createSVGPoint();
-      pt.x = svgX;
-      pt.y = svgY;
-
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return null;
-
-      const screenPoint = pt.matrixTransform(ctm);
-      return { x: screenPoint.x, y: screenPoint.y };
-    },
-    [pathRef]
-  );
-
-  // Convert screen coordinates to SVG coordinates
-  const screenToSvg = useCallback(
-    (screenX: number, screenY: number): { x: number; y: number } | null => {
-      const svg = pathRef.current?.ownerSVGElement;
-      if (!svg) return null;
-
-      const pt = svg.createSVGPoint();
-      pt.x = screenX;
-      pt.y = screenY;
-
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return null;
-
-      const svgPoint = pt.matrixTransform(ctm.inverse());
-      return { x: svgPoint.x, y: svgPoint.y };
-    },
-    [pathRef]
-  );
 
   // Calculate distance between two points
   const distance = useCallback(
@@ -100,28 +55,29 @@ export const EdgeControlPoints: React.FC<EdgeControlPointsProps> = ({
       return;
     }
 
-    const svg = pathRef.current?.ownerSVGElement;
-    if (!svg) return;
-
-    const mouseSvg = screenToSvg(mousePosition.x, mousePosition.y);
+    const mouseSvg = converter.screenToSvg(mousePosition);
     if (!mouseSvg) return;
 
     const visible = new Set<string>();
-    for (const point of controlPoints) {
+    for (const point of controlPointsAbsolute) {
       const dist = distance(mouseSvg, point);
+
       // Convert SVG distance to screen distance (approximate)
-      const ctm = svg.getScreenCTM();
-      if (ctm) {
-        const scale = Math.sqrt(ctm.a * ctm.a + ctm.b * ctm.b);
-        const screenDist = dist * scale;
-        if (screenDist <= showDistance) {
-          visible.add(point.id);
+      const svg = pathRef.current?.ownerSVGElement;
+      if (svg) {
+        const ctm = svg.getScreenCTM();
+        if (ctm) {
+          const scale = Math.sqrt(ctm.a * ctm.a + ctm.b * ctm.b);
+          const screenDist = dist * scale;
+          if (screenDist <= showDistance) {
+            visible.add(point.id);
+          }
         }
       }
     }
 
     setVisiblePoints(visible);
-  }, [mousePosition, hovered, selected, controlPoints, pathRef, screenToSvg, distance, showDistance]);
+  }, [mousePosition, hovered, selected, controlPointsAbsolute, pathRef, converter, distance, showDistance]);
 
   // Track mouse position
   useEffect(() => {
@@ -143,17 +99,17 @@ export const EdgeControlPoints: React.FC<EdgeControlPointsProps> = ({
   // Always show points when dragging
   useEffect(() => {
     if (draggingPointId) {
-      setVisiblePoints(new Set(controlPoints.map((p) => p.id)));
+      setVisiblePoints(new Set(controlPointsAbsolute.map((p) => p.id)));
     }
-  }, [draggingPointId, controlPoints]);
+  }, [draggingPointId, controlPointsAbsolute]);
 
-  if (controlPoints.length === 0) {
+  if (controlPointsAbsolute.length === 0) {
     return null;
   }
 
   return (
     <>
-      {controlPoints.map((point) => {
+      {controlPointsAbsolute.map((point) => {
         const isVisible = visiblePoints.has(point.id) || draggingPointId === point.id;
         if (!isVisible) return null;
 

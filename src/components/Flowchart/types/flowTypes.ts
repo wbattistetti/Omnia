@@ -88,10 +88,11 @@ export interface EdgeData extends BaseEdgeData {
    */
   linkStyle?: LinkStyle;
   /**
-   * Control points for custom path editing (Phase 2)
-   * Array of {x, y} coordinates in SVG space
+   * Control points for custom path editing
+   * NEW: Array of {t, offset} in relative format (t: 0-1 along path, offset: perpendicular distance)
+   * Legacy: Array of {x, y} in absolute SVG coordinates (will be migrated automatically)
    */
-  controlPoints?: Array<{ x: number; y: number }>;
+  controlPoints?: Array<{ t: number; offset: number } | { x: number; y: number }>;
   /**
    * Custom label position (SVG coordinates)
    * If not set, label is positioned at edge midpoint

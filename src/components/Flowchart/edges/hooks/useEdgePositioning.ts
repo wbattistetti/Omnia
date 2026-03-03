@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, RefObject } from 'react';
 import { useReactFlow } from 'reactflow';
+import { CoordinateConverter } from '../utils/coordinateUtils';
 
 export interface EdgePositioningResult {
   midPointSvg: { x: number; y: number };
@@ -10,21 +11,15 @@ export interface EdgePositioningResult {
 
 /**
  * Hook for calculating edge positions (SVG and screen coordinates)
- * Uses React Flow's flowToScreenPosition() for reliable Flow → Screen conversion
+ * DETERMINISTICO: nessun polling, nessun hack globale, listener completi
  */
 export function useEdgePositioning(
   pathRef: RefObject<SVGPathElement>,
-  edgePath: string,
   sourceX: number,
   sourceY: number,
-  sourcePosition: string,
   savedLabelSvgPosition?: { x: number; y: number } | null
 ): EdgePositioningResult {
   const reactFlowInstance = useReactFlow();
-  // ✅ Use flowToScreenPosition instead of deprecated project()
-  // Fallback to project() for backward compatibility
-  const flowToScreenPosition = reactFlowInstance.flowToScreenPosition || reactFlowInstance.project;
-
   const [positions, setPositions] = useState<EdgePositioningResult>({
     midPointSvg: { x: 0, y: 0 },
     midPointScreen: { x: 0, y: 0 },
@@ -33,69 +28,46 @@ export function useEdgePositioning(
   });
 
   const updatePositions = useCallback(() => {
-    if (!pathRef.current) {
-      console.log('[useEdgePositioning][updatePositions] ⚠️ No pathRef');
-      return;
-    }
+    if (!pathRef.current) return;
 
     const path = pathRef.current;
     const pathLength = path.getTotalLength();
+    if (pathLength === 0) return;
+
+    const converter = new CoordinateConverter(reactFlowInstance, pathRef);
 
     // Midpoint del path
     const midPoint = path.getPointAtLength(pathLength / 2);
+    const midPointScreen = converter.svgToScreen(midPoint) || { x: 0, y: 0 };
+    const sourceScreen = converter.flowToScreen({ x: sourceX, y: sourceY });
 
-    // ✅ Use flowToScreenPosition instead of deprecated project()
-    const midPointScreen = flowToScreenPosition({ x: midPoint.x, y: midPoint.y });
-    const sourceScreen = flowToScreenPosition({ x: sourceX, y: sourceY });
-
+    // Label position
     let labelScreenPos: { x: number; y: number };
     if (savedLabelSvgPosition) {
-      console.log('[useEdgePositioning][updatePositions] 📍 Using saved label position', {
-        savedLabelSvgPosition,
-        midPoint: { x: midPoint.x, y: midPoint.y }
-      });
-      labelScreenPos = flowToScreenPosition({
-        x: savedLabelSvgPosition.x,
-        y: savedLabelSvgPosition.y,
-      });
-      console.log('[useEdgePositioning][updatePositions] 📍 Converted to screen', {
-        svg: savedLabelSvgPosition,
-        screen: labelScreenPos
-      });
+      labelScreenPos = converter.svgToScreen(savedLabelSvgPosition) || midPointScreen;
     } else {
-      console.log('[useEdgePositioning][updatePositions] 📍 Using midpoint (no saved position)', {
-        midPoint: { x: midPoint.x, y: midPoint.y },
-        midPointScreen
-      });
       labelScreenPos = midPointScreen;
     }
 
-    const newPositions = {
+    setPositions({
       midPointSvg: { x: midPoint.x, y: midPoint.y },
       midPointScreen,
       labelScreenPosition: labelScreenPos,
       sourceScreenPosition: sourceScreen,
-    };
-
-    console.log('[useEdgePositioning][updatePositions] ✅ Setting positions', {
-      newPositions,
-      savedLabelSvgPosition
     });
+  }, [pathRef, sourceX, sourceY, savedLabelSvgPosition, reactFlowInstance]);
 
-    setPositions(newPositions);
-  }, [pathRef, sourceX, sourceY, savedLabelSvgPosition, flowToScreenPosition]);
-
-  // Aggiorna su mount e quando cambia edgePath
+  // Aggiorna quando cambia il path
   useEffect(() => {
     updatePositions();
-  }, [edgePath, updatePositions]);
+  }, [updatePositions]);
 
-  // Aggiorna quando si muovono i nodi (sourceX/sourceY)
+  // Aggiorna quando cambiano i nodi
   useEffect(() => {
     updatePositions();
   }, [sourceX, sourceY, updatePositions]);
 
-  // Aggiorna su cambi di viewport (zoom/pan)
+  // ✅ Listener viewport (pan/zoom)
   useEffect(() => {
     if (!reactFlowInstance?.onViewportChange) {
       updatePositions();
@@ -110,14 +82,22 @@ export function useEdgePositioning(
     return unsubscribe;
   }, [reactFlowInstance, updatePositions]);
 
-  // ✅ CRITICAL: Update positions when savedLabelSvgPosition changes
-  // This ensures the label position is updated immediately after drag
+  // ✅ Listener scroll (CRITICO)
   useEffect(() => {
-    console.log('[useEdgePositioning][useEffect] 🔄 savedLabelSvgPosition changed', {
-      savedLabelSvgPosition,
-      x: savedLabelSvgPosition?.x,
-      y: savedLabelSvgPosition?.y
-    });
+    const handleScroll = () => updatePositions();
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    return () => window.removeEventListener('scroll', handleScroll, { capture: true });
+  }, [updatePositions]);
+
+  // ✅ Listener resize (CRITICO)
+  useEffect(() => {
+    const handleResize = () => updatePositions();
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => window.removeEventListener('resize', handleResize);
+  }, [updatePositions]);
+
+  // Aggiorna quando cambia labelPositionSvg
+  useEffect(() => {
     updatePositions();
   }, [savedLabelSvgPosition?.x, savedLabelSvgPosition?.y, updatePositions]);
 

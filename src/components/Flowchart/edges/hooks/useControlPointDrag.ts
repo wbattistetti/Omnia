@@ -1,84 +1,66 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-
-export interface ControlPoint {
-  x: number;
-  y: number;
-  id: string;
-}
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { ControlPointRelative, ControlPointAbsolute } from '../types/edgeTypes';
+import { CoordinateConverter } from '../utils/coordinateUtils';
+import { useReactFlow } from 'reactflow';
 
 export interface UseControlPointDragOptions {
-  controlPoints: ControlPoint[];
-  onControlPointsChange: (points: ControlPoint[]) => void;
+  controlPointsRelative: ControlPointRelative[];
+  onControlPointsChange: (points: ControlPointRelative[]) => void;
+  pathRef: React.RefObject<SVGPathElement>;
   enableSnapping?: boolean;
-  snapDistance?: number; // pixels
-  pathRef?: React.RefObject<SVGPathElement>;
+  snapDistance?: number;
 }
 
 export interface UseControlPointDragReturn {
   draggingPointId: string | null;
+  controlPointsAbsolute: ControlPointAbsolute[];
   onMouseDown: (pointId: string, e: React.MouseEvent) => void;
-  onMouseMove: (e: React.MouseEvent) => void;
   onMouseUp: () => void;
-  getSnappedPosition: (x: number, y: number) => { x: number; y: number };
 }
 
 /**
- * Hook for dragging control points on edges
- * Supports optional snapping to grid or path
+ * Hook for dragging control points
+ * Lavora in SVG assoluto durante il drag, salva in (t, offset) relativo
  */
 export function useControlPointDrag(
   options: UseControlPointDragOptions
 ): UseControlPointDragReturn {
   const {
-    controlPoints,
+    controlPointsRelative,
     onControlPointsChange,
+    pathRef,
     enableSnapping = false,
     snapDistance = 10,
-    pathRef,
   } = options;
 
+  const reactFlowInstance = useReactFlow();
+  const converter = new CoordinateConverter(reactFlowInstance, pathRef);
+
   const [draggingPointId, setDraggingPointId] = useState<string | null>(null);
-  const dragStartRef = useRef<{ x: number; y: number; pointIndex: number } | null>(null);
-  const svgRef = useRef<SVGSVGElement | null>(null);
+  const dragStartRef = useRef<{
+    pointIndex: number;
+    startSvg: { x: number; y: number };
+  } | null>(null);
 
-  // Get SVG element from pathRef
-  const getSvg = useCallback(() => {
-    if (pathRef?.current?.ownerSVGElement) {
-      return pathRef.current.ownerSVGElement;
-    }
-    return document.querySelector('svg') as SVGSVGElement | null;
-  }, [pathRef]);
+  // ✅ Converti sempre da relativo ad assoluto per rendering
+  const controlPointsAbsolute: ControlPointAbsolute[] = useMemo(() => {
+    return controlPointsRelative
+      .map((rel, idx) => {
+        const abs = converter.relativeToAbsolute(rel);
+        return abs ? { ...abs, id: `cp-${idx}` } : null;
+      })
+      .filter((p): p is ControlPointAbsolute => p !== null);
+  }, [controlPointsRelative, converter]);
 
-  // Convert screen coordinates to SVG coordinates
-  const screenToSvg = useCallback(
-    (screenX: number, screenY: number): { x: number; y: number } => {
-      const svg = getSvg();
-      if (!svg) return { x: screenX, y: screenY };
-
-      const pt = svg.createSVGPoint();
-      pt.x = screenX;
-      pt.y = screenY;
-
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return { x: screenX, y: screenY };
-
-      const svgPoint = pt.matrixTransform(ctm.inverse());
-      return { x: svgPoint.x, y: svgPoint.y };
-    },
-    [getSvg]
-  );
-
-  // Get snapped position (snap to grid or path)
+  // Get snapped position (snap to grid)
   const getSnappedPosition = useCallback(
     (x: number, y: number): { x: number; y: number } => {
       if (!enableSnapping) return { x, y };
 
-      // Snap to grid (10px grid)
       const gridSize = 10;
       const snappedX = Math.round(x / gridSize) * gridSize;
       const snappedY = Math.round(y / gridSize) * gridSize;
 
-      // If snapping distance is within threshold, use snapped position
       const distance = Math.sqrt(
         Math.pow(x - snappedX, 2) + Math.pow(y - snappedY, 2)
       );
@@ -96,45 +78,47 @@ export function useControlPointDrag(
       e.preventDefault();
       e.stopPropagation();
 
-      const pointIndex = controlPoints.findIndex((p) => p.id === pointId);
+      const pointIndex = controlPointsAbsolute.findIndex((p) => p.id === pointId);
       if (pointIndex === -1) return;
 
-      const svg = getSvg();
-      if (!svg) return;
-      svgRef.current = svg;
+      const startScreen = { x: e.clientX, y: e.clientY };
+      const startSvg = converter.screenToSvg(startScreen);
+      if (!startSvg) return;
 
-      const svgPoint = screenToSvg(e.clientX, e.clientY);
-      dragStartRef.current = {
-        x: svgPoint.x,
-        y: svgPoint.y,
-        pointIndex,
-      };
-
+      dragStartRef.current = { pointIndex, startSvg };
       setDraggingPointId(pointId);
     },
-    [controlPoints, getSvg, screenToSvg]
+    [controlPointsAbsolute, converter]
   );
 
   const onMouseMove = useCallback(
     (e: MouseEvent) => {
-      if (!draggingPointId || !dragStartRef.current) return;
+      if (!draggingPointId || !dragStartRef.current || !pathRef.current) return;
 
-      const svg = getSvg();
-      if (!svg) return;
+      const mouseScreen = { x: e.clientX, y: e.clientY };
+      const mouseSvg = converter.screenToSvg(mouseScreen);
+      if (!mouseSvg) return;
 
-      const svgPoint = screenToSvg(e.clientX, e.clientY);
-      const snapped = getSnappedPosition(svgPoint.x, svgPoint.y);
+      // Applica snapping se abilitato
+      const snapped = getSnappedPosition(mouseSvg.x, mouseSvg.y);
 
-      const updatedPoints = [...controlPoints];
-      updatedPoints[dragStartRef.current.pointIndex] = {
-        ...updatedPoints[dragStartRef.current.pointIndex],
+      // Aggiorna in assoluto temporaneamente
+      const updatedAbsolute = [...controlPointsAbsolute];
+      updatedAbsolute[dragStartRef.current.pointIndex] = {
+        ...updatedAbsolute[dragStartRef.current.pointIndex],
         x: snapped.x,
         y: snapped.y,
       };
 
-      onControlPointsChange(updatedPoints);
+      // ✅ Converti in relativo e salva
+      const updatedRelative = updatedAbsolute.map((abs) => {
+        const rel = converter.absoluteToRelative(abs);
+        return rel || { t: 0.5, offset: 0 };
+      });
+
+      onControlPointsChange(updatedRelative);
     },
-    [draggingPointId, controlPoints, getSvg, screenToSvg, getSnappedPosition, onControlPointsChange]
+    [draggingPointId, controlPointsAbsolute, converter, pathRef, getSnappedPosition, onControlPointsChange]
   );
 
   const onMouseUp = useCallback(() => {
@@ -142,7 +126,6 @@ export function useControlPointDrag(
     dragStartRef.current = null;
   }, []);
 
-  // Attach global mouse events when dragging
   useEffect(() => {
     if (draggingPointId) {
       window.addEventListener('mousemove', onMouseMove);
@@ -156,9 +139,8 @@ export function useControlPointDrag(
 
   return {
     draggingPointId,
+    controlPointsAbsolute,
     onMouseDown,
-    onMouseMove: onMouseMove as any, // Type cast for React.MouseEvent
     onMouseUp,
-    getSnappedPosition,
   };
 }
