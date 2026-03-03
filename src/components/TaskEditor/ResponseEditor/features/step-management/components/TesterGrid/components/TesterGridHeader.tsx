@@ -17,29 +17,29 @@ const EXTRACTOR_COLORS = {
 // 📊 Etichette colonne con tooltip
 const COLUMN_LABELS = {
   regex: {
-    main: "Espressione",
+    main: "Regex",
     tech: "Regex",
-    tooltip: "Cerca pattern di testo con espressioni regolari"
+    tooltip: "Riconosce il dato solo se è scritto in modo molto preciso e prevedibile. Funziona per risposte standard. Se la risposta è espressa in modo diverso, passa al motore successivo."
   },
   deterministic: {
-    main: "Logica",
-    tech: "Extractor",
-    tooltip: "Parsing semantico con regole programmate specifiche per tipo"
+    main: "Rules",
+    tech: "Rules",
+    tooltip: "Applica regole strutturate per estrarre informazioni composte, come indirizzi o dati personali. Funziona quando la risposta contiene più parti da separare. Se la risposta è troppo libera, passa al motore successivo."
   },
   ner: {
-    main: "AI Rapida",
+    main: "NER",
     tech: "NER",
-    tooltip: "Riconoscimento entità con intelligenza artificiale veloce"
+    tooltip: "Capisce vari modi comuni di esprimere lo stesso concetto. Riconosce entità come nomi, luoghi o categorie anche se scritte in forme diverse. Interviene quando Regex non basta."
   },
   llm: {
-    main: "AI Completa",
+    main: "LLM",
     tech: "LLM",
-    tooltip: "Comprensione linguistica profonda con modello AI avanzato"
+    tooltip: "Interpreta il linguaggio naturale in modo avanzato. Capisce risposte complesse, ambigue o discorsive. È il motore finale che interviene quando gli altri non riescono."
   },
   embeddings: {
-    main: "Classificazione",
+    main: "Embeddings",
     tech: "Embeddings",
-    tooltip: "Classificazione intenti basata su embeddings semantici"
+    tooltip: "Capisce sinonimi, parafrasi e modi molto diversi di dire la stessa cosa. Serve quando il dato richiesto appartiene a una lista di valori possibili. Trova il valore più simile anche se l'utente usa parole diverse."
   }
 };
 
@@ -229,7 +229,7 @@ export default function TesterGridHeader({
   const calculateColumnWidth = (totalColumns: number): number => {
     if (totalColumns === 0) return 200; // Default width if no columns
     // Estimate: 100% - 440px fixed = available width
-    // Distribute evenly among dynamic columns (min 220px per column per contenere "Espressione (Regex)" + icone)
+    // Distribute evenly among dynamic columns (min 220px per column per contenere label + icone)
     const minColumnWidth = 220; // Increased from 150 to 220 to prevent text clipping
     const estimatedTotalWidth = 1200; // Approximate table width
     const fixedWidth = 440; // phraseColumnWidth (280) + Actions (80) + Buttons (80)

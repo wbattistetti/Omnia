@@ -411,6 +411,24 @@ export async function runParallelGeneration(
       if (!existingTypes.has(contractType)) {
         template.dataContract.parsers = [...existingContracts, parser];
 
+        // ✅ Sort parsers by priority to ensure correct escalation order
+        // Even if parsers complete in parallel, they must be saved in escalation order
+        const enginePriority: Record<string, number> = {
+          regex: 1,
+          rule_based: 2,
+          ner: 3,
+          embedding: 4,
+          llm: 5
+        };
+
+        template.dataContract.parsers.sort((a: any, b: any) => {
+          const typeA = a.type === 'rules' ? 'rule_based' : a.type;
+          const typeB = b.type === 'rules' ? 'rule_based' : b.type;
+          const priorityA = enginePriority[typeA] || 999;
+          const priorityB = enginePriority[typeB] || 999;
+          return priorityA - priorityB;
+        });
+
         // ✅ DEBUG: Log quando il parser viene salvato nel template in memoria
         console.log(`[wizardActions] ✅ Parser saved to template.dataContract.parsers (in memory)`, {
           nodeId,
@@ -419,6 +437,7 @@ export async function runParallelGeneration(
           parserType: parser.type,
           parsersCount: template.dataContract.parsers.length,
           allContractTypes: template.dataContract.parsers.map((c: any) => c.type),
+          escalationOrder: template.dataContract.parsers.map((c: any) => c.type).join(' → '),
           fullDataContract: {
             templateName: template.dataContract.templateName,
             templateId: template.dataContract.templateId,

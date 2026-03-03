@@ -10,11 +10,11 @@ interface AddContractDropdownProps {
 }
 
 const METHOD_LABELS: Record<ContractMethod, string> = {
-  regex: 'Espressione (Regex)',
-  rules: 'Logica (Extractor)',
-  ner: 'AI Rapida (NER)',
-  llm: 'AI Completa (LLM)',
-  embeddings: 'Classificazione (Embeddings)',
+  regex: 'Regex',
+  rules: 'Rules',
+  ner: 'NER',
+  llm: 'LLM',
+  embeddings: 'Embeddings',
 };
 
 /**

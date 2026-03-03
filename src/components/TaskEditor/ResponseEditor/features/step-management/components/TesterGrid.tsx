@@ -215,15 +215,15 @@ function TesterGridComponent({
     if (!activeEditor) return '';
     switch (activeEditor) {
       case 'regex':
-        return 'Espressione (Regex)';
+        return 'Regex';
       case 'extractor':
-        return 'Logica (Extractor)';
+        return 'Rules';
       case 'ner':
-        return 'AI Rapida (NER)';
+        return 'NER';
       case 'llm':
-        return 'AI Completa (LLM)';
+        return 'LLM';
       case 'embeddings':
-        return 'Classificazione (Embeddings)';
+        return 'Embeddings';
       default:
         return '';
     }

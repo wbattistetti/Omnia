@@ -19,10 +19,10 @@ export interface ContractMethodInfo {
 }
 
 const ALL_CONTRACTS: ContractMethodInfo[] = [
-  { id: 'regex', label: 'Espressione (Regex)', shortLabel: 'Regex', color: '#93c5fd' },
-  { id: 'rules', label: 'Logica (Extractor)', shortLabel: 'Logica', color: '#e5e7eb' },
-  { id: 'ner', label: 'AI Rapida (NER)', shortLabel: 'NER', color: '#fef3c7' },
-  { id: 'llm', label: 'AI Completa (LLM)', shortLabel: 'LLM', color: '#fed7aa' },
+  { id: 'regex', label: 'Regex', shortLabel: 'Regex', color: '#93c5fd' },
+  { id: 'rules', label: 'Rules', shortLabel: 'Rules', color: '#e5e7eb' },
+  { id: 'ner', label: 'NER', shortLabel: 'NER', color: '#fef3c7' },
+  { id: 'llm', label: 'LLM', shortLabel: 'LLM', color: '#fed7aa' },
   { id: 'embeddings', label: 'Embeddings', shortLabel: 'Embeddings', color: '#e0e7ff' },
 ];
 

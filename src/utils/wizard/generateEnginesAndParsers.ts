@@ -13,29 +13,56 @@ import type { GenerationProgress } from './types';
 
 /**
  * SEZIONE 2: Decide which engines to use for a node based on SemanticContract
- * Uses deterministic rules (getDefaultEscalation) based on entity type
+ *
+ * PRIORITY:
+ * 1. Use engines from existing parsers in template (respects AI plan from wizard)
+ * 2. Fallback to default escalation (for existing tasks without AI plan)
  */
 export function decideEnginesForNode(
   node: TaskTreeNode,
   contract: SemanticContract
 ): EngineType[] {
   const nodeId = node.id || node.templateId;
-  const entityType = contract.entity?.type || node.type || 'generic';
+  const template = DialogueTaskService.getTemplate(nodeId);
 
-  // Get default escalation based on entity type
+  // ✅ PRIORITY 1: Use engines from existing parsers in template (respects AI plan)
+  if (template?.dataContract?.parsers && template.dataContract.parsers.length > 0) {
+    const existingEngineTypes = template.dataContract.parsers
+      .map(p => {
+        // Map contract types to engine types
+        if (p.type === 'rules') return 'rule_based';
+        return p.type as EngineType;
+      })
+      .filter((type): type is EngineType =>
+        ['regex', 'rule_based', 'ner', 'llm', 'embedding'].includes(type)
+      );
+
+    if (existingEngineTypes.length > 0) {
+      console.log(`[decideEnginesForNode] ✅ Using engines from existing parsers (AI plan) for node ${nodeId}`, {
+        nodeLabel: node.label,
+        engines: existingEngineTypes,
+        totalEngines: existingEngineTypes.length,
+        source: 'template.dataContract.parsers'
+      });
+      return existingEngineTypes;
+    }
+  }
+
+  // ✅ PRIORITY 2: Fallback to default escalation (only if no parsers exist)
+  const entityType = contract.entity?.type || node.type || 'generic';
   const escalation = EngineEscalationService.getDefaultEscalation(nodeId, entityType);
 
-  // Return only enabled engines, sorted by priority
   const enabledEngines = escalation.engines
     .filter(e => e.enabled)
     .sort((a, b) => a.priority - b.priority)
     .map(e => e.type);
 
-  console.log(`[decideEnginesForNode] Engines decided for node ${nodeId}`, {
+  console.log(`[decideEnginesForNode] ⚠️ Using default escalation (no existing parsers) for node ${nodeId}`, {
     nodeLabel: node.label,
     entityType,
     engines: enabledEngines,
-    totalEngines: enabledEngines.length
+    totalEngines: enabledEngines.length,
+    source: 'defaultEscalation'
   });
 
   return enabledEngines;

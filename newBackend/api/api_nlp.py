@@ -714,57 +714,132 @@ def plan_engines(body: dict = Body(...)):
                 "error": "At least one node is required in contract tree"
             }
 
-        # Build prompt for AI to plan engines for all nodes
-        nodes_summary = []
+        # Build nodes section for prompt with nodeId, nodeLabel, and dataStructure
+        nodes_sections = []
         for n in nodes:
             node_id = n.get("nodeId", "unknown")
             node_label = n.get("nodeLabel", "unknown")
             contract = n.get("contract", {})
-            entity_label = contract.get("entity", {}).get("label", "unknown")
-            sub_entities = contract.get("subEntities", [])
-            nodes_summary.append({
-                "nodeId": node_id,
-                "nodeLabel": node_label,
-                "entityLabel": entity_label,
-                "subEntitiesCount": len(sub_entities),
-                "subEntities": [se.get("label", "unknown") for se in sub_entities[:5]]  # Limit to first 5
-            })
 
-        prompt = f"""You are an Engine Planner. Your task is to determine which extraction engines should be generated for each node in a task tree.
+            # Build data structure representation from contract
+            data_structure = {
+                "entity": contract.get("entity", {}),
+                "subEntities": contract.get("subEntities", [])
+            }
 
-TASK TREE ({len(nodes)} nodes):
-{json.dumps(nodes_summary, indent=2)}
+            # Build individual node section
+            node_section = f"""
+NODE {node_id}:
+- nodeId: {node_id}
+- nodeLabel: {node_label}
+- dataStructure:
+{json.dumps(data_structure, indent=2, ensure_ascii=False)}
+"""
+            nodes_sections.append(node_section)
 
-AVAILABLE ENGINES:
-- regex: Pattern-based extraction (fast, deterministic, good for structured data)
-- rule_based: Rule-based extraction (flexible, deterministic, good for complex logic)
-- ner: Named Entity Recognition (context-aware, good for ambiguous data)
-- llm: LLM-based extraction (most flexible, slower, good for complex cases)
-- embedding: Embedding-based similarity (good for matching against examples)
+        # Combine all node sections
+        nodes_section = "\n".join(nodes_sections)
 
-RULES:
-1. Each node may need 1-4 engines depending on complexity
-2. Simple nodes (single value, no sub-entities) → regex + llm
-3. Complex nodes (composite, multiple sub-entities) → regex + rule_based + llm
-4. Nodes with examples or canonical values → include embedding
-5. Nodes requiring context disambiguation → include ner
-6. Always include at least regex and llm for fallback
-7. Prioritize faster engines (regex, rule_based) over slower ones (llm, embedding)
+        prompt = f"""You are an Engine Planner.
 
-RESPONSE FORMAT (strict JSON, no markdown, no code fences, no comments):
+Your task is to determine the minimal set of extraction engines required
+to interpret the user's answer for EACH NODE independently.
+
+You will receive multiple nodes.
+Each node has:
+- nodeId
+- nodeLabel (the task label)
+- dataStructure (the structure of the data to extract)
+
+You MUST evaluate each node independently.
+Nodes MUST NOT influence each other.
+Do NOT compare nodes.
+Do NOT merge logic across nodes.
+Each node must receive its own engine plan.
+
+------------------------------------------------------------
+AVAILABLE ENGINES
+------------------------------------------------------------
+You can choose between 5 extraction engines:
+
+1. regex
+2. rule_based
+3. ner
+4. embedding
+5. llm
+
+------------------------------------------------------------
+ENGINE PRIORITY (FROM CHEAPEST TO MOST EXPENSIVE)
+------------------------------------------------------------
+1. regex      — always preferred when possible
+2. rule_based — for composite or multi-field structures
+3. ner        — for semantic ambiguity in natural language
+4. embedding  — for canonical values or similarity matching
+5. llm        — ALWAYS included as final fallback
+
+------------------------------------------------------------
+MANDATORY RULE (CRITICAL)
+------------------------------------------------------------
+LLM MUST ALWAYS be included as the final fallback engine
+for EVERY NODE, including boolean yes/no tasks.
+
+This is NOT optional.
+
+------------------------------------------------------------
+PRIMARY DECISION DRIVER
+------------------------------------------------------------
+The engine selection MUST be based primarily on the nodeLabel
+(the semantic meaning of the task).
+
+The dataStructure is secondary and should only be used to detect:
+- whether the node is composite (→ rule_based)
+- whether canonical values exist (→ embedding)
+
+Do NOT use the dataStructure as the main driver.
+
+------------------------------------------------------------
+SELECTION GUIDELINES
+------------------------------------------------------------
+
+- Use regex when the expected answer is predictable, structured,
+  or matches clear patterns (e.g., yes/no, dates, numbers, emails).
+
+- Use rule_based ONLY when the data structure contains multiple fields
+  that require deterministic splitting (e.g., address, personal data).
+
+- Use ner ONLY when the task requires resolving semantic ambiguity
+  in free-form natural language (e.g., "motivo", "descrizione").
+
+- Use embedding ONLY when the node contains canonical values
+  explicitly listed in the data structure.
+
+- ALWAYS include llm as the last engine in the list.
+
+------------------------------------------------------------
+INPUT NODES
+------------------------------------------------------------
+Below are the nodes you must evaluate:
+
+{nodes_section}
+
+------------------------------------------------------------
+OUTPUT FORMAT (strict JSON)
+------------------------------------------------------------
 {{
   "parsersPlan": [
-    {{"nodeId": "A", "engines": ["regex", "llm"]}},
-    {{"nodeId": "B", "engines": ["regex", "rule_based", "llm"]}},
-    ...
+    {{ "nodeId": "NODE_ID_1", "engines": ["regex", "llm"] }},
+    {{ "nodeId": "NODE_ID_2", "engines": ["regex", "rule_based", "llm"] }},
+    {{ "nodeId": "NODE_ID_3", "engines": ["regex", "embedding", "llm"] }}
   ]
 }}
 
-Return ONLY the JSON object, nothing else."""
+- Include EXACTLY one entry per node.
+- Engines must be in priority order.
+- Return ONLY the JSON object."""
 
         system_message = (
             "You are an Engine Planner. "
-            "Your task is to determine which extraction engines should be generated for each node in a task tree. "
+            "Your task is to determine the minimal set of extraction engines required for each node independently. "
             "Return ONLY valid JSON with parsersPlan array, no markdown, no code fences, no comments."
         )
 
@@ -780,6 +855,12 @@ Return ONLY the JSON object, nothing else."""
         else:
             result = ai_response
 
+        # ✅ LOG: Raw AI response
+        print(f"\n[plan-engines] ========================================", flush=True)
+        print(f"[plan-engines] RAW AI RESPONSE:", flush=True)
+        print(f"[plan-engines] {json.dumps(result, indent=2, ensure_ascii=False)}", flush=True)
+        print(f"[plan-engines] ========================================\n", flush=True)
+
         # Validate response structure
         if not isinstance(result, dict) or "parsersPlan" not in result:
             raise ValueError("AI response must contain parsersPlan array")
@@ -788,31 +869,93 @@ Return ONLY the JSON object, nothing else."""
         if not isinstance(parsers_plan, list):
             raise ValueError("parsersPlan must be an array")
 
-        # Validate each plan entry
+        # ✅ Define engine priority order (escalation order)
+        engine_priority = {
+            "regex": 1,
+            "rule_based": 2,
+            "ner": 3,
+            "embedding": 4,
+            "llm": 5
+        }
+
+        # ✅ Create map of nodeId -> nodeLabel for logging
+        node_label_map = {}
+        for n in nodes:
+            node_id = n.get("nodeId", "unknown")
+            node_label = n.get("nodeLabel", "unknown")
+            node_label_map[node_id] = node_label
+
+        # Validate and sort engines by priority for each plan entry
         validated_plan = []
         valid_engine_types = ["regex", "rule_based", "ner", "llm", "embedding"]
+
         for entry in parsers_plan:
             if not isinstance(entry, dict):
                 continue
             node_id = entry.get("nodeId")
             engines = entry.get("engines", [])
+
             if node_id and isinstance(engines, list):
                 # Filter valid engine types
                 valid_engines = [e for e in engines if e in valid_engine_types]
+
                 if valid_engines:
+                    # ✅ Sort engines by priority (escalation order)
+                    valid_engines_sorted = sorted(
+                        valid_engines,
+                        key=lambda e: engine_priority.get(e, 999)
+                    )
+
+                    # ✅ Ensure LLM is always last
+                    if "llm" in valid_engines_sorted:
+                        valid_engines_sorted.remove("llm")
+                        valid_engines_sorted.append("llm")
+
+                    node_label = node_label_map.get(node_id, "unknown")
+
+                    # ✅ LOG: Detailed plan for each node
+                    print(f"[plan-engines] NODE PLAN:", flush=True)
+                    print(f"  - nodeId: {node_id}", flush=True)
+                    print(f"  - nodeLabel: {node_label}", flush=True)
+                    print(f"  - engines (escalation order): {', '.join(valid_engines_sorted)}", flush=True)
+                    print(f"  - engine count: {len(valid_engines_sorted)}", flush=True)
+
+                    # ✅ WARNING: Check if boolean question has too many engines
+                    is_boolean_keywords = any(keyword in node_label.lower() for keyword in [
+                        "chiedi se", "verifica se", "controlla se", "ha", "possiede", "esiste"
+                    ])
+                    if is_boolean_keywords and len(valid_engines_sorted) > 2:
+                        print(f"  ⚠️  WARNING: Boolean question '{node_label}' has {len(valid_engines_sorted)} engines, expected 2 (regex + llm)", flush=True)
+                        print(f"     Expected: ['regex', 'llm']", flush=True)
+                        print(f"     Got: {valid_engines_sorted}", flush=True)
+                    elif is_boolean_keywords and len(valid_engines_sorted) == 2:
+                        if valid_engines_sorted == ["regex", "llm"]:
+                            print(f"  ✅ CORRECT: Boolean question has correct engines in escalation order", flush=True)
+                        else:
+                            print(f"  ⚠️  WARNING: Boolean question engines not in correct order", flush=True)
+                            print(f"     Expected: ['regex', 'llm']", flush=True)
+                            print(f"     Got: {valid_engines_sorted}", flush=True)
+
+                    print("", flush=True)
+
                     validated_plan.append({
                         "nodeId": node_id,
-                        "engines": valid_engines
+                        "engines": valid_engines_sorted
                     })
 
         if len(validated_plan) == 0:
             raise ValueError("No valid engine plans found in AI response")
 
-        print(f"[plan-engines] Engine plan generated", flush=True)
+        # ✅ LOG: Summary
+        print(f"[plan-engines] ========================================", flush=True)
+        print(f"[plan-engines] SUMMARY:", flush=True)
         print(f"  - total nodes: {len(nodes)}", flush=True)
         print(f"  - planned nodes: {len(validated_plan)}", flush=True)
+        print(f"[plan-engines] ========================================\n", flush=True)
+
         for plan in validated_plan:
-            print(f"    - {plan['nodeId']}: {', '.join(plan['engines'])}", flush=True)
+            node_label = node_label_map.get(plan['nodeId'], "unknown")
+            print(f"    - {plan['nodeId']} ({node_label}): {', '.join(plan['engines'])}", flush=True)
 
         return {
             "success": True,

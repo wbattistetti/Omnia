@@ -265,11 +265,11 @@ export default function TesterGridHeaderColumn({
         >
           {availableMethods.map((method) => {
             const METHOD_LABELS: Record<'regex' | 'rules' | 'ner' | 'llm' | 'embeddings', string> = {
-              regex: 'Espressione (Regex)',
-              rules: 'Logica (Extractor)',
-              ner: 'AI Rapida (NER)',
-              llm: 'AI Completa (LLM)',
-              embeddings: 'Classificazione (Embeddings)',
+              regex: 'Regex',
+              rules: 'Rules',
+              ner: 'NER',
+              llm: 'LLM',
+              embeddings: 'Embeddings',
             };
             return (
               <button
