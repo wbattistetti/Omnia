@@ -1,6 +1,7 @@
 import React from 'react';
 import type { EditorProps } from '../../EditorHost/types';
 import { taskRepository } from '../../../../services/TaskRepository';
+import { TaskType } from '../../../../types/taskTypes';
 import { useProjectDataUpdate, useProjectData } from '../../../../context/ProjectDataContext';
 import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
 import EditorHeader from '../../../../components/common/EditorHeader';
@@ -126,8 +127,27 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
     return [];
   }, []);
 
+  // ─────────────────────────────────────────────────────────
+  // Helper: build a BackendCallConfig from a raw Task object
+  // Fields are stored FLAT on the Task: task.endpoint, task.inputs, task.outputs, task.mockTable
+  // ─────────────────────────────────────────────────────────
+  const buildConfigFromTask = React.useCallback((rawTask: any): BackendCallConfig => {
+    const endpoint = rawTask?.endpoint ?? DEFAULT_CONFIG.endpoint;
+    const inputs: BackendCallConfig['inputs'] = rawTask?.inputs ?? [];
+    const outputs: BackendCallConfig['outputs'] = rawTask?.outputs ?? [];
+    const mockTable: BackendCallConfig['mockTable'] = rawTask?.mockTable;
+
+    const cfg: BackendCallConfig = {
+      endpoint,
+      inputs: inputs.length > 0 ? inputs : [{ internalName: '', apiParam: '', variable: '' }],
+      outputs: outputs.length > 0 ? outputs : [{ internalName: '', apiField: '', variable: '' }],
+      ...(mockTable !== undefined ? { mockTable } : {})
+    };
+    return cfg;
+  }, []);
+
   // Load or create backend call config from Task
-  // ✅ Always start with one empty row for inputs and outputs
+  // Fields are stored FLAT on the Task: task.endpoint, task.inputs, task.outputs, task.mockTable
   const [config, setConfig] = React.useState<BackendCallConfig>(() => {
     if (!instanceId) {
       return {
@@ -138,65 +158,46 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
     }
     let existingTask = taskRepository.getTask(instanceId);
     if (!existingTask) {
-      const action = 'CallBackend';
-      const initialConfig = {
-        ...DEFAULT_CONFIG,
-        inputs: [{ internalName: '', apiParam: '', variable: '' }],
-        outputs: [{ internalName: '', apiField: '', variable: '' }]
-      };
-      existingTask = taskRepository.createTask(action, { config: initialConfig }, instanceId, projectId);
-      return initialConfig;
+      // Create task with flat fields, no wrapper
+      const initialInputs = [{ internalName: '', apiParam: '', variable: '' }];
+      const initialOutputs = [{ internalName: '', apiField: '', variable: '' }];
+      taskRepository.createTask(
+        TaskType.BackendCall,
+        null,
+        {
+          endpoint: DEFAULT_CONFIG.endpoint,
+          inputs: initialInputs,
+          outputs: initialOutputs
+        },
+        instanceId,
+        projectId || undefined
+      );
+      return { ...DEFAULT_CONFIG, inputs: initialInputs, outputs: initialOutputs };
     }
-    const loaded = existingTask?.value?.config || DEFAULT_CONFIG;
-    // Ensure at least one empty row exists
-    if (!loaded.inputs || loaded.inputs.length === 0) {
-      loaded.inputs = [{ internalName: '', apiParam: '', variable: '' }];
-    }
-    if (!loaded.outputs || loaded.outputs.length === 0) {
-      loaded.outputs = [{ internalName: '', apiField: '', variable: '' }];
-    }
-    return loaded;
+    return buildConfigFromTask(existingTask);
   });
 
-  // Reload config from Task when instanceId changes
+  // Reload config from Task when instanceId changes (e.g. editor reopened)
   React.useEffect(() => {
     if (!instanceId) return;
-    const task = taskRepository.getTask(instanceId);
-    if (task?.config) {
-      const loaded = task.config;
-      // Ensure at least one empty row exists
-      if (!loaded.inputs || loaded.inputs.length === 0) {
-        loaded.inputs = [{ internalName: '', apiParam: '', variable: '' }];
-      }
-      if (!loaded.outputs || loaded.outputs.length === 0) {
-        loaded.outputs = [{ internalName: '', apiField: '', variable: '' }];
-      }
-      setConfig(loaded);
+    const storedTask = taskRepository.getTask(instanceId);
+    if (!storedTask) return;
 
-      // Initialize editing state for empty rows
-      const emptyInputIndices = new Set<number>();
-      const emptyOutputIndices = new Set<number>();
+    const loaded = buildConfigFromTask(storedTask);
+    setConfig(loaded);
 
-      (loaded.inputs || []).forEach((input: any, index: number) => {
-        if (!input.internalName?.trim()) {
-          emptyInputIndices.add(index);
-        }
-      });
-
-      (loaded.outputs || []).forEach((output: any, index: number) => {
-        if (!output.internalName?.trim()) {
-          emptyOutputIndices.add(index);
-        }
-      });
-
-      if (emptyInputIndices.size > 0) {
-        setEditingInputs(emptyInputIndices);
-      }
-      if (emptyOutputIndices.size > 0) {
-        setEditingOutputs(emptyOutputIndices);
-      }
-    }
-  }, [instanceId]);
+    // Initialize editing state for empty rows
+    const emptyInputIndices = new Set<number>();
+    const emptyOutputIndices = new Set<number>();
+    (loaded.inputs || []).forEach((input, index) => {
+      if (!input.internalName?.trim()) emptyInputIndices.add(index);
+    });
+    (loaded.outputs || []).forEach((output, index) => {
+      if (!output.internalName?.trim()) emptyOutputIndices.add(index);
+    });
+    if (emptyInputIndices.size > 0) setEditingInputs(emptyInputIndices);
+    if (emptyOutputIndices.size > 0) setEditingOutputs(emptyOutputIndices);
+  }, [instanceId, buildConfigFromTask]);
 
   // Initialize editing state for empty rows on initial mount
   React.useEffect(() => {
@@ -223,10 +224,15 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
     }
   }, []); // Only on mount
 
-  // Save config to Task when it changes
+  // Save config to Task when it changes — flat fields, no wrapper
   React.useEffect(() => {
     if (instanceId && config) {
-      taskRepository.updateTask(instanceId, { config }, projectId);
+      taskRepository.updateTask(instanceId, {
+        endpoint: config.endpoint,
+        inputs: config.inputs,
+        outputs: config.outputs,
+        ...(config.mockTable !== undefined ? { mockTable: config.mockTable } : {})
+      } as any, projectId);
     }
   }, [config, instanceId, projectId]);
 
@@ -277,6 +283,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
 
   // Auto-append: quando premi Enter nel textbox, aggiungi riga vuota sotto
   // Se il textbox ha un valore, esce dalla modalità editing e diventa label
+  // ❌ NON aggiungere riga se il campo è vuoto o se l'ultima riga è già vuota
   const handleInputKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>, value: string) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -296,22 +303,34 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
           delete next[index];
           return next;
         });
+
+        // ✅ Aggiungi nuova riga vuota SOLO se l'ultima riga non è già vuota
+        setConfig(prev => {
+          const inputs = [...(prev.inputs || [])];
+          const lastInput = inputs[inputs.length - 1];
+          const isLastEmpty = !lastInput?.internalName?.trim();
+
+          // Se l'ultima riga è già vuota, non aggiungere un'altra riga vuota
+          if (isLastEmpty) {
+            return prev;
+          }
+
+          // Altrimenti, aggiungi nuova riga vuota dopo quella corrente
+          inputs.splice(index + 1, 0, { internalName: '', apiParam: '', variable: '' });
+          return { ...prev, inputs };
+        });
+
+        // Focus sulla nuova riga (next tick)
+        setTimeout(() => {
+          const nextInput = document.querySelector(`input[data-input-index="${index + 1}"]`) as HTMLInputElement;
+          if (nextInput) nextInput.focus();
+          // Nuova riga parte in editing
+          setEditingInputs(prev => new Set(prev).add(index + 1));
+        }, 0);
+      } else {
+        // ✅ Campo vuoto: rimani in editing (non uscire, così l'utente può continuare a digitare)
+        // Non fare nulla, il campo rimane in editing mode
       }
-
-      // In ogni caso, aggiungi nuova riga vuota
-      setConfig(prev => {
-        const inputs = [...(prev.inputs || [])];
-        inputs.splice(index + 1, 0, { internalName: '', apiParam: '', variable: '' });
-        return { ...prev, inputs };
-      });
-
-      // Focus sulla nuova riga (next tick)
-      setTimeout(() => {
-        const nextInput = document.querySelector(`input[data-input-index="${index + 1}"]`) as HTMLInputElement;
-        if (nextInput) nextInput.focus();
-        // Nuova riga parte in editing
-        setEditingInputs(prev => new Set(prev).add(index + 1));
-      }, 0);
     } else if (e.key === 'Escape') {
       // Annulla editing
       setEditingInputs(prev => {
@@ -346,22 +365,34 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
           delete next[index];
           return next;
         });
+
+        // ✅ Aggiungi nuova riga vuota SOLO se l'ultima riga non è già vuota
+        setConfig(prev => {
+          const outputs = [...(prev.outputs || [])];
+          const lastOutput = outputs[outputs.length - 1];
+          const isLastEmpty = !lastOutput?.internalName?.trim();
+
+          // Se l'ultima riga è già vuota, non aggiungere un'altra riga vuota
+          if (isLastEmpty) {
+            return prev;
+          }
+
+          // Altrimenti, aggiungi nuova riga vuota dopo quella corrente
+          outputs.splice(index + 1, 0, { internalName: '', apiField: '', variable: '' });
+          return { ...prev, outputs };
+        });
+
+        // Focus sulla nuova riga (next tick)
+        setTimeout(() => {
+          const nextInput = document.querySelector(`input[data-output-index="${index + 1}"]`) as HTMLInputElement;
+          if (nextInput) nextInput.focus();
+          // Nuova riga parte in editing
+          setEditingOutputs(prev => new Set(prev).add(index + 1));
+        }, 0);
+      } else {
+        // ✅ Campo vuoto: rimani in editing (non uscire, così l'utente può continuare a digitare)
+        // Non fare nulla, il campo rimane in editing mode
       }
-
-      // In ogni caso, aggiungi nuova riga vuota
-      setConfig(prev => {
-        const outputs = [...(prev.outputs || [])];
-        outputs.splice(index + 1, 0, { internalName: '', apiField: '', variable: '' });
-        return { ...prev, outputs };
-      });
-
-      // Focus sulla nuova riga (next tick)
-      setTimeout(() => {
-        const nextInput = document.querySelector(`input[data-output-index="${index + 1}"]`) as HTMLInputElement;
-        if (nextInput) nextInput.focus();
-        // Nuova riga parte in editing
-        setEditingOutputs(prev => new Set(prev).add(index + 1));
-      }, 0);
     } else if (e.key === 'Escape') {
       // Annulla editing
       setEditingOutputs(prev => {
@@ -744,7 +775,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                         </div>
                       )}
                       {/* Campo 3: Variabile (placeholder cliccabile, label o combobox) */}
-                      <div className="flex-shrink-0" style={{ height: '32px', width: '120px' }}>
+                      <div className="flex-shrink-0" style={{ height: '32px', minWidth: '80px' }}>
                         {openInputVariable === index ? (
                           // Combo box aperta
                           <div style={{
@@ -773,7 +804,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                           // Label quando c'è un valore
                           <button
                             onClick={() => setOpenInputVariable(index)}
-                            className="text-xs text-slate-200 px-2 py-1.5 h-8 rounded border border-slate-600 bg-slate-800 w-full text-left hover:border-cyan-500 hover:bg-slate-700 truncate"
+                            className="text-xs text-slate-200 px-2 py-1.5 h-8 rounded border border-slate-600 bg-slate-800 text-left hover:border-cyan-500 hover:bg-slate-700 whitespace-nowrap"
                             title="Click to change variable"
                           >
                             {input.variable}
@@ -955,7 +986,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                         </div>
                       )}
                       {/* Campo 3: Variabile (placeholder cliccabile, label o combobox) */}
-                      <div className="flex-shrink-0" style={{ height: '32px', width: '120px' }}>
+                      <div className="flex-shrink-0" style={{ height: '32px', minWidth: '80px' }}>
                         {openOutputVariable === index ? (
                           // Combo box aperta
                           <div style={{
@@ -984,7 +1015,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                           // Label quando c'è un valore
                           <button
                             onClick={() => setOpenOutputVariable(index)}
-                            className="text-xs text-slate-200 px-2 py-1.5 h-8 rounded border border-slate-600 bg-slate-800 w-full text-left hover:border-green-500 hover:bg-slate-700 truncate"
+                            className="text-xs text-slate-200 px-2 py-1.5 h-8 rounded border border-slate-600 bg-slate-800 text-left hover:border-green-500 hover:bg-slate-700 whitespace-nowrap"
                             title="Click to change variable"
                           >
                             {output.variable}
