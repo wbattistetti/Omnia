@@ -759,7 +759,50 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 </span>
               )}
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
-              <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getNodeLabel(main, translations)}</span>
+              {editingMainIdx === idx ? (
+                <input
+                  autoFocus
+                  value={editDraft}
+                  onChange={(e) => setEditDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (editDraft || '').trim()) {
+                      e.preventDefault(); // ✅ CRITICAL: Prevent default to avoid form submission
+                      e.stopPropagation(); // ✅ CRITICAL: Stop propagation to prevent button click
+                      onRenameMain && onRenameMain(idx, (editDraft || '').trim());
+                      setEditingMainIdx(null);
+                      setEditDraft('');
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setEditingMainIdx(null);
+                      setEditDraft('');
+                    }
+                  }}
+                  onBlur={() => {
+                    if ((editDraft || '').trim()) {
+                      onRenameMain && onRenameMain(idx, (editDraft || '').trim());
+                    }
+                    setEditingMainIdx(null);
+                    setEditDraft('');
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    flex: 1,
+                    background: '#0f172a',
+                    color: '#e5e7eb',
+                    border: '1px solid #334155',
+                    borderRadius: 4,
+                    padding: '2px 6px',
+                    outline: 'none',
+                    fontSize: 'inherit',
+                    fontFamily: 'inherit',
+                    margin: 0
+                  }}
+                />
+              ) : (
+                <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getNodeLabel(main, translations)}</span>
+              )}
               {(subs.length > 0) && (
                 <span
                   role="button"
@@ -827,21 +870,6 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 }}
               />
             </button>
-            {editingMainIdx === idx && (
-              <div style={{ marginLeft: 36, marginTop: 6 }}>
-                <input
-                  autoFocus
-                  value={editDraft}
-                  onChange={(e) => setEditDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (editDraft || '').trim()) { onRenameMain && onRenameMain(idx, (editDraft || '').trim()); setEditingMainIdx(null); setEditDraft(''); }
-                    if (e.key === 'Escape') { setEditingMainIdx(null); setEditDraft(''); }
-                  }}
-                  placeholder="Rename main…"
-                  style={{ width: '80%', background: '#0f172a', color: '#e5e7eb', border: '1px solid #334155', borderRadius: 8, padding: '6px 8px' }}
-                />
-              </div>
-            )}
             {(expandedMainIndex === idx && subs.length > 0) && (
               <div style={{ marginLeft: 36, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {subs.map((sub: any, sidx: number) => {
@@ -918,7 +946,50 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                           )}
                         </span>
                         <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
-                        <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getNodeLabel(sub, translations)}</span>
+                        {editingSub && editingSub.mainIdx === idx && editingSub.subIdx === sidx ? (
+                          <input
+                            autoFocus
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && (editDraft || '').trim()) {
+                                e.preventDefault(); // ✅ CRITICAL: Prevent default to avoid form submission
+                                e.stopPropagation(); // ✅ CRITICAL: Stop propagation to prevent button click
+                                onRenameSub && onRenameSub(editingSub.mainIdx, editingSub.subIdx, (editDraft || '').trim());
+                                setEditingSub(null);
+                                setEditDraft('');
+                              }
+                              if (e.key === 'Escape') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setEditingSub(null);
+                                setEditDraft('');
+                              }
+                            }}
+                            onBlur={() => {
+                              if ((editDraft || '').trim()) {
+                                onRenameSub && onRenameSub(editingSub.mainIdx, editingSub.subIdx, (editDraft || '').trim());
+                              }
+                              setEditingSub(null);
+                              setEditDraft('');
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              flex: 1,
+                              background: '#0f172a',
+                              color: '#e5e7eb',
+                              border: '1px solid #334155',
+                              borderRadius: 4,
+                              padding: '2px 6px',
+                              outline: 'none',
+                              fontSize: 'inherit',
+                              fontFamily: 'inherit',
+                              margin: 0
+                            }}
+                          />
+                        ) : (
+                          <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getNodeLabel(sub, translations)}</span>
+                        )}
                         {/* ✅ Parser icon inline in button (right side) */}
                         <ParserStatusRow
                           node={sub}
@@ -967,56 +1038,14 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                     />
                   </div>
                 )}
-                {editingSub && editingSub.mainIdx === idx && (
-                  <div>
-                    <input
-                      autoFocus
-                      value={editDraft}
-                      onChange={(e) => setEditDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && (editDraft || '').trim()) { onRenameSub && onRenameSub(editingSub.mainIdx, editingSub.subIdx, (editDraft || '').trim()); setEditingSub(null); setEditDraft(''); }
-                        if (e.key === 'Escape') { setEditingSub(null); setEditDraft(''); }
-                      }}
-                      placeholder="Rename sub…"
-                      style={{ width: '80%', background: '#0f172a', color: '#e5e7eb', border: '1px solid #334155', borderRadius: 8, padding: '6px 8px' }}
-                    />
-                  </div>
-                )}
               </div>
             )}
           </div>
         );
       })}
-      {/* ✅ Global Generate All button */}
-      {onGenerateAll && (
-        <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: `1px solid ${borderColor}` }}>
-          <button
-            onClick={onGenerateAll}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              background: 'rgba(96, 165, 250, 0.2)',
-              border: '1px solid rgba(96, 165, 250, 0.5)',
-              color: '#60a5fa',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-            }}
-          >
-            <Plus size={14} />
-            Genera automaticamente i parser mancanti
-          </button>
-        </div>
-      )}
-      {/* ✅ FIX: floating overlay - render ONLY when taskWizardMode === 'none' */}
-      {/* ✅ CRITICAL: Overlay must be completely unmounted when taskWizardMode !== 'none' */}
-      {/* ✅ This prevents overlay from covering the wizard in full mode */}
-      {overlay && (taskWizardMode === 'none' || taskWizardMode === undefined) && createPortal(
+      {/* ✅ Floating overlay - always visible when hovering over sidebar items */}
+      {/* ✅ Sidebar is always editable, even when wizard is active */}
+      {overlay && createPortal(
         <div
           onMouseEnter={() => { overlayHoverRef.current = true; if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current); }}
           onMouseLeave={() => { overlayHoverRef.current = false; maybeHideOverlay(200); }}

@@ -33,6 +33,9 @@ import { generalizeLabel } from '../../../../../TaskBuilderAIWizard/services/Tem
 import { TranslationType } from '@types/translationTypes';
 import { TaskType, TemplateSource } from '@types/taskTypes';
 import { useDeploymentDialog } from '@responseEditor/ResponseEditorToolbar';
+import { useWizardStore } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
+import { shallow } from 'zustand/shallow';
+import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
 
 // ✅ ARCHITECTURE: Props interface with only necessary values (no monolithic editor object)
 export interface ResponseEditorLayoutProps {
@@ -962,14 +965,101 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     wizardIntegrationProp?.handleCorrectionSubmit,
   ]);
 
-  // ✅ NEW: Usa direttamente dataSchema quando taskWizardMode === 'full'
-  // La Sidebar può usare direttamente WizardTaskTreeNode[] senza conversione
-  const effectiveMainList = React.useMemo(() => {
-    if (taskWizardMode === 'full' && wizardIntegrationProp?.dataSchema) {
-      return wizardIntegrationProp.dataSchema;
+  // ✅ 1. Usa shallow compare per rilevare cambiamenti nell'array
+  const wizardDataSchema = useWizardStore((state) => state.dataSchema, shallow);
+
+  // ✅ 2. Usa il setter direttamente invece di getState()
+  const setDataSchema = useWizardStore((state) => state.setDataSchema);
+
+  // ✅ 3. Rimuovi useMemo - calcolo diretto (non blocca gli aggiornamenti)
+  const effectiveMainList = taskWizardMode === 'full' && wizardDataSchema && wizardDataSchema.length > 0
+    ? wizardDataSchema
+    : mainList;
+
+  // ✅ NEW: Wrapper handlers that update ONLY dataSchema when wizard is active
+  // ✅ Usa setter direttamente con updater function (reattivo, React capisce)
+  const wrappedSidebarHandlers = React.useMemo(() => {
+    if (taskWizardMode !== 'full' || !wizardDataSchema || wizardDataSchema.length === 0) {
+      // Normal mode: use handlers as-is
+      return sidebar;
     }
-    return mainList;
-  }, [taskWizardMode, wizardIntegrationProp?.dataSchema, mainList]);
+
+    return {
+      ...sidebar,
+      onAddMain: (label: string) => {
+        setDataSchema((prev) => {
+          const newNode: WizardTaskTreeNode = {
+            id: `node_${Date.now()}_${Math.random()}`,
+            templateId: `node_${Date.now()}_${Math.random()}`,
+            label,
+            type: 'string',
+            icon: 'FileText',
+            subNodes: [],
+          };
+          return [...prev, newNode];
+        });
+      },
+      onRenameMain: (mIdx: number, label: string) => {
+        setDataSchema((prev) => {
+          const updated = [...prev];
+          if (updated[mIdx]) {
+            updated[mIdx] = { ...updated[mIdx], label };
+          }
+          return updated;
+        });
+      },
+      onDeleteMain: (mIdx: number) => {
+        setDataSchema((prev) => {
+          const updated = [...prev];
+          updated.splice(mIdx, 1);
+          return updated;
+        });
+      },
+      onAddSub: (mIdx: number, label: string) => {
+        setDataSchema((prev) => {
+          const updated = [...prev];
+          if (updated[mIdx]) {
+            const newSubNode: WizardTaskTreeNode = {
+              id: `sub_${Date.now()}_${Math.random()}`,
+              templateId: `sub_${Date.now()}_${Math.random()}`,
+              label,
+              type: 'string',
+              icon: 'FileText',
+            };
+            updated[mIdx] = {
+              ...updated[mIdx],
+              subNodes: [...(updated[mIdx].subNodes || []), newSubNode],
+            };
+          }
+          return updated;
+        });
+      },
+      onRenameSub: (mIdx: number, sIdx: number, label: string) => {
+        setDataSchema((prev) => {
+          const updated = [...prev];
+          if (updated[mIdx] && updated[mIdx].subNodes) {
+            const subNodes = [...updated[mIdx].subNodes!];
+            if (subNodes[sIdx]) {
+              subNodes[sIdx] = { ...subNodes[sIdx], label };
+            }
+            updated[mIdx] = { ...updated[mIdx], subNodes };
+          }
+          return updated;
+        });
+      },
+      onDeleteSub: (mIdx: number, sIdx: number) => {
+        setDataSchema((prev) => {
+          const updated = [...prev];
+          if (updated[mIdx] && updated[mIdx].subNodes) {
+            const subNodes = [...updated[mIdx].subNodes!];
+            subNodes.splice(sIdx, 1);
+            updated[mIdx] = { ...updated[mIdx], subNodes };
+          }
+          return updated;
+        });
+      },
+    };
+  }, [taskWizardMode, wizardDataSchema, sidebar, setDataSchema]);
 
   // ✅ ARCHITECTURE: Memoize sidebar to prevent reference changes
   const sidebarElement = React.useMemo(() => {
@@ -1006,14 +1096,14 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         handleSelectSub={handleSelectSub}
         handleSelectAggregator={handleSelectAggregator}
         sidebarRef={sidebarRef}
-        onChangeSubRequired={sidebar.onChangeSubRequired}
-        onReorderSub={sidebar.onReorderSub}
-        onAddMain={sidebar.onAddMain}
-        onRenameMain={sidebar.onRenameMain}
-        onDeleteMain={sidebar.onDeleteMain}
-        onAddSub={sidebar.onAddSub}
-        onRenameSub={sidebar.onRenameSub}
-        onDeleteSub={sidebar.onDeleteSub}
+        onChangeSubRequired={wrappedSidebarHandlers.onChangeSubRequired}
+        onReorderSub={wrappedSidebarHandlers.onReorderSub}
+        onAddMain={wrappedSidebarHandlers.onAddMain}
+        onRenameMain={wrappedSidebarHandlers.onRenameMain}
+        onDeleteMain={wrappedSidebarHandlers.onDeleteMain}
+        onAddSub={wrappedSidebarHandlers.onAddSub}
+        onRenameSub={wrappedSidebarHandlers.onRenameSub}
+        onDeleteSub={wrappedSidebarHandlers.onDeleteSub}
         handleParserCreate={handleParserCreate}
         handleParserModify={handleParserModify}
         handleEngineChipClick={handleEngineChipClick}
@@ -1125,14 +1215,14 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         handleSelectSub={handleSelectSub}
         handleSelectAggregator={handleSelectAggregator}
         sidebarRef={sidebarRef}
-        onChangeSubRequired={sidebar.onChangeSubRequired}
-        onReorderSub={sidebar.onReorderSub}
-        onAddMain={sidebar.onAddMain}
-        onRenameMain={sidebar.onRenameMain}
-        onDeleteMain={sidebar.onDeleteMain}
-        onAddSub={sidebar.onAddSub}
-        onRenameSub={sidebar.onRenameSub}
-        onDeleteSub={sidebar.onDeleteSub}
+        onChangeSubRequired={wrappedSidebarHandlers.onChangeSubRequired}
+        onReorderSub={wrappedSidebarHandlers.onReorderSub}
+        onAddMain={wrappedSidebarHandlers.onAddMain}
+        onRenameMain={wrappedSidebarHandlers.onRenameMain}
+        onDeleteMain={wrappedSidebarHandlers.onDeleteMain}
+        onAddSub={wrappedSidebarHandlers.onAddSub}
+        onRenameSub={wrappedSidebarHandlers.onRenameSub}
+        onDeleteSub={wrappedSidebarHandlers.onDeleteSub}
         handleParserCreate={handleParserCreate}
         handleParserModify={handleParserModify}
         handleEngineChipClick={handleEngineChipClick}
