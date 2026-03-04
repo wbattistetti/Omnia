@@ -133,7 +133,6 @@ function AppInner() {
         setTestPanelOpen={() => {}}
         testNodeId={null}
         setTestNodeId={() => {}}
-        onPlayNode={() => {}}
       />
 
       {/* ✅ NEW: Missing translations dialog */}

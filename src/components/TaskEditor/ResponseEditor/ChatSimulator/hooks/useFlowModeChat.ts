@@ -29,6 +29,9 @@ export function useFlowModeChat(
   const sentMessageIds = React.useRef<Set<string>>(new Set());
   // ✅ Guard to prevent multiple start() calls
   const hasStartedRef = React.useRef(false);
+  // ✅ Track nodes identity to detect when flow actually changes (not just length)
+  // This allows starting a new flow when testing a different node
+  const previousNodesKeyRef = React.useRef<string>('');
 
   // ✅ ARCHITECTURAL: Memoize engine options (not the engine itself)
   // This ensures the engine is recreated only when data actually changes
@@ -100,18 +103,35 @@ export function useFlowModeChat(
   // ✅ Log rimosso dal render - troppo rumoroso, solo nei punti critici
 
   React.useEffect(() => {
+    // ✅ Create stable key based on node IDs to detect actual flow changes
+    // This allows starting a new flow when testing a different node
+    const nodesKey = nodes.map(n => n.id).sort().join(',');
+
     console.log('[useFlowModeChat] ⚙️ useEffect triggered:', {
       nodesLength: nodes.length,
       edgesLength: edges.length,
       translationsKey: translationsKey.substring(0, 50),
       hasStarted: hasStartedRef.current,
+      nodesKey: nodesKey.substring(0, 100),
+      previousNodesKey: previousNodesKeyRef.current.substring(0, 100),
     });
 
-    // Reset guard if data changes (allows retry after data update)
+    // ✅ FIX: Reset guard when nodes actually change (not just when empty)
+    // This allows starting a new flow when opening a different node or flow
+    if (nodesKey !== previousNodesKeyRef.current) {
+      console.log('[useFlowModeChat] 🔄 Nodes changed, resetting hasStartedRef', {
+        previousKey: previousNodesKeyRef.current.substring(0, 100),
+        newKey: nodesKey.substring(0, 100),
+      });
+      hasStartedRef.current = false;
+      previousNodesKeyRef.current = nodesKey;
+    }
+
     // ✅ ARCHITECTURAL: Richiede solo nodes (edges sono opzionali - un flow con un solo nodo è valido)
     if (hasStartedRef.current && nodes.length === 0) {
       console.log('[useFlowModeChat] 🔄 Resetting hasStartedRef because nodes are empty');
       hasStartedRef.current = false;
+      previousNodesKeyRef.current = '';
     }
 
     if (hasStartedRef.current) {
@@ -175,9 +195,10 @@ export function useFlowModeChat(
       setError(error.message || 'Failed to start flow orchestrator');
       hasStartedRef.current = false; // Allow retry on error
     });
-    // ✅ Depend on nodes length and translations key (edges are optional)
+    // ✅ Depend on nodes (full array to detect ID changes), translations key, and flowEngine
+    // This ensures the effect runs when nodes actually change (different IDs), not just when length changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes.length, translationsKey]);
+  }, [nodes, translationsKey, flowEngine]);
 
   // ✅ Handle user input in flow mode
   const handleUserInput = React.useCallback(async (input: string) => {

@@ -4,10 +4,17 @@ import { loadFlow } from '../../flows/FlowPersistence';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { dlog } from '../../utils/debug';
 import { useProjectDataUpdate } from '../../context/ProjectDataContext';
+import { FlowTestProvider } from '../../context/FlowTestContext';
 
-type Props = { projectId: string; flowId: string; onCreateTaskFlow?: (flowId: string, title: string, nodes: any[], edges: any[]) => void; onOpenTaskFlow?: (flowId: string, title: string) => void };
+type Props = {
+  projectId: string;
+  flowId: string;
+  testSingleNode?: (nodeId: string, nodeRows?: any[]) => Promise<void>;
+  onCreateTaskFlow?: (flowId: string, title: string, nodes: any[], edges: any[]) => void;
+  onOpenTaskFlow?: (flowId: string, title: string) => void;
+};
 
-export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, onCreateTaskFlow, onOpenTaskFlow }) => {
+export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleNode, onCreateTaskFlow, onOpenTaskFlow }) => {
   const { flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph } = useFlowActions();
   const pd = useProjectDataUpdate();
@@ -22,7 +29,9 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, onCreateTas
   }, [projectId, flowId]);
 
   const flow = flows[flowId];
-  return (
+
+  // ✅ Wrap FlowEditor with FlowTestProvider if testSingleNode is provided
+  const flowEditor = (
     <FlowEditor
       flowId={flowId}
       nodes={flow?.nodes || []}
@@ -35,11 +44,21 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, onCreateTas
       setTestPanelOpen={() => { }}
       testNodeId={null}
       setTestNodeId={() => { }}
-      onPlayNode={() => { }}
       onCreateTaskFlow={onCreateTaskFlow}
       onOpenTaskFlow={onOpenTaskFlow}
     />
   );
+
+  // ✅ Wrap with FlowTestProvider if testSingleNode is provided
+  if (testSingleNode) {
+    return (
+      <FlowTestProvider testSingleNode={testSingleNode}>
+        {flowEditor}
+      </FlowTestProvider>
+    );
+  }
+
+  return flowEditor;
 };
 
 

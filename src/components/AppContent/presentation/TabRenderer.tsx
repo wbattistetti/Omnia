@@ -22,6 +22,7 @@ export interface TabRendererProps {
   setDockTree: React.Dispatch<React.SetStateAction<DockNode>>;
   editorCloseRefsMap: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
   pdUpdate: any;
+  testSingleNode?: (nodeId: string, nodeRows?: any[]) => Promise<void>;
   onFlowCreateTaskFlow?: (tabId: string, newFlowId: string, title: string, nodes: any[], edges: any[]) => void;
   onFlowOpenTaskFlow?: (tabId: string, taskFlowId: string, title: string) => void;
 }
@@ -62,7 +63,7 @@ function tabContentComparator(prev: { tab: DockTab }, next: { tab: DockTab }): b
 }
 
 export const TabRenderer: React.FC<TabRendererProps> = React.memo(
-  ({ tab, currentPid, setDockTree, editorCloseRefsMap, pdUpdate, onFlowCreateTaskFlow, onFlowOpenTaskFlow }) => {
+  ({ tab, currentPid, setDockTree, editorCloseRefsMap, pdUpdate, testSingleNode, onFlowCreateTaskFlow, onFlowOpenTaskFlow }) => {
     // Flow tab - FlowCanvasHost handles useFlowActions internally
     if (tab.type === 'flow') {
       if (!currentPid) {
@@ -84,6 +85,7 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
         <FlowCanvasHost
           projectId={currentPid}
           flowId={tab.flowId}
+          testSingleNode={testSingleNode}
           onCreateTaskFlow={
             onFlowCreateTaskFlow
               ? (newFlowId, title, nodes, edges) => onFlowCreateTaskFlow(tab.id, newFlowId, title, nodes, edges)

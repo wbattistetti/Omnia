@@ -594,6 +594,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             onToggleUnchecked={handleToggleUnchecked}
             hasUncheckedRows={hasUncheckedRows}
             nodeRef={nodeContainerRef}
+            nodeId={id}
+            nodeRows={data.rows}
             onDragStart={() => {
               // ✅ Verifica che NON ci sia una riga in drag (PROTEZIONE CRITICA)
               const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');

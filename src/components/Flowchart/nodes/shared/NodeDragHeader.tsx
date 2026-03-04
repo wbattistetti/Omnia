@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Move, Edit3, Trash2, Anchor, Eye, EyeOff } from 'lucide-react';
+import { Move, Edit3, Trash2, Anchor, Eye, EyeOff, Play } from 'lucide-react';
 import SmartTooltip from '../../../SmartTooltip';
+import { useFlowTest } from '../../../../context/FlowTestContext';
 
 interface NodeDragHeaderProps {
   onEditTitle: () => void;
   onDelete: () => void;
+  // ✅ REMOVED: onTestNode - now using FlowTestContext instead of prop drilling
   compact?: boolean;
   showDragHandle?: boolean; // Se true, mostra icona grip e testo "Drag"
   fullWidth?: boolean; // Se true, toolbar larga quanto il nodo
@@ -15,6 +17,9 @@ interface NodeDragHeaderProps {
   onToggleUnchecked?: () => void; // Callback per toggle visibilità righe unchecked
   hasUncheckedRows?: boolean; // Se true, ci sono righe unchecked nel nodo
   nodeRef?: React.RefObject<HTMLElement>; // Ref del nodo per calcolare il font size
+  // ✅ NEW: Node ID and rows for testing (passed from CustomNode)
+  nodeId?: string;
+  nodeRows?: any[];
 }
 
 /**
@@ -22,7 +27,9 @@ interface NodeDragHeaderProps {
  * Serve come area drag per spostare il nodo intero.
  * NON ha classe 'nodrag' quindi è draggable.
  */
-export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onDelete, compact, showDragHandle = true, fullWidth = false, isToolbarDrag = false, onDragStart, showUnchecked = true, onToggleUnchecked, hasUncheckedRows = false, nodeRef }) => {
+export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onDelete, compact, showDragHandle = true, fullWidth = false, isToolbarDrag = false, onDragStart, showUnchecked = true, onToggleUnchecked, hasUncheckedRows = false, nodeRef, nodeId, nodeRows }) => {
+  // ✅ Use FlowTestContext instead of prop drilling
+  const { testSingleNode } = useFlowTest();
   // Quando compact=true, è usato come toolbar sopra il nodo (no border radius, più piccolo)
   const isToolbar = compact === true;
   // showDragHandle controlla se mostrare l'area drag (grip + testo)
@@ -229,6 +236,28 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
         )}
 
         {/* DEBUG: Log rimosso per ridurre rumore */}
+
+        {/* ✅ NEW: Play button - Test single node using FlowTestContext */}
+        {nodeId && testSingleNode ? (
+          <SmartTooltip text="Test this node" tutorId="test_node_help" placement="bottom">
+            <button
+              className="p-0 hover:opacity-100 transition transform hover:scale-110 nodrag"
+              style={{ background: 'none', border: 'none', opacity: 0.85, transition: 'opacity 120ms linear' }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('[NodeDragHeader] 🎬 Play button clicked', { nodeId, hasTestSingleNode: !!testSingleNode });
+                if (testSingleNode && nodeId) {
+                  testSingleNode(nodeId, nodeRows);
+                } else {
+                  console.error('[NodeDragHeader] ❌ testSingleNode or nodeId is missing!', { hasTestSingleNode: !!testSingleNode, nodeId });
+                }
+              }}
+            >
+              <Play style={{ width: iconSize, height: iconSize }} className="text-slate-200 hover:text-green-400 drop-shadow hover:drop-shadow-lg transition-colors" />
+            </button>
+          </SmartTooltip>
+        ) : null}
 
         <SmartTooltip text="Edit title" tutorId="edit_title_help" placement="bottom">
           <button

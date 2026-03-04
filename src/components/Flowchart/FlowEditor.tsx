@@ -56,7 +56,7 @@ const edgeTypes = { custom: CustomEdge };
 
 interface FlowEditorProps {
   flowId?: string;
-  onPlayNode: (nodeId: string, nodeRows: any[]) => void;
+  // ✅ REMOVED: onPlayNode - now using FlowTestContext instead of prop drilling
   nodes: Node<FlowNode>[];
   setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>;
   edges: Edge<EdgeData>[];
@@ -69,7 +69,6 @@ interface FlowEditorProps {
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({
   flowId,
-  onPlayNode,
   nodes,
   setNodes,
   edges,
@@ -383,8 +382,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             ...node.data,
             onDelete: () => deleteNodeWithLog(node.id),
             onUpdate: (updates: any) => updateNode(node.id, updates),
-            onPlayNode: onPlayNode ? () => onPlayNode(node.id, node.data.rows) : undefined,
-            onCreateFactoryTask: createFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
+            // ✅ REMOVED: onPlayNode - NodeDragHeader uses FlowTestContext instead
+            onCreateFactoryTask: createFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → createFactoryTask
             onCreateBackendCall: createBackendCall,
             onCreateTask: createTask,
             onCreateCondition: createCondition,
@@ -392,7 +391,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         }));
       });
     }
-  }, [deleteNodeWithLog, updateNode, setNodes, onPlayNode, createFactoryTask, createBackendCall, createTask, nodes.length]); // ✅ RINOMINATO: createAgentAct → createFactoryTask
+  }, [deleteNodeWithLog, updateNode, setNodes, createFactoryTask, createBackendCall, createTask, nodes.length]); // ✅ RINOMINATO: createAgentAct → createFactoryTask
 
   // ✅ Initialize edges with onUpdate/onDeleteEdge if missing (for existing edges loaded from saved project)
   // This is different from the old useEffect: it only adds missing callbacks, doesn't recreate edges
