@@ -296,13 +296,15 @@ Namespace ApiServer.Handlers
                         dialogueState.CurrentStepType = Global.TaskEngine.DialogueStepType.Start
                     End If
 
-                    ' ✅ Chiama ProcessTurn (FASE 1: solo messaggio iniziale)
-                    Dim result = TaskUtteranceStepExecutor.ProcessTurn(dialogueState, "", resolveTranslation)
+                    ' ✅ STATELESS: ProcessTurn restituisce TextKey (non testo risolto)
+                    Dim result = TaskUtteranceStepExecutor.ProcessTurn(dialogueState, "")
 
-                    ' ✅ Emetti messaggi via SSE
+                    ' ✅ Emetti messaggi via SSE (risolvi TextKey qui)
                     Dim processTurnEmitter As EventEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
                     If result.Messages IsNot Nothing AndAlso result.Messages.Count > 0 Then
-                        For Each messageText As String In result.Messages
+                        For Each textKey As String In result.Messages
+                            ' ✅ Risolvi TextKey prima di emettere
+                            Dim messageText = resolveTranslation(textKey)
                             Dim messageData As Object = New With {
                                 .text = messageText,
                                 .stepType = "start",
@@ -696,13 +698,12 @@ Namespace ApiServer.Handlers
                     dialogueState.CurrentStepType = Global.TaskEngine.DialogueStepType.Start
                 End If
 
-                ' ✅ Chiama ProcessTurn con l'input dell'utente e la funzione di risoluzione
+                ' ✅ STATELESS: Chiama ProcessTurn con l'input dell'utente (restituisce TextKey)
+                ' ✅ RIMOSSO: resolveTranslation - non più necessario (stateless)
                 Dim processTurnResult = TaskUtteranceStepExecutor.ProcessTurn(
                     dialogueState,
-                    request.Input,
-                    resolveTranslation
+                    request.Input
                 )
-
 
                 ' ✅ Salva il nuovo DialogueState (SaveDialogueContext salva automaticamente su Redis)
                 If processTurnResult.NewState IsNot Nothing Then
@@ -710,10 +711,12 @@ Namespace ApiServer.Handlers
                     SessionManager.SaveDialogueContext(session, dialogueContext)
                 End If
 
-                ' ✅ Emetti messaggi via SSE
+                ' ✅ Emetti messaggi via SSE (risolvi TextKey qui)
                 Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(sessionId)
                 If processTurnResult.Messages IsNot Nothing AndAlso processTurnResult.Messages.Count > 0 Then
-                    For Each messageText As String In processTurnResult.Messages
+                    For Each textKey As String In processTurnResult.Messages
+                        ' ✅ Risolvi TextKey prima di emettere
+                        Dim messageText = resolveTranslation(textKey)
                         Dim messageData As Object = New With {
                             .text = messageText,
                             .stepType = If(processTurnResult.NewState IsNot Nothing, processTurnResult.NewState.TurnState.ToString(), "unknown"),

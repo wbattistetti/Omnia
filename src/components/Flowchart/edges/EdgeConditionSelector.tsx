@@ -205,7 +205,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
 
       // ✅ Legacy: 2) Fallback a vecchio sistema (mantenuto per compatibilità)
       if (out.length === 0) {
-        const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
+        const pid = (() => { try { return localStorage.getItem('currentProjectId') || ''; } catch { return ''; } })();
         // Cerca intents legacy da ProblemClassification
         for (const r of rows) {
           const isPC = String(r?.type || '').toLowerCase() === 'problemclassification';

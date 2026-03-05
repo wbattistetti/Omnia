@@ -49,32 +49,48 @@ export function useFlowModeChat(
     // ✅ FIX: Add required onTaskExecute (not used with backend orchestrator, but required by interface)
     onTaskExecute: async (task) => {
       // Backend orchestrator handles task execution, this is just a placeholder
-      console.log('[useFlowModeChat] onTaskExecute called (backend orchestrator handles execution)', task.id);
       return { success: true };
     },
     translations: translations || {},
     onMessage: (message) => {
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+      console.log('[useFlowModeChat] 🔵 onMessage callback called');
+      console.log('[useFlowModeChat] 🔵 Message received:', message);
+      console.log('[useFlowModeChat] 🔵 Message text:', message.text);
       const messageId = `msg_${messageIdCounter.current++}`;
+      console.log('[useFlowModeChat] 🔵 Generated messageId:', messageId);
       // Avoid duplicates
-      if (sentMessageIds.current.has(messageId)) return;
+      if (sentMessageIds.current.has(messageId)) {
+        console.log('[useFlowModeChat] ⚠️ Message already sent, skipping:', messageId);
+        return;
+      }
       sentMessageIds.current.add(messageId);
+      console.log('[useFlowModeChat] 🔵 MessageId added to sentMessageIds');
 
       const newMessage: Message = {
         id: messageId,
         text: message.text || '',
-        sender: 'bot',
+        type: 'bot',
         timestamp: new Date(),
       };
-      onMessage?.(newMessage);
+      console.log('[useFlowModeChat] 🔵 Created newMessage object:', newMessage);
+      console.log('[useFlowModeChat] 🔵 onMessage prop exists?', !!onMessage);
+      if (onMessage) {
+        console.log('[useFlowModeChat] 🔵 Calling onMessage prop...');
+        onMessage(newMessage);
+        console.log('[useFlowModeChat] ✅ onMessage prop completed');
+      } else {
+        console.warn('[useFlowModeChat] ⚠️ onMessage prop not provided!');
+      }
+      console.log('═══════════════════════════════════════════════════════════════════════════');
     },
-    onDDTStart: (data) => {
-      console.log('[useFlowModeChat] DDT started', data);
+    onDDTStart: () => {
+      // DDT started - no log needed
     },
     onDDTComplete: () => {
-      console.log('[useFlowModeChat] DDT completed');
+      // DDT completed - no log needed
     },
     onComplete: () => {
-      console.log('[useFlowModeChat] Flow completed');
       setIsWaitingForInput(false);
     },
     onError: (error) => {
@@ -82,9 +98,8 @@ export function useFlowModeChat(
       setError(error.message || 'Flow execution error');
       setIsWaitingForInput(false);
     },
-    onWaitingForInput: (data) => {
+    onWaitingForInput: () => {
       setIsWaitingForInput(true);
-      console.log('[useFlowModeChat] Waiting for input', data);
     },
   }), [nodes, edges, tasks, translations, onMessage]);
 
@@ -107,57 +122,32 @@ export function useFlowModeChat(
     // This allows starting a new flow when testing a different node
     const nodesKey = nodes.map(n => n.id).sort().join(',');
 
-    console.log('[useFlowModeChat] ⚙️ useEffect triggered:', {
-      nodesLength: nodes.length,
-      edgesLength: edges.length,
-      translationsKey: translationsKey.substring(0, 50),
-      hasStarted: hasStartedRef.current,
-      nodesKey: nodesKey.substring(0, 100),
-      previousNodesKey: previousNodesKeyRef.current.substring(0, 100),
-    });
-
     // ✅ FIX: Reset guard when nodes actually change (not just when empty)
     // This allows starting a new flow when opening a different node or flow
     if (nodesKey !== previousNodesKeyRef.current) {
-      console.log('[useFlowModeChat] 🔄 Nodes changed, resetting hasStartedRef', {
-        previousKey: previousNodesKeyRef.current.substring(0, 100),
-        newKey: nodesKey.substring(0, 100),
-      });
       hasStartedRef.current = false;
       previousNodesKeyRef.current = nodesKey;
     }
 
     // ✅ ARCHITECTURAL: Richiede solo nodes (edges sono opzionali - un flow con un solo nodo è valido)
     if (hasStartedRef.current && nodes.length === 0) {
-      console.log('[useFlowModeChat] 🔄 Resetting hasStartedRef because nodes are empty');
       hasStartedRef.current = false;
       previousNodesKeyRef.current = '';
     }
 
     if (hasStartedRef.current) {
-      console.log('[useFlowModeChat] ⏭️ Already started, skipping');
       return; // Already started
     }
 
     // ✅ ARCHITECTURAL: Richiede solo nodes (edges sono opzionali)
     if (nodes.length === 0) {
-      console.error('[useFlowModeChat] ❌ Cannot start: no nodes found', {
-        nodesLength: nodes.length,
-      });
+      console.error('[useFlowModeChat] ❌ Cannot start: no nodes found');
       setError('Cannot start flow: no nodes found');
       return;
     }
 
-    // ✅ Un flow con un solo nodo è valido (non servono edges)
-    if (nodes.length === 1 && edges.length === 0) {
-      console.log('[useFlowModeChat] ℹ️ Flow with single node (no edges) - this is valid');
-    }
-
     if (!translations || Object.keys(translations).length === 0) {
-      console.warn('[useFlowModeChat] ❌ No translations found - aborting start', {
-        hasTranslations: !!translations,
-        translationsCount: translations ? Object.keys(translations).length : 0,
-      });
+      console.warn('[useFlowModeChat] ❌ No translations found - aborting start');
       return;
     }
 
@@ -167,31 +157,13 @@ export function useFlowModeChat(
     }
 
     if (typeof flowEngine.start !== 'function') {
-      console.error('[useFlowModeChat] ❌ flowEngine.start is not a function - aborting start', {
-        flowEngineType: typeof flowEngine,
-        flowEngineKeys: Object.keys(flowEngine || {}),
-      });
+      console.error('[useFlowModeChat] ❌ flowEngine.start is not a function - aborting start');
       return;
     }
 
-    console.log('[useFlowModeChat] 🚀 Starting flow orchestrator', {
-      nodesCount: nodes.length,
-      edgesCount: edges.length,
-      tasksCount: tasks.length,
-      translationsCount: Object.keys(translations).length,
-      engineType: typeof flowEngine,
-      startType: typeof flowEngine.start,
-    });
-
     hasStartedRef.current = true;
-    flowEngine.start().then(() => {
-      console.log('[useFlowModeChat] ✅ flowEngine.start() completed successfully');
-    }).catch((error) => {
-      console.error('[useFlowModeChat] ❌ Failed to start flow orchestrator', {
-        error,
-        errorMessage: error?.message,
-        errorStack: error?.stack,
-      });
+    flowEngine.start().catch((error) => {
+      console.error('[useFlowModeChat] ❌ Failed to start flow orchestrator', error);
       setError(error.message || 'Failed to start flow orchestrator');
       hasStartedRef.current = false; // Allow retry on error
     });

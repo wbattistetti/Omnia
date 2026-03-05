@@ -290,32 +290,43 @@ Module Program
                                                                    Console.WriteLine("🔵 [MapPost] /api/runtime/orchestrator/session/start - Handler called")
                                                                    Console.Out.Flush()
                                                                    System.Diagnostics.Debug.WriteLine("🔵 [MapPost] Handler called")
-                                                                   Console.WriteLine("🔵 [MapPost] Entering Try block...")
-                                                                   Console.Out.Flush()
                                                                    Try
                                                                        Console.WriteLine("🔵 [MapPost] About to call HandleOrchestratorSessionStart...")
                                                                        Console.Out.Flush()
                                                                        System.Diagnostics.Debug.WriteLine("🔵 [MapPost] About to call function")
+
                                                                        Dim result = Await HandleOrchestratorSessionStart(context)
+
                                                                        System.Diagnostics.Debug.WriteLine($"🔵 [MapPost] Function returned")
                                                                        Console.WriteLine($"🔵 [MapPost] Handler returned, result type: {If(result IsNot Nothing, result.GetType().Name, "Nothing")}")
                                                                        Console.Out.Flush()
-                                                                       Return result
-                                                                   Catch ex As Exception
-                                                                       Console.WriteLine($"🔵 [MapPost] EXCEPTION CAUGHT: {ex.GetType().Name}")
-                                                                       Console.WriteLine($"🔵 [MapPost] Exception message: {ex.Message}")
-                                                                       Console.WriteLine($"🔵 [MapPost] Stack trace: {ex.StackTrace}")
-                                                                       Console.Out.Flush()
-                                                                       System.Diagnostics.Debug.WriteLine($"🔵 [MapPost] Exception: {ex.Message}")
-                                                                       If ex.InnerException IsNot Nothing Then
-                                                                           Console.WriteLine($"🔵 [MapPost] Inner exception: {ex.InnerException.Message}")
+
+                                                                       ' ✅ CRITICAL: Esegui esplicitamente l'IResult per scrivere nel context.Response
+                                                                       '    Stesso pattern di HandleTaskSessionStart - garantisce body JSON valido
+                                                                       If result IsNot Nothing Then
+                                                                           Console.WriteLine("🔵 [MapPost] Executing IResult explicitly...")
+                                                                           System.Diagnostics.Debug.WriteLine("🔵 [MapPost] Executing IResult explicitly...")
+                                                                           Console.Out.Flush()
+
+                                                                           Await result.ExecuteAsync(context)
+
+                                                                           Console.WriteLine("🔵 [MapPost] IResult executed successfully")
+                                                                           System.Diagnostics.Debug.WriteLine("🔵 [MapPost] IResult executed successfully")
                                                                            Console.Out.Flush()
                                                                        End If
-                                                                       Return Results.Problem(
-                                                                            title:="Handler exception",
-                                                                            detail:=ex.Message,
-                                                                            statusCode:=500
-                                                                        )
+
+                                                                       Return Results.Empty
+                                                                   Catch ex As Exception
+                                                                       Console.WriteLine($"🔴 [MapPost] EXCEPTION CAUGHT: {ex.GetType().Name}")
+                                                                       Console.WriteLine($"🔴 [MapPost] Exception message: {ex.Message}")
+                                                                       Console.WriteLine($"🔴 [MapPost] Stack trace: {ex.StackTrace}")
+                                                                       Console.Out.Flush()
+                                                                       System.Diagnostics.Debug.WriteLine($"🔴 [MapPost] Exception: {ex.Message}")
+                                                                       If ex.InnerException IsNot Nothing Then
+                                                                           Console.WriteLine($"🔴 [MapPost] Inner exception: {ex.InnerException.Message}")
+                                                                           Console.Out.Flush()
+                                                                       End If
+                                                                       Throw
                                                                    End Try
                                                                End Function)
 
@@ -340,156 +351,80 @@ Module Program
     ''' <summary>
     ''' Handles POST /api/runtime/orchestrator/session/start
     ''' </summary>
+    ''' <summary>
+    ''' ✅ ARCHITECTURAL: Handles POST /api/runtime/orchestrator/session/start
+    ''' Simmetrico a HandleTaskSessionStart: usa ResponseHelpers, non tocca context.Response
+    ''' </summary>
     Private Async Function HandleOrchestratorSessionStart(context As HttpContext) As Task(Of IResult)
         Try
-            ' Read request body
+            ' ✅ STEP 1: Read request body
             Dim body As String = Nothing
             Try
                 Dim reader As New StreamReader(context.Request.Body)
                 body = Await reader.ReadToEndAsync()
-                Console.WriteLine($"📦 [API][OrchestratorSession] Body read: {If(body IsNot Nothing, body.Length, 0)} chars")
-                System.Diagnostics.Debug.WriteLine($"📦 [API][OrchestratorSession] Body read: {If(body IsNot Nothing, body.Length, 0)} chars")
-                Console.Out.Flush()
             Catch readEx As Exception
-                Console.WriteLine($"❌ [API][OrchestratorSession] Error reading body: {readEx.Message}")
-                System.Diagnostics.Debug.WriteLine($"❌ [API][OrchestratorSession] Error reading body: {readEx.Message}")
-                Console.Out.Flush()
-                Return Results.BadRequest(New With {.error = "Failed to read request body"})
+                Return ResponseHelpers.CreateErrorResponse($"Failed to read request body: {readEx.Message}", 400)
             End Try
 
             If String.IsNullOrEmpty(body) Then
-                Console.WriteLine("❌ [API][OrchestratorSession] Empty body")
-                System.Diagnostics.Debug.WriteLine("❌ [API][OrchestratorSession] Empty body")
-                Console.Out.Flush()
-                Return Results.BadRequest(New With {.error = "Empty request body"})
+                Return ResponseHelpers.CreateErrorResponse("Empty request body", 400)
             End If
 
-            ' Deserialize request
+            ' ✅ STEP 2: Deserialize request
             Dim request As OrchestratorSessionStartRequest = Nothing
             Try
+                ' ✅ DEBUG: Verifica se body contiene projectId
+                Dim bodyContainsProjectId = body.Contains("projectId", StringComparison.OrdinalIgnoreCase)
+                Console.WriteLine($"🔵 [HandleOrchestratorSessionStart] Body contains 'projectId': {bodyContainsProjectId}")
+                System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStart] Body contains projectId: {bodyContainsProjectId}")
+
                 request = JsonConvert.DeserializeObject(Of OrchestratorSessionStartRequest)(body, New JsonSerializerSettings() With {
                     .NullValueHandling = NullValueHandling.Ignore,
                     .MissingMemberHandling = MissingMemberHandling.Ignore
                 })
-                Console.WriteLine($"✅ [API][OrchestratorSession] Request deserialized")
-                System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Request deserialized")
-                Console.Out.Flush()
             Catch jsonEx As Exception
-                Console.WriteLine($"❌ [API][OrchestratorSession] JSON error: {jsonEx.Message}")
-                System.Diagnostics.Debug.WriteLine($"❌ [API][OrchestratorSession] JSON error: {jsonEx.Message}")
-                Console.Out.Flush()
-                Return Results.BadRequest(New With {.error = "Invalid JSON", .message = jsonEx.Message})
+                Return ResponseHelpers.CreateErrorResponse($"Invalid JSON: {jsonEx.Message}", 400)
             End Try
 
-            ' ❌ RIMOSSO: Debug request.DDTs legacy - non più usato
-
             If request Is Nothing OrElse request.CompilationResult Is Nothing Then
-                Console.WriteLine("❌ [API][OrchestratorSession] Missing CompilationResult")
-                System.Diagnostics.Debug.WriteLine("❌ [API][OrchestratorSession] Missing CompilationResult")
-                Console.Out.Flush()
-                Return Results.BadRequest(New With {.error = "Missing CompilationResult"})
+                Return ResponseHelpers.CreateErrorResponse("Missing CompilationResult", 400)
             End If
 
-            ' Deserialize CompilationResult
+            ' ✅ DEBUG: Verifica projectId e locale dopo deserializzazione
+            Console.WriteLine($"🔵 [HandleOrchestratorSessionStart] After deserialization:")
+            Console.WriteLine($"🔵 [HandleOrchestratorSessionStart]   request.ProjectId: '{If(request.ProjectId, "NULL/EMPTY")}'")
+            Console.WriteLine($"🔵 [HandleOrchestratorSessionStart]   request.Locale: '{If(request.Locale, "NULL/EMPTY")}'")
+            Console.WriteLine($"🔵 [HandleOrchestratorSessionStart]   request.ProjectId Is Nothing: {request.ProjectId Is Nothing}")
+            Console.WriteLine($"🔵 [HandleOrchestratorSessionStart]   String.IsNullOrEmpty(request.ProjectId): {String.IsNullOrEmpty(request.ProjectId)}")
+            System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStart] ProjectId: '{If(request.ProjectId, "NULL")}', Locale: '{If(request.Locale, "NULL")}'")
+            Console.Out.Flush()
+
+            ' ✅ STEP 3: Deserialize CompilationResult
             Dim compilationResult As Compiler.FlowCompilationResult = Nothing
             Try
-                ' Log what we received
-                Console.WriteLine($"🔍 [API][OrchestratorSession] CompilationResult type: {If(request.CompilationResult IsNot Nothing, request.CompilationResult.GetType().Name, "Nothing")}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [API][OrchestratorSession] CompilationResult type: {If(request.CompilationResult IsNot Nothing, request.CompilationResult.GetType().Name, "Nothing")}")
-
                 ' Try to deserialize directly if it's already a JObject
                 If TypeOf request.CompilationResult Is JObject Then
                     Dim jObj = CType(request.CompilationResult, JObject)
-                    Console.WriteLine($"🔍 [API][OrchestratorSession] CompilationResult is JObject, checking taskGroups...")
-                    System.Diagnostics.Debug.WriteLine($"🔍 [API][OrchestratorSession] CompilationResult is JObject")
-
-                    ' Log all keys in JObject
-                    Console.WriteLine($"   All keys in CompilationResult: {String.Join(", ", jObj.Properties().Select(Function(p) p.Name))}")
-                    System.Diagnostics.Debug.WriteLine($"   All keys in CompilationResult: {String.Join(", ", jObj.Properties().Select(Function(p) p.Name))}")
-
-                    ' Log full JSON structure (first 1000 chars)
-                    Dim fullJson = jObj.ToString()
-                    Console.WriteLine($"   Full JSON (first 1000 chars): {fullJson.Substring(0, Math.Min(1000, fullJson.Length))}")
-                    System.Diagnostics.Debug.WriteLine($"   Full JSON (first 1000 chars): {fullJson.Substring(0, Math.Min(1000, fullJson.Length))}")
-
-                    ' Check if taskGroups exists
-                    If jObj("taskGroups") IsNot Nothing Then
-                        Dim taskGroupsToken = jObj("taskGroups")
-                        Console.WriteLine($"✅ [API][OrchestratorSession] taskGroups found in JObject")
-                        Console.WriteLine($"   taskGroups type: {taskGroupsToken.GetType().Name}")
-                        System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] taskGroups found")
-                        System.Diagnostics.Debug.WriteLine($"   taskGroups type: {taskGroupsToken.GetType().Name}")
-
-                        If TypeOf taskGroupsToken Is JArray Then
-                            Dim taskGroupsArray = CType(taskGroupsToken, JArray)
-                            Console.WriteLine($"   taskGroups is JArray, count: {taskGroupsArray.Count}")
-                            System.Diagnostics.Debug.WriteLine($"   taskGroups is JArray, count: {taskGroupsArray.Count}")
-
-                            If taskGroupsArray.Count = 0 Then
-                                Console.WriteLine($"   ⚠️ taskGroups array is EMPTY!")
-                                System.Diagnostics.Debug.WriteLine($"   ⚠️ taskGroups array is EMPTY!")
-                            Else
-                                Console.WriteLine($"   taskGroups array has {taskGroupsArray.Count} items")
-                                System.Diagnostics.Debug.WriteLine($"   taskGroups array has {taskGroupsArray.Count} items")
-                                ' Log first item structure
-                                If taskGroupsArray(0) IsNot Nothing Then
-                                    Console.WriteLine($"   First taskGroup keys: {String.Join(", ", CType(taskGroupsArray(0), JObject).Properties().Select(Function(p) p.Name))}")
-                                    System.Diagnostics.Debug.WriteLine($"   First taskGroup keys: {String.Join(", ", CType(taskGroupsArray(0), JObject).Properties().Select(Function(p) p.Name))}")
-                                End If
-                            End If
-                        Else
-                            Console.WriteLine($"   ⚠️ taskGroups is NOT a JArray, it's: {taskGroupsToken.GetType().Name}")
-                            System.Diagnostics.Debug.WriteLine($"   ⚠️ taskGroups is NOT a JArray, it's: {taskGroupsToken.GetType().Name}")
-                        End If
-                    Else
-                        Console.WriteLine($"⚠️ [API][OrchestratorSession] taskGroups NOT found in JObject")
-                        System.Diagnostics.Debug.WriteLine($"⚠️ [API][OrchestratorSession] taskGroups NOT found in JObject")
-                    End If
-
-                    ' Deserialize from JObject directly
-                    compilationResult = jObj.ToObject(Of Compiler.FlowCompilationResult)(New JsonSerializer() With {
+                    ' ✅ CRITICAL: Include CompiledTaskListConverter to properly deserialize polymorphic CompiledTask objects
+                    '    CompiledTaskListConverter uses CompiledTaskConverter, which needs ITaskConverter for Escalation.Tasks
+                    Dim serializerSettings As New JsonSerializerSettings() With {
                         .NullValueHandling = NullValueHandling.Ignore,
                         .MissingMemberHandling = MissingMemberHandling.Ignore
-                    })
+                    }
+                    serializerSettings.Converters.Add(New Compiler.CompiledTaskListConverter())
+                    compilationResult = jObj.ToObject(Of Compiler.FlowCompilationResult)(JsonSerializer.Create(serializerSettings))
                 Else
-                    ' ❌ ERRORE BLOCCANTE: CompilationResult OBBLIGATORIO, nessun fallback
-                    Throw New InvalidOperationException("CompilationResult is required and cannot be null. The session cannot start without a valid CompilationResult.")
+                    Throw New InvalidOperationException("CompilationResult must be a JObject. The session cannot start without a valid CompilationResult.")
                 End If
-
-                Console.WriteLine($"✅ [API][OrchestratorSession] CompilationResult deserialized: {If(compilationResult IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
-                System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] CompilationResult deserialized: {If(compilationResult IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
-
-                If compilationResult IsNot Nothing AndAlso compilationResult.TaskGroups IsNot Nothing Then
-                    Console.WriteLine($"   TaskGroups details:")
-                    System.Diagnostics.Debug.WriteLine($"   TaskGroups details:")
-                    For i = 0 To Math.Min(4, compilationResult.TaskGroups.Count - 1)
-                        Dim tg = compilationResult.TaskGroups(i)
-                        Console.WriteLine($"     TaskGroup[{i}]: NodeId={tg.NodeId}, Tasks count={If(tg.Tasks IsNot Nothing, tg.Tasks.Count, 0)}")
-                        System.Diagnostics.Debug.WriteLine($"     TaskGroup[{i}]: NodeId={tg.NodeId}, Tasks count={If(tg.Tasks IsNot Nothing, tg.Tasks.Count, 0)}")
-                    Next
-                End If
-
-                Console.Out.Flush()
             Catch deserializeEx As Exception
-                Console.WriteLine($"❌ [API][OrchestratorSession] CompilationResult error: {deserializeEx.Message}")
-                Console.WriteLine($"   Stack trace: {deserializeEx.StackTrace}")
-                System.Diagnostics.Debug.WriteLine($"❌ [API][OrchestratorSession] CompilationResult error: {deserializeEx.Message}")
-                System.Diagnostics.Debug.WriteLine($"   Stack trace: {deserializeEx.StackTrace}")
-                Console.Out.Flush()
-                Return Results.BadRequest(New With {.error = "Failed to deserialize CompilationResult", .message = deserializeEx.Message})
+                Return ResponseHelpers.CreateErrorResponse($"Failed to deserialize CompilationResult: {deserializeEx.Message}", 400)
             End Try
 
-            ' Generate session ID
+            ' ✅ STEP 4: Generate session ID
             Dim sessionId = Guid.NewGuid().ToString()
-            Console.WriteLine($"✅ [API][OrchestratorSession] Session ID: {sessionId}")
-            System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Session ID: {sessionId}")
-            Console.Out.Flush()
 
-            ' Create session in SessionManager
+            ' ✅ STEP 5: Create session in SessionManager (NON avvia orchestrator - vedi HandleOrchestratorSessionStream)
             Try
-                Console.WriteLine($"🔄 [API][OrchestratorSession] Calling SessionManager.CreateSession...")
-                System.Diagnostics.Debug.WriteLine($"🔄 [API][OrchestratorSession] Calling SessionManager.CreateSession...")
-                Console.Out.Flush()
                 Dim session = SessionManager.CreateSession(
                     sessionId,
                     compilationResult,
@@ -498,36 +433,22 @@ Module Program
                     request.ProjectId,
                     request.Locale
                 )
-                Console.WriteLine($"✅ [API][OrchestratorSession] Session created successfully")
-                System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Session created successfully")
-                Console.Out.Flush()
             Catch sessionEx As Exception
-                Console.WriteLine($"❌ [API][OrchestratorSession] Session creation error: {sessionEx.Message}")
-                Console.WriteLine($"Stack trace: {sessionEx.StackTrace}")
-                System.Diagnostics.Debug.WriteLine($"❌ [API][OrchestratorSession] Session creation error: {sessionEx.Message}")
-                System.Diagnostics.Debug.WriteLine($"Stack trace: {sessionEx.StackTrace}")
-                Console.Out.Flush()
-                Return Results.Problem(title:="Failed to create session", detail:=sessionEx.Message, statusCode:=500)
+                Return ResponseHelpers.CreateErrorResponse($"Failed to create session: {sessionEx.Message}", 500)
             End Try
 
-            ' ✅ UNIFICA: Usa CreateSuccessResponse invece di scrivere direttamente
+            ' ✅ STEP 6: Return success response (simmetrico a HandleTaskSessionStart)
             Dim responseObj = New With {
                 .sessionId = sessionId,
                 .timestamp = DateTime.UtcNow.ToString("O")
             }
 
-            Console.WriteLine($"✅ [API][OrchestratorSession] Returning success response")
-            System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Returning success response")
-            Console.Out.Flush()
-
+            ' ✅ ARCHITECTURAL: Usa ResponseHelpers.CreateSuccessResponse (stesso helper di TaskSession)
+            '    NON tocca mai context.Response, garantisce sempre body JSON valido
             Return ResponseHelpers.CreateSuccessResponse(responseObj)
+
         Catch ex As Exception
-            Console.WriteLine($"❌ [API][OrchestratorSession] ERROR: {ex.Message}")
-            Console.WriteLine($"Stack trace: {ex.StackTrace}")
-            System.Diagnostics.Debug.WriteLine($"❌ [API][OrchestratorSession] ERROR: {ex.Message}")
-            System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}")
-            Console.Out.Flush()
-            Return Results.Problem(detail:=ex.Message, statusCode:=500)
+            Return ResponseHelpers.CreateErrorResponse($"Unexpected error while starting orchestrator session: {ex.Message}", 500)
         End Try
     End Function
 
@@ -555,109 +476,126 @@ Module Program
             System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStream] Session found: {sessionId}, Orchestrator is Nothing: {session.Orchestrator Is Nothing}")
             Console.Out.Flush()
 
-            ' Setup SSE headers PRIMA di iniziare a scrivere
-            context.Response.ContentType = "text/event-stream"
-            context.Response.Headers.Add("Cache-Control", "no-cache")
-            context.Response.Headers.Add("Connection", "keep-alive")
-            context.Response.Headers.Add("X-Accel-Buffering", "no")
-
-            ' IMPORTANTE: Flush gli header prima di continuare
-            Await context.Response.Body.FlushAsync()
-
-            Dim writer As New StreamWriter(context.Response.Body)
-
-            ' Send existing messages first
-            For Each msg In session.Messages
-                Await writer.WriteLineAsync($"event: message")
-                Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(msg)}")
-                Await writer.WriteLineAsync()
-                Await writer.FlushAsync()
-            Next
-
-            ' Send waitingForInput event if already waiting
-            If session.IsWaitingForInput Then
-                Await writer.WriteLineAsync($"event: waitingForInput")
-                Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(session.WaitingForInputData)}")
-                Await writer.WriteLineAsync()
-                Await writer.FlushAsync()
+            ' ✅ CRITICAL FIX: Assicurati che session.EventEmitter sia lo stesso EventEmitter condiviso
+            ' GetSession dovrebbe già aver fatto questo, ma lo verifichiamo comunque per sicurezza
+            Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(sessionId)
+            If session.EventEmitter Is Nothing OrElse session.EventEmitter IsNot sharedEmitter Then
+                Console.WriteLine($"🔵 [HandleOrchestratorSessionStream] Replacing session.EventEmitter with shared EventEmitter for {sessionId}")
+                System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStream] Replacing EventEmitter")
+                Console.Out.Flush()
+                session.EventEmitter = sharedEmitter
             End If
 
-            ' Register event handlers (using Action with Task.Run for async operations)
+            ' ✅ UNIFIED: Usa SseStreamManager come per TaskSession
+            Dim sseStreamManager As New ApiServer.Streaming.SseStreamManager()
+            sseStreamManager.OpenStream(sessionId, context.Response)
+
+            ' ✅ HANDSHAKE: Garantisce che lo stream sia completamente aperto prima di procedere
+            Await context.Response.Body.FlushAsync()
+
+            ' ✅ Register event handlers PRIMA del replay
+            ' Questo permette al replay di EventEmitter di funzionare correttamente
             Dim onMessage As Action(Of Object) = Sub(data)
-                                                     System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                         Try
-                                                                                             Await writer.WriteLineAsync($"event: message")
-                                                                                             Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                                             Await writer.WriteLineAsync()
-                                                                                             Await writer.FlushAsync()
-                                                                                         Catch ex As Exception
-                                                                                             Console.WriteLine($"❌ [SSE] Error sending message: {ex.Message}")
-                                                                                         End Try
-                                                                                     End Function)
+                                                     Try
+                                                         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                         Console.WriteLine($"🔵 [HandleOrchestratorSessionStream] onMessage handler called for session {sessionId}")
+                                                         Dim dataJson = JsonConvert.SerializeObject(data)
+                                                         Console.WriteLine($"🔵 [HandleOrchestratorSessionStream] Message data: {dataJson}")
+                                                         System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStream] onMessage: {dataJson}")
+                                                         Console.Out.Flush()
+
+                                                         Console.WriteLine($"🔵 [HandleOrchestratorSessionStream] Calling SseStreamManager.EmitEvent('message')...")
+                                                         System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStream] Emitting SSE event...")
+                                                         Console.Out.Flush()
+                                                         sseStreamManager.EmitEvent(sessionId, "message", data)
+                                                         Console.WriteLine($"🔵 [HandleOrchestratorSessionStream] SseStreamManager.EmitEvent completed")
+                                                         System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStream] SSE event emitted")
+                                                         Console.Out.Flush()
+                                                         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                     Catch ex As Exception
+                                                         Console.WriteLine($"❌ [SSE] Error in onMessage handler: {ex.Message}")
+                                                         Console.WriteLine($"❌ [SSE] Stack trace: {ex.StackTrace}")
+                                                         System.Diagnostics.Debug.WriteLine($"❌ [SSE] Error: {ex.Message}")
+                                                         Console.Out.Flush()
+                                                     End Try
                                                  End Sub
 
             Dim onWaitingForInput As Action(Of Object) = Sub(data)
-                                                             System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                                 Try
-                                                                                                     session.IsWaitingForInput = True
-                                                                                                     session.WaitingForInputData = data
-                                                                                                     Await writer.WriteLineAsync($"event: waitingForInput")
-                                                                                                     Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                                                     Await writer.WriteLineAsync()
-                                                                                                     Await writer.FlushAsync()
-                                                                                                 Catch ex As Exception
-                                                                                                     Console.WriteLine($"❌ [SSE] Error sending waitingForInput: {ex.Message}")
-                                                                                                 End Try
-                                                                                             End Function)
+                                                             Try
+                                                                 session.IsWaitingForInput = True
+                                                                 session.WaitingForInputData = data
+                                                                 sseStreamManager.EmitEvent(sessionId, "waitingForInput", data)
+                                                             Catch ex As Exception
+                                                                 Console.WriteLine($"❌ [SSE] Error in onWaitingForInput handler: {ex.Message}")
+                                                             End Try
                                                          End Sub
 
             Dim onStateUpdate As Action(Of Object) = Sub(data)
-                                                         System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                             Try
-                                                                                                 Await writer.WriteLineAsync($"event: stateUpdate")
-                                                                                                 Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                                                 Await writer.WriteLineAsync()
-                                                                                                 Await writer.FlushAsync()
-                                                                                             Catch ex As Exception
-                                                                                                 Console.WriteLine($"❌ [SSE] Error sending stateUpdate: {ex.Message}")
-                                                                                             End Try
-                                                                                         End Function)
+                                                         Try
+                                                             sseStreamManager.EmitEvent(sessionId, "stateUpdate", data)
+                                                         Catch ex As Exception
+                                                             Console.WriteLine($"❌ [SSE] Error in onStateUpdate handler: {ex.Message}")
+                                                         End Try
                                                      End Sub
 
             Dim onComplete As Action(Of Object) = Sub(data)
-                                                      System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                          Try
-                                                                                              Await writer.WriteLineAsync($"event: complete")
-                                                                                              Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                                              Await writer.WriteLineAsync()
-                                                                                              Await writer.FlushAsync()
-                                                                                              writer.Close()
-                                                                                          Catch ex As Exception
-                                                                                              Console.WriteLine($"❌ [SSE] Error sending complete: {ex.Message}")
-                                                                                          End Try
-                                                                                      End Function)
+                                                      Try
+                                                          sseStreamManager.EmitEvent(sessionId, "complete", data)
+                                                          sseStreamManager.CloseStream(sessionId)
+                                                      Catch ex As Exception
+                                                          Console.WriteLine($"❌ [SSE] Error in onComplete handler: {ex.Message}")
+                                                      End Try
                                                   End Sub
 
             Dim onError As Action(Of Object) = Sub(data)
-                                                   System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                       Try
-                                                                                           Await writer.WriteLineAsync($"event: error")
-                                                                                           Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                                           Await writer.WriteLineAsync()
-                                                                                           Await writer.FlushAsync()
-                                                                                           writer.Close()
-                                                                                       Catch ex As Exception
-                                                                                           Console.WriteLine($"❌ [SSE] Error sending error: {ex.Message}")
-                                                                                       End Try
-                                                                                   End Function)
+                                                   Try
+                                                       sseStreamManager.EmitEvent(sessionId, "error", data)
+                                                       sseStreamManager.CloseStream(sessionId)
+                                                   Catch ex As Exception
+                                                       Console.WriteLine($"❌ [SSE] Error in onError handler: {ex.Message}")
+                                                   End Try
                                                End Sub
 
-            ' Register listeners
+            ' ✅ HANDSHAKE: Register listeners - questo fa replay automatico dei messaggi buffered da EventEmitter
+            ' EventEmitter gestisce TUTTO il replay, quindi NON chiamiamo SendBufferedMessages (evita doppio invio)
+            Console.WriteLine($"🔵 [HandleOrchestratorSessionStream] Registering SSE event handlers")
+            System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStream] Registering handlers")
             session.EventEmitter.[On]("message", onMessage)
             session.EventEmitter.[On]("waitingForInput", onWaitingForInput)
             session.EventEmitter.[On]("stateUpdate", onStateUpdate)
             session.EventEmitter.[On]("complete", onComplete)
             session.EventEmitter.[On]("error", onError)
+            Console.WriteLine($"🔵 [HandleOrchestratorSessionStream] All handlers registered - replay completed")
+            System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStream] Handlers registered - replay completed")
+
+            ' ✅ HANDSHAKE: Send waitingForInput event if already waiting (prima dell'evento ready)
+            If session.IsWaitingForInput Then
+                sseStreamManager.EmitEvent(sessionId, "waitingForInput", session.WaitingForInputData)
+            End If
+
+            ' ✅ HANDSHAKE: Notifica al client che lo stream è pronto e l'orchestrator partirà
+            sseStreamManager.EmitEvent(sessionId, "ready", New With {.status = "ok"})
+            Console.WriteLine($"✅ [HandleOrchestratorSessionStream] Ready event sent - orchestrator will start now")
+            System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStream] Ready event sent")
+
+            ' ✅ HANDSHAKE: Avvia l'orchestrator SOLO ORA (dopo che lo stream è pronto e i listener sono registrati)
+            ' ✅ THREAD-SAFE: Usa metodo helper di SessionManager che gestisce lock e protezione contro doppio avvio
+            Console.WriteLine($"🔵 [HandleOrchestratorSessionStream] About to start orchestrator for session {sessionId}")
+            System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStream] Starting orchestrator...")
+            Console.Out.Flush()
+            Dim orchestratorStarted = SessionManager.StartOrchestratorIfNotRunning(sessionId)
+            If orchestratorStarted Then
+                Console.WriteLine($"✅ [HandleOrchestratorSessionStream] Orchestrator started successfully for session {sessionId}")
+                System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStream] Orchestrator started")
+            Else
+                Console.WriteLine($"⚠️ [HandleOrchestratorSessionStream] Orchestrator not started (already running or error) for session {sessionId}")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [HandleOrchestratorSessionStream] Orchestrator not started")
+            End If
+            Console.Out.Flush()
+
+            ' ✅ NOTA: NON inviamo session.Messages manualmente
+            ' I messaggi sono già stati replayed da EventEmitter quando abbiamo registrato l'handler
+            ' session.Messages serve solo per persistenza, non per invio SSE
 
             ' Cleanup on disconnect
             context.RequestAborted.Register(Sub()
@@ -667,20 +605,10 @@ Module Program
                                                 session.EventEmitter.RemoveListener("stateUpdate", onStateUpdate)
                                                 session.EventEmitter.RemoveListener("complete", onComplete)
                                                 session.EventEmitter.RemoveListener("error", onError)
+                                                sseStreamManager.CloseStream(sessionId)
                                             End Sub)
 
-            ' Keep connection alive (heartbeat every 30 seconds)
-            Dim heartbeatTimer As New System.Threading.Timer(Async Sub(state)
-                                                                 Try
-                                                                     Await writer.WriteLineAsync($"event: heartbeat")
-                                                                     Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(New With {.timestamp = DateTime.UtcNow.ToString("O")})}")
-                                                                     Await writer.WriteLineAsync()
-                                                                     Await writer.FlushAsync()
-                                                                 Catch ex As Exception
-                                                                     ' Connection closed
-                                                                 End Try
-                                                             End Sub, Nothing, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30))
-
+            ' ✅ Keep connection alive - SseStreamManager gestisce heartbeat automaticamente
             ' Wait for connection to close
             Try
                 Await System.Threading.Tasks.Task.Delay(Timeout.Infinite, context.RequestAborted)
@@ -688,8 +616,6 @@ Module Program
                 ' Connection closed normally
                 Console.WriteLine($"✅ [HandleOrchestratorSessionStream] Connection closed normally for session: {sessionId}")
                 System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStream] Connection closed normally for session: {sessionId}")
-            Finally
-                heartbeatTimer.Dispose()
             End Try
         Catch ex As Exception
             Console.WriteLine($"❌ [HandleOrchestratorSessionStream] ERROR: {ex.Message}")

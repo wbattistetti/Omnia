@@ -16,9 +16,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Common for common interfaces (ITask, ITaskContext), NLP types, and TaskUtterance -->
+    <!-- Common for common interfaces (ITask, ITaskContext), NLP types, TaskUtterance, and ITaskConverter -->
     <ProjectReference Include="..\Common\Common.vbproj" />
-    <!-- Engine reference removed - TaskUtterance is now in Common -->
   </ItemGroup>
 
   <ItemGroup>

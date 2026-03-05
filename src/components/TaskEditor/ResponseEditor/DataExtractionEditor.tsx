@@ -319,7 +319,7 @@ export default function DataExtractionEditor({
     } else if (testPhraseMode === 'test-phrases') {
       // Frasi di test (da ProblemPayload.editor.tests)
       try {
-        const pid = localStorage.getItem('current.projectId') || '';
+        const pid = localStorage.getItem('currentProjectId') || '';
         const key = `problem.${pid}.${task.id}`;
         const raw = localStorage.getItem(key);
         if (raw) {

@@ -44,26 +44,13 @@ export async function executeOrchestratorBackend(
   // })();
   // const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
 
-  console.log('🚀 [ORCHESTRATOR] Frontend calling BACKEND Orchestrator via SSE');
-  console.log(`📍 [ORCHESTRATOR] Using VB.NET server: ${baseUrl}`);
-  console.log('═══════════════════════════════════════════════════════════════════════════');
-  console.log('[ORCHESTRATOR] Compilation result (original JSON from compiler):', {
-    tasksCount: compilationResultJson.tasks?.length || 0,
-    entryTaskId: compilationResultJson.entryTaskId,
-    entryTaskGroupId: compilationResultJson.entryTaskGroupId,
-    taskGroupsCount: compilationResultJson.taskGroups?.length || 0,
-    hasTaskMap: !!compilationResultJson.taskMap,
-    hasTranslations: Object.keys(translations).length > 0,
-    translationsCount: Object.keys(translations).length,
-    timestamp: new Date().toISOString()
-  });
-
   let sessionId: string | null = null;
   let eventSource: EventSource | null = null;
 
   try {
     // ✅ SINGLE POINT OF TRUTH: Ottieni projectId e locale per risoluzione traduzioni
-    const projectId = localStorage.getItem('currentProjectId') || undefined;
+    const rawProjectId = localStorage.getItem('currentProjectId');
+    const projectId = rawProjectId || null; // ✅ Usa null invece di undefined per includerlo nel JSON
     const projectLang = localStorage.getItem('project.lang') || 'it';
     // Converti formato 'it'/'en'/'pt' in formato BCP 47 'it-IT'/'en-US'/'pt-BR'
     const localeMap: Record<string, string> = {
@@ -73,50 +60,112 @@ export async function executeOrchestratorBackend(
     };
     const locale = localeMap[projectLang] || 'it-IT';
 
-    console.log('[ORCHESTRATOR] Translation resolution context:', { projectId, locale, projectLang });
+    // ✅ DEBUG: Log mirato per tracciare projectId
+    console.log('[ORCHESTRATOR] 🔍 projectId check:', {
+      rawProjectId,
+      projectId,
+      projectIdType: typeof projectId,
+      locale,
+      localStorageKey: 'currentProjectId'
+    });
 
     // 1. Create backend session
-    console.log('[ORCHESTRATOR] Creating backend session...');
+    const requestBody = {
+      compilationResult: compilationResultJson,
+      tasks,
+      ddts,
+      translations,
+      projectId, // ✅ SINGLE POINT OF TRUTH: Per risoluzione traduzioni nel backend
+      locale     // ✅ SINGLE POINT OF TRUTH: Per risoluzione traduzioni nel backend
+    };
+
+    // ✅ DEBUG: Verifica che projectId sia nel JSON
+    const requestBodyJson = JSON.stringify(requestBody);
+    const hasProjectId = requestBodyJson.includes('"projectId"');
+    console.log('[ORCHESTRATOR] 🔍 Request body check:', {
+      hasProjectId,
+      projectIdInJson: hasProjectId ? 'YES' : 'NO',
+      requestBodyPreview: requestBodyJson.substring(0, 200)
+    });
+
     const startResponse = await fetch(`${baseUrl}/api/runtime/orchestrator/session/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        compilationResult: compilationResultJson, // Pass original JSON from compiler - no transformation!
-        tasks,
-        ddts,
-        translations,
-        projectId, // ✅ SINGLE POINT OF TRUTH: Per risoluzione traduzioni nel backend
-        locale     // ✅ SINGLE POINT OF TRUTH: Per risoluzione traduzioni nel backend
-      })
+      body: requestBodyJson
     });
 
     if (!startResponse.ok) {
-      const errorData = await startResponse.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(`Backend orchestrator session creation failed: ${errorData.message || errorData.error || startResponse.statusText}`);
+      // Try to get error message from response
+      const responseText = await startResponse.text().catch(() => 'Unable to read response');
+      console.error('[ORCHESTRATOR] ❌ Error response body:', responseText);
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(`Backend orchestrator session creation failed: ${errorData.message || errorData.error || errorData.detail || startResponse.statusText}`);
+      } catch (parseError) {
+        throw new Error(`Backend orchestrator session creation failed: ${startResponse.statusText} - ${responseText.substring(0, 200)}`);
+      }
     }
 
-    const startData = await startResponse.json();
+    const responseText = await startResponse.text();
+    if (!responseText || responseText.trim().length === 0) {
+      throw new Error('Backend orchestrator session creation returned empty response');
+    }
+
+    let startData;
+    try {
+      startData = JSON.parse(responseText);
+    } catch (parseError) {
+      const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
+      throw new Error(`Backend orchestrator session creation returned invalid JSON: ${errorMessage}`);
+    }
+
     sessionId = startData.sessionId;
-    console.log('[ORCHESTRATOR] ✅ Backend session created:', { sessionId });
+    if (!sessionId) {
+      throw new Error('Backend orchestrator session creation returned invalid sessionId');
+    }
 
     // 2. Connect to SSE stream
-    console.log('[ORCHESTRATOR] Connecting to SSE stream...');
-    eventSource = new EventSource(`${baseUrl}/api/runtime/orchestrator/session/${sessionId}/stream`);
+    const sseUrl = `${baseUrl}/api/runtime/orchestrator/session/${sessionId}/stream`;
+    eventSource = new EventSource(sseUrl);
+    const sse = eventSource; // Save reference for type safety in callbacks
+
+    sse.addEventListener('open', () => {
+      console.log('[ORCHESTRATOR] ✅ SSE connection opened');
+    });
+
+    sse.addEventListener('error', (e: Event) => {
+      console.error('[ORCHESTRATOR] ❌ SSE connection error', e);
+      console.error('[ORCHESTRATOR] 🔍 EventSource readyState on error:', sse.readyState);
+      // EventSource will automatically reconnect, but log the error
+    });
+
+    sse.onerror = (error) => {
+      console.error('[ORCHESTRATOR] ❌ SSE onerror', error);
+      console.error('[ORCHESTRATOR] 🔍 EventSource readyState on onerror:', sse.readyState);
+    };
 
     // 3. Listen to events
-    eventSource.addEventListener('message', (e: MessageEvent) => {
+    sse.addEventListener('message', (e: MessageEvent) => {
       try {
         const msg = JSON.parse(e.data);
-        console.log('[ORCHESTRATOR] SSE Event: message', msg);
         if (callbacks.onMessage) {
           callbacks.onMessage(msg);
         }
       } catch (error) {
-        console.error('[ORCHESTRATOR] Error parsing message event', error);
+        console.error('[ORCHESTRATOR] ❌ Error parsing message event', error);
       }
     });
 
-    eventSource.addEventListener('ddtStart', (e: MessageEvent) => {
+    sse.addEventListener('ready', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        console.log('[ORCHESTRATOR] ✅ SSE ready event:', data);
+      } catch (error) {
+        console.error('[ORCHESTRATOR] ❌ Error parsing ready event:', error);
+      }
+    });
+
+    sse.addEventListener('ddtStart', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
         console.log('[ORCHESTRATOR] SSE Event: ddtStart', data);
@@ -128,7 +177,7 @@ export async function executeOrchestratorBackend(
       }
     });
 
-    eventSource.addEventListener('waitingForInput', (e: MessageEvent) => {
+    sse.addEventListener('waitingForInput', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
         console.log('═══════════════════════════════════════════════════════════════════════════');
@@ -146,7 +195,7 @@ export async function executeOrchestratorBackend(
       }
     });
 
-    eventSource.addEventListener('userInputProcessed', (e: MessageEvent) => {
+    sse.addEventListener('userInputProcessed', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
         console.log('[ORCHESTRATOR] SSE Event: userInputProcessed', {
@@ -161,7 +210,7 @@ export async function executeOrchestratorBackend(
       }
     });
 
-    eventSource.addEventListener('stateUpdate', (e: MessageEvent) => {
+    sse.addEventListener('stateUpdate', (e: MessageEvent) => {
       try {
         const state = JSON.parse(e.data);
         console.log('[ORCHESTRATOR] SSE Event: stateUpdate', {
@@ -184,68 +233,54 @@ export async function executeOrchestratorBackend(
       }
     });
 
-    eventSource.addEventListener('complete', (e: MessageEvent) => {
+    sse.addEventListener('complete', (e: MessageEvent) => {
       try {
         const result = JSON.parse(e.data);
-        console.log('═══════════════════════════════════════════════════════════════════════════');
-        console.log('✅ [ORCHESTRATOR] SSE Event: complete', result);
-        console.log('═══════════════════════════════════════════════════════════════════════════');
         if (callbacks.onComplete) {
           callbacks.onComplete();
         }
-        if (eventSource) {
-          eventSource.close();
-        }
+        sse.close();
       } catch (error) {
         console.error('[ORCHESTRATOR] Error parsing complete event', error);
       }
     });
 
-    eventSource.addEventListener('error', (e: MessageEvent) => {
+    sse.addEventListener('error', (e: MessageEvent) => {
       try {
-        // Only parse if data exists and is valid JSON
         if (e.data && typeof e.data === 'string' && e.data.trim()) {
           const errorData = JSON.parse(e.data);
-          console.error('═══════════════════════════════════════════════════════════════════════════');
-          console.error('❌ [ORCHESTRATOR] SSE Event: error', errorData);
-          console.error('═══════════════════════════════════════════════════════════════════════════');
           if (callbacks.onError) {
             callbacks.onError(new Error(errorData.error || 'Orchestrator execution error'));
           }
         } else {
-          // SSE connection error (not a JSON error event)
-          console.error('[ORCHESTRATOR] SSE connection error - event data:', e.data);
+          console.error('[ORCHESTRATOR] SSE connection error');
         }
-        if (eventSource) {
-          eventSource.close();
-        }
+        sse.close();
       } catch (error) {
         console.error('[ORCHESTRATOR] Error parsing error event', error, 'Event data:', e.data);
         // Still close the connection on any error
-        if (eventSource) {
-          eventSource.close();
-        }
+        sse.close();
         if (callbacks.onError) {
           callbacks.onError(new Error('SSE connection error'));
         }
       }
     });
 
-    eventSource.onerror = (error) => {
+    sse.onerror = (error) => {
       console.error('[ORCHESTRATOR] SSE connection error', {
         error,
-        readyState: eventSource?.readyState,
-        url: eventSource?.url,
+        readyState: sse.readyState,
+        url: sse.url,
         sessionId
       });
 
       // Check if connection is closed (readyState 2 = CLOSED)
-      if (eventSource?.readyState === EventSource.CLOSED) {
+      if (sse.readyState === EventSource.CLOSED) {
         console.error('[ORCHESTRATOR] SSE connection closed unexpectedly');
         if (callbacks.onError) {
           callbacks.onError(new Error('SSE connection closed unexpectedly. Session may not exist on backend.'));
         }
-      } else if (eventSource?.readyState === EventSource.CONNECTING) {
+      } else if (sse.readyState === EventSource.CONNECTING) {
         // Still connecting, wait a bit
         console.warn('[ORCHESTRATOR] SSE still connecting...');
       } else {

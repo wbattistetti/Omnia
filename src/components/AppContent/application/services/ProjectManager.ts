@@ -128,7 +128,7 @@ export class ProjectManager {
         localStorage.setItem('project.lang', String(projectInfo.language || 'pt'));
       } catch { }
       try {
-        localStorage.setItem('current.projectId', projectId);
+        localStorage.setItem('currentProjectId', projectId);
       } catch { }
       this.params.pdUpdate.setCurrentProjectId(projectId);
       try {
@@ -187,7 +187,7 @@ export class ProjectManager {
 
       this.params.pdUpdate.setCurrentProjectId(id);
       try {
-        localStorage.setItem('current.projectId', id);
+        localStorage.setItem('currentProjectId', id);
       } catch { }
 
       // ✅ CRITICAL: Load tasks FIRST and wait for completion

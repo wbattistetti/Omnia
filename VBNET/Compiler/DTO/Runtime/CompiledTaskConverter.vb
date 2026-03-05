@@ -30,10 +30,15 @@ Public Class CompiledTaskConverter
         Dim jObject As JObject = JObject.Load(reader)
 
         ' Estrai il TaskType e convertilo in enum
-        ' ❌ ERRORE BLOCCANTE: TaskType OBBLIGATORIO, nessun fallback
+        ' ✅ FIX: Cerca sia TaskType (PascalCase) che taskType (camelCase) per compatibilità
+        ' Il JSON può essere serializzato con CamelCasePropertyNamesContractResolver (taskType) o senza (TaskType)
         Dim taskTypeToken = jObject("TaskType")
         If taskTypeToken Is Nothing Then
-            Throw New JsonException("Missing 'TaskType' field in CompiledTask JSON. TaskType is mandatory and cannot be missing.")
+            ' Prova camelCase se PascalCase non è presente
+            taskTypeToken = jObject("taskType")
+        End If
+        If taskTypeToken Is Nothing Then
+            Throw New JsonException("Missing 'TaskType' or 'taskType' field in CompiledTask JSON. TaskType is mandatory and cannot be missing.")
         End If
 
         Dim taskType As TaskTypes
@@ -66,9 +71,20 @@ Public Class CompiledTaskConverter
                 Throw New JsonException($"Unknown TaskType: {taskType}")
         End Select
 
-        ' ✅ Usa serializer.Populate per popolare TUTTI i campi automaticamente
+        ' ✅ ARCHITECTURAL FIX: Crea un serializer indipendente con ITaskConverter
+        '    Questo rende CompiledTaskConverter autosufficiente e indipendente dal contesto esterno
+        '    ITaskConverter è necessario per deserializzare ITask dentro Escalation.Tasks
+        Dim independentSettings As New JsonSerializerSettings() With {
+            .NullValueHandling = serializer.NullValueHandling,
+            .MissingMemberHandling = serializer.MissingMemberHandling
+        }
+        independentSettings.Converters.Add(New ITaskConverter())
+        Dim independentSerializer = JsonSerializer.Create(independentSettings)
+
+        ' ✅ Usa independentSerializer.Populate per popolare TUTTI i campi automaticamente
         '    Questo legge tutte le proprietà dal JSON e le assegna alle proprietà dell'oggetto
-        serializer.Populate(jObject.CreateReader(), task)
+        '    ITaskConverter è incluso, quindi può deserializzare ITask dentro Escalation.Tasks
+        independentSerializer.Populate(jObject.CreateReader(), task)
 
         Return task
     End Function

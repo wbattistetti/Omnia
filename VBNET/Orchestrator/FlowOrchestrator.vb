@@ -4,6 +4,7 @@ Imports Compiler
 Imports TaskEngine
 Imports Newtonsoft.Json
 Imports System.Linq
+Imports System.Reflection
 
 ''' <summary>
 ''' Orchestrator che esegue un flow compilato
@@ -123,7 +124,11 @@ Public Class FlowOrchestrator
     ''' NON naviga Edges a runtime - usa solo ExecCondition
     ''' </summary>
     Public Async Function ExecuteDialogueAsync() As System.Threading.Tasks.Task
+        Console.WriteLine($"🔵 [FlowOrchestrator] ExecuteDialogueAsync CALLED - _isRunning={_isRunning}")
+        System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] ExecuteDialogueAsync CALLED")
         If _isRunning Then
+            Console.WriteLine($"🔵 [FlowOrchestrator] Already running, returning")
+            System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] Already running")
             Return
         End If
 
@@ -131,6 +136,7 @@ Public Class FlowOrchestrator
 
         Try
             Console.WriteLine($"🚀 [FlowOrchestrator] Starting dialogue with {If(_compilationResult IsNot Nothing AndAlso _compilationResult.TaskGroups IsNot Nothing, _compilationResult.TaskGroups.Count, 0)} task groups")
+            System.Diagnostics.Debug.WriteLine($"🚀 [FlowOrchestrator] Starting dialogue")
             RaiseEvent StateUpdated(Me, _state)
 
             Dim iterationCount As Integer = 0
@@ -141,46 +147,107 @@ Public Class FlowOrchestrator
                 Dim taskGroup = GetNextTaskGroup()
 
                 If taskGroup Is Nothing Then
-                    Console.WriteLine($"[FlowOrchestrator] No more executable TaskGroups")
+                    Console.WriteLine($"🔵 [FlowOrchestrator] No more executable TaskGroups")
+                    System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] No more executable TaskGroups")
                     Exit While
                 End If
 
-                Console.WriteLine($"[FlowOrchestrator] Executing TaskGroup {taskGroup.NodeId} (iteration {iterationCount})")
+                Console.WriteLine($"🔵 [FlowOrchestrator] Executing TaskGroup {taskGroup.NodeId} (iteration {iterationCount})")
+                System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] Executing TaskGroup {taskGroup.NodeId} (iteration {iterationCount})")
 
                 ' ✅ SINGLE POINT OF TRUTH: Risolvi TextKey nel messageCallback
                 ' Questo è l'unico punto dove TUTTI i messaggi passano prima di arrivare al frontend
                 Dim messageCallback As Action(Of String, String, Integer) = Sub(text, stepType, escalationNumber)
-                    ' ✅ Se text è un GUID (TextKey), risolvilo tramite resolveTranslation
-                    ' ✅ Se text è già testo tradotto, usalo così com'è
-                    Dim resolvedText As String = text
+                                                                                ' ✅ DEBUG: Log TextKey ricevuto
+                                                                                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Received message")
+                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback]   text: '{text}'")
+                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback]   stepType: '{stepType}'")
+                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback]   text.Length: {If(text IsNot Nothing, text.Length, 0)}")
+                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback]   _resolveTranslation IsNot Nothing: {_resolveTranslation IsNot Nothing}")
+                                                                                System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Received: text='{text}', stepType='{stepType}'")
 
-                    If _resolveTranslation IsNot Nothing AndAlso Not String.IsNullOrEmpty(text) Then
-                        ' Verifica se è un GUID (TextKey) - formato: 8-4-4-4-12 caratteri esadecimali
-                        Dim isGuid As Boolean = False
-                        Try
-                            ' Pattern GUID: 8-4-4-4-12 caratteri esadecimali separati da trattini
-                            If text.Length = 36 AndAlso text.Count(Function(c) c = "-"c) = 4 Then
-                                Dim guid = New Guid(text)
-                                isGuid = True
-                            End If
-                        Catch
-                            ' Non è un GUID, probabilmente è già testo tradotto
-                        End Try
+                                                                                ' ✅ Se text è un GUID (TextKey), risolvilo tramite resolveTranslation
+                                                                                ' ✅ Se text è già testo tradotto, usalo così com'è
+                                                                                Dim resolvedText As String = text
 
-                        If isGuid Then
-                            ' ✅ Risolvi TextKey → testo tradotto
-                            resolvedText = _resolveTranslation(text)
-                            ' Se risoluzione fallisce (traduzione non trovata), usa TextKey stesso come fallback
-                            If String.IsNullOrEmpty(resolvedText) Then
-                                resolvedText = text
-                            End If
-                        End If
-                        ' Se non è un GUID, text è già testo tradotto, usalo così com'è
-                    End If
+                                                                                If _resolveTranslation IsNot Nothing AndAlso Not String.IsNullOrEmpty(text) Then
+                                                                                    ' Verifica se è un GUID (TextKey) - formato: 8-4-4-4-12 caratteri esadecimali
+                                                                                    Dim isGuid As Boolean = False
+                                                                                    Try
+                                                                                        ' Pattern GUID: 8-4-4-4-12 caratteri esadecimali separati da trattini
+                                                                                        If text.Length = 36 AndAlso text.Count(Function(c) c = "-"c) = 4 Then
+                                                                                            Dim guid = New Guid(text)
+                                                                                            isGuid = True
+                                                                                            Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] ✅ TextKey detected as GUID: {text}")
+                                                                                            System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] TextKey detected as GUID: {text}")
+                                                                                        Else
+                                                                                            Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] ❌ TextKey NOT detected as GUID: length={text.Length}, dashes={text.Count(Function(c) c = "-"c)}")
+                                                                                            System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] TextKey NOT detected as GUID: length={text.Length}")
+                                                                                        End If
+                                                                                    Catch ex As Exception
+                                                                                        ' Non è un GUID, probabilmente è già testo tradotto
+                                                                                        Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] ⚠️ Exception checking GUID: {ex.Message}")
+                                                                                        System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Exception checking GUID: {ex.Message}")
+                                                                                    End Try
 
-                    RaiseEvent MessageToShow(Me, resolvedText)
-                End Sub
+                                                                                    If isGuid Then
+                                                                                        ' ✅ Risolvi TextKey → testo tradotto
+                                                                                        Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] 🔍 Resolving TextKey: {text}")
+                                                                                        System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Resolving TextKey: {text}")
+                                                                                        resolvedText = _resolveTranslation(text)
+                                                                                        Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] ✅ Resolved text: '{resolvedText}'")
+                                                                                        System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Resolved text: '{resolvedText}'")
+                                                                                        ' Se risoluzione fallisce (traduzione non trovata), usa TextKey stesso come fallback
+                                                                                        If String.IsNullOrEmpty(resolvedText) Then
+                                                                                            Console.WriteLine($"⚠️ [FlowOrchestrator.messageCallback] ⚠️ Translation not found for TextKey: {text}, using TextKey as fallback")
+                                                                                            System.Diagnostics.Debug.WriteLine($"⚠️ [FlowOrchestrator.messageCallback] Translation not found for TextKey: {text}")
+                                                                                            resolvedText = text
+                                                                                        End If
+                                                                                    Else
+                                                                                        Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] ℹ️ Text is not a GUID, using as-is: '{text}'")
+                                                                                        System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Text is not a GUID, using as-is")
+                                                                                    End If
+                                                                                    ' Se non è un GUID, text è già testo tradotto, usalo così com'è
+                                                                                Else
+                                                                                    Console.WriteLine($"⚠️ [FlowOrchestrator.messageCallback] ⚠️ _resolveTranslation is Nothing or text is empty")
+                                                                                    System.Diagnostics.Debug.WriteLine($"⚠️ [FlowOrchestrator.messageCallback] _resolveTranslation is Nothing or text is empty")
+                                                                                End If
+
+                                                                                ' ✅ DEBUG: Log messaggio prima di emettere evento
+                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] 📤 Final resolvedText: '{resolvedText}'")
+                                                                                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                                                Console.WriteLine($"🔵 [FlowOrchestrator] MessageToShow event raised: {resolvedText}")
+                                                                                System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] MessageToShow: {resolvedText}")
+
+                                                                                ' ✅ DEBUG: Verifica se ci sono listener registrati
+                                                                                Dim hasListeners = Me.MessageToShowEvent IsNot Nothing
+                                                                                Dim listenerCount = 0
+                                                                                If hasListeners Then
+                                                                                    ' Conta i listener usando reflection
+                                                                                    Dim eventField = Me.GetType().GetField("MessageToShowEvent", Reflection.BindingFlags.NonPublic Or Reflection.BindingFlags.Instance)
+                                                                                    If eventField IsNot Nothing Then
+                                                                                        Dim eventDelegate = TryCast(eventField.GetValue(Me), EventHandler(Of String))
+                                                                                        If eventDelegate IsNot Nothing Then
+                                                                                            listenerCount = eventDelegate.GetInvocationList().Length
+                                                                                        End If
+                                                                                    End If
+                                                                                End If
+
+                                                                                Console.WriteLine($"🔴 [FlowOrchestrator] BREAKPOINT: About to raise MessageToShow")
+                                                                                Console.WriteLine($"🔴 [FlowOrchestrator] Has listeners: {hasListeners}, Count: {listenerCount}")
+                                                                                Console.WriteLine($"🔴 [FlowOrchestrator] Orchestrator instance: {Me.GetHashCode()}")
+                                                                                Console.WriteLine($"🔴 [FlowOrchestrator] Message text: {resolvedText}")
+                                                                                System.Diagnostics.Debug.WriteLine($"🔴 [FlowOrchestrator] BREAKPOINT: Has listeners: {hasListeners}, Count: {listenerCount}, Instance: {Me.GetHashCode()}")
+                                                                                Console.Out.Flush()
+
+                                                                                RaiseEvent MessageToShow(Me, resolvedText)
+                                                                            End Sub
+                Console.WriteLine($"🔵 [FlowOrchestrator] About to execute TaskGroup {taskGroup.NodeId} with messageCallback")
+                System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] About to execute TaskGroup {taskGroup.NodeId}")
                 Dim result = Await _taskGroupExecutor.ExecuteTaskGroup(taskGroup, _state, messageCallback)
+                Console.WriteLine($"🔵 [FlowOrchestrator] TaskGroup {taskGroup.NodeId} execution completed: Success={result.Success}, RequiresInput={result.RequiresInput}")
+                System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] TaskGroup {taskGroup.NodeId} completed: Success={result.Success}")
 
                 If Not result.Success Then
                     Throw New Exception($"TaskGroup execution failed: {result.Err}")
@@ -315,13 +382,16 @@ Public Class FlowOrchestrator
                 ctx.DialogueState.RootTask = utteranceTask
             End If
 
-            ' Call TaskUtteranceStepExecutor.ProcessTurn (executor in Engine/TaskExecutors/)
-            Dim result = TaskUtteranceStepExecutor.ProcessTurn(ctx.DialogueState, userInput, resolveTranslation)
+            ' ✅ STATELESS: Call TaskUtteranceStepExecutor.ProcessTurn (restituisce TextKey)
+            Dim result = TaskUtteranceStepExecutor.ProcessTurn(ctx.DialogueState, userInput)
 
-            ' Emit messages via MessageToShow event
+            ' ✅ Emit messages via MessageToShow event (risolvi TextKey qui)
+            ' Il messageCallback in FlowOrchestrator risolverà i TextKey prima di emettere
             If result.Messages IsNot Nothing Then
-                For Each msg As String In result.Messages
-                    RaiseEvent MessageToShow(Me, msg)
+                For Each textKey As String In result.Messages
+                    ' ✅ Risolvi TextKey usando _resolveTranslation prima di emettere
+                    Dim resolvedText = If(_resolveTranslation IsNot Nothing, _resolveTranslation(textKey), textKey)
+                    RaiseEvent MessageToShow(Me, resolvedText)
                 Next
             End If
 

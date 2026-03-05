@@ -57,6 +57,9 @@ Namespace ApiServer.SessionStorage
             Public Property Messages As List(Of Object)
             Public Property IsWaitingForInput As Boolean
             Public Property WaitingForInputData As Object
+            ' ✅ AGGIUNTO: ProjectId e Locale per risoluzione traduzioni
+            Public Property ProjectId As String
+            Public Property Locale As String
         End Class
 
         ''' <summary>
@@ -145,6 +148,7 @@ Namespace ApiServer.SessionStorage
         ''' </summary>
         Public Shared Function SerializeOrchestratorSession(session As OrchestratorSession) As String
             Try
+                ' ✅ AGGIUNTO: Salva ProjectId e Locale per risoluzione traduzioni
                 Dim data As New OrchestratorSessionData() With {
                     .SessionId = session.SessionId,
                     .CompilationResult = session.CompilationResult,
@@ -152,7 +156,9 @@ Namespace ApiServer.SessionStorage
                     .Translations = session.Translations,
                     .Messages = session.Messages,
                     .IsWaitingForInput = session.IsWaitingForInput,
-                    .WaitingForInputData = session.WaitingForInputData
+                    .WaitingForInputData = session.WaitingForInputData,
+                    .ProjectId = session.ProjectId,
+                    .Locale = session.Locale
                 }
 
                 Return JsonConvert.SerializeObject(data, New JsonSerializerSettings With {
@@ -184,6 +190,9 @@ Namespace ApiServer.SessionStorage
 
                 ' Ricrea oggetti runtime
                 ' ✅ REMOVED: taskEngine (Motore) - no longer needed
+                ' ✅ UNIFIED: EventEmitter NON viene creato qui - verrà creato/riutilizzato da GetOrCreateEventEmitter
+                ' Questo assicura che lo stesso EventEmitter condiviso venga usato in CreateSession, GetSession e HandleOrchestratorSessionStream
+                ' ✅ AGGIUNTO: Ripristina ProjectId e Locale per risoluzione traduzioni
                 Dim session As New OrchestratorSession() With {
                     .SessionId = data.SessionId,
                     .CompilationResult = data.CompilationResult,
@@ -192,7 +201,9 @@ Namespace ApiServer.SessionStorage
                     .Messages = If(data.Messages, New List(Of Object)()),
                     .IsWaitingForInput = data.IsWaitingForInput,
                     .WaitingForInputData = data.WaitingForInputData,
-                    .EventEmitter = New EventEmitter() ' Ricrea EventEmitter (vuoto)
+                    .EventEmitter = Nothing,
+                    .ProjectId = data.ProjectId,
+                    .Locale = data.Locale
                 }
 
                 ' ✅ STATELESS: Ricrea FlowOrchestrator (no longer requires Motore)

@@ -129,26 +129,79 @@ Namespace ApiServer.Handlers
                 ' ✅ UNIFICAZIONE: Deserializza correttamente i task usando la stessa logica di HandleCompileTask
                 ' Questo risolve il problema dove UtteranceInterpretation tasks vengono deserializzati come TaskDefinition base
                 ' La "presa diretta" del ResponseEditor funziona perché usa DeserializeTaskFromJson - unifichiamo qui
+                ' ✅ FIX: Deserializza Tasks direttamente dal JSON originale invece di ri-serializzare/ri-deserializzare
+                ' Il problema è che request.Tasks è già stato deserializzato come List(Of TaskDefinition) base,
+                ' quindi ha perso dataContract. Dobbiamo deserializzare direttamente dal JSON string originale.
                 If request.Tasks IsNot Nothing AndAlso request.Tasks.Count > 0 Then
-                    Dim correctlyDeserializedTasks As New List(Of Compiler.TaskDefinition)()
-                    Dim settings = New JsonSerializerSettings() With {
-                        .NullValueHandling = NullValueHandling.Ignore,
-                        .MissingMemberHandling = MissingMemberHandling.Ignore
-                    }
+                    Try
+                        ' Estrai tasks direttamente dal JSON originale
+                        Dim requestObj = Newtonsoft.Json.Linq.JObject.Parse(body)
+                        Dim tasksToken = requestObj("tasks")
 
-                    ' Deserializza ogni task usando DeserializeTaskFromJson (stessa logica di HandleCompileTask)
-                    For Each task In request.Tasks
-                        ' Serializza il task per poi deserializzarlo correttamente con il tipo giusto
-                        Dim taskJson = JsonConvert.SerializeObject(task, settings)
-                        Dim correctlyDeserializedTask = DeserializeTaskFromJson(taskJson, settings)
-                        correctlyDeserializedTasks.Add(correctlyDeserializedTask)
-                    Next
+                        ' ✅ DEBUG: Verifica cosa contiene tasksToken
+                        If tasksToken IsNot Nothing Then
+                            Console.WriteLine($"🔍 [HandleCompileFlow] tasksToken type: {tasksToken.GetType().Name}")
+                            Dim tasksTokenPreview = tasksToken.ToString()
+                            Console.WriteLine($"🔍 [HandleCompileFlow] tasksToken preview (first 500 chars): {tasksTokenPreview.Substring(0, Math.Min(500, tasksTokenPreview.Length))}")
+                            System.Diagnostics.Debug.WriteLine($"🔍 [HandleCompileFlow] tasksToken type: {tasksToken.GetType().Name}")
+                        Else
+                            Console.WriteLine("❌ [HandleCompileFlow] tasksToken is Nothing!")
+                            System.Diagnostics.Debug.WriteLine("❌ [HandleCompileFlow] tasksToken is Nothing!")
+                        End If
 
-                    ' Sostituisci la lista con quella correttamente deserializzata
-                    request.Tasks = correctlyDeserializedTasks
+                        Dim tasksJson As String = "[]"
+                        If tasksToken IsNot Nothing Then
+                            tasksJson = tasksToken.ToString()
+                            Console.WriteLine($"🔍 [HandleCompileFlow] tasksJson length: {tasksJson.Length}")
+                            System.Diagnostics.Debug.WriteLine($"🔍 [HandleCompileFlow] tasksJson length: {tasksJson.Length}")
+                        Else
+                            Console.WriteLine("❌ [HandleCompileFlow] tasksToken is Nothing, using empty array")
+                            System.Diagnostics.Debug.WriteLine("❌ [HandleCompileFlow] tasksToken is Nothing, using empty array")
+                        End If
 
-                    Console.WriteLine($"✅ [HandleCompileFlow] Correctly deserialized {correctlyDeserializedTasks.Count} tasks (UtteranceInterpretation tasks are now UtteranceTaskDefinition)")
-                    System.Diagnostics.Debug.WriteLine($"✅ [HandleCompileFlow] Correctly deserialized {correctlyDeserializedTasks.Count} tasks")
+                        Dim settings = New JsonSerializerSettings() With {
+                            .NullValueHandling = NullValueHandling.Ignore,
+                            .MissingMemberHandling = MissingMemberHandling.Ignore
+                        }
+
+                        ' Deserializza usando DeserializeTaskListFromJson (stessa logica di HandleCompileTask)
+                        Dim correctlyDeserializedTasks = DeserializeTaskListFromJson(tasksJson, settings)
+
+                        ' ✅ DEBUG: Verifica che il template problematico sia stato deserializzato correttamente
+                        Dim problematicTemplateId = "1fa9cc7c-755d-40c9-9041-3bdfe4fe29b3"
+                        Dim problematicTemplate = correctlyDeserializedTasks.FirstOrDefault(Function(t) t.Id = problematicTemplateId AndAlso String.IsNullOrEmpty(t.TemplateId))
+                        If problematicTemplate IsNot Nothing Then
+                            Dim utteranceTemplate = TryCast(problematicTemplate, Compiler.UtteranceTaskDefinition)
+                            If utteranceTemplate IsNot Nothing Then
+                                Console.WriteLine($"✅ [HandleCompileFlow] Template problematico deserializzato come UtteranceTaskDefinition: Id={utteranceTemplate.Id}, HasDataContract={utteranceTemplate.DataContract IsNot Nothing}")
+                                System.Diagnostics.Debug.WriteLine($"✅ [HandleCompileFlow] Template problematico: HasDataContract={utteranceTemplate.DataContract IsNot Nothing}")
+                            Else
+                                Console.WriteLine($"❌ [HandleCompileFlow] Template problematico NON deserializzato come UtteranceTaskDefinition: Type={problematicTemplate.GetType().Name}")
+                                System.Diagnostics.Debug.WriteLine($"❌ [HandleCompileFlow] Template problematico: Type={problematicTemplate.GetType().Name}")
+                            End If
+                        Else
+                            Console.WriteLine($"❌ [HandleCompileFlow] Template problematico NON trovato in correctlyDeserializedTasks")
+                            System.Diagnostics.Debug.WriteLine($"❌ [HandleCompileFlow] Template problematico NON trovato")
+                        End If
+
+                        ' Sostituisci la lista con quella correttamente deserializzata
+                        request.Tasks = correctlyDeserializedTasks
+
+                        Console.WriteLine($"✅ [HandleCompileFlow] Correctly deserialized {correctlyDeserializedTasks.Count} tasks (UtteranceInterpretation tasks are now UtteranceTaskDefinition)")
+                        System.Diagnostics.Debug.WriteLine($"✅ [HandleCompileFlow] Correctly deserialized {correctlyDeserializedTasks.Count} tasks")
+                    Catch ex As Exception
+                        ' ✅ CRITICAL: Loggare l'errore completo invece di nasconderlo
+                        Console.WriteLine($"❌ [HandleCompileFlow] ERROR in DeserializeTaskListFromJson: {ex.GetType().Name}: {ex.Message}")
+                        Console.WriteLine($"❌ [HandleCompileFlow] Stack trace: {ex.StackTrace}")
+                        If ex.InnerException IsNot Nothing Then
+                            Console.WriteLine($"❌ [HandleCompileFlow] Inner exception: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}")
+                        End If
+                        System.Diagnostics.Debug.WriteLine($"❌ [HandleCompileFlow] ERROR: {ex.ToString()}")
+
+                        ' ✅ Rilanciare l'eccezione invece di usare fallback
+                        ' Questo permette di vedere l'errore reale e capire cosa non funziona
+                        Throw
+                    End Try
                 End If
 
                 Console.WriteLine($"✅ [HandleCompileFlow] Request deserialized: {If(request.Nodes IsNot Nothing, request.Nodes.Count, 0)} nodes, {If(request.Edges IsNot Nothing, request.Edges.Count, 0)} edges, {If(request.Tasks IsNot Nothing, request.Tasks.Count, 0)} tasks")

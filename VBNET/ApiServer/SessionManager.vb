@@ -29,6 +29,8 @@ Public Class OrchestratorSession
     ' ✅ SINGLE POINT OF TRUTH: ProjectId e Locale per risoluzione traduzioni
     Public Property ProjectId As String
     Public Property Locale As String
+    ' ✅ HANDSHAKE: Flag per evitare doppio avvio orchestrator (thread-safe via SessionManager lock)
+    Public Property IsOrchestratorRunning As Boolean = False
 End Class
 
 ''' <summary>
@@ -117,24 +119,58 @@ Public Class EventEmitter
     Public Sub Emit(eventName As String, data As Object)
         SyncLock _lock
             Dim hasListeners = _listeners.ContainsKey(eventName) AndAlso _listeners(eventName).Count > 0
+
+            ' ✅ DEBUG: Log stato listener PRIMA del check
+            Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: Emit called for event '{eventName}'")
+            Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: hasListeners = {hasListeners}")
+            Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: _listeners.ContainsKey('{eventName}') = {_listeners.ContainsKey(eventName)}")
+            If _listeners.ContainsKey(eventName) Then
+                Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: _listeners('{eventName}').Count = {_listeners(eventName).Count}")
+            End If
+            System.Diagnostics.Debug.WriteLine($"🔴 [EventEmitter] Emit: eventName={eventName}, hasListeners={hasListeners}")
+            Console.Out.Flush()
+
             If hasListeners Then
                 Dim listenerCount = _listeners(eventName).Count
+                Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: Entering 'If hasListeners' block, listenerCount = {listenerCount}")
+                System.Diagnostics.Debug.WriteLine($"🔴 [EventEmitter] Entering hasListeners block, count={listenerCount}")
+                Console.Out.Flush()
+
                 _logger.LogInfo($"[EventEmitter] 📤 Emitting event (has listeners)", New With {
                     .eventName = eventName,
                     .listenerCount = listenerCount,
                     .dataType = If(data IsNot Nothing, data.GetType().Name, "null")
                 })
+
+                Dim handlerIndex = 0
                 For Each handler In _listeners(eventName)
                     Try
+                        Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: About to call handler[{handlerIndex}]")
+                        System.Diagnostics.Debug.WriteLine($"🔴 [EventEmitter] Calling handler[{handlerIndex}]")
+                        Console.Out.Flush()
                         handler(data)
+                        Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: Handler[{handlerIndex}] completed successfully")
+                        System.Diagnostics.Debug.WriteLine($"🔴 [EventEmitter] Handler[{handlerIndex}] completed")
+                        Console.Out.Flush()
+                        handlerIndex += 1
                     Catch ex As Exception
+                        Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: Handler[{handlerIndex}] threw exception: {ex.Message}")
+                        System.Diagnostics.Debug.WriteLine($"🔴 [EventEmitter] Handler[{handlerIndex}] exception: {ex.Message}")
+                        Console.Out.Flush()
                         _logger.LogError($"[EventEmitter] ❌ Error in handler", ex, New With {
                             .eventName = eventName
                         })
                     End Try
                 Next
+                Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: All {listenerCount} handlers completed")
+                System.Diagnostics.Debug.WriteLine($"🔴 [EventEmitter] All handlers completed")
+                Console.Out.Flush()
             Else
                 ' No listener yet: queue for replay when .On() is called
+                Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: Entering 'Else' block (no listeners), buffering event")
+                System.Diagnostics.Debug.WriteLine($"🔴 [EventEmitter] No listeners, buffering")
+                Console.Out.Flush()
+
                 If Not _replayBuffer.ContainsKey(eventName) Then
                     _replayBuffer(eventName) = New Queue(Of Object)()
                 End If
@@ -145,6 +181,9 @@ Public Class EventEmitter
                     .bufferSize = bufferSize,
                     .dataType = If(data IsNot Nothing, data.GetType().Name, "null")
                 })
+                Console.WriteLine($"🔴 [EventEmitter] BREAKPOINT: Event buffered, bufferSize = {bufferSize}")
+                System.Diagnostics.Debug.WriteLine($"🔴 [EventEmitter] Buffered, size={bufferSize}")
+                Console.Out.Flush()
             End If
         End SyncLock
     End Sub
@@ -310,12 +349,14 @@ Public Class SessionManager
     ) As OrchestratorSession
         SyncLock _lock
             ' ✅ REMOVED: taskEngine (Motore) - FlowOrchestrator no longer requires it
+            ' ✅ UNIFIED: Usa EventEmitter condiviso (come per TaskSession)
+            Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
             Dim session As New OrchestratorSession() With {
                 .SessionId = sessionId,
                 .CompilationResult = compilationResult,
                 .Tasks = tasks,
                 .Translations = translations,
-                .EventEmitter = New EventEmitter(),
+                .EventEmitter = sharedEmitter,
                 .IsWaitingForInput = False,
                 .ProjectId = projectId,
                 .Locale = locale
@@ -325,19 +366,19 @@ Public Class SessionManager
             Dim resolveTranslation As Func(Of String, String) = Nothing
             If Not String.IsNullOrEmpty(projectId) AndAlso Not String.IsNullOrEmpty(locale) AndAlso _translationRepository IsNot Nothing Then
                 resolveTranslation = Function(textKey As String) As String
-                    If String.IsNullOrEmpty(textKey) Then
-                        Return Nothing
-                    End If
-                    Try
-                        Dim translation = _translationRepository.GetTranslation(projectId, locale, textKey)
-                        ' Se traduzione non trovata, ritorna TextKey stesso (fallback)
-                        Return If(String.IsNullOrEmpty(translation), textKey, translation)
-                    Catch ex As Exception
-                        Console.WriteLine($"[SessionManager] ⚠️ Error resolving translation for key '{textKey}': {ex.Message}")
-                        ' Fallback: ritorna TextKey stesso
-                        Return textKey
-                    End Try
-                End Function
+                                         If String.IsNullOrEmpty(textKey) Then
+                                             Return Nothing
+                                         End If
+                                         Try
+                                             Dim translation = _translationRepository.GetTranslation(projectId, locale, textKey)
+                                             ' Se traduzione non trovata, ritorna TextKey stesso (fallback)
+                                             Return If(String.IsNullOrEmpty(translation), textKey, translation)
+                                         Catch ex As Exception
+                                             Console.WriteLine($"[SessionManager] ⚠️ Error resolving translation for key '{textKey}': {ex.Message}")
+                                             ' Fallback: ritorna TextKey stesso
+                                             Return textKey
+                                         End Try
+                                     End Function
             End If
 
             ' ✅ STATELESS: Crea FlowOrchestrator con resolveTranslation
@@ -351,6 +392,12 @@ Public Class SessionManager
             )
 
             AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
+                                                               Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                               Console.WriteLine($"🔵 [SessionManager] MessageToShow event received for session {sessionId}")
+                                                               Console.WriteLine($"🔵 [SessionManager] Message text: {text}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] MessageToShow: {text}")
+                                                               Console.Out.Flush()
+
                                                                Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
                                                                Dim msg = New With {
                     .id = msgId,
@@ -359,8 +406,25 @@ Public Class SessionManager
                     .timestamp = DateTime.UtcNow.ToString("O"),
                     .taskId = ""
                 }
+                                                               ' ✅ DEBUG: Log messaggio prima di emettere evento SSE
+                                                               Dim msgJson = JsonConvert.SerializeObject(msg)
+                                                               Console.WriteLine($"🔵 [SessionManager] Created message object: {msgJson}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] Message object: {msgJson}")
+                                                               Console.Out.Flush()
+
                                                                session.Messages.Add(msg)
+                                                               Console.WriteLine($"🔵 [SessionManager] Message added to session.Messages. Total: {session.Messages.Count}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] Total messages: {session.Messages.Count}")
+                                                               Console.Out.Flush()
+
+                                                               Console.WriteLine($"🔵 [SessionManager] Emitting 'message' event via EventEmitter...")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] Emitting event...")
+                                                               Console.Out.Flush()
                                                                session.EventEmitter.Emit("message", msg)
+                                                               Console.WriteLine($"🔵 [SessionManager] EventEmitter.Emit('message') completed")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] Event emitted")
+                                                               Console.Out.Flush()
+                                                               Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                                                            End Sub
 
             AddHandler session.Orchestrator.StateUpdated, Sub(sender, state)
@@ -391,20 +455,13 @@ Public Class SessionManager
             ' ✅ STATELESS: Salva solo su Redis
             _storage.SaveOrchestratorSession(session)
 
-            ' ✅ STATELESS: Esegui orchestrator senza delay artificiale (sincronizzazione via Redis/PubSub)
-            Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function()
-                                                                     Try
-                                                                         If session.Orchestrator IsNot Nothing Then
-                                                                             Await session.Orchestrator.ExecuteDialogueAsync()
-                                                                         End If
-                                                                     Catch ex As Exception
-                                                                         Dim errorData = New With {
-                                                                             .error = ex.Message,
-                                                                             .timestamp = DateTime.UtcNow.ToString("O")
-                                                                         }
-                                                                         session.EventEmitter.Emit("error", errorData)
-                                                                     End Try
-                                                                 End Function)
+            ' ✅ HANDSHAKE: NON avviare l'orchestrator qui
+            ' L'orchestrator verrà avviato in HandleOrchestratorSessionStream DOPO che:
+            ' 1. Lo stream SSE è aperto
+            ' 2. I listener sono registrati
+            ' 3. Il replay è completato
+            ' 4. L'evento "ready" è stato inviato
+            ' Questo elimina la race condition e allinea OrchestratorSession con TaskSession
 
             Return session
         End SyncLock
@@ -418,73 +475,183 @@ Public Class SessionManager
     ''' </summary>
     Public Shared Function GetSession(sessionId As String) As OrchestratorSession
         SyncLock _lock
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.WriteLine($"🔵 [SessionManager] GetSession called for session: {sessionId}")
+            System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] GetSession called: {sessionId}")
+            Console.Out.Flush()
+
             Dim session = _storage.GetOrchestratorSession(sessionId)
-            If session IsNot Nothing AndAlso session.CompilationResult IsNot Nothing AndAlso session.Orchestrator Is Nothing Then
-                ' ✅ SINGLE POINT OF TRUTH: Ricrea resolveTranslation per risolvere TextKey
-                Dim resolveTranslation As Func(Of String, String) = Nothing
-                If Not String.IsNullOrEmpty(session.ProjectId) AndAlso Not String.IsNullOrEmpty(session.Locale) AndAlso _translationRepository IsNot Nothing Then
-                    resolveTranslation = Function(textKey As String) As String
-                        If String.IsNullOrEmpty(textKey) Then
-                            Return Nothing
-                        End If
-                        Try
-                            Dim translation = _translationRepository.GetTranslation(session.ProjectId, session.Locale, textKey)
-                            ' Se traduzione non trovata, ritorna TextKey stesso (fallback)
-                            Return If(String.IsNullOrEmpty(translation), textKey, translation)
-                        Catch ex As Exception
-                            Console.WriteLine($"[SessionManager] ⚠️ Error resolving translation for key '{textKey}': {ex.Message}")
-                            ' Fallback: ritorna TextKey stesso
-                            Return textKey
-                        End Try
-                    End Function
-                End If
 
-                ' ✅ STATELESS: Ricrea FlowOrchestrator con resolveTranslation
-                session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(
-                    session.CompilationResult,
-                    sessionId,
-                    _executionStateStorage,
-                    session.ProjectId,
-                    session.Locale,
-                    resolveTranslation
-                )
-
-                ' Ricollega eventi
-                AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
-                                                                   Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
-                                                                   Dim msg = New With {
-                                                                       .id = msgId,
-                                                                       .text = text,
-                                                                       .stepType = "message",
-                                                                       .timestamp = DateTime.UtcNow.ToString("O"),
-                                                                       .taskId = ""
-                                                                   }
-                                                                   session.Messages.Add(msg)
-                                                                   session.EventEmitter.Emit("message", msg)
-                                                               End Sub
-                AddHandler session.Orchestrator.StateUpdated, Sub(sender, state)
-                                                                  Dim stateData = New With {
-                                                                      .currentNodeId = state.CurrentNodeId,
-                                                                      .executedTaskIds = state.ExecutedTaskIds.ToList(),
-                                                                      .variableStore = state.VariableStore
-                                                                  }
-                                                                  session.EventEmitter.Emit("stateUpdate", stateData)
-                                                              End Sub
-                AddHandler session.Orchestrator.ExecutionCompleted, Sub(sender, e)
-                                                                        Dim completeData = New With {
-                                                                            .success = True,
-                                                                            .timestamp = DateTime.UtcNow.ToString("O")
-                                                                        }
-                                                                        session.EventEmitter.Emit("complete", completeData)
-                                                                    End Sub
-                AddHandler session.Orchestrator.ExecutionError, Sub(sender, ex)
-                                                                    Dim errorData = New With {
-                                                                        .error = ex.Message,
-                                                                        .timestamp = DateTime.UtcNow.ToString("O")
-                                                                    }
-                                                                    session.EventEmitter.Emit("error", errorData)
-                                                                End Sub
+            If session Is Nothing Then
+                Console.WriteLine($"❌ [SessionManager] GetSession: session is Nothing for {sessionId}")
+                System.Diagnostics.Debug.WriteLine($"❌ [SessionManager] GetSession: session is Nothing")
+                Console.Out.Flush()
+                Return Nothing
             End If
+
+            If session.CompilationResult Is Nothing Then
+                Console.WriteLine($"⚠️ [SessionManager] GetSession: CompilationResult is Nothing for {sessionId}")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [SessionManager] GetSession: CompilationResult is Nothing")
+                Console.Out.Flush()
+                Return session
+            End If
+
+            Console.WriteLine($"🔵 [SessionManager] GetSession: Orchestrator is Nothing: {session.Orchestrator Is Nothing}")
+            System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] GetSession: Orchestrator is Nothing: {session.Orchestrator Is Nothing}")
+            Console.Out.Flush()
+
+            ' ✅ CRITICAL FIX: Assicurati che session.EventEmitter sia lo stesso EventEmitter condiviso
+            ' Quando la sessione viene deserializzata da Redis, viene creato un nuovo EventEmitter vuoto
+            ' Dobbiamo riutilizzare lo stesso EventEmitter che viene usato in HandleOrchestratorSessionStream
+            Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
+            If session.EventEmitter Is Nothing OrElse session.EventEmitter IsNot sharedEmitter Then
+                Console.WriteLine($"🔵 [SessionManager] GetSession: Replacing session.EventEmitter with shared EventEmitter for {sessionId}")
+                System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] GetSession: Replacing EventEmitter")
+                Console.Out.Flush()
+                session.EventEmitter = sharedEmitter
+            End If
+
+            ' ✅ CRITICAL FIX: Ricrea SEMPRE l'orchestrator con i parametri corretti
+            ' L'orchestrator creato in DeserializeOrchestratorSession non ha resolveTranslation,
+            ' projectId, locale, quindi deve essere ricreato con i parametri corretti
+            ' ✅ SINGLE POINT OF TRUTH: Ricrea resolveTranslation per risolvere TextKey
+            Console.WriteLine($"🔵 [SessionManager] GetSession: Creating resolveTranslation for {sessionId}")
+            Console.WriteLine($"🔵 [SessionManager] GetSession:   session.ProjectId: '{session.ProjectId}'")
+            Console.WriteLine($"🔵 [SessionManager] GetSession:   session.Locale: '{session.Locale}'")
+            Console.WriteLine($"🔵 [SessionManager] GetSession:   _translationRepository IsNot Nothing: {_translationRepository IsNot Nothing}")
+            System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] GetSession: Creating resolveTranslation - ProjectId: '{session.ProjectId}', Locale: '{session.Locale}', Repository: {_translationRepository IsNot Nothing}")
+
+            Dim resolveTranslation As Func(Of String, String) = Nothing
+            If Not String.IsNullOrEmpty(session.ProjectId) AndAlso Not String.IsNullOrEmpty(session.Locale) AndAlso _translationRepository IsNot Nothing Then
+                Console.WriteLine($"✅ [SessionManager] GetSession: Creating resolveTranslation function")
+                System.Diagnostics.Debug.WriteLine($"✅ [SessionManager] GetSession: Creating resolveTranslation function")
+                resolveTranslation = Function(textKey As String) As String
+                                         If String.IsNullOrEmpty(textKey) Then
+                                             Return Nothing
+                                         End If
+                                         Try
+                                             Dim translation = _translationRepository.GetTranslation(session.ProjectId, session.Locale, textKey)
+                                             ' Se traduzione non trovata, ritorna TextKey stesso (fallback)
+                                             Return If(String.IsNullOrEmpty(translation), textKey, translation)
+                                         Catch ex As Exception
+                                             Console.WriteLine($"[SessionManager] ⚠️ Error resolving translation for key '{textKey}': {ex.Message}")
+                                             ' Fallback: ritorna TextKey stesso
+                                             Return textKey
+                                         End Try
+                                     End Function
+            Else
+                Console.WriteLine($"⚠️ [SessionManager] GetSession: resolveTranslation NOT created!")
+                Console.WriteLine($"⚠️ [SessionManager] GetSession:   ProjectId empty: {String.IsNullOrEmpty(session.ProjectId)}")
+                Console.WriteLine($"⚠️ [SessionManager] GetSession:   Locale empty: {String.IsNullOrEmpty(session.Locale)}")
+                Console.WriteLine($"⚠️ [SessionManager] GetSession:   TranslationRepository Nothing: {_translationRepository Is Nothing}")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [SessionManager] GetSession: resolveTranslation NOT created - ProjectId empty: {String.IsNullOrEmpty(session.ProjectId)}, Locale empty: {String.IsNullOrEmpty(session.Locale)}, Repository Nothing: {_translationRepository Is Nothing}")
+            End If
+
+            ' ✅ CRITICAL: Ricrea SEMPRE l'orchestrator con i parametri corretti
+            ' Anche se esiste già, potrebbe essere stato creato in DeserializeOrchestratorSession
+            ' senza resolveTranslation, projectId, locale
+            Console.WriteLine($"🔵 [SessionManager] GetSession: Recreating orchestrator with correct parameters for {sessionId}")
+            System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] GetSession: Recreating orchestrator")
+            Console.Out.Flush()
+
+            session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(
+                session.CompilationResult,
+                sessionId,
+                _executionStateStorage,
+                session.ProjectId,
+                session.Locale,
+                resolveTranslation
+            )
+
+            Console.WriteLine($"✅ [SessionManager] GetSession: Orchestrator recreated for {sessionId}")
+            Console.WriteLine($"🔵 [SessionManager] GetSession: FlowOrchestrator created with resolveTranslation IsNot Nothing: {resolveTranslation IsNot Nothing}")
+            Console.WriteLine($"🔴 [SessionManager] GetSession: Orchestrator instance hash: {session.Orchestrator.GetHashCode()}")
+            System.Diagnostics.Debug.WriteLine($"✅ [SessionManager] GetSession: Orchestrator recreated, hash: {session.Orchestrator.GetHashCode()}, resolveTranslation: {resolveTranslation IsNot Nothing}")
+            System.Diagnostics.Debug.WriteLine($"✅ [SessionManager] GetSession: Orchestrator recreated, hash: {session.Orchestrator.GetHashCode()}")
+            Console.Out.Flush()
+
+            ' ✅ STEP 2: Ricollega SEMPRE gli handler
+            Console.WriteLine($"🔵 [SessionManager] GetSession: Registering MessageToShow handler for {sessionId}")
+            System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] GetSession: Registering handlers")
+            Console.Out.Flush()
+
+            AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
+                                                               Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                               Console.WriteLine($"🔵 [SessionManager] MessageToShow event received for session {sessionId} (from GetSession)")
+                                                               Console.WriteLine($"🔵 [SessionManager] Message text: {text}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] MessageToShow: {text}")
+                                                               Console.Out.Flush()
+
+                                                               Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
+                                                               Dim msg = New With {
+                                                                   .id = msgId,
+                                                                   .text = text,
+                                                                   .stepType = "message",
+                                                                   .timestamp = DateTime.UtcNow.ToString("O"),
+                                                                   .taskId = ""
+                                                               }
+                                                               ' ✅ DEBUG: Log messaggio prima di emettere evento SSE
+                                                               Dim msgJson = JsonConvert.SerializeObject(msg)
+                                                               Console.WriteLine($"🔵 [SessionManager] Created message object: {msgJson}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] Message object: {msgJson}")
+                                                               Console.Out.Flush()
+
+                                                               session.Messages.Add(msg)
+                                                               Console.WriteLine($"🔵 [SessionManager] Message added to session.Messages. Total: {session.Messages.Count}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] Total messages: {session.Messages.Count}")
+                                                               Console.Out.Flush()
+
+                                                               Console.WriteLine($"🔵 [SessionManager] Emitting 'message' event via EventEmitter...")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] Emitting event...")
+                                                               Console.Out.Flush()
+
+                                                               ' ✅ DEBUG: Verifica listener count PRIMA di Emit
+                                                               Dim listenerCountBefore = session.EventEmitter.ListenerCount("message")
+                                                               Console.WriteLine($"🔴 [SessionManager] BREAKPOINT: EventEmitter.ListenerCount('message') BEFORE Emit = {listenerCountBefore}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔴 [SessionManager] ListenerCount BEFORE = {listenerCountBefore}")
+                                                               Console.Out.Flush()
+
+                                                               session.EventEmitter.Emit("message", msg)
+
+                                                               ' ✅ DEBUG: Verifica listener count DOPO Emit
+                                                               Dim listenerCountAfter = session.EventEmitter.ListenerCount("message")
+                                                               Console.WriteLine($"🔴 [SessionManager] BREAKPOINT: EventEmitter.Emit('message') completed")
+                                                               Console.WriteLine($"🔴 [SessionManager] BREAKPOINT: EventEmitter.ListenerCount('message') AFTER Emit = {listenerCountAfter}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔴 [SessionManager] ListenerCount AFTER = {listenerCountAfter}")
+                                                               Console.Out.Flush()
+                                                               Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                           End Sub
+
+            AddHandler session.Orchestrator.StateUpdated, Sub(sender, state)
+                                                              Dim stateData = New With {
+                                                                  .currentNodeId = state.CurrentNodeId,
+                                                                  .executedTaskIds = state.ExecutedTaskIds.ToList(),
+                                                                  .variableStore = state.VariableStore
+                                                              }
+                                                              session.EventEmitter.Emit("stateUpdate", stateData)
+                                                          End Sub
+
+            AddHandler session.Orchestrator.ExecutionCompleted, Sub(sender, e)
+                                                                    Dim completeData = New With {
+                                                                         .success = True,
+                                                                         .timestamp = DateTime.UtcNow.ToString("O")
+                                                                     }
+                                                                    session.EventEmitter.Emit("complete", completeData)
+                                                                End Sub
+
+            AddHandler session.Orchestrator.ExecutionError, Sub(sender, ex)
+                                                                Dim errorData = New With {
+                                                                    .error = ex.Message,
+                                                                    .timestamp = DateTime.UtcNow.ToString("O")
+                                                                }
+                                                                session.EventEmitter.Emit("error", errorData)
+                                                            End Sub
+
+            Console.WriteLine($"✅ [SessionManager] GetSession: All handlers registered for {sessionId}")
+            System.Diagnostics.Debug.WriteLine($"✅ [SessionManager] GetSession: Handlers registered")
+            Console.Out.Flush()
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+
             Return session
         End SyncLock
     End Function
@@ -1156,6 +1323,77 @@ Public Class SessionManager
             .mode = modeBeforeSave
         })
     End Sub
+
+    ''' <summary>
+    ''' ✅ HANDSHAKE: Avvia l'orchestrator in modo thread-safe (protegge contro doppio avvio)
+    ''' </summary>
+    ''' <param name="sessionId">ID della sessione</param>
+    ''' <returns>True se l'orchestrator è stato avviato, False se era già in esecuzione</returns>
+    Public Shared Function StartOrchestratorIfNotRunning(sessionId As String) As Boolean
+        SyncLock _lock
+            ' ✅ CRITICAL FIX: Usa GetSession invece di _storage.GetOrchestratorSession
+            ' GetSession ricrea l'orchestrator con i parametri corretti e registra gli handler
+            Dim session = GetSession(sessionId)
+
+            If session Is Nothing Then
+                Console.WriteLine($"❌ [SessionManager] Cannot start orchestrator: session not found: {sessionId}")
+                Return False
+            End If
+
+            If session.Orchestrator Is Nothing Then
+                Console.WriteLine($"❌ [SessionManager] Cannot start orchestrator: orchestrator is Nothing for session {sessionId}")
+                Return False
+            End If
+
+            ' ✅ THREAD-SAFE: Verifica e imposta flag dentro lock
+            If session.IsOrchestratorRunning Then
+                Console.WriteLine($"⚠️ [SessionManager] Orchestrator already running for session {sessionId} - skipping start")
+                Return False
+            End If
+
+            ' Imposta flag e salva sessione
+            session.IsOrchestratorRunning = True
+            _storage.SaveOrchestratorSession(session)
+
+            ' Avvia orchestrator in background
+            Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function()
+                                                                     Try
+                                                                         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                                         Console.WriteLine($"🔵 [SessionManager] Starting orchestrator execution for session {sessionId}")
+                                                                         Console.WriteLine($"🔵 [SessionManager] Orchestrator is Nothing: {session.Orchestrator Is Nothing}")
+                                                                         Console.WriteLine($"🔴 [SessionManager] Orchestrator instance hash: {session.Orchestrator.GetHashCode()}")
+                                                                         System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] Starting orchestrator for session {sessionId}, hash: {session.Orchestrator.GetHashCode()}")
+                                                                         Console.Out.Flush()
+
+                                                                         If session.Orchestrator IsNot Nothing Then
+                                                                             Console.WriteLine($"🔵 [SessionManager] Calling ExecuteDialogueAsync()...")
+                                                                             Console.Out.Flush()
+                                                                             Await session.Orchestrator.ExecuteDialogueAsync()
+                                                                             Console.WriteLine($"✅ [SessionManager] Orchestrator execution completed for session {sessionId}")
+                                                                             System.Diagnostics.Debug.WriteLine($"✅ [SessionManager] Orchestrator completed for session {sessionId}")
+                                                                             Console.Out.Flush()
+                                                                         Else
+                                                                             Console.WriteLine($"❌ [SessionManager] Orchestrator is Nothing - cannot execute!")
+                                                                             System.Diagnostics.Debug.WriteLine($"❌ [SessionManager] Orchestrator is Nothing")
+                                                                             Console.Out.Flush()
+                                                                         End If
+                                                                         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                                     Catch ex As Exception
+                                                                         Dim errorData = New With {
+                                                                             .error = ex.Message,
+                                                                             .timestamp = DateTime.UtcNow.ToString("O")
+                                                                         }
+                                                                         session.EventEmitter.Emit("error", errorData)
+                                                                         Console.WriteLine($"❌ [SessionManager] Error in orchestrator execution for session {sessionId}: {ex.Message}")
+                                                                         Console.WriteLine($"❌ [SessionManager] Stack trace: {ex.StackTrace}")
+                                                                         System.Diagnostics.Debug.WriteLine($"❌ [SessionManager] Error: {ex.Message}")
+                                                                         Console.Out.Flush()
+                                                                     End Try
+                                                                 End Function)
+
+            Return True
+        End SyncLock
+    End Function
 
 End Class
 

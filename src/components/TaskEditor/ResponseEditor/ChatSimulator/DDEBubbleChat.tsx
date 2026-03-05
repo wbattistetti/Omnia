@@ -249,9 +249,26 @@ export default function DDEBubbleChat({
       });
       // Add flow mode messages to component messages
       setMessages(prev => {
+        console.log('🔴 [DDEBubbleChat BREAKPOINT] setMessages called');
+        console.log('🔴 [DDEBubbleChat BREAKPOINT] prev messages count:', prev.length);
+        console.log('🔴 [DDEBubbleChat BREAKPOINT] prev messages:', prev.map(m => ({ id: m.id, text: m.text?.substring(0, 30) })));
+        console.log('🔴 [DDEBubbleChat BREAKPOINT] new message:', message);
+        console.log('🔴 [DDEBubbleChat BREAKPOINT] message.id:', message.id);
+        console.log('🔴 [DDEBubbleChat BREAKPOINT] Checking for duplicates...');
+        const isDuplicate = prev.some(m => m.id === message.id);
+        console.log('🔴 [DDEBubbleChat BREAKPOINT] isDuplicate:', isDuplicate);
+
         // Avoid duplicates
-        if (prev.some(m => m.id === message.id)) return prev;
-        return [...prev, message];
+        if (isDuplicate) {
+          console.log('🔴 [DDEBubbleChat BREAKPOINT] Duplicate found, returning prev');
+          return prev;
+        }
+
+        const newMessages = [...prev, message];
+        console.log('🔴 [DDEBubbleChat BREAKPOINT] New messages array:', newMessages);
+        console.log('🔴 [DDEBubbleChat BREAKPOINT] New messages count:', newMessages.length);
+        console.log('🔴 [DDEBubbleChat BREAKPOINT] New messages details:', newMessages.map(m => ({ id: m.id, text: m.text?.substring(0, 30), sender: m.sender })));
+        return newMessages;
       });
     }
   );
@@ -291,6 +308,18 @@ export default function DDEBubbleChat({
 
   // ✅ NEW: In preview mode, use previewMessages instead of SSE
   const displayMessages = mode === 'preview' && previewMessages ? previewMessages : messages;
+
+  // ✅ DEBUG: Track messages state changes
+  React.useEffect(() => {
+    console.log('🔴 [DDEBubbleChat BREAKPOINT] messages state changed:', {
+      messagesCount: messages.length,
+      displayMessagesCount: displayMessages.length,
+      isFlowMode,
+      mode,
+      messages: messages.map(m => ({ id: m.id, text: m.text?.substring(0, 30), sender: m.sender })),
+      displayMessages: displayMessages.map(m => ({ id: m.id, text: m.text?.substring(0, 30), sender: m.sender }))
+    });
+  }, [messages, displayMessages, isFlowMode, mode]);
 
   // ✅ ARCHITECTURAL: Separate useEffect for preview mode
   React.useEffect(() => {

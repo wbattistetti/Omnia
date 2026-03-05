@@ -16,6 +16,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Types and Enums -->
     <Compile Include="Types\TaskTypes.vb" />
     <Compile Include="Types\Types.vb" />
@@ -48,6 +52,9 @@
     <!-- Utilities -->
     <Compile Include="Utils\GlobalVariableContext.vb" />
     <Compile Include="Utils\PlaceholderUtils.vb" />
+
+    <!-- JSON Converters (shared between Compiler and Engine) -->
+    <Compile Include="Converters\ITaskConverter.vb" />
 
     <!-- Execution State (shared between Orchestrator and Engine) -->
     <Compile Include="ExecutionState.vb" />

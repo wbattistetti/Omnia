@@ -40,8 +40,7 @@
     <!-- NLPContract moved to Compiler/DTO/IDE (to eliminate circular dependency) -->
     <!-- ITask moved to Common/ITask.vb (uses ITaskContext to avoid circular dependency) -->
     <!-- TaskBase, MessageTask, CloseSessionTask, TransferTask moved to Common (shared between Compiler and Engine) -->
-    <!-- JSON converters -->
-    <Compile Include="Models\Converters\ITaskConverter.vb" />
+    <!-- ITaskConverter moved to Common/Converters (to eliminate circular dependency) -->
     <!-- Core domain model -->
     <Compile Include="Models\TurnResult.vb" />
     <!-- Deprecated compatibility stub - REMOVED: conflicts with DDTInstance.vb -->

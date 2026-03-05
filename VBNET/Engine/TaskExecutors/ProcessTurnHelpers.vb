@@ -250,13 +250,14 @@ Public Module ProcessTurnHelpers
         ''' <summary>
         ''' RenderStepTasks:
         ''' Seleziona l'escalation corretta (in base a NoMatch/NoInput counters)
-        ''' e converte i task "renderizzabili" in stringhe da mostrare in chat.
+        ''' e converte i task "renderizzabili" in TextKey da mostrare in chat.
+        ''' ✅ STATELESS: Restituisce TextKey, non testo risolto.
+        ''' La risoluzione avverrà nei chiamanti (FlowOrchestrator.messageCallback, TaskSessionHandlers).
         ''' </summary>
         Public Function RenderStepTasks(
         stepObj As CompiledDialogueStep,
         currentTask As CompiledUtteranceTask,
-        state As DialogueState,
-        resolveTranslation As Func(Of String, String)
+        state As DialogueState
     ) As List(Of String)
 
             Dim messages As New List(Of String)
@@ -293,19 +294,15 @@ Public Module ProcessTurnHelpers
                 Return messages
             End If
 
-            ' Renderizza solo i task che hanno una rappresentazione testuale in chat
+            ' ✅ STATELESS: Renderizza solo i task che hanno una rappresentazione testuale in chat
+            ' Restituisce TextKey direttamente, senza risoluzione
+            ' La risoluzione avverrà nei chiamanti (SINGLE POINT OF TRUTH)
             For Each taskObj In escalation.Tasks
                 If TypeOf taskObj Is MessageTask Then
                     Dim msgTask = DirectCast(taskObj, MessageTask)
-                    Dim messageText As String = Nothing
-                    If resolveTranslation IsNot Nothing AndAlso Not String.IsNullOrEmpty(msgTask.TextKey) Then
-                        Dim translated = resolveTranslation(msgTask.TextKey)
-                        messageText = If(String.IsNullOrEmpty(translated), msgTask.TextKey, translated)
-                    Else
-                        messageText = msgTask.TextKey
-                    End If
-                    If Not String.IsNullOrEmpty(messageText) Then
-                        messages.Add(messageText)
+                    ' ✅ Restituisci TextKey direttamente
+                    If Not String.IsNullOrEmpty(msgTask.TextKey) Then
+                        messages.Add(msgTask.TextKey)
                     End If
                 ElseIf TypeOf taskObj Is CloseSessionTask Then
                     messages.Add("[Chiusura chiamata]")

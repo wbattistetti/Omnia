@@ -65,7 +65,7 @@ export default function IntentHostAdapter({ task, onClose, hideHeader, onToolbar
 
   // Hydrate from task (load problem payload from TaskRepository or localStorage)
   useEffect(() => {
-    const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
+    const pid = (() => { try { return localStorage.getItem('currentProjectId') || ''; } catch { return ''; } })();
     const key = `problem.${pid}.${instanceId}`;
 
     // ✅ ARCHITETTURA ESPERTO: Carica problem payload dal Task se disponibile
@@ -80,7 +80,7 @@ export default function IntentHostAdapter({ task, onClose, hideHeader, onToolbar
     // FASE 6D: Update TaskRepository with current intents
     try {
       if (instanceId) {
-        const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
+        const pid = (() => { try { return localStorage.getItem('currentProjectId') || ''; } catch { return ''; } })();
         const problemIntents = fromEditorState().intents.map(it => ({
           id: it.id,
           name: it.name,
@@ -105,7 +105,7 @@ export default function IntentHostAdapter({ task, onClose, hideHeader, onToolbar
 
           // FASE 6D: Update TaskRepository when intents change
           try {
-            const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
+            const pid = (() => { try { return localStorage.getItem('currentProjectId') || ''; } catch { return ''; } })();
             console.log('[IntentEditor][SAVE][DEBOUNCED]', {
               taskId: task.id, // ✅ ARCHITETTURA ESPERTO: Usa task.id
               instanceId: instanceId || 'NOT_FOUND',
@@ -172,7 +172,7 @@ export default function IntentHostAdapter({ task, onClose, hideHeader, onToolbar
           // FASE 6D: Update TaskRepository when tests change (which might affect intents)
           try {
             if (instanceId) {
-              const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
+              const pid = (() => { try { return localStorage.getItem('currentProjectId') || ''; } catch { return ''; } })();
               const problemIntents = next.intents.map(it => ({
                 id: it.id,
                 name: it.name,

@@ -420,6 +420,44 @@ export class DialogueTaskService {
       added,
       updated
     });
+
+    // ✅ DEBUG: Verifica duplicati dopo la registrazione
+    const duplicateIds = new Map<string, number>();
+    this.cache.forEach(t => {
+      const id = String(t.id || t._id || '').trim();
+      if (id) {
+        duplicateIds.set(id, (duplicateIds.get(id) || 0) + 1);
+      }
+    });
+
+    const duplicates = Array.from(duplicateIds.entries())
+      .filter(([_, count]) => count > 1);
+
+    if (duplicates.length > 0) {
+      console.error('[DialogueTaskService] ❌ DUPLICATI TROVATI DOPO REGISTRAZIONE!', {
+        duplicates: duplicates.map(([id, count]) => ({ id, count })),
+        totalCacheSize: this.cache.length,
+        duplicateDetails: duplicates.map(([id, count]) => {
+          const matchingTemplates = this.cache.filter(t => String(t.id || t._id || '').trim() === id);
+          return {
+            id,
+            count,
+            templates: matchingTemplates.map(t => ({
+              id: t.id || t._id,
+              label: t.label,
+              name: t.name,
+              type: t.type,
+              templateId: t.templateId,
+              source: (t as any).source
+            }))
+          };
+        })
+      });
+    } else {
+      console.log('[DialogueTaskService] ✅ Nessun duplicato trovato nella cache', {
+        totalCacheSize: this.cache.length
+      });
+    }
   }
 
   /**
@@ -504,6 +542,26 @@ export class DialogueTaskService {
       // Aggiungi nuovo template
       this.cache.push(template);
       // ✅ REMOVED: Log rumoroso - verrà ripristinato se necessario durante refactoring
+    }
+
+    // ✅ DEBUG: Verifica duplicati dopo addTemplate
+    const duplicateIds = new Map<string, number>();
+    this.cache.forEach(t => {
+      const id = String(t.id || t._id || '').trim();
+      if (id) {
+        duplicateIds.set(id, (duplicateIds.get(id) || 0) + 1);
+      }
+    });
+
+    const duplicates = Array.from(duplicateIds.entries())
+      .filter(([_, count]) => count > 1);
+
+    if (duplicates.length > 0) {
+      console.error('[DialogueTaskService] ❌ DUPLICATI TROVATI DOPO addTemplate!', {
+        addedTemplateId: templateIdStr,
+        duplicates: duplicates.map(([id, count]) => ({ id, count })),
+        totalCacheSize: this.cache.length
+      });
     }
 
     // ✅ NUOVO: Genera embedding in background (non blocca)
