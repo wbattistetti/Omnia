@@ -277,6 +277,16 @@ export default function DDEBubbleChat({
   const effectiveIsWaitingForInput = isFlowMode ? flowModeChat.isWaitingForInput : isWaitingForInput;
   const effectiveError = isFlowMode ? flowModeChat.error : backendError;
 
+  // ✅ DEBUG: Log quando effectiveIsWaitingForInput cambia
+  React.useEffect(() => {
+    console.log('🔵 [DDEBubbleChat] 🔍 effectiveIsWaitingForInput changed:', {
+      effectiveIsWaitingForInput,
+      isFlowMode,
+      flowModeChatIsWaiting: isFlowMode ? flowModeChat.isWaitingForInput : undefined,
+      taskModeIsWaiting: !isFlowMode ? isWaitingForInput : undefined,
+    });
+  }, [effectiveIsWaitingForInput, isFlowMode, flowModeChat.isWaitingForInput, isWaitingForInput]);
+
   // Message ID generator
   const messageIdCounter = React.useRef(0);
   const generateMessageId = (prefix: string = 'msg') => {
@@ -305,6 +315,53 @@ export default function DDEBubbleChat({
     currentDDT: null as any, // TODO: Remove when useMessageEditing is updated
     onUpdateDDT: onUpdateTaskTree as any // TODO: Update when useMessageEditing is updated
   });
+
+  // ✅ Focus input quando diventa disponibile per l'input
+  React.useEffect(() => {
+    console.log('🔵 [DDEBubbleChat] 🔍 Focus useEffect triggered:', {
+      effectiveIsWaitingForInput,
+      hasInputRef: !!inlineInputRef.current,
+      inputDisabled: inlineInputRef.current?.disabled,
+    });
+
+    if (effectiveIsWaitingForInput && inlineInputRef.current) {
+      console.log('🔵 [DDEBubbleChat] 🔍 About to focus input');
+      // ✅ UNIFIED: Usa requestAnimationFrame + setTimeout per assicurarsi che:
+      // 1. React abbia aggiornato il DOM (input non più disabled)
+      // 2. Il browser abbia applicato gli stili
+      // 3. L'input sia effettivamente focusabile
+      const focusInput = () => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            try {
+              const input = inlineInputRef.current;
+              console.log('🔵 [DDEBubbleChat] 🔍 Attempting to focus input:', {
+                hasInput: !!input,
+                inputDisabled: input?.disabled,
+                inputType: input?.type,
+              });
+              if (input && !input.disabled) {
+                input.focus();
+                input.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                console.log('✅ [DDEBubbleChat] 🔍 BREAKPOINT: Input focused successfully');
+                console.log('✅ [DDEBubbleChat] 🔍 Input is now focused:', document.activeElement === input);
+              } else {
+                console.warn('⚠️ [DDEBubbleChat] ⚠️ Cannot focus input:', {
+                  hasInput: !!input,
+                  inputDisabled: input?.disabled,
+                });
+              }
+            } catch (error) {
+              console.error('❌ [DDEBubbleChat] ❌ Error focusing input:', error);
+            }
+          }, 150);
+        });
+      };
+      focusInput();
+    } else {
+      console.log('🔵 [DDEBubbleChat] 🔍 Focus useEffect: conditions not met, skipping focus');
+    }
+  }, [effectiveIsWaitingForInput, inlineInputRef]);
 
   // ✅ NEW: In preview mode, use previewMessages instead of SSE
   const displayMessages = mode === 'preview' && previewMessages ? previewMessages : messages;
@@ -1548,11 +1605,11 @@ export default function DDEBubbleChat({
             onFocus={() => {
               try { inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { }
             }}
-            placeholder={isWaitingForInput ? "Type response..." : "Waiting for backend..."}
+            placeholder={effectiveIsWaitingForInput ? "Type response..." : "Waiting for backend..."}
             value={inlineDraft}
             onChange={(e) => setInlineDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && isWaitingForInput) {
+              if (e.key === 'Enter' && effectiveIsWaitingForInput) {
                 const v = inlineDraft.trim();
                 if (!v) return;
                 sentTextRef.current = v;

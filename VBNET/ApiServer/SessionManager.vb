@@ -647,6 +647,35 @@ Public Class SessionManager
                                                                 session.EventEmitter.Emit("error", errorData)
                                                             End Sub
 
+            ' ✅ UNIFIED: Handler per WaitingForInput (allinea con TaskSessionHandlers)
+            AddHandler session.Orchestrator.WaitingForInput, Sub(sender, taskId)
+                                                                 Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                                 Console.WriteLine($"🔵 [SessionManager] 🔍 BREAKPOINT: WaitingForInput event received")
+                                                                 Console.WriteLine($"🔵 [SessionManager] 🔍 TaskId: {taskId}")
+                                                                 Console.WriteLine($"🔵 [SessionManager] 🔍 SessionId: {sessionId}")
+                                                                 System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] WaitingForInput received for task {taskId}")
+                                                                 Console.Out.Flush()
+
+                                                                 Dim waitingData = New With {
+                                                                     .taskId = taskId,
+                                                                     .timestamp = DateTime.UtcNow.ToString("O")
+                                                                 }
+                                                                 session.IsWaitingForInput = True
+                                                                 session.WaitingForInputData = waitingData
+
+                                                                 Console.WriteLine($"🔵 [SessionManager] 🔍 About to emit via EventEmitter")
+                                                                 Console.WriteLine($"🔵 [SessionManager] 🔍 EventEmitter IsNot Nothing: {session.EventEmitter IsNot Nothing}")
+                                                                 System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] Emitting waitingForInput via EventEmitter")
+                                                                 Console.Out.Flush()
+
+                                                                 session.EventEmitter.Emit("waitingForInput", waitingData)
+
+                                                                 Console.WriteLine($"✅ [SessionManager] 🔍 BREAKPOINT: waitingForInput event emitted via EventEmitter for task {taskId}")
+                                                                 System.Diagnostics.Debug.WriteLine($"✅ [SessionManager] waitingForInput emitted")
+                                                                 Console.Out.Flush()
+                                                                 Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                             End Sub
+
             Console.WriteLine($"✅ [SessionManager] GetSession: All handlers registered for {sessionId}")
             System.Diagnostics.Debug.WriteLine($"✅ [SessionManager] GetSession: Handlers registered")
             Console.Out.Flush()

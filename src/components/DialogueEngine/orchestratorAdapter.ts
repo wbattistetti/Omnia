@@ -181,17 +181,21 @@ export async function executeOrchestratorBackend(
       try {
         const data = JSON.parse(e.data);
         console.log('═══════════════════════════════════════════════════════════════════════════');
-        console.log('⏳ [ORCHESTRATOR] SSE Event: waitingForInput', data);
+        console.log('🔵 [ORCHESTRATOR] 🔍 BREAKPOINT: SSE Event waitingForInput received');
+        console.log('🔵 [ORCHESTRATOR] 🔍 Event data:', data);
+        console.log('🔵 [ORCHESTRATOR] 🔍 Raw event data:', e.data);
         console.log('═══════════════════════════════════════════════════════════════════════════');
-        console.log('[ORCHESTRATOR] onWaitingForInput callback exists?', !!callbacks.onWaitingForInput);
+        console.log('[ORCHESTRATOR] 🔍 onWaitingForInput callback exists?', !!callbacks.onWaitingForInput);
         if (callbacks.onWaitingForInput) {
-          console.log('[ORCHESTRATOR] Calling onWaitingForInput callback', { hasDDT: !!data.ddt, ddtId: data.ddt?.id });
+          console.log('🔵 [ORCHESTRATOR] 🔍 About to call onWaitingForInput callback');
+          console.log('🔵 [ORCHESTRATOR] 🔍 Callback data:', { hasDDT: !!data.ddt, ddtId: data.ddt?.id, taskId: data.taskId });
           callbacks.onWaitingForInput(data);
+          console.log('✅ [ORCHESTRATOR] 🔍 BREAKPOINT: onWaitingForInput callback called');
         } else {
           console.warn('[ORCHESTRATOR] ⚠️ onWaitingForInput callback not provided!');
         }
       } catch (error) {
-        console.error('[ORCHESTRATOR] Error parsing waitingForInput event', error);
+        console.error('[ORCHESTRATOR] ❌ Error parsing waitingForInput event', error);
       }
     });
 

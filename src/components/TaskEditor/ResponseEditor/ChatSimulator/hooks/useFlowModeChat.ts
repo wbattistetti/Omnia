@@ -99,7 +99,13 @@ export function useFlowModeChat(
       setIsWaitingForInput(false);
     },
     onWaitingForInput: () => {
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+      console.log('🔵 [useFlowModeChat] 🔍 BREAKPOINT: onWaitingForInput called');
+      console.log('🔵 [useFlowModeChat] 🔍 Current isWaitingForInput state:', isWaitingForInput);
+      console.log('🔵 [useFlowModeChat] 🔍 About to set isWaitingForInput to true');
       setIsWaitingForInput(true);
+      console.log('✅ [useFlowModeChat] 🔍 BREAKPOINT: setIsWaitingForInput(true) called');
+      console.log('═══════════════════════════════════════════════════════════════════════════');
     },
   }), [nodes, edges, tasks, translations, onMessage]);
 

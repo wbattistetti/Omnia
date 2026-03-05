@@ -53,6 +53,12 @@ Public Class FlowOrchestrator
     Public Event ExecutionError As EventHandler(Of Exception)
 
     ''' <summary>
+    ''' ✅ UNIFIED: Evento sollevato quando un task richiede input utente
+    ''' Allinea il comportamento con TaskSessionHandlers per unificare l'approccio
+    ''' </summary>
+    Public Event WaitingForInput As EventHandler(Of String) ' taskId
+
+    ''' <summary>
     ''' Costruttore per retrocompatibilità (senza storage - stato solo in memoria)
     ''' </summary>
     Public Sub New(compiledTasks As List(Of CompiledTask))
@@ -257,6 +263,26 @@ Public Class FlowOrchestrator
                 If result.RequiresInput Then
                     Console.WriteLine($"[FlowOrchestrator] ⏸️ TaskGroup {taskGroup.NodeId} suspended (task {result.WaitingTaskId} requires input)")
                     SaveState()
+                    ' ✅ UNIFIED: Emetti evento WaitingForInput (come TaskSessionHandlers)
+                    ' Questo allinea il comportamento con il test del task singolo
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"🔵 [FlowOrchestrator] 🔍 BREAKPOINT: About to raise WaitingForInput event")
+                    Console.WriteLine($"🔵 [FlowOrchestrator] 🔍 TaskId: {result.WaitingTaskId}")
+                    System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] Raising WaitingForInput for task {result.WaitingTaskId}")
+                    Console.Out.Flush()
+
+                    ' ✅ DEBUG: Verifica se ci sono listener registrati
+                    Dim hasListeners = Me.WaitingForInputEvent IsNot Nothing
+                    Console.WriteLine($"🔵 [FlowOrchestrator] 🔍 Has WaitingForInput listeners: {hasListeners}")
+                    System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] Has listeners: {hasListeners}")
+                    Console.Out.Flush()
+
+                    RaiseEvent WaitingForInput(Me, result.WaitingTaskId)
+
+                    Console.WriteLine($"✅ [FlowOrchestrator] 🔍 BREAKPOINT: WaitingForInput event raised for task {result.WaitingTaskId}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [FlowOrchestrator] WaitingForInput event raised")
+                    Console.Out.Flush()
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                     Exit While  ' Sospendi, attendi input
                 End If
 
