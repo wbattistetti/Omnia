@@ -6,7 +6,7 @@ import { Node, ReactFlowInstance } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
 import { FlowNode } from '../components/Flowchart/types/flowTypes';
 import { taskRepository } from '../services/TaskRepository';
-import { getTaskIdFromRow } from '../utils/flowTestHelpers';
+import { getTaskIdFromRow } from '../utils/taskHelpers';
 
 /**
  * useNodeActions - Phase 3 Refactoring

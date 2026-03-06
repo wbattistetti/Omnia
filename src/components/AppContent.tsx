@@ -37,6 +37,7 @@ import { FlowTestProvider } from '../context/FlowTestContext';
 import { FlowActionsProvider } from '../context/FlowActionsContext';
 import { useEntityCreation } from '../hooks/useEntityCreation';
 import { useChatOrchestrator } from '../hooks/useChatOrchestrator'; // ✅ PHASE 2: Chat orchestration
+import { FlowStateBridge } from '../services/FlowStateBridge'; // ✅ PHASE 5: Centralized flow state
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableNonInteractiveEditor from './TaskEditor/ResponseEditor/ResizableNonInteractiveEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableTaskEditorHost from './TaskEditor/EditorHost/ResizableTaskEditorHost'; // ✅ RINOMINATO: ActEditor → TaskEditor, ResizableActEditorHost → ResizableTaskEditorHost
@@ -75,10 +76,11 @@ function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
 const DockManagerWithFlows: React.FC<{
   root: DockNode;
   setRoot: (updater: (prev: DockNode) => DockNode) => void;
-  renderTabContent: (tab: DockTab) => React.ReactNode;
+  renderTabContent: (tab: DockTab, upsertFlow: (flow: { id: string; title: string; nodes: any[]; edges: any[] }) => void) => React.ReactNode;
   flowsRef: React.MutableRefObject<Record<string, any>>;
 }> = ({ root, setRoot, renderTabContent, flowsRef }) => {
   const flowWorkspace = useFlowWorkspace<Node<FlowNode>, Edge<EdgeData>>();
+  const flowActions = useFlowActions<Node<FlowNode>, Edge<EdgeData>>();
 
   // ✅ CRITICAL: Update flowsRef immediately (not just in useEffect)
   // This ensures flowsRef is always up-to-date when handleSaveProject is called
@@ -98,11 +100,17 @@ const DockManagerWithFlows: React.FC<{
     }
   }, [setRoot]);
 
+  // ✅ Wrap renderTabContent to inject upsertFlow
+  const wrappedRenderTabContent = React.useCallback(
+    (tab: DockTab) => renderTabContent(tab, flowActions.upsertFlow),
+    [renderTabContent, flowActions.upsertFlow]
+  );
+
   return (
     <DockManager
       root={root}
       setRoot={adaptedSetRoot}
-      renderTabContent={renderTabContent}
+      renderTabContent={wrappedRenderTabContent}
     />
   );
 };
@@ -177,9 +185,9 @@ export const AppContent: React.FC<AppContentProps> = ({
   // UnifiedTabContent completamente rimosso - ora usiamo TabRenderer
 
   // ✅ REFACTOR: Use TabRenderer component
-  // Note: FlowCanvasHost handles useFlowActions internally, we only need to update dock tree
+  // Note: upsertFlow is now passed from DockManagerWithFlows to store task flow nodes/edges
   const renderTabContent = React.useCallback(
-    (tab: DockTab) => {
+    (tab: DockTab, upsertFlow: (flow: { id: string; title: string; nodes: any[]; edges: any[] }) => void) => {
       return (
         <TabRenderer
           tab={tab}
@@ -188,9 +196,10 @@ export const AppContent: React.FC<AppContentProps> = ({
           editorCloseRefsMap={editorCloseRefsMap}
           pdUpdate={pdUpdate}
           testSingleNode={handleTestSingleNode}
-          onFlowCreateTaskFlow={(tabId, newFlowId, title) => {
-            // FlowCanvasHost already handles upsertFlow and openFlowBackground
-            // We just need to update the dock tree
+          onFlowCreateTaskFlow={(tabId, newFlowId, title, nodes, edges) => {
+            // ✅ FIX: Store nodes/edges in FlowStore FIRST
+            upsertFlow({ id: newFlowId, title: title || 'Task', nodes, edges });
+            // THEN update the dock tree to add the new tab
             setDockTree(prev =>
               upsertAddNextTo(prev, tabId, {
                 id: `tab_${newFlowId}`,
@@ -201,7 +210,6 @@ export const AppContent: React.FC<AppContentProps> = ({
             );
           }}
           onFlowOpenTaskFlow={(tabId, taskFlowId, title) => {
-            // FlowCanvasHost already handles openFlowBackground
             // We just need to update the dock tree
             setDockTree(prev =>
               upsertAddNextTo(prev, tabId, {
@@ -748,11 +756,16 @@ export const AppContent: React.FC<AppContentProps> = ({
                       console.log('[Save][3-flow][flush] ✅ DONE', { ms: Math.round(tFlushEnd - tFlush) });
 
                       // Final PUT immediate (explicit Save)
+                      // Phase 5: Use FlowStateBridge for centralized flow state access
                       const tPut = performance.now();
+                      const mainFlow = FlowStateBridge.getFlowById('main');
+                      const flowData = mainFlow
+                        ? { nodes: mainFlow.nodes, edges: mainFlow.edges }
+                        : { nodes: FlowStateBridge.getNodes(), edges: FlowStateBridge.getEdges() };
                       const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] })
+                        body: JSON.stringify(flowData)
                       });
                       const tPutEnd = performance.now();
                       if (!putRes.ok) {
@@ -992,13 +1005,13 @@ export const AppContent: React.FC<AppContentProps> = ({
                           />
                         </FlowWorkspaceProvider>
                       ) : (
-                        // ✅ PHASE 1: Wrap with FlowActionsProvider for stable callbacks
+                        // ✅ PHASE 1/5: Wrap with FlowActionsProvider using FlowStateBridge
                         <FlowActionsProvider
                           setNodes={(updater: any) => {
                             try {
-                              const current = (window as any).__flowNodes || [];
+                              const current = FlowStateBridge.getNodes();
                               const updated = typeof updater === 'function' ? updater(current) : updater;
-                              (window as any).__flowNodes = updated;
+                              FlowStateBridge.setNodes(updated);
                             } catch { }
                           }}
                           createFactoryTask={entityCreationFallback.createFactoryTask}
@@ -1008,20 +1021,20 @@ export const AppContent: React.FC<AppContentProps> = ({
                         >
                           <FlowTestProvider testSingleNode={handleTestSingleNode}>
                             <FlowEditor
-                              nodes={(window as any).__flowNodes || []}
+                              nodes={FlowStateBridge.getNodes()}
                               setNodes={(updater: any) => {
                                 try {
-                                  const current = (window as any).__flowNodes || [];
+                                  const current = FlowStateBridge.getNodes();
                                   const updated = typeof updater === 'function' ? updater(current) : updater;
-                                  (window as any).__flowNodes = updated;
+                                  FlowStateBridge.setNodes(updated);
                                 } catch { }
                               }}
-                              edges={(window as any).__flowEdges || []}
+                              edges={FlowStateBridge.getEdges()}
                               setEdges={(updater: any) => {
                                 try {
-                                  const current = (window as any).__flowEdges || [];
+                                  const current = FlowStateBridge.getEdges();
                                   const updated = typeof updater === 'function' ? updater(current) : updater;
-                                  (window as any).__flowEdges = updated;
+                                  FlowStateBridge.setEdges(updated);
                                 } catch { }
                               }}
                               currentProject={currentProject}

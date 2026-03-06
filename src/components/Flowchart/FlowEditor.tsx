@@ -48,6 +48,7 @@ import { CustomEdge } from './edges/CustomEdge';
 import { useIntellisense } from '../../context/IntellisenseContext';
 import { FlowchartWrapper } from './FlowchartWrapper';
 import { ExecutionStateProvider } from './executionHighlight/ExecutionStateContext';
+import { FlowStateBridge } from '../../services/FlowStateBridge';
 // ✅ PHASE 3: taskRepository and getTaskIdFromRow moved to useNodeActions hook
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
@@ -1040,17 +1041,19 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       onMouseLeave={() => setCursorTooltip(null)}
       onMouseDown={eventHandlers.onMouseDown}
     >
-      {/* Expose nodes/edges to GlobalDebuggerPanel (bridge) */}
-      {(() => { try { (window as any).__flowNodes = nodes; (window as any).__flowEdges = edges; if (flowId) { (window as any).__flows = (window as any).__flows || {}; (window as any).__flows[flowId] = { nodes, edges }; } } catch { } return null; })()}
-
-      {/* Execution State Provider - Pass execution state from props or window */}
-      {/* Also expose edges to window for edge highlighting */}
+      {/* Expose nodes/edges via FlowStateBridge (Phase 5: centralized sync) */}
       {(() => {
         try {
-          (window as any).__flowEdges = edges;
+          FlowStateBridge.setNodes(nodes);
+          FlowStateBridge.setEdges(edges);
+          if (flowId) {
+            FlowStateBridge.storeFlow(flowId, nodes, edges);
+          }
         } catch { }
         return null;
       })()}
+
+      {/* Execution State Provider - Pass execution state from props or window */}
       <ExecutionStateProvider
         executionState={propExecutionState ?? (window as any).__executionState ?? null}
         currentTask={propCurrentTask ?? (window as any).__currentTask ?? null}
@@ -1207,11 +1210,11 @@ export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
 
   const { data: projectData } = useProjectData();
 
-  // Providers per IntellisenseService
+  // Providers per IntellisenseService (Phase 5: use FlowStateBridge)
   const intellisenseProviders = useMemo(() => ({
     getProjectData: () => projectData,
-    getFlowNodes: () => (window as any).__flowNodes || [],
-    getFlowEdges: () => (window as any).__flowEdges || [],
+    getFlowNodes: () => FlowStateBridge.getNodes(),
+    getFlowEdges: () => FlowStateBridge.getEdges(),
   }), [projectData]);
 
   return (
