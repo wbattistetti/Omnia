@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { stepMeta } from './ddtUtils';
-import { Shield, Check, Trash2, X } from 'lucide-react';
+import { Shield, Check, Trash2, X, Plus, ChevronDown } from 'lucide-react';
 import { useFontContext } from '@context/FontContext';
 import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { taskRepository } from '@services/TaskRepository';
+import { DialogueTaskService } from '@services/DialogueTaskService';
+import { StepType, STEP_ORDER, getStepOrder } from '@types/stepTypes';
 
 interface StepsStripProps {
   stepKeys: string[];
@@ -23,6 +25,15 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
   const [hoveredStepKey, setHoveredStepKey] = useState<string | null>(null);
   const [toolbarPositions, setToolbarPositions] = useState<Record<string, { top: number; left: number }>>({});
   const buttonRefs = useRef<Record<string, HTMLButtonElement>>({});
+
+  // State per restore dropdown
+  const [showRestoreDropdown, setShowRestoreDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const restoreButtonRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+
+  // ✅ State per forzare ri-render quando taskInstance.steps cambia
+  const [taskVersion, setTaskVersion] = useState(0);
 
   if (!stepKeys.length) {
     return null;
@@ -150,11 +161,106 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
           }
         }
       });
+
+      // ✅ Forza ri-render aggiornando taskVersion
+      setTaskVersion(prev => prev + 1);
     }
   };
 
-  // Handler per delete step
-  const handleDeleteStep = (stepKey: string) => {
+
+  // Step obbligatori che non possono essere disattivati o eliminati
+  const mandatorySteps = ['start'];
+  const isStepMandatory = (stepKey: string) => mandatorySteps.includes(stepKey);
+
+  // ✅ Calcola step disabilitati che possono essere ripristinati
+  const restorableSteps = React.useMemo(() => {
+    if (!effectiveTaskId || !node) return [];
+
+    const nodeTemplateId = node?.templateId || node?.id;
+    if (!nodeTemplateId) return [];
+
+    const taskInstance = taskRepository.getTask(effectiveTaskId);
+    if (!taskInstance) return [];
+
+    const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
+
+    // ✅ Step da ripristinare: presenti nell'istanza ma disabilitati (_disabled === true)
+    const disabled: Array<{ stepKey: string; stepData: any }> = [];
+
+    Object.keys(instanceSteps).forEach(stepKey => {
+      const stepData = instanceSteps[stepKey];
+      if (stepData && stepData._disabled === true) {
+        // ✅ Step disabilitato = può essere ripristinato
+        disabled.push({
+          stepKey,
+          stepData
+        });
+      }
+    });
+
+    // ✅ Ordina per STEP_ORDER (per UX)
+    return disabled.sort((a, b) => {
+      return getStepOrder(a.stepKey) - getStepOrder(b.stepKey);
+    });
+  }, [effectiveTaskId, node, taskVersion]); // ✅ Aggiungi taskVersion come dipendenza
+
+  // ✅ Filter stepKeys to show only steps that are enabled (not disabled)
+  const visibleStepKeys = React.useMemo(() => {
+    if (!effectiveTaskId || !node) return stepKeys;
+
+    const nodeTemplateId = node?.templateId || node?.id;
+    if (!nodeTemplateId) return stepKeys;
+
+    const taskInstance = taskRepository.getTask(effectiveTaskId);
+    if (!taskInstance) return stepKeys;
+
+    const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
+
+    // ✅ Show only steps that exist in instance AND are not disabled
+    const filtered = stepKeys.filter(stepKey => {
+      const stepData = instanceSteps[stepKey];
+      return stepData && stepData._disabled !== true;
+    });
+
+    return filtered;
+  }, [stepKeys, effectiveTaskId, node, taskVersion]); // ✅ Aggiungi taskVersion come dipendenza
+
+  // Handler per ripristinare step (imposta _disabled: false)
+  const handleRestoreStep = (stepKey: string, stepData: any) => {
+    if (!effectiveTaskId || !node) return;
+    const nodeTemplateId = node?.templateId || node?.id;
+    const task = taskRepository.getTask(effectiveTaskId);
+    if (!task) return;
+
+    const currentSteps = task.steps || {};
+    const currentNodeSteps = currentSteps[nodeTemplateId] || {};
+    const currentStepData = currentNodeSteps[stepKey];
+
+    if (currentStepData) {
+      // ✅ Semplicemente imposta _disabled: false
+      const updatedStepData = {
+        ...currentStepData,
+        _disabled: false
+      };
+      taskRepository.updateTask(effectiveTaskId, {
+        steps: {
+          ...currentSteps,
+          [nodeTemplateId]: {
+            ...currentNodeSteps,
+            [stepKey]: updatedStepData
+          }
+        }
+      });
+
+      // ✅ Forza ri-render aggiornando taskVersion
+      setTaskVersion(prev => prev + 1);
+    }
+
+    setShowRestoreDropdown(false);
+  };
+
+  // Handler per cancellazione definitiva (rimuove lo step dalla struttura)
+  const handlePermanentDelete = (stepKey: string) => {
     if (!effectiveTaskId || !node) return;
     const nodeTemplateId = node?.templateId || node?.id;
     const task = taskRepository.getTask(effectiveTaskId);
@@ -171,16 +277,71 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
         [nodeTemplateId]: updatedNodeSteps
       }
     });
+
+    // ✅ Forza ri-render aggiornando taskVersion
+    setTaskVersion(prev => prev + 1);
+
+    // ✅ Se lo step cancellato era selezionato, seleziona il primo step disponibile
+    setTimeout(() => {
+      const taskInstance = taskRepository.getTask(effectiveTaskId);
+      if (!taskInstance) return;
+      const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
+      const remainingSteps = stepKeys.filter(key => {
+        const stepData = instanceSteps[key];
+        return stepData && stepData._disabled !== true;
+      });
+      if (selectedStepKey === stepKey && remainingSteps.length > 0) {
+        onSelectStep(remainingSteps[0]);
+      }
+    }, 0);
   };
 
-  // Step obbligatori che non possono essere disattivati o eliminati
-  const mandatorySteps = ['start'];
-  const isStepMandatory = (stepKey: string) => mandatorySteps.includes(stepKey);
+  // ✅ Funzione per calcolare la posizione del dropdown
+  const updateDropdownPosition = () => {
+    if (!restoreButtonRef.current) return;
+    const rect = restoreButtonRef.current.getBoundingClientRect();
+    setDropdownPosition({
+      top: rect.bottom + 4, // 4px di margine
+      left: rect.right - 200, // Allinea a destra (200px = minWidth del dropdown)
+    });
+  };
+
+  // ✅ Aggiorna posizione quando il dropdown si apre o quando scroll/resize
+  useEffect(() => {
+    if (showRestoreDropdown) {
+      updateDropdownPosition();
+      window.addEventListener('scroll', updateDropdownPosition, true);
+      window.addEventListener('resize', updateDropdownPosition);
+      return () => {
+        window.removeEventListener('scroll', updateDropdownPosition, true);
+        window.removeEventListener('resize', updateDropdownPosition);
+      };
+    } else {
+      setDropdownPosition(null);
+    }
+  }, [showRestoreDropdown]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
+          restoreButtonRef.current && !restoreButtonRef.current.contains(event.target as Node)) {
+        setShowRestoreDropdown(false);
+      }
+    };
+
+    if (showRestoreDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showRestoreDropdown]);
 
   return (
     <>
       {/* Toolbar portals per ogni step */}
-      {stepKeys.map((key) => {
+      {visibleStepKeys.map((key) => {
         const { isDisabled, isDeleted } = getStepState(key);
         const isMandatory = isStepMandatory(key);
         const showToolbar = hoveredStepKey === key && !isDeleted && !isMandatory && effectiveTaskId;
@@ -231,29 +392,6 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
               >
                 {isDisabled ? <Check size={16} /> : <X size={16} />}
               </button>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleDeleteStep(key);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 28,
-                  height: 28,
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#ef4444',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                title="Delete step from instance"
-              >
-                <Trash2 size={16} />
-              </button>
             </div>,
             document.body
           )
@@ -267,15 +405,15 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
           flexWrap: 'nowrap',
           gap: 8,
           padding: '6px 16px 10px 16px',
-          overflowX: 'auto'
+          overflowX: 'auto',
+          alignItems: 'center'
         }}
       >
-      {stepKeys.map((key, index) => {
+      {visibleStepKeys.map((key) => {
         const color = colorForStep(key);
         const selected = selectedStepKey === key;
         const label = getFriendlyLabel(key);
         const { isDisabled, isDeleted } = getStepState(key);
-        const isHovered = hoveredStepKey === key;
 
         return (
           <div
@@ -322,6 +460,149 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
           </div>
         );
       })}
+
+      {/* Restore button - always visible when there are restorable steps */}
+      {restorableSteps.length > 0 && (
+        <div style={{ display: 'inline-block', marginLeft: 8 }}>
+          <button
+            ref={restoreButtonRef}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowRestoreDropdown(!showRestoreDropdown);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '5px 10px',
+              background: 'transparent',
+              border: '1px solid #6b7280',
+              borderRadius: 10,
+              color: '#6b7280',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              fontWeight: 500,
+            }}
+            title="Restore deleted steps"
+          >
+            <Plus size={16} />
+            <span>Restore steps</span>
+            <ChevronDown size={14} style={{ transform: showRestoreDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+          </button>
+        </div>
+      )}
+
+      {/* Dropdown portal - renderizzato fuori dal container */}
+      {showRestoreDropdown && dropdownPosition && typeof document !== 'undefined' && (
+        createPortal(
+          <div
+            ref={dropdownRef}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: `${dropdownPosition.top}px`,
+              left: `${dropdownPosition.left}px`,
+              background: '#fff',
+              border: '1px solid #e5e7eb',
+              borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              zIndex: 10001,
+              minWidth: 200,
+              maxHeight: 300,
+              overflowY: 'auto',
+            }}
+          >
+            {restorableSteps.map(({ stepKey, stepData }) => {
+              const color = colorForStep(stepKey);
+              const icon = iconForStep(stepKey);
+              const label = getFriendlyLabel(stepKey);
+
+              return (
+                <div
+                  key={stepKey}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 12px',
+                    width: '100%',
+                  }}
+                >
+                  {/* Voce step (cliccabile per ripristinare) */}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleRestoreStep(stepKey, stepData);
+                    }}
+                    style={{
+                      flex: 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 10px',
+                      background: 'transparent',
+                      border: `1px solid ${color}`,
+                      borderRadius: 10,
+                      color: color,
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      fontWeight: 500,
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.border = `2px solid ${color}`;
+                      e.currentTarget.style.background = `${color}10`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.border = `1px solid ${color}`;
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <span>{icon}</span>
+                    <span>{label}</span>
+                  </button>
+
+                  {/* Cestino per cancellazione definitiva */}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handlePermanentDelete(stepKey);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 28,
+                      height: 28,
+                      padding: 0,
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#ef4444',
+                      cursor: 'pointer',
+                      borderRadius: 4,
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#fee2e2';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                    title="Delete permanently (cannot be restored)"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>,
+          document.body
+        )
+      )}
       </div>
     </>
   );

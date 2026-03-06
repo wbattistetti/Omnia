@@ -662,6 +662,10 @@ export default function DDEBubbleChat({
                   if (stepType === 'disambiguation' || stepType === 'violation' || stepType === 'introduction') {
                     continue;
                   }
+                  // ✅ NEW: Rimuovi step disabilitati (_disabled === true)
+                  if (stepData?._disabled === true) {
+                    continue;
+                  }
                   filteredNodeSteps[stepType] = stepData;
                 }
                 filteredSteps[nodeId] = filteredNodeSteps;

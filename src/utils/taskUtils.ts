@@ -1165,8 +1165,15 @@ export async function buildTaskTree(
       : {};
   let stepsWereCloned = false;
 
+  // ✅ CRITICAL: Clona SOLO se l'istanza NON ha MAI avuto steps (prima creazione)
+  // Se l'istanza ha già una struttura steps (anche se vuota per alcuni nodeId),
+  // significa che alcuni step sono stati cancellati intenzionalmente - NON clonare
+  const hasExistingStepsStructure = instance.steps &&
+    typeof instance.steps === 'object' &&
+    !Array.isArray(instance.steps) &&
+    Object.keys(instance.steps).length > 0;
 
-  if (!finalSteps || Object.keys(finalSteps).length === 0) {
+  if (!hasExistingStepsStructure) {
     // ✅ Prima creazione: clona steps dal template
     // ✅ ARCHITECTURAL RULE: Estrai guidMapping per copiare traduzioni
     const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(template, nodes);
@@ -1215,11 +1222,14 @@ export async function buildTaskTree(
       });
     }
   } else {
+    // ✅ L'istanza ha già una struttura steps - preserva tutto, inclusa flag _disabled
     // ✅ Verifica che sia dictionary (non array legacy)
     if (Array.isArray(finalSteps)) {
       // ✅ Converti array legacy in dictionary (se necessario)
       finalSteps = {};
     }
+    // ✅ Preserva la struttura esistente (inclusi step cancellati e flag _disabled)
+    // Non fare nulla - finalSteps è già impostato correttamente dall'istanza
   }
 
   // ✅ NUOVO MODELLO: Salva gli step clonati nell'istanza in memoria immediatamente

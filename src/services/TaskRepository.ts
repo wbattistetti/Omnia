@@ -90,7 +90,8 @@ class TaskRepository {
     }
 
     // ✅ CRITICAL: Preserve type field - never allow it to be removed
-    const { type, templateId, ...updatesWithoutTypeAndTemplateId } = updates;
+    // ✅ CRITICAL: Rimuovi anche steps e data per gestirli separatamente con merge profondo
+    const { type, templateId, steps, data, ...updatesWithoutTypeAndTemplateId } = updates;
 
     // ✅ If type is explicitly provided and different, update it
     // ✅ If type is not provided, preserve existing type
@@ -117,6 +118,17 @@ class TaskRepository {
         stepsKeys.every(key => stepTypeKeys.includes(key));
 
       // Structure validation (silent)
+    }
+
+    // ✅ CRITICAL: Merge profondo di steps per preservare tutti i nodeTemplateId
+    let finalSteps = updates.steps;
+    if (updates.steps && typeof updates.steps === 'object' && !Array.isArray(updates.steps) &&
+        existingTask.steps && typeof existingTask.steps === 'object' && !Array.isArray(existingTask.steps)) {
+      // ✅ Merge profondo: preserva tutti i nodeTemplateId esistenti e aggiorna solo quelli in updates
+      finalSteps = {
+        ...existingTask.steps,  // Base: tutti i nodeTemplateId esistenti
+        ...updates.steps        // Override: aggiorna solo quelli specificati
+      };
     }
 
     // ✅ CRITICAL: Se updates.data è presente, fa merge profondo dei node per preservare nlpProfile
@@ -158,6 +170,7 @@ class TaskRepository {
     const updatedTask: Task = {
       ...existingTask,
       ...updatesWithoutTypeAndTemplateId,  // ✅ Spread senza type e templateId
+      ...(finalSteps ? { steps: finalSteps } : {}), // ✅ Usa finalSteps se presente (merge profondo)
       ...(finalData ? { data: finalData } : {}), // ✅ Usa finalData se presente (merge profondo)
       type: finalType,  // ✅ Always preserve/update type - REQUIRED
       templateId: finalTemplateId,  // ✅ Protected templateId

@@ -45,33 +45,22 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
     const template = nodeTemplateId ? DialogueTaskService.getTemplate(nodeTemplateId) : null;
 
     // Find deleted steps that can be restored from template
+    // ✅ Calcola step cancellati che possono essere ripristinati (approccio diretto)
     const restorableSteps = React.useMemo(() => {
         if (!taskInstance || !template || !nodeTemplateId) return [];
 
-        const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
+        // ✅ Leggi tutti gli step del template per questo nodeTemplateId
         const templateSteps = template.steps?.[nodeTemplateId] || template.steps || {};
 
+        // ✅ Leggi tutti gli step dell'istanza per questo nodeTemplateId
+        const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
+
+        // ✅ Step da ripristinare: presenti nel template ma NON nell'istanza
         const deleted: Array<{ stepKey: string; stepData: any }> = [];
 
-        // Check all steps in STEP_ORDER
-        STEP_ORDER.forEach(stepType => {
-            const stepKey = stepType;
-            const existsInInstance = !!instanceSteps[stepKey];
-            const existsInTemplate = !!templateSteps[stepKey];
-
-            // Step is deleted if it exists in template but not in instance
-            if (!existsInInstance && existsInTemplate) {
-                deleted.push({
-                    stepKey,
-                    stepData: templateSteps[stepKey]
-                });
-            }
-        });
-
-        // Also check for any other steps in template that aren't in instance
         Object.keys(templateSteps).forEach(stepKey => {
-            const stepType = stepKey as StepType;
-            if (!STEP_ORDER.includes(stepType) && !instanceSteps[stepKey]) {
+            if (!instanceSteps[stepKey]) {
+                // ✅ Esiste nel template ma non nell'istanza = cancellato
                 deleted.push({
                     stepKey,
                     stepData: templateSteps[stepKey]
@@ -79,7 +68,7 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
             }
         });
 
-        // Sort by STEP_ORDER
+        // ✅ Ordina per STEP_ORDER (per UX)
         return deleted.sort((a, b) => {
             return getStepOrder(a.stepKey) - getStepOrder(b.stepKey);
         });
