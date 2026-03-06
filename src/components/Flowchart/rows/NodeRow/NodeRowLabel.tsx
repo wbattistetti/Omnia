@@ -7,7 +7,7 @@ import SmartTooltip from '../../../SmartTooltip';
 import { taskRepository } from '@services/TaskRepository';
 import { useGlobalTestPanel } from '@context/GlobalTestPanelContext';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
-import { buildTaskTree } from '@utils/taskUtils';
+import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 
 // Component to render checkbox with dynamic size based on font
 const CheckboxButton: React.FC<{
@@ -326,10 +326,11 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
     }
 
     try {
-      // ✅ Build TaskTree from instance (same routine as Response Editor)
-      const taskTree = await buildTaskTree(taskInstance, projectId);
+      // ✅ CRITICAL: Build TaskTree from repository (same routine as Response Editor)
+      // buildTaskTreeFromRepository garantisce istanza fresca dal repository (inclusi flag _disabled)
+      const taskTree = await buildTaskTreeFromRepository(row.id, projectId);
       if (!taskTree) {
-        console.error('[NodeRowLabel] Failed to build TaskTree for task instance', taskInstance.id);
+        console.error('[NodeRowLabel] Failed to build TaskTree for task instance', row.id);
         return;
       }
 

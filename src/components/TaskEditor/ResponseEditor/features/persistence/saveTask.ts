@@ -267,14 +267,18 @@ export async function saveTaskOnEditorClose(
 
   const currentTemplateId = getTemplateId(taskInstance);
 
+  // ✅ CRITICAL: Leggi sempre dal repository per avere la versione più aggiornata (inclusi flag _disabled)
+  // Il task passato come parametro potrebbe non essere aggiornato
+  const currentTaskFromRepository = taskRepository.getTask(key);
+
   // Add task.steps to finalTaskTree (single source of truth for steps)
-  // ✅ NO FALLBACKS: Use task.steps as primary source, or finalTaskTree.steps, or throw error
-  if (!task?.steps && !finalTaskTree.steps) {
-    console.warn('[saveTask] No steps found in task or finalTaskTree. Using empty object.');
+  // ✅ NO FALLBACKS: Use currentTaskFromRepository.steps as primary source (most up-to-date)
+  if (!currentTaskFromRepository?.steps && !finalTaskTree.steps) {
+    console.warn('[saveTask] No steps found in repository task or finalTaskTree. Using empty object.');
   }
   const finalTaskTreeWithSteps: TaskTree = {
     ...finalTaskTree,
-    steps: task?.steps ?? finalTaskTree.steps ?? {}
+    steps: currentTaskFromRepository?.steps ?? task?.steps ?? finalTaskTree.steps ?? {}
   };
 
   // Save based on template type

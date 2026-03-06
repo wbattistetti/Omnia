@@ -1080,6 +1080,39 @@ export async function buildTemplateExpanded(
  * @param projectId - Project ID (obbligatorio per creare template se necessario)
  * @returns TaskTree costruito da template + instance
  */
+/**
+ * ✅ ARCHITECTURAL: Build TaskTree from repository (always uses fresh instance)
+ * This ensures that _disabled flags and other in-memory changes are always reflected.
+ *
+ * @param taskId - Task ID to load from repository
+ * @param projectId - Optional project ID
+ * @returns TaskTree or null if task not found
+ */
+export async function buildTaskTreeFromRepository(
+  taskId: string,
+  projectId?: string
+): Promise<TaskTree | null> {
+  // ✅ CRITICAL: Always read fresh instance from repository (single source of truth in memory)
+  const { taskRepository } = await import('../services/TaskRepository');
+  const freshInstance = taskRepository.getTask(taskId);
+  if (!freshInstance) {
+    console.warn(`[buildTaskTreeFromRepository] Task ${taskId} not found in repository`);
+    return null;
+  }
+
+  // ✅ Delegate to pure buildTaskTree with fresh instance
+  return await buildTaskTree(freshInstance, projectId);
+}
+
+/**
+ * ✅ PURE FUNCTION: Build TaskTree from Task instance
+ * This function is pure - it does not read from repository.
+ * Use buildTaskTreeFromRepository() if you need to ensure fresh instance from repository.
+ *
+ * @param instance - Task instance (must be fresh from repository if you need latest _disabled flags)
+ * @param projectId - Optional project ID
+ * @returns TaskTree or null if instance is null
+ */
 export async function buildTaskTree(
   instance: Task | null,
   projectId?: string
@@ -1159,23 +1192,39 @@ export async function buildTaskTree(
 
   // ✅ Steps dall'istanza o clonati dal template
   // ✅ NUOVO: steps è un dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
-  let finalSteps: Record<string, Record<string, any>> =
-    (instance.steps && typeof instance.steps === 'object' && !Array.isArray(instance.steps))
-      ? instance.steps
-      : {};
+  let finalSteps: Record<string, Record<string, any>>;
   let stepsWereCloned = false;
 
-  // ✅ CRITICAL: Clona SOLO se l'istanza NON ha MAI avuto steps (prima creazione)
-  // Se l'istanza ha già una struttura steps (anche se vuota per alcuni nodeId),
-  // significa che alcuni step sono stati cancellati intenzionalmente - NON clonare
-  const hasExistingStepsStructure = instance.steps &&
+  // ✅ CRITICAL: Se instance.steps ESISTE (anche se vuoto {}), NON clonare
+  // Clona SOLO se instance.steps è undefined o null (prima creazione)
+  // {} = "l'utente ha cancellato tutti gli step" → NON clonare
+  // undefined = "istanza nuova" → clonare
+  const hasInstanceSteps =
+    instance.steps &&
     typeof instance.steps === 'object' &&
-    !Array.isArray(instance.steps) &&
-    Object.keys(instance.steps).length > 0;
+    !Array.isArray(instance.steps);
 
-  if (!hasExistingStepsStructure) {
-    // ✅ Prima creazione: clona steps dal template
-    // ✅ ARCHITECTURAL RULE: Estrai guidMapping per copiare traduzioni
+  if (hasInstanceSteps) {
+    // ✅ instance.steps esiste → usalo così com'è (anche se vuoto)
+    // {} significa "l'utente ha cancellato tutti gli step" → NON clonare
+    finalSteps = instance.steps;
+
+    // ✅ Verifica che sia dictionary (non array legacy)
+    if (Array.isArray(finalSteps)) {
+      // ✅ Converti array legacy in dictionary (se necessario)
+      finalSteps = {};
+    }
+
+    // ✅ Preserva la struttura esistente (inclusi step cancellati e flag _disabled)
+    console.log('[buildTaskTree] ✅ Using instance steps (even if empty)', {
+      taskId: instance.id,
+      stepsKeys: Object.keys(finalSteps),
+      sampleNodeId: Object.keys(finalSteps)[0],
+      sampleNodeSteps: Object.keys(finalSteps)[0] ? Object.keys(finalSteps[Object.keys(finalSteps)[0]]) : [],
+      isEmpty: Object.keys(finalSteps).length === 0 || (Object.keys(finalSteps)[0] && Object.keys(finalSteps[Object.keys(finalSteps)[0]]).length === 0),
+    });
+  } else {
+    // ✅ Prima creazione: instance.steps è undefined/null → clona dal template
     const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(template, nodes);
     finalSteps = clonedSteps;
     stepsWereCloned = true;
@@ -1221,15 +1270,6 @@ export async function buildTaskTree(
         guidMappingSize: guidMapping?.size || 0
       });
     }
-  } else {
-    // ✅ L'istanza ha già una struttura steps - preserva tutto, inclusa flag _disabled
-    // ✅ Verifica che sia dictionary (non array legacy)
-    if (Array.isArray(finalSteps)) {
-      // ✅ Converti array legacy in dictionary (se necessario)
-      finalSteps = {};
-    }
-    // ✅ Preserva la struttura esistente (inclusi step cancellati e flag _disabled)
-    // Non fare nulla - finalSteps è già impostato correttamente dall'istanza
   }
 
   // ✅ NUOVO MODELLO: Salva gli step clonati nell'istanza in memoria immediatamente

@@ -271,10 +271,12 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
     const updatedNodeSteps = { ...currentNodeSteps };
     delete updatedNodeSteps[stepKey];
 
+    // ✅ CRITICAL: Quando cancelliamo uno step, passiamo updatedNodeSteps (che può essere {} se tutti gli step sono stati cancellati)
+    // Il merge di taskRepository.updateTask ora gestisce correttamente {} come "cancellazione esplicita di tutti gli step"
     taskRepository.updateTask(effectiveTaskId, {
       steps: {
         ...currentSteps,
-        [nodeTemplateId]: updatedNodeSteps
+        [nodeTemplateId]: updatedNodeSteps  // ✅ Se {} (vuoto), indica cancellazione esplicita di tutti gli step
       }
     });
 

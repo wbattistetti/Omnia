@@ -11,7 +11,7 @@ import DialogueTaskService from '@services/DialogueTaskService';
 import { v4 as uuidv4 } from 'uuid';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { taskRepository } from '@services/TaskRepository';
-import { buildTaskTree } from '@utils/taskUtils';
+import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 
 /**
  * Estrae tutti i GUID dai step (utterance, invalid, nomatch, noinput, escalation, constraint)
@@ -588,22 +588,12 @@ export default function DDEBubbleChat({
         // ✅ NON usare TaskTree della UI - è solo un artefatto grafico, non affidabile
         // ✅ Log rimosso: troppo verboso
 
-        // ✅ CRITICAL: Carica l'istanza REALE dal repository (ignora TaskTree della UI)
-        const taskInstance = taskRepository.getTask(task.id);
-        if (!taskInstance) {
-          throw new Error(`[DDEBubbleChat] Task instance not found in repository: ${task.id}. Cannot compile without instance.`);
-        }
-
-        // ✅ CRITICAL: Verifica che l'istanza abbia il campo type (obbligatorio per VB.NET)
-        if (taskInstance.type === undefined || taskInstance.type === null) {
-          throw new Error(`[DDEBubbleChat] Task instance ${task.id} has no type field. Task is invalid and cannot be compiled.`);
-        }
-
-        // ✅ ARCHITECTURAL FIX: Materializza usando buildTaskTree (stessa routine dell'editor)
+        // ✅ ARCHITECTURAL FIX: Materializza usando buildTaskTreeFromRepository (stessa routine dell'editor)
         // Questo garantisce che compilatore e editor usino la stessa struttura logica,
         // eliminando la classe di bug "editor vede X, runtime vede Y"
-        console.log('[DDEBubbleChat] 🔧 Materializing task structure using buildTaskTree...');
-        const materializedTree = await buildTaskTree(taskInstance, projectId || undefined);
+        // ✅ CRITICAL: buildTaskTreeFromRepository garantisce istanza fresca dal repository (inclusi flag _disabled)
+        console.log('[DDEBubbleChat] 🔧 Materializing task structure using buildTaskTreeFromRepository...');
+        const materializedTree = await buildTaskTreeFromRepository(task.id, projectId || undefined);
         if (!materializedTree) {
           throw new Error(`[DDEBubbleChat] Failed to materialize task tree for instance ${task.id}`);
         }

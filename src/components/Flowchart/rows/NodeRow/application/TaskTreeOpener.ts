@@ -290,9 +290,10 @@ export class TaskTreeOpener {
         const { RowHeuristicsService } = await import('@services/RowHeuristicsService');
         const templateType = RowHeuristicsService.getTemplateType(template);
         if (templateType === TaskType.UtteranceInterpretation) {
-          const { buildTaskTree } = await import('@utils/taskUtils');
+          const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
           const projectId = getProjectId?.() || undefined;
-          taskTree = await buildTaskTree(taskForType, projectId);
+          // ✅ CRITICAL: Usa buildTaskTreeFromRepository per garantire istanza fresca dal repository
+          taskTree = await buildTaskTreeFromRepository(row.id, projectId);
         }
       }
     }

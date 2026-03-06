@@ -82,7 +82,20 @@ class TaskRepository {
   /**
    * Update Task
    */
-  updateTask(taskId: string, updates: Partial<Task>, projectId?: string): boolean {
+  /**
+   * Update Task with optional merge behavior
+   *
+   * @param taskId - Task ID
+   * @param updates - Partial Task updates
+   * @param projectId - Optional project ID
+   * @param options - Update options (merge behavior)
+   */
+  updateTask(
+    taskId: string,
+    updates: Partial<Task>,
+    projectId?: string,
+    options?: { merge?: boolean }
+  ): boolean {
     // Check internal storage first
     const existingTask = this.tasks.get(taskId);
     if (!existingTask) {
@@ -120,15 +133,37 @@ class TaskRepository {
       // Structure validation (silent)
     }
 
-    // ✅ CRITICAL: Merge profondo di steps per preservare tutti i nodeTemplateId
+    // ✅ CRITICAL: Merge profondo di steps per preservare tutti i nodeTemplateId E tutti gli step all'interno
     let finalSteps = updates.steps;
     if (updates.steps && typeof updates.steps === 'object' && !Array.isArray(updates.steps) &&
         existingTask.steps && typeof existingTask.steps === 'object' && !Array.isArray(existingTask.steps)) {
       // ✅ Merge profondo: preserva tutti i nodeTemplateId esistenti e aggiorna solo quelli in updates
       finalSteps = {
         ...existingTask.steps,  // Base: tutti i nodeTemplateId esistenti
-        ...updates.steps        // Override: aggiorna solo quelli specificati
       };
+
+      // ✅ Merge profondo per ogni nodeTemplateId: preserva tutti gli step esistenti e aggiorna solo quelli in updates
+      for (const [nodeTemplateId, nodeSteps] of Object.entries(updates.steps)) {
+        if (nodeSteps && typeof nodeSteps === 'object') {
+          // ✅ CRITICAL: Se nodeSteps è un oggetto vuoto {}, significa che tutti gli step sono stati cancellati
+          // In questo caso, sovrascriviamo completamente con {} invece di fare merge
+          if (Object.keys(nodeSteps).length === 0) {
+            // ✅ Oggetto vuoto = cancellazione esplicita di tutti gli step per questo nodeTemplateId
+            finalSteps[nodeTemplateId] = {};
+          } else {
+            // ✅ Merge profondo: preserva tutti gli step esistenti (inclusi flag _disabled) e aggiorna solo quelli in updates
+            if (!finalSteps[nodeTemplateId]) {
+              finalSteps[nodeTemplateId] = {};
+            }
+            finalSteps[nodeTemplateId] = {
+              ...finalSteps[nodeTemplateId],  // Base: tutti gli step esistenti (inclusi flag _disabled)
+              ...nodeSteps                    // Override: aggiorna solo quelli specificati
+            };
+          }
+        } else {
+          finalSteps[nodeTemplateId] = nodeSteps;
+        }
+      }
     }
 
     // ✅ CRITICAL: Se updates.data è presente, fa merge profondo dei node per preservare nlpProfile
@@ -322,7 +357,7 @@ class TaskRepository {
           if (Array.isArray(task.steps)) {
             // Struttura corretta, nessun warning
           } else if (typeof task.steps === 'object') {
-            // ✅ Verifica se è la vecchia struttura (dictionary)
+            // ✅ Verifica se è la vecchia struttura (dictionary con stepType come chiavi)
             const stepsKeys = Object.keys(task.steps);
             const stepTypeKeys = [StepType.START, StepType.NO_MATCH, StepType.NO_INPUT, StepType.CONFIRMATION, StepType.NOT_CONFIRMED, StepType.SUCCESS, StepType.INTRODUCTION];
             const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
@@ -330,6 +365,8 @@ class TaskRepository {
 
             if (hasWrongStructure) {
               // ✅ CONVERSIONE AUTOMATICA: Converti dictionary in array MaterializedStep[]
+              // ⚠️ ATTENZIONE: Questa conversione è per la vecchia struttura (stepType come chiavi)
+              // La nuova struttura (nodeTemplateId come chiavi) NON deve essere convertita!
               const stepsDict = task.steps as Record<string, any>;
               const materializedSteps: MaterializedStep[] = [];
 
@@ -345,6 +382,11 @@ class TaskRepository {
 
               // ✅ Sostituisci steps con la struttura corretta
               task.steps = materializedSteps;
+            } else {
+              // ✅ NUOVA STRUTTURA: Dictionary con nodeTemplateId come chiavi
+              // ✅ Preserva TUTTA la struttura, inclusi flag _disabled
+              // Non fare nulla - la struttura è già corretta
+              // Esempio: { "nodeTemplateId": { "start": { _disabled: true, escalations: [...] }, ... } }
             }
           }
         }

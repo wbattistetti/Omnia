@@ -5,7 +5,7 @@ import { taskRepository } from '@services/TaskRepository';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { flowchartVariablesService } from '@services/FlowchartVariablesService';
 import { getTemplateId } from '@utils/taskHelpers';
-import { buildTaskTree } from '@utils/taskUtils';
+import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '@types/taskTypes';
 import type { TaskTree } from '@types/taskTypes';
 import { useTaskTreeStore } from '@responseEditor/core/state';
@@ -114,8 +114,9 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       try {
         setTaskTreeLoading(true);
 
-        // ✅ Usa buildTaskTree per costruire TaskTree da template + instance
-        const tree = await buildTaskTree(fullTask, currentProjectId || undefined);
+        // ✅ CRITICAL: Usa buildTaskTreeFromRepository per garantire istanza fresca dal repository
+        // Questo assicura che flag _disabled e altre modifiche in memoria siano sempre riflesse
+        const tree = await buildTaskTreeFromRepository(taskId, currentProjectId || undefined);
 
         // ✅ CRITICAL: Ricarica task dal repository dopo buildTaskTree
         // buildTaskTree clona gli step e li salva nel repository, ma fullTask non si aggiorna automaticamente

@@ -315,8 +315,9 @@ export async function buildTaskTreeWithContractsAndEngines(
   projectId: string,
   dataSchema: WizardTaskTreeNode[]
 ): Promise<any> {
-  // Build TaskTree
-  const taskTree = await buildTaskTree(taskInstance, projectId);
+  // ✅ CRITICAL: Build TaskTree from repository (guarantees fresh instance with latest _disabled flags)
+  const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
+  const taskTree = await buildTaskTreeFromRepository(taskInstance.id, projectId);
 
   if (!taskTree) {
     return null;
@@ -548,9 +549,11 @@ export async function createTemplateAndInstanceForProposed(
   );
 
   // 8. Build TaskTree (without parsers/engines - they will be generated separately)
+  // ✅ CRITICAL: Build TaskTree from repository (guarantees fresh instance with latest _disabled flags)
   let taskTree: any | null = null;
   try {
-    taskTree = await buildTaskTree(taskInstance, projectId);
+    const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
+    taskTree = await buildTaskTreeFromRepository(rowId, projectId);
 
     // 9. Generate parsers for all nodes (CRITICAL: must be done before parser generation)
     if (taskTree) {
