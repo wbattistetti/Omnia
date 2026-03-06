@@ -76,22 +76,11 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     initializedRef.current = false;
   }, [taskId]);
 
-  // ✅ ARCHITETTURA ESPERTO: Carica TaskTree async usando buildTaskTree
+  // Load TaskTree async using buildTaskTree
   React.useEffect(() => {
     const loadTaskTree = async () => {
-      console.log('[DDTHostAdapter] 🔄 loadTaskTree START', {
-        taskId,
-        fullTaskId: fullTask?.id,
-        fullTaskHasSteps: !!fullTask?.steps,
-        fullTaskStepsKeys: fullTask?.steps ? Object.keys(fullTask.steps) : [],
-      });
-      // ✅ NEW: Skip buildTaskTree if needsTaskBuilder is true AND no task exists yet
-      // In this case, the wizard will create the task when completed
+      // Skip buildTaskTree if needsTaskBuilder is true AND no task exists yet
       if ((taskMeta as any).needsTaskBuilder === true && !fullTask) {
-        console.log('[DDTHostAdapter] Wizard mode - no task exists yet, wizard will create it', {
-          taskId,
-          taskLabel: taskMeta.label
-        });
         setTaskTreeInStore(null);
         setTaskTree(null);
         setTaskTreeLoading(false);
@@ -104,12 +93,8 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         return;
       }
 
-      // ✅ NEW: Skip buildTaskTree if needsTaskBuilder is true (wizard will create TaskTree)
+      // Skip buildTaskTree if needsTaskBuilder is true (wizard will create TaskTree)
       if ((taskMeta as any).needsTaskBuilder === true) {
-        console.log('[DDTHostAdapter] Skipping buildTaskTree - wizard will create TaskTree', {
-          taskId,
-          taskLabel: taskMeta.label
-        });
         setTaskTreeInStore(null);
         setTaskTree(null);
         setTaskTreeLoading(false);
@@ -120,57 +105,10 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       try {
         setTaskTreeLoading(true);
 
-        // ✅ DEBUG: Log task from repository BEFORE buildTaskTree
-        const taskBeforeBuild = taskRepository.getTask(taskId);
-        const stepsBeforeBuild = taskBeforeBuild?.steps;
-        const disabledFlagsBeforeBuild: Record<string, Record<string, boolean | undefined>> = {};
-        if (stepsBeforeBuild) {
-          for (const [nodeId, nodeSteps] of Object.entries(stepsBeforeBuild)) {
-            if (nodeSteps && typeof nodeSteps === 'object') {
-              disabledFlagsBeforeBuild[nodeId] = {};
-              for (const [stepKey, stepData] of Object.entries(nodeSteps)) {
-                if (stepData && typeof stepData === 'object') {
-                  disabledFlagsBeforeBuild[nodeId][stepKey] = (stepData as any)._disabled;
-                }
-              }
-            }
-          }
-        }
-        console.log('[DDTHostAdapter] 🔍 Task from repository BEFORE buildTaskTree', {
-          taskId,
-          hasSteps: !!stepsBeforeBuild,
-          stepsKeys: stepsBeforeBuild ? Object.keys(stepsBeforeBuild) : [],
-          disabledFlagsBeforeBuild: JSON.stringify(disabledFlagsBeforeBuild),
-        });
-
-        // ✅ CRITICAL: Usa buildTaskTreeFromRepository per garantire istanza fresca dal repository
-        // Questo assicura che flag _disabled e altre modifiche in memoria siano sempre riflesse
+        // Build TaskTree from repository (ensures fresh instance with _disabled flags)
         const tree = await buildTaskTreeFromRepository(taskId, currentProjectId || undefined);
 
-        // ✅ DEBUG: Log tree steps AFTER buildTaskTree
-        const treeSteps = tree?.steps;
-        const disabledFlagsAfterBuild: Record<string, Record<string, boolean | undefined>> = {};
-        if (treeSteps) {
-          for (const [nodeId, nodeSteps] of Object.entries(treeSteps)) {
-            if (nodeSteps && typeof nodeSteps === 'object') {
-              disabledFlagsAfterBuild[nodeId] = {};
-              for (const [stepKey, stepData] of Object.entries(nodeSteps)) {
-                if (stepData && typeof stepData === 'object') {
-                  disabledFlagsAfterBuild[nodeId][stepKey] = (stepData as any)._disabled;
-                }
-              }
-            }
-          }
-        }
-        console.log('[DDTHostAdapter] 🔍 TaskTree AFTER buildTaskTree', {
-          taskId,
-          hasTreeSteps: !!treeSteps,
-          treeStepsKeys: treeSteps ? Object.keys(treeSteps) : [],
-          disabledFlagsAfterBuild: JSON.stringify(disabledFlagsAfterBuild),
-        });
-
-        // ✅ CRITICAL: Ricarica task dal repository dopo buildTaskTree
-        // buildTaskTree clona gli step e li salva nel repository, ma fullTask non si aggiorna automaticamente
+        // Reload task from repository after buildTaskTree
         const updatedTask = taskRepository.getTask(taskId);
 
         // ✅ TaskTree caricato

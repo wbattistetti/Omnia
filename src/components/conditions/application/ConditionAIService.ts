@@ -47,10 +47,269 @@ export interface RepairConditionParams {
 }
 
 /**
+ * Parameters for generateFromLabel method
+ */
+export interface GenerateFromLabelParams {
+  label: string;
+  variables: string[];
+  semanticMatch: string | null;
+}
+
+/**
  * Service for AI-related operations in Condition Editor.
  * Encapsulates all AI calls (generate, normalize, repair, suggest test cases).
  */
 export class ConditionAIService {
+  /**
+   * Generates a condition script from a label with complete variable context.
+   * Called from ConditionEditorEventHandler where all variables are available.
+   *
+   * Pipeline:
+   * 1. If semantic match found: generate simple predicate
+   * 2. If no match: use intelligent AI generation with full context
+   *
+   * @param params - Label, variables, and optional semantic match
+   * @returns Generated script (never empty)
+   */
+  async generateFromLabel(params: GenerateFromLabelParams): Promise<string> {
+    const { label, variables, semanticMatch } = params;
+
+    if (!label || !label.trim()) {
+      return 'return false;';
+    }
+
+    // If we have a semantic match, generate a simple predicate
+    if (semanticMatch) {
+      const script = this.generateSimplePredicate(semanticMatch, label);
+      return script;
+    }
+
+    // No semantic match - use intelligent AI generation
+    try {
+      const script = await this.generateWithIntelligentAI(label, variables);
+      if (script && script.trim()) {
+        return script;
+      }
+    } catch (e) {
+      console.warn('[ConditionAIService] AI generation failed', e);
+    }
+
+    // Final fallback
+    return `// Condition: ${label}\n// Edit this script to match your logic\nreturn false;`;
+  }
+
+  /**
+   * Generates a condition using intelligent AI prompt with full context.
+   * Uses a prompt that allows AI to interpret the label semantically.
+   */
+  private async generateWithIntelligentAI(label: string, variables: string[]): Promise<string> {
+    const varsList = variables.map(v => `"${v}"`).join(', ');
+
+    const prompt = `Interpret the following label as natural language and generate a JavaScript condition that represents its meaning.
+
+Input:
+- Label: "${label}"
+- Available variables: [${varsList}]
+
+Rules:
+1. Use your intelligence to interpret what "${label}" means semantically.
+2. Find the most relevant variable from the available list that relates to the label.
+3. Generate a simple, readable condition using vars["variableName"] syntax.
+4. For yes/no type conditions, compare with "si" or "yes".
+5. Do NOT invent variables - only use variables from the provided list.
+6. Return ONLY JavaScript code, no explanation.
+7. The code should be a simple return statement like: return vars["variableName"] === "si";
+
+Example:
+- Label: "User is adult"
+- Variables: ["user age", "user name"]
+- Output: return Number(vars["user age"]) >= 18;
+
+Generate the condition for "${label}":`;
+
+    try {
+      const result = await generateConditionWithAI(prompt, variables);
+      if (result?.script && typeof result.script === 'string') {
+        // Extract just the return statement if the AI returned more
+        const script = result.script.trim();
+        if (script.includes('return ')) {
+          return script;
+        }
+        return `return ${script};`;
+      }
+    } catch (e) {
+      console.warn('[ConditionAIService] AI call failed', e);
+    }
+
+    return '';
+  }
+
+  /**
+   * @deprecated Use generateFromLabel instead. Kept for backward compatibility.
+   */
+  async generateFromEdgeLabel(label: string, variables: string[]): Promise<string> {
+    const semanticMatch = this.findSemanticMatch(label, variables);
+    return this.generateFromLabel({ label, variables, semanticMatch });
+  }
+
+  /**
+   * Finds a variable that semantically matches the given label.
+   * Uses multiple matching strategies:
+   * 1. Exact match (case-insensitive)
+   * 2. Label contains variable name
+   * 3. Variable name contains label
+   * 4. Partial word overlap
+   */
+  private findSemanticMatch(label: string, variables: string[]): string | null {
+    if (!variables || variables.length === 0) return null;
+
+    const labelNorm = this.normalizeText(label);
+    const labelWords = this.extractWords(labelNorm);
+
+    // Strategy 1: Exact match
+    for (const v of variables) {
+      const varNorm = this.normalizeText(v);
+      if (varNorm === labelNorm) {
+        return v;
+      }
+    }
+
+    // Strategy 2: Label contains variable (e.g., "Ha un ticket" contains "ticket")
+    for (const v of variables) {
+      const varNorm = this.normalizeText(v);
+      const varLastPart = varNorm.split('.').pop() || varNorm;
+      if (labelNorm.includes(varLastPart) && varLastPart.length > 3) {
+        return v;
+      }
+    }
+
+    // Strategy 3: Variable contains label keywords
+    for (const v of variables) {
+      const varNorm = this.normalizeText(v);
+      // Check if variable contains significant label words
+      const significantWords = labelWords.filter(w => w.length > 3);
+      const matchCount = significantWords.filter(w => varNorm.includes(w)).length;
+      if (matchCount >= Math.ceil(significantWords.length * 0.5) && matchCount > 0) {
+        return v;
+      }
+    }
+
+    // Strategy 4: Word overlap scoring
+    let bestMatch: { var: string; score: number } | null = null;
+    for (const v of variables) {
+      const varWords = this.extractWords(this.normalizeText(v));
+      const overlap = labelWords.filter(w => varWords.some(vw => vw.includes(w) || w.includes(vw)));
+      const score = overlap.length / Math.max(labelWords.length, 1);
+      if (score > 0.4 && (!bestMatch || score > bestMatch.score)) {
+        bestMatch = { var: v, score };
+      }
+    }
+
+    return bestMatch?.var || null;
+  }
+
+  /**
+   * Generates a simple predicate script for a matched variable.
+   * Infers the expected value based on the label semantics.
+   */
+  private generateSimplePredicate(variableName: string, label: string): string {
+    const labelLower = label.toLowerCase();
+
+    // Detect negation patterns
+    const isNegation = /\b(non|no|senza|not|without|isn't|doesn't|hasn't)\b/i.test(labelLower);
+
+    // Detect boolean question patterns (yes/no)
+    const isBooleanQuestion = /\b(ha|has|have|is|are|was|were|does|did|can|could|should|will|would)\b/i.test(labelLower);
+
+    // Detect numeric patterns
+    const isNumeric = /\b(maggiore|minore|uguale|greater|less|equal|more|fewer|>=|<=|>|<)\b/i.test(labelLower);
+
+    let comparison: string;
+    let value: string;
+
+    if (isNumeric) {
+      // Numeric comparison - user needs to fill in
+      comparison = '>';
+      value = '0';
+    } else if (isBooleanQuestion) {
+      // Boolean yes/no question
+      comparison = '===';
+      value = isNegation ? '"no"' : '"si"';
+    } else {
+      // Default: check if truthy
+      comparison = '===';
+      value = isNegation ? '"no"' : '"si"';
+    }
+
+    // Generate clean script with comment
+    return `// Condition: ${label}
+// Variable: ${variableName}
+return vars["${variableName}"] ${comparison} ${value};`;
+  }
+
+  /**
+   * Normalizes text for comparison (lowercase, remove accents, trim).
+   */
+  private normalizeText(text: string): string {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove accents
+      .replace(/[^\w\s.]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Extracts meaningful words from text.
+   */
+  private extractWords(text: string): string[] {
+    const stopWords = new Set([
+      'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una',
+      'di', 'a', 'da', 'in', 'con', 'su', 'per', 'tra', 'fra',
+      'e', 'o', 'ma', 'se', 'che', 'non', 'come', 'quando',
+      'the', 'a', 'an', 'of', 'to', 'in', 'for', 'on', 'with',
+      'and', 'or', 'but', 'if', 'as', 'at', 'by', 'is', 'are'
+    ]);
+
+    return text
+      .split(/[\s.]+/)
+      .filter(w => w.length > 2 && !stopWords.has(w));
+  }
+
+  /**
+   * Generates a condition using AI when semantic match fails.
+   */
+  private async generateConditionFromLabel(label: string, variables: string[]): Promise<string> {
+    const varsList = variables.map(v => `- ${v}`).join('\n');
+    const prompt = `Generate a JavaScript condition that evaluates to true when: "${label}"
+
+Available variables (access as vars["variable_name"]):
+${varsList}
+
+Rules:
+- Return ONLY the JavaScript code for the condition body
+- Use vars["..."] syntax to access variables
+- Return a boolean expression
+- Keep it simple and readable
+- Add a brief comment explaining the logic
+
+Example output format:
+// Check if user has a ticket
+return vars["ha un ticket"] === "si";`;
+
+    try {
+      const result = await generateConditionWithAI(prompt, variables);
+      if (result?.script && typeof result.script === 'string') {
+        return result.script;
+      }
+    } catch (e) {
+      console.warn('[ConditionAIService] AI call failed', e);
+    }
+
+    return '';
+  }
+
   /**
    * Generates a condition script from natural language description.
    * Handles template parsing, duplicate variable selection, and fallback generation.

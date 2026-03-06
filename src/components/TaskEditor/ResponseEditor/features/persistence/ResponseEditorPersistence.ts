@@ -5,10 +5,15 @@
  * This module provides a single entry point for all persistence operations.
  *
  * The actual implementations are split into:
- * - saveTask.ts: All save operations (saveTaskToRepository, saveTaskOnProjectSave, saveTaskOnEditorClose)
+ * - saveTask.ts: Unified save function and legacy wrappers
  * - syncTemplate.ts: Template synchronization logic (checkAndApplyTemplateSync)
  */
 
+// New unified API
+export { saveTask } from './saveTask';
+export type { SaveTaskOptions } from './saveTask';
+
+// Legacy wrappers (deprecated - use saveTask instead)
 export {
   saveTaskToRepository,
   saveTaskOnProjectSave,

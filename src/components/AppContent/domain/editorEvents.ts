@@ -32,6 +32,8 @@ export interface ConditionEditorOpenEvent {
   script?: string;
   variables?: Record<string, any>;
   variablesTree?: any;
+  /** If true, condition needs to be generated using AI */
+  needsGeneration?: boolean;
 }
 
 /**
