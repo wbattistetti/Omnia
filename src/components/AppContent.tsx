@@ -26,14 +26,17 @@ import { FlowWorkspaceProvider, useFlowWorkspace } from '../flows/FlowStore.tsx'
 import { useFlowActions } from '../flows/FlowStore.tsx';
 import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/ops';
 import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
-import { openBottomDockedTab, openLateralChatPanel } from './AppContent/infrastructure/docking/DockingHelpers';
+import { openBottomDockedTab } from './AppContent/infrastructure/docking/DockingHelpers';
 import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
 import { ProjectManager } from './AppContent/application/services/ProjectManager';
 import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
-import { createSingleNodeFlow } from '../utils/flowTestHelpers';
+// ✅ PHASE 2: createSingleNodeFlow moved to useChatOrchestrator
 import { FlowTestProvider } from '../context/FlowTestContext';
+import { FlowActionsProvider } from '../context/FlowActionsContext';
+import { useEntityCreation } from '../hooks/useEntityCreation';
+import { useChatOrchestrator } from '../hooks/useChatOrchestrator'; // ✅ PHASE 2: Chat orchestration
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableNonInteractiveEditor from './TaskEditor/ResponseEditor/ResizableNonInteractiveEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableTaskEditorHost from './TaskEditor/EditorHost/ResizableTaskEditorHost'; // ✅ RINOMINATO: ActEditor → TaskEditor, ResizableActEditorHost → ResizableTaskEditorHost
@@ -151,155 +154,24 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Popolato da DockManagerWithFlows che è dentro FlowWorkspaceProvider
   const flowsRef = React.useRef<Record<string, any>>({});
 
-  // ✅ Get translations for chat panel (needed for handleTestSingleNode)
+  // ✅ Get translations for chat panel (needed for ChatOrchestrator)
   const { translations: globalTranslations, isReady: translationsReady, isLoading: translationsLoading, loadAllTranslations } = useProjectTranslations();
 
-  // ✅ Handler to test a single node (creates flow with only that node)
-  // This is the default implementation if onPlayNode prop is not provided
-  // Signature matches FlowEditor's onPlayNode: (nodeId: string, nodeRows: any[]) => void
-  // ✅ MOVED: Defined before renderTabContent to avoid "Cannot access before initialization" error
-  const handleTestSingleNodeRetryCountRef = React.useRef(0);
+  // ✅ PHASE 2: Use ChatOrchestrator hook for chat panel operations
+  const chatOrchestrator = useChatOrchestrator({
+    setDockTree,
+    currentPid,
+    translations: globalTranslations,
+    translationsReady,
+    translationsLoading,
+    loadAllTranslations,
+  });
+
+  // ✅ PHASE 2: handleTestSingleNode now delegates to ChatOrchestrator
   const handleTestSingleNode = React.useCallback(async (nodeId: string, nodeRows?: any[]) => {
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('🎬 [AppContent] handleTestSingleNode CALLED');
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('[AppContent] 📋 handleTestSingleNode parameters:', {
-      nodeId,
-      nodeRows: nodeRows ? `Array(${nodeRows.length})` : 'undefined',
-      stackTrace: new Error().stack?.split('\n').slice(0, 5).join('\n')
-    });
-    console.log('[AppContent] 📋 Parameters:', {
-      nodeId,
-      nodeRows: nodeRows ? `Array(${nodeRows.length})` : 'undefined',
-      hasSetDockTree: !!setDockTree,
-      currentPid,
-      translationsReady,
-      translationsLoading,
-    });
-
-    // Reset retry count after successful execution
-    handleTestSingleNodeRetryCountRef.current = 0;
-
-    // Get all flow data
-    const allNodes = (window as any).__flowNodes || [];
-    const allEdges = (window as any).__flowEdges || [];
-    const allTasks = (window as any).__flowTasks || [];
-
-    // Find the node to test
-    const node = allNodes.find((n: any) => n.id === nodeId);
-    if (!node) {
-      console.error('[AppContent] ❌ Node not found:', nodeId);
-      alert(`Node ${nodeId} not found in flow.`);
-      return;
-    }
-
-    // ✅ Create single-node flow using helper
-    const { nodes, edges, tasks } = createSingleNodeFlow(nodeId, allNodes, allEdges, allTasks);
-
-    console.log('[AppContent] 📊 Single-node flow created:', {
-      nodeId,
-      nodeLabel: node.data?.label || nodeId,
-      rowsCount: node.data?.rows?.length || 0,
-      nodesCount: nodes.length,
-      edgesCount: edges.length,
-      tasksCount: tasks.length,
-    });
-
-    // Ensure translations are loaded (same logic as handleRunFlow)
-    if (!translationsReady && !translationsLoading && loadAllTranslations) {
-      console.log('[AppContent] ⏳ Translations not ready, loading...');
-      await loadAllTranslations();
-    }
-
-    // Prevent infinite retry loop (max 10 retries)
-    if (translationsLoading) {
-      if (handleTestSingleNodeRetryCountRef.current >= 10) {
-        console.error('[AppContent] ❌ Max retries reached waiting for translations');
-        return;
-      }
-      handleTestSingleNodeRetryCountRef.current += 1;
-      console.log(`[AppContent] ⏳ Translations loading, retry ${handleTestSingleNodeRetryCountRef.current}/10`);
-      setTimeout(() => {
-        handleTestSingleNode(nodeId);
-      }, 500);
-      return;
-    }
-
-    // Get translations
-    const allTranslations = globalTranslations || {};
-    if (!allTranslations || Object.keys(allTranslations).length === 0) {
-      console.error('[AppContent] ❌ Translations are empty - aborting');
-      alert('Translations are not available. Please ensure the project has translations loaded.');
-      return;
-    }
-
-    // Create chat tab for single node test
-    const nodeLabel = node.data?.label || nodeId;
-    const chatTabId = `chat_node_${nodeId}`;
-    const chatTab: DockTabChat = {
-      id: chatTabId,
-      title: `Test: ${nodeLabel}`,
-      type: 'chat',
-      task: null,
-      projectId: currentPid || null,
-      translations: allTranslations,
-      taskTree: null,
-      mode: 'interactive',
-      flowNodes: nodes,
-      flowEdges: edges,
-      flowTasks: tasks,
-    };
-
-    console.log('[AppContent] 📦 Created single-node test chat tab:', {
-      id: chatTab.id,
-      title: chatTab.title,
-      nodeId,
-      nodeLabel,
-      flowNodesCount: chatTab.flowNodes?.length || 0,
-      flowEdgesCount: chatTab.flowEdges?.length || 0,
-      flowTasksCount: chatTab.flowTasks?.length || 0,
-    });
-
-    // Open as right lateral panel
-    console.log('[AppContent] 🚪 Opening lateral chat panel...', {
-      chatTabId,
-      chatTabTitle: chatTab.title,
-      hasSetDockTree: !!setDockTree,
-    });
-
-    if (!setDockTree) {
-      console.error('[AppContent] ❌ setDockTree is not available - cannot open chat panel');
-      alert('Cannot open chat panel: dock tree manager not available');
-      return;
-    }
-
-    try {
-      setDockTree(prev => {
-        console.log('[AppContent] 📦 setDockTree called with prev tree:', {
-          prevTreeKind: prev?.kind,
-          prevTreeId: prev?.id,
-        });
-        const newTree = openLateralChatPanel(prev, {
-          tabId: chatTabId,
-          newTab: chatTab,
-          position: 'right',
-        });
-        console.log('[AppContent] ✅ openLateralChatPanel returned new tree:', {
-          newTreeKind: newTree?.kind,
-          newTreeId: newTree?.id,
-        });
-        return newTree;
-      });
-      console.log('[AppContent] ✅ setDockTree completed');
-    } catch (error) {
-      console.error('[AppContent] ❌ Error opening chat panel:', error);
-      alert(`Failed to open chat panel: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return;
-    }
-
-    console.log('[AppContent] ✅ handleTestSingleNode COMPLETED');
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-  }, [setDockTree, currentPid, globalTranslations, translationsReady, translationsLoading, loadAllTranslations]);
+    console.log('[AppContent] handleTestSingleNode -> delegating to ChatOrchestrator');
+    await chatOrchestrator.openSingleNodeChat(nodeId, nodeRows);
+  }, [chatOrchestrator]);
 
   // ✅ REFACTOR: TabRenderer component estratto in presentation/TabRenderer.tsx
   // UnifiedTabContent completamente rimosso - ora usiamo TabRenderer
@@ -365,6 +237,9 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Usa ActEditor context invece di selectedDDT per unificare l'apertura editor
   const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
+
+  // ✅ PHASE 1: Get entity creation for fallback FlowEditor (when no project is loaded)
+  const entityCreationFallback = useEntityCreation();
 
   // ✅ REFACTOR: Initialize ProjectManager
   const projectManager = React.useMemo(() => {
@@ -511,159 +386,11 @@ export const AppContent: React.FC<AppContentProps> = ({
     });
   }, [handleTestSingleNode]);
 
-  // ✅ Handler to open flow chat as dockable panel (same logic as Response Editor Test button)
-  const handleRunFlowRetryCountRef = React.useRef(0);
+  // ✅ PHASE 2: handleRunFlow now delegates to ChatOrchestrator
   const handleRunFlow = React.useCallback(() => {
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('🚀 [AppContent] handleRunFlow CALLED');
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('[AppContent] 🔍 handleRunFlow function check:', {
-      functionName: handleRunFlow.name,
-      functionType: typeof handleRunFlow,
-      isFunction: typeof handleRunFlow === 'function',
-      retryCount: handleRunFlowRetryCountRef.current,
-    });
-
-    // Reset retry count after successful execution
-    handleRunFlowRetryCountRef.current = 0;
-
-    // Check if flow has nodes/edges
-    const nodes = (window as any).__flowNodes || [];
-    const edges = (window as any).__flowEdges || [];
-    const tasks = (window as any).__flowTasks || [];
-
-    console.log('[AppContent] 📊 Flow data check:', {
-      nodesCount: nodes.length,
-      edgesCount: edges.length,
-      tasksCount: tasks.length,
-      nodesAvailable: !!nodes.length,
-      edgesAvailable: !!edges.length,
-      windowHasFlowNodes: !!(window as any).__flowNodes,
-      windowHasFlowEdges: !!(window as any).__flowEdges,
-      windowHasFlowTasks: !!(window as any).__flowTasks,
-    });
-
-    // ✅ ARCHITECTURAL: Richiede solo nodes (edges sono opzionali - un flow con un solo nodo è valido)
-    if (nodes.length === 0) {
-      console.error('[AppContent] ❌ No flow nodes found - aborting');
-      alert('No flow data found. Please create a flow with at least one node.');
-      return;
-    }
-
-    // ✅ Un flow con un solo nodo è valido (non servono edges)
-    if (nodes.length === 1 && edges.length === 0) {
-      console.log('[AppContent] ℹ️ Flow with single node (no edges) - this is valid');
-    }
-
-    // Ensure translations are loaded
-    console.log('[AppContent] 🔤 Translations state:', {
-      translationsReady,
-      translationsLoading,
-      hasLoadAllTranslations: !!loadAllTranslations,
-      globalTranslationsKeys: globalTranslations ? Object.keys(globalTranslations).length : 0,
-    });
-
-    if (!translationsReady && !translationsLoading && loadAllTranslations) {
-      console.log('[AppContent] ⏳ Translations not ready, loading...');
-      loadAllTranslations().then(() => {
-        console.log('[AppContent] ✅ Translations loaded, retrying handleRunFlow');
-        handleRunFlow();
-      }).catch((err) => {
-        console.error('[AppContent] ❌ Failed to load translations', err);
-      });
-      return;
-    }
-
-    // Prevent infinite retry loop (max 10 retries)
-    if (translationsLoading) {
-      if (handleRunFlowRetryCountRef.current >= 10) {
-        console.error('[AppContent] ❌ Max retries reached waiting for translations');
-        return;
-      }
-      handleRunFlowRetryCountRef.current += 1;
-      console.log(`[AppContent] ⏳ Translations loading, retry ${handleRunFlowRetryCountRef.current}/10`);
-      setTimeout(() => {
-        handleRunFlow();
-      }, 500);
-      return;
-    }
-
-    // Get translations (for flow mode, use all available translations)
-    const allTranslations = globalTranslations || {};
-
-    console.log('[AppContent] 🔤 Final translations check:', {
-      hasTranslations: !!allTranslations,
-      translationsCount: Object.keys(allTranslations).length,
-      translationsSample: Object.keys(allTranslations).slice(0, 5),
-    });
-
-    if (!allTranslations || Object.keys(allTranslations).length === 0) {
-      console.error('[AppContent] ❌ Translations are empty - aborting');
-      alert('Translations are not available. Please ensure the project has translations loaded.');
-      return;
-    }
-
-    // Create chat tab for flow mode
-    const chatTabId = 'chat_flow_main';
-    // ✅ ARCHITECTURAL: Pass flow data as props instead of reading from window in child components
-    const chatTab: DockTabChat = {
-      id: chatTabId,
-      title: 'Flow Chat',
-      type: 'chat',
-      task: null, // Flow mode, no specific task
-      projectId: currentPid || null,
-      translations: allTranslations, // All translations for flow mode
-      taskTree: null, // Flow mode
-      mode: 'interactive',
-      // ✅ NEW: Pass flow data as props
-      flowNodes: nodes,
-      flowEdges: edges,
-      flowTasks: tasks,
-    };
-
-    console.log('[AppContent] 📦 Created DockTabChat:', {
-      id: chatTab.id,
-      title: chatTab.title,
-      type: chatTab.type,
-      mode: chatTab.mode,
-      projectId: chatTab.projectId,
-      flowNodesCount: chatTab.flowNodes?.length || 0,
-      flowEdgesCount: chatTab.flowEdges?.length || 0,
-      flowTasksCount: chatTab.flowTasks?.length || 0,
-      translationsCount: chatTab.translations ? Object.keys(chatTab.translations).length : 0,
-      // ✅ DEBUG: Verifica se gli edges sono stati passati correttamente
-      edgesArray: edges,
-      edgesFirstItem: edges[0],
-      nodesArray: nodes,
-      nodesFirstItem: nodes[0],
-    });
-
-    if (edges.length === 0) {
-      console.error('[AppContent] ❌ CRITICAL: No edges passed to DockTabChat!', {
-        windowEdges: (window as any).__flowEdges,
-        edgesVariable: edges,
-        edgesLength: edges.length,
-      });
-    }
-
-    // Open as right lateral panel (same as Response Editor Test button)
-    console.log('[AppContent] 🚪 Opening lateral chat panel...');
-    setDockTree(prev => {
-      const newTree = openLateralChatPanel(prev, {
-        tabId: chatTabId,
-        newTab: chatTab,
-        position: 'right',
-      });
-      console.log('[AppContent] ✅ Lateral chat panel opened, new tree:', {
-        hasTree: !!newTree,
-        treeKind: newTree?.kind,
-      });
-      return newTree;
-    });
-
-    console.log('[AppContent] ✅ handleRunFlow COMPLETED');
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-  }, [setDockTree, currentPid, globalTranslations, translationsReady, translationsLoading, loadAllTranslations]);
+    console.log('[AppContent] handleRunFlow -> delegating to ChatOrchestrator');
+    chatOrchestrator.openFlowChat();
+  }, [chatOrchestrator]);
 
   // Listen to Sidebar wrench
   React.useEffect(() => {
@@ -1265,32 +992,47 @@ export const AppContent: React.FC<AppContentProps> = ({
                           />
                         </FlowWorkspaceProvider>
                       ) : (
-                        <FlowTestProvider testSingleNode={handleTestSingleNode}>
-                          <FlowEditor
-                            nodes={(window as any).__flowNodes || []}
-                            setNodes={(updater: any) => {
-                              try {
-                                const current = (window as any).__flowNodes || [];
-                                const updated = typeof updater === 'function' ? updater(current) : updater;
-                                (window as any).__flowNodes = updated;
-                              } catch { }
-                            }}
-                            edges={(window as any).__flowEdges || []}
-                            setEdges={(updater: any) => {
-                              try {
-                                const current = (window as any).__flowEdges || [];
-                                const updated = typeof updater === 'function' ? updater(current) : updater;
-                                (window as any).__flowEdges = updated;
-                              } catch { }
-                            }}
-                            currentProject={currentProject}
-                            setCurrentProject={setCurrentProject}
-                            testPanelOpen={testPanelOpen}
-                            setTestPanelOpen={setTestPanelOpen}
-                            testNodeId={testNodeId}
-                            setTestNodeId={setTestNodeId}
-                          />
-                        </FlowTestProvider>
+                        // ✅ PHASE 1: Wrap with FlowActionsProvider for stable callbacks
+                        <FlowActionsProvider
+                          setNodes={(updater: any) => {
+                            try {
+                              const current = (window as any).__flowNodes || [];
+                              const updated = typeof updater === 'function' ? updater(current) : updater;
+                              (window as any).__flowNodes = updated;
+                            } catch { }
+                          }}
+                          createFactoryTask={entityCreationFallback.createFactoryTask}
+                          createBackendCall={entityCreationFallback.createBackendCall}
+                          createTask={entityCreationFallback.createTask}
+                          createCondition={entityCreationFallback.createCondition}
+                        >
+                          <FlowTestProvider testSingleNode={handleTestSingleNode}>
+                            <FlowEditor
+                              nodes={(window as any).__flowNodes || []}
+                              setNodes={(updater: any) => {
+                                try {
+                                  const current = (window as any).__flowNodes || [];
+                                  const updated = typeof updater === 'function' ? updater(current) : updater;
+                                  (window as any).__flowNodes = updated;
+                                } catch { }
+                              }}
+                              edges={(window as any).__flowEdges || []}
+                              setEdges={(updater: any) => {
+                                try {
+                                  const current = (window as any).__flowEdges || [];
+                                  const updated = typeof updater === 'function' ? updater(current) : updater;
+                                  (window as any).__flowEdges = updated;
+                                } catch { }
+                              }}
+                              currentProject={currentProject}
+                              setCurrentProject={setCurrentProject}
+                              testPanelOpen={testPanelOpen}
+                              setTestPanelOpen={setTestPanelOpen}
+                              testNodeId={testNodeId}
+                              setTestNodeId={setTestNodeId}
+                            />
+                          </FlowTestProvider>
+                        </FlowActionsProvider>
                       )}
                     </div>
                   </>

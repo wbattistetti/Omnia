@@ -287,7 +287,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   } = nodeState;
 
   // ✅ EVENT HANDLERS: Extract all event handlers to custom hook (BEFORE rendering)
+  // ✅ PHASE 1: Pass nodeId for FlowActionsContext
   const handlers = useNodeEventHandlers({
+    nodeId: id,
     data: normalizedData,
     nodeTitle,
     setNodeTitle,

@@ -97,6 +97,9 @@ export const FlowchartWrapper: React.FC<FlowchartWrapperProps> = ({
     // Gestione scroll con mouse wheel
     // Nota: preventDefault non funziona con event listener passivi, quindi gestiamo lo scroll senza bloccare il default
     const handleWheel = useCallback((e: React.WheelEvent) => {
+        // ✅ FIX: Skip scroll when Ctrl is pressed - let ReactFlow handle zoom
+        if (e.ctrlKey) return;
+
         // Non chiamare preventDefault - React usa event listener passivi per wheel events
         // Gestiamo lo scroll manualmente senza bloccare il comportamento di default
         const deltaX = e.deltaX;

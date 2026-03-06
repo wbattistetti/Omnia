@@ -76,10 +76,11 @@ export function useEdgeHoverDuringLabelDrag(
       pathElement = document.getElementById(edge.id) as SVGPathElement;
 
       // Metodo 2: Se non trovato, cerca nel DOM React Flow
+      // ✅ FIX: Use attribute selector instead of #id (CSS selectors can't start with a digit)
       if (!pathElement || pathElement.tagName !== 'path') {
         const reactFlowWrapper = document.querySelector('.react-flow');
         if (reactFlowWrapper) {
-          pathElement = reactFlowWrapper.querySelector(`path#${edge.id}`) as SVGPathElement;
+          pathElement = reactFlowWrapper.querySelector(`path[id="${edge.id}"]`) as SVGPathElement;
         }
       }
 
