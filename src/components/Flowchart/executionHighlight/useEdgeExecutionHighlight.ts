@@ -145,8 +145,8 @@ export function useEdgeExecutionHighlight(
       if (!errorReportedRef.current.has(errorKey)) {
         errorReportedRef.current.add(errorKey);
 
-        // Get onMessage from window
-        const onMessage = typeof window !== 'undefined' ? (window as any).__flowOnMessage : null;
+        // Get onMessage from FlowStateBridge
+        const onMessage = FlowStateBridge.getFlowOnMessage();
 
         if (onMessage) {
           // Send system message with error icon

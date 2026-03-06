@@ -1,18 +1,19 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { NodeRowData } from '../../../../../types/project';
 import { useRowRegistry } from '../../../rows/NodeRow/hooks/useRowRegistry';
+import { useFlowActions } from '../../../../../context/FlowActionsContext';
 
 interface UseNodeDragDropProps {
     nodeRows: NodeRowData[];
     setNodeRows: (rows: NodeRowData[]) => void;
     data: any;
     rowsContainerRef: React.RefObject<HTMLElement>;
-    nodeId: string; // ID del nodo corrente per identificare il nodo di origine
+    nodeId: string;
 }
 
 /**
- * Hook per gestire il drag & drop personalizzato delle righe
- * Approccio: Mouse down → Crea immagine che segue il mouse → Mouse up → Inserisci/rimuovi
+ * Hook for managing custom row drag & drop
+ * Approach: Mouse down → Create image following mouse → Mouse up → Insert/remove
  */
 export function useNodeDragDrop({
     nodeRows,
@@ -21,7 +22,10 @@ export function useNodeDragDrop({
     rowsContainerRef,
     nodeId
 }: UseNodeDragDropProps) {
-    // Registry per accedere ai componenti NodeRow
+    // Context for node operations (with fallback to legacy)
+    const flowActions = useFlowActions();
+
+    // Registry for accessing NodeRow components
     const { getRowComponent } = useRowRegistry();
 
     // Ref per salvare la posizione iniziale della riga (per verificare se è stata spostata)
@@ -272,24 +276,31 @@ export function useNodeDragDrop({
                 window.dispatchEvent(crossNodeEvent);
             }, 10);
 
-            // Rimuovi la riga dal nodo corrente
+            // Remove the row from current node
             const updatedRows = nodeRows.filter(row => row.id !== draggedRowId);
             setNodeRows(updatedRows);
 
-            if (data.onUpdate) {
+            // Update node via context or fallback
+            if (flowActions?.updateNode) {
+                flowActions.updateNode(nodeId, { rows: updatedRows });
+            } else if (data.onUpdate) {
                 data.onUpdate({ rows: updatedRows });
             }
 
-            // ✅ Rimuovi evidenziazione del nodo target dopo timeout (cross-node)
+            // Remove highlight from target node after timeout (cross-node)
             if (targetNodeId) {
                 removeNodeHighlight(targetNodeId);
             }
 
-            // ✅ Se il nodo sorgente rimane vuoto dopo lo spostamento, eliminalo
-            if (updatedRows.length === 0 && data.onDelete) {
+            // If source node becomes empty after move, delete it
+            if (updatedRows.length === 0) {
                 setTimeout(() => {
-                    data.onDelete();
-                }, 50); // Piccolo delay per permettere la creazione/aggiornamento del nodo destinatario
+                    if (flowActions?.deleteNode) {
+                        flowActions.deleteNode(nodeId);
+                    } else if (data.onDelete) {
+                        data.onDelete();
+                    }
+                }, 50); // Small delay to allow target node creation/update
             }
 
         } else if (!targetNodeId) {
@@ -319,23 +330,30 @@ export function useNodeDragDrop({
                 window.dispatchEvent(createNodeEvent);
             }, 10);
 
-            // Rimuovi la riga dal nodo corrente
+            // Remove the row from current node
             const updatedRows = nodeRows.filter(row => row.id !== draggedRowId);
             setNodeRows(updatedRows);
 
-            if (data.onUpdate) {
+            // Update node via context or fallback
+            if (flowActions?.updateNode) {
+                flowActions.updateNode(nodeId, { rows: updatedRows });
+            } else if (data.onUpdate) {
                 data.onUpdate({ rows: updatedRows });
             }
 
-            // ✅ Se il nodo sorgente rimane vuoto dopo lo spostamento, eliminalo
-            if (updatedRows.length === 0 && data.onDelete) {
+            // If source node becomes empty after move, delete it
+            if (updatedRows.length === 0) {
                 setTimeout(() => {
-                    data.onDelete();
-                }, 50); // Piccolo delay per permettere la creazione del nuovo nodo
+                    if (flowActions?.deleteNode) {
+                        flowActions.deleteNode(nodeId);
+                    } else if (data.onDelete) {
+                        data.onDelete();
+                    }
+                }, 50); // Small delay to allow new node creation
             }
 
         } else {
-            // SAME-NODE DROP: Riordinamento interno
+            // SAME-NODE DROP: Internal reordering
             const elements = Array.from(rowsContainerRef.current?.querySelectorAll('.node-row-outer') || []) as HTMLElement[];
             const rects = elements.map((el, idx) => ({
                 idx: Number(el.dataset.index),
@@ -370,9 +388,9 @@ export function useNodeDragDrop({
             const verticalDistance = Math.abs(mousePosition.y - originalRowCenter);
             const threshold = 30; // Soglia di 30px: se il mouse è entro 30px dalla posizione originale, non spostare
 
-            // Esegui il riordinamento solo se:
-            // - L'indice è cambiato E
-            // - Il mouse si è mosso abbastanza lontano dalla posizione originale
+            // Execute reordering only if:
+            // - Index has changed AND
+            // - Mouse has moved far enough from original position
             if (hasMovedIndex && verticalDistance > threshold) {
                 const updatedRows = [...nodeRows];
                 const draggedRow = updatedRows[draggedRowIndex];
@@ -381,11 +399,14 @@ export function useNodeDragDrop({
 
                 setNodeRows(updatedRows);
 
-                if (data.onUpdate) {
+                // Update node via context or fallback
+                if (flowActions?.updateNode) {
+                    flowActions.updateNode(nodeId, { rows: updatedRows });
+                } else if (data.onUpdate) {
                     data.onUpdate({ rows: updatedRows });
                 }
 
-                // ✅ Highlight unificato: evidenzia la riga SUBITO dopo il drop
+                // Highlight row immediately after drop
                 // Usa requestAnimationFrame per assicurarsi che il DOM sia aggiornato
                 requestAnimationFrame(() => {
                     const rowComponent = getRowComponent(draggedRow.id);

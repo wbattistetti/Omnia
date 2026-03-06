@@ -6,6 +6,7 @@ import { IntellisenseItem } from '../../types/intellisense';
 import { useDynamicFontSizes } from '../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../utils/fontSizeUtils';
 import { VoiceInput } from '../common/VoiceInput';
+import { FlowStateBridge } from '../../services/FlowStateBridge';
 
 interface IntellisenseStandaloneProps {
     position: { x: number; y: number };
@@ -153,8 +154,8 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
         // ✅ Chiudi Intellisense (onClose ora gestisce anche il cleanup per gli edge)
         onClose();
 
-        // ✅ CLEANUP: Chiama anche qui come fallback (onClose potrebbe non avere il contesto dell'edge)
-        const cleanupTempNodesAndEdges = (window as any).__cleanupAllTempNodesAndEdges;
+        // Cleanup: fallback cleanup for temporary nodes/edges
+        const cleanupTempNodesAndEdges = FlowStateBridge.getCleanupAllTempNodesAndEdges();
         if (cleanupTempNodesAndEdges) {
             cleanupTempNodesAndEdges();
         }

@@ -3,6 +3,7 @@ import { Node } from 'reactflow';
 import type { FlowNode, EdgeData } from '@components/Flowchart/types/flowTypes';
 import type { Edge } from 'reactflow';
 import { dlog } from '@utils/debug';
+import { FlowStateBridge } from '../../../services/FlowStateBridge';
 
 /**
  * Hook for managing Flow Editor event handlers
@@ -123,39 +124,39 @@ export function useFlowEventHandlers(
       target.closest('.react-flow__handle')
     );
     const hasNodrag = target && (target.classList.contains('nodrag') || target.closest('.nodrag'));
-    const isToolbarDrag = (window as any).__isToolbarDrag === node.id;
+    const isToolbarDrag = FlowStateBridge.isToolbarDragForNode(node.id);
 
-    // ✅ Se viene chiamato con un handle, blocca
+    // If called with a handle, block
     if (isHandle) {
-      (window as any).__dragStartedFromHandle = true;
+      FlowStateBridge.setDragStartedFromHandle(true);
       event.preventDefault();
       event.stopPropagation();
       return false;
     }
 
-    (window as any).__dragStartedFromHandle = false;
+    FlowStateBridge.setDragStartedFromHandle(false);
 
-    // ✅ BLOCCA se ha nodrag E non è un drag dalla toolbar
+    // Block if has nodrag AND not a toolbar drag
     if (hasNodrag && !isToolbarDrag) {
-      (window as any).__blockNodeDrag = node.id;
+      FlowStateBridge.setBlockNodeDrag(true);
       event.preventDefault();
       event.stopPropagation();
       return false;
     }
 
-    // ✅ Permetti solo se è un drag dalla toolbar
+    // Allow only if it's a toolbar drag
     if (isToolbarDrag) {
-      (window as any).__blockNodeDrag = null;
+      FlowStateBridge.setBlockNodeDrag(false);
     } else {
-      // ✅ Se non è toolbar drag, blocca (non dovrebbe succedere con nodesDraggable={false})
+      // If not toolbar drag, block
       event.preventDefault();
       event.stopPropagation();
       return false;
     }
 
-    (window as any).__blockNodeDrag = null;
-    // Prepara contesto per drag rigido SOLO se partito dall'ancora
-    if ((window as any).__flowDragMode === 'rigid' || isAnchor) {
+    FlowStateBridge.setBlockNodeDrag(false);
+    // Prepare context for rigid drag ONLY if started from anchor
+    if (FlowStateBridge.isRigidDrag() || isAnchor) {
       const rootId = node.id;
       // BFS su edges per raccogliere tutti i discendenti
       const visited = new Set<string>();
@@ -205,8 +206,8 @@ export function useFlowEventHandlers(
       return;
     }
 
-    // ✅ Se il drag è partito da un handle, NON DOVREBBE ESSERE QUI
-    if ((window as any).__dragStartedFromHandle) {
+    // If drag started from a handle, skip
+    if (FlowStateBridge.isDragStartedFromHandle()) {
       return;
     }
 

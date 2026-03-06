@@ -102,8 +102,8 @@ export const IntellisensePopover: React.FC = () => {
             // ✅ Click fuori → Chiudi e cleanup
             actions.close();
 
-            // ✅ CLEANUP: Cancella nodo temporaneo e edge
-            const cleanupTempNodesAndEdges = (window as any).__cleanupAllTempNodesAndEdges;
+            // Cleanup: remove temporary node and edge
+            const cleanupTempNodesAndEdges = FlowStateBridge.getCleanupAllTempNodesAndEdges();
             if (cleanupTempNodesAndEdges) {
                 cleanupTempNodesAndEdges();
             }
@@ -117,9 +117,9 @@ export const IntellisensePopover: React.FC = () => {
     const handleClose = () => {
         actions.close();
 
-        // ✅ CLEANUP: Se è un edge, cancella nodo temporaneo e link
+        // Cleanup: if it's an edge, remove temporary node and link
         if (state.target?.edgeId) {
-            const cleanupTempNodesAndEdges = (window as any).__cleanupAllTempNodesAndEdges;
+            const cleanupTempNodesAndEdges = FlowStateBridge.getCleanupAllTempNodesAndEdges();
             if (cleanupTempNodesAndEdges) {
                 cleanupTempNodesAndEdges();
             }
@@ -203,9 +203,9 @@ export const IntellisensePopover: React.FC = () => {
                 }
             }
 
-            // ✅ 3. Aggiorna l'edge
-            const scheduleApplyLabel = (window as any).__scheduleApplyLabel;
-            const setEdges = (window as any).__setEdges;
+            // Update the edge
+            const scheduleApplyLabel = FlowStateBridge.getScheduleApplyLabel();
+            const setEdges = FlowStateBridge.getSetEdges();
 
             if (scheduleApplyLabel && label !== undefined) {
                 // ✅ Passa isElse quando è true
@@ -266,8 +266,8 @@ export const IntellisensePopover: React.FC = () => {
                     // ✅ Rimuovi solo hidden, NON modificare il titolo
                     tempNode.data.hidden = false;
 
-                    // Aggiorna anche il nodo nello stato (solo hidden)
-                    const setNodes = (window as any).__setNodes;
+                    // Update the node state (only hidden)
+                    const setNodes = FlowStateBridge.getSetNodes();
                     if (setNodes) {
                         setNodes((nds: any[]) => nds.map(n =>
                             n.id === tempNode.id ? { ...n, data: { ...n.data, hidden: false } } : n

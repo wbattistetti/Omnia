@@ -3,6 +3,7 @@ import { Connection, Node, Edge } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
 import type { FlowNode, EdgeData } from '../types/flowTypes';
 import { DEFAULT_LINK_STYLE } from '../types/flowTypes';
+import { FlowStateBridge } from '../../../services/FlowStateBridge';
 
 export function useFlowConnect(
   reactFlowInstance: any,
@@ -48,7 +49,7 @@ export function useFlowConnect(
     });
   }, [setEdges, onDeleteEdge, createOnUpdate]);
 
-  // Gestisce l'inizio di una connessione
+  // Handle connection start
   const onConnectStart = useCallback((event: any, params: any) => {
     const { nodeId, handleId, handleType } = params;
 
@@ -56,8 +57,8 @@ export function useFlowConnect(
     connectionMenuRef.current.sourceHandleId = handleId;
     connectionMenuRef.current.sourceHandleType = handleType;
 
-    // ✅ Flag globale per bloccare drag HTML5 quando si traccia una connessione
-    (window as any).__isConnecting = true;
+    // Global flag to block HTML5 drag during connection
+    FlowStateBridge.setIsConnecting(true);
   }, [connectionMenuRef]);
 
   // Gestisce connessioni non condizionate (crea nuovo nodo)

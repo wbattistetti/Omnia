@@ -43,14 +43,23 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
     [flowId, updateFlowGraph]
   );
 
-  // ✅ Wrap FlowEditor with FlowTestProvider if testSingleNode is provided
+  // Stable setEdges function for FlowActionsProvider
+  const setEdges = useCallback(
+    (updater: any) => updateFlowGraph(flowId, (ns, es) => ({
+      nodes: ns,
+      edges: typeof updater === 'function' ? updater(es) : updater
+    })),
+    [flowId, updateFlowGraph]
+  );
+
+  // Wrap FlowEditor with providers
   const flowEditor = (
     <FlowEditor
       flowId={flowId}
       nodes={flow?.nodes || []}
       edges={flow?.edges || []}
       setNodes={setNodes}
-      setEdges={(updater: any) => updateFlowGraph(flowId, (ns, es) => ({ nodes: ns, edges: typeof updater === 'function' ? updater(es) : updater }))}
+      setEdges={setEdges}
       currentProject={{ id: projectId, name: 'Project' } as any}
       setCurrentProject={() => { }}
       testPanelOpen={false}
@@ -65,6 +74,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
   const withFlowActions = (
     <FlowActionsProvider
       setNodes={setNodes}
+      setEdges={setEdges}
       createFactoryTask={entityCreation.createFactoryTask}
       createBackendCall={entityCreation.createBackendCall}
       createTask={entityCreation.createTask}

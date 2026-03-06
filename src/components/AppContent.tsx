@@ -1008,6 +1008,13 @@ export const AppContent: React.FC<AppContentProps> = ({
                               FlowStateBridge.setNodes(updated);
                             } catch { }
                           }}
+                          setEdges={(updater: any) => {
+                            try {
+                              const current = FlowStateBridge.getEdges();
+                              const updated = typeof updater === 'function' ? updater(current) : updater;
+                              FlowStateBridge.setEdges(updated);
+                            } catch { }
+                          }}
                           createFactoryTask={entityCreationFallback.createFactoryTask}
                           createBackendCall={entityCreationFallback.createBackendCall}
                           createTask={entityCreationFallback.createTask}

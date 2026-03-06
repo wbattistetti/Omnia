@@ -18,6 +18,8 @@ import { useNodeEffects } from './hooks/useNodeEffects';
 import { useNodeExitEditing } from './hooks/useNodeExitEditing';
 import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
 import { useNodeExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
+import { FlowStateBridge } from '../../../../services/FlowStateBridge';
+import { useFlowActions } from '../../../../context/FlowActionsContext';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -48,10 +50,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   isConnectable,
   selected
 }) => {
-  // ✅ REGISTRY: Register node with NodeRegistry
+  // Context for node operations (with fallback to legacy)
+  const flowActions = useFlowActions();
+
+  // REGISTRY: Register node with NodeRegistry
   const nodeRegistryRef = useRegisterAsNode(id);
 
-  // ✅ INITIALIZATION: Initialize node data and rows
+  // INITIALIZATION: Initialize node data and rows
   const { displayRows, normalizedData } = useNodeInitialization(id, data);
 
   // ✅ MEASURE NODE WIDTH: Track node width to prevent shrinking when editing
@@ -385,16 +390,18 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Registry per accedere ai componenti NodeRow
   const { getRowComponent } = useRowRegistry();
 
-  // ✅ TOGGLE UNCHECKED ROWS: Handle eye icon click
+  // TOGGLE UNCHECKED ROWS: Handle eye icon click
   const handleToggleUnchecked = useCallback(() => {
     const newShowUnchecked = !showUnchecked;
     setShowUnchecked(newShowUnchecked);
 
-    // Update the node data
-    if (typeof data.onUpdate === 'function') {
+    // Update the node data via context or fallback
+    if (flowActions?.updateNode) {
+      flowActions.updateNode(id, { hideUncheckedRows: !newShowUnchecked });
+    } else if (typeof data.onUpdate === 'function') {
       data.onUpdate({ hideUncheckedRows: !newShowUnchecked });
     }
-  }, [showUnchecked, setShowUnchecked, data]);
+  }, [showUnchecked, setShowUnchecked, id, data, flowActions]);
 
   // ✅ CHECK FOR UNCHECKED ROWS: Calculate if there are any unchecked rows
   const hasUncheckedRows = nodeRows.some(row => row.included === false);
@@ -431,16 +438,19 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             }
           }
 
-          // Inserisci alla posizione corretta
+          // Insert at correct position
           const updatedRows = [...nodeRows];
           updatedRows.splice(targetIndex, 0, rowData);
           setNodeRows(updatedRows);
 
-          if (data.onUpdate) {
+          // Update via context or fallback
+          if (flowActions?.updateNode) {
+            flowActions.updateNode(id, { rows: updatedRows });
+          } else if (data.onUpdate) {
             data.onUpdate({ rows: updatedRows });
           }
 
-          // ✅ Highlight unificato: evidenzia la riga SUBITO dopo il drop
+          // Highlight row immediately after drop
           // Usa requestAnimationFrame per essere il più veloce possibile
           requestAnimationFrame(() => {
             const rowComponent = getRowComponent(rowData.id);
@@ -653,9 +663,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 descendantOffsets
               };
 
-              // ✅ Imposta flag e stato
-              (window as any).__isToolbarDrag = id;
-              (window as any).__blockNodeDrag = null;
+              // Set flag and state
+              FlowStateBridge.setToolbarDragNodeId(id);
+              FlowStateBridge.setBlockNodeDrag(false);
               setIsDragging(true);
               setIsToolbarDrag(true);
               document.body.style.cursor = 'move';
@@ -685,8 +695,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                   y: nodeDragStateRef.current.nodeStartY + flowDeltaY
                 };
 
-                // ✅ Se è drag rigido, sposta anche tutti i discendenti mantenendo le posizioni relative
-                const isRigidDrag = (window as any).__flowDragMode === 'rigid';
+                // If rigid drag, also move all descendants maintaining relative positions
+                const isRigidDrag = FlowStateBridge.isRigidDrag();
                 if (isRigidDrag && nodeDragStateRef.current.descendantOffsets) {
                   setNodes((nds) => nds.map((n) => {
                     if (n.id === id) {
@@ -727,9 +737,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 document.removeEventListener('mousemove', handleMouseMove);
                 document.removeEventListener('mouseup', handleMouseUp);
 
-                // Reset flag e stato
-                (window as any).__isToolbarDrag = null;
-                (window as any).__flowDragMode = null; // ✅ Reset anche il flag rigid
+                // Reset flag and state
+                FlowStateBridge.setToolbarDragNodeId(null);
+                FlowStateBridge.setDragMode(null);
                 setIsDragging(false);
                 setIsToolbarDrag(false);
                 document.body.style.cursor = 'default';
@@ -893,7 +903,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 hasUnchecked={nodeRows.some(r => r.included === false)}
                 hideUnchecked={(data as any)?.hideUncheckedRows === true}
                 onToggleHideUnchecked={() => {
-                  if (typeof data.onUpdate === 'function') {
+                  if (flowActions?.updateNode) {
+                    flowActions.updateNode(id, { hideUncheckedRows: !(data as any)?.hideUncheckedRows });
+                  } else if (typeof data.onUpdate === 'function') {
                     data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
                   }
                 }}
@@ -915,7 +927,15 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                   return;
                 } else if (e.key === 'Escape') {
                   const singleEmpty = nodeRows.length === 1 && nodeRows[0].text.trim() === '';
-                  singleEmpty ? data.onDelete?.() : exitEditing();
+                  if (singleEmpty) {
+                    if (flowActions?.deleteNode) {
+                      flowActions.deleteNode(id);
+                    } else {
+                      data.onDelete?.();
+                    }
+                  } else {
+                    exitEditing();
+                  }
                 }
               }}
               canDelete={() => nodeRows.length > 1}

@@ -130,33 +130,31 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     onDeleteEdgeRef.current = onDeleteEdge;
   }, [createOnUpdate, onDeleteEdge]);
 
-  // ✅ PULITO: Esporta createOnUpdate per inizializzazione edge esistenti
+  // Export createOnUpdate for edge initialization
   useEffect(() => {
-    (window as any).__createOnUpdate = createOnUpdate;
-    return () => {
-      delete (window as any).__createOnUpdate;
-    };
+    FlowStateBridge.setCreateOnUpdate(createOnUpdate);
+    return () => FlowStateBridge.setCreateOnUpdate(undefined);
   }, [createOnUpdate]);
 
   // Deferred apply for labels on just-created edges (avoids race with RF state)
   const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler(setEdges, setSelectedEdgeId, connectionMenuRef);
 
-  // ✅ Esporta scheduleApplyLabel e setEdges per l'Intellisense
+  // Export scheduleApplyLabel and setEdges for Intellisense
   useEffect(() => {
-    (window as any).__scheduleApplyLabel = scheduleApplyLabel;
-    (window as any).__setEdges = setEdges;
+    FlowStateBridge.setScheduleApplyLabel(scheduleApplyLabel);
+    FlowStateBridge.setSetEdges(setEdges);
     return () => {
-      delete (window as any).__scheduleApplyLabel;
-      delete (window as any).__setEdges;
+      FlowStateBridge.setScheduleApplyLabel(undefined);
+      FlowStateBridge.setSetEdges(undefined);
     };
   }, [scheduleApplyLabel, setEdges]);
 
-  // 🎨 [HIGHLIGHT] Log execution state changes (only when values change)
+  // Log execution state changes (only when values change)
   const prevStateRef = useRef<{ currentNodeId?: string | null; executedCount?: number; isRunning?: boolean }>({});
   useEffect(() => {
-    const execState = propExecutionState ?? (window as any).__executionState ?? null;
-    const task = propCurrentTask ?? (window as any).__currentTask ?? null;
-    const running = propIsRunning ?? (window as any).__isRunning ?? false;
+    const execState = propExecutionState ?? FlowStateBridge.getExecutionState();
+    const task = propCurrentTask ?? FlowStateBridge.getCurrentTask();
+    const running = propIsRunning ?? FlowStateBridge.isRunning();
 
     const prev = prevStateRef.current;
     const current = {
@@ -339,19 +337,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     patchEdges();
   }, [patchEdges]);
 
-  // Update existing nodes with callbacks and onPlayNode
+  // LEGACY: Node callback injection - Components now primarily use FlowActionsContext
+  // These callbacks are injected as fallback for components that don't have context access
   useEffect(() => {
-    // Solo aggiorna se ci sono nodi da aggiornare
     if (nodes.length > 0) {
       setNodes((nds) => {
         return nds.map((node) => ({
           ...node,
           data: {
             ...node.data,
+            // Fallback callbacks - components prefer FlowActionsContext when available
             onDelete: () => deleteNodeWithLog(node.id),
             onUpdate: (updates: any) => updateNode(node.id, updates),
-            // ✅ REMOVED: onPlayNode - NodeDragHeader uses FlowTestContext instead
-            onCreateFactoryTask: createFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → createFactoryTask
+            // Entity creation callbacks
+            onCreateFactoryTask: createFactoryTask,
             onCreateBackendCall: createBackendCall,
             onCreateTask: createTask,
             onCreateCondition: createCondition,
@@ -359,10 +358,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         }));
       });
     }
-  }, [deleteNodeWithLog, updateNode, setNodes, createFactoryTask, createBackendCall, createTask, nodes.length]); // ✅ RINOMINATO: createAgentAct → createFactoryTask
+  }, [deleteNodeWithLog, updateNode, setNodes, createFactoryTask, createBackendCall, createTask, nodes.length]);
 
-  // ✅ Initialize edges with onUpdate/onDeleteEdge if missing (for existing edges loaded from saved project)
-  // This is different from the old useEffect: it only adds missing callbacks, doesn't recreate edges
+  // LEGACY: Edge callback injection - CustomEdge now uses FlowActionsContext with fallback
+  // These callbacks are injected for edges loaded from saved projects that don't have callbacks
   // Use a ref to track which edges have been initialized to prevent infinite loops
   const initializedEdgeIdsRef = useRef<Set<string>>(new Set());
   const previousEdgeIdsRef = useRef<Set<string>>(new Set());
@@ -505,12 +504,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     createOnUpdate
   );
 
-  // ✅ Esporta cleanup per l'Intellisense (DOPO la definizione)
+  // Export cleanup for Intellisense
   useEffect(() => {
-    (window as any).__cleanupAllTempNodesAndEdges = cleanupAllTempNodesAndEdges;
-    return () => {
-      delete (window as any).__cleanupAllTempNodesAndEdges;
-    };
+    FlowStateBridge.setCleanupAllTempNodesAndEdges(cleanupAllTempNodesAndEdges);
+    return () => FlowStateBridge.setCleanupAllTempNodesAndEdges(undefined);
   }, [cleanupAllTempNodesAndEdges]);
 
   // Promuove il nodo/edge temporanei a definitivi e rimuove ogni altro temporaneo residuo
@@ -529,15 +526,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
 
   const onConnectEnd = useCallback((event: any) => {
-    // ✅ Reset flag connessione quando si rilascia
-    if ((window as any).__isConnecting) {
-      (window as any).__isConnecting = false;
+    // Reset connection flag on release
+    if (FlowStateBridge.isConnecting()) {
+      FlowStateBridge.setIsConnecting(false);
     }
 
-    // ✅ NOTA: Con noDragClassName, onNodeDragStart non viene chiamato quando si parte da un handle,
-    // quindi questo controllo non dovrebbe essere necessario, ma lo lasciamo come sicurezza
-    if ((window as any).__dragStartedFromHandle) {
-      (window as any).__dragStartedFromHandle = false;
+    // Safety check: if drag started from handle, cleanup
+    if (FlowStateBridge.isDragStartedFromHandle()) {
+      FlowStateBridge.setDragStartedFromHandle(false);
       cleanupAllTempNodesAndEdges();
       return;
     }
@@ -678,11 +674,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         return null;
       })()}
 
-      {/* Execution State Provider - Pass execution state from props or window */}
+      {/* Execution State Provider */}
       <ExecutionStateProvider
-        executionState={propExecutionState ?? (window as any).__executionState ?? null}
-        currentTask={propCurrentTask ?? (window as any).__currentTask ?? null}
-        isRunning={propIsRunning ?? (window as any).__isRunning ?? false}
+        executionState={propExecutionState ?? FlowStateBridge.getExecutionState()}
+        currentTask={propCurrentTask ?? FlowStateBridge.getCurrentTask()}
+        isRunning={propIsRunning ?? FlowStateBridge.isRunning()}
       >
         <FlowchartWrapper
           nodes={nodes}

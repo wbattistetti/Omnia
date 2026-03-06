@@ -1,22 +1,25 @@
 import React, { createContext, useContext, useMemo, useRef } from 'react';
-import type { Node } from 'reactflow';
-import type { FlowNode } from '../components/Flowchart/types/flowTypes';
+import type { Node, Edge } from 'reactflow';
+import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
 import type { TaskType } from '../types/taskTypes';
 
 /**
- * FlowActionsContext - Phase 1 Refactoring
+ * FlowActionsContext - Centralized flow operations
  *
  * Provides stable action references that don't change on every render.
  * This eliminates the callback recreation problem in FlowEditor.
  *
- * BACKWARD COMPATIBILITY: Components should check if context is available
- * and fall back to data.onDelete/data.onUpdate if not.
+ * Supports both node and edge operations.
  */
 
 export interface FlowActionsContextValue {
   // Node CRUD operations
   deleteNode: (nodeId: string) => void;
   updateNode: (nodeId: string, updates: Partial<FlowNode>) => void;
+
+  // Edge CRUD operations
+  deleteEdge: (edgeId: string) => void;
+  updateEdge: (edgeId: string, updates: Partial<EdgeData>) => void;
 
   // Entity creation operations
   createFactoryTask: (
@@ -51,40 +54,49 @@ const FlowActionsContext = createContext<FlowActionsContextValue | null>(null);
 export interface FlowActionsProviderProps {
   children: React.ReactNode;
   setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>;
+  setEdges?: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>;
   // Entity creation functions (from useEntityCreation hook)
   createFactoryTask: FlowActionsContextValue['createFactoryTask'];
   createBackendCall: FlowActionsContextValue['createBackendCall'];
   createTask: FlowActionsContextValue['createTask'];
   createCondition: FlowActionsContextValue['createCondition'];
-  // Optional: custom delete handler (e.g., deleteNodeWithLog)
+  // Optional: custom delete handlers
   onDeleteNode?: (nodeId: string) => void;
+  onDeleteEdge?: (edgeId: string) => void;
 }
 
 export const FlowActionsProvider: React.FC<FlowActionsProviderProps> = ({
   children,
   setNodes,
+  setEdges,
   createFactoryTask,
   createBackendCall,
   createTask,
   createCondition,
   onDeleteNode,
+  onDeleteEdge,
 }) => {
-  // Store setNodes in a ref to avoid dependency changes
+  // Store setters in refs to avoid dependency changes
   const setNodesRef = useRef(setNodes);
   setNodesRef.current = setNodes;
 
-  // Store onDeleteNode in a ref
+  const setEdgesRef = useRef(setEdges);
+  setEdgesRef.current = setEdges;
+
+  // Store custom handlers in refs
   const onDeleteNodeRef = useRef(onDeleteNode);
   onDeleteNodeRef.current = onDeleteNode;
 
+  const onDeleteEdgeRef = useRef(onDeleteEdge);
+  onDeleteEdgeRef.current = onDeleteEdge;
+
   // Create stable action references that NEVER change
   const actions = useMemo<FlowActionsContextValue>(() => ({
+    // Node operations
     deleteNode: (nodeId: string) => {
       if (onDeleteNodeRef.current) {
-        // Use custom delete handler if provided
         onDeleteNodeRef.current(nodeId);
       } else {
-        // Default: simple filter
         setNodesRef.current((nds) => nds.filter((n) => n.id !== nodeId));
       }
     },
@@ -99,8 +111,28 @@ export const FlowActionsProvider: React.FC<FlowActionsProviderProps> = ({
       );
     },
 
-    // Pass through entity creation functions
-    // These are already memoized in useEntityCreation
+    // Edge operations
+    deleteEdge: (edgeId: string) => {
+      if (onDeleteEdgeRef.current) {
+        onDeleteEdgeRef.current(edgeId);
+      } else if (setEdgesRef.current) {
+        setEdgesRef.current((eds) => eds.filter((e) => e.id !== edgeId));
+      }
+    },
+
+    updateEdge: (edgeId: string, updates: Partial<EdgeData>) => {
+      if (setEdgesRef.current) {
+        setEdgesRef.current((eds) =>
+          eds.map((edge) =>
+            edge.id === edgeId
+              ? { ...edge, data: { ...(edge.data || {}), ...updates } }
+              : edge
+          )
+        );
+      }
+    },
+
+    // Entity creation functions (already memoized in useEntityCreation)
     createFactoryTask,
     createBackendCall,
     createTask,
