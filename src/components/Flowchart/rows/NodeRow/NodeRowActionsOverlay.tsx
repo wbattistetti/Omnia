@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, Edit3, Settings, Wrench, Check } from 'lucide-react';
+import { Trash2, Edit3, Settings, Wrench, Check, Play } from 'lucide-react';
 import SmartTooltip from '../../../SmartTooltip';
 
 interface NodeRowActionsOverlayProps {
@@ -29,6 +29,8 @@ interface NodeRowActionsOverlayProps {
   outerRef?: React.RefObject<HTMLDivElement>;
   included?: boolean;
   setIncluded?: (val: boolean) => void;
+  // Test task button
+  onTestTask?: () => void; // Callback to test the task instance
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -56,7 +58,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   buttonCloseTimeoutRef,
   outerRef,
   included,
-  setIncluded
+  setIncluded,
+  onTestTask
 }) => {
   if (!showIcons || !iconPos) return null;
   // Calculate icon size based on font size (same as primary icons) - 119% of font size
@@ -143,6 +146,39 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
               color: (!included) ? '#9ca3af' : (taskColor || '#94a3b8'), // ✅ RINOMINATO: actColor → taskColor - Grigio se unchecked
               filter: (included && taskColor && taskColor !== '#94a3b8') ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined // ✅ RINOMINATO: actColor → taskColor
             }} />
+          </button>
+        </SmartTooltip>
+      )}
+      {/* Play (Test Task) - Only show if onTestTask is provided */}
+      {onTestTask && (
+        <SmartTooltip text="Test task instance" tutorId="test_task_help" placement="bottom">
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onTestTask();
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className="text-green-400 hover:text-green-300 transition-colors hover:opacity-100 hover:scale-110 nodrag"
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 2,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: size,
+              height: size,
+              opacity: 0.9,
+              transition: 'opacity 120ms linear, transform 120ms ease'
+            }}
+            onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
+          >
+            <Play style={{ width: size, height: size }} />
           </button>
         </SmartTooltip>
       )}

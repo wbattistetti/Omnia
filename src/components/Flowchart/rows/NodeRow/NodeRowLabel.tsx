@@ -1,9 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Check } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { NodeRowActionsOverlay } from './NodeRowActionsOverlay';
 import { NodeRowData } from '../../types/project';
 import SmartTooltip from '../../../SmartTooltip';
+import { taskRepository } from '@services/TaskRepository';
+import { useGlobalTestPanel } from '@context/GlobalTestPanelContext';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
+import { buildTaskTree } from '@utils/taskUtils';
 
 // Component to render checkbox with dynamic size based on font
 const CheckboxButton: React.FC<{
@@ -264,6 +268,7 @@ interface NodeRowLabelProps {
   onRequestClosePicker?: () => void; // NEW: ask parent to close type picker
   buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
   overlayRef?: React.RefObject<HTMLDivElement>;
+  getProjectId?: () => string | undefined; // Project ID getter for testing
 }
 
 export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
@@ -294,8 +299,48 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   onTypeChangeRequest,
   onRequestClosePicker,
   buttonCloseTimeoutRef,
-  overlayRef
-}) => (
+  overlayRef,
+  getProjectId
+}) => {
+  // ✅ ARCHITECTURAL: Use GlobalTestPanel context for testing
+  const { openWithTask } = useGlobalTestPanel();
+  const { translations } = useProjectTranslations();
+
+  // ✅ Check if task instance exists for this row
+  const taskInstance = React.useMemo(() => {
+    if (!row?.id) return null;
+    return taskRepository.getTask(row.id);
+  }, [row?.id]);
+
+  // ✅ Handle test task - opens GlobalTestPanel with task instance
+  const handleTestTask = useCallback(async () => {
+    if (!taskInstance) {
+      console.warn('[NodeRowLabel] Cannot test: task instance not found for row', row?.id);
+      return;
+    }
+
+    const projectId = getProjectId?.();
+    if (!projectId) {
+      console.error('[NodeRowLabel] Cannot test: projectId is required');
+      return;
+    }
+
+    try {
+      // ✅ Build TaskTree from instance (same routine as Response Editor)
+      const taskTree = await buildTaskTree(taskInstance, projectId);
+      if (!taskTree) {
+        console.error('[NodeRowLabel] Failed to build TaskTree for task instance', taskInstance.id);
+        return;
+      }
+
+      // ✅ Open GlobalTestPanel with task context
+      openWithTask(taskInstance, taskTree, projectId, translations);
+    } catch (error) {
+      console.error('[NodeRowLabel] Error opening test panel:', error);
+    }
+  }, [taskInstance, getProjectId, openWithTask, translations, row?.id]);
+
+  return (
   <>
     <span
       ref={labelRef}
@@ -438,9 +483,11 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           outerRef={overlayRef}
           included={included}
           setIncluded={setIncluded}
+          onTestTask={taskInstance ? handleTestTask : undefined}
         />,
         document.body
       )}
     </span>
   </>
-);
+  );
+};

@@ -618,6 +618,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             }}
             buttonCloseTimeoutRef={buttonCloseTimeoutRef}
             overlayRef={overlayRef}
+            getProjectId={getProjectId}
           />
         )}
       </div>
