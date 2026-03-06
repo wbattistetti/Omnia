@@ -20,6 +20,7 @@ import { useProjectTranslations } from '../../../context/ProjectTranslationsCont
 import { getTemplateTranslations } from '../../../services/ProjectDataService';
 import { DialogueTaskService } from '../../../services/DialogueTaskService';
 import { cloneTemplateSteps } from '../../../utils/taskUtils';
+import { StepType } from '../../../types/stepTypes';
 // ResponseEditor will be opened by sidebar after onComplete
 
 // 🚀 NEW: Interface for field processing state
@@ -1474,7 +1475,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
             const nodeSteps = subTemplate.steps[String(subTemplateId)];
             if (nodeSteps && typeof nodeSteps === 'object') {
               const filtered = {};
-              const allowedStepTypes = ['start', 'noInput', 'noMatch'];
+              const allowedStepTypes = [StepType.START, StepType.NO_INPUT, StepType.NO_MATCH];
               for (const stepType of allowedStepTypes) {
                 if (nodeSteps[stepType]) {
                   filtered[stepType] = nodeSteps[stepType];

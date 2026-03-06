@@ -3,6 +3,7 @@
 
 import type { ActionParameter, Escalation, StepGroup } from './types';
 import type { Task } from '../../../types/taskTypes';
+import { StepType } from '../../../types/stepTypes';
 
 // Export types
 export type { ActionParameter, Escalation, StepGroup };
@@ -13,8 +14,8 @@ export type { Task };
 export type TaskReference = Task;
 export type Action = Task;
 
-// Explicit step type union for current UI/editor expectations
-export type StepType = 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'success' | 'introduction';
+// ✅ Use StepType enum instead of union type
+export { StepType };
 
 // Main data node produced by the assembler today
 // ✅ MIGRATION: steps removed (now in dialogueSteps array at DDT level)

@@ -1,6 +1,7 @@
 import type { Task, TaskTree, TaskTreeNode, MaterializedStep } from '../types/taskTypes';
 import { DialogueTaskService } from '../services/DialogueTaskService';
 import { TaskType, templateIdToTaskType } from '../types/taskTypes';
+import { StepType } from '../types/stepTypes';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -1649,7 +1650,7 @@ export function organizeStepsByTemplateId(
     if (!nodeTemplateId) return;
 
     // ✅ Per ogni nodo, conta quanti steps dovrebbe avere (6 tipi standard)
-    const stepTypes = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success'];
+    const stepTypes = [StepType.START, StepType.NO_MATCH, StepType.NO_INPUT, StepType.CONFIRMATION, StepType.NOT_CONFIRMED, StepType.SUCCESS];
     const stepsForThisNode: MaterializedStep[] = [];
 
     // ✅ Raccogli steps che appartengono a questo templateId

@@ -4,6 +4,7 @@
 
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { getNodeIdStrict, getNodeLabelStrict } from '@responseEditor/core/domain/nodeStrict';
+import { StepType } from '@types/stepTypes';
 
 export interface TemplateMatchResult {
   ai: {
@@ -83,7 +84,7 @@ export function createSubDataInstance(subTemplate: any): any {
     const nodeSteps = subTemplate.steps[String(subTemplateId)];
     if (nodeSteps && typeof nodeSteps === 'object') {
       const filtered = {};
-      const allowedStepTypes = ['start', 'noInput', 'noMatch'];
+      const allowedStepTypes = [StepType.START, StepType.NO_INPUT, StepType.NO_MATCH];
       for (const stepType of allowedStepTypes) {
         if (nodeSteps[stepType]) {
           filtered[stepType] = nodeSteps[stepType];

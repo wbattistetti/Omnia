@@ -83,7 +83,7 @@ export function builddataNodeWithSubData(
   const constraints = enrichAndTranslateConstraints(Array.isArray(dataNode.constraints) ? dataNode.constraints : [], ddtId, translations);
 
   // Build steps using StepBuilder - use data stepMessages
-  const STANDARD_STEPS: StepGroup['type'][] = ['start', 'noMatch', 'noInput', 'confirmation', 'success'];
+  const STANDARD_STEPS: StepGroup['type'][] = [StepType.START, StepType.NO_MATCH, StepType.NO_INPUT, StepType.CONFIRMATION, StepType.SUCCESS];
   let allStepTranslations: { key: string; value: string }[] = [];
   const steps: StepGroup[] = STANDARD_STEPS.map((stepType) => {
     const messagesArr = (stepMessagesWithSubData.data && stepMessagesWithSubData.data[stepType]) || [];

@@ -1,84 +1,123 @@
 import React from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import { stepMeta } from '@responseEditor/ddtUtils';
 import { StepGroup } from '@responseEditor/MessageReview/types';
 import MessageReviewMessage from '@responseEditor/MessageReview/MessageReviewMessage';
 import { useFontContext } from '@context/FontContext';
+import { taskRepository } from '@services/TaskRepository';
+import { stepMeta } from '@responseEditor/ddtUtils';
+import StepTab from './StepTab';
 
 type Props = {
     group: StepGroup;
     expanded: boolean;
     onToggle: () => void;
     updateSelectedNode?: (updater: (node: any) => any) => void;
+    node: any;
+    taskId?: string;
 };
 
-export default function MessageReviewAccordion({ group, expanded, onToggle, updateSelectedNode }: Props) {
+export default function MessageReviewAccordion({ group, expanded, onToggle, updateSelectedNode, node, taskId }: Props) {
     const { combinedClass } = useFontContext();
+
+    // Get node templateId
+    const nodeTemplateId = node?.templateId || node?.id;
+
+    // Get task instance and check step state
+    const taskInstance = taskId ? taskRepository.getTask(taskId) : null;
+    const nodeSteps = taskInstance?.steps?.[nodeTemplateId] || {};
+    const stepData = nodeSteps[group.stepKey];
+    const isDisabled = stepData?._disabled === true;
+    const isDeleted = !stepData;
+
+    // Get step meta for styling
     const meta = stepMeta[group.stepKey];
-
-    if (!meta) {
-        console.warn('[MessageReviewAccordion] ⚠️ No meta found for stepKey:', group.stepKey, 'Available keys:', Object.keys(stepMeta));
-    }
-
     const bgColor = meta?.bg || 'rgba(107,114,128,0.15)';
     const borderColor = meta?.border || '#6b7280';
     const textColor = meta?.color || '#64748b';
 
+    // Apply disabled styling
+    const effectiveBgColor = isDisabled ? `${bgColor}80` : bgColor;
+    const effectiveBorderColor = isDisabled ? `${borderColor}80` : borderColor;
+    const effectiveBorderStyle = isDisabled ? 'dashed' : 'solid';
+
+    // Handle toggle disabled state
+    const handleToggleDisabled = () => {
+        if (!taskId || !nodeTemplateId) return;
+
+        const task = taskRepository.getTask(taskId);
+        if (!task) return;
+
+        const currentSteps = task.steps || {};
+        const currentNodeSteps = currentSteps[nodeTemplateId] || {};
+        const currentStepData = currentNodeSteps[group.stepKey];
+
+        if (currentStepData) {
+            const updatedStepData = {
+                ...currentStepData,
+                _disabled: !currentStepData._disabled
+            };
+            taskRepository.updateTask(taskId, {
+                steps: {
+                    ...currentSteps,
+                    [nodeTemplateId]: {
+                        ...currentNodeSteps,
+                        [group.stepKey]: updatedStepData
+                    }
+                }
+            });
+        }
+    };
+
+    // Handle delete step
+    const handleDeleteStep = () => {
+        if (!taskId || !nodeTemplateId) return;
+
+        const task = taskRepository.getTask(taskId);
+        if (!task) return;
+
+        const currentSteps = task.steps || {};
+        const currentNodeSteps = currentSteps[nodeTemplateId] || {};
+        const updatedNodeSteps = { ...currentNodeSteps };
+        delete updatedNodeSteps[group.stepKey];
+
+        taskRepository.updateTask(taskId, {
+            steps: {
+                ...currentSteps,
+                [nodeTemplateId]: updatedNodeSteps
+            }
+        });
+    };
+
+    // Calculate total messages
+    const totalMessages = group.recoveries.reduce((sum, r) => sum + r.items.length, 0);
+
     return (
         <div
             style={{
-                border: `2px solid ${borderColor}`,
+                border: `2px ${effectiveBorderStyle} ${effectiveBorderColor}`,
                 borderRadius: 12,
-                background: bgColor,
+                background: effectiveBgColor,
                 marginBottom: 12,
                 overflow: 'visible',
                 breakInside: 'avoid',
                 pageBreakInside: 'avoid',
                 WebkitColumnBreakInside: 'avoid',
+                position: 'relative',
+                opacity: isDisabled ? 0.6 : 1,
             }}
         >
-            {/* Accordion Header - Always visible */}
-            <button
-                onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onToggle();
-                }}
-                style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '12px 16px',
-                    background: bgColor,
-                    border: 'none',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'background 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.background = meta?.bgActive || bgColor;
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.background = bgColor;
-                }}
-            >
-                <span style={{ color: borderColor, display: 'flex', alignItems: 'center' }}>
-                    {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                </span>
-                <span style={{ color: borderColor, display: 'flex', alignItems: 'center' }}>
-                    {meta?.icon || null}
-                </span>
-                <span className={combinedClass} style={{ fontWeight: 700, color: borderColor, flex: 1 }}>
-                    {meta?.label || group.stepKey}
-                </span>
-                <span className={combinedClass} style={{ color: textColor, opacity: 0.7 }}>
-                    {(() => {
-                        const totalMessages = group.recoveries.reduce((sum, r) => sum + r.items.length, 0);
-                        return `${totalMessages} ${totalMessages === 1 ? 'message' : 'messages'}`;
-                    })()}
-                </span>
-            </button>
+            {/* StepTab as header */}
+            <StepTab
+                stepKey={group.stepKey}
+                expanded={expanded}
+                disabled={isDisabled}
+                deleted={isDeleted}
+                messageCount={totalMessages}
+                onToggle={onToggle}
+                onToggleDisabled={handleToggleDisabled}
+                onDelete={handleDeleteStep}
+                taskId={taskId}
+                node={node}
+            />
 
             {/* Accordion Content - Recovery boxes with messages when expanded */}
             {expanded && (

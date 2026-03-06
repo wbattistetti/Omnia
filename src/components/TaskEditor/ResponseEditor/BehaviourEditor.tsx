@@ -3,6 +3,7 @@ import StepsStrip from '@responseEditor/StepsStrip';
 import StepEditor from '@responseEditor/features/step-management/components/StepEditor';
 import { getNodeStepKeys } from '@responseEditor/core/domain';
 import { stepMeta } from '@responseEditor/ddtUtils';
+import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 
 interface BehaviourEditorProps {
   node: any;
@@ -19,6 +20,7 @@ export default function BehaviourEditor({
   selectedRoot,
   selectedSubIndex,
 }: BehaviourEditorProps) {
+  const { taskId } = useResponseEditorContext();
   // Calcola gli step keys disponibili per questo nodo
   const stepKeys = useMemo(() => {
     if (selectedRoot) {
@@ -122,6 +124,7 @@ export default function BehaviourEditor({
           selectedStepKey={selectedStepKey}
           onSelectStep={handleStepChange}
           node={node}
+          taskId={taskId}
         />
       </div>
 

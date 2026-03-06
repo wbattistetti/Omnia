@@ -1,6 +1,7 @@
 // Types and constants for DDTAssembler StepBuilder
 
 import type { Task } from '../../../types/taskTypes';
+import { StepType } from '../../../types/stepTypes';
 
 /**
  * ActionParameter: Parameter for task execution (e.g., translation key for text)
@@ -31,7 +32,7 @@ export type TaskReference = Task;
 export type Action = Task;
 
 export type StepGroup = {
-  type: 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'success' | 'introduction';
+  type: StepType;
   escalations: Escalation[];
 };
 

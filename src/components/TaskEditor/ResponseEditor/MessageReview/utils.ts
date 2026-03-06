@@ -1,11 +1,9 @@
 import { ReviewItem, StepGroup, RecoveryGroup } from '@responseEditor/MessageReview/types';
 import { getTaskText } from '@responseEditor/utils/escalationHelpers';
-
-const STEP_ORDER = ['start', 'introduction', 'noInput', 'noMatch', 'confirmation', 'notConfirmed', 'invalid', 'success'];
+import { STEP_ORDER, getStepOrder } from '@types/stepTypes';
 
 export function orderOf(k: string): number {
-    const i = STEP_ORDER.indexOf(k);
-    return i === -1 ? 999 : i;
+    return getStepOrder(k);
 }
 
 export function groupMessagesByStep(items: ReviewItem[]): StepGroup[] {

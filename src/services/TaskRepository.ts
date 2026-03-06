@@ -1,5 +1,6 @@
 import type { Task, TaskInstance, MaterializedStep } from '../types/taskTypes';
 import { TaskType } from '../types/taskTypes';
+import { StepType } from '../types/stepTypes';
 import { generateId } from '../utils/idGenerator';
 import { getTemplateId } from '../utils/taskHelpers';
 import { v4 as uuidv4 } from 'uuid';
@@ -310,7 +311,7 @@ class TaskRepository {
           } else if (typeof task.steps === 'object') {
             // ✅ Verifica se è la vecchia struttura (dictionary)
             const stepsKeys = Object.keys(task.steps);
-            const stepTypeKeys = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success', 'introduction'];
+            const stepTypeKeys = [StepType.START, StepType.NO_MATCH, StepType.NO_INPUT, StepType.CONFIRMATION, StepType.NOT_CONFIRMED, StepType.SUCCESS, StepType.INTRODUCTION];
             const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
               stepsKeys.every(key => stepTypeKeys.includes(key));
 
@@ -747,7 +748,7 @@ class TaskRepository {
       // ✅ CRITICAL: Log steps structure only if wrong (reduce noise)
       if (payload.steps) {
         const stepsKeys = Object.keys(payload.steps);
-        const stepTypeKeys = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success'];
+        const stepTypeKeys = [StepType.START, StepType.NO_MATCH, StepType.NO_INPUT, StepType.CONFIRMATION, StepType.NOT_CONFIRMED, StepType.SUCCESS];
         const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
           stepsKeys.every(key => stepTypeKeys.includes(key));
 

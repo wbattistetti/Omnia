@@ -1,8 +1,14 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { collectAllMessages, groupMessagesByStep } from './utils';
+import { STEP_ORDER, StepType, getStepOrder } from '@types/stepTypes';
 import { AccordionState } from './types';
 import MessageReviewToolbar from './MessageReviewToolbar';
 import MessageReviewAccordion from './MessageReviewAccordion';
+import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
+import { taskRepository } from '@services/TaskRepository';
+import DialogueTaskService from '@services/DialogueTaskService';
+import { Plus, ChevronDown } from 'lucide-react';
+import { stepMeta } from '@responseEditor/ddtUtils';
 
 type Props = {
     node: any;
@@ -11,13 +17,141 @@ type Props = {
 };
 
 export default function MessageReviewView({ node, translations, updateSelectedNode }: Props) {
+    const { taskId } = useResponseEditorContext();
+
+    // Debug: Log quando MessageReviewView viene renderizzato
+    console.log('[MessageReviewView] RENDER:', {
+        hasNode: !!node,
+        nodeId: node?.id,
+        taskId,
+        translationsCount: Object.keys(translations || {}).length
+    });
+
     const items = React.useMemo(() => collectAllMessages(node, translations), [node, translations]);
 
     const [accordionState, setAccordionState] = React.useState<AccordionState>({});
     // Initialize with Italy (it) as default culture
     const [activeParams, setActiveParams] = React.useState<Set<string>>(new Set(['it']));
+    const [showRestoreDropdown, setShowRestoreDropdown] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     const groups = React.useMemo(() => groupMessagesByStep(items), [items]);
+
+    // Get node templateId
+    const nodeTemplateId = node?.templateId || node?.id;
+
+    // Get task instance and template
+    const taskInstance = taskId ? taskRepository.getTask(taskId) : null;
+    const template = nodeTemplateId ? DialogueTaskService.getTemplate(nodeTemplateId) : null;
+
+    // Find deleted steps that can be restored from template
+    const restorableSteps = React.useMemo(() => {
+        if (!taskInstance || !template || !nodeTemplateId) return [];
+
+        const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
+        const templateSteps = template.steps?.[nodeTemplateId] || template.steps || {};
+
+        const deleted: Array<{ stepKey: string; stepData: any }> = [];
+
+        // Check all steps in STEP_ORDER
+        STEP_ORDER.forEach(stepType => {
+            const stepKey = stepType;
+            const existsInInstance = !!instanceSteps[stepKey];
+            const existsInTemplate = !!templateSteps[stepKey];
+
+            // Step is deleted if it exists in template but not in instance
+            if (!existsInInstance && existsInTemplate) {
+                deleted.push({
+                    stepKey,
+                    stepData: templateSteps[stepKey]
+                });
+            }
+        });
+
+        // Also check for any other steps in template that aren't in instance
+        Object.keys(templateSteps).forEach(stepKey => {
+            const stepType = stepKey as StepType;
+            if (!STEP_ORDER.includes(stepType) && !instanceSteps[stepKey]) {
+                deleted.push({
+                    stepKey,
+                    stepData: templateSteps[stepKey]
+                });
+            }
+        });
+
+        // Sort by STEP_ORDER
+        return deleted.sort((a, b) => {
+            return getStepOrder(a.stepKey) - getStepOrder(b.stepKey);
+        });
+    }, [taskInstance, template, nodeTemplateId]);
+
+    // Handle restore step
+    const handleRestoreStep = (stepKey: string, stepData: any) => {
+        if (!taskId || !nodeTemplateId) return;
+
+        const task = taskRepository.getTask(taskId);
+        if (!task) return;
+
+        // For now, restore step as-is (GUIDs will be handled by buildTaskTree if needed)
+        // TODO: Consider cloning GUIDs if step was previously deleted and needs new translations
+        const currentSteps = task.steps || {};
+        const currentNodeSteps = currentSteps[nodeTemplateId] || {};
+
+        // Create new steps object with restored step in correct position
+        const updatedNodeSteps: Record<string, any> = {};
+
+        // Add steps in STEP_ORDER, inserting restored step at correct position
+        STEP_ORDER.forEach(stepType => {
+            const key = stepType;
+            if (key === stepKey) {
+                // Insert restored step
+                updatedNodeSteps[key] = { ...stepData, _disabled: false };
+            } else if (currentNodeSteps[key]) {
+                // Keep existing step
+                updatedNodeSteps[key] = currentNodeSteps[key];
+            }
+        });
+
+        // Add any remaining steps not in STEP_ORDER
+        Object.keys(currentNodeSteps).forEach(key => {
+            const stepType = key as StepType;
+            if (!STEP_ORDER.includes(stepType) && !updatedNodeSteps[key]) {
+                updatedNodeSteps[key] = currentNodeSteps[key];
+            }
+        });
+
+        // If restored step is not in STEP_ORDER, add it at the end
+        const restoredStepType = stepKey as StepType;
+        if (!STEP_ORDER.includes(restoredStepType)) {
+            updatedNodeSteps[stepKey] = { ...stepData, _disabled: false };
+        }
+
+        taskRepository.updateTask(taskId, {
+            steps: {
+                ...currentSteps,
+                [nodeTemplateId]: updatedNodeSteps
+            }
+        });
+
+        setShowRestoreDropdown(false);
+    };
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowRestoreDropdown(false);
+            }
+        };
+
+        if (showRestoreDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showRestoreDropdown]);
 
     // Split groups into two panels
     const leftGroups = React.useMemo(() => {
@@ -174,6 +308,7 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
                         overflow: 'auto',
                         padding: '16px',
                         borderRight: '1px solid #e5e7eb',
+                        position: 'relative',
                     }}
                 >
                     {leftGroups.length === 0 ? (
@@ -181,7 +316,7 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
                             No messages to display.
                         </div>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', overflow: 'visible' }}>
                             {leftGroups.map((group) => (
                                 <MessageReviewAccordion
                                     key={group.stepKey}
@@ -189,8 +324,103 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
                                     expanded={accordionState[group.stepKey] ?? false}
                                     onToggle={() => handleToggleAccordion(group.stepKey)}
                                     updateSelectedNode={updateSelectedNode}
+                                    node={node}
+                                    taskId={taskId}
                                 />
                             ))}
+
+                            {/* Restore button - always visible when there are restorable steps */}
+                            {restorableSteps.length > 0 && (
+                                <div style={{ position: 'relative', display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                                    <button
+                                        onClick={() => setShowRestoreDropdown(!showRestoreDropdown)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 6,
+                                            padding: '8px 12px',
+                                            backgroundColor: '#fff',
+                                            border: '1px solid #e5e7eb',
+                                            borderRadius: 6,
+                                            cursor: 'pointer',
+                                            color: '#6b7280',
+                                            fontSize: '14px',
+                                            transition: 'all 0.2s',
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#f9fafb';
+                                            e.currentTarget.style.borderColor = '#d1d5db';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#fff';
+                                            e.currentTarget.style.borderColor = '#e5e7eb';
+                                        }}
+                                    >
+                                        <Plus size={16} />
+                                        <span>Restore steps</span>
+                                        <ChevronDown size={14} style={{ transform: showRestoreDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                                    </button>
+
+                                    {showRestoreDropdown && (
+                                        <div
+                                            ref={dropdownRef}
+                                            style={{
+                                                position: 'absolute',
+                                                top: '100%',
+                                                right: 0,
+                                                marginTop: '4px',
+                                                backgroundColor: '#fff',
+                                                border: '1px solid #e5e7eb',
+                                                borderRadius: 6,
+                                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                                zIndex: 1000,
+                                                minWidth: '200px',
+                                                maxHeight: '300px',
+                                                overflowY: 'auto',
+                                            }}
+                                        >
+                                            {restorableSteps.map(({ stepKey, stepData }) => {
+                                                const stepMetaItem = stepMeta[stepKey];
+                                                return (
+                                                    <button
+                                                        key={stepKey}
+                                                        onClick={() => handleRestoreStep(stepKey, stepData)}
+                                                        style={{
+                                                            width: '100%',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: 8,
+                                                            padding: '10px 12px',
+                                                            border: 'none',
+                                                            background: 'transparent',
+                                                            cursor: 'pointer',
+                                                            textAlign: 'left',
+                                                            fontSize: '14px',
+                                                            color: '#374151',
+                                                            transition: 'background 0.2s',
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            e.currentTarget.style.backgroundColor = '#f3f4f6';
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            e.currentTarget.style.backgroundColor = 'transparent';
+                                                        }}
+                                                    >
+                                                        {stepMetaItem?.icon && (
+                                                            <span style={{ color: stepMetaItem.border }}>
+                                                                {stepMetaItem.icon}
+                                                            </span>
+                                                        )}
+                                                        <span style={{ flex: 1 }}>
+                                                            {stepMetaItem?.label || stepKey}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -215,8 +445,9 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
                     style={{
                         width: `${100 - leftWidth}%`,
                         minWidth: 0,
-                        overflow: 'auto',
+                        overflow: 'visible',
                         padding: '16px',
+                        position: 'relative',
                     }}
                 >
                     {rightGroups.length === 0 ? (
@@ -224,7 +455,7 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
                             No messages to display.
                         </div>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }}>
                             {rightGroups.map((group) => (
                                 <MessageReviewAccordion
                                     key={group.stepKey}
@@ -232,8 +463,103 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
                                     expanded={accordionState[group.stepKey] ?? false}
                                     onToggle={() => handleToggleAccordion(group.stepKey)}
                                     updateSelectedNode={updateSelectedNode}
+                                    node={node}
+                                    taskId={taskId}
                                 />
                             ))}
+
+                            {/* Restore button - always visible when there are restorable steps */}
+                            {restorableSteps.length > 0 && (
+                                <div style={{ position: 'relative', display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                                    <button
+                                        onClick={() => setShowRestoreDropdown(!showRestoreDropdown)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 6,
+                                            padding: '8px 12px',
+                                            backgroundColor: '#fff',
+                                            border: '1px solid #e5e7eb',
+                                            borderRadius: 6,
+                                            cursor: 'pointer',
+                                            color: '#6b7280',
+                                            fontSize: '14px',
+                                            transition: 'all 0.2s',
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#f9fafb';
+                                            e.currentTarget.style.borderColor = '#d1d5db';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#fff';
+                                            e.currentTarget.style.borderColor = '#e5e7eb';
+                                        }}
+                                    >
+                                        <Plus size={16} />
+                                        <span>Restore steps</span>
+                                        <ChevronDown size={14} style={{ transform: showRestoreDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                                    </button>
+
+                                    {showRestoreDropdown && (
+                                        <div
+                                            ref={dropdownRef}
+                                            style={{
+                                                position: 'absolute',
+                                                top: '100%',
+                                                right: 0,
+                                                marginTop: '4px',
+                                                backgroundColor: '#fff',
+                                                border: '1px solid #e5e7eb',
+                                                borderRadius: 6,
+                                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                                zIndex: 1000,
+                                                minWidth: '200px',
+                                                maxHeight: '300px',
+                                                overflowY: 'auto',
+                                            }}
+                                        >
+                                            {restorableSteps.map(({ stepKey, stepData }) => {
+                                                const stepMetaItem = stepMeta[stepKey];
+                                                return (
+                                                    <button
+                                                        key={stepKey}
+                                                        onClick={() => handleRestoreStep(stepKey, stepData)}
+                                                        style={{
+                                                            width: '100%',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: 8,
+                                                            padding: '10px 12px',
+                                                            border: 'none',
+                                                            background: 'transparent',
+                                                            cursor: 'pointer',
+                                                            textAlign: 'left',
+                                                            fontSize: '14px',
+                                                            color: '#374151',
+                                                            transition: 'background 0.2s',
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            e.currentTarget.style.backgroundColor = '#f3f4f6';
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            e.currentTarget.style.backgroundColor = 'transparent';
+                                                        }}
+                                                    >
+                                                        {stepMetaItem?.icon && (
+                                                            <span style={{ color: stepMetaItem.border }}>
+                                                                {stepMetaItem.icon}
+                                                            </span>
+                                                        )}
+                                                        <span style={{ flex: 1 }}>
+                                                            {stepMetaItem?.label || stepKey}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

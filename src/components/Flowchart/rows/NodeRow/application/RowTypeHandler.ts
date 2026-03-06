@@ -110,8 +110,8 @@ export class RowTypeHandler {
         // ❌ RIMOSSO: text: this.row.text - task.text non deve esistere
         // Il modello corretto è: task contiene solo GUID, traduzione in translations[GUID]
         const taskFields = finalTaskType === TaskType.BackendCall
-          ? { endpoint: '', inputs: [], outputs: [] }
-          : undefined;
+            ? { endpoint: '', inputs: [], outputs: [] }
+            : undefined;
 
         taskRepository.createTask(
           finalTaskType,

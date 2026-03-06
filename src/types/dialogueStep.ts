@@ -2,6 +2,7 @@
 // Part of hybrid DDT structure migration
 
 import type { StepGroup, Escalation } from '../components/TaskTreeBuilder/DDTAssembler/types';
+import { StepType } from './stepTypes';
 
 /**
  * DialogueStep: Flat representation of a dialogue step

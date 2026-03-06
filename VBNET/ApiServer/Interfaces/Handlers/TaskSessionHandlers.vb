@@ -306,7 +306,7 @@ Namespace ApiServer.Handlers
                                                                             ' ✅ MODELLO SEMPLICE: Leggi solo da Redis (dopo reset contiene solo sotto-grafo)
                                                                             If translationRepository IsNot Nothing Then
                                                                                 Try
-                                                                                    Dim translation = translationRepository.GetTranslation(projectId, locale, textKey)
+                                                                            Dim translation = translationRepository.GetTranslation(projectId, locale, textKey)
                                                                                     If Not String.IsNullOrEmpty(translation) Then
                                                                                         Console.WriteLine($"[TaskSessionHandlers] ✅ Using translation from REDIS for key '{textKey}': '{translation.Substring(0, Math.Min(50, translation.Length))}'")
                                                                                         Return translation
@@ -723,7 +723,7 @@ Namespace ApiServer.Handlers
                                                                         ' ✅ MODELLO SEMPLICE: Leggi solo da Redis (dopo reset contiene solo sotto-grafo)
                                                                         If translationRepository IsNot Nothing Then
                                                                             Try
-                                                                                Dim translation = translationRepository.GetTranslation(session.ProjectId, session.Locale, textKey)
+                                                                        Dim translation = translationRepository.GetTranslation(session.ProjectId, session.Locale, textKey)
                                                                                 If Not String.IsNullOrEmpty(translation) Then
                                                                                     Console.WriteLine($"[TaskSessionHandlers] ✅ Using translation from REDIS for key '{textKey}': '{translation.Substring(0, Math.Min(50, translation.Length))}'")
                                                                                     Return translation
