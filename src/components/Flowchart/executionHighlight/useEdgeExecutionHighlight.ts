@@ -5,6 +5,7 @@ import { Highlight } from './executionHighlightConstants';
 import type { Edge } from 'reactflow';
 import type { EdgeData } from '../types/flowTypes';
 import { evaluateCondition } from '../../DialogueEngine/conditionEvaluator';
+import { FlowStateBridge } from '../../../services/FlowStateBridge';
 
 /**
  * Hook to get execution highlight styles for an edge/link
@@ -22,8 +23,8 @@ export function useEdgeExecutionHighlight(
   const execState = useExecutionState();
   const errorReportedRef = useRef<Set<string>>(new Set());
 
-  // Get all edges from window if not provided
-  const edges = allEdges || (typeof window !== 'undefined' ? (window as any).__flowEdges : []) || [];
+  // Get all edges via FlowStateBridge if not provided (Phase 4: centralized access)
+  const edges = allEdges || FlowStateBridge.getEdges();
 
   const highlightResult = useMemo(() => {
     if (!execState || !execState.isRunning || !execState.executionState) {

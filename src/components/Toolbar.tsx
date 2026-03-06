@@ -5,6 +5,7 @@ import { useAIProvider, AI_PROVIDERS } from '../context/AIProviderContext';
 import { useFontStore } from '../state/fontStore';
 import { useBackendType } from '../context/BackendTypeContext';
 import DeploymentDialog, { type DeploymentConfig } from './TaskEditor/ResponseEditor/Deployment/DeploymentDialog';
+import { FlowStateBridge } from '../services/FlowStateBridge';
 
 export interface ToolbarProps {
   onHome: () => void;
@@ -54,10 +55,9 @@ export function Toolbar({
 
   // Verifica se il progetto è vuoto (non ha contenuti)
   // Controlla sia i dati del progetto che i nodes/edges del flowchart
-  const hasFlowchartContent = typeof window !== 'undefined' && (
-    ((window as any).__flowNodes && (window as any).__flowNodes.length > 0) ||
-    ((window as any).__flows?.main?.nodes && (window as any).__flows.main.nodes.length > 0)
-  );
+  // Phase 4: Use FlowStateBridge for centralized access
+  const hasFlowchartContent = FlowStateBridge.hasNodes() ||
+    (FlowStateBridge.getFlowById('main')?.nodes?.length || 0) > 0;
 
   const isProjectEmpty = !currentProject ||
     (!currentProject.taskTemplates?.length &&

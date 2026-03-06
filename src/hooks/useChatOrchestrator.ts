@@ -5,6 +5,7 @@ import { useCallback, useRef } from 'react';
 import { DockNode, DockTabChat } from '../dock/types';
 import { openLateralChatPanel } from '../components/AppContent/infrastructure/docking/DockingHelpers';
 import { createSingleNodeFlow } from '../utils/flowTestHelpers';
+import { FlowStateBridge } from '../services/FlowStateBridge';
 
 /**
  * Chat orchestration hook - Phase 2 Refactoring
@@ -96,10 +97,8 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
     // Reset retry count
     flowChatRetryRef.current = 0;
 
-    // Get flow data from window globals (will be removed in Phase 4)
-    const nodes = (window as any).__flowNodes || [];
-    const edges = (window as any).__flowEdges || [];
-    const tasks = (window as any).__flowTasks || [];
+    // Get flow data via FlowStateBridge (Phase 4: centralized access)
+    const { nodes, edges, tasks } = FlowStateBridge.getFlowData();
 
     console.log('[ChatOrchestrator] Flow data:', {
       nodesCount: nodes.length,
@@ -171,13 +170,11 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
     // Reset retry count
     singleNodeRetryRef.current = 0;
 
-    // Get flow data
-    const allNodes = (window as any).__flowNodes || [];
-    const allEdges = (window as any).__flowEdges || [];
-    const allTasks = (window as any).__flowTasks || [];
+    // Get flow data via FlowStateBridge (Phase 4: centralized access)
+    const { nodes: allNodes, edges: allEdges, tasks: allTasks } = FlowStateBridge.getFlowData();
 
-    // Find the node
-    const node = allNodes.find((n: any) => n.id === nodeId);
+    // Find the node using bridge helper
+    const node = FlowStateBridge.findNode(nodeId);
     if (!node) {
       console.error('[ChatOrchestrator] Node not found:', nodeId);
       alert(`Node ${nodeId} not found in flow.`);

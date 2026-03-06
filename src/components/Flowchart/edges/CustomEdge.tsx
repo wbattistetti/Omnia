@@ -20,6 +20,7 @@ import { ControlPointRelative } from './types/edgeTypes';
 import { isLegacyControlPoint, migrateControlPoints } from './utils/dataMigration';
 import { useReactFlow } from 'reactflow';
 import { CoordinateConverter } from './utils/coordinateUtils';
+import { FlowStateBridge } from '../../../services/FlowStateBridge';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -45,7 +46,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const reactFlowInstance = useReactFlow();
 
   // ✅ EXECUTION HIGHLIGHT: Get execution highlight styles for edge
-  const allEdges = typeof window !== 'undefined' ? (window as any).__flowEdges : [];
+  // Phase 4: Use FlowStateBridge for centralized access
+  const allEdges = FlowStateBridge.getEdges();
   const edgeHighlight = useEdgeExecutionHighlight(props as any, allEdges);
 
   const { addItem, addCategory } = useProjectDataUpdate();

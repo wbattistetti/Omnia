@@ -5,6 +5,7 @@ import { ProjectService } from '@services/ProjectService';
 import { ProjectDataService } from '@services/ProjectDataService';
 import { taskRepository } from '@services/TaskRepository';
 import { flowchartVariablesService } from '@services/FlowchartVariablesService';
+import { FlowStateBridge } from '@services/FlowStateBridge';
 import type { ProjectInfo, ProjectData } from '@types/projectTypes';
 
 export interface ProjectManagerParams {
@@ -131,10 +132,8 @@ export class ProjectManager {
         localStorage.setItem('currentProjectId', projectId);
       } catch { }
       this.params.pdUpdate.setCurrentProjectId(projectId);
-      try {
-        (window as any).__flowNodes = [];
-        (window as any).__flowEdges = [];
-      } catch { }
+      // Phase 4: Use FlowStateBridge for centralized access
+      FlowStateBridge.clear();
 
       await this.params.refreshData();
       this.params.setAppState('mainApp');

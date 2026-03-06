@@ -5,6 +5,7 @@ import { useNodeRegistry } from "../../context/NodeRegistryContext";
 import { IntellisenseMenu } from "./IntellisenseMenu";
 import { IntellisenseStandalone } from "./IntellisenseStandalone";
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
+import { FlowStateBridge } from '../../services/FlowStateBridge';
 
 export const IntellisensePopover: React.FC = () => {
     const { state, actions } = useIntellisense();
@@ -28,9 +29,9 @@ export const IntellisensePopover: React.FC = () => {
         let elementId = state.target.nodeId;
 
         // Se è un edge, trova il nodo di DESTINAZIONE (temporaneo)
+        // Phase 4: Use FlowStateBridge for centralized access
         if (state.target.edgeId && !state.target.nodeId) {
-            const flowEdges = (window as any).__flowEdges || [];
-            const edge = flowEdges.find((e: any) => e.id === state.target!.edgeId);
+            const edge = FlowStateBridge.findEdge(state.target.edgeId);
             if (edge && edge.target) {
                 elementId = edge.target; // ✅ Questo è il nodo di DESTINAZIONE
             }
@@ -65,9 +66,9 @@ export const IntellisensePopover: React.FC = () => {
             let elementId = state.target!.nodeId;
 
             // Se è un edge, trova il nodo temporaneo associato
+            // Phase 4: Use FlowStateBridge for centralized access
             if (state.target!.edgeId && !state.target!.nodeId) {
-                const flowEdges = (window as any).__flowEdges || [];
-                const edge = flowEdges.find((e: any) => e.id === state.target!.edgeId);
+                const edge = FlowStateBridge.findEdge(state.target!.edgeId);
                 if (edge && edge.target) {
                     elementId = edge.target;
                 }
@@ -258,12 +259,11 @@ export const IntellisensePopover: React.FC = () => {
             }
 
             // ✅ 4. Rendi visibile il nodo temporaneo (SENZA modificare il titolo)
-            const flowEdges = (window as any).__flowEdges || [];
-            const edge = flowEdges.find((e: any) => e.id === edgeId);
+            // Phase 4: Use FlowStateBridge for centralized access
+            const edge = FlowStateBridge.findEdge(edgeId);
 
             if (edge && edge.target) {
-                const flowNodes = (window as any).__flowNodes || [];
-                const tempNode = flowNodes.find((n: any) => n.id === edge.target);
+                const tempNode = FlowStateBridge.findNode(edge.target);
 
                 if (tempNode && tempNode.data) {
                     // ✅ Rimuovi solo hidden, NON modificare il titolo
