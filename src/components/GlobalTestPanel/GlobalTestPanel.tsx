@@ -4,11 +4,13 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { useGlobalTestPanel } from '@context/GlobalTestPanelContext';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import DDEBubbleChat from '@responseEditor/ChatSimulator/DDEBubbleChat';
 import { FontProvider } from '@context/FontContext';
 
 export function GlobalTestPanel() {
   const { isOpen, context, close } = useGlobalTestPanel();
+  const { translations } = useProjectTranslations();
 
   React.useEffect(() => {
     console.log('[GlobalTestPanel] State changed:', { isOpen, contextType: context?.type });
@@ -52,7 +54,7 @@ export function GlobalTestPanel() {
             <DDEBubbleChat
               task={context.task}
               projectId={context.projectId}
-              translations={context.translations}
+              translations={translations}
               taskTree={context.taskTree}
               onUpdateTaskTree={() => {}}
               mode="interactive"

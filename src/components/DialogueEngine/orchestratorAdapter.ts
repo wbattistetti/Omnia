@@ -180,17 +180,9 @@ export async function executeOrchestratorBackend(
     sse.addEventListener('waitingForInput', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        console.log('═══════════════════════════════════════════════════════════════════════════');
-        console.log('🔵 [ORCHESTRATOR] 🔍 BREAKPOINT: SSE Event waitingForInput received');
-        console.log('🔵 [ORCHESTRATOR] 🔍 Event data:', data);
-        console.log('🔵 [ORCHESTRATOR] 🔍 Raw event data:', e.data);
-        console.log('═══════════════════════════════════════════════════════════════════════════');
-        console.log('[ORCHESTRATOR] 🔍 onWaitingForInput callback exists?', !!callbacks.onWaitingForInput);
+        console.log('[ORCHESTRATOR] ⏳ SSE Event: waitingForInput', { taskId: data.taskId });
         if (callbacks.onWaitingForInput) {
-          console.log('🔵 [ORCHESTRATOR] 🔍 About to call onWaitingForInput callback');
-          console.log('🔵 [ORCHESTRATOR] 🔍 Callback data:', { hasDDT: !!data.ddt, ddtId: data.ddt?.id, taskId: data.taskId });
           callbacks.onWaitingForInput(data);
-          console.log('✅ [ORCHESTRATOR] 🔍 BREAKPOINT: onWaitingForInput callback called');
         } else {
           console.warn('[ORCHESTRATOR] ⚠️ onWaitingForInput callback not provided!');
         }

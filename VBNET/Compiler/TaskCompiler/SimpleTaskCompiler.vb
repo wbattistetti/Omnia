@@ -79,16 +79,17 @@ Public Class SimpleTaskCompiler
 
     ''' <summary>
     ''' Extracts the TextKey (translation GUID) from a SayMessage task.
-    ''' Tries task.Text, then Parameters[parameterId='text'], then Value["parameters"].
+    ''' ❌ RIMOSSO: task.Text - task.text non deve esistere
+    ''' Tries Parameters[parameterId='text'], then Value["parameters"].
     ''' Throws immediately if the key is missing or appears to be literal text.
     ''' </summary>
     Private Function ExtractTextKeyFromTask(task As TaskDefinition) As String
         Dim textKey As String = ""
 
-        If Not String.IsNullOrWhiteSpace(task.Text) Then
-            textKey = task.Text.Trim()
+        ' ❌ RIMOSSO: If Not String.IsNullOrWhiteSpace(task.Text) Then
+        ' Il modello corretto è: task contiene solo GUID nei parameters
 
-        ElseIf task.Parameters IsNot Nothing Then
+        If task.Parameters IsNot Nothing Then
             Dim textParams = task.Parameters.Where(Function(p) p.ParameterId = "text").ToList()
             If textParams.Count = 0 Then
                 Throw New InvalidOperationException(
@@ -139,7 +140,7 @@ Public Class SimpleTaskCompiler
             Throw New InvalidOperationException(
                 $"SayMessage task '{task.Id}': no TextKey found. " &
                 $"The IDE must provide a translation key (GUID) or literal text. " &
-                $"Checked: task.Text, Parameters[parameterId='text'], Value.parameters.")
+                $"Checked: Parameters[parameterId='text'], Value.parameters.")
         End If
 
         ' ✅ ACCETTA sia GUID che testo letterale

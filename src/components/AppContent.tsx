@@ -392,7 +392,9 @@ export const AppContent: React.FC<AppContentProps> = ({
         return;
       }
 
-      const template = task.text || '';
+      // ❌ RIMOSSO: const template = task.text || '' - task.text non deve esistere
+      // TODO: Usare translations[textKey] dove textKey viene da task.parameters
+      const template = '';
 
       // Open as docking tab instead of fixed panel
       const tabId = `ni_${instanceId}`;

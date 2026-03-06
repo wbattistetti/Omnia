@@ -306,8 +306,9 @@ export interface Task {
   steps?: Record<string, Record<string, any>>;  // ✅ Steps come dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
   // ❌ RIMOSSO: steps - use steps instead
   introduction?: any;             // ✅ Introduction override (opzionale)
-  // Per SayMessage:
-  text?: string;                 // Message text
+  // ❌ RIMOSSO: text?: string - Il task deve contenere solo GUID nei parameters
+  // Il modello corretto è: task.parameters = [{ parameterId: 'text', value: GUID }]
+  // La traduzione è in translations[GUID], NON in task.text
   // Per ClassifyProblem:
   intents?: any[];               // Intents array
   // Per BackendCall:

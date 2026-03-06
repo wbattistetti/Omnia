@@ -36,10 +36,12 @@ Public Class TaskDefinition
         Public Property TemplateId As String
 
         ''' <summary>
-        ''' Task text (for SayMessage tasks) - direct property from frontend
+        ''' ❌ RIMOSSO: Task text - task.text non deve esistere
+        ''' Il modello corretto è: task contiene solo GUID nei parameters
+        ''' La traduzione è in translations[GUID], NON in task.text
         ''' </summary>
-        <JsonProperty("text")>
-        Public Property Text As String
+        ' <JsonProperty("text")>
+        ' Public Property Text As String
 
         ''' <summary>
         ''' Task parameters array (for tasks in escalations)

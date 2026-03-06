@@ -11,6 +11,7 @@ import DialogueTaskService from '@services/DialogueTaskService';
 import { v4 as uuidv4 } from 'uuid';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { taskRepository } from '@services/TaskRepository';
+import { buildTaskTree } from '@utils/taskUtils';
 
 /**
  * Estrae tutti i GUID dai step (utterance, invalid, nomatch, noinput, escalation, constraint)
@@ -128,7 +129,15 @@ function extractGuidsFromSteps(
  * Filtra le traduzioni per includere solo quelle runtime
  * Runtime translations sono:
  * 1. Chiavi che iniziano con "runtime." (pattern: runtime.DDT_<ID>.<step>#<n>.<action>.text)
- * 2. GUID che sono referenziati nei step dei task/DDT (utterance, invalid, nomatch, noinput, escalation, constraint)
+ * 2. GUID che sono referenziati nei step dell'ISTANZA (non del template!)
+ *
+ * ✅ CRITICAL: Il runtime deve usare SOLO i GUID dell'istanza, non quelli del template.
+ * Quando un'istanza viene clonata da un template, riceve nuovi GUID per le traduzioni.
+ * Il runtime deve risolvere solo questi GUID dell'istanza, non quelli del template originale.
+ *
+ * ✅ ARCHITECTURAL FIX: Usa materializedTree.steps invece di taskInstance.steps
+ * Questo garantisce che i GUID estratti siano identici a quelli usati dall'editor,
+ * eliminando la classe di bug "editor vede X, runtime vede Y".
  *
  * Traduzioni IDE (escluse):
  * - Label, description, help text, metadata UI
@@ -137,49 +146,60 @@ function extractGuidsFromSteps(
  */
 function filterRuntimeTranslations(
   allTranslations: Record<string, string>,
-  taskInstance: any,
-  referencedTemplates: any[]
+  materializedTree: TaskTree, // ✅ CAMBIATO: Accetta TaskTree invece di Task
+  referencedTemplates: any[] // ⚠️ Mantenuto per retrocompatibilità ma NON più usato
 ): Record<string, string> {
   const runtimeTranslations: Record<string, string> = {};
 
-  // 1. Estrai tutti i GUID referenziati nei step dei task
+  // 1. Estrai SOLO i GUID referenziati nei step dell'ISTANZA
+  // ✅ CRITICAL: NON processare template referenziati - hanno GUID diversi (del template)
+  // L'istanza ha i suoi GUID clonati, e il runtime deve usare solo quelli
   const runtimeGuids = new Set<string>();
 
-  // Processa task instance
-  if (taskInstance.steps && typeof taskInstance.steps === 'object') {
-    // ✅ Log rimosso: troppo verboso
-    extractGuidsFromSteps(taskInstance.steps, runtimeGuids);
+  // ✅ ARCHITECTURAL FIX: Estrai GUID da materializedTree.steps (stesso TaskTree dell'editor)
+  // Questo garantisce che i GUID siano identici a quelli usati dall'editor
+  if (materializedTree.steps && typeof materializedTree.steps === 'object') {
+    extractGuidsFromSteps(materializedTree.steps, runtimeGuids);
   }
 
-  // Processa template referenziati
-  for (const template of referencedTemplates) {
-    if (template.steps && typeof template.steps === 'object') {
-      // ✅ Log rimosso: troppo verboso
-      extractGuidsFromSteps(template.steps, runtimeGuids);
-    }
-  }
+  // 🔍 DEBUG: Verifica quali GUID vengono estratti dalla struttura materializzata
+  console.log('[filterRuntimeTranslations] 🔍 DEBUG GUIDs extracted from materializedTree', {
+    materializedTreeId: materializedTree.labelKey,
+    runtimeGuidsCount: runtimeGuids.size,
+    runtimeGuids: Array.from(runtimeGuids),
+    allTranslationsCount: Object.keys(allTranslations).length,
+    allTranslationsSample: Object.entries(allTranslations).slice(0, 5).map(([k, v]) => ({ guid: k, text: String(v).substring(0, 50) }))
+  });
 
-  // ✅ Log rimosso: troppo verboso
+  // ❌ RIMOSSO: Non processare template referenziati
+  // I template hanno GUID diversi (del template), l'istanza ha i suoi GUID (clonati)
+  // Il runtime deve usare SOLO i GUID dell'istanza!
 
-  // 2. Filtra traduzioni: solo quelle che sono GUID referenziati O chiavi runtime.*
-  let runtimeKeyCount = 0;
-  let guidMatchCount = 0;
-
+  // 2. Filtra traduzioni: solo quelle che sono GUID referenziati nell'istanza O chiavi runtime.*
   for (const [guid, text] of Object.entries(allTranslations)) {
     // Pattern runtime.* (es: runtime.DDT_xxx.start#1.SayMessage_1.text)
     if (guid.startsWith('runtime.')) {
       runtimeTranslations[guid] = text;
-      runtimeKeyCount++;
     }
-    // GUID referenziati nei step
+    // ✅ GUID referenziati nei step dell'istanza (non del template!)
     else if (runtimeGuids.has(guid)) {
       runtimeTranslations[guid] = text;
-      guidMatchCount++;
     }
     // ❌ Tutte le altre (IDE) vengono escluse
   }
 
-  // ✅ Log rimosso: troppo verboso
+  // 🔍 DEBUG: Verifica quali traduzioni vengono filtrate e inviate al runtime
+  console.log('[filterRuntimeTranslations] 🔍 DEBUG Runtime translations filtered', {
+    runtimeTranslationsCount: Object.keys(runtimeTranslations).length,
+    runtimeTranslationsGuids: Object.keys(runtimeTranslations),
+    runtimeTranslationsSample: Object.entries(runtimeTranslations).slice(0, 10).map(([k, v]) => ({
+      guid: k,
+      text: String(v).substring(0, 100),
+      isRuntimePattern: k.startsWith('runtime.'),
+      isInstanceGuid: runtimeGuids.has(k)
+    })),
+    missingGuids: Array.from(runtimeGuids).filter(guid => !runtimeTranslations[guid])
+  });
 
   return runtimeTranslations;
 }
@@ -279,7 +299,7 @@ export default function DDEBubbleChat({
 
   // ✅ DEBUG: Log quando effectiveIsWaitingForInput cambia
   React.useEffect(() => {
-    console.log('🔵 [DDEBubbleChat] 🔍 effectiveIsWaitingForInput changed:', {
+    console.log('[DDEBubbleChat] ⏳ effectiveIsWaitingForInput changed:', {
       effectiveIsWaitingForInput,
       isFlowMode,
       flowModeChatIsWaiting: isFlowMode ? flowModeChat.isWaitingForInput : undefined,
@@ -318,14 +338,14 @@ export default function DDEBubbleChat({
 
   // ✅ Focus input quando diventa disponibile per l'input
   React.useEffect(() => {
-    console.log('🔵 [DDEBubbleChat] 🔍 Focus useEffect triggered:', {
+    console.log('[DDEBubbleChat] 🔍 Focus useEffect triggered:', {
       effectiveIsWaitingForInput,
       hasInputRef: !!inlineInputRef.current,
       inputDisabled: inlineInputRef.current?.disabled,
     });
 
     if (effectiveIsWaitingForInput && inlineInputRef.current) {
-      console.log('🔵 [DDEBubbleChat] 🔍 About to focus input');
+      console.log('[DDEBubbleChat] 🔍 About to focus input');
       // ✅ UNIFIED: Usa requestAnimationFrame + setTimeout per assicurarsi che:
       // 1. React abbia aggiornato il DOM (input non più disabled)
       // 2. Il browser abbia applicato gli stili
@@ -335,7 +355,7 @@ export default function DDEBubbleChat({
           setTimeout(() => {
             try {
               const input = inlineInputRef.current;
-              console.log('🔵 [DDEBubbleChat] 🔍 Attempting to focus input:', {
+              console.log('[DDEBubbleChat] 🔍 Attempting to focus input:', {
                 hasInput: !!input,
                 inputDisabled: input?.disabled,
                 inputType: input?.type,
@@ -343,23 +363,27 @@ export default function DDEBubbleChat({
               if (input && !input.disabled) {
                 input.focus();
                 input.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                console.log('✅ [DDEBubbleChat] 🔍 BREAKPOINT: Input focused successfully');
-                console.log('✅ [DDEBubbleChat] 🔍 Input is now focused:', document.activeElement === input);
+                console.log('[DDEBubbleChat] ✅ Input focused successfully');
+                console.log('[DDEBubbleChat] 🔍 Input is now focused:', document.activeElement === input);
               } else {
-                console.warn('⚠️ [DDEBubbleChat] ⚠️ Cannot focus input:', {
+                console.warn('[DDEBubbleChat] ⚠️ Cannot focus input:', {
                   hasInput: !!input,
                   inputDisabled: input?.disabled,
+                  inputType: input?.type,
                 });
               }
             } catch (error) {
-              console.error('❌ [DDEBubbleChat] ❌ Error focusing input:', error);
+              console.error('[DDEBubbleChat] ❌ Error focusing input:', error);
             }
           }, 150);
         });
       };
       focusInput();
     } else {
-      console.log('🔵 [DDEBubbleChat] 🔍 Focus useEffect: conditions not met, skipping focus');
+      console.log('[DDEBubbleChat] ⚠️ Focus conditions not met:', {
+        effectiveIsWaitingForInput,
+        hasInputRef: !!inlineInputRef.current,
+      });
     }
   }, [effectiveIsWaitingForInput, inlineInputRef]);
 
@@ -575,11 +599,23 @@ export default function DDEBubbleChat({
           throw new Error(`[DDEBubbleChat] Task instance ${task.id} has no type field. Task is invalid and cannot be compiled.`);
         }
 
-        // ✅ Log rimosso: troppo verboso
+        // ✅ ARCHITECTURAL FIX: Materializza usando buildTaskTree (stessa routine dell'editor)
+        // Questo garantisce che compilatore e editor usino la stessa struttura logica,
+        // eliminando la classe di bug "editor vede X, runtime vede Y"
+        console.log('[DDEBubbleChat] 🔧 Materializing task structure using buildTaskTree...');
+        const materializedTree = await buildTaskTree(taskInstance, projectId || undefined);
+        if (!materializedTree) {
+          throw new Error(`[DDEBubbleChat] Failed to materialize task tree for instance ${task.id}`);
+        }
+        console.log('[DDEBubbleChat] ✅ Task structure materialized', {
+          taskId: taskInstance.id,
+          hasSteps: !!materializedTree.steps,
+          stepsKeys: materializedTree.steps ? Object.keys(materializedTree.steps) : []
+        });
 
-        // ✅ CORRETTO: Costruisci taskForCompilation SOLO dall'istanza (NON dal TaskTree)
+        // ✅ CORRETTO: Costruisci taskForCompilation usando materializedTree
         // Il compilatore VB.NET materializzerà nodes da zero usando template referenziati
-        // ✅ CRITICAL INVARIANT: Steps vengono SOLO dall'istanza come override, NON dal template
+        // ✅ CRITICAL INVARIANT: Steps vengono dalla struttura materializzata (stesso TaskTree dell'editor)
         // Se l'istanza non ha steps, il nodo avrà Steps.Count = 0
         // Se ci sono constraints e Steps.Count = 0, la validazione fallisce
         const taskForCompilation = {
@@ -605,13 +641,14 @@ export default function DDEBubbleChat({
                 const tplSource = DialogueTaskService.getTemplate(tplId);
                 return tplSource?.dataContract ?? taskInstance.dataContract ?? null;
               })(),
-          // ✅ CRITICAL: Steps vengono SOLO dall'istanza come override
+          // ✅ ARCHITECTURAL FIX: Steps vengono dalla struttura materializzata (stesso TaskTree dell'editor)
           // Formato: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
           // Se manca, il nodo avrà Steps.Count = 0 e la validazione fallirà se ci sono constraints
           // ✅ TEMPORARY: Rimuovi completamente 'introduction' e 'disambiguation' da tutti i nodi (da gestire in separata sede)
           // Entrambi vengono mappati a DialogueState.Start nel backend, causando duplicati
           steps: (() => {
-            const rawSteps = taskInstance.steps || {};
+            // ✅ Usa materializedTree.steps invece di taskInstance.steps
+            const rawSteps = materializedTree.steps || {};
             if (!rawSteps || typeof rawSteps !== 'object') {
               return {};
             }
@@ -865,38 +902,74 @@ export default function DDEBubbleChat({
           );
         }
 
-        // ✅ STEP 2.5: DEPLOY ON-THE-FLY - Sincronizza traduzioni MEMORIA → Redis
-        // Ambiente "on-the-fly" per test automatico (effimero, nessuna persistenza)
-        // ✅ Log rimosso: troppo verboso
+        // ✅ MODELLO SEMPLICE: Reset totale → Deploy minimo
+        // STEP 1: Reset totale (svuota tutto per projectId + locale)
+        // STEP 2: Deploy minimo (solo sotto-grafo necessario)
         try {
-          // ✅ Estrai tutte le traduzioni da window.__projectTranslationsContext
-          const projectTranslationsContext = (window as any).__projectTranslationsContext;
-          const allTranslations = projectTranslationsContext?.translations || {};
-
-          // ✅ Log rimosso: troppo verboso
-
-          // ✅ CRITICAL: Filtra SOLO traduzioni runtime (esclude IDE: label, description, help, metadata, UI, wizard, menu, debug)
-          const runtimeTranslations = filterRuntimeTranslations(
-            allTranslations,
-            taskInstance,
-            referencedTemplates
-          );
-
-          // ✅ Log rimosso: troppo verboso
-
-          if (Object.keys(runtimeTranslations).length === 0) {
-            console.warn('[DDEBubbleChat] ⚠️ No runtime translations found - Redis may be incomplete');
-          }
-
-          const deployResponse = await fetch(`http://localhost:3100/api/deploy/sync-translations`, {
+          // ✅ STEP 1: Reset totale
+          console.log('[DDEBubbleChat] 🗑️ Step 1: Resetting all data for projectId + locale...');
+          const resetResponse = await fetch(`http://localhost:3100/api/deploy/reset`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               projectId: projectId,
               locale: projectLanguage,
-              environment: 'on-the-fly', // ✅ Ambiente automatico per test
-              type: 'full', // ✅ Full sync per garantire completezza
-              translations: runtimeTranslations // ✅ SOLO runtime, IDE escluso
+              environment: 'on-the-fly'
+            })
+          });
+
+          if (!resetResponse.ok) {
+            const errorText = await resetResponse.text();
+            throw new Error(`Reset failed: ${resetResponse.statusText} - ${errorText}`);
+          }
+
+          const resetResult = await resetResponse.json();
+          console.log('[DDEBubbleChat] ✅ Reset completed:', {
+            deletedCount: resetResult.deletedCount
+          });
+
+          // ✅ STEP 2: Deploy minimo (solo sotto-grafo necessario)
+          console.log('[DDEBubbleChat] 📦 Step 2: Deploying minimal subgraph...');
+
+          // ✅ CRITICAL: Always read translations from window.__projectTranslationsContext.translations
+          const projectTranslationsContext = (window as any).__projectTranslationsContext;
+          const allTranslations = projectTranslationsContext ? projectTranslationsContext.translations : {};
+
+          // ✅ ARCHITECTURAL FIX: Filtra traduzioni usando materializedTree (stesso TaskTree dell'editor)
+          // Questo garantisce che i GUID estratti siano identici a quelli usati dall'editor
+          const runtimeTranslations = filterRuntimeTranslations(
+            allTranslations,
+            materializedTree, // ✅ Passa TaskTree invece di Task
+            referencedTemplates
+          );
+
+          // 🔍 DEBUG: Verifica traduzioni inviate al deploy
+          console.log('[DDEBubbleChat] 🔍 DEBUG Translations sent to deploy', {
+            taskInstanceId: taskInstance.id,
+            runtimeTranslationsCount: Object.keys(runtimeTranslations).length,
+            runtimeTranslationsGuids: Object.keys(runtimeTranslations),
+            runtimeTranslationsSample: Object.entries(runtimeTranslations).slice(0, 10).map(([k, v]) => ({
+              guid: k,
+              text: String(v).substring(0, 100)
+            }))
+          });
+
+          if (Object.keys(runtimeTranslations).length === 0) {
+            console.warn('[DDEBubbleChat] ⚠️ No runtime translations found - Redis may be incomplete');
+          }
+
+          // ✅ DEPLOY MINIMO: Task + Template + Traduzioni (solo sotto-grafo)
+          const deployResponse = await fetch(`http://localhost:3100/api/deploy/sync-subgraph`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: projectId,
+              locale: projectLanguage,
+              environment: 'on-the-fly',
+              taskInstance: taskForCompilation,        // ✅ Task instance completa
+              referencedTemplates: referencedTemplates, // ✅ Tutti i template referenziati
+              translations: runtimeTranslations,        // ✅ Tutte le traduzioni del sotto-grafo
+              compiledTask: compileResult.compiledTask  // ✅ CompiledTask risultante
             })
           });
 
@@ -906,10 +979,17 @@ export default function DDEBubbleChat({
           }
 
           const deployResult = await deployResponse.json();
-          // ✅ Log rimosso: troppo verboso
+          console.log('[DDEBubbleChat] ✅ Complete subgraph deployed:', {
+            translations: deployResult.translationsDeployed,
+            templates: deployResult.templatesDeployed,
+            task: deployResult.taskDeployed
+          });
+
+          // ✅ CRITICAL: Wait a bit to ensure Redis writes are complete and cache is invalidated
+          await new Promise(resolve => setTimeout(resolve, 200));
         } catch (deployError) {
           console.error('[DDEBubbleChat] ❌ Deployment failed:', deployError);
-          throw new Error(`Failed to deploy translations: ${deployError instanceof Error ? deployError.message : 'Unknown error'}. The runtime requires Redis to be complete before starting.`);
+          throw new Error(`Failed to deploy complete subgraph: ${deployError instanceof Error ? deployError.message : 'Unknown error'}`);
         }
 
         // ✅ STEP 2.3: Estrai CompiledTask dalla compilazione e convertilo in RuntimeTask
@@ -1016,16 +1096,49 @@ export default function DDEBubbleChat({
         }
 
         // ✅ STATELESS: STEP 3: Avvia la sessione
-        // ✅ Log rimosso: troppo verboso
+        // ✅ CRITICAL: Passa traduzioni nella richiesta per garantire che il backend usi quelle più aggiornate
+        const projectTranslationsContext = (window as any).__projectTranslationsContext;
+        const allTranslations = projectTranslationsContext ? projectTranslationsContext.translations : {};
+
+        // ✅ ARCHITECTURAL FIX: Filtra traduzioni usando materializedTree (stesso TaskTree dell'editor)
+        // Questo garantisce che i GUID estratti siano identici a quelli usati dall'editor
+        const runtimeTranslations = filterRuntimeTranslations(
+          allTranslations,
+          materializedTree, // ✅ Passa TaskTree invece di Task
+          referencedTemplates
+        );
+
+        // 🔍 DEBUG: Verifica traduzioni inviate al runtime backend
+        console.log('[DDEBubbleChat] 🔍 DEBUG Translations sent to runtime backend', {
+          taskInstanceId: taskInstance.id,
+          runtimeTranslationsCount: Object.keys(runtimeTranslations).length,
+          runtimeTranslationsGuids: Object.keys(runtimeTranslations),
+          runtimeTranslationsSample: Object.entries(runtimeTranslations).slice(0, 10).map(([k, v]) => ({
+            guid: k,
+            text: String(v).substring(0, 100),
+            isRuntimePattern: k.startsWith('runtime.')
+          }))
+        });
 
         const requestBody = {
           projectId: projectId,
           dialogVersion: dialogVersion, // ✅ Versione reale del progetto
           locale: projectLanguage, // ✅ Locale invece di language
-          // ❌ RIMOSSO: taskId, taskInstanceId, translations, taskTree (configurazione immutabile - carica da repository)
+          translations: runtimeTranslations // ✅ CRITICAL: Passa traduzioni aggiornate dalla memoria
         };
 
-        // ✅ Log rimosso: troppo verboso
+        // ✅ CRITICAL: Log per debug - verifica traduzioni passate
+        console.log('[DDEBubbleChat] 🔍 Request body with translations:', {
+          projectId,
+          dialogVersion,
+          locale: projectLanguage,
+          translationsCount: Object.keys(runtimeTranslations).length,
+          sampleTranslations: Object.entries(runtimeTranslations).slice(0, 10).map(([k, v]) => ({
+            key: k,
+            text: String(v).substring(0, 100)
+          })),
+          requestBodyPreview: JSON.stringify(requestBody).substring(0, 500)
+        });
 
         const startResponse = await fetch(`${baseUrl}/api/runtime/task/session/start`, {
           method: 'POST',

@@ -82,11 +82,8 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       if (prev[guid] === text) return prev; // No change
       setIsDirty(true);
       const updated = { ...prev, [guid]: text };
-      // ✅ CRITICAL: Aggiorna immediatamente window.__projectTranslationsContext.translations
-      // per accesso sincrono (senza attendere il re-render di React)
-      if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
-        (window as any).__projectTranslationsContext.translations = updated;
-      }
+      // ✅ REMOVED: Non serve più aggiornare direttamente window.__projectTranslationsContext.translations
+      // perché ora usiamo un getter che legge sempre dallo stato React corrente
       return updated;
     });
     setAllGuids((prev) => new Set([...prev, guid]));
@@ -114,11 +111,8 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       if (hasChanges) {
         setIsDirty(true);
         setAllGuids((prev) => new Set([...prev, ...Object.keys(newTranslations)]));
-        // ✅ CRITICAL: Aggiorna immediatamente window.__projectTranslationsContext.translations
-        // per accesso sincrono (senza attendere il re-render di React)
-        if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
-          (window as any).__projectTranslationsContext.translations = updated;
-        }
+        // ✅ REMOVED: Non serve più aggiornare direttamente window.__projectTranslationsContext.translations
+        // perché ora usiamo un getter che legge sempre dallo stato React corrente
       }
       return updated;
     });
@@ -309,35 +303,50 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   // Expose saveAllTranslations, addTranslations, and loadAllTranslations on window for explicit save from AppContent and taskUtils
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      (window as any).__projectTranslationsContext = {
-        saveAllTranslations: async () => {
-          if (isDirty) {
-            await saveAllTranslations();
+      // ✅ CRITICAL: Use Object.defineProperty to create a getter that always reads from current React state
+      // This ensures that when DDEBubbleChat reads translations during compilation, it always gets the latest value
+      Object.defineProperty((window as any), '__projectTranslationsContext', {
+        value: {
+          saveAllTranslations: async () => {
+            if (isDirty) {
+              await saveAllTranslations();
+            }
+          },
+          addTranslations: (newTranslations: Record<string, string>, templateId?: string) => {
+            addTranslations(newTranslations, templateId);
+          },
+          addTranslation: (guid: string, text: string, templateId?: string) => {
+            addTranslation(guid, text, templateId);
+          },
+          setCurrentTemplateId: (templateId: string | null) => {
+            setCurrentTemplateId(templateId);
+          },
+          loadAllTranslations: async () => {
+            await loadAllTranslations();
+          },
+          get isDirty() {
+            return isDirty;
+          },
+          get translationsCount() {
+            return Object.keys(translations).length;
+          },
+          get translations() {
+            // ✅ CRITICAL: Always return the current translations state from React
+            // This ensures that every read gets the latest value, even if the state was updated
+            // after the useEffect was last executed
+            return translations;
           }
         },
-        addTranslations: (newTranslations: Record<string, string>, templateId?: string) => {
-          addTranslations(newTranslations, templateId);
-        },
-        addTranslation: (guid: string, text: string, templateId?: string) => {
-          addTranslation(guid, text, templateId);
-        },
-        setCurrentTemplateId: (templateId: string | null) => {
-          setCurrentTemplateId(templateId);
-        },
-        loadAllTranslations: async () => {
-          await loadAllTranslations();
-        },
-        isDirty,
-        translationsCount: Object.keys(translations).length,
-        translations: translations // ✅ CRITICAL: Espone le traduzioni direttamente per accesso sincrono
-      };
+        writable: true,
+        configurable: true
+      });
     }
     return () => {
       if (typeof window !== 'undefined') {
         delete (window as any).__projectTranslationsContext;
       }
     };
-  }, [saveAllTranslations, addTranslations, loadAllTranslations, isDirty, translations]);
+  }, [saveAllTranslations, addTranslations, addTranslation, loadAllTranslations, isDirty, translations, setCurrentTemplateId]);
 
   return (
     <ProjectTranslationsContext.Provider value={value}>

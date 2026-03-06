@@ -131,7 +131,8 @@ export function normalizeTaskForEscalation(
     parameters: templateId === 'sayMessage' || templateId === null
       ? [{ parameterId: 'text', value: generateGuidFn() }]
       : (task.parameters || []),
-    text: task.text,
+    // ❌ RIMOSSO: text: task.text - il task deve contenere solo GUID nei parameters
+    // Il modello corretto è: task contiene solo GUID, traduzione in translations[textKey]
     color: task.color,
     label: task.label,
     // ✅ NO FALLBACKS: Use iconName as primary, icon as fallback (both are valid properties)

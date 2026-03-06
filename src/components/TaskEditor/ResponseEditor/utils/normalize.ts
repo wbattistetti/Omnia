@@ -29,8 +29,8 @@ export const createTask = (item: any): Task => {
   // Extract color from task or item
   const color = task?.color || item?.color;
 
-  // Extract text (if already set)
-  const text = typeof task?.text === 'string' ? task.text : undefined;
+  // ❌ RIMOSSO: Extract text - task.text non deve esistere
+  // Il modello corretto è: task contiene solo GUID, traduzione in translations[GUID]
 
   // Extract label: prefer item.label (from TaskItem drag), then task.label
   const label = item?.label || task?.label || (typeof task?.label === 'object' ? (task.label.it || task.label.en || task.label) : undefined);

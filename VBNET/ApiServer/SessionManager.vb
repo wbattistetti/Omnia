@@ -247,8 +247,11 @@ Public Class TaskSession
     ' ✅ STATELESS: DialogueContext serializzato (per il nuovo motore stateless)
     Public Property DialogueContextJson As String
 
+    ' ✅ NEW: Traduzioni dalla memoria per test on-the-fly (opzionale)
+    ' Se presente, ha priorità su TranslationRepository per garantire traduzioni aggiornate
+    Public Property Translations As Dictionary(Of String, String)
+
     ' ❌ RIMOSSO: RuntimeTask (configurazione immutabile - carica da DialogRepository)
-    ' ❌ RIMOSSO: Translations (configurazione immutabile - carica da TranslationRepository)
 End Class
 
 ''' <summary>
@@ -649,31 +652,14 @@ Public Class SessionManager
 
             ' ✅ UNIFIED: Handler per WaitingForInput (allinea con TaskSessionHandlers)
             AddHandler session.Orchestrator.WaitingForInput, Sub(sender, taskId)
-                                                                 Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-                                                                 Console.WriteLine($"🔵 [SessionManager] 🔍 BREAKPOINT: WaitingForInput event received")
-                                                                 Console.WriteLine($"🔵 [SessionManager] 🔍 TaskId: {taskId}")
-                                                                 Console.WriteLine($"🔵 [SessionManager] 🔍 SessionId: {sessionId}")
-                                                                 System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] WaitingForInput received for task {taskId}")
-                                                                 Console.Out.Flush()
-
                                                                  Dim waitingData = New With {
                                                                      .taskId = taskId,
                                                                      .timestamp = DateTime.UtcNow.ToString("O")
                                                                  }
                                                                  session.IsWaitingForInput = True
                                                                  session.WaitingForInputData = waitingData
-
-                                                                 Console.WriteLine($"🔵 [SessionManager] 🔍 About to emit via EventEmitter")
-                                                                 Console.WriteLine($"🔵 [SessionManager] 🔍 EventEmitter IsNot Nothing: {session.EventEmitter IsNot Nothing}")
-                                                                 System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] Emitting waitingForInput via EventEmitter")
-                                                                 Console.Out.Flush()
-
                                                                  session.EventEmitter.Emit("waitingForInput", waitingData)
-
-                                                                 Console.WriteLine($"✅ [SessionManager] 🔍 BREAKPOINT: waitingForInput event emitted via EventEmitter for task {taskId}")
-                                                                 System.Diagnostics.Debug.WriteLine($"✅ [SessionManager] waitingForInput emitted")
-                                                                 Console.Out.Flush()
-                                                                 Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                                 Console.WriteLine($"[SessionManager] ✅ WaitingForInput event emitted via EventEmitter for task {taskId}")
                                                              End Sub
 
             Console.WriteLine($"✅ [SessionManager] GetSession: All handlers registered for {sessionId}")
@@ -706,12 +692,19 @@ Public Class SessionManager
     '''
     ''' Il dialogo e le traduzioni sono caricati dai repository quando necessario.
     ''' La sessione contiene solo riferimenti (projectId, dialogVersion, locale) e stato runtime.
+    ''' Per test on-the-fly, le traduzioni possono essere passate direttamente dalla memoria.
     ''' </summary>
+    ''' <param name="sessionId">ID della sessione</param>
+    ''' <param name="projectId">ID del progetto</param>
+    ''' <param name="dialogVersion">Versione del dialogo</param>
+    ''' <param name="locale">Locale (es. "it-IT")</param>
+    ''' <param name="requestTranslations">Traduzioni dalla memoria per test on-the-fly (opzionale)</param>
     Public Shared Function CreateTaskSession(
         sessionId As String,
         projectId As String,
         dialogVersion As String,
-        locale As String
+        locale As String,
+        Optional requestTranslations As Dictionary(Of String, String) = Nothing
     ) As TaskSession
         ' ❌ ERRORE BLOCCANTE: parametri OBBLIGATORI
         If String.IsNullOrWhiteSpace(projectId) Then
@@ -743,7 +736,8 @@ Public Class SessionManager
                 .CurrentNodeId = Nothing,  ' Inizializzato quando il dialogo viene caricato
                 .RuntimeData = New Dictionary(Of String, Object)(),
                 .EventEmitter = sharedEmitter,
-                .IsWaitingForInput = False
+                .IsWaitingForInput = False,
+                .Translations = requestTranslations  ' ✅ CRITICAL: Salva traduzioni dalla memoria per test on-the-fly
             }
 
             ' ✅ REMOVED: TaskEngine.MessageToShow handler - use StatelessDialogueEngine output instead

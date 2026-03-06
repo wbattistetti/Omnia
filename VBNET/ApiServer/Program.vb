@@ -6,6 +6,7 @@ Imports ApiServer.Helpers
 Imports ApiServer.Models
 Imports ApiServer.Interfaces
 Imports ApiServer.Logging
+Imports ApiServer.Repositories
 Imports ApiServer.SessionStorage
 Imports Microsoft.AspNetCore.Builder
 Imports Microsoft.AspNetCore.Hosting
@@ -344,6 +345,41 @@ Module Program
         app.MapDelete("/api/runtime/orchestrator/session/{id}", Function(context As HttpContext, id As String) As Task(Of IResult)
                                                                     Return HandleOrchestratorSessionDelete(context, id)
                                                                 End Function)
+
+        ' ✅ POST /api/runtime/translations/invalidate-cache - Invalida cache traduzioni
+        app.MapPost("/api/runtime/translations/invalidate-cache", Function(req As HttpRequest) As IResult
+                                                                      Try
+                                                                          Dim body = req.ReadFromJsonAsync(Of Dictionary(Of String, Object))().Result
+                                                                          Dim projectId = If(body IsNot Nothing AndAlso body.ContainsKey("projectId"), CStr(body("projectId")), Nothing)
+                                                                          Dim locale = If(body IsNot Nothing AndAlso body.ContainsKey("locale"), CStr(body("locale")), Nothing)
+                                                                          Dim invalidateAll = If(body IsNot Nothing AndAlso body.ContainsKey("invalidateAll"), CBool(body("invalidateAll")), False)
+
+                                                                          If String.IsNullOrEmpty(projectId) Or String.IsNullOrEmpty(locale) Then
+                                                                              Return Results.BadRequest(New With {.error = "projectId and locale are required"})
+                                                                          End If
+
+                                                                          ' ✅ Invalida cache nel TranslationRepository
+                                                                          Dim translationRepo = SessionManager.GetTranslationRepository()
+                                                                          If translationRepo IsNot Nothing Then
+                                                                              ' ✅ Cast a RedisTranslationRepository per accedere a InvalidateCache
+                                                                              Dim redisRepo = TryCast(translationRepo, ApiServer.Repositories.RedisTranslationRepository)
+                                                                              If redisRepo IsNot Nothing Then
+                                                                                  redisRepo.InvalidateCache(projectId, locale, invalidateAll)
+                                                                                  Console.WriteLine($"[API] ✅ Cache invalidated for project {projectId}, locale {locale}, invalidateAll={invalidateAll}")
+                                                                              Else
+                                                                                  Console.WriteLine($"[API] ⚠️ TranslationRepository is not RedisTranslationRepository, cannot invalidate cache")
+                                                                              End If
+                                                                          Else
+                                                                              Console.WriteLine($"[API] ⚠️ TranslationRepository is not available")
+                                                                          End If
+
+                                                                          Return Results.Ok(New With {.success = True, .message = "Cache invalidated"})
+                                                                      Catch ex As Exception
+                                                                          Console.WriteLine($"[API] ❌ Error invalidating cache: {ex.Message}")
+                                                                          Console.WriteLine($"[API] ❌ Stack trace: {ex.StackTrace}")
+                                                                          Return Results.StatusCode(500)
+                                                                      End Try
+                                                                  End Function)
     End Sub
 
     ' HandleCompileFlow, HandleCompileTask, HandleCompileFlowWithModel moved to ApiServer.Handlers.CompilationHandlers

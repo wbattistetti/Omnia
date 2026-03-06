@@ -85,14 +85,16 @@ Namespace ApiServer.Handlers
         ''' <summary>
         ''' ✅ STATELESS: Crea una nuova task session con solo stato runtime
         ''' Il dialogo e le traduzioni sono nei repository, non nella sessione
+        ''' Per test on-the-fly, le traduzioni possono essere passate direttamente dalla memoria
         ''' </summary>
         ''' <param name="projectId">ID del progetto</param>
         ''' <param name="dialogVersion">Versione del dialogo</param>
         ''' <param name="locale">Locale (es. "it-IT")</param>
+        ''' <param name="translations">Traduzioni dalla memoria per test on-the-fly (opzionale)</param>
         ''' <returns>Session ID della sessione creata</returns>
-        Private Function CreateTaskSession(projectId As String, dialogVersion As String, locale As String) As String
+        Private Function CreateTaskSession(projectId As String, dialogVersion As String, locale As String, Optional translations As Dictionary(Of String, String) = Nothing) As String
             Dim sessionId = Guid.NewGuid().ToString()
-            SessionManager.CreateTaskSession(sessionId, projectId, dialogVersion, locale)
+            SessionManager.CreateTaskSession(sessionId, projectId, dialogVersion, locale, translations)
             Return sessionId
         End Function
 
@@ -120,6 +122,21 @@ Namespace ApiServer.Handlers
 
                 If request Is Nothing Then
                     Return ResponseHelpers.CreateErrorResponse("Request is Nothing after parsing", 500)
+                End If
+
+                ' ✅ CRITICAL: Log per debug - verifica traduzioni ricevute
+                Console.WriteLine($"[TaskSessionHandlers] 🔍 Request received:")
+                Console.WriteLine($"[TaskSessionHandlers]   ProjectId: '{If(request.ProjectId, "NULL/EMPTY")}'")
+                Console.WriteLine($"[TaskSessionHandlers]   DialogVersion: '{If(request.DialogVersion, "NULL/EMPTY")}'")
+                Console.WriteLine($"[TaskSessionHandlers]   Locale: '{If(request.Locale, "NULL/EMPTY")}'")
+                Console.WriteLine($"[TaskSessionHandlers]   Translations: {If(request.Translations IsNot Nothing, request.Translations.Count.ToString(), "NULL")}")
+                If request.Translations IsNot Nothing AndAlso request.Translations.Count > 0 Then
+                    Dim sampleKeys = request.Translations.Keys.Take(5).ToList()
+                    Console.WriteLine($"[TaskSessionHandlers]   Sample translation keys: {String.Join(", ", sampleKeys)}")
+                    For Each key In sampleKeys
+                        Dim value = If(request.Translations.ContainsKey(key), request.Translations(key), Nothing)
+                        Console.WriteLine($"[TaskSessionHandlers]     '{key}' = '{If(Not String.IsNullOrEmpty(value), value.Substring(0, Math.Min(100, value.Length)), "NULL/EMPTY")}'")
+                    Next
                 End If
 
                 Dim projectId As String = Nothing
@@ -191,9 +208,9 @@ Namespace ApiServer.Handlers
                     End If
                 End If
 
-                ' ✅ PASSO 5: Crea sessione
-                ' ✅ Log rimosso: troppo verboso
-                Dim newSessionId = CreateTaskSession(projectId, dialogVersion, locale)
+                ' ✅ PASSO 5: Crea sessione con traduzioni dalla richiesta (se presenti)
+                ' ✅ CRITICAL: Passa traduzioni dalla memoria per test on-the-fly
+                Dim newSessionId = CreateTaskSession(projectId, dialogVersion, locale, request.Translations)
 
                 ' ✅ PASSO 6: Verifica salvataggio sessione su Redis
                 ' ✅ Log rimosso: troppo verboso
@@ -280,13 +297,28 @@ Namespace ApiServer.Handlers
 
                 ' ✅ PASSO 9: Chiama ProcessTurn (FASE 1: Invio messaggio iniziale)
                 Try
-                    ' ✅ Crea funzione per risolvere traduzioni on-demand (più efficiente)
+                    ' ✅ MODELLO SEMPLICE: Risolve traduzioni da Redis (dopo reset totale, Redis contiene solo sotto-grafo)
                     Dim resolveTranslation As Func(Of String, String) = Function(textKey As String) As String
                                                                             If String.IsNullOrEmpty(textKey) Then
                                                                                 Return Nothing
                                                                             End If
-                                                                            Dim translation = translationRepository.GetTranslation(projectId, locale, textKey)
-                                                                            Return If(String.IsNullOrEmpty(translation), textKey, translation)
+
+                                                                            ' ✅ MODELLO SEMPLICE: Leggi solo da Redis (dopo reset contiene solo sotto-grafo)
+                                                                            If translationRepository IsNot Nothing Then
+                                                                                Try
+                                                                                    Dim translation = translationRepository.GetTranslation(projectId, locale, textKey)
+                                                                                    If Not String.IsNullOrEmpty(translation) Then
+                                                                                        Console.WriteLine($"[TaskSessionHandlers] ✅ Using translation from REDIS for key '{textKey}': '{translation.Substring(0, Math.Min(50, translation.Length))}'")
+                                                                                        Return translation
+                                                                                    End If
+                                                                                Catch ex As Exception
+                                                                                    Console.WriteLine($"[TaskSessionHandlers] ⚠️ Error resolving translation from Redis for key '{textKey}': {ex.Message}")
+                                                                                End Try
+                                                                            End If
+
+                                                                            ' ✅ Fallback finale - ritorna TextKey stesso
+                                                                            Console.WriteLine($"[TaskSessionHandlers] ⚠️ No translation found for key '{textKey}', using key as fallback")
+                                                                            Return textKey
                                                                         End Function
 
                     ' ✅ Inizializza CurrentTask se non esiste
@@ -682,13 +714,28 @@ Namespace ApiServer.Handlers
                     )
                 End If
 
-                ' ✅ Crea funzione per risolvere traduzioni on-demand (più efficiente)
+                ' ✅ MODELLO SEMPLICE: Risolve traduzioni da Redis (dopo reset totale, Redis contiene solo sotto-grafo)
                 Dim resolveTranslation As Func(Of String, String) = Function(textKey As String) As String
                                                                         If String.IsNullOrEmpty(textKey) Then
                                                                             Return Nothing
                                                                         End If
-                                                                        Dim translation = translationRepository.GetTranslation(session.ProjectId, session.Locale, textKey)
-                                                                        Return If(String.IsNullOrEmpty(translation), textKey, translation)
+
+                                                                        ' ✅ MODELLO SEMPLICE: Leggi solo da Redis (dopo reset contiene solo sotto-grafo)
+                                                                        If translationRepository IsNot Nothing Then
+                                                                            Try
+                                                                                Dim translation = translationRepository.GetTranslation(session.ProjectId, session.Locale, textKey)
+                                                                                If Not String.IsNullOrEmpty(translation) Then
+                                                                                    Console.WriteLine($"[TaskSessionHandlers] ✅ Using translation from REDIS for key '{textKey}': '{translation.Substring(0, Math.Min(50, translation.Length))}'")
+                                                                                    Return translation
+                                                                                End If
+                                                                            Catch ex As Exception
+                                                                                Console.WriteLine($"[TaskSessionHandlers] ⚠️ Error resolving translation from Redis for key '{textKey}': {ex.Message}")
+                                                                            End Try
+                                                                        End If
+
+                                                                        ' ✅ Fallback finale - ritorna TextKey stesso
+                                                                        Console.WriteLine($"[TaskSessionHandlers] ⚠️ No translation found for key '{textKey}', using key as fallback")
+                                                                        Return textKey
                                                                     End Function
 
                 ' ✅ Inizializza CurrentTask se non esiste

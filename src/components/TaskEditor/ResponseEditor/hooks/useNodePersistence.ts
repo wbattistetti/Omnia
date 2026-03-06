@@ -74,11 +74,8 @@ export function useNodePersistence(
                 out.parameters = [{ parameterId: 'text', value: textParam.value }];
               }
             }
-            // If text is provided (especially when editing), save it directly in the node
-            // This ensures edited text persists even when switching steps
-            if (typeof item.text === 'string' && item.text.trim().length > 0) {
-              out.text = item.text;
-            }
+            // ❌ RIMOSSO: Non salvare item.text - il task deve contenere solo GUID
+            // Il modello corretto è: task contiene solo GUID, traduzione in translations[GUID]
           }
           return out;
         }).filter((x: any) => x != null);

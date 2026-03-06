@@ -39,7 +39,10 @@ export function buildTask(
     id: taskId,
     type: taskType, // ✅ NO FALLBACK - must be present
     templateId: null, // Standalone task (not derived from template)
-    text: message, // Direct text value
+    // ❌ RIMOSSO: text: message - il task deve contenere solo GUID nei parameters
+    // Il modello corretto è: task.parameters = [{ parameterId: 'text', value: GUID }]
+    // La traduzione è in translations[GUID], NON in task.text
+    parameters: [{ parameterId: 'text', value: valueKey }], // ✅ Usa parameters invece di text
     // Store parameters for backward compatibility with old system
     params: {
       [parameterId]: valueKey

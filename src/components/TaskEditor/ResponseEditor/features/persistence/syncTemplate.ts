@@ -47,7 +47,7 @@ export async function checkAndApplyTemplateSync(
             const step = nodeSteps[stepType];
             if (step?.escalations?.[escalationIndex]?.tasks?.[taskIndex]) {
               const task = step.escalations[escalationIndex].tasks[taskIndex];
-              task.text = templateTask.text;
+              // ❌ RIMOSSO: task.text = templateTask.text - il task deve contenere solo GUID
               task.parameters = templateTask.parameters;
               task.edited = false; // Keep as inherited
             }
@@ -58,7 +58,7 @@ export async function checkAndApplyTemplateSync(
             const group = nodeSteps.find((g: any) => g?.type === stepType);
             if (group?.escalations?.[escalationIndex]?.tasks?.[taskIndex]) {
               const task = group.escalations[escalationIndex].tasks[taskIndex];
-              task.text = templateTask.text;
+              // ❌ RIMOSSO: task.text = templateTask.text - il task deve contenere solo GUID
               task.parameters = templateTask.parameters;
               task.edited = false; // Keep as inherited
             }

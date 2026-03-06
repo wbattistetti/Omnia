@@ -25,7 +25,7 @@ function normalizeActionType(action: string, task?: any): string {
 
   // ✅ Fields directly on task (no value wrapper)
   const hasDDT = task?.mainData && task.mainData.length > 0;
-  const hasText = task?.text !== undefined;
+  // ❌ RIMOSSO: const hasText = task?.text !== undefined - task.text non deve esistere
   const hasIntents = task?.intents && task.intents.length > 0;
   const hasConfig = task?.config !== undefined;
 
@@ -126,25 +126,43 @@ async function executeSayMessage(
     translations?: Record<string, string>;
   }
 ): Promise<TaskExecutionResult> {
-  // ✅ Fields directly on task (no value wrapper)
-  let text = task.text || '';
+  // ❌ RIMOSSO: let text = task.text || '' - task.text non deve esistere
+  // Il modello corretto è: task contiene solo GUID nei parameters
+  // La traduzione è in translations[GUID], NON in task.text
 
-  // Resolve GUID/text key using translations
-  if (text) {
-    const translations = callbacks.translations || {};
-    const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);
+  // ✅ Estrai textKey dai parameters
+  const textKeyParam = task.parameters?.find((p: any) => p?.parameterId === 'text');
+  const textKey = textKeyParam?.value;
 
-    if (isGuid || translations[text]) {
-      const resolvedText = translations[text];
-      if (resolvedText && typeof resolvedText === 'string' && resolvedText.trim().length > 0) {
-        console.log('[BACKEND][TaskExecutor][executeSayMessage] ✅ Resolved GUID/text key', {
-          taskId: task.id,
-          originalText: text.substring(0, 20) + '...',
-          resolvedText: resolvedText.substring(0, 50) + '...'
-        });
-        text = resolvedText;
-      }
+  if (!textKey || typeof textKey !== 'string') {
+    console.warn('[BACKEND][TaskExecutor][executeSayMessage] SayMessage task has no textKey in parameters', { taskId: task.id });
+    if (callbacks.onMessage) {
+      callbacks.onMessage('⚠️ Message task missing textKey', 'warning');
     }
+    task.state = 'Executed';
+    return {
+      success: false,
+      error: new Error('SayMessage task missing textKey')
+    };
+  }
+
+  // ✅ Risolvi traduzione usando textKey (GUID)
+  const translations = callbacks.translations || {};
+  const text = translations[textKey] || '';
+
+  if (!text || text.trim().length === 0) {
+    console.warn('[BACKEND][TaskExecutor][executeSayMessage] SayMessage task translation not found', {
+      taskId: task.id,
+      textKey
+    });
+    if (callbacks.onMessage) {
+      callbacks.onMessage('⚠️ Message translation missing', 'warning');
+    }
+    task.state = 'Executed';
+    return {
+      success: false,
+      error: new Error(`SayMessage task translation not found for key: ${textKey}`)
+    };
   }
 
   if (!text) {

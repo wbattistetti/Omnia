@@ -24,6 +24,11 @@ export function useFlowModeChat(
   const messageIdCounter = React.useRef(0);
   const [isWaitingForInput, setIsWaitingForInput] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // ✅ DEBUG: Log quando isWaitingForInput cambia
+  React.useEffect(() => {
+    console.log('[useFlowModeChat] ⏳ isWaitingForInput state changed:', isWaitingForInput);
+  }, [isWaitingForInput]);
   // ✅ Don't store messages internally - let parent component manage them
   // We only track messages to avoid duplicates when calling onMessage
   const sentMessageIds = React.useRef<Set<string>>(new Set());
@@ -99,13 +104,8 @@ export function useFlowModeChat(
       setIsWaitingForInput(false);
     },
     onWaitingForInput: () => {
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-      console.log('🔵 [useFlowModeChat] 🔍 BREAKPOINT: onWaitingForInput called');
-      console.log('🔵 [useFlowModeChat] 🔍 Current isWaitingForInput state:', isWaitingForInput);
-      console.log('🔵 [useFlowModeChat] 🔍 About to set isWaitingForInput to true');
+      console.log('[useFlowModeChat] ⏳ onWaitingForInput called - setting isWaitingForInput to true');
       setIsWaitingForInput(true);
-      console.log('✅ [useFlowModeChat] 🔍 BREAKPOINT: setIsWaitingForInput(true) called');
-      console.log('═══════════════════════════════════════════════════════════════════════════');
     },
   }), [nodes, edges, tasks, translations, onMessage]);
 

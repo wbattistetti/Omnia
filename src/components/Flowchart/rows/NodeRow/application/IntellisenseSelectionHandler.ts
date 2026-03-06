@@ -91,6 +91,42 @@ export class IntellisenseSelectionHandler {
         }
       }
 
+      // Create task for backendActions category (BackendCall)
+      // For BackendCall, there's no templateId concept - each backend coincides with its instance
+      if (projectId && this.item.categoryType === 'backendActions') {
+        const taskId = this.row.id || generateId();
+
+        // Check if task already exists
+        const existingTask = taskRepository.getTask(taskId);
+        if (!existingTask) {
+          // Create BackendCall task with default fields
+          // templateId is null because BackendCall doesn't use templates
+          const task = taskRepository.createTask(
+            TaskType.BackendCall,
+            null, // templateId: null (standalone, no template concept for BackendCall)
+            {
+              endpoint: '',
+              inputs: [],
+              outputs: []
+            },
+            taskId,
+            projectId
+          );
+
+          if (task) {
+            baseUpdateData.instanceId = task.id;
+            baseUpdateData.type = TaskType.BackendCall;
+          }
+        } else {
+          // Task already exists, update type if needed
+          if (existingTask.type !== TaskType.BackendCall) {
+            taskRepository.updateTask(taskId, { type: TaskType.BackendCall }, projectId);
+          }
+          baseUpdateData.instanceId = existingTask.id;
+          baseUpdateData.type = TaskType.BackendCall;
+        }
+      }
+
       // Handle ProblemClassification special case
       const problemClassificationResult = await this.handleProblemClassification(
         projectId

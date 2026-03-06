@@ -264,25 +264,8 @@ Public Class FlowOrchestrator
                     Console.WriteLine($"[FlowOrchestrator] ⏸️ TaskGroup {taskGroup.NodeId} suspended (task {result.WaitingTaskId} requires input)")
                     SaveState()
                     ' ✅ UNIFIED: Emetti evento WaitingForInput (come TaskSessionHandlers)
-                    ' Questo allinea il comportamento con il test del task singolo
-                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-                    Console.WriteLine($"🔵 [FlowOrchestrator] 🔍 BREAKPOINT: About to raise WaitingForInput event")
-                    Console.WriteLine($"🔵 [FlowOrchestrator] 🔍 TaskId: {result.WaitingTaskId}")
-                    System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] Raising WaitingForInput for task {result.WaitingTaskId}")
-                    Console.Out.Flush()
-
-                    ' ✅ DEBUG: Verifica se ci sono listener registrati
-                    Dim hasListeners = Me.WaitingForInputEvent IsNot Nothing
-                    Console.WriteLine($"🔵 [FlowOrchestrator] 🔍 Has WaitingForInput listeners: {hasListeners}")
-                    System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] Has listeners: {hasListeners}")
-                    Console.Out.Flush()
-
                     RaiseEvent WaitingForInput(Me, result.WaitingTaskId)
-
-                    Console.WriteLine($"✅ [FlowOrchestrator] 🔍 BREAKPOINT: WaitingForInput event raised for task {result.WaitingTaskId}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [FlowOrchestrator] WaitingForInput event raised")
-                    Console.Out.Flush()
-                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"[FlowOrchestrator] ✅ WaitingForInput event raised for task {result.WaitingTaskId}")
                     Exit While  ' Sospendi, attendi input
                 End If
 

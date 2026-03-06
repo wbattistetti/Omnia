@@ -21,7 +21,6 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     console.log('[TextMessageEditor] Initial load', {
       instanceId,
       taskExists: !!taskInstance,
-      taskText: taskInstance?.text?.substring(0, 50) || '',
       taskType: taskInstance?.type
     });
     if (!taskInstance) {
@@ -31,47 +30,24 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
       console.log('[TextMessageEditor] Creating new task', { instanceId, taskType, projectId });
       taskInstance = taskRepository.createTask(taskType, null, undefined, instanceId, projectId);
     }
-    return taskInstance?.text || '';
+    // ❌ RIMOSSO: return taskInstance?.text || '' - task.text non deve esistere
+    // TODO: Usare translations[textKey] dove textKey viene da task.parameters
+    return '';
   });
 
   // FIX: Reload text from Task when instanceId changes or when Task is updated
   useEffect(() => {
     if (!instanceId) return;
 
-    // Check if Task exists and has different text (only on mount or instanceId change)
-    const task = taskRepository.getTask(instanceId);
-    if (task?.text !== undefined) {
-      setText(prevText => {
-        if (prevText !== task.text) {
-          console.log('[TextMessageEditor] Reloading text from Task', {
-            instanceId,
-            oldText: prevText.substring(0, 50),
-            newText: task.text?.substring(0, 50) || ''
-          });
-          return task.text || '';
-        }
-        return prevText;
-      });
-    }
+    // ❌ RIMOSSO: Check if Task exists and has different text - task.text non deve esistere
+    // TODO: Usare translations[textKey] dove textKey viene da task.parameters
 
     // Listen for instance updates (backward compatibility during migration)
     const handleInstanceUpdate = (event: CustomEvent) => {
       const { instanceId: updatedInstanceId } = event.detail || {};
       if (updatedInstanceId === instanceId) {
-        // Task was updated, reload text
-        const updatedTask = taskRepository.getTask(instanceId);
-        if (updatedTask?.text !== undefined) {
-          setText(prevText => {
-            if (prevText !== updatedTask.text) {
-              console.log('[TextMessageEditor] Task updated, reloading text', {
-                instanceId,
-                newText: updatedTask.text?.substring(0, 50) || ''
-              });
-              return updatedTask.text || '';
-            }
-            return prevText;
-          });
-        }
+        // ❌ RIMOSSO: Task was updated, reload text - task.text non deve esistere
+        // TODO: Usare translations[textKey] dove textKey viene da task.parameters
       }
     };
 
@@ -82,14 +58,8 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     };
   }, [instanceId]); // Only reload when instanceId changes
 
-  // FASE 3: Update Task when text changes (TaskRepository syncs with InstanceRepository automatically)
-  useEffect(() => {
-    if (instanceId && text !== undefined) {
-      // FIX: Pass projectId to save to database immediately
-      const projectId = pdUpdate?.getCurrentProjectId() || undefined;
-      taskRepository.updateTask(instanceId, { text }, projectId);
-    }
-  }, [text, instanceId, pdUpdate]);
+  // ❌ RIMOSSO: Update Task when text changes - task.text non deve esistere
+  // TODO: Usare addTranslation(textKey, text) dove textKey viene da task.parameters
 
   // ✅ REMOVED: updateInstance (legacy act_instances) - taskRepository.updateTask already saves to database
   const handleClose = async () => {

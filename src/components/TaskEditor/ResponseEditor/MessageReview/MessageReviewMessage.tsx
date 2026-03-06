@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Check, X } from 'lucide-react';
-import { useTaskTreeManager } from '@context/DDTManagerContext';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { ReviewItem } from '@responseEditor/MessageReview/types';
 import { getTaskIconNode, getTaskMeta } from '@responseEditor/taskMeta';
 import { ensureHexColor, tailwindToHex } from '@responseEditor/utils/color';
@@ -15,7 +15,7 @@ type Props = {
 
 export default function MessageReviewMessage({ item, onSave, updateSelectedNode }: Props) {
     const { combinedClass } = useFontContext();
-    const { updateTranslation } = useTaskTreeManager();
+    const { addTranslation } = useProjectTranslations();
     const [editing, setEditing] = useState(false);
     const [editValue, setEditValue] = useState(item.text);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -41,55 +41,59 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
     const handleEditConfirm = () => {
         const newText = editValue.trim();
 
-        // Always update translation if textKey exists
+        // 🔍 DEBUG: Verifica se textKey esiste PRIMA del check
+        console.log('[MessageReviewMessage] 🔍 DEBUG handleEditConfirm called', {
+            hasTextKey: !!item.textKey,
+            textKey: item.textKey,
+            newText,
+            nodeId: item.pathLabel,
+            stepKey: item.stepKey,
+            escIndex: item.escIndex,
+            taskIndex: item.taskIndex,
+            itemKeys: Object.keys(item),
+            fullItem: item
+        });
+
+        // Always update translation in memory if textKey exists
+        // This will be included in on-the-fly test deployments via window.__projectTranslationsContext
+        // Database save happens only when user clicks explicit save button
         if (item.textKey) {
+            // 🔍 DEBUG: Verifica quale GUID viene usato quando modifichi
+            console.log('[MessageReviewMessage] 🔍 DEBUG Editing translation', {
+                textKey: item.textKey,
+                newText,
+                nodeId: item.pathLabel,
+                stepKey: item.stepKey,
+                escIndex: item.escIndex,
+                taskIndex: item.taskIndex,
+                isGuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.textKey || '')
+            });
             try {
-                updateTranslation(item.textKey, newText);
+                addTranslation(item.textKey, newText);
             } catch (err) {
-                console.error('Failed to save translation:', err);
+                console.error('Failed to update translation:', err);
             }
-        }
-
-        // Always update the node to persist the edited text
-        // This ensures the text is saved even when switching steps or refreshing
-        if (updateSelectedNode && item.stepKey && (item.escIndex !== null && item.escIndex !== undefined) && (item.taskIndex !== null && item.taskIndex !== undefined)) {
-            updateSelectedNode((node: any) => {
-                // ✅ NO FALLBACKS: node.steps must exist after validation (can be empty object)
-                const steps = node?.steps ?? {};
-                let stepData = steps[item.stepKey];
-
-                if (!stepData) return node;
-
-                // Handle array format: steps[stepKey] is an array of escalations
-                if (Array.isArray(stepData)) {
-                    const esc = stepData[item.escIndex!];
-                    if (esc && Array.isArray(esc.tasks) && esc.tasks[item.taskIndex!]) {
-                        const task = esc.tasks[item.taskIndex!];
-                        // Update the task text, preserving textKey and other properties
-                        esc.tasks[item.taskIndex!] = {
-                            ...task,
-                            text: newText.length > 0 ? newText : undefined,
-                        };
-                        return node;
-                    }
-                }
-                // Handle object format: steps[stepKey].escalations is an array
-                else if (stepData?.escalations && Array.isArray(stepData.escalations)) {
-                    const esc = stepData.escalations[item.escIndex!];
-                    if (esc && Array.isArray(esc.tasks) && esc.tasks[item.taskIndex!]) {
-                        const task = esc.tasks[item.taskIndex!];
-                        // Update the task text, preserving textKey and other properties
-                        esc.tasks[item.taskIndex!] = {
-                            ...task,
-                            text: newText.length > 0 ? newText : undefined,
-                        };
-                        return node;
-                    }
-                }
-
-                return node;
+        } else {
+            // 🔍 DEBUG: textKey non esiste!
+            console.warn('[MessageReviewMessage] ⚠️ DEBUG textKey is missing!', {
+                item: item,
+                itemKeys: Object.keys(item),
+                hasTextKey: !!item.textKey,
+                textKeyValue: item.textKey
             });
         }
+
+        // ❌ RIMOSSO: Non salvare task.text - il task deve contenere solo GUID
+        // Il modello corretto è:
+        // - Il task contiene solo il GUID nei parameters (parameterId='text', value=GUID)
+        // - La traduzione è in translations[textKey]
+        // - Il runtime usa translations[textKey] per risolvere il testo
+        // - task.text non deve esistere (è ridondante e crea confusione)
+        //
+        // La persistenza avviene tramite:
+        // 1. addTranslation() aggiorna translations[textKey] in memoria
+        // 2. saveAllTranslations() salva le traduzioni nel database
+        // 3. Il task non viene modificato (contiene solo il GUID)
 
         setEditing(false);
         onSave?.();
@@ -101,10 +105,32 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
     };
 
     const handleEdit = () => {
+        // 🔍 DEBUG: Verifica se l'editing viene attivato
+        console.log('[MessageReviewMessage] 🔍 DEBUG handleEdit called', {
+            hasTextKey: !!item.textKey,
+            textKey: item.textKey,
+            currentText: item.text,
+            taskId: item.taskId,
+            nodeId: item.pathLabel,
+            stepKey: item.stepKey,
+            escIndex: item.escIndex,
+            taskIndex: item.taskIndex,
+            itemKeys: Object.keys(item)
+        });
+
         if (item.textKey || item.taskId === 'sayMessage') {
             setEditValue(item.text);
             setEditing(true);
             setTimeout(() => inputRef.current?.focus(), 0);
+        } else {
+            // 🔍 DEBUG: Editing non attivato perché textKey non esiste
+            console.warn('[MessageReviewMessage] ⚠️ DEBUG Editing not activated - textKey missing', {
+                item: item,
+                itemKeys: Object.keys(item),
+                hasTextKey: !!item.textKey,
+                textKeyValue: item.textKey,
+                taskId: item.taskId
+            });
         }
     };
 

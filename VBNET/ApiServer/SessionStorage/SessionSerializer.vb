@@ -44,6 +44,9 @@ Namespace ApiServer.SessionStorage
             ' ✅ STATELESS: DialogueContext serializzato (per il nuovo motore stateless)
             ' Contiene lo stato completo del dialogo (DialogueState con Mode, CurrentTask, etc.)
             Public Property DialogueContextJson As String
+
+            ' ✅ NEW: Traduzioni dalla memoria per test on-the-fly (opzionale)
+            Public Property Translations As Dictionary(Of String, String)
         End Class
 
         ''' <summary>
@@ -86,7 +89,8 @@ Namespace ApiServer.SessionStorage
                     .WaitingForInputData = session.WaitingForInputData,
                     .SseConnected = session.SseConnected,
                     .TaskUtteranceState = stateSnapshot,
-                    .DialogueContextJson = session.DialogueContextJson
+                    .DialogueContextJson = session.DialogueContextJson,
+                    .Translations = session.Translations  ' ✅ NEW: Salva traduzioni dalla memoria
                 }
 
                 Return JsonConvert.SerializeObject(data, New JsonSerializerSettings With {
@@ -131,7 +135,8 @@ Namespace ApiServer.SessionStorage
                     .SseConnected = data.SseConnected,
                     .EventEmitter = sharedEmitter,
                     .TaskUtteranceState = data.TaskUtteranceState,
-                    .DialogueContextJson = data.DialogueContextJson
+                    .DialogueContextJson = data.DialogueContextJson,
+                    .Translations = data.Translations  ' ✅ NEW: Carica traduzioni dalla memoria
                 }
 
                 ' ✅ REMOVED: TaskInstance legacy code - state is now managed by TaskEngine via DialogueContext

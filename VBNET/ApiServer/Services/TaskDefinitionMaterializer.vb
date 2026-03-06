@@ -154,33 +154,79 @@ Namespace ApiServer.Services
                 ' ✅ CRITICAL: Steps vengono dall'istanza come override (se presenti)
                 ' ✅ Constraints vengono dal template (validazione)
                 ' ✅ Condition viene dal template (esecuzione)
-                Dim materialized As New UtteranceTaskDefinition() With {
-                    .Id = taskInstance.Id,
-                    .Type = taskInstance.Type,
-                    .TemplateId = template.Id,
-                    .Label = If(Not String.IsNullOrEmpty(taskInstance.Label), taskInstance.Label, template.Label),
-                    .Text = taskInstance.Text,
-                    .Parameters = If(taskInstance.Parameters IsNot Nothing AndAlso taskInstance.Parameters.Count > 0, taskInstance.Parameters, If(template.Parameters IsNot Nothing, template.Parameters, New List(Of TaskParameter)())),
-                    .Value = If(taskInstance.Value IsNot Nothing AndAlso taskInstance.Value.Count > 0, taskInstance.Value, If(template.Value IsNot Nothing, template.Value, New Dictionary(Of String, Object)())),
-                    .DataContract = templateUtterance.DataContract,
-                    .SubTasksIds = templateUtterance.SubTasksIds,
-                    .Steps = GetStepsFromInstanceOrTemplate(taskInstance, templateUtterance),
-                    .Constraints = templateUtterance.Constraints,
-                    .Condition = templateUtterance.Condition
-                }
+                ' ✅ Calcola valori complessi prima dell'inizializzatore
+                Dim labelValue As String
+                If Not String.IsNullOrEmpty(taskInstance.Label) Then
+                    labelValue = taskInstance.Label
+                Else
+                    labelValue = template.Label
+                End If
+                Dim parametersValue As List(Of TaskParameter)
+                If taskInstance.Parameters IsNot Nothing AndAlso taskInstance.Parameters.Count > 0 Then
+                    parametersValue = taskInstance.Parameters
+                ElseIf template.Parameters IsNot Nothing Then
+                    parametersValue = template.Parameters
+                Else
+                    parametersValue = New List(Of TaskParameter)()
+                End If
+                Dim valueValue As Dictionary(Of String, Object)
+                If taskInstance.Value IsNot Nothing AndAlso taskInstance.Value.Count > 0 Then
+                    valueValue = taskInstance.Value
+                ElseIf template.Value IsNot Nothing Then
+                    valueValue = template.Value
+                Else
+                    valueValue = New Dictionary(Of String, Object)()
+                End If
+
+                Dim materialized As New UtteranceTaskDefinition()
+                materialized.Id = taskInstance.Id
+                materialized.Type = taskInstance.Type
+                materialized.TemplateId = template.Id
+                materialized.Label = labelValue
+                ' ❌ RIMOSSO: .Text = taskInstance.Text - task.text non deve esistere
+                materialized.Parameters = parametersValue
+                materialized.Value = valueValue
+                materialized.DataContract = templateUtterance.DataContract
+                materialized.SubTasksIds = templateUtterance.SubTasksIds
+                materialized.Steps = GetStepsFromInstanceOrTemplate(taskInstance, templateUtterance)
+                materialized.Constraints = templateUtterance.Constraints
+                materialized.Condition = templateUtterance.Condition
                 Return materialized
             End If
 
             ' ✅ Se template è TaskDefinition base, crea TaskDefinition materializzato
-            Dim materializedBase As New TaskDefinition() With {
-                .Id = taskInstance.Id,
-                .Type = taskInstance.Type,
-                .TemplateId = template.Id,
-                .Label = If(Not String.IsNullOrEmpty(taskInstance.Label), taskInstance.Label, template.Label),
-                .Text = taskInstance.Text,
-                .Parameters = If(taskInstance.Parameters IsNot Nothing AndAlso taskInstance.Parameters.Count > 0, taskInstance.Parameters, If(template.Parameters IsNot Nothing, template.Parameters, New List(Of TaskParameter)())),
-                .Value = If(taskInstance.Value IsNot Nothing AndAlso taskInstance.Value.Count > 0, taskInstance.Value, If(template.Value IsNot Nothing, template.Value, New Dictionary(Of String, Object)()))
-            }
+            ' ✅ Calcola valori complessi prima dell'inizializzatore
+            Dim labelValueBase As String
+            If Not String.IsNullOrEmpty(taskInstance.Label) Then
+                labelValueBase = taskInstance.Label
+            Else
+                labelValueBase = template.Label
+            End If
+            Dim parametersValueBase As List(Of TaskParameter)
+            If taskInstance.Parameters IsNot Nothing AndAlso taskInstance.Parameters.Count > 0 Then
+                parametersValueBase = taskInstance.Parameters
+            ElseIf template.Parameters IsNot Nothing Then
+                parametersValueBase = template.Parameters
+            Else
+                parametersValueBase = New List(Of TaskParameter)()
+            End If
+            Dim valueValueBase As Dictionary(Of String, Object)
+            If taskInstance.Value IsNot Nothing AndAlso taskInstance.Value.Count > 0 Then
+                valueValueBase = taskInstance.Value
+            ElseIf template.Value IsNot Nothing Then
+                valueValueBase = template.Value
+            Else
+                valueValueBase = New Dictionary(Of String, Object)()
+            End If
+
+            Dim materializedBase As New TaskDefinition()
+            materializedBase.Id = taskInstance.Id
+            materializedBase.Type = taskInstance.Type
+            materializedBase.TemplateId = template.Id
+            materializedBase.Label = labelValueBase
+            ' ❌ RIMOSSO: .Text = taskInstance.Text - task.text non deve esistere
+            materializedBase.Parameters = parametersValueBase
+            materializedBase.Value = valueValueBase
             Return materializedBase
         End Function
 

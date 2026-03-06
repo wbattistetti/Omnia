@@ -7009,6 +7009,288 @@ app.post('/api/deploy/sync-translations', async (req, res) => {
 });
 
 /**
+ * POST /api/deploy/reset
+ *
+ * ✅ RESET ENDPOINT: Reset totale per projectId + locale (svuota tutto)
+ *
+ * Elimina tutte le chiavi Redis per projectId + locale:
+ * - omnia:translations:{projectId}:{locale}:*
+ * - omnia:compiled-tasks:{projectId}:*
+ * - omnia:templates:{projectId}:*
+ *
+ * @param {string} projectId - Project ID
+ * @param {string} locale - Locale (default: 'it-IT')
+ * @param {string} environment - Environment: 'on-the-fly' | 'development' | 'staging' | 'production'
+ * @returns {object} { success: boolean, deletedCount: number }
+ */
+app.post('/api/deploy/reset', async (req, res) => {
+  const { projectId, locale = 'it-IT', environment = 'on-the-fly' } = req.body || {};
+  const startTime = Date.now();
+
+  try {
+    console.log('[DEPLOY][RESET] 🗑️ Starting total reset...', {
+      projectId,
+      locale,
+      environment
+    });
+
+    if (!projectId) {
+      return res.status(400).json({
+        success: false,
+        error: 'projectId is required'
+      });
+    }
+
+    const redis = await getRedisClient();
+    if (!redis) {
+      console.error('[DEPLOY][RESET] ❌ Redis client not available');
+      return res.status(500).json({
+        success: false,
+        error: 'Redis client not available'
+      });
+    }
+
+    const keyPrefix = process.env.REDIS_KEY_PREFIX || 'omnia:';
+    let totalDeleted = 0;
+
+    // ✅ STEP 1: Elimina tutte le traduzioni per projectId + locale
+    const translationPattern = `${keyPrefix}translations:${projectId}:${locale}:*`;
+    const translationKeys = await redis.keys(translationPattern);
+    if (translationKeys.length > 0) {
+      await redis.del(translationKeys);
+      totalDeleted += translationKeys.length;
+      console.log(`[DEPLOY][RESET] ✅ Deleted ${translationKeys.length} translation keys`);
+    }
+
+    // ✅ STEP 2: Elimina tutti i task compilati per projectId
+    const compiledTaskPattern = `${keyPrefix}compiled-tasks:${projectId}:*`;
+    const compiledTaskKeys = await redis.keys(compiledTaskPattern);
+    if (compiledTaskKeys.length > 0) {
+      await redis.del(compiledTaskKeys);
+      totalDeleted += compiledTaskKeys.length;
+      console.log(`[DEPLOY][RESET] ✅ Deleted ${compiledTaskKeys.length} compiled task keys`);
+    }
+
+    // ✅ STEP 3: Elimina tutti i template per projectId
+    const templatePattern = `${keyPrefix}templates:${projectId}:*`;
+    const templateKeys = await redis.keys(templatePattern);
+    if (templateKeys.length > 0) {
+      await redis.del(templateKeys);
+      totalDeleted += templateKeys.length;
+      console.log(`[DEPLOY][RESET] ✅ Deleted ${templateKeys.length} template keys`);
+    }
+
+    // ✅ STEP 4: Invalida cache VB.NET
+    try {
+      const invalidateResponse = await fetch(`http://localhost:5000/api/runtime/translations/invalidate-cache`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          locale,
+          invalidateAll: true
+        })
+      });
+
+      if (invalidateResponse.ok) {
+        console.log(`[DEPLOY][RESET] ✅ Cache invalidation signal sent to VB.NET backend`);
+      } else {
+        console.warn(`[DEPLOY][RESET] ⚠️ Cache invalidation returned status ${invalidateResponse.status}`);
+      }
+    } catch (cacheError) {
+      console.warn(`[DEPLOY][RESET] ⚠️ Failed to invalidate cache:`, cacheError.message);
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(`[DEPLOY][RESET] ✅✅ Total reset completed in ${duration}ms`, {
+      totalDeleted,
+      projectId,
+      locale,
+      environment
+    });
+
+    return res.json({
+      success: true,
+      deletedCount: totalDeleted,
+      duration: `${duration}ms`,
+      environment
+    });
+  } catch (err) {
+    console.error('[DEPLOY][RESET] ❌ Error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+});
+
+/**
+ * POST /api/deploy/sync-subgraph
+ *
+ * ✅ DEPLOY ENDPOINT: Deploy completo del sotto-grafo per test on-the-fly
+ *
+ * MODELLO SEMPLICE: Reset totale → Deploy minimo
+ * 1. Reset totale (svuota tutto per projectId + locale)
+ * 2. Deploy minimo (solo sotto-grafo necessario)
+ *
+ * @param {string} projectId - Project ID
+ * @param {string} locale - Locale (default: 'it-IT')
+ * @param {string} environment - Environment: 'on-the-fly' | 'development' | 'staging' | 'production'
+ * @param {object} taskInstance - Task instance completa da deployare
+ * @param {array} referencedTemplates - Tutti i template referenziati
+ * @param {object} translations - Tutte le traduzioni del sotto-grafo
+ * @param {object} compiledTask - CompiledTask risultante dalla compilazione
+ * @returns {object} { success: boolean, translationsDeployed: number, templatesDeployed: number, taskDeployed: boolean }
+ */
+app.post('/api/deploy/sync-subgraph', async (req, res) => {
+  const {
+    projectId,
+    locale = 'it-IT',
+    environment = 'on-the-fly',
+    taskInstance,
+    referencedTemplates,
+    translations,
+    compiledTask
+  } = req.body || {};
+
+  const startTime = Date.now();
+
+  try {
+    console.log('[DEPLOY][SYNC_SUBGRAPH] 🚀 Starting complete subgraph deployment...', {
+      projectId,
+      locale,
+      environment,
+      hasTaskInstance: !!taskInstance,
+      referencedTemplatesCount: referencedTemplates?.length || 0,
+      translationsCount: Object.keys(translations || {}).length,
+      hasCompiledTask: !!compiledTask
+    });
+
+    const redis = await getRedisClient();
+    if (!redis) {
+      console.error('[DEPLOY][SYNC_SUBGRAPH] ❌ Redis client not available');
+      return res.status(500).json({
+        success: false,
+        error: 'Redis client not available. Please ensure Redis is running (redis-server or docker run -d -p 6379:6379 redis:latest) and the redis npm package is installed (npm install redis)'
+      });
+    }
+
+    const keyPrefix = process.env.REDIS_KEY_PREFIX || 'omnia:';
+
+    // ✅ MODELLO SEMPLICE: STEP 1 - Reset totale (svuota tutto per projectId + locale)
+    console.log('[DEPLOY][SYNC_SUBGRAPH] 🗑️ Step 1: Resetting all data for projectId + locale...');
+    let totalDeleted = 0;
+
+    // Elimina traduzioni
+    const translationPattern = `${keyPrefix}translations:${projectId}:${locale}:*`;
+    const translationKeys = await redis.keys(translationPattern);
+    if (translationKeys.length > 0) {
+      await redis.del(translationKeys);
+      totalDeleted += translationKeys.length;
+    }
+
+    // Elimina task compilati
+    const compiledTaskPattern = `${keyPrefix}compiled-tasks:${projectId}:*`;
+    const compiledTaskKeys = await redis.keys(compiledTaskPattern);
+    if (compiledTaskKeys.length > 0) {
+      await redis.del(compiledTaskKeys);
+      totalDeleted += compiledTaskKeys.length;
+    }
+
+    // Elimina template
+    const templatePattern = `${keyPrefix}templates:${projectId}:*`;
+    const templateKeys = await redis.keys(templatePattern);
+    if (templateKeys.length > 0) {
+      await redis.del(templateKeys);
+      totalDeleted += templateKeys.length;
+    }
+
+    console.log(`[DEPLOY][SYNC_SUBGRAPH] ✅ Reset completed: deleted ${totalDeleted} keys`);
+
+    // ✅ Invalida cache VB.NET dopo reset
+    try {
+      await fetch(`http://localhost:5000/api/runtime/translations/invalidate-cache`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          locale,
+          invalidateAll: true
+        })
+      });
+    } catch (cacheError) {
+      console.warn(`[DEPLOY][SYNC_SUBGRAPH] ⚠️ Failed to invalidate cache:`, cacheError.message);
+    }
+
+    // ✅ MODELLO SEMPLICE: STEP 2 - Deploy minimo (solo sotto-grafo necessario)
+    console.log('[DEPLOY][SYNC_SUBGRAPH] 📦 Step 2: Deploying minimal subgraph...');
+
+    // ✅ STEP 2.1: Deploy traduzioni complete del sotto-grafo
+    const translationKeyValuePairs = [];
+    for (const [guid, text] of Object.entries(translations || {})) {
+      if (guid && text !== undefined && text !== null) {
+        const redisKey = `${keyPrefix}translations:${projectId}:${locale}:${guid}`;
+        translationKeyValuePairs.push(redisKey, String(text));
+      }
+    }
+
+    if (translationKeyValuePairs.length > 0) {
+      await redis.mSet(translationKeyValuePairs);
+      console.log(`[DEPLOY][SYNC_SUBGRAPH] ✅ Deployed ${translationKeyValuePairs.length / 2} translations`);
+    }
+
+    // ✅ STEP 2: Deploy task instance compilata (per il runtime)
+    if (compiledTask && compiledTask.id) {
+      const taskKey = `${keyPrefix}compiled-tasks:${projectId}:${compiledTask.id}`;
+      await redis.set(taskKey, JSON.stringify(compiledTask));
+      console.log(`[DEPLOY][SYNC_SUBGRAPH] ✅ Deployed compiled task: ${compiledTask.id}`);
+    }
+
+    // ✅ STEP 3: Deploy template referenziati (per il runtime)
+    if (referencedTemplates && referencedTemplates.length > 0) {
+      const templateKeyValuePairs = [];
+      for (const template of referencedTemplates) {
+        if (template && template.id) {
+          const templateKey = `${keyPrefix}templates:${projectId}:${template.id}`;
+          templateKeyValuePairs.push(templateKey, JSON.stringify(template));
+        }
+      }
+      if (templateKeyValuePairs.length > 0) {
+        await redis.mSet(templateKeyValuePairs);
+        console.log(`[DEPLOY][SYNC_SUBGRAPH] ✅ Deployed ${templateKeyValuePairs.length / 2} referenced templates`);
+      }
+    }
+
+    // ✅ Cache già invalidata durante reset, non serve rifarlo
+
+    const duration = Date.now() - startTime;
+    console.log(`[DEPLOY][SYNC_SUBGRAPH] ✅✅ Complete subgraph deployment completed in ${duration}ms`, {
+      translationsDeployed: translationKeyValuePairs.length / 2,
+      templatesDeployed: referencedTemplates?.length || 0,
+      taskDeployed: !!compiledTask,
+      environment
+    });
+
+    return res.json({
+      success: true,
+      translationsDeployed: translationKeyValuePairs.length / 2,
+      templatesDeployed: referencedTemplates?.length || 0,
+      taskDeployed: !!compiledTask,
+      duration: `${duration}ms`,
+      environment
+    });
+  } catch (err) {
+    console.error('[DEPLOY][SYNC_SUBGRAPH] ❌ Error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+});
+
+/**
  * GET /api/deploy/verify-redis
  *
  * ✅ DEPLOY ENDPOINT: Verifica consistenza Redis

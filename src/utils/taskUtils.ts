@@ -639,14 +639,8 @@ export async function syncTasksWithTemplate(
   const compareTaskValues = (instanceTask: any, templateTask: any): Array<{ field: string; instanceValue: any; templateValue: any }> => {
     const differences: Array<{ field: string; instanceValue: any; templateValue: any }> = [];
 
-    // Compare text
-    if (instanceTask.text !== templateTask.text) {
-      differences.push({
-        field: 'text',
-        instanceValue: instanceTask.text,
-        templateValue: templateTask.text
-      });
-    }
+    // ❌ RIMOSSO: Compare text - task.text non deve esistere
+    // Il modello corretto è: task contiene solo GUID, traduzione in translations[GUID]
 
     // Compare parameters[].value
     const instanceParams = instanceTask.parameters || [];
@@ -1178,6 +1172,26 @@ export async function buildTaskTree(
     finalSteps = clonedSteps;
     stepsWereCloned = true;
 
+    // 🔍 DEBUG: Verifica quali GUID sono stati clonati
+    const firstNodeId = Object.keys(finalSteps)[0];
+    const firstNodeSteps = firstNodeId ? finalSteps[firstNodeId] : null;
+    const firstStepKey = firstNodeSteps ? Object.keys(firstNodeSteps)[0] : null;
+    const firstStep = firstStepKey ? firstNodeSteps[firstStepKey] : null;
+    const firstEscalation = firstStep?.escalations?.[0];
+    const firstTask = firstEscalation?.tasks?.[0];
+    const firstTaskTextKey = firstTask?.parameters?.find((p: any) => p.parameterId === 'text')?.value;
+    console.log('[buildTaskTree] 🔍 DEBUG Steps cloned', {
+      taskId: instance.id,
+      templateId: instance.templateId,
+      clonedStepsKeys: Object.keys(finalSteps),
+      firstNodeId,
+      firstStepKey,
+      firstTaskTextKey,
+      firstTaskTextKeyIsGuid: firstTaskTextKey ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(firstTaskTextKey) : false,
+      guidMappingSize: guidMapping?.size || 0,
+      guidMappingSample: guidMapping && guidMapping.size > 0 ? Array.from(guidMapping.entries()).slice(0, 3) : []
+    });
+
     // ✅ ARCHITECTURAL RULE: Copia traduzioni template → nuovi GUID
     if (guidMapping && guidMapping.size > 0) {
       try {
@@ -1428,10 +1442,8 @@ function updateEditedFlags(workingCopy: TaskTree, templateExpanded: TaskTree): v
 
   // Helper per confrontare valori di un task
   const compareTaskValues = (instanceTask: any, templateTask: any): boolean => {
-    // Confronta text
-    if (instanceTask.text !== templateTask.text) {
-      return false;
-    }
+    // ❌ RIMOSSO: Confronta text - task.text non deve esistere
+    // Il modello corretto è: task contiene solo GUID, traduzione in translations[GUID]
 
     // Confronta parameters[].value
     const instanceParams = instanceTask.parameters || [];

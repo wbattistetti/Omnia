@@ -387,16 +387,17 @@ Public Class TaskAssembler
 
     ''' <summary>
     ''' Extracts the TextKey (translation GUID) from a SayMessage IDE task.
-    ''' Tries ideTask.Text, then Parameters[parameterId='text'], then Value["parameters"].
+    ''' ❌ RIMOSSO: ideTask.Text - task.text non deve esistere
+    ''' Tries Parameters[parameterId='text'], then Value["parameters"].
     ''' Throws immediately if the key is missing or appears to be literal text.
     ''' </summary>
     Private Shared Function ExtractTextKeyFromIdeTask(ideTask As TaskDefinition) As String
         Dim textKey As String = ""
 
-        If Not String.IsNullOrWhiteSpace(ideTask.Text) Then
-            textKey = ideTask.Text.Trim()
+        ' ❌ RIMOSSO: If Not String.IsNullOrWhiteSpace(ideTask.Text) Then
+        ' Il modello corretto è: task contiene solo GUID nei parameters
 
-        ElseIf ideTask.Parameters IsNot Nothing Then
+        If ideTask.Parameters IsNot Nothing Then
             Dim textParams = ideTask.Parameters.Where(Function(p) p.ParameterId = "text").ToList()
             If textParams.Count = 0 Then
                 Throw New InvalidOperationException(
@@ -447,7 +448,7 @@ Public Class TaskAssembler
             Throw New InvalidOperationException(
                 $"SayMessage task '{ideTask.Id}': no TextKey found. " &
                 $"The IDE must provide a translation key (GUID), not literal text. " &
-                $"Checked: ideTask.Text, Parameters[parameterId='text'], Value.parameters.")
+                $"Checked: Parameters[parameterId='text'], Value.parameters.")
         End If
 
         If Not IsGuid(textKey) AndAlso textKey.Contains(" ") Then

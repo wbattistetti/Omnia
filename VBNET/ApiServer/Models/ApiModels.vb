@@ -83,8 +83,14 @@ Namespace Models
         <JsonProperty("locale")>
         Public Property Locale As String
 
+        ''' <summary>
+        ''' ✅ NEW: Traduzioni passate dalla memoria per test on-the-fly (opzionale)
+        ''' Se presente, ha priorità su TranslationRepository per garantire traduzioni aggiornate
+        ''' </summary>
+        <JsonProperty("translations")>
+        Public Property Translations As Dictionary(Of String, String)
+
         ' ❌ RIMOSSO: TaskId, TaskInstanceId (non servono più)
-        ' ❌ RIMOSSO: Translations (configurazione immutabile - carica da TranslationRepository)
         ' ❌ RIMOSSO: TaskTree (configurazione immutabile - carica da DialogRepository)
     End Class
 

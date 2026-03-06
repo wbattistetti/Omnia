@@ -214,5 +214,41 @@ Namespace ApiServer.Repositories
                 Return False
             End Try
         End Function
+
+        ''' <summary>
+        ''' Invalida la cache in memoria per un progetto e locale specifici
+        ''' </summary>
+        ''' <param name="projectId">Project ID</param>
+        ''' <param name="locale">Locale</param>
+        ''' <param name="invalidateAll">Se True, invalida TUTTA la cache per questo progetto/locale</param>
+        Public Sub InvalidateCache(projectId As String, locale As String, Optional invalidateAll As Boolean = False)
+            If String.IsNullOrWhiteSpace(projectId) Or String.IsNullOrWhiteSpace(locale) Then
+                Return
+            End If
+
+            ' ✅ Rimuovi tutte le chiavi di cache che corrispondono al progetto e locale
+            Dim keysToRemove As New List(Of String)
+            Dim prefix = $"{projectId}:{locale}:"
+
+            SyncLock _cacheLock
+                If invalidateAll Then
+                    ' ✅ Invalida TUTTA la cache per questo progetto/locale
+                    For Each key In _cache.Keys
+                        If key.StartsWith(prefix) Then
+                            keysToRemove.Add(key)
+                        End If
+                    Next
+                Else
+                    ' Invalida solo chiavi specifiche (se passate)
+                    ' Per ora, se non è invalidateAll, non facciamo nulla
+                End If
+
+                For Each key In keysToRemove
+                    _cache.TryRemove(key, Nothing)
+                Next
+            End SyncLock
+
+            Console.WriteLine($"[TranslationRepository] ✅ Invalidated {keysToRemove.Count} cache entries for {projectId}:{locale}")
+        End Sub
     End Class
 End Namespace

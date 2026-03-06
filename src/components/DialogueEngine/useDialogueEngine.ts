@@ -40,6 +40,9 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
   // Start execution - compiles flow only when Start is clicked
   const start = useCallback(async () => {
+    // ✅ DEBUG: Dichiarare missingTaskId all'inizio della funzione per accesso globale
+    const missingTaskId = 'fe1330c8-70be-4bd8-a840-1d3886522785-1770736796206-njys7s';
+
     console.log('═══════════════════════════════════════════════════════════════════════════');
     console.log('🚀 [useDialogueEngine] start() CALLED');
     console.log('═══════════════════════════════════════════════════════════════════════════');
@@ -123,6 +126,19 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           return false; // This is a template, not an instance
         }
         return true;
+      });
+
+      // ✅ DEBUG: Verifica task mancante specifico (missingTaskId già dichiarato all'inizio)
+      const taskInInstances = allProjectTaskInstances.find(t => t.id === missingTaskId);
+      console.log('[useDialogueEngine] 🔍 DEBUG: Checking for missing task', {
+        searchedTaskId: missingTaskId,
+        allProjectTaskInstancesCount: allProjectTaskInstances.length,
+        taskInInstances: taskInInstances ? {
+          id: taskInInstances.id,
+          type: taskInInstances.type,
+          templateId: taskInInstances.templateId,
+          hasType: taskInInstances.type !== undefined && taskInInstances.type !== null
+        } : null
       });
 
       // ✅ B. Tutti i template del progetto (da DialogueTaskService, fonte unica normalizzata)
@@ -233,6 +249,19 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         ...allProjectTemplates,
         ...allFactoryTemplates
       ];
+
+      // ✅ DEBUG: Verifica task mancante in allTasksWithTemplates (missingTaskId già dichiarato sopra)
+      const taskInAllTasks = allTasksWithTemplates.find(t => t.id === missingTaskId);
+      console.log('[useDialogueEngine] 🔍 DEBUG: Missing task in allTasksWithTemplates', {
+        searchedTaskId: missingTaskId,
+        allTasksWithTemplatesCount: allTasksWithTemplates.length,
+        taskInAllTasks: taskInAllTasks ? {
+          id: taskInAllTasks.id,
+          type: taskInAllTasks.type,
+          templateId: (taskInAllTasks as any).templateId,
+          source: (taskInAllTasks as any).source
+        } : null
+      });
 
       // ✅ DEBUG: Verifica che il template problematico sia presente in allTasksWithTemplates con dataContract
       // ✅ Usa problematicTemplateId già dichiarato sopra
@@ -417,6 +446,53 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         projectId: localStorage.getItem('currentProjectId') || undefined,
         translations: translations // ✅ Pass translations table (already in memory) - runtime will do lookup at execution time
       };
+
+      // ✅ DEBUG: Verifica task mancante in requestBody (missingTaskId già dichiarato sopra)
+      const taskInRequestBody = requestBody.tasks.find((t: any) => t.id === missingTaskId);
+      if (!taskInRequestBody) {
+        console.error('[useDialogueEngine] ❌ MISSING TASK IN REQUEST BODY:', {
+          taskId: missingTaskId,
+          totalTasksInRequestBody: requestBody.tasks.length,
+          taskIdsInRequestBody: requestBody.tasks.map((t: any) => t.id).slice(0, 20),
+          taskInAllTasksWithTemplates: allTasksWithTemplates.find(t => t.id === missingTaskId)
+        });
+      } else {
+        console.log('[useDialogueEngine] ✅ Missing task FOUND in requestBody:', {
+          taskId: missingTaskId,
+          type: taskInRequestBody.type,
+          templateId: taskInRequestBody.templateId
+        });
+      }
+
+      // ✅ DEBUG: Verifica che tutti i task referenziati nei nodi siano presenti in requestBody.tasks
+      // Nota: referencedTaskIds potrebbe essere già dichiarato sopra, usiamo un nome diverso per evitare conflitti
+      const referencedTaskIdsInRequestBody = new Set<string>();
+      options.nodes.forEach(node => {
+        node.rows?.forEach((row: any) => {
+          if (row.taskId) {
+            referencedTaskIdsInRequestBody.add(row.taskId);
+          }
+        });
+      });
+
+      const missingReferencedTasks = Array.from(referencedTaskIdsInRequestBody).filter(taskId => {
+        return !requestBody.tasks.find((t: any) => t.id === taskId);
+      });
+
+      if (missingReferencedTasks.length > 0) {
+        console.error('[useDialogueEngine] ❌ MISSING REFERENCED TASKS:', {
+          missingTaskIds: missingReferencedTasks,
+          totalReferencedTasks: referencedTaskIdsInRequestBody.size,
+          totalTasksInRequestBody: requestBody.tasks.length,
+          referencedTaskIds: Array.from(referencedTaskIdsInRequestBody).slice(0, 10),
+          taskIdsInRequestBody: requestBody.tasks.map((t: any) => t.id).slice(0, 10)
+        });
+      } else {
+        console.log('[useDialogueEngine] ✅ All referenced tasks are present in requestBody:', {
+          totalReferencedTasks: referencedTaskIdsInRequestBody.size,
+          totalTasksInRequestBody: requestBody.tasks.length
+        });
+      }
 
       // ✅ DEBUG: Verifica che il template problematico sia presente nel requestBody con dataContract
       const problematicTemplateInRequestBody = requestBody.tasks.find((t: any) => t.id === problematicTemplateId && !t.templateId);
