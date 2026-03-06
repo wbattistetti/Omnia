@@ -44,12 +44,10 @@ import { useCursorTooltip } from './hooks/useCursorTooltip';
 import { useEdgeLabelManager } from './hooks/useEdgeLabelManager';
 import { useTaskCreationFromSelection } from './hooks/useTaskCreationFromSelection';
 import { CustomEdge } from './edges/CustomEdge';
-// ✅ PHASE 3: uuidv4 moved to useNodeActions hook
 import { useIntellisense } from '../../context/IntellisenseContext';
 import { FlowchartWrapper } from './FlowchartWrapper';
 import { ExecutionStateProvider } from './executionHighlight/ExecutionStateContext';
 import { FlowStateBridge } from '../../services/FlowStateBridge';
-// ✅ PHASE 3: taskRepository and getTaskIdFromRow moved to useNodeActions hook
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -200,8 +198,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Keyboard shortcuts: Ctrl/Cmd+Z, Ctrl/Cmd+Y or Ctrl+Shift+Z
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((window as any).__debugCanvas) {
-      }
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       if (e.key.toLowerCase() === 'z') {
@@ -253,7 +249,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ RIMOSSO: addItem e addCategory - ora usati direttamente in useConditionCreation
   const { data: projectData } = useProjectData();
 
-  // ✅ PHASE 3: Use useNodeActions hook for enhanced node operations
   const nodeActions = useNodeActions({
     nodes,
     deleteNode,
@@ -470,7 +465,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setContentSize({ w, h });
   }, [nodes]);
 
-  // ✅ PHASE 3: createNodeAt now comes from useNodeActions hook
   const { createNodeAt } = nodeActions;
 
   // ✅ Listener per creare un nodo dal canvas quando si rilascia una riga
@@ -664,375 +658,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     };
   }, []);
 
-  // ✅ RIMOSSO: Il debug non serve più - la soluzione è solo CSS sopra
-  /*useEffect(() => {
-    const analyzeBackground = () => {
-      const backgroundEl = document.querySelector('.react-flow__background') as HTMLElement | null;
-      const svgEl = backgroundEl?.querySelector('svg') as SVGSVGElement | null;
-      const patternEl = svgEl?.querySelector('pattern') as SVGPatternElement | null;
-      const reactFlowEl = document.querySelector('.react-flow') as HTMLElement | null;
-      const paneEl = document.querySelector('.react-flow__pane') as HTMLElement | null;
-      const canvasRefEl = canvasRef.current as HTMLElement | null;
-
-      // Log completo della struttura (solo una volta per evitare spam)
-      if (!(window as any).__gridDebugLogged) {
-        console.log('🔍 [GRID DEBUG] Background Analysis:', {
-          background: {
-            exists: !!backgroundEl,
-            width: backgroundEl?.offsetWidth,
-            height: backgroundEl?.offsetHeight,
-            computedWidth: backgroundEl ? window.getComputedStyle(backgroundEl).width : null,
-            computedHeight: backgroundEl ? window.getComputedStyle(backgroundEl).height : null,
-            position: backgroundEl ? window.getComputedStyle(backgroundEl).position : null,
-            top: backgroundEl ? window.getComputedStyle(backgroundEl).top : null,
-            left: backgroundEl ? window.getComputedStyle(backgroundEl).left : null,
-            backgroundColor: backgroundEl ? window.getComputedStyle(backgroundEl).backgroundColor : null,
-            innerHTML: backgroundEl ? backgroundEl.innerHTML.substring(0, 200) : null,
-          },
-          svg: {
-            exists: !!svgEl,
-            width: svgEl?.width.baseVal.value,
-            height: svgEl?.height.baseVal.value,
-            viewBox: svgEl?.viewBox.baseVal ? {
-              x: svgEl.viewBox.baseVal.x,
-              y: svgEl.viewBox.baseVal.y,
-              width: svgEl.viewBox.baseVal.width,
-              height: svgEl.viewBox.baseVal.height,
-            } : null,
-            fill: svgEl ? window.getComputedStyle(svgEl).fill : null,
-            innerHTML: svgEl ? svgEl.innerHTML.substring(0, 500) : null,
-          },
-          pattern: {
-            exists: !!patternEl,
-            width: patternEl?.width.baseVal.value,
-            height: patternEl?.height.baseVal.value,
-            patternUnits: patternEl?.patternUnits,
-            patternUnitsAttr: patternEl?.getAttribute('patternUnits'),
-            x: patternEl?.x.baseVal.value,
-            y: patternEl?.y.baseVal.value,
-          },
-          reactFlow: {
-            exists: !!reactFlowEl,
-            width: reactFlowEl?.offsetWidth,
-            height: reactFlowEl?.offsetHeight,
-            backgroundColor: reactFlowEl ? window.getComputedStyle(reactFlowEl).backgroundColor : null,
-          },
-          pane: {
-            exists: !!paneEl,
-            width: paneEl?.offsetWidth,
-            height: paneEl?.offsetHeight,
-            backgroundColor: paneEl ? window.getComputedStyle(paneEl).backgroundColor : null,
-          },
-          canvas: {
-            exists: !!canvasRefEl,
-            width: canvasRefEl?.offsetWidth,
-            height: canvasRefEl?.offsetHeight,
-            scrollWidth: canvasRefEl?.scrollWidth,
-            scrollHeight: canvasRefEl?.scrollHeight,
-          }
-        });
-        (window as any).__gridDebugLogged = true;
-      }
-
-      // ✅ Cerca tutti i pattern possibili (anche in altri SVG o nel documento)
-      const allPatterns = document.querySelectorAll('pattern');
-      console.log('🔍 [GRID DEBUG] All patterns found:', {
-        count: allPatterns.length,
-        patterns: Array.from(allPatterns).map((p, i) => ({
-          index: i,
-          id: p.id,
-          width: (p as SVGPatternElement).width.baseVal.value,
-          height: (p as SVGPatternElement).height.baseVal.value,
-          patternUnits: (p as SVGPatternElement).patternUnits,
-          parent: p.parentElement?.tagName,
-        }))
-      });
-
-      // ✅ Cerca anche in defs
-      const allDefs = document.querySelectorAll('defs');
-      console.log('🔍 [GRID DEBUG] All defs found:', {
-        count: allDefs.length,
-        defs: Array.from(allDefs).map((d, i) => ({
-          index: i,
-          parent: d.parentElement?.tagName,
-          children: Array.from(d.children).map(c => c.tagName),
-        }))
-      });
-
-      // ✅ Modifica il pattern SVG per renderlo infinito
-      // Prova prima quello trovato nel background, poi tutti gli altri
-      let patternToModify = patternEl;
-
-      if (!patternToModify && allPatterns.length > 0) {
-        // Se non trovato nel background, usa il primo pattern disponibile
-        patternToModify = allPatterns[0] as SVGPatternElement;
-      }
-
-      if (patternToModify) {
-        const patternUnitsValue = patternToModify.getAttribute('patternUnits') || 'objectBoundingBox';
-        const currentWidth = patternToModify.width.baseVal.value;
-        const currentHeight = patternToModify.height.baseVal.value;
-        const TARGET_SIZE = 10000;
-
-        // ✅ Evita loop: controlla diversamente in base a patternUnits
-        if (patternUnitsValue === 'objectBoundingBox') {
-          // Con objectBoundingBox, controlla le dimensioni dell'SVG invece
-          if (svgEl) {
-            const svgWidth = svgEl.width.baseVal.value;
-            const svgHeight = svgEl.height.baseVal.value;
-            if (svgWidth >= 5000 && svgHeight >= 5000) {
-              // SVG già modificato, non fare nulla per evitare loop
-              return;
-            }
-          }
-        } else {
-          // Con userSpaceOnUse, controlla le dimensioni del pattern
-          if (currentWidth >= TARGET_SIZE && currentHeight >= TARGET_SIZE) {
-            // Pattern già modificato, non fare nulla per evitare loop
-            return;
-          }
-        }
-
-        const originalWidth = currentWidth;
-        const originalHeight = currentHeight;
-
-        console.log('🔧 [GRID DEBUG] Modifying pattern:', {
-          id: patternToModify.id,
-          originalWidth,
-          originalHeight,
-          before: {
-            width: currentWidth,
-            height: currentHeight,
-            patternUnits: patternToModify.patternUnits,
-          }
-        });
-
-        // ✅ IMPORTANTE: Con patternUnits="objectBoundingBox", le dimensioni sono relative (0-1)
-        // Quindi non possiamo semplicemente aumentare le dimensioni!
-        // Dobbiamo modificare l'SVG o il background container invece
-        try {
-          const patternUnitsValue = patternToModify.getAttribute('patternUnits') || 'objectBoundingBox';
-          console.log('🔧 [GRID DEBUG] Pattern units:', patternUnitsValue);
-
-          if (patternUnitsValue === 'objectBoundingBox') {
-            // Con objectBoundingBox, le dimensioni sono relative - non possiamo aumentarle
-            // Invece, modifichiamo l'SVG del background per renderlo più grande
-            console.log('⚠️ [GRID DEBUG] Pattern uses objectBoundingBox - cannot increase pattern size directly');
-            console.log('🔧 [GRID DEBUG] Will modify SVG/background container instead');
-
-            // NON modificare il pattern - lascialo com'è
-            // Invece modifichiamo l'SVG o il background container
-            if (svgEl) {
-              const currentSvgWidth = svgEl.width.baseVal.value;
-              const currentSvgHeight = svgEl.height.baseVal.value;
-
-              console.log('🔧 [GRID DEBUG] SVG current dimensions:', {
-                width: currentSvgWidth,
-                height: currentSvgHeight,
-                viewBox: svgEl.viewBox.baseVal ? {
-                  width: svgEl.viewBox.baseVal.width,
-                  height: svgEl.viewBox.baseVal.height,
-                } : null,
-              });
-
-              // Aumenta le dimensioni dell'SVG se è troppo piccolo
-              // IMPORTANTE: Usa valori molto grandi per coprire tutto il canvas
-              const SVG_TARGET_SIZE = 20000; // Molto più grande per coprire tutto
-
-              if (currentSvgWidth < SVG_TARGET_SIZE || currentSvgHeight < SVG_TARGET_SIZE) {
-                const oldWidth = svgEl.width.baseVal.value;
-                const oldHeight = svgEl.height.baseVal.value;
-
-                svgEl.width.baseVal.value = SVG_TARGET_SIZE;
-                svgEl.height.baseVal.value = SVG_TARGET_SIZE;
-
-                // Aggiorna anche il viewBox se esiste
-                if (svgEl.viewBox.baseVal) {
-                  svgEl.setAttribute('viewBox', `0 0 ${SVG_TARGET_SIZE} ${SVG_TARGET_SIZE}`);
-                }
-
-                console.log('✅ [GRID DEBUG] SVG enlarged:', {
-                  before: { width: oldWidth, height: oldHeight },
-                  after: {
-                    width: svgEl.width.baseVal.value,
-                    height: svgEl.height.baseVal.value,
-                    viewBox: svgEl.viewBox.baseVal ? {
-                      width: svgEl.viewBox.baseVal.width,
-                      height: svgEl.viewBox.baseVal.height,
-                    } : null,
-                  },
-                });
-
-                // ✅ Monitora se React Flow resetta l'SVG
-                setTimeout(() => {
-                  const checkWidth = svgEl.width.baseVal.value;
-                  const checkHeight = svgEl.height.baseVal.value;
-                  if (checkWidth !== SVG_TARGET_SIZE || checkHeight !== SVG_TARGET_SIZE) {
-                    console.warn('⚠️ [GRID DEBUG] SVG was reset by React Flow!', {
-                      expected: { width: SVG_TARGET_SIZE, height: SVG_TARGET_SIZE },
-                      actual: { width: checkWidth, height: checkHeight },
-                    });
-                    // Ri-applica la modifica
-                    svgEl.width.baseVal.value = SVG_TARGET_SIZE;
-                    svgEl.height.baseVal.value = SVG_TARGET_SIZE;
-                  }
-                }, 100);
-              }
-            }
-
-            // Modifica anche il background container CSS
-            if (backgroundEl) {
-              const bgStyle = window.getComputedStyle(backgroundEl);
-              console.log('🔧 [GRID DEBUG] Background container before:', {
-                width: bgStyle.width,
-                height: bgStyle.height,
-                position: bgStyle.position,
-                backgroundColor: bgStyle.backgroundColor,
-                overflow: bgStyle.overflow,
-              });
-
-              // Forza dimensioni molto grandi anche sul container
-              (backgroundEl as HTMLElement).style.width = '20000px';
-              (backgroundEl as HTMLElement).style.height = '20000px';
-              (backgroundEl as HTMLElement).style.position = 'absolute';
-              (backgroundEl as HTMLElement).style.top = '-50%';
-              (backgroundEl as HTMLElement).style.left = '-50%';
-
-              console.log('✅ [GRID DEBUG] Background container CSS modified');
-            }
-          } else {
-            // Con userSpaceOnUse, possiamo aumentare le dimensioni
-            patternToModify.width.baseVal.value = TARGET_SIZE;
-            patternToModify.height.baseVal.value = TARGET_SIZE;
-
-            console.log('✅ [GRID DEBUG] Pattern modified (userSpaceOnUse):', {
-              id: patternToModify.id,
-              after: {
-                width: patternToModify.width.baseVal.value,
-                height: patternToModify.height.baseVal.value,
-                patternUnits: patternToModify.patternUnits,
-                patternUnitsAttr: patternToModify.getAttribute('patternUnits'),
-              }
-            });
-          }
-        } catch (e) {
-          console.error('❌ [GRID DEBUG] Error modifying pattern:', e);
-        }
-      } else {
-        console.warn('⚠️ [GRID DEBUG] Pattern element not found - trying to modify SVG directly');
-
-        // ✅ Se non c'è pattern, prova a modificare direttamente l'SVG
-        if (svgEl) {
-          const svgWidth = svgEl.width.baseVal.value;
-          const svgHeight = svgEl.height.baseVal.value;
-
-          console.log('🔧 [GRID DEBUG] Modifying SVG directly:', {
-            before: {
-              width: svgWidth,
-              height: svgHeight,
-            }
-          });
-
-          try {
-            // Prova a impostare dimensioni molto grandi
-            svgEl.width.baseVal.value = 10000;
-            svgEl.height.baseVal.value = 10000;
-
-            console.log('✅ [GRID DEBUG] SVG modified:', {
-              after: {
-                width: svgEl.width.baseVal.value,
-                height: svgEl.height.baseVal.value,
-              }
-            });
-          } catch (e) {
-            console.error('❌ [GRID DEBUG] Error modifying SVG:', e);
-          }
-        }
-      }
-    };
-
-    // Esegui analisi dopo un breve delay per permettere al DOM di renderizzare
-    const timeout = setTimeout(analyzeBackground, 100);
-
-    // ✅ Usa MutationObserver per monitorare quando React Flow rigenera il pattern
-    // Con debounce per evitare loop infiniti
-    let reanalysisTimeout: NodeJS.Timeout | null = null;
-    const observer = new MutationObserver((mutations) => {
-      let shouldReanalyze = false;
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'childList' || mutation.type === 'attributes') {
-          // Se cambia il pattern o l'SVG, ri-analizza
-          const target = mutation.target as HTMLElement;
-          if (target.tagName === 'pattern' || target.tagName === 'svg' || target.classList.contains('react-flow__background')) {
-            // Verifica se qualcosa è stato resettato
-            if (target.tagName === 'pattern') {
-              const pattern = target as SVGPatternElement;
-              const patternUnits = pattern.getAttribute('patternUnits') || 'objectBoundingBox';
-              if (patternUnits === 'objectBoundingBox') {
-                // Con objectBoundingBox, controlla l'SVG
-                const svg = target.closest('svg') as SVGSVGElement | null;
-                if (svg && (svg.width.baseVal.value < 5000 || svg.height.baseVal.value < 5000)) {
-                  shouldReanalyze = true;
-                  console.log('🔄 [GRID DEBUG] SVG reset detected');
-                }
-              } else {
-                // Con userSpaceOnUse, controlla il pattern
-                if (pattern.width.baseVal.value < 10000 || pattern.height.baseVal.value < 10000) {
-                  shouldReanalyze = true;
-                  console.log('🔄 [GRID DEBUG] Pattern reset detected');
-                }
-              }
-            } else if (target.tagName === 'svg') {
-              const svg = target as SVGSVGElement;
-              if (svg.width.baseVal.value < 5000 || svg.height.baseVal.value < 5000) {
-                shouldReanalyze = true;
-                console.log('🔄 [GRID DEBUG] SVG reset detected');
-              }
-            } else {
-              shouldReanalyze = true;
-            }
-          }
-        }
-      });
-      if (shouldReanalyze) {
-        // Debounce: aspetta 200ms prima di ri-analizzare
-        if (reanalysisTimeout) {
-          clearTimeout(reanalysisTimeout);
-        }
-        reanalysisTimeout = setTimeout(() => {
-          console.log('🔄 [GRID DEBUG] DOM changed, re-analyzing...');
-          analyzeBackground();
-        }, 200);
-      }
-    });
-
-    // Osserva il background e tutti gli SVG per cambiamenti
-    const backgroundEl = document.querySelector('.react-flow__background');
-    if (backgroundEl) {
-      observer.observe(backgroundEl, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['width', 'height', 'patternUnits', 'viewBox']
-      });
-    }
-
-    // Esegui anche quando cambia il viewport o si fa resize
-    window.addEventListener('resize', analyzeBackground);
-    window.addEventListener('scroll', analyzeBackground, { passive: true });
-
-    return () => {
-      clearTimeout(timeout);
-      if (reanalysisTimeout) {
-        clearTimeout(reanalysisTimeout);
-      }
-      observer.disconnect();
-      window.removeEventListener('resize', analyzeBackground);
-      window.removeEventListener('scroll', analyzeBackground);
-    };
-  }, [reactFlowInstance, nodes.length]);*/
-
-
   return (
     <div
       className="flex-1 h-full relative"
@@ -1041,7 +666,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       onMouseLeave={() => setCursorTooltip(null)}
       onMouseDown={eventHandlers.onMouseDown}
     >
-      {/* Expose nodes/edges via FlowStateBridge (Phase 5: centralized sync) */}
+      {/* Sync nodes/edges to FlowStateBridge for global access */}
       {(() => {
         try {
           FlowStateBridge.setNodes(nodes);
@@ -1210,7 +835,7 @@ export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
 
   const { data: projectData } = useProjectData();
 
-  // Providers per IntellisenseService (Phase 5: use FlowStateBridge)
+  // Providers for IntellisenseService
   const intellisenseProviders = useMemo(() => ({
     getProjectData: () => projectData,
     getFlowNodes: () => FlowStateBridge.getNodes(),

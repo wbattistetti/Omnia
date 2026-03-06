@@ -45,8 +45,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
 
   const reactFlowInstance = useReactFlow();
 
-  // ✅ EXECUTION HIGHLIGHT: Get execution highlight styles for edge
-  // Phase 4: Use FlowStateBridge for centralized access
+  // Execution highlight styles
   const allEdges = FlowStateBridge.getEdges();
   const edgeHighlight = useEdgeExecutionHighlight(props as any, allEdges);
 

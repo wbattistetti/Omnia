@@ -21,7 +21,6 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
   const { upsertFlow, updateFlowGraph } = useFlowStoreActions();
   const pd = useProjectDataUpdate();
 
-  // ✅ PHASE 1: Get entity creation functions for FlowActionsContext
   const entityCreation = useEntityCreation();
 
   useEffect(() => {
@@ -35,7 +34,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
 
   const flow = flows[flowId];
 
-  // ✅ PHASE 1: Create stable setNodes function for FlowActionsProvider
+  // Stable setNodes function for FlowActionsProvider
   const setNodes = useCallback(
     (updater: any) => updateFlowGraph(flowId, (ns, es) => ({
       nodes: typeof updater === 'function' ? updater(ns) : updater,
@@ -63,7 +62,6 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
     />
   );
 
-  // ✅ PHASE 1: Always wrap with FlowActionsProvider for stable callbacks
   const withFlowActions = (
     <FlowActionsProvider
       setNodes={setNodes}

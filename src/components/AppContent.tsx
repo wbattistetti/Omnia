@@ -32,12 +32,11 @@ import { ProjectManager } from './AppContent/application/services/ProjectManager
 import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
-// ✅ PHASE 2: createSingleNodeFlow moved to useChatOrchestrator
 import { FlowTestProvider } from '../context/FlowTestContext';
 import { FlowActionsProvider } from '../context/FlowActionsContext';
 import { useEntityCreation } from '../hooks/useEntityCreation';
-import { useChatOrchestrator } from '../hooks/useChatOrchestrator'; // ✅ PHASE 2: Chat orchestration
-import { FlowStateBridge } from '../services/FlowStateBridge'; // ✅ PHASE 5: Centralized flow state
+import { useChatOrchestrator } from '../hooks/useChatOrchestrator';
+import { FlowStateBridge } from '../services/FlowStateBridge';
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableNonInteractiveEditor from './TaskEditor/ResponseEditor/ResizableNonInteractiveEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableTaskEditorHost from './TaskEditor/EditorHost/ResizableTaskEditorHost'; // ✅ RINOMINATO: ActEditor → TaskEditor, ResizableActEditorHost → ResizableTaskEditorHost
@@ -165,7 +164,6 @@ export const AppContent: React.FC<AppContentProps> = ({
   // ✅ Get translations for chat panel (needed for ChatOrchestrator)
   const { translations: globalTranslations, isReady: translationsReady, isLoading: translationsLoading, loadAllTranslations } = useProjectTranslations();
 
-  // ✅ PHASE 2: Use ChatOrchestrator hook for chat panel operations
   const chatOrchestrator = useChatOrchestrator({
     setDockTree,
     currentPid,
@@ -175,7 +173,6 @@ export const AppContent: React.FC<AppContentProps> = ({
     loadAllTranslations,
   });
 
-  // ✅ PHASE 2: handleTestSingleNode now delegates to ChatOrchestrator
   const handleTestSingleNode = React.useCallback(async (nodeId: string, nodeRows?: any[]) => {
     console.log('[AppContent] handleTestSingleNode -> delegating to ChatOrchestrator');
     await chatOrchestrator.openSingleNodeChat(nodeId, nodeRows);
@@ -246,7 +243,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Usa ActEditor context invece di selectedDDT per unificare l'apertura editor
   const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
 
-  // ✅ PHASE 1: Get entity creation for fallback FlowEditor (when no project is loaded)
+  // Entity creation for fallback FlowEditor (when no project is loaded)
   const entityCreationFallback = useEntityCreation();
 
   // ✅ REFACTOR: Initialize ProjectManager
@@ -394,7 +391,6 @@ export const AppContent: React.FC<AppContentProps> = ({
     });
   }, [handleTestSingleNode]);
 
-  // ✅ PHASE 2: handleRunFlow now delegates to ChatOrchestrator
   const handleRunFlow = React.useCallback(() => {
     console.log('[AppContent] handleRunFlow -> delegating to ChatOrchestrator');
     chatOrchestrator.openFlowChat();
@@ -756,7 +752,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                       console.log('[Save][3-flow][flush] ✅ DONE', { ms: Math.round(tFlushEnd - tFlush) });
 
                       // Final PUT immediate (explicit Save)
-                      // Phase 5: Use FlowStateBridge for centralized flow state access
                       const tPut = performance.now();
                       const mainFlow = FlowStateBridge.getFlowById('main');
                       const flowData = mainFlow
@@ -1005,7 +1000,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                           />
                         </FlowWorkspaceProvider>
                       ) : (
-                        // ✅ PHASE 1/5: Wrap with FlowActionsProvider using FlowStateBridge
                         <FlowActionsProvider
                           setNodes={(updater: any) => {
                             try {

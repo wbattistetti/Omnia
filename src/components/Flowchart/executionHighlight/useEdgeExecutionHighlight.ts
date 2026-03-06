@@ -23,7 +23,6 @@ export function useEdgeExecutionHighlight(
   const execState = useExecutionState();
   const errorReportedRef = useRef<Set<string>>(new Set());
 
-  // Get all edges via FlowStateBridge if not provided (Phase 4: centralized access)
   const edges = allEdges || FlowStateBridge.getEdges();
 
   const highlightResult = useMemo(() => {

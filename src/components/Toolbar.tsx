@@ -54,8 +54,7 @@ export function Toolbar({
   const projectLocale = 'it-IT'; // TODO: Get from project context if available
 
   // Verifica se il progetto è vuoto (non ha contenuti)
-  // Controlla sia i dati del progetto che i nodes/edges del flowchart
-  // Phase 4: Use FlowStateBridge for centralized access
+  // Check both project data and flowchart nodes/edges
   const hasFlowchartContent = FlowStateBridge.hasNodes() ||
     (FlowStateBridge.getFlowById('main')?.nodes?.length || 0) > 0;
 

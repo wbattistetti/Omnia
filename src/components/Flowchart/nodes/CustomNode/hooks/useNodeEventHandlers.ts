@@ -2,7 +2,7 @@ import { CustomNodeData } from '../CustomNode';
 import { useFlowActions } from '../../../../../context/FlowActionsContext';
 
 interface NodeEventHandlersProps {
-  nodeId: string; // ✅ PHASE 1: Added nodeId for context-based actions
+  nodeId: string;
   data: CustomNodeData;
   nodeTitle: string;
   setNodeTitle: (title: string) => void;
@@ -15,8 +15,6 @@ interface NodeEventHandlersProps {
 /**
  * Manages all event handlers for CustomNode
  * Extracts event handling logic to simplify the main component
- *
- * ✅ PHASE 1: Uses FlowActionsContext with fallback to data.onDelete/data.onUpdate
  */
 export function useNodeEventHandlers({
   nodeId,
@@ -28,7 +26,6 @@ export function useNodeEventHandlers({
   setIsHoveredNode,
   toolbarElementRef
 }: NodeEventHandlersProps) {
-  // ✅ PHASE 1: Try to get actions from context (null if outside provider)
   const flowActions = useFlowActions();
 
   const handleEndTitleEditing = () => {
@@ -53,7 +50,6 @@ export function useNodeEventHandlers({
 
   const handleTitleUpdate = (newTitle: string) => {
     setNodeTitle(newTitle);
-    // ✅ PHASE 1: Try context first, then fallback to data.onUpdate
     if (flowActions?.updateNode) {
       flowActions.updateNode(nodeId, { label: newTitle });
     } else if (typeof data.onUpdate === 'function') {
@@ -62,7 +58,6 @@ export function useNodeEventHandlers({
   };
 
   const handleDeleteNode = () => {
-    // ✅ PHASE 1: Try context first, then fallback to data.onDelete
     if (flowActions?.deleteNode) {
       flowActions.deleteNode(nodeId);
     } else if (typeof data.onDelete === 'function') {

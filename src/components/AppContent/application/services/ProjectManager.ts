@@ -132,7 +132,6 @@ export class ProjectManager {
         localStorage.setItem('currentProjectId', projectId);
       } catch { }
       this.params.pdUpdate.setCurrentProjectId(projectId);
-      // Phase 4: Use FlowStateBridge for centralized access
       FlowStateBridge.clear();
 
       await this.params.refreshData();

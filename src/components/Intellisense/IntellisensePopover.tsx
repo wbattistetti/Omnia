@@ -28,8 +28,7 @@ export const IntellisensePopover: React.FC = () => {
 
         let elementId = state.target.nodeId;
 
-        // Se è un edge, trova il nodo di DESTINAZIONE (temporaneo)
-        // Phase 4: Use FlowStateBridge for centralized access
+        // If it's an edge, find the DESTINATION node (temporary)
         if (state.target.edgeId && !state.target.nodeId) {
             const edge = FlowStateBridge.findEdge(state.target.edgeId);
             if (edge && edge.target) {
@@ -65,8 +64,7 @@ export const IntellisensePopover: React.FC = () => {
         const handler = () => {
             let elementId = state.target!.nodeId;
 
-            // Se è un edge, trova il nodo temporaneo associato
-            // Phase 4: Use FlowStateBridge for centralized access
+            // If it's an edge, find the associated temporary node
             if (state.target!.edgeId && !state.target!.nodeId) {
                 const edge = FlowStateBridge.findEdge(state.target!.edgeId);
                 if (edge && edge.target) {
@@ -258,8 +256,7 @@ export const IntellisensePopover: React.FC = () => {
                 }));
             }
 
-            // ✅ 4. Rendi visibile il nodo temporaneo (SENZA modificare il titolo)
-            // Phase 4: Use FlowStateBridge for centralized access
+            // Make the temporary node visible (without modifying the title)
             const edge = FlowStateBridge.findEdge(edgeId);
 
             if (edge && edge.target) {

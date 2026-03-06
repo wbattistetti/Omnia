@@ -97,7 +97,6 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
     // Reset retry count
     flowChatRetryRef.current = 0;
 
-    // Get flow data via FlowStateBridge (Phase 4: centralized access)
     const { nodes, edges, tasks } = FlowStateBridge.getFlowData();
 
     console.log('[ChatOrchestrator] Flow data:', {
@@ -170,7 +169,6 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
     // Reset retry count
     singleNodeRetryRef.current = 0;
 
-    // Get flow data via FlowStateBridge (Phase 4: centralized access)
     const { nodes: allNodes, edges: allEdges, tasks: allTasks } = FlowStateBridge.getFlowData();
 
     // Find the node using bridge helper
