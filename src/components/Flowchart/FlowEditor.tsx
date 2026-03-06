@@ -17,6 +17,7 @@ import { TaskNode } from './nodes/TaskNode/TaskNode';
 import { useEdgeManager } from '../../hooks/useEdgeManager';
 import { useConnectionMenu } from '../../hooks/useConnectionMenu';
 import { useNodeManager } from '../../hooks/useNodeManager';
+import { useNodeActions } from '../../hooks/useNodeActions'; // Phase 3
 import { useProjectData } from '../../context/ProjectDataContext';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 import { dlog } from '../../utils/debug';
@@ -43,12 +44,11 @@ import { useCursorTooltip } from './hooks/useCursorTooltip';
 import { useEdgeLabelManager } from './hooks/useEdgeLabelManager';
 import { useTaskCreationFromSelection } from './hooks/useTaskCreationFromSelection';
 import { CustomEdge } from './edges/CustomEdge';
-import { v4 as uuidv4 } from 'uuid';
+// ✅ PHASE 3: uuidv4 moved to useNodeActions hook
 import { useIntellisense } from '../../context/IntellisenseContext';
 import { FlowchartWrapper } from './FlowchartWrapper';
 import { ExecutionStateProvider } from './executionHighlight/ExecutionStateContext';
-import { taskRepository } from '../../services/TaskRepository';
-import { getTaskIdFromRow } from '../../utils/taskHelpers';
+// ✅ PHASE 3: taskRepository and getTaskIdFromRow moved to useNodeActions hook
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -252,44 +252,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ RIMOSSO: addItem e addCategory - ora usati direttamente in useConditionCreation
   const { data: projectData } = useProjectData();
 
-  // ✅ Definisci deleteNodeWithLog dopo projectData
-  const deleteNodeWithLog = useCallback(async (id: string) => {
-    // ✅ NUOVO: Cancella tutti i task delle righe del nodo prima di cancellare il nodo
-    try {
-      // Trova il nodo prima di cancellarlo
-      const nodeToDelete = nodes.find(n => n.id === id);
-      if (nodeToDelete && nodeToDelete.data?.rows) {
-        const rows = nodeToDelete.data.rows as any[];
-        // ✅ Ottieni projectId da useProjectData
-        const projectId = projectData?.projectId || undefined;
-
-        console.log(`🗑️ [deleteNodeWithLog] Cancellando nodo ${id} con ${rows.length} righe`);
-
-        // Cancella tutti i task delle righe
-        for (const row of rows) {
-          const taskId = row?.taskId || getTaskIdFromRow(row) || row?.id; // row.id è anche il taskId
-          if (taskId) {
-            try {
-              await taskRepository.deleteTask(taskId, projectId);
-              console.log(`✅ [deleteNodeWithLog] Task ${taskId} cancellato per riga ${row.id}`);
-
-              // ✅ Emit event to close Response Editor if open for this task
-              document.dispatchEvent(new CustomEvent('taskEditor:closeIfOpen', {
-                detail: { taskId }
-              }));
-            } catch (e) {
-              console.warn(`⚠️ [deleteNodeWithLog] Errore cancellando task ${taskId}:`, e);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.error('❌ [deleteNodeWithLog] Errore durante cancellazione task:', e);
-    }
-
-    // Cancella il nodo
-    deleteNode(id);
-  }, [deleteNode, nodes, projectData]);
+  // ✅ PHASE 3: Use useNodeActions hook for enhanced node operations
+  const nodeActions = useNodeActions({
+    nodes,
+    deleteNode,
+    addNodeAtPosition,
+    updateNode,
+    reactFlowInstance,
+    projectId: projectData?.projectId,
+  });
+  const { deleteNodeWithLog } = nodeActions;
 
   // Sostituisco onConnect (dopo deleteNodeWithLog)
   const { onConnect, onConnectStart } = useFlowConnect(
@@ -497,38 +469,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setContentSize({ w, h });
   }, [nodes]);
 
-  const createNodeAt = useCallback((clientX: number, clientY: number, initialRow?: any) => {
-    // Usa UUID invece del contatore per evitare conflitti
-    const newNodeId = uuidv4();
-
-    let x = 0, y = 0;
-    if (reactFlowInstance) {
-      // ✅ clientX, clientY sono le coordinate schermo del clone (position: fixed)
-      // ✅ Converti direttamente in coordinate flow
-      const pos = reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY });
-      x = pos.x;
-      y = pos.y;
-    }
-
-    const focusRowId = initialRow ? initialRow.id : `${newNodeId}-${Math.random().toString(36).substr(2, 9)}`;
-
-    const node: Node<FlowNode> = {
-      id: newNodeId,
-      type: 'custom',
-      position: { x, y },
-      data: {
-        label: '',
-        rows: initialRow ? [initialRow] : [],
-        onDelete: () => deleteNodeWithLog(newNodeId),
-        onUpdate: (updates: any) => updateNode(newNodeId, updates),
-        hidden: false, // ✅ Visibile subito - la posizione è già corretta
-        focusRowId: focusRowId,
-        isTemporary: true,
-      },
-    };
-    // ✅ Aggiungi il nodo - fine, niente retry, niente attese DOM
-    addNodeAtPosition(node, x, y);
-  }, [addNodeAtPosition, reactFlowInstance, deleteNodeWithLog, updateNode]);
+  // ✅ PHASE 3: createNodeAt now comes from useNodeActions hook
+  const { createNodeAt } = nodeActions;
 
   // ✅ Listener per creare un nodo dal canvas quando si rilascia una riga
   useEffect(() => {
