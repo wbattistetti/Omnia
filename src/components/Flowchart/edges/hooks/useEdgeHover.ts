@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { FlowStateBridge } from '../../../../services/FlowStateBridge';
 
 export interface EdgeHoverState {
   hovered: boolean;
@@ -50,10 +51,8 @@ export function useEdgeHover(
       }
       toolbarTimeoutRef.current = setTimeout(() => {
         // Check if mouse is still over toolbar or label
-        const activeElement = document.elementFromPoint(
-          (window as any).__lastMouseX || 0,
-          (window as any).__lastMouseY || 0
-        ) as HTMLElement;
+        const { x, y } = FlowStateBridge.getLastMousePosition();
+        const activeElement = document.elementFromPoint(x, y) as HTMLElement;
 
         const isOverToolbar = activeElement && (
           toolbarRef.current?.contains(activeElement) ||

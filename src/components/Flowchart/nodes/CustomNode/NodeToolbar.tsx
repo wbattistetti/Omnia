@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trash2, Anchor, Edit3, Move } from 'lucide-react';
+import { FlowStateBridge } from '../../../../services/FlowStateBridge';
 
 type NodeToolbarProps = {
   onDelete?: () => void;
@@ -29,11 +30,11 @@ export const NodeToolbar: React.FC<NodeToolbarProps> = ({ onDelete, onEditTitle,
       {/* Icona Move (4 frecce) per trascinare il nodo - NON ha 'nodrag' quindi è draggable */}
       <div
         title="Drag to move node"
-        style={{ 
-          cursor: 'grab', 
-          opacity: 0.85, 
-          transition: 'opacity 120ms linear', 
-          display: 'flex', 
+        style={{
+          cursor: 'grab',
+          opacity: 0.85,
+          transition: 'opacity 120ms linear',
+          display: 'flex',
           alignItems: 'center',
           userSelect: 'none'
         }}
@@ -44,7 +45,7 @@ export const NodeToolbar: React.FC<NodeToolbarProps> = ({ onDelete, onEditTitle,
       >
         <Move className="w-3 h-3 text-slate-200 hover:text-amber-300 transition transform hover:scale-110 drop-shadow hover:drop-shadow-lg" />
       </div>
-      
+
       {/* conferma/annulla in modalità header editing saranno mostrati dall'header; qui solo matita/cestino/ancora */}
       <button
         className="p-0 hover:opacity-100 transition transform hover:scale-110 nodrag"
@@ -71,8 +72,8 @@ export const NodeToolbar: React.FC<NodeToolbarProps> = ({ onDelete, onEditTitle,
           title="Drag to move with descendants"
           className="rigid-anchor nodrag"
           style={{ cursor: 'grab', marginLeft: 4, opacity: 0.85, transition: 'opacity 120ms linear' }}
-          onMouseDown={() => { try { (window as any).__flowDragMode = 'rigid'; } catch {} }}
-          onMouseUp={() => { try { (window as any).__flowDragMode = undefined; } catch {} }}
+          onMouseDown={() => { try { FlowStateBridge.setDragMode('rigid'); } catch {} }}
+          onMouseUp={() => { try { FlowStateBridge.setDragMode(null); } catch {} }}
         >
           <Anchor className="w-3 h-3 text-slate-200 hover:text-amber-300 transition transform hover:scale-110 drop-shadow hover:drop-shadow-lg" />
         </div>

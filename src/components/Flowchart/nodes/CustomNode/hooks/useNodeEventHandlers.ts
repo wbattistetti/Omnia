@@ -1,5 +1,6 @@
 import { CustomNodeData } from '../CustomNode';
 import { useFlowActions } from '../../../../../context/FlowActionsContext';
+import { FlowStateBridge } from '../../../../../services/FlowStateBridge';
 
 interface NodeEventHandlersProps {
   nodeId: string;
@@ -32,8 +33,7 @@ export function useNodeEventHandlers({
     setIsEditingNode(false);
     setIsHoverHeader(false);
     try {
-      const mx = (window as any).__lastMouseX ?? 0;
-      const my = (window as any).__lastMouseY ?? 0;
+      const { x: mx, y: my } = FlowStateBridge.getLastMousePosition();
       const elements = document.elementsFromPoint(mx, my);
       const stillOverNode = elements.some((el: Element) => {
         return el.closest?.('[data-id]') !== null ||

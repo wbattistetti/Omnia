@@ -192,7 +192,7 @@ export function useFlowEventHandlers(
    * Handles node drag - applies rigid drag movement if context exists
    */
   const onNodeDrag = useCallback((event: any, draggedNode: Node) => {
-    const isBlocked = (window as any).__blockNodeDrag === draggedNode.id;
+    const isBlocked = FlowStateBridge.isNodeDragBlocked(draggedNode.id);
 
     // ✅ Blocca il drag se è partito da un elemento nodrag
     if (isBlocked) {
@@ -222,9 +222,9 @@ export function useFlowEventHandlers(
    * Handles node drag stop - applies final rigid drag offset
    */
   const onNodeDragStop = useCallback((event: any, node: Node) => {
-    // ✅ NOTA: onNodeDragStop NON viene chiamato quando si parte da un handle
-    // grazie a noDragClassName="react-flow__handle"
-    try { (window as any).__flowDragMode = undefined; } catch { }
+    // NOTE: onNodeDragStop is NOT called when starting from a handle
+    // thanks to noDragClassName="react-flow__handle"
+    try { FlowStateBridge.setDragMode(null); } catch { }
 
     const ctx = rigidDragCtxRef.current;
     if (ctx) {

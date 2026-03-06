@@ -627,8 +627,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               const nodeRect = nodeEl.getBoundingClientRect();
               const viewport = getViewport();
 
-              // ✅ Verifica se è drag rigido (ancora) o normale (move)
-              const isRigidDrag = (window as any).__flowDragMode === 'rigid';
+              // Check if this is a rigid drag (anchor) or normal (move)
+              const isRigidDrag = FlowStateBridge.isRigidDrag();
 
               // ✅ Se è drag rigido, calcola le posizioni relative dei discendenti
               let descendantOffsets: Map<string, { offsetX: number; offsetY: number }> | undefined;

@@ -229,6 +229,24 @@ class FlowStateBridgeClass {
     return this.getDragMode() === 'rigid';
   }
 
+  // ========== TEMPORARY NODE TRACKING ==========
+
+  /**
+   * Get the last temporary node ID
+   */
+  getLastTempNodeId(): string | null {
+    if (typeof window === 'undefined') return null;
+    return (window as any).__flowLastTemp || null;
+  }
+
+  /**
+   * Set the last temporary node ID
+   */
+  setLastTempNodeId(nodeId: string | null): void {
+    if (typeof window === 'undefined') return;
+    (window as any).__flowLastTemp = nodeId;
+  }
+
   // ========== UTILITIES ==========
 
   /**
@@ -463,19 +481,30 @@ class FlowStateBridgeClass {
   }
 
   /**
-   * Check if node drag should be blocked
+   * Get the blocked node drag ID (null if not blocked)
    */
-  isNodeDragBlocked(): boolean {
-    if (typeof window === 'undefined') return false;
-    return (window as any).__blockNodeDrag || false;
+  getBlockedNodeDragId(): string | null {
+    if (typeof window === 'undefined') return null;
+    return (window as any).__blockNodeDrag || null;
   }
 
   /**
-   * Set block node drag state
+   * Check if a specific node's drag is blocked
    */
-  setBlockNodeDrag(block: boolean): void {
+  isNodeDragBlocked(nodeId?: string): boolean {
+    if (typeof window === 'undefined') return false;
+    const blocked = (window as any).__blockNodeDrag;
+    if (!blocked) return false;
+    if (nodeId) return blocked === nodeId;
+    return !!blocked;
+  }
+
+  /**
+   * Set block node drag state (pass nodeId to block, null to unblock)
+   */
+  setBlockNodeDrag(nodeId: string | null): void {
     if (typeof window === 'undefined') return;
-    (window as any).__blockNodeDrag = block;
+    (window as any).__blockNodeDrag = nodeId;
   }
 
   /**

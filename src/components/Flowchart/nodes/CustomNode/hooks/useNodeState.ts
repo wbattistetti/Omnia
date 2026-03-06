@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { CustomNodeData } from '../CustomNode';
+import { FlowStateBridge } from '../../../../../services/FlowStateBridge';
 
 interface UseNodeStateProps {
   data: CustomNodeData;
@@ -39,8 +40,7 @@ export function useNodeState({ data }: UseNodeStateProps) {
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       try {
-        (window as any).__lastMouseX = e.clientX;
-        (window as any).__lastMouseY = e.clientY;
+        FlowStateBridge.setLastMousePosition(e.clientX, e.clientY);
       } catch { }
     };
     window.addEventListener('mousemove', onMove, { passive: true });

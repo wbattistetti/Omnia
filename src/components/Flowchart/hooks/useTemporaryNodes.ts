@@ -3,6 +3,7 @@ import { Node, Edge } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
 import type { FlowNode, EdgeData } from '../types/flowTypes';
 import { DEFAULT_LINK_STYLE } from '../types/flowTypes';
+import { FlowStateBridge } from '../../../services/FlowStateBridge';
 
 export function useTemporaryNodes(
       setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>,
@@ -29,11 +30,11 @@ export function useTemporaryNodes(
     // ✅ Rimuovi SOLO l'edge temporaneo corrente
     setEdges((eds) => eds.filter(e => e.id !== tempEdgeId));
 
-    // Azzera i riferimenti temporanei
+    // Clear temporary references
     try {
       connectionMenuRef.current.tempNodeId = null;
       connectionMenuRef.current.tempEdgeId = null;
-      (window as any).__flowLastTemp = null;
+      FlowStateBridge.setLastTempNodeId(null);
     } catch (error) {
       // Silent fail
     }
