@@ -187,12 +187,13 @@ export class TaskEditorEventHandler {
         task = taskRepository.createTask(taskMeta.type, event.templateId, undefined, instanceId);
       }
       if (task) {
-        const { extractTaskOverrides } = await import('@utils/taskUtils');
-        const overrides = await extractTaskOverrides(task, taskTree, this.params.pdUpdate?.getCurrentProjectId() || undefined);
-        taskRepository.updateTask(instanceId, {
-          ...overrides,
+        // ✅ SIMPLIFIED: Save directly from taskTree (no extractTaskOverrides needed)
+        const updates: Partial<Task> = {
+          steps: taskTree.steps ?? {},
+          ...(taskTree.labelKey || taskTree.label ? { labelKey: taskTree.labelKey || taskTree.label } : {}),
           templateId: event.templateId || task.templateId,
-        }, this.params.pdUpdate?.getCurrentProjectId());
+        };
+        taskRepository.updateTask(instanceId, updates, this.params.pdUpdate?.getCurrentProjectId());
       }
       return taskTree;
     }

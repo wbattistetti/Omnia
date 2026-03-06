@@ -37,20 +37,28 @@ function getFeatureFlag(
   if (typeof window === 'undefined') {
     // Server-side: use environment variable
     const envKey = `FEATURE_${key}`;
-    const envValue = process.env[envKey];
+    // ✅ Safe access to process.env (only on server-side)
+    const envValue = typeof process !== 'undefined' && process.env ? process.env[envKey] : undefined;
     return envValue === 'true' || defaultValue;
   }
 
-  // Client-side: check localStorage first, then environment
+  // Client-side: check localStorage first, then environment (via import.meta.env in Vite)
   const stored = localStorage.getItem(`featureFlag_${key}`);
   if (stored !== null) {
     return stored === 'true';
   }
 
-  const envKey = `FEATURE_${key}`;
-  const envValue = process.env[envKey];
-  if (envValue !== undefined) {
-    return envValue === 'true';
+  // ✅ Use import.meta.env for Vite (browser environment)
+  // In Vite, import.meta.env is always available, so we can access it directly
+  try {
+    const envKey = `VITE_FEATURE_${key}`;
+    // @ts-ignore - import.meta.env is available in Vite
+    const envValue = import.meta.env[envKey];
+    if (envValue !== undefined) {
+      return envValue === 'true';
+    }
+  } catch (e) {
+    // If import.meta is not available, ignore
   }
 
   return defaultValue;
@@ -76,6 +84,18 @@ export function setFeatureFlag(
  * Get all feature flags
  */
 export function getFeatureFlags(): FeatureFlags {
+  // ✅ Safe check for development mode (works in both browser and server)
+  let isDevelopment = false;
+  try {
+    // @ts-ignore - import.meta.env is available in Vite
+    isDevelopment = import.meta.env.MODE === 'development';
+  } catch (e) {
+    // Fallback to process.env if available (server-side)
+    if (typeof process !== 'undefined' && process.env) {
+      isDevelopment = process.env.NODE_ENV === 'development';
+    }
+  }
+
   return {
     USE_SIMPLIFIED_TASK_REPOSITORY: getFeatureFlag('USE_SIMPLIFIED_TASK_REPOSITORY', false),
     USE_DIRECT_TASK_UPDATES: getFeatureFlag('USE_DIRECT_TASK_UPDATES', false),
@@ -83,8 +103,8 @@ export function getFeatureFlags(): FeatureFlags {
     USE_SIMPLIFIED_BUILD_TASK_TREE: getFeatureFlag('USE_SIMPLIFIED_BUILD_TASK_TREE', false),
     USE_DIRECT_PERSISTENCE: getFeatureFlag('USE_DIRECT_PERSISTENCE', false),
     DISABLE_EXTRACT_TASK_OVERRIDES: getFeatureFlag('DISABLE_EXTRACT_TASK_OVERRIDES', false),
-    VALIDATE_REFACTORING: getFeatureFlag('VALIDATE_REFACTORING', process.env.NODE_ENV === 'development'),
-    LOG_REFACTORING_CHANGES: getFeatureFlag('LOG_REFACTORING_CHANGES', process.env.NODE_ENV === 'development'),
+    VALIDATE_REFACTORING: getFeatureFlag('VALIDATE_REFACTORING', isDevelopment),
+    LOG_REFACTORING_CHANGES: getFeatureFlag('LOG_REFACTORING_CHANGES', isDevelopment),
   };
 }
 

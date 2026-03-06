@@ -148,10 +148,22 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
     const currentStepData = currentNodeSteps[stepKey];
 
     if (currentStepData) {
+      const newDisabledValue = !currentStepData._disabled;
       const updatedStepData = {
         ...currentStepData,
-        _disabled: !currentStepData._disabled
+        _disabled: newDisabledValue
       };
+
+      console.log('[StepsStrip] 🔄 Toggling step disabled state', {
+        taskId: effectiveTaskId,
+        nodeTemplateId,
+        stepKey,
+        oldDisabled: currentStepData._disabled,
+        newDisabled: newDisabledValue,
+        stepDataBefore: currentStepData,
+        stepDataAfter: updatedStepData
+      });
+
       taskRepository.updateTask(effectiveTaskId, {
         steps: {
           ...currentSteps,
@@ -160,6 +172,18 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
             [stepKey]: updatedStepData
           }
         }
+      });
+
+      // ✅ Verifica che il flag sia stato salvato correttamente
+      const verifyTask = taskRepository.getTask(effectiveTaskId);
+      const verifySteps = verifyTask?.steps?.[nodeTemplateId] || {};
+      const verifyStepData = verifySteps[stepKey];
+      console.log('[StepsStrip] ✅ Verification after update', {
+        taskId: effectiveTaskId,
+        nodeTemplateId,
+        stepKey,
+        savedDisabled: verifyStepData?._disabled,
+        savedStepData: verifyStepData
       });
 
       // ✅ Forza ri-render aggiornando taskVersion
@@ -206,20 +230,61 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
 
   // ✅ Filter stepKeys to show only steps that are enabled (not disabled)
   const visibleStepKeys = React.useMemo(() => {
-    if (!effectiveTaskId || !node) return stepKeys;
+    console.log('[StepsStrip] 🔍 Computing visibleStepKeys', {
+      effectiveTaskId,
+      hasNode: !!node,
+      nodeTemplateId: node?.templateId || node?.id,
+      stepKeys,
+      taskVersion,
+    });
+
+    if (!effectiveTaskId || !node) {
+      console.log('[StepsStrip] ⚠️ Early return: no effectiveTaskId or node');
+      return stepKeys;
+    }
 
     const nodeTemplateId = node?.templateId || node?.id;
-    if (!nodeTemplateId) return stepKeys;
+    if (!nodeTemplateId) {
+      console.log('[StepsStrip] ⚠️ Early return: no nodeTemplateId');
+      return stepKeys;
+    }
 
     const taskInstance = taskRepository.getTask(effectiveTaskId);
-    if (!taskInstance) return stepKeys;
+    if (!taskInstance) {
+      console.log('[StepsStrip] ⚠️ Early return: no taskInstance in repository');
+      return stepKeys;
+    }
 
     const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
+
+    // ✅ DEBUG: Log all _disabled flags
+    const allDisabledFlags: Record<string, boolean | undefined> = {};
+    for (const [stepKey, stepData] of Object.entries(instanceSteps)) {
+      if (stepData && typeof stepData === 'object') {
+        allDisabledFlags[stepKey] = (stepData as any)._disabled;
+      }
+    }
+    console.log('[StepsStrip] 🔍 Instance steps with _disabled flags', {
+      taskId: effectiveTaskId,
+      nodeTemplateId,
+      instanceStepsKeys: Object.keys(instanceSteps),
+      allDisabledFlags,
+    });
 
     // ✅ Show only steps that exist in instance AND are not disabled
     const filtered = stepKeys.filter(stepKey => {
       const stepData = instanceSteps[stepKey];
-      return stepData && stepData._disabled !== true;
+      const isVisible = stepData && stepData._disabled !== true;
+      if (!isVisible) {
+        console.log(`[StepsStrip] 🚫 Step "${stepKey}" filtered out: _disabled=${stepData?._disabled}, exists=${!!stepData}`);
+      }
+      return isVisible;
+    });
+
+    console.log('[StepsStrip] ✅ Filtered visibleStepKeys', {
+      originalCount: stepKeys.length,
+      filteredCount: filtered.length,
+      filteredKeys: filtered,
     });
 
     return filtered;

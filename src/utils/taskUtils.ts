@@ -1100,6 +1100,28 @@ export async function buildTaskTreeFromRepository(
     return null;
   }
 
+  // ✅ DEBUG: Log fresh instance steps and _disabled flags
+  const freshSteps = freshInstance.steps;
+  const disabledFlagsFromRepo: Record<string, Record<string, boolean | undefined>> = {};
+  if (freshSteps) {
+    for (const [nodeId, nodeSteps] of Object.entries(freshSteps)) {
+      if (nodeSteps && typeof nodeSteps === 'object') {
+        disabledFlagsFromRepo[nodeId] = {};
+        for (const [stepKey, stepData] of Object.entries(nodeSteps)) {
+          if (stepData && typeof stepData === 'object') {
+            disabledFlagsFromRepo[nodeId][stepKey] = (stepData as any)._disabled;
+          }
+        }
+      }
+    }
+  }
+  console.log('[buildTaskTreeFromRepository] 🔍 Fresh instance from repository', {
+    taskId,
+    hasSteps: !!freshSteps,
+    stepsKeys: freshSteps ? Object.keys(freshSteps) : [],
+    disabledFlagsFromRepo: JSON.stringify(disabledFlagsFromRepo),
+  });
+
   // ✅ Delegate to pure buildTaskTree with fresh instance
   return await buildTaskTree(freshInstance, projectId);
 }
@@ -1216,12 +1238,26 @@ export async function buildTaskTree(
     }
 
     // ✅ Preserva la struttura esistente (inclusi step cancellati e flag _disabled)
+    // ✅ DEBUG: Verifica flag _disabled per ogni step
+    const disabledFlags: Record<string, Record<string, boolean>> = {};
+    for (const [nodeId, nodeSteps] of Object.entries(finalSteps)) {
+      if (nodeSteps && typeof nodeSteps === 'object' && !Array.isArray(nodeSteps)) {
+        disabledFlags[nodeId] = {};
+        for (const [stepKey, stepData] of Object.entries(nodeSteps)) {
+          if (stepData && typeof stepData === 'object') {
+            disabledFlags[nodeId][stepKey] = (stepData as any)._disabled === true;
+          }
+        }
+      }
+    }
+
     console.log('[buildTaskTree] ✅ Using instance steps (even if empty)', {
       taskId: instance.id,
       stepsKeys: Object.keys(finalSteps),
       sampleNodeId: Object.keys(finalSteps)[0],
       sampleNodeSteps: Object.keys(finalSteps)[0] ? Object.keys(finalSteps[Object.keys(finalSteps)[0]]) : [],
       isEmpty: Object.keys(finalSteps).length === 0 || (Object.keys(finalSteps)[0] && Object.keys(finalSteps[Object.keys(finalSteps)[0]]).length === 0),
+      disabledFlags, // ✅ DEBUG: Mostra tutti i flag _disabled
     });
   } else {
     // ✅ Prima creazione: instance.steps è undefined/null → clona dal template

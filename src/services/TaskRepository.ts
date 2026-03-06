@@ -4,6 +4,7 @@ import { StepType } from '../types/stepTypes';
 import { generateId } from '../utils/idGenerator';
 import { getTemplateId } from '../utils/taskHelpers';
 import { v4 as uuidv4 } from 'uuid';
+import { FEATURE_FLAGS } from '../config/featureFlags';
 
 /**
  * TaskRepository: Primary repository for Task data
@@ -133,35 +134,54 @@ class TaskRepository {
       // Structure validation (silent)
     }
 
-    // ✅ CRITICAL: Merge profondo di steps per preservare tutti i nodeTemplateId E tutti gli step all'interno
+    // ✅ CRITICAL: Merge behavior controlled by options.merge or feature flag
+    // Default: use feature flag (DISABLE_MERGE_PROFONDO = true means NO merge)
+    const shouldMerge = options?.merge ?? !FEATURE_FLAGS.DISABLE_MERGE_PROFONDO;
+
     let finalSteps = updates.steps;
     if (updates.steps && typeof updates.steps === 'object' && !Array.isArray(updates.steps) &&
         existingTask.steps && typeof existingTask.steps === 'object' && !Array.isArray(existingTask.steps)) {
-      // ✅ Merge profondo: preserva tutti i nodeTemplateId esistenti e aggiorna solo quelli in updates
-      finalSteps = {
-        ...existingTask.steps,  // Base: tutti i nodeTemplateId esistenti
-      };
 
-      // ✅ Merge profondo per ogni nodeTemplateId: preserva tutti gli step esistenti e aggiorna solo quelli in updates
-      for (const [nodeTemplateId, nodeSteps] of Object.entries(updates.steps)) {
-        if (nodeSteps && typeof nodeSteps === 'object') {
-          // ✅ CRITICAL: Se nodeSteps è un oggetto vuoto {}, significa che tutti gli step sono stati cancellati
-          // In questo caso, sovrascriviamo completamente con {} invece di fare merge
-          if (Object.keys(nodeSteps).length === 0) {
-            // ✅ Oggetto vuoto = cancellazione esplicita di tutti gli step per questo nodeTemplateId
-            finalSteps[nodeTemplateId] = {};
-          } else {
-            // ✅ Merge profondo: preserva tutti gli step esistenti (inclusi flag _disabled) e aggiorna solo quelli in updates
-            if (!finalSteps[nodeTemplateId]) {
+      if (shouldMerge) {
+        // ✅ Merge profondo: preserva tutti i nodeTemplateId esistenti e aggiorna solo quelli in updates
+        finalSteps = {
+          ...existingTask.steps,  // Base: tutti i nodeTemplateId esistenti
+        };
+
+        // ✅ Merge profondo per ogni nodeTemplateId: preserva tutti gli step esistenti e aggiorna solo quelli in updates
+        for (const [nodeTemplateId, nodeSteps] of Object.entries(updates.steps)) {
+          if (nodeSteps && typeof nodeSteps === 'object') {
+            // ✅ CRITICAL: Se nodeSteps è un oggetto vuoto {}, significa che tutti gli step sono stati cancellati
+            // In questo caso, sovrascriviamo completamente con {} invece di fare merge
+            if (Object.keys(nodeSteps).length === 0) {
+              // ✅ Oggetto vuoto = cancellazione esplicita di tutti gli step per questo nodeTemplateId
               finalSteps[nodeTemplateId] = {};
+            } else {
+              // ✅ Merge profondo: preserva tutti gli step esistenti (inclusi flag _disabled) e aggiorna solo quelli in updates
+              if (!finalSteps[nodeTemplateId]) {
+                finalSteps[nodeTemplateId] = {};
+              }
+              finalSteps[nodeTemplateId] = {
+                ...finalSteps[nodeTemplateId],  // Base: tutti gli step esistenti (inclusi flag _disabled)
+                ...nodeSteps                    // Override: aggiorna solo quelli specificati
+              };
             }
-            finalSteps[nodeTemplateId] = {
-              ...finalSteps[nodeTemplateId],  // Base: tutti gli step esistenti (inclusi flag _disabled)
-              ...nodeSteps                    // Override: aggiorna solo quelli specificati
-            };
+          } else {
+            finalSteps[nodeTemplateId] = nodeSteps;
           }
-        } else {
-          finalSteps[nodeTemplateId] = nodeSteps;
+        }
+      } else {
+        // ✅ NO MERGE: Sovrascrivi completamente (nuovo comportamento semplificato)
+        finalSteps = {
+          ...existingTask.steps,  // Preserva altri nodeTemplateId
+          ...updates.steps        // Sovrascrivi completamente quelli in updates
+        };
+
+        // ✅ Gestisci cancellazioni esplicite ({} = cancella tutti gli step)
+        for (const [nodeTemplateId, nodeSteps] of Object.entries(updates.steps)) {
+          if (nodeSteps && typeof nodeSteps === 'object' && Object.keys(nodeSteps).length === 0) {
+            finalSteps[nodeTemplateId] = {}; // Cancellazione esplicita
+          }
         }
       }
     }

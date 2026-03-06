@@ -79,6 +79,12 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
   // ✅ ARCHITETTURA ESPERTO: Carica TaskTree async usando buildTaskTree
   React.useEffect(() => {
     const loadTaskTree = async () => {
+      console.log('[DDTHostAdapter] 🔄 loadTaskTree START', {
+        taskId,
+        fullTaskId: fullTask?.id,
+        fullTaskHasSteps: !!fullTask?.steps,
+        fullTaskStepsKeys: fullTask?.steps ? Object.keys(fullTask.steps) : [],
+      });
       // ✅ NEW: Skip buildTaskTree if needsTaskBuilder is true AND no task exists yet
       // In this case, the wizard will create the task when completed
       if ((taskMeta as any).needsTaskBuilder === true && !fullTask) {
@@ -114,9 +120,54 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       try {
         setTaskTreeLoading(true);
 
+        // ✅ DEBUG: Log task from repository BEFORE buildTaskTree
+        const taskBeforeBuild = taskRepository.getTask(taskId);
+        const stepsBeforeBuild = taskBeforeBuild?.steps;
+        const disabledFlagsBeforeBuild: Record<string, Record<string, boolean | undefined>> = {};
+        if (stepsBeforeBuild) {
+          for (const [nodeId, nodeSteps] of Object.entries(stepsBeforeBuild)) {
+            if (nodeSteps && typeof nodeSteps === 'object') {
+              disabledFlagsBeforeBuild[nodeId] = {};
+              for (const [stepKey, stepData] of Object.entries(nodeSteps)) {
+                if (stepData && typeof stepData === 'object') {
+                  disabledFlagsBeforeBuild[nodeId][stepKey] = (stepData as any)._disabled;
+                }
+              }
+            }
+          }
+        }
+        console.log('[DDTHostAdapter] 🔍 Task from repository BEFORE buildTaskTree', {
+          taskId,
+          hasSteps: !!stepsBeforeBuild,
+          stepsKeys: stepsBeforeBuild ? Object.keys(stepsBeforeBuild) : [],
+          disabledFlagsBeforeBuild: JSON.stringify(disabledFlagsBeforeBuild),
+        });
+
         // ✅ CRITICAL: Usa buildTaskTreeFromRepository per garantire istanza fresca dal repository
         // Questo assicura che flag _disabled e altre modifiche in memoria siano sempre riflesse
         const tree = await buildTaskTreeFromRepository(taskId, currentProjectId || undefined);
+
+        // ✅ DEBUG: Log tree steps AFTER buildTaskTree
+        const treeSteps = tree?.steps;
+        const disabledFlagsAfterBuild: Record<string, Record<string, boolean | undefined>> = {};
+        if (treeSteps) {
+          for (const [nodeId, nodeSteps] of Object.entries(treeSteps)) {
+            if (nodeSteps && typeof nodeSteps === 'object') {
+              disabledFlagsAfterBuild[nodeId] = {};
+              for (const [stepKey, stepData] of Object.entries(nodeSteps)) {
+                if (stepData && typeof stepData === 'object') {
+                  disabledFlagsAfterBuild[nodeId][stepKey] = (stepData as any)._disabled;
+                }
+              }
+            }
+          }
+        }
+        console.log('[DDTHostAdapter] 🔍 TaskTree AFTER buildTaskTree', {
+          taskId,
+          hasTreeSteps: !!treeSteps,
+          treeStepsKeys: treeSteps ? Object.keys(treeSteps) : [],
+          disabledFlagsAfterBuild: JSON.stringify(disabledFlagsAfterBuild),
+        });
 
         // ✅ CRITICAL: Ricarica task dal repository dopo buildTaskTree
         // buildTaskTree clona gli step e li salva nel repository, ma fullTask non si aggiorna automaticamente
@@ -236,31 +287,27 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         taskInstanceTemplateId: taskInstance?.templateId,
       });
 
-      // ✅ NUOVO: Usa extractTaskOverrides per salvare solo override
+      // ✅ SIMPLIFIED: Save directly from finalTaskTree (no extractTaskOverrides needed)
       if (taskInstance && currentProjectId) {
-        const { extractTaskOverrides } = await import('../../../utils/taskUtils');
-        const overrides = await extractTaskOverrides(taskInstance, finalTaskTree, currentProjectId);
+        const stepsToSave = finalTaskTree.steps ?? {};
+        const labelKeyToSave = finalTaskTree.labelKey || finalTaskTree.label;
 
-        // ✅ Aggiorna task con solo override
-        if (overrides.label !== undefined) taskInstance.label = overrides.label;
-        if (overrides.steps !== undefined) taskInstance.steps = overrides.steps;
-        if (overrides.introduction !== undefined) taskInstance.introduction = overrides.introduction;
-        // ❌ NON salvare: constraints, dataContract (vengono dal template)
+        const updates: Partial<Task> = {
+          steps: stepsToSave,
+          ...(labelKeyToSave ? { labelKey: labelKeyToSave } : {}),
+          type: TaskType.UtteranceInterpretation
+        };
 
-        console.log('[TaskTreeHostAdapter][handleComplete] 💾 Saving task with overrides', {
+        console.log('[TaskTreeHostAdapter][handleComplete] 💾 Saving task directly', {
           taskId,
-          hasOverridesSteps: !!overrides.steps,
-          overridesStepsKeys: overrides.steps && typeof overrides.steps === 'object' && !Array.isArray(overrides.steps)
-            ? Object.keys(overrides.steps)
+          hasSteps: !!stepsToSave,
+          stepsKeys: stepsToSave && typeof stepsToSave === 'object' && !Array.isArray(stepsToSave)
+            ? Object.keys(stepsToSave)
             : [],
-          overridesStepsContent: overrides.steps,
         });
 
-        taskInstance.type = TaskType.UtteranceInterpretation;
-        taskInstance.updatedAt = new Date();
-
-        // ✅ Salva nel database
-        await taskRepository.updateTask(taskId, overrides, currentProjectId);
+        // ✅ Salva nel repository
+        await taskRepository.updateTask(taskId, updates, currentProjectId);
 
         console.log('[TaskTreeHostAdapter][handleComplete] ✅ Task saved, verifying', {
           taskId,

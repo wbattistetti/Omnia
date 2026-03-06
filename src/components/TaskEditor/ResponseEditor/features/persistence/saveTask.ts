@@ -3,7 +3,8 @@
 
 import { taskRepository } from '@services/TaskRepository';
 import { getTemplateId } from '@utils/taskHelpers';
-import { extractTaskOverrides, buildTemplateExpanded } from '@utils/taskUtils';
+// ✅ REMOVED: extractTaskOverrides and buildTemplateExpanded - no longer needed
+// We save directly from taskTree.steps and taskTree.labelKey
 import { TaskType, isUtteranceInterpretationTemplateId } from '@types/taskTypes';
 import type { Task, TaskTree } from '@types/taskTypes';
 import { getMainNodes } from '@responseEditor/core/domain';
@@ -13,6 +14,12 @@ import { DialogueTaskService } from '@services/DialogueTaskService';
 /**
  * Save task data to repository (in-memory cache only, not DB).
  * This is called during project save or editor close.
+ *
+ * ✅ ARCHITECTURAL FIX: NON sovrascrivere gli steps!
+ * Gli steps sono già aggiornati direttamente nel repository da:
+ * - handleToggleDisabled (quando si disattiva uno step)
+ * - handleDeleteStep (quando si cancella uno step)
+ * - handleRestoreStep (quando si ripristina uno step)
  */
 export async function saveTaskToRepository(
   taskId: string,
@@ -34,47 +41,32 @@ export async function saveTaskToRepository(
 
     const currentTemplateId = getTemplateId(taskInstance);
 
-    // Create templateExpanded (baseline from current template)
-    const templateExpanded = currentTemplateId
-      ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
-      : null;
+    // ✅ ARCHITECTURAL FIX: NON includere steps negli updates!
+    // Gli steps sono già nel repository, aggiornati direttamente da handleToggleDisabled etc.
+    // Sovrascrivere con taskTree.steps (working copy) causa perdita di _disabled flags.
+    const labelKeyToSave = taskTree.labelKey || (taskTree as any).label;
 
-    // Create temporary task for extractTaskOverrides
-    // ✅ NO FALLBACKS: Use taskTree.steps as primary source, or task.steps, or throw error
-    if (!taskTree.steps && !task?.steps) {
-      console.warn('[saveTask] No steps found in taskTree or task. Using empty object.');
-    }
-    const tempTask: Task = {
-      id: key,
-      type: TaskType.UtteranceInterpretation,
-      templateId: currentTemplateId || null,
-      label: taskTree.label,
-      steps: taskTree.steps ?? task?.steps ?? {}
+    // Update in-memory cache only - WITHOUT steps!
+    const updates: Partial<Task> = {
+      ...(labelKeyToSave ? { labelKey: labelKeyToSave } : {})
     };
 
-    // Extract overrides (full working copy with edited flags)
-    const dataToSave = await extractTaskOverrides(
-      tempTask,
-      taskTree,
-      currentProjectId || undefined,
-      templateExpanded || undefined
-    );
-
-    // Update in-memory cache only (DB save happens on explicit "Save project" command)
     if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
-      await taskRepository.updateTask(key, {
-        type: TaskType.UtteranceInterpretation,
-        templateId: null,
-        ...dataToSave
-      }, currentProjectId || undefined);
-    } else {
-      await taskRepository.updateTask(key, dataToSave, currentProjectId || undefined);
+      updates.type = TaskType.UtteranceInterpretation;
+      updates.templateId = null;
     }
 
-    info('RESPONSE_EDITOR', 'Task saved to repository cache', {
+    // ✅ Solo se ci sono campi da aggiornare (non steps!)
+    if (Object.keys(updates).length > 0) {
+      await taskRepository.updateTask(key, updates, currentProjectId || undefined);
+    }
+
+    // ✅ Log per debug
+    const savedTask = taskRepository.getTask(key);
+    info('RESPONSE_EDITOR', 'Task saved to repository cache (steps preserved)', {
       taskId: key,
-      hasDataToSave: !!dataToSave,
-      dataToSaveKeys: dataToSave ? Object.keys(dataToSave) : []
+      hasSteps: !!savedTask?.steps,
+      stepsKeys: savedTask?.steps && typeof savedTask.steps === 'object' ? Object.keys(savedTask.steps) : []
     });
   } else if (taskTree) {
     // No TaskTree structure, but save other fields (e.g., Message text)
@@ -83,9 +75,16 @@ export async function saveTaskToRepository(
       const taskType = task?.type ?? TaskType.SayMessage;
       taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
     }
-    const overrides = await extractTaskOverrides(taskInstance, taskTree, currentProjectId || undefined);
-    await taskRepository.updateTask(key, overrides, currentProjectId || undefined);
-    info('RESPONSE_EDITOR', 'Task saved (no data structure)', { key });
+
+    // ✅ ARCHITECTURAL FIX: NON sovrascrivere steps
+    const updates: Partial<Task> = {
+      ...(taskTree.labelKey || (taskTree as any).label ? { labelKey: taskTree.labelKey || (taskTree as any).label } : {})
+    };
+
+    if (Object.keys(updates).length > 0) {
+      await taskRepository.updateTask(key, updates, currentProjectId || undefined);
+    }
+    info('RESPONSE_EDITOR', 'Task saved (no data structure, steps preserved)', { key });
   }
 }
 
@@ -153,35 +152,36 @@ export async function saveTaskOnProjectSave(
       }
     }
 
-    const modifiedFields = await extractTaskOverrides(
-      taskInstance,
-      taskTree,
-      currentProjectId || undefined,
-      templateExpanded || undefined
-    );
+    // ✅ ARCHITECTURAL FIX: Leggi steps dal REPOSITORY (single source of truth)
+    // NON usare taskTree.steps che potrebbe essere stale!
+    // Il repository contiene la versione aggiornata con tutti i flag _disabled
+    const currentTaskFromRepo = taskRepository.getTask(key);
+    const stepsToSave = currentTaskFromRepo?.steps ?? {};
+    const labelKeyToSave = taskTree.labelKey || (taskTree as any).label;
+
+    const updates: Partial<Task> = {
+      steps: stepsToSave,  // ✅ Steps dal repository, NON da taskTree!
+      ...(labelKeyToSave ? { labelKey: labelKeyToSave } : {})
+    };
 
     // ✅ CRITICAL: Check task TYPE, not templateId
     // If task has a templateId (GUID), it's an instance and we must preserve it
     // Only set templateId: null if task.type is UtteranceInterpretation AND templateId is null/undefined
     if (taskInstance.type === TaskType.UtteranceInterpretation && !currentTemplateId) {
       // Task is UtteranceInterpretation but has no templateId - it's a standalone template
-      await taskRepository.updateTask(key, {
-        type: TaskType.UtteranceInterpretation,
-        templateId: null,
-        ...modifiedFields
-      }, currentProjectId || undefined);
+      updates.type = TaskType.UtteranceInterpretation;
+      updates.templateId = null;
+      await taskRepository.updateTask(key, updates, currentProjectId || undefined);
       console.log('[saveTaskOnProjectSave] ✅ FLOW TRACE - Saved as standalone template', {
         taskId: key,
         templateId: null,
       });
     } else {
       // ✅ CRITICAL: Preserve templateId if it exists (it's an instance)
-      // modifiedFields doesn't include templateId, so we need to preserve it from taskInstance
-      await taskRepository.updateTask(key, {
-        ...modifiedFields,
-        // ✅ CRITICAL: Preserve templateId if it exists
-        ...(currentTemplateId ? { templateId: currentTemplateId } : {}),
-      }, currentProjectId || undefined);
+      if (currentTemplateId) {
+        updates.templateId = currentTemplateId;
+      }
+      await taskRepository.updateTask(key, updates, currentProjectId || undefined);
       console.log('[saveTaskOnProjectSave] ✅ FLOW TRACE - Saved as instance', {
         taskId: key,
         templateId: currentTemplateId,
@@ -210,26 +210,14 @@ export async function saveTaskOnProjectSave(
       allTaskIds: allTasksInRepo.map(t => t.id),
     });
   } else if (taskTree) {
-    const currentTemplateId = task?.templateId ?? null;
-    const templateExpanded = currentTemplateId
-      ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
-      : null;
-
-    const tempTask: Task = {
-      id: key,
-      type: task?.type || TaskType.UtteranceInterpretation,
-      templateId: currentTemplateId,
-      label: taskTree.label,
-      steps: taskTree.steps ?? {}
+    // ✅ ARCHITECTURAL FIX: Leggi steps dal REPOSITORY (single source of truth)
+    const currentTaskFromRepo = taskRepository.getTask(key);
+    const updates: Partial<Task> = {
+      steps: currentTaskFromRepo?.steps ?? {},  // ✅ Steps dal repository, NON da taskTree!
+      ...(taskTree.labelKey || (taskTree as any).label ? { labelKey: taskTree.labelKey || (taskTree as any).label } : {})
     };
 
-    const overrides = await extractTaskOverrides(
-      tempTask,
-      taskTree,
-      currentProjectId || undefined,
-      templateExpanded || undefined
-    );
-    await taskRepository.updateTask(key, overrides, currentProjectId || undefined);
+    await taskRepository.updateTask(key, updates, currentProjectId || undefined);
 
     // ✅ FLOW TRACE: Saved task without taskTree structure
     const savedTask = taskRepository.getTask(key);
@@ -267,75 +255,62 @@ export async function saveTaskOnEditorClose(
 
   const currentTemplateId = getTemplateId(taskInstance);
 
-  // ✅ CRITICAL: Leggi sempre dal repository per avere la versione più aggiornata (inclusi flag _disabled)
-  // Il task passato come parametro potrebbe non essere aggiornato
-  const currentTaskFromRepository = taskRepository.getTask(key);
+  // ✅ ARCHITECTURAL FIX: NON sovrascrivere gli steps!
+  // Gli steps sono già aggiornati direttamente nel repository da:
+  // - handleToggleDisabled (quando si disattiva uno step)
+  // - handleDeleteStep (quando si cancella uno step)
+  // - handleRestoreStep (quando si ripristina uno step)
+  //
+  // Sovrascrivere gli steps qui con dati potenzialmente stale (da TaskTree/working copy)
+  // causa la perdita dei flag _disabled e altre modifiche fatte durante l'editing.
+  //
+  // L'unica cosa che dobbiamo salvare è labelKey (se presente).
 
-  // Add task.steps to finalTaskTree (single source of truth for steps)
-  // ✅ NO FALLBACKS: Use currentTaskFromRepository.steps as primary source (most up-to-date)
-  if (!currentTaskFromRepository?.steps && !finalTaskTree.steps) {
-    console.warn('[saveTask] No steps found in repository task or finalTaskTree. Using empty object.');
-  }
-  const finalTaskTreeWithSteps: TaskTree = {
-    ...finalTaskTree,
-    steps: currentTaskFromRepository?.steps ?? task?.steps ?? finalTaskTree.steps ?? {}
+  const labelKeyToSave = finalTaskTree.labelKey || (finalTaskTree as any).label;
+
+  // ✅ NON includere steps negli updates - sono già nel repository!
+  const updates: Partial<Task> = {
+    ...(labelKeyToSave ? { labelKey: labelKeyToSave } : {})
   };
 
-  // Save based on template type
   if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
     // Standalone task
-    const templateExpanded = currentTemplateId
-      ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
-      : null;
-
-    const tempTask: Task = {
-      id: key,
-      type: TaskType.UtteranceInterpretation,
-      templateId: currentTemplateId || null,
-      label: finalTaskTreeWithSteps.label,
-      steps: finalTaskTreeWithSteps.steps
-    };
-
-    const dataToSave = await extractTaskOverrides(
-      tempTask,
-      finalTaskTreeWithSteps,
-      currentProjectId || undefined,
-      templateExpanded || undefined
-    );
-
-    // Update in-memory cache only
-    taskRepository.updateTask(key, dataToSave, currentProjectId || undefined);
-  } else {
-    // Task with templateId
-    const templateExpanded = currentTemplateId
-      ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
-      : null;
-
-    const tempTask: Task = {
-      id: key,
-      type: TaskType.UtteranceInterpretation,
-      templateId: currentTemplateId || null,
-      label: finalTaskTreeWithSteps.label,
-      steps: finalTaskTreeWithSteps.steps
-    };
-
-    const dataToSave = await extractTaskOverrides(
-      tempTask,
-      finalTaskTreeWithSteps,
-      currentProjectId || undefined,
-      templateExpanded || undefined
-    );
-
-    // Update in-memory cache only
-    taskRepository.updateTask(key, dataToSave, currentProjectId || undefined);
+    updates.type = TaskType.UtteranceInterpretation;
+    updates.templateId = null;
   }
 
-  // Verify steps were saved
+  // ✅ Solo se ci sono campi da aggiornare (non steps!)
+  if (Object.keys(updates).length > 0) {
+    // Update in-memory cache only (WITHOUT steps - they're already correct)
+    taskRepository.updateTask(key, updates, currentProjectId || undefined);
+  }
+
+  // ✅ DEBUG: Verifica che gli steps nel repository siano intatti
   const savedTask = taskRepository.getTask(key);
   const savedStepsKeys = savedTask?.steps ? Object.keys(savedTask.steps) : [];
   const savedStepsCount = savedStepsKeys.length;
 
-  info('RESPONSE_EDITOR', 'Task saved on editor close', {
+  const savedDisabledFlags: Record<string, Record<string, boolean>> = {};
+  if (savedTask?.steps) {
+    for (const [nodeId, nodeSteps] of Object.entries(savedTask.steps)) {
+      if (nodeSteps && typeof nodeSteps === 'object' && !Array.isArray(nodeSteps)) {
+        savedDisabledFlags[nodeId] = {};
+        for (const [stepKey, stepData] of Object.entries(nodeSteps)) {
+          if (stepData && typeof stepData === 'object') {
+            savedDisabledFlags[nodeId][stepKey] = (stepData as any)._disabled === true;
+          }
+        }
+      }
+    }
+  }
+  console.log('[saveTaskOnEditorClose] ✅ Steps preserved (NOT overwritten)', {
+    taskId: key,
+    savedDisabledFlags: JSON.stringify(savedDisabledFlags),
+    savedStepsKeys,
+    updatesApplied: Object.keys(updates),
+  });
+
+  info('RESPONSE_EDITOR', 'Task saved on editor close (steps preserved)', {
     taskId: key,
     savedStepsCount,
     savedStepsKeys
