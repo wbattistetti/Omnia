@@ -39,7 +39,7 @@ export interface CustomNodeData {
   hidden?: boolean; // render invisibile finché non riposizionato
   focusRowId?: string; // row da mettere in edit al mount
   hideUncheckedRows?: boolean; // nasconde le righe non incluse
-  onCreateFactoryTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void; // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
+  onCreateFactoryTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
 }
@@ -913,7 +913,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             </div>
           )}
 
-          {/* Header drag: RIMOSSO - ora gestito dalla toolbar sopra il nodo */}
+          {/* Header drag handled by toolbar above the node */}
           <div className="px-1.5" ref={rowsContainerRef}>
             <NodeRowList
               {...nodeRowListProps}
@@ -940,7 +940,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               }}
               canDelete={() => nodeRows.length > 1}
               totalRows={nodeRows.length}
-              onCreateFactoryTask={data.onCreateFactoryTask} // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
+              onCreateFactoryTask={data.onCreateFactoryTask}
               onCreateBackendCall={data.onCreateBackendCall}
               onCreateTask={data.onCreateTask}
               getProjectId={() => {

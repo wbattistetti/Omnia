@@ -87,9 +87,7 @@ export function useNodeRendering({
             mode: (row as any).mode,
             isUndefined: (row as any).isUndefined, // ✅ Preserva flag isUndefined
             factoryId: (row as any).factoryId,
-            // ❌ RIMOSSO: instanceId (row.id === task.id ALWAYS, non serve duplicato)
-            // ❌ RIMOSSO: taskId (row.id === task.id ALWAYS, non serve duplicato)
-            // ✅ FIX: Preserva row.heuristics esplicitamente (contiene type e templateId dall'euristica)
+            // Preserva row.heuristics (contiene type e templateId dall'euristica)
             heuristics: (row as any).heuristics || undefined
           };
           return handleUpdateRow(row.id, newText, row.categoryType, meta);

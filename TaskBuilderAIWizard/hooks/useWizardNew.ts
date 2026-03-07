@@ -155,7 +155,7 @@ export function useWizardNew(props: UseWizardNewProps) {
     shouldBeGeneral: store.shouldBeGeneral,
     showStructureConfirmation: store.showStructureConfirmation(),
     // ✅ Access the boolean field directly (not the selector function)
-    structureConfirmed: (store as any as { structureConfirmed: boolean }).structureConfirmed,
+    structureConfirmed: store.structureConfirmed,
     showCorrectionMode: store.showCorrectionMode(),
     correctionInput: store.correctionInput,
     setCorrectionInput: store.setCorrectionInput,

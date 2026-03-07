@@ -5,7 +5,7 @@ import { typeToMode } from '../../../utils/normalizers';
 async function simulateCreateAndAttach({ name, type, onImmediateRowUpdate, onInstanceCreated }: any) {
   const mode = typeToMode(type);
   // immediate row update
-  onImmediateRowUpdate({ type, mode, templateId: 'local_task', taskId: 'local_task', factoryId: null }); // ✅ RINOMINATO: baseActId → templateId, actId → taskId
+  onImmediateRowUpdate({ type, mode, templateId: 'local_task', taskId: 'local_task', factoryId: null });
   // async instance creation
   await Promise.resolve();
   onImmediateRowUpdate({ instanceId: 'inst_1', type, mode });

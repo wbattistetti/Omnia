@@ -7,7 +7,6 @@ import type { NodeRowData } from '../../../types/project';
 export interface ExecutionHighlightStyles {
   nodeBorder: string;
   nodeBorderWidth: number;
-  // ✅ RIMOSSO: nodeBackground e rowBackground - usiamo solo bordi
 }
 
 /**

@@ -47,7 +47,6 @@ export function resolveTaskType(row: any): TaskType {
         'Summarizer': TaskType.Summarizer,
         'Negotiation': TaskType.Negotiation
       };
-      // ❌ RIMOSSO FALLBACK: se non è nel map, restituisci UNDEFINED (nessun fallback automatico)
       return typeMap[row.type] ?? TaskType.UNDEFINED;
     }
   }
@@ -73,16 +72,14 @@ export function resolveTaskType(row: any): TaskType {
     }
   }
 
-  // ❌ RIMOSSO: Fallback da row.mode - se l'euristica non ha trovato niente, resta UNDEFINED
-  // L'utente deve scegliere manualmente il tipo
+  // L'utente deve scegliere manualmente il tipo se l'euristica non ha trovato niente
 
   // 5) Default: UNDEFINED (mostra punto interrogativo)
   return TaskType.UNDEFINED;
 }
 
 /**
- * ✅ NUOVO: Controlla se il task ha un TaskTree usando solo TaskRepository
- * ❌ RIMOSSO: parametro act (non esiste più il concetto di Act)
+ * Controlla se il task ha un TaskTree usando solo TaskRepository
  */
 export function hasTaskTree(row: any): boolean {
   // ✅ UNIFIED MODEL: row.id === task.id ALWAYS (when task exists)
@@ -129,7 +126,6 @@ export function hasTaskTree(row: any): boolean {
 }
 
 /**
- * ✅ RINOMINATO: getTaskVisualsByType (era getAgentActVisualsByType)
  * Restituisce icona e colori per un tipo di task
  * ✅ Accetta TaskType enum invece di ActType stringa
  *

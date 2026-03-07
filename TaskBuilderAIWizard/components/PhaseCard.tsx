@@ -39,25 +39,42 @@ export const PhaseCard = React.memo(function PhaseCard({
   const isRunning   = state === 'running';
   const isEditing   = showCorrectionForm && isExpanded;
 
-  const showProgressBar =
-    (isRunning || isCompleted) && progress !== undefined;
-
   const pct = Math.min(100, Math.max(0, progress ?? 0));
-  const barColor = isCompleted ? 'bg-green-500' : 'bg-blue-500';
-
-  // ❌ REMOVED: Debug log (was causing spam)
+  const hasProgress = progress !== undefined && isRunning;
 
   return (
     <div
       className={`
-        bg-white rounded-2xl shadow-md transition-all w-full
+        bg-white rounded-2xl shadow-md transition-all w-full relative overflow-hidden
         ${isRunning  ? 'ring-2 ring-blue-500' : ''}
+        ${isCompleted ? 'ring-2 ring-green-500' : ''}
         ${isEditing  ? 'border-2 border-orange-500' : 'border border-gray-200'}
       `}
     >
-      {/* Header row: icon + title + status IMMEDIATELY to the right of title */}
+      {/* Progress background - la card diventa la progress bar */}
+      {isRunning && hasProgress && (
+        <div
+          className="absolute inset-0 pointer-events-none z-0 rounded-2xl"
+          style={{
+            background: 'rgba(59, 130, 246, 0.20)',
+            width: `${Math.max(2, pct)}%`, // Minimo 2% per visibilità anche a 0%
+            transition: 'width 0.3s ease-out',
+            backdropFilter: 'brightness(1.05)',
+          }}
+        />
+      )}
+
+      {/* Completed overlay - fade in quando completa */}
+      {isCompleted && (
+        <div
+          className="absolute inset-0 pointer-events-none z-0 bg-green-50/40 transition-opacity duration-500 rounded-2xl"
+          style={{ opacity: 1 }}
+        />
+      )}
+
+      {/* Header row: icon + title + status - sopra la progress bar */}
       <div
-        className="flex items-center gap-3 px-4 py-3"
+        className="relative z-10 flex items-center gap-3 px-4 py-3"
         style={{ minHeight: '48px' }}
       >
         {/* Icon */}
@@ -74,9 +91,9 @@ export const PhaseCard = React.memo(function PhaseCard({
           {title}:
         </span>
 
-        {/* Status — sits immediately after the title colon */}
-        {isRunning && !isEditing && dynamicMessage && (
-          <div className="flex items-center gap-2 min-w-0">
+        {/* STATO 1: Running senza progresso numerico - mostra payload */}
+        {isRunning && !isEditing && progress === undefined && dynamicMessage && (
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent flex-shrink-0" />
             <span className="text-sm text-gray-700 truncate">
               {dynamicMessage.split('**').map((part, i) =>
@@ -88,34 +105,39 @@ export const PhaseCard = React.memo(function PhaseCard({
           </div>
         )}
 
-        {isCompleted && !isEditing && dynamicMessage && (
-          <div className="flex items-center gap-1.5 text-sm font-medium text-green-600">
-            <span className="text-base leading-none">✔</span>
-            <span>{dynamicMessage}</span>
+        {/* STATO 2: Running con progresso - mostra percentuale + messaggio */}
+        {isRunning && !isEditing && progress !== undefined && (
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="text-xs font-mono text-blue-600 font-semibold whitespace-nowrap">
+              {pct}%
+            </span>
+            {dynamicMessage && (
+              <span className="text-sm text-gray-700 truncate">
+                {dynamicMessage.split('**').map((part, i) =>
+                  i % 2 === 1
+                    ? <strong key={i} className="font-bold text-gray-900">{part}</strong>
+                    : <span key={i}>{part}</span>
+                )}
+              </span>
+            )}
           </div>
         )}
 
+        {/* STATO 3: Completed - mostra etichetta di termine */}
+        {isCompleted && !isEditing && (
+          <div className="flex items-center gap-1.5 text-sm font-medium text-green-600">
+            <span className="text-base leading-none">✔</span>
+            <span>{dynamicMessage || 'Generati!'}</span>
+          </div>
+        )}
+
+        {/* Pending state */}
         {!isRunning && !isCompleted && !isEditing && (
           <span className="text-sm text-gray-400">In attesa...</span>
         )}
       </div>
 
-      {/* Progress bar — percentage first, then bar fills full card width */}
-      {showProgressBar && (
-        <div className="px-4 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-blue-600 w-9 text-right flex-shrink-0">
-              {pct}%
-            </span>
-            <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-              <div
-                className={`h-1.5 rounded-full transition-all duration-300 ${barColor}`}
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Barra sottile rimossa - la card stessa è la progress bar */}
 
       {/* Correction form */}
       {isExpanded && showCorrectionForm && (

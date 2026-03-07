@@ -3,7 +3,6 @@ import { Link2Off as LinkOff } from 'lucide-react';
 import { IntellisenseMenu } from '../../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../../Intellisense/IntellisenseTypes';
 import { useProjectData } from '../../../context/ProjectDataContext';
-// ✅ RIMOSSO: findAgentAct - non esiste più il concetto di Act
 import { taskRepository } from '../../../services/TaskRepository';
 import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../../utils/fontSizeUtils';

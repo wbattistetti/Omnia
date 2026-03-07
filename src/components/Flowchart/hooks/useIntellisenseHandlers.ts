@@ -1,9 +1,8 @@
 import { useCallback } from 'react';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectData, useProjectDataUpdate } from '../../../context/ProjectDataContext';
-// ✅ RIMOSSO: findAgentAct - non esiste più il concetto di Act
 import { createRowWithTask } from '../../../utils/taskHelpers';
-import { taskIdToTaskType } from '../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType - Per convertire stringa semantica legacy a TaskType enum
+import { taskIdToTaskType } from '../../../types/taskTypes';
 
 export function useIntellisenseHandlers(
   nodeIntellisenseTarget: string | null,
@@ -35,8 +34,7 @@ export function useIntellisenseHandlers(
     if (isProblemClassification && item.value) {
       actId = item.value; // L'ID del template
 
-      // ✅ RIMOSSO: findAgentAct - gli intents sono nel task.intents (campi diretti)
-      // ✅ Recupera gli intents dal task se esiste già
+      // Recupera gli intents dal task se esiste già
       const initialIntents: any[] = [];
       try {
         const task = taskRepository.getTask(actId);
@@ -54,11 +52,11 @@ export function useIntellisenseHandlers(
       }
 
       const projectId = pdUpdate?.getCurrentProjectId() || undefined;
-      // Genera un ID temporaneo per la row (sarà sostituito quando la row viene creata definitivamente)
+      // Generate a temporary ID for the row
       const tempRowId = `${nodeIntellisenseTarget}-${Date.now()}`;
-      // ✅ Converti actId (stringa da Intellisense) a TaskType enum
-      const taskType = taskIdToTaskType(actId); // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
-      const rowWithTask = createRowWithTask(tempRowId, taskType, '', projectId); // ✅ TaskType enum invece di stringa
+      // Convert actId (string from Intellisense) to TaskType enum
+      const taskType = taskIdToTaskType(actId);
+      const rowWithTask = createRowWithTask(tempRowId, taskType, '', projectId);
       instanceId = rowWithTask.taskId;
 
       // Se ci sono intents iniziali, aggiorna il Task

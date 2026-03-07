@@ -2,6 +2,7 @@ import { Loader2, Check } from 'lucide-react';
 import { PipelineStep } from '../store/wizardStore';
 import { WizardStepMessages, WizardTaskTreeNode } from '../types';
 import { flattenTaskTree } from '../utils/wizardHelpers';
+import { getPhaseProgress } from '../utils/progressCalculator';
 
 type PipelineProps = {
   steps: PipelineStep[];
@@ -36,23 +37,9 @@ export function Pipeline({
 
   // Helper function imported from wizardHelpers.ts
 
-  // Calcola la percentuale media per una fase specifica
-  const getPhaseProgress = (phase: 'constraints' | 'parser' | 'messages'): number => {
-    const allTasks = flattenTaskTree(dataSchema);
-    if (allTasks.length === 0) return 0;
-
-    const progressField = phase === 'constraints' ? 'constraintsProgress' : phase === 'parser' ? 'parserProgress' : 'messagesProgress';
-    const stateField = phase === 'constraints' ? 'constraints' : phase === 'parser' ? 'parser' : 'messages';
-
-    const progresses = allTasks.map(task => {
-      const state = task.pipelineStatus?.[stateField] || 'pending';
-      if (state === 'pending') return 0;
-      if (state === 'completed') return 100;
-      return task.pipelineStatus?.[progressField] || 0;
-    });
-
-    const total = progresses.reduce((sum, p) => sum + p, 0);
-    return Math.round(total / allTasks.length);
+  // ✅ REFACTOR: Use centralized progress calculator
+  const getPhaseProgressLocal = (phase: 'constraints' | 'parser' | 'messages'): number => {
+    return getPhaseProgress(phase, steps, undefined, dataSchema);
   };
 
   const handleVaBeneHover = (isHovering: boolean) => {
@@ -93,13 +80,13 @@ export function Pipeline({
   const getStepLabel = (step: PipelineStep) => {
     let progress = 0;
 
-    // Calcola il progress per le fasi con percentuali
+    // ✅ REFACTOR: Use centralized progress calculator
     if (step.id === 'constraints') {
-      progress = getPhaseProgress('constraints');
+      progress = getPhaseProgressLocal('constraints');
     } else if (step.id === 'parsers') {
-      progress = getPhaseProgress('parser');
+      progress = getPhaseProgressLocal('parser');
     } else if (step.id === 'messages') {
-      progress = getPhaseProgress('messages');
+      progress = getPhaseProgressLocal('messages');
     }
 
     switch (step.id) {

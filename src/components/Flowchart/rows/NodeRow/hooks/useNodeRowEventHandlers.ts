@@ -335,7 +335,6 @@ export function useNodeRowEventHandlers(
             type: result.taskType,
           },
           factoryId: (row as any).factoryId,
-          // ❌ RIMOSSO: instanceId (row.id === task.id ALWAYS, non serve duplicato)
           isUndefined: false,
         };
 

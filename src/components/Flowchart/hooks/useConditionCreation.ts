@@ -15,7 +15,7 @@ export function useConditionCreation(
   setNodes: any,
   deleteNodeWithLog: any,
   updateNode: any,
-  createFactoryTask: any, // ✅ RINOMINATO: createAgentAct → createFactoryTask
+  createFactoryTask: any,
   createBackendCall: any,
   createTask: any,
   createCondition: any,
@@ -171,7 +171,7 @@ export function useConditionCreation(
               rows: [],
               onDelete: () => deleteNodeWithLog(newNodeId),
               onUpdate: (updates: any) => updateNode(newNodeId, updates),
-              onCreateFactoryTask: createFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
+              onCreateFactoryTask: createFactoryTask,
               onCreateBackendCall: createBackendCall,
               onCreateTask: createTask,
               onCreateCondition: createCondition,
@@ -210,7 +210,7 @@ export function useConditionCreation(
     } catch (error) {
       try { console.error('[CondFlow] error', error); } catch {}
     }
-  }, [projectData, addItem, addCategory, setEdges, setSelectedEdgeId, pendingEdgeIdRef, closeMenu, nodeIdCounter, reactFlowInstance, connectionMenuRef, deleteNodeWithLog, updateNode, onDeleteEdge, setNodes, nodesRef, setNodeIdCounter, createFactoryTask, createBackendCall, createTask, createCondition, tempFlags, setNodesWithLog, removeAllTempEdges, edges]); // ✅ RINOMINATO: createAgentAct → createFactoryTask
+  }, [projectData, addItem, addCategory, setEdges, setSelectedEdgeId, pendingEdgeIdRef, closeMenu, nodeIdCounter, reactFlowInstance, connectionMenuRef, deleteNodeWithLog, updateNode, onDeleteEdge, setNodes, nodesRef, setNodeIdCounter, createFactoryTask, createBackendCall, createTask, createCondition, tempFlags, setNodesWithLog, removeAllTempEdges, edges]);
 
   return { handleCreateCondition };
 }

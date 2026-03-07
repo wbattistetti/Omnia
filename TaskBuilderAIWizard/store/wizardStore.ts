@@ -31,7 +31,6 @@ interface WizardStore {
   dataSchema: WizardTaskTreeNode[];
   constraints: WizardConstraint[];
   setConstraints: (constraints: WizardConstraint[]) => void;
-  // ❌ REMOVED: nlpContract - dataContract is now in node.dataContract
   messages: Map<string, WizardStepMessages>;
   messagesGeneralized: Map<string, WizardStepMessages>;
   messagesContextualized: Map<string, WizardStepMessages>;
@@ -50,6 +49,13 @@ interface WizardStore {
     parsers: { completed: number; total: number };
     messages: { completed: number; total: number };
   };
+  // ✅ NEW: Global phase completion tracker (determines when wizard can close)
+  completedPhases: {
+    constraints: boolean;
+    parsers: boolean;
+    messages: boolean;
+    sequential: boolean;
+  };
 
   // ============================================
   // ACTIONS - Synchronous state updates
@@ -67,7 +73,6 @@ interface WizardStore {
   setCurrentStep: (step: WizardStep) => void;
   setDataSchema: (schema: WizardTaskTreeNode[] | ((prev: WizardTaskTreeNode[]) => WizardTaskTreeNode[])) => void;
   setConstraints: (constraints: WizardConstraint[] | ((prev: WizardConstraint[]) => WizardConstraint[])) => void;
-  // ❌ REMOVED: setNlpContract - dataContract is now in node.dataContract
   setMessages: (nodeId: string, messages: WizardStepMessages) => void;
   setMessagesGeneralized: (nodeId: string, messages: WizardStepMessages) => void;
   setMessagesContextualized: (nodeId: string, messages: WizardStepMessages) => void;
@@ -83,14 +88,16 @@ interface WizardStore {
   setStructureConfirmed: (confirmed: boolean) => void;
   // ✅ NEW: Update phase counter (source of truth for progress)
   updatePhaseCounter: (phase: 'constraints' | 'parsers' | 'messages', completed: number, total: number) => void;
+  // ✅ NEW: Mark phase as completed (for global completion tracking)
+  markPhaseCompleted: (phaseId: 'constraints' | 'parsers' | 'messages' | 'sequential') => void;
+  // ✅ NEW: Reset all completed phases (when wizard starts)
+  resetCompletedPhases: () => void;
 
   // ============================================
   // SELECTORS - Computed values
   // ============================================
 
   showStructureConfirmation: () => boolean;
-  // ❌ REMOVED: structureConfirmed selector - CONFLICT with field
-  // ✅ Use field directly: store.structureConfirmed (boolean)
   showCorrectionMode: () => boolean;
   getMessagesToUse: () => Map<string, WizardStepMessages>;
 }
@@ -131,7 +138,6 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
   currentStep: 'idle',
   dataSchema: [],
   constraints: [],
-  // ❌ REMOVED: nlpContract - dataContract is now in node.dataContract
   messages: new Map(),
   messagesGeneralized: new Map(),
   messagesContextualized: new Map(),
@@ -149,6 +155,13 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     parsers: { completed: 0, total: 0 },
     messages: { completed: 0, total: 0 }
   },
+  // ✅ NEW: Initialize completed phases tracker
+  completedPhases: {
+    constraints: false,
+    parsers: false,
+    messages: false,
+    sequential: false
+  },
 
   // ============================================
   // ACTIONS
@@ -159,9 +172,8 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     wizardMode: WizardMode.START,
     currentStep: 'idle',
     dataSchema: [],
-    constraints: [],
-    // ❌ REMOVED: nlpContract - dataContract is now in node.dataContract
-    messages: new Map(),
+  constraints: [],
+  messages: new Map(),
     messagesGeneralized: new Map(),
     messagesContextualized: new Map(),
     shouldBeGeneral: false,
@@ -176,6 +188,12 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
       constraints: { completed: 0, total: 0 },
       parsers: { completed: 0, total: 0 },
       messages: { completed: 0, total: 0 }
+    },
+    completedPhases: {
+      constraints: false,
+      parsers: false,
+      messages: false,
+      sequential: false
     }
   }),
 
@@ -187,8 +205,9 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     // ✅ Future: Extract dataSchema, constraints, messages from instance if needed
     // For now, wizard always starts fresh (reset is sufficient)
     if (instance) {
-      // TODO: If instance contains wizard state, restore it here
-      // Example:
+      // NOTE: Wizard state restoration from instance is not currently needed.
+      // The wizard always starts fresh (reset() is sufficient for clean state).
+      // If future requirements need to restore wizard state from instance, implement here:
       // if (instance.dataSchema) set({ dataSchema: instance.dataSchema });
       // if (instance.constraints) set({ constraints: instance.constraints });
       // if (instance.messages) set({ messages: new Map(Object.entries(instance.messages)) });
@@ -199,7 +218,7 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     // ✅ POINT OF NO RETURN: If structure is confirmed, NEVER go back to DATA_STRUCTURE_PROPOSED
     // Access the boolean field directly (not the selector function)
     const currentState = get();
-    const isConfirmed = (currentState as any as { structureConfirmed: boolean }).structureConfirmed === true;
+    const isConfirmed = currentState.structureConfirmed === true;
 
     if (mode === WizardMode.DATA_STRUCTURE_PROPOSED && isConfirmed) {
       console.warn('[wizardStore] ⚠️ Attempted to set wizardMode to DATA_STRUCTURE_PROPOSED after confirmation - blocked');
@@ -218,8 +237,6 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
   setConstraints: (constraints) => set((state) => ({
     constraints: typeof constraints === 'function' ? constraints(state.constraints) : constraints
   })),
-
-  // ❌ REMOVED: setNlpContract - dataContract is now in node.dataContract
 
   setMessages: (nodeId, messages) => set((state) => {
     const newMap = new Map(state.messages);
@@ -256,7 +273,7 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     // EXCEPT: Allow updating to 'completed' when user clicks "Sì" (this is the confirmation action itself)
     const currentState = get();
     // Access the boolean field directly (not the selector function)
-    const isConfirmed = (currentState as any as { structureConfirmed: boolean }).structureConfirmed === true;
+    const isConfirmed = currentState.structureConfirmed === true;
     if (stepId === 'structure' && isConfirmed && status !== 'completed') {
       // Allow 'completed' status even if confirmed (this is the confirmation action itself)
       console.warn('[wizardStore] ⚠️ Attempted to update structure step after confirmation - blocked');
@@ -317,6 +334,30 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
         [phase]: { completed, total }
       }
     }));
+  },
+
+  // ✅ NEW: Mark phase as completed (for global completion tracking)
+  markPhaseCompleted: (phaseId) => {
+    console.log(`[wizardStore] ✅ markPhaseCompleted called`, { phaseId });
+    set((state) => ({
+      completedPhases: {
+        ...state.completedPhases,
+        [phaseId]: true
+      }
+    }));
+  },
+
+  // ✅ NEW: Reset all completed phases (when wizard starts)
+  resetCompletedPhases: () => {
+    console.log(`[wizardStore] 🔄 resetCompletedPhases called`);
+    set({
+      completedPhases: {
+        constraints: false,
+        parsers: false,
+        messages: false,
+        sequential: false
+      }
+    });
   },
 
   updateTaskPipelineStatus: (taskId, phase, status) => set((state) => {
@@ -384,8 +425,6 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     return state.wizardMode === WizardMode.DATA_STRUCTURE_PROPOSED && !state.structureConfirmed;
   },
 
-  // ❌ REMOVED: structureConfirmed selector - CONFLICT with field
-  // ✅ Use field directly: store.structureConfirmed (boolean)
 
   showCorrectionMode: () => get().wizardMode === WizardMode.DATA_STRUCTURE_CORRECTION,
 

@@ -64,7 +64,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     bgColor: propBgColor,
     textColor: propTextColor,
     onEditingEnd,
-    onCreateFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
+    onCreateFactoryTask,
     onCreateBackendCall,
     onCreateTask,
     getProjectId,
@@ -476,7 +476,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   });
 
   // Editor host context (for opening the right editor per ActType) - host is always present
-  const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
+  const taskEditorCtx = useTaskEditor();
 
   // ✅ REFACTOR: Extract visuals calculation to custom hook
   const {

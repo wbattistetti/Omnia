@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
-// ❌ RIMOSSO: typeToMode - usa TaskType enum direttamente
 import { getTaskIdFromRow } from '../../../../../utils/taskHelpers';
 import { flowchartVariablesService } from '../../../../../services/FlowchartVariablesService';
 import { taskRepository } from '../../../../../services/TaskRepository';
@@ -202,7 +201,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         // When row.text is updated, it's updating the task name, not the message content
         // The message content is updated separately when editing the task in ResponseEditor
 
-        // ❌ RIMOSSO - isEmpty si aggiorna SOLO in exitEditing() per mantenere auto-append continuo
         // setIsEmpty viene aggiornato solo quando esci dall'editing (ESC, click fuori, blur esterno)
         normalizedData.onUpdate?.({ rows: updatedRows, isTemporary: normalizedData.isTemporary });
 

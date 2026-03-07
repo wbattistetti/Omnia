@@ -11,7 +11,8 @@
 import React, { useMemo } from 'react';
 import { useWizardStore } from '../store/wizardStore';
 import { PhaseCard } from './PhaseCard';
-import { calculatePhaseProgress, getPhaseState, extractDynamicMessage } from '../utils/wizardHelpers';
+import { getPhaseState, extractDynamicMessage } from '../utils/wizardHelpers';
+import { calculatePhaseProgress } from '../utils/progressCalculator';
 import { LucideIcon } from 'lucide-react';
 
 type PhaseCardContainerProps = {

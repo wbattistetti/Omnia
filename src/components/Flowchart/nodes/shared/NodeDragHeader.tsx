@@ -34,8 +34,6 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
   const isToolbar = compact === true;
   // showDragHandle controlla se mostrare l'area drag (grip + testo)
 
-  // Log quando isToolbarDrag cambia - RIMOSSO per ridurre rumore console
-
         // Calcola dimensione icone dinamicamente basata sul font size del nodo (stessa logica delle icone di riga)
         // DEVE usare lo stesso elemento di riferimento delle icone di riga (span.nodrag della prima riga)
         const [iconSize, setIconSize] = useState(16);

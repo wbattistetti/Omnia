@@ -29,6 +29,7 @@ import type { useResponseEditorCore } from '@responseEditor/hooks/useResponseEdi
 import type { useResponseEditorHandlers } from '@responseEditor/hooks/useResponseEditorHandlers';
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
+import { useTaskTreeFromStore } from '@responseEditor/core/state';
 import { generalizeLabel } from '../../../../../TaskBuilderAIWizard/services/TemplateCreationService';
 import { TranslationType } from '@types/translationTypes';
 import { TaskType, TemplateSource } from '@types/taskTypes';
@@ -304,10 +305,15 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // taskMeta.contextualizationTemplateId is still used as fallback for backward compatibility
   const contextualizationTemplateIdFromMeta = taskMeta?.contextualizationTemplateId;
 
+  // ✅ FIX RACE CONDITION: Use Zustand store as primary source for taskTree
+  // The store is updated immediately when wizard completes, while props take longer to propagate
+  // This ensures the context has the taskTree immediately when mainViewMode transitions to BEHAVIOUR
+  const taskTreeFromStore = useTaskTreeFromStore();
+
   // ✅ ARCHITECTURE: Context is SINGLE SOURCE OF TRUTH for taskWizardMode
   // No more derives, no more fallbacks - just use the value from props (which comes from state)
   const responseEditorContextValue = React.useMemo(() => ({
-    taskTree,
+    taskTree: taskTreeFromStore ?? taskTree,  // ✅ Store as primary, prop as fallback
     taskMeta,
     taskLabel: taskLabel || '', // ✅ SINGLE SOURCE: from useResponseEditorCore - empty string if not available yet
     taskId: taskMeta?.id,
@@ -318,7 +324,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     taskWizardMode: taskWizardMode, // ✅ Use prop directly (comes from state in useResponseEditorCore)
     setTaskWizardMode, // ✅ ARCHITECTURE: Setter for updating wizard mode (updates state in useResponseEditorCore)
     contextualizationTemplateId: contextualizationTemplateIdFromMeta || contextualizationTemplateId || undefined,
-      }), [taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId]);
+      }), [taskTreeFromStore, taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId]);
 
   // ✅ B1: WizardContext.Provider moved to ResponseEditorInner to avoid race condition
 

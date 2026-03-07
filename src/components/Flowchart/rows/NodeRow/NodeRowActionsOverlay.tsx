@@ -20,9 +20,9 @@ interface NodeRowActionsOverlayProps {
   isCondition?: boolean;
   onWrenchClick?: () => void;
   onOpenTaskTree?: () => void;
-  // NEW: task type icon and handler to open inline picker
-  TaskIcon?: React.ComponentType<any> | null; // ✅ RINOMINATO: ActIcon → TaskIcon
-  taskColor?: string; // ✅ RINOMINATO: actColor → taskColor - iconColor della riga (grigio se no TaskTree/messaggio, colorato se ha TaskTree/messaggio)
+  // Task type icon and handler to open inline picker
+  TaskIcon?: React.ComponentType<any> | null;
+  taskColor?: string;
   onTypeChangeRequest?: (anchor: DOMRect) => void;
   onRequestClosePicker?: () => void;
   buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
@@ -51,8 +51,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   isCondition,
   onWrenchClick,
   onOpenTaskTree,
-  TaskIcon, // ✅ RINOMINATO: ActIcon → TaskIcon
-  taskColor, // ✅ RINOMINATO: actColor → taskColor
+  TaskIcon,
+  taskColor,
   onTypeChangeRequest,
   onRequestClosePicker,
   buttonCloseTimeoutRef,
@@ -93,8 +93,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       onMouseEnter={() => { onHoverChange && onHoverChange(true); }}
       onMouseLeave={() => { onHoverChange && onHoverChange(false); }}
     >
-      {/* Current TaskType icon → opens inline type picker below */}
-      {TaskIcon && ( // ✅ RINOMINATO: ActIcon → TaskIcon
+      {/* Current TaskType icon - opens inline type picker below */}
+      {TaskIcon && (
         <SmartTooltip text="Change task type" tutorId="task_type_help" placement="top">
           <button
             onMouseDown={(e) => {
@@ -140,11 +140,11 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
             }}
             className="hover:opacity-100 hover:scale-110"
           >
-            <TaskIcon style={{ // ✅ RINOMINATO: ActIcon → TaskIcon
+            <TaskIcon style={{
               width: size,
               height: size,
-              color: (!included) ? '#9ca3af' : (taskColor || '#94a3b8'), // ✅ RINOMINATO: actColor → taskColor - Grigio se unchecked
-              filter: (included && taskColor && taskColor !== '#94a3b8') ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined // ✅ RINOMINATO: actColor → taskColor
+              color: (!included) ? '#9ca3af' : (taskColor || '#94a3b8'),
+              filter: (included && taskColor && taskColor !== '#94a3b8') ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined
             }} />
           </button>
         </SmartTooltip>

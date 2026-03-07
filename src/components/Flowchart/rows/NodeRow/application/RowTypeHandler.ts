@@ -66,8 +66,6 @@ export class RowTypeHandler {
         if (existingTask) {
           taskRepository.updateTask(taskId, updateDataWithVisuals, projectId);
         } else {
-          // ❌ RIMOSSO: text: this.row.text - task.text non deve esistere
-          // Il modello corretto è: task contiene solo GUID, traduzione in translations[GUID]
           const taskData: any = {
             icon: selectedTask.icon || selectedTask.iconName || null,
             color: selectedTask.color || null,
@@ -107,8 +105,6 @@ export class RowTypeHandler {
 
         // ✅ Caso 3: Tutti gli altri tipi (o UtteranceInterpretation con template) → crea task
         // For BackendCall, create task with default fields (endpoint, inputs, outputs)
-        // ❌ RIMOSSO: text: this.row.text - task.text non deve esistere
-        // Il modello corretto è: task contiene solo GUID, traduzione in translations[GUID]
         const taskFields = finalTaskType === TaskType.BackendCall
             ? { endpoint: '', inputs: [], outputs: [] }
             : undefined;
@@ -171,8 +167,6 @@ export class RowTypeHandler {
         // Check if task exists in repository (row.id === task.id ALWAYS)
         const existingTask = taskRepository.getTask(this.row.id);
         if (!existingTask) {
-          // ❌ RIMOSSO: text: label - task.text non deve esistere
-          // Il modello corretto è: task contiene solo GUID, traduzione in translations[GUID]
           taskRepository.createTask(
             finalTaskType,
             templateId,

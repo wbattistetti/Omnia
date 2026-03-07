@@ -35,7 +35,6 @@ import { NodeRegistryProvider } from '../../context/NodeRegistryContext';
 import { IntellisenseProvider } from '../../context/IntellisenseContext';
 import { IntellisensePopover } from '../Intellisense/IntellisensePopover';
 import { SelectionMenu } from './components/SelectionMenu';
-// RIMOSSO: import { EdgeConditionMenu } from './components/EdgeConditionMenu';
 import { useConditionCreation } from './hooks/useConditionCreation';
 import { useEdgeDataManager } from './hooks/useEdgeDataManager';
 import { useFlowEventHandlers } from './hooks/useFlowEventHandlers';
@@ -224,14 +223,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     originalAddNodeAtPosition(node, x, y);
   }, [originalAddNodeAtPosition]);
 
-  // Hook centralizzato per la creazione di entità (solo se il context è pronto)
+  // Centralized entity creation hook
   const entityCreation = useEntityCreation();
-  const { createFactoryTask, createBackendCall, createMacrotask, createTask, createCondition } = entityCreation; // ✅ RINOMINATO: createAgentAct → createFactoryTask
+  const { createFactoryTask, createBackendCall, createMacrotask, createTask, createCondition } = entityCreation;
 
-  // Adapter functions per matchare le signature expected da useFlowConnect
+  // Adapter functions to match signatures expected by useFlowConnect
   const createFactoryTaskAdapter = useCallback(() => {
-    createFactoryTask(''); // Solo name, scope opzionale
-  }, [createFactoryTask]); // ✅ RINOMINATO: createAgentActAdapter → createFactoryTaskAdapter
+    createFactoryTask('');
+  }, [createFactoryTask]);
 
   const createBackendCallAdapter = useCallback(() => {
     createBackendCall(''); // Solo name, scope opzionale
@@ -241,10 +240,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     createMacrotask(''); // Solo name, scope opzionale
   }, [createMacrotask]);
 
-  // RIMOSSO: useEffect inutile che causava loop infinito
-
-  // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
-  // ✅ RIMOSSO: addItem e addCategory - ora usati direttamente in useConditionCreation
+  // ProjectData for condition creation
   const { data: projectData } = useProjectData();
 
   const nodeActions = useNodeActions({
@@ -268,14 +264,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     onDeleteEdge,
     deleteNodeWithLog,
     updateNode,
-    createFactoryTaskAdapter, // ✅ RINOMINATO: createAgentActAdapter → createFactoryTaskAdapter
+    createFactoryTaskAdapter,
     createBackendCallAdapter,
     createTaskAdapter,
     nodeIdCounterRef,
     createOnUpdate
   );
-
-  // ✅ RIMOSSO: problemIntentSeedItems - ora calcolato manualmente in openIntellisense
 
   // Ottieni tutte le condizioni disponibili dal project data
   const allConditions = useMemo(() => {
@@ -317,7 +311,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setNodes,
     deleteNodeWithLog,
     updateNode,
-    createFactoryTask, // ✅ RINOMINATO: createAgentAct → createFactoryTask
+    createFactoryTask,
     createBackendCall,
     createTask,
     createCondition,
@@ -565,21 +559,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [withNodeLock, createTemporaryNode, openMenu, cleanupAllTempNodesAndEdges, pendingEdgeIdRef, intellisenseActions]);
 
-  // Utility per rimuovere edge temporaneo
-  // ✅ RIMOSSA: function removeTempEdge - non utilizzata
-
-  // Una edge è temporanea se il suo target è un nodo temporaneo (usando lo stato più recente dei nodi)
-  // ✅ RIMOSSO: removeAllTempEdges - ora definito prima per useConditionCreation
-
-  // Rimuovi completamente handleSelectCondition e handleConnectionMenuClose
-  // Queste funzioni erano legate a EdgeConditionMenu che è stato rimosso
-
-  // Handler robusto per chiusura intellisense/condition menu
-  // ✅ RIMOSSA: const handleConnectionMenuClose - non utilizzata
-
-  // ✅ REMOVED: onNodeDragStart, onNodeDrag, onNodeDragStop, rigidDragCtxRef, dragStartedFromHandleRef
-  // ✅ REMOVED: applyRigidDragMovement, applyFinalRigidDragOffset
-  // All moved to useFlowEventHandlers hook
+  // Event handlers moved to useFlowEventHandlers hook
 
   // ✅ Use Flow Viewport hook for zoom, pan, and scroll-to-node
   const { handleWheel } = useFlowViewport(reactFlowInstance);
@@ -812,19 +792,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           }}
         />
       )}
-      {/* ✅ RIMOSSO: IntellisenseMenu inline - ora gestito da IntellisensePopover */}
     </div>
   );
 };
-
-// Ref globale per edge temporaneo
-// ✅ RIMOSSO: const tempEdgeIdGlobal - non utilizzato
-
-// Flag per tracciare nodi temporanei stabilizzati (per evitare riposizionamento)
-// ✅ RIMOSSO: const stabilizedTempNodes - non utilizzato
-
-// Flag per tracciare nodi temporanei in corso di creazione (per evitare creazione duplicata)
-// ✅ RIMOSSO: const creatingTempNodes - non utilizzato
 
 export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
   console.debug('[FlowEditor] Component mounted');

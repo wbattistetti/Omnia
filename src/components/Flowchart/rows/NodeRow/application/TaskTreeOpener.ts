@@ -697,12 +697,10 @@ export class TaskTreeOpener {
         metaTemplateId,
       });
 
-      // ❌ RIMOSSO: text: row.text - task.text non deve esistere
-      // Il modello corretto è: task contiene solo GUID, traduzione in translations[GUID]
       taskForType = taskRepository.createTask(
         metaTaskType,
         metaTemplateId,
-        undefined, // ❌ RIMOSSO: metaTaskType === TaskType.SayMessage ? { text: row.text || '' } : undefined
+        undefined,
         row.id,
         projectId
       );

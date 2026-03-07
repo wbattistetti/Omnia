@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
+import type { DataContract, DataContractItem } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 /** Regex that every valid GroupName must satisfy. */
 const GROUP_NAME_PATTERN = /^s[0-9]+$/i;
@@ -36,8 +36,8 @@ export function validateWizardContract(
   }
 
   // ✅ Extract patterns from parsers[] (not from contract.regex)
-  const regexContracts = contract.parsers?.filter(c => c.type === 'regex') ?? [];
-  const patterns: string[] = regexContracts.flatMap(c => (c as any).patterns ?? []);
+  const regexContracts = contract.parsers?.filter((c): c is Extract<DataContractItem, { type: 'regex' }> => c.type === 'regex') ?? [];
+  const patterns: string[] = regexContracts.flatMap(c => c.patterns ?? []);
   const combinedPattern = patterns.join('\n');
 
   // --- Extract named groups from all patterns ---

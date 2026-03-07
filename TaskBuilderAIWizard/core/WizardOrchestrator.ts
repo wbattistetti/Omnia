@@ -108,12 +108,33 @@ export class WizardOrchestrator {
     // ✅ POINT OF NO RETURN: Set flag FIRST
     store.setStructureConfirmed(true);
 
+    // ✅ Reset completed phases tracker (fresh start)
+    store.resetCompletedPhases();
+
     // ✅ Update UI IMMEDIATELY (before async operations)
     store.updatePipelineStep('structure', 'completed', 'Confermata!');
     store.setWizardMode(WizardMode.GENERATING);
 
-    // ✅ CRITICAL: Calculate payloads IMMEDIATELY (before any async operations)
-    // This ensures UI shows payloads right away, not after createTemplateAndInstanceForProposed
+    // ✅ REFACTOR: Extract phase setup
+    const { payloads } = await this.setupPhasePayloads(store);
+
+    // ✅ REFACTOR: Extract template creation phases
+    const { templates, nodeStructures } = await this.executeTemplateCreationPhases(store);
+
+    // ✅ REFACTOR: Extract parallel generation
+    await this.executeParallelGeneration(store, templates, nodeStructures, payloads);
+
+    // ✅ REFACTOR: Extract sequential phases (6-7) and completion (8)
+    await this.executeSequentialPhases(store, templates);
+  }
+
+  /**
+   * ✅ REFACTOR: Setup phase payloads and update UI
+   */
+  private async setupPhasePayloads(store: ReturnType<typeof useWizardStore.getState>): Promise<{
+    payloads: { constraints: string; parsers: string; messages: string };
+    parsersPayloadPromise: Promise<string>;
+  }> {
     const allTasks = store.dataSchema ? flattenTaskTree(store.dataSchema) : [];
     const constraintsPayload = `Sto generando i constraints per: ${allTasks.map(n => n.label).join(', ')}…`;
 
@@ -184,7 +205,25 @@ export class WizardOrchestrator {
       // Keep default payload on error (already has 0%)
     });
 
-    // ✅ NUOVA PIPELINE DETERMINISTICA
+    return {
+      payloads: {
+        constraints: constraintsPayload,
+        parsers: parsersPayload,
+        messages: messagesPayload
+      },
+      parsersPayloadPromise
+    };
+  }
+
+  /**
+   * ✅ REFACTOR: Execute template creation phases (FASE 1, 2, 2.5)
+   */
+  private async executeTemplateCreationPhases(store: ReturnType<typeof useWizardStore.getState>): Promise<{
+    templates: Map<string, any>;
+    nodeStructures: Map<string, any>;
+  }> {
+    const allTasks = store.dataSchema ? flattenTaskTree(store.dataSchema) : [];
+
     // FASE 1: Crea struttura deterministica per tutti i nodi
     const { createTemplateStructure } = await import('../services/TemplateCreationService');
     const nodeStructures = new Map<string, any>();
@@ -225,13 +264,20 @@ export class WizardOrchestrator {
     });
     console.log('[WizardOrchestrator] ✅ FASE 2: Template skeletons created and registered', { templatesCount: templates.size });
 
+    return { templates, nodeStructures };
+  }
+
+  /**
+   * ✅ REFACTOR: Execute parallel generation phases (FASI 3-5)
+   */
+  private async executeParallelGeneration(
+    store: ReturnType<typeof useWizardStore.getState>,
+    templates: Map<string, any>,
+    nodeStructures: Map<string, any>,
+    payloads: { constraints: string; parsers: string; messages: string }
+  ): Promise<void> {
     // FASI 3-5: Parallelo (constraints, contracts, template messages)
     const { AIGenerateConstraints, AIGenerateContracts, AIGenerateTemplateMessages } = await import('../services/TemplateGenerationServices');
-
-    // Store payloads for progress updates
-    let finalConstraintsPayload = constraintsPayload;
-    let finalParsersPayload = parsersPayload;
-    let finalMessagesPayload = messagesPayload;
 
     // ✅ Store semanticContracts for Assembler
     let semanticContractsMap = new Map<string, SemanticContract>();
@@ -260,24 +306,18 @@ export class WizardOrchestrator {
     const legacyParallelGenerationPromise = runParallelGeneration(store, this.config.locale || 'it', async (phase, taskId, payloads?) => {
         // ✅ Orchestrator receives payloads from runParallelGeneration (taskId === 'init')
         if (taskId === 'init' && payloads) {
-          finalParsersPayload = payloads.parsers || finalParsersPayload;
-
           // ✅ ORCHESTRATOR updates pipeline with payloads
-          if (payloads.parsers && payloads.parsers !== finalParsersPayload) {
+          if (payloads.parsers) {
             store.updatePipelineStep('parsers', 'running', payloads.parsers);
-            finalParsersPayload = payloads.parsers;
           }
           return; // Early return for init
         }
-
-        // ✅ REMOVED: all-complete handler - templates are already created in FASE 2
-        // The new flow handles completion in FASI 6-7
 
         // Progress update (e.g., "33%")
         if (typeof taskId === 'string' && taskId.includes('%')) {
           const progress = parseInt(taskId);
           const phaseId = phase === 'parser' ? 'parsers' : phase;
-          const basePayload = phase === 'parser' ? finalParsersPayload : '';
+          const basePayload = phase === 'parser' ? payloads.parsers || '' : '';
           const baseMessage = basePayload.replace(/…$/, '');
           const newPayload = `${baseMessage} ${progress}%`;
 
@@ -298,96 +338,135 @@ export class WizardOrchestrator {
           const phaseId = taskId.replace('phase-complete-', '');
           // ✅ FIX: Handle all phases, not just parsers
           if (phaseId === 'parsers' || phaseId === 'constraints' || phaseId === 'messages') {
-            store.updatePipelineStep(phaseId, 'completed', 'Generati!');
+            // ✅ NEW: Mark phase as completed in global tracker, but DON'T mark pipeline as "completed" yet
+            // The pipeline will be marked as "completed" only when ALL phases (including sequential) are done
+            store.markPhaseCompleted(phaseId as 'constraints' | 'parsers' | 'messages');
+            // Keep pipeline step as "running" with 100% progress (card will show filled)
+            const currentStep = store.pipelineSteps.find(s => s.id === phaseId);
+            if (currentStep?.status === 'running') {
+              store.updatePipelineStep(phaseId, 'running', 'Finalizzazione in corso...');
+            }
           }
         }
       });
 
     // ✅ Wait for parallel generation to complete
-    try {
-      await Promise.all([parallelGenerationPromise, legacyParallelGenerationPromise]);
+    await Promise.all([parallelGenerationPromise, legacyParallelGenerationPromise]);
+  }
 
-      // FASI 6-7: Sequenziale (dopo che tutto il parallelo è finito)
-      if (this.config.rowId && this.config.projectId) {
-        console.log('[WizardOrchestrator] 🚀 Starting sequential phases 6-7');
-
-        // FASE 6: Clona tutti gli step di tutti i nodi e li aggiunge all'istanza
-        const { cloneTemplateSteps } = await import('@utils/taskUtils');
-        const { buildNodesFromTemplates } = await import('../services/TemplateCreationService');
-        const rootNode = store.dataSchema[0];
-        const rootTemplate = templates.get(rootNode.id);
-
-        if (rootTemplate) {
-          // Build nodes from templates (per cloneTemplateSteps)
-          const nodes = buildNodesFromTemplates(rootTemplate, templates);
-          const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(rootTemplate, nodes);
-
-          // Crea istanza con step clonati
-          const taskInstance: any = {
-            id: this.config.rowId,
-            type: rootTemplate.type || 3,
-            templateId: rootTemplate.id,
-            label: this.config.taskLabel || 'Task',
-            steps: clonedSteps,
-          };
-
-          console.log('[WizardOrchestrator] ✅ FASE 6: Steps cloned', { guidMappingSize: guidMapping.size });
-
-          // FASE 7: Clona e contestualizza traduzioni (nuovo flusso deterministico)
-          try {
-            const { cloneAndContextualizeTranslations } = await import('@utils/cloneAndContextualizeTranslations');
-            await cloneAndContextualizeTranslations(
-              clonedSteps,
-              guidMapping,
-              rootTemplate.id,
-              this.config.taskLabel || 'Task',
-              this.config.locale || 'it'
-            );
-            console.log('[WizardOrchestrator] ✅ FASE 7: Translations cloned and contextualized', {
-              guidMappingSize: guidMapping.size
-            });
-          } catch (contextError) {
-            console.error('[WizardOrchestrator] ❌ Error in FASE 7 (non-blocking):', contextError);
-            // Continue even if contextualization fails - translations are already cloned
-          }
-
-          // ✅ NOTA: Le traduzioni sono già in memoria (ProjectTranslationsContext)
-          // Il salvataggio nel database avviene SOLO quando l'utente clicca su "Salva"
-          // Non salviamo qui per mantenere il wizard completamente in memoria
-
-          // ✅ FASE 8: Build TaskTree and assemble dataContract (base + semantic + engines)
-          // This is the ONLY place where dataContract is assembled (Architectural constraint)
-          const finalTaskTree = await buildTaskTreeWithContractsAndEngines(
-            taskInstance,
-            this.config.projectId,
-            store.dataSchema
-          );
-
-          if (finalTaskTree && this.config.onTaskBuilderComplete) {
-            this.config.onTaskBuilderComplete(finalTaskTree);
-          }
-
-          // ✅ NOTA: Il task è già nel repository in memoria (taskRepository)
-          // Il salvataggio nel database avviene SOLO quando l'utente clicca su "Salva"
-          // Non salviamo qui per mantenere il wizard completamente in memoria
-
-          // Chiudi wizard
-          store.setWizardMode(WizardMode.COMPLETED);
-
-          console.log('[WizardOrchestrator] ✅ All phases completed successfully (all in memory)');
-        }
-      }
-    } catch (error) {
-      console.error('[WizardOrchestrator] ❌ Error in pipeline:', error);
-      // Try to close wizard even on error
-      try {
-        const store = this.getStore();
-        store.setWizardMode(WizardMode.COMPLETED);
-      } catch (closeError) {
-        console.error('[WizardOrchestrator] ❌ Error closing wizard:', closeError);
-      }
-      throw error;
+  /**
+   * ✅ REFACTOR: Execute sequential phases (FASI 6-7) and completion (FASE 8)
+   */
+  private async executeSequentialPhases(
+    store: ReturnType<typeof useWizardStore.getState>,
+    templates: Map<string, any>
+  ): Promise<void> {
+    // FASI 6-7: Sequenziale (dopo che tutto il parallelo è finito)
+    if (!this.config.rowId || !this.config.projectId) {
+      return;
     }
+
+    console.log('[WizardOrchestrator] 🚀 Starting sequential phases 6-7');
+
+    // FASE 6: Clona tutti gli step di tutti i nodi e li aggiunge all'istanza
+    const { cloneTemplateSteps } = await import('@utils/taskUtils');
+    const { buildNodesFromTemplates } = await import('../services/TemplateCreationService');
+    const rootNode = store.dataSchema[0];
+    const rootTemplate = templates.get(rootNode.id);
+
+    if (!rootTemplate) {
+      console.error('[WizardOrchestrator] ❌ Root template not found');
+      return;
+    }
+
+    // Build nodes from templates (per cloneTemplateSteps)
+    const nodes = buildNodesFromTemplates(rootTemplate, templates);
+    const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(rootTemplate, nodes);
+
+    // Crea istanza con step clonati
+    const taskInstance: any = {
+      id: this.config.rowId,
+      type: rootTemplate.type || 3,
+      templateId: rootTemplate.id,
+      label: this.config.taskLabel || 'Task',
+      steps: clonedSteps,
+    };
+
+    console.log('[WizardOrchestrator] ✅ FASE 6: Steps cloned', { guidMappingSize: guidMapping.size });
+
+    // FASE 7: Clona e contestualizza traduzioni (nuovo flusso deterministico)
+    try {
+      const { cloneAndContextualizeTranslations } = await import('@utils/cloneAndContextualizeTranslations');
+      await cloneAndContextualizeTranslations(
+        clonedSteps,
+        guidMapping,
+        rootTemplate.id,
+        this.config.taskLabel || 'Task',
+        this.config.locale || 'it'
+      );
+      console.log('[WizardOrchestrator] ✅ FASE 7: Translations cloned and contextualized', {
+        guidMappingSize: guidMapping.size
+      });
+    } catch (contextError) {
+      console.error('[WizardOrchestrator] ❌ Error in FASE 7 (non-blocking):', contextError);
+      // Continue even if contextualization fails - translations are already cloned
+    }
+
+    // ✅ FASE 8: Build TaskTree and assemble dataContract (base + semantic + engines)
+    // This is the ONLY place where dataContract is assembled (Architectural constraint)
+    // ✅ FIX: Save taskInstance to repository BEFORE building TaskTree
+    const { taskRepository } = await import('@services/TaskRepository');
+    taskRepository.createTask(
+      taskInstance.type || 3,
+      taskInstance.templateId,
+      taskInstance,
+      taskInstance.id,
+      this.config.projectId
+    );
+
+    const finalTaskTree = await buildTaskTreeWithContractsAndEngines(
+      taskInstance,
+      this.config.projectId,
+      store.dataSchema
+    );
+
+    // ✅ NEW: Mark sequential phases as completed
+    store.markPhaseCompleted('sequential');
+
+    // ✅ NEW: Check if ALL phases are completed before closing wizard
+    const { completedPhases } = store;
+    const allPhasesCompleted =
+      completedPhases.constraints &&
+      completedPhases.parsers &&
+      completedPhases.messages &&
+      completedPhases.sequential;
+
+    if (allPhasesCompleted) {
+      // ✅ NOW it's really finished - mark all pipeline steps as "completed"
+      store.updatePipelineStep('constraints', 'completed', 'Generati!');
+      store.updatePipelineStep('parsers', 'completed', 'Generati!');
+      store.updatePipelineStep('messages', 'completed', 'Generati!');
+
+      // Close wizard
+      store.setWizardMode(WizardMode.COMPLETED);
+
+      // Trigger completion callback
+      if (finalTaskTree && this.config.onTaskBuilderComplete) {
+        this.config.onTaskBuilderComplete(finalTaskTree);
+      }
+    } else {
+      console.warn('[WizardOrchestrator] ⚠️ Sequential phases completed but not all phases are done:', {
+        completedPhases,
+        allPhasesCompleted
+      });
+      // Still trigger callback even if phases not all completed (fallback)
+      if (finalTaskTree && this.config.onTaskBuilderComplete) {
+        this.config.onTaskBuilderComplete(finalTaskTree);
+      }
+      store.setWizardMode(WizardMode.COMPLETED);
+    }
+
+    console.log('[WizardOrchestrator] ✅ All phases completed successfully (all in memory)');
   }
 
   /**
@@ -491,7 +570,7 @@ export function useWizardOrchestrator(config: WizardOrchestratorConfig) {
     pipelineSteps: store.pipelineSteps,
     dataSchema: store.dataSchema,
     showStructureConfirmation: store.showStructureConfirmation(),
-    structureConfirmed: (useWizardStore.getState() as any as { structureConfirmed: boolean }).structureConfirmed, // ✅ Direct field access
+    structureConfirmed: useWizardStore.getState().structureConfirmed, // ✅ Direct field access
     showCorrectionMode: store.showCorrectionMode(),
     correctionInput: store.correctionInput,
     messages: store.messages,
@@ -504,7 +583,7 @@ export function useWizardOrchestrator(config: WizardOrchestratorConfig) {
     currentMessageSubstep: store.currentMessageSubstep,
     activeNodeId: store.activeNodeId,
     selectedModuleId: store.selectedModuleId,
-    availableModules: [], // TODO: implement
+    availableModules: [], // NOTE: Module system not yet implemented - placeholder for future feature
     foundModuleId: store.selectedModuleId,
     // ✅ NEW: Phase counters (source of truth for progress)
     phaseCounters: store.phaseCounters,

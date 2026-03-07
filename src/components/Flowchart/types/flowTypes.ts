@@ -43,7 +43,7 @@ export interface FlowNode {
   onDelete?: () => void;
   onUpdate?: (updates: any) => void;
   onPlayNode?: () => void;
-  onCreateFactoryTask?: (name: string, scope?: 'global' | 'industry') => void; // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
+  onCreateFactoryTask?: (name: string, scope?: 'global' | 'industry') => void;
   onCreateBackendCall?: (name: string, scope?: 'global' | 'industry') => void;
   onCreateTask?: (name: string, scope?: 'global' | 'industry') => void;
   onCreateCondition?: (name: string, scope?: 'global' | 'industry') => void;
@@ -77,7 +77,6 @@ export interface NodeRow {
   factoryId?: string;             // ID template factory (quando la riga referenzia un template)
   isUndefined?: boolean;          // Flag tipo undefined (per UI - mostra icona "?")
 
-  // ❌ RIMOSSO: [key: string]: any - non più necessario, struttura esplicita
 }
 
 // NodeData removed - use FlowNode directly

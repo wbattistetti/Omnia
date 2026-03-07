@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
-// ❌ RIMOSSO: typeToMode - usa TaskType enum direttamente
 
 interface UseInternalRowManagerProps {
     nodeId: string;
