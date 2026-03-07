@@ -15,6 +15,7 @@ import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
 import { AIProviderProvider } from '../context/AIProviderContext';
 import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext';
 import { BackendTypeProvider } from '../context/BackendTypeContext';
+import { CompilationErrorsProvider } from '../context/CompilationErrorsContext';
 import { TypeTemplateService } from '../services/TypeTemplateService';
 import { taskTemplateService } from '../services/TaskTemplateService';
 import { DialogueTaskService } from '../services/DialogueTaskService';
@@ -158,17 +159,19 @@ export default function App() {
           <AIProviderProvider>
             <DndProvider backend={HTML5Backend}>
               <SpeechRecognitionProvider>
-                <TaskTreeProvider>
-                  <TaskTreeManagerProvider>
-                    <TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
-                      <InMemoryConditionsProvider>
-                        <BackendTypeProvider>
-                          <AppInner />
-                        </BackendTypeProvider>
-                      </InMemoryConditionsProvider>
-                    </TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
-                  </TaskTreeManagerProvider>
-                </TaskTreeProvider>
+                  <TaskTreeProvider>
+                    <TaskTreeManagerProvider>
+                      <TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
+                        <InMemoryConditionsProvider>
+                          <BackendTypeProvider>
+                            <CompilationErrorsProvider>
+                              <AppInner />
+                            </CompilationErrorsProvider>
+                          </BackendTypeProvider>
+                        </InMemoryConditionsProvider>
+                      </TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
+                    </TaskTreeManagerProvider>
+                  </TaskTreeProvider>
               </SpeechRecognitionProvider>
             </DndProvider>
         </AIProviderProvider>

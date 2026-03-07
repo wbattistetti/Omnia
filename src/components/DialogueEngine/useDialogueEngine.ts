@@ -650,8 +650,62 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         taskMap,
         // Preserve VB.NET backend fields
         taskGroups: compileData.taskGroups || undefined,
-        entryTaskGroupId: compileData.entryTaskGroupId || null
+        entryTaskGroupId: compileData.entryTaskGroupId || null,
+        // ✅ Error handling
+        errors: compileData.errors || undefined,
+        hasErrors: compileData.hasErrors || false,
+        hasCriticalErrors: compileData.hasCriticalErrors || false
       };
+
+      // ✅ Check for blocking errors BEFORE starting orchestrator
+      if (compilationResult.errors && compilationResult.errors.length > 0) {
+        // ✅ Store errors in context for flowchart visualization
+        try {
+          const { useCompilationErrors } = await import('../../context/CompilationErrorsContext');
+          // Note: We can't use hooks here, so we'll store errors via a global setter
+          // The context will be updated by the component that uses this hook
+          (window as any).__compilationErrors = compilationResult.errors;
+        } catch (e) {
+          console.warn('[useDialogueEngine] Could not store errors in context', e);
+        }
+
+        const blockingErrors = compilationResult.errors.filter(
+          e => e.severity === 'error' || e.severity === 'critical'
+        );
+
+        if (blockingErrors.length > 0) {
+          // ✅ Show user-friendly message in chat
+          const { formatCompilationErrorMessage } = await import('../../utils/errorMessageFormatter');
+          const errorMessage = formatCompilationErrorMessage(blockingErrors);
+
+          if (options.onMessage) {
+            options.onMessage({
+              id: `error-${Date.now()}`,
+              text: errorMessage + '\n\n💡 Clicca sulla sidebar errori per vedere i dettagli e selezionare i nodi con problemi.',
+              stepType: 'error',
+              taskId: 'SYSTEM'
+            });
+          }
+
+          // Don't start orchestrator
+          setIsRunning(false);
+          setCurrentTask(null);
+          options.onError?.(new Error(`Compilation has ${blockingErrors.length} blocking errors. Fix errors before execution.`));
+          return;
+        }
+
+        // Only warnings - show info but allow execution
+        const { formatCompilationWarningMessage } = await import('../../utils/errorMessageFormatter');
+        const warningMessage = formatCompilationWarningMessage(compilationResult.errors);
+        if (warningMessage && options.onMessage) {
+          options.onMessage({
+            id: `warning-${Date.now()}`,
+            text: warningMessage,
+            stepType: 'warning',
+            taskId: 'SYSTEM'
+          });
+        }
+      }
 
       // ═══════════════════════════════════════════════════════════════════════════
       // 🚀 FLOW ORCHESTRATOR - EXECUTION LOCATION TRACKING

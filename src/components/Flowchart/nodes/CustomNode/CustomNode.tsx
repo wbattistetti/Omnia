@@ -20,6 +20,8 @@ import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
 import { useNodeExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
 import { FlowStateBridge } from '../../../../services/FlowStateBridge';
 import { useFlowActions } from '../../../../context/FlowActionsContext';
+import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
+import { useNodeErrors } from '../../hooks/useNodeErrors';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -408,6 +410,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ EXECUTION HIGHLIGHT: Get execution highlight styles
   const executionHighlight = useNodeExecutionHighlight(id, nodeRows);
+
+  // ✅ COMPILATION ERRORS: Get errors for this node
+  const { errors: compilationErrors } = useCompilationErrors();
+  const nodeErrors = useNodeErrors(id, nodeRows, compilationErrors);
 
   // ✅ CROSS-NODE DRAG: Listen for cross-node row moves - VERSIONE SEMPLIFICATA
   React.useEffect(() => {
@@ -817,10 +823,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
           style={{
             ...nodeStyles,
-            // ✅ Solo bordo, NO background
-            border: executionHighlight.nodeBorder !== 'transparent'
-              ? `${executionHighlight.nodeBorderWidth}px solid ${executionHighlight.nodeBorder}`
-              : (selected ? '2px solid black' : '1px solid black'),
+            // ✅ Priority: Error border > Execution highlight > Selection > Default
+            border: nodeErrors.borderColor !== 'transparent'
+              ? `${nodeErrors.borderWidth}px solid ${nodeErrors.borderColor}`
+              : executionHighlight.nodeBorder !== 'transparent'
+                ? `${executionHighlight.nodeBorderWidth}px solid ${executionHighlight.nodeBorder}`
+                : (selected ? '2px solid black' : '1px solid black'),
             backgroundColor: 'white' // ✅ Sempre bianco, non toccare
           }}
           tabIndex={-1}
@@ -886,6 +894,16 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           }}
           onFocusCapture={() => { }}
         >
+
+          {/* ✅ ERROR BADGE: Show error count badge */}
+          {nodeErrors.errors.length > 0 && (
+            <div
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold z-50 shadow-lg"
+              title={nodeErrors.errors.map(e => e.message).join('\n')}
+            >
+              {nodeErrors.errors.length}
+            </div>
+          )}
 
           {/* Header permanente: DENTRO il nodo come fascia colorata in alto */}
           {showPermanentHeader && (

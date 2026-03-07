@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports Newtonsoft.Json
+Imports DTO.Runtime
 
 ''' <summary>
 ''' Flow Compilation Result: Output of FlowCompiler
@@ -34,10 +35,39 @@ Public Class FlowCompilationResult
     <JsonProperty("edges")>
     Public Property Edges As List(Of FlowEdge)
 
+    ''' <summary>
+    ''' List of compilation errors (Critical, Error, Warning)
+    ''' </summary>
+    <JsonProperty("errors")>
+    Public Property Errors As List(Of CompilationError)
+
+    ''' <summary>
+    ''' True if compilation has Error or Critical errors (blocks orchestrator)
+    ''' </summary>
+    <JsonProperty("hasErrors")>
+    Public ReadOnly Property HasErrors As Boolean
+        Get
+            If Errors Is Nothing Then Return False
+            Return Errors.Any(Function(e) e.Severity = ErrorSeverity.Error OrElse e.Severity = ErrorSeverity.Critical)
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' True if compilation has Critical errors (orchestrator must reject)
+    ''' </summary>
+    <JsonProperty("hasCriticalErrors")>
+    Public ReadOnly Property HasCriticalErrors As Boolean
+        Get
+            If Errors Is Nothing Then Return False
+            Return Errors.Any(Function(e) e.Severity = ErrorSeverity.Critical)
+        End Get
+    End Property
+
     Public Sub New()
         TaskGroups = New List(Of TaskGroup)()
         Tasks = New List(Of CompiledTask)()
         Edges = New List(Of FlowEdge)()
+        Errors = New List(Of CompilationError)()
     End Sub
 End Class
 

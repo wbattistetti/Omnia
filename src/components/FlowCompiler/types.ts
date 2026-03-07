@@ -61,6 +61,24 @@ export interface TaskGroup {
 }
 
 /**
+ * Error severity levels for compilation errors
+ */
+export type ErrorSeverity = 'error' | 'warning' | 'critical';
+
+/**
+ * Compilation error with task/node/row context
+ * Every error must have a taskId for traceability
+ */
+export interface CompilationError {
+  taskId: string;      // ✅ REQUIRED: Every error must have taskId
+  nodeId?: string;     // Optional: for node-level errors
+  rowId?: string;      // Optional: for row-level errors
+  message: string;     // Error message (user-friendly)
+  severity: ErrorSeverity; // Error severity (error, warning, critical)
+  category?: string;   // Error category (e.g., "TaskNotFound", "MissingTaskId")
+}
+
+/**
  * Compilation Result: Output of compiler
  */
 export interface CompilationResult {
@@ -71,6 +89,10 @@ export interface CompilationResult {
   // VB.NET backend fields
   taskGroups?: TaskGroup[]; // TaskGroups (one per node) - from VB.NET compiler
   entryTaskGroupId?: string | null; // First TaskGroup to execute - from VB.NET compiler
+  // ✅ Error handling
+  errors?: CompilationError[]; // List of compilation errors
+  hasErrors?: boolean; // True if has Error or Critical errors (blocks orchestrator)
+  hasCriticalErrors?: boolean; // True if has Critical errors (orchestrator must reject)
 }
 
 /**

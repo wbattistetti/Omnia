@@ -47,6 +47,8 @@ import { useIntellisense } from '../../context/IntellisenseContext';
 import { FlowchartWrapper } from './FlowchartWrapper';
 import { ExecutionStateProvider } from './executionHighlight/ExecutionStateContext';
 import { FlowStateBridge } from '../../services/FlowStateBridge';
+import { ErrorSidebar } from './components/ErrorSidebar';
+import { useCompilationErrors } from '../../context/CompilationErrorsContext';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -97,6 +99,31 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const selection = useSelectionManager();
 
   const { selectedEdgeId, setSelectedEdgeId, selectedNodeIds, setSelectedNodeIds, selectionMenu, setSelectionMenu, handleEdgeClick } = selection;
+
+  // ✅ COMPILATION ERRORS: Get errors from context and sync with window
+  const { errors: compilationErrors, setErrors: setCompilationErrors } = useCompilationErrors();
+
+  // ✅ Sync errors from window (set by useDialogueEngine)
+  useEffect(() => {
+    const windowErrors = (window as any).__compilationErrors;
+    if (windowErrors && Array.isArray(windowErrors)) {
+      setCompilationErrors(windowErrors);
+    }
+  }, [setCompilationErrors]);
+
+  // ✅ Handle error click - select node and center viewport
+  const handleErrorClick = useCallback((error: import('../../FlowCompiler/types').CompilationError) => {
+    if (error.nodeId) {
+      // Select node
+      setSelectedNodeIds([error.nodeId]);
+
+      // Center viewport on node
+      const node = nodes.find(n => n.id === error.nodeId);
+      if (node && reactFlowInstance) {
+        reactFlowInstance.setCenter(node.position.x, node.position.y, { zoom: 1.5, duration: 500 });
+      }
+    }
+  }, [nodes, reactFlowInstance, setSelectedNodeIds]);
 
   // Node alignment and distribution
   const { handleAlign, handleDistribute, checkAlignmentOverlap, checkDistributionOverlap } = useNodeAlignment(
@@ -774,6 +801,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           style={{ position: 'fixed' as any }}
         >
 
+        </div>
+      )}
+
+      {/* ✅ ERROR SIDEBAR: Show compilation errors */}
+      {compilationErrors.length > 0 && (
+        <div className="absolute right-0 top-0 bottom-0 z-50 pointer-events-auto">
+          <ErrorSidebar
+            errors={compilationErrors}
+            onErrorClick={handleErrorClick}
+          />
         </div>
       )}
 

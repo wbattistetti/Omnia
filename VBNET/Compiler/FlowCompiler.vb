@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 Imports TaskEngine
 Imports Compiler.DTO.IDE
+Imports DTO.Runtime
 
 ''' <summary>
 ''' Flow Compiler: Trasforma struttura IDE (FlowNode, FlowEdge)
@@ -11,7 +12,7 @@ Public Class FlowCompiler
     ''' <summary>
     ''' Crea un CompiledTask type-safe in base al TaskType usando il factory pattern
     ''' </summary>
-    Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As TaskDefinition, row As TaskRow, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
+    Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As TaskDefinition, row As TaskRow, node As FlowNode, taskId As String, flow As Flow, errors As List(Of CompilationError)) As CompiledTask
         Console.WriteLine($"🔍 [COMPILER][FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
         ' Usa il factory per ottenere il compiler appropriato
@@ -25,20 +26,36 @@ Public Class FlowCompiler
         ' ✅ Passa flow.Tasks come allTemplates (il compiler non ha bisogno di Nodes/Edges)
         ' ✅ Null-safe: flow.Tasks è sempre inizializzato nel costruttore, ma per sicurezza
         Dim allTemplates = If(flow.Tasks IsNot Nothing, flow.Tasks, New List(Of TaskDefinition)())
-        Dim result = compiler.Compile(task, taskId, allTemplates)
 
-        ' Aggiungi metadata del flowchart dopo la compilazione
-        result.Id = row.Id
-        result.Debug = New TaskDebugInfo() With {
-            .SourceType = TaskSourceType.Flowchart,
-            .NodeId = node.Id,
-            .RowId = row.Id,
-            .OriginalTaskId = taskId
-        }
+        Try
+            Dim result = compiler.Compile(task, taskId, allTemplates)
 
-        Console.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
-        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
-        Return result
+            ' ✅ Aggiungi metadata del flowchart dopo la compilazione
+            result.Id = row.Id
+            result.Debug = New TaskDebugInfo() With {
+                .SourceType = TaskSourceType.Flowchart,
+                .NodeId = node.Id,
+                .RowId = row.Id,
+                .OriginalTaskId = taskId
+            }
+
+            Console.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
+            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
+            Return result
+
+        Catch ex As Exception
+            ' ✅ Unexpected exception during compilation - add as Error
+            errors.Add(New CompilationError() With {
+                .TaskId = taskId,
+                .NodeId = node.Id,
+                .RowId = row.Id,
+                .Message = $"Task compilation exception: {ex.Message}",
+                .Severity = ErrorSeverity.Error,
+                .Category = "CompilationException"
+            })
+            ' ✅ Return Nothing to signal skip this row
+            Return Nothing
+        End Try
     End Function
 
     Private ReadOnly _conditionBuilder As ConditionBuilder
@@ -64,6 +81,7 @@ Public Class FlowCompiler
 
         Dim taskGroups As New List(Of TaskGroup)()
         Dim allTasks As New List(Of CompiledTask)()
+        Dim errors As New List(Of CompilationError)()
 
         ' NOTE: flow.Tasks should contain ONLY tasks referenced in node rows
         ' (not all tasks from repository). Frontend filters before sending.
@@ -76,24 +94,42 @@ Public Class FlowCompiler
         Console.WriteLine($"   Entry nodes found: {entryNodes.Count}")
         System.Diagnostics.Debug.WriteLine($"   Entry nodes found: {entryNodes.Count}")
 
-        ' Topologicamente impossibile avere 0 entry nodes in un grafo connesso
-        ' Se 0, significa grafo vuoto o non connesso
+        ' ✅ CRITICAL: No entry nodes - add as Critical error, don't throw
         If entryNodes.Count = 0 Then
             Console.WriteLine($"❌ [COMPILER][FlowCompiler] No entry nodes found!")
             System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][FlowCompiler] No entry nodes found!")
-            Throw New Exception("No entry nodes found. Graph may be empty or disconnected. At least one entry node is required.")
+            errors.Add(New CompilationError() With {
+                .TaskId = "SYSTEM",
+                .NodeId = Nothing,
+                .RowId = Nothing,
+                .Message = "No entry nodes found. Graph may be empty or disconnected. At least one entry node is required.",
+                .Severity = ErrorSeverity.Critical,
+                .Category = "NoEntryNodes"
+            })
+            ' ✅ Return empty but valid result
+            Return New FlowCompilationResult() With {
+                .TaskGroups = New List(Of TaskGroup)(),
+                .Tasks = New List(Of CompiledTask)(),
+                .EntryTaskGroupId = Nothing,
+                .Edges = If(flow.Edges, New List(Of FlowEdge)()),
+                .Errors = errors
+            }
         End If
 
-        ' Gestisci ambiguità: più entry nodes (es. ciclo A → B → A)
-        ' In questo caso, tutti i nodi nel ciclo sono entry (tutti hanno solo back edges)
-        ' La compilazione viene bloccata: bisogna definire/marcare quale nodo è di start
+        ' ✅ WARNING: Multiple entry nodes - add as Warning, continue with first
         If entryNodes.Count > 1 Then
             Dim entryNodeIds = String.Join(", ", entryNodes.Select(Function(n) $"'{n.Id}'"))
-            Console.WriteLine($"❌ [COMPILER][FlowCompiler] Multiple entry nodes found: {entryNodeIds}")
-            System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][FlowCompiler] Multiple entry nodes found: {entryNodeIds}")
-            Throw New Exception($"Multiple entry nodes found ({entryNodes.Count}): {entryNodeIds}. " &
-                                "Please mark one node as the start/entry point. " &
-                                "All nodes in a cycle cannot be entry points simultaneously.")
+            Console.WriteLine($"⚠️ [COMPILER][FlowCompiler] Multiple entry nodes found: {entryNodeIds}")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][FlowCompiler] Multiple entry nodes found: {entryNodeIds}")
+            errors.Add(New CompilationError() With {
+                .TaskId = "SYSTEM",
+                .NodeId = Nothing,
+                .RowId = Nothing,
+                .Message = $"Multiple entry nodes found ({entryNodes.Count}): {entryNodeIds}. Please mark one node as the start/entry point.",
+                .Severity = ErrorSeverity.Warning,
+                .Category = "MultipleEntryNodes"
+            })
+            ' Continue with first entry node
         End If
 
         ' Process all nodes - crea un TaskGroup per nodo
@@ -128,11 +164,21 @@ Public Class FlowCompiler
 
             ' Processa tutte le righe del nodo (task in sequenza)
             For Each row In rows
-                ' ❌ ERRORE BLOCCANTE: row.TaskId OBBLIGATORIO, nessun fallback a row.Id
+                ' ✅ ERROR: Missing TaskId - use row.Id as fallback for taskId
+                Dim taskId As String
                 If String.IsNullOrEmpty(row.TaskId) Then
-                    Throw New InvalidOperationException($"Row '{row.Id}' has no TaskId. TaskId is mandatory and cannot be empty. The frontend must provide a valid TaskId for each row.")
+                    taskId = row.Id ' ✅ Fallback to row.Id
+                    errors.Add(New CompilationError() With {
+                        .TaskId = taskId,
+                        .NodeId = node.Id,
+                        .RowId = row.Id,
+                        .Message = $"Row '{row.Id}' has no TaskId. Using row.Id as fallback. TaskId is mandatory.",
+                        .Severity = ErrorSeverity.Error,
+                        .Category = "MissingTaskId"
+                    })
+                Else
+                    taskId = row.TaskId
                 End If
-                Dim taskId As String = row.TaskId
 
                 ' ✅ DEBUG: Log available task IDs before lookup
                 Console.WriteLine($"     🔍 [COMPILER][FlowCompiler] Looking for task: taskId={taskId}, row.Id={row.Id}")
@@ -150,7 +196,15 @@ Public Class FlowCompiler
                 If task Is Nothing Then
                     Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Task not found: taskId={taskId}, row.Id={row.Id}, node.Id={node.Id}")
                     System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Task not found: taskId={taskId}, row.Id={row.Id}, node.Id={node.Id}")
-                    Throw New Exception($"Task not found: {taskId} in node {node.Id}, row {row.Id}. Task must exist.")
+                    errors.Add(New CompilationError() With {
+                        .TaskId = taskId,
+                        .NodeId = node.Id,
+                        .RowId = row.Id,
+                        .Message = $"Task not found: {taskId} in node {node.Id}, row {row.Id}. Task must exist.",
+                        .Severity = ErrorSeverity.Error,
+                        .Category = "TaskNotFound"
+                    })
+                    Continue For ' Skip this row
                 End If
 
                 ' ✅ USA SOLO task.Type (enum numerico) - templateId è SOLO un GUID per riferimenti
@@ -164,7 +218,15 @@ Public Class FlowCompiler
                     Console.WriteLine($"   - Type: NULL (REQUIRED)")
                     Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(task.TemplateId), "EMPTY", task.TemplateId)} (GUID reference, not used for type)")
                     System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][FlowCompiler] Task {taskId} has no Type!")
-                    Throw New Exception($"Task {taskId} (node {node.Id}, row {row.Id}) has no Type. Type is required.")
+                    errors.Add(New CompilationError() With {
+                        .TaskId = taskId,
+                        .NodeId = node.Id,
+                        .RowId = row.Id,
+                        .Message = $"Task {taskId} has no Type. Type is required.",
+                        .Severity = ErrorSeverity.Error,
+                        .Category = "MissingTaskType"
+                    })
+                    Continue For ' Skip this row
                 End If
 
                 Dim typeValue = task.Type.Value
@@ -175,14 +237,27 @@ Public Class FlowCompiler
                     Console.WriteLine($"   - Type: {typeValue} (INVALID)")
                     Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(task.TemplateId), "EMPTY", task.TemplateId)}")
                     System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][FlowCompiler] Task {taskId} has invalid Type: {typeValue}")
-                    Throw New Exception($"Task {taskId} (node {node.Id}, row {row.Id}) has invalid Type: {typeValue}")
+                    errors.Add(New CompilationError() With {
+                        .TaskId = taskId,
+                        .NodeId = node.Id,
+                        .RowId = row.Id,
+                        .Message = $"Task {taskId} has invalid Type: {typeValue}",
+                        .Severity = ErrorSeverity.Error,
+                        .Category = "InvalidTaskType"
+                    })
+                    Continue For ' Skip this row
                 End If
 
                 Dim taskType = CType(typeValue, TaskTypes)
                 Console.WriteLine($"✅ [COMPILER][FlowCompiler] Using task.Type: {taskType} (value={typeValue})")
                 System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] Using task.Type: {taskType} (value={typeValue})")
 
-                Dim compiledTask As CompiledTask = CreateTypedCompiledTask(taskType, task, row, node, taskId, flow)
+                Dim compiledTask As CompiledTask = CreateTypedCompiledTask(taskType, task, row, node, taskId, flow, errors)
+
+                ' ✅ Skip if compilation failed (compiledTask is Nothing)
+                If compiledTask Is Nothing Then
+                    Continue For ' Error already added in CreateTypedCompiledTask
+                End If
 
                 Console.WriteLine($"✅ [COMPILER][FlowCompiler] Created CompiledTask: Id={compiledTask.Id}, TaskType={compiledTask.TaskType}")
                 System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] Created CompiledTask: Id={compiledTask.Id}, TaskType={compiledTask.TaskType}")
@@ -212,8 +287,8 @@ Public Class FlowCompiler
         System.Diagnostics.Debug.WriteLine($"   Total Tasks created: {allTasks.Count}")
 
         ' Trova entry TaskGroup (primo nodo entry)
-        ' entryNodes.Count > 0 è garantito dal check precedente (altrimenti avremmo lanciato un'eccezione)
-        Dim entryTaskGroupId As String = entryNodes(0).Id
+        ' entryNodes.Count > 0 è garantito (altrimenti avremmo già restituito con Critical error)
+        Dim entryTaskGroupId As String = If(entryNodes.Count > 0, entryNodes(0).Id, Nothing)
         Console.WriteLine($"   Entry TaskGroup ID: {entryTaskGroupId}")
         System.Diagnostics.Debug.WriteLine($"   Entry TaskGroup ID: {entryTaskGroupId}")
 
@@ -221,7 +296,8 @@ Public Class FlowCompiler
             .TaskGroups = taskGroups,
             .EntryTaskGroupId = entryTaskGroupId,
             .Tasks = allTasks,
-            .Edges = If(flow.Edges, New List(Of FlowEdge)()) ' ✅ FASE 2.4: Topologia separata
+            .Edges = If(flow.Edges, New List(Of FlowEdge)()), ' ✅ FASE 2.4: Topologia separata
+            .Errors = errors ' ✅ Add errors to result
         }
 
         Console.WriteLine($"✅ [COMPILER][FlowCompiler] Compilation completed: {taskGroups.Count} task groups, {allTasks.Count} tasks")
