@@ -16,7 +16,8 @@ export function ErrorSidebar({ errors, onErrorClick, onClose }: ErrorSidebarProp
     return null;
   }
 
-  const criticalErrors = errors.filter(e => e.severity === 'critical');
+  // ✅ Filter errors by severity - only 'error' and 'warning' are handled
+  // 'hint' is defined in the type but not used yet (future design suggestions)
   const blockingErrors = errors.filter(e => e.severity === 'error');
   const warnings = errors.filter(e => e.severity === 'warning');
 
@@ -40,11 +41,6 @@ export function ErrorSidebar({ errors, onErrorClick, onClose }: ErrorSidebarProp
       <div className="p-4 bg-gray-50 border-b border-gray-200">
         <div className="text-sm text-gray-600">
           <div className="flex items-center gap-2 mb-1">
-            {criticalErrors.length > 0 && (
-              <span className="text-red-900 font-semibold">
-                {criticalErrors.length} Critical
-              </span>
-            )}
             {blockingErrors.length > 0 && (
               <span className="text-red-600 font-semibold">
                 {blockingErrors.length} Error{blockingErrors.length !== 1 ? 's' : ''}
@@ -66,7 +62,6 @@ export function ErrorSidebar({ errors, onErrorClick, onClose }: ErrorSidebarProp
       <div className="flex-1 overflow-y-auto p-2">
         <div className="space-y-2">
           {errors.map((error, idx) => {
-            const isCritical = error.severity === 'critical';
             const isError = error.severity === 'error';
             const isWarning = error.severity === 'warning';
 
@@ -75,9 +70,7 @@ export function ErrorSidebar({ errors, onErrorClick, onClose }: ErrorSidebarProp
                 key={idx}
                 onClick={() => onErrorClick(error)}
                 className={`p-3 rounded border-l-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                  isCritical
-                    ? 'border-red-900 bg-red-50'
-                    : isError
+                  isError
                     ? 'border-red-500 bg-red-50'
                     : 'border-yellow-500 bg-yellow-50'
                 }`}
@@ -85,12 +78,8 @@ export function ErrorSidebar({ errors, onErrorClick, onClose }: ErrorSidebarProp
                 <div className="flex items-start gap-2">
                   {/* Icon */}
                   <div className="flex-shrink-0 mt-0.5">
-                    {isCritical || isError ? (
-                      <AlertCircle
-                        className={`h-4 w-4 ${
-                          isCritical ? 'text-red-900' : 'text-red-500'
-                        }`}
-                      />
+                    {isError ? (
+                      <AlertCircle className="h-4 w-4 text-red-500" />
                     ) : (
                       <AlertTriangle className="h-4 w-4 text-yellow-500" />
                     )}
@@ -109,9 +98,7 @@ export function ErrorSidebar({ errors, onErrorClick, onClose }: ErrorSidebarProp
                     </div>
                     <div
                       className={`text-xs ${
-                        isCritical
-                          ? 'text-red-800'
-                          : isError
+                        isError
                           ? 'text-red-700'
                           : 'text-yellow-700'
                       }`}

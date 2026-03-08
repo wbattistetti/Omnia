@@ -20,6 +20,7 @@ import { closeTab } from '@dock/ops';
 
 import type { TaskMeta } from '@taskEditor/EditorHost/types';
 import type { Task, TaskTree } from '@types/taskTypes';
+import '@responseEditor/styles/errorHighlight.css';
 
 function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose, saveDecisionMade, onOpenSaveDialog }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void, saveDecisionMade?: boolean, onOpenSaveDialog?: () => void }) {
   const pdUpdate = useProjectDataUpdate();
@@ -479,8 +480,10 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       handleProfileUpdate={editor.handleProfileUpdate}
       updateSelectedNode={editor.updateSelectedNode}
       leftPanelMode={editor.leftPanelMode}
+      setLeftPanelMode={editor.setLeftPanelMode} // ✅ NEW: Pass setter for navigation context
       testPanelMode={editor.testPanelMode}
       tasksPanelMode={editor.tasksPanelMode}
+      setTasksPanelMode={editor.setTasksPanelMode} // ✅ NEW: Pass setter for navigation context
       rightWidth={editor.rightWidth}
       testPanelWidth={editor.testPanelWidth}
       tasksPanelWidth={editor.tasksPanelWidth}

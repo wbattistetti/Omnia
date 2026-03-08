@@ -29,6 +29,7 @@ import type { useResponseEditorCore } from '@responseEditor/hooks/useResponseEdi
 import type { useResponseEditorHandlers } from '@responseEditor/hooks/useResponseEditorHandlers';
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
+import { ResponseEditorNavigationProvider } from '@responseEditor/context/ResponseEditorNavigationContext';
 import { useTaskTreeFromStore } from '@responseEditor/core/state';
 import { generalizeLabel } from '../../../../../TaskBuilderAIWizard/services/TemplateCreationService';
 import { TranslationType } from '@types/translationTypes';
@@ -124,8 +125,10 @@ export interface ResponseEditorLayoutProps {
 
   // Panel modes
   leftPanelMode: any;
+  setLeftPanelMode?: (mode: any) => void; // ✅ NEW: Setter for navigation context
   testPanelMode: any;
   tasksPanelMode: any;
+  setTasksPanelMode?: (mode: any) => void; // ✅ NEW: Setter for navigation context
 
   // Panel widths
   rightWidth: number;
@@ -235,8 +238,10 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     handleProfileUpdate,
     updateSelectedNode,
     leftPanelMode,
+    setLeftPanelMode, // ✅ NEW: Destructure setter for navigation context
     testPanelMode,
     tasksPanelMode,
+    setTasksPanelMode, // ✅ NEW: Destructure setter for navigation context
     rightWidth,
     testPanelWidth,
     tasksPanelWidth,
@@ -1184,8 +1189,10 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     handleProfileUpdate,
     updateSelectedNode,
     leftPanelMode,
+    setLeftPanelMode, // ✅ NEW: Destructure setter for navigation context
     testPanelMode,
     tasksPanelMode,
+    setTasksPanelMode, // ✅ NEW: Destructure setter for navigation context
     rightWidth,
     testPanelWidth,
     tasksPanelWidth,
@@ -1305,8 +1312,10 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     handleProfileUpdate,
     updateSelectedNode,
     leftPanelMode,
+    setLeftPanelMode, // ✅ NEW: Destructure setter for navigation context
     testPanelMode,
     tasksPanelMode,
+    setTasksPanelMode, // ✅ NEW: Destructure setter for navigation context
     rightWidth,
     testPanelWidth,
     tasksPanelWidth,
@@ -1466,9 +1475,15 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
   // ✅ B1: WizardContext.Provider moved to ResponseEditorInner
   // ✅ Only ResponseEditorContext.Provider remains here
+  // ✅ NEW: ResponseEditorNavigationProvider for programmatic navigation
   return (
     <ResponseEditorContext.Provider value={responseEditorContextValue}>
-      {content}
+      <ResponseEditorNavigationProvider
+        setLeftPanelMode={setLeftPanelMode}
+        setTasksPanelMode={setTasksPanelMode}
+      >
+        {content}
+      </ResponseEditorNavigationProvider>
     </ResponseEditorContext.Provider>
   );
 }

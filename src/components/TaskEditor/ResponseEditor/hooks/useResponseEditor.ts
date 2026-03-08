@@ -276,8 +276,10 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     selectedNodePath,
     showContractWizard,
     leftPanelMode,
+    setLeftPanelMode, // ✅ NEW: Add setter for navigation context
     testPanelMode,
     tasksPanelMode,
+    setTasksPanelMode, // ✅ NEW: Add setter for navigation context
     sidebarManualWidth,
     isDraggingSidebar,
     showMessageReview,
@@ -411,8 +413,10 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     setTestPanelWidth,
     setTasksPanelWidth,
     leftPanelMode,
+    setLeftPanelMode, // ✅ NEW: Add setter for navigation context
     testPanelMode,
     tasksPanelMode,
+    setTasksPanelMode, // ✅ NEW: Add setter for navigation context
     sidebarManualWidth,
     isDraggingSidebar,
     showMessageReview,

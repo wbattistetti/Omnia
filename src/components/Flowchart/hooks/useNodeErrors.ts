@@ -4,9 +4,9 @@
 import { useMemo } from 'react';
 import type { CompilationError } from '../../FlowCompiler/types';
 import type { NodeRowData } from '../../../types/project';
+import { normalizeSeverity } from '../../../utils/severityUtils';
 
 export interface NodeErrorsResult {
-  hasCritical: boolean;
   hasError: boolean;
   hasWarning: boolean;
   errors: CompilationError[];
@@ -26,8 +26,10 @@ export function useNodeErrors(
   return useMemo(() => {
     // Filter errors for this node
     const nodeErrors = errors.filter(e => {
-      // Match by nodeId
-      if (e.nodeId === nodeId) return true;
+      // Match by nodeId (priorità massima)
+      if (e.nodeId === nodeId) {
+        return true;
+      }
 
       // Match by taskId or rowId in rows
       return rows.some(row => {
@@ -38,7 +40,6 @@ export function useNodeErrors(
 
     if (nodeErrors.length === 0) {
       return {
-        hasCritical: false,
         hasError: false,
         hasWarning: false,
         errors: [],
@@ -47,28 +48,26 @@ export function useNodeErrors(
       };
     }
 
-    // Calculate severity
-    const hasCritical = nodeErrors.some(e => e.severity === 'critical');
-    const hasError = nodeErrors.some(e => e.severity === 'error');
-    const hasWarning = nodeErrors.some(e => e.severity === 'warning');
+    // ✅ Calculate severity - only 'error' and 'warning' are handled
+    // 'hint' is defined in the type but not used yet (future design suggestions)
+    // ✅ Normalize severity: backend sends "Error"/"Warning" (PascalCase), frontend expects 'error'/'warning' (lowercase)
+    const hasError = nodeErrors.some(e => normalizeSeverity(e.severity) === 'error');
+    const hasWarning = nodeErrors.some(e => normalizeSeverity(e.severity) === 'warning');
 
-    // Determine border color and width
+    // ✅ Determine border color and width
     let borderColor = 'transparent';
     let borderWidth = 1;
 
-    if (hasCritical) {
-      borderColor = '#991b1b'; // red-900 (dark red)
-      borderWidth = 3;
-    } else if (hasError) {
+    if (hasError) {
       borderColor = '#ef4444'; // red-500
       borderWidth = 3;
     } else if (hasWarning) {
-      borderColor = '#f59e0b'; // yellow-500
+      borderColor = '#f59e0b'; // orange
       borderWidth = 2;
     }
+    // Note: 'hint' severity is ignored for now (future use)
 
     return {
-      hasCritical,
       hasError,
       hasWarning,
       errors: nodeErrors,

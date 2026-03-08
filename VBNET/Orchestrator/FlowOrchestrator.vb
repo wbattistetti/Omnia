@@ -92,16 +92,6 @@ Public Class FlowOrchestrator
             Throw New ArgumentNullException(NameOf(compilationResult), "CompilationResult cannot be null")
         End If
 
-        ' ✅ CRITICAL: Reject if has critical errors
-        If compilationResult.HasCriticalErrors Then
-            Dim criticalErrors = compilationResult.Errors.Where(Function(e) e.Severity = ErrorSeverity.Critical).ToList()
-            Dim errorMessages = String.Join("; ", criticalErrors.Select(Function(e) e.Message))
-            Throw New InvalidOperationException(
-                $"Cannot create FlowOrchestrator: compilation has {criticalErrors.Count} critical errors. " &
-                $"Errors: {errorMessages}"
-            )
-        End If
-
         ' ✅ ERROR: Reject if has blocking errors
         If compilationResult.HasErrors Then
             Dim blockingErrors = compilationResult.Errors.Where(Function(e) e.Severity = ErrorSeverity.Error).ToList()

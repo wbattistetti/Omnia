@@ -26,13 +26,19 @@ Public Class CompilationError
     Public Property RowId As String
 
     ''' <summary>
+    ''' Edge ID (optional) - for edge-level errors (e.g., label without condition)
+    ''' </summary>
+    <JsonProperty("edgeId")>
+    Public Property EdgeId As String
+
+    ''' <summary>
     ''' Error message (user-friendly)
     ''' </summary>
     <JsonProperty("message")>
     Public Property Message As String
 
     ''' <summary>
-    ''' Error severity (Error, Warning, Critical)
+    ''' Error severity (Error, Warning, Hint)
     ''' </summary>
     <JsonProperty("severity")>
     Public Property Severity As ErrorSeverity
@@ -47,6 +53,7 @@ Public Class CompilationError
         TaskId = String.Empty
         NodeId = String.Empty
         RowId = String.Empty
+        EdgeId = String.Empty
         Message = String.Empty
         Severity = ErrorSeverity.Error
         Category = String.Empty

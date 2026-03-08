@@ -269,6 +269,13 @@ interface NodeRowLabelProps {
   buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
   overlayRef?: React.RefObject<HTMLDivElement>;
   getProjectId?: () => string | undefined; // Project ID getter for testing
+  // ✅ Compilation errors props
+  rowErrors?: import('../../hooks/useRowErrors').RowErrorsResult;
+  onErrorClick?: (e: React.MouseEvent) => void;
+  errorIconRef?: React.RefObject<HTMLButtonElement>;
+  showErrorPopover?: boolean;
+  onCloseErrorPopover?: () => void;
+  onErrorFix?: (error: import('../../../../FlowCompiler/types').CompilationError) => void;
 }
 
 export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
@@ -300,7 +307,13 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   onRequestClosePicker,
   buttonCloseTimeoutRef,
   overlayRef,
-  getProjectId
+  getProjectId,
+  rowErrors,
+  onErrorClick,
+  errorIconRef,
+  showErrorPopover,
+  onCloseErrorPopover,
+  onErrorFix
 }) => {
   // ✅ ARCHITECTURAL: Use GlobalTestPanel context for testing
   const { openWithTask } = useGlobalTestPanel();
@@ -423,6 +436,12 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           gearColor={gearColor || labelTextColor}
           onOpenTaskTree={onOpenTaskTree}
           isCondition={String((row as any)?.categoryType || '').toLowerCase() === 'conditions'}
+          rowErrors={rowErrors}
+          onErrorClick={onErrorClick}
+          errorIconRef={errorIconRef}
+          showErrorPopover={showErrorPopover}
+          onCloseErrorPopover={onCloseErrorPopover}
+          onErrorFix={onErrorFix}
           onWrenchClick={async () => {
             try {
               const variables = (window as any).__omniaVars || {};
@@ -485,6 +504,12 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           included={included}
           setIncluded={setIncluded}
           onTestTask={taskInstance ? handleTestTask : undefined}
+          rowErrors={rowErrors}
+          onErrorClick={onErrorClick}
+          errorIconRef={errorIconRef}
+          showErrorPopover={showErrorPopover}
+          onCloseErrorPopover={onCloseErrorPopover}
+          onErrorFix={onErrorFix}
         />,
         document.body
       )}

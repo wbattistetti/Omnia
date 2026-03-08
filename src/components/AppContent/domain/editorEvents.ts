@@ -20,6 +20,17 @@ export interface TaskEditorOpenEvent {
   taskLabel?: string;
   taskTree?: TaskTree;
   templateId?: string;
+  // ✅ NEW: Navigation parameters for programmatic navigation
+  navigation?: {
+    stepKey?: string;              // Navigate to specific step (e.g., "noMatch", "noInput")
+    escalationIndex?: number;      // Navigate to specific escalation
+    autoEditTarget?: {             // Auto-open prompt editor for specific task
+      escIdx: number;
+      taskIdx: number;
+    };
+    openTasksPanel?: boolean;      // Open Tasks panel
+    openBehaviorPanel?: boolean;   // Open Behavior panel
+  };
 }
 
 /**

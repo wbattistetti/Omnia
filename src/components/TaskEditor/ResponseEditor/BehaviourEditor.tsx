@@ -4,6 +4,7 @@ import StepEditor from '@responseEditor/features/step-management/components/Step
 import { getNodeStepKeys } from '@responseEditor/core/domain';
 import { stepMeta } from '@responseEditor/ddtUtils';
 import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
+import { useResponseEditorNavigation } from '@responseEditor/context/ResponseEditorNavigationContext';
 
 interface BehaviourEditorProps {
   node: any;
@@ -45,6 +46,9 @@ export default function BehaviourEditor({
     return result;
   }, [stepKeys, selectedSubIndex, selectedRoot]);
 
+  // ✅ NEW: Get navigation context for programmatic step changes
+  const navigation = useResponseEditorNavigation();
+
   // Stato locale per lo step selezionato
   const [selectedStepKey, setSelectedStepKey] = useState<string>(() => {
     if (uiStepKeys.length > 0) {
@@ -52,6 +56,20 @@ export default function BehaviourEditor({
     }
     return 'start';
   });
+
+  // ✅ NEW: Sync with navigation context
+  useEffect(() => {
+    if (navigation.currentStepKey && navigation.currentStepKey !== selectedStepKey && uiStepKeys.includes(navigation.currentStepKey)) {
+      setSelectedStepKey(navigation.currentStepKey);
+    }
+  }, [navigation.currentStepKey, selectedStepKey, uiStepKeys]);
+
+  // ✅ NEW: Update navigation context when step changes locally
+  useEffect(() => {
+    if (navigation.setCurrentStepKey) {
+      navigation.setCurrentStepKey(selectedStepKey);
+    }
+  }, [selectedStepKey, navigation]);
 
   // Aggiorna selectedStepKey quando cambiano gli step disponibili
   useEffect(() => {
@@ -119,13 +137,14 @@ export default function BehaviourEditor({
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
       {/* StepsStrip in alto */}
       <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
-        <StepsStrip
-          stepKeys={uiStepKeys}
-          selectedStepKey={selectedStepKey}
-          onSelectStep={handleStepChange}
-          node={node}
-          taskId={taskId}
-        />
+      <StepsStrip
+        stepKeys={uiStepKeys}
+        selectedStepKey={selectedStepKey}
+        onSelectStep={handleStepChange}
+        node={node}
+        taskId={taskId}
+        data-step-key={selectedStepKey} // ✅ NEW: Add data attribute for scroll targeting
+      />
       </div>
 
       {/* StepEditor sotto */}

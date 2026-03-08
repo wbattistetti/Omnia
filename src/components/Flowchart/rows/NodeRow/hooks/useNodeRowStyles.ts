@@ -5,6 +5,8 @@ import { useMemo } from 'react';
 import { useRowExecutionHighlight } from '@components/Flowchart/executionHighlight/useExecutionHighlight';
 import { getTaskIdFromRow } from '@utils/taskHelpers';
 import type { Row } from '@types/NodeRowTypes';
+import { useRowErrors } from '../../../hooks/useRowErrors';
+import { useCompilationErrors } from '../../../../../context/CompilationErrorsContext';
 
 export type VisualState = 'normal' | 'fade' | 'highlight';
 
@@ -23,6 +25,7 @@ export interface UseNodeRowStylesResult {
   checkboxStyles: React.CSSProperties;
   finalStyles: React.CSSProperties;
   rowBorderStyle: React.CSSProperties;
+  rowBackgroundStyle: React.CSSProperties; // ✅ NEW: Background for compilation errors
 }
 
 /**
@@ -36,6 +39,10 @@ export function useNodeRowStyles(props: UseNodeRowStylesProps): UseNodeRowStyles
   // Task may not exist yet (created only when ResponseEditor is opened)
   const taskId = getTaskIdFromRow(row);
   const rowHighlight = useRowExecutionHighlight(row.id, taskId || undefined);
+
+  // ✅ COMPILATION ERRORS: Get errors for this row
+  const { errors: compilationErrors } = useCompilationErrors();
+  const rowErrors = useRowErrors(row.id, taskId || undefined, compilationErrors);
 
   return useMemo(() => {
     // Visual state styles
@@ -91,14 +98,6 @@ export function useNodeRowStyles(props: UseNodeRowStylesProps): UseNodeRowStyles
     // Merge visual styles with conditional styles
     conditionalStyles = { ...conditionalStyles, ...getVisualStyles() };
 
-    // Apply border instead of background
-    const rowBorderStyle = rowHighlight.border !== 'transparent'
-      ? {
-        border: `${rowHighlight.borderWidth}px solid ${rowHighlight.border}`,
-        borderRadius: '4px' // Optional: to make border more visible
-      }
-      : {};
-
     // Checkbox styles (always applied based on included state)
     const checkboxStyles = getCheckboxStyles();
 
@@ -121,12 +120,45 @@ export function useNodeRowStyles(props: UseNodeRowStylesProps): UseNodeRowStyles
         width: '100%'
       };
 
+    // ✅ Apply border and background for compilation errors (priority over execution highlight)
+    // Priority: Compilation error > Execution highlight
+    const compilationErrorBorder = rowErrors.borderColor !== 'transparent'
+      ? {
+          border: `${rowErrors.borderWidth}px solid ${rowErrors.borderColor}`,
+          borderRadius: '4px'
+        }
+      : {};
+
+    // ✅ Apply background color with 20% transparency for compilation errors
+    const compilationErrorBackground = rowErrors.backgroundColor !== 'transparent'
+      ? {
+          backgroundColor: rowErrors.backgroundColor
+        }
+      : {};
+
+    // Apply border instead of background (execution highlight)
+    const rowBorderStyle = compilationErrorBorder.border
+      ? compilationErrorBorder
+      : (rowHighlight.border !== 'transparent'
+          ? {
+              border: `${rowHighlight.borderWidth}px solid ${rowHighlight.border}`,
+              borderRadius: '4px'
+            }
+          : {});
+
+    // Merge background with final styles
+    const finalStylesWithBackground = {
+      ...finalStyles,
+      ...compilationErrorBackground
+    };
+
     return {
       conditionalStyles,
       conditionalClasses,
       checkboxStyles,
-      finalStyles,
+      finalStyles: finalStylesWithBackground,
       rowBorderStyle,
+      rowBackgroundStyle: compilationErrorBackground,
     };
-  }, [visualState, included, isPlaceholder, isBeingDragged, style, rowHighlight]);
+  }, [visualState, included, isPlaceholder, isBeingDragged, style, rowHighlight, rowErrors]);
 }

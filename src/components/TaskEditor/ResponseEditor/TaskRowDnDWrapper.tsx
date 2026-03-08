@@ -188,7 +188,12 @@ const TaskRowDnDWrapper: React.FC<TaskRowDnDWrapperProps> = ({
   drag(drop(ref));
 
   return (
-    <div ref={ref} style={{ opacity: isDragging ? 0.5 : 1, position: 'relative' }}>
+    <div
+      ref={ref}
+      data-escalation-index={escalationIdx} // ✅ NEW: Add data attribute for scroll targeting
+      data-task-index={taskIdx} // ✅ NEW: Add data attribute for scroll targeting
+      style={{ opacity: isDragging ? 0.5 : 1, position: 'relative' }}
+    >
       {/* Preview line - thin blue line shown when hovering */}
       {isOver && previewPosition && (
         <div

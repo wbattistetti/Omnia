@@ -30,7 +30,9 @@ import { resolveTaskType, hasTaskTree } from '@components/Flowchart/utils/taskVi
 import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '@types/taskTypes';
 import { idMappingService } from '@services/IdMappingService';
 import { generateId } from '@utils/idGenerator';
-import { updateRowTaskType, createRowWithTask, getTemplateId } from '@utils/taskHelpers';
+import { updateRowTaskType, createRowWithTask, getTemplateId, getTaskIdFromRow } from '@utils/taskHelpers';
+import { useRowErrors } from '../../hooks/useRowErrors';
+import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
 import { TaskTreeOpener } from './application/TaskTreeOpener';
 import { RowSaveHandler } from './application/RowSaveHandler';
 import { RowHeuristicsHandler } from './application/RowHeuristicsHandler';
@@ -447,6 +449,30 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     style,
   });
 
+  // ✅ COMPILATION ERRORS: Get errors for this row
+  const { errors: compilationErrors } = useCompilationErrors();
+  const taskId = getTaskIdFromRow(row);
+  const rowErrors = useRowErrors(row.id, taskId || undefined, compilationErrors);
+
+  // ✅ Handle error icon click - open error popover
+  const [showErrorPopover, setShowErrorPopover] = React.useState(false);
+  const errorIconRef = React.useRef<HTMLButtonElement>(null);
+
+  const handleErrorClick = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowErrorPopover(true);
+  }, []);
+
+  const handleErrorFix = React.useCallback(async (error: import('../../../../FlowCompiler/types').CompilationError) => {
+    // Close popover
+    setShowErrorPopover(false);
+
+    // ✅ Use central error fix handler
+    const { handleErrorFix: handleErrorFixCentral } = await import('../../../../utils/handleErrorFix');
+    await handleErrorFixCentral(error);
+  }, []);
+
   // FASE 4: Listen for instance updates to force re-render and update icon color
   // Note: TaskRepository doesn't emit events yet, but InstanceRepository still does
   // This listener is kept for backward compatibility during migration
@@ -498,9 +524,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         style={{
           ...conditionalStyles,
           ...checkboxStyles,
-          ...finalStyles,
+          ...finalStyles, // ✅ Includes background for compilation errors
           ...rowBorderStyle, // ✅ Applica bordo invece di background
-          backgroundColor: finalStyles.backgroundColor || 'transparent' // ✅ Mantieni background originale
         }}
         data-index={index}
         data-being-dragged={isBeingDragged ? 'true' : 'false'}
@@ -619,6 +644,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             buttonCloseTimeoutRef={buttonCloseTimeoutRef}
             overlayRef={overlayRef}
             getProjectId={getProjectId}
+            rowErrors={rowErrors}
+            onErrorClick={handleErrorClick}
+            errorIconRef={errorIconRef}
+            showErrorPopover={showErrorPopover}
+            onCloseErrorPopover={() => setShowErrorPopover(false)}
+            onErrorFix={handleErrorFix}
           />
         )}
       </div>

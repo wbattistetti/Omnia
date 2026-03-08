@@ -12,29 +12,33 @@ interface CompilationErrorsContextValue {
 
 const CompilationErrorsContext = createContext<CompilationErrorsContextValue | undefined>(undefined);
 
+// ✅ Global setter that can be called from anywhere (including async callbacks)
+// This allows useDialogueEngine to update errors directly without using window global state
+let globalSetErrors: ((errors: CompilationError[]) => void) | null = null;
+
 export function CompilationErrorsProvider({ children }: { children: React.ReactNode }) {
-  const [errors, setErrors] = useState<CompilationError[]>([]);
+  const [errors, setErrorsState] = useState<CompilationError[]>([]);
 
-  const clearErrors = useCallback(() => {
-    setErrors([]);
-  }, []);
-
-  // ✅ Sync with window (for useDialogueEngine)
+  // ✅ Expose setter to global scope for useDialogueEngine
+  // This is initialized when the provider mounts
   React.useEffect(() => {
-    const checkWindowErrors = () => {
-      const windowErrors = (window as any).__compilationErrors;
-      if (windowErrors && Array.isArray(windowErrors)) {
-        setErrors(windowErrors);
-      }
+    globalSetErrors = (newErrors: CompilationError[]) => {
+      console.log('[CompilationErrorsContext] ✅ Global setter called:', newErrors.length);
+      setErrorsState(newErrors);
     };
 
-    // Check immediately
-    checkWindowErrors();
+    return () => {
+      globalSetErrors = null;
+    };
+  }, []);
 
-    // Check periodically (in case errors are set after mount)
-    const interval = setInterval(checkWindowErrors, 1000);
+  const setErrors = useCallback((newErrors: CompilationError[]) => {
+    console.log('[CompilationErrorsContext] ✅ setErrors called:', newErrors.length);
+    setErrorsState(newErrors);
+  }, []);
 
-    return () => clearInterval(interval);
+  const clearErrors = useCallback(() => {
+    setErrorsState([]);
   }, []);
 
   return (
@@ -51,4 +55,16 @@ export function useCompilationErrors() {
     return { errors: [], setErrors: () => {}, clearErrors: () => {} };
   }
   return context;
+}
+
+// ✅ Export global setter for useDialogueEngine (can be called from async callbacks)
+// This function can be called from anywhere, including async functions that can't use hooks
+export function setCompilationErrorsGlobal(errors: CompilationError[]): void {
+  if (globalSetErrors) {
+    globalSetErrors(errors);
+  } else {
+    // ✅ NO FALLBACK TO WINDOW - errors will be lost if context not initialized
+    // This is intentional: the context should always be available in the component tree
+    console.error('[CompilationErrorsContext] ❌ Global setter not initialized - errors will be lost. Ensure CompilationErrorsProvider is mounted.');
+  }
 }

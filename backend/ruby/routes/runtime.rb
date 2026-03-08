@@ -53,7 +53,6 @@ class RuntimeRoutes < Sinatra::Base
       if result['errors'] && result['errors'].length > 0
         response_data[:errors] = result['errors']
         response_data[:hasErrors] = result['hasErrors'] || false
-        response_data[:hasCriticalErrors] = result['hasCriticalErrors'] || false
         puts "[RUBY] ⚠️ Compilation completed with #{result['errors'].length} errors"
       end
 

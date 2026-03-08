@@ -4,6 +4,8 @@ import { Pencil, Wrench, Link2Off as LinkOff } from 'lucide-react';
 import { useDynamicFontSizes } from '../../../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../../../utils/fontSizeUtils';
 import { VoiceInput } from '../../../common/VoiceInput';
+import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
+import { useEdgeErrors } from '../../hooks/useEdgeErrors';
 
 export interface EdgeLabelProps {
   label: string | undefined;
@@ -21,6 +23,7 @@ export interface EdgeLabelProps {
   dragPosition?: { x: number; y: number } | null;
   isDragging?: boolean;
   onMouseDown?: (e: React.MouseEvent) => void;
+  edgeId?: string; // ✅ Add edgeId prop for error detection
 }
 
 /**
@@ -43,12 +46,22 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
   dragPosition,
   isDragging = false,
   onMouseDown,
+  edgeId, // ✅ Add edgeId
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingValue, setEditingValue] = useState(label || '');
   const inputRef = useRef<HTMLInputElement>(null);
   const fontSizes = useDynamicFontSizes();
   const sizes = calculateFontBasedSizes(fontSizes.edgeCaption);
+
+  // ✅ COMPILATION ERRORS: Get errors for this edge
+  const { errors: compilationErrors } = useCompilationErrors();
+  const edgeErrors = edgeId ? useEdgeErrors(edgeId, compilationErrors) : null;
+
+  // ✅ Determine label color based on errors
+  const labelColor = edgeErrors && edgeErrors.strokeColor !== 'transparent'
+    ? edgeErrors.strokeColor
+    : '#8b5cf6'; // Default purple
 
   // Update editing value when label changes externally
   useEffect(() => {
@@ -147,11 +160,18 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
         left: displayPosition.x,
         top: displayPosition.y,
         transform: 'translate(-50%, -50%)',
-        background: 'transparent',
-        border: 'none',
+        background: edgeErrors && edgeErrors.strokeColor !== 'transparent'
+          ? (edgeErrors.hasError
+              ? 'rgba(239, 68, 68, 0.2)' // red-500 with 20% transparency
+              : 'rgba(245, 158, 11, 0.2)') // orange-500 with 20% transparency
+          : 'transparent',
+        border: edgeErrors && edgeErrors.strokeColor !== 'transparent'
+          ? `1px solid ${edgeErrors.strokeColor}` // ✅ Add border if error
+          : 'none',
         borderRadius: 4,
         padding: '2px 8px',
         fontSize: fontSizes.edgeCaption,
+        color: labelColor, // ✅ Apply error color to label text
         pointerEvents: 'auto',
         zIndex: isDragging ? 1000 : 10,
         boxShadow: isDragging

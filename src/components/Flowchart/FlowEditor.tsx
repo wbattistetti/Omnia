@@ -47,7 +47,6 @@ import { useIntellisense } from '../../context/IntellisenseContext';
 import { FlowchartWrapper } from './FlowchartWrapper';
 import { ExecutionStateProvider } from './executionHighlight/ExecutionStateContext';
 import { FlowStateBridge } from '../../services/FlowStateBridge';
-import { ErrorSidebar } from './components/ErrorSidebar';
 import { useCompilationErrors } from '../../context/CompilationErrorsContext';
 import { useFlowchartState } from '../../context/FlowchartStateContext';
 
@@ -101,16 +100,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   const { selectedEdgeId, setSelectedEdgeId, selectedNodeIds, setSelectedNodeIds, selectionMenu, setSelectionMenu, handleEdgeClick } = selection;
 
-  // ✅ COMPILATION ERRORS: Get errors from context and sync with window
-  const { errors: compilationErrors, setErrors: setCompilationErrors } = useCompilationErrors();
-
-  // ✅ Sync errors from window (set by useDialogueEngine)
-  useEffect(() => {
-    const windowErrors = (window as any).__compilationErrors;
-    if (windowErrors && Array.isArray(windowErrors)) {
-      setCompilationErrors(windowErrors);
-    }
-  }, [setCompilationErrors]);
+  // ✅ COMPILATION ERRORS: Get errors from context (already reactive - no sync needed)
+  const { errors: compilationErrors } = useCompilationErrors();
 
   // ✅ FLOWCHART STATE: Sync nodes with context
   const { setNodes: setContextNodes } = useFlowchartState();
@@ -118,6 +109,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   useEffect(() => {
     setContextNodes(nodes);
   }, [nodes, setContextNodes]);
+
+  // ✅ ERROR SIDEBAR: Removed - errors are always visible on nodes/edges, not in optional sidebar
 
   // ✅ Handle error click - select node and center viewport
   const handleErrorClick = useCallback((error: import('../../FlowCompiler/types').CompilationError) => {
@@ -131,6 +124,22 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         reactFlowInstance.setCenter(node.position.x, node.position.y, { zoom: 1.5, duration: 500 });
       }
     }
+  }, [nodes, reactFlowInstance, setSelectedNodeIds]);
+
+  // ✅ Listen for node selection events from error tooltip
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      const nodeId = e.detail?.nodeId;
+      if (nodeId) {
+        setSelectedNodeIds([nodeId]);
+        const node = nodes.find(n => n.id === nodeId);
+        if (node && reactFlowInstance) {
+          reactFlowInstance.setCenter(node.position.x, node.position.y, { zoom: 1.5, duration: 500 });
+        }
+      }
+    };
+    document.addEventListener('flowchart:selectNode', handler as EventListener);
+    return () => document.removeEventListener('flowchart:selectNode', handler as EventListener);
   }, [nodes, reactFlowInstance, setSelectedNodeIds]);
 
   // Node alignment and distribution
@@ -812,15 +821,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         </div>
       )}
 
-      {/* ✅ ERROR SIDEBAR: Show compilation errors */}
-      {compilationErrors.length > 0 && (
-        <div className="absolute right-0 top-0 bottom-0 z-50 pointer-events-auto">
-          <ErrorSidebar
-            errors={compilationErrors}
-            onErrorClick={handleErrorClick}
-          />
-        </div>
-      )}
+      {/* ✅ ERRORS: Always visible on nodes/edges with colored borders - no sidebar needed */}
 
       {connectionMenu.show && (
         <div

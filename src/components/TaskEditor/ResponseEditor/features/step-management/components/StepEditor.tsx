@@ -5,6 +5,7 @@ import { updateStepEscalations } from '@responseEditor/utils/stepHelpers';
 import { EscalationCard } from '@responseEditor/components/EscalationCard/EscalationCard';
 import { useEscalationUpdate } from '@responseEditor/hooks/useEscalationUpdate';
 import { getEscalationName } from '@responseEditor/utils/escalationHelpers';
+import { useResponseEditorNavigation } from '@responseEditor/context/ResponseEditorNavigationContext';
 
 // Force Vite cache refresh
 
@@ -72,8 +73,26 @@ export default function StepEditor({
   updateSelectedNode,
   stepKey
 }: Props) {
-  const [autoEditTarget, setAutoEditTarget] = React.useState<{ escIdx: number; taskIdx: number } | null>(null);
+  // ✅ NEW: Get autoEditTarget from navigation context
+  const navigation = useResponseEditorNavigation();
+  const contextAutoEditTarget = navigation?.autoEditTarget || null;
+
+  const [autoEditTarget, setAutoEditTarget] = React.useState<{ escIdx: number; taskIdx: number } | null>(contextAutoEditTarget);
   const stepLabel = stepMeta[stepKey]?.label || 'Escalation';
+
+  // ✅ NEW: Sync with navigation context
+  React.useEffect(() => {
+    if (contextAutoEditTarget && contextAutoEditTarget !== autoEditTarget) {
+      setAutoEditTarget(contextAutoEditTarget);
+    }
+  }, [contextAutoEditTarget, autoEditTarget]);
+
+  // ✅ NEW: Update navigation context when autoEditTarget changes locally
+  React.useEffect(() => {
+    if (navigation?.setAutoEditTarget) {
+      navigation.setAutoEditTarget(autoEditTarget);
+    }
+  }, [autoEditTarget, navigation]);
 
   const handleAddEscalation = React.useCallback(() => {
     updateSelectedNode((node) => {

@@ -63,6 +63,7 @@ export function EscalationCard({
   // Per step con escalation card (noMatch, noInput, confirmation, ecc.), renderizza la card completa
   return (
     <div
+      data-escalation-index={escalationIdx} // ✅ NEW: Add data attribute for scroll targeting
       style={{
         borderWidth: isHovered ? '2px' : '1px',
         borderStyle: 'solid',

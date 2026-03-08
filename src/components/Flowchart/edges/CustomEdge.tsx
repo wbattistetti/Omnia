@@ -5,6 +5,8 @@ import { useProjectDataUpdate, useProjectData } from '../../../context/ProjectDa
 import { ProjectDataService } from '../../../services/ProjectDataService';
 import { useEdgeExecutionHighlight } from '../executionHighlight/useEdgeExecutionHighlight';
 import { LinkStyle, DEFAULT_LINK_STYLE } from '../types/flowTypes';
+import { useCompilationErrors } from '../../../context/CompilationErrorsContext';
+import { useEdgeErrors } from '../hooks/useEdgeErrors';
 import { IntellisenseMenu } from '../../Intellisense/IntellisenseMenu';
 import { EdgeConditionSelector } from './EdgeConditionSelector';
 import { useEdgePositioning } from './hooks/useEdgePositioning';
@@ -49,6 +51,10 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // Execution highlight styles
   const allEdges = FlowStateBridge.getEdges();
   const edgeHighlight = useEdgeExecutionHighlight(props as any, allEdges);
+
+  // ✅ COMPILATION ERRORS: Get errors for this edge
+  const { errors: compilationErrors } = useCompilationErrors();
+  const edgeErrors = useEdgeErrors(id, compilationErrors);
 
   const { addItem, addCategory } = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
@@ -505,7 +511,16 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         targetPosition={targetPosition}
         linkStyle={linkStyle}
         controlPoints={controlPointsAbsolute}
-        style={style}
+        style={{
+          ...style,
+          // ✅ Priority: Error stroke > Execution highlight > Default
+          stroke: edgeErrors.strokeColor !== 'transparent'
+            ? edgeErrors.strokeColor
+            : edgeHighlight.stroke || (style as any)?.stroke,
+          strokeWidth: edgeErrors.strokeWidth !== 2
+            ? edgeErrors.strokeWidth
+            : edgeHighlight.strokeWidth || (style as any)?.strokeWidth || 2,
+        }}
         markerEnd={markerEnd}
         hovered={hover.state.hovered}
         selected={props.selected}
@@ -565,6 +580,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         dragPosition={labelDrag.dragPosition}
         isDragging={labelDrag.isDragging}
         onMouseDown={labelDrag.onMouseDown}
+        edgeId={id} // ✅ Add edgeId prop
       />
 
       {/* Intellisense Menu */}

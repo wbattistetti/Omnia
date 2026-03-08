@@ -36,30 +36,19 @@ Public Class FlowCompilationResult
     Public Property Edges As List(Of FlowEdge)
 
     ''' <summary>
-    ''' List of compilation errors (Critical, Error, Warning)
+    ''' List of compilation errors (Error, Warning, Hint)
     ''' </summary>
     <JsonProperty("errors")>
     Public Property Errors As List(Of CompilationError)
 
     ''' <summary>
-    ''' True if compilation has Error or Critical errors (blocks orchestrator)
+    ''' True if compilation has Error (blocks orchestrator)
     ''' </summary>
     <JsonProperty("hasErrors")>
     Public ReadOnly Property HasErrors As Boolean
         Get
             If Errors Is Nothing Then Return False
-            Return Errors.Any(Function(e) e.Severity = ErrorSeverity.Error OrElse e.Severity = ErrorSeverity.Critical)
-        End Get
-    End Property
-
-    ''' <summary>
-    ''' True if compilation has Critical errors (orchestrator must reject)
-    ''' </summary>
-    <JsonProperty("hasCriticalErrors")>
-    Public ReadOnly Property HasCriticalErrors As Boolean
-        Get
-            If Errors Is Nothing Then Return False
-            Return Errors.Any(Function(e) e.Severity = ErrorSeverity.Critical)
+            Return Errors.Any(Function(e) e.Severity = ErrorSeverity.Error)
         End Get
     End Property
 

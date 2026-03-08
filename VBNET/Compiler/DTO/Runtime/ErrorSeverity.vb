@@ -19,7 +19,7 @@ Imports Newtonsoft.Json.Converters
     Warning = 1
 
     ''' <summary>
-    ''' Critical: Blocks compilation result usage (orchestrator must reject)
+    ''' Hint: Future use for design suggestions (not used now)
     ''' </summary>
-    Critical = 2
+    Hint = 2
     End Enum

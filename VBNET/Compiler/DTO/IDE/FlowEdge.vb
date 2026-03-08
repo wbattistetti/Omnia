@@ -27,6 +27,12 @@ Public Class FlowEdge
     Public Property Target As String
 
     ''' <summary>
+    ''' Edge label (caption)
+    ''' </summary>
+    <JsonProperty("label")>
+    Public Property Label As String
+
+    ''' <summary>
     ''' Edge data (condition, isElse, etc.)
     ''' </summary>
     <JsonProperty("data")>

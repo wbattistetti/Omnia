@@ -95,7 +95,7 @@ Public Class FlowCompiler
         Console.WriteLine($"   Entry nodes found: {entryNodes.Count}")
         System.Diagnostics.Debug.WriteLine($"   Entry nodes found: {entryNodes.Count}")
 
-        ' ✅ CRITICAL: No entry nodes - add as Critical error, don't throw
+        ' ✅ ERROR: No entry nodes - add as Error, don't throw
         If entryNodes.Count = 0 Then
             Console.WriteLine($"❌ [COMPILER][FlowCompiler] No entry nodes found!")
             System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][FlowCompiler] No entry nodes found!")
@@ -104,7 +104,7 @@ Public Class FlowCompiler
                 .NodeId = Nothing,
                 .RowId = Nothing,
                 .Message = "No entry nodes found. Graph may be empty or disconnected. At least one entry node is required.",
-                .Severity = ErrorSeverity.Critical,
+                .Severity = ErrorSeverity.Error,
                 .Category = "NoEntryNodes"
             })
             ' ✅ Return empty but valid result
@@ -292,8 +292,40 @@ Public Class FlowCompiler
         System.Diagnostics.Debug.WriteLine($"   Total TaskGroups created: {taskGroups.Count}")
         System.Diagnostics.Debug.WriteLine($"   Total Tasks created: {allTasks.Count}")
 
+        ' ✅ VALIDATE EDGES: Check for edges with label but no condition
+        Console.WriteLine($"   Validating {If(flow.Edges IsNot Nothing, flow.Edges.Count, 0)} edges...")
+        System.Diagnostics.Debug.WriteLine($"   Validating {If(flow.Edges IsNot Nothing, flow.Edges.Count, 0)} edges...")
+        If flow.Edges IsNot Nothing Then
+            For Each edge In flow.Edges
+                ' Check if edge has a label (non-empty)
+                Dim hasLabel As Boolean = Not String.IsNullOrWhiteSpace(edge.Label)
+
+                ' Check if edge has a condition or is an Else edge
+                Dim hasCondition As Boolean = False
+                If edge.Data IsNot Nothing Then
+                    ' Edge has condition if Condition is not empty, OR if it's an Else edge
+                    hasCondition = Not String.IsNullOrWhiteSpace(edge.Data.Condition) OrElse (edge.Data.IsElse.HasValue AndAlso edge.Data.IsElse.Value)
+                End If
+
+                ' ✅ ERROR: Edge has label but no condition (and is not Else)
+                If hasLabel AndAlso Not hasCondition Then
+                    Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} has label '{edge.Label}' but no condition")
+                    System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} has label '{edge.Label}' but no condition")
+                    errors.Add(New CompilationError() With {
+                        .TaskId = "SYSTEM", ' Edge errors don't have a taskId
+                        .NodeId = edge.Source, ' Source node
+                        .RowId = Nothing,
+                        .EdgeId = edge.Id,
+                        .Message = $"Edge '{edge.Label}' (from node {edge.Source} to {edge.Target}) has a label but no condition. Add a condition or remove the label.",
+                        .Severity = ErrorSeverity.Error,
+                        .Category = "EdgeLabelWithoutCondition"
+                    })
+                End If
+            Next
+        End If
+
         ' Trova entry TaskGroup (primo nodo entry)
-        ' entryNodes.Count > 0 è garantito (altrimenti avremmo già restituito con Critical error)
+        ' entryNodes.Count > 0 è garantito (altrimenti avremmo già restituito con Error)
         Dim entryTaskGroupId As String = If(entryNodes.Count > 0, entryNodes(0).Id, Nothing)
         Console.WriteLine($"   Entry TaskGroup ID: {entryTaskGroupId}")
         System.Diagnostics.Debug.WriteLine($"   Entry TaskGroup ID: {entryTaskGroupId}")

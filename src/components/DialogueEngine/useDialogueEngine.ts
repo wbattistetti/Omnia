@@ -653,24 +653,26 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         entryTaskGroupId: compileData.entryTaskGroupId || null,
         // ✅ Error handling
         errors: compileData.errors || undefined,
-        hasErrors: compileData.hasErrors || false,
-        hasCriticalErrors: compileData.hasCriticalErrors || false
+        hasErrors: compileData.hasErrors || false
       };
 
       // ✅ Check for blocking errors BEFORE starting orchestrator
       if (compilationResult.errors && compilationResult.errors.length > 0) {
-        // ✅ Store errors in context for flowchart visualization
+        // ✅ Store errors in context IMMEDIATELY (reactive React state)
+        // Use global setter that can be called from async callbacks
         try {
-          const { useCompilationErrors } = await import('../../context/CompilationErrorsContext');
-          // Note: We can't use hooks here, so we'll store errors via a global setter
-          // The context will be updated by the component that uses this hook
-          (window as any).__compilationErrors = compilationResult.errors;
+          const { setCompilationErrorsGlobal } = await import('../../context/CompilationErrorsContext');
+          setCompilationErrorsGlobal(compilationResult.errors);
+          console.log('[useDialogueEngine] ✅ Errors set in context (reactive):', compilationResult.errors.length);
         } catch (e) {
-          console.warn('[useDialogueEngine] Could not store errors in context', e);
+          console.error('[useDialogueEngine] ❌ Failed to store errors in context:', e);
+          // Note: No fallback to window - context should always be available
         }
 
+        // ✅ Normalize severity: backend sends "Error"/"Warning" (PascalCase), frontend expects 'error'/'warning'
+        const { normalizeSeverity } = await import('../../utils/severityUtils');
         const blockingErrors = compilationResult.errors.filter(
-          e => e.severity === 'error' || e.severity === 'critical'
+          e => normalizeSeverity(e.severity) === 'error'
         );
 
         if (blockingErrors.length > 0) {
