@@ -38,13 +38,28 @@ const industries = [
   { id: 'utility_gas', name: 'Utility Gas', description: 'Template per servizi di utilità gas', Icon: Zap, color: 'text-blue-400' },
 ];
 
+// Helper function to detect browser language
+const detectBrowserLanguage = (): string => {
+  if (typeof window === 'undefined') return 'en';
+
+  const browserLang = navigator.language || navigator.languages?.[0] || 'en';
+  const langCode = browserLang.split('-')[0].toLowerCase();
+
+  const supportedLanguages = ['pt', 'en', 'it', 'es', 'fr'];
+  if (supportedLanguages.includes(langCode)) {
+    return langCode;
+  }
+
+  return 'en';
+};
+
 export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProject, duplicateNameError, onProjectNameChange, isLoading, onFactoryTemplatesLoaded }: NewProjectModalProps) {
   const [formData, setFormData] = useState<ProjectInfo>({
     id: '',
     name: '',
     description: '',
     template: 'utility_gas',
-    language: 'pt',
+    language: detectBrowserLanguage(),
     clientName: '',
     industry: 'undefined',
     ownerCompany: '',
@@ -177,7 +192,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
         name: '',
         description: '',
         template: 'utility_gas',
-        language: 'en',
+        language: detectBrowserLanguage(),
         clientName: '',
         industry: 'undefined',
         ownerCompany: '',
@@ -232,6 +247,19 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     handleInputChange('clientName', value || '');
   };
 
+  const handleClientCreate = async (inputValue: string) => {
+    if (inputValue && inputValue.trim()) {
+      const clientName = inputValue.trim();
+      setAvailableClients(prev => {
+        if (!prev.includes(clientName)) {
+          return [...prev, clientName].sort();
+        }
+        return prev;
+      });
+      handleInputChange('clientName', clientName);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -249,7 +277,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-700">
           <h2 className="text-2xl font-bold text-white">Nuovo Progetto</h2>
-          <button
+            <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
             disabled={isLoading}
@@ -297,6 +325,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
                 options={availableClients}
                 value={formData.clientName || null}
                 onChange={handleClientChange}
+                onCreateOption={handleClientCreate}
                 placeholder="Nome del cliente (es. Indesit)"
                 isDisabled={isLoading}
                 isInvalid={!!errors.clientName}

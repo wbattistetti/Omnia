@@ -41,8 +41,25 @@ export interface Counters {
   confirmation: number;
 }
 
+// Variable types for rich memory structure
+export interface SemanticValue {
+  semantic: any;              // Valore normalizzato usato per decisioni e condizioni
+  linguistic?: string;        // Forma linguistica detta dall'utente
+  confidence?: number;        // Confidenza dell'interpretazione
+  timestamp: number;          // Epoch ms
+}
+
+export interface Variable {
+  id: string;                 // Identificatore immutabile (GUID), lingua-neutro
+  label: string;              // Nome leggibile nella lingua del flow
+  value: SemanticValue | null;// Ultimo valore semantico
+  values: SemanticValue[];    // Storico dei valori acquisiti (non sovrascritto)
+  utterance?: string;         // Ultima frase dell'utente che ha generato il valore
+  confirmed: boolean;         // Stato di conferma
+}
+
 export interface DDTEngineState {
-  memory: Record<string, { value: any; confirmed: boolean }>;
+  memory: Record<string, Variable>; // Rich structure: nodeId -> Variable
   counters: Record<string, Counters>;
   currentMainId?: string;
   currentSubId?: string;

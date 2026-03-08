@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { convertScriptLabelsToGuids, convertScriptGuidsToLabels } from '@utils/conditionScriptConverter';
+import { convertUICodeToExecCode, convertExecCodeToUICode, createVariableMappings } from '@utils/conditionCodeConverter';
 
 export interface ScriptManagerServiceDependencies {
   projectData: any;
@@ -10,13 +10,14 @@ export interface ScriptManagerServiceDependencies {
 
 /**
  * Service for managing script persistence and conversion.
- * Handles saving/loading scripts and GUID ↔ Label conversion.
+ * Handles saving/loading scripts with ExecCode (runtime) and UICode (editor).
  */
 export class ScriptManagerService {
   constructor(private deps: ScriptManagerServiceDependencies) {}
 
   /**
-   * Saves a script to project data, converting labels to GUIDs before saving.
+   * Saves a script to project data.
+   * script is UICode (with [label] placeholders) - converts to ExecCode for persistence.
    */
   saveScript(script: string, label: string): void {
     const { projectData, pdUpdate } = this.deps;
@@ -36,13 +37,15 @@ export class ScriptManagerService {
       scriptPreview: script?.substring(0, 200) || ''
     });
 
-    // Convert label → GUID before saving (language-independent)
-    console.log('[ScriptManagerService][SAVE] 🔄 Converting label → GUID before save');
-    const scriptWithGuids = convertScriptLabelsToGuids(script);
-    console.log('[ScriptManagerService][SAVE] ✅ Conversion complete', {
-      originalLength: script.length,
-      convertedLength: scriptWithGuids.length,
-      changed: script !== scriptWithGuids
+    // script is UICode (with [label] placeholders)
+    // Convert to ExecCode (with ctx["guid"]) for persistence
+    const variableMappings = createVariableMappings();
+    const execCode = convertUICodeToExecCode(script, variableMappings);
+
+    console.log('[ScriptManagerService][SAVE] ✅ Conversion UICode → ExecCode complete', {
+      uiCodeLength: script.length,
+      execCodeLength: execCode.length,
+      changed: script !== execCode
     });
 
     const updatedPd = JSON.parse(JSON.stringify(projectData));
@@ -54,16 +57,20 @@ export class ScriptManagerService {
         const itemName = item.name || item.label;
         if (itemName === label) {
           if (!item.data) item.data = {};
-          const oldScript = item.data.script || '';
-          item.data.script = scriptWithGuids; // Save with GUIDs
+
+          // Save both ExecCode and UICode
+          item.data.execCode = execCode; // For runtime/persistence
+          item.data.uiCode = script;     // For editor display
+
+          // Keep data.script for backward compatibility (same as execCode)
+          item.data.script = execCode;
+
           found = true;
-          console.log('[ScriptManagerService][SAVE] ✅ Saved script to condition (converted to GUIDs)', {
+          console.log('[ScriptManagerService][SAVE] ✅ Saved script to condition', {
             conditionName: label,
             itemId: item.id,
-            scriptLength: scriptWithGuids.length,
-            originalLength: script.length,
-            oldScriptLength: oldScript.length,
-            oldScriptPreview: oldScript.substring(0, 100)
+            execCodeLength: execCode.length,
+            uiCodeLength: script.length
           });
           break;
         }
@@ -83,7 +90,8 @@ export class ScriptManagerService {
   }
 
   /**
-   * Loads a script from project data, converting GUIDs to labels for display.
+   * Loads a script from project data.
+   * Returns UICode (with [label] placeholders) for display in editor.
    */
   loadScript(label: string): string | null {
     const { projectData } = this.deps;
@@ -98,12 +106,21 @@ export class ScriptManagerService {
       for (const item of (cat.items || [])) {
         const itemName = item.name || item.label;
         if (itemName === label) {
-          const scriptWithGuids = item.data?.script || '';
-          if (scriptWithGuids) {
-            // Convert GUID → Label for display
-            const scriptWithLabels = convertScriptGuidsToLabels(scriptWithGuids);
-            return scriptWithLabels;
+          // Prefer uiCode, fallback to execCode (convert), then script (legacy)
+          let execCode = item.data?.execCode || item.data?.script || '';
+
+          if (execCode) {
+            // Convert ExecCode → UICode for display
+            const variableMappings = createVariableMappings();
+            const uiCode = convertExecCodeToUICode(execCode, variableMappings);
+            return uiCode;
           }
+
+          // If uiCode exists, use it directly
+          if (item.data?.uiCode) {
+            return item.data.uiCode;
+          }
+
           return null;
         }
       }
@@ -113,16 +130,43 @@ export class ScriptManagerService {
   }
 
   /**
-   * Converts a script from labels to GUIDs (for saving).
+   * Gets ExecCode for a condition (for runtime evaluation).
    */
-  convertForSave(script: string): string {
-    return convertScriptLabelsToGuids(script);
+  getExecCode(label: string): string | null {
+    const { projectData } = this.deps;
+
+    if (!label || !projectData) {
+      return null;
+    }
+
+    const conditions = projectData?.conditions || [];
+
+    for (const cat of conditions) {
+      for (const item of (cat.items || [])) {
+        const itemName = item.name || item.label;
+        if (itemName === label) {
+          // Prefer execCode, fallback to script (legacy)
+          return item.data?.execCode || item.data?.script || null;
+        }
+      }
+    }
+
+    return null;
   }
 
   /**
-   * Converts a script from GUIDs to labels (for display).
+   * Converts UICode to ExecCode (for saving).
+   */
+  convertForSave(script: string): string {
+    const variableMappings = createVariableMappings();
+    return convertUICodeToExecCode(script, variableMappings);
+  }
+
+  /**
+   * Converts ExecCode to UICode (for display).
    */
   convertForDisplay(script: string): string {
-    return convertScriptGuidsToLabels(script);
+    const variableMappings = createVariableMappings();
+    return convertExecCodeToUICode(script, variableMappings);
   }
 }

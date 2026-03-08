@@ -5,7 +5,7 @@
 // DDT Engine - Backend Runtime
 // Copied from frontend and adapted for backend
 
-import type { AssembledDDT, MainDataNode, DDTNavigatorCallbacks } from './types';
+import type { AssembledDDT, MainDataNode, DDTNavigatorCallbacks, SemanticValue, Variable } from './types';
 import { getStep, getEscalationRecovery, executeStep } from './ddtSteps';
 import { loadContract, findOriginalNode } from './utils';
 
@@ -791,12 +791,29 @@ async function processUserInput(
             let mappedCount = 0;
             // ✅ Use backend utility instead of dynamic import
 
+            // Get original input for utterance
+            const originalInput = typeof userInputEvent === 'object' && 'value' in userInputEvent
+              ? String(userInputEvent.value || '')
+              : '';
+
             if (contract && contract.subDataMapping) {
               // ✅ SIMPLIFIED: recognitionResult.value is already keyed by subId (no canonicalKey mapping needed)
               const tMap = performance.now();
               for (const [subId, value] of Object.entries(recognitionResult.value)) {
                 if (contract.subDataMapping[subId]) {
-                  updateMemory(state, subId, value);
+                  // Find subData node to get label
+                  const subDataNode = mainData.subData?.find((s: any) => {
+                    const sId = (s as any).referenceId || s.id;
+                    return sId === subId;
+                  });
+                  const subLabel = subDataNode?.label || subDataNode?.name || subId;
+
+                  updateMemory(state, subId, value, {
+                    label: subLabel,
+                    utterance: originalInput,
+                    linguistic: originalInput,
+                    confidence: recognitionResult.confidence
+                  });
                   mappedCount++;
                 }
               }
@@ -815,7 +832,12 @@ async function processUserInput(
                                 recognitionResult.value[subData.label] ||
                                 recognitionResult.value[subData.name];
                 if (subValue !== undefined && subValue !== null) {
-                  updateMemory(state, subDataId, subValue);
+                  const subLabel = subData.label || subData.name || subDataId;
+                  updateMemory(state, subDataId, subValue, {
+                    label: subLabel,
+                    utterance: originalInput,
+                    linguistic: originalInput
+                  });
                   mappedCount++;
                 }
               }
@@ -824,14 +846,38 @@ async function processUserInput(
             // Salva anche l'oggetto completo sotto mainData.referenceId per riferimento
             // ✅ Runtime: use referenceId from instance (not recalculated from template)
             const mainDataId = (currData.mainData as any).referenceId || currData.nodeId;
-            updateMemory(state, mainDataId, recognitionResult.value);
+            const mainLabel = currData.mainData.label || currData.mainData.name || mainDataId;
+            updateMemory(state, mainDataId, recognitionResult.value, {
+              label: mainLabel,
+              utterance: originalInput,
+              linguistic: originalInput,
+              confidence: recognitionResult.confidence
+            });
           } else {
             // MainData atomico, salva direttamente
-            updateMemory(state, currData.nodeId, recognitionResult.value);
+            const mainLabel = currData.mainData.label || currData.mainData.name || currData.nodeId;
+            const originalInput = typeof userInputEvent === 'object' && 'value' in userInputEvent
+              ? String(userInputEvent.value || '')
+              : '';
+            updateMemory(state, currData.nodeId, recognitionResult.value, {
+              label: mainLabel,
+              utterance: originalInput,
+              linguistic: originalInput,
+              confidence: recognitionResult.confidence
+            });
           }
         } else {
           // SubData o valore non oggetto, salva direttamente
-          updateMemory(state, currData.nodeId, recognitionResult.value);
+          const nodeLabel = node?.label || node?.name || currData.nodeId;
+          const originalInput = typeof userInputEvent === 'object' && 'value' in userInputEvent
+            ? String(userInputEvent.value || '')
+            : '';
+          updateMemory(state, currData.nodeId, recognitionResult.value, {
+            label: nodeLabel,
+            utterance: originalInput,
+            linguistic: originalInput,
+            confidence: recognitionResult.confidence
+          });
         }
         return 'Match';
       }
@@ -845,6 +891,10 @@ async function processUserInput(
     case 'partialMatch':
       // Match parziale: tratta come match
       // Stessa logica di decomposizione per partialMatch
+      const originalInputPartial = typeof userInputEvent === 'object' && 'value' in userInputEvent
+        ? String(userInputEvent.value || '')
+        : '';
+
       if (currData.isMain && recognitionResult.value && typeof recognitionResult.value === 'object') {
         const mainData = currData.mainData;
         if (mainData.subData && Array.isArray(mainData.subData)) {
@@ -855,21 +905,41 @@ async function processUserInput(
                             recognitionResult.value[subData.label] ||
                             recognitionResult.value[subData.name];
             if (subValue !== undefined && subValue !== null) {
-              updateMemory(state, subDataId, subValue);
+              const subLabel = subData.label || subData.name || subDataId;
+              updateMemory(state, subDataId, subValue, {
+                label: subLabel,
+                utterance: originalInputPartial,
+                linguistic: originalInputPartial
+              });
             }
           }
           // ✅ Runtime: use referenceId from instance (not recalculated from template)
           const mainDataId = (mainData as any).referenceId || currData.nodeId;
-          updateMemory(state, mainDataId, recognitionResult.value);
+          const mainLabelPartial = mainData.label || mainData.name || mainDataId;
+          updateMemory(state, mainDataId, recognitionResult.value, {
+            label: mainLabelPartial,
+            utterance: originalInputPartial,
+            linguistic: originalInputPartial
+          });
         } else {
           // ✅ Runtime: use referenceId from instance (not recalculated from template)
           const mainDataId = (mainData as any).referenceId || currData.nodeId;
-          updateMemory(state, mainDataId, recognitionResult.value);
+          const mainLabelPartial = mainData.label || mainData.name || mainDataId;
+          updateMemory(state, mainDataId, recognitionResult.value, {
+            label: mainLabelPartial,
+            utterance: originalInputPartial,
+            linguistic: originalInputPartial
+          });
         }
       } else {
         // ✅ Runtime: use referenceId from instance (not recalculated from template)
         // currData.nodeId should already be referenceId if set correctly in getNextData
-        updateMemory(state, currData.nodeId, recognitionResult.value);
+        const nodeLabelPartial = node?.label || node?.name || currData.nodeId;
+        updateMemory(state, currData.nodeId, recognitionResult.value, {
+          label: nodeLabelPartial,
+          utterance: originalInputPartial,
+          linguistic: originalInputPartial
+        });
       }
       return 'Match';
 
@@ -1104,7 +1174,13 @@ function initializeState(ddtInstance: AssembledDDT): DDTEngineState {
 function updateMemory(
   state: DDTEngineState,
   nodeId: string,
-  value: any
+  value: any,
+  options?: {
+    label?: string;
+    utterance?: string;
+    linguistic?: string;
+    confidence?: number;
+  }
 ): void {
   console.log('═══════════════════════════════════════════════════════════════════════════');
   console.log('[DDTEngine] 💾 Saving to memory', {
@@ -1112,26 +1188,69 @@ function updateMemory(
     valueType: typeof value,
     isObject: typeof value === 'object' && value !== null,
     valueKeys: typeof value === 'object' && value !== null ? Object.keys(value) : [],
-    value: typeof value === 'string' ? value.substring(0, 100) : value
+    value: typeof value === 'string' ? value.substring(0, 100) : value,
+    hasLabel: !!options?.label,
+    hasUtterance: !!options?.utterance
   });
   console.log('═══════════════════════════════════════════════════════════════════════════');
-  if (state.memory[nodeId]) {
-    state.memory[nodeId].value = value;
-    console.log('[DDTEngine] ✅ Memory updated (existing entry)', { nodeId, hasValue: !!state.memory[nodeId].value });
+
+  // Create SemanticValue
+  const semanticValue: SemanticValue = {
+    semantic: value,
+    linguistic: options?.linguistic,
+    confidence: options?.confidence,
+    timestamp: Date.now()
+  };
+
+  // Get or create Variable
+  let variable = state.memory[nodeId];
+  if (variable) {
+    // Add to history (never overwrite)
+    variable.values.push(semanticValue);
+    // Update current value
+    variable.value = semanticValue;
+    // Update utterance if provided
+    if (options?.utterance) {
+      variable.utterance = options.utterance;
+    }
+    console.log('[DDTEngine] ✅ Memory updated (existing entry)', {
+      nodeId,
+      hasValue: !!variable.value,
+      historyLength: variable.values.length
+    });
   } else {
-    state.memory[nodeId] = { value, confirmed: false };
-    console.log('[DDTEngine] ✅ Memory created (new entry)', { nodeId, hasValue: !!state.memory[nodeId].value });
+    // Create new Variable
+    variable = {
+      id: nodeId,
+      label: options?.label || nodeId, // Fallback to nodeId if label not provided
+      value: semanticValue,
+      values: [semanticValue], // Initialize history with first value
+      utterance: options?.utterance,
+      confirmed: false
+    };
+    state.memory[nodeId] = variable;
+    console.log('[DDTEngine] ✅ Memory created (new entry)', {
+      nodeId,
+      label: variable.label,
+      hasValue: !!variable.value
+    });
   }
+
   console.log('[DDTEngine] 📊 Memory state after update', {
     totalKeys: Object.keys(state.memory).length,
     keys: Object.keys(state.memory),
-    nodeIdValue: state.memory[nodeId]?.value
+    variableLabel: variable.label,
+    variableValue: variable.value?.semantic,
+    historyLength: variable.values.length
   });
 }
 
 function markAsConfirmed(state: DDTEngineState, nodeId: string): void {
-  if (state.memory[nodeId]) {
-    state.memory[nodeId].confirmed = true;
+  const variable = state.memory[nodeId];
+  if (variable) {
+    variable.confirmed = true;
+    // Note: The semantic value itself doesn't have a confirmed flag,
+    // but the Variable does. This is sufficient for our use case.
   }
 }
 

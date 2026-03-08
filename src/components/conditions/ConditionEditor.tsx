@@ -11,7 +11,7 @@ import { setupMonacoEnvironment } from '../../utils/monacoWorkerSetup';
 import VariablesPanel from './VariablesPanel';
 import { useAIProvider } from '../../context/AIProviderContext';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
-import { convertScriptGuidsToLabels, convertScriptLabelsToGuids } from '../../utils/conditionScriptConverter';
+// Note: ScriptManagerService handles ExecCode/UICode conversion internally
 // SmartTooltip is used only in the tester's toolbar (right panel)
 
 // Ensure Monaco workers configured once
@@ -236,7 +236,8 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
   const [varsMenuMaxH] = React.useState<number>(280);
 
-  // ✅ Update script when initialScript changes, converting GUID → label for display
+  // ✅ Update script when initialScript changes
+  // initialScript is ExecCode (with ctx["guid"]) - convert to UICode (with [label]) for display
   React.useEffect(() => {
     console.log('[ConditionEditor][UPDATE] 🔄 initialScript changed', {
       hasInitialScript: !!(initialScript && initialScript.trim()),
@@ -245,19 +246,20 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     });
 
     if (initialScript && initialScript.trim()) {
-      console.log('[ConditionEditor][UPDATE] 🔄 Converting GUID → label');
-      const scriptWithLabels = convertScriptGuidsToLabels(initialScript);
+      // initialScript is ExecCode - convert to UICode for display
+      console.log('[ConditionEditor][UPDATE] 🔄 Converting ExecCode → UICode');
+      const uiCode = scriptManager.convertForDisplay(initialScript);
       console.log('[ConditionEditor][UPDATE] ✅ Conversion complete', {
-        originalLength: initialScript.length,
-        convertedLength: scriptWithLabels.length,
-        changed: initialScript !== scriptWithLabels
+        execCodeLength: initialScript.length,
+        uiCodeLength: uiCode.length,
+        changed: initialScript !== uiCode
       });
-      setScript(scriptWithLabels);
+      setScript(uiCode);
     } else {
       console.log('[ConditionEditor][UPDATE] ℹ️ No initial script, using DEFAULT_CODE');
       setScript(DEFAULT_CODE);
     }
-  }, [initialScript]);
+  }, [initialScript, scriptManager]);
 
   // legacy filtered list removed (hierarchical tree used instead)
 

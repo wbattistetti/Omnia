@@ -322,6 +322,7 @@ export class DialogueEngine {
 
   /**
    * Updates execution state from task result
+   * Converts rich Variable structure to simplified variableStore
    */
   private updateStateFromResult(task: CompiledTask, result: any): void {
     // Update variable store
@@ -329,22 +330,40 @@ export class DialogueEngine {
       // Helper to identify GUID keys (36 chars with hyphens)
       const isGuid = (key: string) => key.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
 
-      const guidKeys = Object.keys(result.variables).filter(isGuid);
-      const labelKeys = Object.keys(result.variables).filter(k => !isGuid(k));
-
       console.log('[DialogueEngine][updateStateFromResult] 🔄 Updating variableStore', {
         taskId: task.id,
         action: task.action,
         variablesCount: Object.keys(result.variables).length,
-        guidKeysCount: guidKeys.length,
-        labelKeysCount: labelKeys.length,
-        guidKeys: guidKeys.slice(0, 5),
-        labelKeys: labelKeys.slice(0, 5),
         variableKeys: Object.keys(result.variables).map(k => k.substring(0, 20) + '...'),
-        variables: result.variables,
         variableStoreBefore: { ...this.state.variableStore }
       });
-      Object.assign(this.state.variableStore, result.variables);
+
+      // Convert state.memory (rich Variable structure) to variableStore (simplified)
+      for (const [nodeId, variable] of Object.entries(result.variables)) {
+        // Check if variable is rich structure (Variable) or legacy structure
+        if (variable && typeof variable === 'object' && 'label' in variable && 'value' in variable) {
+          // Rich structure: Variable
+          const varObj = variable as any;
+          const semanticValue = varObj.value?.semantic ?? varObj.value ?? null;
+
+          // Use label as key (editor guarantees uniqueness)
+          if (varObj.label) {
+            this.state.variableStore[varObj.label] = semanticValue;
+          }
+
+          // Also store with nodeId for compatibility
+          this.state.variableStore[nodeId] = semanticValue;
+        } else if (variable && typeof variable === 'object' && 'value' in variable) {
+          // Legacy structure: { value, confirmed }
+          const legacyValue = (variable as any).value;
+          // Try to get label from FlowchartVariablesService (if available)
+          // For now, store with nodeId only
+          this.state.variableStore[nodeId] = legacyValue;
+        } else {
+          // Simple value
+          this.state.variableStore[nodeId] = variable;
+        }
+      }
 
       const finalGuidKeys = Object.keys(this.state.variableStore).filter(isGuid);
       const finalLabelKeys = Object.keys(this.state.variableStore).filter(k => !isGuid(k));

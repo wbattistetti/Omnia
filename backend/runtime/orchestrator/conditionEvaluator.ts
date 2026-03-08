@@ -261,30 +261,30 @@ function evaluateEdgeCondition(
             for (const item of (cat.items || [])) {
               const itemId = item.id || item._id;
               if (itemId === edgeCondition) {
-                const script = (item.data?.script || item.script || '').trim();
+                // Prefer execCode, fallback to script (legacy)
+                const execCode = (item.data?.execCode || item.data?.script || item.script || '').trim();
                 console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ Condition found!', {
                   conditionId: edgeCondition,
                   itemId,
-                  hasScript: !!script,
-                  scriptLength: script.length,
-                  scriptPreview: script.substring(0, 100)
+                  hasExecCode: !!execCode,
+                  execCodeLength: execCode.length,
+                  execCodePreview: execCode.substring(0, 100)
                 });
-                if (script) {
-                  console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ Script found, compiling', {
+                if (execCode) {
+                  console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ ExecCode found, compiling', {
                     conditionId: edgeCondition,
-                    scriptLength: script.length,
-                    scriptPreview: script.substring(0, 200)
+                    execCodeLength: execCode.length,
+                    execCodePreview: execCode.substring(0, 200)
                   });
 
-                  // ✅ Use script directly with labels (no conversion needed)
-                  // The variableStore now contains BOTH GUID and label keys, so scripts can use labels directly
-
+                  // ExecCode uses ctx["guid"] format
+                  // variableStore contains both GUID keys (from updateStateFromResult) and label keys
                   const guidKeys = Object.keys(variableStore).filter(k => k.length === 36 && k.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));
                   const labelKeys = Object.keys(variableStore).filter(k => !guidKeys.includes(k));
 
                   console.log('[ConditionEvaluator][evaluateEdgeCondition] 🔍 VariableStore status', {
                     conditionId: edgeCondition,
-                    scriptPreview: script.substring(0, 300),
+                    execCodePreview: execCode.substring(0, 300),
                     variableStoreKeys: Object.keys(variableStore),
                     variableStoreSize: Object.keys(variableStore).length,
                     guidKeysCount: guidKeys.length,
@@ -294,10 +294,10 @@ function evaluateEdgeCondition(
                     variableStorePreview: Object.fromEntries(Object.entries(variableStore).slice(0, 10))
                   });
 
-                  // ✅ Script already contains labels, variableStore has labels too
-                  const scriptWithLabels = script; // No conversion needed!
+                  // ExecCode uses ctx["guid"] - variableStore has GUID keys, so it works directly
+                  const scriptToExecute = execCode;
 
-                  const wrapper = `"use strict";\nreturn (function(ctx){\n  var vars = ctx;\n  ${scriptWithLabels}\n  if (typeof main==='function') return !!main(ctx);\n  if (typeof evaluate==='function') return !!evaluate(ctx);\n  throw new Error('main(ctx) or evaluate(ctx) not found');\n});`;
+                  const wrapper = `"use strict";\nreturn (function(ctx){\n  var vars = ctx;\n  ${scriptToExecute}\n  if (typeof main==='function') return !!main(ctx);\n  if (typeof evaluate==='function') return !!evaluate(ctx);\n  throw new Error('main(ctx) or evaluate(ctx) not found');\n});`;
                   try {
                     // eslint-disable-next-line no-new-func
                     const makeRunner = new Function(wrapper)();
