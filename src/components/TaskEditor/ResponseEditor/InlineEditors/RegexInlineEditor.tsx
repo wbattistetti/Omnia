@@ -12,6 +12,8 @@ import {
   type SubDataMapping,
 } from '@responseEditor/utils/regexGroupTransform';
 import { generateGroupName } from '@responseEditor/utils/regexGroupUtils';
+import { useHeaderToolbarContext } from '@responseEditor/context/HeaderToolbarContext';
+import { Wand2, Loader2 } from 'lucide-react';
 
 interface RegexInlineEditorProps {
   regex: string; // contract.regex.value (GUID-based, stored form)
@@ -181,9 +183,18 @@ export default function RegexInlineEditor({
     onRegexSaveRef.current = onRegexSave;
   }, [onRegexSave]);
 
-  // ✅ Sync when the GUID regex prop changes (e.g. different node selected)
+  // ✅ Sync when the GUID regex prop changes (e.g. different node selected or editor reopened)
   useEffect(() => {
     const guidRegex = regex || '';
+
+    console.log('[RegexInlineEditor] 🔄 Regex prop changed', {
+      newGuidRegex: guidRegex || '(empty)',
+      previousGuidRegex: prevGuidRegexRef.current || '(empty)',
+      isSame: guidRegex === prevGuidRegexRef.current,
+      nodeId: node?.id,
+      templateId: node?.templateId
+    });
+
     if (guidRegex === prevGuidRegexRef.current) {
       return;
     }
@@ -194,13 +205,19 @@ export default function RegexInlineEditor({
     subDataMappingRef.current = ensureSubDataMapping(node?.templateId, node?.subNodes);
 
     const labelRegex = toLabel(guidRegex);
+    console.log('[RegexInlineEditor] ✅ Converted to label regex', {
+      guidRegex: guidRegex || '(empty)',
+      labelRegex: labelRegex || '(empty)',
+      mappingKeys: Object.keys(subDataMappingRef.current).length
+    });
+
     setLastTextboxText(labelRegex);
     setTextboxText(labelRegex);
     textboxTextRef.current = labelRegex;
     if (labelRegex && labelRegex.trim()) {
       preservedValueRef.current = labelRegex;
     }
-  }, [regex, node?.templateId, toLabel]);
+  }, [regex, node?.templateId, toLabel, node?.id]);
 
   // -----------------------------------------------------------------------
   // Validation error display
@@ -366,35 +383,98 @@ export default function RegexInlineEditor({
   }, [node?.templateId, saveToTemplate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // -----------------------------------------------------------------------
-  // Render AI button
+  // Inject toolbar into main header via Context
   // -----------------------------------------------------------------------
+  const headerToolbarContext = useHeaderToolbarContext();
 
   useEffect(() => {
-    if (!onButtonRender) return;
-    if (showButton) {
-      onButtonRender(
-        <button
-          type="button"
-          onClick={handleAIClick}
-          disabled={generatingRegex}
-          style={{
-            padding: '6px 12px',
-            backgroundColor: generatingRegex ? '#9ca3af' : '#3b82f6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: generatingRegex ? 'not-allowed' : 'pointer',
-            fontSize: '13px',
-            fontWeight: 500,
-          }}
-        >
-          {generatingRegex ? 'Generating...' : buttonCaption}
-        </button>
-      );
+    // ✅ DEBUG: Log context availability
+    if (!headerToolbarContext) {
+      console.warn('[RegexInlineEditor] ⚠️ HeaderToolbarContext not available, using fallback onButtonRender');
     } else {
-      onButtonRender(null);
+      console.log('[RegexInlineEditor] ✅ HeaderToolbarContext available, injecting toolbar');
     }
-  }, [onButtonRender, showButton, handleAIClick, buttonCaption, generatingRegex]);
+
+    // ✅ NEW: Inject toolbar into main header (takes precedence over onButtonRender)
+    if (headerToolbarContext) {
+      if (showButton) {
+        headerToolbarContext.setToolbar(
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {validationError && (
+              <span style={{ color: '#ef4444', fontSize: '12px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>⚠️</span>
+                <span>{validationError}</span>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleAIClick}
+              disabled={generatingRegex}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: generatingRegex ? '#9ca3af' : '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: generatingRegex ? 'not-allowed' : 'pointer',
+                fontSize: '13px',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              {generatingRegex ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Generating...</span>
+                </>
+              ) : (
+                <>
+                  <Wand2 size={14} />
+                  <span>{buttonCaption}</span>
+                </>
+              )}
+            </button>
+          </div>
+        );
+      } else {
+        headerToolbarContext.setToolbar(null);
+      }
+    } else if (onButtonRender) {
+      // ✅ FALLBACK: Use onButtonRender if Context is not available (backward compatibility)
+      if (showButton) {
+        onButtonRender(
+          <button
+            type="button"
+            onClick={handleAIClick}
+            disabled={generatingRegex}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: generatingRegex ? '#9ca3af' : '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: generatingRegex ? 'not-allowed' : 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+            }}
+          >
+            {generatingRegex ? 'Generating...' : buttonCaption}
+          </button>
+        );
+      } else {
+        onButtonRender(null);
+      }
+    }
+
+    // ✅ Cleanup: Remove toolbar when editor closes
+    return () => {
+      if (headerToolbarContext) {
+        headerToolbarContext.setToolbar(null);
+      }
+    };
+  }, [headerToolbarContext, onButtonRender, showButton, handleAIClick, buttonCaption, generatingRegex, validationError]);
 
   // -----------------------------------------------------------------------
   // Editor value — shows label-based regex or placeholder

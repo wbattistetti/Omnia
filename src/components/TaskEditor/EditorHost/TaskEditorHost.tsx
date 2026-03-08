@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { registry } from './editorRegistry';
 import { resolveEditorKind } from './resolveKind';
 import type { EditorProps } from './types';
+import { HeaderToolbarProvider } from '../ResponseEditor/context/HeaderToolbarContext';
 // ✅ RIMOSSO: getAgentActVisualsByType - non più usato in questo file
 
 export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHeader, registerOnClose, setDockTree }: EditorProps) {
@@ -35,21 +36,18 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
   // Gli altri editori (problem, simple, aiagent, summarizer, negotiation) usano lazy loading, quindi hanno bisogno di Suspense
   const isLazy = kind !== 'ddt' && kind !== 'intent' && kind !== 'message' && kind !== 'backend' && kind !== 'problem' && kind !== 'aiagent' && kind !== 'summarizer' && kind !== 'negotiation';
 
-  if (!isLazy) {
+  // ✅ ARCHITECTURE: Wrap with HeaderToolbarProvider to support header injection from editors
+  const editorContent = !isLazy ? (
     // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
-    return (
-      <div className="w-full bg-slate-900 flex flex-col flex-1 min-h-0 h-full">
-        <div className="min-h-0 flex-1 h-full">
-          {/* @ts-expect-error registry type */}
-          <Comp task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} registerOnClose={registerOnClose} setDockTree={setDockTree} />
-        </div>
+    <div className="w-full bg-slate-900 flex flex-col flex-1 min-h-0 h-full">
+      <div className="min-h-0 flex-1 h-full">
+        {/* @ts-expect-error registry type */}
+        <Comp task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} registerOnClose={registerOnClose} setDockTree={setDockTree} />
       </div>
-    );
-  }
-
-  // Suspense per lazy components
-  // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
-  return (
+    </div>
+  ) : (
+    // Suspense per lazy components
+    // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
     <div className="w-full bg-slate-900 flex flex-col flex-1 min-h-0 h-full">
       <div className="min-h-0 flex-1 h-full">
         <Suspense fallback={
@@ -64,6 +62,14 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
         </Suspense>
       </div>
     </div>
+  );
+
+  // ✅ ARCHITECTURE: Provide HeaderToolbarContext for editors that need to inject header content
+  // Note: This is only for editors opened via TaskEditorHost (not ResponseEditorLayout which already has the provider)
+  return (
+    <HeaderToolbarProvider>
+      {editorContent}
+    </HeaderToolbarProvider>
   );
 }
 

@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import EditorHeader from '../../components/common/EditorHeader';
 import { getTaskVisualsByType } from '../../components/Flowchart/utils/taskVisuals';
 import EmbeddingEditorShell, { EmbeddingEditorShellRef } from './EmbeddingEditorShell';
 import { useIntentStore } from './state/intentStore';
@@ -10,6 +9,7 @@ import { taskRepository } from '../../services/TaskRepository';
 import { Brain, Loader2 } from 'lucide-react';
 import type { EditorProps } from '../../components/TaskEditor/EditorHost/types'; // ✅ ARCHITETTURA ESPERTO: Usa EditorProps invece di props custom
 import type { ToolbarButton } from '../../dock/types'; // ✅ PATTERN CENTRALIZZATO: Import per toolbar
+import { useHeaderToolbarContext } from '../../components/TaskEditor/ResponseEditor/context/HeaderToolbarContext';
 
 function toEditorState(payload?: ProblemPayload) {
   const intents = (payload?.intents || []).map((pi: ProblemIntent) => ({
@@ -219,19 +219,26 @@ export default function IntentHostAdapter({ task, onClose, hideHeader, onToolbar
     }
   }, [hideHeader, toolbarButtons, onToolbarUpdate, headerColor]);
 
+  // ✅ ARCHITECTURE: Inject icon and title into main header (no local header)
+  const headerContext = useHeaderToolbarContext();
+  React.useEffect(() => {
+    if (headerContext) {
+      // Inject icon and title into main header
+      headerContext.setIcon(<Icon size={18} style={{ color }} />);
+      headerContext.setTitle(String(task?.label || 'Problem'));
+
+      return () => {
+        // Cleanup: remove injected values when editor unmounts
+        headerContext.setIcon(null);
+        headerContext.setTitle(null);
+      };
+    }
+  }, [headerContext, task?.label, Icon, color]);
+
   // ✅ SOLUZIONE ESPERTO: Rimuovere tutti i ResizeObserver e log di debug, usare solo flex-1 min-h-0
   return (
     <div className="w-full flex flex-col flex-1 min-h-0">
-      {/* ✅ PATTERN CENTRALIZZATO: Mostra EditorHeader solo se hideHeader è false */}
-      {!hideHeader && (
-      <EditorHeader
-        icon={<Icon size={18} style={{ color }} />}
-          title={String(task?.label || 'Problem')} // ✅ ARCHITETTURA ESPERTO: Usa task.label
-        color="orange"
-          onClose={onClose} // ✅ ARCHITETTURA ESPERTO: Usa onClose da EditorProps
-          toolbarButtons={toolbarButtons} // ✅ PATTERN CENTRALIZZATO: Toolbar incorporata nell'header
-        />
-      )}
+      {/* ✅ ARCHITECTURE: No local header - icon/title/toolbar are injected into main header */}
       {/* ✅ SOLUZIONE ESPERTO: Usa flex-1 min-h-0 per propagare correttamente l'altezza */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <EmbeddingEditorShell

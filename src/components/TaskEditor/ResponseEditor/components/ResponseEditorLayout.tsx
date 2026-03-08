@@ -30,6 +30,7 @@ import type { useResponseEditorHandlers } from '@responseEditor/hooks/useRespons
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { ResponseEditorNavigationProvider } from '@responseEditor/context/ResponseEditorNavigationContext';
+import { HeaderToolbarProvider, useHeaderToolbarContext } from '@responseEditor/context/HeaderToolbarContext';
 import { useTaskTreeFromStore } from '@responseEditor/core/state';
 import { generalizeLabel } from '../../../../../TaskBuilderAIWizard/services/TemplateCreationService';
 import { TranslationType } from '@types/translationTypes';
@@ -37,6 +38,54 @@ import { TaskType, TemplateSource } from '@types/taskTypes';
 import { useWizardStore } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 import { shallow } from 'zustand/shallow';
 import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
+
+/**
+ * Internal component that wraps EditorHeader with dynamic injection support
+ * ✅ ARCHITECTURE: Uses injected icon/title/toolbar from task editors, with fallback to props
+ */
+function HeaderWithDynamicToolbar({
+  icon: defaultIcon,
+  title: defaultTitle,
+  toolbarButtons,
+  onClose,
+  color,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  toolbarButtons: any[];
+  onClose: () => void;
+  color: 'slate' | 'orange' | 'purple';
+}) {
+  const toolbarContext = useHeaderToolbarContext();
+
+  // ✅ ARCHITECTURE: Use injected values if available, otherwise fallback to props
+  const icon = toolbarContext?.icon ?? defaultIcon;
+  const title = toolbarContext?.title ?? defaultTitle;
+  const dynamicToolbar = toolbarContext?.toolbar || null;
+
+  // ✅ DEBUG: Log when dynamic values change
+  React.useEffect(() => {
+    if (dynamicToolbar || toolbarContext?.icon || toolbarContext?.title) {
+      console.log('[HeaderWithDynamicToolbar] ✅ Dynamic header values active', {
+        hasToolbar: !!dynamicToolbar,
+        hasIcon: !!toolbarContext?.icon,
+        hasTitle: !!toolbarContext?.title,
+        injectedTitle: toolbarContext?.title || '(using default)'
+      });
+    }
+  }, [dynamicToolbar, toolbarContext?.icon, toolbarContext?.title]);
+
+  return (
+    <EditorHeader
+      icon={icon}
+      title={title}
+      toolbarButtons={toolbarButtons}
+      dynamicToolbarSlot={dynamicToolbar}
+      onClose={onClose}
+      color={color}
+    />
+  );
+}
 
 // ✅ ARCHITECTURE: Props interface with only necessary values (no monolithic editor object)
 export interface ResponseEditorLayoutProps {
@@ -1372,10 +1421,10 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       {/* ✅ Header: visibile solo quando taskWizardMode === 'none' (STATO 1) */}
       {/* ✅ CRITICAL: Quando taskWizardMode === 'full', header e toolbar devono essere completamente nascosti */}
       {!hideHeader && taskWizardMode === 'none' && (
-        <EditorHeader
+        <HeaderWithDynamicToolbar
           icon={<Icon size={18} style={{ color: iconColor }} />}
           title={headerTitle}
-          toolbarButtons={toolbarButtons} // ✅ FIX: Il pulsante è sempre presente con ref nella toolbar
+          toolbarButtons={toolbarButtons}
           onClose={handleEditorCloseWithTutor}
           color="orange"
         />
@@ -1476,14 +1525,17 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ B1: WizardContext.Provider moved to ResponseEditorInner
   // ✅ Only ResponseEditorContext.Provider remains here
   // ✅ NEW: ResponseEditorNavigationProvider for programmatic navigation
+  // ✅ NEW: HeaderToolbarProvider for dynamic toolbar injection from inline editors
   return (
     <ResponseEditorContext.Provider value={responseEditorContextValue}>
-      <ResponseEditorNavigationProvider
-        setLeftPanelMode={setLeftPanelMode}
-        setTasksPanelMode={setTasksPanelMode}
-      >
-        {content}
-      </ResponseEditorNavigationProvider>
+      <HeaderToolbarProvider>
+        <ResponseEditorNavigationProvider
+          setLeftPanelMode={setLeftPanelMode}
+          setTasksPanelMode={setTasksPanelMode}
+        >
+          {content}
+        </ResponseEditorNavigationProvider>
+      </HeaderToolbarProvider>
     </ResponseEditorContext.Provider>
   );
 }

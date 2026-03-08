@@ -389,12 +389,25 @@ export default function RecognitionEditor({
   React.useEffect(() => {
     // Only reload when regex editor is opened (was closed, now opened)
     if (activeEditor === 'regex' && prevActiveEditorRef.current !== 'regex' && editorProps?.node?.templateId) {
+      console.log('[RecognitionEditor] 🔄 Regex editor opened, reloading pattern', {
+        templateId: editorProps.node.templateId,
+        previousEditor: prevActiveEditorRef.current,
+        currentEditor: activeEditor
+      });
+
       const template = DialogueTaskService.getTemplate(editorProps.node.templateId);
       if (template?.dataContract) {
         const regexParser = template.dataContract.parsers?.find((c: any) => c.type === 'regex');
         const regexPattern = regexParser?.patterns?.[0] || '';
 
-        // Update only the regex parser in local contract
+        console.log('[RecognitionEditor] 📝 Found regex pattern in template', {
+          hasParser: !!regexParser,
+          pattern: regexPattern || '(empty)',
+          parsersCount: template.dataContract.parsers?.length || 0
+        });
+
+        // ✅ CRITICAL: Update local contract AND trigger prop update for RegexInlineEditor
+        // The RegexInlineEditor receives regex via props, so we need to ensure it gets the latest value
         if (contract) {
           const updatedParsers = contract.parsers ? [...contract.parsers] : [];
           const existingRegexIndex = updatedParsers.findIndex((c: any) => c.type === 'regex');
@@ -410,12 +423,21 @@ export default function RecognitionEditor({
           const updatedContract = { ...contract, parsers: updatedParsers };
           setLocalContract(updatedContract);
 
-          console.log('[RecognitionEditor] 🔄 Reloaded regex pattern from template', {
+          console.log('[RecognitionEditor] ✅ Updated local contract with regex pattern', {
             templateId: editorProps.node.templateId,
             regexPattern: regexPattern || '(empty)',
-            wasEmpty: !regexPattern
+            wasEmpty: !regexPattern,
+            contractUpdated: true
           });
+        } else {
+          console.warn('[RecognitionEditor] ⚠️ Contract is null, cannot update regex pattern');
         }
+      } else {
+        console.warn('[RecognitionEditor] ⚠️ Template or dataContract not found', {
+          templateId: editorProps.node.templateId,
+          hasTemplate: !!template,
+          hasDataContract: !!template?.dataContract
+        });
       }
     }
     prevActiveEditorRef.current = activeEditor;

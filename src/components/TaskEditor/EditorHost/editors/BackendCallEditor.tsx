@@ -4,7 +4,7 @@ import { taskRepository } from '../../../../services/TaskRepository';
 import { TaskType } from '../../../../types/taskTypes';
 import { useProjectDataUpdate, useProjectData } from '../../../../context/ProjectDataContext';
 import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
-import EditorHeader from '../../../../components/common/EditorHeader';
+import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
 import { Server, Plus, X, Eye, EyeOff, Pencil, Check, Trash2, Table2 } from 'lucide-react';
 import { OmniaSelect } from '../../../../components/common/OmniaSelect';
 import { flowchartVariablesService } from '../../../../services/FlowchartVariablesService';
@@ -567,17 +567,25 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
   // Aggiornare per usare getTaskVisuals(type, task?.category, task?.categoryCustom, false)
   const { Icon, color } = getTaskVisualsByType(type, false);
 
+  // ✅ ARCHITECTURE: Inject icon and title into main header (no local header)
+  const headerContext = useHeaderToolbarContext();
+  React.useEffect(() => {
+    if (headerContext) {
+      // Inject icon and title into main header
+      headerContext.setIcon(<Server size={18} style={{ color: color || '#94a3b8' }} />);
+      headerContext.setTitle(String(task?.label || 'Backend Call'));
+
+      return () => {
+        // Cleanup: remove injected values when editor unmounts
+        headerContext.setIcon(null);
+        headerContext.setTitle(null);
+      };
+    }
+  }, [headerContext, task?.label, task?.type, color]);
+
   return (
     <div className="h-full bg-slate-900 flex flex-col min-h-0" style={{ color: '#e5e7eb' }}>
-      {!hideHeader && (
-        <EditorHeader
-          icon={<Server size={18} style={{ color: color || '#94a3b8' }} />}
-          title={String(task?.label || 'Backend Call')}
-          color="slate"
-          onClose={handleClose}
-          toolbarButtons={toolbarButtons}
-        />
-      )}
+      {/* ✅ ARCHITECTURE: No local header - icon/title/toolbar are injected into main header */}
 
       <div className="flex-1 min-h-0 overflow-auto p-3">
         {/* Endpoint Configuration - Compact (hidden when table view is active) */}

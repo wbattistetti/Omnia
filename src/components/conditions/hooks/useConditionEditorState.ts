@@ -68,6 +68,12 @@ export interface UseConditionEditorStateReturn {
   setPendingDupGroups: (groups: Array<{ tail: string; options: string[] }> | null) => void;
   preferredVarByTail: Record<string, string>;
   setPreferredVarByTail: (prefs: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) => void;
+
+  // DSL state
+  editorMode: 'dsl' | 'javascript';
+  setEditorMode: (mode: 'dsl' | 'javascript') => void;
+  compiledJs: string;
+  setCompiledJs: (js: string) => void;
 }
 
 /**
@@ -81,6 +87,10 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
   const [script, setScript] = useState(initialScript && initialScript.trim() ? initialScript : defaultCode);
   const [lastAcceptedScript, setLastAcceptedScript] = useState('');
   const [hasCreated, setHasCreated] = useState(false);
+
+  // DSL state (new)
+  const [editorMode, setEditorMode] = useState<'dsl' | 'javascript'>('dsl');
+  const [compiledJs, setCompiledJs] = useState<string>('');
 
   // UI state
   const [busy, setBusy] = useState(false);
@@ -208,5 +218,11 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
     setPendingDupGroups,
     preferredVarByTail,
     setPreferredVarByTail,
+
+    // DSL state
+    editorMode,
+    setEditorMode,
+    compiledJs,
+    setCompiledJs,
   };
 }

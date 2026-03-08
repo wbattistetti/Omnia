@@ -1,25 +1,36 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { convertUICodeToExecCode, convertExecCodeToUICode, createVariableMappings } from '@utils/conditionCodeConverter';
+import { DSLParser } from '../dsl/parser/DSLParser';
+import { ASTCompiler } from '../dsl/compiler/ASTCompiler';
+import { VariableMappingService } from '../dsl/compiler/VariableMappingService';
 
 export interface ScriptManagerServiceDependencies {
   projectData: any;
   pdUpdate: any;
+  variables?: Record<string, any>; // Variables map for variable mapping service
 }
 
 /**
- * Service for managing script persistence and conversion.
- * Handles saving/loading scripts with ExecCode (runtime) and UICode (editor).
+ * Service for managing DSL script persistence and compilation.
+ * DSL is the only source of truth. JavaScript is always compiled from DSL.
  */
 export class ScriptManagerService {
-  constructor(private deps: ScriptManagerServiceDependencies) {}
+  private variableMappingService: VariableMappingService;
+  private parser: DSLParser;
+  private compiler: ASTCompiler;
+
+  constructor(private deps: ScriptManagerServiceDependencies) {
+    this.variableMappingService = new VariableMappingService();
+    this.parser = new DSLParser();
+    this.compiler = new ASTCompiler(this.variableMappingService);
+  }
 
   /**
-   * Saves a script to project data.
-   * script is UICode (with [label] placeholders) - converts to ExecCode for persistence.
+   * Saves DSL script to project data.
+   * Compiles DSL → JavaScript and saves both.
    */
-  saveScript(script: string, label: string): void {
+  saveScript(dsl: string, label: string): { success: boolean; errors: any[] } {
     const { projectData, pdUpdate } = this.deps;
 
     if (!label || !projectData || !pdUpdate) {
@@ -28,26 +39,47 @@ export class ScriptManagerService {
         hasProjectData: !!projectData,
         hasPdUpdate: !!pdUpdate
       });
-      return;
+      return { success: false, errors: [] };
     }
 
-    console.log('[ScriptManagerService][SAVE] 🚀 START saving script', {
+    console.log('[ScriptManagerService][SAVE] 🚀 START saving DSL', {
       conditionName: label,
-      scriptLength: script?.length || 0,
-      scriptPreview: script?.substring(0, 200) || ''
+      dslLength: dsl?.length || 0,
+      dslPreview: dsl?.substring(0, 200) || ''
     });
 
-    // script is UICode (with [label] placeholders)
-    // Convert to ExecCode (with ctx["guid"]) for persistence
-    const variableMappings = createVariableMappings();
-    const execCode = convertUICodeToExecCode(script, variableMappings);
+    // Parse DSL → AST
+    const parseResult = this.parser.parse(dsl);
 
-    console.log('[ScriptManagerService][SAVE] ✅ Conversion UICode → ExecCode complete', {
-      uiCodeLength: script.length,
-      execCodeLength: execCode.length,
-      changed: script !== execCode
+    if (!parseResult.ast || parseResult.errors.length > 0) {
+      console.error('[ScriptManagerService][SAVE] ❌ DSL parsing failed', {
+        errors: parseResult.errors
+      });
+      return { success: false, errors: parseResult.errors };
+    }
+
+    // Compile AST → JavaScript
+    let execCode: string;
+    try {
+      execCode = this.compiler.compile(parseResult.ast);
+    } catch (error: any) {
+      console.error('[ScriptManagerService][SAVE] ❌ Compilation failed', { error });
+      return {
+        success: false,
+        errors: [{
+          message: error.message || 'Compilation error',
+          position: { line: 1, column: 1 },
+          severity: 'error'
+        }]
+      };
+    }
+
+    console.log('[ScriptManagerService][SAVE] ✅ DSL compiled to JavaScript', {
+      dslLength: dsl.length,
+      execCodeLength: execCode.length
     });
 
+    // Save to project data
     const updatedPd = JSON.parse(JSON.stringify(projectData));
     const conditions = updatedPd?.conditions || [];
 
@@ -58,19 +90,22 @@ export class ScriptManagerService {
         if (itemName === label) {
           if (!item.data) item.data = {};
 
-          // Save both ExecCode and UICode
-          item.data.execCode = execCode; // For runtime/persistence
-          item.data.uiCode = script;     // For editor display
-
-          // Keep data.script for backward compatibility (same as execCode)
-          item.data.script = execCode;
+          // Save DSL as source of truth
+          item.data.uiCode = dsl;
+          item.data.uiCodeFormat = 'dsl';
+          item.data.execCode = execCode;
+          item.data.script = execCode; // Legacy compatibility
+          item.data.dslMeta = {
+            lastCompiledAt: new Date().toISOString(),
+            errors: []
+          };
 
           found = true;
-          console.log('[ScriptManagerService][SAVE] ✅ Saved script to condition', {
+          console.log('[ScriptManagerService][SAVE] ✅ Saved DSL to condition', {
             conditionName: label,
             itemId: item.id,
-            execCodeLength: execCode.length,
-            uiCodeLength: script.length
+            dslLength: dsl.length,
+            execCodeLength: execCode.length
           });
           break;
         }
@@ -81,17 +116,19 @@ export class ScriptManagerService {
     if (found) {
       pdUpdate.updateDataDirectly(updatedPd);
       console.log('[ScriptManagerService][SAVE] ✅ Updated projectData via updateDataDirectly');
+      return { success: true, errors: [] };
     } else {
       console.warn('[ScriptManagerService][SAVE] ⚠️ Condition not found in projectData', {
         conditionName: label,
         availableConditions: conditions.flatMap(cat => (cat.items || []).map((item: any) => item.name || item.label))
       });
+      return { success: false, errors: [] };
     }
   }
 
   /**
-   * Loads a script from project data.
-   * Returns UICode (with [label] placeholders) for display in editor.
+   * Loads DSL script from project data.
+   * Returns DSL (source of truth).
    */
   loadScript(label: string): string | null {
     const { projectData } = this.deps;
@@ -106,22 +143,8 @@ export class ScriptManagerService {
       for (const item of (cat.items || [])) {
         const itemName = item.name || item.label;
         if (itemName === label) {
-          // Prefer uiCode, fallback to execCode (convert), then script (legacy)
-          let execCode = item.data?.execCode || item.data?.script || '';
-
-          if (execCode) {
-            // Convert ExecCode → UICode for display
-            const variableMappings = createVariableMappings();
-            const uiCode = convertExecCodeToUICode(execCode, variableMappings);
-            return uiCode;
-          }
-
-          // If uiCode exists, use it directly
-          if (item.data?.uiCode) {
-            return item.data.uiCode;
-          }
-
-          return null;
+          // Return DSL (uiCode) - source of truth
+          return item.data?.uiCode || null;
         }
       }
     }
@@ -130,7 +153,7 @@ export class ScriptManagerService {
   }
 
   /**
-   * Gets ExecCode for a condition (for runtime evaluation).
+   * Gets compiled JavaScript for a condition (for runtime evaluation).
    */
   getExecCode(label: string): string | null {
     const { projectData } = this.deps;
@@ -145,7 +168,7 @@ export class ScriptManagerService {
       for (const item of (cat.items || [])) {
         const itemName = item.name || item.label;
         if (itemName === label) {
-          // Prefer execCode, fallback to script (legacy)
+          // Return compiled JavaScript
           return item.data?.execCode || item.data?.script || null;
         }
       }
@@ -155,18 +178,37 @@ export class ScriptManagerService {
   }
 
   /**
-   * Converts UICode to ExecCode (for saving).
+   * Compiles DSL to JavaScript (without saving).
+   * Used for preview/validation.
    */
-  convertForSave(script: string): string {
-    const variableMappings = createVariableMappings();
-    return convertUICodeToExecCode(script, variableMappings);
-  }
+  compileDSL(dsl: string): { success: boolean; jsCode: string | null; errors: any[] } {
+    const parseResult = this.parser.parse(dsl);
 
-  /**
-   * Converts ExecCode to UICode (for display).
-   */
-  convertForDisplay(script: string): string {
-    const variableMappings = createVariableMappings();
-    return convertExecCodeToUICode(script, variableMappings);
+    if (!parseResult.ast || parseResult.errors.length > 0) {
+      return {
+        success: false,
+        jsCode: null,
+        errors: parseResult.errors
+      };
+    }
+
+    try {
+      const jsCode = this.compiler.compile(parseResult.ast);
+      return {
+        success: true,
+        jsCode,
+        errors: []
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        jsCode: null,
+        errors: [{
+          message: error.message || 'Compilation error',
+          position: { line: 1, column: 1 },
+          severity: 'error'
+        }]
+      };
+    }
   }
 }

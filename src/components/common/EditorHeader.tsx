@@ -30,6 +30,7 @@ type EditorHeaderProps = {
   subtitle?: string;
   titleActions?: React.ReactNode; // Actions to show right after title (before spacer)
   toolbarButtons?: ToolbarButton[];
+  dynamicToolbarSlot?: React.ReactNode; // ✅ NEW: Dynamic toolbar slot for inline editors
   rightActions?: React.ReactNode;
   onClose?: () => void;
   color?: 'slate' | 'orange' | 'purple';
@@ -197,7 +198,7 @@ function ToolbarDropdownButton({
   );
 }
 
-export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButtons = [], rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
+export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButtons = [], dynamicToolbarSlot, rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
   const theme = THEMES[color] || THEMES.orange;
   let combinedClass = '';
   try {
@@ -241,8 +242,14 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
 
       {/* Right: Toolbar + Custom actions + Close */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {/* Toolbar (auto-hidden if empty) */}
-        {toolbarButtons.length > 0 && (
+        {/* ✅ NEW: Dynamic toolbar slot (from inline editors) - takes precedence over static toolbar */}
+        {dynamicToolbarSlot ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {dynamicToolbarSlot}
+          </div>
+        ) : (
+          /* Toolbar (auto-hidden if empty) */
+          toolbarButtons.length > 0 && (
           <>
             {toolbarButtons.map((btn, i) => {
               // ✅ FIX: Monta sempre il pulsante, controlla visibilità con CSS
@@ -339,6 +346,7 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
               );
             })}
           </>
+          )
         )}
         {rightActions}
         {onClose && (

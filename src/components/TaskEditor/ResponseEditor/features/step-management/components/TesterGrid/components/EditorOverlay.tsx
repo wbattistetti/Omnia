@@ -1,5 +1,4 @@
 import React from 'react';
-import { Wand2, X } from 'lucide-react';
 import { MemoizedEditorRenderer } from './EditorRenderer';
 
 interface EditorOverlayProps {
@@ -26,6 +25,7 @@ interface EditorOverlayProps {
   getTextColor: (color: string) => string;
   setEditorButton: (button: React.ReactNode) => void;
   setEditorErrorMessage: (error: React.ReactNode) => void;
+  // ✅ REMOVED: Header-related props are no longer needed (header removed from overlay)
 }
 
 /**
@@ -39,18 +39,17 @@ export function EditorOverlay({
   editorProps,
   toggleEditor,
   onCloseEditor,
-  editorButton,
-  editorErrorMessage,
-  getActiveEditorColor,
-  getActiveEditorTitle,
-  getTextColor,
   setEditorButton,
   setEditorErrorMessage,
+  // ✅ REMOVED: editorButton, editorErrorMessage, getActiveEditorColor, getActiveEditorTitle, getTextColor
+  // These are no longer used since header was removed
 }: EditorOverlayProps) {
   if (!activeEditor || testing || !['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) || Object.keys(editorOverlayStyle).length === 0 || !editorProps) {
     return null;
   }
 
+  // ✅ REFACTORED: Removed header from overlay - toolbar is now injected into main header via Context
+  // The overlay is now just a visual container for the editor content
   return (
     <div
       style={{
@@ -65,71 +64,7 @@ export function EditorOverlay({
         pointerEvents: 'auto',
       }}
     >
-      {/* Editor header with dynamic color based on column */}
-      <div
-        style={{
-          background: getActiveEditorColor(),
-          padding: '8px 12px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexShrink: 0,
-          borderRadius: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="checkbox" checked={true} readOnly style={{ cursor: 'default' }} />
-          <span style={{ fontWeight: 600, color: getTextColor(getActiveEditorColor()) }}>
-            {getActiveEditorTitle()}
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, justifyContent: 'flex-end' }}>
-          {editorErrorMessage && (
-            <div style={{ marginLeft: 'auto', marginRight: 0 }}>
-              {editorErrorMessage}
-            </div>
-          )}
-          {editorButton && (
-            <div style={{ marginRight: 0 }}>
-              {editorButton}
-            </div>
-          )}
-          <button
-            onClick={() => toggleEditor(activeEditor)}
-            style={{
-              background: 'rgba(0,0,0,0.1)',
-              border: 'none',
-              borderRadius: 4,
-              padding: '4px 6px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              transition: 'all 0.2s',
-            }}
-            title="Configure"
-          >
-            <Wand2 size={14} color={getTextColor(getActiveEditorColor())} />
-          </button>
-          <button
-            onClick={onCloseEditor || (() => toggleEditor(activeEditor))}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 4,
-              padding: '4px 6px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              color: getTextColor(getActiveEditorColor()),
-            }}
-            title="Close Editor"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      </div>
-
-      {/* Editor body */}
+      {/* ✅ Editor body - no header, toolbar is in main header */}
       <div style={{ flex: 1, overflow: 'auto', padding: 6, minHeight: 0 }}>
         <MemoizedEditorRenderer
           activeEditor={activeEditor}

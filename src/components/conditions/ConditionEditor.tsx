@@ -43,6 +43,7 @@ import { VariablesIntellisenseService } from './application/VariablesIntellisens
 import { useConditionEditorState } from './hooks/useConditionEditorState';
 import { useVariablesIntellisense } from './hooks/useVariablesIntellisense';
 import { ConditionEditorHeader } from './presentation/ConditionEditorHeader';
+import { DSLEditor } from './dsl/editor/DSLEditor';
 
 // No local template; EditorPanel injects the scaffold
 
@@ -91,6 +92,8 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     hasFailures, setHasFailures,
     pendingDupGroups, setPendingDupGroups,
     preferredVarByTail, setPreferredVarByTail,
+    editorMode, setEditorMode,
+    compiledJs, setCompiledJs,
   } = state;
 
   // Use context directly - much simpler!
@@ -108,9 +111,16 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     return new ScriptManagerService({ projectData, pdUpdate });
   }, [projectData, pdUpdate]);
 
-  const updateProjectDataScript = React.useCallback((scriptToSave: string) => {
-    scriptManager.saveScript(scriptToSave, label || '');
-  }, [scriptManager, label]);
+  const updateProjectDataScript = React.useCallback((dslToSave: string) => {
+    const result = scriptManager.saveScript(dslToSave, label || '');
+    if (result.success) {
+      // Update compiled JS preview
+      const compileResult = scriptManager.compileDSL(dslToSave);
+      if (compileResult.success && compileResult.jsCode) {
+        setCompiledJs(compileResult.jsCode);
+      }
+    }
+  }, [scriptManager, label, setCompiledJs]);
 
   // Refs
   const monacoEditorRef = React.useRef<any>(null);
@@ -148,6 +158,16 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   const aiService = React.useMemo(() => {
     return new ConditionAIService();
   }, []);
+
+  // Update compiledJs when switching to JavaScript tab
+  React.useEffect(() => {
+    if (editorMode === 'javascript' && script && !compiledJs) {
+      const compileResult = scriptManager.compileDSL(script);
+      if (compileResult.success && compileResult.jsCode) {
+        setCompiledJs(compileResult.jsCode);
+      }
+    }
+  }, [editorMode, script, compiledJs, scriptManager, setCompiledJs]);
 
   // ✅ REFACTOR: State reset is now handled in useConditionEditorState hook
   // Reset tester refs when opening
@@ -246,18 +266,29 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     });
 
     if (initialScript && initialScript.trim()) {
-      // initialScript is ExecCode - convert to UICode for display
-      console.log('[ConditionEditor][UPDATE] 🔄 Converting ExecCode → UICode');
-      const uiCode = scriptManager.convertForDisplay(initialScript);
-      console.log('[ConditionEditor][UPDATE] ✅ Conversion complete', {
-        execCodeLength: initialScript.length,
-        uiCodeLength: uiCode.length,
-        changed: initialScript !== uiCode
-      });
-      setScript(uiCode);
+      // Load DSL from ScriptManagerService (source of truth)
+      console.log('[ConditionEditor][UPDATE] 🔄 Loading DSL from ScriptManagerService');
+      const dsl = scriptManager.loadScript(label || '');
+      if (dsl) {
+        setScript(dsl);
+        // Compile DSL → JS for preview
+        const compileResult = scriptManager.compileDSL(dsl);
+        if (compileResult.success && compileResult.jsCode) {
+          setCompiledJs(compileResult.jsCode);
+        }
+        console.log('[ConditionEditor][UPDATE] ✅ DSL loaded', {
+          dslLength: dsl.length,
+          dslPreview: dsl.substring(0, 100)
+        });
+      } else {
+        // No DSL found - use initialScript as DSL (new condition)
+        console.log('[ConditionEditor][UPDATE] ℹ️ No DSL found, using initialScript as DSL');
+        setScript(initialScript);
+      }
     } else {
       console.log('[ConditionEditor][UPDATE] ℹ️ No initial script, using DEFAULT_CODE');
       setScript(DEFAULT_CODE);
+      setCompiledJs('');
     }
   }, [initialScript, scriptManager]);
 
@@ -617,9 +648,45 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
               style={{ cursor: 'col-resize', width: 4, margin: '0 2px', background: 'rgba(148,163,184,0.25)', borderRadius: 2 }}
             />
           )}
-          {/* Code panel - CodeEditor with toolbar */}
+          {/* Code panel - DSL/JavaScript editor with toolbar */}
           {showCode && (
-          <div style={{ height: '100%', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0b1220', display: 'grid', gridTemplateRows: 'auto 1fr' }}>
+          <div style={{ height: '100%', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0b1220', display: 'grid', gridTemplateRows: 'auto auto 1fr' }}>
+            {/* Tab switcher */}
+            <div style={{ display: 'flex', gap: 4, padding: '4px 8px', borderBottom: '1px solid #334155', background: '#1e293b' }}>
+              <button
+                onClick={() => setEditorMode('dsl')}
+                style={{
+                  padding: '4px 12px',
+                  background: editorMode === 'dsl' ? '#3b82f6' : 'transparent',
+                  color: editorMode === 'dsl' ? '#fff' : '#94a3b8',
+                  border: '1px solid',
+                  borderColor: editorMode === 'dsl' ? '#3b82f6' : '#334155',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: editorMode === 'dsl' ? 600 : 400,
+                }}
+              >
+                DSL
+              </button>
+              <button
+                onClick={() => setEditorMode('javascript')}
+                style={{
+                  padding: '4px 12px',
+                  background: editorMode === 'javascript' ? '#3b82f6' : 'transparent',
+                  color: editorMode === 'javascript' ? '#fff' : '#94a3b8',
+                  border: '1px solid',
+                  borderColor: editorMode === 'javascript' ? '#3b82f6' : '#334155',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: editorMode === 'javascript' ? 600 : 400,
+                }}
+                title="Read-only: Generated from DSL"
+              >
+                JavaScript (read-only)
+              </button>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid #334155' }}>
               {/* Generate button - uses CodeEditor logic via onGenerateClick */}
               {(() => {
@@ -709,132 +776,68 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                 ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><FlaskConical className="w-4 h-4" /> Test Code</span></button>
               )}
             </div>
-            <CodeEditor
-              ref={codeEditorRef}
-              initialCode={script}
-              initialMode={'predicate'}
-              fontPx={fontPx}
-              initialVars={(variablesFlat || []).map(k => ({ key: k, type: 'string', description: k, sensitivity: 'public' })) as any}
-              onCodeChange={(code) => {
-                // Keep banner hidden when user is writing; only show when Generate validates
-                setAiQuestion('');
-                setScript(code);
-                // Request lint markers optionally here in the future
-                // clear runtime markers on edit
-                try {
-                  const ed = monacoEditorRef.current?.editor || monacoEditorRef.current;
-                  const monaco = monacoInstanceRef.current;
-                  if (ed && monaco) clearMonacoMarkers(ed, monaco as any, 'conditions-runtime');
-                  setRuntimeErrorMsg(null);
-                } catch {}
-              }}
-              ai={{
-                codeEditToPatch: async ({ instructions, execution }) => {
-                  try {
-                    const out = await generateConditionWithAI(instructions || serializeCE(), variablesUsedInScript);
-                    const newScript = (out as any)?.script || execution.code;
-                    const a = execution.code.replace(/\r/g, '');
-                    const b = String(newScript || '').replace(/\r/g, '');
-                    if (a === b) return '--- a/code\n+++ b/code\n';
-                    return `--- a/code\n+++ b/code\n@@ -1,1 +1,1 @@\n-${a}\n+${b}`;
-                  } catch {
-                    return '--- a/code\n+++ b/code\n';
+            {editorMode === 'dsl' ? (
+              <DSLEditor
+                value={script}
+                onChange={(dsl) => {
+                  setScript(dsl);
+                  setAiQuestion('');
+                  // Compile DSL → JS for preview
+                  const compileResult = scriptManager.compileDSL(dsl);
+                  if (compileResult.success && compileResult.jsCode) {
+                    setCompiledJs(compileResult.jsCode);
                   }
-                },
-                suggestTestCases: async ({ code, mode, variables, nl }) => {
-                  try {
-                    const nlText = nl || serializeCE();
-                    const cases = await suggestConditionCases(nlText, variables);
-                    return cases;
-                  } catch {
-                    return {};
+                  // Auto-save on valid DSL (debounced in DSLEditor)
+                  if (compileResult.success && dsl.trim()) {
+                    updateProjectDataScript(dsl);
                   }
-                }
-              }}
-              tests={{
-                run: async () => ({ pass: 0, fail: 0, blocked: 0, ms: 0, results: [] })
-              }}
-              onPatchApplied={({ code }) => {
-                setScript(code);
-                // After applying patch, also suggest test cases if in predicate mode
-                if (code && variablesUsedInScript.length > 0) {
-                  // This will be handled by CodeEditor's generate() if called via onGenerateClick
-                  // But we can also trigger it here if needed
-                }
-              }}
-              layout="compact"
-              showGenerateButton={false}
-              onGenerateClick={async () => {
-                // Use CodeEditor's ai.codeEditToPatch to generate diff instead of setting script directly
-                // This will show the DiffPanel in CodeEditor
-                setBusy(true);
-                try {
-                  if (hasFailures) {
-                    const failures = getFailuresRef.current?.() || [];
-                    const resp = await aiService.repairCondition({
-                      script,
-                      failures,
-                      variables: variablesForTester,
-                      provider: (window as any).__AI_PROVIDER || undefined,
-                    });
-                    if (resp.script && typeof resp.script === 'string') {
-                      setScript(resp.script);
-                      updateProjectDataScript(resp.script);
-                      setLastAcceptedScript(resp.script);
-                      resetTesterVisuals();
-                      resetTesterVisualsRef.current?.();
-                      markNotesAsUsedRef.current?.(); // Mark notes as used after successful repair
-                      setTesterAllPass(null);
-                      setHasFailures(false);
-                      // Format after repair
-                      setTimeout(() => {
-                        try {
-                          codeEditorRef.current?.format();
-                        } catch (e) {
-                          console.warn('[ConditionEditor] Format failed:', e);
-                        }
-                      }, 100);
-                    } else {
-                      setAiQuestion('Repair failed: ' + String(resp.error || 'repair_failed'));
-                    }
-                    return;
+                }}
+                onCompile={(dsl, jsCode, errors) => {
+                  setCompiledJs(jsCode);
+                  if (errors.length === 0) {
+                    updateProjectDataScript(dsl);
                   }
-
-                  const isScaffold = normalizeCode(script) === normalizeCode(DEFAULT_CODE);
-                  const isEmpty = normalizeCode(script).length === 0;
-                  const hasText = !isEmpty && normalizeCode(script).trim().length > 0;
-                  const canCreate = hasText && !hasCreated;
-                  const canModify = hasCreated && String(script || '') !== String(lastAcceptedScript || '');
-
-                  // Call generate/modify directly (they will set script, CodeEditor will sync via initialCode prop)
-                  if (canModify) {
-                    await modify();
-                  } else if (canCreate) {
-                    await generate();
-                  }
-                } finally {
-                  setBusy(false);
-                }
-              }}
-              onTestCasesSuggested={(cases) => {
-                // Convert TestCase[] to CaseRow[]
-                const rows: CaseRow[] = cases.map(tc => ({
-                  id: tc.id,
-                  label: tc.expectedBoolean === true ? 'true' : 'false',
-                  vars: tc.values as Record<string, any>
-                }));
-                if (rows.length) {
-                  setTestRows(rows);
-                  // Set hints from test cases
-                  const trueCase = cases.find(c => c.expectedBoolean === true);
-                  const falseCase = cases.find(c => c.expectedBoolean === false);
-                  setTesterHints({
-                    hintTrue: trueCase?.hint,
-                    hintFalse: falseCase?.hint
-                  });
-                }
-              }}
-            />
+                }}
+                variables={variables}
+                variablesTree={variablesTree}
+                fontSize={fontPx}
+              />
+            ) : (
+              <div style={{ position: 'relative', height: '100%' }}>
+                <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, padding: '4px 8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', borderRadius: 4, fontSize: 11, color: '#93c5fd' }}>
+                  Read-only: Generated from DSL
+                </div>
+                <CodeEditor
+                  ref={codeEditorRef}
+                  initialCode={compiledJs || '// Compile DSL to see generated JavaScript'}
+                  initialMode={'predicate'}
+                  fontPx={fontPx}
+                  initialVars={(variablesFlat || []).map(k => ({ key: k, type: 'string', description: k, sensitivity: 'public' })) as any}
+                  onCodeChange={() => {
+                    // Read-only - do nothing
+                  }}
+                  ai={{
+                    // Disabled in JavaScript mode (read-only)
+                    codeEditToPatch: async () => '--- a/code\n+++ b/code\n',
+                    suggestTestCases: async () => ({}),
+                  }}
+                  tests={{
+                    run: async () => ({ pass: 0, fail: 0, blocked: 0, ms: 0, results: [] })
+                  }}
+                  onPatchApplied={() => {
+                    // Read-only - do nothing
+                  }}
+                  layout="compact"
+                  showGenerateButton={false}
+                  onGenerateClick={async () => {
+                    // Read-only mode - do nothing
+                  }}
+                  onTestCasesSuggested={() => {
+                    // Read-only mode - do nothing
+                  }}
+                />
+              </div>
+            )}
           </div>
           )}
           {/* splitter after Code if tester exists (visual grip) */}
