@@ -286,81 +286,84 @@ export default function RegexInlineEditor({
   }, [textboxText, generateRegex]);
 
   // -----------------------------------------------------------------------
-  // Save on close
-  // Normalizes the label-based display regex back to GUID-based tech regex
-  // before persisting to the template / calling onRegexSave.
+  // Save immediately to template when user types
+  // Saves directly to template.dataContract (not just on close)
+  // -----------------------------------------------------------------------
+  const saveToTemplate = useCallback((displayValue: string) => {
+    if (!displayValue || !displayValue.trim() || !node?.templateId) {
+      return;
+    }
+
+    // ✅ Normalize: convert label regex → GUID regex
+    let techValue: string;
+    try {
+      techValue = normalizeRegexFromEditor(displayValue, subDataMappingRef.current);
+    } catch (normError) {
+      // The user has typed an unrecognized group name — do NOT corrupt the contract.
+      console.error('[RegexEditor] Cannot save: normalization failed.', (normError as Error).message);
+      return;
+    }
+
+    const template = DialogueTaskService.getTemplate(node.templateId);
+    if (!template) {
+      console.warn('[RegexEditor] Template not found:', node.templateId);
+      return;
+    }
+
+    if (!template.dataContract) {
+      template.dataContract = { parsers: [] };
+    }
+
+    const regexContract = template.dataContract.parsers?.find((c: any) => c.type === 'regex');
+    if (regexContract) {
+      regexContract.patterns = [techValue];
+    } else {
+      if (!template.dataContract.parsers) {
+        template.dataContract.parsers = [];
+      }
+      template.dataContract.parsers.push({ type: 'regex', patterns: [techValue] });
+    }
+
+    DialogueTaskService.markTemplateAsModified(node.templateId);
+
+    // Also notify the parent component to update contract
+    const currentOnSave = onRegexSaveRef.current;
+    if (currentOnSave) {
+      try {
+        currentOnSave(techValue);
+      } catch (cbError) {
+        console.error('[RegexEditor] Error in onRegexSave callback:', cbError);
+      }
+    }
+  }, [node?.templateId]);
+
+  // ✅ Save immediately when textboxText changes (debounced to avoid too many saves)
+  useEffect(() => {
+    if (!textboxText || textboxText.trim() === '' || textboxText === lastTextboxText) {
+      return;
+    }
+
+    // Debounce: save after 500ms of no typing
+    const timeoutId = setTimeout(() => {
+      saveToTemplate(textboxText);
+      // Update lastTextboxText after save to track that it's been saved
+      setLastTextboxText(textboxText);
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [textboxText, lastTextboxText, saveToTemplate]);
+
+  // -----------------------------------------------------------------------
+  // Save on close (backup - in case debounce didn't fire)
   // -----------------------------------------------------------------------
   useEffect(() => {
     return () => {
-      // Use the "never-reset" preserved ref as source of truth
       const displayValue = preservedValueRef.current || textboxTextRef.current;
-
-      console.log('[RegexEditor] Editor closing — display value:', displayValue);
-      console.log('[RegexEditor] node.templateId:', node?.templateId);
-
-      if (!displayValue || !displayValue.trim() || !node?.templateId) {
-        if (!displayValue?.trim()) {
-          console.warn('[RegexEditor] No value to save.');
-        }
-        if (!node?.templateId) {
-          console.warn('[RegexEditor] No node.templateId available.');
-        }
-        return;
-      }
-
-      // ✅ Normalize: convert label regex → GUID regex
-      let techValue: string;
-      try {
-        techValue = normalizeRegexFromEditor(displayValue, subDataMappingRef.current);
-        console.log('[RegexEditor] Normalized to GUID regex:', techValue);
-      } catch (normError) {
-        // The user has typed an unrecognized group name — do NOT corrupt the contract.
-        console.error(
-          '[RegexEditor] Cannot save: normalization failed.',
-          (normError as Error).message
-        );
-        return;
-      }
-
-      const template = DialogueTaskService.getTemplate(node.templateId);
-      if (!template) {
-        console.warn('[RegexEditor] Template not found:', node.templateId);
-        return;
-      }
-
-      console.log('[RegexEditor] Saving GUID regex to template:', node.templateId);
-
-      if (!template.dataContract) {
-        template.dataContract = { parsers: [] };
-      }
-
-      const regexContract = template.dataContract.parsers?.find((c: any) => c.type === 'regex');
-      if (regexContract) {
-        regexContract.patterns = [techValue];
-        console.log('[RegexEditor] Updated existing regex contract.');
-      } else {
-        if (!template.dataContract.parsers) {
-          template.dataContract.parsers = [];
-        }
-        template.dataContract.parsers.push({ type: 'regex', patterns: [techValue] });
-        console.log('[RegexEditor] Created new regex contract.');
-      }
-
-      DialogueTaskService.markTemplateAsModified(node.templateId);
-      console.log('[RegexEditor] Template marked as modified.');
-
-      // Also notify the parent component
-      const currentOnSave = onRegexSaveRef.current;
-      if (currentOnSave) {
-        try {
-          currentOnSave(techValue);
-          console.log('[RegexEditor] onRegexSave callback called.');
-        } catch (cbError) {
-          console.error('[RegexEditor] Error in onRegexSave callback:', cbError);
-        }
+      if (displayValue && displayValue.trim() && node?.templateId) {
+        saveToTemplate(displayValue);
       }
     };
-  }, [node?.templateId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [node?.templateId, saveToTemplate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // -----------------------------------------------------------------------
   // Render AI button
@@ -401,8 +404,23 @@ export default function RegexInlineEditor({
   const editorRef = useRef<any>(null);
 
   const editorValue = React.useMemo(() => {
-    return textboxText || preservedValueRef.current || PLACEHOLDER_TEXT;
-  }, [textboxText]);
+    // ✅ CRITICAL FIX: Don't show placeholder if we have a value (even if empty string from template)
+    const displayValue = textboxText || preservedValueRef.current;
+
+    // If we have a display value, use it
+    if (displayValue && displayValue.trim()) {
+      return displayValue;
+    }
+
+    // If regex prop exists (even if empty), it means contract was loaded
+    // Don't show placeholder - show empty string so user can type
+    if (regex !== undefined && regex !== null) {
+      return '';
+    }
+
+    // Only show placeholder if we truly have no contract loaded
+    return PLACEHOLDER_TEXT;
+  }, [textboxText, regex]);
 
   // -----------------------------------------------------------------------
   // Render

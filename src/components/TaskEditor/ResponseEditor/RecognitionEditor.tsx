@@ -154,13 +154,16 @@ export default function RecognitionEditor({
   // ✅ Ref per salvare contract originale (dal DB) per poterlo ripristinare
   const originalContractRef = React.useRef<DataContract | null>(null);
 
-  // ✅ Carica contract SOLO quando apri l'editor o cambi nodo
+  // ✅ Carica contract SOLO quando cambi nodo (non quando riapri l'editor)
+  // Il pattern regex viene ricaricato separatamente quando riapri l'editor regex
   const prevNodeIdRef = React.useRef<string | undefined>(editorProps?.node?.id);
+
   useEffect(() => {
     const node = editorProps?.node;
     const currentNodeId = node?.id;
     const nodeIdChanged = currentNodeId !== prevNodeIdRef.current;
 
+    // ✅ Reload contract only when node changes
     if (nodeIdChanged) {
       prevNodeIdRef.current = currentNodeId;
 
@@ -379,6 +382,44 @@ export default function RecognitionEditor({
   }) : null;
 
   const officialRegexValue = contractItem?.patterns?.[0] ?? '';
+
+  // ✅ Reload regex pattern from template when regex editor is reopened
+  // More efficient: only reloads the regex pattern, not the entire contract
+  const prevActiveEditorRef = React.useRef<string | null>(activeEditor);
+  React.useEffect(() => {
+    // Only reload when regex editor is opened (was closed, now opened)
+    if (activeEditor === 'regex' && prevActiveEditorRef.current !== 'regex' && editorProps?.node?.templateId) {
+      const template = DialogueTaskService.getTemplate(editorProps.node.templateId);
+      if (template?.dataContract) {
+        const regexParser = template.dataContract.parsers?.find((c: any) => c.type === 'regex');
+        const regexPattern = regexParser?.patterns?.[0] || '';
+
+        // Update only the regex parser in local contract
+        if (contract) {
+          const updatedParsers = contract.parsers ? [...contract.parsers] : [];
+          const existingRegexIndex = updatedParsers.findIndex((c: any) => c.type === 'regex');
+
+          if (existingRegexIndex >= 0) {
+            // Update existing regex parser
+            updatedParsers[existingRegexIndex] = { ...updatedParsers[existingRegexIndex], patterns: [regexPattern] };
+          } else if (regexPattern) {
+            // Add new regex parser if pattern exists
+            updatedParsers.push({ type: 'regex', patterns: [regexPattern] });
+          }
+
+          const updatedContract = { ...contract, parsers: updatedParsers };
+          setLocalContract(updatedContract);
+
+          console.log('[RecognitionEditor] 🔄 Reloaded regex pattern from template', {
+            templateId: editorProps.node.templateId,
+            regexPattern: regexPattern || '(empty)',
+            wasEmpty: !regexPattern
+          });
+        }
+      }
+    }
+    prevActiveEditorRef.current = activeEditor;
+  }, [activeEditor, editorProps?.node?.templateId, contract]);
 
   // Helper: confronta contract con template
   const hasContractChanged = useCallback((nodeTemplateId: string, modifiedContract: DataContract | null): boolean => {
