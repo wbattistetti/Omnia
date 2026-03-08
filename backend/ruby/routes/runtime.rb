@@ -36,16 +36,28 @@ class RuntimeRoutes < Sinatra::Base
 
       puts "[RUBY] VBNetClient.compile_flow completed successfully"
 
-      {
-        taskGroups: result['taskGroups'],
-        taskGroupMap: result['taskGroupMap'],
+      # ✅ Check for compilation errors and include them in response
+      # Errors are part of the compilation result, not a failure
+      response_data = {
+        taskGroups: result['taskGroups'] || [],
+        taskGroupMap: result['taskGroupMap'] || {},
         entryTaskGroupId: result['entryTaskGroupId'],
-        tasks: result['tasks'],
-        taskMap: result['taskMap'],
+        tasks: result['tasks'] || [],
+        taskMap: result['taskMap'] || {},
         translations: result['translations'] || {}, # ✅ Include translation table for runtime lookup
         compiledBy: 'VB.NET_RUNTIME',
         timestamp: Time.now.iso8601
-      }.to_json
+      }
+
+      # ✅ Include errors if present (for frontend visualization)
+      if result['errors'] && result['errors'].length > 0
+        response_data[:errors] = result['errors']
+        response_data[:hasErrors] = result['hasErrors'] || false
+        response_data[:hasCriticalErrors] = result['hasCriticalErrors'] || false
+        puts "[RUBY] ⚠️ Compilation completed with #{result['errors'].length} errors"
+      end
+
+      response_data.to_json
     rescue => e
       puts "[RUBY] ❌ Error in /api/runtime/compile:"
       puts "[RUBY]    #{e.class}: #{e.message}"

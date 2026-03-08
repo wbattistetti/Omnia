@@ -6,6 +6,7 @@ import { useFontStore } from '../state/fontStore';
 import { useBackendType } from '../context/BackendTypeContext';
 import DeploymentDialog, { type DeploymentConfig } from './TaskEditor/ResponseEditor/Deployment/DeploymentDialog';
 import { FlowStateBridge } from '../services/FlowStateBridge';
+import { useFlowchartState } from '../context/FlowchartStateContext';
 
 export interface ToolbarProps {
   onHome: () => void;
@@ -52,6 +53,9 @@ export function Toolbar({
   // ✅ Deployment dialog state
   const [isDeploymentDialogOpen, setIsDeploymentDialogOpen] = useState(false);
   const projectLocale = 'it-IT'; // TODO: Get from project context if available
+
+  // ✅ FLOWCHART STATE: Get nodes state from context
+  const { hasNodes: hasFlowchartNodes } = useFlowchartState();
 
   // Verifica se il progetto è vuoto (non ha contenuti)
   // Check both project data and flowchart nodes/edges
@@ -333,7 +337,7 @@ export function Toolbar({
           )}
         </div>
 
-        {!isProjectEmpty && (
+        {hasFlowchartNodes && onRun && (
             <button
               onClick={() => {
                 console.log('═══════════════════════════════════════════════════════════════════════════');
@@ -342,7 +346,7 @@ export function Toolbar({
                 console.log('[Toolbar] 📊 Button state:', {
                   hasOnRun: typeof onRun === 'function',
                   onRunType: typeof onRun,
-                  isProjectEmpty,
+                  hasFlowchartNodes,
                   currentProjectId,
                 });
 

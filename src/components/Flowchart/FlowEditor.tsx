@@ -49,6 +49,7 @@ import { ExecutionStateProvider } from './executionHighlight/ExecutionStateConte
 import { FlowStateBridge } from '../../services/FlowStateBridge';
 import { ErrorSidebar } from './components/ErrorSidebar';
 import { useCompilationErrors } from '../../context/CompilationErrorsContext';
+import { useFlowchartState } from '../../context/FlowchartStateContext';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -110,6 +111,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       setCompilationErrors(windowErrors);
     }
   }, [setCompilationErrors]);
+
+  // ✅ FLOWCHART STATE: Sync nodes with context
+  const { setNodes: setContextNodes } = useFlowchartState();
+
+  useEffect(() => {
+    setContextNodes(nodes);
+  }, [nodes, setContextNodes]);
 
   // ✅ Handle error click - select node and center viewport
   const handleErrorClick = useCallback((error: import('../../FlowCompiler/types').CompilationError) => {

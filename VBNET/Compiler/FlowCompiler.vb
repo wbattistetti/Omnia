@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System.Linq
 Imports TaskEngine
 Imports Compiler.DTO.IDE
 Imports DTO.Runtime
@@ -191,8 +192,13 @@ Public Class FlowCompiler
                     System.Diagnostics.Debug.WriteLine($"     ⚠️ [COMPILER][FlowCompiler] flow.Tasks is Nothing!")
                 End If
 
-                ' Risolvi task direttamente da flow.Tasks
-                Dim task = flow.GetTaskById(taskId)
+                ' ✅ Risolvi task direttamente da flow.Tasks (NON usare GetTaskById che lancia eccezioni)
+                ' Cerca manualmente per poter raccogliere errori invece di lanciare eccezioni
+                Dim task As TaskDefinition = Nothing
+                If flow.Tasks IsNot Nothing Then
+                    task = flow.Tasks.FirstOrDefault(Function(t) t.Id = taskId)
+                End If
+
                 If task Is Nothing Then
                     Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Task not found: taskId={taskId}, row.Id={row.Id}, node.Id={node.Id}")
                     System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Task not found: taskId={taskId}, row.Id={row.Id}, node.Id={node.Id}")

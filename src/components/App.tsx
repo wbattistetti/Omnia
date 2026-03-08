@@ -16,6 +16,7 @@ import { AIProviderProvider } from '../context/AIProviderContext';
 import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext';
 import { BackendTypeProvider } from '../context/BackendTypeContext';
 import { CompilationErrorsProvider } from '../context/CompilationErrorsContext';
+import { FlowchartStateProvider } from '../context/FlowchartStateContext';
 import { TypeTemplateService } from '../services/TypeTemplateService';
 import { taskTemplateService } from '../services/TaskTemplateService';
 import { DialogueTaskService } from '../services/DialogueTaskService';
@@ -165,7 +166,9 @@ export default function App() {
                         <InMemoryConditionsProvider>
                           <BackendTypeProvider>
                             <CompilationErrorsProvider>
-                              <AppInner />
+                              <FlowchartStateProvider>
+                                <AppInner />
+                              </FlowchartStateProvider>
                             </CompilationErrorsProvider>
                           </BackendTypeProvider>
                         </InMemoryConditionsProvider>
