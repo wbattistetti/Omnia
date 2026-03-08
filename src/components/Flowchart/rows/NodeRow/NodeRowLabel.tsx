@@ -341,14 +341,15 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
     try {
       // ✅ CRITICAL: Build TaskTree from repository (same routine as Response Editor)
       // buildTaskTreeFromRepository garantisce istanza fresca dal repository (inclusi flag _disabled)
-      const taskTree = await buildTaskTreeFromRepository(row.id, projectId);
-      if (!taskTree) {
+      const result = await buildTaskTreeFromRepository(row.id, projectId);
+      if (!result) {
         console.error('[NodeRowLabel] Failed to build TaskTree for task instance', row.id);
         return;
       }
+      const { taskTree, instance: freshTaskInstance } = result;
 
-      // ✅ Open GlobalTestPanel with task context
-      openWithTask(taskInstance, taskTree, projectId, translations);
+      // ✅ Open GlobalTestPanel with task context (use fresh instance from repository)
+      openWithTask(freshTaskInstance, taskTree, projectId, translations);
     } catch (error) {
       console.error('[NodeRowLabel] Error opening test panel:', error);
     }

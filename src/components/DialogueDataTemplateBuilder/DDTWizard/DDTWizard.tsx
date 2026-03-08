@@ -1718,6 +1718,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
                 }}>
                   <DataCollection
                     rootLabel={displayRoot}
+                    onChangeRootLabel={setSchemaRootLabel}
                     mains={displayMains}
                     onChangeMains={setMountedDataTree}
                     onAddMain={handleAddMain}
@@ -1984,6 +1985,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
               <div tabIndex={0} style={{ outline: 'none' }}>
                 <DataCollection
                   rootLabel={schemaRootLabel || 'Data'}
+                  onChangeRootLabel={setSchemaRootLabel}
                   mains={mountedDataTree}
                   onChangeMains={setMountedDataTree}
                   onAddMain={handleAddMain}

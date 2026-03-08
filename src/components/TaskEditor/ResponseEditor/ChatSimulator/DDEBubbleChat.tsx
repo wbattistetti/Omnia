@@ -593,10 +593,12 @@ export default function DDEBubbleChat({
         // eliminando la classe di bug "editor vede X, runtime vede Y"
         // ✅ CRITICAL: buildTaskTreeFromRepository garantisce istanza fresca dal repository (inclusi flag _disabled)
         console.log('[DDEBubbleChat] 🔧 Materializing task structure using buildTaskTreeFromRepository...');
-        const materializedTree = await buildTaskTreeFromRepository(task.id, projectId || undefined);
-        if (!materializedTree) {
+        const materialized = await buildTaskTreeFromRepository(task.id, projectId || undefined);
+        if (!materialized) {
           throw new Error(`[DDEBubbleChat] Failed to materialize task tree for instance ${task.id}`);
         }
+        const { taskTree: materializedTree, instance: taskInstance } = materialized;
+
         console.log('[DDEBubbleChat] ✅ Task structure materialized', {
           taskId: taskInstance.id,
           hasSteps: !!materializedTree.steps,

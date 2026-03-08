@@ -211,9 +211,12 @@ export class TaskEditorEventHandler {
                 const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
                 const projectId = this.params.currentProjectId || undefined;
                 // ✅ CRITICAL: Build TaskTree from repository (guarantees fresh instance with latest _disabled flags)
-                taskTree = await buildTaskTreeFromRepository(instanceId, projectId);
-                // Reload task after buildTaskTree (it may have updated steps)
-                task = taskRepository.getTask(instanceId);
+                const result = await buildTaskTreeFromRepository(instanceId, projectId);
+                if (result) {
+                  taskTree = result.taskTree;
+                  // ✅ Use instance from result instead of reloading (eliminates duplicate repository access)
+                  task = result.instance;
+                }
               } catch (err) {
                 console.error('[TaskEditorEventHandler] Error loading TaskTree from template:', err);
               }

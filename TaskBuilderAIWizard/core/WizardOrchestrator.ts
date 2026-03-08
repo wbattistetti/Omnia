@@ -317,7 +317,8 @@ export class WizardOrchestrator {
         if (typeof taskId === 'string' && taskId.includes('%')) {
           const progress = parseInt(taskId);
           const phaseId = phase === 'parser' ? 'parsers' : phase;
-          const basePayload = phase === 'parser' ? payloads.parsers || '' : '';
+          // ✅ FIX: Check if payloads exists before accessing payloads.parsers
+          const basePayload = phase === 'parser' ? (payloads?.parsers || '') : '';
           const baseMessage = basePayload.replace(/…$/, '');
           const newPayload = `${baseMessage} ${progress}%`;
 

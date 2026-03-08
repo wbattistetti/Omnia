@@ -1086,12 +1086,12 @@ export async function buildTemplateExpanded(
  *
  * @param taskId - Task ID to load from repository
  * @param projectId - Optional project ID
- * @returns TaskTree or null if task not found
+ * @returns Object with taskTree and instance, or null if task not found or buildTaskTree fails
  */
 export async function buildTaskTreeFromRepository(
   taskId: string,
   projectId?: string
-): Promise<TaskTree | null> {
+): Promise<{ taskTree: TaskTree; instance: Task } | null> {
   // Always read fresh instance from repository (single source of truth in memory)
   const { taskRepository } = await import('../services/TaskRepository');
   const freshInstance = taskRepository.getTask(taskId);
@@ -1101,7 +1101,12 @@ export async function buildTaskTreeFromRepository(
   }
 
   // Delegate to pure buildTaskTree with fresh instance
-  return await buildTaskTree(freshInstance, projectId);
+  const taskTree = await buildTaskTree(freshInstance, projectId);
+  if (!taskTree) {
+    return null; // ✅ Important: return null if buildTaskTree fails
+  }
+
+  return { taskTree, instance: freshInstance };
 }
 
 /**

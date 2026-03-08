@@ -106,13 +106,11 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         setTaskTreeLoading(true);
 
         // Build TaskTree from repository (ensures fresh instance with _disabled flags)
-        const tree = await buildTaskTreeFromRepository(taskId, currentProjectId || undefined);
-
-        // Reload task from repository after buildTaskTree
-        const updatedTask = taskRepository.getTask(taskId);
+        const result = await buildTaskTreeFromRepository(taskId, currentProjectId || undefined);
 
         // ✅ TaskTree caricato
-        if (tree) {
+        if (result) {
+          const { taskTree: tree, instance: updatedTask } = result;
           // ✅ FASE 3: Store è primary - aggiorna sempre lo store
           setTaskTreeInStore(tree);
           // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility

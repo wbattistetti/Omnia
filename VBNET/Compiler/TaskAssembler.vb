@@ -140,12 +140,15 @@ Public Class TaskAssembler
         ' ✅ VALIDAZIONE: Verifica congruenza tra Constraints e step Invalid
         ' Se ci sono Constraints, deve esistere uno step di tipo Invalid
         ' Se non ci sono Constraints, non deve esistere uno step di tipo Invalid
+        ' ⚠️ TEMPORANEAMENTE DISABILITATO: Permette nodi con constraints senza invalid step
+        ' Se non c'è invalid step, tutti i dati vengono considerati validi (fallback a comportamento normale)
         Dim hasConstraints = task.Constraints IsNot Nothing AndAlso task.Constraints.Count > 0
         Dim hasInvalidStep = task.Steps IsNot Nothing AndAlso task.Steps.Any(Function(s) s.Type = DialogueStepType.Invalid)
 
-        If hasConstraints AndAlso Not hasInvalidStep Then
-            Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has {task.Constraints.Count} constraint(s) but no step of type 'invalid'. When constraints are present, an 'invalid' step is mandatory to handle validation failures.")
-        End If
+        ' TODO: Re-implementare con fallback: se non c'è invalid step, considera tutti i dati validi
+        'If hasConstraints AndAlso Not hasInvalidStep Then
+        '    Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has {task.Constraints.Count} constraint(s) but no step of type 'invalid'. When constraints are present, an 'invalid' step is mandatory to handle validation failures.")
+        'End If
 
         If Not hasConstraints AndAlso hasInvalidStep Then
             Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has a step of type 'invalid' but no constraints. The 'invalid' step is only needed when constraints are present. Remove the 'invalid' step or add constraints.")

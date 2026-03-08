@@ -293,7 +293,10 @@ export class TaskTreeOpener {
           const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
           const projectId = getProjectId?.() || undefined;
           // ✅ CRITICAL: Usa buildTaskTreeFromRepository per garantire istanza fresca dal repository
-          taskTree = await buildTaskTreeFromRepository(row.id, projectId);
+          const result = await buildTaskTreeFromRepository(row.id, projectId);
+          if (result) {
+            taskTree = result.taskTree;
+          }
         }
       }
     }

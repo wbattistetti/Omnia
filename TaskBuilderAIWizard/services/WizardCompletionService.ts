@@ -317,7 +317,14 @@ export async function buildTaskTreeWithContractsAndEngines(
 ): Promise<any> {
   // ✅ CRITICAL: Build TaskTree from repository (guarantees fresh instance with latest _disabled flags)
   const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
-  const taskTree = await buildTaskTreeFromRepository(taskInstance.id, projectId);
+  const result = await buildTaskTreeFromRepository(taskInstance.id, projectId);
+
+  if (!result) {
+    return null;
+  }
+
+  // ✅ FIX: Extract taskTree from result (now returns { taskTree, instance })
+  const taskTree = result.taskTree;
 
   if (!taskTree) {
     return null;
