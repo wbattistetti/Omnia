@@ -44,9 +44,6 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
   // Start execution - compiles flow only when Start is clicked
   const start = useCallback(async () => {
-    // ✅ DEBUG: Dichiarare missingTaskId all'inizio della funzione per accesso globale
-    const missingTaskId = 'fe1330c8-70be-4bd8-a840-1d3886522785-1770736796206-njys7s';
-
     console.log('═══════════════════════════════════════════════════════════════════════════');
     console.log('🚀 [useDialogueEngine] start() CALLED');
     console.log('═══════════════════════════════════════════════════════════════════════════');
@@ -111,196 +108,11 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       console.log('🚀 [FRONTEND] Calling backend compiler API...');
       console.log('═══════════════════════════════════════════════════════════════════════════');
 
-      // ✅ OPZIONE B: Invia TUTTO il grafo al backend
-      // Il frontend NON decide quali template servono - invia tutto ciò che ha
-      // Il backend materializer è l'unico che ricostruisce il grafo e decide cosa serve davvero
+      // ✅ NUOVA LOGICA ARCHITETTURALE: Prendi solo istanze referenziate dalle righe, poi risolvi template ricorsivamente
+      // ✅ PRINCIPIO: row.id === task.id (se esiste nel TaskRepository, è un'istanza referenziata)
+      // ✅ Nessun duplicato possibile: ogni task viene preso da una sola fonte
 
-      // ✅ A. Tutte le TaskInstances del progetto (SOLO istanze, templateId !== null)
-      // Il backend potrebbe aver bisogno di qualsiasi TaskInstance per dereferenziare SubTasksIds
-      const allProjectTaskInstances = taskRepository.getAllTasks().filter(task => {
-        if (!task) return false;
-        // ✅ CRITICAL: type is required - skip tasks without type
-        if (task.type === undefined || task.type === null) {
-          console.error(`[useDialogueEngine] Task ${task.id} has no type field - skipping from compilation. This task is invalid.`);
-          return false;
-        }
-        // ✅ CRITICAL: Only include instances (templateId !== null), exclude templates (templateId === null)
-        // Templates are included separately in allProjectTemplates
-        if (task.templateId === null || task.templateId === undefined) {
-          return false; // This is a template, not an instance
-        }
-        return true;
-      });
-
-      // ✅ DEBUG: Verifica task mancante specifico (missingTaskId già dichiarato all'inizio)
-      const taskInInstances = allProjectTaskInstances.find(t => t.id === missingTaskId);
-      console.log('[useDialogueEngine] 🔍 DEBUG: Checking for missing task', {
-        searchedTaskId: missingTaskId,
-        allProjectTaskInstancesCount: allProjectTaskInstances.length,
-        taskInInstances: taskInInstances ? {
-          id: taskInInstances.id,
-          type: taskInInstances.type,
-          templateId: taskInInstances.templateId,
-          hasType: taskInInstances.type !== undefined && taskInInstances.type !== null
-        } : null
-      });
-
-      // ✅ B. Tutti i template del progetto (da DialogueTaskService, fonte unica normalizzata)
-      // ✅ ARCHITECTURAL: DialogueTaskService è il punto di normalizzazione
-      // ProjectManager carica i template da TaskRepository e li registra in DialogueTaskService
-      // DialogueTaskService preserva i template completi (incluso dataContract)
-      // Nessuna mappatura distruttiva necessaria - i template sono già normalizzati
-      // ✅ FILTER: DialogueTaskService contiene sia template di progetto che di factory
-      // Filtriamo per source !== 'Factory' per ottenere solo template di progetto
-      // ✅ CRITICAL: Assicurati che DialogueTaskService sia inizializzato
-      if (!DialogueTaskService.isCacheLoaded()) {
-        console.warn('[useDialogueEngine] ⚠️ DialogueTaskService cache not loaded, loading now...');
-        await DialogueTaskService.loadTemplates();
-      }
-      const allDialogueTaskServiceTemplates = DialogueTaskService.getAllTemplates();
-      const allProjectTemplatesFiltered = allDialogueTaskServiceTemplates.filter(template => {
-        if (!template) return false;
-        // ✅ CRITICAL: type is required
-        if (template.type === undefined || template.type === null) {
-          return false;
-        }
-        // ✅ FILTER: Solo template di progetto (source !== 'Factory')
-        // Template di factory hanno source === 'Factory', template di progetto hanno source === 'Project' o undefined
-        const source = (template as any).source;
-        return source !== 'Factory';
-      });
-
-      // ✅ FALLBACK: Se un template non ha dataContract in DialogueTaskService, provare a prenderlo da TaskRepository
-      // Questo può succedere se il template è stato registrato prima che dataContract fosse disponibile
-      const allProjectTemplatesWithFallback = allProjectTemplatesFiltered.map(template => {
-        // ✅ Se il template è UtteranceInterpretation (type === 3) e non ha dataContract, provare fallback
-        if (template.type === TaskType.UtteranceInterpretation && !(template as any).dataContract) {
-          const templateFromRepository = taskRepository.getTask(template.id);
-          if (templateFromRepository && (templateFromRepository as any).dataContract) {
-            console.warn(`[useDialogueEngine] ⚠️ Template ${template.id} missing dataContract in DialogueTaskService, using fallback from TaskRepository`);
-            return {
-              ...template,
-              dataContract: (templateFromRepository as any).dataContract || (templateFromRepository as any).semanticContract
-            };
-          }
-        }
-        return template;
-      });
-
-      // ✅ Usa allProjectTemplatesWithFallback come fonte finale
-      const allProjectTemplates = allProjectTemplatesWithFallback;
-
-      // ✅ DEBUG: Verifica che il template problematico sia presente con dataContract
-      const problematicTemplateId = '1fa9cc7c-755d-40c9-9041-3bdfe4fe29b3';
-      const problematicTemplate = allProjectTemplates.find(t => t.id === problematicTemplateId);
-      if (problematicTemplate) {
-        console.log('[useDialogueEngine] 🔍 DEBUG: Template problematico trovato in allProjectTemplates', {
-          id: problematicTemplate.id,
-          type: problematicTemplate.type,
-          hasDataContract: !!(problematicTemplate as any).dataContract,
-          hasSemanticContract: !!(problematicTemplate as any).semanticContract,
-          source: (problematicTemplate as any).source,
-          dataContractKeys: (problematicTemplate as any).dataContract ? Object.keys((problematicTemplate as any).dataContract) : [],
-          allKeys: Object.keys(problematicTemplate)
-        });
-      } else {
-        console.warn('[useDialogueEngine] ⚠️ DEBUG: Template problematico NON trovato in allProjectTemplates', {
-          searchedId: problematicTemplateId,
-          totalTemplates: allProjectTemplates.length,
-          templateIds: allProjectTemplates.map(t => t.id).slice(0, 10)
-        });
-        // ✅ Verifica se è in DialogueTaskService ma escluso dal filtro
-        const inDialogueTaskService = allDialogueTaskServiceTemplates.find(t => t.id === problematicTemplateId);
-        if (inDialogueTaskService) {
-          console.warn('[useDialogueEngine] ⚠️ DEBUG: Template trovato in DialogueTaskService ma escluso dal filtro', {
-            id: inDialogueTaskService.id,
-            source: (inDialogueTaskService as any).source,
-            hasDataContract: !!(inDialogueTaskService as any).dataContract
-          });
-        }
-      }
-
-      // ✅ C. Tutti i template di factory
-      // Molti template del progetto derivano da template di factory
-      // I sub-template potrebbero essere definiti lì
-      const allFactoryTemplatesRaw = await taskTemplateService.getAllTemplates();
-
-      // ✅ Convert factory templates (TaskCatalog) to DialogueTask format
-      // Factory templates have nlpContract (not dataContract or semanticContract)
-      const allFactoryTemplates = allFactoryTemplatesRaw.map(factoryTemplate => {
-        const factoryTemplateAny = factoryTemplate as any;
-        // ✅ Map factory template to DialogueTask format expected by backend
-        return {
-          id: factoryTemplate.id,
-          label: factoryTemplate.label,
-          type: factoryTemplate.type,
-          name: factoryTemplateAny.name,
-          // ✅ Map nlpContract → dataContract (factory templates use nlpContract)
-          dataContract: factoryTemplateAny.nlpContract || factoryTemplateAny.dataContract || factoryTemplateAny.semanticContract || null,
-          semanticContract: factoryTemplateAny.semanticContract,
-          // ✅ Include all other fields from factory template
-          ...factoryTemplateAny
-        };
-      });
-
-      // ✅ COMBINA: Unisci tutte le fonti
-      // ✅ ARCHITECTURAL: No deduplication needed - sources are disjoint:
-      // - TaskInstances: templateId !== null (from TaskRepository)
-      // - Project Templates: templateId === null (from TaskRepository)
-      // - Factory Templates: from TaskTemplateService (different IDs)
-      const allTasksWithTemplates = [
-        ...allProjectTaskInstances,
-        ...allProjectTemplates,
-        ...allFactoryTemplates
-      ];
-
-      // ✅ DEBUG: Verifica task mancante in allTasksWithTemplates (missingTaskId già dichiarato sopra)
-      const taskInAllTasks = allTasksWithTemplates.find(t => t.id === missingTaskId);
-      console.log('[useDialogueEngine] 🔍 DEBUG: Missing task in allTasksWithTemplates', {
-        searchedTaskId: missingTaskId,
-        allTasksWithTemplatesCount: allTasksWithTemplates.length,
-        taskInAllTasks: taskInAllTasks ? {
-          id: taskInAllTasks.id,
-          type: taskInAllTasks.type,
-          templateId: (taskInAllTasks as any).templateId,
-          source: (taskInAllTasks as any).source
-        } : null
-      });
-
-      // ✅ DEBUG: Verifica che il template problematico sia presente in allTasksWithTemplates con dataContract
-      // ✅ Usa problematicTemplateId già dichiarato sopra
-      const problematicTemplateInAllTasks = allTasksWithTemplates.find(t => t.id === problematicTemplateId);
-      if (problematicTemplateInAllTasks) {
-        console.log('[useDialogueEngine] 🔍 DEBUG: Template problematico trovato in allTasksWithTemplates', {
-          id: problematicTemplateInAllTasks.id,
-          type: problematicTemplateInAllTasks.type,
-          hasDataContract: !!(problematicTemplateInAllTasks as any).dataContract,
-          hasSemanticContract: !!(problematicTemplateInAllTasks as any).semanticContract,
-          source: (problematicTemplateInAllTasks as any).source,
-          templateId: (problematicTemplateInAllTasks as any).templateId,
-          dataContractType: typeof (problematicTemplateInAllTasks as any).dataContract,
-          dataContractKeys: (problematicTemplateInAllTasks as any).dataContract ? Object.keys((problematicTemplateInAllTasks as any).dataContract) : [],
-          allKeys: Object.keys(problematicTemplateInAllTasks).slice(0, 20)
-        });
-      } else {
-        console.error('[useDialogueEngine] ❌ DEBUG: Template problematico NON trovato in allTasksWithTemplates!', {
-          searchedId: problematicTemplateId,
-          totalTasks: allTasksWithTemplates.length,
-          projectTemplatesCount: allProjectTemplates.length,
-          templateIds: allProjectTemplates.map(t => t.id).slice(0, 10)
-        });
-      }
-
-      console.log('[useDialogueEngine] 📦 Complete graph payload for backend materialization:', {
-        projectTaskInstancesCount: allProjectTaskInstances.length,
-        projectTemplatesCount: allProjectTemplates.length,
-        factoryTemplatesCount: allFactoryTemplates.length,
-        totalTasksCount: allTasksWithTemplates.length,
-        sampleTaskIds: allTasksWithTemplates.slice(0, 5).map(t => t.id)
-      });
-
-      // ✅ Extract DDTs only from referenced GetData tasks (keep existing logic for DDTs)
-      // DDTs are still extracted only from referenced tasks, as they are flow-specific
+      // ✅ STEP 1: Raccogli tutti i taskId referenziati dalle righe dei nodi
       const referencedTaskIds = new Set<string>();
       enrichedNodes.forEach(node => {
         const rows = node.data?.rows || [];
@@ -311,6 +123,166 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           }
         });
       });
+
+      console.log('[useDialogueEngine] 🔍 Referenced task IDs from rows:', {
+        referencedCount: referencedTaskIds.size,
+        taskIds: Array.from(referencedTaskIds)
+      });
+
+      // ✅ STEP 2: Prendi solo le istanze referenziate (row.id === task.id)
+      const referencedInstances = Array.from(referencedTaskIds)
+        .map(taskId => {
+          const task = taskRepository.getTask(taskId);
+          if (!task) {
+            console.warn(`[useDialogueEngine] ⚠️ Task ${taskId} not found in TaskRepository`);
+            return null;
+          }
+          if (task.type === undefined || task.type === null) {
+            console.error(`[useDialogueEngine] Task ${task.id} has no type field - skipping.`);
+            return null;
+          }
+          return task;
+        })
+        .filter((task): task is any => task !== null);
+
+      console.log('[useDialogueEngine] ✅ Referenced instances found:', {
+        instancesCount: referencedInstances.length,
+        instanceIds: referencedInstances.map(t => t.id)
+      });
+
+      // ✅ STEP 3: Assicurati che DialogueTaskService sia inizializzato
+      if (!DialogueTaskService.isCacheLoaded()) {
+        console.warn('[useDialogueEngine] ⚠️ DialogueTaskService cache not loaded, loading now...');
+        await DialogueTaskService.loadTemplates();
+      }
+
+      // ✅ STEP 4: Raccogli template referenziati ricorsivamente (solo ID, sincrono)
+      const collectedTemplateIds = new Set<string>();
+
+      const collectTemplateIdsRecursive = (task: any) => {
+        if (!task) return;
+
+        // ✅ Raccogli templateId diretto
+        const templateId = getTemplateId(task);
+        if (templateId && !collectedTemplateIds.has(templateId)) {
+          collectedTemplateIds.add(templateId);
+
+          // ✅ Ricorsivamente raccogli template del template (solo ID, non caricare ancora)
+          // Prova prima in DialogueTaskService (sincrono)
+          let template = DialogueTaskService.getTemplate(templateId);
+          if (!template) {
+            // ✅ Fallback: cerca in getAllTemplates se getTemplate non trova
+            const allTemplates = DialogueTaskService.getAllTemplates();
+            template = allTemplates.find(t => t.id === templateId) || null;
+          }
+          if (template) {
+            // ✅ Template trovato, raccogli ricorsivamente i suoi sub-template
+            collectTemplateIdsRecursive(template);
+          }
+          // ✅ Se non trovato in DialogueTaskService, sarà cercato dopo in factory templates
+        }
+
+        // ✅ Raccogli sub-template (per UtteranceTaskDefinition con subTasksIds)
+        if ((task as any).subTasksIds && Array.isArray((task as any).subTasksIds)) {
+          (task as any).subTasksIds.forEach((subTaskId: string) => {
+            if (subTaskId && !collectedTemplateIds.has(subTaskId)) {
+              collectedTemplateIds.add(subTaskId);
+
+              // ✅ Ricorsivamente raccogli template del sub-template (solo ID)
+              let subTemplate = DialogueTaskService.getTemplate(subTaskId);
+              if (!subTemplate) {
+                const allTemplates = DialogueTaskService.getAllTemplates();
+                subTemplate = allTemplates.find(t => t.id === subTaskId) || null;
+              }
+              if (subTemplate) {
+                collectTemplateIdsRecursive(subTemplate);
+              }
+              // ✅ Se non trovato, sarà cercato dopo in factory templates
+            }
+          });
+        }
+      };
+
+      // ✅ Raccogli template IDs per tutte le istanze referenziate (sincrono)
+      referencedInstances.forEach(instance => {
+        collectTemplateIdsRecursive(instance);
+      });
+
+      console.log('[useDialogueEngine] ✅ Collected template IDs:', {
+        templatesCount: collectedTemplateIds.size,
+        templateIds: Array.from(collectedTemplateIds)
+      });
+
+      // ✅ STEP 5: Carica tutti i template referenziati
+      const referencedTemplates: any[] = [];
+      const loadedTemplateIds = new Set<string>();
+
+      // ✅ Carica template di progetto (sincrono)
+      const allDialogueTaskServiceTemplates = DialogueTaskService.getAllTemplates();
+      Array.from(collectedTemplateIds).forEach(templateId => {
+        // ✅ Prova prima da DialogueTaskService (template di progetto)
+        let template = DialogueTaskService.getTemplate(templateId);
+        if (!template) {
+          // ✅ Fallback: cerca in getAllTemplates
+          template = allDialogueTaskServiceTemplates.find(t => t.id === templateId) || null;
+        }
+        if (template) {
+          // ✅ Filtra solo template di progetto (source !== 'Factory')
+          const source = (template as any).source;
+          if (source !== 'Factory') {
+            referencedTemplates.push(template);
+            loadedTemplateIds.add(templateId);
+          }
+        }
+      });
+
+      // ✅ Carica template di factory (async) - solo quelli non trovati in DialogueTaskService
+      const factoryTemplateIds = Array.from(collectedTemplateIds).filter(id => !loadedTemplateIds.has(id));
+
+      if (factoryTemplateIds.length > 0) {
+        const allFactoryTemplatesRaw = await taskTemplateService.getAllTemplates();
+        factoryTemplateIds.forEach(templateId => {
+          const factoryTemplate = allFactoryTemplatesRaw.find(t => t.id === templateId);
+          if (factoryTemplate) {
+            const factoryTemplateAny = factoryTemplate as any;
+            // ✅ Convert factory template to DialogueTask format
+            referencedTemplates.push({
+              id: factoryTemplate.id,
+              label: factoryTemplate.label,
+              type: factoryTemplate.type,
+              name: factoryTemplateAny.name,
+              // ✅ Map nlpContract → dataContract (factory templates use nlpContract)
+              dataContract: factoryTemplateAny.nlpContract || factoryTemplateAny.dataContract || factoryTemplateAny.semanticContract || null,
+              semanticContract: factoryTemplateAny.semanticContract,
+              // ✅ Include all other fields from factory template
+              ...factoryTemplateAny
+            });
+          }
+        });
+      }
+
+      console.log('[useDialogueEngine] ✅ Referenced templates loaded:', {
+        templatesCount: referencedTemplates.length,
+        templateIds: referencedTemplates.map(t => t.id)
+      });
+
+      // ✅ STEP 6: Combina istanze + template (nessun duplicato possibile)
+      const allTasksWithTemplates = [
+        ...referencedInstances,
+        ...referencedTemplates
+      ];
+
+      console.log('[useDialogueEngine] 📦 Final task list (instances + templates):', {
+        instancesCount: referencedInstances.length,
+        templatesCount: referencedTemplates.length,
+        totalCount: allTasksWithTemplates.length,
+        allTaskIds: allTasksWithTemplates.map(t => t.id)
+      });
+
+      // ✅ Extract DDTs only from referenced GetData tasks (keep existing logic for DDTs)
+      // DDTs are still extracted only from referenced tasks, as they are flow-specific
+      // ✅ referencedTaskIds è già stato dichiarato sopra (STEP 1), riutilizzalo
+      // Non serve ridichiararlo - è già stato popolato con tutti i taskId dalle righe
 
       const allDDTs: any[] = [];
       Array.from(referencedTaskIds).forEach(taskId => {
@@ -347,9 +319,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         nodesCount: enrichedNodes.length,
         edgesCount: options.edges.length,
         totalTasksCount: allTasksWithTemplates.length,
-        projectTaskInstancesCount: allProjectTaskInstances.length,
-        projectTemplatesCount: allProjectTemplates.length,
-        factoryTemplatesCount: allFactoryTemplates.length,
+        referencedInstancesCount: referencedInstances.length,
+        referencedTemplatesCount: referencedTemplates.length,
         ddtsCount: allDDTs.length
       });
 
@@ -589,23 +560,6 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         conditions: conditions // ✅ NEW: Pass conditions for validation
       };
 
-      // ✅ DEBUG: Verifica task mancante in requestBody (missingTaskId già dichiarato sopra)
-      const taskInRequestBody = requestBody.tasks.find((t: any) => t.id === missingTaskId);
-      if (!taskInRequestBody) {
-        console.error('[useDialogueEngine] ❌ MISSING TASK IN REQUEST BODY:', {
-          taskId: missingTaskId,
-          totalTasksInRequestBody: requestBody.tasks.length,
-          taskIdsInRequestBody: requestBody.tasks.map((t: any) => t.id).slice(0, 20),
-          taskInAllTasksWithTemplates: allTasksWithTemplates.find(t => t.id === missingTaskId)
-        });
-      } else {
-        console.log('[useDialogueEngine] ✅ Missing task FOUND in requestBody:', {
-          taskId: missingTaskId,
-          type: taskInRequestBody.type,
-          templateId: taskInRequestBody.templateId
-        });
-      }
-
       // ✅ DEBUG: Verifica che tutti i task referenziati nei nodi siano presenti in requestBody.tasks
       // Nota: referencedTaskIds potrebbe essere già dichiarato sopra, usiamo un nome diverso per evitare conflitti
       const referencedTaskIdsInRequestBody = new Set<string>();
@@ -633,27 +587,6 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         console.log('[useDialogueEngine] ✅ All referenced tasks are present in requestBody:', {
           totalReferencedTasks: referencedTaskIdsInRequestBody.size,
           totalTasksInRequestBody: requestBody.tasks.length
-        });
-      }
-
-      // ✅ DEBUG: Verifica che il template problematico sia presente nel requestBody con dataContract
-      const problematicTemplateInRequestBody = requestBody.tasks.find((t: any) => t.id === problematicTemplateId && !t.templateId);
-      if (problematicTemplateInRequestBody) {
-        console.log('[useDialogueEngine] 🔍 DEBUG: Template problematico trovato nel requestBody (prima di JSON.stringify)', {
-          id: problematicTemplateInRequestBody.id,
-          type: problematicTemplateInRequestBody.type,
-          templateId: problematicTemplateInRequestBody.templateId,
-          hasDataContract: !!(problematicTemplateInRequestBody.dataContract),
-          hasSemanticContract: !!(problematicTemplateInRequestBody.semanticContract),
-          dataContractType: typeof problematicTemplateInRequestBody.dataContract,
-          dataContractKeys: problematicTemplateInRequestBody.dataContract ? Object.keys(problematicTemplateInRequestBody.dataContract) : [],
-          dataContractValue: problematicTemplateInRequestBody.dataContract ? JSON.stringify(problematicTemplateInRequestBody.dataContract).substring(0, 200) : null
-        });
-      } else {
-        console.error('[useDialogueEngine] ❌ DEBUG: Template problematico NON trovato nel requestBody!', {
-          searchedId: problematicTemplateId,
-          totalTasksInRequestBody: requestBody.tasks.length,
-          allTemplateIds: requestBody.tasks.filter((t: any) => !t.templateId).map((t: any) => t.id).slice(0, 10)
         });
       }
 
@@ -697,53 +630,6 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           jsonLength: jsonString.length,
           conditionsJsonPreview: conditionsInJson ? jsonString.substring(jsonString.indexOf('"conditions"'), Math.min(jsonString.indexOf('"conditions"') + 500, jsonString.length)) : 'NOT FOUND'
         });
-
-        // ✅ DEBUG: Verifica se il template problematico è presente nel JSON serializzato
-        const templateInJson = jsonString.includes(`"id":"${problematicTemplateId}"`);
-        if (templateInJson) {
-          // ✅ DEBUG: Cerca il template nell'array tasks del requestBody (non nel JSON string)
-          const templateInTasksArray = requestBody.tasks.find((t: any) => t.id === problematicTemplateId && !t.templateId);
-          if (templateInTasksArray) {
-            console.log('[useDialogueEngine] 🔍 DEBUG: Template problematico trovato nell\'array tasks del requestBody', {
-              id: templateInTasksArray.id,
-              type: templateInTasksArray.type,
-              templateId: templateInTasksArray.templateId,
-              hasDataContract: !!(templateInTasksArray.dataContract),
-              hasSemanticContract: !!(templateInTasksArray.semanticContract),
-              dataContractType: typeof templateInTasksArray.dataContract,
-              dataContractKeys: templateInTasksArray.dataContract ? Object.keys(templateInTasksArray.dataContract) : [],
-              dataContractValue: templateInTasksArray.dataContract ? JSON.stringify(templateInTasksArray.dataContract).substring(0, 200) : null,
-              allKeys: Object.keys(templateInTasksArray).slice(0, 30)
-            });
-
-            // ✅ DEBUG: Verifica se il template ha type nel JSON serializzato
-            const templateJson = JSON.stringify(templateInTasksArray);
-            const hasTypeInTemplateJson = templateJson.includes(`"type":${templateInTasksArray.type}`);
-            const hasDataContractInTemplateJson = templateJson.includes(`"dataContract"`);
-            console.log('[useDialogueEngine] 🔍 DEBUG: Template problematico nel JSON serializzato (singolo template)', {
-              hasType: hasTypeInTemplateJson,
-              typeValue: templateInTasksArray.type,
-              hasDataContract: hasDataContractInTemplateJson,
-              jsonLength: templateJson.length,
-              jsonPreview: templateJson.substring(0, 500)
-            });
-          } else {
-            console.error('[useDialogueEngine] ❌ DEBUG: Template problematico NON trovato nell\'array tasks del requestBody come template (templateId === null)!', {
-              searchedId: problematicTemplateId,
-              allTasksWithTemplateIdNull: requestBody.tasks.filter((t: any) => !t.templateId).map((t: any) => ({ id: t.id, type: t.type })).slice(0, 10)
-            });
-          }
-
-          // Estrai il template dal JSON per verificare se ha dataContract
-          const templateMatch = jsonString.match(new RegExp(`"id":"${problematicTemplateId}"[^}]*"dataContract"[^}]*}`));
-          console.log('[useDialogueEngine] 🔍 DEBUG: Template problematico trovato nel JSON serializzato', {
-            found: true,
-            hasDataContractInJson: jsonString.includes(`"id":"${problematicTemplateId}"`) && jsonString.includes(`"dataContract"`),
-            templateMatch: templateMatch ? templateMatch[0].substring(0, 300) : null
-          });
-        } else {
-          console.error('[useDialogueEngine] ❌ DEBUG: Template problematico NON trovato nel JSON serializzato!');
-        }
 
         // Check if type is in JSON string
         const hasTypeInJson = jsonPreview.includes('"type"');
