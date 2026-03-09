@@ -340,7 +340,20 @@ Public Class SessionManager
     End Sub
 
     ''' <summary>
-    ''' Crea una nuova sessione e avvia l'orchestrator
+    ''' ✅ ARCHITECTURAL: Crea una nuova sessione (puro, senza side effects)
+    '''
+    ''' Responsabilità:
+    ''' - Crea OrchestratorSession
+    ''' - Crea FlowOrchestrator con resolveTranslation
+    ''' - Registra event handlers
+    ''' - Salva sessione su Redis
+    '''
+    ''' NON fa:
+    ''' - Salvare translations nel repository (deve essere fatto dal chiamante)
+    ''' - Avviare l'orchestrator (viene avviato in HandleOrchestratorSessionStream)
+    '''
+    ''' Pre-condizioni:
+    ''' - Le translations DEVONO essere già salvate nel TranslationRepository dal chiamante
     ''' </summary>
     Public Shared Function CreateSession(
         sessionId As String,
@@ -366,6 +379,7 @@ Public Class SessionManager
             }
 
             ' ✅ SINGLE POINT OF TRUTH: Crea resolveTranslation function per risolvere TextKey
+            ' Le translations DEVONO essere già nel TranslationRepository (salvate dal chiamante)
             Dim resolveTranslation As Func(Of String, String) = Nothing
             If Not String.IsNullOrEmpty(projectId) AndAlso Not String.IsNullOrEmpty(locale) AndAlso _translationRepository IsNot Nothing Then
                 resolveTranslation = Function(textKey As String) As String

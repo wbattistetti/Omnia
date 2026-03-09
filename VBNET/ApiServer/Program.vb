@@ -466,7 +466,40 @@ Module Program
             ' ✅ STEP 4: Generate session ID
             Dim sessionId = Guid.NewGuid().ToString()
 
+            ' ✅ STEP 4.5: ARCHITECTURAL - Salva translations nel TranslationRepository PRIMA di creare la sessione
+            ' Questo garantisce che il repository sia pronto quando CreateSession crea resolveTranslation
+            ' CreateSession è puro e non salva nulla - la responsabilità di salvare è del chiamante
+            Dim translationRepository = SessionManager.GetTranslationRepository()
+            If translationRepository IsNot Nothing AndAlso request.Translations IsNot Nothing AndAlso
+               Not String.IsNullOrEmpty(request.ProjectId) AndAlso Not String.IsNullOrEmpty(request.Locale) Then
+                Console.WriteLine($"[HandleOrchestratorSessionStart] 💾 Saving {request.Translations.Count} translations to TranslationRepository for projectId '{request.ProjectId}' and locale '{request.Locale}'")
+                Dim savedCount = 0
+                Dim errorCount = 0
+                For Each kvp In request.Translations
+                    Try
+                        translationRepository.SetTranslation(request.ProjectId, request.Locale, kvp.Key, kvp.Value)
+                        savedCount += 1
+                    Catch ex As Exception
+                        Console.WriteLine($"[HandleOrchestratorSessionStart] ⚠️ Error saving translation '{kvp.Key}': {ex.Message}")
+                        errorCount += 1
+                    End Try
+                Next
+                Console.WriteLine($"[HandleOrchestratorSessionStart] ✅ Translations saved: {savedCount} successful, {errorCount} errors")
+            Else
+                If translationRepository Is Nothing Then
+                    Console.WriteLine($"[HandleOrchestratorSessionStart] ⚠️ TranslationRepository is Nothing - translations will not be saved")
+                ElseIf request.Translations Is Nothing Then
+                    Console.WriteLine($"[HandleOrchestratorSessionStart] ⚠️ Request.Translations is Nothing - no translations to save")
+                ElseIf String.IsNullOrEmpty(request.ProjectId) Then
+                    Console.WriteLine($"[HandleOrchestratorSessionStart] ⚠️ Request.ProjectId is empty - translations will not be saved")
+                ElseIf String.IsNullOrEmpty(request.Locale) Then
+                    Console.WriteLine($"[HandleOrchestratorSessionStart] ⚠️ Request.Locale is empty - translations will not be saved")
+                End If
+            End If
+
             ' ✅ STEP 5: Create session in SessionManager (NON avvia orchestrator - vedi HandleOrchestratorSessionStream)
+            ' CreateSession è puro: non salva nulla, solo crea la sessione
+            ' Le translations DEVONO essere già nel TranslationRepository (salvate sopra)
             Try
                 Dim session = SessionManager.CreateSession(
                     sessionId,

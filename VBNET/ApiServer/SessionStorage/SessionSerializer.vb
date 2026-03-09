@@ -177,8 +177,19 @@ Namespace ApiServer.SessionStorage
         End Function
 
         ''' <summary>
-        ''' Deserializza OrchestratorSession e ricostruisce oggetti runtime
-        ''' ✅ STATELESS: Accetta executionStateStorage opzionale per ricreare FlowOrchestrator con storage
+        ''' ✅ ARCHITECTURAL: Deserializza OrchestratorSession (solo dati, NON oggetti runtime)
+        '''
+        ''' Responsabilità:
+        ''' - Deserializza dati della sessione da JSON
+        ''' - Ricrea oggetto OrchestratorSession con dati
+        '''
+        ''' NON fa:
+        ''' - Creare FlowOrchestrator (viene creato da SessionManager.GetSession con parametri corretti)
+        ''' - Creare EventEmitter (viene creato/riutilizzato da SessionManager.GetOrCreateEventEmitter)
+        '''
+        ''' L'orchestrator viene creato da SessionManager.GetSession con:
+        ''' - projectId, locale, resolveTranslation completi
+        ''' - executionStateStorage corretto
         ''' </summary>
         Public Shared Function DeserializeOrchestratorSession(json As String, Optional sessionId As String = Nothing, Optional executionStateStorage As ApiServer.Interfaces.IExecutionStateStorage = Nothing) As OrchestratorSession
             Try
@@ -193,11 +204,9 @@ Namespace ApiServer.SessionStorage
                     Return Nothing
                 End If
 
-                ' Ricrea oggetti runtime
-                ' ✅ REMOVED: taskEngine (Motore) - no longer needed
-                ' ✅ UNIFIED: EventEmitter NON viene creato qui - verrà creato/riutilizzato da GetOrCreateEventEmitter
-                ' Questo assicura che lo stesso EventEmitter condiviso venga usato in CreateSession, GetSession e HandleOrchestratorSessionStream
-                ' ✅ AGGIUNTO: Ripristina ProjectId e Locale per risoluzione traduzioni
+                ' ✅ ARCHITECTURAL: Ricrea solo i dati, NON l'orchestrator
+                ' L'orchestrator verrà creato da SessionManager.GetSession con i parametri corretti
+                ' (projectId, locale, resolveTranslation, executionStateStorage)
                 Dim session As New OrchestratorSession() With {
                     .SessionId = data.SessionId,
                     .CompilationResult = data.CompilationResult,
@@ -206,19 +215,11 @@ Namespace ApiServer.SessionStorage
                     .Messages = If(data.Messages, New List(Of Object)()),
                     .IsWaitingForInput = data.IsWaitingForInput,
                     .WaitingForInputData = data.WaitingForInputData,
-                    .EventEmitter = Nothing,
+                    .EventEmitter = Nothing, ' Verrà impostato da SessionManager.GetSession
                     .ProjectId = data.ProjectId,
-                    .Locale = data.Locale
+                    .Locale = data.Locale,
+                    .Orchestrator = Nothing ' ✅ NON creare qui - verrà creato da SessionManager.GetSession
                 }
-
-                ' ✅ STATELESS: Ricrea FlowOrchestrator (no longer requires Motore)
-                If data.CompilationResult IsNot Nothing Then
-                    Try
-                        session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(data.CompilationResult, sessionId, executionStateStorage)
-                    Catch ex As Exception
-                        ' Orchestrator sarà Nothing, verrà ricreato quando necessario
-                    End Try
-                End If
 
                 Return session
             Catch ex As Exception
