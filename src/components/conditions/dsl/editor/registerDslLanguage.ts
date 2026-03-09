@@ -106,6 +106,8 @@ export function registerDslLanguage(monaco: any): void {
     colors: {
       'editor.foreground': '#D4D4D4',
       'editor.background': '#1e1e1e',
+      'editorCursor.foreground': '#FFFFFF', // White cursor for dark theme
+      'editorCursor.background': '#1e1e1e', // Background behind cursor
     },
   });
 

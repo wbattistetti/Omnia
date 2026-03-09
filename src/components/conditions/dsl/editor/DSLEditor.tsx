@@ -37,6 +37,14 @@ export function DSLEditor({
   const parserRef = useRef<DSLParser>(new DSLParser());
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastParsedValueRef = useRef<string>('');
+  const autoInsertMenuTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isFormattingRef = useRef<boolean>(false); // Prevent recursive formatting
+  const contextMenuOpenRef = useRef<boolean>(false); // Track menu state in ref for closures
+
+  // Sync ref with state
+  useEffect(() => {
+    contextMenuOpenRef.current = contextMenuOpen;
+  }, [contextMenuOpen]);
 
   // Initialize Monaco
   useEffect(() => {
@@ -75,10 +83,132 @@ export function DSLEditor({
 
         monacoEditorRef.current = editor;
 
+        // Helper: Check if cursor is inside a string
+        const isInsideString = (model: monacoNS.editor.ITextModel, position: monacoNS.Position): boolean => {
+          try {
+            const tokens = model.getLineTokens(position.lineNumber);
+            const tokenIndex = tokens.findTokenIndexAtOffset(position.column - 1);
+            if (tokenIndex >= 0) {
+              const token = tokens.getToken(tokenIndex);
+              return token?.type === 'string' || token?.type?.includes('string');
+            }
+          } catch (e) {
+            // Fallback: check if position is between quotes
+            const line = model.getLineContent(position.lineNumber);
+            const before = line.substring(0, position.column - 1);
+            const after = line.substring(position.column - 1);
+            const quoteCountBefore = (before.match(/"/g) || []).length;
+            const quoteCountAfter = (after.match(/"/g) || []).length;
+            // If odd number of quotes before, we're inside a string
+            return quoteCountBefore % 2 === 1;
+          }
+          return false;
+        };
+
+        // Helper: Auto-format operators (=, <>, >=, <=)
+        const autoFormatOperator = (model: monacoNS.editor.ITextModel, position: monacoNS.Position): boolean => {
+          if (isFormattingRef.current) return false; // Prevent recursion
+          if (isInsideString(model, position)) return false; // Don't format inside strings
+
+          const line = model.getLineContent(position.lineNumber);
+          const before = line.substring(0, position.column - 1);
+
+          // Check if operator is already formatted (has spaces around it)
+          if (/\s=\s$|\s<>\s$|\s>=\s$|\s<=\s$/.test(before)) {
+            return false; // Already formatted
+          }
+
+          // Check for operators that need formatting (at the end of before, user just typed them)
+          let operatorStart = -1;
+          let operatorLength = 0;
+          let replacement = '';
+
+          // Check for = (but not if part of <=, >=, <>)
+          if (before.endsWith('=') && !before.endsWith('<>') && !before.endsWith('>=') && !before.endsWith('<=')) {
+            operatorStart = before.length - 1;
+            operatorLength = 1;
+            replacement = ' = ';
+          }
+          // Check for <> (must check before =)
+          else if (before.endsWith('<>')) {
+            operatorStart = before.length - 2;
+            operatorLength = 2;
+            replacement = ' <> ';
+          }
+          // Check for >=
+          else if (before.endsWith('>=')) {
+            operatorStart = before.length - 2;
+            operatorLength = 2;
+            replacement = ' >= ';
+          }
+          // Check for <=
+          else if (before.endsWith('<=')) {
+            operatorStart = before.length - 2;
+            operatorLength = 2;
+            replacement = ' <= ';
+          }
+
+          if (operatorStart >= 0) {
+            isFormattingRef.current = true;
+
+            const range = new monaco.Range(
+              position.lineNumber,
+              operatorStart + 1,
+              position.lineNumber,
+              operatorStart + operatorLength + 1
+            );
+
+            editor.executeEdits('format-operator', [
+              {
+                range,
+                text: replacement,
+              },
+            ]);
+
+            // Move cursor after the formatted operator
+            const newColumn = operatorStart + replacement.length + 1;
+            setTimeout(() => {
+              editor.setPosition({
+                lineNumber: position.lineNumber,
+                column: newColumn,
+              });
+              isFormattingRef.current = false;
+            }, 0);
+
+            return true;
+          }
+
+          return false;
+        };
+
         // Handle content changes with debounce
-        editor.onDidChangeModelContent(() => {
+        editor.onDidChangeModelContent((e) => {
+          if (isFormattingRef.current) {
+            // Skip processing if we're in the middle of auto-formatting
+            return;
+          }
+
+          const model = editor.getModel();
+          const position = editor.getPosition();
+          if (!model || !position) return;
+
           const newValue = editor.getValue();
           onChange(newValue);
+
+          // Auto-format operators
+          const wasFormatted = autoFormatOperator(model, position);
+          if (wasFormatted) {
+            // After formatting, re-check position for menu trigger
+            setTimeout(() => {
+              const newPos = editor.getPosition();
+              if (newPos) {
+                checkAndShowInsertMenu(editor, model, newPos);
+              }
+            }, 10);
+          } else {
+            // Check for menu triggers
+            checkAndShowInsertMenu(editor, model, position);
+          }
 
           // Clear previous timeout
           if (debounceTimeoutRef.current) {
@@ -89,6 +219,92 @@ export function DSLEditor({
           debounceTimeoutRef.current = setTimeout(() => {
             parseAndValidate(newValue);
           }, 200);
+        });
+
+        // Helper: Check if we should show Insert menu and show it
+        const checkAndShowInsertMenu = (
+          editor: monacoNS.editor.IStandaloneCodeEditor,
+          model: monacoNS.editor.ITextModel,
+          position: monacoNS.Position
+        ) => {
+          // Don't show if menu is already open
+          if (contextMenuOpenRef.current) return;
+
+          // Don't show if inside string
+          if (isInsideString(model, position)) {
+            // Close menu if open
+            if (contextMenuOpenRef.current) {
+              setContextMenuOpen(false);
+              setContextMenuPosition(null);
+            }
+            return;
+          }
+
+          const line = model.getLineContent(position.lineNumber);
+          const before = line.substring(0, position.column - 1);
+
+          // Check if we just typed a trigger pattern
+          const triggers = [
+            /AND\s+$/,  // "AND " at end
+            /OR\s+$/,   // "OR " at end
+            /NOT\s+$/,  // "NOT " at end
+            /\($/,      // "(" at end
+            /\s=\s$/,   // " = " at end (after formatting)
+            /\s<>\s$/,  // " <> " at end (after formatting)
+            /\s>=\s$/,  // " >= " at end (after formatting)
+            /\s<=\s$/,  // " <= " at end (after formatting)
+          ];
+
+          const shouldShowMenu = triggers.some(regex => regex.test(before));
+
+          if (shouldShowMenu) {
+            // Clear any existing timeout
+            if (autoInsertMenuTimeoutRef.current) {
+              clearTimeout(autoInsertMenuTimeoutRef.current);
+            }
+
+            // Show menu after a short delay (to avoid showing on every keystroke)
+            autoInsertMenuTimeoutRef.current = setTimeout(() => {
+              // Double-check menu is still not open
+              if (contextMenuOpenRef.current) return;
+
+              // Get cursor position in pixels for menu placement
+              const coords = editor.getScrolledVisiblePosition(position);
+              if (coords) {
+                const domNode = editor.getDomNode();
+                if (domNode) {
+                  const rect = domNode.getBoundingClientRect();
+                  setContextMenuPosition({
+                    x: rect.left + coords.left,
+                    y: rect.top + coords.top + 20, // Below cursor
+                  });
+                  setContextMenuOpen(true);
+                }
+              }
+            }, 300); // Small delay to avoid flickering
+          } else {
+            // Close menu if user typed something invalid
+            if (contextMenuOpenRef.current) {
+              // Check if user typed a non-whitespace character after trigger
+              const invalidAfterTrigger = /(AND|OR|NOT|\(|\s=\s|\s<>\s|\s>=\s|\s<=\s)\s*[A-Za-z0-9_\[\]"]/.test(before);
+              if (invalidAfterTrigger) {
+                setContextMenuOpen(false);
+                setContextMenuPosition(null);
+              }
+            }
+          }
+        };
+
+        // Handle ESC key to close menu
+        editor.onKeyDown((e: any) => {
+          if (e.keyCode === monaco.KeyCode.Escape) {
+            if (contextMenuOpen) {
+              setContextMenuOpen(false);
+              setContextMenuPosition(null);
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }
         });
 
         // ✅ SOLUTION: Block browser context menu in capture phase
@@ -143,6 +359,9 @@ export function DSLEditor({
     return () => {
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current);
+      }
+      if (autoInsertMenuTimeoutRef.current) {
+        clearTimeout(autoInsertMenuTimeoutRef.current);
       }
       if (monacoEditorRef.current) {
         monacoEditorRef.current.dispose();
@@ -233,30 +452,45 @@ export function DSLEditor({
 
     const editor = monacoEditorRef.current;
     const selection = editor.getSelection();
+
+    let insertRange: any;
     if (selection) {
-      editor.executeEdits('insert', [
-        {
-          range: selection,
-          text: text,
-        },
-      ]);
+      insertRange = selection;
     } else {
       // Insert at cursor
       const position = editor.getPosition();
       if (position) {
-        editor.executeEdits('insert', [
-          {
-            range: {
-              startLineNumber: position.lineNumber,
-              startColumn: position.column,
-              endLineNumber: position.lineNumber,
-              endColumn: position.column,
-            },
-            text: text,
-          },
-        ]);
+        insertRange = {
+          startLineNumber: position.lineNumber,
+          startColumn: position.column,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column,
+        };
+      } else {
+        return; // No valid position
       }
     }
+
+    // Execute edit to insert text
+    editor.executeEdits('insert', [
+      {
+        range: insertRange,
+        text: text,
+      },
+    ]);
+
+    // Focus editor and position cursor after inserted text
+    editor.focus();
+
+    // Calculate new cursor position (after inserted text)
+    const newLineNumber = insertRange.startLineNumber;
+    const newColumn = insertRange.startColumn + text.length;
+
+    // Set cursor position after inserted text
+    editor.setPosition({ lineNumber: newLineNumber, column: newColumn });
+
+    // Ensure cursor is visible
+    editor.revealPosition({ lineNumber: newLineNumber, column: newColumn });
 
     setShowInsertMenu(false);
     setContextMenuOpen(false);
