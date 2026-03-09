@@ -236,7 +236,7 @@ export function Toolbar({
                 ? 'bg-blue-600 text-white'
                 : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
             }`}
-            title="Use React/Ruby backend (localhost:3100)"
+            title="Use React backend (localhost:3100)"
           >
             React
           </button>

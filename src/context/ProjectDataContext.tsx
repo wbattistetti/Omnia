@@ -84,19 +84,31 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
     loadData();
   }, []);
 
+  // ✅ NEW: Reload data when currentProjectId changes (e.g., when opening a project)
+  useEffect(() => {
+    if (currentProjectId) {
+      loadData();
+    }
+  }, [currentProjectId]);
+
   // ✅ Populate window.__projectData for synchronous access (e.g., conditionEvaluator)
   useEffect(() => {
     if (data) {
       (window as any).__projectData = data;
-      // ❌ RIMOSSO: log verboso quando popola window.__projectData (non necessario all'avvio)
-      // console.log('[ProjectDataProvider] ✅ Populated window.__projectData', {
-      //   conditionsCount: data.conditions?.flatMap(cat => cat.items || []).length || 0,
-      //   conditions: data.conditions?.flatMap(cat => (cat.items || []).map((item: any) => ({
-      //     id: item.id || item._id,
-      //     name: item.name || item.label,
-      //     hasScript: !!(item.data?.script || item.script)
-      //   }))) || []
-      // });
+      // ✅ Log conditions with uiCode when data changes (useful for debugging)
+      const conditionsWithUiCode = data.conditions?.flatMap(cat =>
+        (cat.items || []).filter((item: any) => item.data?.uiCode).map((item: any) => ({
+          id: item.id || item._id,
+          name: item.name || item.label,
+          hasUiCode: !!item.data?.uiCode,
+          uiCodeLength: item.data?.uiCode?.length || 0
+        }))
+      ) || [];
+      console.log('[ProjectDataProvider] ✅ Updated window.__projectData', {
+        conditionsCount: data.conditions?.flatMap(cat => cat.items || []).length || 0,
+        conditionsWithUiCodeCount: conditionsWithUiCode.length,
+        conditionsWithUiCode: conditionsWithUiCode
+      });
     } else {
       (window as any).__projectData = null;
     }
@@ -112,6 +124,8 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
     // Deep clone usando JSON (perfetto per ProjectData che è serializzabile)
     const cloned = JSON.parse(JSON.stringify(updatedData));
     setData(cloned);
+    // ✅ Also update window.__projectData immediately for synchronous access
+    (window as any).__projectData = cloned;
   }, []);
 
   const getCurrentProjectId = () => currentProjectId;

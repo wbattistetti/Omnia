@@ -7,8 +7,8 @@ import { useDDTSimulator } from '../DialogueDataEngine/useSimulator';
 
 type Props = { currentDDT?: AssembledTaskTree };
 
-// ⭐ Backend DDT sempre attivo - Ruby è l'unica fonte di verità
-// Rimossa funzione getUseBackendDDTEngine() - backend sempre attivo
+// ✅ REMOVED RUBY: Backend DDT Engine now uses VB.NET ApiServer directly (port 5000)
+// Backend sempre attivo - chiama direttamente VB.NET ApiServer
 
 const demoTemplate: DDTTemplateV2 = {
   schemaVersion: '2',
@@ -73,11 +73,11 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
     }
   }, [currentDDT]);
 
-  // ⭐ Backend DDT Engine logic
+  // ✅ REMOVED RUBY: Backend DDT Engine now calls VB.NET ApiServer directly (port 5000)
   useEffect(() => {
     if (!useBackend || !currentDDT) return;
 
-    const baseUrl = 'http://localhost:3101';
+    const baseUrl = 'http://localhost:5000';
 
     // Start backend session
     const startSession = async () => {
@@ -162,12 +162,12 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
         eventSource.onerror = (error) => {
           console.error('[DDTSimulatorPreview] SSE connection error', error);
           if (eventSource.readyState === EventSource.CLOSED) {
-            setBackendError('Connection to backend server closed. Is Ruby server running on port 3101?');
+            setBackendError('Connection to backend server closed. Is VB.NET ApiServer running on port 5000?');
           }
         };
       } catch (error) {
         console.error('[DDTSimulatorPreview] Backend session error', error);
-        setBackendError(error instanceof Error ? error.message : 'Failed to connect to backend server. Is Ruby server running on port 3101?');
+        setBackendError(error instanceof Error ? error.message : 'Failed to connect to backend server. Is VB.NET ApiServer running on port 5000?');
       }
     };
 
@@ -180,7 +180,7 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
         eventSourceRef.current = null;
       }
       if (sessionId) {
-        const baseUrl = 'http://localhost:3101';
+        const baseUrl = 'http://localhost:5000';
         fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}`, {
           method: 'DELETE'
         }).catch(() => {});
@@ -288,11 +288,11 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
     }
   }, [state, planById, useBackend]);
 
-  // ⭐ Handle input for backend
+  // ✅ REMOVED RUBY: Handle input for backend (VB.NET ApiServer on port 5000)
   const handleBackendInput = async (inputText: string) => {
     if (!sessionId || !useBackend) return;
 
-    const baseUrl = 'http://localhost:3101';
+    const baseUrl = 'http://localhost:5000';
     try {
       const response = await fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}/input`, {
         method: 'POST',
@@ -341,7 +341,7 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
         }}>
           ⚠️ {backendError}
           <div style={{ marginTop: 4, fontSize: '11px', color: '#7f1d1d' }}>
-            Assicurati che il server Ruby sia avviato: <code>cd backend/ruby && bundle exec rackup config.ru</code>
+            Assicurati che il server VB.NET ApiServer sia avviato: <code>cd VBNET/ApiServer && dotnet run</code>
           </div>
         </div>
       )}
@@ -357,7 +357,7 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
           color: '#166534',
           fontSize: '11px'
         }}>
-          ✅ Connesso al backend Ruby (porta 3101)
+          ✅ Connesso al backend VB.NET ApiServer (porta 5000)
         </div>
       )}
 

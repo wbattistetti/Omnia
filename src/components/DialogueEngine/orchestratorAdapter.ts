@@ -15,7 +15,7 @@ export interface OrchestratorCallbacks {
 
 /**
  * Executes orchestrator on backend via SSE
- * Uses BackendTypeContext to determine which backend to call (React/Ruby or VB.NET)
+ * Executes orchestrator on backend via SSE (VB.NET ApiServer on port 5000)
  *
  * @param compilationResultJson - Original JSON from compiler (preserves all fields like taskGroups)
  * @param tasks - Tasks array
@@ -30,7 +30,7 @@ export async function executeOrchestratorBackend(
   translations: Record<string, string>,
   callbacks: OrchestratorCallbacks
 ): Promise<{ sessionId: string; stop: () => void }> {
-  // ✅ FIX: Use VB.NET backend (port 5000) instead of Ruby (3101)
+  // ✅ REMOVED RUBY: Frontend now calls VB.NET ApiServer directly (port 5000)
   const baseUrl = 'http://localhost:5000';
 
   // ❌ POSTEGGIATO: Logica switch backendType - non usata per ora

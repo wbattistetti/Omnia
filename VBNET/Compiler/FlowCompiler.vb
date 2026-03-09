@@ -301,11 +301,68 @@ Public Class FlowCompiler
                 Dim hasLabel As Boolean = Not String.IsNullOrWhiteSpace(edge.Label)
 
                 ' Check if edge has a condition or is an Else edge
-                Dim hasCondition As Boolean = False
-                If edge.Data IsNot Nothing Then
-                    ' Edge has condition if Condition is not empty, OR if it's an Else edge
-                    hasCondition = Not String.IsNullOrWhiteSpace(edge.Data.Condition) OrElse (edge.Data.IsElse.HasValue AndAlso edge.Data.IsElse.Value)
-                End If
+                ' ✅ Read conditionId from top-level (not from data)
+                Dim conditionId = If(edge.ConditionId, "").Trim()
+                Dim isElseEdge = edge.IsElse.HasValue AndAlso edge.IsElse.Value
+
+                ' Edge has condition if ConditionId is not empty, OR if it's an Else edge
+                Dim hasCondition As Boolean = Not String.IsNullOrWhiteSpace(conditionId) OrElse isElseEdge
+
+                ' ✅ NEW: If conditionId exists (and is not Else), verify it exists and has valid script
+                If Not String.IsNullOrWhiteSpace(conditionId) AndAlso Not isElseEdge Then
+                        ' ✅ DEBUG: Log condition search
+                        Console.WriteLine($"🔍 [COMPILER][FlowCompiler] Searching for condition '{conditionId}' in flow.Conditions")
+                        Console.WriteLine($"   Edge ID: {edge.Id}, Edge Label: '{edge.Label}'")
+                        Console.WriteLine($"   Edge conditionId (raw): '{If(edge.ConditionId, "NULL")}'")
+                        Console.WriteLine($"   Edge conditionId (trimmed): '{conditionId}' (length: {conditionId.Length})")
+                        Console.WriteLine($"   Flow.Conditions count: {If(flow.Conditions IsNot Nothing, flow.Conditions.Count, 0)}")
+                        If flow.Conditions IsNot Nothing AndAlso flow.Conditions.Count > 0 Then
+                            Console.WriteLine($"   Available condition IDs:")
+                            For Each c In flow.Conditions
+                                Dim matchResult = (c.Id = conditionId)
+                                Console.WriteLine($"     - Condition ID: '{c.Id}' (length: {If(c.Id IsNot Nothing, c.Id.Length, 0)}), Name: '{c.Name}', Match: {matchResult}")
+                            Next
+                        Else
+                            Console.WriteLine($"   ⚠️ Flow.Conditions is Nothing or empty!")
+                        End If
+
+                        ' Find condition in flow.Conditions
+                        Dim condition = If(flow.Conditions IsNot Nothing, flow.Conditions.FirstOrDefault(Function(c) c.Id = conditionId), Nothing)
+
+                        If condition Is Nothing Then
+                            ' Condition not found in projectData
+                            Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition not found in projectData")
+                            System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition not found")
+                            errors.Add(New CompilationError() With {
+                                .TaskId = "SYSTEM",
+                                .NodeId = edge.Source,
+                                .RowId = Nothing,
+                                .EdgeId = edge.Id,
+                                .Message = $"Edge '{edge.Label}' references condition '{conditionId}' but condition not found in projectData.",
+                                .Severity = ErrorSeverity.Error,
+                                .Category = "ConditionNotFound"
+                            })
+                            hasCondition = False
+                        ElseIf condition.Data IsNot Nothing Then
+                            ' Check if condition has valid script (execCode or DSL)
+                            Dim hasScript = Not String.IsNullOrWhiteSpace(condition.Data.Script) OrElse Not String.IsNullOrWhiteSpace(condition.Data.UiCode)
+                            If Not hasScript Then
+                                ' Condition exists but has no script
+                                Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition has no script")
+                                System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition has no script")
+                                errors.Add(New CompilationError() With {
+                                    .TaskId = "SYSTEM",
+                                    .NodeId = edge.Source,
+                                    .RowId = Nothing,
+                                    .EdgeId = edge.Id,
+                                    .Message = $"Edge '{edge.Label}' references condition '{conditionId}' but condition has no script (DSL or JavaScript).",
+                                    .Severity = ErrorSeverity.Error,
+                                    .Category = "ConditionHasNoScript"
+                                })
+                                hasCondition = False
+                            End If
+                        End If
+                    End If
 
                 ' ✅ ERROR: Edge has label but no condition (and is not Else)
                 If hasLabel AndAlso Not hasCondition Then
@@ -316,7 +373,7 @@ Public Class FlowCompiler
                         .NodeId = edge.Source, ' Source node
                         .RowId = Nothing,
                         .EdgeId = edge.Id,
-                        .Message = $"Edge '{edge.Label}' (from node {edge.Source} to {edge.Target}) has a label but no condition. Add a condition or remove the label.",
+                        .Message = $"Edge '{edge.Label}' has a label but no condition. Add a condition or remove the label.",
                         .Severity = ErrorSeverity.Error,
                         .Category = "EdgeLabelWithoutCondition"
                     })

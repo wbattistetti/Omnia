@@ -241,9 +241,23 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
 
           // ✅ AWAIT OBBLIGATORIO: non chiudere finché non è salvato
           await saveTaskOnEditorClose(key, finalTaskTreeWithSteps, task, currentProjectId);
+
+          // ✅ Emetti evento per notificare NodeRow dell'aggiornamento (indipendente dal tipo di task)
+          window.dispatchEvent(
+            new CustomEvent('instanceRepository:updated', {
+              detail: { instanceId: key }
+            })
+          );
         } else if (finalTaskTree) {
           // ✅ No TaskTree structure, but save other fields (e.g., Message text)
           await saveTaskToRepository(key, finalTaskTree, task, currentProjectId);
+
+          // ✅ Emetti evento anche per task senza TaskTree (es. SayMessage con solo text)
+          window.dispatchEvent(
+            new CustomEvent('instanceRepository:updated', {
+              detail: { instanceId: key }
+            })
+          );
         }
       }
 

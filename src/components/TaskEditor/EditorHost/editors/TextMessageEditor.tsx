@@ -137,6 +137,12 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
       // Broadcast per aggiornare la riga
       try {
         document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId, text } }));
+        // ✅ Emetti anche instanceRepository:updated per aggiornare l'icona (indipendente dal tipo di task)
+        window.dispatchEvent(
+          new CustomEvent('instanceRepository:updated', {
+            detail: { instanceId }
+          })
+        );
       } catch { }
     }
     onClose?.();

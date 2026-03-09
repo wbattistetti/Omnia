@@ -62,6 +62,9 @@ export type DockTabConditionEditor = DockTabBase & {
   script: string;
   variablesTree?: any[];
   label?: string;
+  isGenerating?: boolean; // ✅ NEW: Flag for AI generation loading state
+  edgeId?: string; // ✅ Edge ID (when opened from edge)
+  conditionId?: string; // ✅ Condition ID (top-level on edge, not in data)
 };
 
 // Task Editor tab - for generic task editors (BackendCall, etc.)
@@ -88,8 +91,13 @@ export type DockTabChat = DockTabBase & {
   flowTasks?: any[];
 };
 
+// Error Report Panel tab - for compilation errors display
+export type DockTabErrorReport = DockTabBase & {
+  type: 'errorReport';
+};
+
 // Union type for all tab types
-export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor | DockTabChat; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
+export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor | DockTabChat | DockTabErrorReport; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 
 export type SplitNode = {
   kind: 'split';

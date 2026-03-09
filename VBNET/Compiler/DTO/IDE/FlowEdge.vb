@@ -33,7 +33,19 @@ Public Class FlowEdge
     Public Property Label As String
 
     ''' <summary>
-    ''' Edge data (condition, isElse, etc.)
+    ''' Edge condition ID (top-level, not in data)
+    ''' </summary>
+    <JsonProperty("conditionId")>
+    Public Property ConditionId As String
+
+    ''' <summary>
+    ''' Edge isElse flag (top-level, not in data)
+    ''' </summary>
+    <JsonProperty("isElse")>
+    Public Property IsElse As Boolean?
+
+    ''' <summary>
+    ''' Edge data (non-persistent callbacks only)
     ''' </summary>
     <JsonProperty("data")>
     Public Property Data As EdgeData

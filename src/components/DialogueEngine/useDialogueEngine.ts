@@ -10,6 +10,7 @@ import { getTemplateId } from '../../utils/taskHelpers';
 import { DialogueTaskService } from '../../services/DialogueTaskService';
 import { taskTemplateService } from '../../services/TaskTemplateService';
 import { templateIdToTaskType, TaskType } from '../../types/taskTypes';
+import { useProjectData } from '../../context/ProjectDataContext';
 
 interface UseDialogueEngineOptions {
   nodes: Node<FlowNode>[];
@@ -31,6 +32,9 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
   const [currentTask, setCurrentTask] = useState<CompiledTask | null>(null);
   const engineRef = useRef<DialogueEngine | null>(null);
   const sessionIdRef = useRef<string | null>(null); // Store sessionId in a ref for real-time access
+
+  // ✅ NEW: Get projectData for conditions
+  const { data: projectData } = useProjectData();
 
   // 🎨 [HIGHLIGHT] Ref to track previous state for logging
   const prevStateRef = useRef<{ currentNodeId?: string | null; executedCount?: number }>({});
@@ -349,9 +353,9 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         ddtsCount: allDDTs.length
       });
 
-      // ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità per interpretare dialoghi
-      // ❌ POSTEGGIATO: Node.js (3100) e VB.NET diretto (5000) - non usati per ora
-      const baseUrl = 'http://localhost:3101';
+      // ✅ REMOVED RUBY: Frontend now calls VB.NET ApiServer directly (port 5000)
+      // This eliminates the unnecessary proxy hop and ensures conditions are passed correctly
+      const baseUrl = 'http://localhost:5000';
 
       // ❌ POSTEGGIATO: Logica switch backendType - non usata per ora
       // const backendType = (() => {
@@ -437,14 +441,152 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         }
       }
 
+      // ✅ NEW: Extract conditions from projectData (only referenced ones)
+      // ✅ Read conditionId from top-level (not from data)
+      const referencedConditionIds = new Set(
+        (options.edges || [])
+          .map((e: any) => e.conditionId)
+          .filter(Boolean)
+      );
+
+      console.log('[useDialogueEngine] 🔍 Extracting conditions', {
+        referencedConditionIds: Array.from(referencedConditionIds),
+        edgesCount: (options.edges || []).length,
+        edgesWithConditionId: (options.edges || []).filter((e: any) => e.conditionId).map((e: any) => ({
+          id: e.id,
+          label: e.label,
+          conditionId: e.conditionId
+        }))
+      });
+
+      // ✅ DEBUG: Log all project conditions before filtering
+      const allProjectConditions = (projectData as any)?.conditions
+        ? (projectData as any).conditions.flatMap((cat: any) => cat.items || [])
+        : [];
+
+      console.log('[useDialogueEngine] 🔍 DEBUG: All project conditions before filtering', {
+        totalProjectConditions: allProjectConditions.length,
+        allConditionIds: allProjectConditions.map((item: any) => ({
+          id: item.id,
+          _id: item._id,
+          both: item.id || item._id,
+          name: item.name || item.label,
+          hasUiCode: !!item.data?.uiCode,
+          hasScript: !!item.data?.script
+        })),
+        referencedConditionIds: Array.from(referencedConditionIds)
+      });
+
+      const conditions = (projectData as any)?.conditions
+        ? (projectData as any).conditions
+          .flatMap((cat: any) => cat.items || [])
+          .filter((item: any) => {
+            const itemId = item.id || item._id;
+            const isInSet = itemId && referencedConditionIds.has(itemId);
+            if (!isInSet && itemId) {
+              console.log('[useDialogueEngine] ⚠️ Condition not in referenced set', {
+                itemId,
+                itemName: item.name || item.label,
+                referencedConditionIds: Array.from(referencedConditionIds),
+                match: referencedConditionIds.has(itemId)
+              });
+            }
+            return isInSet;
+          })
+          .map((item: any) => ({
+            id: item.id || item._id,
+            name: item.name || item.label,
+            label: item.label || item.name,
+            data: {
+              script: item.data?.script || item.data?.execCode || '',
+              uiCode: item.data?.uiCode || '',
+              uiCodeFormat: item.data?.uiCodeFormat || 'dsl',
+              ast: item.data?.ast || ''
+            }
+          }))
+        : [];
+
+      console.log('[useDialogueEngine] ✅ Conditions extracted', {
+        conditionsCount: conditions.length,
+        conditionIds: conditions.map((c: any) => c.id),
+        conditionsWithUiCode: conditions.filter((c: any) => c.data?.uiCode).length,
+        matchedConditions: conditions.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          hasUiCode: !!c.data?.uiCode,
+          hasScript: !!c.data?.script
+        }))
+      });
+
+      // ✅ Filter out orphan edges (edges pointing to non-existent or hidden nodes)
+      const validNodeIds = new Set(nodesWithTaskId.map(n => n.id));
+      const filteredEdges = (options.edges || []).filter((e: any) => {
+        const targetExists = validNodeIds.has(e.target);
+        const sourceExists = validNodeIds.has(e.source);
+
+        if (!targetExists || !sourceExists) {
+          console.warn('[useDialogueEngine] ⚠️ Filtering out orphan edge', {
+            edgeId: e.id,
+            label: e.label,
+            source: e.source,
+            target: e.target,
+            sourceExists,
+            targetExists
+          });
+          return false;
+        }
+
+        // Also filter out edges connected to hidden/temporary nodes
+        const targetNode = nodesWithTaskId.find(n => n.id === e.target);
+        const sourceNode = nodesWithTaskId.find(n => n.id === e.source);
+        const isTargetHidden = targetNode?.data?.hidden === true || targetNode?.data?.isTemporary === true;
+        const isSourceHidden = sourceNode?.data?.hidden === true || sourceNode?.data?.isTemporary === true;
+
+        if (isTargetHidden || isSourceHidden) {
+          console.warn('[useDialogueEngine] ⚠️ Filtering out edge connected to hidden/temporary node', {
+            edgeId: e.id,
+            label: e.label,
+            isTargetHidden,
+            isSourceHidden
+          });
+          return false;
+        }
+
+        return true;
+      });
+
+      // ✅ DEBUG: Log edge filtering
+      if ((options.edges || []).length !== filteredEdges.length) {
+        console.log('[useDialogueEngine] 🔍 Edge filtering', {
+          originalEdgesCount: (options.edges || []).length,
+          filteredEdgesCount: filteredEdges.length,
+          removedEdgesCount: (options.edges || []).length - filteredEdges.length,
+          removedEdges: (options.edges || []).filter((e: any) => {
+            const targetExists = validNodeIds.has(e.target);
+            const sourceExists = validNodeIds.has(e.source);
+            const targetNode = nodesWithTaskId.find(n => n.id === e.target);
+            const sourceNode = nodesWithTaskId.find(n => n.id === e.source);
+            const isTargetHidden = targetNode?.data?.hidden === true || targetNode?.data?.isTemporary === true;
+            const isSourceHidden = sourceNode?.data?.hidden === true || sourceNode?.data?.isTemporary === true;
+            return !targetExists || !sourceExists || isTargetHidden || isSourceHidden;
+          }).map((e: any) => ({
+            id: e.id,
+            label: e.label,
+            source: e.source,
+            target: e.target
+          }))
+        });
+      }
+
       // ✅ DEBUG: Log tasks before serialization to verify type field
       const requestBody = {
         nodes: nodesWithTaskId,  // ✅ Use nodes with taskId field (backend VB.NET requires it)
-        edges: options.edges,
+        edges: filteredEdges,  // ✅ Use filtered edges (no orphans)
         tasks: allTasksWithTemplates,  // ✅ Include both instance tasks and referenced templates
         ddts: allDDTs,
         projectId: localStorage.getItem('currentProjectId') || undefined,
-        translations: translations // ✅ Pass translations table (already in memory) - runtime will do lookup at execution time
+        translations: translations, // ✅ Pass translations table (already in memory) - runtime will do lookup at execution time
+        conditions: conditions // ✅ NEW: Pass conditions for validation
       };
 
       // ✅ DEBUG: Verifica task mancante in requestBody (missingTaskId già dichiarato sopra)
@@ -529,12 +671,34 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           });
         });
 
+        // ✅ DEBUG: Log conditions in request body before serialization
+        console.log('[FRONTEND] Request body conditions (before JSON.stringify):', {
+          conditionsCount: requestBody.conditions?.length || 0,
+          conditionIds: requestBody.conditions?.map((c: any) => c.id) || [],
+          conditionsPreview: requestBody.conditions?.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            hasUiCode: !!c.data?.uiCode,
+            hasScript: !!c.data?.script
+          })) || []
+        });
+
         // Log serialized JSON preview to verify type is in JSON
-        const jsonPreview = JSON.stringify(requestBody).substring(0, 2000);
+        const jsonString = JSON.stringify(requestBody);
+        const jsonPreview = jsonString.substring(0, 2000);
         console.log('[FRONTEND] Request body JSON preview (first 2000 chars):', jsonPreview);
 
+        // ✅ DEBUG: Verify conditions are in JSON string
+        const conditionsInJson = jsonString.includes('"conditions"');
+        const conditionsArrayInJson = jsonString.includes('"conditions":[');
+        console.log('[FRONTEND] Conditions in JSON string:', {
+          hasConditionsKey: conditionsInJson,
+          hasConditionsArray: conditionsArrayInJson,
+          jsonLength: jsonString.length,
+          conditionsJsonPreview: conditionsInJson ? jsonString.substring(jsonString.indexOf('"conditions"'), Math.min(jsonString.indexOf('"conditions"') + 500, jsonString.length)) : 'NOT FOUND'
+        });
+
         // ✅ DEBUG: Verifica se il template problematico è presente nel JSON serializzato
-        const jsonString = JSON.stringify(requestBody);
         const templateInJson = jsonString.includes(`"id":"${problematicTemplateId}"`);
         if (templateInJson) {
           // ✅ DEBUG: Cerca il template nell'array tasks del requestBody (non nel JSON string)
@@ -586,13 +750,28 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         console.log(`[FRONTEND] Does JSON contain "type" field? ${hasTypeInJson}`);
       }
 
+      // ✅ DEBUG: Verify conditions are in the JSON that will be sent
+      const requestBodyJson = JSON.stringify(requestBody);
+      const conditionsInRequestJson = requestBodyJson.includes('"conditions"');
+      console.log('[FRONTEND] Conditions in request JSON (before fetch):', {
+        hasConditionsKey: conditionsInRequestJson,
+        requestJsonLength: requestBodyJson.length,
+        conditionsJsonPreview: conditionsInRequestJson
+          ? requestBodyJson.substring(
+            requestBodyJson.indexOf('"conditions"'),
+            Math.min(requestBodyJson.indexOf('"conditions"') + 500, requestBodyJson.length)
+          )
+          : 'NOT FOUND',
+        requestBodyKeys: Object.keys(requestBody)
+      });
+
       // Call backend API (NO FALLBACK - backend only)
       const compileResponse = await fetch(`${baseUrl}/api/runtime/compile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(requestBody)
+        body: requestBodyJson
       });
 
       console.log(`[FRONTEND] Response status: ${compileResponse.status} ${compileResponse.statusText}`);
@@ -676,6 +855,14 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         );
 
         if (blockingErrors.length > 0) {
+          // ✅ Open Error Report Panel automatically
+          try {
+            const { openErrorReportPanelService } = await import('../../services/ErrorReportPanelService');
+            openErrorReportPanelService();
+          } catch (e) {
+            console.error('[useDialogueEngine] ❌ Failed to open Error Report Panel:', e);
+          }
+
           // ✅ Show user-friendly message in chat
           const { formatCompilationErrorMessage } = await import('../../utils/errorMessageFormatter');
           const errorMessage = formatCompilationErrorMessage(blockingErrors);
@@ -683,7 +870,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           if (options.onMessage) {
             options.onMessage({
               id: `error-${Date.now()}`,
-              text: errorMessage + '\n\n💡 Clicca sulla sidebar errori per vedere i dettagli e selezionare i nodi con problemi.',
+              text: errorMessage + '\n\n💡 Apri il pannello Error Report per vedere i dettagli e selezionare i nodi con problemi.',
               stepType: 'error',
               taskId: 'SYSTEM'
             });

@@ -331,6 +331,105 @@ def suggest_vars(body: dict = Body(...)):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=200)
 
+# --- DSL Condition generation (NEW - simplified DSL language) ---
+@app.post("/api/conditions/generate-dsl")
+def generate_dsl_condition(body: dict = Body(...)):
+    nl = (body or {}).get("nl") or ""
+    variables = (body or {}).get("variables") or []
+    try:
+        print("[DSL][req]", {"nl_preview": (nl or "")[:160], "vars": variables[:20]})
+    except Exception:
+        pass
+    if not isinstance(nl, str) or not nl.strip():
+        return {"error": "nl_required"}
+    if not isinstance(variables, list):
+        variables = []
+
+    # System prompt for DSL generation
+    SYSTEM = (
+        "You generate DSL (Domain Specific Language) conditions from natural language.\n"
+        "DSL Syntax:\n"
+        "- Variables: [VariableName] or [Object.Field]\n"
+        "- Operators: =, <>, >, <, >=, <=\n"
+        "- Logical: AND, OR, NOT\n"
+        "- Functions: LCase([Var]), UCase([Var]), Trim([Var]), Len([Var]), Contains([Var], \"text\"), StartsWith([Var], \"text\"), EndsWith([Var], \"text\"), Int([Var]), Abs([Var]), Round([Var])\n"
+        "- Literals: strings in quotes, numbers, TRUE/FALSE\n"
+        "- Parentheses: ( ) for grouping\n"
+        "\n"
+        "Examples:\n"
+        "- Label: \"User is adult\" → DSL: [Età] >= 18\n"
+        "- Label: \"City is Milan\" → DSL: LCase([Città]) = \"milano\"\n"
+        "- Label: \"Has ticket\" → DSL: [Ha ticket] = \"si\"\n"
+        "- Label: \"Age between 18 and 65\" → DSL: [Età] >= 18 AND [Età] <= 65\n"
+        "- Label: \"Month is February\" → DSL: Int([Mese]) = 2\n"
+        "\n"
+        "Rules:\n"
+        "- Use only variables from the provided list (use exact variable names)\n"
+        "- Return ONLY the DSL code, no explanation, no JSON wrapper\n"
+        "- Keep it simple and readable\n"
+        "- For yes/no conditions, compare with \"si\" or \"yes\"\n"
+        "- For string comparisons, use LCase() for case-insensitive matching\n"
+        "- For numeric comparisons, use Int() if needed\n"
+    )
+
+    user = {
+        "role": "user",
+        "content": (
+            "Natural language description:\n" + nl + "\n\nAvailable variables:\n" + "\n".join([f"- {v}" for v in variables]) + "\n\nGenerate DSL condition:"
+        )
+    }
+
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "groq").lower()
+    try:
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai_json as _call_json
+            except Exception:
+                from call_openai import call_openai_json as _call_json
+        else:
+            _call_json = call_groq_json
+
+        # Call AI - expect plain DSL text, not JSON
+        ai_response = _call_json([
+            {"role": "system", "content": SYSTEM},
+            user,
+        ])
+
+        text = (ai_response or "").strip()
+        try:
+            print("[DSL][ai][raw]", text[:400])
+        except Exception:
+            pass
+
+        # Try to extract DSL from JSON if AI returned JSON
+        try:
+            obj = _safe_json_loads(text)
+            if isinstance(obj, dict):
+                dsl = obj.get("dsl") or obj.get("script") or ""
+                if dsl:
+                    return {"dsl": dsl}
+        except Exception:
+            pass
+
+        # If not JSON, treat as plain DSL
+        # Clean up common AI prefixes/suffixes
+        dsl = text.strip()
+        # Remove markdown code blocks if present
+        if dsl.startswith("```"):
+            lines = dsl.split("\n")
+            dsl = "\n".join([l for l in lines if not l.strip().startswith("```")])
+        # Remove common prefixes
+        prefixes = ["DSL:", "Condition:", "The DSL condition is:", "Here is the DSL:"]
+        for prefix in prefixes:
+            if dsl.lower().startswith(prefix.lower()):
+                dsl = dsl[len(prefix):].strip()
+
+        return JSONResponse({"dsl": dsl}, status_code=200)
+
+    except Exception as e:
+        print("[DSL][error]", str(e))
+        return JSONResponse({"error": str(e), "dsl": ""}, status_code=200)
+
 # --- Condition generation (backend-centralized Groq) ---
 @app.post("/api/conditions/generate")
 def generate_condition(body: dict = Body(...)):

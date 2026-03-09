@@ -120,17 +120,37 @@ export function transformEdgeToSimplified(edge: any): SimplifiedEdge {
     markerEnd: edge.markerEnd,
   };
 
-  // Copy data properties if needed
-  if (edge.data) {
-    Object.keys(edge.data).forEach(key => {
-      (simplified as any)[key] = edge.data[key];
+  // ✅ Copy persistent fields from top-level (NOT from data)
+  const persistentFields = [
+    'conditionId',
+    'isElse',
+    'linkStyle',
+    'controlPoints',
+    'labelPositionRelative',
+    'labelPositionSvg'
+  ];
+
+  persistentFields.forEach(field => {
+    if (edge[field] !== undefined) {
+      (simplified as any)[field] = edge[field];
+    }
+  });
+
+  // ✅ Log if conditionId is present
+  if (edge.conditionId) {
+    console.log('[transformEdgeToSimplified] ✅ Preserving conditionId', {
+      edgeId: edge.id,
+      conditionId: edge.conditionId,
+      simplifiedHasConditionId: !!(simplified as any).conditionId
     });
   }
 
-  // Copy other properties
+  // ✅ Copy other top-level properties (excluding React Flow internals)
   Object.keys(edge).forEach(key => {
-    if (!['id', 'source', 'target', 'sourceHandle', 'targetHandle', 'label', 'type', 'style', 'markerEnd', 'data'].includes(key)) {
-      (simplified as any)[key] = edge[key];
+    if (!['id', 'source', 'target', 'sourceHandle', 'targetHandle', 'label', 'type', 'style', 'markerEnd', 'data', 'selected', 'animated', 'hidden'].includes(key)) {
+      if (!persistentFields.includes(key)) {
+        (simplified as any)[key] = edge[key];
+      }
     }
   });
 
@@ -153,17 +173,41 @@ export function transformEdgeToReactFlow(simplified: SimplifiedEdge): any {
     markerEnd: simplified.markerEnd,
   };
 
-  // Extract data properties
-  const dataProps: any = {};
-  Object.keys(simplified).forEach(key => {
-    if (!['id', 'source', 'target', 'sourceHandle', 'targetHandle', 'label', 'type', 'style', 'markerEnd'].includes(key)) {
-      dataProps[key] = (simplified as any)[key];
+  // ✅ Copy persistent fields to top-level (NOT to data)
+  const persistentFields = [
+    'conditionId',
+    'isElse',
+    'linkStyle',
+    'controlPoints',
+    'labelPositionRelative',
+    'labelPositionSvg'
+  ];
+
+  persistentFields.forEach(field => {
+    if ((simplified as any)[field] !== undefined) {
+      reactFlowEdge[field] = (simplified as any)[field];
     }
   });
 
-  if (Object.keys(dataProps).length > 0) {
-    reactFlowEdge.data = dataProps;
+  // ✅ Log if conditionId is present
+  if (reactFlowEdge.conditionId) {
+    console.log('[transformEdgeToReactFlow] ✅ Restoring conditionId', {
+      edgeId: reactFlowEdge.id,
+      conditionId: reactFlowEdge.conditionId
+    });
   }
+
+  // ✅ Copy other top-level properties
+  Object.keys(simplified).forEach(key => {
+    if (!['id', 'source', 'target', 'sourceHandle', 'targetHandle', 'label', 'type', 'style', 'markerEnd'].includes(key)) {
+      if (!persistentFields.includes(key)) {
+        reactFlowEdge[key] = (simplified as any)[key];
+      }
+    }
+  });
+
+  // ✅ data is ONLY for non-persistent callbacks (if any)
+  // Do NOT copy persistent fields to data
 
   return reactFlowEdge;
 }

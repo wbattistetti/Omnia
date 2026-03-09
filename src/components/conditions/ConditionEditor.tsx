@@ -1,16 +1,16 @@
 import React from 'react';
-import { getDDTIcon as getDDTIconFromRE } from '../TaskEditor/ResponseEditor/ddtUtils';
+import { getDDTIcon as getDDTIconFromRE } from '@responseEditor/ddtUtils';
 // ✅ REFACTOR: AI functions now in ConditionAIService
 import ConditionTester, { CaseRow } from './ConditionTester';
-import CodeEditor, { CodeEditorRef } from '../CodeEditor/CodeEditor';
+import CodeEditor, { CodeEditorRef } from '@components/CodeEditor/CodeEditor';
 import * as monacoNS from 'monaco-editor';
-import { setMonacoMarkers, clearMonacoMarkers } from '../../utils/monacoMarkers';
+import { setMonacoMarkers, clearMonacoMarkers } from '@utils/monacoMarkers';
 import { X, Pencil, Check, Code2, FlaskConical, ListChecks, Loader2 } from 'lucide-react';
-import { SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_ICONS } from '../Sidebar/sidebarTheme';
-import { setupMonacoEnvironment } from '../../utils/monacoWorkerSetup';
+import { SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_ICONS } from '@components/Sidebar/sidebarTheme';
+import { setupMonacoEnvironment } from '@utils/monacoWorkerSetup';
 import VariablesPanel from './VariablesPanel';
-import { useAIProvider } from '../../context/AIProviderContext';
-import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
+import { useAIProvider } from '@context/AIProviderContext';
+import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
 // Note: ScriptManagerService handles ExecCode/UICode conversion internally
 // SmartTooltip is used only in the tester's toolbar (right panel)
 
@@ -32,6 +32,10 @@ interface Props {
   variablesTree?: VarsTreeAct[];
   label?: string;
   onRename?: (next: string) => void;
+  isGenerating?: boolean; // ✅ Flag for AI generation loading state
+  onSave?: (script: string) => void; // ✅ Callback when script is saved
+  edgeId?: string; // ✅ Edge ID for error removal
+  conditionId?: string; // ✅ Condition ID (if edge is linked)
 }
 
 // ✅ REFACTOR: Use domain function
@@ -47,18 +51,10 @@ import { DSLEditor } from './dsl/editor/DSLEditor';
 
 // No local template; EditorPanel injects the scaffold
 
-export default function ConditionEditor({ open, onClose, variables, initialScript, dockWithinParent, variablesTree, label, onRename }: Props) {
+export default function ConditionEditor({ open, onClose, variables, initialScript, dockWithinParent, variablesTree, label, onRename, isGenerating = false, onSave, edgeId, conditionId }: Props) {
   const [nl, setNl] = React.useState('');
-  const DEFAULT_CODE = [
-    '// Describe below, in detail, when the condition should be TRUE.',
-    '// You can write pseudo-code or a plain natural-language description.',
-    '// Right-click to view and insert the available variables the code must use.',
-    '//',
-    '// Example of pseudo-code for the condition "USER MUST BE ADULT":',
-    '// PSEUDO-CODE:',
-    '// Now - vars["Agent asks for user\'s name.DateOfBirth"] > 18 years',
-    ''
-  ].join('\n');
+  // ✅ RIMOSSO: DEFAULT_CODE - ora usiamo stringa vuota
+  const DEFAULT_CODE = ''; // Stringa vuota invece del testo di esempio
 
   // ✅ REFACTOR: Use centralized state hook
   const state = useConditionEditorState({
@@ -111,11 +107,11 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     return new ScriptManagerService({ projectData, pdUpdate });
   }, [projectData, pdUpdate]);
 
-  const updateProjectDataScript = React.useCallback((dslToSave: string) => {
-    const result = scriptManager.saveScript(dslToSave, label || '');
+  const updateProjectDataScript = React.useCallback(async (dslToSave: string) => {
+    const result = await scriptManager.saveScript(dslToSave, label || '');
     if (result.success) {
       // Update compiled JS preview
-      const compileResult = scriptManager.compileDSL(dslToSave);
+      const compileResult = await scriptManager.compileDSL(dslToSave);
       if (compileResult.success && compileResult.jsCode) {
         setCompiledJs(compileResult.jsCode);
       }
@@ -258,23 +254,51 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
   // ✅ Update script when initialScript changes
   // initialScript is ExecCode (with ctx["guid"]) - convert to UICode (with [label]) for display
+  // ✅ IMPORTANT: Only update if script is empty or if initialScript actually changed
+  // This prevents resetting user input when they're typing
+  const lastInitialScriptRef = React.useRef<string>('');
   React.useEffect(() => {
     console.log('[ConditionEditor][UPDATE] 🔄 initialScript changed', {
       hasInitialScript: !!(initialScript && initialScript.trim()),
       initialScriptLength: initialScript?.length || 0,
-      initialScriptPreview: initialScript?.substring(0, 100) || ''
+      initialScriptPreview: initialScript?.substring(0, 100) || '',
+      isGenerating,
+      currentScript: script
     });
+
+    // ✅ Se isGenerating è true, non aggiornare lo script (mostra solo spinner)
+    if (isGenerating) {
+      console.log('[ConditionEditor][UPDATE] ⏳ Still generating, skipping script update');
+      return;
+    }
+
+    // ✅ NEW: Don't reset if user is typing (script is not empty and different from what we'd load)
+    const currentScript = script || '';
+    const hasUserInput = currentScript.trim().length > 0;
+
+    // Only update if initialScript actually changed
+    const initialScriptChanged = initialScript !== lastInitialScriptRef.current;
+    if (!initialScriptChanged && hasUserInput) {
+      console.log('[ConditionEditor][UPDATE] ⏭️ Skipping update - user is typing and initialScript unchanged');
+      return;
+    }
+    lastInitialScriptRef.current = initialScript || '';
 
     if (initialScript && initialScript.trim()) {
       // Load DSL from ScriptManagerService (source of truth)
       console.log('[ConditionEditor][UPDATE] 🔄 Loading DSL from ScriptManagerService');
       const dsl = scriptManager.loadScript(label || '');
       if (dsl) {
-        setScript(dsl);
-        // Compile DSL → JS for preview
-        const compileResult = scriptManager.compileDSL(dsl);
-        if (compileResult.success && compileResult.jsCode) {
-          setCompiledJs(compileResult.jsCode);
+        // Only update if different from current script
+        if (dsl !== currentScript) {
+          setScript(dsl);
+          // Compile DSL → JS for preview
+          (async () => {
+            const compileResult = await scriptManager.compileDSL(dsl);
+            if (compileResult.success && compileResult.jsCode) {
+              setCompiledJs(compileResult.jsCode);
+            }
+          })();
         }
         console.log('[ConditionEditor][UPDATE] ✅ DSL loaded', {
           dslLength: dsl.length,
@@ -282,15 +306,47 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         });
       } else {
         // No DSL found - use initialScript as DSL (new condition)
-        console.log('[ConditionEditor][UPDATE] ℹ️ No DSL found, using initialScript as DSL');
-        setScript(initialScript);
+        // Only if current script is empty
+        if (!hasUserInput) {
+          console.log('[ConditionEditor][UPDATE] ℹ️ No DSL found, using initialScript as DSL');
+          setScript(initialScript);
+        }
       }
     } else {
-      console.log('[ConditionEditor][UPDATE] ℹ️ No initial script, using DEFAULT_CODE');
-      setScript(DEFAULT_CODE);
-      setCompiledJs('');
+      // ✅ Only reset if script is empty (don't reset user input)
+      if (!hasUserInput) {
+        console.log('[ConditionEditor][UPDATE] ℹ️ No initial script, using empty string');
+        setScript(''); // ✅ Stringa vuota invece di DEFAULT_CODE
+        setCompiledJs('');
+      }
     }
-  }, [initialScript, scriptManager]);
+  }, [initialScript, scriptManager, isGenerating, label, script]); // ✅ Added script to dependencies to check user input
+
+  // ✅ NEW: Force refresh when isGenerating becomes false (to ensure script is updated)
+  React.useEffect(() => {
+    if (!isGenerating && initialScript && initialScript.trim()) {
+      // When generation completes, ensure script is updated
+      console.log('[ConditionEditor][UPDATE] 🔄 Generation completed, refreshing script', {
+        initialScriptLength: initialScript.length,
+        initialScriptPreview: initialScript.substring(0, 100)
+      });
+      // Load DSL from ScriptManagerService (source of truth)
+      const dsl = scriptManager.loadScript(label || '');
+      if (dsl) {
+        setScript(dsl);
+        // Compile DSL → JS for preview
+        (async () => {
+          const compileResult = await scriptManager.compileDSL(dsl);
+          if (compileResult.success && compileResult.jsCode) {
+            setCompiledJs(compileResult.jsCode);
+          }
+        })();
+      } else if (initialScript) {
+        // Use initialScript as DSL if no DSL found in ScriptManagerService
+        setScript(initialScript);
+      }
+    }
+  }, [isGenerating, initialScript, scriptManager, label]); // ✅ React when isGenerating becomes false
 
   // legacy filtered list removed (hierarchical tree used instead)
 
@@ -388,6 +444,39 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   // No animated text; only a spinner and color change while busy
 
   if (!open) return null;
+
+  // ✅ NEW: Show loading overlay when generating
+  if (isGenerating) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        gap: 16,
+        color: '#8b5cf6',
+        backgroundColor: '#1e1e1e',
+      }}>
+        <Loader2
+          size={32}
+          style={{
+            color: '#8b5cf6',
+            animation: 'spin 1s linear infinite',
+          }}
+        />
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+        <div style={{ fontSize: 14, fontWeight: 500, color: '#8b5cf6' }}>
+          Sto creando la condizione...
+        </div>
+      </div>
+    );
+  }
 
   const containerStyle: React.CSSProperties = dockWithinParent
     ? { position: 'absolute', left: 0, right: 0, bottom: 0, height: heightPx, fontSize: fontPx }
@@ -553,7 +642,111 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         titleInputRef={titleInputRef}
         label={label}
         onRename={onRename}
-        onClose={onClose}
+        onClose={async () => {
+          // ✅ Save script before closing (if not empty)
+          // Save even if compilation fails - DSL is source of truth
+          if (script && script.trim()) {
+            console.log('[ConditionEditor] 💾 Attempting to save script on close', {
+              label,
+              conditionId,
+              edgeId,
+              scriptLength: script.length,
+              scriptPreview: script.substring(0, 100)
+            });
+
+            // Try to compile for validation, but save even if compilation fails
+            const compileResult = await scriptManager.compileDSL(script);
+            const hasCompilationErrors = !compileResult.success || compileResult.errors.length > 0;
+
+            if (hasCompilationErrors) {
+              console.warn('[ConditionEditor] ⚠️ Compilation errors, but saving DSL anyway', {
+                errors: compileResult.errors
+              });
+            }
+
+            // ✅ Save script by conditionId if exists, otherwise try to save by label
+            // If condition doesn't exist (manual creation without AI), create it
+            let saveResult;
+            if (conditionId) {
+              // Edge already has conditionId - update existing condition
+              saveResult = await scriptManager.saveScript(script, label || '', conditionId);
+            } else {
+              // Edge doesn't have conditionId - try to save by label first
+              saveResult = await scriptManager.saveScript(script, label || '');
+
+              // If save failed because condition doesn't exist, create it
+              if (!saveResult.success && saveResult.errors?.some((e: any) =>
+                e.message?.includes('not found') || e.message?.includes('Use createCondition')
+              )) {
+                console.log('[ConditionEditor] ℹ️ Condition not found, creating new condition', {
+                  label
+                });
+                const createResult = await scriptManager.createCondition(script, label || '');
+                if (createResult.success) {
+                  saveResult = createResult;
+                }
+              }
+            }
+
+            if (saveResult.success) {
+              const savedConditionId = saveResult.conditionId || conditionId;
+              console.log('[ConditionEditor] ✅ Script saved on close', {
+                label,
+                conditionId: savedConditionId,
+                dslLength: script.length,
+                hasEdgeId: !!edgeId,
+                hasCompilationErrors,
+                wasCreated: !conditionId && !!savedConditionId
+              });
+
+              // ✅ Notify save callback
+              onSave?.(script);
+
+              // ✅ Update edge with conditionId SYNCHRONOUSLY if available
+              // Only update if edge doesn't already have conditionId (new condition created)
+              if (edgeId && savedConditionId && !conditionId) {
+                console.log('[ConditionEditor] 🚀 Updating edge synchronously with conditionId', {
+                  edgeId,
+                  conditionId: savedConditionId
+                });
+                const { updateEdgeWithConditionId } = await import('@services/EdgeConditionUpdater');
+                const updated = updateEdgeWithConditionId(edgeId, savedConditionId);
+                if (!updated) {
+                  console.warn('[ConditionEditor] ⚠️ Failed to update edge synchronously', {
+                    edgeId,
+                    conditionId: savedConditionId
+                  });
+                }
+              } else if (edgeId && !savedConditionId) {
+                console.warn('[ConditionEditor] ⚠️ Cannot update edge - missing conditionId', {
+                  edgeId,
+                  hasConditionId: !!saveResult.conditionId
+                });
+              }
+
+              // ✅ Remove errors for this edge if condition is valid (no compilation errors)
+              if (edgeId && !hasCompilationErrors) {
+                document.dispatchEvent(new CustomEvent('conditionEditor:conditionValidated', {
+                  detail: { edgeId, label },
+                  bubbles: true
+                }));
+              }
+            } else {
+              console.error('[ConditionEditor] ❌ Failed to save script', {
+                label,
+                conditionId,
+                errors: saveResult.errors
+              });
+            }
+          } else {
+            console.log('[ConditionEditor] ⏭️ Skipping save - script is empty', {
+              label,
+              conditionId,
+              scriptLength: script?.length || 0
+            });
+          }
+          onClose();
+        }}
       />
       {/* hidden measurer for title autosize */}
       <span ref={titleMeasureRef} style={{ position: 'absolute', visibility: 'hidden', whiteSpace: 'pre', fontWeight: 700, fontFamily: 'inherit', fontSize: '14px', padding: '4px 6px', border: '1px solid transparent' }} />
@@ -779,11 +972,11 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
             {editorMode === 'dsl' ? (
               <DSLEditor
                 value={script}
-                onChange={(dsl) => {
+                onChange={async (dsl) => {
                   setScript(dsl);
                   setAiQuestion('');
                   // Compile DSL → JS for preview
-                  const compileResult = scriptManager.compileDSL(dsl);
+                  const compileResult = await scriptManager.compileDSL(dsl);
                   if (compileResult.success && compileResult.jsCode) {
                     setCompiledJs(compileResult.jsCode);
                   }

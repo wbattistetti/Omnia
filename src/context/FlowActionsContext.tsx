@@ -122,10 +122,35 @@ export const FlowActionsProvider: React.FC<FlowActionsProviderProps> = ({
 
     updateEdge: (edgeId: string, updates: Partial<EdgeData>) => {
       if (setEdgesRef.current) {
+        // ✅ Separate persistent fields from data-only fields
+        const persistentFields = [
+          'conditionId',
+          'isElse',
+          'linkStyle',
+          'controlPoints',
+          'labelPositionRelative',
+          'labelPositionSvg'
+        ];
+
+        const persistentUpdates: any = {};
+        const dataOnlyUpdates: any = {};
+
+        Object.keys(updates).forEach(key => {
+          if (persistentFields.includes(key)) {
+            persistentUpdates[key] = (updates as any)[key];
+          } else {
+            dataOnlyUpdates[key] = (updates as any)[key];
+          }
+        });
+
         setEdgesRef.current((eds) =>
           eds.map((edge) =>
             edge.id === edgeId
-              ? { ...edge, data: { ...(edge.data || {}), ...updates } }
+              ? {
+                  ...edge,
+                  ...persistentUpdates,  // ✅ Top-level
+                  data: { ...(edge.data || {}), ...dataOnlyUpdates }  // ✅ Only non-persistent
+                }
               : edge
           )
         );

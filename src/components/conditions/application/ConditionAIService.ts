@@ -61,6 +61,82 @@ export interface GenerateFromLabelParams {
  */
 export class ConditionAIService {
   /**
+   * Generates DSL condition from label (NEW - replaces generateFromLabel for new conditions)
+   * Called from ConditionEditorEventHandler when opening condition editor with needsGeneration=true
+   *
+   * Pipeline:
+   * 1. If semantic match found: generate simple DSL predicate
+   * 2. If no match: use intelligent AI generation with full context
+   *
+   * @param params - Label, variables, and optional semantic match
+   * @returns Generated DSL (empty string if generation fails)
+   */
+  async generateDSLFromLabel(params: GenerateFromLabelParams): Promise<string> {
+    const { label, variables, semanticMatch } = params;
+
+    if (!label || !label.trim()) {
+      return ''; // Empty DSL
+    }
+
+    // If we have a semantic match, generate a simple DSL predicate
+    if (semanticMatch) {
+      return this.generateSimpleDSLPredicate(semanticMatch, label);
+    }
+
+    // No semantic match - use intelligent AI generation
+    try {
+      const dsl = await this.generateDSLWithAI(label, variables);
+      if (dsl && dsl.trim()) {
+        return dsl;
+      }
+    } catch (e) {
+      console.warn('[ConditionAIService] AI DSL generation failed', e);
+    }
+
+    // Final fallback - return empty DSL
+    return '';
+  }
+
+  /**
+   * Generates a simple DSL predicate when semantic match is found
+   */
+  private generateSimpleDSLPredicate(variable: string, label: string): string {
+    // Simple DSL: [Variable] = "value" or [Variable] = "si" for yes/no
+    const normalizedLabel = label.toLowerCase().trim();
+    if (normalizedLabel === 'si' || normalizedLabel === 'yes' || normalizedLabel === 'true') {
+      return `[${variable}] = "si"`;
+    }
+    // For other cases, use the label as the comparison value
+    return `[${variable}] = "${label}"`;
+  }
+
+  /**
+   * Generates DSL using AI with full context
+   */
+  private async generateDSLWithAI(label: string, variables: string[]): Promise<string> {
+    try {
+      const response = await fetch('/api/conditions/generate-dsl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nl: label,
+          variables: variables,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to generate DSL: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result.dsl || '';
+    } catch (e) {
+      console.error('[ConditionAIService] DSL generation API call failed', e);
+      throw e;
+    }
+  }
+
+  /**
    * Generates a condition script from a label with complete variable context.
    * Called from ConditionEditorEventHandler where all variables are available.
    *
@@ -70,6 +146,7 @@ export class ConditionAIService {
    *
    * @param params - Label, variables, and optional semantic match
    * @returns Generated script (never empty)
+   * @deprecated Use generateDSLFromLabel for new conditions
    */
   async generateFromLabel(params: GenerateFromLabelParams): Promise<string> {
     const { label, variables, semanticMatch } = params;

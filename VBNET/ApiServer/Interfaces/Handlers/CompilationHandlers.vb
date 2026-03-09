@@ -5,6 +5,7 @@ Imports ApiServer.Models
 Imports ApiServer.Services
 Imports Compiler
 Imports Microsoft.AspNetCore.Http
+Imports Microsoft.AspNetCore.Http.Features
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Serialization
 Imports TaskEngine
@@ -62,6 +63,16 @@ Namespace ApiServer.Handlers
         ''' </summary>
         Public Async Function HandleCompileFlow(context As HttpContext) As System.Threading.Tasks.Task
             Try
+                ' ✅ FIX: Increase request body size limit for this endpoint to handle large flows with conditions
+                Try
+                    Dim maxRequestBodySizeFeature = context.Features.Get(Of Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature)()
+                    If maxRequestBodySizeFeature IsNot Nothing Then
+                        maxRequestBodySizeFeature.MaxRequestBodySize = 100 * 1024 * 1024 ' 100MB
+                    End If
+                Catch
+                    ' Ignore if feature is not available
+                End Try
+
                 ' Enable buffering to allow reading the body multiple times if needed
                 Try
                     context.Request.EnableBuffering()
@@ -97,6 +108,50 @@ Namespace ApiServer.Handlers
                 End If
 
                 Dim request As CompileFlowRequest = Nothing
+                ' ✅ DEBUG: Check if conditions are in JSON before deserialization
+                Dim hasConditionsInBody = body.Contains("""" & "conditions" & """")
+                Console.WriteLine($"🔍 [HandleCompileFlow] Checking body for 'conditions' key: {hasConditionsInBody}")
+                Console.WriteLine($"   Body length: {body.Length}")
+
+                ' ✅ DEBUG: Try multiple search patterns
+                Dim hasConditionsPattern1 = body.Contains("""" & "conditions" & """")
+                Dim hasConditionsPattern2 = body.Contains("conditions")
+                Dim hasConditionsPattern3 = body.IndexOf("""" & "conditions" & """") >= 0
+                Console.WriteLine($"   Search results: Pattern1={hasConditionsPattern1}, Pattern2={hasConditionsPattern2}, Pattern3={hasConditionsPattern3}")
+
+                If hasConditionsInBody OrElse hasConditionsPattern2 Then
+                    Console.WriteLine($"🔍 [HandleCompileFlow] 'conditions' key found in JSON body (before deserialization)")
+                    Dim conditionsIndex = If(body.IndexOf("""" & "conditions" & """") >= 0, body.IndexOf("""" & "conditions" & """"), body.IndexOf("conditions"))
+                    Dim conditionsPreview = If(conditionsIndex >= 0 AndAlso body.Length > conditionsIndex + 50, body.Substring(conditionsIndex, Math.Min(500, body.Length - conditionsIndex)), "NOT FOUND")
+                    Console.WriteLine($"   Conditions JSON preview: {conditionsPreview}")
+
+                    ' ✅ DEBUG: Try to parse conditions directly from JSON
+                    Try
+                        Dim requestObj = Newtonsoft.Json.Linq.JObject.Parse(body)
+                        Dim conditionsToken = requestObj("conditions")
+                        If conditionsToken IsNot Nothing Then
+                            Console.WriteLine($"   ✅ Conditions token found in JObject: Type={conditionsToken.GetType().Name}, Count={If(conditionsToken.Type = Newtonsoft.Json.Linq.JTokenType.Array, DirectCast(conditionsToken, Newtonsoft.Json.Linq.JArray).Count, 0)}")
+                        Else
+                            Console.WriteLine($"   ⚠️ Conditions token NOT found in JObject")
+                            ' ✅ DEBUG: List all keys in JObject
+                            Console.WriteLine($"   JObject keys: {String.Join(", ", requestObj.Properties().Select(Function(p) p.Name))}")
+                        End If
+                    Catch parseEx As Exception
+                        Console.WriteLine($"   ❌ Error parsing body as JObject: {parseEx.Message}")
+                    End Try
+                Else
+                    Console.WriteLine($"⚠️ [HandleCompileFlow] 'conditions' key NOT found in JSON body (before deserialization)")
+                    ' ✅ DEBUG: Check if body contains other keys
+                    Dim hasNodes = body.Contains("""" & "nodes" & """")
+                    Dim hasEdges = body.Contains("""" & "edges" & """")
+                    Dim hasTasks = body.Contains("""" & "tasks" & """")
+                    Console.WriteLine($"   Body contains keys: nodes={hasNodes}, edges={hasEdges}, tasks={hasTasks}")
+
+                    ' ✅ DEBUG: Show first and last 500 chars of body
+                    Console.WriteLine($"   Body first 500 chars: {If(body.Length > 500, body.Substring(0, 500), body)}")
+                    Console.WriteLine($"   Body last 500 chars: {If(body.Length > 500, body.Substring(body.Length - 500), body)}")
+                End If
+
                 Try
                     request = JsonConvert.DeserializeObject(Of CompileFlowRequest)(body, New JsonSerializerSettings() With {
                         .Error = Sub(sender, args)
@@ -275,12 +330,37 @@ Namespace ApiServer.Handlers
                     If(request.Tasks, New List(Of Compiler.TaskDefinition)())  ' allTemplates = request.Tasks (contiene sia istanze che template)
                 )
 
+                ' ✅ DEBUG: Log conditions deserialization
+                Console.WriteLine($"🔍 [HandleCompileFlow] Conditions deserialized: {If(request.Conditions IsNot Nothing, request.Conditions.Count, 0)}")
+                If request.Conditions IsNot Nothing AndAlso request.Conditions.Count > 0 Then
+                    For Each cond In request.Conditions
+                        Console.WriteLine($"   Condition[{cond.Id}]: Name={cond.Name}, HasScript={Not String.IsNullOrWhiteSpace(If(cond.Data?.Script, ""))}, HasUiCode={Not String.IsNullOrWhiteSpace(If(cond.Data?.UiCode, ""))}")
+                    Next
+                Else
+                    ' ✅ DEBUG: Check if conditions key exists in raw JSON (body already read as string)
+                    If body.Contains("""" & "conditions" & """") Then
+                        Console.WriteLine($"⚠️ [HandleCompileFlow] 'conditions' key found in JSON body but deserialized as Nothing/Empty")
+                        Dim conditionsIndex = body.IndexOf("""" & "conditions" & """")
+                        Dim conditionsPreview = If(conditionsIndex >= 0 AndAlso body.Length > conditionsIndex + 50, body.Substring(conditionsIndex, Math.Min(500, body.Length - conditionsIndex)), "NOT FOUND")
+                        Console.WriteLine($"   Conditions JSON preview: {conditionsPreview}")
+                    Else
+                        Console.WriteLine($"⚠️ [HandleCompileFlow] 'conditions' key NOT found in JSON body")
+                    End If
+                End If
+
                 ' Create Flow structure con task materializzati
                 Dim flow As New Compiler.Flow() With {
                     .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
                     .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
-                    .Tasks = materializedTasks  ' ✅ Task materializzati con dataContract
+                    .Tasks = materializedTasks,  ' ✅ Task materializzati con dataContract
+                    .Conditions = If(request.Conditions, New List(Of Compiler.ConditionDefinition)())  ' ✅ NEW: Conditions per validazione
                 }
+
+                ' ✅ DEBUG: Log Flow.Conditions after creation
+                Console.WriteLine($"🔍 [HandleCompileFlow] Flow.Conditions count: {If(flow.Conditions IsNot Nothing, flow.Conditions.Count, 0)}")
+                If flow.Conditions IsNot Nothing AndAlso flow.Conditions.Count > 0 Then
+                    Console.WriteLine($"   Flow.Conditions IDs: {String.Join(", ", flow.Conditions.Select(Function(c) c.Id))}")
+                End If
 
                 ' Log Flow structure after creation
                 Console.WriteLine($"🔍 [HandleCompileFlow] Flow structure created:")

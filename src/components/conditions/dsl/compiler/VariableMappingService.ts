@@ -2,6 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { VariableMappingService as IVariableMappingService } from './ASTCompiler';
+import { flowchartVariablesService } from '@services/FlowchartVariablesService';
 
 /**
  * Service for mapping variable labels to GUIDs.
@@ -11,11 +12,8 @@ export class VariableMappingService implements IVariableMappingService {
   /**
    * Get GUID for a variable by its label and optional path.
    */
-  getVariableId(label: string, path?: string[]): string | null {
+  async getVariableId(label: string, path?: string[]): Promise<string | null> {
     try {
-      // Import FlowchartVariablesService dynamically to avoid circular dependencies
-      const { flowchartVariablesService } = require('../../../services/FlowchartVariablesService');
-
       // Build full variable path
       const fullPath = path ? `${label}.${path.join('.')}` : label;
 

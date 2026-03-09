@@ -1,8 +1,9 @@
 Option Strict On
 Option Explicit On
+Imports Compiler.DTO.IDE
 
 ''' <summary>
-''' Flow structure: contiene nodes, edges, tasks
+''' Flow structure: contiene nodes, edges, tasks, conditions
 ''' Helper per navigare struttura IDE durante la compilazione
 ''' ❌ RIMOSSO: ddts - struttura costruita da template usando templateId
 ''' </summary>
@@ -22,6 +23,11 @@ Public Class Flow
     ''' </summary>
     Public Property Tasks As List(Of TaskDefinition)
 
+    ''' <summary>
+    ''' ✅ NEW: Conditions dal projectData - usate per validare edge conditions
+    ''' </summary>
+    Public Property Conditions As List(Of ConditionDefinition)
+
     ' ❌ RIMOSSO: DDTs property - non più usato, struttura costruita da template usando templateId
     ' Public Property DDTs As List(Of Compiler.AssembledDDT)
 
@@ -29,6 +35,7 @@ Public Class Flow
         Nodes = New List(Of FlowNode)()
         Edges = New List(Of FlowEdge)()
         Tasks = New List(Of TaskDefinition)()
+        Conditions = New List(Of ConditionDefinition)()
         ' ❌ RIMOSSO: DDTs initialization - non più usato
     End Sub
 End Class

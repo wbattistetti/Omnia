@@ -103,8 +103,8 @@ export function useFlowModeChat(
       setError(error.message || 'Flow execution error');
       setIsWaitingForInput(false);
     },
-    onWaitingForInput: () => {
-      console.log('[useFlowModeChat] ⏳ onWaitingForInput called - setting isWaitingForInput to true');
+    onWaitingForInput: (data?: { taskId: string; nodeId?: string }) => {
+      console.log('[useFlowModeChat] ⏳ onWaitingForInput called - setting isWaitingForInput to true', data);
       setIsWaitingForInput(true);
     },
   }), [nodes, edges, tasks, translations, onMessage]);

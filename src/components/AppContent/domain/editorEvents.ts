@@ -45,6 +45,10 @@ export interface ConditionEditorOpenEvent {
   variablesTree?: any;
   /** If true, condition needs to be generated using AI */
   needsGeneration?: boolean;
+  /** Edge ID for error removal when condition becomes valid */
+  edgeId?: string;
+  /** Condition ID if edge is already linked to a condition */
+  conditionId?: string;
 }
 
 /**

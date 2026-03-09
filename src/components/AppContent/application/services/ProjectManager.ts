@@ -260,10 +260,26 @@ export class ProjectManager {
             const flowRes = await fetch(`/api/projects/${encodeURIComponent(id)}/flow`);
             if (flowRes.ok) {
               const flow = await flowRes.json();
+
+              // ✅ Log edges with conditionId after loading (top-level)
+              const edgesWithCondition = (flow.edges || []).filter((e: any) => e.conditionId);
+              if (edgesWithCondition.length > 0) {
+                console.log(`[LOAD][ProjectManager] 📥 Edges with conditionId loaded`, {
+                  projectId: id,
+                  count: edgesWithCondition.length,
+                  edges: edgesWithCondition.map((e: any) => ({
+                    id: e.id,
+                    label: e.label,
+                    conditionId: e.conditionId  // ✅ Top-level
+                  }))
+                });
+              }
+
               console.log(`[LOAD][ProjectManager] 📥 Flow received from backend`, {
                 projectId: id,
                 nodesCount: flow.nodes?.length || 0,
                 edgesCount: flow.edges?.length || 0,
+                edgesWithConditionCount: edgesWithCondition.length
               });
               return {
                 nodes: Array.isArray(flow.nodes) ? flow.nodes : [],

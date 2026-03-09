@@ -13,7 +13,7 @@ export interface VariableMappingService {
    * Get GUID for a variable by its label.
    * Returns null if variable not found.
    */
-  getVariableId(label: string, path?: string[]): string | null;
+  getVariableId(label: string, path?: string[]): Promise<string | null>;
 }
 
 /**
@@ -28,8 +28,8 @@ export class ASTCompiler {
   /**
    * Compile AST to JavaScript function.
    */
-  compile(ast: ASTNode): string {
-    const jsCode = this.compileNode(ast);
+  async compile(ast: ASTNode): Promise<string> {
+    const jsCode = await this.compileNode(ast);
     return `function main(ctx) {
   try {
     return ${jsCode};
@@ -42,53 +42,53 @@ export class ASTCompiler {
   /**
    * Compile a single AST node.
    */
-  private compileNode(node: ASTNode): string {
+  private async compileNode(node: ASTNode): Promise<string> {
     switch (node.type) {
       case 'or':
-        return `(${this.compileNode(node.left)} || ${this.compileNode(node.right)})`;
+        return `(${await this.compileNode(node.left)} || ${await this.compileNode(node.right)})`;
 
       case 'and':
-        return `(${this.compileNode(node.left)} && ${this.compileNode(node.right)})`;
+        return `(${await this.compileNode(node.left)} && ${await this.compileNode(node.right)})`;
 
       case 'not':
-        return `!${this.compileNode(node.operand)}`;
+        return `!${await this.compileNode(node.operand)}`;
 
       case 'equals':
-        return `${this.compileNode(node.left)} === ${this.compileNode(node.right)}`;
+        return `${await this.compileNode(node.left)} === ${await this.compileNode(node.right)}`;
 
       case 'notEquals':
-        return `${this.compileNode(node.left)} !== ${this.compileNode(node.right)}`;
+        return `${await this.compileNode(node.left)} !== ${await this.compileNode(node.right)}`;
 
       case 'greaterThan':
-        return `${this.compileNode(node.left)} > ${this.compileNode(node.right)}`;
+        return `${await this.compileNode(node.left)} > ${await this.compileNode(node.right)}`;
 
       case 'lessThan':
-        return `${this.compileNode(node.left)} < ${this.compileNode(node.right)}`;
+        return `${await this.compileNode(node.left)} < ${await this.compileNode(node.right)}`;
 
       case 'greaterThanOrEqual':
-        return `${this.compileNode(node.left)} >= ${this.compileNode(node.right)}`;
+        return `${await this.compileNode(node.left)} >= ${await this.compileNode(node.right)}`;
 
       case 'lessThanOrEqual':
-        return `${this.compileNode(node.left)} <= ${this.compileNode(node.right)}`;
+        return `${await this.compileNode(node.left)} <= ${await this.compileNode(node.right)}`;
 
       case 'function':
-        return this.compileFunction(node);
+        return await this.compileFunction(node);
 
       case 'variable':
-        return this.compileVariable(node);
+        return await this.compileVariable(node);
 
       case 'literal':
         return JSON.stringify(node.value);
 
       case 'parenthesized':
-        return `(${this.compileNode(node.expression)})`;
+        return `(${await this.compileNode(node.expression)})`;
     }
   }
 
   /**
    * Compile function call.
    */
-  private compileFunction(node: { type: 'function'; name: string; args: ASTNode[] }): string {
+  private async compileFunction(node: { type: 'function'; name: string; args: ASTNode[] }): Promise<string> {
     const fnName = node.name.toUpperCase();
     const fnDef = getBuiltinFunction(fnName);
 
@@ -103,7 +103,7 @@ export class ASTCompiler {
       );
     }
 
-    const args = node.args.map(a => this.compileNode(a));
+    const args = await Promise.all(node.args.map(a => this.compileNode(a)));
 
     switch (fnName) {
       // String functions
@@ -157,12 +157,12 @@ export class ASTCompiler {
    * Compile variable reference.
    * Delegates to VariableMappingService for GUID resolution.
    */
-  private compileVariable(node: { type: 'variable'; name: string; path?: string[] }): string {
+  private async compileVariable(node: { type: 'variable'; name: string; path?: string[] }): Promise<string> {
     // Build full variable path
     const fullPath = node.path ? `${node.name}.${node.path.join('.')}` : node.name;
 
     // Get GUID from mapping service
-    const variableId = this.variableMappingService.getVariableId(node.name, node.path);
+    const variableId = await this.variableMappingService.getVariableId(node.name, node.path);
 
     if (!variableId) {
       // Variable not found - use path as fallback (will cause runtime error, but allows compilation)

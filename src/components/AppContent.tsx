@@ -37,6 +37,7 @@ import { FlowActionsProvider } from '../context/FlowActionsContext';
 import { useEntityCreation } from '../hooks/useEntityCreation';
 import { useChatOrchestrator } from '../hooks/useChatOrchestrator';
 import { FlowStateBridge } from '../services/FlowStateBridge';
+import { initializeErrorReportPanelService } from '../services/ErrorReportPanelService';
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableNonInteractiveEditor from './TaskEditor/ResponseEditor/ResizableNonInteractiveEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableTaskEditorHost from './TaskEditor/EditorHost/ResizableTaskEditorHost'; // ✅ RINOMINATO: ActEditor → TaskEditor, ResizableActEditorHost → ResizableTaskEditorHost
@@ -151,6 +152,11 @@ export const AppContent: React.FC<AppContentProps> = ({
     tabs: [{ id: 'tab_main', title: 'Main', type: 'flow', flowId: 'main' }],
     active: 0
   });
+
+  // ✅ Initialize ErrorReportPanelService
+  React.useEffect(() => {
+    initializeErrorReportPanelService(setDockTree);
+  }, []);
 
   // ✅ REFACTOR: Map globale per tenere traccia di tutti i refs di chiusura per tutti i tab
   // Questo risolve il problema delle closure stale: quando tab.onClose viene chiamato,
@@ -424,6 +430,75 @@ export const AppContent: React.FC<AppContentProps> = ({
     document.addEventListener('conditionEditor:open', handler as any);
     return () => document.removeEventListener('conditionEditor:open', handler as any);
   }, [editorCoordinator]);
+
+  // ✅ NEW: Handle conditionEditor:update event (when AI generation completes)
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      const d = (e && e.detail) || {};
+      const { tabId, script, isGenerating } = d;
+      if (!tabId) return;
+
+      setDockTree(prev => {
+        return mapNode(prev, (n: any) => {
+          if (n.kind === 'tabset') {
+            const idx = n.tabs.findIndex((t: any) => t.id === tabId);
+            if (idx !== -1) {
+              const updated = [...n.tabs];
+              updated[idx] = {
+                ...updated[idx],
+                script: script !== undefined ? script : updated[idx].script,
+                isGenerating: isGenerating !== undefined ? isGenerating : updated[idx].isGenerating,
+              };
+              return { ...n, tabs: updated };
+            }
+          }
+          return n;
+        });
+      });
+    };
+    document.addEventListener('conditionEditor:update', handler as any);
+    return () => document.removeEventListener('conditionEditor:update', handler as any);
+  }, []);
+
+  // ✅ REMOVED: conditionEditor:updateEdge event listener
+  // Edge updates now happen synchronously via EdgeConditionUpdater when conditions are created
+
+  // ✅ NEW: Handle conditionEditor:conditionValidated event (remove errors when condition is valid)
+  React.useEffect(() => {
+    const handler = async (e: any) => {
+      const d = (e && e.detail) || {};
+      const { edgeId, label } = d;
+      if (!edgeId) return;
+
+      try {
+        const { useCompilationErrors, setCompilationErrorsGlobal } = await import('../context/CompilationErrorsContext');
+        // Get current errors from context (we need to access them)
+        // Since we can't use hooks here, we'll use the global setter pattern
+        // We need to get current errors first - use a custom event to request them
+        const getErrorsEvent = new CustomEvent('compilationErrors:get', {
+          detail: { requestId: Date.now() },
+          bubbles: true
+        });
+        document.dispatchEvent(getErrorsEvent);
+
+        // Alternative: use a ref or state to track errors
+        // For now, we'll use a simpler approach: recompile to get fresh errors
+        // But that's not ideal. Let's use the context directly if available.
+
+        // Actually, the best approach is to filter errors in the context itself
+        // But since we can't access the context state here, we'll emit an event
+        // that the CompilationErrorsContext can listen to
+        document.dispatchEvent(new CustomEvent('compilationErrors:removeEdge', {
+          detail: { edgeId },
+          bubbles: true
+        }));
+      } catch (e) {
+        console.warn('[AppContent] Failed to remove edge errors', e);
+      }
+    };
+    document.addEventListener('conditionEditor:conditionValidated', handler as any);
+    return () => document.removeEventListener('conditionEditor:conditionValidated', handler as any);
+  }, []);
 
   // Stato per gestione progetti
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
@@ -757,10 +832,42 @@ export const AppContent: React.FC<AppContentProps> = ({
                       const flowData = mainFlow
                         ? { nodes: mainFlow.nodes, edges: mainFlow.edges }
                         : { nodes: FlowStateBridge.getNodes(), edges: FlowStateBridge.getEdges() };
+
+                      // ✅ Log edges with conditionId before saving (top-level)
+                      const edgesWithCondition = flowData.edges.filter((e: any) => e.conditionId);
+                      if (edgesWithCondition.length > 0) {
+                        console.log('[Save][3-flow] 📊 Edges with conditionId before save', {
+                          count: edgesWithCondition.length,
+                          edges: edgesWithCondition.map((e: any) => ({
+                            id: e.id,
+                            label: e.label,
+                            conditionId: e.conditionId  // ✅ Top-level
+                          }))
+                        });
+                      }
+
+                      // ✅ Transform to simplified format
+                      const { transformNodesToSimplified, transformEdgesToSimplified } = await import('../flows/flowTransformers');
+                      const simplifiedNodes = transformNodesToSimplified(flowData.nodes);
+                      const simplifiedEdges = transformEdgesToSimplified(flowData.edges);
+
+                      // ✅ Log edges with conditionId after transformation
+                      const simplifiedEdgesWithCondition = simplifiedEdges.filter((e: any) => e.conditionId);
+                      if (simplifiedEdgesWithCondition.length > 0) {
+                        console.log('[Save][3-flow] 📊 Edges with conditionId after transformation', {
+                          count: simplifiedEdgesWithCondition.length,
+                          edges: simplifiedEdgesWithCondition.map((e: any) => ({
+                            id: e.id,
+                            label: e.label,
+                            conditionId: e.conditionId
+                          }))
+                        });
+                      }
+
                       const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(flowData)
+                        body: JSON.stringify({ nodes: simplifiedNodes, edges: simplifiedEdges })
                       });
                       const tPutEnd = performance.now();
                       if (!putRes.ok) {
@@ -899,6 +1006,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                       await (ProjectDataService as any).saveProjectConditionsToDb?.(pid, projectData);
                       const tCondEnd = performance.now();
                       console.log('[Save][7-conditions] ✅ DONE', { ms: Math.round(tCondEnd - tCond), conditionsCount });
+
+                      // ✅ REMOVED: Patch to link edges by label
+                      // Edges are now updated synchronously when conditions are created via EdgeConditionUpdater
+                      // No need to patch during save - edges already have conditionId if conditions were created correctly
 
                       // ✅ REMOVED: Reload completo non necessario - i dati sono già in memoria e aggiornati
                       // - task.problem è già nel TaskRepository dopo il salvataggio

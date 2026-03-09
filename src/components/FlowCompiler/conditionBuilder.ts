@@ -29,16 +29,16 @@ export function buildFirstRowCondition(
 
   // First pass: separate Else edges from normal edges
   for (const edge of incomingEdges) {
-    // ✅ FIX: Also check if label is 'Else' even if isElse flag is missing
-    if (edge.data?.isElse === true || edge.label === 'Else') {
+    // ✅ Check top-level isElse
+    if (edge.isElse === true || edge.label === 'Else') {
       elseEdges.push(edge);
-      // ✅ DEBUG: Log when Else edge is found (to verify isElse preservation)
-      if (edge.data?.isElse === true) {
+      // ✅ DEBUG: Log when Else edge is found
+      if (edge.isElse === true) {
         console.log('[ConditionBuilder] ✅ Found Else edge with isElse flag', {
           nodeId,
           edgeId: edge.id,
           edgeLabel: edge.label,
-          isElse: edge.data.isElse
+          isElse: edge.isElse
         });
       }
     }
@@ -47,7 +47,7 @@ export function buildFirstRowCondition(
   // Build conditions for normal (non-Else) edges
   for (const edge of incomingEdges) {
     // Skip Else edges in first pass - they'll be handled separately
-    if (edge.data?.isElse === true) {
+    if (edge.isElse === true) {
       continue;
     }
 
@@ -70,9 +70,8 @@ export function buildFirstRowCondition(
       }
     ];
 
-    // If edge has condition, add it (AND with parent executed)
-    // Check both edge.data.condition and edge.data.conditionId for compatibility
-    const conditionId = edge.data?.conditionId || edge.data?.condition;
+    // ✅ Check top-level conditionId
+    const conditionId = edge.conditionId;
     if (conditionId) {
       linkConditionParts.push({
         type: 'EdgeCondition',
@@ -111,7 +110,7 @@ export function buildFirstRowCondition(
     const otherEdgesFromSource = edges.filter(e =>
       e.source === elseEdge.source &&
       e.id !== elseEdge.id &&
-      e.data?.isElse !== true
+      e.isElse !== true  // ✅ Top-level
     );
 
     // ✅ FIX: Extract only edge conditions (without Parent.Executed) for the NOT
@@ -119,7 +118,7 @@ export function buildFirstRowCondition(
     // NOT of (Parent.Executed AND C) is wrong - we need NOT(C) only
     const otherEdgeConditions: Condition[] = [];
     for (const otherEdge of otherEdgesFromSource) {
-      const otherConditionId = otherEdge.data?.conditionId || otherEdge.data?.condition;
+      const otherConditionId = otherEdge.conditionId;  // ✅ Top-level
       if (otherConditionId) {
         // Extract only the edge condition, without Parent.Executed
         otherEdgeConditions.push({

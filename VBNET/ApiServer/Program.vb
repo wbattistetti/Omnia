@@ -11,6 +11,7 @@ Imports ApiServer.SessionStorage
 Imports Microsoft.AspNetCore.Builder
 Imports Microsoft.AspNetCore.Hosting
 Imports Microsoft.AspNetCore.Http
+Imports Microsoft.AspNetCore.Http.Features
 Imports Microsoft.Extensions.DependencyInjection
 Imports Microsoft.Extensions.Hosting
 Imports Newtonsoft.Json
@@ -55,6 +56,12 @@ Module Program
         Console.WriteLine("🌐 [RunHttpServerMode] Initializing ASP.NET Core Web API...")
         Try
             Dim builder = WebApplication.CreateBuilder(args)
+
+            ' ✅ FIX: Increase request body size limit to handle large compilation requests with conditions
+            ' Default limit is 30MB, but we need to ensure it's high enough for large flows
+            builder.WebHost.ConfigureKestrel(Sub(options)
+                                                  options.Limits.MaxRequestBodySize = 100 * 1024 * 1024 ' 100MB
+                                              End Sub)
 
             ' ✅ FASE 2: Configura Dependency Injection
             ' Registra ILogger come singleton

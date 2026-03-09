@@ -4,7 +4,7 @@
  */
 
 /**
- * Control point in formato relativo (PERSISTITO in edge.data)
+ * Control point in formato relativo (PERSISTITO a livello top dell'edge)
  * t: posizione lungo il path (0 = source, 1 = target)
  * offset: distanza perpendicolare dal path (positivo = destra, negativo = sinistra)
  */
@@ -24,7 +24,7 @@ export interface ControlPointAbsolute {
 }
 
 /**
- * Label position in formato relativo (PERSISTITO in edge.data)
+ * Label position in formato relativo (PERSISTITO a livello top dell'edge)
  * t: posizione lungo il path (0 = source, 1 = target)
  * offset: distanza perpendicolare dal path (positivo = destra, negativo = sinistra)
  */

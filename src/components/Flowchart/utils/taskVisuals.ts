@@ -4,6 +4,7 @@ import { taskRepository } from '../../../services/TaskRepository';
 import { TaskType } from '../../../types/taskTypes';
 import { PRESET_CATEGORIES, getCurrentProjectLocale } from '../../../utils/categoryPresets';
 import getIconComponent from '../../TaskEditor/ResponseEditor/icons';
+import { getGlobalResolver } from '@domain/taskContent/TaskContentResolver.config';
 
 // ✅ Tipo per custom category (da TODO_NUOVO.md)
 export interface CustomCategory {
@@ -79,10 +80,35 @@ export function resolveTaskType(row: any): TaskType {
 }
 
 /**
- * Controlla se il task ha un TaskTree usando solo TaskRepository
+ * Controlla se il task ha un TaskTree usando TaskContentResolver
+ * ✅ NEW: Uses centralized domain service (independent of task type)
  */
 export function hasTaskTree(row: any): boolean {
   // ✅ UNIFIED MODEL: row.id === task.id ALWAYS (when task exists)
+  const taskId = row?.id;
+
+  if (!taskId) {
+    return false;
+  }
+
+  try {
+    const taskType = resolveTaskType(row);
+
+    // ✅ NEW: Use TaskContentResolver (centralized logic, independent of task type)
+    const resolver = getGlobalResolver();
+    return resolver.hasTaskTree(taskId, taskType);
+  } catch (err) {
+    // ✅ Fallback to legacy logic if resolver not available (during migration)
+    console.warn('[hasTaskTree] Resolver not available, using legacy logic', err);
+    return hasTaskTreeLegacy(row);
+  }
+}
+
+/**
+ * ✅ LEGACY: Maintained for backward compatibility during migration
+ * TODO: Remove after complete migration to TaskContentResolver
+ */
+function hasTaskTreeLegacy(row: any): boolean {
   const taskId = row?.id;
 
   if (!taskId) {

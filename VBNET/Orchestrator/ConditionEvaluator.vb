@@ -1,6 +1,8 @@
 Option Strict On
 Option Explicit On
 Imports Compiler
+Imports Common.DSL
+Imports System.Text.Json
 
 ''' <summary>
 ''' Valuta condizioni per determinare quale task eseguire
@@ -10,6 +12,11 @@ Imports Compiler
 ''' - OR: valuta da sinistra a destra, ferma al primo True
 ''' </summary>
 Public Class ConditionEvaluator
+    ''' <summary>
+    ''' Condition loader - can be set to provide condition loading from repository
+    ''' If Nothing, EdgeCondition evaluation will return False
+    ''' </summary>
+    Public Shared Property ConditionLoader As IConditionLoader
     ''' <summary>
     ''' Valuta una condizione e ritorna True se soddisfatta
     ''' Funzione deterministica: stesso input → stesso output
@@ -46,10 +53,12 @@ Public Class ConditionEvaluator
                 Return True  ' Per ora assume che se eseguito, stato è corretto
 
             Case ConditionType.EdgeCondition
-                ' Valuta condizione di un edge (link)
-                ' TODO: Implementare valutazione EdgeCondition
-                ' Per ora assume sempre True
-                Return True
+                ' Valuta condizione di un edge (link) usando DSL interpreter
+                Dim conditionId = condition.EdgeConditionId
+                If String.IsNullOrEmpty(conditionId) Then
+                    Return False
+                End If
+                Return EvaluateEdgeConditionDSL(conditionId, state.VariableStore)
 
             Case ConditionType.AndOp
                 ' ✅ SHORT-CIRCUIT: valuta da sinistra a destra, ferma al primo False
@@ -85,6 +94,63 @@ Public Class ConditionEvaluator
                 Console.WriteLine($"[ConditionEvaluator] ⚠️ Unknown condition type: {condition.Type}")
                 Return False
         End Select
+    End Function
+
+    ''' <summary>
+    ''' Evaluates EdgeCondition using DSL interpreter
+    ''' Loads AST from condition repository and evaluates it
+    ''' </summary>
+    Private Shared Function EvaluateEdgeConditionDSL(
+        conditionId As String,
+        variableStore As Dictionary(Of String, Object)
+    ) As Boolean
+        Try
+            ' Check if condition loader is available
+            If ConditionLoader Is Nothing Then
+                Console.WriteLine($"[ConditionEvaluator] ⚠️ ConditionLoader not set, cannot evaluate EdgeCondition {conditionId}")
+                Return False
+            End If
+
+            ' Load condition data from repository
+            Dim conditionData = ConditionLoader.LoadCondition(conditionId)
+            If conditionData Is Nothing Then
+                Console.WriteLine($"[ConditionEvaluator] ⚠️ Condition {conditionId} not found in repository")
+                Return False
+            End If
+
+            ' Get AST JSON from condition data
+            Dim astJson As String = Nothing
+            If conditionData.ContainsKey("ast") AndAlso conditionData("ast") IsNot Nothing Then
+                astJson = conditionData("ast").ToString()
+            End If
+
+            If String.IsNullOrEmpty(astJson) Then
+                Console.WriteLine($"[ConditionEvaluator] ⚠️ Condition {conditionId} has no AST data")
+                Return False
+            End If
+
+            ' Deserialize AST
+            Dim options = New JsonSerializerOptions() With {
+                .PropertyNameCaseInsensitive = True
+            }
+            Dim ast = JsonSerializer.Deserialize(Of ASTNode)(astJson, options)
+
+            If ast Is Nothing Then
+                Console.WriteLine($"[ConditionEvaluator] ⚠️ Failed to deserialize AST for condition {conditionId}")
+                Return False
+            End If
+
+            ' Evaluate using interpreter
+            Dim interpreter = New DSLInterpreter(variableStore)
+            Dim result = interpreter.Evaluate(ast)
+
+            Console.WriteLine($"[ConditionEvaluator] ✅ DSL condition {conditionId} evaluated: {result}")
+            Return result
+
+        Catch ex As Exception
+            Console.WriteLine($"[ConditionEvaluator] ❌ Error evaluating DSL condition {conditionId}: {ex.Message}")
+            Return False
+        End Try
     End Function
 End Class
 

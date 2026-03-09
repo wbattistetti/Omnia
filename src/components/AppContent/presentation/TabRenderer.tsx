@@ -2,7 +2,7 @@
 // Renders different tab types (flow, responseEditor, conditionEditor, taskEditor, nonInteractive)
 
 import React, { useMemo, useCallback, useEffect } from 'react';
-import type { DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabChat, ToolbarButton } from '@dock/types';
+import type { DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabChat, DockTabErrorReport, ToolbarButton } from '@dock/types';
 import type { DockNode } from '@dock/types';
 import { TaskType } from '@types/taskTypes';
 import { resolveEditorKind } from '@taskEditor/EditorHost/resolveKind';
@@ -13,8 +13,8 @@ import ResponseEditor from '../../TaskEditor/ResponseEditor';
 import NonInteractiveResponseEditor from '../../TaskEditor/ResponseEditor/NonInteractiveResponseEditor';
 import ConditionEditor from '../../conditions/ConditionEditor';
 import ResizableTaskEditorHost from '../../TaskEditor/EditorHost/ResizableTaskEditorHost';
-import DDEBubbleChat from '../../TaskEditor/ResponseEditor/ChatSimulator/DDEBubbleChat';
-import { FontProvider } from '@context/FontContext';
+import { AssistantPanel } from '@components/ChatPanel/AssistantPanel';
+import { ErrorReportPanel } from '@components/ChatPanel/ErrorReportPanel';
 
 export interface TabRendererProps {
   tab: DockTab;
@@ -337,6 +337,9 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
             variablesTree={tab.variablesTree}
             label={tab.label}
             dockWithinParent={false}
+            isGenerating={tab.isGenerating} // ✅ Pass isGenerating flag
+            edgeId={tab.edgeId} // ✅ Pass edgeId for error removal
+            conditionId={tab.conditionId} // ✅ Pass conditionId (if edge is linked)
             onRename={(next) => {
               setDockTree(prev =>
                 mapNode(prev, n => {
@@ -479,40 +482,34 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
       );
     }
 
-    // Chat Panel tab
+    // Chat Panel tab (Assistant)
     if (tab.type === 'chat') {
       const chatTab = tab as DockTabChat;
-      // ✅ Log rimosso dal render - troppo rumoroso, solo nei punti critici
 
       return (
-        <div
-          style={{
-            width: '100%',
-            flex: 1,
-            minHeight: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
+        <AssistantPanel
+          task={chatTab.task || null}
+          projectId={chatTab.projectId || currentPid || null}
+          translations={chatTab.translations}
+          taskTree={chatTab.taskTree}
+          onUpdateTaskTree={() => { }}
+          mode={chatTab.mode || 'interactive'}
+          flowNodes={chatTab.flowNodes}
+          flowEdges={chatTab.flowEdges}
+          flowTasks={chatTab.flowTasks}
+          useBackendMaterialization={chatTab.useBackendMaterialization || false}
+        />
+      );
+    }
+
+    // Error Report Panel tab
+    if (tab.type === 'errorReport') {
+      return (
+        <ErrorReportPanel
+          onClose={() => {
+            // Handle close if needed (e.g., remove tab from dock)
           }}
-        >
-          <FontProvider>
-            <DDEBubbleChat
-              key={`${chatTab.id}-${chatTab.flowNodes?.length || 0}-${chatTab.flowEdges?.length || 0}`}
-              task={chatTab.task || null}
-              projectId={chatTab.projectId || currentPid || null}
-              translations={chatTab.translations}
-              taskTree={chatTab.taskTree}
-              onUpdateTaskTree={() => {}}
-              mode={chatTab.mode || 'interactive'}
-              // ✅ NEW: Pass flow data as props
-              flowNodes={chatTab.flowNodes}
-              flowEdges={chatTab.flowEdges}
-              flowTasks={chatTab.flowTasks}
-              // ✅ NEW: Pass backend materialization flag
-              useBackendMaterialization={chatTab.useBackendMaterialization || false}
-            />
-          </FontProvider>
-        </div>
+        />
       );
     }
 

@@ -32,6 +32,30 @@ export function CompilationErrorsProvider({ children }: { children: React.ReactN
     };
   }, []);
 
+  // ✅ NEW: Listen for edge error removal requests
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      const d = (e && e.detail) || {};
+      const { edgeId } = d;
+      if (!edgeId) return;
+
+      // Filter out errors for this edge
+      setErrorsState(prev => {
+        const filtered = prev.filter(e => e.edgeId !== edgeId);
+        if (filtered.length !== prev.length) {
+          console.log('[CompilationErrorsContext] ✅ Removed errors for edge', {
+            edgeId,
+            removedCount: prev.length - filtered.length,
+            remainingCount: filtered.length
+          });
+        }
+        return filtered;
+      });
+    };
+    document.addEventListener('compilationErrors:removeEdge', handler as any);
+    return () => document.removeEventListener('compilationErrors:removeEdge', handler as any);
+  }, []);
+
   const setErrors = useCallback((newErrors: CompilationError[]) => {
     console.log('[CompilationErrorsContext] ✅ setErrors called:', newErrors.length);
     setErrorsState(newErrors);

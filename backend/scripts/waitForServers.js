@@ -15,12 +15,7 @@ const servers = [
     healthCheck: 'http://localhost:8000/api/ping', // Usa /api/ping come startPythonService.js
     port: 8000
   },
-  {
-    name: 'Ruby',
-    url: 'http://localhost:3101',
-    healthCheck: 'http://localhost:3101/', // Ruby ha endpoint root che ritorna JSON
-    port: 3101
-  },
+  // ✅ REMOVED: Ruby backend (port 3101) - Frontend now calls VB.NET ApiServer directly (port 5000)
 ];
 
 const maxAttempts = 60; // 60 seconds total
@@ -40,18 +35,6 @@ function checkServer(server) {
           try {
             const json = JSON.parse(data);
             resolve(json.ok === true);
-          } catch {
-            resolve(false);
-          }
-        });
-      } else if (server.name === 'Ruby') {
-        // Ruby ritorna JSON con status: 'ok' alla root
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          try {
-            const json = JSON.parse(data);
-            resolve(json.status === 'ok');
           } catch {
             resolve(false);
           }

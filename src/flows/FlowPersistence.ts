@@ -31,7 +31,21 @@ export async function loadFlow(projectId: string, flowId: FlowId): Promise<{ nod
   const simplifiedNodes = Array.isArray(json?.nodes) ? json.nodes : [];
   const simplifiedEdges = Array.isArray(json?.edges) ? json.edges : [];
 
-  // Log rimosso: non essenziale per flusso motore
+  // ✅ LOG: Traccia cosa viene ricevuto dal backend
+  const edgesWithCondition = simplifiedEdges.filter((e: any) => e.condition || e.conditionId);
+  if (edgesWithCondition.length > 0) {
+    console.log(`[LOAD][loadFlow] 📥 Edges with conditionId from backend`, {
+      projectId,
+      flowId,
+      count: edgesWithCondition.length,
+      edges: edgesWithCondition.map((e: any) => ({
+        id: e.id,
+        label: e.label,
+        condition: e.condition,
+        conditionId: e.conditionId
+      }))
+    });
+  }
 
   // Transform to ReactFlow format: { id, data: { label, rows, ... } }
   const nodes = transformNodesToReactFlow(simplifiedNodes);
@@ -60,11 +74,19 @@ export async function saveFlow(projectId: string, flowId: FlowId, nodes: Node<Fl
   const simplifiedEdges = transformEdgesToSimplified(edges);
 
   // ✅ LOG: Traccia cosa viene inviato al backend
+  const edgesWithCondition = simplifiedEdges.filter((e: any) => e.condition || e.conditionId);
   console.log(`[SAVE][saveFlow] 📤 Sending to backend`, {
     projectId,
     flowId,
     nodesCount: simplifiedNodes.length,
     edgesCount: simplifiedEdges.length,
+    edgesWithConditionCount: edgesWithCondition.length,
+    edgesWithCondition: edgesWithCondition.map((e: any) => ({
+      id: e.id,
+      label: e.label,
+      condition: e.condition,
+      conditionId: e.conditionId
+    })),
     nodes: simplifiedNodes.map((n: any) => ({
       id: n.id,
       label: n.label,

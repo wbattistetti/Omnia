@@ -8,6 +8,8 @@ import { flowchartVariablesService } from '@services/FlowchartVariablesService';
 import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from '@components/Sidebar/sidebarTheme';
 import { getNodesWithFallback } from '@utils/taskTreeMigrationHelpers';
 import { ConditionAIService } from '@components/conditions/application/ConditionAIService';
+import { ScriptManagerService } from '@components/conditions/application/ScriptManagerService';
+import { updateEdgeWithConditionId } from '@services/EdgeConditionUpdater';
 
 export interface ConditionEditorEventHandlerParams {
   projectData: any;
@@ -50,37 +52,82 @@ export class ConditionEditorEventHandler {
     // Get condition info
     const conditionLabel = event.label || event.name || 'Condition';
     const tabId = `cond_${event.nodeId || Date.now()}`;
+    const edgeId = event.edgeId; // ✅ Edge ID
+    const conditionId = event.conditionId; // ✅ Condition ID (if edge is linked)
 
-    // Determine if we need to generate a script
-    const needsGeneration = (event as any).needsGeneration === true;
+    // ✅ Load DSL script if conditionId exists (use ScriptManagerService for fresh data)
     let conditionScript = event.script || '';
+    if (conditionId) {
+      console.log('[ConditionEditorEventHandler] 🔍 Loading DSL for conditionId', {
+        conditionId,
+        label: conditionLabel,
+        eventScriptLength: event.script?.length || 0
+      });
 
-    // Generate script if needed (using complete variables)
-    if (needsGeneration && variableNames.length > 0) {
-      try {
-        // Notify loading started
-        this.params.onLoadingChange?.(true);
+      const scriptManager = new ScriptManagerService({
+        projectData: this.params.projectData,
+        pdUpdate: this.params.pdUpdate,
+      });
 
-        // Find semantic match
-        const semanticMatch = this.findSemanticMatch(conditionLabel, variableNames);
+      // Check window.__projectData availability
+      const windowData = (window as any).__projectData;
+      console.log('[ConditionEditorEventHandler] 📊 Data availability', {
+        hasWindowData: !!windowData,
+        hasProjectData: !!this.params.projectData,
+        conditionsCount: windowData?.conditions?.flatMap((cat: any) => cat.items || []).length || 0
+      });
 
-        // Generate script with AI using complete variables
-        conditionScript = await this.aiService.generateFromLabel({
-          label: conditionLabel,
-          variables: variableNames,
-          semanticMatch,
+      const loadedScript = scriptManager.loadScriptById(conditionId);
+      if (loadedScript) {
+        conditionScript = loadedScript;
+        console.log('[ConditionEditorEventHandler] ✅ Loaded DSL from conditionId', {
+          conditionId,
+          dslLength: loadedScript.length,
+          dslPreview: loadedScript.substring(0, 100)
         });
-      } catch (e) {
-        console.error('[ConditionEditorEventHandler] AI generation failed', e);
-        // Fallback template
-        conditionScript = `// Condition: ${conditionLabel}\n// Available variables: ${variableNames.slice(0, 3).join(', ')}...\n// Edit this script to define when the condition is TRUE\nreturn false;`;
-      } finally {
-        // Notify loading finished
-        this.params.onLoadingChange?.(false);
+      } else {
+        console.warn('[ConditionEditorEventHandler] ⚠️ Condition not found by ID', {
+          conditionId,
+          label: conditionLabel,
+          willUseEventScript: !!event.script
+        });
       }
+    } else {
+      console.log('[ConditionEditorEventHandler] ℹ️ No conditionId provided, using event.script', {
+        eventScriptLength: event.script?.length || 0
+      });
     }
 
-    // Build DockTab with generated script
+    // Determine if we need to generate a script
+    const needsGeneration = (event as any).needsGeneration === true || (!conditionId && !conditionScript.trim());
+
+    // ✅ NEW: If needs generation, open immediately with loading state
+    if (needsGeneration && variableNames.length > 0) {
+      // Open dock tab immediately with loading state
+      const loadingDockTab: DockTab = {
+        id: tabId,
+        title: conditionLabel,
+        type: 'conditionEditor',
+        variables: finalVars,
+        script: '', // Empty initially
+        variablesTree: event.variablesTree || varsTree,
+        label: conditionLabel,
+        isGenerating: true, // ✅ Flag for loading state
+        edgeId, // ✅ Edge ID
+        conditionId, // ✅ Condition ID (if exists)
+      };
+
+      // Start generation in background (don't await)
+      this.generateAndUpdate(tabId, conditionLabel, variableNames, finalVars, event.variablesTree || varsTree, edgeId, conditionId)
+        .catch(err => console.error('[ConditionEditorEventHandler] Generation failed', err));
+
+      return {
+        tabId,
+        dockTab: loadingDockTab,
+      };
+    }
+
+    // Build DockTab with existing script (no generation needed)
     const dockTab: DockTab = {
       id: tabId,
       title: conditionLabel,
@@ -89,6 +136,8 @@ export class ConditionEditorEventHandler {
       script: conditionScript,
       variablesTree: event.variablesTree || varsTree,
       label: conditionLabel,
+      edgeId, // ✅ Edge ID
+      conditionId, // ✅ Condition ID (if exists)
     };
 
     return {
@@ -269,5 +318,99 @@ export class ConditionEditorEventHandler {
       }
     } catch { }
     return tasks;
+  }
+
+  /**
+   * Generates DSL condition in background and updates the dock tab
+   * This method is called asynchronously after the tab is opened
+   */
+  private async generateAndUpdate(
+    tabId: string,
+    label: string,
+    variables: string[],
+    finalVars: Record<string, any>,
+    varsTree: any[],
+    edgeId?: string,
+    conditionId?: string
+  ): Promise<void> {
+    try {
+      this.params.onLoadingChange?.(true);
+
+      // Find semantic match
+      const semanticMatch = this.findSemanticMatch(label, variables);
+
+      // Generate DSL with AI using complete variables
+      const dsl = await this.aiService.generateDSLFromLabel({
+        label,
+        variables,
+        semanticMatch,
+      });
+
+      // ✅ Save DSL to ScriptManagerService
+      if (dsl && dsl.trim()) {
+        const scriptManager = new ScriptManagerService({
+          projectData: this.params.projectData,
+          pdUpdate: this.params.pdUpdate,
+        });
+
+        let savedConditionId: string | undefined = conditionId;
+
+        if (conditionId) {
+          // ✅ Edge already has conditionId - update existing condition
+          const saveResult = await scriptManager.saveScript(dsl, label, conditionId);
+          savedConditionId = saveResult.conditionId;
+          console.log('[ConditionEditorEventHandler] ✅ DSL updated in existing condition', {
+            label,
+            conditionId: savedConditionId,
+            dslLength: dsl.length
+          });
+        } else {
+          // ✅ Edge doesn't have conditionId - create new condition
+          const createResult = await scriptManager.createCondition(dsl, label);
+          savedConditionId = createResult.conditionId;
+          console.log('[ConditionEditorEventHandler] ✅ DSL saved to new condition', {
+            label,
+            conditionId: savedConditionId,
+            dslLength: dsl.length
+          });
+
+          // ✅ Associate conditionId with edge SYNCHRONOUSLY (not via event)
+          if (savedConditionId && edgeId) {
+            const updated = updateEdgeWithConditionId(edgeId, savedConditionId);
+            if (!updated) {
+              console.warn('[ConditionEditorEventHandler] ⚠️ Failed to update edge synchronously', {
+                edgeId,
+                conditionId: savedConditionId
+              });
+            }
+          }
+        }
+      }
+
+      // Update dock tab via event (the dock tree will be updated by AppContent)
+      const updateEvent = new CustomEvent('conditionEditor:update', {
+        detail: {
+          tabId,
+          script: dsl,
+          isGenerating: false,
+        },
+        bubbles: true,
+      });
+      document.dispatchEvent(updateEvent);
+    } catch (e) {
+      console.error('[ConditionEditorEventHandler] AI generation failed', e);
+      // Update with empty DSL on error
+      const updateEvent = new CustomEvent('conditionEditor:update', {
+        detail: {
+          tabId,
+          script: '',
+          isGenerating: false,
+        },
+        bubbles: true,
+      });
+      document.dispatchEvent(updateEvent);
+    } finally {
+      this.params.onLoadingChange?.(false);
+    }
   }
 }

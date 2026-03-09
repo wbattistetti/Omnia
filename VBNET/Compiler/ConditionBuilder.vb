@@ -36,8 +36,9 @@ Public Class ConditionBuilder
         Dim elseEdges As New List(Of FlowEdge)()
 
         ' First pass: separate Else edges from normal edges
+        ' ✅ Read isElse from top-level
         For Each edge In incomingEdges
-            If edge.Data IsNot Nothing AndAlso edge.Data.IsElse = True Then
+            If edge.IsElse = True Then
                 elseEdges.Add(edge)
             End If
         Next
@@ -45,7 +46,8 @@ Public Class ConditionBuilder
         ' Build conditions for normal (non-Else) edges
         For Each edge In incomingEdges
             ' Skip Else edges in first pass - they'll be handled separately
-            If edge.Data IsNot Nothing AndAlso edge.Data.IsElse = True Then
+            ' ✅ Read isElse from top-level
+            If edge.IsElse = True Then
                 Continue For
             End If
 
@@ -73,10 +75,8 @@ Public Class ConditionBuilder
             })
 
             ' If edge has condition, add it (AND with parent executed)
-            Dim conditionId As String = Nothing
-            If edge.Data IsNot Nothing Then
-                conditionId = edge.Data.Condition
-            End If
+            ' ✅ Read conditionId from top-level
+            Dim conditionId As String = edge.ConditionId
 
             If Not String.IsNullOrEmpty(conditionId) Then
                 linkConditionParts.Add(New Condition() With {
@@ -120,19 +120,18 @@ Public Class ConditionBuilder
 
             ' Find all edges FROM the same source node (not just incoming to target)
             ' "Gemelle" = link che condividono lo stesso nodo sorgente
+            ' ✅ Read isElse from top-level
             Dim otherEdgesFromSource = edges.Where(Function(e) _
                 e.Source = elseEdge.Source AndAlso
                 e.Id <> elseEdge.Id AndAlso
-                Not (e.Data IsNot Nothing AndAlso e.Data.IsElse.GetValueOrDefault(False) = True)
+                Not (e.IsElse.GetValueOrDefault(False) = True)
             ).ToList()
 
             ' Extract only edge conditions (without Parent.Executed) for the NOT
             Dim otherEdgeConditions As New List(Of Condition)()
             For Each otherEdge In otherEdgesFromSource
-                Dim otherConditionId As String = Nothing
-                If otherEdge.Data IsNot Nothing Then
-                    otherConditionId = otherEdge.Data.Condition
-                End If
+                ' ✅ Read conditionId from top-level
+                Dim otherConditionId As String = otherEdge.ConditionId
 
                 If Not String.IsNullOrEmpty(otherConditionId) Then
                     otherEdgeConditions.Add(New Condition() With {
@@ -241,8 +240,9 @@ Public Class ConditionBuilder
         Dim elseEdges As New List(Of FlowEdge)()
 
         ' First pass: separate Else edges from normal edges
+        ' ✅ Read isElse from top-level
         For Each edge In incomingLinks
-            If edge.Data IsNot Nothing AndAlso edge.Data.IsElse = True Then
+            If edge.IsElse = True Then
                 elseEdges.Add(edge)
             End If
         Next
@@ -250,7 +250,8 @@ Public Class ConditionBuilder
         ' Build conditions for normal (non-Else) edges
         For Each edge In incomingLinks
             ' Skip Else edges in first pass
-            If edge.Data IsNot Nothing AndAlso edge.Data.IsElse = True Then
+            ' ✅ Read isElse from top-level
+            If edge.IsElse = True Then
                 Continue For
             End If
 
@@ -266,10 +267,8 @@ Public Class ConditionBuilder
             })
 
             ' Se link ha condizione, aggiungila (AND)
-            Dim conditionId As String = Nothing
-            If edge.Data IsNot Nothing Then
-                conditionId = edge.Data.Condition
-            End If
+            ' ✅ Read conditionId from top-level
+            Dim conditionId As String = edge.ConditionId
 
             If Not String.IsNullOrEmpty(conditionId) Then
                 linkConditionParts.Add(New Condition() With {
@@ -299,19 +298,18 @@ Public Class ConditionBuilder
             Dim sourceNodeId = elseEdge.Source
 
             ' Find all edges FROM the same source node (gemelle)
+            ' ✅ Read isElse from top-level
             Dim otherEdgesFromSource = flow.Edges.Where(Function(e) _
                 e.Source = sourceNodeId AndAlso
                 e.Id <> elseEdge.Id AndAlso
-                Not (e.Data IsNot Nothing AndAlso e.Data.IsElse.GetValueOrDefault(False) = True)
+                Not (e.IsElse.GetValueOrDefault(False) = True)
             ).ToList()
 
             ' Extract only edge conditions (without TaskGroup.Executed) for the NOT
             Dim otherEdgeConditions As New List(Of Condition)()
             For Each otherEdge In otherEdgesFromSource
-                Dim otherConditionId As String = Nothing
-                If otherEdge.Data IsNot Nothing Then
-                    otherConditionId = otherEdge.Data.Condition
-                End If
+                ' ✅ Read conditionId from top-level
+                Dim otherConditionId As String = otherEdge.ConditionId
 
                 If Not String.IsNullOrEmpty(otherConditionId) Then
                     otherEdgeConditions.Add(New Condition() With {

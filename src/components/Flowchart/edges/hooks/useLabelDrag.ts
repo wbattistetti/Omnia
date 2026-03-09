@@ -82,6 +82,12 @@ export function useLabelDrag(
     (e: React.MouseEvent) => {
       if (!enabled || !labelRef.current || !pathRef.current) return;
 
+      // ✅ FIX: Check if click is on toolbar (prevent drag)
+      const target = e.target as HTMLElement;
+      if (target.closest('button') || target.closest('[data-toolbar]')) {
+        return; // Don't start drag if clicking on toolbar button
+      }
+
       e.preventDefault();
       e.stopPropagation();
 

@@ -23,7 +23,7 @@ export function BackendTypeProvider({ children }: { children: React.ReactNode })
     } catch (e) {
       console.warn('[BackendTypeContext] Failed to load from localStorage', e);
     }
-    return 'react'; // Default to React (Ruby backend)
+    return 'react'; // Default to React backend
   });
 
   // Save to localStorage whenever it changes
@@ -62,17 +62,12 @@ export function useBackendType(): BackendTypeContextType {
 
 /**
  * Hook to get the base URL for API calls
- * ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità per interpretare dialoghi
- * ❌ POSTEGGIATO: Node.js (3100) e VB.NET diretto (5000) - non usati per ora
- * TODO: Quando Ruby funziona completamente, rimuovere gli altri server
+ * ✅ REMOVED RUBY: Frontend now calls VB.NET ApiServer directly (port 5000)
+ * This eliminates the unnecessary proxy hop and ensures conditions are passed correctly
  */
 export function useBackendBaseUrl(): string {
-  // ⭐ SEMPRE RUBY - Unica fonte di verità
-  return 'http://localhost:3101';
-
-  // ❌ POSTEGGIATO: Logica switch backendType - non usata per ora
-  // const { backendType } = useBackendType();
-  // return backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
+  // ✅ VB.NET ApiServer is now the direct backend (no Ruby proxy)
+  return 'http://localhost:5000';
 }
 
 

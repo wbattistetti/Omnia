@@ -99,12 +99,12 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     return false;
   }, [id, flowActions]);
 
-  // Get link style
-  const linkStyle = (data as any)?.linkStyle ?? DEFAULT_LINK_STYLE;
-  const label = props.data?.label || props.label;
+  // ✅ Get persistent fields from top-level (NOT from data)
+  const linkStyle = (props as any).linkStyle ?? (data as any)?.linkStyle ?? DEFAULT_LINK_STYLE;
+  const label = props.label || props.data?.label;
 
-  // ✅ PULITO: Get saved label position in relative format (t, offset)
-  const labelPositionRelative = (data as any)?.labelPositionRelative || null;
+  // ✅ PULITO: Get saved label position in relative format (t, offset) - top-level
+  const labelPositionRelative = ((props as any).labelPositionRelative ?? (data as any)?.labelPositionRelative) || null;
 
   // Auto-migration from legacy labelPositionSvg
   useEffect(() => {
@@ -112,21 +112,19 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     if (labelPositionRelative) return;
 
     // If we have legacy labelPositionSvg and path is available, migrate
-    const legacySvg = (data as any)?.labelPositionSvg;
+    const legacySvg = (props as any).labelPositionSvg ?? (data as any)?.labelPositionSvg;
     if (legacySvg && pathRef.current) {
       const converter = new CoordinateConverter(reactFlowInstance, pathRef);
       const migrated = converter.labelAbsoluteToRelative(legacySvg);
       if (migrated) {
         updateEdgeData({
-          data: {
-            labelPositionRelative: migrated,
-            labelPositionSvg: undefined,
-          }
+          labelPositionRelative: migrated,  // ✅ Top-level
+          labelPositionSvg: undefined,  // ✅ Top-level
         });
         console.log('[CustomEdge] Migrazione labelPositionSvg → labelPositionRelative:', migrated);
       }
     }
-  }, [labelPositionRelative, (data as any)?.labelPositionSvg, reactFlowInstance]);
+  }, [labelPositionRelative, (props as any).labelPositionSvg, (data as any)?.labelPositionSvg, reactFlowInstance]);
 
   // ✅ PULITO: Use positioning hook con labelPositionRelative
   const positions = useEdgePositioning(
@@ -141,9 +139,9 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     toolbarTransitionDelay: 200,
   });
 
-  // ✅ Get control points from data with migration support
+  // ✅ Get control points from top-level with migration support
   const controlPointsRelative = useMemo((): ControlPointRelative[] => {
-    const dataControlPoints = (data as any)?.controlPoints;
+    const dataControlPoints = (props as any).controlPoints ?? (data as any)?.controlPoints;
     if (!dataControlPoints || !Array.isArray(dataControlPoints) || dataControlPoints.length === 0) {
       return [];
     }
@@ -156,14 +154,12 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       const legacyPoints = dataControlPoints.filter(isLegacyControlPoint);
       const migrated = migrateControlPoints(legacyPoints, pathRef.current);
 
-      // If migration successful, save back to data
+      // If migration successful, save back to top-level
       if (migrated.length > 0) {
         // Migrate in background (don't block render)
         setTimeout(() => {
           updateEdgeData({
-            data: {
-              controlPoints: migrated,
-            }
+            controlPoints: migrated,  // ✅ Top-level
           });
         }, 0);
       }
@@ -175,16 +171,14 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     return dataControlPoints.filter((cp: any): cp is ControlPointRelative =>
       typeof cp.t === 'number' && typeof cp.offset === 'number'
     );
-  }, [data, pathRef, props.data]);
+  }, [(props as any).controlPoints, (data as any)?.controlPoints, pathRef]);
 
   // Control points drag hook
   const controlPointDrag = useControlPointDrag({
     controlPointsRelative,
     onControlPointsChange: useCallback((points: ControlPointRelative[]) => {
       updateEdgeData({
-        data: {
-          controlPoints: points,
-        }
+        controlPoints: points,  // ✅ Top-level
       });
     }, [updateEdgeData]),
     pathRef,
@@ -244,10 +238,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // Label drag hook - saves labelPositionRelative
   const handleLabelPositionChange = useCallback((newRelative: { t: number; offset: number }) => {
     const success = updateEdgeData({
-      data: {
-        labelPositionRelative: newRelative,
-        labelPositionSvg: undefined, // Remove legacy if exists
-      }
+      labelPositionRelative: newRelative,  // ✅ Top-level
+      labelPositionSvg: undefined, // Remove legacy if exists (top-level)
     });
     if (success) {
       console.log('[CustomEdge] Label position saved (relative):', newRelative);
@@ -303,29 +295,62 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     try {
       const conditionName = String(label || 'Condition');
 
-      // Search for existing condition script
+      // ✅ Check if edge already has conditionId (top-level)
+      const currentEdges = FlowStateBridge.getEdges();
+      const currentEdge = currentEdges.find((e: any) => e.id === id);
+      const existingConditionId = currentEdge?.conditionId || (props as any).conditionId;  // ✅ Top-level
+
+      console.log('[CustomEdge] 🔍 Opening condition editor', {
+        edgeId: id,
+        label: conditionName,
+        conditionIdFromProps: (props as any).conditionId,  // ✅ Top-level
+        conditionIdFromBridge: currentEdge?.conditionId,  // ✅ Top-level
+        existingConditionId,
+        hasCurrentEdge: !!currentEdge
+      });
+
+      // ✅ Search for existing condition script ONLY if conditionId exists
       let existingScript = '';
-      const conditions = (projectData as any)?.conditions || [];
-      for (const cat of conditions) {
-        for (const item of (cat.items || [])) {
-          const itemName = item.name || item.label;
-          if (itemName === conditionName) {
-            existingScript = (item as any)?.data?.script || '';
-            break;
+      let foundConditionId: string | undefined = undefined;
+
+      if (existingConditionId) {
+        // ✅ Search by ID (edge is already linked to a condition)
+        const conditions = (projectData as any)?.conditions || [];
+        for (const cat of conditions) {
+          for (const item of (cat.items || [])) {
+            const itemId = item.id || item._id;
+            if (itemId === existingConditionId) {
+              // Load DSL (uiCode) - source of truth
+              existingScript = (item as any)?.data?.uiCode || (item as any)?.data?.script || '';
+              foundConditionId = itemId;
+              break;
+            }
           }
+          if (foundConditionId) break;
         }
-        if (existingScript) break;
+
+        // ✅ If conditionId exists but condition not found, notify error
+        if (!foundConditionId) {
+          console.error('[CustomEdge] ⚠️ Condition not found', {
+            edgeId: id,
+            conditionId: existingConditionId,
+            edgeLabel: label
+          });
+          // TODO: Show user notification (toast/message)
+        }
       }
+      // ✅ If no conditionId, don't search by label - condition doesn't exist yet
 
       // Dispatch event - generation will happen in ConditionEditorEventHandler
-      // where complete variables (staticVars + flowchartVars) are available
       const ev = new CustomEvent('conditionEditor:open', {
         detail: {
           label: conditionName,
           name: conditionName,
           script: existingScript,
           nodeId: target,
-          needsGeneration: !existingScript || !existingScript.trim(),
+          needsGeneration: !existingConditionId || !existingScript || !existingScript.trim(),
+          edgeId: id, // ✅ Edge ID
+          conditionId: foundConditionId || existingConditionId, // ✅ Condition ID (if exists)
         },
         bubbles: true,
       });
@@ -357,12 +382,9 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
 
   const handleSelectLinkStyle = useCallback((style: LinkStyle) => {
     updateEdgeData({
-      data: {
-        ...(props.data || {}),
-        linkStyle: style,
-      },
+      linkStyle: style,  // ✅ Top-level
     });
-  }, [updateEdgeData, props.data]);
+  }, [updateEdgeData]);
 
   const handleCloseContextMenu = useCallback(() => {
     setContextMenu(null);
@@ -371,13 +393,16 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const handleSelectCondition = (item: any) => {
     updateEdgeData({
       label: item.description || item.name || '',
-      data: { ...(props.data || {}), isElse: false },
+      isElse: false,  // ✅ Top-level
     });
     setShowConditionSelector(false);
   };
 
   const handleSelectUnconditioned = () => {
-    updateEdgeData({ label: undefined, data: { ...(props.data || {}), isElse: false } });
+    updateEdgeData({
+      label: undefined,
+      isElse: false  // ✅ Top-level
+    });
     setShowConditionSelector(false);
   };
 
@@ -491,9 +516,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       const updatedPoints = [...controlPointsRelative, newPoint].sort((a, b) => a.t - b.t);
 
       updateEdgeData({
-        data: {
-          controlPoints: updatedPoints,
-        }
+        controlPoints: updatedPoints,  // ✅ Top-level
       });
     }
   };
@@ -571,8 +594,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         onEdit={handleEditLabel}
         onUncondition={handleUncondition}
         onOpenConditionEditor={handleOpenConditionEditor}
-        hasConditionScript={(props.data as any)?.hasConditionScript}
-        isElse={(props.data as any)?.isElse}
+        hasConditionScript={!!((props as any).conditionId || (props.data as any)?.hasConditionScript)}
+        isElse={(props as any).isElse ?? (props.data as any)?.isElse}
         onMouseEnter={() => hover.setLabelHovered(true)}
         onMouseLeave={() => hover.setLabelHovered(false)}
         toolbarRef={hoverRefs.toolbarRef}
@@ -615,8 +638,10 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             onSelectCondition={handleSelectCondition}
             onSelectUnconditioned={handleSelectUnconditioned}
             onSelectElse={() => {
-              const newData = { ...(props.data || {}), isElse: true };
-              updateEdgeData({ label: 'Else', data: newData });
+              updateEdgeData({
+                label: 'Else',
+                isElse: true  // ✅ Top-level
+              });
               setShowConditionSelector(false);
             }}
             onClose={handleCloseSelector}

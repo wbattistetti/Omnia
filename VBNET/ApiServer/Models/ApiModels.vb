@@ -23,6 +23,12 @@ Namespace Models
 
         <JsonProperty("translations")>
         Public Property Translations As Dictionary(Of String, String)
+
+        ''' <summary>
+        ''' ✅ NEW: Conditions dal projectData - usate per validare edge conditions
+        ''' </summary>
+        <JsonProperty("conditions")>
+        Public Property Conditions As List(Of Compiler.ConditionDefinition)
     End Class
 
     ''' <summary>

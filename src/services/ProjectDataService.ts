@@ -435,7 +435,7 @@ export const ProjectDataService = {
         type: (item as any)?.type,
         // ✅ mode removed - use type (TaskType enum) only
         shortLabel: item.shortLabel,
-        data: item.data,
+        data: item.data || {}, // ✅ Preserve data object (includes uiCode, script, ast, etc.)
         ddt: item.ddt,
         // Include ProblemClassification payload persisted per act (project-owned)
         problem: (item as any)?.problem,
@@ -448,6 +448,16 @@ export const ProjectDataService = {
         factoryId: (item.origin === 'factory' && item.originId) ? item.originId : (item.factoryId || null),
         isInMemory: false
       };
+
+      // ✅ Log if condition has uiCode when converting
+      if (entityType === 'conditions' && convertedItem.data?.uiCode) {
+        console.log('[ProjectDataService][convertToCategories] ✅ Condition with uiCode converted', {
+          id: convertedItem.id,
+          name: convertedItem.name,
+          uiCodeLength: convertedItem.data.uiCode.length,
+          hasScript: !!convertedItem.data.script
+        });
+      }
 
       categoriesMap[key].items.push(convertedItem);
     });
@@ -496,6 +506,82 @@ export const ProjectDataService = {
       console.log(`[PERF][${new Date().toISOString()}] 📊 START loadProjectData`);
     }
     await new Promise(resolve => setTimeout(resolve, 50));
+
+    // ✅ NEW: Load project-specific conditions from database
+    const currentProjectId = localStorage.getItem('currentProjectId');
+    if (currentProjectId) {
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(currentProjectId)}/conditions`);
+        if (res.ok) {
+          const { items } = await res.json();
+          if (Array.isArray(items) && items.length > 0) {
+            // Convert project conditions to categories format
+            const projectConditions = this.convertToCategories(items, 'conditions');
+
+            // Merge with existing conditions (project conditions take precedence)
+            const existingConditions = projectData.conditions || [];
+            const mergedConditions: Category[] = [];
+
+            // Create a map of existing condition IDs
+            const existingIds = new Set<string>();
+            existingConditions.forEach(cat => {
+              cat.items.forEach(item => {
+                existingIds.add(item.id || item._id);
+              });
+            });
+
+            // Add project conditions (overwrite existing ones with same ID)
+            projectConditions.forEach(projectCat => {
+              const existingCat = existingConditions.find(c => c.name === projectCat.name);
+              if (existingCat) {
+                // Merge items: project items overwrite factory items with same ID
+                const mergedItems = [...existingCat.items];
+                projectCat.items.forEach(projectItem => {
+                  const existingIndex = mergedItems.findIndex(item => (item.id || item._id) === (projectItem.id || projectItem._id));
+                  if (existingIndex >= 0) {
+                    mergedItems[existingIndex] = projectItem; // Overwrite
+                  } else {
+                    mergedItems.push(projectItem); // Add new
+                  }
+                });
+                mergedConditions.push({ ...existingCat, items: mergedItems });
+              } else {
+                mergedConditions.push(projectCat); // New category
+              }
+            });
+
+            // Add factory conditions that don't exist in project
+            existingConditions.forEach(factoryCat => {
+              const hasProjectCat = mergedConditions.some(c => c.name === factoryCat.name);
+              if (!hasProjectCat) {
+                mergedConditions.push(factoryCat);
+              }
+            });
+
+            projectData.conditions = mergedConditions;
+            console.log('[ProjectDataService] ✅ Loaded project conditions', {
+              projectId: currentProjectId,
+              projectConditionsCount: items.length,
+              mergedCategoriesCount: mergedConditions.length,
+              conditionsWithUiCode: mergedConditions.flatMap(cat =>
+                (cat.items || []).filter((item: any) => item.data?.uiCode).map((item: any) => ({
+                  id: item.id || item._id,
+                  name: item.name || item.label,
+                  hasUiCode: !!item.data?.uiCode,
+                  uiCodeLength: item.data?.uiCode?.length || 0
+                }))
+              )
+            });
+          }
+        }
+      } catch (e: any) {
+        console.warn('[ProjectDataService] ⚠️ Failed to load project conditions', {
+          projectId: currentProjectId,
+          error: e.message
+        });
+      }
+    }
+
     const result = { ...projectData };
     const duration = performance.now() - startTime;
     if (import.meta.env.DEV && localStorage.getItem('SHOW_PERF_LOGS') === 'true') {
@@ -669,7 +755,8 @@ export const ProjectDataService = {
       for (const cat of categories) {
         const items: any[] = Array.isArray(cat?.items) ? cat.items : [];
         for (const item of items) {
-          if (item?.data?.script) {
+          // ✅ FIX: Save conditions that have either script OR uiCode (DSL)
+          if (item?.data?.script || item?.data?.uiCode) {
             const conditionId = item.id || item._id;
             itemsToPersist.push({
               _id: conditionId,

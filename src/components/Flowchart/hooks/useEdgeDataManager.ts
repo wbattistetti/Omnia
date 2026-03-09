@@ -27,11 +27,30 @@ export function useEdgeDataManager(
    */
   const createOnUpdate = useCallback((edgeId: string) => {
     return (updates: any) => {
-      console.log('[useEdgeDataManager][createOnUpdate] 🎯 START', {
-        edgeId,
-        updates,
-        updatesData: updates.data,
-        hasLabelPositionSvg: !!(updates.data?.labelPositionSvg)
+      // ✅ Separate persistent fields from data-only fields
+      const persistentFields = [
+        'conditionId',
+        'isElse',
+        'linkStyle',
+        'controlPoints',
+        'labelPositionRelative',
+        'labelPositionSvg'
+      ];
+
+      const persistentUpdates: any = {};
+      const dataOnlyUpdates: any = {};
+
+      Object.keys(updates).forEach(key => {
+        if (key === 'data') {
+          // data updates are always non-persistent callbacks
+          dataOnlyUpdates.data = updates.data;
+        } else if (persistentFields.includes(key)) {
+          // Persistent fields go to top-level
+          persistentUpdates[key] = updates[key];
+        } else if (key !== 'label') {
+          // Other top-level fields (except label which is handled separately)
+          persistentUpdates[key] = updates[key];
+        }
       });
 
       let safeUpdates = { ...updates };
@@ -42,59 +61,27 @@ export function useEdgeDataManager(
       }
 
       setEdges(prevEdges => {
-        console.log('[useEdgeDataManager][createOnUpdate] 📊 Before update', {
-          edgeId,
-          totalEdges: prevEdges.length,
-          targetEdge: prevEdges.find(e => e.id === edgeId),
-          targetEdgeData: prevEdges.find(e => e.id === edgeId)?.data
-        });
-
         const updatedEdges = prevEdges.map(edge => {
           if (edge.id === edgeId) {
-            // CRITICAL: Preserve ALL existing data properties
-            // This includes: linkStyle, labelPositionSvg, controlPoints, isElse, etc.
-            const existingData = edge.data || {};
-            const mergedData = {
-              ...existingData,
-              ...(safeUpdates.data || {})
-            };
-
-            // DEBUG: Log when labelPositionSvg is being updated
-            if (safeUpdates.data?.labelPositionSvg) {
-              console.log('[useEdgeDataManager][createOnUpdate] 🔄 Updating labelPositionSvg', {
-                edgeId: edge.id,
-                oldPosition: existingData.labelPositionSvg,
-                newPosition: safeUpdates.data.labelPositionSvg,
-                existingDataKeys: Object.keys(existingData),
-                mergedDataKeys: Object.keys(mergedData),
-                mergedData: mergedData
-              });
-            }
-
+            // ✅ Merge persistent fields at top-level
             const updatedEdge = {
               ...edge,
-              ...safeUpdates,
-              data: mergedData
+              ...persistentUpdates,
+              label: safeUpdates.label !== undefined ? safeUpdates.label : edge.label
             };
 
-            console.log('[useEdgeDataManager][createOnUpdate] ✅ Updated edge', {
-              edgeId: edge.id,
-              updatedEdgeData: updatedEdge.data,
-              hasLabelPositionSvg: !!(updatedEdge.data as any)?.labelPositionSvg,
-              labelPositionSvg: (updatedEdge.data as any)?.labelPositionSvg
-            });
+            // ✅ Merge data-only fields (callbacks)
+            if (Object.keys(dataOnlyUpdates).length > 0 || safeUpdates.data) {
+              updatedEdge.data = {
+                ...(edge.data || {}),
+                ...(safeUpdates.data || {}),
+                ...dataOnlyUpdates.data
+              };
+            }
 
             return updatedEdge;
           }
           return edge;
-        });
-
-        console.log('[useEdgeDataManager][createOnUpdate] 📊 After update', {
-          edgeId,
-          totalEdges: updatedEdges.length,
-          targetEdge: updatedEdges.find(e => e.id === edgeId),
-          targetEdgeData: updatedEdges.find(e => e.id === edgeId)?.data,
-          targetEdgeLabelPosition: (updatedEdges.find(e => e.id === edgeId)?.data as any)?.labelPositionSvg
         });
 
         return updatedEdges;

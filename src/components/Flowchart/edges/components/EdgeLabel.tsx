@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Pencil, Wrench, Link2Off as LinkOff } from 'lucide-react';
+import { Pencil, Wrench, Link2Off as LinkOff, AlertTriangle } from 'lucide-react';
 import { useDynamicFontSizes } from '../../../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../../../utils/fontSizeUtils';
 import { VoiceInput } from '../../../common/VoiceInput';
 import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
 import { useEdgeErrors } from '../../hooks/useEdgeErrors';
+import type { CompilationError } from '../../../../FlowCompiler/types';
+import { ErrorTooltip } from '../../components/ErrorTooltip';
 
 export interface EdgeLabelProps {
   label: string | undefined;
@@ -62,6 +64,36 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
   const labelColor = edgeErrors && edgeErrors.strokeColor !== 'transparent'
     ? edgeErrors.strokeColor
     : '#8b5cf6'; // Default purple
+
+  // ✅ Error popover state
+  const [showErrorPopover, setShowErrorPopover] = useState(false);
+  const errorIconRef = useRef<HTMLButtonElement>(null);
+
+  // ✅ Handle error icon click
+  const handleErrorClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowErrorPopover(true);
+  }, []);
+
+  // ✅ Handle error fix
+  const handleErrorFix = useCallback(async (error: CompilationError) => {
+    setShowErrorPopover(false);
+    const { handleErrorFix: handleErrorFixCentral } = await import('../../../../utils/handleErrorFix');
+    await handleErrorFixCentral(error);
+  }, []);
+
+  // ✅ Close popover on outside click
+  useEffect(() => {
+    if (!showErrorPopover) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (errorIconRef.current && !errorIconRef.current.contains(e.target as Node)) {
+        setShowErrorPopover(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showErrorPopover]);
 
   // Update editing value when label changes externally
   useEffect(() => {
@@ -193,8 +225,13 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
       {isHovered && !isEditing && (
         <span
           ref={toolbarRef as any}
+          data-toolbar="true"
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
+          onMouseDown={(e) => {
+            // ✅ FIX: Prevent drag when clicking on toolbar buttons
+            e.stopPropagation();
+          }}
           style={{
             position: 'absolute',
             left: '100%',
@@ -223,6 +260,10 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
               minHeight: `${sizes.iconButtonSize}px`,
             }}
             title="Modifica label"
+            onMouseDown={(e) => {
+              // ✅ FIX: Prevent drag when clicking this button
+              e.stopPropagation();
+            }}
             onClick={(e) => {
               e.stopPropagation();
               handleStartEdit();
@@ -247,6 +288,10 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
                 minHeight: `${sizes.iconButtonSize}px`,
               }}
               title="Apri Condition Editor"
+              onMouseDown={(e) => {
+                // ✅ FIX: Prevent drag when clicking this button (tenaglia)
+                e.stopPropagation();
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenConditionEditor?.();
@@ -271,6 +316,10 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
               minHeight: `${sizes.iconButtonSize}px`,
             }}
             title="Rendi unconduitioned"
+            onMouseDown={(e) => {
+              // ✅ FIX: Prevent drag when clicking this button
+              e.stopPropagation();
+            }}
             onClick={(e) => {
               e.stopPropagation();
               onUncondition?.();
@@ -278,8 +327,123 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
           >
             <LinkOff size={sizes.iconSize} />
           </button>
+          {/* ✅ Error Icon - Added at the end of toolbar, only visible when errors exist */}
+          {edgeErrors && (edgeErrors.hasError || edgeErrors.hasWarning) && (
+            <div style={{ position: 'relative' }}>
+              <button
+                ref={errorIconRef}
+                onClick={handleErrorClick}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: `${sizes.iconButtonSize}px`,
+                  height: `${sizes.iconButtonSize}px`,
+                  minWidth: `${sizes.iconButtonSize}px`,
+                  minHeight: `${sizes.iconButtonSize}px`,
+                  opacity: 0.9,
+                  transition: 'opacity 120ms linear, transform 120ms ease'
+                }}
+                title={edgeErrors.hasError ? 'Errori di compilazione' : 'Avvisi di compilazione'}
+              >
+                <AlertTriangle
+                  size={sizes.iconSize}
+                  style={{
+                    color: edgeErrors.hasError ? '#ef4444' : '#f59e0b' // Red for error, orange for warning
+                  }}
+                />
+              </button>
+              {/* Error Popover - shown when icon is clicked */}
+              {showErrorPopover && errorIconRef.current && edgeErrors.errors.length > 0 && (
+                <ErrorPopoverPortal
+                  errors={edgeErrors.errors}
+                  anchorRef={errorIconRef}
+                  onClose={() => setShowErrorPopover(false)}
+                  onFix={handleErrorFix}
+                />
+              )}
+            </div>
+          )}
         </span>
       )}
+    </div>,
+    document.body
+  );
+};
+
+// ✅ Error Popover Portal Component (similar to NodeRowActionsOverlay)
+interface ErrorPopoverPortalProps {
+  errors: CompilationError[];
+  anchorRef: React.RefObject<HTMLElement>;
+  onClose: () => void;
+  onFix?: (error: CompilationError) => void;
+}
+
+const ErrorPopoverPortal: React.FC<ErrorPopoverPortalProps> = ({ errors, anchorRef, onClose, onFix }) => {
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!anchorRef.current) return;
+
+    const updatePosition = () => {
+      if (anchorRef.current) {
+        const rect = anchorRef.current.getBoundingClientRect();
+        setPosition({
+          top: rect.bottom + 8,
+          left: rect.left
+        });
+      }
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    // Close on outside click
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node) &&
+        anchorRef.current &&
+        !anchorRef.current.contains(e.target as Node)
+      ) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [anchorRef, onClose]);
+
+  if (!position) return null;
+
+  return createPortal(
+    <div
+      ref={popoverRef}
+      style={{
+        position: 'fixed',
+        top: position.top,
+        left: position.left,
+        zIndex: 10000,
+        pointerEvents: 'auto'
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <ErrorTooltip errors={errors} onFix={onFix} onClose={onClose} />
     </div>,
     document.body
   );

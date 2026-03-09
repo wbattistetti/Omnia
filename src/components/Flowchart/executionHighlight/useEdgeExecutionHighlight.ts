@@ -65,9 +65,9 @@ export function useEdgeExecutionHighlight(
       };
     }
 
-    // Check if edge has a condition
-    const edgeData = edge.data;
-    const hasCondition = edgeData?.condition && Object.keys(edgeData.condition).length > 0;
+    // ✅ Check if edge has a conditionId (top-level)
+    const conditionId = (edge as any).conditionId;
+    const hasCondition = !!conditionId;
 
     if (!hasCondition) {
       return {
@@ -77,10 +77,10 @@ export function useEdgeExecutionHighlight(
       };
     }
 
-    // Evaluate condition
+    // Evaluate condition using conditionId
     try {
       const conditionResult = evaluateCondition(
-        edgeData.condition,
+        { type: 'EdgeCondition', edgeId: edge.id, condition: conditionId },
         execState.executionState
       );
 
@@ -92,12 +92,14 @@ export function useEdgeExecutionHighlight(
         // Evaluate all conditions for edges from the same source
         const validEdges = edgesFromSource.filter(e => {
           if (e.id === edge.id) return true; // Include current edge
-          const eData = e.data;
-          const hasCondition = eData?.condition && Object.keys(eData.condition).length > 0;
-          if (!hasCondition) return false;
+          const otherConditionId = (e as any).conditionId;  // ✅ Top-level
+          if (!otherConditionId) return false;
 
           try {
-            return evaluateCondition(eData.condition, execState.executionState!);
+            return evaluateCondition(
+              { type: 'EdgeCondition', edgeId: e.id, condition: otherConditionId },
+              execState.executionState!
+            );
           } catch {
             return false;
           }
