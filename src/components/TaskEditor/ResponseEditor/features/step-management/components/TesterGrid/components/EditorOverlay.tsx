@@ -48,8 +48,8 @@ export function EditorOverlay({
     return null;
   }
 
-  // ✅ REFACTORED: Removed header from overlay - toolbar is now injected into main header via Context
-  // The overlay is now just a visual container for the editor content
+  // ✅ Editors now have their own headers (EditorHeader component)
+  // The overlay is just a visual container for the editor content
   return (
     <div
       style={{
@@ -64,8 +64,8 @@ export function EditorOverlay({
         pointerEvents: 'auto',
       }}
     >
-      {/* ✅ Editor body - no header, toolbar is in main header */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 6, minHeight: 0 }}>
+      {/* ✅ Editor with its own header - no padding to allow header to be visible */}
+      <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <MemoizedEditorRenderer
           activeEditor={activeEditor}
           editorProps={editorProps}

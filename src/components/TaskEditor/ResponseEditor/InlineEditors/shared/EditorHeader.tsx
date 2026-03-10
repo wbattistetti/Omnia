@@ -1,6 +1,14 @@
 import React from 'react';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, X } from 'lucide-react';
 import { ExtractorType } from '@responseEditor/hooks/useEditorMode';
+
+// Colors matching TesterGrid column headers
+const EXTRACTOR_COLORS: Record<ExtractorType, string> = {
+  regex: '#93c5fd',
+  extractor: '#e5e7eb', // deterministic/rules
+  ner: '#fef3c7',
+  llm: '#fed7aa',
+};
 
 interface EditorHeaderProps {
   title: string;
@@ -108,6 +116,8 @@ export default function EditorHeader({
     }
   }, [shouldShowButton, isCreateMode, isGenerating, onButtonClick, getButtonLabel, onButtonRender]);
 
+  const backgroundColor = EXTRACTOR_COLORS[extractorType] || EXTRACTOR_COLORS.regex;
+
   return (
     <div
       style={{
@@ -115,6 +125,9 @@ export default function EditorHeader({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 16,
+        padding: '8px 12px',
+        background: backgroundColor,
+        borderRadius: 4,
         flexWrap: 'wrap',
         gap: 8,
       }}
@@ -144,7 +157,37 @@ export default function EditorHeader({
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
         {buttonElement}
-        {/* Pulsante Close rimosso - la X è già nell'header dell'overlay */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close editor"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28,
+              height: 28,
+              padding: 0,
+              border: '1px solid #e5e7eb',
+              borderRadius: 4,
+              background: 'transparent',
+              color: '#6b7280',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = '#ef4444';
+              e.currentTarget.style.color = '#ef4444';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = '#e5e7eb';
+              e.currentTarget.style.color = '#6b7280';
+            }}
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
     </div>
   );

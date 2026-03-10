@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import EditorPanel, { type CustomLanguage } from '@components/CodeEditor/EditorPanel';
 import { useRegexAIGeneration } from '@responseEditor/hooks/useRegexAIGeneration';
+import { useRegexValidation } from '@responseEditor/hooks/useRegexValidation';
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 import DialogueTaskService from '@services/DialogueTaskService';
 import {
@@ -12,8 +13,7 @@ import {
   type SubDataMapping,
 } from '@responseEditor/utils/regexGroupTransform';
 import { generateGroupName } from '@responseEditor/utils/regexGroupUtils';
-import { useHeaderToolbarContext } from '@responseEditor/context/HeaderToolbarContext';
-import { Wand2, Loader2 } from 'lucide-react';
+import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
 
 interface RegexInlineEditorProps {
   regex: string; // contract.regex.value (GUID-based, stored form)
@@ -225,25 +225,13 @@ export default function RegexInlineEditor({
 
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Propagate validation errors upward via onErrorRender
-  useEffect(() => {
-    if (onErrorRender) {
-      if (validationError) {
-        onErrorRender(
-          <span style={{ color: '#ef4444', fontSize: '12px' }}>{validationError}</span>
-        );
-      } else {
-        onErrorRender(null);
-      }
-    }
-  }, [validationError, onErrorRender]);
-
   // -----------------------------------------------------------------------
   // Show/hide AI button
   // -----------------------------------------------------------------------
 
-  const showButton = textboxText !== lastTextboxText;
+  const shouldShowButton = textboxText !== lastTextboxText || !!validationError;
   const buttonCaption = lastTextboxText.trim() === '' ? 'Create Regex' : 'Refine Regex';
+  const isCreateMode = lastTextboxText.trim() === '';
 
   // -----------------------------------------------------------------------
   // AI generation
@@ -273,6 +261,41 @@ export default function RegexInlineEditor({
       alert(`Error generating regex: ${error.message}`);
     },
   });
+
+  // -----------------------------------------------------------------------
+  // Validation: groups count and normalization errors
+  // -----------------------------------------------------------------------
+
+  // Use existing useRegexValidation hook to validate groups count
+  // Must be called after generatingRegex is defined
+  const { validationResult, shouldShowValidation } = useRegexValidation({
+    regex: textboxText, // Use label-based regex (what user sees)
+    node,
+    shouldValidateOnChange: true,
+    shouldValidateOnAIFinish: true,
+    generatingRegex,
+  });
+
+  // Also validate normalization (groups must be recognized labels)
+  useEffect(() => {
+    if (!textboxText || textboxText.trim() === '' || textboxText === lastTextboxText) {
+      setValidationError(null);
+      return;
+    }
+
+    // Debounce normalization validation
+    const timeoutId = setTimeout(() => {
+      try {
+        normalizeRegexFromEditor(textboxText, subDataMappingRef.current);
+        setValidationError(null);
+      } catch (normError) {
+        const errorMessage = normError instanceof Error ? normError.message : String(normError);
+        setValidationError(errorMessage);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [textboxText, lastTextboxText]);
 
   // The AI sees and works with label-based regex (what is shown in the editor).
   // The AI is expected to preserve the label group names in its output.
@@ -383,98 +406,96 @@ export default function RegexInlineEditor({
   }, [node?.templateId, saveToTemplate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // -----------------------------------------------------------------------
-  // Inject toolbar into main header via Context
+  // Backward compatibility: Support onButtonRender and onErrorRender callbacks
+  // (but EditorHeader is the primary UI)
   // -----------------------------------------------------------------------
-  const headerToolbarContext = useHeaderToolbarContext();
-
   useEffect(() => {
-    // ✅ DEBUG: Log context availability
-    if (!headerToolbarContext) {
-      console.warn('[RegexInlineEditor] ⚠️ HeaderToolbarContext not available, using fallback onButtonRender');
-    } else {
-      console.log('[RegexInlineEditor] ✅ HeaderToolbarContext available, injecting toolbar');
-    }
-
-    // ✅ NEW: Inject toolbar into main header (takes precedence over onButtonRender)
-    if (headerToolbarContext) {
-      if (showButton) {
-        headerToolbarContext.setToolbar(
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {validationError && (
-              <span style={{ color: '#ef4444', fontSize: '12px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span>⚠️</span>
-                <span>{validationError}</span>
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={handleAIClick}
-              disabled={generatingRegex}
-              style={{
-                padding: '6px 12px',
-                backgroundColor: generatingRegex ? '#9ca3af' : '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: generatingRegex ? 'not-allowed' : 'pointer',
-                fontSize: '13px',
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              {generatingRegex ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  <span>Generating...</span>
-                </>
-              ) : (
-                <>
-                  <Wand2 size={14} />
-                  <span>{buttonCaption}</span>
-                </>
-              )}
-            </button>
-          </div>
+    if (onErrorRender) {
+      if (validationError) {
+        onErrorRender(
+          <span style={{ color: '#ef4444', fontSize: '12px' }}>{validationError}</span>
         );
       } else {
-        headerToolbarContext.setToolbar(null);
+        onErrorRender(null);
       }
-    } else if (onButtonRender) {
-      // ✅ FALLBACK: Use onButtonRender if Context is not available (backward compatibility)
-      if (showButton) {
-        onButtonRender(
-          <button
-            type="button"
-            onClick={handleAIClick}
-            disabled={generatingRegex}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: generatingRegex ? '#9ca3af' : '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: generatingRegex ? 'not-allowed' : 'pointer',
-              fontSize: '13px',
-              fontWeight: 500,
-            }}
-          >
-            {generatingRegex ? 'Generating...' : buttonCaption}
-          </button>
+    }
+  }, [validationError, onErrorRender]);
+
+  // -----------------------------------------------------------------------
+  // Build validation badge showing groups status
+  // -----------------------------------------------------------------------
+
+  const validationBadge = React.useMemo(() => {
+    // Priority 1: Show normalization error (groups not recognized)
+    if (validationError) {
+      return (
+        <span style={{ color: '#ef4444', fontSize: '12px', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span>⚠️</span>
+          <span>{validationError}</span>
+        </span>
+      );
+    }
+
+    // Priority 2: Show groups validation status
+    if (validationResult && shouldShowValidation && validationResult.groupsExpected > 0) {
+      const isComplete = validationResult.groupsFound === validationResult.groupsExpected && validationResult.valid;
+      const hasMissingGroups = validationResult.groupsFound < validationResult.groupsExpected;
+
+      if (isComplete) {
+        // All groups present
+        return (
+          <span style={{
+            color: '#10b981',
+            fontSize: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            fontWeight: 500
+          }}>
+            <span>✓</span>
+            <span>Tutto ok</span>
+          </span>
+        );
+      } else if (hasMissingGroups) {
+        // Missing groups
+        return (
+          <span style={{
+            color: '#ef4444',
+            fontSize: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            fontWeight: 500
+          }}>
+            <span>⚠</span>
+            <span>Mancano gruppi ({validationResult.groupsFound}/{validationResult.groupsExpected})</span>
+          </span>
         );
       } else {
-        onButtonRender(null);
+        // Warning (extra groups or other issues)
+        return (
+          <span style={{
+            color: '#f59e0b',
+            fontSize: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            fontWeight: 500
+          }}>
+            <span>⚠</span>
+            <span>{validationResult.groupsFound}/{validationResult.groupsExpected} groups</span>
+          </span>
+        );
       }
     }
 
-    // ✅ Cleanup: Remove toolbar when editor closes
-    return () => {
-      if (headerToolbarContext) {
-        headerToolbarContext.setToolbar(null);
-      }
-    };
-  }, [headerToolbarContext, onButtonRender, showButton, handleAIClick, buttonCaption, generatingRegex, validationError]);
+    return undefined;
+  }, [validationError, validationResult, shouldShowValidation]);
+
+  // Combine validation errors
+  const errorMessage = validationError || (validationResult && !validationResult.valid && validationResult.errors.length > 0
+    ? validationResult.errors[0]
+    : undefined);
 
   // -----------------------------------------------------------------------
   // Editor value — shows label-based regex or placeholder
@@ -507,21 +528,48 @@ export default function RegexInlineEditor({
   // -----------------------------------------------------------------------
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <EditorPanel
-        ref={editorRef}
-        code={editorValue}
-        language="regex"
-        customLanguage={{ id: 'regex', tokenizer: { root: [] } } as CustomLanguage}
-        onChange={(value) => {
-          if (value && value !== PLACEHOLDER_TEXT) {
-            setTextboxText(value);
-            // Clear any previous normalization error as user is still editing
-            setValidationError(null);
-          }
-        }}
-        useTemplate={false}
+    <div
+      style={{
+        padding: 8,
+        background: '#f9fafb',
+        animation: 'fadeIn 0.2s ease-in',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        width: '100%',
+        maxWidth: '100%',
+        overflow: 'hidden',
+        height: '100%',
+      }}
+    >
+      <EditorHeader
+        title="Regex (Regex)"
+        extractorType="regex"
+        isCreateMode={isCreateMode}
+        isGenerating={generatingRegex}
+        shouldShowButton={shouldShowButton}
+        onButtonClick={handleAIClick}
+        onClose={onClose}
+        validationBadge={validationBadge}
+        errorMessage={errorMessage}
+        buttonCaption={buttonCaption}
       />
+
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <EditorPanel
+          ref={editorRef}
+          code={editorValue}
+          language="regex"
+          customLanguage={{ id: 'regex', tokenizer: { root: [] } } as CustomLanguage}
+          onChange={(value) => {
+            if (value && value !== PLACEHOLDER_TEXT) {
+              setTextboxText(value);
+              // Don't clear validationError here - let debounced validation handle it
+            }
+          }}
+          useTemplate={false}
+        />
+      </div>
     </div>
   );
 }

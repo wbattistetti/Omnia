@@ -126,7 +126,7 @@ export default function NERInlineEditor({
       }}
     >
       <EditorHeader
-        title=""
+        title="NER (NER)"
         extractorType="ner"
         isCreateMode={isCreateMode}
         isGenerating={generating}

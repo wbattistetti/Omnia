@@ -157,7 +157,7 @@ export default function LLMInlineEditor({
       }}
     >
       <EditorHeader
-        title=""
+        title="LLM (LLM)"
         extractorType="llm"
         isCreateMode={isCreateMode}
         isGenerating={generating}

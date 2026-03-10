@@ -217,7 +217,7 @@ export default function ExtractorInlineEditor({
       }}
     >
       <EditorHeader
-        title=""
+        title="Rules (Rules)"
         extractorType="extractor"
         isCreateMode={isCreateMode}
         isGenerating={generating}
