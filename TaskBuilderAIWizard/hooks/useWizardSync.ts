@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { WizardTaskTreeNode } from '../types';
 import { generateVariableNames, applyVariableNamesToStructure } from '../services/VariableNameGeneratorService';
 import { syncTranslationsWithStructure } from '../services/TranslationSyncService';
@@ -69,7 +69,7 @@ export function useWizardSync(props: UseWizardSyncProps) {
     }
   }, [dataSchema, taskLabel, rowId, projectId, locale, setDataSchema]);
 
-  return {
-    syncVariables,
-  };
+  // Memoize the return object so its reference is stable across renders.
+  // Without this, any useEffect with wizardSync in its deps fires every render.
+  return useMemo(() => ({ syncVariables }), [syncVariables]);
 }

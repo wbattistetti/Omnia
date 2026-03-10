@@ -208,7 +208,14 @@ export class WizardOrchestrator {
 
     if (runMode === 'adaptation') {
       // ✅ ADAPTATION MODE: Direct cloning and adaptation (no parallel generation)
-      await this.executeAdaptationFlow(store);
+      try {
+        await this.executeAdaptationFlow(store);
+      } catch (error) {
+        console.error('[WizardOrchestrator] ❌ executeAdaptationFlow failed:', error);
+        store.updatePipelineStep('adaptation', 'failed',
+          error instanceof Error ? error.message : 'Errore sconosciuto nell\'adattamento');
+        throw error;
+      }
     } else {
       // ✅ FULL MODE: Parallel generation → sequential → adaptation
       // ✅ Reset completed phases tracker (fresh start)
@@ -233,8 +240,22 @@ export class WizardOrchestrator {
   private async executeAdaptationFlow(
     store: ReturnType<typeof useWizardStore.getState>
   ): Promise<void> {
+    // ✅ Debug: log config before guard check so we can see what's missing
+    console.log('[WizardOrchestrator] 🔍 executeAdaptationFlow config', {
+      hasRowId: !!this.config.rowId,
+      hasProjectId: !!this.config.projectId,
+      hasTemplateId: !!this.config.templateId,
+      rowId: this.config.rowId,
+      projectId: this.config.projectId,
+      templateId: this.config.templateId,
+      instanceRunMode: this.instanceRunMode,
+    });
+
     if (!this.config.rowId || !this.config.projectId || !this.config.templateId) {
-      throw new Error('[WizardOrchestrator] rowId, projectId and templateId required for adaptation');
+      throw new Error(
+        `[WizardOrchestrator] rowId, projectId and templateId required for adaptation. ` +
+        `rowId=${this.config.rowId}, projectId=${this.config.projectId}, templateId=${this.config.templateId}`
+      );
     }
 
     console.log('[WizardOrchestrator] 🚀 Starting adaptation flow: cloning steps and translations');
@@ -261,9 +282,10 @@ export class WizardOrchestrator {
 
     if (this.config.onTaskBuilderComplete) {
       const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
-      const taskTree = await buildTaskTreeFromRepository(this.config.rowId, this.config.projectId);
-      if (taskTree) {
-        this.config.onTaskBuilderComplete(taskTree);
+      // buildTaskTreeFromRepository returns { taskTree, instance } — unpack before passing
+      const result = await buildTaskTreeFromRepository(this.config.rowId, this.config.projectId);
+      if (result?.taskTree) {
+        this.config.onTaskBuilderComplete(result.taskTree);
       }
     }
   }

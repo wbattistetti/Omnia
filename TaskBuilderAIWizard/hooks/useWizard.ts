@@ -137,11 +137,17 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
 
   const hasStartedRef = useRef(false);
 
-  // ✅ FIX 1: Reset hasStartedRef quando cambia "contesto" (nuovo task / nuova modalità / nuovo template)
+  // Always keep a current reference to syncVariables without it being a useEffect dep.
+  // This avoids the stale-closure problem (the .then() callback always calls the latest version)
+  // and removes wizardSync from the auto-start effect dependency array.
+  const syncVariablesRef = useRef(wizardSync.syncVariables);
+  syncVariablesRef.current = wizardSync.syncVariables;
+
+  // Reset hasStartedRef when the context changes (new task / new mode / new template).
+  // Kept separate from the auto-start effect to avoid the "reset then immediately start" race.
   useEffect(() => {
     hasStartedRef.current = false;
-    console.log('[useWizard] 🔄 Reset hasStartedRef', { mode, templateId, taskLabel, rowId });
-  }, [mode, templateId, taskLabel, rowId]); // ✅ Aggiunto rowId - quando cambia task, cambia anche rowId
+  }, [mode, templateId, taskLabel, rowId]);
 
   // Handler for correction submit
   const handleCorrectionSubmit = useCallback(async () => {
@@ -195,20 +201,11 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
     }
   }, [taskLabel, store.correctionInput, store.dataSchema, store, rowId]); // ✅ FIX: Use store values instead of orchestrator
 
-  // ✅ FIX 2: Auto-start wizard (separato dal reset)
+  // Auto-start wizard.
+  // wizardSync is intentionally NOT in the deps array — syncVariablesRef.current is used
+  // instead to avoid firing this effect on every render (wizardSync object was unstable).
   useEffect(() => {
-    console.log('[useWizard] 🔍 Auto-start effect triggered', {
-      mode,
-      templateId,
-      taskLabel: taskLabel?.trim(),
-      rowId,
-      wizardState: store.wizardState,
-      hasStarted: hasStartedRef.current,
-      hasStartAdaptation: !!orchestrator.startAdaptation,
-      hasStartAdaptationMode: !!orchestrator.startAdaptationMode
-    });
-
-    // ✅ FULL MODE: Comportamento invariato - parte solo se wizardState === START
+    // FULL MODE: unchanged behaviour — starts only when wizardState === START
     if (
       mode === 'full' &&
       taskLabel?.trim() &&
@@ -216,129 +213,96 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
       !hasStartedRef.current
     ) {
       hasStartedRef.current = true;
-      if (orchestrator.startFull) {
-        orchestrator.startFull()
+      const startFn = orchestrator.startFull ?? orchestrator.start;
+      if (startFn) {
+        startFn()
           .then(async () => {
             await new Promise(resolve => setTimeout(resolve, 100));
-            await wizardSync.syncVariables();
+            await syncVariablesRef.current();
           })
           .catch((error) => {
-            console.error('[useWizard] ❌ Error in startFull:', error);
-            hasStartedRef.current = false;
-          });
-      } else if (orchestrator.start) {
-        orchestrator.start()
-          .then(async () => {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            await wizardSync.syncVariables();
-          })
-          .catch((error) => {
-            console.error('[useWizard] ❌ Error in start:', error);
+            console.error('[useWizard] Error in startFull:', error);
             hasStartedRef.current = false;
           });
       }
     }
 
-    // ✅ ADAPTATION MODE: Parte immediatamente se templateId è disponibile
-    // NON aspetta wizardState === START, parte direttamente con DATA_STRUCTURE_PROPOSED
+    // ADAPTATION MODE: starts immediately when templateId is available.
+    // Does NOT wait for wizardState === START.
     if (
       mode === 'adaptation' &&
       templateId &&
       !hasStartedRef.current
     ) {
-      console.log('[useWizard] ✅ Starting adaptation mode immediately', {
-        mode,
-        templateId,
-        rowId,
-        hasStartAdaptation: !!orchestrator.startAdaptation,
-        hasStartAdaptationMode: !!orchestrator.startAdaptationMode,
-        orchestratorKeys: Object.keys(orchestrator)
-      });
       hasStartedRef.current = true;
-      if (orchestrator.startAdaptation) {
-        orchestrator.startAdaptation(templateId)
-          .then(async () => {
-            console.log('[useWizard] ✅ startAdaptation completed successfully');
-            await new Promise(resolve => setTimeout(resolve, 100));
-            await wizardSync.syncVariables();
-          })
+      const startFn = orchestrator.startAdaptation ?? orchestrator.startAdaptationMode;
+      if (startFn) {
+        startFn(templateId)
           .catch((error) => {
-            console.error('[useWizard] ❌ Error in startAdaptation:', error);
+            console.error('[useWizard] Error in startAdaptation:', error);
             hasStartedRef.current = false;
           });
-      } else if (orchestrator.startAdaptationMode) {
-        orchestrator.startAdaptationMode(templateId)
-          .then(async () => {
-            console.log('[useWizard] ✅ startAdaptationMode completed successfully');
-            await new Promise(resolve => setTimeout(resolve, 100));
-            await wizardSync.syncVariables();
-          })
-          .catch((error) => {
-            console.error('[useWizard] ❌ Error in startAdaptationMode:', error);
-            hasStartedRef.current = false;
-          });
+        // No syncVariables here: the task does not exist yet at this point.
+        // It is created inside executeAdaptationFlow (after the user confirms).
       } else {
-        console.error('[useWizard] ❌ No startAdaptation or startAdaptationMode method available', {
-          orchestratorKeys: Object.keys(orchestrator)
-        });
+        console.error('[useWizard] No startAdaptation method on orchestrator');
         hasStartedRef.current = false;
       }
     }
-  }, [mode, taskLabel, templateId, store.wizardState, orchestrator, wizardSync]);
+  }, [mode, taskLabel, templateId, store.wizardState, orchestrator]);
 
-  // Return null if wizard is not active
-  if (!mode || (mode !== 'full' && mode !== 'adaptation')) {
+  // Wizard is only active in 'full' or 'adaptation' mode.
+  if (mode !== 'full' && mode !== 'adaptation') {
     return null;
   }
 
-  // Build result object
   return {
-    // State
-    wizardMode: store.wizardState, // ✅ RINOMINATO: wizardMode → wizardState (per backward compatibility, esponiamo ancora come wizardMode)
-    runMode: store.runMode || 'none', // ✅ FIX: Use store.runMode instead of orchestrator.runMode
-    currentStep: store.currentStep, // ✅ FIX: Use store.currentStep instead of orchestrator.currentStep
-    pipelineSteps: store.pipelineSteps, // ✅ FIX: Use store.pipelineSteps instead of orchestrator.pipelineSteps
-    dataSchema: store.dataSchema, // ✅ FIX: Use store.dataSchema instead of orchestrator.dataSchema
-    phaseCounters: store.phaseCounters, // ✅ FIX: Use store.phaseCounters instead of orchestrator.phaseCounters
+    // ── State (read from store — single source of truth) ──────────────────
+    wizardMode: store.wizardState,
+    runMode: store.runMode || 'none',
+    currentStep: store.currentStep,
+    pipelineSteps: store.pipelineSteps,
+    dataSchema: store.dataSchema,
+    phaseCounters: store.phaseCounters,
 
-    // UI state
-    showStructureConfirmation: store.wizardState === WizardMode.DATA_STRUCTURE_PROPOSED, // ✅ RINOMINATO: wizardMode → wizardState
-    structureConfirmed: store.structureConfirmed, // ✅ FIX: Use store.structureConfirmed
-    showCorrectionMode: store.wizardState === WizardMode.DATA_STRUCTURE_CORRECTION, // ✅ RINOMINATO: wizardMode → wizardState
-    correctionInput: store.correctionInput, // ✅ FIX: Use store.correctionInput
-    setCorrectionInput: store.setCorrectionInput, // ✅ FIX: Use store.setCorrectionInput
+    // ── UI state ──────────────────────────────────────────────────────────
+    showStructureConfirmation: store.wizardState === WizardMode.DATA_STRUCTURE_PROPOSED,
+    structureConfirmed: store.structureConfirmed,
+    showCorrectionMode: store.wizardState === WizardMode.DATA_STRUCTURE_CORRECTION,
+    correctionInput: store.correctionInput,
+    setCorrectionInput: store.setCorrectionInput,
 
-    // Handlers
-    startFull: orchestrator.startFull || (() => Promise.resolve()),
-    startAdaptation: orchestrator.startAdaptation || (() => Promise.resolve()),
-    confirmStructure: orchestrator.confirmStructure || (() => Promise.resolve()), // ✅ FIX: Use confirmStructure directly
-    rejectStructure: () => { // ✅ FIX: Implement rejectStructure using store
-      store.setWizardState(WizardMode.DATA_STRUCTURE_CORRECTION); // ✅ RINOMINATO: setWizardMode → setWizardState
+    // ── Handlers ──────────────────────────────────────────────────────────
+    startFull: orchestrator.startFull,
+    startAdaptation: orchestrator.startAdaptation,
+    confirmStructure: orchestrator.confirmStructure,
+    rejectStructure: () => {
+      store.setWizardState(WizardMode.DATA_STRUCTURE_CORRECTION);
       store.setStructureConfirmed(false);
     },
     handleCorrectionSubmit,
 
-    // Data
-    messages: store.messages, // ✅ FIX: Use store.messages
-    messagesGeneralized: store.messagesGeneralized, // ✅ FIX: Use store.messagesGeneralized
-    messagesContextualized: store.messagesContextualized, // ✅ FIX: Use store.messagesContextualized
-    shouldBeGeneral: store.shouldBeGeneral, // ✅ FIX: Use store.shouldBeGeneral
-    generalizedLabel: store.dataSchema?.[0]?.generalizedLabel || null, // ✅ FIX: Use store.dataSchema
-    generalizationReason: store.dataSchema?.[0]?.generalizationReason || null, // ✅ FIX: Use store.dataSchema
-    generalizedMessages: store.dataSchema?.[0]?.generalizedMessages || null, // ✅ FIX: Use store.dataSchema
-    constraints: store.constraints, // ✅ FIX: Use store.constraints
-    nlpContract: null, // ✅ FIX: nlpContract not in store, set to null for now
+    // ── Data ──────────────────────────────────────────────────────────────
+    messages: store.messages,
+    messagesGeneralized: store.messagesGeneralized,
+    messagesContextualized: store.messagesContextualized,
+    shouldBeGeneral: store.shouldBeGeneral,
+    generalizedLabel: store.dataSchema?.[0]?.generalizedLabel || null,
+    generalizationReason: store.dataSchema?.[0]?.generalizationReason || null,
+    generalizedMessages: store.dataSchema?.[0]?.generalizedMessages || null,
+    constraints: store.constraints,
+    nlpContract: null,
 
-    // Sub-steps
-    currentParserSubstep: store.currentParserSubstep, // ✅ FIX: Use store.currentParserSubstep
-    currentMessageSubstep: store.currentMessageSubstep, // ✅ FIX: Use store.currentMessageSubstep
+    // ── Sub-steps ─────────────────────────────────────────────────────────
+    currentParserSubstep: store.currentParserSubstep,
+    currentMessageSubstep: store.currentMessageSubstep,
 
-    // Module handlers
-    onProceedFromEuristica: () => Promise.resolve(), // ✅ FIX: Not implemented yet, placeholder
-    onShowModuleList: () => {}, // ✅ FIX: Not implemented yet, placeholder
-    onSelectModule: () => Promise.resolve(), // ✅ FIX: Not implemented yet, placeholder
-    onPreviewModule: store.setActiveNodeId, // ✅ FIX: Use store.setActiveNodeId
+    // ── Module handlers (placeholders — not yet implemented) ──────────────
+    onProceedFromEuristica: () => Promise.resolve(),
+    onShowModuleList: () => {},
+    onSelectModule: () => Promise.resolve(),
+    onPreviewModule: store.setActiveNodeId,
     availableModules: EMPTY_MODULES,
-    foundModuleId: store.selectedModuleId, // ✅ FIX: Use store.selectedModuleId
+    foundModuleId: store.selectedModuleId,
   };
 }

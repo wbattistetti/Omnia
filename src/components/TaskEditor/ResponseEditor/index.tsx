@@ -140,45 +140,14 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     ? task.id  // ✅ ALWAYS equals row.id (task can be TaskMeta or Task, both have id)
     : undefined;
 
-  // ✅ DEBUG: Log per verificare che rowId sia disponibile
-  if (taskWizardMode === 'full' && !rowIdForWizard) {
-    console.error('[ResponseEditor] ❌ CRITICAL: rowIdForWizard is undefined when taskWizardMode === "full"', {
-      taskWizardMode,
-      task,
-      taskId: task?.id,
-      taskLabel,
-    });
-  }
   const projectIdForWizard = (taskWizardMode === 'full' || taskWizardMode === 'adaptation' || shouldPreserveWizardIntegration)
     ? currentProjectId || undefined
     : undefined;
   const localeForWizard = 'it';
 
-  // ✅ Determine wizard mode and templateId for adaptation
+  // Determine wizard mode and templateId for adaptation
   const wizardMode = taskWizardMode === 'adaptation' ? 'adaptation' : taskWizardMode === 'full' ? 'full' : undefined;
   const templateIdForWizard = taskWizardMode === 'adaptation' ? contextualizationTemplateId : undefined;
-
-  // ✅ DEBUG: Log wizard mode determination
-  console.log('[ResponseEditor] 🔍 DEBUG: Wizard mode determination', {
-    taskWizardMode,
-    contextualizationTemplateId,
-    wizardMode,
-    templateIdForWizard,
-    rowIdForWizard,
-    taskLabelForWizard,
-    projectIdForWizard
-  });
-
-  // ✅ DEBUG: Log per verificare che rowId sia disponibile
-  if (taskWizardMode === 'full' && !rowIdForWizard) {
-    console.error('[ResponseEditor] ❌ CRITICAL: rowIdForWizard is undefined when taskWizardMode === "full"', {
-      taskWizardMode,
-      task,
-      taskId: task?.id,
-      taskLabel,
-      shouldPreserveWizardIntegration,
-    });
-  }
 
   // ✅ NEW: Use unified wizard hook
   const wizardResult = useWizard({
