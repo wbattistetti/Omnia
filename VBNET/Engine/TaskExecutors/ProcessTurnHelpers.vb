@@ -332,8 +332,8 @@ Public Module ProcessTurnHelpers
         <Extension>
         Public Function StepExists(task As CompiledUtteranceTask, stepType As DialogueStepType) As Boolean
             If task.Steps Is Nothing Then Return False
-            Return task.Steps.SingleOrDefault(Function(s) s.Type = stepType) IsNot Nothing
-        End Function
+        Return task.Steps.SingleOrDefault(Function(s) s.Type = stepType) IsNot Nothing
+    End Function
 
 End Module
 ''' <summary>

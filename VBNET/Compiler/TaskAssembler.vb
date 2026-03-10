@@ -115,9 +115,21 @@ Public Class TaskAssembler
         }
 
         If ideNode.Steps IsNot Nothing Then
-            ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
+            ' ✅ COMPILE-TIME FILTER: skip steps with no escalations (disabled in Response Editor).
+            ' A step with 0 escalations has no messages → it was disabled by the designer.
+            ' Excluding it here means StepExists() returns False naturally at runtime,
+            ' with no changes needed in the engine layer.
             Dim seenTypes As New HashSet(Of DialogueStepType)()
             For Each ideStep As DialogueStep In ideNode.Steps
+                If ideStep.IsDisabled Then
+                    Console.WriteLine($"[TaskAssembler] ℹ️ Skipping disabled step '{ideStep.Type}' (_disabled=true) for node {ideNode.Id}")
+                    Continue For
+                End If
+                If ideStep.Escalations Is Nothing OrElse ideStep.Escalations.Count = 0 Then
+                    Console.WriteLine($"[TaskAssembler] ℹ️ Skipping disabled step '{ideStep.Type}' (0 escalations) for node {ideNode.Id}")
+                    Continue For
+                End If
+
                 Dim runtimeStep = CompileDialogueStep(ideStep)
 
                 If seenTypes.Contains(runtimeStep.Type) Then

@@ -19,8 +19,16 @@ Public Class DialogueStep
     <JsonProperty("escalations")>
     Public Property Escalations As List(Of Escalation)
 
+    ''' <summary>
+    ''' When True the step is disabled by the designer in the Response Editor.
+    ''' The compiler must skip it so StepExists() returns False at runtime.
+    ''' </summary>
+    <JsonProperty("_disabled")>
+    Public Property IsDisabled As Boolean
+
     Public Sub New()
         Escalations = New List(Of Escalation)()
+        IsDisabled = False
     End Sub
 End Class
 
