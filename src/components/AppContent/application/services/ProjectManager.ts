@@ -70,16 +70,21 @@ export class ProjectManager {
   async createProject(projectInfo: ProjectInfo): Promise<CreateProjectResult> {
     try {
       // Bootstrap: create DB and catalog immediately
+      // ✅ FIX: Trim clientName and convert empty string to null
+      const clientName = (projectInfo.clientName || '').trim() || null;
+      const ownerCompany = (projectInfo.ownerCompany || '').trim() || null;
+      const ownerClient = (projectInfo.ownerClient || '').trim() || null;
+
       const resp = await fetch('/api/projects/bootstrap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientName: projectInfo.clientName || null,
+          clientName,
           projectName: projectInfo.name || 'Project',
           industry: projectInfo.industry || 'utility_gas',
           language: projectInfo.language || 'pt',
-          ownerCompany: projectInfo.ownerCompany || null,
-          ownerClient: projectInfo.ownerClient || null,
+          ownerCompany,
+          ownerClient,
           version: projectInfo.version || '1.0',
           versionQualifier: projectInfo.versionQualifier || 'alpha',
           tenantId: 'tenant_default',
@@ -246,6 +251,20 @@ export class ProjectManager {
         }
       } catch (e) {
         console.warn('[ProjectManager] ⚠️ Failed to register project templates in DialogueTaskService', e);
+      }
+
+      // ✅ NEW: Load project embeddings in background (non-blocking)
+      // This ensures embeddings from project database are available for template matching
+      try {
+        const { EmbeddingService } = await import('@services/EmbeddingService');
+        EmbeddingService.loadEmbeddings('task', false, id).catch(err => {
+          console.warn('[ProjectManager] ⚠️ Failed to load project embeddings (non-blocking):', err);
+        });
+        if (showPerfLogs) {
+          console.log(`[PERF][${new Date().toISOString()}] 🔄 START load project embeddings (background)`);
+        }
+      } catch (e) {
+        console.warn('[ProjectManager] ⚠️ Failed to start loading project embeddings:', e);
       }
 
       // Load flow and variable mappings in parallel (tasks already loaded)

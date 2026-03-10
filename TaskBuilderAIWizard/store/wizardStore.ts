@@ -13,6 +13,15 @@ import type { WizardTaskTreeNode, WizardStepMessages, WizardConstraint } from '.
 import { WizardMode } from '../types/WizardMode';
 import type { WizardStep } from '../types/WizardStep';
 
+/**
+ * Wizard Run Mode - Single source of truth for wizard execution mode
+ *
+ * - 'none': Wizard not active
+ * - 'full': Full wizard construction (structure → constraints → parsers → messages → clone → adaptation)
+ * - 'adaptation': Adaptation only (template exists, only adaptation needed)
+ */
+export type WizardRunMode = 'none' | 'full' | 'adaptation';
+
 export type PipelineStep = {
   id: string;
   label: string;
@@ -26,7 +35,11 @@ interface WizardStore {
   // STATE
   // ============================================
 
-  wizardMode: WizardMode;
+  // ✅ NEW: Single source of truth for wizard execution mode
+  runMode: WizardRunMode;
+
+  // ✅ RINOMINATO: wizardMode → wizardState per chiarezza (è lo stato, non la modalità)
+  wizardState: WizardMode;
   currentStep: WizardStep;
   dataSchema: WizardTaskTreeNode[];
   constraints: WizardConstraint[];
@@ -69,7 +82,11 @@ interface WizardStore {
   // This function is available for future use when wizard state needs to be restored.
   initializeFromInstance: (instance: any) => void;
 
-  setWizardMode: (mode: WizardMode) => void;
+  // ✅ NEW: Set wizard run mode (single source of truth)
+  setRunMode: (mode: WizardRunMode) => void;
+
+  // ✅ RINOMINATO: setWizardMode → setWizardState per chiarezza
+  setWizardState: (state: WizardMode) => void;
   setCurrentStep: (step: WizardStep) => void;
   setDataSchema: (schema: WizardTaskTreeNode[] | ((prev: WizardTaskTreeNode[]) => WizardTaskTreeNode[])) => void;
   setConstraints: (constraints: WizardConstraint[] | ((prev: WizardConstraint[]) => WizardConstraint[])) => void;
@@ -126,6 +143,12 @@ const initialPipelineSteps: PipelineStep[] = [
     label: 'Messaggi',
     status: 'pending',
     payload: 'sto generando i messaggi per gestire il dialogo con l\'utente:'
+  },
+  {
+    id: 'adaptation',
+    label: 'Adattamento',
+    status: 'pending',
+    payload: 'sto adattando i prompt contestuali per personalizzare i messaggi...'
   }
 ];
 
@@ -134,7 +157,8 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
   // INITIAL STATE
   // ============================================
 
-  wizardMode: WizardMode.START,
+  runMode: 'none', // ✅ NEW: Initial run mode
+  wizardState: WizardMode.START, // ✅ RINOMINATO: wizardMode → wizardState
   currentStep: 'idle',
   dataSchema: [],
   constraints: [],
@@ -169,7 +193,8 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
 
   // ✅ Reset wizard state to initial values
   reset: () => set({
-    wizardMode: WizardMode.START,
+    runMode: 'none', // ✅ Reset run mode
+    wizardState: WizardMode.START, // ✅ RINOMINATO: wizardMode → wizardState
     currentStep: 'idle',
     dataSchema: [],
   constraints: [],
@@ -214,18 +239,24 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     }
   },
 
-  setWizardMode: (mode) => {
+  // ✅ NEW: Set wizard run mode (single source of truth)
+  setRunMode: (mode) => {
+    console.log(`[wizardStore] 📊 setRunMode called`, { mode });
+    set({ runMode: mode });
+  },
+
+  setWizardState: (state) => {
     // ✅ POINT OF NO RETURN: If structure is confirmed, NEVER go back to DATA_STRUCTURE_PROPOSED
     // Access the boolean field directly (not the selector function)
     const currentState = get();
     const isConfirmed = currentState.structureConfirmed === true;
 
-    if (mode === WizardMode.DATA_STRUCTURE_PROPOSED && isConfirmed) {
-      console.warn('[wizardStore] ⚠️ Attempted to set wizardMode to DATA_STRUCTURE_PROPOSED after confirmation - blocked');
+    if (state === WizardMode.DATA_STRUCTURE_PROPOSED && isConfirmed) {
+      console.warn('[wizardStore] ⚠️ Attempted to set wizardState to DATA_STRUCTURE_PROPOSED after confirmation - blocked');
       return;
     }
 
-    set({ wizardMode: mode });
+    set({ wizardState: state });
   },
 
   setCurrentStep: (step) => set({ currentStep: step }),
@@ -421,12 +452,12 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
 
   showStructureConfirmation: () => {
     const state = get();
-    // ✅ Verify: wizardMode is DATA_STRUCTURE_PROPOSED AND structureConfirmed is false
-    return state.wizardMode === WizardMode.DATA_STRUCTURE_PROPOSED && !state.structureConfirmed;
+    // ✅ Verify: wizardState is DATA_STRUCTURE_PROPOSED AND structureConfirmed is false
+    return state.wizardState === WizardMode.DATA_STRUCTURE_PROPOSED && !state.structureConfirmed;
   },
 
 
-  showCorrectionMode: () => get().wizardMode === WizardMode.DATA_STRUCTURE_CORRECTION,
+  showCorrectionMode: () => get().wizardState === WizardMode.DATA_STRUCTURE_CORRECTION,
 
   getMessagesToUse: () => {
     const state = get();

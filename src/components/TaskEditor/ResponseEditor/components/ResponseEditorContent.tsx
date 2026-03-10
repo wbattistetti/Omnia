@@ -121,36 +121,9 @@ export function ResponseEditorContent({
     }
   }, [effectiveWizardMode, effectiveTemplateId, taskTreeFromStore]);
 
-  if (effectiveWizardMode === 'adaptation' && effectiveTemplateId) {
-    console.log('[ResponseEditorContent] ✅ Mostrando wizard di adattamento', {
-      effectiveWizardMode,
-      templateId: effectiveTemplateId,
-      hasTaskTree: !!taskTreeFromStore,
-      hasSidebar: !!sidebar,
-      taskLabel
-    });
-    return (
-      <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex' }}>
-        {/* Sidebar: visible (structure from template) */}
-        {sidebar && (
-          <div style={{ width: '320px', borderRight: '1px solid #334155', backgroundColor: '#0f172a' }}>
-            {sidebar}
-          </div>
-        )}
-        {/* Contextualization panel: generates only messages */}
-        <div style={{ flex: 1 }}>
-          <TaskContextualizationPanel
-            taskTree={taskTreeFromStore} // ✅ Può essere null inizialmente, verrà caricato asincronamente
-            taskLabel={taskLabel || ''}
-            templateId={effectiveTemplateId}
-            task={taskMeta as any} // ✅ Pass task completo per AdaptTaskTreePromptToContext
-            onComplete={onTaskContextualizationComplete}
-            onCancel={onTaskBuilderCancel}
-          />
-        </div>
-      </div>
-    );
-  }
+  // ✅ REMOVED: TaskContextualizationPanel - now wizard handles adaptation mode
+  // The wizard will be shown via MainViewMode.WIZARD in MainContentArea
+  // This allows showing template structure and asking for confirmation before adaptation
 
   // ✅ STATO 1: taskWizardMode = 'none' (task exists)
   // Layout classico: sidebar + editor + preview (handled by normalEditorLayout)

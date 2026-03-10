@@ -37,11 +37,12 @@ export class RowHeuristicsHandler {
    * This uses the centralized RowHeuristicsService for analysis.
    */
   public static async analyzeRowLabel(
-    label: string
+    label: string,
+    projectId?: string // ✅ NEW: Support projectId for loading project-specific embeddings
   ): Promise<RowHeuristicsResult> {
     try {
       // Use centralized service for heuristic analysis
-      const heuristicsResult = await RowHeuristicsService.analyzeRowLabel(label);
+      const heuristicsResult = await RowHeuristicsService.analyzeRowLabel(label, projectId); // ✅ FIX: Pass projectId
       const { taskType, templateId, isUndefined, inferredCategory } =
         heuristicsResult;
 

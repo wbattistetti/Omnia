@@ -298,7 +298,7 @@ export function checkCompletion(): {
     allNodesHaveParser &&
     allTasksCompletedAllPhases &&
     !hasFailedNodes &&
-    currentState.wizardMode === WizardMode.GENERATING;
+    currentState.wizardState === WizardMode.GENERATING; // ✅ RINOMINATO: wizardMode → wizardState
 
   return {
     isComplete,

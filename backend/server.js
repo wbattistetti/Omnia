@@ -490,11 +490,30 @@ function randomId(len = 8) {
   return base.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, len);
 }
 
-function makeProjectDbName(clientName, projectName) {
-  const c = clientName ? abbreviateSlug(clientName, 6) : 'no-client';
-  const p = abbreviateSlug(projectName, 6);
-  let name = `t_${c}__p_${p}__${randomId(8)}`;
-  if (name.length > 63) name = name.slice(0, 63);
+function makeProjectDbName(clientName, projectName, version = '1.0') {
+  // Use slugifyName to get full names (not abbreviated)
+  const clientSlug = clientName ? slugifyName(clientName) : 'no-client';
+  const projectSlug = slugifyName(projectName);
+
+  // Format: nome_cliente_nome_progetto_versione
+  // Replace dots in version with underscores for consistency
+  const versionSlug = String(version || '1.0').replace(/\./g, '_');
+
+  let name = `${clientSlug}_${projectSlug}_${versionSlug}`;
+
+  // MongoDB database name limit is 63 characters
+  if (name.length > 63) {
+    // Truncate project name if needed, keeping client and version
+    const maxProjectLen = 63 - clientSlug.length - versionSlug.length - 2; // -2 for underscores
+    if (maxProjectLen > 0) {
+      const truncatedProject = projectSlug.slice(0, maxProjectLen);
+      name = `${clientSlug}_${truncatedProject}_${versionSlug}`;
+    } else {
+      // If still too long, truncate everything proportionally
+      name = name.slice(0, 63);
+    }
+  }
+
   return name;
 }
 
@@ -522,7 +541,8 @@ app.get('/api/projects/dbname/preview', async (req, res) => {
   try {
     const clientName = String(req.query.client || 'client');
     const projectName = String(req.query.project || 'project');
-    const dbName = makeProjectDbName(clientName, projectName);
+    const version = String(req.query.version || '1.0');
+    const dbName = makeProjectDbName(clientName, projectName, version);
     res.json({
       dbName,
       clientSlug: slugifyName(clientName),
@@ -942,8 +962,11 @@ app.get('/api/projects/catalog/project-names', async (req, res) => {
 
 app.post('/api/projects/catalog', async (req, res) => {
   const payload = req.body || {};
-  const clientName = payload.clientName || null; // Permette null/vuoto
+  // ✅ FIX: Trim clientName and ensure null if empty
+  const clientName = payload.clientName ? String(payload.clientName).trim() : null;
+  const clientNameFinal = clientName && clientName.length > 0 ? clientName : null;
   const projectName = payload.projectName;
+  const version = payload.version || '1.0';
   if (!projectName) {
     return res.status(400).json({ error: 'projectName_required' });
   }
@@ -952,19 +975,23 @@ app.post('/api/projects/catalog', async (req, res) => {
     const db = client.db(dbProjects);
     const coll = db.collection('projects_catalog');
     const projectId = makeProjectId();
-    const dbName = makeProjectDbName(clientName, projectName);
+    const dbName = makeProjectDbName(clientNameFinal, projectName, version);
     const now = new Date();
+    const ownerCompany = payload.ownerCompany ? String(payload.ownerCompany).trim() : null;
+    const ownerCompanyFinal = ownerCompany && ownerCompany.length > 0 ? ownerCompany : null;
+    const ownerClient = payload.ownerClient ? String(payload.ownerClient).trim() : null;
+    const ownerClientFinal = ownerClient && ownerClient.length > 0 ? ownerClient : null;
     const doc = {
       _id: projectId,
       projectId,
       tenantId: payload.tenantId || null,
-      clientName: clientName || null,
+      clientName: clientNameFinal, // ✅ Use trimmed and validated clientName
       projectName,
-      clientSlug: clientName ? slugifyName(clientName) : null,
+      clientSlug: clientNameFinal ? slugifyName(clientNameFinal) : null,
       projectSlug: slugifyName(projectName),
       industry: payload.industry || null,
-      ownerCompany: payload.ownerCompany || null,
-      ownerClient: payload.ownerClient || null,
+      ownerCompany: ownerCompanyFinal, // ✅ Use trimmed and validated ownerCompany
+      ownerClient: ownerClientFinal, // ✅ Use trimmed and validated ownerClient
       dbName,
       status: 'draft',
       createdAt: now,
@@ -1122,12 +1149,16 @@ app.delete('/api/projects/catalog', async (req, res) => {
 // -----------------------------
 app.post('/api/projects/bootstrap', async (req, res) => {
   const payload = req.body || {};
-  const clientName = payload.clientName || null; // Permette null/vuoto
+  // ✅ FIX: Trim clientName and ensure null if empty
+  const clientName = payload.clientName ? String(payload.clientName).trim() : null;
+  const clientNameFinal = clientName && clientName.length > 0 ? clientName : null;
   const projectName = payload.projectName;
   const industry = payload.industry || null;
   const language = payload.language || 'pt';
-  const ownerCompany = payload.ownerCompany || null; // Owner del progetto lato azienda (obbligatorio)
-  const ownerClient = payload.ownerClient || null; // Owner del progetto lato cliente (opzionale)
+  const ownerCompany = payload.ownerCompany ? String(payload.ownerCompany).trim() : null;
+  const ownerCompanyFinal = ownerCompany && ownerCompany.length > 0 ? ownerCompany : null;
+  const ownerClient = payload.ownerClient ? String(payload.ownerClient).trim() : null;
+  const ownerClientFinal = ownerClient && ownerClient.length > 0 ? ownerClient : null;
   const version = payload.version || '1.0';
   const versionQualifier = payload.versionQualifier || 'alpha';
   if (!projectName) {
@@ -1146,21 +1177,21 @@ app.post('/api/projects/bootstrap', async (req, res) => {
     const cat = catalogDb.collection('projects_catalog');
     const now = new Date();
     const projectId = payload.projectId || makeProjectId();
-    const dbName = payload.dbName || makeProjectDbName(clientName, projectName);
+    const dbName = payload.dbName || makeProjectDbName(clientNameFinal, projectName, version);
     console.log('[Bootstrap] 📋 Generated projectId:', projectId, 'dbName:', dbName);
 
     const catalogDoc = {
       _id: projectId,
       projectId,
       tenantId: payload.tenantId || null,
-      clientName: clientName || null,
+      clientName: clientNameFinal, // ✅ Use trimmed and validated clientName
       projectName,
-      clientSlug: clientName ? slugifyName(clientName) : null,
+      clientSlug: clientNameFinal ? slugifyName(clientNameFinal) : null,
       projectSlug: slugifyName(projectName),
       industry,
       language,
-      ownerCompany: ownerCompany || null,
-      ownerClient: ownerClient || null,
+      ownerCompany: ownerCompanyFinal, // ✅ Use trimmed and validated ownerCompany
+      ownerClient: ownerClientFinal, // ✅ Use trimmed and validated ownerClient
       version,
       versionQualifier,
       dbName,
@@ -2031,6 +2062,92 @@ app.post('/api/projects/:pid/templates', async (req, res) => {
     );
 
     const saved = await projDb.collection('tasks').findOne({ projectId, id: payload.id });
+
+    // ✅ DEBUG: Log payload to understand why embedding might not be saved
+    console.log('[POST /api/projects/:pid/templates] 🔍 Checking embedding save conditions', {
+      projectId,
+      taskId: payload.id,
+      hasType: payload.type !== undefined,
+      type: payload.type,
+      hasLabel: !!payload.label,
+      label: payload.label?.substring(0, 50),
+      shouldSaveEmbedding: payload.type === 3 && !!payload.label
+    });
+
+    // ✅ NEW: Save embedding to project database for templates (type === 3)
+    // Only for UtteranceInterpretation tasks (type === 3) that have a label
+    if (payload.type === 3 && payload.label) {
+      try {
+        const embeddingsColl = projDb.collection('embeddings');
+
+        // Check if embedding already exists
+        const existingEmbedding = await embeddingsColl.findOne({ id: payload.id, type: 'task' });
+
+        if (!existingEmbedding) {
+          // ✅ ARCHITECTURAL RULE: Use V-X-Y segmentation to extract X (data type) for embedding
+          const { removeVerbsFromTemplateLabel } = require('./utils/embeddingTextNormalization');
+
+          // For type=3 templates, use V-X-Y segmentation to extract only X (data type)
+          let normalizedLabel = removeVerbsFromTemplateLabel(payload.label.trim(), 'IT');
+          normalizedLabel = normalizedLabel.toLowerCase();
+
+          // Compute embedding using Python FastAPI service
+          const pythonServiceUrl = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000';
+          const computeResponse = await fetch(`${pythonServiceUrl}/api/embeddings/compute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: normalizedLabel }),
+            signal: AbortSignal.timeout(10000)
+          });
+
+          if (computeResponse.ok) {
+            const { embedding } = await computeResponse.json();
+
+            if (embedding && Array.isArray(embedding) && embedding.length > 0) {
+              // Save embedding to project database
+              const saveResult = await embeddingsColl.updateOne(
+                { id: payload.id, type: 'task' },
+                {
+                  $set: {
+                    id: payload.id,
+                    type: 'task',
+                    text: normalizedLabel,
+                    originalText: payload.label.trim(),
+                    embedding: embedding,
+                    model: 'paraphrase-multilingual-MiniLM-L12-v2',
+                    updatedAt: now
+                  },
+                  $setOnInsert: {
+                    createdAt: now
+                  }
+                },
+                { upsert: true }
+              );
+
+              // ✅ VERIFY: Check if embedding was actually saved
+              const verifyEmbedding = await embeddingsColl.findOne({ id: payload.id, type: 'task' });
+
+              console.log('[POST /api/projects/:pid/templates] ✅ Embedding saved to project database', {
+                projectId,
+                taskId: payload.id,
+                originalLabel: payload.label.substring(0, 50),
+                normalizedLabel: normalizedLabel.substring(0, 50),
+                embeddingDimensions: embedding.length,
+                upserted: saveResult.upsertedCount > 0,
+                verified: !!verifyEmbedding
+              });
+            }
+          }
+        }
+      } catch (embeddingError) {
+        console.error('[POST /api/projects/:pid/templates] ❌ Failed to save embedding:', {
+          projectId,
+          taskId: payload.id,
+          error: embeddingError.message
+        });
+      }
+    }
+
     logInfo('Templates.post', {
       projectId,
       templateId: payload.id,
@@ -2130,6 +2247,95 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
     );
 
     const saved = await projDb.collection('tasks').findOne({ projectId, id: payload.id });
+
+    // ✅ NEW: Save embedding to project database for local templates (type === 3)
+    // Only for UtteranceInterpretation tasks (type === 3) that are templates (not instances)
+    if (isLocalTemplate(payload) && type === 3 && payload.label) {
+      try {
+        const embeddingsColl = projDb.collection('embeddings');
+
+        // Check if embedding already exists
+        const existingEmbedding = await embeddingsColl.findOne({ id: payload.id, type: 'task' });
+
+        if (!existingEmbedding) {
+          // ✅ ARCHITECTURAL RULE: Use V-X-Y segmentation to extract X (data type) for embedding
+          const { removeVerbsFromTemplateLabel } = require('./utils/embeddingTextNormalization');
+
+          // For type=3 templates, use V-X-Y segmentation to extract only X (data type)
+          let normalizedLabel;
+          if (type === 3) {
+            normalizedLabel = removeVerbsFromTemplateLabel(payload.label.trim(), 'IT');
+            normalizedLabel = normalizedLabel.toLowerCase();
+          } else {
+            const { normalizeTextForEmbedding } = require('./utils/embeddingTextNormalization');
+            normalizedLabel = normalizeTextForEmbedding(payload.label.trim());
+          }
+
+          // Compute embedding using Python FastAPI service
+          const pythonServiceUrl = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000';
+          const computeResponse = await fetch(`${pythonServiceUrl}/api/embeddings/compute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: normalizedLabel }),
+            signal: AbortSignal.timeout(10000)
+          });
+
+          if (computeResponse.ok) {
+            const { embedding } = await computeResponse.json();
+
+            if (embedding && Array.isArray(embedding) && embedding.length > 0) {
+              // Save embedding to project database
+              const saveResult = await embeddingsColl.updateOne(
+                { id: payload.id, type: 'task' },
+                {
+                  $set: {
+                    id: payload.id,
+                    type: 'task',
+                    text: normalizedLabel,
+                    originalText: payload.label.trim(),
+                    embedding: embedding,
+                    model: 'paraphrase-multilingual-MiniLM-L12-v2',
+                    updatedAt: now
+                  },
+                  $setOnInsert: {
+                    createdAt: now
+                  }
+                },
+                { upsert: true }
+              );
+
+              // ✅ VERIFY: Check if embedding was actually saved
+              const verifyEmbedding = await embeddingsColl.findOne({ id: payload.id, type: 'task' });
+
+              console.log('[POST /api/projects/:pid/tasks] ✅ Embedding saved to project database', {
+                projectId,
+                taskId: payload.id,
+                originalLabel: payload.label.substring(0, 50),
+                normalizedLabel: normalizedLabel.substring(0, 50),
+                embeddingDimensions: embedding.length,
+                upserted: saveResult.upsertedCount > 0,
+                verified: !!verifyEmbedding
+              });
+            }
+          } else {
+            const errorText = await computeResponse.text().catch(() => 'Unable to read error text');
+            console.warn('[POST /api/projects/:pid/tasks] ⚠️ Failed to compute embedding', {
+              projectId,
+              taskId: payload.id,
+              status: computeResponse.status,
+              errorText: errorText.substring(0, 100)
+            });
+          }
+        }
+      } catch (embeddingError) {
+        console.error('[POST /api/projects/:pid/tasks] ❌ Failed to save embedding:', {
+          projectId,
+          taskId: payload.id,
+          error: embeddingError.message
+        });
+      }
+    }
+
     logInfo('Tasks.post', {
       projectId,
       taskId: payload.id,
@@ -2438,6 +2644,98 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
       } else {
         console.warn('[💾 BACKEND_BULK] No valid operations after filtering', {
           totalItems: items.length
+        });
+      }
+
+      // ✅ NEW: Save embeddings to project database for local templates (type === 3)
+      // Process embeddings in parallel (non-blocking, doesn't affect response)
+      const templatesNeedingEmbedding = items.filter(item =>
+        isLocalTemplate(item) && item.type === 3 && item.label
+      );
+
+      if (templatesNeedingEmbedding.length > 0) {
+        const embeddingsColl = projDb.collection('embeddings');
+        const { removeVerbsFromTemplateLabel, normalizeTextForEmbedding } = require('./utils/embeddingTextNormalization');
+        const pythonServiceUrl = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000';
+
+        // Process embeddings in parallel (non-blocking)
+        Promise.all(
+          templatesNeedingEmbedding.map(async (template) => {
+            try {
+              // Check if embedding already exists
+              const existingEmbedding = await embeddingsColl.findOne({ id: template.id, type: 'task' });
+              if (existingEmbedding) {
+                return;
+              }
+
+              // ✅ ARCHITECTURAL RULE: Use V-X-Y segmentation to extract X (data type) for embedding
+              let normalizedLabel;
+              if (template.type === 3) {
+                normalizedLabel = removeVerbsFromTemplateLabel(template.label.trim(), 'IT');
+                normalizedLabel = normalizedLabel.toLowerCase();
+              } else {
+                normalizedLabel = normalizeTextForEmbedding(template.label.trim());
+              }
+
+              // Compute embedding using Python FastAPI service
+              const computeResponse = await fetch(`${pythonServiceUrl}/api/embeddings/compute`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: normalizedLabel }),
+                signal: AbortSignal.timeout(10000)
+              });
+
+              if (computeResponse.ok) {
+                const { embedding } = await computeResponse.json();
+
+                if (embedding && Array.isArray(embedding) && embedding.length > 0) {
+                  // Save embedding to project database
+                  const saveResult = await embeddingsColl.updateOne(
+                    { id: template.id, type: 'task' },
+                    {
+                      $set: {
+                        id: template.id,
+                        type: 'task',
+                        text: normalizedLabel,
+                        originalText: template.label.trim(),
+                        embedding: embedding,
+                        model: 'paraphrase-multilingual-MiniLM-L12-v2',
+                        updatedAt: now
+                      },
+                      $setOnInsert: {
+                        createdAt: now
+                      }
+                    },
+                    { upsert: true }
+                  );
+
+                  // ✅ VERIFY: Check if embedding was actually saved
+                  const verifyEmbedding = await embeddingsColl.findOne({ id: template.id, type: 'task' });
+
+                  console.log('[💾 BACKEND_BULK] ✅ Embedding saved to project database', {
+                    projectId,
+                    taskId: template.id,
+                    originalLabel: template.label.substring(0, 50),
+                    normalizedLabel: normalizedLabel.substring(0, 50),
+                    embeddingDimensions: embedding.length,
+                    upserted: saveResult.upsertedCount > 0,
+                    verified: !!verifyEmbedding
+                  });
+                }
+              }
+            } catch (embeddingError) {
+              console.error('[💾 BACKEND_BULK] ❌ Failed to save embedding:', {
+                projectId,
+                taskId: template.id,
+                error: embeddingError.message
+              });
+            }
+          })
+        ).catch(err => {
+          console.error('[💾 BACKEND_BULK] ❌ Some embeddings failed to save:', {
+            projectId,
+            error: err.message
+          });
         });
       }
 
@@ -3261,19 +3559,53 @@ app.post('/api/embeddings', async (req, res) => {
 });
 
 // GET /api/embeddings - Carica embedding filtrati per type (query parameter)
+// ✅ NEW: Supporta projectId per caricare anche embeddings dal database del progetto
 app.get('/api/embeddings', async (req, res) => {
   try {
     await withMongoClient(async (client) => {
-      const db = client.db(dbFactory);
-      const coll = db.collection('embeddings');
-
-      const { type } = req.query;
+      const { type, projectId } = req.query;
       const filter = type ? { type: type } : {}; // Se type non specificato, carica tutto
 
-      const embeddings = await coll.find(filter).toArray();
+      const allEmbeddings = [];
+
+      // 1. Carica embeddings dal database factory (sempre)
+      try {
+        const factoryDb = client.db(dbFactory);
+        const factoryColl = factoryDb.collection('embeddings');
+        const factoryEmbeddings = await factoryColl.find(filter).toArray();
+        allEmbeddings.push(...factoryEmbeddings);
+        console.log('[Embeddings] Loaded', factoryEmbeddings.length, 'embeddings from factory', type ? `(type: ${type})` : '(all types)');
+      } catch (factoryError) {
+        console.warn('[Embeddings] Failed to load from factory:', factoryError.message);
+        // Non blocca - continua con progetto se disponibile
+      }
+
+      // 2. Se projectId è specificato, carica anche embeddings dal database del progetto
+      if (projectId) {
+        try {
+          const projectRecord = await getProjectCatalogRecord(client, projectId);
+          if (projectRecord && projectRecord.dbName) {
+            const projectDb = client.db(projectRecord.dbName);
+            const projectColl = projectDb.collection('embeddings');
+            const projectEmbeddings = await projectColl.find(filter).toArray();
+
+            // ✅ Merge: aggiungi solo embeddings che non esistono già (evita duplicati)
+            const existingIds = new Set(allEmbeddings.map(e => e.id));
+            const uniqueProjectEmbeddings = projectEmbeddings.filter(e => !existingIds.has(e.id));
+            allEmbeddings.push(...uniqueProjectEmbeddings);
+
+            console.log('[Embeddings] Loaded', projectEmbeddings.length, 'embeddings from project', projectId, `(${uniqueProjectEmbeddings.length} unique)`, type ? `(type: ${type})` : '(all types)');
+          } else {
+            console.warn('[Embeddings] Project not found or missing dbName:', projectId);
+          }
+        } catch (projectError) {
+          console.warn('[Embeddings] Failed to load from project:', projectId, projectError.message);
+          // Non blocca - ritorna almeno quelli factory
+        }
+      }
 
       // Rimuovi _id e ritorna solo i campi necessari
-      const result = embeddings.map(item => {
+      const result = allEmbeddings.map(item => {
         const base = {
           id: item.id,
           type: item.type,
@@ -3291,7 +3623,7 @@ app.get('/api/embeddings', async (req, res) => {
         return base;
       });
 
-      console.log('[Embeddings] Loaded', result.length, 'embeddings', type ? `(type: ${type})` : '(all types)');
+      console.log('[Embeddings] Total loaded', result.length, 'embeddings', type ? `(type: ${type})` : '(all types)', projectId ? `(project: ${projectId})` : '(factory only)');
       res.json(result);
     });
   } catch (error) {
@@ -5484,7 +5816,7 @@ app.post('/api/extractors/run', async (req, res) => {
 // Endpoint: Update catalog timestamp
 // -----------------------------
 app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
-  const { projectId, ownerCompany, ownerClient } = req.body;
+  const { projectId, ownerCompany, ownerClient, clientName } = req.body;
   if (!projectId) {
     return res.status(400).json({ error: 'projectId_required' });
   }
@@ -5497,12 +5829,29 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
 
     // Aggiorna ownerCompany se fornito
     if (ownerCompany !== undefined) {
-      updateDoc.ownerCompany = ownerCompany || null;
+      const ownerCompanyTrimmed = ownerCompany ? String(ownerCompany).trim() : null;
+      updateDoc.ownerCompany = ownerCompanyTrimmed && ownerCompanyTrimmed.length > 0 ? ownerCompanyTrimmed : null;
     }
 
     // Aggiorna ownerClient se fornito
     if (ownerClient !== undefined) {
-      updateDoc.ownerClient = ownerClient || null;
+      const ownerClientTrimmed = ownerClient ? String(ownerClient).trim() : null;
+      updateDoc.ownerClient = ownerClientTrimmed && ownerClientTrimmed.length > 0 ? ownerClientTrimmed : null;
+    }
+
+    // ✅ NEW: Aggiorna clientName se fornito
+    if (clientName !== undefined) {
+      const clientNameTrimmed = clientName ? String(clientName).trim() : null;
+      const clientNameFinal = clientNameTrimmed && clientNameTrimmed.length > 0 ? clientNameTrimmed : null;
+      updateDoc.clientName = clientNameFinal;
+      updateDoc.clientSlug = clientNameFinal ? slugifyName(clientNameFinal) : null;
+
+      // ✅ Aggiorna anche dbName se clientName cambia
+      const existingProject = await cat.findOne({ _id: projectId });
+      if (existingProject && existingProject.projectName) {
+        const version = existingProject.version || '1.0';
+        updateDoc.dbName = makeProjectDbName(clientNameFinal, existingProject.projectName, version);
+      }
     }
 
     const result = await cat.updateOne(
@@ -5512,7 +5861,13 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
     if (result.matchedCount === 0) {
       logInfo('Catalog.updateTimestamp', { projectId, warning: 'project_not_found_in_catalog' });
     } else {
-      logInfo('Catalog.updateTimestamp', { projectId, updated: true, ownerCompany: ownerCompany !== undefined, ownerClient: ownerClient !== undefined });
+      logInfo('Catalog.updateTimestamp', {
+        projectId,
+        updated: true,
+        ownerCompany: ownerCompany !== undefined,
+        ownerClient: ownerClient !== undefined,
+        clientName: clientName !== undefined
+      });
     }
 
     // Aggiorna anche project_meta se esiste
@@ -5522,10 +5877,17 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
         const projDb = client.db(catalogDoc.dbName);
         const metaUpdate = { updatedAt: now };
         if (ownerCompany !== undefined) {
-          metaUpdate.ownerCompany = ownerCompany || null;
+          const ownerCompanyTrimmed = ownerCompany ? String(ownerCompany).trim() : null;
+          metaUpdate.ownerCompany = ownerCompanyTrimmed && ownerCompanyTrimmed.length > 0 ? ownerCompanyTrimmed : null;
         }
         if (ownerClient !== undefined) {
-          metaUpdate.ownerClient = ownerClient || null;
+          const ownerClientTrimmed = ownerClient ? String(ownerClient).trim() : null;
+          metaUpdate.ownerClient = ownerClientTrimmed && ownerClientTrimmed.length > 0 ? ownerClientTrimmed : null;
+        }
+        if (clientName !== undefined) {
+          const clientNameTrimmed = clientName ? String(clientName).trim() : null;
+          const clientNameFinal = clientNameTrimmed && clientNameTrimmed.length > 0 ? clientNameTrimmed : null;
+          metaUpdate.clientName = clientNameFinal;
         }
         await projDb.collection('project_meta').updateOne(
           { _id: 'meta' },

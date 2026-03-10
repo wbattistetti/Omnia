@@ -31,6 +31,7 @@ try:
     from backend.ai_endpoints.intent_generation import router as intent_gen_router
     from backend.ai_steps.intentMessages import router as intentMessages_router
     from backend.ai_steps.adapt_prompts import router as adapt_prompts_router
+    from backend.ai_endpoints.intent_embeddings import router as intent_embeddings_router
 except Exception as e:
     print(f"[groq_ddt_api] ⚠️ Failed to import adapt_prompts_router from backend.ai_steps.adapt_prompts: {e}")
     try:
@@ -50,6 +51,7 @@ except Exception as e:
         from ai_endpoints.intent_generation import router as intent_gen_router
         from ai_steps.intentMessages import router as intentMessages_router
         from ai_steps.adapt_prompts import router as adapt_prompts_router
+        from ai_endpoints.intent_embeddings import router as intent_embeddings_router
         print("[groq_ddt_api] ✅ Successfully imported adapt_prompts_router from ai_steps.adapt_prompts (fallback)")
     except Exception as e2:
         print(f"[groq_ddt_api] ❌ CRITICAL: Failed to import adapt_prompts_router from both paths: {e2}")
@@ -57,6 +59,7 @@ except Exception as e:
         from fastapi import APIRouter
         adapt_prompts_router = APIRouter()
         print("[groq_ddt_api] ⚠️ Created empty adapt_prompts_router to prevent crash")
+        # ✅ intent_embeddings_router: no fallback - if import fails, let it crash
 
 GROQ_KEY = os.environ.get("Groq_key")
 
@@ -262,6 +265,22 @@ try:
         print(f"[FASTAPI]   - {list(r.methods) if hasattr(r, 'methods') else 'N/A'} {r.path}")
 except Exception as e:
     print(f"[FASTAPI] ❌ ERROR including adapt_prompts_router: {e}")
+    import traceback
+    traceback.print_exc()
+
+# ✅ Include intent_embeddings_router (for /api/embeddings/compute endpoint)
+print("[FASTAPI] 🔍 Attempting to include intent_embeddings_router...")
+try:
+    app.include_router(intent_embeddings_router)
+    print("[FASTAPI] ✅ intent_embeddings_router included successfully")
+    # Verify the router has routes
+    if hasattr(intent_embeddings_router, 'routes'):
+        print(f"[FASTAPI] intent_embeddings_router has {len(intent_embeddings_router.routes)} route(s)")
+        for route in intent_embeddings_router.routes:
+            if hasattr(route, 'path') and hasattr(route, 'methods'):
+                print(f"[FASTAPI]   - {list(route.methods)} {route.path}")
+except Exception as embeddings_error:
+    print(f"[FASTAPI] ❌ Failed to include intent_embeddings_router: {embeddings_error}")
     import traceback
     traceback.print_exc()
 

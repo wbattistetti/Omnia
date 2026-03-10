@@ -415,9 +415,9 @@ export default function RegexInlineEditor({
         onErrorRender(
           <span style={{ color: '#ef4444', fontSize: '12px' }}>{validationError}</span>
         );
-      } else {
+    } else {
         onErrorRender(null);
-      }
+    }
     }
   }, [validationError, onErrorRender]);
 
@@ -429,10 +429,10 @@ export default function RegexInlineEditor({
     // Priority 1: Show normalization error (groups not recognized)
     if (validationError) {
       return (
-        <span style={{ color: '#ef4444', fontSize: '12px', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span>⚠️</span>
-          <span>{validationError}</span>
-        </span>
+              <span style={{ color: '#ef4444', fontSize: '12px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>⚠️</span>
+                <span>{validationError}</span>
+              </span>
       );
     }
 
@@ -462,8 +462,8 @@ export default function RegexInlineEditor({
           <span style={{
             color: '#ef4444',
             fontSize: '12px',
-            display: 'flex',
-            alignItems: 'center',
+                display: 'flex',
+                alignItems: 'center',
             gap: 4,
             fontWeight: 500
           }}>
@@ -556,19 +556,19 @@ export default function RegexInlineEditor({
       />
 
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <EditorPanel
-          ref={editorRef}
-          code={editorValue}
-          language="regex"
-          customLanguage={{ id: 'regex', tokenizer: { root: [] } } as CustomLanguage}
-          onChange={(value) => {
-            if (value && value !== PLACEHOLDER_TEXT) {
-              setTextboxText(value);
+      <EditorPanel
+        ref={editorRef}
+        code={editorValue}
+        language="regex"
+        customLanguage={{ id: 'regex', tokenizer: { root: [] } } as CustomLanguage}
+        onChange={(value) => {
+          if (value && value !== PLACEHOLDER_TEXT) {
+            setTextboxText(value);
               // Don't clear validationError here - let debounced validation handle it
-            }
-          }}
-          useTemplate={false}
-        />
+          }
+        }}
+        useTemplate={false}
+      />
       </div>
     </div>
   );

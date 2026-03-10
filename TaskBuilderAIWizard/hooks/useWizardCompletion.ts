@@ -13,7 +13,7 @@ import {
 } from '../services/WizardCompletionService';
 
 type UseWizardCompletionProps = {
-  wizardMode: WizardMode;
+  wizardState: WizardMode; // ✅ RINOMINATO: wizardMode → wizardState
   dataSchema: WizardTaskTreeNode[];
   messages: Map<string, any>;
   messagesGeneralized: Map<string, any>;
@@ -35,7 +35,7 @@ type UseWizardCompletionProps = {
  */
 export function useWizardCompletion(props: UseWizardCompletionProps) {
   const {
-    wizardMode,
+    wizardState, // ✅ RINOMINATO: wizardMode → wizardState
     dataSchema,
     messages,
     messagesGeneralized,
@@ -171,10 +171,10 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
    */
   const createTemplateAndInstanceForCompleted = useCallback(async () => {
     // ✅ Guard: check wizardMode, dataSchema, and separate completion ref
-    if (wizardMode !== WizardMode.GENERATING || dataSchema.length === 0 || hasCreatedTemplateForCompletedRef.current) {
+    if (wizardState !== WizardMode.GENERATING || dataSchema.length === 0 || hasCreatedTemplateForCompletedRef.current) { // ✅ RINOMINATO: wizardMode → wizardState
       console.log('[useWizardCompletion] ⚠️ createTemplateAndInstanceForCompleted - Guard failed', {
-        wizardMode,
-        wizardModeEqualsGenerating: wizardMode === WizardMode.GENERATING,
+        wizardState, // ✅ RINOMINATO: wizardMode → wizardState
+        wizardStateEqualsGenerating: wizardState === WizardMode.GENERATING, // ✅ RINOMINATO
         dataSchemaLength: dataSchema.length,
         hasCreatedTemplateForCompleted: hasCreatedTemplateForCompletedRef.current
       });
@@ -232,7 +232,7 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
       console.error('[useWizardCompletion] ❌ Error in createTemplateAndInstanceForCompleted', {
         error: error instanceof Error ? error.message : String(error),
         errorStack: error instanceof Error ? error.stack : undefined,
-        wizardMode,
+        wizardState, // ✅ RINOMINATO: wizardMode → wizardState
         dataSchemaLength: dataSchema.length,
         hasRowId: !!rowId,
         hasProjectId: !!projectId
@@ -241,7 +241,7 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
       hasCreatedTemplateForCompletedRef.current = false;
     }
   }, [
-    wizardMode,
+    wizardState, // ✅ RINOMINATO: wizardMode → wizardState
     dataSchema,
     messages,
     messagesGeneralized,
@@ -314,7 +314,7 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
       allNodesHaveParser &&
       allTasksCompletedAllPhases &&
       !hasFailedNodes &&
-      wizardMode === WizardMode.GENERATING
+      wizardState === WizardMode.GENERATING // ✅ RINOMINATO: wizardMode → wizardState
     ) {
       console.log('[useWizardCompletion] 🚀 All conditions met - creating template + instance BEFORE transition to COMPLETED');
       await createTemplateAndInstanceForCompleted();
@@ -368,7 +368,7 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         nodesWithCompletedMessages: allNodes.filter(n => n.pipelineStatus?.messages === 'completed').length,
       });
     }
-  }, [wizardMode, transitionToCompleted, createTemplateAndInstanceForCompleted, messages, messagesGeneralized]);
+  }, [wizardState, transitionToCompleted, createTemplateAndInstanceForCompleted, messages, messagesGeneralized]); // ✅ RINOMINATO: wizardMode → wizardState
 
   // ✅ Esponi checkAndComplete tramite ref per useWizardGeneration (modello deterministico)
   checkAndCompleteRef.current = checkAndComplete;

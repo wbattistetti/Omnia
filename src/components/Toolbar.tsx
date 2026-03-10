@@ -33,16 +33,16 @@ export function Toolbar({
   onCloseProject,
   currentProjectId
 }: ToolbarProps) {
-  // ✅ DEBUG: Log component mount and props
-  React.useEffect(() => {
-    console.log('[Toolbar] 🎨 Component mounted/updated:', {
-      hasOnRun: typeof onRun === 'function',
-      onRunType: typeof onRun,
-      currentProjectId,
-      hasCurrentProject: !!currentProject,
-      isProjectEmpty: !currentProject || !currentProjectId,
-    });
-  }, [onRun, currentProjectId, currentProject]);
+  // ✅ DEBUG: Log component mount and props (log removed to reduce noise)
+  // React.useEffect(() => {
+  //   console.log('[Toolbar] 🎨 Component mounted/updated:', {
+  //     hasOnRun: typeof onRun === 'function',
+  //     onRunType: typeof onRun,
+  //     currentProjectId,
+  //     hasCurrentProject: !!currentProject,
+  //     isProjectEmpty: !currentProject || !currentProjectId,
+  //   });
+  // }, [onRun, currentProjectId, currentProject]);
   const { provider, model, setProvider, setModel, providerConfig, availableModels } = useAIProvider();
   const { fontType, fontSize, setFontType, setFontSize } = useFontStore();
   const { backendType, setBackendType } = useBackendType();

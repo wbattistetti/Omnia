@@ -27,6 +27,7 @@ export default defineConfig({
       '@taskEditor': path.resolve(__dirname, 'src/components/TaskEditor'),
       '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
       '@TaskBuilderAIWizard': path.resolve(__dirname, 'TaskBuilderAIWizard'),
+      '@wizard': path.resolve(__dirname, 'src/wizard'),
     }
   },
   test: {

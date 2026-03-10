@@ -1,7 +1,7 @@
 import { PhaseCardContainer } from './PhaseCardContainer';
 import type { PipelineStep } from '../store/wizardStore';
 import { WizardStep, WizardTaskTreeNode, WizardModuleTemplate } from '../types';
-import { Boxes, Shield, Brain, MessageSquare, Calendar, Sparkles, Utensils, Info, Truck, ChevronDown, ChevronRight, Check } from 'lucide-react';
+import { Boxes, Shield, Brain, MessageSquare, Languages, Calendar, Sparkles, Utensils, Info, Truck, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 
 type CenterPanelProps = {
@@ -34,7 +34,7 @@ type CenterPanelProps = {
 
 export function CenterPanel({
   currentStep,
-  pipelineSteps,
+  pipelineSteps = [], // ✅ Default to empty array to prevent undefined errors
   userInput, // DEPRECATED: non più usato
   dataSchema,
   showStructureConfirmation,
@@ -80,21 +80,56 @@ export function CenterPanel({
   // ✅ OPTIMIZATION: Extract helper functions outside useMemo to prevent recreation
   // These are stable and don't depend on render-time values
   const getStructureStep = useCallback(() => {
+    if (!pipelineSteps || !Array.isArray(pipelineSteps)) {
+      return undefined;
+    }
     return pipelineSteps.find(s => s.id === 'structure');
   }, [pipelineSteps]);
 
   // ✅ OPTIMIZATION: Memoize phases array - only recreate when pipelineSteps or showStructureConfirmation change
   const phases = useMemo(() => {
+    // ✅ Early return if pipelineSteps is not ready
+    if (!pipelineSteps || !Array.isArray(pipelineSteps)) {
+      return [];
+    }
+
     const structureStep = getStructureStep();
     const constraintsStep = pipelineSteps.find(s => s.id === 'constraints');
     const parsersStep = pipelineSteps.find(s => s.id === 'parsers');
     const messagesStep = pipelineSteps.find(s => s.id === 'messages');
+    const adaptationStep = pipelineSteps.find(s => s.id === 'adaptation');
 
     // Early return if steps are not ready
-    if (!structureStep || !constraintsStep || !parsersStep || !messagesStep) {
+    if (!structureStep || !constraintsStep || !parsersStep || !messagesStep || !adaptationStep) {
       return [];
     }
 
+    // ✅ Check if we're in adaptation mode (constraints, parsers, messages are all "completed" with "Non necessario")
+    const isAdaptationMode =
+      constraintsStep.status === 'completed' &&
+      constraintsStep.payload?.includes('Non necessario') &&
+      parsersStep.status === 'completed' &&
+      parsersStep.payload?.includes('Non necessario') &&
+      messagesStep.status === 'completed' &&
+      messagesStep.payload?.includes('Non necessario');
+
+    if (isAdaptationMode) {
+      // ✅ Adaptation mode: show only structure (read-only) and adaptation
+      return [
+        {
+          stepId: 'structure' as const,
+          icon: Boxes,
+          title: 'Struttura dati',
+        },
+        {
+          stepId: 'adaptation' as const,
+          icon: Languages,
+          title: 'Adattamento',
+        }
+      ];
+    }
+
+    // ✅ Full mode: show all steps
     return [
       {
         stepId: 'structure' as const,
@@ -115,6 +150,11 @@ export function CenterPanel({
         stepId: 'messages' as const,
         icon: MessageSquare,
         title: 'Messaggi',
+      },
+      {
+        stepId: 'adaptation' as const,
+        icon: Languages,
+        title: 'Adattamento',
       }
     ];
   }, [pipelineSteps, getStructureStep]);

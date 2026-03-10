@@ -1,14 +1,16 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
 import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
+import type { UseWizardResult } from '../../../../../TaskBuilderAIWizard/hooks/useWizard';
 
 export interface WizardContextValue {
   // Wizard state (always available when wizard is active)
   wizardMode: WizardMode;
+  runMode: 'none' | 'full' | 'adaptation'; // ✅ NEW: Single source of truth for run mode
   currentStep: string; // DEPRECATED but kept for compatibility
   dataSchema: WizardTaskTreeNode[];
   pipelineSteps: PipelineStep[];
@@ -29,7 +31,7 @@ export interface WizardContextValue {
   // Wizard handlers
   handleStructureConfirm: () => Promise<void>;
   handleStructureReject: () => void;
-  runGenerationPipeline: (taskLabel: string, taskId?: string) => Promise<void>;
+  runGenerationPipeline: (taskLabel: string, taskId?: string) => Promise<void>; // @deprecated
   handleCorrectionSubmit: () => Promise<void>;
 
   // Wizard module handlers
@@ -49,6 +51,41 @@ export interface WizardContextValue {
     constraints: { completed: number; total: number };
     parsers: { completed: number; total: number };
     messages: { completed: number; total: number };
+  };
+}
+
+/**
+ * Helper to convert UseWizardResult to WizardContextValue
+ */
+export function wizardResultToContextValue(wizard: UseWizardResult): WizardContextValue {
+  return {
+    wizardMode: wizard.wizardMode,
+    runMode: wizard.runMode,
+    currentStep: wizard.currentStep,
+    dataSchema: wizard.dataSchema || [],
+    pipelineSteps: wizard.pipelineSteps || [], // ✅ Default to empty array to prevent undefined errors
+    showStructureConfirmation: wizard.showStructureConfirmation,
+    structureConfirmed: wizard.structureConfirmed,
+    showCorrectionMode: wizard.showCorrectionMode,
+    correctionInput: wizard.correctionInput,
+    setCorrectionInput: wizard.setCorrectionInput,
+    shouldBeGeneral: wizard.shouldBeGeneral,
+    generalizedLabel: wizard.generalizedLabel,
+    generalizedMessages: wizard.generalizedMessages,
+    generalizationReason: wizard.generalizationReason,
+    handleStructureConfirm: wizard.confirmStructure,
+    handleStructureReject: wizard.rejectStructure,
+    runGenerationPipeline: wizard.startFull, // @deprecated - use startFull directly
+    handleCorrectionSubmit: wizard.handleCorrectionSubmit,
+    onProceedFromEuristica: wizard.onProceedFromEuristica,
+    onShowModuleList: wizard.onShowModuleList,
+    onSelectModule: wizard.onSelectModule,
+    onPreviewModule: wizard.onPreviewModule,
+    availableModules: wizard.availableModules,
+    foundModuleId: wizard.foundModuleId,
+    currentParserSubstep: wizard.currentParserSubstep,
+    currentMessageSubstep: wizard.currentMessageSubstep,
+    phaseCounters: wizard.phaseCounters,
   };
 }
 

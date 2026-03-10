@@ -177,6 +177,16 @@ export class TaskEditorEventHandler {
       return null;
     }
 
+    // ✅ FIX: Se è adaptation mode, NON preparare il taskTree qui
+    // Il wizard lo farà quando l'utente clicca "Sì" (creerà task, clonerà step, adatterà prompt)
+    if (taskMeta.taskWizardMode === 'adaptation') {
+      console.log('[TaskEditorEventHandler] ⏸️ Adaptation mode: wizard preparerà il taskTree (task e step verranno creati al click su "Sì")', {
+        instanceId,
+        templateId: taskMeta.contextualizationTemplateId
+      });
+      return null; // Il wizard creerà il task e clonerà gli step
+    }
+
     // Use TaskTree from event if present
     let taskTree = event.taskTree;
 

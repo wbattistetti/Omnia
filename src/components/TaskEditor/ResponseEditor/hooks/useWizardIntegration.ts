@@ -15,9 +15,14 @@ import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/type
 const EMPTY_MODULES: any[] = [];
 
 /**
+ * @deprecated Use useWizard() from TaskBuilderAIWizard/hooks/useWizard instead
+ *
  * Hook orchestratore che compone tutti gli hook del wizard.
  * Gestisce il flusso completo: stato, transizioni, generazione, sincronizzazione, completamento.
  * Espone API unificata per ResponseEditorLayout.
+ *
+ * This hook is deprecated and will be removed in a future version.
+ * Use the unified useWizard() hook instead.
  */
 export function useWizardIntegration(
   taskLabel?: string,
@@ -42,7 +47,7 @@ export function useWizardIntegration(
 
   // ✅ Create wizardCompletion FIRST so we can pass createTemplateAndInstanceForProposed to wizardGeneration
   const wizardCompletion = useWizardCompletion({
-    wizardMode: wizardState.wizardMode,
+    wizardState: wizardState.wizardMode, // ✅ RINOMINATO: wizardMode → wizardState (wizardState.wizardMode è il vecchio hook, manterremo per ora)
     dataSchema: wizardState.dataSchema,
     messages: wizardState.messages,
     messagesGeneralized: wizardState.messagesGeneralized,
@@ -320,7 +325,7 @@ export function useWizardIntegration(
   // ✅ FIX: Memoize return object to prevent reference changes on every render
   return useMemo(() => ({
     // Stato wizard
-    wizardMode: wizardState.wizardMode,
+    wizardMode: wizardState.wizardMode, // ✅ Questo è il vecchio hook useWizardState, manterremo per backward compatibility
     currentStep: wizardState.currentStep,
     pipelineSteps: wizardState.pipelineSteps,
     dataSchema: wizardState.dataSchema,

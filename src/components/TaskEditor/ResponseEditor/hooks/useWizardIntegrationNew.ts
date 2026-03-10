@@ -25,8 +25,13 @@ import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 const EMPTY_MODULES: any[] = [];
 
 /**
+ * @deprecated Use useWizard() from TaskBuilderAIWizard/hooks/useWizard instead
+ *
  * NEW: Wizard Integration using new store architecture
  * Maintains same API as old useWizardIntegration for backward compatibility
+ *
+ * This hook is deprecated and will be removed in a future version.
+ * Use the unified useWizard() hook instead.
  */
 export function useWizardIntegrationNew(
   taskLabel?: string,

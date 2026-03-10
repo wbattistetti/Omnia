@@ -7,7 +7,7 @@
  * SINGLE SOURCE OF TRUTH for all wizard operations.
  *
  * Rules:
- * - ONLY this file can call setWizardMode
+ * - ONLY this file can call setWizardState
  * - ONLY this file can call updatePipelineStep
  * - ONLY this file can start/stop generation
  * - ONLY this file can open/close TaskTree
@@ -15,7 +15,8 @@
  * - NO direct store access from components
  */
 
-import { useWizardStore } from '../store/wizardStore';
+import React from 'react';
+import { useWizardStore, type WizardRunMode } from '../store/wizardStore';
 import { runStructureGeneration, runParallelGeneration, checkCompletion } from '../actions/wizardActions';
 import { WizardMode } from '../types/WizardMode';
 import {
@@ -27,6 +28,7 @@ import {
 import type { SemanticContract } from '@types/semanticContract';
 import { flattenTaskTree } from '../utils/wizardHelpers';
 import type { WizardTaskTreeNode } from '../types';
+import { cloneTemplateToInstance } from '../services/TemplateCloningService';
 
 export interface WizardOrchestratorConfig {
   taskLabel: string;
@@ -35,6 +37,12 @@ export interface WizardOrchestratorConfig {
   locale?: string;
   onTaskBuilderComplete?: (taskTree: any) => void;
   addTranslation?: (guid: string, text: string) => void;
+  /**
+   * @deprecated Use store.runMode instead. This property is ignored.
+   * The run mode is now managed by the store via setRunMode().
+   */
+  mode?: 'full' | 'adaptation';
+  templateId?: string; // ✅ Template ID for adaptation mode
 }
 
 /**
@@ -45,6 +53,7 @@ export interface WizardOrchestratorConfig {
 export class WizardOrchestrator {
   private config: WizardOrchestratorConfig;
   private hasStarted = false;
+  private taskInstance: any = null; // ✅ Store task instance for adaptation phase
 
   constructor(config: WizardOrchestratorConfig) {
     this.config = config;
@@ -58,21 +67,31 @@ export class WizardOrchestrator {
   }
 
   /**
-   * Start wizard generation
-   * ONLY entry point for starting the wizard
+   * Get current run mode from store
    */
-  async start(): Promise<void> {
+  private getRunMode(): WizardRunMode {
+    return this.getStore().runMode;
+  }
+
+  /**
+   * Start wizard in FULL mode (complete construction)
+   * Replaces old start() method
+   */
+  async startFull(): Promise<void> {
     if (this.hasStarted) {
-      console.warn('[WizardOrchestrator] ⚠️ start() called multiple times - ignored');
+      console.warn('[WizardOrchestrator] ⚠️ startFull() called multiple times - ignored');
       return;
     }
 
     if (!this.config.taskLabel?.trim()) {
-      throw new Error('[WizardOrchestrator] taskLabel is required');
+      throw new Error('[WizardOrchestrator] taskLabel is required for full mode');
     }
 
     this.hasStarted = true;
     const store = this.getStore();
+
+    // ✅ Set run mode in store (single source of truth)
+    store.setRunMode('full');
 
     // ✅ ORCHESTRATOR controls ALL pipeline updates
     store.reset();
@@ -95,37 +114,137 @@ export class WizardOrchestrator {
 
     // ✅ ORCHESTRATOR updates pipeline AFTER generation
     store.updatePipelineStep('structure', 'running', 'Confermami la struttura che vedi sulla sinistra...');
-    store.setWizardMode(WizardMode.DATA_STRUCTURE_PROPOSED);
+    store.setWizardState(WizardMode.DATA_STRUCTURE_PROPOSED);
+  }
+
+  /**
+   * Start wizard in ADAPTATION mode (template exists, only adaptation needed)
+   */
+  async startAdaptation(templateId: string): Promise<void> {
+    if (this.hasStarted) {
+      console.warn('[WizardOrchestrator] ⚠️ startAdaptation() called multiple times - ignored');
+      return;
+    }
+
+    this.hasStarted = true;
+    const store = this.getStore();
+
+    // ✅ Set run mode in store (single source of truth)
+    store.setRunMode('adaptation');
+
+    // ✅ Load template structure
+    const { DialogueTaskService } = await import('@services/DialogueTaskService');
+    const template = DialogueTaskService.getTemplate(templateId);
+
+    if (!template) {
+      throw new Error(`[WizardOrchestrator] Template not found: ${templateId}`);
+    }
+
+    // ✅ Convert template to dataSchema format
+    const { buildDataSchemaFromTemplate } = await import('../utils/templateToDataSchema');
+    const dataSchema = buildDataSchemaFromTemplate(template);
+
+    // ✅ Set dataSchema in store (read-only, for display)
+    store.setDataSchema(dataSchema);
+
+    // ✅ Mark structure as "proposed" (user must confirm)
+    store.updatePipelineStep('structure', 'running', 'Struttura dati del template caricata. Conferma per procedere con l\'adattamento...');
+    store.setWizardState(WizardMode.DATA_STRUCTURE_PROPOSED);
+
+    // ✅ Mark other steps as skipped (not needed in adaptation mode)
+    store.updatePipelineStep('constraints', 'completed', 'Non necessario (template esistente)');
+    store.updatePipelineStep('parsers', 'completed', 'Non necessario (template esistente)');
+    store.updatePipelineStep('messages', 'completed', 'Non necessario (template esistente)');
+    store.updatePipelineStep('adaptation', 'pending', 'In attesa di conferma struttura...');
+
+    // ✅ Store templateId for later use
+    this.config.templateId = templateId;
+  }
+
+  /**
+   * @deprecated Use startFull() or startAdaptation() instead
+   * Start wizard generation (legacy method - kept for backward compatibility)
+   */
+  async start(): Promise<void> {
+    // ✅ Legacy method delegates to startFull()
+    return this.startFull();
   }
 
   /**
    * Confirm structure (point of no return)
-   * ONLY entry point for structure confirmation
+   * Unified entry point for structure confirmation in both FULL and ADAPTATION modes
    */
   async confirmStructure(): Promise<void> {
     const store = this.getStore();
+    const runMode = this.getRunMode();
 
     // ✅ POINT OF NO RETURN: Set flag FIRST
     store.setStructureConfirmed(true);
 
-    // ✅ Reset completed phases tracker (fresh start)
-    store.resetCompletedPhases();
-
     // ✅ Update UI IMMEDIATELY (before async operations)
     store.updatePipelineStep('structure', 'completed', 'Confermata!');
-    store.setWizardMode(WizardMode.GENERATING);
+    store.setWizardState(WizardMode.GENERATING);
 
-    // ✅ REFACTOR: Extract phase setup
-    const { payloads } = await this.setupPhasePayloads(store);
+    if (runMode === 'adaptation') {
+      // ✅ ADAPTATION MODE: Direct cloning and adaptation (no parallel generation)
+      await this.executeAdaptationFlow(store);
+    } else {
+      // ✅ FULL MODE: Parallel generation → sequential → adaptation
+      // ✅ Reset completed phases tracker (fresh start)
+      store.resetCompletedPhases();
 
-    // ✅ REFACTOR: Extract template creation phases
-    const { templates, nodeStructures } = await this.executeTemplateCreationPhases(store);
+      // ✅ REFACTOR: Extract phase setup
+      const { payloads } = await this.setupPhasePayloads(store);
 
-    // ✅ REFACTOR: Extract parallel generation
-    await this.executeParallelGeneration(store, templates, nodeStructures, payloads);
+      // ✅ REFACTOR: Extract template creation phases
+      const { templates, nodeStructures } = await this.executeTemplateCreationPhases(store);
 
-    // ✅ REFACTOR: Extract sequential phases (6-7) and completion (8)
-    await this.executeSequentialPhases(store, templates);
+      // ✅ REFACTOR: Extract parallel generation
+      // Note: Sequential phases and adaptation are triggered by 'all-complete' callback
+      await this.executeParallelGeneration(store, templates, nodeStructures, payloads);
+    }
+  }
+
+  /**
+   * Execute adaptation flow (cloning + adaptation)
+   * Used by ADAPTATION mode after structure confirmation
+   */
+  private async executeAdaptationFlow(
+    store: ReturnType<typeof useWizardStore.getState>
+  ): Promise<void> {
+    if (!this.config.rowId || !this.config.projectId || !this.config.templateId) {
+      throw new Error('[WizardOrchestrator] rowId, projectId and templateId required for adaptation');
+    }
+
+    console.log('[WizardOrchestrator] 🚀 Starting adaptation flow: cloning steps and translations');
+
+    // ✅ Use shared cloning function
+    const { taskInstance, guidMapping } = await cloneTemplateToInstance({
+      templateId: this.config.templateId!,
+      rowId: this.config.rowId,
+      projectId: this.config.projectId,
+      taskLabel: this.config.taskLabel || 'Task',
+      locale: this.config.locale || 'it',
+      dataSchema: store.dataSchema
+    });
+
+    // ✅ Store taskInstance for adaptation phase
+    this.taskInstance = taskInstance;
+
+    // ✅ Execute adaptation phase
+    await this.executeAdaptationPhase(store);
+
+    // ✅ Mark as completed
+    store.updatePipelineStep('adaptation', 'completed', 'Prompt adattati al contesto');
+    store.setWizardState(WizardMode.COMPLETED);
+
+    if (this.config.onTaskBuilderComplete) {
+      const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
+      const taskTree = await buildTaskTreeFromRepository(this.config.rowId, this.config.projectId);
+      if (taskTree) {
+        this.config.onTaskBuilderComplete(taskTree);
+      }
+    }
   }
 
   /**
@@ -348,6 +467,41 @@ export class WizardOrchestrator {
               store.updatePipelineStep(phaseId, 'running', 'Finalizzazione in corso...');
             }
           }
+        } else if (taskId === 'all-complete') {
+          // ✅ DETERMINISTIC POINT: All parallel phases are complete (allPhasesCompleteCheck() is true)
+          // This is the ONLY safe point to execute sequential phases and adaptation
+          console.log('[WizardOrchestrator] ✅ All parallel phases completed, starting sequential phases and adaptation');
+
+          // Execute sequential phases (FASE 6-7)
+          await this.executeSequentialPhases(store, templates);
+
+          // Execute adaptation phase (FASE 9) - only if in FULL mode
+          const runMode = this.getRunMode();
+          if (runMode === 'full') {
+            await this.executeAdaptationPhase(store);
+          }
+
+          // Mark all pipeline steps as completed and close wizard
+          store.updatePipelineStep('constraints', 'completed', 'Generati!');
+          store.updatePipelineStep('parsers', 'completed', 'Generati!');
+          store.updatePipelineStep('messages', 'completed', 'Generati!');
+
+          // Build final TaskTree and trigger completion callback
+          if (this.taskInstance && this.config.projectId) {
+            const finalTaskTree = await buildTaskTreeWithContractsAndEngines(
+              this.taskInstance,
+              this.config.projectId,
+              store.dataSchema
+            );
+
+            store.setWizardState(WizardMode.COMPLETED);
+
+            if (finalTaskTree && this.config.onTaskBuilderComplete) {
+              this.config.onTaskBuilderComplete(finalTaskTree);
+            }
+          } else {
+            store.setWizardState(WizardMode.COMPLETED);
+          }
         }
       });
 
@@ -357,6 +511,7 @@ export class WizardOrchestrator {
 
   /**
    * ✅ REFACTOR: Execute sequential phases (FASI 6-7) and completion (FASE 8)
+   * Uses shared cloneTemplateToInstance function
    */
   private async executeSequentialPhases(
     store: ReturnType<typeof useWizardStore.getState>,
@@ -369,105 +524,80 @@ export class WizardOrchestrator {
 
     console.log('[WizardOrchestrator] 🚀 Starting sequential phases 6-7');
 
-    // FASE 6: Clona tutti gli step di tutti i nodi e li aggiunge all'istanza
-    const { cloneTemplateSteps } = await import('@utils/taskUtils');
-    const { buildNodesFromTemplates } = await import('../services/TemplateCreationService');
+    // Get root template ID from dataSchema
     const rootNode = store.dataSchema[0];
-    const rootTemplate = templates.get(rootNode.id);
+    if (!rootNode) {
+      console.error('[WizardOrchestrator] ❌ Root node not found in dataSchema');
+      return;
+    }
 
+    const rootTemplate = templates.get(rootNode.id);
     if (!rootTemplate) {
       console.error('[WizardOrchestrator] ❌ Root template not found');
       return;
     }
 
-    // Build nodes from templates (per cloneTemplateSteps)
-    const nodes = buildNodesFromTemplates(rootTemplate, templates);
-    const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(rootTemplate, nodes);
-
-    // Crea istanza con step clonati
-    const taskInstance: any = {
-      id: this.config.rowId,
-      type: rootTemplate.type || 3,
+    // ✅ Use shared cloning function
+    const { taskInstance } = await cloneTemplateToInstance({
       templateId: rootTemplate.id,
-      label: this.config.taskLabel || 'Task',
-      steps: clonedSteps,
-    };
+      rowId: this.config.rowId,
+      projectId: this.config.projectId,
+      taskLabel: this.config.taskLabel || 'Task',
+      locale: this.config.locale || 'it',
+      dataSchema: store.dataSchema
+    });
 
-    console.log('[WizardOrchestrator] ✅ FASE 6: Steps cloned', { guidMappingSize: guidMapping.size });
+    // ✅ Store taskInstance for adaptation phase
+    this.taskInstance = taskInstance;
 
-    // FASE 7: Clona e contestualizza traduzioni (nuovo flusso deterministico)
-    try {
-      const { cloneAndContextualizeTranslations } = await import('@utils/cloneAndContextualizeTranslations');
-      await cloneAndContextualizeTranslations(
-        clonedSteps,
-        guidMapping,
-        rootTemplate.id,
-        this.config.taskLabel || 'Task',
-        this.config.locale || 'it'
-      );
-      console.log('[WizardOrchestrator] ✅ FASE 7: Translations cloned and contextualized', {
-        guidMappingSize: guidMapping.size
-      });
-    } catch (contextError) {
-      console.error('[WizardOrchestrator] ❌ Error in FASE 7 (non-blocking):', contextError);
-      // Continue even if contextualization fails - translations are already cloned
-    }
-
-    // ✅ FASE 8: Build TaskTree and assemble dataContract (base + semantic + engines)
-    // This is the ONLY place where dataContract is assembled (Architectural constraint)
-    // ✅ FIX: Save taskInstance to repository BEFORE building TaskTree
-    const { taskRepository } = await import('@services/TaskRepository');
-    taskRepository.createTask(
-      taskInstance.type || 3,
-      taskInstance.templateId,
-      taskInstance,
-      taskInstance.id,
-      this.config.projectId
-    );
-
-    const finalTaskTree = await buildTaskTreeWithContractsAndEngines(
-      taskInstance,
-      this.config.projectId,
-      store.dataSchema
-    );
-
-    // ✅ NEW: Mark sequential phases as completed
+    // ✅ Mark sequential phases as completed
     store.markPhaseCompleted('sequential');
 
-    // ✅ NEW: Check if ALL phases are completed before closing wizard
-    const { completedPhases } = store;
-    const allPhasesCompleted =
-      completedPhases.constraints &&
-      completedPhases.parsers &&
-      completedPhases.messages &&
-      completedPhases.sequential;
+    console.log('[WizardOrchestrator] ✅ Sequential phases completed (FASE 6-7)');
+  }
 
-    if (allPhasesCompleted) {
-      // ✅ NOW it's really finished - mark all pipeline steps as "completed"
-      store.updatePipelineStep('constraints', 'completed', 'Generati!');
-      store.updatePipelineStep('parsers', 'completed', 'Generati!');
-      store.updatePipelineStep('messages', 'completed', 'Generati!');
-
-      // Close wizard
-      store.setWizardMode(WizardMode.COMPLETED);
-
-      // Trigger completion callback
-      if (finalTaskTree && this.config.onTaskBuilderComplete) {
-        this.config.onTaskBuilderComplete(finalTaskTree);
-      }
-    } else {
-      console.warn('[WizardOrchestrator] ⚠️ Sequential phases completed but not all phases are done:', {
-        completedPhases,
-        allPhasesCompleted
-      });
-      // Still trigger callback even if phases not all completed (fallback)
-      if (finalTaskTree && this.config.onTaskBuilderComplete) {
-        this.config.onTaskBuilderComplete(finalTaskTree);
-      }
-      store.setWizardMode(WizardMode.COMPLETED);
+  /**
+   * ✅ NEW: Execute adaptation phase (FASE 9)
+   * Pure sequential phase - does NOT depend on counters
+   * Only runs in FULL mode, after sequential phases are complete
+   */
+  private async executeAdaptationPhase(
+    store: ReturnType<typeof useWizardStore.getState>
+  ): Promise<void> {
+    if (!this.taskInstance || !this.config.rowId) {
+      console.warn('[WizardOrchestrator] ⚠️ Cannot execute adaptation: taskInstance or rowId missing');
+      return;
     }
 
-    console.log('[WizardOrchestrator] ✅ All phases completed successfully (all in memory)');
+    try {
+      console.log('[WizardOrchestrator] 🚀 Starting adaptation phase (FASE 9)');
+      store.updatePipelineStep('adaptation', 'running', 'Sto adattando i prompt contestuali per personalizzare i messaggi...');
+
+      const { AdaptTaskTreePromptToContext } = await import('@utils/taskTreePromptAdapter');
+      await AdaptTaskTreePromptToContext(this.taskInstance, this.config.taskLabel || 'Task', false);
+
+      store.updatePipelineStep('adaptation', 'completed', 'Prompt adattati al contesto');
+      console.log('[WizardOrchestrator] ✅ Adaptation phase completed');
+    } catch (err) {
+      store.updatePipelineStep('adaptation', 'error', `Errore durante adattamento: ${err instanceof Error ? err.message : String(err)}`);
+      console.error('[WizardOrchestrator] ❌ Error in adaptation phase (non-blocking):', err);
+    }
+  }
+
+  /**
+   * @deprecated Use startAdaptation() instead
+   * Start wizard in adaptation mode (legacy method - kept for backward compatibility)
+   */
+  async startAdaptationMode(templateId: string): Promise<void> {
+    return this.startAdaptation(templateId);
+  }
+
+  /**
+   * @deprecated Use confirmStructure() instead (now unified for both modes)
+   * Confirm structure in adaptation mode (legacy method - kept for backward compatibility)
+   */
+  async confirmStructureForAdaptation(): Promise<void> {
+    return this.confirmStructure();
   }
 
   /**
@@ -476,7 +606,7 @@ export class WizardOrchestrator {
    */
   rejectStructure(): void {
     const store = this.getStore();
-    store.setWizardMode(WizardMode.DATA_STRUCTURE_CORRECTION);
+    store.setWizardState(WizardMode.DATA_STRUCTURE_CORRECTION);
   }
 
   /**
@@ -495,7 +625,7 @@ export class WizardOrchestrator {
    */
   showModuleList(): void {
     const store = this.getStore();
-    store.setWizardMode(WizardMode.LISTA_MODULI);
+    store.setWizardState(WizardMode.LISTA_MODULI);
     store.setCurrentStep('lista_moduli');
   }
 
@@ -523,7 +653,7 @@ export class WizardOrchestrator {
 
       // ✅ ORCHESTRATOR updates pipeline AFTER generation
       store.updatePipelineStep('structure', 'running', 'Confermami la struttura che vedi sulla sinistra...');
-      store.setWizardMode(WizardMode.DATA_STRUCTURE_PROPOSED);
+      store.setWizardState(WizardMode.DATA_STRUCTURE_PROPOSED);
     }
   }
 
@@ -553,7 +683,7 @@ export class WizardOrchestrator {
 
     // ✅ ORCHESTRATOR updates pipeline AFTER generation
     store.updatePipelineStep('structure', 'running', 'Confermami la struttura che vedi sulla sinistra...');
-    store.setWizardMode(WizardMode.DATA_STRUCTURE_PROPOSED);
+    store.setWizardState(WizardMode.DATA_STRUCTURE_PROPOSED);
   }
 }
 
@@ -562,11 +692,18 @@ export class WizardOrchestrator {
  */
 export function useWizardOrchestrator(config: WizardOrchestratorConfig) {
   const store = useWizardStore();
-  const orchestrator = new WizardOrchestrator(config);
+  const orchestratorRef = React.useRef<WizardOrchestrator | null>(null);
 
-  return {
+  // ✅ Create orchestrator instance only once
+  if (!orchestratorRef.current) {
+    orchestratorRef.current = new WizardOrchestrator(config);
+  }
+
+  const orchestrator = orchestratorRef.current;
+
+    return {
     // State (read-only)
-    wizardMode: store.wizardMode,
+    wizardMode: store.wizardState, // ✅ RINOMINATO: wizardMode → wizardState (per backward compatibility, esponiamo ancora come wizardMode)
     currentStep: store.currentStep,
     pipelineSteps: store.pipelineSteps,
     dataSchema: store.dataSchema,
@@ -590,8 +727,12 @@ export function useWizardOrchestrator(config: WizardOrchestratorConfig) {
     phaseCounters: store.phaseCounters,
 
     // Actions (only through orchestrator)
-    start: orchestrator.start.bind(orchestrator),
+    start: orchestrator.start.bind(orchestrator), // @deprecated - use startFull
+    startFull: orchestrator.startFull.bind(orchestrator),
+    startAdaptation: orchestrator.startAdaptation.bind(orchestrator),
+    startAdaptationMode: orchestrator.startAdaptationMode.bind(orchestrator), // @deprecated - use startAdaptation
     confirmStructure: orchestrator.confirmStructure.bind(orchestrator),
+    confirmStructureForAdaptation: orchestrator.confirmStructureForAdaptation.bind(orchestrator), // @deprecated - use confirmStructure
     rejectStructure: orchestrator.rejectStructure.bind(orchestrator),
     reset: orchestrator.reset.bind(orchestrator),
     showModuleList: orchestrator.showModuleList.bind(orchestrator),
@@ -599,5 +740,8 @@ export function useWizardOrchestrator(config: WizardOrchestratorConfig) {
     proceedFromEuristica: orchestrator.proceedFromEuristica.bind(orchestrator),
     setCorrectionInput: store.setCorrectionInput,
     setActiveNodeId: store.setActiveNodeId,
+
+    // ✅ NEW: Expose runMode from store
+    runMode: store.runMode,
   };
 }

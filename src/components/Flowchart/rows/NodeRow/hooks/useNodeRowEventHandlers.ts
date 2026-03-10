@@ -227,7 +227,8 @@ export function useNodeRowEventHandlers(
         return;
       }
 
-      const heuristicsResult = await RowHeuristicsHandler.analyzeRowLabel(q);
+      const projectId = getProjectId?.(); // ✅ FIX: Get projectId for loading project-specific embeddings
+      const heuristicsResult = await RowHeuristicsHandler.analyzeRowLabel(q, projectId); // ✅ FIX: Pass projectId
 
       if (heuristicsResult.success) {
         const rowUpdateData = RowHeuristicsHandler.prepareRowUpdateData(row, q, heuristicsResult);

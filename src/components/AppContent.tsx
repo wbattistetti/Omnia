@@ -389,13 +389,13 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // ✅ REMOVED: Duplicate handleTestSingleNode definition - already defined before renderTabContent
 
-  // ✅ DEBUG: Verify handleTestSingleNode is stable
-  React.useEffect(() => {
-    console.log('[AppContent] handleTestSingleNode defined:', {
-      hasHandleTestSingleNode: !!handleTestSingleNode,
-      handleTestSingleNodeName: handleTestSingleNode?.name,
-    });
-  }, [handleTestSingleNode]);
+  // ✅ DEBUG: Verify handleTestSingleNode is stable (log removed to reduce noise)
+  // React.useEffect(() => {
+  //   console.log('[AppContent] handleTestSingleNode defined:', {
+  //     hasHandleTestSingleNode: !!handleTestSingleNode,
+  //     handleTestSingleNodeName: handleTestSingleNode?.name,
+  //   });
+  // }, [handleTestSingleNode]);
 
   const handleRunFlow = React.useCallback(() => {
     console.log('[AppContent] handleRunFlow -> delegating to ChatOrchestrator');
@@ -953,36 +953,58 @@ export const AppContent: React.FC<AppContentProps> = ({
                     }
                   })(),
 
-                  // 6. Save modified templates (templates with modified contracts)
+                  // 6. Save all local templates from memory to database
                   (async () => {
                     if (!pid) return;
                     const tStart = performance.now();
                     try {
                       console.log('[Save][6-templates] 🚀 START');
                       const { DialogueTaskService } = await import('../services/DialogueTaskService');
-                      const modifiedIds = DialogueTaskService.getModifiedTemplateIds();
-                      console.log('[Save][6-templates] 📊 Templates to save', { count: modifiedIds.length, templateIds: modifiedIds });
 
-                      if (modifiedIds.length === 0) {
+                      // ✅ Get ALL templates from memory
+                      const allTemplates = DialogueTaskService.getAllTemplates();
+
+                      // ✅ Filter: Only save local templates (not Factory templates, not instances)
+                      // Local template = source !== 'Factory' AND templateId === null
+                      const localTemplates = allTemplates.filter(t => {
+                        const isFactory = t.source === 'Factory';
+                        const isInstance = t.templateId !== null && t.templateId !== undefined;
+                        return !isFactory && !isInstance;
+                      });
+
+                      console.log('[Save][6-templates] 📊 Local templates to save', {
+                        count: localTemplates.length,
+                        templateIds: localTemplates.map(t => t.id)
+                      });
+
+                      if (localTemplates.length === 0) {
                         const tEnd = performance.now();
-                        console.log('[Save][6-templates] ✅ DONE (no modified templates)', { ms: Math.round(tEnd - tStart) });
+                        console.log('[Save][6-templates] ✅ DONE (no local templates)', { ms: Math.round(tEnd - tStart) });
                         return;
                       }
 
+                      // ✅ Mark all local templates as modified so they get saved
+                      localTemplates.forEach(t => {
+                        if (t.id) {
+                          DialogueTaskService.markTemplateAsModified(t.id);
+                        }
+                      });
+
+                      // ✅ Save all marked templates
                       const result = await DialogueTaskService.saveModifiedTemplates(pid);
                       const tEnd = performance.now();
                       if (result.failed === 0) {
                         console.log('[Save][6-templates] ✅ DONE', {
                           ms: Math.round(tEnd - tStart),
                           saved: result.saved,
-                          total: modifiedIds.length
+                          total: localTemplates.length
                         });
                       } else {
                         console.warn('[Save][6-templates] ⚠️ PARTIAL', {
                           ms: Math.round(tEnd - tStart),
                           saved: result.saved,
                           failed: result.failed,
-                          total: modifiedIds.length
+                          total: localTemplates.length
                         });
                       }
                     } catch (e) {

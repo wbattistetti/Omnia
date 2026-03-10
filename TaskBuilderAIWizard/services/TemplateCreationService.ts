@@ -841,14 +841,26 @@ export async function createContextualizedInstance(
   // ✅ FASE 4: POI chiama AI per adattare (genera messaggi contestualizzati e sovrascrive solo traduzioni)
   // Questo avviene DOPO la clonazione e copia traduzioni
   try {
+    // ✅ Update pipeline step to running
+    const { useWizardStore } = await import('../store/wizardStore');
+    useWizardStore.getState().updatePipelineStep('adaptation', 'running', 'Sto adattando i prompt contestuali per personalizzare i messaggi...');
+
     const { AdaptTaskTreePromptToContext } = await import('@utils/taskTreePromptAdapter');
     await AdaptTaskTreePromptToContext(instance, taskLabel, adaptAllNormalSteps);
+
+    // ✅ Update pipeline step to completed
+    useWizardStore.getState().updatePipelineStep('adaptation', 'completed', 'Prompt adattati al contesto');
+
     console.log('[createContextualizedInstance] ✅ Prompt adattati al contesto', {
       instanceId: instance.id,
       adaptAllNormalSteps,
       taskLabel
     });
   } catch (err) {
+    // ✅ Update pipeline step to error
+    const { useWizardStore } = await import('../store/wizardStore');
+    useWizardStore.getState().updatePipelineStep('adaptation', 'error', `Errore durante adattamento: ${err instanceof Error ? err.message : String(err)}`);
+
     console.error('[createContextualizedInstance] ⚠️ Errore durante adattamento prompt (continua con template):', err);
     // Non bloccare il flusso - l'istanza usa i prompt del template
   }

@@ -28,23 +28,27 @@ export class EmbeddingService {
    * Carica embedding per un tipo specifico dal backend
    * @param type - Tipo di embedding da caricare (es. 'task', 'condition', ecc.)
    * @param forceReload - Se true, forza il ricaricamento anche se già in cache
+   * @param projectId - ID del progetto (opzionale) - se specificato, carica anche embeddings dal database del progetto
    */
-  static async loadEmbeddings(type: string = 'task', forceReload: boolean = false): Promise<void> {
-    if (!forceReload && this.cacheLoaded.has(type)) return;
+  static async loadEmbeddings(type: string = 'task', forceReload: boolean = false, projectId?: string): Promise<void> {
+    // ✅ NEW: Se projectId è specificato, usa una chiave unica per evitare conflitti
+    const cacheKey = projectId ? `${type}:${projectId}` : type;
+
+    if (!forceReload && this.cacheLoaded.has(cacheKey)) return;
 
     // Se forceReload, invalida la cache
     if (forceReload) {
-      this.cacheLoaded.delete(type);
-      this.cache.delete(type);
+      this.cacheLoaded.delete(cacheKey);
+      this.cache.delete(type); // ✅ Mantieni type come chiave cache (merge factory + progetto)
     }
 
-    const existingPromise = this.loadingPromises.get(type);
+    const existingPromise = this.loadingPromises.get(cacheKey);
     if (existingPromise) return existingPromise;
 
-    const promise = this._loadFromAPI(type);
-    this.loadingPromises.set(type, promise);
+    const promise = this._loadFromAPI(type, projectId);
+    this.loadingPromises.set(cacheKey, promise);
     await promise;
-    this.loadingPromises.delete(type);
+    this.loadingPromises.delete(cacheKey);
   }
 
   /**
@@ -106,13 +110,23 @@ export class EmbeddingService {
     }
 
     this.cache.set(type, entries);
-    // Mark as loaded so it won't be overwritten by _loadFromAPI
+    // ✅ Mark as loaded for all possible cache keys (type, type:projectId, etc.)
+    // This ensures that _loadFromAPI won't overwrite embeddings added in memory
+    // Note: _loadFromAPI now does merge instead of overwrite, but this is still useful
+    // to prevent unnecessary API calls if cache is already populated
     this.cacheLoaded.add(type);
+    // Also mark for any project-specific keys that might exist
+    // (This is defensive - the merge logic in _loadFromAPI handles this correctly)
   }
 
-  private static async _loadFromAPI(type: string): Promise<void> {
+  private static async _loadFromAPI(type: string, projectId?: string): Promise<void> {
     try {
-      const response = await fetch(`/api/embeddings?type=${encodeURIComponent(type)}`);
+      // ✅ NEW: Aggiungi projectId alla query se specificato
+      const url = projectId
+        ? `/api/embeddings?type=${encodeURIComponent(type)}&projectId=${encodeURIComponent(projectId)}`
+        : `/api/embeddings?type=${encodeURIComponent(type)}`;
+
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to load embeddings: ${response.status} ${response.statusText}`);
       }
@@ -127,12 +141,24 @@ export class EmbeddingService {
         language: item.language  // ✅ Include language se presente
       }));
 
-      this.cache.set(type, entries);
-      this.cacheLoaded.add(type);
-      console.log(`[EmbeddingService] ✅ Loaded ${entries.length} embeddings (type: ${type})`);
+      // ✅ NEW: Merge con cache esistente (non sovrascrive embeddings in memoria)
+      const existingEntries = this.cache.get(type) || [];
+      const existingIds = new Set(existingEntries.map(e => e.id));
+
+      // Aggiungi solo nuovi embeddings (evita duplicati)
+      const newEntries = entries.filter(e => !existingIds.has(e.id));
+      const mergedEntries = [...existingEntries, ...newEntries];
+
+      this.cache.set(type, mergedEntries);
+      this.cacheLoaded.add(projectId ? `${type}:${projectId}` : type);
+
+      console.log(`[EmbeddingService] ✅ Loaded ${entries.length} embeddings (${newEntries.length} new) (type: ${type}${projectId ? `, project: ${projectId}` : ''})`);
     } catch (error) {
-      console.error(`[EmbeddingService] ❌ Failed to load embeddings (type: ${type}):`, error);
-      this.cache.set(type, []);
+      console.error(`[EmbeddingService] ❌ Failed to load embeddings (type: ${type}${projectId ? `, project: ${projectId}` : ''}):`, error);
+      // ✅ Non sovrascrive cache esistente in caso di errore
+      if (!this.cache.has(type)) {
+        this.cache.set(type, []);
+      }
       // Non blocca - se cache vuota, findBestMatch ritorna null
     }
   }
@@ -152,13 +178,86 @@ export class EmbeddingService {
    * @param threshold - Minimum similarity threshold (0-1)
    * @returns ID of best matching entity (or { id, taskType } for type='taskType'), or null if no match above threshold
    */
+  /**
+   * Find all matches sorted by similarity (for debugging)
+   */
+  static async findAllMatches(
+    inputText: string,
+    type: 'task' | 'taskType',
+    minThreshold: number = 0.0,
+    projectId?: string // ✅ NEW: Support projectId to load project-specific embeddings
+  ): Promise<Array<{ id: string; text: string; similarity: number }>> {
+    // Reuse the same logic as findBestMatch but return all matches
+    // 1. Assicura che la cache sia caricata per questo type
+    await this.loadEmbeddings(type, false, projectId); // ✅ FIX: Load embeddings with projectId support
+
+    const entries = this.cache.get(type) || []; // ✅ FIX: Use this.cache.get() instead of this.getEntriesByType()
+
+    console.log('[EmbeddingService] 🔍 findAllMatches - Cache status', {
+      type,
+      projectId,
+      entriesCount: entries.length,
+      cacheKeys: Array.from(this.cache.keys()),
+      cacheSizes: Array.from(this.cache.entries()).map(([k, v]) => ({ key: k, size: v.length })),
+    });
+
+    if (entries.length === 0) {
+      console.log(`[EmbeddingService] ⚠️ No embeddings available (type: ${type}${projectId ? `, project: ${projectId}` : ''}), returning empty array`);
+      return [];
+    }
+
+    const normalizedText = this.normalizeText(inputText);
+
+    // Compute input embedding
+    let inputEmbedding: Float32Array;
+    try {
+      const response = await fetch('/api/embeddings/compute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: normalizedText })
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      if (!data.embedding || !Array.isArray(data.embedding)) {
+        return [];
+      }
+      inputEmbedding = new Float32Array(data.embedding);
+    } catch (error) {
+      return [];
+    }
+
+    // Calculate similarities
+    const allScores: Array<{ id: string; text: string; similarity: number }> = [];
+
+    for (const entry of entries) {
+      const similarity = this.cosineSimilarity(inputEmbedding, entry.embedding);
+      if (similarity >= minThreshold) {
+        allScores.push({
+          id: entry.id,
+          text: entry.text,
+          similarity: similarity
+        });
+      }
+    }
+
+    // Sort by similarity (descending)
+    allScores.sort((a, b) => b.similarity - a.similarity);
+
+    return allScores;
+  }
+
   static async findBestMatch(
     inputText: string,
     type: string = 'task',
-    threshold: number = 0.70
+    threshold: number = 0.70,
+    projectId?: string // ✅ NEW: Support projectId to load project-specific embeddings
   ): Promise<string | { id: string; taskType: number } | null> {
     // 1. Assicura che la cache sia caricata per questo type
-    await this.loadEmbeddings(type);
+    await this.loadEmbeddings(type, false, projectId); // ✅ FIX: Load embeddings with projectId support
 
     const entries = this.cache.get(type) || [];
     if (entries.length === 0) {

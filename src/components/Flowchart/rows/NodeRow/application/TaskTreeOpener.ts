@@ -352,35 +352,29 @@ export class TaskTreeOpener {
 
       const template = DialogueTaskService.getTemplate(metaTemplateId);
 
+      console.log('[🔍 TaskTreeOpener] 🔍 DEBUG: Template lookup result', {
+        metaTemplateId,
+        templateFound: !!template,
+        templateLabel: template?.label,
+        templateType: template?.type,
+        cacheLoaded: DialogueTaskService.isCacheLoaded()
+      });
+
       if (template) {
-        console.log('[🔍 TaskTreeOpener] 📋 Template caricato, creando task...', {
+        console.log('[🔍 TaskTreeOpener] ✅ Template trovato, aprendo ResponseEditor in adaptation mode (wizard creerà task e clonerà step)', {
           templateId: metaTemplateId,
           templateLabel: template.label || template.name,
           rowId: row.id,
           rowText: row.text
         });
 
-        // Create task from template found by heuristics
-        const newTask = taskRepository.createTask(
-          metaTaskType,
-          metaTemplateId,
-          { label: row.text || '' },
-          row.id,
-          projectId
-        );
+        // ✅ FIX: NON creare il task qui - lo farà il wizard quando l'utente clicca "Sì"
+        // ✅ FIX: NON clonare gli step qui - lo farà il wizard
+        // ✅ FIX: Solo aprire l'editor con i meta corretti, il wizard eseguirà la pipeline
 
-        console.log('[🔍 TaskTreeOpener] ✅ Task creato, aprendo ResponseEditor con taskWizardMode = "adaptation"', {
-          taskId: newTask.id,
-          taskTemplateId: newTask.templateId,
-          taskLabel: newTask.label,
-          taskWizardMode: 'adaptation',
-          contextualizationTemplateId: metaTemplateId,
-          taskLabel: row.text || ''
-        });
-
-        // 3. Now open the editor
+        // 1. Apri editor con adaptation mode - il wizard farà il resto
         taskEditorCtx.open({
-          id: row.id,  // ALWAYS equals task.id
+          id: row.id,
           type: metaTaskType,
           label: row.text || '',
           taskWizardMode: 'adaptation',
@@ -388,9 +382,9 @@ export class TaskTreeOpener {
           taskLabel: row.text || '',
         });
 
-        // Emit event to open ResponseEditor tab
+        // 2. Emit event to open ResponseEditor tab
         this.dispatchTaskEditorOpenEvent({
-          id: row.id,  // ALWAYS equals task.id
+          id: row.id,
           type: metaTaskType,
           label: row.text || '',
           templateId: metaTemplateId,
@@ -400,6 +394,12 @@ export class TaskTreeOpener {
         });
 
         return { success: true };
+      } else {
+        console.error('[🔍 TaskTreeOpener] ❌ Template not found in cache', {
+          metaTemplateId,
+          cacheLoaded: DialogueTaskService.isCacheLoaded(),
+          allTemplateIds: DialogueTaskService.getAllTemplates().map(t => t.id)
+        });
       }
     } catch (err) {
       console.error('[🔍 TaskTreeOpener] ❌ Errore caricamento template:', err);

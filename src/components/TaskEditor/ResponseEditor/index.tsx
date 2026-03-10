@@ -8,9 +8,12 @@ import { ToolbarButton } from '@dock/types';
 import { ResponseEditorLayout } from '@responseEditor/components/ResponseEditorLayout';
 import { useResponseEditor } from '@responseEditor/hooks/useResponseEditor';
 import { validateTaskTreeStructure } from '@responseEditor/core/domain/validators';
-import { useWizardIntegration } from '@responseEditor/hooks/useWizardIntegration';
-import { useWizardIntegrationNew } from '@responseEditor/hooks/useWizardIntegrationNew';
-import { useWizardIntegrationOrchestrated } from '@responseEditor/hooks/useWizardIntegrationOrchestrated';
+// ✅ REMOVED: Legacy hooks - use useWizard instead
+// import { useWizardIntegration } from '@responseEditor/hooks/useWizardIntegration';
+// import { useWizardIntegrationNew } from '@responseEditor/hooks/useWizardIntegrationNew';
+// import { useWizardIntegrationOrchestrated } from '@responseEditor/hooks/useWizardIntegrationOrchestrated';
+import { useWizard } from '@TaskBuilderAIWizard/hooks/useWizard';
+import { wizardResultToContextValue } from '@responseEditor/context/WizardContext';
 import { WizardContext } from '@responseEditor/context/WizardContext';
 import { WizardMode } from '../../../../TaskBuilderAIWizard/types/WizardMode';
 import { useWizardModeTransition } from '@responseEditor/hooks/useWizardModeTransition';
@@ -123,14 +126,17 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // ✅ FIX: Determina se dobbiamo preservare wizardIntegration basandoci sul ref (che mantiene lo stato precedente)
   const shouldPreserveWizardIntegration = previousWizardIntegrationRef.current?.shouldBeGeneral === true;
 
-  const taskLabelForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration)
+  // ✅ Get contextualizationTemplateId from editor (comes from taskMeta)
+  const contextualizationTemplateId = editor.contextualizationTemplateId;
+
+  const taskLabelForWizard = (taskWizardMode === 'full' || taskWizardMode === 'adaptation' || shouldPreserveWizardIntegration)
     ? (taskLabel || undefined)
     : undefined;
   // ✅ FIX: Usa sempre task.id (che è sempre row.id) quando task esiste
-  // Quando taskWizardMode === 'full', task può essere TaskMeta (che ha id = row.id)
+  // Quando taskWizardMode === 'full' o 'adaptation', task può essere TaskMeta (che ha id = row.id)
   // Per costruzione: task.id = row.id (sempre)
-  // ✅ CRITICAL: rowId MUST be available when wizard mode is 'full'
-  const rowIdForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration) && task
+  // ✅ CRITICAL: rowId MUST be available when wizard mode is 'full' or 'adaptation'
+  const rowIdForWizard = (taskWizardMode === 'full' || taskWizardMode === 'adaptation' || shouldPreserveWizardIntegration) && task
     ? task.id  // ✅ ALWAYS equals row.id (task can be TaskMeta or Task, both have id)
     : undefined;
 
@@ -143,10 +149,25 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       taskLabel,
     });
   }
-  const projectIdForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration)
+  const projectIdForWizard = (taskWizardMode === 'full' || taskWizardMode === 'adaptation' || shouldPreserveWizardIntegration)
     ? currentProjectId || undefined
     : undefined;
   const localeForWizard = 'it';
+
+  // ✅ Determine wizard mode and templateId for adaptation
+  const wizardMode = taskWizardMode === 'adaptation' ? 'adaptation' : taskWizardMode === 'full' ? 'full' : undefined;
+  const templateIdForWizard = taskWizardMode === 'adaptation' ? contextualizationTemplateId : undefined;
+
+  // ✅ DEBUG: Log wizard mode determination
+  console.log('[ResponseEditor] 🔍 DEBUG: Wizard mode determination', {
+    taskWizardMode,
+    contextualizationTemplateId,
+    wizardMode,
+    templateIdForWizard,
+    rowIdForWizard,
+    taskLabelForWizard,
+    projectIdForWizard
+  });
 
   // ✅ DEBUG: Log per verificare che rowId sia disponibile
   if (taskWizardMode === 'full' && !rowIdForWizard) {
@@ -159,97 +180,84 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     });
   }
 
-  // ✅ NEW: Use orchestrated wizard (with feature flag for testing)
-  const USE_ORCHESTRATED_WIZARD = true; // Feature flag - set to false to use old system
-  const USE_NEW_WIZARD = false; // Legacy flag - keep for compatibility
+  // ✅ NEW: Use unified wizard hook
+  const wizardResult = useWizard({
+    taskLabel: taskLabelForWizard,
+    rowId: rowIdForWizard,
+    projectId: projectIdForWizard,
+    locale: localeForWizard,
+    onTaskBuilderComplete: onWizardComplete,
+    mode: wizardMode,
+    templateId: templateIdForWizard,
+  });
 
-  const wizardIntegrationRaw = USE_ORCHESTRATED_WIZARD
-    ? useWizardIntegrationOrchestrated(
-        taskLabelForWizard,
-        rowIdForWizard,
-        projectIdForWizard,
-        localeForWizard,
-        onWizardComplete
-      )
-    : USE_NEW_WIZARD
-    ? useWizardIntegrationNew(
-        taskLabelForWizard,
-        rowIdForWizard,
-        projectIdForWizard,
-        localeForWizard,
-        onWizardComplete
-      )
-    : useWizardIntegration(
-        taskLabelForWizard,
-        rowIdForWizard,
-        projectIdForWizard,
-        localeForWizard,
-        onWizardComplete
-      );
+  // ✅ Backward compatibility: Convert to old format for now
+  // TODO: Remove this once all components are migrated to use WizardContext
+  const wizardIntegrationRaw = wizardResult ? {
+    wizardMode: wizardResult.wizardMode,
+    currentStep: wizardResult.currentStep,
+    pipelineSteps: wizardResult.pipelineSteps,
+    dataSchema: wizardResult.dataSchema,
+    phaseCounters: wizardResult.phaseCounters,
+    showStructureConfirmation: wizardResult.showStructureConfirmation,
+    structureConfirmed: wizardResult.structureConfirmed,
+    showCorrectionMode: wizardResult.showCorrectionMode,
+    correctionInput: wizardResult.correctionInput,
+    setCorrectionInput: wizardResult.setCorrectionInput,
+    handleStructureConfirm: wizardResult.confirmStructure,
+    handleStructureReject: wizardResult.rejectStructure,
+    runGenerationPipeline: wizardResult.startFull,
+    handleCorrectionSubmit: wizardResult.handleCorrectionSubmit,
+    messages: wizardResult.messages,
+    messagesGeneralized: wizardResult.messagesGeneralized,
+    messagesContextualized: wizardResult.messagesContextualized,
+    shouldBeGeneral: wizardResult.shouldBeGeneral,
+    generalizedLabel: wizardResult.generalizedLabel,
+    generalizationReason: wizardResult.generalizationReason,
+    generalizedMessages: wizardResult.generalizedMessages,
+    constraints: wizardResult.constraints,
+    nlpContract: wizardResult.nlpContract,
+    currentParserSubstep: wizardResult.currentParserSubstep,
+    currentMessageSubstep: wizardResult.currentMessageSubstep,
+    onProceedFromEuristica: wizardResult.onProceedFromEuristica,
+    onShowModuleList: wizardResult.onShowModuleList,
+    onSelectModule: wizardResult.onSelectModule,
+    setActiveNodeId: wizardResult.onPreviewModule,
+    selectedModuleId: wizardResult.foundModuleId,
+    availableModules: wizardResult.availableModules,
+    foundModuleId: wizardResult.foundModuleId,
+  } : null;
 
-  // ✅ FIX: Mantieni riferimento al wizardIntegrationRaw precedente per preservare shouldBeGeneral
-  // ✅ IMPORTANTE: Aggiorna il ref SEMPRE quando wizardIntegrationRaw ha shouldBeGeneral === true
-  // Questo garantisce che anche se wizardIntegrationRaw diventa null, manteniamo lo stato precedente
+  // ✅ FIX: Mantieni riferimento al wizardResult precedente per preservare shouldBeGeneral
+  // ✅ IMPORTANTE: Aggiorna il ref SEMPRE quando wizardResult ha shouldBeGeneral === true
   React.useEffect(() => {
-    if (wizardIntegrationRaw?.shouldBeGeneral) {
+    if (wizardResult?.shouldBeGeneral) {
       previousWizardIntegrationRef.current = wizardIntegrationRaw;
     }
-    // ✅ Se wizardIntegrationRaw è null o shouldBeGeneral è false, mantieni il valore precedente nel ref
-  }, [wizardIntegrationRaw]);
+  }, [wizardResult, wizardIntegrationRaw]);
 
   // ✅ FIX: Mantieni wizardIntegration anche dopo completamento se shouldBeGeneral è true
-  // ✅ IMPORTANTE: Se shouldBeGeneral è true, wizardIntegration deve rimanere disponibile anche quando taskWizardMode è 'none'
-  // ✅ PROBLEMA: Quando taskLabel diventa undefined, useWizardIntegration crea una nuova istanza di useWizardState
-  // che resetta shouldBeGeneral a false. Devo preservare shouldBeGeneral leggendolo da dataSchema[0]?.shouldBeGeneral
-  // che viene salvato durante la generazione.
+  // ✅ Simplified: Use wizardResult directly, fallback to wizardIntegrationRaw for backward compatibility
   const wizardIntegration = React.useMemo(() => {
-    // ✅ PRIORITÀ 1: Se wizardIntegrationRaw ha shouldBeGeneral === true, mantieni sempre wizardIntegrationRaw
-    // anche quando taskWizardMode === 'none'
+    // ✅ PRIORITÀ 1: Se wizardResult esiste, usalo (nuovo sistema)
+    if (wizardResult) {
+      return wizardIntegrationRaw; // wizardIntegrationRaw è già convertito da wizardResult
+    }
+
+    // ✅ PRIORITÀ 2: Se wizardIntegrationRaw ha shouldBeGeneral === true, mantienilo
     if (wizardIntegrationRaw?.shouldBeGeneral) {
-      // ✅ Aggiorna il ref immediatamente (non aspettare useEffect)
       previousWizardIntegrationRef.current = wizardIntegrationRaw;
       return wizardIntegrationRaw;
     }
 
-    // ✅ PRIORITÀ 1.5: Se dataSchema[0] ha shouldBeGeneral === true, ricostruisci wizardIntegrationRaw.shouldBeGeneral
-    // Questo accade quando useWizardIntegration viene chiamato con taskLabel undefined e resetta lo stato
-    // ma dataSchema[0] mantiene il valore originale di shouldBeGeneral
-    if (wizardIntegrationRaw?.dataSchema?.[0]?.shouldBeGeneral === true) {
-      // ✅ Ricrea wizardIntegrationRaw con shouldBeGeneral corretto usando dataSchema[0]
-      const preservedWizardIntegration = {
-        ...wizardIntegrationRaw,
-        shouldBeGeneral: true, // ✅ Ricostruito da dataSchema[0]?.shouldBeGeneral
-        generalizedLabel: wizardIntegrationRaw.dataSchema[0].generalizedLabel || null,
-        generalizationReason: wizardIntegrationRaw.dataSchema[0].generalizationReason || null,
-        generalizedMessages: wizardIntegrationRaw.dataSchema[0].generalizedMessages || null,
-      };
-      // ✅ Aggiorna il ref per preservare lo stato anche in futuro
-      previousWizardIntegrationRef.current = preservedWizardIntegration;
-      return preservedWizardIntegration;
-    }
-
-    // ✅ PRIORITÀ 2: Se il ref precedente aveva shouldBeGeneral === true, usalo (preserva stato)
-    // Questo garantisce che anche se wizardIntegrationRaw diventa null, manteniamo lo stato
+    // ✅ PRIORITÀ 3: Se il ref precedente aveva shouldBeGeneral === true, usalo
     if (previousWizardIntegrationRef.current?.shouldBeGeneral) {
-      // ✅ CRITICAL: Verifica che dataSchema sia presente nel ref
-      if (!previousWizardIntegrationRef.current.dataSchema || !Array.isArray(previousWizardIntegrationRef.current.dataSchema)) {
-        console.error('[ResponseEditor] ❌ previousWizardIntegrationRef has shouldBeGeneral but missing dataSchema', {
-          hasDataSchema: !!previousWizardIntegrationRef.current.dataSchema,
-          dataSchemaType: typeof previousWizardIntegrationRef.current.dataSchema,
-          dataSchemaIsArray: Array.isArray(previousWizardIntegrationRef.current.dataSchema),
-        });
-      }
       return previousWizardIntegrationRef.current;
-    }
-
-    // ✅ PRIORITÀ 3: Se wizard è attivo, usa wizardIntegrationRaw
-    if (taskWizardMode === 'full') {
-      return wizardIntegrationRaw;
     }
 
     // ✅ Altrimenti, null
     return null;
-  }, [taskWizardMode, wizardIntegrationRaw]);
+  }, [taskWizardMode, wizardResult, wizardIntegrationRaw]);
 
   // ✅ REMOVED: Debug log che causava loop infinito
 
@@ -264,9 +272,9 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const taskTreeVersion = useTaskTreeVersion(); // ✅ NEW: Force re-render when store updates
   const shouldTransitionToNone = useWizardModeTransition(
     taskWizardMode,
-    wizardIntegration?.wizardMode,
+    wizardResult?.wizardMode,
     taskTreeFromStore, // ✅ Use taskTreeFromStore instead of taskTree prop
-    wizardIntegration?.pipelineSteps,
+    wizardResult?.pipelineSteps,
     taskTreeVersion // ✅ NEW: Pass version to force recalculation when store updates
   );
 
@@ -279,147 +287,100 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
   // ✅ OPTIMIZATION: Stabilize callbacks OUTSIDE useMemo to prevent recreation
   // These are stable and only change when wizardIntegration handlers change
+  // ✅ OPTIMIZATION: Stabilize callbacks from wizardResult
+  // These are stable and only change when wizardResult handlers change
   const setCorrectionInputStable = React.useCallback(
     (value: string) => {
-      wizardIntegration?.setCorrectionInput?.(value);
+      wizardResult?.setCorrectionInput?.(value);
     },
-    [wizardIntegration?.setCorrectionInput]
+    [wizardResult?.setCorrectionInput]
   );
 
   const handleStructureConfirmStable = React.useCallback(
     async () => {
-      await wizardIntegration?.handleStructureConfirm?.();
+      await wizardResult?.confirmStructure?.();
     },
-    [wizardIntegration?.handleStructureConfirm]
+    [wizardResult?.confirmStructure]
   );
 
   const handleStructureRejectStable = React.useCallback(
     () => {
-      wizardIntegration?.handleStructureReject?.();
+      wizardResult?.rejectStructure?.();
     },
-    [wizardIntegration?.handleStructureReject]
+    [wizardResult?.rejectStructure]
   );
 
   const runGenerationPipelineStable = React.useCallback(
     async () => {
-      await wizardIntegration?.runGenerationPipeline?.();
+      await wizardResult?.startFull?.();
     },
-    [wizardIntegration?.runGenerationPipeline]
+    [wizardResult?.startFull]
   );
 
   const onProceedFromEuristicaStable = React.useCallback(
     async () => {
-      await wizardIntegration?.onProceedFromEuristica?.();
+      await wizardResult?.onProceedFromEuristica?.();
     },
-    [wizardIntegration?.onProceedFromEuristica]
+    [wizardResult?.onProceedFromEuristica]
   );
 
   const onShowModuleListStable = React.useCallback(
     () => {
-      wizardIntegration?.onShowModuleList?.();
+      wizardResult?.onShowModuleList?.();
     },
-    [wizardIntegration?.onShowModuleList]
+    [wizardResult?.onShowModuleList]
   );
 
   const onSelectModuleStable = React.useCallback(
     async (moduleId: string) => {
-      await wizardIntegration?.onSelectModule?.(moduleId);
+      await wizardResult?.onSelectModule?.(moduleId);
     },
-    [wizardIntegration?.onSelectModule]
+    [wizardResult?.onSelectModule]
   );
 
   const onPreviewModuleStable = React.useCallback(
     (moduleId: string | null) => {
-      wizardIntegration?.onPreviewModule?.(moduleId);
+      wizardResult?.onPreviewModule?.(moduleId);
     },
-    [wizardIntegration?.onPreviewModule]
+    [wizardResult?.onPreviewModule]
   );
 
   const handleCorrectionSubmitStable = React.useCallback(
     async () => {
-      console.log('[index.tsx] 🔄 handleCorrectionSubmitStable CALLED');
-      console.log('[index.tsx] wizardIntegration:', {
-        hasWizardIntegration: !!wizardIntegration,
-        hasHandleCorrectionSubmit: !!wizardIntegration?.handleCorrectionSubmit,
-        handleCorrectionSubmitType: typeof wizardIntegration?.handleCorrectionSubmit
-      });
-      if (wizardIntegration?.handleCorrectionSubmit) {
+      if (wizardResult?.handleCorrectionSubmit) {
         try {
-          await wizardIntegration.handleCorrectionSubmit();
-          console.log('[index.tsx] ✅ handleCorrectionSubmit completed');
+          await wizardResult.handleCorrectionSubmit();
         } catch (error) {
           console.error('[index.tsx] ❌ ERROR in handleCorrectionSubmit:', error);
           throw error;
         }
-      } else {
-        console.error('[index.tsx] ❌ handleCorrectionSubmit is not available in wizardIntegration');
       }
     },
-    [wizardIntegration?.handleCorrectionSubmit]
+    [wizardResult?.handleCorrectionSubmit]
   );
 
-  // ✅ B1: WizardContext value (only when wizard is active OR shouldBeGeneral is true) - calculated here to avoid race condition
-  // ✅ FIX: Usa useMemo con dipendenze MINIME - solo quelle che determinano se il context deve esistere
-  // I valori interni vengono letti direttamente da wizardIntegration (che è stabile grazie al useMemo precedente)
+  // ✅ B1: WizardContext value (only when wizard is active OR shouldBeGeneral is true)
+  // ✅ NEW: Use unified wizard hook result
   const wizardContextValue = React.useMemo(() => {
-    if (!wizardIntegration) {
+    if (!wizardResult) {
       return null;
     }
     // ✅ FIX: Mantieni WizardContext anche dopo completamento se shouldBeGeneral è true
-    if (taskWizardMode !== 'full' && !wizardIntegration.shouldBeGeneral) {
+    if (taskWizardMode !== 'full' && taskWizardMode !== 'adaptation' && !wizardResult.shouldBeGeneral) {
       return null;
     }
 
-    // ✅ Leggi valori direttamente da wizardIntegration
-    return {
-      wizardMode: wizardIntegration.wizardMode || WizardMode.START,
-      currentStep: wizardIntegration.currentStep || 'idle',
-      dataSchema: wizardIntegration.dataSchema || [],
-      pipelineSteps: wizardIntegration.pipelineSteps || [],
-      showStructureConfirmation: wizardIntegration.showStructureConfirmation || false,
-      structureConfirmed: wizardIntegration.structureConfirmed || false,
-      showCorrectionMode: wizardIntegration.showCorrectionMode || false,
-      correctionInput: wizardIntegration.correctionInput || '',
-      setCorrectionInput: setCorrectionInputStable, // ✅ Stable callback
-      shouldBeGeneral: wizardIntegration.shouldBeGeneral || false,
-      generalizedLabel: wizardIntegration.generalizedLabel || null,
-      generalizedMessages: wizardIntegration.generalizedMessages || null,
-      generalizationReason: wizardIntegration.generalizationReason || null,
-      // ✅ Wizard handlers (stable callbacks)
-      handleStructureConfirm: handleStructureConfirmStable,
-      handleStructureReject: handleStructureRejectStable,
-      runGenerationPipeline: runGenerationPipelineStable,
-      handleCorrectionSubmit: handleCorrectionSubmitStable,
-      // ✅ Wizard module handlers (stable callbacks)
-      onProceedFromEuristica: onProceedFromEuristicaStable,
-      onShowModuleList: onShowModuleListStable,
-      onSelectModule: onSelectModuleStable,
-      onPreviewModule: onPreviewModuleStable,
-      availableModules: wizardIntegration.availableModules || [],
-      foundModuleId: wizardIntegration.foundModuleId ?? undefined,
-      // ✅ Sotto-stati
-      currentParserSubstep: wizardIntegration.currentParserSubstep || null,
-      currentMessageSubstep: wizardIntegration.currentMessageSubstep || null,
-      // ✅ DEPRECATED: Phase counters now read directly from store via PhaseCardContainer
-      phaseCounters: wizardIntegration.phaseCounters,
-    };
+    // ✅ Convert wizard result to context value
+    return wizardResultToContextValue(wizardResult);
   }, [
-    wizardIntegration,
-    // ✅ FIX: Dipendenze esplicite per forzare re-render quando dataSchema o pipelineSteps cambiano
-    wizardIntegration?.dataSchema,
-    wizardIntegration?.pipelineSteps,
-    wizardIntegration?.phaseCounters, // ✅ DEPRECATED: Phase counters now read directly from store
+    wizardResult,
     taskWizardMode,
-    // ✅ OPTIMIZATION: Include stable callbacks in dependencies (they only change when handlers change)
-    setCorrectionInputStable,
-    handleStructureConfirmStable,
-    handleStructureRejectStable,
-    runGenerationPipelineStable,
-    handleCorrectionSubmitStable,
-    onProceedFromEuristicaStable,
-    onShowModuleListStable,
-    onSelectModuleStable,
-    onPreviewModuleStable,
+    // ✅ Include key fields to trigger re-render when they change
+    wizardResult?.dataSchema,
+    wizardResult?.pipelineSteps,
+    wizardResult?.wizardMode,
+    wizardResult?.runMode,
+    wizardResult?.phaseCounters,
   ]);
 
   // ✅ ARCHITECTURE: Pass only necessary props (no monolithic editor object)

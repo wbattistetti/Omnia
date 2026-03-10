@@ -2,10 +2,15 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 /**
+ * @deprecated Use useWizard() from TaskBuilderAIWizard/hooks/useWizard instead
+ *
  * Wizard Integration (Orchestrated)
  *
  * Uses WizardOrchestrator as SINGLE SOURCE OF TRUTH.
  * NO direct store access, NO side effects, NO legacy code.
+ *
+ * This hook is deprecated and will be removed in a future version.
+ * Use the unified useWizard() hook instead.
  */
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -24,7 +29,9 @@ export function useWizardIntegrationOrchestrated(
   rowId?: string,
   projectId?: string,
   locale: string = 'it',
-  onTaskBuilderComplete?: (taskTree: any) => void
+  onTaskBuilderComplete?: (taskTree: any) => void,
+  mode?: 'full' | 'adaptation',
+  templateId?: string
 ) {
   let addTranslation: ((guid: string, text: string) => void) | undefined;
   try {
@@ -41,6 +48,7 @@ export function useWizardIntegrationOrchestrated(
     locale,
     onTaskBuilderComplete,
     addTranslation,
+    templateId, // ✅ Pass templateId for adaptation mode
   });
 
   // ✅ Get store setter for useWizardSync (variable sync needs to update dataSchema)
@@ -190,25 +198,74 @@ export function useWizardIntegrationOrchestrated(
     store
   ]);
 
-  // ✅ Auto-start wizard when taskLabel is available
+  // ✅ Auto-start wizard when taskLabel is available (full mode) or templateId is available (adaptation mode)
   useEffect(() => {
+    // Full mode: start with taskLabel
     if (
+      mode !== 'adaptation' &&
       taskLabel?.trim() &&
       orchestrator.wizardMode === WizardMode.START &&
       !hasStartedRef.current
     ) {
       hasStartedRef.current = true;
-      orchestrator.start()
-        .then(async () => {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          await wizardSync.syncVariables();
-        })
-        .catch((error) => {
-          console.error('[useWizardIntegrationOrchestrated] ❌ Error in start:', error);
-          hasStartedRef.current = false;
-        });
+      // ✅ Use new startFull() method
+      if (orchestrator.startFull) {
+        orchestrator.startFull()
+          .then(async () => {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            await wizardSync.syncVariables();
+          })
+          .catch((error) => {
+            console.error('[useWizardIntegrationOrchestrated] ❌ Error in startFull:', error);
+            hasStartedRef.current = false;
+          });
+      } else {
+        // Fallback to legacy start() method
+        orchestrator.start()
+          .then(async () => {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            await wizardSync.syncVariables();
+          })
+          .catch((error) => {
+            console.error('[useWizardIntegrationOrchestrated] ❌ Error in start:', error);
+            hasStartedRef.current = false;
+          });
+      }
     }
-  }, [taskLabel, orchestrator.wizardMode, orchestrator, wizardSync]);
+
+    // Adaptation mode: start with templateId
+    if (
+      mode === 'adaptation' &&
+      templateId &&
+      orchestrator.wizardMode === WizardMode.START &&
+      !hasStartedRef.current
+    ) {
+      hasStartedRef.current = true;
+      // ✅ Use new startAdaptation() method
+      if (orchestrator.startAdaptation) {
+        orchestrator.startAdaptation(templateId)
+          .then(async () => {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            await wizardSync.syncVariables();
+          })
+          .catch((error) => {
+            console.error('[useWizardIntegrationOrchestrated] ❌ Error in startAdaptation:', error);
+            hasStartedRef.current = false;
+          });
+      } else if (orchestrator.startAdaptationMode) {
+        // Fallback to legacy startAdaptationMode() method
+        orchestrator.startAdaptationMode(templateId)
+          .then(async () => {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            await wizardSync.syncVariables();
+          })
+          .catch((error) => {
+            console.error('[useWizardIntegrationOrchestrated] ❌ Error in startAdaptationMode:', error);
+            hasStartedRef.current = false;
+          });
+      }
+    }
+  }, [taskLabel, templateId, mode, orchestrator.wizardMode, orchestrator, wizardSync]);
 
   return {
     // State (read-only from orchestrator)
@@ -227,6 +284,7 @@ export function useWizardIntegrationOrchestrated(
     setCorrectionInput: orchestrator.setCorrectionInput,
 
     // Handlers (only through orchestrator)
+    // ✅ Unified: confirmStructure() now handles both full and adaptation modes
     handleStructureConfirm: orchestrator.confirmStructure,
     handleStructureReject: orchestrator.rejectStructure,
     runGenerationPipeline: orchestrator.start, // For compatibility

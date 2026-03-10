@@ -32,7 +32,7 @@ export class RowHeuristicsService {
    * 3. Override: se Euristica 1 è UNDEFINED ma Euristica 2 trova template → usa tipo del template
    * 4. Se entrambe non trovano nulla → UNDEFINED (nessun fallback automatico)
    */
-  static async analyzeRowLabel(label: string): Promise<RowHeuristicsResult> {
+  static async analyzeRowLabel(label: string, projectId?: string): Promise<RowHeuristicsResult> {
     const trimmedLabel = label.trim();
 
     if (!trimmedLabel || trimmedLabel.length === 0) {
@@ -114,10 +114,23 @@ export class RowHeuristicsService {
         // ✅ Normalize X for template matching (remove V and Y, capitalize)
         let textForTemplate = vxySegmentation.X || separation.partB || trimmedLabel;
 
+        console.log('[RowHeuristicsService] 🔍 Before normalization', {
+          label: trimmedLabel,
+          vxySegmentation,
+          partB: separation.partB,
+          textForTemplateBeforeNormalization: textForTemplate,
+        });
+
         // ✅ Additional normalization: use generalizeLabel for consistency
         if (vxySegmentation.X) {
           const { generalizeLabel } = await import('@TaskBuilderAIWizard/services/TemplateCreationService');
+          const normalizedBefore = textForTemplate;
           textForTemplate = await generalizeLabel(textForTemplate, language);
+          console.log('[RowHeuristicsService] 🔍 After generalizeLabel normalization', {
+            before: normalizedBefore,
+            after: textForTemplate,
+            language,
+          });
         }
 
         console.log('[RowHeuristicsService] 🔍 Starting template embedding matching', {
@@ -126,10 +139,67 @@ export class RowHeuristicsService {
           partB: separation.partB,
           textForTemplate,
           taskType: TaskType[taskType],
+          searchText: textForTemplate,
         });
 
         const { EmbeddingService } = await import('./EmbeddingService');
-        const matchedTaskIdResult = await EmbeddingService.findBestMatch(textForTemplate, 'task', 0.70);
+
+        // ✅ DEBUG: Get current project ID for loading project-specific embeddings
+        let currentProjectId = projectId;
+        if (!currentProjectId) {
+          // ✅ FIX: Use localStorage to get projectId (same approach as ProjectDataService)
+          try {
+            currentProjectId = localStorage.getItem('currentProjectId') || undefined;
+          } catch {
+            // Fallback if localStorage not available
+            currentProjectId = undefined;
+          }
+        }
+
+        console.log('[RowHeuristicsService] 🔍 Loading embeddings for search', {
+          searchText: textForTemplate,
+          type: 'task',
+          projectId: currentProjectId,
+        });
+
+        // ✅ DEBUG: Get all matches (not just best) to see what's available
+        // ✅ FIX: Pass projectId to load project-specific embeddings
+        const allMatches = await EmbeddingService.findAllMatches(textForTemplate, 'task', 0.0, currentProjectId); // Get all matches, no threshold
+
+        console.log('[RowHeuristicsService] 🔍 After loading embeddings', {
+          searchText: textForTemplate,
+          totalMatches: allMatches.length,
+        });
+        console.log('[RowHeuristicsService] 🔍 All embedding matches (no threshold)', {
+          searchText: textForTemplate,
+          normalizedSearchText: textForTemplate,
+          totalMatches: allMatches.length,
+          totalEmbeddings: allMatches.length,
+          top20: allMatches.slice(0, 20).map((m, idx) => ({
+            rank: idx + 1,
+            id: m.id,
+            text: m.text,
+            similarity: parseFloat(m.similarity.toFixed(3)),
+            aboveThreshold: parseFloat(m.similarity.toFixed(3)) >= 0.70,
+          })),
+          threshold: 0.70,
+        });
+
+        // ✅ DEBUG: Check if "altezza" is in the results
+        const altezzaMatches = allMatches.filter(m =>
+          m.text.toLowerCase().includes('altezza') ||
+          m.id.toLowerCase().includes('altezza')
+        );
+        console.log('[RowHeuristicsService] 🔍 Matches containing "altezza"', {
+          searchText: textForTemplate,
+          altezzaMatches: altezzaMatches.map(m => ({
+            id: m.id,
+            text: m.text,
+            similarity: parseFloat(m.similarity.toFixed(3)),
+          })),
+        });
+
+        const matchedTaskIdResult = await EmbeddingService.findBestMatch(textForTemplate, 'task', 0.70, currentProjectId); // ✅ FIX: Pass projectId
 
         // ✅ Type guard: quando type='task', restituisce string | null
         const matchedTaskId = typeof matchedTaskIdResult === 'string' ? matchedTaskIdResult : null;

@@ -44,7 +44,7 @@ export function useWizardNew(props: UseWizardNewProps) {
   // Start generation when taskLabel is available
   useEffect(() => {
     if (taskLabel?.trim() &&
-        store.wizardMode === WizardMode.START &&
+        store.wizardState === WizardMode.START && // ✅ RINOMINATO: wizardMode → wizardState
         !hasStartedRef.current) {
       hasStartedRef.current = true;
 
@@ -56,7 +56,7 @@ export function useWizardNew(props: UseWizardNewProps) {
       // ✅ NON chiamare createTemplateAndInstanceForProposed qui
       // Deve essere chiamato solo quando l'utente conferma la struttura (in handleStructureConfirm)
     }
-  }, [taskLabel, rowId, locale, store.wizardMode, createTemplateAndInstanceForProposed]);
+  }, [taskLabel, rowId, locale, store.wizardState, createTemplateAndInstanceForProposed]); // ✅ RINOMINATO: wizardMode → wizardState
 
   // Handle structure confirmation
   const handleStructureConfirm = useCallback(async () => {

@@ -331,7 +331,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   } = props;
 
   // ✅ ARCHITECTURE: Extract generalization values from wizardIntegration to populate WizardContext
-  // These values come from useWizardIntegration in ResponseEditorInner
+  // These values come from useWizard() in ResponseEditorInner (via WizardContext)
   const shouldBeGeneral = wizardIntegrationProp?.shouldBeGeneral ?? false;
   const generalizedLabel = wizardIntegrationProp?.generalizedLabel ?? null;
   const generalizedMessages = wizardIntegrationProp?.generalizedMessages ?? null;
@@ -949,11 +949,12 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ IMPORTANTE: Questo useMemo deve venire DOPO la dichiarazione di wizardIntegrationProp
   const mainViewMode = React.useMemo<MainViewMode>(() => {
     // ✅ NEW: Se wizard è completato, passa a BEHAVIOUR (auto-chiusura)
-    if (taskWizardMode === 'full' && wizardIntegrationProp?.wizardMode === 'completed') {
+    if ((taskWizardMode === 'full' || taskWizardMode === 'adaptation') && wizardIntegrationProp?.wizardMode === 'completed') {
       return MainViewMode.BEHAVIOUR;
     }
 
-    if (taskWizardMode === 'full') {
+    // ✅ NEW: Show wizard for both 'full' and 'adaptation' modes
+    if (taskWizardMode === 'full' || taskWizardMode === 'adaptation') {
       return MainViewMode.WIZARD;
     }
     if (showMessageReview) {
@@ -1030,7 +1031,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ 3. ARCHITECTURE: When wizard is active, ALWAYS use wizardDataSchema (even if empty)
   // This ensures sidebar is cleared immediately when opening a new task
   // mainList should NEVER be used as fallback when wizard is active, as it contains stale data
-  const effectiveMainList = taskWizardMode === 'full'
+  const effectiveMainList = (taskWizardMode === 'full' || taskWizardMode === 'adaptation')
     ? (wizardDataSchema || [])  // ✅ Always use wizardDataSchema when wizard is active
     : mainList;  // ✅ Only use mainList when wizard is not active
 
@@ -1039,7 +1040,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ ARCHITECTURE: When wizard is active, handlers MUST update wizardDataSchema
   // This ensures edits are saved to wizard store, not to stale mainList
   const wrappedSidebarHandlers = React.useMemo(() => {
-    if (taskWizardMode !== 'full') {
+    if (taskWizardMode !== 'full' && taskWizardMode !== 'adaptation') {
       // Normal mode: use handlers as-is (they update taskTree/mainList)
       return sidebar;
     }
@@ -1124,146 +1125,19 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     };
   }, [taskWizardMode, wizardDataSchema, sidebar, setDataSchema]);
 
-  // ✅ ARCHITECTURE: Memoize sidebar to prevent reference changes
-  const sidebarElement = React.useMemo(() => {
-    // ✅ NEW: Mostra sidebar quando wizardMode === DATA_STRUCTURE_PROPOSED o successivi
-    if (taskWizardMode === 'full') {
-      // ✅ Sidebar visibile solo quando la struttura è stata proposta o confermata
-      const shouldShowSidebar = wizardIntegrationProp?.wizardMode === WizardMode.DATA_STRUCTURE_PROPOSED ||
-        wizardIntegrationProp?.wizardMode === WizardMode.DATA_STRUCTURE_CONFIRMED ||
-        wizardIntegrationProp?.wizardMode === WizardMode.GENERATING ||
-        wizardIntegrationProp?.wizardMode === WizardMode.COMPLETED;
-
-      if (!shouldShowSidebar) {
-        return undefined;
-      }
-    }
-
-    if (taskWizardMode !== 'adaptation' && taskWizardMode !== 'full') {
-      return undefined;
-    }
-
-    // ✅ Quando taskWizardMode === 'full', renderizza sidebar + MainContentArea (non solo sidebar)
-    return (
-      <ResponseEditorNormalLayout
-        mainList={effectiveMainList}
-        // ✅ REMOVED: taskTree, task, currentProjectId - now from Context
-        localTranslations={localTranslations}
-        escalationTasks={escalationTasks}
-        selectedMainIndex={selectedMainIndex}
-        selectedSubIndex={selectedSubIndex}
-        selectedRoot={selectedRoot}
-        selectedNode={selectedNode}
-        selectedNodePath={selectedNodePath}
-        handleSelectMain={handleSelectMain}
-        handleSelectSub={handleSelectSub}
-        handleSelectAggregator={handleSelectAggregator}
-        sidebarRef={sidebarRef}
-        onChangeSubRequired={wrappedSidebarHandlers.onChangeSubRequired}
-        onReorderSub={wrappedSidebarHandlers.onReorderSub}
-        onAddMain={wrappedSidebarHandlers.onAddMain}
-        onRenameMain={wrappedSidebarHandlers.onRenameMain}
-        onDeleteMain={wrappedSidebarHandlers.onDeleteMain}
-        onAddSub={wrappedSidebarHandlers.onAddSub}
-        onRenameSub={wrappedSidebarHandlers.onRenameSub}
-        onDeleteSub={wrappedSidebarHandlers.onDeleteSub}
-        handleParserCreate={handleParserCreate}
-        handleParserModify={handleParserModify}
-        handleEngineChipClick={handleEngineChipClick}
-        handleGenerateAll={handleGenerateAll}
-        isAggregatedAtomic={isAggregatedAtomic}
-        sidebarManualWidth={sidebarManualWidth}
-        isDraggingSidebar={isDraggingSidebar}
-        handleSidebarResizeStart={sidebar.handleSidebarResizeStart}
-        selectedIntentIdForTraining={selectedIntentIdForTraining}
-        setSelectedIntentIdForTraining={setSelectedIntentIdForTraining}
-        pendingEditorOpen={pendingEditorOpen}
-        contractChangeRef={contractChangeRef}
-        taskType={taskType}
-        handleProfileUpdate={handleProfileUpdate}
-        updateSelectedNode={updateSelectedNode}
-        leftPanelMode={leftPanelMode}
-        testPanelMode={testPanelMode}
-        tasksPanelMode={tasksPanelMode}
-        rightWidth={rightWidth}
-        testPanelWidth={testPanelWidth}
-        tasksPanelWidth={tasksPanelWidth}
-        draggingPanel={draggingPanel}
-        setDraggingPanel={setDraggingPanel}
-        setRightWidth={setRightWidth}
-        setTestPanelWidth={setTestPanelWidth}
-        setTasksPanelWidth={setTasksPanelWidth}
-        tasksStartWidthRef={tasksStartWidthRef}
-        tasksStartXRef={tasksStartXRef}
-        replaceSelectedTaskTree={replaceSelectedTaskTree}
-        sidebarOnly={false} // ✅ Quando taskWizardMode === 'full', mostra anche MainContentArea
-        taskWizardMode={taskWizardMode}
-        mainViewMode={mainViewMode}
-      // ✅ REMOVED: wizardProps - now from WizardContext
-      />
-    );
-  }, [
-    taskWizardMode,
-    mainViewMode,
-    effectiveMainList,
-    taskTree,
-    taskMeta,
-    currentProjectId,
-    localTranslations,
-    escalationTasks,
-    selectedMainIndex,
-    selectedSubIndex,
-    selectedRoot,
-    selectedNode,
-    selectedNodePath,
-    handleSelectMain,
-    handleSelectSub,
-    handleSelectAggregator,
-    sidebarRef,
-    sidebar,
-    handleParserCreate,
-    handleParserModify,
-    handleEngineChipClick,
-    handleGenerateAll,
-    isAggregatedAtomic,
-    sidebarManualWidth,
-    isDraggingSidebar,
-    showMessageReview,
-    showSynonyms,
-    selectedIntentIdForTraining,
-    setSelectedIntentIdForTraining,
-    pendingEditorOpen,
-    contractChangeRef,
-    taskType,
-    handleProfileUpdate,
-    updateSelectedNode,
-    leftPanelMode,
-    setLeftPanelMode, // ✅ NEW: Destructure setter for navigation context
-    testPanelMode,
-    tasksPanelMode,
-    setTasksPanelMode, // ✅ NEW: Destructure setter for navigation context
-    rightWidth,
-    testPanelWidth,
-    tasksPanelWidth,
-    draggingPanel,
-    setDraggingPanel,
-    setRightWidth,
-    setTestPanelWidth,
-    setTasksPanelWidth,
-    tasksStartWidthRef,
-    tasksStartXRef,
-    replaceSelectedTaskTree,
-    effectiveMainList,
-  ]);
+  // ✅ ARCHITECTURE: sidebarElement — deprecated, always undefined
+  // The full layout (including wizard) is now rendered via normalEditorLayoutElement for ALL modes.
+  // mainViewMode=WIZARD handles the CenterPanel rendering when taskWizardMode === 'adaptation' or 'full'.
+  const sidebarElement = undefined;
 
   // ✅ ARCHITECTURE: Memoize normalEditorLayout to prevent reference changes
-  // ✅ REFACTORED: Non ritorna più null quando taskWizardMode === 'full'
+  // ✅ REFACTORED: Render per TUTTI i modi (none, full, adaptation)
   // Il wizard viene gestito tramite mainViewMode nel MainContentArea
+  // In adaptation mode: mainViewMode=WIZARD → MainContentArea renderizza CenterPanel con WizardContext
   const normalEditorLayoutElement = React.useMemo(() => {
-    // ✅ Solo per 'adaptation' mode ritorna null (gestito separatamente)
-    if (taskWizardMode !== 'none' && taskWizardMode !== 'full') {
-      return null;
-    }
+    // ✅ FIX: NON ritornare null per adaptation mode
+    // Il `sidebarElement` era dead code (passato come `sidebar` ma mai renderizzato da ResponseEditorContent)
+    // La corretta architettura è: normalEditorLayout sempre presente, mainViewMode controlla cosa viene mostrato
 
     return (
       <ResponseEditorNormalLayout
