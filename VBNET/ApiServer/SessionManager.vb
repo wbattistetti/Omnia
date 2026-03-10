@@ -698,9 +698,7 @@ Public Class SessionManager
     Public Shared Sub DeleteSession(sessionId As String)
         SyncLock _lock
             Dim session = _storage.GetOrchestratorSession(sessionId)
-            If session IsNot Nothing AndAlso session.Orchestrator IsNot Nothing Then
-                session.Orchestrator.Stop()
-            End If
+            ' ✅ REMOVED: session.Orchestrator.Stop() - method removed, not needed with stateless architecture
             _storage.DeleteOrchestratorSession(sessionId)
         End SyncLock
     End Sub

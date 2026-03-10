@@ -36,6 +36,13 @@ Public Class FlowCompilationResult
     Public Property Edges As List(Of FlowEdge)
 
     ''' <summary>
+    ''' Conditions available at runtime (keyed by conditionId)
+    ''' Used by ConditionEvaluator to evaluate edge conditions
+    ''' </summary>
+    <JsonProperty("conditions")>
+    Public Property Conditions As Dictionary(Of String, ConditionDefinition)
+
+    ''' <summary>
     ''' List of compilation errors (Error, Warning, Hint)
     ''' </summary>
     <JsonProperty("errors")>
@@ -56,6 +63,7 @@ Public Class FlowCompilationResult
         TaskGroups = New List(Of TaskGroup)()
         Tasks = New List(Of CompiledTask)()
         Edges = New List(Of FlowEdge)()
+        Conditions = New Dictionary(Of String, ConditionDefinition)()
         Errors = New List(Of CompilationError)()
     End Sub
 End Class

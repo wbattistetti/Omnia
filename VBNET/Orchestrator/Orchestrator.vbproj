@@ -23,9 +23,9 @@
 
   <ItemGroup>
     <Compile Include="FlowOrchestrator.vb" />
-    <Compile Include="TaskGroupExecutor.vb" />
     <Compile Include="TaskExecutor.vb" />
     <Compile Include="ConditionEvaluator.vb" />
+    <Compile Include="FlowConditionLoader.vb" />
     <!-- ExecutionState moved to Common (shared with Engine) -->
     <!-- TaskExecutorBase moved to Engine/TaskExecutors/ -->
     <!-- All task executors moved to Engine/TaskExecutors/ -->

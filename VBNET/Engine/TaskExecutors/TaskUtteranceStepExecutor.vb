@@ -20,18 +20,18 @@ Public Class TaskUtteranceStepExecutor
     Public Class DialogueTurnResult
         Public Property Messages As List(Of String)
         Public Property NewState As DialogueState
-        Public Property Status As String ' "waiting_for_input" | "completed"
+        Public Property Status As TurnStatus ' ✅ Enum invece di stringa
 
         Public Sub New()
             Messages = New List(Of String)()
             NewState = New DialogueState()
-            Status = "waiting_for_input"
+            Status = TurnStatus.WaitingForInput
         End Sub
 
         Public Sub New(messages As List(Of String), newState As DialogueState)
             Me.Messages = messages
             Me.NewState = newState
-            Me.Status = If(newState.IsCompleted, "completed", "waiting_for_input")
+            Me.Status = If(newState.IsCompleted, TurnStatus.Completed, TurnStatus.WaitingForInput)
         End Sub
     End Class
 
@@ -124,13 +124,13 @@ Public Class TaskUtteranceStepExecutor
             dialogueState = result.NewState
 
             ' ✅ GUARD 1: Esci se richiede input utente
-            If result.Status = "waiting_for_input" OrElse dialogueState.Mode = DialogueMode.WaitingForUtterance Then
+            If result.Status = TurnStatus.WaitingForInput OrElse dialogueState.Mode = DialogueMode.WaitingForUtterance Then
                 Console.WriteLine($"[TaskUtteranceStepExecutor] ⏸️ Task {task.Id} requires user input, exiting loop (iteration {iterationCount})")
                 Exit Do
             End If
 
             ' ✅ GUARD 2: Esci se completato
-            If result.Status = "completed" OrElse dialogueState.IsCompleted Then
+            If result.Status = TurnStatus.Completed OrElse dialogueState.IsCompleted Then
                 Console.WriteLine($"[TaskUtteranceStepExecutor] ✅ Task {task.Id} completed, exiting loop (iteration {iterationCount})")
                 Exit Do
             End If
@@ -167,14 +167,14 @@ Public Class TaskUtteranceStepExecutor
 
         ' ✅ ARCHITECTURAL: TaskExecutor decide tutto (incapsula tutto)
         ' Decide se richiede input basandosi su DialogueState
-        Dim requiresInput = result.Status = "waiting_for_input" OrElse dialogueState.Mode = DialogueMode.WaitingForUtterance
+        Dim requiresInput = result.Status = TurnStatus.WaitingForInput OrElse dialogueState.Mode = DialogueMode.WaitingForUtterance
 
         ' ✅ ARCHITECTURAL: TaskExecutor decide se è completato basandosi su DialogueState.IsCompleted
         ' Un TaskUtterance è completato quando ha terminato tutto il suo ciclo:
         ' - Arrivato a Success step (se esiste) e processato
         ' - Validato e completato tutti i dati che il task si aspettava
         ' - DialogueState.IsCompleted = True
-        Dim isCompleted = result.Status = "completed" OrElse dialogueState.IsCompleted
+        Dim isCompleted = result.Status = TurnStatus.Completed OrElse dialogueState.IsCompleted
 
         Dim waitingTaskId = If(requiresInput, task.Id, Nothing)
         Console.WriteLine($"[TaskUtteranceStepExecutor] ✅ Task {task.Id} execution completed: RequiresInput={requiresInput}, IsCompleted={isCompleted}, WaitingTaskId={If(requiresInput, task.Id, "Nothing")}, Iterations={iterationCount}")
@@ -289,7 +289,16 @@ Public Class TaskUtteranceStepExecutor
             Dim stepToRender = ProcessTurnHelpers.GetStep(currentTask, state.CurrentStepType)
             ' ✅ STATELESS: RenderStepTasks restituisce TextKey, non testo risolto
             renderedTasks = ProcessTurnHelpers.RenderStepTasks(stepToRender, currentTask, state)
-            If Not ProcessTurnHelpers.IsFilled(currentTask, state.Memory) OrElse state.CurrentStepType = DialogueStepType.Confirmation Then
+
+            ' ✅ NEW: Se siamo in Success step e il task è filled, completa il task
+            ' Success step non è interattivo, quindi dopo aver eseguito i task, completa immediatamente
+            If state.CurrentStepType = DialogueStepType.Success AndAlso
+               ProcessTurnHelpers.IsFilled(currentTask, state.Memory) Then
+                state.IsCompleted = True
+                state.Mode = DialogueMode.Completed
+                Console.WriteLine($"[ProcessTurn] ✅ Task {currentTask.Id} completed after Success step")
+            ElseIf Not ProcessTurnHelpers.IsFilled(currentTask, state.Memory) OrElse
+                   state.CurrentStepType = DialogueStepType.Confirmation Then
                 state.Mode = DialogueMode.WaitingForUtterance
             End If
         End If

@@ -106,6 +106,13 @@ Public Class CompiledUtteranceTask
     ''' </summary>
     Public Property SubTasks As List(Of CompiledUtteranceTask)
 
+    ''' <summary>
+    ''' ID del nodo DDT originale (GUID puro)
+    ''' Usato come chiave per salvare variabili in Memory/VariableStore
+    ''' Deve corrispondere al GUID usato nell'AST delle condizioni
+    ''' </summary>
+    Public Property NodeId As String
+
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
             Return TaskTypes.UtteranceInterpretation

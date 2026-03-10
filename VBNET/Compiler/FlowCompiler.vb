@@ -387,11 +387,23 @@ Public Class FlowCompiler
         Console.WriteLine($"   Entry TaskGroup ID: {entryTaskGroupId}")
         System.Diagnostics.Debug.WriteLine($"   Entry TaskGroup ID: {entryTaskGroupId}")
 
+        ' ✅ NEW: Build conditions dictionary (keyed by conditionId) for runtime evaluation
+        Dim conditionsDict As New Dictionary(Of String, ConditionDefinition)()
+        If flow.Conditions IsNot Nothing Then
+            For Each condition In flow.Conditions
+                If Not String.IsNullOrEmpty(condition.Id) Then
+                    conditionsDict(condition.Id) = condition
+                End If
+            Next
+        End If
+        Console.WriteLine($"   Conditions available at runtime: {conditionsDict.Count}")
+
         Dim result = New FlowCompilationResult() With {
             .TaskGroups = taskGroups,
             .EntryTaskGroupId = entryTaskGroupId,
             .Tasks = allTasks,
             .Edges = If(flow.Edges, New List(Of FlowEdge)()), ' ✅ FASE 2.4: Topologia separata
+            .Conditions = conditionsDict, ' ✅ NEW: Conditions for runtime evaluation
             .Errors = errors ' ✅ Add errors to result
         }
 

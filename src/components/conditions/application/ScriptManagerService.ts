@@ -4,6 +4,7 @@
 import { DSLParser } from '../dsl/parser/DSLParser';
 import { ASTCompiler } from '../dsl/compiler/ASTCompiler';
 import { VariableMappingService } from '../dsl/compiler/VariableMappingService';
+import { transformASTLabelsToGuids } from '@utils/conditionCodeConverter';
 
 export interface ScriptManagerServiceDependencies {
   projectData: any;
@@ -149,7 +150,9 @@ export class ScriptManagerService {
               item.data.uiCodeFormat = 'dsl';
               item.data.execCode = execCode;
               item.data.script = execCode;
-              item.data.ast = JSON.stringify(parseResult.ast);
+              // Transform AST: label → GUID before saving
+              const transformedAST = await transformASTLabelsToGuids(parseResult.ast, this.variableMappingService);
+              item.data.ast = JSON.stringify(transformedAST);
               item.data.dslMeta = {
                 lastCompiledAt: new Date().toISOString(),
                 errors: []
@@ -276,7 +279,9 @@ export class ScriptManagerService {
           item.data.uiCodeFormat = 'dsl';
           item.data.execCode = execCode;
           item.data.script = execCode; // Legacy compatibility
-          item.data.ast = JSON.stringify(parseResult.ast);
+          // Transform AST: label → GUID before saving
+          const transformedAST = await transformASTLabelsToGuids(parseResult.ast, this.variableMappingService);
+          item.data.ast = JSON.stringify(transformedAST);
           item.data.dslMeta = {
             lastCompiledAt: new Date().toISOString(),
             errors: []

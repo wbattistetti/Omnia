@@ -61,6 +61,7 @@
     <Compile Include="ExecutionState.vb" />
     <Compile Include="TaskExecutionResult.vb" />
     <Compile Include="RowTurnResult.vb" />
+    <Compile Include="TurnStatus.vb" />
 
     <!-- DSL Interpreter -->
     <Compile Include="DSL\ASTNode.vb" />

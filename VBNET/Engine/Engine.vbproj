@@ -42,7 +42,7 @@
     <!-- TaskBase, MessageTask, CloseSessionTask, TransferTask moved to Common (shared between Compiler and Engine) -->
     <!-- ITaskConverter moved to Common/Converters (to eliminate circular dependency) -->
     <!-- Core domain model -->
-    <Compile Include="Models\TurnResult.vb" />
+    <!-- TurnResult.vb removed - legacy class, replaced by DialogueTurnResult and RowTurnResult -->
     <!-- Deprecated compatibility stub - REMOVED: conflicts with DDTInstance.vb -->
     <!-- <Compile Include="Models\TaskInstance.vb" /> -->
     <!-- DTOs removed - not used (DialogueStep, Escalation, Response are in Common) -->

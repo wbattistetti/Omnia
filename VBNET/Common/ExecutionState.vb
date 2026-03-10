@@ -72,6 +72,12 @@ Public Class ExecutionState
     ''' </summary>
     Public Property FlowCompleted As Boolean = False
 
+    ''' <summary>
+    ''' ID dell'ultimo TaskGroup completato (per valutazione edge)
+    ''' Usato per identificare quale nodo ha appena completato e valutare i suoi edge uscenti
+    ''' </summary>
+    Public Property LastCompletedNodeId As String
+
     Public Sub New()
         ExecutedTaskIds = New HashSet(Of String)()
         ExecutedTaskGroupIds = New HashSet(Of String)()
@@ -84,5 +90,6 @@ Public Class ExecutionState
         PendingUtterance = ""
         WaitingTaskId = Nothing
         FlowCompleted = False
+        LastCompletedNodeId = Nothing
     End Sub
 End Class

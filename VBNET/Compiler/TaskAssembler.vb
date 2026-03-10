@@ -51,6 +51,7 @@ Public Class TaskAssembler
                 Dim taskNode As TaskNode = assembled.Nodes(0)
                 rootTask = CompileNode(taskNode, Nothing)
                 rootTask.Id = assembled.TaskInstanceId ' ✅ Usa TaskInstanceId del TaskTreeExpanded come ID del root
+                rootTask.NodeId = taskNode.Id ' ✅ NEW: Conserva GUID del nodo DDT (non sovrascrivere)
             Else
                 ' Più nodi: crea un nodo aggregato root con subTasks
                 rootTask = New CompiledUtteranceTask() With {
@@ -107,6 +108,7 @@ Public Class TaskAssembler
         ' ✅ Crea CompiledUtteranceTask ricorsivo
         Dim task As New CompiledUtteranceTask() With {
             .Id = ideNode.Id,
+            .NodeId = ideNode.Id, ' ✅ NEW: Conserva GUID del nodo DDT per salvare variabili
             .Condition = Nothing, ' Condition viene dall'istanza, non dal template
             .Steps = New List(Of TaskEngine.CompiledDialogueStep)(),
             .Constraints = New List(Of ValidationCondition)(),

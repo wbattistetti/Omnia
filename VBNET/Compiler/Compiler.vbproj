@@ -88,6 +88,7 @@
     <Compile Include="DTO\Runtime\CompilationError.vb" />
     <Compile Include="DTO\Runtime\FlowCompilationResult.vb" />
     <Compile Include="DTO\Runtime\TaskGroup.vb" />
+    <Compile Include="DTO\Runtime\TaskGroupExecCondition.vb" />
     <Compile Include="DTO\Runtime\Utils.vb" />
     <!-- Runtime types moved to Common (to eliminate circular dependency) -->
     <!-- CompiledNlpContract, IParsableTask are now in Common -->

@@ -8,14 +8,14 @@ Option Explicit On
 '''   ProcessUtteranceTurn, ProcessSayMessageTurn, ProcessBackendTurn, ecc.
 '''
 ''' Status:
-'''   "waiting_for_input"  — il turno richiede input esterno; RunUntilInput si ferma
-'''   "auto_advance"       — transizione automatica; RunUntilInput itera sulla stessa riga
-'''   "completed"          — la riga è terminata; RunUntilInput avanza alla riga successiva
+'''   WaitingForInput  — il turno richiede input esterno; RunUntilInput si ferma
+'''   AutoAdvance      — transizione automatica; RunUntilInput itera sulla stessa riga
+'''   Completed        — la riga è terminata; RunUntilInput avanza alla riga successiva
 ''' </summary>
 Public Class RowTurnResult
 
     Public Property Messages As List(Of String)
-    Public Property Status As String
+    Public Property Status As TurnStatus ' ✅ Enum invece di stringa
     Public Property WaitingTaskId As String
 
     Private Sub New()
@@ -31,7 +31,7 @@ Public Class RowTurnResult
         Optional messages As List(Of String) = Nothing
     ) As RowTurnResult
         Return New RowTurnResult() With {
-            .Status = "waiting_for_input",
+            .Status = TurnStatus.WaitingForInput, ' ✅ Enum
             .WaitingTaskId = taskId,
             .Messages = If(messages, New List(Of String)())
         }
@@ -44,7 +44,7 @@ Public Class RowTurnResult
         Optional messages As List(Of String) = Nothing
     ) As RowTurnResult
         Return New RowTurnResult() With {
-            .Status = "completed",
+            .Status = TurnStatus.Completed, ' ✅ Enum
             .Messages = If(messages, New List(Of String)())
         }
     End Function
@@ -57,7 +57,7 @@ Public Class RowTurnResult
         Optional messages As List(Of String) = Nothing
     ) As RowTurnResult
         Return New RowTurnResult() With {
-            .Status = "auto_advance",
+            .Status = TurnStatus.AutoAdvance, ' ✅ Enum
             .Messages = If(messages, New List(Of String)())
         }
     End Function

@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports Compiler
+Imports Compiler.DTO.Runtime
 Imports Common.DSL
 Imports System.Text.Json
 
@@ -131,14 +132,35 @@ Public Class ConditionEvaluator
 
             ' Deserialize AST
             Dim options = New JsonSerializerOptions() With {
-                .PropertyNameCaseInsensitive = True
+                .PropertyNameCaseInsensitive = True,
+                .AllowTrailingCommas = True,
+                .ReadCommentHandling = JsonCommentHandling.Skip
             }
-            Dim ast = JsonSerializer.Deserialize(Of ASTNode)(astJson, options)
+
+            ' Log the JSON string being deserialized
+            Console.WriteLine($"[ConditionEvaluator] 🔍 Deserializing AST for condition {conditionId}")
+            Console.WriteLine($"[ConditionEvaluator]   JSON length: {If(astJson, "").Length}")
+            If Not String.IsNullOrEmpty(astJson) Then
+                Dim previewLength = Math.Min(200, astJson.Length)
+                Console.WriteLine($"[ConditionEvaluator]   JSON preview: {astJson.Substring(0, previewLength)}{If(astJson.Length > 200, "...", "")}")
+            End If
+
+            Dim ast As ASTNode = Nothing
+            Try
+                ast = JsonSerializer.Deserialize(Of ASTNode)(astJson, options)
+            Catch deserEx As Exception
+                Console.WriteLine($"[ConditionEvaluator] ❌ Deserialization exception for condition {conditionId}: {deserEx.Message}")
+                Console.WriteLine($"[ConditionEvaluator]   Inner exception: {If(deserEx.InnerException IsNot Nothing, deserEx.InnerException.Message, "None")}")
+                Console.WriteLine($"[ConditionEvaluator]   Stack trace: {deserEx.StackTrace}")
+                Return False
+            End Try
 
             If ast Is Nothing Then
-                Console.WriteLine($"[ConditionEvaluator] ⚠️ Failed to deserialize AST for condition {conditionId}")
+                Console.WriteLine($"[ConditionEvaluator] ⚠️ Failed to deserialize AST for condition {conditionId} - ast is Nothing")
                 Return False
             End If
+
+            Console.WriteLine($"[ConditionEvaluator] ✅ AST deserialized successfully: type={ast.Type}, hasLeft={ast.Left IsNot Nothing}, hasRight={ast.Right IsNot Nothing}, hasArgs={ast.Args IsNot Nothing AndAlso ast.Args.Count > 0}")
 
             ' Evaluate using interpreter
             Dim interpreter = New DSLInterpreter(variableStore)
@@ -149,8 +171,153 @@ Public Class ConditionEvaluator
 
         Catch ex As Exception
             Console.WriteLine($"[ConditionEvaluator] ❌ Error evaluating DSL condition {conditionId}: {ex.Message}")
+            Console.WriteLine($"[ConditionEvaluator]   Stack trace: {ex.StackTrace}")
             Return False
         End Try
+    End Function
+
+    ''' <summary>
+    ''' Valuta TaskGroupExecCondition (nuova struttura semplificata)
+    ''' Valuta TUTTE le EdgeCondition (no early exit) per rilevare ambiguità
+    ''' </summary>
+    ''' <param name="execCondition">Condizione di esecuzione del TaskGroup</param>
+    ''' <param name="state">Stato di esecuzione</param>
+    ''' <param name="taskGroupId">ID del TaskGroup (per entry node: verifica che non sia già eseguito)</param>
+    Public Shared Function EvaluateTaskGroupExecCondition(
+        execCondition As TaskGroupExecCondition,
+        state As ExecutionState,
+        Optional taskGroupId As String = Nothing
+    ) As Boolean
+        If execCondition Is Nothing OrElse execCondition.EdgeConditions Is Nothing OrElse execCondition.EdgeConditions.Count = 0 Then
+            ' Entry node: eseguibile solo se non già eseguito
+            If Not String.IsNullOrEmpty(taskGroupId) Then
+                Dim isExecuted = state.ExecutedTaskGroupIds.Contains(taskGroupId)
+                Console.WriteLine($"[ConditionEvaluator] 🔍 Entry node {taskGroupId}: Executed={isExecuted}")
+                Return Not isExecuted
+            End If
+            ' Nessuna condizione = sempre eseguibile
+            Return True
+        End If
+
+        ' ✅ Valuta TUTTE le EdgeCondition (no early exit per rilevare ambiguità)
+        Dim trueConditions As New List(Of EdgeCondition)()
+        Dim elseCondition As EdgeCondition = Nothing
+
+        For Each edgeCond In execCondition.EdgeConditions
+            Dim isTrue = EvaluateEdgeCondition(edgeCond, state)
+
+            If edgeCond.IsElse Then
+                elseCondition = edgeCond
+            ElseIf isTrue Then
+                trueConditions.Add(edgeCond)
+            End If
+        Next
+
+        ' ✅ ERRORE: Multiple condizioni true contemporaneamente (ambiguità)
+        If trueConditions.Count > 1 Then
+            Dim edgeIds = String.Join(", ", trueConditions.Select(Function(c) c.EdgeId))
+            Dim errorMsg = $"Ambiguous ExecCondition: {trueConditions.Count} conditions are true simultaneously. " &
+                          $"Only one condition should be true at a time. Edge IDs: {edgeIds}"
+            Console.WriteLine($"[ConditionEvaluator] ❌ {errorMsg}")
+            Throw New InvalidOperationException(errorMsg)
+        End If
+
+        ' ✅ Se esattamente una è true → TaskGroup può essere eseguito
+        If trueConditions.Count = 1 Then
+            Console.WriteLine($"[ConditionEvaluator] ✅ ExecCondition satisfied by edge {trueConditions(0).EdgeId}")
+            Return True
+        End If
+
+        ' ✅ Se nessuna è true E c'è Else → attiva Else
+        If trueConditions.Count = 0 AndAlso elseCondition IsNot Nothing Then
+            ' Verifica che il TaskGroup sorgente dell'Else sia completato
+            If EvaluateTaskGroupCompleted(elseCondition.TaskGroupId, state) Then
+                Console.WriteLine($"[ConditionEvaluator] ✅ ExecCondition satisfied by Else edge {elseCondition.EdgeId}")
+                Return True
+            End If
+        End If
+
+        ' ✅ Altrimenti → TaskGroup non può essere eseguito
+        Console.WriteLine($"[ConditionEvaluator] ⚠️ ExecCondition not satisfied: {trueConditions.Count} true conditions, Else={elseCondition IsNot Nothing}")
+        Return False
+    End Function
+
+    ''' <summary>
+    ''' Valuta una singola EdgeCondition
+    ''' EdgeCondition è vera se: TaskGroup(TaskGroupId).completed AND Expression=true
+    ''' </summary>
+    Private Shared Function EvaluateEdgeCondition(
+        edgeCond As EdgeCondition,
+        state As ExecutionState
+    ) As Boolean
+        ' 1. Verifica se TaskGroup sorgente è completato
+        Dim sourceCompleted = EvaluateTaskGroupCompleted(edgeCond.TaskGroupId, state)
+        If Not sourceCompleted Then
+            Return False
+        End If
+
+        ' 2. Se Expression è vuota, considera solo TaskGroupId.completed
+        If String.IsNullOrEmpty(edgeCond.Expression) Then
+            Return True
+        End If
+
+        ' 3. Valuta Expression usando DSLInterpreter
+        Try
+            Dim options = New JsonSerializerOptions() With {
+                .PropertyNameCaseInsensitive = True,
+                .AllowTrailingCommas = True,
+                .ReadCommentHandling = JsonCommentHandling.Skip
+            }
+
+            ' Log the JSON string being deserialized
+            Console.WriteLine($"[ConditionEvaluator] 🔍 Deserializing AST for edge {edgeCond.EdgeId}")
+            Console.WriteLine($"[ConditionEvaluator]   JSON length: {If(edgeCond.Expression, "").Length}")
+            If Not String.IsNullOrEmpty(edgeCond.Expression) Then
+                Dim previewLength = Math.Min(200, edgeCond.Expression.Length)
+                Console.WriteLine($"[ConditionEvaluator]   JSON preview: {edgeCond.Expression.Substring(0, previewLength)}{If(edgeCond.Expression.Length > 200, "...", "")}")
+            End If
+
+            Dim ast As ASTNode = Nothing
+            Try
+                ast = JsonSerializer.Deserialize(Of ASTNode)(edgeCond.Expression, options)
+            Catch deserEx As Exception
+                Console.WriteLine($"[ConditionEvaluator] ❌ Deserialization exception for edge {edgeCond.EdgeId}: {deserEx.Message}")
+                Console.WriteLine($"[ConditionEvaluator]   Inner exception: {If(deserEx.InnerException IsNot Nothing, deserEx.InnerException.Message, "None")}")
+                Console.WriteLine($"[ConditionEvaluator]   Stack trace: {deserEx.StackTrace}")
+                Return False
+            End Try
+
+            If ast Is Nothing Then
+                Console.WriteLine($"[ConditionEvaluator] ⚠️ Failed to deserialize AST for edge {edgeCond.EdgeId} - ast is Nothing")
+                Return False
+            End If
+
+            Console.WriteLine($"[ConditionEvaluator] ✅ AST deserialized successfully: type={ast.Type}, hasLeft={ast.Left IsNot Nothing}, hasRight={ast.Right IsNot Nothing}, hasArgs={ast.Args IsNot Nothing AndAlso ast.Args.Count > 0}")
+
+            Dim interpreter = New DSLInterpreter(state.VariableStore)
+            Dim expressionResult = interpreter.Evaluate(ast)
+
+            Console.WriteLine($"[ConditionEvaluator] 🔍 Edge {edgeCond.EdgeId}: TaskGroup {edgeCond.TaskGroupId} completed={sourceCompleted}, Expression={expressionResult}")
+            Return expressionResult
+
+        Catch ex As Exception
+            Console.WriteLine($"[ConditionEvaluator] ❌ Error evaluating expression for edge {edgeCond.EdgeId}: {ex.Message}")
+            Console.WriteLine($"[ConditionEvaluator]   Stack trace: {ex.StackTrace}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Verifica se un TaskGroup è stato completato
+    ''' </summary>
+    Private Shared Function EvaluateTaskGroupCompleted(
+        taskGroupId As String,
+        state As ExecutionState
+    ) As Boolean
+        If String.IsNullOrEmpty(taskGroupId) Then
+            Return False
+        End If
+        Return state.ExecutedTaskGroupIds.Contains(taskGroupId)
     End Function
 End Class
 

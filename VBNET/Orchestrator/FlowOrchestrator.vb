@@ -111,6 +111,11 @@ Public Class FlowOrchestrator
         _locale = locale
         _resolveTranslation = resolveTranslation
 
+        ' ✅ NEW: Configure ConditionLoader for edge condition evaluation
+        Dim conditionLoader As New FlowConditionLoader(compilationResult)
+        ConditionEvaluator.ConditionLoader = conditionLoader
+        Console.WriteLine($"[FlowOrchestrator] ✅ ConditionLoader configured with {If(compilationResult.Conditions IsNot Nothing, compilationResult.Conditions.Count, 0)} conditions")
+
         ' Carica ExecutionState da Redis (o crea nuovo se non esiste)
         _state = LoadOrCreateState()
     End Sub
@@ -178,10 +183,12 @@ Public Class FlowOrchestrator
                 ' Gruppo completato: tutte le righe eseguite o skippate
                 Console.WriteLine($"[FlowOrchestrator] ✅ TaskGroup {taskGroup.NodeId} completed (all rows done)")
                 _state.ExecutedTaskGroupIds.Add(taskGroup.NodeId)
+                _state.LastCompletedNodeId = taskGroup.NodeId ' ✅ NEW: Traccia ultimo completato
                 _state.CurrentNodeId = Nothing
                 _state.CurrentRowIndex = 0
                 SaveState()
                 RaiseEvent StateUpdated(Me, _state)
+                ' ✅ GetNextTaskGroup() nella prossima iterazione valuterà gli edge uscenti
                 Continue Do
             End If
 
@@ -198,17 +205,17 @@ Public Class FlowOrchestrator
             ' Aggiorna stato in base al risultato del turno
             Select Case result.Status
 
-                Case "waiting_for_input"
+                Case TurnStatus.WaitingForInput ' ✅ Enum
                     _state.RequiresInput = True
                     _state.WaitingTaskId = result.WaitingTaskId
                     Console.WriteLine($"[FlowOrchestrator] ⏸️ WaitingForInput task={result.WaitingTaskId}")
 
-                Case "completed"
+                Case TurnStatus.Completed ' ✅ Enum
                     _state.CurrentRowIndex += 1
                     _state.WaitingTaskId = Nothing
                     Console.WriteLine($"[FlowOrchestrator] ✅ Row completed, CurrentRowIndex → {_state.CurrentRowIndex}")
 
-                Case "auto_advance"
+                Case TurnStatus.AutoAdvance ' ✅ Enum
                     ' Stessa riga, prossima iterazione con PendingUtterance = ""
                     Console.WriteLine($"[FlowOrchestrator] 🔄 AutoAdvance (same row)")
 
@@ -257,10 +264,6 @@ Public Class FlowOrchestrator
         Return True
     End Function
 
-    ''' <summary>Ferma l'esecuzione (legacy).</summary>
-    Public Sub [Stop]()
-        ' Non più necessario con il loop stateless, mantenuto per compatibilità
-    End Sub
 
     ' ─────────────────────────────────────────────────────────────────────────
     ' L1 — Trova TaskGroup
@@ -293,7 +296,7 @@ Public Class FlowOrchestrator
             If suspended IsNot Nothing AndAlso
                Not _state.ExecutedTaskGroupIds.Contains(suspended.NodeId) Then
                 Dim canResume = suspended.ExecCondition Is Nothing OrElse
-                                ConditionEvaluator.EvaluateCondition(suspended.ExecCondition, _state)
+                                ConditionEvaluator.EvaluateTaskGroupExecCondition(suspended.ExecCondition, _state, suspended.NodeId)
                 If canResume Then
                     Console.WriteLine($"[FlowOrchestrator] ▶️ Resuming suspended TaskGroup {suspended.NodeId}")
                     Return suspended
@@ -305,6 +308,30 @@ Public Class FlowOrchestrator
             _state.CurrentRowIndex = 0
         End If
 
+        ' ✅ NEW: Se c'è un nodo appena completato, valuta tutte le ExecCondition
+        ' La ExecCondition di ogni TaskGroup è già l'OR delle condizioni degli edge entranti
+        ' A runtime non esistono "edge", solo ExecCondition da valutare
+        If Not String.IsNullOrEmpty(_state.LastCompletedNodeId) Then
+            ' Itera su tutti i TaskGroup non ancora eseguiti
+            For Each tg In _compilationResult.TaskGroups
+                If _state.ExecutedTaskGroupIds.Contains(tg.NodeId) Then Continue For
+
+                ' Valuta semplicemente la ExecCondition (che include già tutto)
+                Dim canEnter = tg.ExecCondition Is Nothing OrElse
+                               ConditionEvaluator.EvaluateTaskGroupExecCondition(tg.ExecCondition, _state, tg.NodeId)
+
+                If canEnter Then
+                    Console.WriteLine($"[FlowOrchestrator] ▶️ Entering TaskGroup {tg.NodeId} after node {_state.LastCompletedNodeId} completed")
+                    _state.CurrentNodeId = tg.NodeId
+                    _state.CurrentRowIndex = 0
+                    _state.LastCompletedNodeId = Nothing ' Reset dopo uso
+                    Return tg
+                End If
+            Next
+
+            _state.LastCompletedNodeId = Nothing ' Reset anche se non trovato
+        End If
+
         ' Prima esecuzione: entra nell'entry TaskGroup
         If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
             Dim entry = _compilationResult.TaskGroups.FirstOrDefault(
@@ -312,7 +339,7 @@ Public Class FlowOrchestrator
             If entry IsNot Nothing AndAlso
                Not _state.ExecutedTaskGroupIds.Contains(entry.NodeId) Then
                 Dim canEnter = entry.ExecCondition Is Nothing OrElse
-                               ConditionEvaluator.EvaluateCondition(entry.ExecCondition, _state)
+                               ConditionEvaluator.EvaluateTaskGroupExecCondition(entry.ExecCondition, _state, entry.NodeId)
                 If canEnter Then
                     _state.CurrentNodeId = entry.NodeId
                     _state.CurrentRowIndex = 0
@@ -322,12 +349,12 @@ Public Class FlowOrchestrator
             End If
         End If
 
-        ' Cerca il primo gruppo eseguibile non ancora eseguito
+        ' Cerca il primo gruppo eseguibile non ancora eseguito (fallback)
         For Each tg In _compilationResult.TaskGroups
             If _state.ExecutedTaskGroupIds.Contains(tg.NodeId) Then Continue For
 
             Dim canExecute = tg.ExecCondition Is Nothing OrElse
-                             ConditionEvaluator.EvaluateCondition(tg.ExecCondition, _state)
+                             ConditionEvaluator.EvaluateTaskGroupExecCondition(tg.ExecCondition, _state, tg.NodeId)
             If canExecute Then
                 If _state.CurrentNodeId <> tg.NodeId Then
                     _state.CurrentNodeId = tg.NodeId
@@ -434,6 +461,18 @@ Public Class FlowOrchestrator
 
         ' Mappa DialogueTurnResult → RowTurnResult
         If result.NewState.IsCompleted Then
+            ' ✅ NEW: Copia variabili estratte da DialogueState.Memory a ExecutionState.VariableStore
+            ' Questo permette alle condizioni degli edge di accedere alle variabili estratte
+            If result.NewState.Memory IsNot Nothing AndAlso result.NewState.Memory.Count > 0 Then
+                If _state.VariableStore Is Nothing Then
+                    _state.VariableStore = New Dictionary(Of String, Object)()
+                End If
+                ' Copia tutte le variabili estratte nel VariableStore globale
+                For Each kvp In result.NewState.Memory
+                    _state.VariableStore(kvp.Key) = kvp.Value
+                    Console.WriteLine($"[FlowOrchestrator] ✅ Copied variable '{kvp.Key}' = '{kvp.Value}' to VariableStore")
+                Next
+            End If
             _state.DialogueContexts.Remove(rowTask.Id)
             Return RowTurnResult.Completed(result.Messages)
         End If

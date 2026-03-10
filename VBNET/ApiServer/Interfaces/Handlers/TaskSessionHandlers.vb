@@ -355,7 +355,7 @@ Namespace ApiServer.Handlers
                     End If
 
                     ' ✅ Emetti evento waitingForInput se necessario
-                    If result.Status = "waiting_for_input" Then
+                    If result.Status = TurnStatus.WaitingForInput Then ' ✅ Enum
                         Dim waitingData As Object = New With {
                             .taskId = compiledTask.Id,
                             .timestamp = DateTime.UtcNow.ToString("O")
@@ -774,13 +774,13 @@ Namespace ApiServer.Handlers
                 End If
 
                 ' ✅ Aggiorna stato waiting
-                If processTurnResult.Status = "waiting_for_input" Then
+                If processTurnResult.Status = TurnStatus.WaitingForInput Then ' ✅ Enum
                     session.IsWaitingForInput = True
                     session.WaitingForInputData = New With {
                         .taskId = compiledTask.Id,
                         .timestamp = DateTime.UtcNow.ToString("O")
                     }
-                ElseIf processTurnResult.Status = "completed" Then
+                ElseIf processTurnResult.Status = TurnStatus.Completed Then ' ✅ Enum
                     session.IsWaitingForInput = False
                     session.WaitingForInputData = Nothing
                     ' ✅ Emetti evento complete

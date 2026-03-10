@@ -14,10 +14,11 @@ Public Class TaskGroup
     Public Property NodeId As String
 
     ''' <summary>
-    ''' Condizione di esecuzione del nodo (calcolata UNA volta)
+    ''' Condizione di esecuzione del nodo (struttura semplificata)
+    ''' Lista piatta di condizioni edge invece di albero ricorsivo
     ''' </summary>
     <JsonProperty("execCondition")>
-    Public Property ExecCondition As Condition
+    Public Property ExecCondition As TaskGroupExecCondition
 
     ''' <summary>
     ''' Indice del task iniziale da eseguire (default 0)

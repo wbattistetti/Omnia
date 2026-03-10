@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 Imports System.Linq
 Imports Compiler.DTO.IDE
+Imports Compiler.DTO.Runtime
 Imports TaskEngine
 
 ''' <summary>
@@ -215,167 +216,54 @@ Public Class ConditionBuilder
 
     ''' <summary>
     ''' Builds execution condition for a TaskGroup (node)
-    ''' Usa TaskGroupExecuted invece di TaskState per efficienza
-    ''' Trasforma condizioni IDE (Edge) in condizioni Runtime (Condition)
+    ''' Nuova struttura semplificata: lista piatta di EdgeCondition invece di albero ricorsivo
     ''' </summary>
     Public Function BuildTaskGroupCondition(
         nodeId As String,
         flow As Flow
-    ) As Condition
+    ) As TaskGroupExecCondition
         Dim incomingLinks = flow.GetIncomingLinks(nodeId)
+        Dim result As New TaskGroupExecCondition()
 
         ' Entry node: eseguibile solo se non già eseguito
+        ' Crea una condizione speciale per entry node
         If incomingLinks.Count = 0 Then
-            Return New Condition() With {
-                .Type = ConditionType.NotOp,
-                .Condition = New Condition() With {
-                    .Type = ConditionType.TaskGroupExecuted,
-                    .NodeId = nodeId
-                }
-            }
+            ' Entry node: condizione che verifica che il nodo stesso NON sia stato eseguito
+            ' Questo viene gestito come un EdgeCondition speciale con TaskGroupId = nodeId
+            ' e Expression che valuta NOT(executed)
+            ' Per semplicità, usiamo una struttura che verrà valutata come:
+            ' "Se nodeId NON è in ExecutedTaskGroupIds"
+            ' Questo viene gestito nell'evaluator
+            Return result ' Entry node: lista vuota = sempre eseguibile se non già eseguito
         End If
 
-        ' Build conditions for each incoming link
-        Dim linkConditions As New List(Of Condition)()
-        Dim elseEdges As New List(Of FlowEdge)()
-
-        ' First pass: separate Else edges from normal edges
-        ' ✅ Read isElse from top-level
+        ' Build EdgeCondition per ogni edge entrante
         For Each edge In incomingLinks
-            If edge.IsElse = True Then
-                elseEdges.Add(edge)
-            End If
-        Next
-
-        ' Build conditions for normal (non-Else) edges
-        For Each edge In incomingLinks
-            ' Skip Else edges in first pass
-            ' ✅ Read isElse from top-level
-            If edge.IsElse = True Then
-                Continue For
-            End If
-
             Dim sourceNodeId = edge.Source
-
-            ' Costruisci condizione link: (TaskGroup sorgente eseguito AND link.condition)
-            Dim linkConditionParts As New List(Of Condition)()
-
-            ' Sempre: TaskGroup sorgente eseguito
-            linkConditionParts.Add(New Condition() With {
-                .Type = ConditionType.TaskGroupExecuted,
-                .NodeId = sourceNodeId
-            })
-
-            ' Se link ha condizione, aggiungila (AND)
-            ' ✅ Read conditionId from top-level
             Dim conditionId As String = edge.ConditionId
+            Dim isElse = edge.IsElse.GetValueOrDefault(False)
 
-            If Not String.IsNullOrEmpty(conditionId) Then
-                linkConditionParts.Add(New Condition() With {
-                    .Type = ConditionType.EdgeCondition,
-                    .EdgeId = edge.Id,
-                    .EdgeConditionId = conditionId
-                })
+            ' Ottieni AST dalla condizione se presente
+            Dim expressionAst As String = Nothing
+            If Not String.IsNullOrEmpty(conditionId) AndAlso flow.Conditions IsNot Nothing Then
+                Dim condition = flow.Conditions.FirstOrDefault(Function(c) c.Id = conditionId)
+                If condition IsNot Nothing AndAlso condition.Data IsNot Nothing Then
+                    expressionAst = condition.Data.Ast
+                End If
             End If
 
-            ' Combina con AND
-            Dim linkCondition As Condition
-            If linkConditionParts.Count = 1 Then
-                linkCondition = linkConditionParts(0)
-            Else
-                linkCondition = New Condition() With {
-                    .Type = ConditionType.AndOp,
-                    .Conditions = linkConditionParts
-                }
-            End If
+            ' Crea EdgeCondition
+            Dim edgeCondition As New EdgeCondition() With {
+                .TaskGroupId = sourceNodeId,
+                .Expression = expressionAst,
+                .IsElse = isElse,
+                .EdgeId = edge.Id
+            }
 
-            linkConditions.Add(linkCondition)
+            result.EdgeConditions.Add(edgeCondition)
         Next
 
-        ' Second pass: handle Else edges
-        ' For each Else edge: (TaskGroup sorgente eseguito AND NOT(altre condizioni dello stesso sorgente))
-        For Each elseEdge In elseEdges
-            Dim sourceNodeId = elseEdge.Source
-
-            ' Find all edges FROM the same source node (gemelle)
-            ' ✅ Read isElse from top-level
-            Dim otherEdgesFromSource = flow.Edges.Where(Function(e) _
-                e.Source = sourceNodeId AndAlso
-                e.Id <> elseEdge.Id AndAlso
-                Not (e.IsElse.GetValueOrDefault(False) = True)
-            ).ToList()
-
-            ' Extract only edge conditions (without TaskGroup.Executed) for the NOT
-            Dim otherEdgeConditions As New List(Of Condition)()
-            For Each otherEdge In otherEdgesFromSource
-                ' ✅ Read conditionId from top-level
-                Dim otherConditionId As String = otherEdge.ConditionId
-
-                If Not String.IsNullOrEmpty(otherConditionId) Then
-                    otherEdgeConditions.Add(New Condition() With {
-                        .Type = ConditionType.EdgeCondition,
-                        .EdgeId = otherEdge.Id,
-                        .EdgeConditionId = otherConditionId
-                    })
-                End If
-            Next
-
-            ' Build Else condition: (TaskGroup sorgente eseguito AND NOT(altre condizioni))
-            Dim elseConditionParts As New List(Of Condition)()
-            elseConditionParts.Add(New Condition() With {
-                .Type = ConditionType.TaskGroupExecuted,
-                .NodeId = sourceNodeId
-            })
-
-            If otherEdgeConditions.Count > 0 Then
-                ' Create NOT(OR of all other edge conditions)
-                Dim orOfEdgeConditions As Condition
-                If otherEdgeConditions.Count = 1 Then
-                    orOfEdgeConditions = otherEdgeConditions(0)
-                Else
-                    orOfEdgeConditions = New Condition() With {
-                        .Type = ConditionType.OrOp,
-                        .Conditions = otherEdgeConditions
-                    }
-                End If
-
-                Dim notCondition As New Condition() With {
-                    .Type = ConditionType.NotOp,
-                    .Condition = orOfEdgeConditions
-                }
-
-                elseConditionParts.Add(notCondition)
-            End If
-            ' If no other conditions exist, Else is just (TaskGroup sorgente eseguito)
-
-            Dim elseLinkCondition As Condition
-            If elseConditionParts.Count = 1 Then
-                elseLinkCondition = elseConditionParts(0)
-            Else
-                elseLinkCondition = New Condition() With {
-                    .Type = ConditionType.AndOp,
-                    .Conditions = elseConditionParts
-                }
-            End If
-
-            linkConditions.Add(elseLinkCondition)
-        Next
-
-        ' If no links, return null (should not happen as entry node is handled above)
-        If linkConditions.Count = 0 Then
-            Return Nothing
-        End If
-
-        ' If only one link, return its condition directly
-        If linkConditions.Count = 1 Then
-            Return linkConditions(0)
-        End If
-
-        ' Multiple links: OR of all link conditions
-        Return New Condition() With {
-            .Type = ConditionType.OrOp,
-            .Conditions = linkConditions
-        }
+        Return result
     End Function
 End Class
 

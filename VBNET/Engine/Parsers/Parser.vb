@@ -8,6 +8,7 @@ Imports System.Text.RegularExpressions
 Imports TaskEngine.Models
 Imports TaskEngine
 Imports IParsableTask = TaskEngine.IParsableTask
+Imports Compiler.DTO.Runtime
 
 ''' <summary>
 ''' Interprets user utterances for a given CompiledUtteranceTask.
@@ -95,7 +96,9 @@ Partial Public Class Parser
 
         ' ✅ STATELESS: Non modifica current.Value, restituisce solo i dati estratti
         Dim data As New System.Collections.Generic.Dictionary(Of String, Object)()
-        data(current.Id) = value
+        ' ✅ NEW: Usa NodeId (GUID del nodo DDT) invece di Id (task instance ID)
+        Dim variableId As String = GetVariableId(current)
+        data(variableId) = value
 
         Return New ParseResult() With {
             .Result = ParseResultType.Match,
@@ -136,8 +139,24 @@ Partial Public Class Parser
         Dim value = ExtractSimple(utterance, current)
         If String.IsNullOrEmpty(value) Then Return Nothing
         Dim data As New System.Collections.Generic.Dictionary(Of String, Object)()
-        data(current.Id) = value
+        ' ✅ NEW: Usa NodeId (GUID del nodo DDT) invece di Id (task instance ID)
+        Dim variableId As String = GetVariableId(current)
+        data(variableId) = value
         Return data
+    End Function
+
+    ''' <summary>
+    ''' Helper: Ottiene l'ID della variabile (GUID del nodo DDT) da un task
+    ''' Usa NodeId se disponibile (CompiledUtteranceTask), altrimenti fallback a Id
+    ''' </summary>
+    Private Function GetVariableId(current As IParsableTask) As String
+        ' ✅ Cast a CompiledUtteranceTask per accedere a NodeId
+        Dim utteranceTask = TryCast(current, Compiler.CompiledUtteranceTask)
+        If utteranceTask IsNot Nothing AndAlso Not String.IsNullOrEmpty(utteranceTask.NodeId) Then
+            Return utteranceTask.NodeId
+        End If
+        ' Fallback a Id se NodeId non disponibile
+        Return current.Id
     End Function
 
     Private Shared Function IsYes(input As String) As Boolean

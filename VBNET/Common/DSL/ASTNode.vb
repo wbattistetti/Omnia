@@ -36,4 +36,11 @@ Public Class ASTNode
     ' Parenthesized expression
     <JsonPropertyName("expression")>
     Public Property Expression As ASTNode
+
+    ''' <summary>
+    ''' Constructor to initialize Args list (prevents null reference during recursive deserialization)
+    ''' </summary>
+    Public Sub New()
+        Args = New List(Of ASTNode)()
+    End Sub
 End Class
