@@ -31,7 +31,11 @@ Namespace ApiServer.SessionStorage
 
             ' ✅ STATELESS: Stato comunicazione
             Public Property Messages As List(Of Object)
+            ' ❌ DEPRECATED: IsWaitingForInput e WaitingForInputData non sono più usati come fonte di verità
+            ' Mantenuti per retrocompatibilità serializzazione, ma ExecutionState.DialogueContexts è l'unica fonte di verità
+            <Obsolete("Use ExecutionState.DialogueContexts instead. This field is kept only for backward compatibility.")>
             Public Property IsWaitingForInput As Boolean
+            <Obsolete("Use ExecutionState.DialogueContexts instead. This field is kept only for backward compatibility.")>
             Public Property WaitingForInputData As Object
             Public Property SseConnected As Boolean = False
 
@@ -58,7 +62,11 @@ Namespace ApiServer.SessionStorage
             Public Property Tasks As List(Of Object)
             Public Property Translations As Dictionary(Of String, String)
             Public Property Messages As List(Of Object)
+            ' ❌ DEPRECATED: IsWaitingForInput e WaitingForInputData non sono più usati come fonte di verità
+            ' Mantenuti per retrocompatibilità serializzazione, ma ExecutionState.DialogueContexts è l'unica fonte di verità
+            <Obsolete("Use ExecutionState.DialogueContexts instead. This field is kept only for backward compatibility.")>
             Public Property IsWaitingForInput As Boolean
+            <Obsolete("Use ExecutionState.DialogueContexts instead. This field is kept only for backward compatibility.")>
             Public Property WaitingForInputData As Object
             ' ✅ AGGIUNTO: ProjectId e Locale per risoluzione traduzioni
             Public Property ProjectId As String

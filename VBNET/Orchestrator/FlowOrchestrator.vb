@@ -4,70 +4,76 @@ Imports Compiler
 Imports DTO.Runtime
 Imports TaskEngine
 Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Linq
 Imports System.Linq
-Imports System.Reflection
 
 ''' <summary>
-''' Orchestrator che esegue un flow compilato
-''' - Trova task eseguibili (condizione = true)
-''' - Esegue task
-''' - Chiama Task Engine per task GetData
-''' - Gestisce stato globale
-''' ✅ STATELESS: ExecutionState viene salvato/caricato da Redis
+''' Orchestrator che esegue un flow compilato tramite un loop stateless.
+'''
+''' Architettura:
+'''   RunUntilInput() è l'unico loop principale.
+'''   Ogni iterazione esegue UN turno (ProcessCurrentTurn) e aggiorna ExecutionState.
+'''   Si ferma quando un task richiede input utente o quando il flow è completato.
+'''
+''' Statefulness:
+'''   ExecutionState è l'unica fonte di verità; viene letto/scritto su Redis tramite SaveState().
+'''   L'oggetto FlowOrchestrator è ricreato per ogni richiesta HTTP (stateless per design).
 ''' </summary>
 Public Class FlowOrchestrator
+
+    ' ── Settings condivisi per serializzazione/deserializzazione DialogueState ─
+    ' TypeNameHandling.Auto è necessario per preservare CurrentTask/RootTask
+    ' come CompiledUtteranceTask attraverso i roundtrip JSON/Redis.
+    Private Shared ReadOnly _dialogueStateSettings As JsonSerializerSettings =
+        New JsonSerializerSettings() With {
+            .TypeNameHandling = TypeNameHandling.Auto,
+            .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+            .NullValueHandling = NullValueHandling.Ignore,
+            .Converters = New List(Of JsonConverter) From {
+                New Newtonsoft.Json.Converters.StringEnumConverter(),
+                New ITaskConverter()
+            }
+        }
+
+    ' ── Configurazione immutabile (passata nel costruttore) ───────────────────
     Private ReadOnly _compiledTasks As List(Of CompiledTask)
     Private ReadOnly _compilationResult As FlowCompilationResult
-    ' ✅ REMOVED: _taskEngine (Motore) - use StatelessDialogueEngine instead when needed
-    ' ✅ REMOVED: _taskExecutor (ora TaskExecutor è statico)
-    Private ReadOnly _taskGroupExecutor As TaskGroupExecutor
-    Private ReadOnly _state As ExecutionState
-    Private _isRunning As Boolean = False
-    Private _entryTaskGroupId As String
-    ' ✅ STATELESS: Storage per ExecutionState (opzionale per retrocompatibilità)
-    ' Nota: Usa Object invece di IExecutionStateStorage per evitare dipendenza circolare
+    Private ReadOnly _entryTaskGroupId As String
     Private ReadOnly _executionStateStorage As Object
     Private ReadOnly _sessionId As String
-    ' ✅ SINGLE POINT OF TRUTH: Campi per risoluzione traduzioni
     Private ReadOnly _projectId As String
     Private ReadOnly _locale As String
     Private ReadOnly _resolveTranslation As Func(Of String, String)
 
-    ''' <summary>
-    ''' Evento sollevato quando un messaggio deve essere mostrato
-    ''' </summary>
+    ' ── Stato runtime caricato da Redis ──────────────────────────────────────
+    Private ReadOnly _state As ExecutionState
+
+    ' ── Events (per comunicazione con SessionManager / SSE) ──────────────────
+
+    ''' <summary>Sollevato quando un messaggio deve essere mostrato all'utente.</summary>
     Public Event MessageToShow As EventHandler(Of String)
 
-    ''' <summary>
-    ''' Evento sollevato quando lo stato viene aggiornato
-    ''' </summary>
+    ''' <summary>Sollevato quando ExecutionState viene aggiornato.</summary>
     Public Event StateUpdated As EventHandler(Of ExecutionState)
 
-    ''' <summary>
-    ''' Evento sollevato quando l'esecuzione è completata
-    ''' </summary>
+    ''' <summary>Sollevato quando il flow è completato (nessun altro TaskGroup eseguibile).</summary>
     Public Event ExecutionCompleted As EventHandler
 
-    ''' <summary>
-    ''' Evento sollevato quando c'è un errore
-    ''' </summary>
+    ''' <summary>Sollevato quando si verifica un errore fatale.</summary>
     Public Event ExecutionError As EventHandler(Of Exception)
 
-    ''' <summary>
-    ''' ✅ UNIFIED: Evento sollevato quando un task richiede input utente
-    ''' Allinea il comportamento con TaskSessionHandlers per unificare l'approccio
-    ''' </summary>
-    Public Event WaitingForInput As EventHandler(Of String) ' taskId
+    ''' <summary>Sollevato quando un task richiede input utente (emette taskId).</summary>
+    Public Event WaitingForInput As EventHandler(Of String)
 
-    ''' <summary>
-    ''' Costruttore per retrocompatibilità (senza storage - stato solo in memoria)
-    ''' </summary>
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' Costruttori
+    ' ─────────────────────────────────────────────────────────────────────────
+
+    ''' <summary>Costruttore legacy (senza storage, stato solo in memoria).</summary>
     Public Sub New(compiledTasks As List(Of CompiledTask))
         _compiledTasks = compiledTasks
         _compilationResult = Nothing
-        ' ✅ REMOVED: taskEngine parameter - use StatelessDialogueEngine when needed
-        ' ✅ REMOVED: _taskExecutor (ora TaskExecutor è statico)
-        _taskGroupExecutor = New TaskGroupExecutor()
+        _entryTaskGroupId = Nothing
         _executionStateStorage = Nothing
         _sessionId = Nothing
         _projectId = Nothing
@@ -76,9 +82,7 @@ Public Class FlowOrchestrator
         _state = New ExecutionState()
     End Sub
 
-    ''' <summary>
-    ''' ✅ STATELESS: Costruttore con storage per salvare/caricare ExecutionState da Redis
-    ''' </summary>
+    ''' <summary>Costruttore principale (con storage Redis e risoluzione traduzioni).</summary>
     Public Sub New(
         compilationResult As FlowCompilationResult,
         Optional sessionId As String = Nothing,
@@ -87,388 +91,481 @@ Public Class FlowOrchestrator
         Optional locale As String = Nothing,
         Optional resolveTranslation As Func(Of String, String) = Nothing
     )
-        ' ✅ VALIDATION: Check for blocking errors BEFORE initialization
         If compilationResult Is Nothing Then
-            Throw New ArgumentNullException(NameOf(compilationResult), "CompilationResult cannot be null")
+            Throw New ArgumentNullException(NameOf(compilationResult))
         End If
 
-        ' ✅ ERROR: Reject if has blocking errors
         If compilationResult.HasErrors Then
-            Dim blockingErrors = compilationResult.Errors.Where(Function(e) e.Severity = ErrorSeverity.Error).ToList()
-            Dim errorMessages = String.Join("; ", blockingErrors.Select(Function(e) e.Message))
+            Dim errors = compilationResult.Errors.Where(Function(e) e.Severity = ErrorSeverity.Error).ToList()
             Throw New InvalidOperationException(
-                $"Cannot create FlowOrchestrator: compilation has {blockingErrors.Count} errors. " &
-                $"Errors: {errorMessages}"
-            )
+                $"Cannot create FlowOrchestrator: {errors.Count} blocking errors. " &
+                String.Join("; ", errors.Select(Function(e) e.Message)))
         End If
 
         _compilationResult = compilationResult
-        If compilationResult IsNot Nothing AndAlso compilationResult.Tasks IsNot Nothing Then
-            _compiledTasks = compilationResult.Tasks
-            _entryTaskGroupId = compilationResult.EntryTaskGroupId
-        Else
-            _compiledTasks = New List(Of CompiledTask)()
-            _entryTaskGroupId = Nothing
-        End If
-        ' ✅ REMOVED: taskEngine parameter - use StatelessDialogueEngine when needed
-        ' ✅ REMOVED: _taskExecutor (ora TaskExecutor è statico)
-        _taskGroupExecutor = New TaskGroupExecutor()
+        _compiledTasks = If(compilationResult.Tasks, New List(Of CompiledTask)())
+        _entryTaskGroupId = compilationResult.EntryTaskGroupId
         _executionStateStorage = executionStateStorage
         _sessionId = sessionId
-        ' ✅ SINGLE POINT OF TRUTH: Salva parametri per risoluzione traduzioni
         _projectId = projectId
         _locale = locale
         _resolveTranslation = resolveTranslation
 
-        ' ✅ STATELESS: Carica ExecutionState da Redis se storage disponibile
-        If _executionStateStorage IsNot Nothing AndAlso Not String.IsNullOrEmpty(_sessionId) Then
-            Try
-                ' Usa reflection per chiamare GetExecutionState senza dipendenza diretta
-                Dim getExecutionStateMethod = _executionStateStorage.GetType().GetMethod("GetExecutionState")
-                If getExecutionStateMethod IsNot Nothing Then
-                    _state = DirectCast(getExecutionStateMethod.Invoke(_executionStateStorage, {_sessionId}), ExecutionState)
-                    Console.WriteLine($"[FlowOrchestrator] ✅ Loaded ExecutionState from Redis for session: {_sessionId}")
-                Else
-                    _state = New ExecutionState()
-                End If
-            Catch ex As Exception
-                Console.WriteLine($"[FlowOrchestrator] ⚠️ Failed to load ExecutionState from Redis: {ex.Message}, using new state")
-                _state = New ExecutionState()
-            End Try
-        Else
-            _state = New ExecutionState()
-        End If
+        ' Carica ExecutionState da Redis (o crea nuovo se non esiste)
+        _state = LoadOrCreateState()
     End Sub
 
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' API pubblica
+    ' ─────────────────────────────────────────────────────────────────────────
+
     ''' <summary>
-    ''' Executes the entire dialogue flow
-    ''' Trova TaskGroup eseguibili e delega esecuzione a TaskGroupExecutor
-    ''' NON naviga Edges a runtime - usa solo ExecCondition
+    ''' Avvia l'esecuzione del flow. Delega a RunUntilInput.
+    ''' Mantenuto per compatibilità con SessionManager.
     ''' </summary>
     Public Async Function ExecuteDialogueAsync() As System.Threading.Tasks.Task
-        Console.WriteLine($"🔵 [FlowOrchestrator] ExecuteDialogueAsync CALLED - _isRunning={_isRunning}")
-        System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] ExecuteDialogueAsync CALLED")
-        If _isRunning Then
-            Console.WriteLine($"🔵 [FlowOrchestrator] Already running, returning")
-            System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] Already running")
-            Return
-        End If
-
-        _isRunning = True
-
+        Console.WriteLine($"[FlowOrchestrator] ExecuteDialogueAsync → delegating to RunUntilInput")
         Try
-            Console.WriteLine($"🚀 [FlowOrchestrator] Starting dialogue with {If(_compilationResult IsNot Nothing AndAlso _compilationResult.TaskGroups IsNot Nothing, _compilationResult.TaskGroups.Count, 0)} task groups")
-            System.Diagnostics.Debug.WriteLine($"🚀 [FlowOrchestrator] Starting dialogue")
-            RaiseEvent StateUpdated(Me, _state)
-
-            Dim iterationCount As Integer = 0
-            While _isRunning
-                iterationCount += 1
-
-                ' ✅ Trova prossimo TaskGroup eseguibile (usa solo ExecCondition, NON naviga Edges)
-                Dim taskGroup = GetNextTaskGroup()
-
-                If taskGroup Is Nothing Then
-                    Console.WriteLine($"🔵 [FlowOrchestrator] No more executable TaskGroups")
-                    System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] No more executable TaskGroups")
-                    Exit While
-                End If
-
-                Console.WriteLine($"🔵 [FlowOrchestrator] Executing TaskGroup {taskGroup.NodeId} (iteration {iterationCount})")
-                System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] Executing TaskGroup {taskGroup.NodeId} (iteration {iterationCount})")
-
-                ' ✅ SINGLE POINT OF TRUTH: Risolvi TextKey nel messageCallback
-                ' Questo è l'unico punto dove TUTTI i messaggi passano prima di arrivare al frontend
-                Dim messageCallback As Action(Of String, String, Integer) = Sub(text, stepType, escalationNumber)
-                                                                                ' ✅ DEBUG: Log TextKey ricevuto
-                                                                                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Received message")
-                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback]   text: '{text}'")
-                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback]   stepType: '{stepType}'")
-                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback]   text.Length: {If(text IsNot Nothing, text.Length, 0)}")
-                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback]   _resolveTranslation IsNot Nothing: {_resolveTranslation IsNot Nothing}")
-                                                                                System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Received: text='{text}', stepType='{stepType}'")
-
-                                                                                ' ✅ Se text è un GUID (TextKey), risolvilo tramite resolveTranslation
-                                                                                ' ✅ Se text è già testo tradotto, usalo così com'è
-                                                                                Dim resolvedText As String = text
-
-                                                                                If _resolveTranslation IsNot Nothing AndAlso Not String.IsNullOrEmpty(text) Then
-                                                                                    ' Verifica se è un GUID (TextKey) - formato: 8-4-4-4-12 caratteri esadecimali
-                                                                                    Dim isGuid As Boolean = False
-                                                                                    Try
-                                                                                        ' Pattern GUID: 8-4-4-4-12 caratteri esadecimali separati da trattini
-                                                                                        If text.Length = 36 AndAlso text.Count(Function(c) c = "-"c) = 4 Then
-                                                                                            Dim guid = New Guid(text)
-                                                                                            isGuid = True
-                                                                                            Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] ✅ TextKey detected as GUID: {text}")
-                                                                                            System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] TextKey detected as GUID: {text}")
-                                                                                        Else
-                                                                                            Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] ❌ TextKey NOT detected as GUID: length={text.Length}, dashes={text.Count(Function(c) c = "-"c)}")
-                                                                                            System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] TextKey NOT detected as GUID: length={text.Length}")
-                                                                                        End If
-                                                                                    Catch ex As Exception
-                                                                                        ' Non è un GUID, probabilmente è già testo tradotto
-                                                                                        Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] ⚠️ Exception checking GUID: {ex.Message}")
-                                                                                        System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Exception checking GUID: {ex.Message}")
-                                                                                    End Try
-
-                                                                                    If isGuid Then
-                                                                                        ' ✅ Risolvi TextKey → testo tradotto
-                                                                                        Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] 🔍 Resolving TextKey: {text}")
-                                                                                        System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Resolving TextKey: {text}")
-                                                                                        resolvedText = _resolveTranslation(text)
-                                                                                        Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] ✅ Resolved text: '{resolvedText}'")
-                                                                                        System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Resolved text: '{resolvedText}'")
-                                                                                        ' Se risoluzione fallisce (traduzione non trovata), usa TextKey stesso come fallback
-                                                                                        If String.IsNullOrEmpty(resolvedText) Then
-                                                                                            Console.WriteLine($"⚠️ [FlowOrchestrator.messageCallback] ⚠️ Translation not found for TextKey: {text}, using TextKey as fallback")
-                                                                                            System.Diagnostics.Debug.WriteLine($"⚠️ [FlowOrchestrator.messageCallback] Translation not found for TextKey: {text}")
-                                                                                            resolvedText = text
-                                                                                        End If
-                                                                                    Else
-                                                                                        Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] ℹ️ Text is not a GUID, using as-is: '{text}'")
-                                                                                        System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator.messageCallback] Text is not a GUID, using as-is")
-                                                                                    End If
-                                                                                    ' Se non è un GUID, text è già testo tradotto, usalo così com'è
-                                                                                Else
-                                                                                    Console.WriteLine($"⚠️ [FlowOrchestrator.messageCallback] ⚠️ _resolveTranslation is Nothing or text is empty")
-                                                                                    System.Diagnostics.Debug.WriteLine($"⚠️ [FlowOrchestrator.messageCallback] _resolveTranslation is Nothing or text is empty")
-                                                                                End If
-
-                                                                                ' ✅ DEBUG: Log messaggio prima di emettere evento
-                                                                                Console.WriteLine($"🔵 [FlowOrchestrator.messageCallback] 📤 Final resolvedText: '{resolvedText}'")
-                                                                                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-                                                                                Console.WriteLine($"🔵 [FlowOrchestrator] MessageToShow event raised: {resolvedText}")
-                                                                                System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] MessageToShow: {resolvedText}")
-
-                                                                                ' ✅ DEBUG: Verifica se ci sono listener registrati
-                                                                                Dim hasListeners = Me.MessageToShowEvent IsNot Nothing
-                                                                                Dim listenerCount = 0
-                                                                                If hasListeners Then
-                                                                                    ' Conta i listener usando reflection
-                                                                                    Dim eventField = Me.GetType().GetField("MessageToShowEvent", Reflection.BindingFlags.NonPublic Or Reflection.BindingFlags.Instance)
-                                                                                    If eventField IsNot Nothing Then
-                                                                                        Dim eventDelegate = TryCast(eventField.GetValue(Me), EventHandler(Of String))
-                                                                                        If eventDelegate IsNot Nothing Then
-                                                                                            listenerCount = eventDelegate.GetInvocationList().Length
-                                                                                        End If
-                                                                                    End If
-                                                                                End If
-
-                                                                                Console.WriteLine($"🔴 [FlowOrchestrator] BREAKPOINT: About to raise MessageToShow")
-                                                                                Console.WriteLine($"🔴 [FlowOrchestrator] Has listeners: {hasListeners}, Count: {listenerCount}")
-                                                                                Console.WriteLine($"🔴 [FlowOrchestrator] Orchestrator instance: {Me.GetHashCode()}")
-                                                                                Console.WriteLine($"🔴 [FlowOrchestrator] Message text: {resolvedText}")
-                                                                                System.Diagnostics.Debug.WriteLine($"🔴 [FlowOrchestrator] BREAKPOINT: Has listeners: {hasListeners}, Count: {listenerCount}, Instance: {Me.GetHashCode()}")
-                                                                                Console.Out.Flush()
-
-                                                                                RaiseEvent MessageToShow(Me, resolvedText)
-                                                                            End Sub
-                Console.WriteLine($"🔵 [FlowOrchestrator] About to execute TaskGroup {taskGroup.NodeId} with messageCallback")
-                System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] About to execute TaskGroup {taskGroup.NodeId}")
-                Dim result = Await _taskGroupExecutor.ExecuteTaskGroup(taskGroup, _state, messageCallback)
-                Console.WriteLine($"🔵 [FlowOrchestrator] TaskGroup {taskGroup.NodeId} execution completed: Success={result.Success}, RequiresInput={result.RequiresInput}")
-                System.Diagnostics.Debug.WriteLine($"🔵 [FlowOrchestrator] TaskGroup {taskGroup.NodeId} completed: Success={result.Success}")
-
-                If Not result.Success Then
-                    Throw New Exception($"TaskGroup execution failed: {result.Err}")
-                End If
-
-                ' ✅ Se task richiede input asincrono, sospendi esecuzione
-                If result.RequiresInput Then
-                    Console.WriteLine($"[FlowOrchestrator] ⏸️ TaskGroup {taskGroup.NodeId} suspended (task {result.WaitingTaskId} requires input)")
-                    SaveState()
-                    ' ✅ UNIFIED: Emetti evento WaitingForInput (come TaskSessionHandlers)
-                    RaiseEvent WaitingForInput(Me, result.WaitingTaskId)
-                    Console.WriteLine($"[FlowOrchestrator] ✅ WaitingForInput event raised for task {result.WaitingTaskId}")
-                    Exit While  ' Sospendi, attendi input
-                End If
-
-                ' ✅ Marca TaskGroup come eseguito
-                taskGroup.Executed = True
-                _state.ExecutedTaskGroupIds.Add(taskGroup.NodeId)
-                Console.WriteLine($"[FlowOrchestrator] ✅ TaskGroup {taskGroup.NodeId} completed")
-
-                ' ✅ STATELESS: Salva ExecutionState su Redis dopo ogni modifica
-                SaveState()
-
-                RaiseEvent StateUpdated(Me, _state)
-
-                ' ✅ STATELESS: Nessun delay artificiale - il loop è guidato da stato, non da timing
-            End While
-
-            Console.WriteLine($"✅ [FlowOrchestrator] Dialogue completed after {iterationCount} iterations")
-            RaiseEvent ExecutionCompleted(Me, Nothing)
-
+            Await RunUntilInput()
         Catch ex As Exception
-            Console.WriteLine($"❌ [FlowOrchestrator] Error: {ex.Message}")
+            Console.WriteLine($"[FlowOrchestrator] ❌ ExecuteDialogueAsync error: {ex.Message}")
             RaiseEvent ExecutionError(Me, ex)
             Throw
-        Finally
-            _isRunning = False
         End Try
     End Function
 
     ''' <summary>
-    ''' ✅ Trova il prossimo TaskGroup eseguibile usando solo ExecCondition
-    ''' NON naviga Edges a runtime - la navigazione è già "baked" in ExecCondition
+    ''' Loop stateless principale.
+    '''
+    ''' Ogni iterazione:
+    '''   L1 → trova TaskGroup con ExecCondition = true e non ancora eseguito
+    '''   L2 → trova la prima riga eseguibile nel gruppo (relativa a CurrentRowIndex)
+    '''   L3 → esegue UN turno della riga (ProcessCurrentTurn)
+    '''
+    ''' Si ferma quando:
+    '''   - RequiresInput = True  (emette WaitingForInput)
+    '''   - GetNextTaskGroup = Nothing (emette ExecutionCompleted, salvo CloseSession già fatto)
+    ''' </summary>
+    Public Async Function RunUntilInput() As System.Threading.Tasks.Task
+        Console.WriteLine($"[FlowOrchestrator] RunUntilInput START")
+        _state.RequiresInput = False
+
+        Const MaxIterations As Integer = 500
+        Dim iterations As Integer = 0
+
+        Do
+            iterations += 1
+            If iterations > MaxIterations Then
+                Throw New InvalidOperationException(
+                    $"[FlowOrchestrator] Max iterations ({MaxIterations}) exceeded — possible infinite loop")
+            End If
+
+            ' ── L1: Trova TaskGroup eseguibile ───────────────────────────────
+            Dim taskGroup = GetNextTaskGroup()
+            If taskGroup Is Nothing Then
+                ' Flow completato naturalmente (tutti i gruppi eseguiti o non eseguibili)
+                If Not _state.FlowCompleted Then
+                    Console.WriteLine($"[FlowOrchestrator] ✅ No more TaskGroups — ExecutionCompleted")
+                    SaveState()
+                    RaiseEvent ExecutionCompleted(Me, Nothing)
+                End If
+                Exit Do
+            End If
+
+            ' ── L2: Trova prima riga eseguibile nel gruppo ───────────────────
+            Dim rowTask = GetNextRowTask(taskGroup)
+            If rowTask Is Nothing Then
+                ' Gruppo completato: tutte le righe eseguite o skippate
+                Console.WriteLine($"[FlowOrchestrator] ✅ TaskGroup {taskGroup.NodeId} completed (all rows done)")
+                _state.ExecutedTaskGroupIds.Add(taskGroup.NodeId)
+                _state.CurrentNodeId = Nothing
+                _state.CurrentRowIndex = 0
+                SaveState()
+                RaiseEvent StateUpdated(Me, _state)
+                Continue Do
+            End If
+
+            ' ── L3: Esegui UN turno della riga ───────────────────────────────
+            Dim result = Await ProcessCurrentTurn(rowTask)
+
+            ' Emetti messaggi (TextKey → testo risolto)
+            For Each textKey As String In result.Messages
+                Dim resolved = ResolveText(textKey)
+                Console.WriteLine($"[FlowOrchestrator] 💬 Message: '{resolved}'")
+                RaiseEvent MessageToShow(Me, resolved)
+            Next
+
+            ' Aggiorna stato in base al risultato del turno
+            Select Case result.Status
+
+                Case "waiting_for_input"
+                    _state.RequiresInput = True
+                    _state.WaitingTaskId = result.WaitingTaskId
+                    Console.WriteLine($"[FlowOrchestrator] ⏸️ WaitingForInput task={result.WaitingTaskId}")
+
+                Case "completed"
+                    _state.CurrentRowIndex += 1
+                    _state.WaitingTaskId = Nothing
+                    Console.WriteLine($"[FlowOrchestrator] ✅ Row completed, CurrentRowIndex → {_state.CurrentRowIndex}")
+
+                Case "auto_advance"
+                    ' Stessa riga, prossima iterazione con PendingUtterance = ""
+                    Console.WriteLine($"[FlowOrchestrator] 🔄 AutoAdvance (same row)")
+
+            End Select
+
+            ' Un solo SaveState per iterazione
+            SaveState()
+
+        Loop Until _state.RequiresInput
+
+        If _state.RequiresInput Then
+            If String.IsNullOrEmpty(_state.WaitingTaskId) Then
+                Throw New InvalidOperationException(
+                    "[FlowOrchestrator] RequiresInput=True but WaitingTaskId is empty")
+            End If
+            RaiseEvent WaitingForInput(Me, _state.WaitingTaskId)
+            Console.WriteLine($"[FlowOrchestrator] ⏸️ WaitingForInput event raised for task {_state.WaitingTaskId}")
+        End If
+    End Function
+
+    ''' <summary>
+    ''' Fornisce input utente al task in attesa e riprende il loop.
+    ''' </summary>
+    Public Async Function ProvideUserInput(
+        taskId As String,
+        userInput As String,
+        Optional resolveTranslation As Func(Of String, String) = Nothing
+    ) As System.Threading.Tasks.Task(Of Boolean)
+
+        ' Verifica che il task atteso sia quello giusto
+        If _state.WaitingTaskId <> taskId Then
+            Console.WriteLine($"⚠️ [FlowOrchestrator] Task {taskId} is not waiting (current: {_state.WaitingTaskId})")
+            Return False
+        End If
+
+        Console.WriteLine($"[FlowOrchestrator] ProvideUserInput task={taskId} input='{userInput}'")
+
+        ' Imposta input e sblocca il loop
+        _state.PendingUtterance = userInput
+        _state.RequiresInput = False
+        _state.WaitingTaskId = Nothing
+        SaveState()
+
+        ' Riprende il loop
+        Await RunUntilInput()
+        Return True
+    End Function
+
+    ''' <summary>Ferma l'esecuzione (legacy).</summary>
+    Public Sub [Stop]()
+        ' Non più necessario con il loop stateless, mantenuto per compatibilità
+    End Sub
+
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' L1 — Trova TaskGroup
+    ' ─────────────────────────────────────────────────────────────────────────
+
+    ''' <summary>
+    ''' Trova il prossimo TaskGroup eseguibile.
+    '''
+    ''' Priorità:
+    '''   1. Se FlowCompleted → Nothing (flow terminato)
+    '''   2. Se esiste CurrentNodeId (task sospeso) → riprendi quel gruppo
+    '''   3. Entry TaskGroup (prima esecuzione)
+    '''   4. Primo gruppo con ExecCondition = True non ancora eseguito
     ''' </summary>
     Private Function GetNextTaskGroup() As TaskGroup
         If _compilationResult Is Nothing OrElse _compilationResult.TaskGroups Is Nothing Then
-            ' Fallback: flat list search (retrocompatibilità)
             Return Nothing
         End If
 
-        ' ✅ Inizializza con entry TaskGroup se necessario
-        If String.IsNullOrEmpty(_state.CurrentNodeId) Then
-            If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
-                Dim entryTaskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = _entryTaskGroupId)
-                If entryTaskGroup IsNot Nothing Then
-                    _state.CurrentNodeId = _entryTaskGroupId
-                    _state.CurrentRowIndex = entryTaskGroup.StartTaskIndex
-                    SaveState()
-                    Return entryTaskGroup
+        ' Flow terminato definitivamente
+        If _state.FlowCompleted Then
+            Return Nothing
+        End If
+
+        ' Riprendi gruppo sospeso (RequiresInput precedente)
+        If Not String.IsNullOrEmpty(_state.CurrentNodeId) Then
+            Dim suspended = _compilationResult.TaskGroups.FirstOrDefault(
+                Function(tg) tg.NodeId = _state.CurrentNodeId)
+
+            If suspended IsNot Nothing AndAlso
+               Not _state.ExecutedTaskGroupIds.Contains(suspended.NodeId) Then
+                Dim canResume = suspended.ExecCondition Is Nothing OrElse
+                                ConditionEvaluator.EvaluateCondition(suspended.ExecCondition, _state)
+                If canResume Then
+                    Console.WriteLine($"[FlowOrchestrator] ▶️ Resuming suspended TaskGroup {suspended.NodeId}")
+                    Return suspended
                 End If
             End If
-            Return Nothing
+
+            ' Gruppo sospeso non più eseguibile: resetta e cerca il prossimo
+            _state.CurrentNodeId = Nothing
+            _state.CurrentRowIndex = 0
         End If
 
-        ' ✅ Itera su tutti i TaskGroups e trova il primo con ExecCondition = TRUE
-        For Each taskGroup In _compilationResult.TaskGroups
-            ' Salta TaskGroup già eseguiti
-            If taskGroup.Executed Then
-                Continue For
+        ' Prima esecuzione: entra nell'entry TaskGroup
+        If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
+            Dim entry = _compilationResult.TaskGroups.FirstOrDefault(
+                Function(tg) tg.NodeId = _entryTaskGroupId)
+            If entry IsNot Nothing AndAlso
+               Not _state.ExecutedTaskGroupIds.Contains(entry.NodeId) Then
+                Dim canEnter = entry.ExecCondition Is Nothing OrElse
+                               ConditionEvaluator.EvaluateCondition(entry.ExecCondition, _state)
+                If canEnter Then
+                    _state.CurrentNodeId = entry.NodeId
+                    _state.CurrentRowIndex = 0
+                    Console.WriteLine($"[FlowOrchestrator] ▶️ Entering entry TaskGroup {entry.NodeId}")
+                    Return entry
+                End If
             End If
+        End If
 
-            ' ✅ Valuta ExecCondition (include già "padre eseguito AND link condizione")
-            Dim canExecute As Boolean = True
-            If taskGroup.ExecCondition IsNot Nothing Then
-                canExecute = ConditionEvaluator.EvaluateCondition(taskGroup.ExecCondition, _state)
-            End If
+        ' Cerca il primo gruppo eseguibile non ancora eseguito
+        For Each tg In _compilationResult.TaskGroups
+            If _state.ExecutedTaskGroupIds.Contains(tg.NodeId) Then Continue For
 
+            Dim canExecute = tg.ExecCondition Is Nothing OrElse
+                             ConditionEvaluator.EvaluateCondition(tg.ExecCondition, _state)
             If canExecute Then
-                ' ✅ TaskGroup eseguibile trovato
-                Return taskGroup
+                If _state.CurrentNodeId <> tg.NodeId Then
+                    _state.CurrentNodeId = tg.NodeId
+                    _state.CurrentRowIndex = 0
+                End If
+                Console.WriteLine($"[FlowOrchestrator] ▶️ Entering TaskGroup {tg.NodeId}")
+                Return tg
             End If
         Next
 
-        ' ✅ Nessun TaskGroup eseguibile
         Return Nothing
     End Function
 
-
-    ' ✅ REMOVED: OnTaskEngineMessage handler - no longer needed without Motore
-
-    ''' <summary>
-    ''' Ferma l'esecuzione
-    ''' </summary>
-    Public Sub [Stop]()
-        _isRunning = False
-    End Sub
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' L2 — Trova riga eseguibile nel gruppo
+    ' ─────────────────────────────────────────────────────────────────────────
 
     ''' <summary>
-    ''' ✅ NEW: Fornisce input utente a un task utterance in attesa usando ProcessTurnEngine
+    ''' Trova la prima riga eseguibile nel TaskGroup a partire da CurrentRowIndex.
+    ''' CurrentRowIndex è 0-based e relativo alla lista taskGroup.Tasks.
+    ''' Se la condizione di una riga non è soddisfatta, avanza automaticamente.
+    ''' Restituisce Nothing se tutte le righe sono state eseguite o skippate.
     ''' </summary>
-    Public Async Function ProvideUserInput(taskId As String, userInput As String, resolveTranslation As Func(Of String, String)) As System.Threading.Tasks.Task(Of Boolean)
-        If Not _state.DialogueContexts.ContainsKey(taskId) Then
-            Console.WriteLine($"⚠️ [FlowOrchestrator] No DialogueContext found for task {taskId}")
-            Return False
-        End If
+    Private Function GetNextRowTask(taskGroup As TaskGroup) As CompiledTask
+        Dim i As Integer = _state.CurrentRowIndex
+        While i < taskGroup.Tasks.Count
+            Dim rowTask = taskGroup.Tasks(i)
 
-        Try
-            ' Find the task
-            Dim task = _compiledTasks.FirstOrDefault(Function(t) t.Id = taskId)
-            If task Is Nothing Then
-                Console.WriteLine($"⚠️ [FlowOrchestrator] Task {taskId} not found")
-                Return False
-            End If
-
-            ' Load DialogueContext from state
-            Dim ctxJson As String = CStr(_state.DialogueContexts(taskId))
-            Dim ctx = JsonConvert.DeserializeObject(Of TaskEngine.Orchestrator.DialogueContext)(ctxJson)
-            If ctx Is Nothing OrElse ctx.DialogueState Is Nothing Then
-                Console.WriteLine($"⚠️ [FlowOrchestrator] Invalid DialogueContext for task {taskId}")
-                Return False
-            End If
-
-            ' Cast task to CompiledUtteranceTask
-            Dim utteranceTask = TryCast(task, CompiledUtteranceTask)
-            If utteranceTask Is Nothing Then
-                Console.WriteLine($"⚠️ [FlowOrchestrator] Task {taskId} is not an UtteranceInterpretation task")
-                Return False
-            End If
-
-            ' Ensure CurrentTask and RootTask are set
-            If ctx.DialogueState.CurrentTask Is Nothing Then
-                ctx.DialogueState.CurrentTask = utteranceTask
-            End If
-            If ctx.DialogueState.RootTask Is Nothing Then
-                ctx.DialogueState.RootTask = utteranceTask
-            End If
-
-            ' ✅ STATELESS: Call TaskUtteranceStepExecutor.ProcessTurn (restituisce TextKey)
-            Dim result = TaskUtteranceStepExecutor.ProcessTurn(ctx.DialogueState, userInput)
-
-            ' ✅ Emit messages via MessageToShow event (risolvi TextKey qui)
-            ' Il messageCallback in FlowOrchestrator risolverà i TextKey prima di emettere
-            If result.Messages IsNot Nothing Then
-                For Each textKey As String In result.Messages
-                    ' ✅ Risolvi TextKey usando _resolveTranslation prima di emettere
-                    Dim resolvedText = If(_resolveTranslation IsNot Nothing, _resolveTranslation(textKey), textKey)
-                    RaiseEvent MessageToShow(Me, resolvedText)
-                Next
-            End If
-
-            ' Update DialogueState
-            ctx.DialogueState = result.NewState
-
-            ' Save updated DialogueContext to state
-            Dim updatedCtxJson = JsonConvert.SerializeObject(ctx)
-            _state.DialogueContexts(taskId) = updatedCtxJson
-
-            ' Save state
-            SaveState()
-
-            ' Check if task is completed
-            Dim isCompleted = result.Status = "completed" OrElse result.NewState.IsCompleted
-
-            ' If task completed, remove DialogueContext and resume execution
-            If isCompleted Then
-                _state.DialogueContexts.Remove(taskId)
-                SaveState()
-
-                ' Resume execution
-                If Not _isRunning Then
-                    Await ExecuteDialogueAsync()
+            If rowTask.Condition IsNot Nothing Then
+                If Not ConditionEvaluator.EvaluateCondition(rowTask.Condition, _state) Then
+                    Console.WriteLine($"[FlowOrchestrator] ⏭️ Skipping row {i} (condition false)")
+                    i += 1
+                    _state.CurrentRowIndex = i
+                    Continue While
                 End If
             End If
 
-            Console.WriteLine("✅ [FlowOrchestrator] Processed user input for task {0}. Completed: {1}", taskId, isCompleted)
-            Return True
+            _state.CurrentRowIndex = i
+            Return rowTask
+        End While
 
-        Catch ex As Exception
-            Console.WriteLine($"❌ [FlowOrchestrator] Error processing user input for task {taskId}: {ex.Message}")
-            Return False
-        End Try
+        Return Nothing
+    End Function
+
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' L3 — Dispatcher per tipo di task
+    ' ─────────────────────────────────────────────────────────────────────────
+
+    ''' <summary>
+    ''' Dispatcher: esegue UN turno del task corrente e restituisce RowTurnResult.
+    ''' Chiama l'handler specifico per tipo di task.
+    ''' </summary>
+    Private Async Function ProcessCurrentTurn(rowTask As CompiledTask) As System.Threading.Tasks.Task(Of RowTurnResult)
+        Select Case rowTask.TaskType
+
+            Case TaskTypes.UtteranceInterpretation
+                Return ProcessUtteranceTurn(DirectCast(rowTask, CompiledUtteranceTask))
+
+            Case TaskTypes.SayMessage
+                Return ProcessSayMessageTurn(DirectCast(rowTask, CompiledSayMessageTask))
+
+            Case TaskTypes.BackendCall
+                Return Await ProcessBackendTurn(rowTask)
+
+            Case TaskTypes.Transfer
+                Console.WriteLine($"[FlowOrchestrator] Transfer task {rowTask.Id} — auto-complete")
+                Return RowTurnResult.Completed()
+
+            Case TaskTypes.CloseSession
+                Return ProcessCloseSessionTurn()
+
+            Case Else
+                Console.WriteLine($"[FlowOrchestrator] ⚠️ Unknown task type {rowTask.TaskType} — skipping")
+                Return RowTurnResult.Completed()
+
+        End Select
     End Function
 
     ''' <summary>
-    ''' ✅ STATELESS: Salva ExecutionState su Redis
+    ''' Handler per UtteranceInterpretation.
+    ''' Chiama ProcessTurn UNA SOLA VOLTA (primitiva pura stateless).
+    ''' Il loop RunUntilInput gestisce le iterazioni successive.
+    ''' </summary>
+    Private Function ProcessUtteranceTurn(rowTask As CompiledUtteranceTask) As RowTurnResult
+        ' Carica o crea DialogueState per questa riga
+        Dim ds = LoadDialogueState(rowTask)
+
+        ' Consuma PendingUtterance (input utente o stringa vuota per auto-advance)
+        Dim utterance As String = _state.PendingUtterance
+        _state.PendingUtterance = ""
+
+        Console.WriteLine($"[FlowOrchestrator] ProcessUtteranceTurn task={rowTask.Id} utterance='{utterance}'")
+
+        ' UNA SOLA chiamata a ProcessTurn (primitiva pura)
+        Dim result = TaskUtteranceStepExecutor.ProcessTurn(ds, utterance)
+
+        ' Salva DialogueState aggiornato in ExecutionState.
+        ' ✅ TypeNameHandling.Auto preserva CurrentTask/RootTask come CompiledUtteranceTask
+        '    attraverso il roundtrip Redis, necessario per la corretta navigazione dei subtask.
+        Dim updatedCtx = JsonConvert.SerializeObject(
+            New With {.TaskId = rowTask.Id, .DialogueState = result.NewState},
+            _dialogueStateSettings)
+        _state.DialogueContexts(rowTask.Id) = updatedCtx
+
+        ' Mappa DialogueTurnResult → RowTurnResult
+        If result.NewState.IsCompleted Then
+            _state.DialogueContexts.Remove(rowTask.Id)
+            Return RowTurnResult.Completed(result.Messages)
+        End If
+
+        If result.NewState.Mode = DialogueMode.WaitingForUtterance Then
+            ' Task in attesa di input utente
+            Return RowTurnResult.WaitingForInput(rowTask.Id, result.Messages)
+        End If
+
+        ' Stato intermedio (es. dopo un Match, prima della Confirmation)
+        ' RunUntilInput itera di nuovo sulla stessa riga con PendingUtterance = ""
+        Return RowTurnResult.AutoAdvance(result.Messages)
+    End Function
+
+    ''' <summary>
+    ''' Handler per SayMessage: emette il messaggio e completa subito.
+    ''' </summary>
+    Private Function ProcessSayMessageTurn(rowTask As CompiledSayMessageTask) As RowTurnResult
+        If String.IsNullOrEmpty(rowTask.TextKey) Then
+            Return RowTurnResult.Completed()
+        End If
+        Return RowTurnResult.Completed(New List(Of String) From {rowTask.TextKey})
+    End Function
+
+    ''' <summary>
+    ''' Handler per BackendCall (placeholder — completa automaticamente per ora).
+    ''' </summary>
+    Private Async Function ProcessBackendTurn(rowTask As CompiledTask) As System.Threading.Tasks.Task(Of RowTurnResult)
+        Console.WriteLine($"[FlowOrchestrator] BackendCall {rowTask.Id} — not yet implemented, auto-complete")
+        Return RowTurnResult.Completed()
+    End Function
+
+    ''' <summary>
+    ''' Handler per CloseSession: termina definitivamente il flow.
+    ''' </summary>
+    Private Function ProcessCloseSessionTurn() As RowTurnResult
+        Console.WriteLine($"[FlowOrchestrator] CloseSession — setting FlowCompleted=True")
+        _state.FlowCompleted = True
+        SaveState()
+        RaiseEvent ExecutionCompleted(Me, Nothing)
+        Return RowTurnResult.Completed()
+    End Function
+
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' Helper privati
+    ' ─────────────────────────────────────────────────────────────────────────
+
+    ''' <summary>
+    ''' Carica DialogueState dal contesto serializzato in ExecutionState,
+    ''' oppure crea un nuovo stato iniziale per la prima esecuzione del task.
+    ''' </summary>
+    Private Function LoadDialogueState(task As CompiledUtteranceTask) As DialogueState
+        If _state.DialogueContexts.ContainsKey(task.Id) Then
+            Try
+                ' ✅ Deserializza con TypeNameHandling.Auto + ITaskConverter per ripristinare
+                '    CurrentTask/RootTask come CompiledUtteranceTask (sono Object in DialogueState).
+                '    Senza TypeNameHandling.Auto, CurrentTask sarebbe sempre Nothing dopo il
+                '    roundtrip Redis, con conseguente reset errato al task radice.
+                Dim obj = JsonConvert.DeserializeObject(Of JObject)(_state.DialogueContexts(task.Id))
+                If obj?("DialogueState") IsNot Nothing Then
+                    Dim ds = obj("DialogueState").ToObject(Of DialogueState)(
+                        JsonSerializer.CreateDefault(_dialogueStateSettings))
+                    If ds IsNot Nothing Then
+                        ' Fallback solo se il contesto era stato scritto senza TypeNameHandling
+                        ' (es. dati legacy o prima iterazione)
+                        If ds.CurrentTask Is Nothing Then ds.CurrentTask = task
+                        If ds.RootTask Is Nothing Then ds.RootTask = task
+                        Console.WriteLine($"[FlowOrchestrator] ✅ Loaded DialogueState for task {task.Id}, Mode={ds.Mode}")
+                        Return ds
+                    End If
+                End If
+            Catch ex As Exception
+                Console.WriteLine($"[FlowOrchestrator] ⚠️ Failed to load DialogueState for {task.Id}: {ex.Message}")
+            End Try
+        End If
+
+        ' Prima esecuzione: crea nuovo DialogueState
+        Console.WriteLine($"[FlowOrchestrator] 🆕 Creating new DialogueState for task {task.Id}")
+        Return New DialogueState() With {
+            .CurrentTask = task,
+            .RootTask = task,
+            .CurrentStepType = DialogueStepType.Start,
+            .Mode = DialogueMode.ExecutingStep
+        }
+    End Function
+
+    ''' <summary>
+    ''' Risolve un TextKey (GUID) nel testo tradotto.
+    ''' Se non c'è un resolver o la chiave è vuota, restituisce la chiave stessa.
+    ''' </summary>
+    Private Function ResolveText(textKey As String) As String
+        If String.IsNullOrEmpty(textKey) Then Return textKey
+        If _resolveTranslation Is Nothing Then Return textKey
+        Dim resolved = _resolveTranslation(textKey)
+        Return If(String.IsNullOrEmpty(resolved), textKey, resolved)
+    End Function
+
+    ''' <summary>
+    ''' Carica ExecutionState da Redis oppure crea un nuovo stato pulito.
+    ''' </summary>
+    Private Function LoadOrCreateState() As ExecutionState
+        If _executionStateStorage IsNot Nothing AndAlso Not String.IsNullOrEmpty(_sessionId) Then
+            Try
+                Dim method = _executionStateStorage.GetType().GetMethod("GetExecutionState")
+                If method IsNot Nothing Then
+                    Dim loaded = DirectCast(method.Invoke(_executionStateStorage, {_sessionId}), ExecutionState)
+                    If loaded IsNot Nothing Then
+                        Console.WriteLine($"[FlowOrchestrator] ✅ Loaded ExecutionState from Redis for session {_sessionId}")
+                        Return loaded
+                    End If
+                End If
+            Catch ex As Exception
+                Console.WriteLine($"[FlowOrchestrator] ⚠️ Failed to load ExecutionState: {ex.Message}, using new state")
+            End Try
+        End If
+        Return New ExecutionState()
+    End Function
+
+    ''' <summary>
+    ''' Persiste ExecutionState su Redis.
     ''' </summary>
     Private Sub SaveState()
         If _executionStateStorage IsNot Nothing AndAlso Not String.IsNullOrEmpty(_sessionId) Then
             Try
-                ' Usa reflection per chiamare SaveExecutionState senza dipendenza diretta
-                Dim saveExecutionStateMethod = _executionStateStorage.GetType().GetMethod("SaveExecutionState")
-                If saveExecutionStateMethod IsNot Nothing Then
-                    saveExecutionStateMethod.Invoke(_executionStateStorage, {_sessionId, _state})
+                Dim method = _executionStateStorage.GetType().GetMethod("SaveExecutionState")
+                If method IsNot Nothing Then
+                    method.Invoke(_executionStateStorage, {_sessionId, _state})
                 End If
             Catch ex As Exception
-                Console.WriteLine($"[FlowOrchestrator] ⚠️ Failed to save ExecutionState to Redis: {ex.Message}")
-                ' Non solleviamo eccezione per non interrompere l'esecuzione, ma loggiamo l'errore
+                Console.WriteLine($"[FlowOrchestrator] ⚠️ Failed to save ExecutionState: {ex.Message}")
             End Try
         End If
     End Sub
-End Class
 
+End Class

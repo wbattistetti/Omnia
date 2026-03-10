@@ -180,7 +180,13 @@ export async function executeOrchestratorBackend(
     sse.addEventListener('waitingForInput', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        console.log('[ORCHESTRATOR] ⏳ SSE Event: waitingForInput', { taskId: data.taskId });
+        console.log('[ORCHESTRATOR] ⏳ SSE Event: waitingForInput', {
+          taskId: data.taskId,
+          nodeId: data.nodeId,
+          timestamp: data.timestamp,
+          // ✅ DEBUG: Log completo per confronto DDT vs Flow
+          fullData: data
+        });
         if (callbacks.onWaitingForInput) {
           callbacks.onWaitingForInput(data);
         } else {

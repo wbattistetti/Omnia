@@ -42,6 +42,36 @@ Public Class ExecutionState
     ''' </summary>
     Public Property DialogueContexts As Dictionary(Of String, String)
 
+    ' ────────────────────────────────────────────────────────────────────────
+    ' ✅ STATELESS LOOP: Campi per il loop RunUntilInput
+    ' Questi sostituiranno session.IsWaitingForInput (flag duplicato rimosso)
+    ' ────────────────────────────────────────────────────────────────────────
+
+    ''' <summary>
+    ''' Quando True, il loop RunUntilInput si ferma e aspetta input utente.
+    ''' Unica fonte di verità per "waiting for input".
+    ''' </summary>
+    Public Property RequiresInput As Boolean = False
+
+    ''' <summary>
+    ''' Input utente in attesa di essere processato al prossimo turn.
+    ''' Impostato da ProvideUserInput, consumato da ProcessStateTurn.
+    ''' Stringa vuota = nessun input pendente.
+    ''' </summary>
+    Public Property PendingUtterance As String = ""
+
+    ''' <summary>
+    ''' ID del task che sta aspettando input utente.
+    ''' Impostato da ProcessStateTurn quando RequiresInput = True.
+    ''' </summary>
+    Public Property WaitingTaskId As String = Nothing
+
+    ''' <summary>
+    ''' True quando il flow è terminato definitivamente (CloseSession eseguito).
+    ''' Quando True, GetNextTaskGroup restituisce Nothing immediatamente.
+    ''' </summary>
+    Public Property FlowCompleted As Boolean = False
+
     Public Sub New()
         ExecutedTaskIds = New HashSet(Of String)()
         ExecutedTaskGroupIds = New HashSet(Of String)()
@@ -50,5 +80,9 @@ Public Class ExecutionState
         CurrentNodeId = Nothing
         CurrentRowIndex = 0
         DialogueContexts = New Dictionary(Of String, String)()
+        RequiresInput = False
+        PendingUtterance = ""
+        WaitingTaskId = Nothing
+        FlowCompleted = False
     End Sub
 End Class

@@ -12,12 +12,14 @@ Public Class BackendCallTaskExecutor
         MyBase.New()
     End Sub
 
-    Public Overrides Async Function Execute(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
+    Public Overrides Async Function Execute(task As CompiledTask, state As ExecutionState, Optional userInput As String = "") As System.Threading.Tasks.Task(Of TaskExecutionResult)
         ' TODO: Implementare chiamata backend
         Console.WriteLine($"⚠️ [BackendCallTaskExecutor] Task type BackendCall not yet implemented, returning success")
 
+        ' ✅ ARCHITECTURAL: BackendCall è un task atomico - se Success=True, è completato
         Return New TaskExecutionResult() With {
-            .Success = True
+            .Success = True,
+            .IsCompleted = True  ' ✅ TaskExecutor decide: task atomico completato
         }
     End Function
 End Class

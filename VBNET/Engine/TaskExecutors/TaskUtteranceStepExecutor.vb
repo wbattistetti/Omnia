@@ -41,16 +41,19 @@ Public Class TaskUtteranceStepExecutor
 
     ''' <summary>
     ''' Esegue un task UtteranceInterpretation
+    ''' ✅ ARCHITECTURAL: Loop interno che processa automaticamente tutti gli step fino a completamento o richiesta input.
+    ''' Questo garantisce che il comportamento sia identico nel test singolo e nel flow completo.
     ''' ✅ STATELESS: Usa ProcessTurn (funzione pura) e emette TextKey via messageCallback.
     ''' La risoluzione dei TextKey avverrà in FlowOrchestrator.messageCallback (SINGLE POINT OF TRUTH).
     ''' </summary>
-    Public Overrides Async Function Execute(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
+    Public Overrides Async Function Execute(task As CompiledTask, state As ExecutionState, Optional userInput As String = "") As System.Threading.Tasks.Task(Of TaskExecutionResult)
         ' ✅ Cast to CompiledUtteranceTask
         Dim utteranceTask = TryCast(task, CompiledUtteranceTask)
         If utteranceTask Is Nothing Then
             Return New TaskExecutionResult() With {
                 .Success = False,
-                .Err = $"Task {task.Id} is not a CompiledUtteranceTask"
+                .Err = $"Task {task.Id} is not a CompiledUtteranceTask",
+                .IsCompleted = False
             }
         End If
 
@@ -89,25 +92,72 @@ Public Class TaskUtteranceStepExecutor
             Console.WriteLine($"[TaskUtteranceStepExecutor] Created new DialogueState for task {task.Id}")
         End If
 
-        ' ✅ STATELESS: ProcessTurn è pura, non richiede resolveTranslation
-        ' I TextKey verranno risolti da FlowOrchestrator.messageCallback (SINGLE POINT OF TRUTH)
-        Dim result = TaskUtteranceStepExecutor.ProcessTurn(dialogueState, "")
+        ' ✅ ARCHITECTURAL: Loop interno - processa automaticamente tutti gli step fino a completamento o richiesta input
+        ' Questo garantisce che Success step venga processato automaticamente senza bisogno di patch esterne
+        Dim utterance As String = If(String.IsNullOrEmpty(userInput), "", userInput)
+        Dim result As DialogueTurnResult = Nothing
+        Dim iterationCount As Integer = 0
+        Dim maxIterations As Integer = 100 ' ✅ Guard contro loop infiniti
 
-        ' ✅ Emit TextKey via messageCallback - FlowOrchestrator li risolverà
-        If result.Messages IsNot Nothing AndAlso result.Messages.Count > 0 Then
-            For Each textKey As String In result.Messages
-                If _messageCallback IsNot Nothing Then
-                    _messageCallback(textKey, "message", 0)
-                End If
-            Next
-            Console.WriteLine($"[TaskUtteranceStepExecutor] Emitted {result.Messages.Count} TextKeys for task {task.Id}")
-        End If
+        Do
+            iterationCount += 1
+            If iterationCount > maxIterations Then
+                Console.WriteLine($"[TaskUtteranceStepExecutor] ⚠️ Max iterations reached for task {task.Id}, breaking loop")
+                Exit Do
+            End If
+
+            ' ✅ STATELESS: ProcessTurn è pura, non richiede resolveTranslation
+            ' I TextKey verranno risolti da FlowOrchestrator.messageCallback (SINGLE POINT OF TRUTH)
+            result = TaskUtteranceStepExecutor.ProcessTurn(dialogueState, utterance)
+
+            ' ✅ Emit TextKey via messageCallback - FlowOrchestrator li risolverà
+            If result.Messages IsNot Nothing AndAlso result.Messages.Count > 0 Then
+                For Each textKey As String In result.Messages
+                    If _messageCallback IsNot Nothing Then
+                        _messageCallback(textKey, "message", 0)
+                    End If
+                Next
+                Console.WriteLine($"[TaskUtteranceStepExecutor] Emitted {result.Messages.Count} TextKeys for task {task.Id} (iteration {iterationCount})")
+            End If
+
+            ' ✅ Aggiorna DialogueState
+            dialogueState = result.NewState
+
+            ' ✅ GUARD 1: Esci se richiede input utente
+            If result.Status = "waiting_for_input" OrElse dialogueState.Mode = DialogueMode.WaitingForUtterance Then
+                Console.WriteLine($"[TaskUtteranceStepExecutor] ⏸️ Task {task.Id} requires user input, exiting loop (iteration {iterationCount})")
+                Exit Do
+            End If
+
+            ' ✅ GUARD 2: Esci se completato
+            If result.Status = "completed" OrElse dialogueState.IsCompleted Then
+                Console.WriteLine($"[TaskUtteranceStepExecutor] ✅ Task {task.Id} completed, exiting loop (iteration {iterationCount})")
+                Exit Do
+            End If
+
+            ' ✅ GUARD 3: Continua solo se siamo in uno step che può essere processato automaticamente
+            ' (es. Success step dopo che tutti i dati sono stati raccolti, senza bisogno di input)
+            ' Reset utterance per prossimo turno automatico
+            utterance = ""
+
+            ' ✅ Continua solo se siamo in Success step e non ancora completato
+            ' (Success step può essere processato automaticamente senza input)
+            If dialogueState.CurrentStepType = DialogueStepType.Success AndAlso Not dialogueState.IsCompleted Then
+                Console.WriteLine($"[TaskUtteranceStepExecutor] 🔄 Task {task.Id} in Success step, continuing loop to process automatically (iteration {iterationCount})")
+                Continue Do
+            End If
+
+            ' ✅ Se non siamo in Success step, esci (non possiamo processare automaticamente altri step)
+            Console.WriteLine($"[TaskUtteranceStepExecutor] ⚠️ Task {task.Id} not in Success step and not completed, exiting loop (iteration {iterationCount}, step: {dialogueState.CurrentStepType})")
+            Exit Do
+
+        Loop
 
         ' ✅ Update DialogueState in state (serializza come DialogueContext per compatibilità con Orchestrator)
         ' Orchestrator si aspetta DialogueContext con TaskId e DialogueState
         Dim updatedCtx = New With {
             .TaskId = task.Id,
-            .DialogueState = result.NewState
+            .DialogueState = dialogueState
         }
         Dim updatedCtxJson = JsonConvert.SerializeObject(updatedCtx)
         If state.DialogueContexts Is Nothing Then
@@ -115,14 +165,25 @@ Public Class TaskUtteranceStepExecutor
         End If
         state.DialogueContexts(task.Id) = updatedCtxJson
 
-        ' ✅ Check if task requires input
-        Dim requiresInput = result.Status = "waiting_for_input" OrElse result.NewState.Mode = DialogueMode.WaitingForUtterance
+        ' ✅ ARCHITECTURAL: TaskExecutor decide tutto (incapsula tutto)
+        ' Decide se richiede input basandosi su DialogueState
+        Dim requiresInput = result.Status = "waiting_for_input" OrElse dialogueState.Mode = DialogueMode.WaitingForUtterance
 
-        Console.WriteLine($"[TaskUtteranceStepExecutor] Task {task.Id} execution completed: RequiresInput={requiresInput}")
+        ' ✅ ARCHITECTURAL: TaskExecutor decide se è completato basandosi su DialogueState.IsCompleted
+        ' Un TaskUtterance è completato quando ha terminato tutto il suo ciclo:
+        ' - Arrivato a Success step (se esiste) e processato
+        ' - Validato e completato tutti i dati che il task si aspettava
+        ' - DialogueState.IsCompleted = True
+        Dim isCompleted = result.Status = "completed" OrElse dialogueState.IsCompleted
+
+        Dim waitingTaskId = If(requiresInput, task.Id, Nothing)
+        Console.WriteLine($"[TaskUtteranceStepExecutor] ✅ Task {task.Id} execution completed: RequiresInput={requiresInput}, IsCompleted={isCompleted}, WaitingTaskId={If(requiresInput, task.Id, "Nothing")}, Iterations={iterationCount}")
 
         Return New TaskExecutionResult() With {
             .Success = True,
-            .RequiresInput = requiresInput
+            .RequiresInput = requiresInput,
+            .WaitingTaskId = waitingTaskId,
+            .IsCompleted = isCompleted  ' ✅ TaskExecutor decide, non FlowOrchestrator
         }
     End Function
 

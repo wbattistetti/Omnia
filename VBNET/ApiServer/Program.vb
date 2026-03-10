@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports System.IO
+Imports System.Linq
 Imports System.Threading
 Imports ApiServer.Helpers
 Imports ApiServer.Models
@@ -596,10 +597,14 @@ Module Program
                                                      End Try
                                                  End Sub
 
+            ' ✅ ARCHITECTURAL: Handler per WaitingForInput - SOLO emissione SSE
+            ' ExecutionState.DialogueContexts è l'unica fonte di verità, non impostiamo flag duplicati
             Dim onWaitingForInput As Action(Of Object) = Sub(data)
                                                              Try
-                                                                 session.IsWaitingForInput = True
-                                                                 session.WaitingForInputData = data
+                                                                 ' ✅ SOLO emissione SSE per frontend
+                                                                 ' ❌ RIMOSSO: session.IsWaitingForInput = True
+                                                                 ' ❌ RIMOSSO: session.WaitingForInputData = data
+                                                                 ' ExecutionState.DialogueContexts è già stato aggiornato da TaskExecutor
                                                                  sseStreamManager.EmitEvent(sessionId, "waitingForInput", data)
                                                              Catch ex As Exception
                                                                  Console.WriteLine($"❌ [SSE] Error in onWaitingForInput handler: {ex.Message}")
@@ -644,9 +649,22 @@ Module Program
             Console.WriteLine($"🔵 [HandleOrchestratorSessionStream] All handlers registered - replay completed")
             System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStream] Handlers registered - replay completed")
 
-            ' ✅ HANDSHAKE: Send waitingForInput event if already waiting (prima dell'evento ready)
-            If session.IsWaitingForInput Then
-                sseStreamManager.EmitEvent(sessionId, "waitingForInput", session.WaitingForInputData)
+            ' ✅ ARCHITECTURAL: Send waitingForInput event if already waiting (prima dell'evento ready)
+            ' Leggi da ExecutionState.DialogueContexts, non da flag duplicati
+            Dim executionStateStorage = SessionManager.GetExecutionStateStorage()
+            If executionStateStorage IsNot Nothing Then
+                Dim executionState = executionStateStorage.GetExecutionState(sessionId)
+                If executionState IsNot Nothing AndAlso executionState.DialogueContexts IsNot Nothing AndAlso executionState.DialogueContexts.Count > 0 Then
+                    Dim taskId = executionState.DialogueContexts.Keys.FirstOrDefault()
+                    If Not String.IsNullOrEmpty(taskId) Then
+                        Dim waitingData = New With {
+                            .taskId = taskId,
+                            .timestamp = DateTime.UtcNow.ToString("O")
+                        }
+                        sseStreamManager.EmitEvent(sessionId, "waitingForInput", waitingData)
+                        Console.WriteLine($"✅ [HandleOrchestratorSessionStream] Replayed waitingForInput event for task {taskId} (from ExecutionState)")
+                    End If
+                End If
             End If
 
             ' ✅ HANDSHAKE: Notifica al client che lo stream è pronto e l'orchestrator partirà
@@ -732,19 +750,81 @@ Module Program
 
             Console.WriteLine($"✅ [HandleOrchestratorSessionInput] Processing input: {request.Input.Substring(0, Math.Min(100, request.Input.Length))}")
 
-            ' TODO: Process input and continue orchestrator execution
-            ' For now, just acknowledge receipt
-            ' In the future, this should:
-            ' 1. Add input to session state
-            ' 2. Continue orchestrator execution if it was waiting for input
-            ' 3. Trigger next task execution
+            ' ✅ ARCHITECTURAL: Verifica da ExecutionState (unica fonte di verità)
+            ' WaitingTaskId è impostato da RunUntilInput quando RequiresInput=True
+            Dim executionStateStorage = SessionManager.GetExecutionStateStorage()
+            If executionStateStorage Is Nothing Then
+                Console.WriteLine($"❌ [HandleOrchestratorSessionInput] ExecutionStateStorage is not available")
+                Return Results.Problem(title:="ExecutionStateStorage not available", detail:="Cannot verify if session is waiting for input", statusCode:=500)
+            End If
 
-            ' Clear waiting state
-            session.IsWaitingForInput = False
-            session.WaitingForInputData = Nothing
+            Dim executionState = executionStateStorage.GetExecutionState(sessionId)
+            If executionState Is Nothing Then
+                Console.WriteLine($"⚠️ [HandleOrchestratorSessionInput] ExecutionState not found for session {sessionId}")
+                Return Results.BadRequest(New With {.error = "Session is not waiting for input"})
+            End If
+
+            ' ✅ Usa WaitingTaskId come fonte di verità primaria (impostato da RunUntilInput)
+            ' Fallback su DialogueContexts per compatibilità con sessioni vecchie
+            Dim taskId As String = executionState.WaitingTaskId
+            If String.IsNullOrEmpty(taskId) Then
+                ' Fallback: cerca in DialogueContexts
+                If executionState.DialogueContexts IsNot Nothing AndAlso executionState.DialogueContexts.Count > 0 Then
+                    taskId = executionState.DialogueContexts.Keys.FirstOrDefault()
+                End If
+            End If
+
+            If String.IsNullOrEmpty(taskId) Then
+                Console.WriteLine($"⚠️ [HandleOrchestratorSessionInput] No task waiting for input (WaitingTaskId=empty, DialogueContexts=empty)")
+                Return Results.BadRequest(New With {.error = "Session is not waiting for input"})
+            End If
+
+            Console.WriteLine($"✅ [HandleOrchestratorSessionInput] Found task {taskId} waiting for input")
+
+            ' ✅ ARCHITECTURAL: Crea resolveTranslation function (come in GetSession)
+            Dim resolveTranslation As Func(Of String, String) = Nothing
+            If Not String.IsNullOrEmpty(session.ProjectId) AndAlso Not String.IsNullOrEmpty(session.Locale) Then
+                Dim translationRepository = SessionManager.GetTranslationRepository()
+                If translationRepository IsNot Nothing Then
+                    resolveTranslation = Function(textKey As String) As String
+                                             If String.IsNullOrEmpty(textKey) Then
+                                                 Return Nothing
+                                             End If
+                                             Try
+                                                 Return SessionManager.ResolveTranslation(session.ProjectId, session.Locale, textKey)
+                                             Catch ex As Exception
+                                                 Console.WriteLine($"⚠️ [HandleOrchestratorSessionInput] Error resolving translation for {textKey}: {ex.Message}")
+                                                 Return textKey ' Fallback: usa TextKey stesso
+                                             End Try
+                                         End Function
+                End If
+            End If
+
+            ' ✅ ARCHITECTURAL: Chiama FlowOrchestrator.ProvideUserInput
+            ' TaskExecutor gestisce tutto internamente, FlowOrchestrator delega e propaga
+            If session.Orchestrator Is Nothing Then
+                Console.WriteLine($"❌ [HandleOrchestratorSessionInput] Orchestrator is Nothing")
+                Return Results.Problem(title:="Orchestrator not available", detail:="Session orchestrator is not initialized", statusCode:=500)
+            End If
+
+            Console.WriteLine($"✅ [HandleOrchestratorSessionInput] Calling FlowOrchestrator.ProvideUserInput for task {taskId}")
+            Dim inputProcessed = Await session.Orchestrator.ProvideUserInput(taskId, request.Input, resolveTranslation)
+
+            If Not inputProcessed Then
+                Console.WriteLine($"❌ [HandleOrchestratorSessionInput] Failed to process input for task {taskId}")
+                Return Results.Problem(title:="Failed to process input", detail:="Orchestrator could not process the input", statusCode:=500)
+            End If
+
+            ' ✅ ARCHITECTURAL: ExecutionState viene aggiornato da ProvideUserInput
+            ' Se il task è completato, DialogueContexts viene rimosso automaticamente
+            ' ❌ RIMOSSO: session.IsWaitingForInput = False (flag duplicato)
+            ' ❌ RIMOSSO: session.WaitingForInputData = Nothing (flag duplicato)
+
+            Console.WriteLine($"✅ [HandleOrchestratorSessionInput] Input processed successfully for task {taskId} (ExecutionState updated by ProvideUserInput)")
 
             Return Results.Ok(New With {
                 .success = True,
+                .taskId = taskId,
                 .timestamp = DateTime.UtcNow.ToString("O")
             })
         Catch ex As Exception

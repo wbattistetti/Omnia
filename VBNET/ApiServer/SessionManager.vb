@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System
 Imports Compiler
 Imports TaskEngine
 Imports TaskEngine.Orchestrator
@@ -664,16 +665,19 @@ Public Class SessionManager
                                                                 session.EventEmitter.Emit("error", errorData)
                                                             End Sub
 
-            ' ✅ UNIFIED: Handler per WaitingForInput (allinea con TaskSessionHandlers)
+            ' ✅ ARCHITECTURAL: Handler per WaitingForInput - SOLO emissione evento per frontend
+            ' ExecutionState.DialogueContexts è l'unica fonte di verità, non impostiamo flag duplicati
             AddHandler session.Orchestrator.WaitingForInput, Sub(sender, taskId)
                                                                  Dim waitingData = New With {
                                                                      .taskId = taskId,
                                                                      .timestamp = DateTime.UtcNow.ToString("O")
                                                                  }
-                                                                 session.IsWaitingForInput = True
-                                                                 session.WaitingForInputData = waitingData
+                                                                 ' ✅ SOLO emissione evento per frontend (SSE)
+                                                                 ' ❌ RIMOSSO: session.IsWaitingForInput = True
+                                                                 ' ❌ RIMOSSO: session.WaitingForInputData = waitingData
+                                                                 ' ExecutionState.DialogueContexts è già stato aggiornato da TaskExecutor
                                                                  session.EventEmitter.Emit("waitingForInput", waitingData)
-                                                                 Console.WriteLine($"[SessionManager] ✅ WaitingForInput event emitted via EventEmitter for task {taskId}")
+                                                                 Console.WriteLine($"[SessionManager] ✅ WaitingForInput event emitted via EventEmitter for task {taskId} (ExecutionState is source of truth)")
                                                              End Sub
 
             Console.WriteLine($"✅ [SessionManager] GetSession: All handlers registered for {sessionId}")
@@ -861,6 +865,16 @@ Public Class SessionManager
             End If
         End SyncLock
     End Sub
+
+    ''' <summary>
+    ''' ✅ ARCHITECTURAL: Ottiene ExecutionStateStorage per leggere ExecutionState
+    ''' ExecutionState.DialogueContexts è l'unica fonte di verità per "waiting for input"
+    ''' </summary>
+    Public Shared Function GetExecutionStateStorage() As ApiServer.Interfaces.IExecutionStateStorage
+        SyncLock _lock
+            Return _executionStateStorage
+        End SyncLock
+    End Function
 
     ''' <summary>
     ''' ✅ STATELESS: Avvia l'esecuzione del task (chiamato da Redis Pub/Sub quando SSE si connette)
@@ -1403,9 +1417,9 @@ Public Class SessionManager
                                                                          Console.Out.Flush()
 
                                                                          If session.Orchestrator IsNot Nothing Then
-                                                                             Console.WriteLine($"🔵 [SessionManager] Calling ExecuteDialogueAsync()...")
+                                                                             Console.WriteLine($"🔵 [SessionManager] Calling RunUntilInput()...")
                                                                              Console.Out.Flush()
-                                                                             Await session.Orchestrator.ExecuteDialogueAsync()
+                                                                             Await session.Orchestrator.RunUntilInput()
                                                                              Console.WriteLine($"✅ [SessionManager] Orchestrator execution completed for session {sessionId}")
                                                                              System.Diagnostics.Debug.WriteLine($"✅ [SessionManager] Orchestrator completed for session {sessionId}")
                                                                              Console.Out.Flush()

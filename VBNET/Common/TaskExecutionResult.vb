@@ -19,4 +19,11 @@ Public Class TaskExecutionResult
     ''' ID del task che sta attendendo input (se RequiresInput = True)
     ''' </summary>
     Public Property WaitingTaskId As String = Nothing
+
+    ''' <summary>
+    ''' ✅ ARCHITECTURAL: Indica se il task è completato
+    ''' Solo TaskExecutor decide questo, basandosi su DialogueState.IsCompleted o logica interna del task
+    ''' FlowOrchestrator NON decide, legge solo questo valore
+    ''' </summary>
+    Public Property IsCompleted As Boolean = False
 End Class

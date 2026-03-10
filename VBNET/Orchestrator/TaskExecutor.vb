@@ -40,12 +40,14 @@ Public Class TaskExecutor
     Public Shared Async Function ExecuteTask(
         task As CompiledTask,
         state As ExecutionState,
-        messageCallback As Action(Of String, String, Integer)
+        messageCallback As Action(Of String, String, Integer),
+        Optional userInput As String = ""
     ) As System.Threading.Tasks.Task(Of TaskExecutionResult)
         If task Is Nothing Then
             Return New TaskExecutionResult() With {
                 .Success = False,
-                .Err = "Task is Nothing"
+                .Err = "Task is Nothing",
+                .IsCompleted = False
             }
         End If
 
@@ -56,18 +58,22 @@ Public Class TaskExecutor
             If executor Is Nothing Then
                 Return New TaskExecutionResult() With {
                     .Success = False,
-                    .Err = $"No executor found for task type: {task.TaskType}"
+                    .Err = $"No executor found for task type: {task.TaskType}",
+                    .IsCompleted = False
                 }
             End If
 
             ' Imposta callback e esegui
             executor.SetMessageCallback(messageCallback)
-            Return Await executor.Execute(task, state)
+            ' ✅ PROPAGA: ritorna esattamente quello che l'executor specifico ha deciso (incluso IsCompleted)
+            ' ✅ Passa userInput solo se fornito (per TaskUtteranceStepExecutor)
+            Return Await executor.Execute(task, state, userInput)
 
         Catch ex As Exception
             Return New TaskExecutionResult() With {
                 .Success = False,
-                .Err = ex.Message
+                .Err = ex.Message,
+                .IsCompleted = False
             }
         End Try
     End Function

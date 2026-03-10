@@ -2,7 +2,6 @@ Option Strict On
 Option Explicit On
 Imports Newtonsoft.Json
 Imports TaskEngine
-Imports Compiler.DTO.IDE
 
 ''' <summary>
 ''' TaskNode: corrisponde ESATTAMENTE a TaskTreeNode TypeScript del frontend

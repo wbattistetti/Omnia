@@ -3,7 +3,6 @@ Option Explicit On
 Imports System.Linq
 Imports System.Text.RegularExpressions
 Imports TaskEngine
-Imports Compiler.DTO.IDE
 
 ''' <summary>
 ''' Helper per compilare NLPContract (IDE) in CompiledNlpContract (Runtime)

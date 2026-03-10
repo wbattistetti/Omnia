@@ -60,6 +60,7 @@
     <!-- Execution State (shared between Orchestrator and Engine) -->
     <Compile Include="ExecutionState.vb" />
     <Compile Include="TaskExecutionResult.vb" />
+    <Compile Include="RowTurnResult.vb" />
 
     <!-- DSL Interpreter -->
     <Compile Include="DSL\ASTNode.vb" />

@@ -25,5 +25,5 @@ Public MustInherit Class TaskExecutorBase
     ''' <summary>
     ''' Esegue un task compilato
     ''' </summary>
-    Public MustOverride Function Execute(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
+    Public MustOverride Function Execute(task As CompiledTask, state As ExecutionState, Optional userInput As String = "") As System.Threading.Tasks.Task(Of TaskExecutionResult)
 End Class

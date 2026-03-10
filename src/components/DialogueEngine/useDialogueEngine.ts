@@ -1,6 +1,6 @@
 // React hook for Dialogue Engine
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import type { CompiledTask, CompilationResult, ExecutionState } from '../FlowCompiler/types';
@@ -26,34 +26,69 @@ interface UseDialogueEngineOptions {
   translations?: Record<string, string>; // Add translations support
 }
 
+/**
+ * ✅ ARCHITECTURAL: Stable engine instance pattern
+ *
+ * This hook maintains a stable engine instance across React Strict Mode remounts by:
+ * 1. Storing all options in a ref (optionsRef) - updated via useEffect
+ * 2. Using optionsRef.current in all callbacks (never directly from props)
+ * 3. Keeping critical state (SSE, sessionId, orchestratorControl) in refs
+ * 4. Using useState only for UI-reactive state (executionState, isRunning, currentTask)
+ *
+ * This ensures:
+ * - No engine recreation on remount (hook is always called at same level)
+ * - No state loss during React Strict Mode double-invocation
+ * - Stable callbacks that don't cause re-renders
+ * - Options can be updated without recreating the engine
+ */
 export function useDialogueEngine(options: UseDialogueEngineOptions) {
+  // ✅ STATE: UI-reactive state (triggers re-renders)
   const [executionState, setExecutionState] = useState<ExecutionState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [currentTask, setCurrentTask] = useState<CompiledTask | null>(null);
-  const engineRef = useRef<DialogueEngine | null>(null);
-  const sessionIdRef = useRef<string | null>(null); // Store sessionId in a ref for real-time access
 
-  // ✅ NEW: Get projectData for conditions
-  const { data: projectData } = useProjectData();
+  // ✅ REFS: Stable state that survives remounts
+  const engineRef = useRef<{
+    orchestratorControl?: { sessionId: string; stop: () => void };
+    sessionId?: string;
+    waitingForInput?: { taskId: string; nodeId?: string };
+  } | null>(null);
 
-  // 🎨 [HIGHLIGHT] Ref to track previous state for logging
+  const sessionIdRef = useRef<string | null>(null);
   const prevStateRef = useRef<{ currentNodeId?: string | null; executedCount?: number }>({});
+
+  // ✅ CRITICAL: Store options in ref for stable access in callbacks
+  // This ref is updated via useEffect when options change, but the engine instance
+  // is never recreated - only the options reference is updated
+  const optionsRef = useRef<UseDialogueEngineOptions>(options);
+
+  // ✅ Update options ref when options change (without recreating engine)
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
+
+  // ✅ Get projectData for conditions
+  const { data: projectData } = useProjectData();
 
   // Expose currentTask for useNewFlowOrchestrator
   const getCurrentTask = useCallback(() => currentTask, [currentTask]);
 
-  // Start execution - compiles flow only when Start is clicked
+  // ✅ STABLE: start callback uses optionsRef, not options directly
+  // This ensures callbacks always use the latest options without causing re-renders
   const start = useCallback(async () => {
+    // ✅ Always read from ref to get latest options (survives remount)
+    const currentOptions = optionsRef.current;
+
     console.log('═══════════════════════════════════════════════════════════════════════════');
     console.log('🚀 [useDialogueEngine] start() CALLED');
     console.log('═══════════════════════════════════════════════════════════════════════════');
     console.log('[useDialogueEngine] 📊 State check:', {
       isRunning,
-      hasOptions: !!options,
-      nodesCount: options?.nodes?.length || 0,
-      edgesCount: options?.edges?.length || 0,
-      hasTranslations: !!options?.translations,
-      translationsCount: options?.translations ? Object.keys(options.translations).length : 0,
+      hasOptions: !!currentOptions,
+      nodesCount: currentOptions?.nodes?.length || 0,
+      edgesCount: currentOptions?.edges?.length || 0,
+      hasTranslations: !!currentOptions?.translations,
+      translationsCount: currentOptions?.translations ? Object.keys(currentOptions.translations).length : 0,
     });
 
     if (isRunning) {
@@ -64,10 +99,11 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     setIsRunning(true);
 
     try {
+      // ✅ Use currentOptions from ref throughout (all compilation logic)
       // Ensure all tasks exist in memory before compilation
       // Enrich all rows with taskId (creates tasks in memory if missing)
       const { enrichRowsWithTaskId } = await import('../../utils/taskHelpers');
-      const enrichedNodes = options.nodes.map(node => {
+      const enrichedNodes = currentOptions.nodes.map(node => {
         if (node.data?.rows) {
           // Enrich rows and update node.data.rows with enriched version
           const enrichedRows = enrichRowsWithTaskId(node.data.rows);
@@ -84,12 +120,12 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
       // Compile flow HERE, only when Start is clicked
       // ✅ DEBUG: Log edges passed to compiler
-      const elseEdgesCount = options.edges.filter(e => e.data?.isElse === true).length;
+      const elseEdgesCount = currentOptions.edges.filter(e => e.data?.isElse === true).length;
       if (elseEdgesCount > 0) {
         console.log('[useDialogueEngine][start] ✅ Else edges found before compilation', {
           elseEdgesCount,
-          totalEdgesCount: options.edges.length,
-          elseEdges: options.edges.filter(e => e.data?.isElse === true).map(e => ({
+          totalEdgesCount: currentOptions.edges.length,
+          elseEdges: currentOptions.edges.filter(e => e.data?.isElse === true).map(e => ({
             id: e.id,
             label: e.label,
             source: e.source,
@@ -317,7 +353,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
       console.log('[FRONTEND] Preparing compilation request with complete graph:', {
         nodesCount: enrichedNodes.length,
-        edgesCount: options.edges.length,
+        edgesCount: currentOptions.edges.length,
         totalTasksCount: allTasksWithTemplates.length,
         referencedInstancesCount: referencedInstances.length,
         referencedTemplatesCount: referencedTemplates.length,
@@ -398,10 +434,10 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       });
       console.log('═══════════════════════════════════════════════════════════════════════════');
 
-      // ✅ Get translations from options or global context (already in memory)
+      // ✅ Get translations from currentOptions or global context (already in memory)
       let translations: Record<string, string> = {};
-      if (options.translations && Object.keys(options.translations).length > 0) {
-        translations = options.translations;
+      if (currentOptions.translations && Object.keys(currentOptions.translations).length > 0) {
+        translations = currentOptions.translations;
       } else {
         // Fallback: Try to get from window or context
         try {
@@ -415,15 +451,15 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       // ✅ NEW: Extract conditions from projectData (only referenced ones)
       // ✅ Read conditionId from top-level (not from data)
       const referencedConditionIds = new Set(
-        (options.edges || [])
+        (currentOptions.edges || [])
           .map((e: any) => e.conditionId)
           .filter(Boolean)
       );
 
       console.log('[useDialogueEngine] 🔍 Extracting conditions', {
         referencedConditionIds: Array.from(referencedConditionIds),
-        edgesCount: (options.edges || []).length,
-        edgesWithConditionId: (options.edges || []).filter((e: any) => e.conditionId).map((e: any) => ({
+        edgesCount: (currentOptions.edges || []).length,
+        edgesWithConditionId: (currentOptions.edges || []).filter((e: any) => e.conditionId).map((e: any) => ({
           id: e.id,
           label: e.label,
           conditionId: e.conditionId
@@ -491,7 +527,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
       // ✅ Filter out orphan edges (edges pointing to non-existent or hidden nodes)
       const validNodeIds = new Set(nodesWithTaskId.map(n => n.id));
-      const filteredEdges = (options.edges || []).filter((e: any) => {
+      const filteredEdges = (currentOptions.edges || []).filter((e: any) => {
         const targetExists = validNodeIds.has(e.target);
         const sourceExists = validNodeIds.has(e.source);
 
@@ -527,12 +563,12 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       });
 
       // ✅ DEBUG: Log edge filtering
-      if ((options.edges || []).length !== filteredEdges.length) {
+      if ((currentOptions.edges || []).length !== filteredEdges.length) {
         console.log('[useDialogueEngine] 🔍 Edge filtering', {
-          originalEdgesCount: (options.edges || []).length,
+          originalEdgesCount: (currentOptions.edges || []).length,
           filteredEdgesCount: filteredEdges.length,
-          removedEdgesCount: (options.edges || []).length - filteredEdges.length,
-          removedEdges: (options.edges || []).filter((e: any) => {
+          removedEdgesCount: (currentOptions.edges || []).length - filteredEdges.length,
+          removedEdges: (currentOptions.edges || []).filter((e: any) => {
             const targetExists = validNodeIds.has(e.target);
             const sourceExists = validNodeIds.has(e.source);
             const targetNode = nodesWithTaskId.find(n => n.id === e.target);
@@ -563,7 +599,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       // ✅ DEBUG: Verifica che tutti i task referenziati nei nodi siano presenti in requestBody.tasks
       // Nota: referencedTaskIds potrebbe essere già dichiarato sopra, usiamo un nome diverso per evitare conflitti
       const referencedTaskIdsInRequestBody = new Set<string>();
-      options.nodes.forEach(node => {
+      currentOptions.nodes.forEach(node => {
         node.rows?.forEach((row: any) => {
           if (row.taskId) {
             referencedTaskIdsInRequestBody.add(row.taskId);
@@ -753,8 +789,9 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           const { formatCompilationErrorMessage } = await import('../../utils/errorMessageFormatter');
           const errorMessage = formatCompilationErrorMessage(blockingErrors);
 
-          if (options.onMessage) {
-            options.onMessage({
+          const opts = optionsRef.current;
+          if (opts.onMessage) {
+            opts.onMessage({
               id: `error-${Date.now()}`,
               text: errorMessage + '\n\n💡 Apri il pannello Error Report per vedere i dettagli e selezionare i nodi con problemi.',
               stepType: 'error',
@@ -765,15 +802,16 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           // Don't start orchestrator
           setIsRunning(false);
           setCurrentTask(null);
-          options.onError?.(new Error(`Compilation has ${blockingErrors.length} blocking errors. Fix errors before execution.`));
+          opts.onError?.(new Error(`Compilation has ${blockingErrors.length} blocking errors. Fix errors before execution.`));
           return;
         }
 
         // Only warnings - show info but allow execution
         const { formatCompilationWarningMessage } = await import('../../utils/errorMessageFormatter');
         const warningMessage = formatCompilationWarningMessage(compilationResult.errors);
-        if (warningMessage && options.onMessage) {
-          options.onMessage({
+        const opts = optionsRef.current;
+        if (warningMessage && opts.onMessage) {
+          opts.onMessage({
             id: `warning-${Date.now()}`,
             text: warningMessage,
             stepType: 'warning',
@@ -832,12 +870,12 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         // Use backend orchestrator via SSE
         const { executeOrchestratorBackend } = await import('./orchestratorAdapter');
 
-        // Get translations - prefer from options, fallback to global context
+        // Get translations - prefer from currentOptions, fallback to global context
         let translations: Record<string, string> = {};
 
-        // 1. Try from options (most reliable, passed from useNewFlowOrchestrator)
-        if (options.translations && Object.keys(options.translations).length > 0) {
-          translations = options.translations;
+        // 1. Try from currentOptions (most reliable, passed from useNewFlowOrchestrator)
+        if (currentOptions.translations && Object.keys(currentOptions.translations).length > 0) {
+          translations = currentOptions.translations;
           console.log('[useDialogueEngine] ✅ Using translations from options', {
             translationsCount: Object.keys(translations).length,
             sampleKeys: Object.keys(translations).slice(0, 5)
@@ -863,28 +901,29 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           translations,
           {
             onMessage: (message) => {
-              // Messages from backend orchestrator - forward to onMessage callback
+              // ✅ Always use latest options from ref
+              const opts = optionsRef.current;
               console.log('[useDialogueEngine] Message from backend orchestrator', {
                 messageId: message.id,
                 text: message.text?.substring(0, 50),
                 stepType: message.stepType,
                 taskId: message.taskId
               });
-              if (options.onMessage) {
-                options.onMessage(message);
+              if (opts.onMessage) {
+                opts.onMessage(message);
               }
             },
             onDDTStart: (data) => {
-              // DDT start from backend orchestrator
+              // ✅ Always use latest options from ref
+              const opts = optionsRef.current;
               const ddt = data.ddt || data;
               console.log('[useDialogueEngine] DDT start from backend orchestrator', {
                 ddtId: ddt?.id,
                 ddtLabel: ddt?.label,
                 taskId: data.taskId
               });
-              // Forward to options.onDDTStart if provided
-              if (options.onDDTStart && ddt) {
-                options.onDDTStart({ ddt, taskId: data.taskId });
+              if (opts.onDDTStart && ddt) {
+                opts.onDDTStart({ ddt, taskId: data.taskId });
               }
             },
             onStateUpdate: (state) => {
@@ -893,38 +932,36 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
             onComplete: () => {
               setIsRunning(false);
               setCurrentTask(null);
-              options.onComplete?.();
+              const opts = optionsRef.current;
+              opts.onComplete?.();
             },
             onError: (error) => {
               setIsRunning(false);
               setCurrentTask(null);
-              options.onError?.(error);
+              const opts = optionsRef.current;
+              opts.onError?.(error);
             },
             onWaitingForInput: (data) => {
-              // Store waiting state for input handling
-              console.log('[useDialogueEngine] onWaitingForInput called from backend orchestrator', {
-                hasDDT: !!data.ddt,
-                ddtId: data.ddt?.id,
-                taskId: data.taskId,
-                nodeId: data.nodeId
-              });
-              (engineRef.current as any).waitingForInput = data;
+              // ✅ Store waiting state in ref (survives remount)
+              if (!engineRef.current) {
+                engineRef.current = {};
+              }
+              engineRef.current.waitingForInput = data;
 
-              // Update sessionId in engineRef to keep it fresh
+              // Update sessionId in ref
               if (orchestratorControl && orchestratorControl.sessionId) {
                 sessionIdRef.current = orchestratorControl.sessionId;
-                if (engineRef.current) {
-                  (engineRef.current as any).sessionId = orchestratorControl.sessionId;
-                }
+                engineRef.current.sessionId = orchestratorControl.sessionId;
                 console.log('[useDialogueEngine] ✅ Refreshed sessionId in onWaitingForInput', {
                   sessionId: orchestratorControl.sessionId
                 });
               }
 
-              // Forward to options.onWaitingForInput if provided
-              if (options.onWaitingForInput) {
+              // ✅ Forward using currentOptions from ref (always latest)
+              const opts = optionsRef.current;
+              if (opts.onWaitingForInput) {
                 console.log('[useDialogueEngine] Forwarding onWaitingForInput to options callback');
-                options.onWaitingForInput(data);
+                opts.onWaitingForInput(data);
               } else {
                 console.warn('[useDialogueEngine] ⚠️ options.onWaitingForInput not provided!');
               }
@@ -953,14 +990,16 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         console.error('   Set localStorage.setItem("orchestrator.useBackend", "false") is no longer supported.');
         setIsRunning(false);
         setCurrentTask(null);
-        options.onError?.(new Error('Frontend DialogueEngine has been removed. Backend orchestrator is required.'));
+        const opts = optionsRef.current;
+        opts.onError?.(new Error('Frontend DialogueEngine has been removed. Backend orchestrator is required.'));
       }
     } catch (error) {
       setIsRunning(false);
       setCurrentTask(null);
-      options.onError?.(error as Error);
+      const opts = optionsRef.current;
+      opts.onError?.(error as Error);
     }
-  }, [isRunning, options]);
+  }, [isRunning]); // ✅ Only isRunning in deps - options come da ref
 
   // Stop execution
   const stop = useCallback(() => {
@@ -1009,6 +1048,34 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     return sessionIdRef.current || (engineRef.current as any)?.sessionId || null;
   }, []);
 
+  // ✅ ARCHITECTURAL: Provide user input to backend orchestrator
+  // Delegates to provideOrchestratorInput with current sessionId
+  const provideInput = useCallback(async (input: string) => {
+    const currentSessionId = sessionIdRef.current || (engineRef.current as any)?.sessionId;
+
+    if (!currentSessionId) {
+      console.error('[useDialogueEngine] ❌ Cannot provide input: no sessionId available');
+      throw new Error('No active orchestrator session. Cannot provide input.');
+    }
+
+    try {
+      const { provideOrchestratorInput } = await import('./orchestratorAdapter');
+      const result = await provideOrchestratorInput(currentSessionId, input);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to provide input to orchestrator');
+      }
+
+      console.log('[useDialogueEngine] ✅ Input provided successfully to backend orchestrator', {
+        sessionId: currentSessionId,
+        inputLength: input.length
+      });
+    } catch (error) {
+      console.error('[useDialogueEngine] ❌ Error providing input to orchestrator', error);
+      throw error;
+    }
+  }, []);
+
   return {
     executionState,
     isRunning,
@@ -1020,7 +1087,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     completeWaitingTask,
     updateRetrievalState,
     getSessionId, // Expose getter for sessionId
-    sessionId: sessionIdRef.current || (engineRef.current as any)?.sessionId || null // Also expose directly for easier access
+    sessionId: sessionIdRef.current || (engineRef.current as any)?.sessionId || null, // Also expose directly for easier access
+    provideInput // ✅ Expose method to provide user input
   };
 }
 

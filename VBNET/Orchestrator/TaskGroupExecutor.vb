@@ -37,15 +37,18 @@ Public Class TaskGroupExecutor
         If taskGroup Is Nothing Then
             Return New TaskExecutionResult() With {
                 .Success = False,
-                .Err = "TaskGroup is Nothing"
+                .Err = "TaskGroup is Nothing",
+                .IsCompleted = False
             }
         End If
 
         If taskGroup.Tasks Is Nothing OrElse taskGroup.Tasks.Count = 0 Then
             Console.WriteLine($"[TaskGroupExecutor] ⚠️ TaskGroup {taskGroup.NodeId} has no tasks")
+            ' ✅ TaskGroup vuoto = completato (nessun task da eseguire)
             Return New TaskExecutionResult() With {
                 .Success = True,
-                .RequiresInput = False
+                .RequiresInput = False,
+                .IsCompleted = True
             }
         End If
 
@@ -78,30 +81,44 @@ Public Class TaskGroupExecutor
 
             If Not result.Success Then
                 Console.WriteLine($"[TaskGroupExecutor] ❌ Task {task.Id} execution failed: {result.Err}")
+                ' ✅ PROPAGA: ritorna esattamente quello che TaskExecutor ha deciso (incluso IsCompleted)
                 Return result
             End If
 
-            ' ✅ Se task richiede input asincrono, sospendi esecuzione
+            ' ✅ ARCHITECTURAL: TaskGroupExecutor PROPAGA, non decide
+            ' Se TaskExecutor dice RequiresInput, propaga immediatamente (STOP)
             If result.RequiresInput Then
                 Console.WriteLine($"[TaskGroupExecutor] ⏸️ Task {task.Id} requires input, suspending TaskGroup execution")
                 executionState.CurrentRowIndex = i  ' Mantieni indice corrente per ripresa
+                ' ✅ PROPAGA: ritorna esattamente quello che TaskExecutor ha deciso
                 Return New TaskExecutionResult() With {
                     .Success = True,
                     .RequiresInput = True,
-                    .WaitingTaskId = task.Id
+                    .WaitingTaskId = result.WaitingTaskId,
+                    .IsCompleted = result.IsCompleted  ' ✅ PROPAGA: non modifica
                 }
             End If
 
-            ' ✅ Task completato, passa al successivo
-            executionState.CurrentRowIndex = i + 1
-            Console.WriteLine($"[TaskGroupExecutor] ✅ Task {task.Id} completed, moving to next task")
+            ' ✅ ARCHITECTURAL: Se TaskExecutor dice IsCompleted, passa al prossimo task
+            ' TaskGroupExecutor NON decide, solo propaga e gestisce sequenza
+            If result.IsCompleted Then
+                executionState.CurrentRowIndex = i + 1
+                Console.WriteLine($"[TaskGroupExecutor] ✅ Task {task.Id} completed (IsCompleted=True), moving to next task")
+            Else
+                ' Task non completato ma non richiede input (caso raro, ma gestito)
+                executionState.CurrentRowIndex = i + 1
+                Console.WriteLine($"[TaskGroupExecutor] ⚠️ Task {task.Id} not completed but not requiring input, moving to next task")
+            End If
         Next
 
-        ' ✅ Tutti i task eseguiti
+        ' ✅ ARCHITECTURAL: Tutti i task eseguiti
+        ' TaskGroupExecutor NON decide se il TaskGroup è completato
+        ' Assume che se tutti i task sono stati eseguiti, il TaskGroup è completato
         Console.WriteLine($"[TaskGroupExecutor] ✅ All tasks in TaskGroup {taskGroup.NodeId} completed")
         Return New TaskExecutionResult() With {
             .Success = True,
-            .RequiresInput = False
+            .RequiresInput = False,
+            .IsCompleted = True  ' ✅ Tutti i task eseguiti = TaskGroup completato
         }
     End Function
 End Class
