@@ -53,6 +53,13 @@ export interface WizardOrchestratorConfig {
 export class WizardOrchestrator {
   private config: WizardOrchestratorConfig;
   private hasStarted = false;
+  /**
+   * Instance-level run mode flag.
+   * Set by startFull() or startAdaptation() and used by confirmStructure().
+   * This is the reliable source of truth — independent of global store state
+   * which can be reset by concurrent operations or re-renders.
+   */
+  private instanceRunMode: 'none' | 'full' | 'adaptation' = 'none';
   private taskInstance: any = null; // ✅ Store task instance for adaptation phase
 
   constructor(config: WizardOrchestratorConfig) {
@@ -88,13 +95,14 @@ export class WizardOrchestrator {
     }
 
     this.hasStarted = true;
+    this.instanceRunMode = 'full'; // ✅ Set instance-level flag BEFORE reset
     const store = this.getStore();
 
-    // ✅ Set run mode in store (single source of truth)
+    // ✅ FIX: reset() FIRST, then setRunMode() — otherwise reset() overwrites runMode to 'none'
+    store.reset();
     store.setRunMode('full');
 
     // ✅ ORCHESTRATOR controls ALL pipeline updates
-    store.reset();
     store.setCurrentStep('generazione_struttura');
     store.updatePipelineStep('structure', 'running', 'sto pensando a qual è la migliore struttura dati per questo task...');
 
@@ -127,6 +135,7 @@ export class WizardOrchestrator {
     }
 
     this.hasStarted = true;
+    this.instanceRunMode = 'adaptation'; // ✅ Set instance-level flag (reliable source of truth)
     const store = this.getStore();
 
     // ✅ Set run mode in store (single source of truth)
@@ -176,7 +185,19 @@ export class WizardOrchestrator {
    */
   async confirmStructure(): Promise<void> {
     const store = this.getStore();
-    const runMode = this.getRunMode();
+
+    // ✅ FIX: Use instanceRunMode (per-instance, set by startFull/startAdaptation) as
+    // primary source of truth. store.runMode is unreliable because store.reset() (called
+    // inside startFull) overwrites it, and concurrent re-renders can create new orchestrators.
+    const runMode = this.instanceRunMode !== 'none'
+      ? this.instanceRunMode
+      : this.getRunMode(); // fallback: read from store if instance flag not set
+
+    console.log('[WizardOrchestrator] 🔍 confirmStructure', {
+      instanceRunMode: this.instanceRunMode,
+      storeRunMode: this.getRunMode(),
+      effectiveRunMode: runMode,
+    });
 
     // ✅ POINT OF NO RETURN: Set flag FIRST
     store.setStructureConfirmed(true);
@@ -615,6 +636,7 @@ export class WizardOrchestrator {
    */
   reset(): void {
     this.hasStarted = false;
+    this.instanceRunMode = 'none'; // ✅ Reset instance flag
     const store = this.getStore();
     store.reset();
   }
