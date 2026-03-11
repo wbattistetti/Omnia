@@ -21,6 +21,7 @@ import { useNodeExecutionHighlight } from '../../executionHighlight/useExecution
 import { FlowStateBridge } from '../../../../services/FlowStateBridge';
 import { useFlowActions } from '../../../../context/FlowActionsContext';
 import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
+import { taskRepository } from '../../../../services/TaskRepository';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -416,6 +417,24 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       const { toNodeId, rowData, mousePosition } = event.detail;
 
       if (toNodeId === id && rowData) {
+
+        // ✅ VERIFY: Controlla che il task esista quando la riga arriva nel nuovo nodo
+        const taskId = rowData.id; // row.id === task.id
+        const task = taskRepository.getTask(taskId);
+
+        console.log('[CustomNode] 🔍 CROSS-NODE MOVE RECEIVED - Task verification', {
+            rowId: rowData.id,
+            taskId: taskId,
+            taskExists: !!task,
+            taskType: task?.type,
+            toNodeId: id,
+            rowData: {
+                id: rowData.id,
+                text: rowData.text,
+                taskId: rowData.taskId,
+                instanceId: rowData.instanceId
+            }
+        });
 
         // Verifica che la riga non esista già
         const existingRow = nodeRows.find(row => row.id === rowData.id);

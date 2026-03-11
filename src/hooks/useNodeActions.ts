@@ -114,6 +114,27 @@ export function useNodeActions(deps: UseNodeActionsDeps): UseNodeActionsResult {
       y = pos.y;
     }
 
+    // ✅ VERIFY: Controlla che il task esista quando si crea un nuovo nodo con una riga
+    if (initialRow && initialRow.id) {
+      const taskId = initialRow.id; // row.id === task.id
+      const task = taskRepository.getTask(taskId);
+
+      console.log('[useNodeActions] 🔍 CREATE NODE FROM ROW - Task verification', {
+        rowId: initialRow.id,
+        taskId: taskId,
+        taskExists: !!task,
+        taskType: task?.type,
+        newNodeId: newNodeId,
+        action: 'creating new node with row',
+        rowData: {
+          id: initialRow.id,
+          text: initialRow.text,
+          taskId: initialRow.taskId,
+          instanceId: initialRow.instanceId
+        }
+      });
+    }
+
     const focusRowId = initialRow ? initialRow.id : `${newNodeId}-${Math.random().toString(36).substr(2, 9)}`;
 
     const node: Node<FlowNode> = {

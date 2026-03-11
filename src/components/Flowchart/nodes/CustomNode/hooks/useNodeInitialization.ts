@@ -17,9 +17,17 @@ function initRows(nodeId: string, rows?: NodeRowData[], nodeData?: any): NodeRow
         const rowId = nodeData?.focusRowId || `${nodeId}-${newUid()}`;
         return [{ id: rowId, text: '', included: true, mode: 'Message' as const }];
     }
-    return rows.map(r =>
-        r.id?.startsWith(`${nodeId}-`) ? r : { ...r, id: `${nodeId}-${r.id || newUid()}` }
-    );
+    // ✅ CRITICAL: NON modificare row.id se la riga ha già un ID valido
+    // row.id === task.id ALWAYS, quindi non deve essere modificato quando si sposta tra nodi
+    return rows.map(r => {
+        // ✅ Se la riga ha già un ID valido (non vuoto), mantenerlo invariato
+        // ✅ NON aggiungere nodeId all'inizio perché row.id === task.id e deve rimanere lo stesso
+        if (r.id && r.id.trim().length > 0) {
+            return r; // ✅ Mantieni l'ID originale invariato
+        }
+        // ✅ Solo se l'ID è vuoto o mancante, genera un nuovo ID basato sul nodeId
+        return { ...r, id: `${nodeId}-${newUid()}` };
+    });
 }
 
 /**

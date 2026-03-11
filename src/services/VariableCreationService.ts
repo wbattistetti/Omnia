@@ -213,9 +213,11 @@ class VariableCreationService {
       projectId,
       varId: newVariable.varId, // ✅ GUID
       varName: newVariable.varName, // ✅ Label (label-GUID mapping created)
-      taskInstanceId: newVariable.taskInstanceId,
-      nodeId: newVariable.nodeId,
-      totalVariablesInStore: this.store.get(projectId)?.length || 0
+      taskInstanceId: newVariable.taskInstanceId || '(empty)',
+      nodeId: newVariable.nodeId || '(empty)',
+      ddtPath: newVariable.ddtPath || '(empty)',
+      totalVariablesInStore: this.store.get(projectId)?.length || 0,
+      isManualVariable: true // ✅ Flag to identify manual variables
     });
 
     return newVariable;
@@ -297,34 +299,84 @@ class VariableCreationService {
   async saveToDatabase(projectId: string): Promise<boolean> {
     const variables = this.store.get(projectId) ?? [];
 
+    // ✅ Separate manual variables (empty taskInstanceId) from task variables for logging
+    const manualVariables = variables.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
+    const taskVariables = variables.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
+
     console.log('[VariableCreationService] 💾 saveToDatabase called', {
       projectId,
-      variablesInStore: variables.length,
+      totalVariablesInStore: variables.length,
+      manualVariables: manualVariables.length,
+      taskVariables: taskVariables.length,
       willSkip: variables.length === 0,
-      varNamesSample: variables.slice(0, 5).map(v => v.varName),
+      manualVarNames: manualVariables.map(v => v.varName),
+      varNamesSample: variables.slice(0, 10).map(v => ({
+        varName: v.varName,
+        varId: v.varId,
+        taskInstanceId: v.taskInstanceId || '(empty)',
+        nodeId: v.nodeId || '(empty)'
+      })),
     });
 
-    if (variables.length === 0) return true;
+    if (variables.length === 0) {
+      console.log('[VariableCreationService] ⚠️ No variables to save');
+      return true;
+    }
 
     try {
+      // ✅ Ensure all variables have required fields (MongoDB compatibility)
+      const variablesToSave = variables.map(v => ({
+        varId: v.varId,
+        varName: v.varName,
+        taskInstanceId: v.taskInstanceId || '', // ✅ Explicit empty string (not null/undefined)
+        nodeId: v.nodeId || '', // ✅ Explicit empty string (not null/undefined)
+        ddtPath: v.ddtPath || '', // ✅ Explicit empty string (not null/undefined)
+        projectId: projectId // ✅ Will be set by backend, but include for clarity
+      }));
+
+      console.log('[VariableCreationService] 📤 Sending variables to backend', {
+        projectId,
+        totalCount: variablesToSave.length,
+        manualVariablesCount: manualVariables.length,
+        taskVariablesCount: taskVariables.length
+      });
+
       const response = await fetch(`/api/projects/${projectId}/variables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ variables }),
+        body: JSON.stringify({ variables: variablesToSave }),
       });
 
       if (!response.ok) {
-        console.error('[VariableCreationService] Failed to save variables', response.statusText);
+        const errorText = await response.text();
+        console.error('[VariableCreationService] ❌ Failed to save variables', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText,
+          variablesCount: variablesToSave.length,
+          manualVariablesCount: manualVariables.length
+        });
         return false;
       }
 
+      const result = await response.json();
       console.log('[VariableCreationService] ✅ Variables saved to database', {
         projectId,
-        count: variables.length,
+        totalCount: variablesToSave.length,
+        inserted: result.insertedCount || 0,
+        modified: result.modifiedCount || 0,
+        manualVariablesSaved: manualVariables.length,
+        taskVariablesSaved: taskVariables.length,
+        manualVarNames: manualVariables.map(v => v.varName)
       });
       return true;
     } catch (error) {
-      console.error('[VariableCreationService] ❌ Error saving variables', error);
+      console.error('[VariableCreationService] ❌ Error saving variables', {
+        error: error instanceof Error ? error.message : String(error),
+        projectId,
+        variablesCount: variables.length,
+        manualVariablesCount: manualVariables.length
+      });
       return false;
     }
   }
@@ -335,26 +387,74 @@ class VariableCreationService {
    */
   async loadFromDatabase(projectId: string): Promise<void> {
     try {
+      console.log('[VariableCreationService] 📥 Loading variables from database', { projectId });
+
       const response = await fetch(`/api/projects/${projectId}/variables`);
 
       if (!response.ok) {
         if (response.status === 404) {
+          console.log('[VariableCreationService] ⚠️ No variables found in database (404)');
           this.store.set(projectId, []);
           return;
         }
-        console.warn('[VariableCreationService] Failed to load variables', response.statusText);
+        console.warn('[VariableCreationService] Failed to load variables', {
+          status: response.status,
+          statusText: response.statusText
+        });
         return;
       }
 
       const variables: VariableInstance[] = await response.json();
-      this.store.set(projectId, Array.isArray(variables) ? variables : []);
+
+      // ✅ Separate manual variables from task variables for logging
+      const manualVariables = variables.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
+      const taskVariables = variables.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
+
+      console.log('[VariableCreationService] 📥 Variables received from database', {
+        projectId,
+        totalCount: variables.length,
+        manualVariables: manualVariables.length,
+        taskVariables: taskVariables.length,
+        manualVarNames: manualVariables.map(v => v.varName)
+      });
+
+      // ✅ DEDUPLICATE: Remove duplicates by varName (case-insensitive)
+      const seen = new Map<string, VariableInstance>();
+      const deduplicated: VariableInstance[] = [];
+
+      for (const v of variables) {
+        const normalizedName = v.varName.trim().toLowerCase();
+        if (!seen.has(normalizedName)) {
+          seen.set(normalizedName, v);
+          deduplicated.push(v);
+        } else {
+          console.warn('[VariableCreationService] ⚠️ Duplicate variable found and removed', {
+            projectId,
+            varName: v.varName,
+            varId: v.varId,
+            keptVarId: seen.get(normalizedName)?.varId
+          });
+        }
+      }
+
+      this.store.set(projectId, deduplicated);
+
+      const finalManualVariables = deduplicated.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
+      const finalTaskVariables = deduplicated.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
 
       console.log('[VariableCreationService] ✅ Variables loaded from database', {
         projectId,
-        count: (this.store.get(projectId) ?? []).length,
+        totalCount: deduplicated.length,
+        manualVariables: finalManualVariables.length,
+        taskVariables: finalTaskVariables.length,
+        duplicatesRemoved: variables.length - deduplicated.length,
+        manualVarNames: finalManualVariables.map(v => v.varName)
       });
     } catch (error) {
-      console.warn('[VariableCreationService] ❌ Error loading variables', error);
+      console.warn('[VariableCreationService] ❌ Error loading variables', {
+        error: error instanceof Error ? error.message : String(error),
+        projectId
+      });
       this.store.set(projectId, []);
     }
   }

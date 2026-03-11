@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { NodeRowData } from '../../../../../types/project';
 import { useRowRegistry } from '../../../rows/NodeRow/hooks/useRowRegistry';
 import { useFlowActions } from '../../../../../context/FlowActionsContext';
+import { taskRepository } from '../../../../../services/TaskRepository';
 
 interface UseNodeDragDropProps {
     nodeRows: NodeRowData[];
@@ -260,13 +261,32 @@ export function useNodeDragDrop({
                 return;
             }
 
+            // ✅ VERIFY: Controlla che il task esista ancora dopo lo spostamento
+            const taskId = rowDataToMove.id; // row.id === task.id
+            const task = taskRepository.getTask(taskId);
+
+            console.log('[useNodeDragDrop] 🔍 CROSS-NODE MOVE - Task verification', {
+                rowId: rowDataToMove.id,
+                taskId: taskId,
+                taskExists: !!task,
+                taskType: task?.type,
+                fromNodeId: nodeId,
+                toNodeId: targetNodeId,
+                rowData: {
+                    id: rowDataToMove.id,
+                    text: rowDataToMove.text,
+                    taskId: rowDataToMove.taskId,
+                    instanceId: rowDataToMove.instanceId
+                }
+            });
+
             // Dispatch evento per cross-node move
             const crossNodeEvent = new CustomEvent('crossNodeRowMove', {
                 detail: {
                     fromNodeId: nodeId,
                     toNodeId: targetNodeId,
                     rowId: draggedRowId,
-                    rowData: rowDataToMove,
+                    rowData: rowDataToMove, // ✅ Mantiene lo stesso row.id, quindi il task è ancora disponibile
                     originalIndex: draggedRowIndex,
                     mousePosition: { x: mousePosition.x, y: mousePosition.y }
                 }
@@ -310,6 +330,25 @@ export function useNodeDragDrop({
             if (!rowDataToMove) {
                 return;
             }
+
+            // ✅ VERIFY: Controlla che il task esista quando si trascina fuori per creare nuovo nodo
+            const taskId = rowDataToMove.id; // row.id === task.id
+            const task = taskRepository.getTask(taskId);
+
+            console.log('[useNodeDragDrop] 🔍 CANVAS DROP - Task verification', {
+                rowId: rowDataToMove.id,
+                taskId: taskId,
+                taskExists: !!task,
+                taskType: task?.type,
+                fromNodeId: nodeId,
+                action: 'creating new node on canvas',
+                rowData: {
+                    id: rowDataToMove.id,
+                    text: rowDataToMove.text,
+                    taskId: rowDataToMove.taskId,
+                    instanceId: rowDataToMove.instanceId
+                }
+            });
 
             // ✅ Posizione schermo del clone (position: fixed)
             // Il clone è posizionato a mousePosition + (10, -10)

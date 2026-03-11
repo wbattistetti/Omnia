@@ -2804,14 +2804,23 @@ app.post('/api/projects/:pid/variables', async (req, res) => {
 
     const projDb = await getProjectDb(client, projectId);
 
+    // ✅ Separate manual variables (empty taskInstanceId) from task variables for logging
+    const manualVariables = variables.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
+    const taskVariables = variables.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
+
     // Insert variables (upsert by varId to avoid duplicates)
+    // ✅ Ensure empty strings are preserved (not converted to null/undefined)
     const operations = variables.map(v => ({
       updateOne: {
         filter: { varId: v.varId },
         update: {
           $set: {
-            ...v,
-            projectId
+            varId: v.varId,
+            varName: v.varName,
+            taskInstanceId: v.taskInstanceId || '', // ✅ Explicit empty string
+            nodeId: v.nodeId || '', // ✅ Explicit empty string
+            ddtPath: v.ddtPath || '', // ✅ Explicit empty string
+            projectId: projectId
           }
         },
         upsert: true
@@ -2824,6 +2833,9 @@ app.post('/api/projects/:pid/variables', async (req, res) => {
     logInfo('Variables.post', {
       projectId,
       variablesCount: variables.length,
+      manualVariables: manualVariables.length,
+      taskVariables: taskVariables.length,
+      manualVarNames: manualVariables.map(v => v.varName),
       inserted: result.insertedCount,
       modified: result.modifiedCount,
       duration: `${duration}ms`

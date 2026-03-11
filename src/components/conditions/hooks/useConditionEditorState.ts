@@ -2,6 +2,8 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useState, useEffect, useMemo } from 'react';
+import { convertDSLGUIDsToLabels } from '../../../utils/conditionCodeConverter';
+import { createVariableMappings } from '../../../utils/conditionCodeConverter';
 
 export interface UseConditionEditorStateProps {
   open: boolean;
@@ -136,11 +138,24 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
     setHasFailures(false);
 
     // Reset script to template or provided initialScript when opening a new condition
-    const base = (initialScript && initialScript.trim()) ? initialScript : defaultCode;
+    let base = (initialScript && initialScript.trim()) ? initialScript : defaultCode;
+
+    // ✅ Convert GUIDs to labels if initialScript contains GUIDs (human-readable format)
+    // This ensures the editor always displays labels, not GUIDs, even if initialScript is passed with GUIDs
+    if (base && base.trim() && base !== defaultCode) {
+      // Check if script contains GUID pattern: [xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx]
+      const GUID_PATTERN = /\[[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\]/i;
+      if (GUID_PATTERN.test(base)) {
+        // Convert GUIDs to labels for human-readable display
+        const variableMappings = createVariableMappings();
+        base = convertDSLGUIDsToLabels(base, variableMappings);
+      }
+    }
+
     setScript(base);
-    const created = !!(initialScript && initialScript.trim());
+    const created = !!(base && base.trim() && base !== defaultCode);
     setHasCreated(created);
-    setLastAcceptedScript(created ? String(initialScript) : '');
+    setLastAcceptedScript(created ? String(base) : '');
     setTesterAllPass(null);
     setHeightPx(480);
     setWVars(280);

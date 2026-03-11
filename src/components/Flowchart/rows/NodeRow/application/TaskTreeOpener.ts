@@ -56,6 +56,21 @@ export class TaskTreeOpener {
       const taskType = resolveTaskType(row);
       const projectId = getProjectId?.() || undefined;
 
+      // ✅ VERIFY: Log esplicito quando si apre l'editor dopo spostamento riga
+      const taskId = row.id; // row.id === task.id
+      const task = taskRepository.getTask(taskId);
+
+      console.log('[TaskTreeOpener] 🔍 OPEN EDITOR - Task verification', {
+        rowId: row.id,
+        taskId: taskId,
+        taskExists: !!task,
+        taskType: task?.type,
+        rowText: row.text,
+        projectId: projectId,
+        action: 'opening editor after row move',
+        timestamp: new Date().toISOString()
+      });
+
       // ✅ CRITICAL: Log repository state and check if instance should exist
       const allTasksBefore = taskRepository.getAllTasks();
       const taskInRepository = taskRepository.getTask(row.id);

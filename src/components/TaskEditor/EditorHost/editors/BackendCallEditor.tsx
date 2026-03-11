@@ -127,6 +127,18 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
     }
   }, [projectData, variablesRefreshKey]); // ✅ Include variablesRefreshKey to force re-render
 
+  // ✅ Helper: Convert varId to varName for display
+  const getVarNameFromVarId = React.useCallback((varId: string | undefined): string | null => {
+    if (!varId || !projectId) return null;
+    return variableCreationService.getVarNameByVarId(projectId, varId);
+  }, [projectId]);
+
+  // ✅ Helper: Get varId from varName for saving
+  const getVarIdFromVarName = React.useCallback((varName: string | undefined): string | null => {
+    if (!varName || !projectId) return null;
+    return variableCreationService.getVarIdByVarName(projectId, varName);
+  }, [projectId]);
+
   // Get available API params (placeholder - in futuro da Backend Builder)
   const availableApiParams = React.useMemo(() => {
     // TODO: Load from Backend Builder Sources
@@ -623,8 +635,14 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
         {/* Two Column Layout: Input (left) + Output (right) OR Table View */}
         {showTableView ? (
           <TableEditor
-            inputs={config.inputs || []}
-            outputs={config.outputs || []}
+            inputs={(config.inputs || []).map(input => ({
+              ...input,
+              variable: input.variable ? getVarNameFromVarId(input.variable) || undefined : undefined
+            }))}
+            outputs={(config.outputs || []).map(output => ({
+              ...output,
+              variable: output.variable ? getVarNameFromVarId(output.variable) || undefined : undefined
+            }))}
             rows={config.mockTable || []}
             onChange={(rows) => setConfig(prev => ({ ...prev, mockTable: rows }))}
           />
@@ -801,9 +819,27 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                             <OmniaSelect
                               variant="dark"
                               options={availableVariables}
-                              value={input.variable || null}
+                              value={input.variable ? getVarNameFromVarId(input.variable) || input.variable : null}
                               onChange={(value) => {
-                                updateInput(index, { variable: value || '' });
+                                // ✅ value è varName (label), convertiamo a varId prima di salvare
+                                if (!value || !projectId) {
+                                  updateInput(index, { variable: '' });
+                                  setOpenInputVariable(null);
+                                  return;
+                                }
+
+                                const varId = getVarIdFromVarName(value);
+                                if (varId) {
+                                  updateInput(index, { variable: varId }); // ✅ Salva varId, non varName
+                                  console.log('[BackendCallEditor] Variable assigned to INPUT', {
+                                    varName: value,
+                                    varId: varId,
+                                    internalName: config.inputs[index]?.internalName
+                                  });
+                                } else {
+                                  console.warn('[BackendCallEditor] Variable not found', { varName: value, projectId });
+                                  updateInput(index, { variable: '' });
+                                }
                                 setOpenInputVariable(null); // Chiudi dopo selezione
                               }}
                               onCreateOption={async (inputValue) => {
@@ -812,9 +848,11 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                                   return;
                                 }
 
-                                const projectId = localStorage.getItem('currentProjectId');
+                                // ✅ Use projectId from context (already available at component level)
                                 if (!projectId) {
-                                  console.warn('[BackendCallEditor] Cannot create variable: no projectId');
+                                  console.warn('[BackendCallEditor] Cannot create variable: no projectId from context', {
+                                    fallbackLocalStorage: localStorage.getItem('currentProjectId')
+                                  });
                                   return;
                                 }
 
@@ -822,25 +860,35 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                                   // ✅ Create variable using the unified collection
                                   // This automatically creates the label-GUID mapping (varId = GUID, varName = label)
                                   const newVariable = variableCreationService.createManualVariable(
-                                    projectId,
+                                    projectId, // ✅ Use projectId from context, not localStorage
                                     inputValue.trim()
                                   );
 
-                                  // Update the input field with the new variable name
-                                  updateInput(index, { variable: newVariable.varName });
+                                  // ✅ Salva varId invece di varName
+                                  updateInput(index, { variable: newVariable.varId });
 
                                   // ✅ Force re-render of availableVariables by incrementing refresh key
                                   setVariablesRefreshKey(prev => prev + 1);
 
                                   setOpenInputVariable(null); // Close after creation
 
-                                  console.log('[BackendCallEditor] ✅ Variable created and assigned to input', {
-                                    varName: newVariable.varName, // ✅ Label
-                                    varId: newVariable.varId, // ✅ GUID (label-GUID mapping created)
-                                    totalVariablesInStore: variableCreationService.getCount(projectId)
+                                  console.log('[BackendCallEditor] ✅ Variable created and assigned to INPUT', {
+                                    varName: newVariable.varName,
+                                    varId: newVariable.varId,
+                                    projectId, // ✅ Log projectId used
+                                    internalName: config.inputs[index]?.internalName || 'N/A',
+                                    paramIndex: index,
+                                    totalVariablesInStore: variableCreationService.getCount(projectId),
+                                    context: 'BackendCallEditor - INPUT parameter',
+                                    taskInstanceId: newVariable.taskInstanceId || '(empty)',
+                                    nodeId: newVariable.nodeId || '(empty)'
                                   });
                                 } catch (error) {
-                                  console.error('[BackendCallEditor] ❌ Error creating variable', error);
+                                  console.error('[BackendCallEditor] ❌ Error creating variable', {
+                                    error,
+                                    projectId,
+                                    inputValue
+                                  });
                                 }
                               }}
                               onBlur={() => setOpenInputVariable(null)}
@@ -852,13 +900,13 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                             />
                           </div>
                         ) : input.variable ? (
-                          // Label quando c'è un valore
+                          // ✅ Mostra varName ma input.variable contiene varId
                           <button
                             onClick={() => setOpenInputVariable(index)}
                             className="text-xs text-slate-200 px-2 py-1.5 h-8 rounded border border-slate-600 bg-slate-800 text-left hover:border-cyan-500 hover:bg-slate-700 whitespace-nowrap"
                             title="Click to change variable"
                           >
-                            {input.variable}
+                            {getVarNameFromVarId(input.variable) || input.variable}
                           </button>
                         ) : (
                           // Placeholder quando vuoto
@@ -1049,9 +1097,27 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                             <OmniaSelect
                               variant="dark"
                               options={availableVariables}
-                              value={output.variable || null}
+                              value={output.variable ? getVarNameFromVarId(output.variable) || output.variable : null}
                               onChange={(value) => {
-                                updateOutput(index, { variable: value || '' });
+                                // ✅ value è varName (label), convertiamo a varId prima di salvare
+                                if (!value || !projectId) {
+                                  updateOutput(index, { variable: '' });
+                                  setOpenOutputVariable(null);
+                                  return;
+                                }
+
+                                const varId = getVarIdFromVarName(value);
+                                if (varId) {
+                                  updateOutput(index, { variable: varId }); // ✅ Salva varId, non varName
+                                  console.log('[BackendCallEditor] Variable assigned to OUTPUT', {
+                                    varName: value,
+                                    varId: varId,
+                                    internalName: config.outputs[index]?.internalName
+                                  });
+                                } else {
+                                  console.warn('[BackendCallEditor] Variable not found', { varName: value, projectId });
+                                  updateOutput(index, { variable: '' });
+                                }
                                 setOpenOutputVariable(null); // Chiudi dopo selezione
                               }}
                               onCreateOption={async (inputValue) => {
@@ -1060,9 +1126,11 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                                   return;
                                 }
 
-                                const projectId = localStorage.getItem('currentProjectId');
+                                // ✅ Use projectId from context (already available at component level)
                                 if (!projectId) {
-                                  console.warn('[BackendCallEditor] Cannot create variable: no projectId');
+                                  console.warn('[BackendCallEditor] Cannot create variable: no projectId from context', {
+                                    fallbackLocalStorage: localStorage.getItem('currentProjectId')
+                                  });
                                   return;
                                 }
 
@@ -1070,25 +1138,35 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                                   // ✅ Create variable using the unified collection
                                   // This automatically creates the label-GUID mapping (varId = GUID, varName = label)
                                   const newVariable = variableCreationService.createManualVariable(
-                                    projectId,
+                                    projectId, // ✅ Use projectId from context, not localStorage
                                     inputValue.trim()
                                   );
 
-                                  // Update the output field with the new variable name
-                                  updateOutput(index, { variable: newVariable.varName });
+                                  // ✅ Salva varId invece di varName
+                                  updateOutput(index, { variable: newVariable.varId });
 
                                   // ✅ Force re-render of availableVariables by incrementing refresh key
                                   setVariablesRefreshKey(prev => prev + 1);
 
                                   setOpenOutputVariable(null); // Close after creation
 
-                                  console.log('[BackendCallEditor] ✅ Variable created and assigned', {
-                                    varName: newVariable.varName, // ✅ Label
-                                    varId: newVariable.varId, // ✅ GUID (label-GUID mapping created)
-                                    totalVariablesInStore: variableCreationService.getCount(projectId)
+                                  console.log('[BackendCallEditor] ✅ Variable created and assigned to OUTPUT', {
+                                    varName: newVariable.varName,
+                                    varId: newVariable.varId,
+                                    projectId, // ✅ Log projectId used
+                                    internalName: config.outputs[index]?.internalName || 'N/A',
+                                    paramIndex: index,
+                                    totalVariablesInStore: variableCreationService.getCount(projectId),
+                                    context: 'BackendCallEditor - OUTPUT parameter',
+                                    taskInstanceId: newVariable.taskInstanceId || '(empty)',
+                                    nodeId: newVariable.nodeId || '(empty)'
                                   });
                                 } catch (error) {
-                                  console.error('[BackendCallEditor] ❌ Error creating variable', error);
+                                  console.error('[BackendCallEditor] ❌ Error creating variable', {
+                                    error,
+                                    projectId,
+                                    inputValue
+                                  });
                                 }
                               }}
                               onBlur={() => setOpenOutputVariable(null)}
@@ -1100,13 +1178,13 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                             />
                           </div>
                         ) : output.variable ? (
-                          // Label quando c'è un valore
+                          // ✅ Mostra varName ma output.variable contiene varId
                           <button
                             onClick={() => setOpenOutputVariable(index)}
                             className="text-xs text-slate-200 px-2 py-1.5 h-8 rounded border border-slate-600 bg-slate-800 text-left hover:border-green-500 hover:bg-slate-700 whitespace-nowrap"
                             title="Click to change variable"
                           >
-                            {output.variable}
+                            {getVarNameFromVarId(output.variable) || output.variable}
                           </button>
                         ) : (
                           // Placeholder quando vuoto
