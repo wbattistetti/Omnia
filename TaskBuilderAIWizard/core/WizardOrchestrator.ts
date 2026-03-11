@@ -142,8 +142,15 @@ export class WizardOrchestrator {
     store.setRunMode('adaptation');
 
     // ✅ Load template structure
+    // First try Factory, then project database
     const { DialogueTaskService } = await import('@services/DialogueTaskService');
-    const template = DialogueTaskService.getTemplate(templateId);
+    let template = DialogueTaskService.getTemplate(templateId);
+
+    // ✅ If not found in Factory, try loading from project database
+    if (!template && this.config.projectId) {
+      const { loadTemplateFromProject } = await import('@utils/taskUtils');
+      template = await loadTemplateFromProject(templateId, this.config.projectId);
+    }
 
     if (!template) {
       throw new Error(`[WizardOrchestrator] Template not found: ${templateId}`);
@@ -151,7 +158,7 @@ export class WizardOrchestrator {
 
     // ✅ Convert template to dataSchema format
     const { buildDataSchemaFromTemplate } = await import('../utils/templateToDataSchema');
-    const dataSchema = buildDataSchemaFromTemplate(template);
+    const dataSchema = await buildDataSchemaFromTemplate(template, this.config.projectId);
 
     // ✅ Set dataSchema in store (read-only, for display)
     store.setDataSchema(dataSchema);

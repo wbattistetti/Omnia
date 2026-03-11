@@ -93,7 +93,7 @@ export async function cloneTemplateToInstance(
   if (!effectiveDataSchema) {
     // Load dataSchema from template structure
     const { buildDataSchemaFromTemplate } = await import('../utils/templateToDataSchema');
-    effectiveDataSchema = buildDataSchemaFromTemplate(template);
+    effectiveDataSchema = await buildDataSchemaFromTemplate(template, projectId);
   }
 
   if (!effectiveDataSchema || effectiveDataSchema.length === 0) {
@@ -161,6 +161,26 @@ export async function cloneTemplateToInstance(
     taskInstanceId: taskInstance.id,
     templateId: taskInstance.templateId
   });
+
+  // ✅ STEP 9: Create variables in memory (no DB call — persisted on project save)
+  // This is the single, authoritative creation point for variables (both FULL and ADAPTATION modes).
+  try {
+    const { variableCreationService } = await import('@services/VariableCreationService');
+    variableCreationService.createVariablesForInstance({
+      taskInstance,
+      template,
+      taskLabel,
+      projectId,
+      dataSchema: effectiveDataSchema, // Pass the full tree structure from wizard
+    });
+    console.log('[TemplateCloningService] ✅ Variables created in memory', {
+      taskInstanceId: taskInstance.id,
+      templateId: template.id,
+    });
+  } catch (varError) {
+    // Non-blocking: variables can be re-created later
+    console.warn('[TemplateCloningService] ⚠️ Error creating variables (non-blocking)', varError);
+  }
 
   return {
     taskInstance,

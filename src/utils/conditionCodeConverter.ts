@@ -145,24 +145,25 @@ export function transformASTGuidsToLabels(
 }
 
 /**
- * Creates variable mappings from FlowchartVariablesService
- * Returns Map<guid, label> for conversion
+ * Creates variable mappings from VariableCreationService.
+ * Returns Map<varId, varName> for conversion.
  */
 export function createVariableMappings(): Map<string, string> {
   const mappings = new Map<string, string>();
 
   try {
-    const { flowchartVariablesService } = require('../services/FlowchartVariablesService');
+    const { variableCreationService } = require('../services/VariableCreationService');
+    const projectId: string | null = typeof localStorage !== 'undefined'
+      ? localStorage.getItem('currentProjectId')
+      : null;
 
-    // Use nodeIdToReadableName map directly (nodeId -> readableName)
-    // We need to access the private map, so we'll use a helper method if available
-    // For now, iterate through all readable names and get their nodeIds
-    const allReadableNames = flowchartVariablesService.getAllReadableNames?.() || [];
+    if (!projectId) return mappings;
 
-    for (const readableName of allReadableNames) {
-      const nodeId = flowchartVariablesService.getNodeId(readableName);
-      if (nodeId) {
-        mappings.set(nodeId, readableName);
+    const allVarNames: string[] = variableCreationService.getAllVarNames(projectId) ?? [];
+    for (const varName of allVarNames) {
+      const varId: string | null = variableCreationService.getVarIdByVarName(projectId, varName);
+      if (varId) {
+        mappings.set(varId, varName);
       }
     }
   } catch (error) {

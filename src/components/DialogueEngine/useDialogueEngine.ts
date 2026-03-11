@@ -321,19 +321,112 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       // Non serve ridichiararlo - è già stato popolato con tutti i taskId dalle righe
 
       const allDDTs: any[] = [];
-      Array.from(referencedTaskIds).forEach(taskId => {
-        const task = taskRepository.getTask(taskId);
-        if (task) {
+      // ✅ FIX: Use buildTaskTree() instead of task.data to ensure node.id = templateId
+      // This fixes the variableStore key mismatch (backend uses node.id, conditions use templateId)
+      // ✅ Move import OUTSIDE the loop and add better error handling
+      let buildTaskTree: any = null;
+      try {
+        const taskUtilsModule = await import('../../utils/taskUtils');
+        buildTaskTree = taskUtilsModule.buildTaskTree;
+      } catch (importError) {
+        console.error('[useDialogueEngine] ❌ Failed to import buildTaskTree', {
+          error: importError instanceof Error ? importError.message : String(importError),
+          stack: importError instanceof Error ? importError.stack : undefined
+        });
+        // ✅ Fallback: use task.data for all DDTs if import fails
+        Array.from(referencedTaskIds).forEach(taskId => {
+          const task = taskRepository.getTask(taskId);
+          if (task && task.data && Array.isArray(task.data) && task.data.length > 0) {
+            const templateId = getTemplateId(task);
+            if (templateId && templateIdToTaskType(templateId) === TaskType.UtteranceInterpretation) {
+              allDDTs.push({
+                label: task.label,
+                data: task.data,
+                steps: task.steps
+              });
+            }
+          }
+        });
+      }
+
+      if (buildTaskTree) {
+        const projectId = currentOptions.projectId || localStorage.getItem('currentProjectId') || undefined;
+
+        for (const taskId of Array.from(referencedTaskIds)) {
+          const task = taskRepository.getTask(taskId);
+          if (!task) continue;
+
           const templateId = getTemplateId(task);
-          if (templateId && templateIdToTaskType(templateId) === TaskType.UtteranceInterpretation && task.data && task.data.length > 0) {
+          if (!templateId || templateIdToTaskType(templateId) !== TaskType.UtteranceInterpretation) continue;
+
+          try {
+            // ✅ Build TaskTree from template (nodes have id = templateId, matching steps keys and condition expressions)
+            const taskTree = await buildTaskTree(task, projectId);
+            if (!taskTree || !taskTree.nodes || taskTree.nodes.length === 0) {
+              // ✅ Fallback to legacy task.data if buildTaskTree fails or returns empty
+              if (task.data && Array.isArray(task.data) && task.data.length > 0) {
+                console.warn('[useDialogueEngine] ⚠️ Using legacy task.data as fallback', { taskId });
+                allDDTs.push({
+                  label: task.label,
+                  data: task.data,
+                  steps: task.steps
+                });
+              }
+              continue;
+            }
+
+            // ✅ Merge user data from task.data if exists (preserves nlpProfile.examples, testNotes, etc.)
+            const nodesWithUserData = taskTree.nodes.map((node: any) => {
+              // Find matching user node by templateId or id
+              const userNode = task.data?.find((d: any) =>
+                d.templateId === node.templateId || d.id === node.id || d.templateId === node.id
+              );
+
+              if (userNode) {
+                // ✅ Preserve user modifications (nlpProfile.examples, testNotes, etc.)
+                // but keep node.id = templateId (critical for variableStore)
+                return {
+                  ...node,
+                  ...userNode,
+                  id: node.id,  // ✅ CRITICAL: Keep id = templateId (don't use userNode.id which might be cloned instanceId)
+                  templateId: node.templateId  // ✅ CRITICAL: Keep templateId
+                };
+              }
+              return node;
+            });
+
             allDDTs.push({
               label: task.label,
-              data: task.data,
-              steps: task.steps
+              data: nodesWithUserData,  // ✅ id = templateId (fixes variableStore) + user data preserved
+              steps: taskTree.steps || task.steps  // ✅ Use steps from taskTree (keyed by templateId)
             });
+
+            console.log('[useDialogueEngine] ✅ DDT built from TaskTree', {
+              taskId,
+              templateId,
+              nodesCount: nodesWithUserData.length,
+              firstNodeId: nodesWithUserData[0]?.id,
+              firstNodeTemplateId: nodesWithUserData[0]?.templateId,
+              hasUserData: task.data && task.data.length > 0,
+              userDataNodesCount: task.data?.length || 0
+            });
+          } catch (error) {
+            console.error('[useDialogueEngine] ❌ Error building TaskTree, falling back to task.data', {
+              taskId,
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined
+            });
+            // ✅ Fallback to legacy task.data if buildTaskTree throws
+            if (task.data && Array.isArray(task.data) && task.data.length > 0) {
+              allDDTs.push({
+                label: task.label,
+                data: task.data,
+                steps: task.steps
+              });
+            }
           }
         }
-      });
+      }
 
       // ✅ DEBUG: Log complete graph payload
       if (allTasksWithTemplates.length > 0) {

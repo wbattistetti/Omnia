@@ -95,13 +95,21 @@ export class DialogueTaskService {
       }
 
       const data = await response.json();
-      this.cache = Array.isArray(data) ? data : [];
+      // ✅ Tag every Factory template with source:'Factory' so saveModifiedTemplates
+      // routes them back to the Factory DB instead of the project DB.
+      const raw = Array.isArray(data) ? data : [];
+      this.cache = raw.map((t: any) =>
+        t.source ? t : { ...t, source: 'Factory' }
+      );
       this.cacheLoaded = true;
 
       // ✅ Resetta lista templates modificati quando si ricarica la cache
       // (i templates ricaricati sono quelli dal database, quindi non sono più "modificati")
       this.modifiedTemplates.clear();
-      console.log('[DialogueTaskService] 🧹 Cleared modified templates list after cache reload');
+      console.log('[DialogueTaskService] 🧹 Cleared modified templates list after cache reload', {
+        count: this.cache.length,
+        source: 'Factory',
+      });
 
       return this.cache;
     } catch (error) {
@@ -394,16 +402,24 @@ export class DialogueTaskService {
     let added = 0;
     let updated = 0;
 
-    templates.forEach(template => {
-      const templateId = String(template.id || template._id || '').trim();
+    templates.forEach(rawTemplate => {
+      const templateId = String(rawTemplate.id || rawTemplate._id || '').trim();
       if (!templateId) return;
+
+      // ✅ Tag every project template with source:'Project' so saveModifiedTemplates
+      // routes them back to the project DB instead of the Factory DB.
+      const template: DialogueTask = (rawTemplate as any).source
+        ? rawTemplate
+        : { ...rawTemplate, source: 'Project' };
 
       const existingIdx = this.cache.findIndex(t =>
         String(t.id || t._id || '').trim() === templateId
       );
 
       if (existingIdx >= 0) {
-        this.cache[existingIdx] = template;
+        // ✅ Preserve existing source if already set; do not downgrade Factory → Project
+        const existing = this.cache[existingIdx] as any;
+        this.cache[existingIdx] = existing.source ? { ...template, source: existing.source } : template;
         updated++;
       } else {
         this.cache.push(template);

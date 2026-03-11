@@ -2768,80 +2768,148 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
 // The frontend filters out orphan tasks from the payload, so the backend only receives coherent data
 // No cleanup needed in backend - orphan tasks are never written to database
 
-// GET /api/projects/:pid/variable-mappings - Get variable mappings for project
-app.get('/api/projects/:pid/variable-mappings', async (req, res) => {
-  const projectId = req.params.pid;
-  const startTime = Date.now();
-  const client = await getMongoClient();
-  try {
-    const projDb = await getProjectDb(client, projectId);
-    const queryStart = Date.now();
-    const doc = await projDb.collection('variable_mappings').findOne({ projectId });
-    const queryDuration = Date.now() - queryStart;
+// variable-mappings endpoints removed — superseded by /variables endpoints
 
-    if (!doc) {
-      const duration = Date.now() - startTime;
-      logInfo('VariableMappings.get', { projectId, found: false, duration: `${duration}ms` });
-      return res.status(404).json({ error: 'not_found' });
+// POST /api/projects/:pid/variables - Create variables for a task instance
+app.post('/api/projects/:pid/variables', async (req, res) => {
+  const projectId = req.params.pid;
+  const { variables } = req.body || {};
+  const client = await getMongoClient();
+  const startTime = Date.now();
+  try {
+    if (!Array.isArray(variables) || variables.length === 0) {
+      return res.status(400).json({ error: 'variables must be a non-empty array' });
     }
 
+    const projDb = await getProjectDb(client, projectId);
+
+    // Insert variables (upsert by varId to avoid duplicates)
+    const operations = variables.map(v => ({
+      updateOne: {
+        filter: { varId: v.varId },
+        update: {
+          $set: {
+            ...v,
+            projectId
+          }
+        },
+        upsert: true
+      }
+    }));
+
+    const result = await projDb.collection('variables').bulkWrite(operations);
+
     const duration = Date.now() - startTime;
-    const mappingsCount = (doc.mappings || []).length;
-    logInfo('VariableMappings.get', { projectId, found: true, mappingsCount, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
-    res.json({
-      version: doc.version || '1.0',
-      mappings: doc.mappings || [],
-      nodeIdToReadableName: doc.nodeIdToReadableName || [],
-      taskIdToReadableNames: doc.taskIdToReadableNames || [],
-      taskIdToSnapshot: doc.taskIdToSnapshot || []
+    logInfo('Variables.post', {
+      projectId,
+      variablesCount: variables.length,
+      inserted: result.insertedCount,
+      modified: result.modifiedCount,
+      duration: `${duration}ms`
     });
+
+    res.json({ ok: true, inserted: result.insertedCount, modified: result.modifiedCount });
   } catch (e) {
     const duration = Date.now() - startTime;
-    logError('VariableMappings.get', e, { projectId, duration: `${duration}ms` });
+    logError('Variables.post', e, { projectId, duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
-// POST /api/projects/:pid/variable-mappings - Save variable mappings for project
-app.post('/api/projects/:pid/variable-mappings', async (req, res) => {
+// GET /api/projects/:pid/variables - Get variables (with optional filters)
+app.get('/api/projects/:pid/variables', async (req, res) => {
   const projectId = req.params.pid;
-  const payload = req.body || {};
+  const { taskInstanceId, varName, nodeId } = req.query;
   const client = await getMongoClient();
+  const startTime = Date.now();
   try {
     const projDb = await getProjectDb(client, projectId);
-    const now = new Date();
+    const query = { projectId };
 
-    const doc = {
+    if (taskInstanceId) {
+      query.taskInstanceId = taskInstanceId;
+    }
+    if (varName) {
+      query.varName = varName;
+    }
+    if (nodeId) {
+      query.nodeId = nodeId;
+    }
+
+    const variables = await projDb.collection('variables').find(query).toArray();
+
+    const duration = Date.now() - startTime;
+    logInfo('Variables.get', {
       projectId,
-      version: payload.version || '1.0',
-      mappings: payload.mappings || [],
-      nodeIdToReadableName: payload.nodeIdToReadableName || [],
-      taskIdToReadableNames: payload.taskIdToReadableNames || [],
-      taskIdToSnapshot: payload.taskIdToSnapshot || [],
-      updatedAt: now
-    };
-
-    const result = await projDb.collection('variable_mappings').updateOne(
-      { projectId },
-      {
-        $set: doc,
-        $setOnInsert: { createdAt: now }
-      },
-      { upsert: true }
-    );
-
-    logInfo('VariableMappings.post', {
-      projectId,
-      upserted: result.upsertedCount > 0,
-      modified: result.modifiedCount > 0,
-      mappingsCount: doc.mappings.length
+      taskInstanceId,
+      varName,
+      variablesCount: variables.length,
+      duration: `${duration}ms`
     });
 
-    res.json({ ok: true, upserted: result.upsertedCount > 0, modified: result.modifiedCount > 0 });
+    res.json(variables);
   } catch (e) {
-    logError('VariableMappings.post', e, { projectId });
+    const duration = Date.now() - startTime;
+    logError('Variables.get', e, { projectId, duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
-  // ✅ NON chiudere la connessione se usi il pool
+  }
+});
+
+// GET /api/projects/:pid/variables/:varId - Get variable by varId
+app.get('/api/projects/:pid/variables/:varId', async (req, res) => {
+  const projectId = req.params.pid;
+  const { varId } = req.params;
+  const client = await getMongoClient();
+  const startTime = Date.now();
+  try {
+    const projDb = await getProjectDb(client, projectId);
+    const variable = await projDb.collection('variables').findOne({ projectId, varId });
+
+    if (!variable) {
+      const duration = Date.now() - startTime;
+      logInfo('Variables.getById', { projectId, varId, found: false, duration: `${duration}ms` });
+      return res.status(404).json({ error: 'not_found' });
+    }
+
+    const duration = Date.now() - startTime;
+    logInfo('Variables.getById', { projectId, varId, found: true, duration: `${duration}ms` });
+    res.json(variable);
+  } catch (e) {
+    const duration = Date.now() - startTime;
+    logError('Variables.getById', e, { projectId, varId, duration: `${duration}ms` });
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// DELETE /api/projects/:pid/variables - Delete variables (with optional filters)
+app.delete('/api/projects/:pid/variables', async (req, res) => {
+  const projectId = req.params.pid;
+  const { taskInstanceId } = req.query;
+  const client = await getMongoClient();
+  const startTime = Date.now();
+  try {
+    const projDb = await getProjectDb(client, projectId);
+    const query = { projectId };
+
+    if (taskInstanceId) {
+      query.taskInstanceId = taskInstanceId;
+    }
+
+    const result = await projDb.collection('variables').deleteMany(query);
+
+    const duration = Date.now() - startTime;
+    logInfo('Variables.delete', {
+      projectId,
+      taskInstanceId,
+      deletedCount: result.deletedCount,
+      duration: `${duration}ms`
+    });
+
+    res.json({ ok: true, deletedCount: result.deletedCount });
+  } catch (e) {
+    const duration = Date.now() - startTime;
+    logError('Variables.delete', e, { projectId, duration: `${duration}ms` });
+    res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
@@ -6617,11 +6685,13 @@ app.post('/api/runtime/orchestrator/session/start', async (req, res) => {
     }
 
     const sessionManager = orchestratorSessionManagerInstance;
+    const projectId = req.body.projectId || null;
     const sessionId = sessionManager.createSession(
       compilationResult,
       tasks || [],
       ddts || [],
-      translations || {}
+      translations || {},
+      projectId
     );
 
     console.log('✅ [API] POST /api/runtime/orchestrator/session/start - Session created:', { sessionId });

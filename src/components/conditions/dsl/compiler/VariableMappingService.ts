@@ -2,38 +2,39 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { VariableMappingService as IVariableMappingService } from './ASTCompiler';
-import { flowchartVariablesService } from '@services/FlowchartVariablesService';
+import { variableCreationService } from '@services/VariableCreationService';
 
 /**
- * Service for mapping variable labels to GUIDs.
- * Delegates to FlowchartVariablesService.
+ * Implements VariableMappingService for the DSL compiler.
+ * Resolves a human-readable variable label to its varId (GUID) using the
+ * in-memory store maintained by VariableCreationService.
+ *
+ * The lookup is synchronous (in-memory), so no DB round-trip occurs during
+ * condition compilation.
  */
 export class VariableMappingService implements IVariableMappingService {
   /**
-   * Get GUID for a variable by its label and optional path.
+   * Return the varId for a variable identified by label and optional sub-path.
+   * e.g. label="data di nascita", path=["giorno"] → varId for "data di nascita.giorno"
    */
   async getVariableId(label: string, path?: string[]): Promise<string | null> {
     try {
-      // Build full variable path
-      const fullPath = path ? `${label}.${path.join('.')}` : label;
-
-      // Try to get GUID by readable name
-      const nodeId = flowchartVariablesService.getNodeId(fullPath);
-      if (nodeId) {
-        return nodeId;
+      const projectId = localStorage.getItem('currentProjectId');
+      if (!projectId) {
+        console.warn('[VariableMappingService] No projectId in localStorage');
+        return null;
       }
 
-      // If not found, try just the label
-      const labelNodeId = flowchartVariablesService.getNodeId(label);
-      if (labelNodeId && path) {
-        // For nested paths, we might need to construct the full path differently
-        // This is a simplified approach - may need refinement based on actual variable structure
-        return `${labelNodeId}.${path.join('.')}`;
+      const varName = path && path.length > 0 ? `${label}.${path.join('.')}` : label;
+      const varId = variableCreationService.getVarIdByVarName(projectId, varName);
+
+      if (!varId) {
+        console.warn('[VariableMappingService] Variable not found', { varName, projectId });
       }
 
-      return labelNodeId;
+      return varId;
     } catch (error) {
-      console.warn('[VariableMappingService] Error getting variable ID', { label, path, error });
+      console.warn('[VariableMappingService] Error resolving variable ID', { label, path, error });
       return null;
     }
   }

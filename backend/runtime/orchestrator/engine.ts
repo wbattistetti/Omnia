@@ -3,6 +3,7 @@
 
 import type { CompiledTask, CompilationResult, ExecutionState, RetrievalState } from '../compiler/types';
 import { evaluateCondition } from './conditionEvaluator';
+import { variableResolver } from '../variables/VariableResolver';
 
 interface EngineCallbacks {
   onTaskExecute: (task: CompiledTask) => Promise<any>;
@@ -19,10 +20,12 @@ export class DialogueEngine {
   private state: ExecutionState;
   private callbacks: EngineCallbacks;
   private isRunning: boolean = false;
+  private projectId: string | null = null;
 
-  constructor(result: CompilationResult, callbacks: EngineCallbacks) {
+  constructor(result: CompilationResult, callbacks: EngineCallbacks, projectId?: string) {
     this.result = result;
     this.callbacks = callbacks;
+    this.projectId = projectId || null;
     this.state = {
       executedTaskIds: new Set(),
       variableStore: {},
@@ -30,6 +33,11 @@ export class DialogueEngine {
       currentNodeId: null,
       currentRowIndex: 0
     };
+
+    // Initialize variable resolver with projectId
+    if (this.projectId) {
+      variableResolver.setProjectId(this.projectId);
+    }
   }
 
   /**
@@ -296,7 +304,7 @@ export class DialogueEngine {
 
       // Update state based on result
       if (result) {
-        this.updateStateFromResult(task, result);
+        await this.updateStateFromResult(task, result);
         console.log('[DialogueEngine][executeTask] State updated', {
           retrievalState: this.state.retrievalState,
           variableStoreKeys: Object.keys(this.state.variableStore)
@@ -322,14 +330,11 @@ export class DialogueEngine {
 
   /**
    * Updates execution state from task result
-   * Converts rich Variable structure to simplified variableStore
+   * Converts rich Variable structure to simplified variableStore using varId
    */
-  private updateStateFromResult(task: CompiledTask, result: any): void {
+  private async updateStateFromResult(task: CompiledTask, result: any): Promise<void> {
     // Update variable store
     if (result.variables) {
-      // Helper to identify GUID keys (36 chars with hyphens)
-      const isGuid = (key: string) => key.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
-
       console.log('[DialogueEngine][updateStateFromResult] 🔄 Updating variableStore', {
         taskId: task.id,
         action: task.action,
@@ -339,43 +344,47 @@ export class DialogueEngine {
       });
 
       // Convert state.memory (rich Variable structure) to variableStore (simplified)
+      // Resolve nodeId to varId for each variable
       for (const [nodeId, variable] of Object.entries(result.variables)) {
-        // Check if variable is rich structure (Variable) or legacy structure
+        // Resolve varId from nodeId + taskInstanceId
+        const varId = await variableResolver.resolveVarId(nodeId, task.id);
+
+        if (!varId) {
+          console.warn('[DialogueEngine][updateStateFromResult] ⚠️ Could not resolve varId', {
+            nodeId,
+            taskId: task.id,
+            projectId: this.projectId
+          });
+          // Skip this variable if we can't resolve varId
+          continue;
+        }
+
+        // Extract semantic value
+        let semanticValue: any = null;
         if (variable && typeof variable === 'object' && 'label' in variable && 'value' in variable) {
           // Rich structure: Variable
           const varObj = variable as any;
-          const semanticValue = varObj.value?.semantic ?? varObj.value ?? null;
-
-          // Use label as key (editor guarantees uniqueness)
-          if (varObj.label) {
-            this.state.variableStore[varObj.label] = semanticValue;
-          }
-
-          // Also store with nodeId for compatibility
-          this.state.variableStore[nodeId] = semanticValue;
+          semanticValue = varObj.value?.semantic ?? varObj.value ?? null;
         } else if (variable && typeof variable === 'object' && 'value' in variable) {
           // Legacy structure: { value, confirmed }
-          const legacyValue = (variable as any).value;
-          // Try to get label from FlowchartVariablesService (if available)
-          // For now, store with nodeId only
-          this.state.variableStore[nodeId] = legacyValue;
+          semanticValue = (variable as any).value;
         } else {
           // Simple value
-          this.state.variableStore[nodeId] = variable;
+          semanticValue = variable;
         }
+
+        // Store with varId as key
+        this.state.variableStore[varId] = semanticValue;
       }
 
-      const finalGuidKeys = Object.keys(this.state.variableStore).filter(isGuid);
-      const finalLabelKeys = Object.keys(this.state.variableStore).filter(k => !isGuid(k));
+      const varIdKeys = Object.keys(this.state.variableStore);
 
       console.log('[DialogueEngine][updateStateFromResult] ✅ variableStore updated', {
         taskId: task.id,
         variableStoreAfter: { ...this.state.variableStore },
-        variableStoreKeys: Object.keys(this.state.variableStore),
-        guidKeysCount: finalGuidKeys.length,
-        labelKeysCount: finalLabelKeys.length,
-        guidKeys: finalGuidKeys.slice(0, 5),
-        labelKeys: finalLabelKeys.slice(0, 5)
+        variableStoreKeys: varIdKeys,
+        varIdKeysCount: varIdKeys.length,
+        sampleVarIds: varIdKeys.slice(0, 5)
       });
     } else {
       console.log('[DialogueEngine][updateStateFromResult] ⚠️ No variables in result', {

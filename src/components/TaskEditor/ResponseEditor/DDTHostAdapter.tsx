@@ -3,7 +3,6 @@ import type { EditorProps } from '@taskEditor/EditorHost/types';
 import ResponseEditor from '@responseEditor/index';
 import { taskRepository } from '@services/TaskRepository';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
-import { flowchartVariablesService } from '@services/FlowchartVariablesService';
 import { getTemplateId } from '@utils/taskHelpers';
 import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '@types/taskTypes';
@@ -318,35 +317,10 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       });
     }
 
-    // ✅ NEW: Extract variables from TaskTree structure
+    // Emit event to refresh ConditionEditor variables (variables are created by TemplateCloningService)
     try {
-      if (currentProjectId && finalTaskTree) {
-        await flowchartVariablesService.init(currentProjectId);
-
-        // Get row text from task (this is the label of the row)
-        const taskInstance = taskRepository.getTask(taskId);
-        // ✅ NO FALLBACKS: Use taskInstance.text as primary, taskMeta.label as fallback, 'Task' as explicit default
-        const rowText = taskInstance?.text ?? taskMeta.label ?? 'Task';
-
-        // Extract variables from TaskTree using row text and TaskTree labels
-        const varNames = await flowchartVariablesService.extractVariablesFromDDT(
-          finalTaskTree,
-          taskId, // taskId (ALWAYS equals row.id)
-          taskId, // rowId (same as taskId, ALWAYS equals row.id)
-          rowText, // Row text (e.g., "chiedi data di nascita")
-          undefined // nodeId (not available here)
-        );
-
-        // Emit event to refresh ConditionEditor variables
-        try {
-          document.dispatchEvent(new CustomEvent('flowchart:variablesUpdated', {
-            bubbles: true
-          }));
-        } catch {}
-      }
-    } catch (e) {
-      // Failed to extract variables from TaskTree
-    }
+      document.dispatchEvent(new CustomEvent('flowchart:variablesUpdated', { bubbles: true }));
+    } catch { }
 
     // ✅ FASE 3: Store è primary - aggiorna sempre lo store
     setTaskTreeInStore(finalTaskTree);

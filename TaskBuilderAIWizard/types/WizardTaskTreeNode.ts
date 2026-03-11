@@ -28,7 +28,7 @@ export type WizardTaskTreeNode = {
   // ✅ NUOVO: Variabili (generati da VariableNameGeneratorService)
   readableName?: string;      // Nome completo variabile (es: "Data di nascita del paziente")
   dottedName?: string;        // Nome gerarchico (es: "Data di nascita del paziente.Giorno")
-  taskId?: string;            // Task ID (per mapping variabili in FlowchartVariablesService)
+  taskId?: string;            // Task ID (used for variable creation in VariableCreationService)
 
   // ✅ NEW: Generalization fields (solo sul nodo root)
   shouldBeGeneral?: boolean;

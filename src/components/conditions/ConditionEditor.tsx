@@ -108,7 +108,17 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   }, [projectData, pdUpdate]);
 
   const updateProjectDataScript = React.useCallback(async (dslToSave: string) => {
-    const result = await scriptManager.saveScript(dslToSave, label || '');
+    // ✅ Pass conditionId if available (update existing), otherwise search by label
+    let result = await scriptManager.saveScript(dslToSave, label || '', conditionId);
+
+    // ✅ Fallback: condition not found (by ID or by label) → create it
+    // Covers both: new conditions (no conditionId) and orphaned conditionIds (stale ID not in projectData)
+    if (!result.success && result.errors?.some((e: any) =>
+      e.message?.includes('not found') || e.message?.includes('Use createCondition')
+    )) {
+      result = await scriptManager.createCondition(dslToSave, label || '');
+    }
+
     if (result.success) {
       // Update compiled JS preview
       const compileResult = await scriptManager.compileDSL(dslToSave);
@@ -116,7 +126,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         setCompiledJs(compileResult.jsCode);
       }
     }
-  }, [scriptManager, label, setCompiledJs]);
+  }, [scriptManager, label, conditionId, setCompiledJs]);
 
   // Refs
   const monacoEditorRef = React.useRef<any>(null);
@@ -665,7 +675,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
             }
 
             // ✅ Save script by conditionId if exists, otherwise try to save by label
-            // If condition doesn't exist (manual creation without AI), create it
+            // If condition doesn't exist (new or orphaned conditionId), create it
             let saveResult;
             if (conditionId) {
               // Edge already has conditionId - update existing condition
@@ -673,18 +683,20 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
             } else {
               // Edge doesn't have conditionId - try to save by label first
               saveResult = await scriptManager.saveScript(script, label || '');
+            }
 
-              // If save failed because condition doesn't exist, create it
-              if (!saveResult.success && saveResult.errors?.some((e: any) =>
-                e.message?.includes('not found') || e.message?.includes('Use createCondition')
-              )) {
-                console.log('[ConditionEditor] ℹ️ Condition not found, creating new condition', {
-                  label
-                });
-                const createResult = await scriptManager.createCondition(script, label || '');
-                if (createResult.success) {
-                  saveResult = createResult;
-                }
+            // ✅ Fallback: condition not found (by ID or by label) → create it
+            // Covers: new conditions (no conditionId) AND orphaned conditionIds (stale ID missing from projectData)
+            if (!saveResult.success && saveResult.errors?.some((e: any) =>
+              e.message?.includes('not found') || e.message?.includes('Use createCondition')
+            )) {
+              console.log('[ConditionEditor] ℹ️ Condition not found, creating new condition', {
+                label,
+                hadConditionId: !!conditionId
+              });
+              const createResult = await scriptManager.createCondition(script, label || '');
+              if (createResult.success) {
+                saveResult = createResult;
               }
             }
 

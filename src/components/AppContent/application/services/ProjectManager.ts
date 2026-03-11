@@ -4,7 +4,7 @@
 import { ProjectService } from '@services/ProjectService';
 import { ProjectDataService } from '@services/ProjectDataService';
 import { taskRepository } from '@services/TaskRepository';
-import { flowchartVariablesService } from '@services/FlowchartVariablesService';
+import { variableCreationService } from '@services/VariableCreationService';
 import { FlowStateBridge } from '@services/FlowStateBridge';
 import type { ProjectInfo, ProjectData } from '@types/projectTypes';
 
@@ -313,7 +313,7 @@ export class ProjectManager {
         })(),
         (async () => {
           try {
-            await flowchartVariablesService.init(id);
+            await variableCreationService.loadFromDatabase(id);
             return true;
           } catch (e) {
             console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR load variable mappings`, e);

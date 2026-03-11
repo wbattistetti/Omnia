@@ -39,7 +39,8 @@ export class OrchestratorSessionManager {
     compilationResult: CompilationResult,
     tasks: any[],
     ddts: any[],
-    translations: Record<string, string> = {}
+    translations: Record<string, string> = {},
+    projectId?: string
   ): string {
     const sessionId = `orch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
@@ -294,7 +295,7 @@ export class OrchestratorSessionManager {
         console.error('[ORCHESTRATOR SESSION] Execution error', { sessionId, error: error.message });
         eventEmitter.emit('error', { error: error.message });
       }
-    });
+    }, projectId);
 
     const session: OrchestratorSession = {
       id: sessionId,

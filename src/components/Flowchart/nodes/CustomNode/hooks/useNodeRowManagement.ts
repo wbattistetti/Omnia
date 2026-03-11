@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
 import { getTaskIdFromRow } from '../../../../../utils/taskHelpers';
-import { flowchartVariablesService } from '../../../../../services/FlowchartVariablesService';
+import { variableCreationService } from '../../../../../services/VariableCreationService';
 import { taskRepository } from '../../../../../services/TaskRepository';
 import { TaskType } from '../../../../../types/taskTypes'; // ✅ Per TaskType enum
 
@@ -243,7 +243,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             }
         }
 
-        // ✅ NEW: Delete variables when row is deleted
+        // Delete variables when row is deleted
         try {
             let projectId: string | undefined = undefined;
             try {
@@ -251,14 +251,9 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             } catch {}
 
             if (projectId) {
-                await flowchartVariablesService.init(projectId);
-                await flowchartVariablesService.deleteMappingsByRowId(rowId);
-
-                // Emit event to refresh ConditionEditor variables
+                variableCreationService.deleteVariablesForInstance(projectId, rowId);
                 try {
-                    document.dispatchEvent(new CustomEvent('flowchart:variablesUpdated', {
-                        bubbles: true
-                    }));
+                    document.dispatchEvent(new CustomEvent('flowchart:variablesUpdated', { bubbles: true }));
                 } catch {}
             }
         } catch (e) {
@@ -296,7 +291,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             }
             // Se l'indice era prima dell'ultima riga, rimane invariato
 
-            // ✅ Elimina anche le variabili associate alla riga eliminata
+            // Delete variables for the replaced empty row
             try {
                 let projectId: string | undefined = undefined;
                 try {
@@ -304,14 +299,9 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 } catch {}
 
                 if (projectId) {
-                    await flowchartVariablesService.init(projectId);
-                    await flowchartVariablesService.deleteMappingsByRowId(lastRow.id);
-
-                    // Emit event to refresh ConditionEditor variables
+                    variableCreationService.deleteVariablesForInstance(projectId, lastRow.id);
                     try {
-                        document.dispatchEvent(new CustomEvent('flowchart:variablesUpdated', {
-                            bubbles: true
-                        }));
+                        document.dispatchEvent(new CustomEvent('flowchart:variablesUpdated', { bubbles: true }));
                     } catch {}
                 }
             } catch (e) {

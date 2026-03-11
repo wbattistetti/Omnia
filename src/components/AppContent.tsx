@@ -931,25 +931,25 @@ export const AppContent: React.FC<AppContentProps> = ({
                     }
                   })(),
 
-                  // 5. Save variable mappings
+                  // 5. Save variables (new system)
                   (async () => {
                     if (!pid) return;
                     const tStart = performance.now();
                     try {
-                      console.log('[Save][5-mappings] 🚀 START');
-                      const { flowchartVariablesService } = await import('../services/FlowchartVariablesService');
-                      const stats = flowchartVariablesService.getStats();
-                      console.log('[Save][5-mappings] 📊 Mappings to save', stats);
-                      const mappingsSaved = await flowchartVariablesService.saveToDatabase(pid);
+                      console.log('[Save][5-variables] 🚀 START');
+                      const { variableCreationService } = await import('../services/VariableCreationService');
+                      const count = variableCreationService.getCount(pid);
+                      console.log('[Save][5-variables] 📊 Variables to save', { count });
+                      const saved = await variableCreationService.saveToDatabase(pid);
                       const tEnd = performance.now();
-                      if (mappingsSaved) {
-                        console.log('[Save][5-mappings] ✅ DONE', { ms: Math.round(tEnd - tStart), stats });
+                      if (saved) {
+                        console.log('[Save][5-variables] ✅ DONE', { ms: Math.round(tEnd - tStart), count });
                       } else {
-                        console.warn('[Save][5-mappings] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), stats });
+                        console.warn('[Save][5-variables] ⚠️ FAILED', { ms: Math.round(tEnd - tStart) });
                       }
                     } catch (e) {
                       const tEnd = performance.now();
-                      console.error('[Save][5-mappings] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                      console.error('[Save][5-variables] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
                     }
                   })(),
 

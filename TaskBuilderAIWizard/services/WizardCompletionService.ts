@@ -278,6 +278,8 @@ async function createAndSaveInstance(
 
   // ✅ STEP 7: Ricaricare task instance dopo l'aggiornamento
   taskInstance = taskRepository.getTask(rowId);
+
+  // Variables are created in TemplateCloningService.cloneTemplateToInstance (single creation point).
   return taskInstance;
 }
 

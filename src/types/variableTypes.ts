@@ -25,7 +25,19 @@ export interface Variable {
 }
 
 /**
- * VariableStore: Vista semplificata per valutazione condizioni
- * Usa label come chiave (sicuro perché editor garantisce unicità)
+ * VariableInstance: Variabile associata a un'istanza di task
+ * Ogni variabile ha un varId univoco per evitare collisioni quando lo stesso template è usato in istanze diverse
  */
-export type VariableStore = Record<string, any>; // { [label: string]: semantic value }
+export interface VariableInstance {
+  varId: string;          // GUID univoco per ogni istanza×nodo (NUOVO)
+  varName: string;        // Nome leggibile: "data di nascita" | "data di nascita.giorno"
+  taskInstanceId: string; // rowId dell'istanza (sempre = task.id)
+  nodeId: string;         // GUID del nodo nel template (riferimento struttura)
+  ddtPath: string;        // Path nel DDT: "data[0]" | "data[0].subData[1]"
+}
+
+/**
+ * VariableStore: Vista semplificata per valutazione condizioni
+ * Usa varId come chiave (non più nodeId o label)
+ */
+export type VariableStore = Record<string, any>; // { [varId: string]: semantic value }

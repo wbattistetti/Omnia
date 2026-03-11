@@ -4,7 +4,7 @@
 import type { DockTab } from '@dock/types';
 import type { ConditionEditorOpenEvent } from '../../domain/editorEvents';
 import { validateConditionEditorEvent } from '../../domain/editorEvents';
-import { flowchartVariablesService } from '@services/FlowchartVariablesService';
+import { variableCreationService } from '@services/VariableCreationService';
 import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from '@components/Sidebar/sidebarTheme';
 import { getNodesWithFallback } from '@utils/taskTreeMigrationHelpers';
 import { ConditionAIService } from '@components/conditions/application/ConditionAIService';
@@ -41,7 +41,7 @@ export class ConditionEditorEventHandler {
     const provided = event.variables || {};
     const hasProvided = provided && Object.keys(provided).length > 0;
     const staticVars = this.buildStaticVars();
-    const flowchartVars = await this.buildFlowchartVars();
+    const flowchartVars = this.buildFlowchartVars();
     const varsTree = this.buildVarsTree();
 
     // Merge all variables
@@ -263,14 +263,12 @@ export class ConditionEditorEventHandler {
   /**
    * Builds flowchart variables
    */
-  private async buildFlowchartVars(): Promise<Record<string, any>> {
+  private buildFlowchartVars(): Record<string, any> {
     const vars: Record<string, any> = {};
     try {
       const projectId = this.params.pdUpdate?.getCurrentProjectId();
       if (projectId) {
-        await flowchartVariablesService.init(projectId);
-        const varNames = flowchartVariablesService.getAllReadableNames();
-        varNames.forEach(name => {
+        variableCreationService.getAllVarNames(projectId).forEach(name => {
           vars[name] = '';
         });
       }

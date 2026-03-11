@@ -7,7 +7,7 @@ import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/tas
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
 import { Server, Plus, X, Eye, EyeOff, Pencil, Check, Trash2, Table2 } from 'lucide-react';
 import { OmniaSelect } from '../../../../components/common/OmniaSelect';
-import { flowchartVariablesService } from '../../../../services/FlowchartVariablesService';
+import { variableCreationService } from '../../../../services/VariableCreationService';
 import type { ToolbarButton } from '../../../../dock/types';
 import TableEditor from './TableEditor';
 
@@ -108,13 +108,16 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
   // These are the same names used in ConditionEditor and runtime (ctx["data di nascita"])
   const availableVariables = React.useMemo(() => {
     try {
-      const vars = flowchartVariablesService.getAllReadableNames();
-      return vars; // Return directly, no wrapping in vars["..."]
+      const projectId = localStorage.getItem('currentProjectId');
+      if (projectId) {
+        return variableCreationService.getAllVarNames(projectId);
+      }
+      return [];
     } catch {
       // Fallback: try to get from window (if available)
       try {
         const windowVars = (window as any).__omniaVarKeys || [];
-        return windowVars; // Return directly
+        return windowVars;
       } catch {
         return [];
       }

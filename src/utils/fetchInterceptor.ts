@@ -12,8 +12,8 @@
  * - Maintains full REST semantics (404 is still returned, just not logged)
  */
 
-const SILENT_404_ENDPOINTS = [
-  '/variable-mappings', // Variable mappings may not exist for new projects
+const SILENT_404_ENDPOINTS: string[] = [
+  // Add endpoint suffixes here that should suppress 404 console errors
 ];
 
 /**
