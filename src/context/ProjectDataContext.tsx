@@ -17,7 +17,7 @@ interface ProjectDataUpdateContextType {
   addCategory: (type: EntityType, name: string) => Promise<void>;
   deleteCategory: (type: EntityType, categoryId: string) => Promise<void>;
   updateCategory: (type: EntityType, categoryId: string, updates: Partial<Category>) => Promise<void>;
-  addItem: (type: EntityType, categoryId: string, name: string, description?: string, scope?: 'global' | 'industry') => Promise<void>;
+  addItem: (type: EntityType, categoryId: string, name: string, description?: string, scope?: 'global' | 'industry') => Promise<ProjectEntityItem>;
   deleteItem: (type: EntityType, categoryId: string, itemId: string) => Promise<void>;
   updateItem: (type: EntityType, categoryId: string, itemId: string, updates: Partial<ProjectEntityItem>) => Promise<void>;
 }
@@ -95,19 +95,19 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
   useEffect(() => {
     if (data) {
       (window as any).__projectData = data;
-      // ✅ Log conditions with uiCode when data changes (useful for debugging)
-      const conditionsWithUiCode = data.conditions?.flatMap(cat =>
-        (cat.items || []).filter((item: any) => item.data?.uiCode).map((item: any) => ({
+      // ✅ FASE 2: Log conditions with expression.executableCode when data changes (useful for debugging)
+      const conditionsWithExpression = data.conditions?.flatMap(cat =>
+        (cat.items || []).filter((item: any) => item.expression?.executableCode).map((item: any) => ({
           id: item.id || item._id,
           name: item.name || item.label,
-          hasUiCode: !!item.data?.uiCode,
-          uiCodeLength: item.data?.uiCode?.length || 0
+          hasExecutableCode: !!item.expression?.executableCode,
+          executableCodeLength: item.expression?.executableCode?.length || 0
         }))
       ) || [];
       console.log('[ProjectDataProvider] ✅ Updated window.__projectData', {
         conditionsCount: data.conditions?.flatMap(cat => cat.items || []).length || 0,
-        conditionsWithUiCodeCount: conditionsWithUiCode.length,
-        conditionsWithUiCode: conditionsWithUiCode
+        conditionsWithExpressionCount: conditionsWithExpression.length,
+        conditionsWithExpression: conditionsWithExpression
       });
     } else {
       (window as any).__projectData = null;
@@ -158,12 +158,14 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
     }
   };
 
-  const addItem = async (type: EntityType, categoryId: string, name: string, description = '', scope?: 'global' | 'industry') => {
+  const addItem = async (type: EntityType, categoryId: string, name: string, description = '', scope?: 'global' | 'industry'): Promise<ProjectEntityItem> => {
     try {
-      await ProjectDataService.addItem(type, categoryId, name, description, scope);
+      const newItem = await ProjectDataService.addItem(type, categoryId, name, description, scope);
       await refreshData();
+      return newItem;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add item');
+      throw err;
     }
   };
 

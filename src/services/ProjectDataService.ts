@@ -755,15 +755,23 @@ export const ProjectDataService = {
       for (const cat of categories) {
         const items: any[] = Array.isArray(cat?.items) ? cat.items : [];
         for (const item of items) {
-          // ✅ FIX: Save conditions that have either script OR uiCode (DSL)
-          if (item?.data?.script || item?.data?.uiCode) {
+          // ✅ FASE 2: Save conditions that have expression (executableCode, compiledCode)
+          // readableCode is NOT saved - generated on-the-fly
+          if (item?.expression?.executableCode || item?.expression?.compiledCode) {
             const conditionId = item.id || item._id;
+            // Only save executableCode and compiledCode (remove readableCode if present)
+            const expressionToSave = {
+              executableCode: item.expression.executableCode,
+              compiledCode: item.expression.compiledCode,
+              ast: item.expression.ast,
+              format: item.expression.format || 'dsl'
+            };
             itemsToPersist.push({
               _id: conditionId,
               name: item.name || item.label,
               label: item.label || item.name,
               description: item.description || '',
-              data: item.data
+              expression: expressionToSave
             });
           }
         }

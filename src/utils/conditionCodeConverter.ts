@@ -4,22 +4,24 @@
 import { ASTNode } from '../components/conditions/dsl/parser/AST';
 
 /**
- * Converts UICode (with [label] placeholders) to ExecCode (with ctx["guid"])
- * Used when saving conditions to database
+ * ✅ FASE 2: Converts DSL with labels to DSL with GUIDs
+ * readableCode: [dataNascita.giorno] == 15
+ * executableCode: [guid-2222] == 15
  */
-export function convertUICodeToExecCode(
-  uiCode: string,
+export function convertDSLLabelsToGUIDs(
+  readableCode: string,
   variableMappings: Map<string, string> // Map<guid, label>
 ): string {
-  if (!uiCode || typeof uiCode !== 'string') {
-    return uiCode;
+  if (!readableCode || typeof readableCode !== 'string') {
+    return readableCode;
   }
 
-  // Replace [label] with ctx["guid"]
-  return uiCode.replace(/\[\s*([A-Za-z0-9 _-]+)\s*\]/g, (match, label) => {
+  // Replace [label] with [guid] in DSL
+  // Pattern matches [label] or [label.subpath]
+  return readableCode.replace(/\[\s*([A-Za-z0-9_. -]+)\s*\]/g, (match, label) => {
     // Find guid by label (reverse lookup)
     const guid = Array.from(variableMappings.entries()).find(
-      ([g, l]) => l === label
+      ([g, l]) => l === label.trim()
     )?.[0];
 
     if (!guid) {
@@ -27,34 +29,48 @@ export function convertUICodeToExecCode(
       return match; // Keep original if not found
     }
 
-    return `ctx["${guid}"]`;
+    return `[${guid}]`;
   });
 }
 
 /**
- * Converts ExecCode (with ctx["guid"]) to UICode (with [label] placeholders)
- * Used when loading conditions from database for display in editor
+ * ✅ FASE 2: Converts DSL with GUIDs to DSL with labels
+ * executableCode: [guid-2222] == 15
+ * readableCode: [dataNascita.giorno] == 15
+ * Used when loading condition for display in editor
  */
-export function convertExecCodeToUICode(
-  execCode: string,
+export function convertDSLGUIDsToLabels(
+  executableCode: string,
   variableMappings: Map<string, string> // Map<guid, label>
 ): string {
-  if (!execCode || typeof execCode !== 'string') {
-    return execCode;
+  if (!executableCode || typeof executableCode !== 'string') {
+    return executableCode;
   }
 
-  // Replace ctx["guid"] with [label]
-  return execCode.replace(/ctx\["([^"]+)"\]/g, (match, guid) => {
-    const label = variableMappings.get(guid);
+  // Replace [guid] with [label] in DSL
+  // Pattern matches GUID format: [xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx]
+  const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-    if (!label) {
-      console.warn(`[ConditionCodeConverter] GUID ${guid} not found in mappings`);
-      return match; // Keep original if not found
+  return executableCode.replace(/\[\s*([^\]]+)\s*\]/g, (match, content) => {
+    const trimmed = content.trim();
+
+    // Check if content is a GUID
+    if (GUID_PATTERN.test(trimmed)) {
+      const label = variableMappings.get(trimmed);
+
+      if (label) {
+        return `[${label}]`;
+      } else {
+        console.warn(`[ConditionCodeConverter] GUID [${trimmed}] not found in mappings`);
+        return match; // Keep original if not found
+      }
     }
 
-    return `[${label}]`;
+    // Not a GUID, keep as is (might be a literal or other content)
+    return match;
   });
 }
+
 
 /**
  * Transforms AST: replaces variable labels with GUIDs

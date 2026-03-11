@@ -15,6 +15,31 @@ export interface ProjectEntityItem {
 }
 
 /**
+ * Condition Expression: contains DSL with GUIDs and compiled code
+ * ✅ FASE 2: Simplified structure - readableCode is generated on-the-fly
+ */
+export interface ConditionExpression {
+  /** DSL with GUIDs: [guid-2222] == 15 - source of truth */
+  executableCode: string;
+  /** JavaScript compiled from executableCode: return ctx["guid-2222"] == 15; */
+  compiledCode: string;
+  /** AST serialized (optional, for debug) */
+  ast?: string;
+  /** Format: "dsl" (default) */
+  format?: string;
+  // ❌ readableCode is NOT stored - generated on-the-fly from executableCode + variableMappings
+}
+
+/**
+ * Condition Item: extends ProjectEntityItem with expression
+ * ✅ FASE 2: Uses expression.* instead of data.*
+ */
+export interface ConditionItem extends ProjectEntityItem {
+  label: string;
+  expression: ConditionExpression;
+}
+
+/**
  * Rappresenta una categoria di entità (es. gruppo di agent acts, tasks, ecc.)
  * T è il tipo di item contenuto (default: ProjectEntityItem)
  */

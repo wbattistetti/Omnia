@@ -26,37 +26,40 @@ Public Class ConditionDefinition
     Public Property Label As String
 
     ''' <summary>
-    ''' Dati della condizione (script, DSL, AST)
+    ''' Expression: contiene DSL e codice compilato
+    ''' ✅ FASE 2: Nuova struttura - sostituisce data.*
     ''' </summary>
-    <JsonProperty("data")>
-    Public Property Data As ConditionData
+    <JsonProperty("expression")>
+    Public Property Expression As ConditionExpression
 End Class
 
 ''' <summary>
-''' Condition Data: contiene script compilato e DSL originale
+''' Condition Expression: contiene DSL con GUID e JavaScript compilato
+''' ✅ FASE 2: Struttura semplificata - readableCode generato on-the-fly
 ''' </summary>
-Public Class ConditionData
+Public Class ConditionExpression
     ''' <summary>
-    ''' Script JavaScript compilato (execCode) - usato a runtime
+    ''' DSL con GUID: [guid-2222] == 15 - fonte di verità
     ''' </summary>
-    <JsonProperty("script")>
-    Public Property Script As String
+    <JsonProperty("executableCode")>
+    Public Property ExecutableCode As String
 
     ''' <summary>
-    ''' Codice DSL originale (uiCode) - usato per validazione
+    ''' JavaScript compilato: return ctx["guid-2222"] == 15;
     ''' </summary>
-    <JsonProperty("uiCode")>
-    Public Property UiCode As String
-
-    ''' <summary>
-    ''' Formato del codice UI ("dsl" o altro)
-    ''' </summary>
-    <JsonProperty("uiCodeFormat")>
-    Public Property UiCodeFormat As String
+    <JsonProperty("compiledCode")>
+    Public Property CompiledCode As String
 
     ''' <summary>
     ''' AST serializzato (opzionale, per debug)
     ''' </summary>
     <JsonProperty("ast")>
     Public Property Ast As String
+
+    ''' <summary>
+    ''' Formato: "dsl" (default)
+    ''' </summary>
+    <JsonProperty("format")>
+    Public Property Format As String
+    ' ❌ readableCode NON salvato - generato on-the-fly da executableCode + variableMappings
 End Class

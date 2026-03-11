@@ -35,20 +35,20 @@ export interface TaskEditorOpenEvent {
 
 /**
  * ConditionEditor open event payload
+ * ✅ FASE 1: Simplified - no needsGeneration, no script field
  */
 export interface ConditionEditorOpenEvent {
   nodeId?: string;
   label?: string;
   name?: string;
-  script?: string;
   variables?: Record<string, any>;
   variablesTree?: any;
-  /** If true, condition needs to be generated using AI */
-  needsGeneration?: boolean;
   /** Edge ID for error removal when condition becomes valid */
   edgeId?: string;
   /** Condition ID if edge is already linked to a condition */
   conditionId?: string;
+  /** DSL with labels (readableCode) - only if condition exists */
+  readableCode?: string;
 }
 
 /**

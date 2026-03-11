@@ -343,9 +343,10 @@ Public Class FlowCompiler
                                 .Category = "ConditionNotFound"
                             })
                             hasCondition = False
-                        ElseIf condition.Data IsNot Nothing Then
-                            ' Check if condition has valid script (execCode or DSL)
-                            Dim hasScript = Not String.IsNullOrWhiteSpace(condition.Data.Script) OrElse Not String.IsNullOrWhiteSpace(condition.Data.UiCode)
+                        ' ✅ FASE 2: Use expression.* instead of data.*
+                        ElseIf condition.Expression IsNot Nothing Then
+                            ' ✅ FASE 2: Check if condition has valid compiledCode (readableCode not stored)
+                            Dim hasScript = Not String.IsNullOrWhiteSpace(condition.Expression.CompiledCode)
                             If Not hasScript Then
                                 ' Condition exists but has no script
                                 Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition has no script")

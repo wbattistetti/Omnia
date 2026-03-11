@@ -4,7 +4,7 @@
 import { DSLParser } from '../dsl/parser/DSLParser';
 import { ASTCompiler } from '../dsl/compiler/ASTCompiler';
 import { VariableMappingService } from '../dsl/compiler/VariableMappingService';
-import { transformASTLabelsToGuids } from '@utils/conditionCodeConverter';
+import { transformASTLabelsToGuids, convertDSLLabelsToGUIDs, convertDSLGUIDsToLabels, createVariableMappings } from '@utils/conditionCodeConverter';
 
 export interface ScriptManagerServiceDependencies {
   projectData: any;
@@ -55,7 +55,7 @@ export class ScriptManagerService {
       dslPreview: dsl?.substring(0, 200) || ''
     });
 
-    // Parse DSL → AST
+    // ✅ FASE 2: Parse readableCode (DSL with labels) → AST
     const parseResult = this.parser.parse(dsl);
 
     if (!parseResult.ast || parseResult.errors.length > 0) {
@@ -65,10 +65,23 @@ export class ScriptManagerService {
       return { success: false, errors: parseResult.errors };
     }
 
-    // Compile AST → JavaScript
-    let execCode: string;
+    // ✅ FASE 2: Generate executableCode (DSL with GUIDs)
+    const variableMappings = createVariableMappings();
+    const executableCode = convertDSLLabelsToGUIDs(dsl, variableMappings);
+
+    // ✅ FASE 2: Parse executableCode → AST (with GUIDs) for compilation
+    const executableParseResult = this.parser.parse(executableCode);
+    if (!executableParseResult.ast || executableParseResult.errors.length > 0) {
+      console.error('[ScriptManagerService][CREATE] ❌ ExecutableCode parsing failed', {
+        errors: executableParseResult.errors
+      });
+      return { success: false, errors: executableParseResult.errors };
+    }
+
+    // ✅ FASE 2: Compile AST (with GUIDs) → JavaScript
+    let compiledCode: string;
     try {
-      execCode = await this.compiler.compile(parseResult.ast);
+      compiledCode = await this.compiler.compile(executableParseResult.ast);
     } catch (error: any) {
       console.error('[ScriptManagerService][CREATE] ❌ Compilation failed', { error });
       return {
@@ -81,9 +94,9 @@ export class ScriptManagerService {
       };
     }
 
-    console.log('[ScriptManagerService][CREATE] ✅ DSL compiled to JavaScript', {
-      dslLength: dsl.length,
-      execCodeLength: execCode.length
+    console.log('[ScriptManagerService][CREATE] ✅ Condition expression generated', {
+      executableCodeLength: executableCode.length,
+      compiledCodeLength: compiledCode.length
     });
 
     // ✅ Get fresh projectData from context (always use latest)
@@ -114,56 +127,46 @@ export class ScriptManagerService {
       return { success: false, errors: [] };
     }
 
-    // Create the condition item
+    // ✅ REFACTOR: Create the condition item and use the returned ID (not label search)
     try {
-      await pdUpdate.addItem('conditions', categoryId, label, '');
+      // addItem now returns the created item with its ID
+      const createdItem = await pdUpdate.addItem('conditions', categoryId, label, '');
+      const conditionId = createdItem.id || createdItem._id;
 
-      // Reload projectData to get the new item
+      if (!conditionId) {
+        console.error('[ScriptManagerService][CREATE] ❌ Created item has no ID');
+        return { success: false, errors: [] };
+      }
+
+      // Reload projectData to get the fresh state
       const { ProjectDataService } = await import('@services/ProjectDataService');
       const refreshed = await ProjectDataService.loadProjectData();
-      const refreshedConditions = (refreshed as any)?.conditions || [];
+      const finalPd = JSON.parse(JSON.stringify(refreshed));
+      const finalConditions = finalPd?.conditions || [];
 
-      // Find the newly created item and save the script
-      let createdItem: any = null;
-      for (const cat of refreshedConditions) {
+      // ✅ Find by ID (not by label) - ID is the primary key
+      let found = false;
+      for (const cat of finalConditions) {
         for (const item of (cat.items || [])) {
-          const itemName = item.name || item.label;
-          if (itemName === label) {
-            createdItem = item;
+          const itemId = item.id || item._id;
+          if (itemId === conditionId) {
+            // ✅ FASE 2: Save only executableCode and compiledCode (readableCode generated on-the-fly)
+            if (!item.expression) item.expression = {} as any;
+            item.expression.executableCode = executableCode; // DSL with GUIDs - source of truth
+            item.expression.compiledCode = compiledCode; // JavaScript compiled
+            item.expression.format = 'dsl';
+            // Transform AST: label → GUID before saving
+            const transformedAST = await transformASTLabelsToGuids(parseResult.ast, this.variableMappingService);
+            item.expression.ast = JSON.stringify(transformedAST);
+            found = true;
             break;
           }
         }
-        if (createdItem) break;
+        if (found) break;
       }
 
-      if (createdItem) {
-        // Update the newly created item with script data
-        const finalPd = JSON.parse(JSON.stringify(refreshed));
-        const finalConditions = finalPd?.conditions || [];
-
-        for (const cat of finalConditions) {
-          for (const item of (cat.items || [])) {
-            const itemName = item.name || item.label;
-            if (itemName === label) {
-              if (!item.data) item.data = {};
-              item.data.uiCode = dsl;
-              item.data.uiCodeFormat = 'dsl';
-              item.data.execCode = execCode;
-              item.data.script = execCode;
-              // Transform AST: label → GUID before saving
-              const transformedAST = await transformASTLabelsToGuids(parseResult.ast, this.variableMappingService);
-              item.data.ast = JSON.stringify(transformedAST);
-              item.data.dslMeta = {
-                lastCompiledAt: new Date().toISOString(),
-                errors: []
-              };
-              break;
-            }
-          }
-        }
-
+      if (found) {
         pdUpdate.updateDataDirectly(finalPd);
-        const conditionId = createdItem.id || createdItem._id;
         console.log('[ScriptManagerService][CREATE] ✅ Created condition', {
           conditionName: label,
           conditionId,
@@ -171,7 +174,10 @@ export class ScriptManagerService {
         });
         return { success: true, errors: [], conditionId };
       } else {
-        console.error('[ScriptManagerService][CREATE] ❌ Created item not found after reload');
+        console.error('[ScriptManagerService][CREATE] ❌ Created item not found by ID after reload', {
+          conditionId,
+          conditionName: label
+        });
         return { success: false, errors: [] };
       }
     } catch (error) {
@@ -182,18 +188,26 @@ export class ScriptManagerService {
 
   /**
    * Updates existing condition by ID.
-   * If conditionId is provided, searches by ID; otherwise searches by label.
+   * ✅ REFACTOR: conditionId is now REQUIRED (ID is the primary key, label can change/duplicate).
    * Returns conditionId so edge can be updated.
    */
-  async saveScript(dsl: string, label: string, conditionId?: string): Promise<{ success: boolean; errors: any[]; conditionId?: string }> {
+  async saveScript(dsl: string, label: string, conditionId: string): Promise<{ success: boolean; errors: any[]; conditionId?: string }> {
     const { pdUpdate } = this.deps;
 
-    if (!label || !pdUpdate) {
+    if (!label || !conditionId || !pdUpdate) {
       console.warn('[ScriptManagerService][SAVE] ⚠️ Missing required data', {
         hasLabel: !!label,
+        hasConditionId: !!conditionId,
         hasPdUpdate: !!pdUpdate
       });
-      return { success: false, errors: [] };
+      return {
+        success: false,
+        errors: [{
+          message: conditionId ? 'Missing required data' : 'conditionId is required (ID is the primary key, label can change)',
+          position: { line: 1, column: 1 },
+          severity: 'error'
+        }]
+      };
     }
 
     // ✅ Get fresh projectData from context (not from snapshot)
@@ -223,7 +237,7 @@ export class ScriptManagerService {
       dslPreview: dsl?.substring(0, 200) || ''
     });
 
-    // Parse DSL → AST
+    // ✅ FASE 2: Parse readableCode (DSL with labels) → AST
     const parseResult = this.parser.parse(dsl);
 
     if (!parseResult.ast || parseResult.errors.length > 0) {
@@ -233,10 +247,23 @@ export class ScriptManagerService {
       return { success: false, errors: parseResult.errors };
     }
 
-    // Compile AST → JavaScript
-    let execCode: string;
+    // ✅ FASE 2: Generate executableCode (DSL with GUIDs)
+    const variableMappings = createVariableMappings();
+    const executableCode = convertDSLLabelsToGUIDs(dsl, variableMappings);
+
+    // ✅ FASE 2: Parse executableCode → AST (with GUIDs) for compilation
+    const executableParseResult = this.parser.parse(executableCode);
+    if (!executableParseResult.ast || executableParseResult.errors.length > 0) {
+      console.error('[ScriptManagerService][SAVE] ❌ ExecutableCode parsing failed', {
+        errors: executableParseResult.errors
+      });
+      return { success: false, errors: executableParseResult.errors };
+    }
+
+    // ✅ FASE 2: Compile AST (with GUIDs) → JavaScript
+    let compiledCode: string;
     try {
-      execCode = await this.compiler.compile(parseResult.ast);
+      compiledCode = await this.compiler.compile(executableParseResult.ast);
     } catch (error: any) {
       console.error('[ScriptManagerService][SAVE] ❌ Compilation failed', { error });
       return {
@@ -249,9 +276,9 @@ export class ScriptManagerService {
       };
     }
 
-    console.log('[ScriptManagerService][SAVE] ✅ DSL compiled to JavaScript', {
-      dslLength: dsl.length,
-      execCodeLength: execCode.length
+    console.log('[ScriptManagerService][SAVE] ✅ Condition expression generated', {
+      executableCodeLength: executableCode.length,
+      compiledCodeLength: compiledCode.length
     });
 
     // ✅ Get fresh projectData from context (always use latest)
@@ -259,42 +286,29 @@ export class ScriptManagerService {
     const updatedPd = JSON.parse(JSON.stringify(freshProjectData));
     const conditions = updatedPd?.conditions || [];
 
+    // ✅ REFACTOR: Search ONLY by ID (primary key), never by label
     let found = false;
-    let foundConditionId: string | undefined = undefined;
 
     for (const cat of conditions) {
       for (const item of (cat.items || [])) {
-        // ✅ Search by ID if provided, otherwise by label
+        // ✅ REFACTOR: Search ONLY by ID (primary key), never by label
         const itemId = item.id || item._id;
-        const itemName = item.name || item.label;
-        const matches = conditionId
-          ? (itemId === conditionId)
-          : (itemName === label);
-
-        if (matches) {
-          if (!item.data) item.data = {};
-
-          // Save DSL as source of truth
-          item.data.uiCode = dsl;
-          item.data.uiCodeFormat = 'dsl';
-          item.data.execCode = execCode;
-          item.data.script = execCode; // Legacy compatibility
+        if (itemId === conditionId) {
+          // ✅ FASE 2: Save only executableCode and compiledCode (readableCode generated on-the-fly)
+          if (!item.expression) item.expression = {} as any;
+          item.expression.executableCode = executableCode; // DSL with GUIDs - source of truth
+          item.expression.compiledCode = compiledCode; // JavaScript compiled
+          item.expression.format = 'dsl';
           // Transform AST: label → GUID before saving
           const transformedAST = await transformASTLabelsToGuids(parseResult.ast, this.variableMappingService);
-          item.data.ast = JSON.stringify(transformedAST);
-          item.data.dslMeta = {
-            lastCompiledAt: new Date().toISOString(),
-            errors: []
-          };
+          item.expression.ast = JSON.stringify(transformedAST);
 
-          foundConditionId = itemId;
           found = true;
-          console.log('[ScriptManagerService][SAVE] ✅ Saved DSL to condition', {
+          console.log('[ScriptManagerService][SAVE] ✅ Saved condition expression', {
             conditionName: label,
-            conditionId: foundConditionId,
-            searchedBy: conditionId ? 'ID' : 'label',
-            dslLength: dsl.length,
-            execCodeLength: execCode.length
+            conditionId,
+            executableCodeLength: executableCode.length,
+            compiledCodeLength: compiledCode.length
           });
           break;
         }
@@ -305,32 +319,17 @@ export class ScriptManagerService {
     if (found) {
       pdUpdate.updateDataDirectly(updatedPd);
       console.log('[ScriptManagerService][SAVE] ✅ Updated projectData via updateDataDirectly');
-      return { success: true, errors: [], conditionId: foundConditionId };
+      return { success: true, errors: [], conditionId };
     } else {
-      // ✅ If conditionId was provided but not found, this is an error
-      if (conditionId) {
-        console.error('[ScriptManagerService][SAVE] ❌ Condition not found by ID', {
-          conditionId,
-          conditionName: label
-        });
-        return {
-          success: false,
-          errors: [{
-            message: `Condition with ID ${conditionId} not found`,
-            position: { line: 1, column: 1 },
-            severity: 'error'
-          }]
-        };
-      }
-
-      // ✅ If no conditionId, condition doesn't exist - should not happen during save
-      console.error('[ScriptManagerService][SAVE] ❌ Condition not found (use createCondition instead)', {
+      // Condition not found by ID
+      console.error('[ScriptManagerService][SAVE] ❌ Condition not found by ID', {
+        conditionId,
         conditionName: label
       });
       return {
         success: false,
         errors: [{
-          message: `Condition "${label}" not found. Use createCondition() to create a new condition.`,
+          message: `Condition with ID ${conditionId} not found. Use createCondition() to create a new condition.`,
           position: { line: 1, column: 1 },
           severity: 'error'
         }]
@@ -340,7 +339,7 @@ export class ScriptManagerService {
 
   /**
    * Loads DSL script from project data by ID.
-   * Returns DSL (source of truth).
+   * ✅ FASE 2: Returns readableCode (DSL with labels) generated on-the-fly from executableCode
    * Uses fresh data from window.__projectData for accuracy.
    */
   loadScriptById(conditionId: string): string | null {
@@ -360,8 +359,16 @@ export class ScriptManagerService {
       for (const item of (cat.items || [])) {
         const itemId = item.id || item._id;
         if (itemId === conditionId) {
-          // Return DSL (uiCode) - source of truth
-          return item.data?.uiCode || null;
+          // ✅ FASE 2: Read executableCode (DSL with GUIDs) and convert to readableCode (DSL with labels)
+          const executableCode = (item as any).expression?.executableCode;
+          if (!executableCode) {
+            return null;
+          }
+
+          // Convert GUID → label on-the-fly
+          const variableMappings = createVariableMappings();
+          const readableCode = convertDSLGUIDsToLabels(executableCode, variableMappings);
+          return readableCode;
         }
       }
     }
@@ -369,57 +376,7 @@ export class ScriptManagerService {
     return null;
   }
 
-  /**
-   * Loads DSL script from project data by label.
-   * Returns DSL (source of truth).
-   * @deprecated Use loadScriptById() when conditionId is available
-   */
-  loadScript(label: string): string | null {
-    const { projectData } = this.deps;
 
-    if (!label || !projectData) {
-      return null;
-    }
-
-    const conditions = projectData?.conditions || [];
-
-    for (const cat of conditions) {
-      for (const item of (cat.items || [])) {
-        const itemName = item.name || item.label;
-        if (itemName === label) {
-          // Return DSL (uiCode) - source of truth
-          return item.data?.uiCode || null;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Gets compiled JavaScript for a condition (for runtime evaluation).
-   */
-  getExecCode(label: string): string | null {
-    const { projectData } = this.deps;
-
-    if (!label || !projectData) {
-      return null;
-    }
-
-    const conditions = projectData?.conditions || [];
-
-    for (const cat of conditions) {
-      for (const item of (cat.items || [])) {
-        const itemName = item.name || item.label;
-        if (itemName === label) {
-          // Return compiled JavaScript
-          return item.data?.execCode || item.data?.script || null;
-        }
-      }
-    }
-
-    return null;
-  }
 
   /**
    * Compiles DSL to JavaScript (without saving).

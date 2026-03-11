@@ -245,10 +245,11 @@ Public Class ConditionBuilder
 
             ' Ottieni AST dalla condizione se presente
             Dim expressionAst As String = Nothing
+            ' ✅ FASE 2: Use expression.* instead of data.*
             If Not String.IsNullOrEmpty(conditionId) AndAlso flow.Conditions IsNot Nothing Then
                 Dim condition = flow.Conditions.FirstOrDefault(Function(c) c.Id = conditionId)
-                If condition IsNot Nothing AndAlso condition.Data IsNot Nothing Then
-                    expressionAst = condition.Data.Ast
+                If condition IsNot Nothing AndAlso condition.Expression IsNot Nothing Then
+                    expressionAst = condition.Expression.Ast
                 End If
             End If
 

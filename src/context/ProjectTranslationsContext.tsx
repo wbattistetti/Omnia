@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback, useMemo } from 'react';
 import { useProjectDataUpdate } from './ProjectDataContext';
 import { loadProjectTranslations, saveProjectTranslations, loadAllProjectTranslations } from '../services/ProjectDataService';
 import { notifyTranslationAdded, notifyTranslationsAdded } from '../utils/translationTracker';
@@ -65,6 +65,16 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   // ✅ NEW: Track current template ID for translation tracking
   const [currentTemplateId, setCurrentTemplateIdState] = useState<string | null>(null);
 
+  // ✅ FIX: Live ref for synchronous access to translations (updated immediately, not waiting for React render)
+  // This solves the timing issue where cloneAndContextualizeTranslations reads translations
+  // before React state has updated (during wizard pipeline execution)
+  const translationsLiveRef = useRef<Record<string, string>>({});
+
+  // ✅ Keep ref in sync with state (for DB loads and initial state)
+  useEffect(() => {
+    translationsLiveRef.current = translations;
+  }, [translations]);
+
   // ✅ NEW: Set current template ID for translation tracking
   const setCurrentTemplateId = useCallback((templateId: string | null) => {
     setCurrentTemplateIdState(templateId);
@@ -78,13 +88,16 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     // Use provided templateId or current templateId
     const activeTemplateId = templateId || currentTemplateId;
 
+    // ✅ FIX: Update ref SYNCHRONOUSLY (immediate, no React render wait)
+    // This ensures cloneAndContextualizeTranslations can read translations immediately
+    // during wizard pipeline execution, before React state has updated
+    translationsLiveRef.current = { ...translationsLiveRef.current, [guid]: text };
+
+    // ⏳ ASYNC: React state update (for UI re-render and context value)
     setTranslations((prev) => {
       if (prev[guid] === text) return prev; // No change
       setIsDirty(true);
-      const updated = { ...prev, [guid]: text };
-      // ✅ REMOVED: Non serve più aggiornare direttamente window.__projectTranslationsContext.translations
-      // perché ora usiamo un getter che legge sempre dallo stato React corrente
-      return updated;
+      return { ...prev, [guid]: text };
     });
     setAllGuids((prev) => new Set([...prev, guid]));
 
@@ -99,6 +112,10 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     // Use provided templateId or current templateId
     const activeTemplateId = templateId || currentTemplateId;
 
+    // ✅ FIX: Update ref SYNCHRONOUSLY (immediate, no React render wait)
+    translationsLiveRef.current = { ...translationsLiveRef.current, ...newTranslations };
+
+    // ⏳ ASYNC: React state update (for UI re-render and context value)
     setTranslations((prev) => {
       let hasChanges = false;
       const updated = { ...prev };
@@ -111,8 +128,6 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       if (hasChanges) {
         setIsDirty(true);
         setAllGuids((prev) => new Set([...prev, ...Object.keys(newTranslations)]));
-        // ✅ REMOVED: Non serve più aggiornare direttamente window.__projectTranslationsContext.translations
-        // perché ora usiamo un getter che legge sempre dallo stato React corrente
       }
       return updated;
     });
@@ -331,10 +346,11 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
             return Object.keys(translations).length;
           },
           get translations() {
-            // ✅ CRITICAL: Always return the current translations state from React
-            // This ensures that every read gets the latest value, even if the state was updated
-            // after the useEffect was last executed
-            return translations;
+            // ✅ FIX: Read from live ref (updated synchronously in addTranslation/addTranslations)
+            // instead of React state closure (stale during wizard pipeline execution)
+            // This ensures cloneAndContextualizeTranslations can read translations immediately
+            // after they are added during AIGenerateTemplateMessages, before React re-render
+            return translationsLiveRef.current;
           }
         },
         writable: true,

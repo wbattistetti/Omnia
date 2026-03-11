@@ -334,7 +334,7 @@ Namespace ApiServer.Handlers
                 Console.WriteLine($"🔍 [HandleCompileFlow] Conditions deserialized: {If(request.Conditions IsNot Nothing, request.Conditions.Count, 0)}")
                 If request.Conditions IsNot Nothing AndAlso request.Conditions.Count > 0 Then
                     For Each cond In request.Conditions
-                        Console.WriteLine($"   Condition[{cond.Id}]: Name={cond.Name}, HasScript={Not String.IsNullOrWhiteSpace(If(cond.Data?.Script, ""))}, HasUiCode={Not String.IsNullOrWhiteSpace(If(cond.Data?.UiCode, ""))}")
+                        Console.WriteLine($"   Condition[{cond.Id}]: Name={cond.Name}, HasExecutableCode={Not String.IsNullOrWhiteSpace(If(cond.Expression?.ExecutableCode, ""))}, HasCompiledCode={Not String.IsNullOrWhiteSpace(If(cond.Expression?.CompiledCode, ""))}")
                     Next
                 Else
                     ' ✅ DEBUG: Check if conditions key exists in raw JSON (body already read as string)

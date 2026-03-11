@@ -55,89 +55,21 @@ export class ConditionEditorEventHandler {
     const edgeId = event.edgeId; // ✅ Edge ID
     const conditionId = event.conditionId; // ✅ Condition ID (if edge is linked)
 
-    // ✅ Load DSL script if conditionId exists (use ScriptManagerService for fresh data)
-    let conditionScript = event.script || '';
-    if (conditionId) {
-      console.log('[ConditionEditorEventHandler] 🔍 Loading DSL for conditionId', {
-        conditionId,
-        label: conditionLabel,
-        eventScriptLength: event.script?.length || 0
-      });
+    // ✅ FASE 1: Simplified logic - no needsGeneration, no automatic regeneration
+    // Use readableCode from event (if condition exists) or empty string (new condition)
+    const readableCode = (event as any).readableCode || '';
 
-      const scriptManager = new ScriptManagerService({
-        projectData: this.params.projectData,
-        pdUpdate: this.params.pdUpdate,
-      });
-
-      // Check window.__projectData availability
-      const windowData = (window as any).__projectData;
-      console.log('[ConditionEditorEventHandler] 📊 Data availability', {
-        hasWindowData: !!windowData,
-        hasProjectData: !!this.params.projectData,
-        conditionsCount: windowData?.conditions?.flatMap((cat: any) => cat.items || []).length || 0
-      });
-
-      const loadedScript = scriptManager.loadScriptById(conditionId);
-      if (loadedScript) {
-        conditionScript = loadedScript;
-        console.log('[ConditionEditorEventHandler] ✅ Loaded DSL from conditionId', {
-          conditionId,
-          dslLength: loadedScript.length,
-          dslPreview: loadedScript.substring(0, 100)
-        });
-      } else {
-        console.warn('[ConditionEditorEventHandler] ⚠️ Condition not found by ID', {
-          conditionId,
-          label: conditionLabel,
-          willUseEventScript: !!event.script
-        });
-      }
-    } else {
-      console.log('[ConditionEditorEventHandler] ℹ️ No conditionId provided, using event.script', {
-        eventScriptLength: event.script?.length || 0
-      });
-    }
-
-    // Determine if we need to generate a script
-    const needsGeneration = (event as any).needsGeneration === true || (!conditionId && !conditionScript.trim());
-
-    // ✅ NEW: If needs generation, open immediately with loading state
-    if (needsGeneration && variableNames.length > 0) {
-      // Open dock tab immediately with loading state
-      const loadingDockTab: DockTab = {
-        id: tabId,
-        title: conditionLabel,
-        type: 'conditionEditor',
-        variables: finalVars,
-        script: '', // Empty initially
-        variablesTree: event.variablesTree || varsTree,
-        label: conditionLabel,
-        isGenerating: true, // ✅ Flag for loading state
-        edgeId, // ✅ Edge ID
-        conditionId, // ✅ Condition ID (if exists)
-      };
-
-      // Start generation in background (don't await)
-      this.generateAndUpdate(tabId, conditionLabel, variableNames, finalVars, event.variablesTree || varsTree, edgeId, conditionId)
-        .catch(err => console.error('[ConditionEditorEventHandler] Generation failed', err));
-
-      return {
-        tabId,
-        dockTab: loadingDockTab,
-      };
-    }
-
-    // Build DockTab with existing script (no generation needed)
+    // Build DockTab - conditionId determines if condition exists
     const dockTab: DockTab = {
       id: tabId,
       title: conditionLabel,
       type: 'conditionEditor',
       variables: finalVars,
-      script: conditionScript,
+      script: readableCode, // ✅ DSL with labels (if condition exists) or empty (new condition)
       variablesTree: event.variablesTree || varsTree,
       label: conditionLabel,
       edgeId, // ✅ Edge ID
-      conditionId, // ✅ Condition ID (if exists)
+      conditionId, // ✅ Condition ID (if exists, undefined for new condition)
     };
 
     return {

@@ -334,19 +334,19 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           stack: importError instanceof Error ? importError.stack : undefined
         });
         // ✅ Fallback: use task.data for all DDTs if import fails
-        Array.from(referencedTaskIds).forEach(taskId => {
-          const task = taskRepository.getTask(taskId);
+      Array.from(referencedTaskIds).forEach(taskId => {
+        const task = taskRepository.getTask(taskId);
           if (task && task.data && Array.isArray(task.data) && task.data.length > 0) {
-            const templateId = getTemplateId(task);
+          const templateId = getTemplateId(task);
             if (templateId && templateIdToTaskType(templateId) === TaskType.UtteranceInterpretation) {
-              allDDTs.push({
-                label: task.label,
-                data: task.data,
-                steps: task.steps
-              });
-            }
+            allDDTs.push({
+              label: task.label,
+              data: task.data,
+              steps: task.steps
+            });
           }
-        });
+        }
+      });
       }
 
       if (buildTaskTree) {
@@ -571,8 +571,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           _id: item._id,
           both: item.id || item._id,
           name: item.name || item.label,
-          hasUiCode: !!item.data?.uiCode,
-          hasScript: !!item.data?.script
+          hasExpression: !!item.expression?.executableCode,
+          hasCompiledCode: !!item.expression?.compiledCode
         })),
         referencedConditionIds: Array.from(referencedConditionIds)
       });
@@ -597,11 +597,12 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
             id: item.id || item._id,
             name: item.name || item.label,
             label: item.label || item.name,
-            data: {
-              script: item.data?.script || item.data?.execCode || '',
-              uiCode: item.data?.uiCode || '',
-              uiCodeFormat: item.data?.uiCodeFormat || 'dsl',
-              ast: item.data?.ast || ''
+            // ✅ FASE 2: Use expression.* instead of data.*
+            expression: {
+              executableCode: item.expression?.executableCode || '',
+              compiledCode: item.expression?.compiledCode || '',
+              ast: item.expression?.ast || '',
+              format: item.expression?.format || 'dsl'
             }
           }))
         : [];
@@ -609,12 +610,12 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       console.log('[useDialogueEngine] ✅ Conditions extracted', {
         conditionsCount: conditions.length,
         conditionIds: conditions.map((c: any) => c.id),
-        conditionsWithUiCode: conditions.filter((c: any) => c.data?.uiCode).length,
+        conditionsWithExpression: conditions.filter((c: any) => c.expression?.executableCode).length,
         matchedConditions: conditions.map((c: any) => ({
           id: c.id,
           name: c.name,
-          hasUiCode: !!c.data?.uiCode,
-          hasScript: !!c.data?.script
+          hasExecutableCode: !!c.expression?.executableCode,
+          hasCompiledCode: !!c.expression?.compiledCode
         }))
       });
 
@@ -740,8 +741,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           conditionsPreview: requestBody.conditions?.map((c: any) => ({
             id: c.id,
             name: c.name,
-            hasUiCode: !!c.data?.uiCode,
-            hasScript: !!c.data?.script
+            hasExpression: !!c.expression?.executableCode,
+            hasCompiledCode: !!c.expression?.compiledCode
           })) || []
         });
 

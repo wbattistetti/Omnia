@@ -49,9 +49,10 @@ async function loadConditionScript(conditionId: string): Promise<((ctx: Record<s
       return null;
     }
 
-    const script = (condition.data?.script || condition.script || '').trim();
+    // ✅ FASE 2: Use expression.compiledCode (JavaScript) - no fallback
+    const script = (condition as any).expression?.compiledCode;
     if (!script) {
-      console.warn('[ConditionEvaluator][loadConditionScript] ⚠️ Condition has no script', {
+      console.warn('[ConditionEvaluator][loadConditionScript] ⚠️ Condition has no compiledCode', {
         conditionId,
         conditionName: condition.name || condition.label
       });
@@ -264,7 +265,8 @@ function evaluateEdgeCondition(
             for (const item of (cat.items || [])) {
               const itemId = item.id || item._id;
               if (itemId === edgeCondition) {
-                const script = (item.data?.script || item.script || '').trim();
+                // ✅ FASE 2: Use expression.compiledCode (JavaScript) - no fallback
+                const script = (item as any).expression?.compiledCode;
                 console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ Condition found!', {
                   conditionId: edgeCondition,
                   itemId,
@@ -273,7 +275,7 @@ function evaluateEdgeCondition(
                   scriptPreview: script.substring(0, 100)
                 });
                 if (script) {
-                  console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ Script found, compiling', {
+                  console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ CompiledCode found, using directly', {
                     conditionId: edgeCondition,
                     scriptLength: script.length,
                     scriptPreview: script.substring(0, 200)

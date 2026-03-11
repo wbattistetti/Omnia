@@ -1766,12 +1766,21 @@ app.post('/api/projects/:pid/conditions', async (req, res) => {
     const db = await getProjectDb(client, pid);
     const coll = db.collection('project_conditions');
     const now = new Date();
+    // ✅ FASE 2: Only save executableCode and compiledCode (readableCode generated on-the-fly)
+    const expression = payload.expression || {};
+    const expressionToSave = {
+      executableCode: expression.executableCode,
+      compiledCode: expression.compiledCode,
+      ast: expression.ast,
+      format: expression.format || 'dsl'
+      // ❌ readableCode is NOT saved - generated on-the-fly
+    };
     const doc = {
       _id: payload._id,
       name: payload.name,
       label: payload.label || payload.name,
       description: payload.description || '',
-      data: payload.data || {},
+      expression: expressionToSave,
       updatedAt: now
     };
     const setDoc = { ...doc };
@@ -1806,22 +1815,34 @@ app.post('/api/projects/:pid/conditions/bulk', async (req, res) => {
     const db = await getProjectDb(client, pid);
     const coll = db.collection('project_conditions');
     const now = new Date();
-    const bulkOps = items.map(item => ({
-      updateOne: {
-        filter: { _id: item._id || item.id },
-        update: {
-          $set: {
-            name: item.name || item.label,
-            label: item.label || item.name,
-            description: item.description || '',
-            data: item.data || {},
-            updatedAt: now
+    const bulkOps = items.map(item => {
+      // ✅ FASE 2: Only save executableCode and compiledCode (readableCode generated on-the-fly)
+      const expression = item.expression || {};
+      const expressionToSave = {
+        executableCode: expression.executableCode,
+        compiledCode: expression.compiledCode,
+        ast: expression.ast,
+        format: expression.format || 'dsl'
+        // ❌ readableCode is NOT saved - generated on-the-fly
+      };
+
+      return {
+        updateOne: {
+          filter: { _id: item._id || item.id },
+          update: {
+            $set: {
+              name: item.name || item.label,
+              label: item.label || item.name,
+              description: item.description || '',
+              expression: expressionToSave,
+              updatedAt: now
+            },
+            $setOnInsert: { createdAt: now }
           },
-          $setOnInsert: { createdAt: now }
-        },
-        upsert: true
-      }
-    }));
+          upsert: true
+        }
+      };
+    });
     const result = await coll.bulkWrite(bulkOps);
     logInfo('Conditions.bulk', { projectId: pid, inserted: result.upsertedCount, updated: result.modifiedCount, total: items.length });
     res.json({ inserted: result.upsertedCount, updated: result.modifiedCount, total: items.length });
@@ -2838,7 +2859,7 @@ app.get('/api/projects/:pid/variables', async (req, res) => {
 
     const variables = await projDb.collection('variables').find(query).toArray();
 
-    const duration = Date.now() - startTime;
+      const duration = Date.now() - startTime;
     logInfo('Variables.get', {
       projectId,
       taskInstanceId,

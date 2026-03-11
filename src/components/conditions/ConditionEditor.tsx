@@ -108,14 +108,19 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   }, [projectData, pdUpdate]);
 
   const updateProjectDataScript = React.useCallback(async (dslToSave: string) => {
-    // ✅ Pass conditionId if available (update existing), otherwise search by label
-    let result = await scriptManager.saveScript(dslToSave, label || '', conditionId);
-
-    // ✅ Fallback: condition not found (by ID or by label) → create it
-    // Covers both: new conditions (no conditionId) and orphaned conditionIds (stale ID not in projectData)
-    if (!result.success && result.errors?.some((e: any) =>
-      e.message?.includes('not found') || e.message?.includes('Use createCondition')
-    )) {
+    // ✅ REFACTOR: If conditionId exists, update existing condition. Otherwise, create new one.
+    // ID is the primary key - we don't search by label anymore.
+    let result;
+    if (conditionId) {
+      result = await scriptManager.saveScript(dslToSave, label || '', conditionId);
+      // If condition not found by ID, create new one
+      if (!result.success && result.errors?.some((e: any) =>
+        e.message?.includes('not found') || e.message?.includes('Use createCondition')
+      )) {
+        result = await scriptManager.createCondition(dslToSave, label || '');
+      }
+    } else {
+      // No conditionId → create new condition
       result = await scriptManager.createCondition(dslToSave, label || '');
     }
 
@@ -262,101 +267,33 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
   const [varsMenuMaxH] = React.useState<number>(280);
 
-  // ✅ Update script when initialScript changes
-  // initialScript is ExecCode (with ctx["guid"]) - convert to UICode (with [label]) for display
-  // ✅ IMPORTANT: Only update if script is empty or if initialScript actually changed
-  // This prevents resetting user input when they're typing
-  const lastInitialScriptRef = React.useRef<string>('');
+  // ✅ FASE 1: Single useEffect - load script by conditionId only
+  // No fallback to label, no complex logic
   React.useEffect(() => {
-    console.log('[ConditionEditor][UPDATE] 🔄 initialScript changed', {
-      hasInitialScript: !!(initialScript && initialScript.trim()),
-      initialScriptLength: initialScript?.length || 0,
-      initialScriptPreview: initialScript?.substring(0, 100) || '',
-      isGenerating,
-      currentScript: script
-    });
+    if (!open || isGenerating) return;
 
-    // ✅ Se isGenerating è true, non aggiornare lo script (mostra solo spinner)
-    if (isGenerating) {
-      console.log('[ConditionEditor][UPDATE] ⏳ Still generating, skipping script update');
-      return;
-    }
-
-    // ✅ NEW: Don't reset if user is typing (script is not empty and different from what we'd load)
-    const currentScript = script || '';
-    const hasUserInput = currentScript.trim().length > 0;
-
-    // Only update if initialScript actually changed
-    const initialScriptChanged = initialScript !== lastInitialScriptRef.current;
-    if (!initialScriptChanged && hasUserInput) {
-      console.log('[ConditionEditor][UPDATE] ⏭️ Skipping update - user is typing and initialScript unchanged');
-      return;
-    }
-    lastInitialScriptRef.current = initialScript || '';
-
-    if (initialScript && initialScript.trim()) {
-      // Load DSL from ScriptManagerService (source of truth)
-      console.log('[ConditionEditor][UPDATE] 🔄 Loading DSL from ScriptManagerService');
-      const dsl = scriptManager.loadScript(label || '');
-      if (dsl) {
-        // Only update if different from current script
-        if (dsl !== currentScript) {
-          setScript(dsl);
-          // Compile DSL → JS for preview
-          (async () => {
-            const compileResult = await scriptManager.compileDSL(dsl);
-            if (compileResult.success && compileResult.jsCode) {
-              setCompiledJs(compileResult.jsCode);
-            }
-          })();
-        }
-        console.log('[ConditionEditor][UPDATE] ✅ DSL loaded', {
-          dslLength: dsl.length,
-          dslPreview: dsl.substring(0, 100)
-        });
-      } else {
-        // No DSL found - use initialScript as DSL (new condition)
-        // Only if current script is empty
-        if (!hasUserInput) {
-          console.log('[ConditionEditor][UPDATE] ℹ️ No DSL found, using initialScript as DSL');
-          setScript(initialScript);
-        }
-      }
-    } else {
-      // ✅ Only reset if script is empty (don't reset user input)
-      if (!hasUserInput) {
-        console.log('[ConditionEditor][UPDATE] ℹ️ No initial script, using empty string');
-        setScript(''); // ✅ Stringa vuota invece di DEFAULT_CODE
-        setCompiledJs('');
-      }
-    }
-  }, [initialScript, scriptManager, isGenerating, label, script]); // ✅ Added script to dependencies to check user input
-
-  // ✅ NEW: Force refresh when isGenerating becomes false (to ensure script is updated)
-  React.useEffect(() => {
-    if (!isGenerating && initialScript && initialScript.trim()) {
-      // When generation completes, ensure script is updated
-      console.log('[ConditionEditor][UPDATE] 🔄 Generation completed, refreshing script', {
-        initialScriptLength: initialScript.length,
-        initialScriptPreview: initialScript.substring(0, 100)
-      });
-      // Load DSL from ScriptManagerService (source of truth)
-      const dsl = scriptManager.loadScript(label || '');
-      if (dsl) {
-        setScript(dsl);
+    if (conditionId) {
+      const loadedScript = scriptManager.loadScriptById(conditionId);
+      if (loadedScript?.trim()) {
+        setScript(loadedScript);
         // Compile DSL → JS for preview
         (async () => {
-          const compileResult = await scriptManager.compileDSL(dsl);
+          const compileResult = await scriptManager.compileDSL(loadedScript);
           if (compileResult.success && compileResult.jsCode) {
             setCompiledJs(compileResult.jsCode);
           }
         })();
-      } else if (initialScript) {
-        // Use initialScript as DSL if no DSL found in ScriptManagerService
-        setScript(initialScript);
+      } else {
+        // Condition not found, empty editor
+        setScript('');
+        setCompiledJs('');
       }
+    } else {
+      // New condition, empty editor
+      setScript('');
+      setCompiledJs('');
     }
-  }, [isGenerating, initialScript, scriptManager, label]); // ✅ React when isGenerating becomes false
+  }, [open, conditionId, scriptManager, isGenerating]);
 
   // legacy filtered list removed (hierarchical tree used instead)
 
@@ -674,30 +611,28 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
               });
             }
 
-            // ✅ Save script by conditionId if exists, otherwise try to save by label
-            // If condition doesn't exist (new or orphaned conditionId), create it
+            // ✅ REFACTOR: If conditionId exists, update existing condition. Otherwise, create new one.
+            // ID is the primary key - we don't search by label anymore.
             let saveResult;
             if (conditionId) {
               // Edge already has conditionId - update existing condition
               saveResult = await scriptManager.saveScript(script, label || '', conditionId);
-            } else {
-              // Edge doesn't have conditionId - try to save by label first
-              saveResult = await scriptManager.saveScript(script, label || '');
-            }
-
-            // ✅ Fallback: condition not found (by ID or by label) → create it
-            // Covers: new conditions (no conditionId) AND orphaned conditionIds (stale ID missing from projectData)
-            if (!saveResult.success && saveResult.errors?.some((e: any) =>
-              e.message?.includes('not found') || e.message?.includes('Use createCondition')
-            )) {
-              console.log('[ConditionEditor] ℹ️ Condition not found, creating new condition', {
-                label,
-                hadConditionId: !!conditionId
-              });
-              const createResult = await scriptManager.createCondition(script, label || '');
-              if (createResult.success) {
-                saveResult = createResult;
+              // If condition not found by ID, create new one (orphaned conditionId)
+              if (!saveResult.success && saveResult.errors?.some((e: any) =>
+                e.message?.includes('not found') || e.message?.includes('Use createCondition')
+              )) {
+                console.log('[ConditionEditor] ℹ️ Condition not found by ID, creating new condition', {
+                  label,
+                  orphanedConditionId: conditionId
+                });
+                const createResult = await scriptManager.createCondition(script, label || '');
+                if (createResult.success) {
+                  saveResult = createResult;
+                }
               }
+            } else {
+              // No conditionId → create new condition
+              saveResult = await scriptManager.createCondition(script, label || '');
             }
 
             if (saveResult.success) {

@@ -55,9 +55,10 @@ async function loadConditionScript(conditionId: string): Promise<((ctx: Record<s
       return null;
     }
 
-    const script = (condition.data?.script || condition.script || '').trim();
+    // ✅ FASE 2: Use expression.compiledCode (JavaScript) instead of data.script
+    const script = (condition as any).expression?.compiledCode || (condition.data?.script || condition.script || '').trim();
     if (!script) {
-      console.warn('[ConditionEvaluator][loadConditionScript] ⚠️ Condition has no script', {
+      console.warn('[ConditionEvaluator][loadConditionScript] ⚠️ Condition has no compiledCode', {
         conditionId,
         conditionName: condition.name || condition.label
       });
@@ -261,30 +262,30 @@ function evaluateEdgeCondition(
             for (const item of (cat.items || [])) {
               const itemId = item.id || item._id;
               if (itemId === edgeCondition) {
-                // Prefer execCode, fallback to script (legacy)
-                const execCode = (item.data?.execCode || item.data?.script || item.script || '').trim();
+                // ✅ FASE 2: Use expression.compiledCode (JavaScript) - no fallback
+                const compiledCode = (item as any).expression?.compiledCode;
                 console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ Condition found!', {
                   conditionId: edgeCondition,
                   itemId,
-                  hasExecCode: !!execCode,
-                  execCodeLength: execCode.length,
-                  execCodePreview: execCode.substring(0, 100)
+                  hasCompiledCode: !!compiledCode,
+                  compiledCodeLength: compiledCode.length,
+                  compiledCodePreview: compiledCode.substring(0, 100)
                 });
-                if (execCode) {
-                  console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ ExecCode found, compiling', {
+                if (compiledCode) {
+                  console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ CompiledCode found, using directly', {
                     conditionId: edgeCondition,
-                    execCodeLength: execCode.length,
-                    execCodePreview: execCode.substring(0, 200)
+                    compiledCodeLength: compiledCode.length,
+                    compiledCodePreview: compiledCode.substring(0, 200)
                   });
 
-                  // ExecCode uses ctx["guid"] format
+                  // ✅ FASE 2: CompiledCode uses ctx["guid"] format
                   // variableStore contains both GUID keys (from updateStateFromResult) and label keys
                   const guidKeys = Object.keys(variableStore).filter(k => k.length === 36 && k.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));
                   const labelKeys = Object.keys(variableStore).filter(k => !guidKeys.includes(k));
 
                   console.log('[ConditionEvaluator][evaluateEdgeCondition] 🔍 VariableStore status', {
                     conditionId: edgeCondition,
-                    execCodePreview: execCode.substring(0, 300),
+                    compiledCodePreview: compiledCode.substring(0, 300),
                     variableStoreKeys: Object.keys(variableStore),
                     variableStoreSize: Object.keys(variableStore).length,
                     guidKeysCount: guidKeys.length,
@@ -294,8 +295,8 @@ function evaluateEdgeCondition(
                     variableStorePreview: Object.fromEntries(Object.entries(variableStore).slice(0, 10))
                   });
 
-                  // ExecCode uses ctx["guid"] - variableStore has GUID keys, so it works directly
-                  const scriptToExecute = execCode;
+                  // ✅ FASE 2: CompiledCode uses ctx["guid"] - variableStore has GUID keys, so it works directly
+                  const scriptToExecute = compiledCode;
 
                   const wrapper = `"use strict";\nreturn (function(ctx){\n  var vars = ctx;\n  ${scriptToExecute}\n  if (typeof main==='function') return !!main(ctx);\n  if (typeof evaluate==='function') return !!evaluate(ctx);\n  throw new Error('main(ctx) or evaluate(ctx) not found');\n});`;
                   try {

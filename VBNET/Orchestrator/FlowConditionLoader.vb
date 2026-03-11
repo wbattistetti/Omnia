@@ -40,8 +40,9 @@ Public Class FlowConditionLoader
         End If
 
         Dim condition = _compilationResult.Conditions(conditionId)
-        If condition Is Nothing OrElse condition.Data Is Nothing Then
-            Console.WriteLine($"[FlowConditionLoader] ⚠️ Condition '{conditionId}' has no Data")
+        ' ✅ FASE 2: Use expression.* instead of data.*
+        If condition Is Nothing OrElse condition.Expression Is Nothing Then
+            Console.WriteLine($"[FlowConditionLoader] ⚠️ Condition '{conditionId}' has no Expression")
             Return Nothing
         End If
 
@@ -49,20 +50,21 @@ Public Class FlowConditionLoader
         Dim conditionData As New Dictionary(Of String, Object)()
 
         ' AST is required for DSLInterpreter
-        If Not String.IsNullOrEmpty(condition.Data.Ast) Then
-            conditionData("ast") = condition.Data.Ast
+        If Not String.IsNullOrEmpty(condition.Expression.Ast) Then
+            conditionData("ast") = condition.Expression.Ast
         End If
 
-        ' Optional: include other fields for debugging
-        If Not String.IsNullOrEmpty(condition.Data.UiCode) Then
-            conditionData("uiCode") = condition.Data.UiCode
+        ' ✅ FASE 2: readableCode is NOT stored - generated on-the-fly
+        ' Include executableCode for reference (optional)
+        If Not String.IsNullOrEmpty(condition.Expression.ExecutableCode) Then
+            conditionData("executableCode") = condition.Expression.ExecutableCode
         End If
 
-        If Not String.IsNullOrEmpty(condition.Data.Script) Then
-            conditionData("script") = condition.Data.Script
+        If Not String.IsNullOrEmpty(condition.Expression.CompiledCode) Then
+            conditionData("compiledCode") = condition.Expression.CompiledCode
         End If
 
-        Console.WriteLine($"[FlowConditionLoader] ✅ Loaded condition '{conditionId}': HasAST={conditionData.ContainsKey("ast")}, HasUiCode={conditionData.ContainsKey("uiCode")}")
+        Console.WriteLine($"[FlowConditionLoader] ✅ Loaded condition '{conditionId}': HasAST={conditionData.ContainsKey("ast")}, HasExecutableCode={conditionData.ContainsKey("executableCode")}, HasCompiledCode={conditionData.ContainsKey("compiledCode")}")
         Return conditionData
     End Function
 End Class
