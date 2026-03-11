@@ -36,6 +36,7 @@ interface Props {
   onSave?: (script: string) => void; // ✅ Callback when script is saved
   edgeId?: string; // ✅ Edge ID for error removal
   conditionId?: string; // ✅ Condition ID (if edge is linked)
+  registerOnClose?: (fn: () => Promise<boolean>) => void; // ✅ NEW: Register close handler for dock tab
 }
 
 // ✅ REFACTOR: Use domain function
@@ -51,7 +52,7 @@ import { DSLEditor } from './dsl/editor/DSLEditor';
 
 // No local template; EditorPanel injects the scaffold
 
-export default function ConditionEditor({ open, onClose, variables, initialScript, dockWithinParent, variablesTree, label, onRename, isGenerating = false, onSave, edgeId, conditionId }: Props) {
+export default function ConditionEditor({ open, onClose, variables, initialScript, dockWithinParent, variablesTree, label, onRename, isGenerating = false, onSave, edgeId, conditionId, registerOnClose }: Props) {
   const [nl, setNl] = React.useState('');
   // ✅ RIMOSSO: DEFAULT_CODE - ora usiamo stringa vuota
   const DEFAULT_CODE = ''; // Stringa vuota invece del testo di esempio
@@ -117,35 +118,158 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   const scriptManagerRef = React.useRef(scriptManager);
   scriptManagerRef.current = scriptManager;
 
-  const updateProjectDataScript = React.useCallback(async (dslToSave: string) => {
-    // ✅ FIX: Use local ref to track conditionId (avoids stale closure)
-    const currentConditionId = localConditionIdRef.current;
-    let result;
-    if (currentConditionId) {
-      result = await scriptManager.saveScript(dslToSave, label || '', currentConditionId);
-      // If condition not found by ID, create new one
-      if (!result.success && result.errors?.some((e: any) =>
-        e.message?.includes('not found') || e.message?.includes('Use createCondition')
-      )) {
-        result = await scriptManager.createCondition(dslToSave, label || '');
-      }
-    } else {
-      // No conditionId → create new condition
-      result = await scriptManager.createCondition(dslToSave, label || '');
-    }
+  /**
+   * Ref tracking the currently in-flight auto-save promise.
+   * Used as a mutex: saveCurrentScriptBeforeClose awaits this before proceeding
+   * to avoid the race where two concurrent createCondition calls overwrite each other.
+   */
+  const pendingSaveRef = React.useRef<Promise<void> | null>(null);
 
-    if (result.success) {
-      // ✅ FIX: Store new conditionId so subsequent edits update the same condition
-      if (result.conditionId) {
-        localConditionIdRef.current = result.conditionId;
+  const updateProjectDataScript = React.useCallback(async (dslToSave: string) => {
+    // ✅ MUTEX: Create a promise that resolves when this save finishes.
+    // saveCurrentScriptBeforeClose will await this before proceeding.
+    let finalizeSave!: () => void;
+    const savePromise = new Promise<void>(res => { finalizeSave = res; });
+    pendingSaveRef.current = savePromise;
+
+    try {
+      const currentConditionId = localConditionIdRef.current;
+
+      let result;
+      if (currentConditionId) {
+        result = await scriptManager.saveScript(dslToSave, label || '', currentConditionId);
+        if (!result.success && result.errors?.some((e: any) =>
+          e.message?.includes('not found') || e.message?.includes('Use createCondition')
+        )) {
+          // ✅ FIX: Usa conditionId dall'edge se disponibile (mantiene collegamento edge → condition)
+          result = await scriptManager.createCondition(dslToSave, label || '', conditionId || currentConditionId);
+        }
+      } else {
+        // ✅ FIX: Usa conditionId dall'edge se disponibile
+        result = await scriptManager.createCondition(dslToSave, label || '', conditionId);
       }
+
+      if (result.success && result.conditionId) {
+        const wasNewCondition = !currentConditionId;
+        localConditionIdRef.current = result.conditionId;
+
+        if (edgeId && wasNewCondition) {
+          try {
+            const { updateEdgeWithConditionId } = await import('@services/EdgeConditionUpdater');
+            updateEdgeWithConditionId(edgeId, result.conditionId);
+          } catch (err) {
+            console.error('[ConditionEditor] ❌ Error updating edge on auto-save', err);
+          }
+        }
+      }
+
       // Update compiled JS preview
       const compileResult = await scriptManager.compileDSL(dslToSave);
       if (compileResult.success && compileResult.jsCode) {
         setCompiledJs(compileResult.jsCode);
       }
+    } finally {
+      // Resolve the mutex promise so saveCurrentScriptBeforeClose can proceed
+      finalizeSave();
+      if (pendingSaveRef.current === savePromise) pendingSaveRef.current = null;
     }
-  }, [scriptManager, label, setCompiledJs]); // ✅ FIX: removed conditionId from deps (uses ref)
+  }, [scriptManager, label, setCompiledJs, edgeId]);
+
+  /**
+   * Called by the dock tab's X button via editorCloseRefsMap.
+   * Waits for any in-flight auto-save (mutex), then persists the current script.
+   * Always returns true so the tab can always be closed.
+   */
+  const saveCurrentScriptBeforeClose = React.useCallback(async (): Promise<boolean> => {
+    // ✅ LOG CRITICO: Salvataggio al close
+    console.log('[SAVE_ON_CLOSE] 🚀 START', {
+      scriptLength: script?.length || 0,
+      scriptPreview: script?.substring(0, 50),
+      conditionId: localConditionIdRef.current,
+      edgeId
+    });
+
+    if (pendingSaveRef.current) {
+      await pendingSaveRef.current;
+    }
+
+    const currentScript = script;
+    if (!currentScript?.trim()) {
+      console.log('[SAVE_ON_CLOSE] ⏭️ Script vuoto, skip');
+      return true;
+    }
+
+    const currentConditionId = localConditionIdRef.current;
+    let saveResult;
+    if (currentConditionId) {
+      saveResult = await scriptManagerRef.current.saveScript(currentScript, label || '', currentConditionId);
+      if (!saveResult.success && saveResult.errors?.some((e: any) =>
+        e.message?.includes('not found') || e.message?.includes('Use createCondition')
+      )) {
+        // ✅ FIX: Usa conditionId dall'edge se disponibile (mantiene collegamento edge → condition)
+        saveResult = await scriptManagerRef.current.createCondition(currentScript, label || '', conditionId || currentConditionId);
+      }
+    } else {
+      // ✅ FIX: Usa conditionId dall'edge se disponibile
+      saveResult = await scriptManagerRef.current.createCondition(currentScript, label || '', conditionId);
+    }
+
+    if (saveResult.success) {
+      if (saveResult.conditionId) {
+        localConditionIdRef.current = saveResult.conditionId;
+        if (edgeId && !currentConditionId) {
+          try {
+            const { updateEdgeWithConditionId } = await import('@services/EdgeConditionUpdater');
+            updateEdgeWithConditionId(edgeId, saveResult.conditionId);
+          } catch (err) {
+            console.error('[SAVE_ON_CLOSE] ❌ Error updating edge', err);
+          }
+        }
+      }
+
+      // ✅ LOG CRITICO: Verifica cosa è stato salvato in memoria
+      const savedConditionId = saveResult.conditionId || currentConditionId;
+      const projectData = (window as any).__projectData;
+      const conditions = projectData?.conditions || [];
+      let foundSaved = false;
+      let hasExecutableCode = false;
+      let executableCodeLength = 0;
+      for (const cat of conditions) {
+        for (const item of (cat.items || [])) {
+          if ((item.id || item._id) === savedConditionId) {
+            foundSaved = true;
+            hasExecutableCode = !!(item as any).expression?.executableCode;
+            executableCodeLength = (item as any).expression?.executableCode?.length || 0;
+            break;
+          }
+        }
+        if (foundSaved) break;
+      }
+
+      console.log('[SAVE_ON_CLOSE] ✅ SUCCESS', {
+        conditionId: savedConditionId,
+        foundInMemory: foundSaved,
+        hasExecutableCode,
+        executableCodeLength
+      });
+
+      onSave?.(currentScript);
+    } else {
+      console.error('[SAVE_ON_CLOSE] ❌ FAILED', {
+        errors: saveResult.errors,
+        conditionId: currentConditionId
+      });
+    }
+
+    return true;
+  }, [script, label, edgeId, onSave]);
+
+  // ✅ Register close handler for dock tab
+  React.useEffect(() => {
+    if (registerOnClose) {
+      registerOnClose(saveCurrentScriptBeforeClose);
+    }
+  }, [registerOnClose, saveCurrentScriptBeforeClose]);
 
   // Refs
   const monacoEditorRef = React.useRef<any>(null);
@@ -287,9 +411,24 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     if (!open || isGenerating) return;
 
     const currentConditionId = localConditionIdRef.current;
-    if (currentConditionId) {
-      const loadedScript = scriptManagerRef.current.loadScriptById(currentConditionId);
+    const conditionIdFromProp = conditionId;
+    const conditionIdToLoad = currentConditionId || conditionIdFromProp;
+
+    // ✅ LOG CRITICO: Caricamento all'apertura
+    console.log('[LOAD_ON_OPEN] 🚀 START', {
+      conditionId: conditionIdToLoad,
+      fromRef: currentConditionId,
+      fromProp: conditionIdFromProp
+    });
+
+    if (conditionIdToLoad) {
+      const loadedScript = scriptManagerRef.current.loadScriptById(conditionIdToLoad);
       if (loadedScript?.trim()) {
+        console.log('[LOAD_ON_OPEN] ✅ SUCCESS', {
+          conditionId: conditionIdToLoad,
+          scriptLength: loadedScript.length,
+          scriptPreview: loadedScript.substring(0, 50)
+        });
         setScript(loadedScript);
         // Compile DSL → JS for preview
         (async () => {
@@ -299,12 +438,15 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
           }
         })();
       } else {
-        // Condition not found, empty editor
+        console.warn('[LOAD_ON_OPEN] ⚠️ NOT FOUND', {
+          conditionId: conditionIdToLoad,
+          loadedScript: loadedScript
+        });
         setScript('');
         setCompiledJs('');
       }
     } else {
-      // New condition, empty editor
+      console.log('[LOAD_ON_OPEN] ℹ️ NEW CONDITION (no conditionId)');
       setScript('');
       setCompiledJs('');
     }
@@ -605,15 +747,30 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         label={label}
         onRename={onRename}
         onClose={async () => {
+          console.log('[ConditionEditor] 🚪 [TRACE] onClose called', {
+            timestamp: new Date().toISOString(),
+            edgeId,
+            label,
+            scriptLength: script?.length || 0,
+            hasScript: !!(script && script.trim())
+          });
+
           // ✅ Save script before closing (if not empty)
           // Save even if compilation fails - DSL is source of truth
           if (script && script.trim()) {
-            console.log('[ConditionEditor] 💾 Attempting to save script on close', {
+            // ✅ FIX: Use localConditionIdRef (always up-to-date) instead of conditionId prop (stale)
+            const currentConditionId = localConditionIdRef.current;
+
+            console.log('[ConditionEditor] 💾 [TRACE] Attempting to save script on close', {
+              timestamp: new Date().toISOString(),
               label,
-              conditionId,
+              conditionIdFromRef: currentConditionId,
+              conditionIdFromProp: conditionId,
               edgeId,
               scriptLength: script.length,
-              scriptPreview: script.substring(0, 100)
+              scriptPreview: script.substring(0, 100),
+              willUpdate: !!currentConditionId,
+              willCreate: !currentConditionId
             });
 
             // Try to compile for validation, but save even if compilation fails
@@ -626,63 +783,86 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
               });
             }
 
-            // ✅ REFACTOR: If conditionId exists, update existing condition. Otherwise, create new one.
-            // ID is the primary key - we don't search by label anymore.
+            // ✅ FIX: Use currentConditionId from ref (always up-to-date) instead of conditionId prop
             let saveResult;
-            if (conditionId) {
-              // Edge already has conditionId - update existing condition
-              saveResult = await scriptManager.saveScript(script, label || '', conditionId);
+            if (currentConditionId) {
+              // Condition already exists - update it
+              saveResult = await scriptManager.saveScript(script, label || '', currentConditionId);
               // If condition not found by ID, create new one (orphaned conditionId)
               if (!saveResult.success && saveResult.errors?.some((e: any) =>
                 e.message?.includes('not found') || e.message?.includes('Use createCondition')
               )) {
                 console.log('[ConditionEditor] ℹ️ Condition not found by ID, creating new condition', {
                   label,
-                  orphanedConditionId: conditionId
+                  orphanedConditionId: currentConditionId
                 });
                 const createResult = await scriptManager.createCondition(script, label || '');
                 if (createResult.success) {
                   saveResult = createResult;
+                  // Update ref with new conditionId
+                  if (createResult.conditionId) {
+                    localConditionIdRef.current = createResult.conditionId;
+                  }
                 }
               }
             } else {
               // No conditionId → create new condition
               saveResult = await scriptManager.createCondition(script, label || '');
+              // Update ref with new conditionId
+              if (saveResult.success && saveResult.conditionId) {
+                localConditionIdRef.current = saveResult.conditionId;
+              }
             }
 
             if (saveResult.success) {
-              const savedConditionId = saveResult.conditionId || conditionId;
-              console.log('[ConditionEditor] ✅ Script saved on close', {
+              const savedConditionId = saveResult.conditionId || currentConditionId;
+              console.log('[ConditionEditor] ✅ [TRACE] Script saved on close', {
+                timestamp: new Date().toISOString(),
                 label,
                 conditionId: savedConditionId,
                 dslLength: script.length,
                 hasEdgeId: !!edgeId,
                 hasCompilationErrors,
-                wasCreated: !conditionId && !!savedConditionId
+                wasCreated: !currentConditionId && !!savedConditionId,
+                previousConditionId: currentConditionId
               });
 
               // ✅ Notify save callback
               onSave?.(script);
 
-              // ✅ Update edge with conditionId SYNCHRONOUSLY if available
-              // Only update if edge doesn't already have conditionId (new condition created)
-              if (edgeId && savedConditionId && !conditionId) {
-                console.log('[ConditionEditor] 🚀 Updating edge synchronously with conditionId', {
+              // ✅ FIX: Only update edge if a brand-new condition was just created (no conditionId before)
+              // If conditionId already existed, edge should already be linked (updated by auto-save)
+              if (edgeId && savedConditionId && !currentConditionId) {
+                console.log('[ConditionEditor] 🔗 [TRACE] Updating edge synchronously with conditionId (new condition)', {
                   edgeId,
-                  conditionId: savedConditionId
+                  conditionId: savedConditionId,
+                  previousConditionId: currentConditionId
                 });
                 const { updateEdgeWithConditionId } = await import('@services/EdgeConditionUpdater');
                 const updated = updateEdgeWithConditionId(edgeId, savedConditionId);
-                if (!updated) {
-                  console.warn('[ConditionEditor] ⚠️ Failed to update edge synchronously', {
+                if (updated) {
+                  console.log('[ConditionEditor] ✅ [TRACE] Edge updated successfully on close', {
+                    edgeId,
+                    conditionId: savedConditionId
+                  });
+                } else {
+                  console.warn('[ConditionEditor] ⚠️ [TRACE] Failed to update edge synchronously on close', {
                     edgeId,
                     conditionId: savedConditionId
                   });
                 }
               } else if (edgeId && !savedConditionId) {
-                console.warn('[ConditionEditor] ⚠️ Cannot update edge - missing conditionId', {
+                console.warn('[ConditionEditor] ⚠️ [TRACE] Cannot update edge - missing conditionId', {
                   edgeId,
-                  hasConditionId: !!saveResult.conditionId
+                  hasConditionId: !!saveResult.conditionId,
+                  currentConditionId
+                });
+              } else {
+                console.log('[ConditionEditor] ⏭️ [TRACE] Skipping edge update on close', {
+                  edgeId,
+                  savedConditionId,
+                  currentConditionId,
+                  reason: !edgeId ? 'no edgeId' : !savedConditionId ? 'no savedConditionId' : 'condition already existed'
                 });
               }
 
@@ -696,14 +876,14 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
             } else {
               console.error('[ConditionEditor] ❌ Failed to save script', {
                 label,
-                conditionId,
+                conditionId: currentConditionId,
                 errors: saveResult.errors
               });
             }
           } else {
             console.log('[ConditionEditor] ⏭️ Skipping save - script is empty', {
               label,
-              conditionId,
+              conditionId: localConditionIdRef.current,
               scriptLength: script?.length || 0
             });
           }

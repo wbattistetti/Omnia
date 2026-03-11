@@ -55,6 +55,16 @@ export class ConditionEditorEventHandler {
     const edgeId = event.edgeId; // ✅ Edge ID
     const conditionId = event.conditionId; // ✅ Condition ID (if edge is linked)
 
+    console.log('[ConditionEditorEventHandler] 📥 [TRACE] Handling conditionEditor:open event', {
+      timestamp: new Date().toISOString(),
+      tabId,
+      edgeId,
+      conditionId,
+      label: conditionLabel,
+      hasConditionId: !!conditionId,
+      willCreateNew: !conditionId
+    });
+
     // ✅ FASE 1: Simplified logic - no needsGeneration, no automatic regeneration
     // Use readableCode from event (if condition exists) or empty string (new condition)
     const readableCode = (event as any).readableCode || '';
@@ -71,6 +81,14 @@ export class ConditionEditorEventHandler {
       edgeId, // ✅ Edge ID
       conditionId, // ✅ Condition ID (if exists, undefined for new condition)
     };
+
+    console.log('[ConditionEditorEventHandler] 📤 [TRACE] Created dockTab', {
+      tabId,
+      edgeId,
+      conditionId,
+      scriptLength: readableCode.length,
+      hasScript: !!readableCode && readableCode.trim().length > 0
+    });
 
     return {
       tabId,

@@ -31,11 +31,14 @@ export class ScriptManagerService {
    * Creates a new condition with DSL script.
    * Returns conditionId so edge can be updated.
    */
-  async createCondition(dsl: string, label: string): Promise<{ success: boolean; errors: any[]; conditionId?: string }> {
+  async createCondition(dsl: string, label: string, conditionId?: string): Promise<{ success: boolean; errors: any[]; conditionId?: string }> {
+    // ✅ LOG CRITICO: Inizio creazione
+    console.log('[CREATE_CONDITION] 🚀 START', { label, dslLength: dsl?.length || 0, providedConditionId: conditionId });
+
     const { pdUpdate } = this.deps;
 
     if (!label || !pdUpdate) {
-      console.warn('[ScriptManagerService][CREATE] ⚠️ Missing required data', {
+      console.warn('[ScriptManagerService][CREATE] ⚠️ [TRACE] Missing required data', {
         hasLabel: !!label,
         hasPdUpdate: !!pdUpdate
       });
@@ -94,9 +97,10 @@ export class ScriptManagerService {
       };
     }
 
-    console.log('[ScriptManagerService][CREATE] ✅ Condition expression generated', {
+    // ✅ LOG CRITICO: Verifica cosa viene scritto
+    console.log('[CREATE_CONDITION] 💾 WRITING', {
       executableCodeLength: executableCode.length,
-      compiledCodeLength: compiledCode.length
+      executableCodePreview: executableCode.substring(0, 50)
     });
 
     // ✅ Get fresh projectData from context (always use latest)
@@ -129,14 +133,87 @@ export class ScriptManagerService {
 
     // ✅ REFACTOR: Create the condition item and use the returned ID (not label search)
     try {
-      // addItem now returns the created item with its ID
-      const createdItem = await pdUpdate.addItem('conditions', categoryId, label, '');
-      const conditionId = createdItem.id || createdItem._id;
+      console.log('[ScriptManagerService][CREATE] 🔍 [TRACE] Creating condition item', {
+        categoryId,
+        label,
+        providedConditionId: conditionId
+      });
 
-      if (!conditionId) {
-        console.error('[ScriptManagerService][CREATE] ❌ Created item has no ID');
-        return { success: false, errors: [] };
+      let finalConditionId: string;
+
+      // ✅ FIX: Se conditionId è fornito (dall'edge), crea item direttamente con quell'ID
+      if (conditionId) {
+        finalConditionId = conditionId;
+
+        // Crea item direttamente in memoria con l'ID specificato
+        const freshProjectData = (window as any).__projectData || this.deps.projectData;
+        const currentPd = JSON.parse(JSON.stringify(freshProjectData));
+        const conditions = currentPd?.conditions || [];
+
+        let foundCategory = false;
+        for (const cat of conditions) {
+          if (cat.id === categoryId) {
+            if (!cat.items) cat.items = [];
+            const newItem = {
+              id: finalConditionId,
+              name: label,
+              label: label,
+              description: '',
+              expression: {
+                executableCode: executableCode,
+                compiledCode: compiledCode,
+                format: 'dsl',
+                ast: JSON.stringify(await transformASTLabelsToGuids(parseResult.ast, this.variableMappingService))
+              }
+            };
+            cat.items.push(newItem);
+            foundCategory = true;
+            pdUpdate.updateDataDirectly(currentPd);
+
+            // ✅ Verifica che sia stato salvato
+            const verify = (window as any).__projectData;
+            const verifyConditions = verify?.conditions || [];
+            let verifyFound = false;
+            let verifyHasExec = false;
+            for (const vCat of verifyConditions) {
+              for (const item of (vCat.items || [])) {
+                if ((item.id || item._id) === finalConditionId) {
+                  verifyFound = true;
+                  verifyHasExec = !!(item as any).expression?.executableCode;
+                  break;
+                }
+              }
+              if (verifyFound) break;
+            }
+
+            console.log('[CREATE_CONDITION] ✅ SUCCESS (with provided ID)', {
+              conditionId: finalConditionId,
+              verifiedInMemory: verifyFound,
+              hasExecutableCode: verifyHasExec
+            });
+
+            return { success: true, errors: [], conditionId: finalConditionId };
+          }
+        }
+
+        if (!foundCategory) {
+          console.error('[CREATE_CONDITION] ❌ Category not found', { categoryId });
+          return { success: false, errors: [] };
+        }
+      } else {
+        // Nessun ID fornito → usa addItem (genera nuovo ID)
+        const createdItem = await pdUpdate.addItem('conditions', categoryId, label, '');
+        finalConditionId = createdItem.id || createdItem._id;
+
+        if (!finalConditionId) {
+          console.error('[ScriptManagerService][CREATE] ❌ [TRACE] Created item has no ID');
+          return { success: false, errors: [] };
+        }
       }
+
+      // ✅ Se siamo qui, significa che abbiamo usato addItem (nessun conditionId fornito)
+      // Procedi con il codice esistente per trovare e aggiornare la condition
+      const conditionIdToFind = finalConditionId;
 
       // Reload projectData to get the fresh state
       const { ProjectDataService } = await import('@services/ProjectDataService');
@@ -144,20 +221,32 @@ export class ScriptManagerService {
       const finalPd = JSON.parse(JSON.stringify(refreshed));
       const finalConditions = finalPd?.conditions || [];
 
+      console.log('[ScriptManagerService][CREATE] 🔍 [TRACE] Searching for condition after reload', {
+        conditionId: conditionIdToFind,
+        categoriesCount: finalConditions.length,
+        totalItemsCount: finalConditions.reduce((sum: number, cat: any) => sum + (cat.items || []).length, 0),
+        allConditionIds: finalConditions.flatMap((cat: any) => (cat.items || []).map((item: any) => item.id || item._id))
+      });
+
       // ✅ Find by ID (not by label) - ID is the primary key
       let found = false;
       for (const cat of finalConditions) {
         for (const item of (cat.items || [])) {
           const itemId = item.id || item._id;
-          if (itemId === conditionId) {
-            // ✅ FASE 2: Save only executableCode and compiledCode (readableCode generated on-the-fly)
-            if (!item.expression) item.expression = {} as any;
-            item.expression.executableCode = executableCode; // DSL with GUIDs - source of truth
-            item.expression.compiledCode = compiledCode; // JavaScript compiled
-            item.expression.format = 'dsl';
-            // Transform AST: label → GUID before saving
+          if (itemId === conditionIdToFind) {
+
+            // ✅ All async work done — compute the expression data synchronously
+            // Transform AST: label → GUID (last async step before the write)
             const transformedAST = await transformASTLabelsToGuids(parseResult.ast, this.variableMappingService);
-            item.expression.ast = JSON.stringify(transformedAST);
+            const transformedASTStr = JSON.stringify(transformedAST);
+
+            // ✅ SEMPLICE: Scrivi expression direttamente in finalPd
+            if (!item.expression) item.expression = {} as any;
+            item.expression.executableCode = executableCode;
+            item.expression.compiledCode = compiledCode;
+            item.expression.format = 'dsl';
+            item.expression.ast = transformedASTStr;
+
             found = true;
             break;
           }
@@ -166,22 +255,46 @@ export class ScriptManagerService {
       }
 
       if (found) {
+        // ✅ SEMPLICE: Usa finalPd direttamente (ha già l'expression scritta sopra)
         pdUpdate.updateDataDirectly(finalPd);
-        console.log('[ScriptManagerService][CREATE] ✅ Created condition', {
-          conditionName: label,
-          conditionId,
-          dslLength: dsl.length
+
+        // ✅ LOG CRITICO: Verifica cosa è stato salvato
+        const verify = (window as any).__projectData;
+        const verifyConditions = verify?.conditions || [];
+        let verifyFound = false;
+        let verifyHasExec = false;
+        for (const cat of verifyConditions) {
+          for (const item of (cat.items || [])) {
+            if ((item.id || item._id) === conditionIdToFind) {
+              verifyFound = true;
+              verifyHasExec = !!(item as any).expression?.executableCode;
+              break;
+            }
+          }
+          if (verifyFound) break;
+        }
+
+        console.log('[CREATE_CONDITION] ✅ SUCCESS', {
+          conditionId: conditionIdToFind,
+          verifiedInMemory: verifyFound,
+          hasExecutableCode: verifyHasExec
         });
-        return { success: true, errors: [], conditionId };
+
+        return { success: true, errors: [], conditionId: conditionIdToFind };
       } else {
-        console.error('[ScriptManagerService][CREATE] ❌ Created item not found by ID after reload', {
-          conditionId,
-          conditionName: label
+        console.error('[ScriptManagerService][CREATE] ❌ [TRACE] Created item not found by ID after reload', {
+          conditionId: conditionIdToFind,
+          conditionName: label,
+          allConditionIds: finalConditions.flatMap((cat: any) => (cat.items || []).map((item: any) => item.id || item._id))
         });
         return { success: false, errors: [] };
       }
     } catch (error) {
-      console.error('[ScriptManagerService][CREATE] ❌ Failed to create condition', error);
+      console.error('[ScriptManagerService][CREATE] ❌ [TRACE] Failed to create condition', {
+        error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined
+      });
       return { success: false, errors: [] };
     }
   }
@@ -192,10 +305,13 @@ export class ScriptManagerService {
    * Returns conditionId so edge can be updated.
    */
   async saveScript(dsl: string, label: string, conditionId: string): Promise<{ success: boolean; errors: any[]; conditionId?: string }> {
+    // ✅ LOG CRITICO: Inizio salvataggio
+    console.log('[SAVE_SCRIPT] 🚀 START', { conditionId, dslLength: dsl?.length || 0 });
+
     const { pdUpdate } = this.deps;
 
     if (!label || !conditionId || !pdUpdate) {
-      console.warn('[ScriptManagerService][SAVE] ⚠️ Missing required data', {
+      console.warn('[ScriptManagerService][SAVE] ⚠️ [TRACE] Missing required data', {
         hasLabel: !!label,
         hasConditionId: !!conditionId,
         hasPdUpdate: !!pdUpdate
@@ -276,15 +392,18 @@ export class ScriptManagerService {
       };
     }
 
-    console.log('[ScriptManagerService][SAVE] ✅ Condition expression generated', {
+    // ✅ LOG CRITICO: Verifica cosa viene scritto
+    console.log('[SAVE_SCRIPT] 💾 WRITING', {
+      conditionId,
       executableCodeLength: executableCode.length,
-      compiledCodeLength: compiledCode.length
+      executableCodePreview: executableCode.substring(0, 50)
     });
 
     // ✅ Get fresh projectData from context (always use latest)
     const freshProjectData = (window as any).__projectData || projectData;
     const updatedPd = JSON.parse(JSON.stringify(freshProjectData));
     const conditions = updatedPd?.conditions || [];
+
 
     // ✅ REFACTOR: Search ONLY by ID (primary key), never by label
     let found = false;
@@ -294,6 +413,7 @@ export class ScriptManagerService {
         // ✅ REFACTOR: Search ONLY by ID (primary key), never by label
         const itemId = item.id || item._id;
         if (itemId === conditionId) {
+
           // ✅ FASE 2: Save only executableCode and compiledCode (readableCode generated on-the-fly)
           if (!item.expression) item.expression = {} as any;
           item.expression.executableCode = executableCode; // DSL with GUIDs - source of truth
@@ -304,12 +424,6 @@ export class ScriptManagerService {
           item.expression.ast = JSON.stringify(transformedAST);
 
           found = true;
-          console.log('[ScriptManagerService][SAVE] ✅ Saved condition expression', {
-            conditionName: label,
-            conditionId,
-            executableCodeLength: executableCode.length,
-            compiledCodeLength: compiledCode.length
-          });
           break;
         }
       }
@@ -318,13 +432,36 @@ export class ScriptManagerService {
 
     if (found) {
       pdUpdate.updateDataDirectly(updatedPd);
-      console.log('[ScriptManagerService][SAVE] ✅ Updated projectData via updateDataDirectly');
+
+      // ✅ LOG CRITICO: Verifica cosa è stato salvato
+      const verify = (window as any).__projectData;
+      const verifyConditions = verify?.conditions || [];
+      let verifyFound = false;
+      let verifyHasExec = false;
+      for (const cat of verifyConditions) {
+        for (const item of (cat.items || [])) {
+          if ((item.id || item._id) === conditionId) {
+            verifyFound = true;
+            verifyHasExec = !!(item as any).expression?.executableCode;
+            break;
+          }
+        }
+        if (verifyFound) break;
+      }
+
+      console.log('[SAVE_SCRIPT] ✅ SUCCESS', {
+        conditionId,
+        verifiedInMemory: verifyFound,
+        hasExecutableCode: verifyHasExec
+      });
+
       return { success: true, errors: [], conditionId };
     } else {
       // Condition not found by ID
-      console.error('[ScriptManagerService][SAVE] ❌ Condition not found by ID', {
+      console.error('[ScriptManagerService][SAVE] ❌ [TRACE] Condition not found by ID', {
         conditionId,
-        conditionName: label
+        conditionName: label,
+        allConditionIds: conditions.flatMap((cat: any) => (cat.items || []).map((item: any) => item.id || item._id))
       });
       return {
         success: false,
@@ -343,13 +480,18 @@ export class ScriptManagerService {
    * Uses fresh data from window.__projectData for accuracy.
    */
   loadScriptById(conditionId: string): string | null {
+    // ✅ LOG CRITICO: Inizio caricamento
+    console.log('[LOAD_SCRIPT] 🚀 START', { conditionId });
+
     if (!conditionId) {
+      console.warn('[LOAD_SCRIPT] ❌ No conditionId');
       return null;
     }
 
     // ✅ Get fresh projectData from context (not from snapshot)
     const projectData: any = (window as any).__projectData || this.deps.projectData;
     if (!projectData) {
+      console.warn('[LOAD_SCRIPT] ❌ No projectData');
       return null;
     }
 
@@ -359,19 +501,41 @@ export class ScriptManagerService {
       for (const item of (cat.items || [])) {
         const itemId = item.id || item._id;
         if (itemId === conditionId) {
-          // ✅ FASE 2: Read executableCode (DSL with GUIDs) and convert to readableCode (DSL with labels)
           const executableCode = (item as any).expression?.executableCode;
+
+          // ✅ LOG CRITICO: Cosa trova
+          console.log('[LOAD_SCRIPT] 🔍 FOUND', {
+            conditionId,
+            hasExpression: !!(item as any).expression,
+            hasExecutableCode: !!executableCode,
+            executableCodeLength: executableCode?.length || 0,
+            executableCodePreview: executableCode?.substring(0, 50)
+          });
+
           if (!executableCode) {
+            console.warn('[LOAD_SCRIPT] ⚠️ NO executableCode');
             return null;
           }
 
           // Convert GUID → label on-the-fly
           const variableMappings = createVariableMappings();
           const readableCode = convertDSLGUIDsToLabels(executableCode, variableMappings);
+
+          console.log('[LOAD_SCRIPT] ✅ SUCCESS', {
+            conditionId,
+            readableCodeLength: readableCode.length,
+            readableCodePreview: readableCode.substring(0, 50)
+          });
+
           return readableCode;
         }
       }
     }
+
+    console.warn('[LOAD_SCRIPT] ⚠️ NOT FOUND', {
+      conditionId,
+      allConditionIds: conditions.flatMap((cat: any) => (cat.items || []).map((item: any) => item.id || item._id))
+    });
 
     return null;
   }

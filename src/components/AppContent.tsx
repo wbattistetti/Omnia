@@ -78,7 +78,8 @@ const DockManagerWithFlows: React.FC<{
   setRoot: (updater: (prev: DockNode) => DockNode) => void;
   renderTabContent: (tab: DockTab, upsertFlow: (flow: { id: string; title: string; nodes: any[]; edges: any[] }) => void) => React.ReactNode;
   flowsRef: React.MutableRefObject<Record<string, any>>;
-}> = ({ root, setRoot, renderTabContent, flowsRef }) => {
+  editorCloseRefsMap: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
+}> = ({ root, setRoot, renderTabContent, flowsRef, editorCloseRefsMap }) => {
   const flowWorkspace = useFlowWorkspace<Node<FlowNode>, Edge<EdgeData>>();
   const flowActions = useFlowActions<Node<FlowNode>, Edge<EdgeData>>();
 
@@ -111,6 +112,7 @@ const DockManagerWithFlows: React.FC<{
       root={root}
       setRoot={adaptedSetRoot}
       renderTabContent={wrappedRenderTabContent}
+      editorCloseRefsMap={editorCloseRefsMap}
     />
   );
 };
@@ -1130,6 +1132,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                             setRoot={setDockTree}
                             renderTabContent={renderTabContent}
                             flowsRef={flowsRef}
+                            editorCloseRefsMap={editorCloseRefsMap}
                           />
                         </FlowWorkspaceProvider>
                       ) : (

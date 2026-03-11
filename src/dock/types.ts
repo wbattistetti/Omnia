@@ -65,6 +65,7 @@ export type DockTabConditionEditor = DockTabBase & {
   isGenerating?: boolean; // ✅ NEW: Flag for AI generation loading state
   edgeId?: string; // ✅ Edge ID (when opened from edge)
   conditionId?: string; // ✅ Condition ID (top-level on edge, not in data)
+  onClose?: (tab: DockTabConditionEditor) => boolean | Promise<boolean> | void | Promise<void>; // ✅ NEW: Callback called before closing the tab. Return false to prevent closing.
 };
 
 // Task Editor tab - for generic task editors (BackendCall, etc.)

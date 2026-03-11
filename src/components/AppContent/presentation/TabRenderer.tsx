@@ -2,7 +2,7 @@
 // Renders different tab types (flow, responseEditor, conditionEditor, taskEditor, nonInteractive)
 
 import React, { useMemo, useCallback, useEffect } from 'react';
-import type { DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabChat, DockTabErrorReport, ToolbarButton } from '@dock/types';
+import type { DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabConditionEditor, DockTabChat, DockTabErrorReport, ToolbarButton } from '@dock/types';
 import type { DockNode } from '@dock/types';
 import { TaskType } from '@types/taskTypes';
 import { resolveEditorKind } from '@taskEditor/EditorHost/resolveKind';
@@ -307,6 +307,22 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
 
     // Condition Editor tab
     if (tab.type === 'conditionEditor') {
+      useEffect(() => {
+        return () => {
+          // ✅ Cleanup: remove close handler when tab unmounts
+          editorCloseRefsMap.current.delete(tab.id);
+        };
+      }, [tab.id, editorCloseRefsMap]);
+
+      // ✅ SIMPLIFIED: Only update the map — DockManager reads directly from editorCloseRefsMap.
+      // No setDockTree needed (avoids state-update race condition on fast close).
+      const handleRegisterOnClose = useCallback(
+        (fn: () => Promise<boolean>) => {
+          editorCloseRefsMap.current.set(tab.id, fn);
+        },
+        [tab.id, editorCloseRefsMap]
+      );
+
       return (
         <div
           style={{
@@ -321,6 +337,11 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
           <ConditionEditor
             open={true}
             onClose={() => {
+              console.log('[TabRenderer] 🚪 [TRACE] ConditionEditor onClose called', {
+                tabId: tab.id,
+                edgeId: tab.edgeId,
+                conditionId: tab.conditionId
+              });
               setDockTree(prev => closeTab(prev, tab.id));
               try {
                 requestAnimationFrame(() => {
@@ -340,6 +361,7 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
             isGenerating={tab.isGenerating} // ✅ Pass isGenerating flag
             edgeId={tab.edgeId} // ✅ Pass edgeId for error removal
             conditionId={tab.conditionId} // ✅ Pass conditionId (if edge is linked)
+            registerOnClose={handleRegisterOnClose} // ✅ NEW: Register close handler for dock tab
             onRename={(next) => {
               setDockTree(prev =>
                 mapNode(prev, n => {

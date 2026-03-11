@@ -21,6 +21,8 @@ type Props = {
   root: DockNode;
   setRoot: (n: DockNode) => void;
   renderTabContent: (tab: DockTab) => React.ReactNode;
+  /** Direct map of tabId → close handler. Read synchronously — no state update delay. */
+  editorCloseRefsMap?: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
 };
 
 // Helper to get icon for tab type
@@ -37,7 +39,7 @@ function getTabIcon(tab: DockTab) {
   }
 }
 
-export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent }) => {
+export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent, editorCloseRefsMap }) => {
   const [dragTab, setDragTab] = React.useState<DockTab | null>(null);
   const [activeTabSetId, setActiveTabSetId] = React.useState<string>('ts_main');
   const [hoverTarget, setHoverTarget] = React.useState<{ tabsetId: string; region: DockRegion } | null>(null);
@@ -67,6 +69,7 @@ export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent }
           // Tab closed - no shelf, just remove it
         }}
         rootNode={root}
+        editorCloseRefsMap={editorCloseRefsMap}
       />
     </div>
   );
@@ -85,6 +88,7 @@ function SplitRenderer(props: {
   setRoot: (n: DockNode) => void;
   setActiveTabSetId: (id: string) => void;
   onTabClosed: (tab: DockTab | null) => void;
+  editorCloseRefsMap?: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
 }) {
   const { node } = props;
   const cls = node.orientation === 'row' ? 'flex flex-row w-full h-full' : 'flex flex-col w-full h-full';
@@ -211,6 +215,7 @@ function DockRenderer(props: {
   setRoot: (n: DockNode) => void;
   setActiveTabSetId: (id: string) => void;
   onTabClosed: (tab: DockTab | null) => void;
+  editorCloseRefsMap?: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
 }) {
   const { node } = props;
   if (node.kind === 'split') {
@@ -223,44 +228,32 @@ function DockRenderer(props: {
       active={node.active}
       setActive={(idx) => { props.setActiveTabSetId(node.id); props.setRoot(activateTab(props.rootNode, node.tabs[idx].id)); }}
       onClose={async (tabId) => {
-        console.log('[DockManager] 🔴 onClose called', { tabId });
-        // ✅ PRIMA: Chiama onClose del tab se presente (per salvataggio sincrono)
-        const t = getTab(props.rootNode, tabId);
-        console.log('[DockManager] 🔍 Tab found', {
-          tabId,
-          hasTab: !!t,
-          tabType: t?.type,
-          hasOnClose: t && 'onClose' in t,
-          onCloseType: t && 'onClose' in t ? typeof t.onClose : 'N/A'
-        });
-        let shouldClose = true; // Default: chiudi il tab
+        let shouldClose = true;
 
-        if (t && 'onClose' in t && typeof t.onClose === 'function') {
-          console.log('[DockManager] 🟢 Calling tab.onClose', { tabId, tabType: t.type });
+        // ✅ PRIORITY 1: Use editorCloseRefsMap directly (no state-update delay, always current)
+        const directHandler = props.editorCloseRefsMap?.current.get(tabId);
+        if (directHandler) {
           try {
-            // ✅ Pass the tab to onClose so it can read tab.ddt (which is updated during editing)
-            const result = await t.onClose(t);
-            console.log('[DockManager] ✅ tab.onClose completed', { tabId, result, shouldClose: result !== false });
-            // ✅ Se onClose ritorna false, non chiudere il tab
-            if (result === false) {
-              shouldClose = false;
-              console.log('[DockManager] ⏸️ Tab close prevented by tab.onClose', { tabId });
-            }
+            const result = await directHandler();
+            if (result === false) shouldClose = false;
           } catch (err) {
-            console.error('[DockManager] ❌ Error in tab.onClose:', err);
-            // ✅ In caso di errore, chiudi comunque il tab (comportamento precedente)
+            console.error('[DockManager] ❌ Error in editorCloseRef handler:', err);
           }
         } else {
-          console.warn('[DockManager] ⚠️ Tab.onClose not available', {
-            tabId,
-            hasTab: !!t,
-            hasOnClose: t && 'onClose' in t,
-            onCloseType: t && 'onClose' in t ? typeof t.onClose : 'N/A'
-          });
+          // ✅ FALLBACK: tab.onClose for other tab types (e.g. responseEditor)
+          const t = getTab(props.rootNode, tabId);
+          if (t && 'onClose' in t && typeof t.onClose === 'function') {
+            try {
+              const result = await (t as any).onClose(t);
+              if (result === false) shouldClose = false;
+            } catch (err) {
+              console.error('[DockManager] ❌ Error in tab.onClose:', err);
+            }
+          }
         }
 
-        // ✅ POI: Chiudi la tab solo se onClose non ha ritornato false
         if (shouldClose) {
+          const t = getTab(props.rootNode, tabId);
           if (t) props.onTabClosed(t);
           props.setRoot(closeTab(props.rootNode, tabId));
         }
