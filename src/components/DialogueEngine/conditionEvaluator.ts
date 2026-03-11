@@ -258,7 +258,8 @@ function evaluateEdgeCondition(
             allConditionIds: conditions.flatMap((cat: any) => (cat.items || []).map((item: any) => ({
               id: item.id || item._id,
               name: item.name || item.label,
-              hasScript: !!(item.data?.script || item.script)
+              hasExpression: !!item.expression,
+              hasCompiledCode: !!item.expression?.compiledCode
             })))
           });
           for (const cat of conditions) {

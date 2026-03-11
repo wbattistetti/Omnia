@@ -428,14 +428,13 @@ export const ProjectDataService = {
         };
       }
 
-      const convertedItem = {
+      const convertedItem: any = {
         id: item._id || uuidv4(),
         name: item.name || item.label || 'Unnamed',
         description: item.description || '',
         type: (item as any)?.type,
         // ✅ mode removed - use type (TaskType enum) only
         shortLabel: item.shortLabel,
-        data: item.data || {}, // ✅ Preserve data object (includes uiCode, script, ast, etc.)
         ddt: item.ddt,
         // Include ProblemClassification payload persisted per act (project-owned)
         problem: (item as any)?.problem,
@@ -449,14 +448,22 @@ export const ProjectDataService = {
         isInMemory: false
       };
 
-      // ✅ Log if condition has uiCode when converting
-      if (entityType === 'conditions' && convertedItem.data?.uiCode) {
-        console.log('[ProjectDataService][convertToCategories] ✅ Condition with uiCode converted', {
-          id: convertedItem.id,
-          name: convertedItem.name,
-          uiCodeLength: convertedItem.data.uiCode.length,
-          hasScript: !!convertedItem.data.script
-        });
+      // ✅ For conditions: use ONLY expression (no data legacy)
+      // ✅ For other entities: use data (if needed)
+      if (entityType === 'conditions') {
+        if (item.expression) {
+          convertedItem.expression = item.expression;
+          console.log('[ProjectDataService][convertToCategories] ✅ Condition with expression converted', {
+            id: convertedItem.id,
+            name: convertedItem.name,
+            hasExecutableCode: !!item.expression.executableCode,
+            hasCompiledCode: !!item.expression.compiledCode,
+            executableCodeLength: item.expression.executableCode?.length || 0
+          });
+        }
+      } else {
+        // For non-conditions, preserve data if present
+        convertedItem.data = item.data || {};
       }
 
       categoriesMap[key].items.push(convertedItem);
@@ -563,12 +570,13 @@ export const ProjectDataService = {
               projectId: currentProjectId,
               projectConditionsCount: items.length,
               mergedCategoriesCount: mergedConditions.length,
-              conditionsWithUiCode: mergedConditions.flatMap(cat =>
-                (cat.items || []).filter((item: any) => item.data?.uiCode).map((item: any) => ({
+              conditionsWithExpression: mergedConditions.flatMap(cat =>
+                (cat.items || []).filter((item: any) => item.expression).map((item: any) => ({
                   id: item.id || item._id,
                   name: item.name || item.label,
-                  hasUiCode: !!item.data?.uiCode,
-                  uiCodeLength: item.data?.uiCode?.length || 0
+                  hasExpression: !!item.expression,
+                  hasExecutableCode: !!item.expression?.executableCode,
+                  hasCompiledCode: !!item.expression?.compiledCode
                 }))
               )
             });
