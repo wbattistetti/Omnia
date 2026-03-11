@@ -105,7 +105,10 @@ export function useLabelDrag(
       };
 
       setIsDragging(true);
-      setDragPosition(initialPosition);
+      // ✅ REFACTOR: EdgeLabelRenderer usa coordinate SVG
+      // Converti initialPosition (screen) in SVG se necessario
+      const initialSvg = converter.screenToSvg(initialPosition) || startSvg;
+      setDragPosition(initialSvg);
       setMouseSvgPosition(startSvg); // ✅ Inizializza posizione mouse
     },
     [enabled, labelRef, initialPosition, converter, savedLabelSvgPosition]
@@ -126,11 +129,9 @@ export function useLabelDrag(
       // ✅ La posizione della caption è sempre quella del mouse (libero movimento)
       dragStartRef.current.currentSvg = mouseSvg;
 
-      // Converti per rendering
-      const screenPos = converter.svgToScreen(mouseSvg);
-      if (screenPos) {
-        setDragPosition(screenPos);
-      }
+      // ✅ REFACTOR: EdgeLabelRenderer usa coordinate SVG, non screen
+      // Manteniamo coordinate SVG per dragPosition
+      setDragPosition(mouseSvg);
     },
     [isDragging, pathRef, converter]
   );

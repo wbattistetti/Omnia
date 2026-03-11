@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { EdgeProps } from 'reactflow';
+import { EdgeProps, EdgeLabelRenderer } from 'reactflow';
 import { createPortal } from 'react-dom';
 import { useProjectDataUpdate, useProjectData } from '../../../context/ProjectDataContext';
 import { ProjectDataService } from '../../../services/ProjectDataService';
@@ -252,9 +252,9 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
 
   const labelDrag = useLabelDrag({
     labelRef: hoverRefs.labelRef,
-    initialPosition: positions.labelScreenPosition,
+    initialPosition: positions.labelSvgPosition, // ✅ REFACTOR: usa coordinate SVG
     pathRef: pathRef,
-    savedLabelSvgPosition: null, // ✅ LEGACY: non più usato, solo per compatibilità
+    savedLabelSvgPosition: positions.labelSvgPosition, // ✅ Usa coordinate SVG correnti
     onPositionChange: handleLabelPositionChange,
     enabled: !!label,
     snapThreshold: 30,
@@ -621,24 +621,27 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         />
       )}
 
-      <EdgeLabel
-        label={label}
-        position={positions.labelScreenPosition}
-        isHovered={hover.state.labelHovered}
-        onEdit={handleEditLabel}
-        onUncondition={handleUncondition}
-        onOpenConditionEditor={handleOpenConditionEditor}
-        hasConditionScript={!!((props as any).conditionId || (props.data as any)?.hasConditionScript)}
-        isElse={(props as any).isElse ?? (props.data as any)?.isElse}
-        onMouseEnter={() => hover.setLabelHovered(true)}
-        onMouseLeave={() => hover.setLabelHovered(false)}
-        toolbarRef={hoverRefs.toolbarRef}
-        labelRef={hoverRefs.labelRef}
-        dragPosition={labelDrag.dragPosition}
-        isDragging={labelDrag.isDragging}
-        onMouseDown={labelDrag.onMouseDown}
-        edgeId={id} // ✅ Add edgeId prop
-      />
+      {/* ✅ REFACTOR: Usa EdgeLabelRenderer per gestire automaticamente le trasformazioni SVG */}
+      <EdgeLabelRenderer>
+        <EdgeLabel
+          label={label}
+          position={positions.labelSvgPosition}
+          isHovered={hover.state.labelHovered}
+          onEdit={handleEditLabel}
+          onUncondition={handleUncondition}
+          onOpenConditionEditor={handleOpenConditionEditor}
+          hasConditionScript={!!((props as any).conditionId || (props.data as any)?.hasConditionScript)}
+          isElse={(props as any).isElse ?? (props.data as any)?.isElse}
+          onMouseEnter={() => hover.setLabelHovered(true)}
+          onMouseLeave={() => hover.setLabelHovered(false)}
+          toolbarRef={hoverRefs.toolbarRef}
+          labelRef={hoverRefs.labelRef}
+          dragPosition={labelDrag.dragPosition}
+          isDragging={labelDrag.isDragging}
+          onMouseDown={labelDrag.onMouseDown}
+          edgeId={id} // ✅ Add edgeId prop
+        />
+      </EdgeLabelRenderer>
 
       {/* Intellisense Menu */}
       {showConditionIntellisense &&

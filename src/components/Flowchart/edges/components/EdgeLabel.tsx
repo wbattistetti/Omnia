@@ -149,7 +149,8 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
     return null;
   }
 
-  // Use drag position if dragging, otherwise use normal position
+  // ✅ REFACTOR: EdgeLabelRenderer gestisce le trasformazioni SVG automaticamente
+  // Le coordinate sono già in formato SVG, EdgeLabelRenderer le trasforma
   const displayPosition = isDragging && dragPosition ? dragPosition : position;
 
   const labelContent = isEditing ? (
@@ -177,7 +178,10 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
     </span>
   );
 
-  return createPortal(
+  // ✅ REFACTOR: Renderizza direttamente invece di createPortal
+  // EdgeLabelRenderer gestirà le trasformazioni SVG automaticamente
+  // Le coordinate sono in formato SVG, EdgeLabelRenderer le converte in screen
+  return (
     <div
       title={
         isElse
@@ -374,8 +378,7 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
           )}
         </span>
       )}
-    </div>,
-    document.body
+    </div>
   );
 };
 

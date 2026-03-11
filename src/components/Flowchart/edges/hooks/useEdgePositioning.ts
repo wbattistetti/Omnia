@@ -6,6 +6,7 @@ export interface EdgePositioningResult {
   midPointSvg: { x: number; y: number };
   midPointScreen: { x: number; y: number };
   labelScreenPosition: { x: number; y: number };
+  labelSvgPosition: { x: number; y: number }; // ✅ NUOVO: coordinate SVG native per EdgeLabelRenderer
   sourceScreenPosition: { x: number; y: number };
 }
 
@@ -28,6 +29,7 @@ export function useEdgePositioning(
     midPointSvg: { x: 0, y: 0 },
     midPointScreen: { x: 0, y: 0 },
     labelScreenPosition: { x: 0, y: 0 },
+    labelSvgPosition: { x: 0, y: 0 }, // ✅ NUOVO
     sourceScreenPosition: { x: 0, y: 0 },
   });
 
@@ -46,16 +48,21 @@ export function useEdgePositioning(
     const sourceScreen = converter.flowToScreen({ x: sourceX, y: sourceY });
 
     // ✅ PULITO: Label position da labelPositionRelative
+    let labelSvgPos: { x: number; y: number };
     let labelScreenPos: { x: number; y: number };
+
     if (labelPositionRelative) {
-      // Converti { t, offset } → coordinate SVG → coordinate screen
+      // Converti { t, offset } → coordinate SVG
       const labelSvg = converter.labelRelativeToAbsolute(labelPositionRelative);
       if (labelSvg) {
+        labelSvgPos = labelSvg;
         labelScreenPos = converter.svgToScreen(labelSvg) || midPointScreen;
       } else {
+        labelSvgPos = { x: midPoint.x, y: midPoint.y };
         labelScreenPos = midPointScreen;
       }
     } else {
+      labelSvgPos = { x: midPoint.x, y: midPoint.y };
       labelScreenPos = midPointScreen;
     }
 
@@ -63,6 +70,7 @@ export function useEdgePositioning(
       midPointSvg: { x: midPoint.x, y: midPoint.y },
       midPointScreen,
       labelScreenPosition: labelScreenPos,
+      labelSvgPosition: labelSvgPos, // ✅ NUOVO: coordinate SVG native
       sourceScreenPosition: sourceScreen,
     });
   }, [pathRef, sourceX, sourceY, targetX, targetY, labelPositionRelative, reactFlowInstance]);
@@ -95,27 +103,9 @@ export function useEdgePositioning(
     updatePositions();
   }, [sourceX, sourceY, targetX, targetY, updatePositions]);
 
-  // ✅ Listener viewport (pan/zoom)
-  useEffect(() => {
-    if (!reactFlowInstance?.onViewportChange) {
-      updatePositions();
-      return;
-    }
-
-    updatePositions();
-    const unsubscribe = reactFlowInstance.onViewportChange(() => {
-      updatePositions();
-    });
-
-    return unsubscribe;
-  }, [reactFlowInstance, updatePositions]);
-
-  // ✅ Listener scroll (CRITICO)
-  useEffect(() => {
-    const handleScroll = () => updatePositions();
-    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
-    return () => window.removeEventListener('scroll', handleScroll, { capture: true });
-  }, [updatePositions]);
+  // ✅ REFACTOR: EdgeLabelRenderer gestisce automaticamente pan/zoom/scroll
+  // Non serve più listener per viewport/scroll - EdgeLabelRenderer trasforma le coordinate SVG automaticamente
+  // Manteniamo solo i listener per cambiamenti strutturali (nodi, path)
 
   // ✅ Listener resize (CRITICO)
   useEffect(() => {
