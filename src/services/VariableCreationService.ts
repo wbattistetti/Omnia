@@ -177,6 +177,50 @@ class VariableCreationService {
     );
   }
 
+  /**
+   * Create a manual variable with empty instanceId and nodeId.
+   * Used when user creates a variable from BackendCallEditor output fields.
+   * The variable is added to the same in-memory store and will be persisted on project save.
+   * Creates the label-GUID mapping automatically (varId = GUID, varName = label).
+   */
+  createManualVariable(projectId: string, varName: string): VariableInstance {
+    const existing = this.store.get(projectId) ?? [];
+
+    // Check if variable with same name already exists
+    const existingVar = existing.find(v => v.varName === varName.trim());
+    if (existingVar) {
+      console.log('[VariableCreationService] ⚠️ Variable already exists', {
+        projectId,
+        varName,
+        existingVarId: existingVar.varId
+      });
+      return existingVar;
+    }
+
+    // ✅ Create variable with GUID (varId) and label (varName) mapping
+    const newVariable: VariableInstance = {
+      varId: this.generateGuid(), // ✅ GUID generated automatically
+      varName: varName.trim(), // ✅ Label stored (creates label-GUID mapping)
+      taskInstanceId: '', // Empty as requested
+      nodeId: '', // Empty as requested
+      ddtPath: '' // Empty for manual variables
+    };
+
+    // ✅ Add to the same in-memory store (unified collection)
+    this.store.set(projectId, [...existing, newVariable]);
+
+    console.log('[VariableCreationService] ✅ Manual variable created and added to store', {
+      projectId,
+      varId: newVariable.varId, // ✅ GUID
+      varName: newVariable.varName, // ✅ Label (label-GUID mapping created)
+      taskInstanceId: newVariable.taskInstanceId,
+      nodeId: newVariable.nodeId,
+      totalVariablesInStore: this.store.get(projectId)?.length || 0
+    });
+
+    return newVariable;
+  }
+
   // ---------------------------------------------------------------------------
   // In-memory queries (synchronous — used by VariableMappingService at compile time)
   // ---------------------------------------------------------------------------

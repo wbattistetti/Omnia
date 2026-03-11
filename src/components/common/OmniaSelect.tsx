@@ -81,6 +81,7 @@ const getStyles = (variant: OmniaSelectVariant, isInvalid?: boolean, showSearchI
           : 'transparent',
         color: '#ffffff',
         padding: '0.5rem 1rem',
+        fontSize: '0.875rem', // ✅ Increased font size (14px instead of default 12px)
         '&:hover': {
           backgroundColor: '#334155',
         },

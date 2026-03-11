@@ -79,6 +79,9 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
   const { data: projectData } = useProjectData();
   const projectId = pdUpdate?.getCurrentProjectId() || undefined;
 
+  // ✅ State to force re-render of availableVariables when a new variable is created
+  const [variablesRefreshKey, setVariablesRefreshKey] = React.useState(0);
+
   // Show/hide API column
   const [showApiColumn, setShowApiColumn] = React.useState(true);
 
@@ -122,7 +125,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
         return [];
       }
     }
-  }, [projectData]);
+  }, [projectData, variablesRefreshKey]); // ✅ Include variablesRefreshKey to force re-render
 
   // Get available API params (placeholder - in futuro da Backend Builder)
   const availableApiParams = React.useMemo(() => {
@@ -803,9 +806,46 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                                 updateInput(index, { variable: value || '' });
                                 setOpenInputVariable(null); // Chiudi dopo selezione
                               }}
+                              onCreateOption={async (inputValue) => {
+                                // ✅ Create new variable when user types and presses Enter
+                                if (!inputValue || inputValue.trim() === '') {
+                                  return;
+                                }
+
+                                const projectId = localStorage.getItem('currentProjectId');
+                                if (!projectId) {
+                                  console.warn('[BackendCallEditor] Cannot create variable: no projectId');
+                                  return;
+                                }
+
+                                try {
+                                  // ✅ Create variable using the unified collection
+                                  // This automatically creates the label-GUID mapping (varId = GUID, varName = label)
+                                  const newVariable = variableCreationService.createManualVariable(
+                                    projectId,
+                                    inputValue.trim()
+                                  );
+
+                                  // Update the input field with the new variable name
+                                  updateInput(index, { variable: newVariable.varName });
+
+                                  // ✅ Force re-render of availableVariables by incrementing refresh key
+                                  setVariablesRefreshKey(prev => prev + 1);
+
+                                  setOpenInputVariable(null); // Close after creation
+
+                                  console.log('[BackendCallEditor] ✅ Variable created and assigned to input', {
+                                    varName: newVariable.varName, // ✅ Label
+                                    varId: newVariable.varId, // ✅ GUID (label-GUID mapping created)
+                                    totalVariablesInStore: variableCreationService.getCount(projectId)
+                                  });
+                                } catch (error) {
+                                  console.error('[BackendCallEditor] ❌ Error creating variable', error);
+                                }
+                              }}
                               onBlur={() => setOpenInputVariable(null)}
                               onMenuClose={() => setOpenInputVariable(null)}
-                              placeholder="Variable"
+                              placeholder="Add Variable"
                               isCreatable={true}
                               className="text-xs"
                               autoFocus={true}
@@ -1014,9 +1054,46 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
                                 updateOutput(index, { variable: value || '' });
                                 setOpenOutputVariable(null); // Chiudi dopo selezione
                               }}
+                              onCreateOption={async (inputValue) => {
+                                // ✅ Create new variable when user types and presses Enter
+                                if (!inputValue || inputValue.trim() === '') {
+                                  return;
+                                }
+
+                                const projectId = localStorage.getItem('currentProjectId');
+                                if (!projectId) {
+                                  console.warn('[BackendCallEditor] Cannot create variable: no projectId');
+                                  return;
+                                }
+
+                                try {
+                                  // ✅ Create variable using the unified collection
+                                  // This automatically creates the label-GUID mapping (varId = GUID, varName = label)
+                                  const newVariable = variableCreationService.createManualVariable(
+                                    projectId,
+                                    inputValue.trim()
+                                  );
+
+                                  // Update the output field with the new variable name
+                                  updateOutput(index, { variable: newVariable.varName });
+
+                                  // ✅ Force re-render of availableVariables by incrementing refresh key
+                                  setVariablesRefreshKey(prev => prev + 1);
+
+                                  setOpenOutputVariable(null); // Close after creation
+
+                                  console.log('[BackendCallEditor] ✅ Variable created and assigned', {
+                                    varName: newVariable.varName, // ✅ Label
+                                    varId: newVariable.varId, // ✅ GUID (label-GUID mapping created)
+                                    totalVariablesInStore: variableCreationService.getCount(projectId)
+                                  });
+                                } catch (error) {
+                                  console.error('[BackendCallEditor] ❌ Error creating variable', error);
+                                }
+                              }}
                               onBlur={() => setOpenOutputVariable(null)}
                               onMenuClose={() => setOpenOutputVariable(null)}
-                              placeholder="Variable"
+                              placeholder="Add Variable"
                               isCreatable={true}
                               className="text-xs"
                               autoFocus={true}
