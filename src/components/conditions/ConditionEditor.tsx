@@ -107,12 +107,22 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     return new ScriptManagerService({ projectData, pdUpdate });
   }, [projectData, pdUpdate]);
 
+  // ✅ FIX: Track conditionId locally — updated after createCondition
+  const localConditionIdRef = React.useRef<string | undefined>(conditionId);
+  React.useEffect(() => {
+    localConditionIdRef.current = conditionId;
+  }, [conditionId]);
+
+  // ✅ FIX: Always keep scriptManagerRef current (avoids stale closure and race conditions)
+  const scriptManagerRef = React.useRef(scriptManager);
+  scriptManagerRef.current = scriptManager;
+
   const updateProjectDataScript = React.useCallback(async (dslToSave: string) => {
-    // ✅ REFACTOR: If conditionId exists, update existing condition. Otherwise, create new one.
-    // ID is the primary key - we don't search by label anymore.
+    // ✅ FIX: Use local ref to track conditionId (avoids stale closure)
+    const currentConditionId = localConditionIdRef.current;
     let result;
-    if (conditionId) {
-      result = await scriptManager.saveScript(dslToSave, label || '', conditionId);
+    if (currentConditionId) {
+      result = await scriptManager.saveScript(dslToSave, label || '', currentConditionId);
       // If condition not found by ID, create new one
       if (!result.success && result.errors?.some((e: any) =>
         e.message?.includes('not found') || e.message?.includes('Use createCondition')
@@ -125,13 +135,17 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     }
 
     if (result.success) {
+      // ✅ FIX: Store new conditionId so subsequent edits update the same condition
+      if (result.conditionId) {
+        localConditionIdRef.current = result.conditionId;
+      }
       // Update compiled JS preview
       const compileResult = await scriptManager.compileDSL(dslToSave);
       if (compileResult.success && compileResult.jsCode) {
         setCompiledJs(compileResult.jsCode);
       }
     }
-  }, [scriptManager, label, conditionId, setCompiledJs]);
+  }, [scriptManager, label, setCompiledJs]); // ✅ FIX: removed conditionId from deps (uses ref)
 
   // Refs
   const monacoEditorRef = React.useRef<any>(null);
@@ -267,18 +281,19 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
   const [varsMenuMaxH] = React.useState<number>(280);
 
-  // ✅ FASE 1: Single useEffect - load script by conditionId only
-  // No fallback to label, no complex logic
+  // ✅ FIX: Only reload when editor opens or conditionId changes — NOT on every projectData update
+  // Uses scriptManagerRef to avoid race conditions during createCondition
   React.useEffect(() => {
     if (!open || isGenerating) return;
 
-    if (conditionId) {
-      const loadedScript = scriptManager.loadScriptById(conditionId);
+    const currentConditionId = localConditionIdRef.current;
+    if (currentConditionId) {
+      const loadedScript = scriptManagerRef.current.loadScriptById(currentConditionId);
       if (loadedScript?.trim()) {
         setScript(loadedScript);
         // Compile DSL → JS for preview
         (async () => {
-          const compileResult = await scriptManager.compileDSL(loadedScript);
+          const compileResult = await scriptManagerRef.current.compileDSL(loadedScript);
           if (compileResult.success && compileResult.jsCode) {
             setCompiledJs(compileResult.jsCode);
           }
@@ -293,7 +308,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
       setScript('');
       setCompiledJs('');
     }
-  }, [open, conditionId, scriptManager, isGenerating]);
+  }, [open, conditionId, isGenerating]); // ✅ FIX: scriptManager removed; uses scriptManagerRef
 
   // legacy filtered list removed (hierarchical tree used instead)
 

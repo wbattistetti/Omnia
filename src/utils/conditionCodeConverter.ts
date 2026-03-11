@@ -2,6 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { ASTNode } from '../components/conditions/dsl/parser/AST';
+import { variableCreationService } from '@services/VariableCreationService';
 
 /**
  * ✅ FASE 2: Converts DSL with labels to DSL with GUIDs
@@ -17,8 +18,9 @@ export function convertDSLLabelsToGUIDs(
   }
 
   // Replace [label] with [guid] in DSL
-  // Pattern matches [label] or [label.subpath]
-  return readableCode.replace(/\[\s*([A-Za-z0-9_. -]+)\s*\]/g, (match, label) => {
+  // Pattern matches [label] or [label.subpath] including Unicode characters (à, è, ì, etc.)
+  // ✅ FIX: Use [^\[\]]+? to match any content except brackets (supports Unicode)
+  return readableCode.replace(/\[\s*([^\[\]]+?)\s*\]/g, (match, label) => {
     // Find guid by label (reverse lookup)
     const guid = Array.from(variableMappings.entries()).find(
       ([g, l]) => l === label.trim()
@@ -168,7 +170,7 @@ export function createVariableMappings(): Map<string, string> {
   const mappings = new Map<string, string>();
 
   try {
-    const { variableCreationService } = require('../services/VariableCreationService');
+    // ✅ Use static import instead of require (ES modules compatible)
     const projectId: string | null = typeof localStorage !== 'undefined'
       ? localStorage.getItem('currentProjectId')
       : null;
