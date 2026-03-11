@@ -43,6 +43,14 @@ Public Class FlowCompilationResult
     Public Property Conditions As Dictionary(Of String, ConditionDefinition)
 
     ''' <summary>
+    ''' Variables transformed for runtime (with values field for history)
+    ''' Maintains only necessary IDs (varId, taskInstanceId, nodeId)
+    ''' Runtime uses direct search instead of mapping
+    ''' </summary>
+    <JsonProperty("variables")>
+    Public Property Variables As List(Of CompiledVariable)
+
+    ''' <summary>
     ''' List of compilation errors (Error, Warning, Hint)
     ''' </summary>
     <JsonProperty("errors")>
@@ -64,6 +72,7 @@ Public Class FlowCompilationResult
         Tasks = New List(Of CompiledTask)()
         Edges = New List(Of FlowEdge)()
         Conditions = New Dictionary(Of String, ConditionDefinition)()
+        Variables = New List(Of CompiledVariable)()
         Errors = New List(Of CompilationError)()
     End Sub
 End Class

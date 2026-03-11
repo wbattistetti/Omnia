@@ -34,11 +34,18 @@ Public Class ParseResult
     Public Property CorrectedData As Dictionary(Of String, Object)
 
     ''' <summary>
+    ''' Dati estratti come triple (taskInstanceId, nodeId, value)
+    ''' ✅ NEW: Struttura esplicita per lookup runtime
+    ''' </summary>
+    Public Property ExtractedVariables As List(Of ExtractedVariable)
+
+    ''' <summary>
     ''' Costruttore
     ''' </summary>
     Public Sub New()
         ExtractedData = New Dictionary(Of String, Object)()
         CorrectedData = New Dictionary(Of String, Object)()
+        ExtractedVariables = New List(Of ExtractedVariable)()
     End Sub
 End Class
 

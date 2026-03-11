@@ -680,14 +680,19 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       }
 
       // ✅ DEBUG: Log tasks before serialization to verify type field
+      const projectId = localStorage.getItem('currentProjectId') || undefined;
+      const { variableCreationService } = await import('@services/VariableCreationService');
+      const variables = projectId ? variableCreationService.getAllVariables(projectId) : [];
+
       const requestBody = {
         nodes: nodesWithTaskId,  // ✅ Use nodes with taskId field (backend VB.NET requires it)
         edges: filteredEdges,  // ✅ Use filtered edges (no orphans)
         tasks: allTasksWithTemplates,  // ✅ Include both instance tasks and referenced templates
         ddts: allDDTs,
-        projectId: localStorage.getItem('currentProjectId') || undefined,
+        projectId: projectId,
         translations: translations, // ✅ Pass translations table (already in memory) - runtime will do lookup at execution time
-        conditions: conditions // ✅ NEW: Pass conditions for validation
+        conditions: conditions, // ✅ NEW: Pass conditions for validation
+        variables: variables // ✅ NEW: Pass variables for compiler to build mapping
       };
 
       // ✅ DEBUG: Verifica che tutti i task referenziati nei nodi siano presenti in requestBody.tasks

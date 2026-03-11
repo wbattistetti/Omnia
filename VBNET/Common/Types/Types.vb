@@ -132,9 +132,10 @@ End Enum
 ''' </summary>
 Public Class DialogueState
     ''' <summary>
-    ''' Memory: Extracted values (nodeId -> value)
+    ''' ✅ ExtractedVariables: Triple esplicite (taskInstanceId, nodeId, value)
+    ''' Usato per memorizzare i valori estratti dalle variabili.
     ''' </summary>
-    Public Property Memory As Dictionary(Of String, Object)
+    Public Property ExtractedVariables As List(Of ExtractedVariable)
 
     ''' <summary>
     ''' Counters: Escalation counters per node (nodeId -> Counters)
@@ -186,7 +187,7 @@ Public Class DialogueState
     Public Property Mode As DialogueMode
 
     Public Sub New()
-        Memory = New Dictionary(Of String, Object)()
+        ExtractedVariables = New List(Of ExtractedVariable)()
         Counters = New Dictionary(Of String, Counters)()
         TurnState = TurnState.Start
         Context = "CollectingMain"

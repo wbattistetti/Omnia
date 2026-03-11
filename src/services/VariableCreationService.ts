@@ -234,6 +234,14 @@ class VariableCreationService {
     return (this.store.get(projectId) ?? []).length;
   }
 
+  /**
+   * Return all variables for a project.
+   * Used by compiler to build variable mapping.
+   */
+  getAllVariables(projectId: string): VariableInstance[] {
+    return this.store.get(projectId) ?? [];
+  }
+
   // ---------------------------------------------------------------------------
   // Persistence: explicit save / load (called by AppContent.tsx)
   // ---------------------------------------------------------------------------

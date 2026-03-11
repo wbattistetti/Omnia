@@ -47,143 +47,147 @@ Public Module ProcessTurnHelpers
             Return New ParseResultWithStatus() With {
             .Status = status,
             .ExtractedData = parseResult.ExtractedData,
+            .ExtractedVariables = parseResult.ExtractedVariables,  ' ✅ NEW: Passa triple esplicite
             .ConditionId = parseResult.ConditionId
         }
         End Function
 
-        ''' <summary>
-        ''' Salva i dati estratti in state.Memory (persistente)
-        ''' ✅ STATELESS: Salva solo in state.Memory, non in currentTask.Value
-        ''' </summary>
-        Public Sub FillTaskFromParseResult(
+    ''' <summary>
+    ''' Salva i dati estratti in state.ExtractedVariables (persistente)
+    ''' ✅ Usa solo ExtractedVariables (triple esplicite)
+    ''' </summary>
+    Public Sub FillTaskFromParseResult(
         parseResult As ParseResultWithStatus,
         state As DialogueState
     )
-            If parseResult.ExtractedData Is Nothing OrElse parseResult.ExtractedData.Count = 0 Then
-                Return
+        ' ✅ Usa solo ExtractedVariables
+        If parseResult.ExtractedVariables IsNot Nothing AndAlso parseResult.ExtractedVariables.Count > 0 Then
+            If state.ExtractedVariables Is Nothing Then
+                state.ExtractedVariables = New List(Of ExtractedVariable)()
             End If
+            ' ✅ Aggiungi tutte le triple estratte
+            state.ExtractedVariables.AddRange(parseResult.ExtractedVariables)
+        End If
+    End Sub
 
-            ' ✅ STATELESS: Inizializza Memory se necessario
-            If state.Memory Is Nothing Then
-                state.Memory = New Dictionary(Of String, Object)()
-            End If
+    ''' <summary>
+    ''' Esegue uno step stateless e restituisce i messaggi
+    ''' </summary>
+    Public Function ExecuteStepStateless(currentTask As CompiledUtteranceTask, currentStep As CompiledDialogueStep, resolveTranslation As Func(Of String, String)) As List(Of String)
+        Dim output As New List(Of String)()
 
-            ' ✅ STATELESS: Salva tutti i valori estratti in Memory (persistente)
-            For Each kvp In parseResult.ExtractedData
-                state.Memory(kvp.Key) = kvp.Value
-            Next
-        End Sub
-
-        ''' <summary>
-        ''' Esegue uno step stateless e restituisce i messaggi
-        ''' </summary>
-        Public Function ExecuteStepStateless(currentTask As CompiledUtteranceTask, currentStep As CompiledDialogueStep, resolveTranslation As Func(Of String, String)) As List(Of String)
-            Dim output As New List(Of String)()
-
-            If currentStep Is Nothing OrElse currentStep.Escalations Is Nothing OrElse currentStep.Escalations.Count = 0 Then
-                Return output
-            End If
-
-            ' ✅ Esegui la prima escalation
-            Dim escalation = currentStep.Escalations(0)
-            output.AddRange(ExecuteEscalationStateless(currentTask, currentStep, 0, resolveTranslation))
-
+        If currentStep Is Nothing OrElse currentStep.Escalations Is Nothing OrElse currentStep.Escalations.Count = 0 Then
             Return output
-        End Function
+        End If
 
-        ''' <summary>
-        ''' Esegue un'escalation stateless e restituisce i messaggi
-        ''' </summary>
-        Public Function ExecuteEscalationStateless(currentTask As CompiledUtteranceTask, currentStep As CompiledDialogueStep, escalationIndex As Integer, resolveTranslation As Func(Of String, String)) As List(Of String)
-            Dim output As New List(Of String)()
+        ' ✅ Esegui la prima escalation
+        Dim escalation = currentStep.Escalations(0)
+        output.AddRange(ExecuteEscalationStateless(currentTask, currentStep, 0, resolveTranslation))
 
-            If currentStep Is Nothing OrElse currentStep.Escalations Is Nothing OrElse escalationIndex < 0 OrElse escalationIndex >= currentStep.Escalations.Count Then
-                Return output
-            End If
+        Return output
+    End Function
 
-            Dim escalation = currentStep.Escalations(escalationIndex)
-            If escalation.Tasks IsNot Nothing Then
-                For Each taskObj In escalation.Tasks
-                    If TypeOf taskObj Is MessageTask Then
-                        Dim msgTask = DirectCast(taskObj, MessageTask)
-                        Dim messageText As String = Nothing
-                        If resolveTranslation IsNot Nothing Then
-                            Dim translated = resolveTranslation(msgTask.TextKey)
-                            messageText = If(String.IsNullOrEmpty(translated), msgTask.TextKey, translated)
-                        Else
-                            messageText = msgTask.TextKey
-                        End If
-                        If Not String.IsNullOrEmpty(messageText) Then
-                            output.Add(messageText)
-                        End If
+    ''' <summary>
+    ''' Esegue un'escalation stateless e restituisce i messaggi
+    ''' </summary>
+    Public Function ExecuteEscalationStateless(currentTask As CompiledUtteranceTask, currentStep As CompiledDialogueStep, escalationIndex As Integer, resolveTranslation As Func(Of String, String)) As List(Of String)
+        Dim output As New List(Of String)()
+
+        If currentStep Is Nothing OrElse currentStep.Escalations Is Nothing OrElse escalationIndex < 0 OrElse escalationIndex >= currentStep.Escalations.Count Then
+            Return output
+        End If
+
+        Dim escalation = currentStep.Escalations(escalationIndex)
+        If escalation.Tasks IsNot Nothing Then
+            For Each taskObj In escalation.Tasks
+                If TypeOf taskObj Is MessageTask Then
+                    Dim msgTask = DirectCast(taskObj, MessageTask)
+                    Dim messageText As String = Nothing
+                    If resolveTranslation IsNot Nothing Then
+                        Dim translated = resolveTranslation(msgTask.TextKey)
+                        messageText = If(String.IsNullOrEmpty(translated), msgTask.TextKey, translated)
+                    Else
+                        messageText = msgTask.TextKey
                     End If
-                Next
-            End If
+                    If Not String.IsNullOrEmpty(messageText) Then
+                        output.Add(messageText)
+                    End If
+                End If
+            Next
+        End If
 
-            Return output
-        End Function
+        Return output
+    End Function
 
-        ''' <summary>
-        ''' Ottiene uno step per tipo (restituisce Nothing se non trovato)
-        ''' </summary>
-        Public Function GetStepOrNull(task As CompiledUtteranceTask, stepType As DialogueStepType) As CompiledDialogueStep
-            If task Is Nothing OrElse task.Steps Is Nothing Then
-                Return Nothing
-            End If
-            Return task.Steps.FirstOrDefault(Function(s) s.Type = stepType)
-        End Function
+    ''' <summary>
+    ''' Ottiene uno step per tipo (restituisce Nothing se non trovato)
+    ''' </summary>
+    Public Function GetStepOrNull(task As CompiledUtteranceTask, stepType As DialogueStepType) As CompiledDialogueStep
+        If task Is Nothing OrElse task.Steps Is Nothing Then
+            Return Nothing
+        End If
+        Return task.Steps.FirstOrDefault(Function(s) s.Type = stepType)
+    End Function
 
-        ''' <summary>
-        ''' Ottiene il prossimo step (per ora restituisce lo stesso step)
-        ''' TODO: Implementare logica di navigazione
-        ''' </summary>
-        Public Function GetNextStep(task As CompiledUtteranceTask, currentStep As CompiledDialogueStep) As CompiledDialogueStep
-            ' Per ora restituisce lo stesso step
-            ' TODO: Implementare logica di navigazione tra step
-            Return currentStep
-        End Function
+    ''' <summary>
+    ''' Ottiene il prossimo step (per ora restituisce lo stesso step)
+    ''' TODO: Implementare logica di navigazione
+    ''' </summary>
+    Public Function GetNextStep(task As CompiledUtteranceTask, currentStep As CompiledDialogueStep) As CompiledDialogueStep
+        ' Per ora restituisce lo stesso step
+        ' TODO: Implementare logica di navigazione tra step
+        Return currentStep
+    End Function
 
-        ''' <summary>
-        ''' Verifica se il task è riempito (ha valore in state.Memory o tutti i sub-task sono riempiti)
-        ''' ✅ STATELESS: Legge da memory
-        ''' </summary>
-        <Extension>
-        Public Function IsFilled(task As CompiledUtteranceTask, memory As Dictionary(Of String, Object)) As Boolean
-            If task Is Nothing Then
-                Return False
-            End If
-            If task.SubTasks IsNot Nothing AndAlso task.SubTasks.Count > 0 Then
-                Return task.SubTasks.All(Function(st) IsFilled(st, memory))
-            End If
-            ' ✅ STATELESS: Legge da memory
-            Return memory IsNot Nothing AndAlso memory.ContainsKey(task.Id)
-        End Function
+    ''' <summary>
+    ''' Verifica se il task è riempito (ha valore in ExtractedVariables o tutti i sub-task sono riempiti)
+    ''' ✅ Usa ExtractedVariables (triple esplicite) invece di Memory
+    ''' </summary>
+    <Extension>
+    Public Function IsFilled(task As CompiledUtteranceTask, extractedVariables As List(Of ExtractedVariable)) As Boolean
+        If task Is Nothing Then
+            Return False
+        End If
 
-        ''' <summary>
-        ''' Verifica se il task è parzialmente riempito (alcuni sub-task sono riempiti ma non tutti)
-        ''' ✅ STATELESS: Legge da memory
-        ''' </summary>
-        <Extension>
-        Public Function IsPartiallyFilled(task As CompiledUtteranceTask, memory As Dictionary(Of String, Object)) As Boolean
-            If task Is Nothing OrElse task.SubTasks Is Nothing OrElse task.SubTasks.Count = 0 Then
-                Return False
-            End If
-            Dim filledCount = task.SubTasks.Where(Function(st) IsFilled(st, memory)).Count()
-            Return filledCount > 0 AndAlso filledCount < task.SubTasks.Count
-        End Function
+        If task.SubTasks IsNot Nothing AndAlso task.SubTasks.Count > 0 Then
+            Return task.SubTasks.All(Function(st) IsFilled(st, extractedVariables))
+        End If
 
-        ''' <summary>
-        ''' Ottiene il primo sub-task non riempito
-        ''' ✅ STATELESS: Usa memory per verificare se è riempito
-        ''' </summary>
-        <Extension>
-        Public Function GetFirstUnfilledSubTask(currentTask As CompiledUtteranceTask, memory As Dictionary(Of String, Object)) As CompiledUtteranceTask
-            If currentTask Is Nothing OrElse currentTask.SubTasks Is Nothing OrElse currentTask.SubTasks.Count = 0 Then
-                Return Nothing
-            End If
+        ' ✅ Cerca variabile con (taskInstanceId = task.Id, nodeId = task.NodeId)
+        If extractedVariables Is Nothing Then
+            Return False
+        End If
 
-            Return currentTask.SubTasks.FirstOrDefault(Function(st) Not IsFilled(st, memory))
-        End Function
+        Return extractedVariables.Any(
+                Function(ev) ev.TaskInstanceId = task.Id AndAlso ev.NodeId = task.NodeId
+            )
+    End Function
+
+    ''' <summary>
+    ''' Verifica se il task è parzialmente riempito (alcuni sub-task sono riempiti ma non tutti)
+    ''' ✅ Usa ExtractedVariables invece di Memory
+    ''' </summary>
+    <Extension>
+    Public Function IsPartiallyFilled(task As CompiledUtteranceTask, extractedVariables As List(Of ExtractedVariable)) As Boolean
+        If task Is Nothing OrElse task.SubTasks Is Nothing OrElse task.SubTasks.Count = 0 Then
+            Return False
+        End If
+        Dim filledCount = task.SubTasks.Where(Function(st) IsFilled(st, extractedVariables)).Count()
+        Return filledCount > 0 AndAlso filledCount < task.SubTasks.Count
+    End Function
+
+    ''' <summary>
+    ''' Ottiene il primo sub-task non riempito
+    ''' ✅ Usa ExtractedVariables invece di Memory
+    ''' </summary>
+    <Extension>
+    Public Function GetFirstUnfilledSubTask(currentTask As CompiledUtteranceTask, extractedVariables As List(Of ExtractedVariable)) As CompiledUtteranceTask
+        If currentTask Is Nothing OrElse currentTask.SubTasks Is Nothing OrElse currentTask.SubTasks.Count = 0 Then
+            Return Nothing
+        End If
+
+        Return currentTask.SubTasks.FirstOrDefault(Function(st) Not IsFilled(st, extractedVariables))
+    End Function
 
         ''' <summary>
         ''' Verifica se il task è il task principale (confronta con rootTask)
@@ -342,9 +346,11 @@ End Module
 Public Class ParseResultWithStatus
     Public Property Status As ParseStatus
     Public Property ExtractedData As Dictionary(Of String, Object)
+    Public Property ExtractedVariables As List(Of ExtractedVariable)  ' ✅ NEW: Triple esplicite
     Public Property ConditionId As String
 
     Public Sub New()
         ExtractedData = New Dictionary(Of String, Object)()
+        ExtractedVariables = New List(Of ExtractedVariable)()
     End Sub
 End Class

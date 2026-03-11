@@ -24,6 +24,7 @@
     <!-- Types and Enums -->
     <Compile Include="Types\TaskTypes.vb" />
     <Compile Include="Types\Types.vb" />
+    <Compile Include="Types\ExtractedVariable.vb" />
 
     <!-- Interfaces -->
     <Compile Include="Interfaces\ITranslationResolver.vb" />
@@ -53,6 +54,7 @@
     <!-- Utilities -->
     <Compile Include="Utils\GlobalVariableContext.vb" />
     <Compile Include="Utils\PlaceholderUtils.vb" />
+    <Compile Include="VariableMappingService.vb" />
 
     <!-- JSON Converters (shared between Compiler and Engine) -->
     <Compile Include="Converters\ITaskConverter.vb" />

@@ -207,7 +207,7 @@ Public Class TaskUtteranceStepExecutor
             Case DialogueMode.ExecutingStep
 
                 Dim stepObj = ProcessTurnHelpers.GetStep(currentTask, state.CurrentStepType)
-                If ProcessTurnHelpers.IsFilled(currentTask, state.Memory) Then
+                If ProcessTurnHelpers.IsFilled(currentTask, state.ExtractedVariables) Then
                     ' Step senza input → transizione immediata allo step successivo
                     Dim nextStep = ProcessTurnHelpers.GetNextStep(currentTask, stepObj)  'OSSERVAZIONE: In realtà la navigazione Cioè la decisione del prossimo step è Implementata in questa funzione non è esternalizzata quindi questo gap forse non serve più
 
@@ -239,7 +239,7 @@ Public Class TaskUtteranceStepExecutor
                             'c'è stato un match potrebbe essere per il task corrente o per una altro task. quindi devo: se sono in subtask tornare altask parent e rivedere qua'è il porssimo da fillare se non c'è nente da fillare allora devo o conferemare o andare al success .
 
                             Dim mainTask = ProcessTurnHelpers.MainTask(currentTask, rootTask)
-                            If ProcessTurnHelpers.IsFilled(mainTask, state.Memory) Then
+                            If ProcessTurnHelpers.IsFilled(mainTask, state.ExtractedVariables) Then
                                 ' Main task completato → gestisci Confirmation o Success
                                 If currentTask.StepExists(DialogueStepType.Confirmation) Then
                                     state.CurrentStepType = DialogueStepType.Confirmation
@@ -293,11 +293,11 @@ Public Class TaskUtteranceStepExecutor
             ' ✅ NEW: Se siamo in Success step e il task è filled, completa il task
             ' Success step non è interattivo, quindi dopo aver eseguito i task, completa immediatamente
             If state.CurrentStepType = DialogueStepType.Success AndAlso
-               ProcessTurnHelpers.IsFilled(currentTask, state.Memory) Then
+               ProcessTurnHelpers.IsFilled(currentTask, state.ExtractedVariables) Then
                 state.IsCompleted = True
                 state.Mode = DialogueMode.Completed
                 Console.WriteLine($"[ProcessTurn] ✅ Task {currentTask.Id} completed after Success step")
-            ElseIf Not ProcessTurnHelpers.IsFilled(currentTask, state.Memory) OrElse
+            ElseIf Not ProcessTurnHelpers.IsFilled(currentTask, state.ExtractedVariables) OrElse
                    state.CurrentStepType = DialogueStepType.Confirmation Then
                 state.Mode = DialogueMode.WaitingForUtterance
             End If
@@ -326,7 +326,7 @@ Public Class TaskUtteranceStepExecutor
         Dim rootTask = DirectCast(state.RootTask, CompiledUtteranceTask)
         If rootTask Is Nothing Then Throw New InvalidOperationException("RootTask must be CompiledUtteranceTask")
 
-        Dim nextSubTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(rootTask, state.Memory)
+        Dim nextSubTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(rootTask, state.ExtractedVariables)
         If nextSubTask IsNot Nothing Then
             state.CurrentTask = nextSubTask
             state.CurrentStepType = DialogueStepType.Start

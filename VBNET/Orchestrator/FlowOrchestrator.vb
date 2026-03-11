@@ -6,6 +6,7 @@ Imports TaskEngine
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports System.Linq
+Imports Common
 
 ''' <summary>
 ''' Orchestrator che esegue un flow compilato tramite un loop stateless.
@@ -44,6 +45,7 @@ Public Class FlowOrchestrator
     Private ReadOnly _projectId As String
     Private ReadOnly _locale As String
     Private ReadOnly _resolveTranslation As Func(Of String, String)
+    Private ReadOnly _variables As List(Of CompiledVariable) ' ✅ NEW: Variables with values for runtime
 
     ' ── Stato runtime caricato da Redis ──────────────────────────────────────
     Private ReadOnly _state As ExecutionState
@@ -79,6 +81,7 @@ Public Class FlowOrchestrator
         _projectId = Nothing
         _locale = Nothing
         _resolveTranslation = Nothing
+        _variables = New List(Of CompiledVariable)() ' ✅ Empty variables list for legacy constructor
         _state = New ExecutionState()
     End Sub
 
@@ -110,11 +113,19 @@ Public Class FlowOrchestrator
         _projectId = projectId
         _locale = locale
         _resolveTranslation = resolveTranslation
+        _variables = If(compilationResult.Variables, New List(Of CompiledVariable)()) ' ✅ NEW: Variables with values from compilation
+        ' ✅ Initialize values list for each variable
+        For Each var In _variables
+            If var.Values Is Nothing Then
+                var.Values = New List(Of Object)()
+            End If
+        Next
 
         ' ✅ NEW: Configure ConditionLoader for edge condition evaluation
         Dim conditionLoader As New FlowConditionLoader(compilationResult)
         ConditionEvaluator.ConditionLoader = conditionLoader
         Console.WriteLine($"[FlowOrchestrator] ✅ ConditionLoader configured with {If(compilationResult.Conditions IsNot Nothing, compilationResult.Conditions.Count, 0)} conditions")
+        Console.WriteLine($"[FlowOrchestrator] ✅ Variables loaded: {_variables.Count} entries")
 
         ' Carica ExecutionState da Redis (o crea nuovo se non esiste)
         _state = LoadOrCreateState()
@@ -461,16 +472,34 @@ Public Class FlowOrchestrator
 
         ' Mappa DialogueTurnResult → RowTurnResult
         If result.NewState.IsCompleted Then
-            ' ✅ NEW: Copia variabili estratte da DialogueState.Memory a ExecutionState.VariableStore
-            ' Questo permette alle condizioni degli edge di accedere alle variabili estratte
-            If result.NewState.Memory IsNot Nothing AndAlso result.NewState.Memory.Count > 0 Then
+            ' ✅ NEW: Usa ExtractedVariables (triple esplicite) invece di Memory
+            '    Le triple contengono (taskInstanceId, nodeId, value) - nessuna assunzione necessaria.
+            If result.NewState.ExtractedVariables IsNot Nothing AndAlso result.NewState.ExtractedVariables.Count > 0 Then
                 If _state.VariableStore Is Nothing Then
                     _state.VariableStore = New Dictionary(Of String, Object)()
                 End If
-                ' Copia tutte le variabili estratte nel VariableStore globale
-                For Each kvp In result.NewState.Memory
-                    _state.VariableStore(kvp.Key) = kvp.Value
-                    Console.WriteLine($"[FlowOrchestrator] ✅ Copied variable '{kvp.Key}' = '{kvp.Value}' to VariableStore")
+
+                For Each extractedVar In result.NewState.ExtractedVariables
+                    ' ✅ Lookup diretto con dati espliciti (taskInstanceId, nodeId) → varId
+                    Dim var = _variables.SingleOrDefault(
+                        Function(v) v.TaskInstanceId = extractedVar.TaskInstanceId AndAlso
+                                   v.NodeId = extractedVar.NodeId
+                    )
+
+                    If var IsNot Nothing Then
+                        ' ✅ Aggiorna storico runtime
+                        var.Values.Add(extractedVar.Value)
+
+                        ' ✅ Aggiorna VariableStore per DSLInterpreter (valore corrente)
+                        '    DSLInterpreter usa varId come chiave (non nodeId)
+                        _state.VariableStore(var.VarId) = extractedVar.Value
+                        Console.WriteLine($"[FlowOrchestrator] ✅ Updated: varId={var.VarId}, taskInstanceId={extractedVar.TaskInstanceId}, nodeId={extractedVar.NodeId}, value={extractedVar.Value}, historyCount={var.Values.Count}")
+                    Else
+                        ' ✅ Fail fast: variabile non trovata
+                        Dim errorMsg = $"Variable not found for taskInstanceId={extractedVar.TaskInstanceId}, nodeId={extractedVar.NodeId}. This indicates a configuration error: the variable was extracted but not registered during compilation."
+                        Console.WriteLine($"[FlowOrchestrator] ❌ {errorMsg}")
+                        Throw New InvalidOperationException(errorMsg)
+                    End If
                 Next
             End If
             _state.DialogueContexts.Remove(rowTask.Id)

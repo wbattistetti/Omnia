@@ -5,6 +5,7 @@
 Option Strict On
 Option Explicit On
 Imports System.Text.RegularExpressions
+Imports System.Linq
 Imports TaskEngine.Models
 Imports TaskEngine
 Imports IParsableTask = TaskEngine.IParsableTask
@@ -94,15 +95,16 @@ Partial Public Class Parser
             Return New ParseResult() With {.Result = ParseResultType.NoMatch}
         End If
 
-        ' ✅ STATELESS: Non modifica current.Value, restituisce solo i dati estratti
-        Dim data As New System.Collections.Generic.Dictionary(Of String, Object)()
-        ' ✅ NEW: Usa NodeId (GUID del nodo DDT) invece di Id (task instance ID)
-        Dim variableId As String = GetVariableId(current)
-        data(variableId) = value
+        ' ✅ Restituisce tripla esplicita (taskInstanceId, nodeId, value)
+        '    FlowOrchestrator userà questa tripla per lookup diretto senza assunzioni.
+        Dim taskInstanceId = current.Id
+        Dim nodeId = GetNodeId(current)
 
         Return New ParseResult() With {
             .Result = ParseResultType.Match,
-            .ExtractedData = data
+            .ExtractedVariables = New List(Of ExtractedVariable) From {
+                New ExtractedVariable(taskInstanceId, nodeId, value)
+            }
         }
     End Function
 
@@ -116,11 +118,43 @@ Partial Public Class Parser
             Return New ParseResult() With {.Result = ParseResultType.NoMatch}
         End If
 
-        ' ✅ STATELESS: Non modifica subTask.Value, restituisce solo i dati estratti
+        ' ✅ Converti Dictionary in triple (taskInstanceId, nodeId, value)
+        '    Per i sub-task, i subId nel Dictionary sono i nodeId dei sub-task.
+        '    Devo trovare i sub-task corrispondenti per ottenere i loro taskInstanceId.
+        Dim extractedVars As New List(Of ExtractedVariable)()
+        Dim utteranceTask = TryCast(current, Compiler.CompiledUtteranceTask)
+
+        If utteranceTask IsNot Nothing AndAlso utteranceTask.SubTasks IsNot Nothing Then
+            ' ✅ Mappa subId (nodeId) ai sub-task per ottenere taskInstanceId
+            For Each kvp In data
+                Dim subNodeId = kvp.Key  ' subId dal SubDataMapping = nodeId del sub-task
+                Dim value = kvp.Value
+
+                ' ✅ Cerca sub-task con NodeId corrispondente
+                Dim subTask = utteranceTask.SubTasks.FirstOrDefault(
+                    Function(st) st.NodeId = subNodeId
+                )
+
+                If subTask IsNot Nothing Then
+                    ' ✅ Trovato: crea tripla con taskInstanceId del sub-task
+                    extractedVars.Add(New ExtractedVariable(subTask.Id, subTask.NodeId, value))
+                Else
+                    ' ⚠️ Sub-task non trovato: usa current.Id come fallback (caso edge)
+                    extractedVars.Add(New ExtractedVariable(current.Id, subNodeId, value))
+                End If
+            Next
+        Else
+            ' ⚠️ Fallback: se non ci sono sub-task, usa current.Id per tutti
+            For Each kvp In data
+                Dim nodeId = kvp.Key
+                Dim value = kvp.Value
+                extractedVars.Add(New ExtractedVariable(current.Id, nodeId, value))
+            Next
+        End If
 
         Return New ParseResult() With {
             .Result = ParseResultType.Match,
-            .ExtractedData = data
+            .ExtractedVariables = extractedVars
         }
     End Function
 
@@ -130,6 +164,7 @@ Partial Public Class Parser
 
     ''' <summary>
     ''' ✅ STATELESS: Estrae dati senza modificarli, restituisce Dictionary invece di Boolean
+    ''' ✅ TEMPLATE-LEVEL: Restituisce Memory[nodeId] = value (nodeId del template, non varId runtime)
     ''' </summary>
     Private Function TryExtract(utterance As String, current As IParsableTask) As System.Collections.Generic.Dictionary(Of String, Object)
         If current.HasSubTasks() Then
@@ -139,21 +174,25 @@ Partial Public Class Parser
         Dim value = ExtractSimple(utterance, current)
         If String.IsNullOrEmpty(value) Then Return Nothing
         Dim data As New System.Collections.Generic.Dictionary(Of String, Object)()
-        ' ✅ NEW: Usa NodeId (GUID del nodo DDT) invece di Id (task instance ID)
-        Dim variableId As String = GetVariableId(current)
-        data(variableId) = value
+        Dim nodeId As String = GetNodeId(current)
+        data(nodeId) = value
         Return data
     End Function
 
     ''' <summary>
-    ''' Helper: Ottiene l'ID della variabile (GUID del nodo DDT) da un task
-    ''' Usa NodeId se disponibile (CompiledUtteranceTask), altrimenti fallback a Id
+    ''' Helper: Ottiene il nodeId (GUID del nodo DDT del template) da un task.
+    '''
+    ''' IMPORTANTE: Il Parser lavora a livello TEMPLATE, non runtime.
+    ''' - Restituisce nodeId (nodo del template), NON varId (variabile runtime)
+    ''' - FlowOrchestrator farà il lookup (taskInstanceId, nodeId) → varId
+    '''
+    ''' Usa NodeId se disponibile (CompiledUtteranceTask), altrimenti fallback a Id.
     ''' </summary>
-    Private Function GetVariableId(current As IParsableTask) As String
+    Private Function GetNodeId(current As IParsableTask) As String
         ' ✅ Cast a CompiledUtteranceTask per accedere a NodeId
         Dim utteranceTask = TryCast(current, Compiler.CompiledUtteranceTask)
         If utteranceTask IsNot Nothing AndAlso Not String.IsNullOrEmpty(utteranceTask.NodeId) Then
-            Return utteranceTask.NodeId
+            Return utteranceTask.NodeId  ' ✅ nodeId del template (dataSchema)
         End If
         ' Fallback a Id se NodeId non disponibile
         Return current.Id

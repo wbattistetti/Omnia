@@ -29,6 +29,13 @@ Namespace Models
         ''' </summary>
         <JsonProperty("conditions")>
         Public Property Conditions As List(Of Compiler.ConditionDefinition)
+
+        ''' <summary>
+        ''' ✅ NEW: Variables from VariableCreationService (in-memory)
+        ''' Used to build (nodeId, taskInstanceId) → varId mapping during compilation
+        ''' </summary>
+        <JsonProperty("variables")>
+        Public Property Variables As List(Of Compiler.VariableInstance)
     End Class
 
     ''' <summary>

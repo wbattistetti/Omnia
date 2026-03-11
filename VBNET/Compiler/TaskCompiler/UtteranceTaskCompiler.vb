@@ -77,6 +77,7 @@ Public Class UtteranceTaskCompiler
                     compiledTask.Constraints = compiledRootTask.Constraints
                     compiledTask.NlpContract = compiledRootTask.NlpContract
                     compiledTask.SubTasks = compiledRootTask.SubTasks
+                    compiledTask.NodeId = compiledRootTask.NodeId ' ✅ FIX: Propaga NodeId (templateId) — era la riga mancante che causava "Variable not found"
                 End If
             Catch ex As Exception
                 Console.WriteLine($"[COMPILER] ERROR: Exception during compilation for task {taskId}: {ex.GetType().Name} - {ex.Message}")

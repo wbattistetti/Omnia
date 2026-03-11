@@ -378,7 +378,7 @@ Namespace ApiServer.Handlers
 
                 ' Compile flow
                 Dim compiler = New Compiler.FlowCompiler()
-                Dim compilationResult = compiler.CompileFlow(flow)
+                Dim compilationResult = compiler.CompileFlow(flow, request.Variables)
 
                 Console.WriteLine($"✅ [HandleCompileFlow] Compilation successful: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
                 System.Diagnostics.Debug.WriteLine($"✅ [HandleCompileFlow] Compilation successful: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
