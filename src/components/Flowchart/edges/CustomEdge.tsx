@@ -131,6 +131,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     pathRef,
     sourceX,
     sourceY,
+    targetX,
+    targetY,
     labelPositionRelative
   );
 

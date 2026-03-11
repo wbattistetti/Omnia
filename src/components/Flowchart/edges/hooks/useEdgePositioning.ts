@@ -13,11 +13,14 @@ export interface EdgePositioningResult {
  * Hook for calculating edge positions (SVG and screen coordinates)
  * DETERMINISTICO: nessun polling, nessun hack globale, listener completi
  * ✅ PULITO: Usa labelPositionRelative invece di coordinate SVG assolute
+ * ✅ FIX: Monitora anche targetX/targetY e usa MutationObserver per rilevare cambiamenti del path
  */
 export function useEdgePositioning(
   pathRef: RefObject<SVGPathElement>,
   sourceX: number,
   sourceY: number,
+  targetX: number,
+  targetY: number,
   labelPositionRelative?: { t: number; offset: number } | null
 ): EdgePositioningResult {
   const reactFlowInstance = useReactFlow();
@@ -62,17 +65,35 @@ export function useEdgePositioning(
       labelScreenPosition: labelScreenPos,
       sourceScreenPosition: sourceScreen,
     });
-  }, [pathRef, sourceX, sourceY, labelPositionRelative, reactFlowInstance]);
+  }, [pathRef, sourceX, sourceY, targetX, targetY, labelPositionRelative, reactFlowInstance]);
 
-  // Aggiorna quando cambia il path
+  // ✅ CRITICO: Aggiorna quando cambia il path (rileva cambiamenti del DOM)
+  useEffect(() => {
+    if (!pathRef.current) return;
+
+    // Usa MutationObserver per rilevare cambiamenti dell'attributo 'd' del path
+    const observer = new MutationObserver(() => {
+      updatePositions();
+    });
+
+    observer.observe(pathRef.current, {
+      attributes: true,
+      attributeFilter: ['d'], // Solo quando cambia l'attributo 'd'
+      subtree: false,
+    });
+
+    // Anche un check iniziale
+    updatePositions();
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [pathRef, updatePositions]);
+
+  // ✅ Aggiorna quando cambiano i nodi (source E target)
   useEffect(() => {
     updatePositions();
-  }, [updatePositions]);
-
-  // Aggiorna quando cambiano i nodi
-  useEffect(() => {
-    updatePositions();
-  }, [sourceX, sourceY, updatePositions]);
+  }, [sourceX, sourceY, targetX, targetY, updatePositions]);
 
   // ✅ Listener viewport (pan/zoom)
   useEffect(() => {
