@@ -2,8 +2,8 @@ import React from 'react';
 import { Plus, X, Trash2, Check } from 'lucide-react';
 
 interface TableEditorProps {
-  inputs: Array<{ internalName: string }>;
-  outputs: Array<{ internalName: string }>;
+  inputs: Array<{ internalName: string; variable?: string }>;
+  outputs: Array<{ internalName: string; variable?: string }>;
   rows: Array<{
     id: string;
     inputs: Record<string, any>;
@@ -113,11 +113,10 @@ export default function TableEditor({ inputs, outputs, rows, onChange }: TableEd
       <div className="flex-1 min-h-0 overflow-auto p-4 space-y-4">
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+          <table className="border-collapse" style={{ tableLayout: 'auto', width: 'auto' }}>
             <thead>
               <tr className="border-b border-slate-700">
-                <th className="px-2 py-2 text-left text-xs font-semibold text-slate-400 bg-slate-800 sticky left-0 z-10 min-w-[80px]">
-                  Row
+                <th className="px-2 py-2 text-left text-xs font-semibold text-slate-400 bg-slate-800 sticky left-0 z-10" style={{ width: 'auto', minWidth: '40px', maxWidth: '50px' }}>
                 </th>
                 {/* SEND columns */}
                 {inputs.length > 0 && (
@@ -125,9 +124,17 @@ export default function TableEditor({ inputs, outputs, rows, onChange }: TableEd
                     {inputs.map((input) => (
                       <th
                         key={`input_${input.internalName}`}
-                        className="px-2 py-2 text-left text-xs font-semibold text-cyan-500 bg-cyan-500/20 border-l border-slate-700 border-t-2 border-b-2 border-cyan-500 min-w-[120px]"
+                        className="px-2 py-2 text-left text-xs font-semibold text-cyan-500 bg-cyan-500/20 border-l border-slate-700 border-t-2 border-b-2 border-cyan-500 whitespace-nowrap"
+                        style={{ width: 'auto' }}
                       >
-                        {input.internalName}
+                        <div className="flex flex-col">
+                          <span>{input.internalName}</span>
+                          {input.variable && (
+                            <span className="text-cyan-400/70 text-[10px] font-normal mt-0.5">
+                              {input.variable}
+                            </span>
+                          )}
+                        </div>
                       </th>
                     ))}
                   </>
@@ -136,12 +143,20 @@ export default function TableEditor({ inputs, outputs, rows, onChange }: TableEd
                 {outputs.map((output) => (
                   <th
                     key={`output_${output.internalName}`}
-                    className="px-2 py-2 text-left text-xs font-semibold text-green-500 bg-green-500/20 border-l border-slate-700 border-t-2 border-b-2 border-green-500 min-w-[120px]"
+                    className="px-2 py-2 text-left text-xs font-semibold text-green-500 bg-green-500/20 border-l border-slate-700 border-t-2 border-b-2 border-green-500 whitespace-nowrap"
+                    style={{ width: 'auto' }}
                   >
-                    {output.internalName}
+                    <div className="flex flex-col">
+                      <span>{output.internalName}</span>
+                      {output.variable && (
+                        <span className="text-green-400/70 text-[10px] font-normal mt-0.5">
+                          {output.variable}
+                        </span>
+                      )}
+                    </div>
                   </th>
                 ))}
-                <th className="px-2 py-2 text-center text-xs font-semibold text-slate-400 bg-slate-800 border-l border-slate-700 min-w-[60px]">
+                <th className="px-2 py-2 text-center text-xs font-semibold text-slate-400 bg-slate-800 border-l border-slate-700" style={{ width: 'auto', minWidth: '50px' }}>
                   Actions
                 </th>
               </tr>
@@ -149,7 +164,7 @@ export default function TableEditor({ inputs, outputs, rows, onChange }: TableEd
             <tbody>
               {rows.map((row, rowIndex) => (
                   <tr key={row.id} className="border-b border-slate-700 hover:bg-slate-800/50">
-                    <td className="px-2 py-2 text-xs text-slate-400 bg-slate-900 sticky left-0 z-10">
+                    <td className="px-2 py-2 text-xs text-slate-400 bg-slate-900 sticky left-0 z-10 text-center" style={{ width: 'auto', minWidth: '40px', maxWidth: '50px' }}>
                       {rowIndex + 1}
                     </td>
                     {/* SEND cells */}
