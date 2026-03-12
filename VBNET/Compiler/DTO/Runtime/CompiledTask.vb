@@ -3,6 +3,7 @@ Option Explicit On
 Imports TaskEngine
 Imports Newtonsoft.Json
 Imports System.Linq
+Imports Compiler.DTO.IDE
 
 ''' <summary>
 ''' CompiledTask: Base class astratta per tutti i task compilati
@@ -237,9 +238,24 @@ Public Class CompiledBackendCallTask
 
     ''' <summary>
     ''' Mock table: array di righe con { id, inputs: {...}, outputs: {...} }
-    ''' Compilata solo se esiste e ha almeno una riga
+    ''' ⚠️ LEGACY: Mantenuto per retrocompatibilità durante la transizione
     ''' </summary>
     Public Property MockTable As List(Of Dictionary(Of String, Object))
+
+    ''' <summary>
+    ''' ✅ MockTable design: struttura dati tabellare pura
+    ''' </summary>
+    Public Property MockTableDesign As Compiler.DTO.IDE.MockTableDesign
+
+    ''' <summary>
+    ''' ✅ Mapping colonne → varId
+    ''' </summary>
+    Public Property ColumnMapping As Compiler.DTO.IDE.ColumnMapping
+
+    ''' <summary>
+    ''' ✅ Righe compilate: formule AND precompilate (solo varId)
+    ''' </summary>
+    Public Property MockRows As List(Of CompiledMockRow)
 
     ''' <summary>
     ''' Config completo per retrocompatibilità
@@ -264,6 +280,9 @@ Public Class CompiledBackendCallTask
         Inputs = New List(Of Dictionary(Of String, Object))()
         Outputs = New List(Of Dictionary(Of String, Object))()
         Config = New Dictionary(Of String, Object)()
+        MockTableDesign = New Compiler.DTO.IDE.MockTableDesign()
+        ColumnMapping = New Compiler.DTO.IDE.ColumnMapping()
+        MockRows = New List(Of CompiledMockRow)()
     End Sub
 End Class
 

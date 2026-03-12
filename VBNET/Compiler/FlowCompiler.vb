@@ -69,7 +69,7 @@ Public Class FlowCompiler
     ''' Compiles flowchart into TaskGroups (uno per nodo)
     ''' Trasforma IDE.* → Runtime.*
     ''' </summary>
-    Public Function CompileFlow(flow As Flow, Optional variables As List(Of Compiler.VariableInstance) = Nothing, Optional projectId As String = Nothing) As FlowCompilationResult
+    Public Function CompileFlow(flow As Flow, Optional variables As List(Of VariableInstance) = Nothing, Optional projectId As String = Nothing) As FlowCompilationResult
         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
         Console.WriteLine($"🔧 [COMPILER][FlowCompiler] Starting compilation...")
         System.Diagnostics.Debug.WriteLine($"🔧 [COMPILER][FlowCompiler] Starting compilation...")
@@ -430,7 +430,7 @@ Public Class FlowCompiler
     ''' Frontend is the single source of truth for variable creation
     ''' Backend only uses variables passed as parameter
     ''' </summary>
-    Private Function ConvertVariablesToCompiled(variables As List(Of Compiler.VariableInstance)) As List(Of CompiledVariable)
+    Private Function ConvertVariablesToCompiled(variables As List(Of VariableInstance)) As List(Of CompiledVariable)
         Dim compiledVariables As New List(Of CompiledVariable)()
 
         If variables IsNot Nothing Then

@@ -53,6 +53,9 @@
     <Compile Include="DTO\IDE\EdgeData.vb" />
     <Compile Include="DTO\IDE\TaskDefinition.vb" />
     <Compile Include="DTO\IDE\UtteranceTaskDefinition.vb" />
+    <Compile Include="DTO\IDE\BackendCallTaskDefinition.vb" />
+    <Compile Include="DTO\IDE\MockTableDesign.vb" />
+    <Compile Include="DTO\IDE\ColumnMapping.vb" />
     <Compile Include="DTO\IDE\ConditionDefinition.vb" />
     <Compile Include="DTO\IDE\VariableInstance.vb" />
     <!-- TaskTypeConverter.vb (renamed from ActionTypeConverter) - kept for backward compatibility, not actively used -->
@@ -82,6 +85,7 @@
     <Compile Include="DTO\Runtime\TaskTypesConverter.vb" />
     <!-- ❌ RIMOSSO: DTO\Runtime\Task.vb - RuntimeTask eliminato, usare CompiledUtteranceTask -->
     <Compile Include="DTO\Runtime\CompiledTask.vb" />
+    <Compile Include="DTO\Runtime\CompiledMockTable.vb" />
     <Compile Include="DTO\Runtime\CompiledTaskConverter.vb" />
     <Compile Include="DTO\Runtime\CompiledTaskListConverter.vb" />
     <!-- ✅ Error handling - Must be compiled BEFORE FlowCompilationResult (which uses them) -->

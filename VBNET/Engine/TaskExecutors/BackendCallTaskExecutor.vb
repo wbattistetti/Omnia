@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports Compiler
+Imports Compiler.DTO.Runtime
 Imports System.Linq
 Imports Newtonsoft.Json
 
@@ -19,24 +20,24 @@ Public Class BackendCallTaskExecutor
     ''' ✅ Deterministic typed matching function
     ''' Matches input values with type checking, null/undefined handling, and deep comparison
     ''' </summary>
-    Private Function MatchesInput(rowValue As Object, currentValue As Object) As Boolean
+    Private Function ValuesEqual(value1 As Object, value2 As Object) As Boolean
         ' ✅ Type check: same type required (10 !== "10")
-        If rowValue Is Nothing AndAlso currentValue Is Nothing Then Return True
-        If rowValue Is Nothing OrElse currentValue Is Nothing Then Return False
+        If value1 Is Nothing AndAlso value2 Is Nothing Then Return True
+        If value1 Is Nothing OrElse value2 Is Nothing Then Return False
 
-        Dim rowType = rowValue.GetType()
-        Dim currentType = currentValue.GetType()
-        If rowType IsNot currentType Then Return False
+        Dim type1 = value1.GetType()
+        Dim type2 = value2.GetType()
+        If type1 IsNot type2 Then Return False
 
         ' ✅ Deep comparison for objects/arrays
-        If TypeOf rowValue Is Dictionary(Of String, Object) OrElse TypeOf rowValue Is Array OrElse TypeOf rowValue Is IList Then
-            Dim rowJson = JsonConvert.SerializeObject(rowValue)
-            Dim currentJson = JsonConvert.SerializeObject(currentValue)
-            Return rowJson = currentJson
+        If TypeOf value1 Is Dictionary(Of String, Object) OrElse TypeOf value1 Is Array OrElse TypeOf value1 Is IList Then
+            Dim json1 = JsonConvert.SerializeObject(value1)
+            Dim json2 = JsonConvert.SerializeObject(value2)
+            Return json1 = json2
         End If
 
         ' ✅ Exact match for primitives (case-sensitive for strings)
-        Return rowValue.Equals(currentValue)
+        Return value1.Equals(value2)
     End Function
 
     Public Overrides Async Function Execute(task As CompiledTask, state As ExecutionState, Optional userInput As String = "") As System.Threading.Tasks.Task(Of TaskExecutionResult)
@@ -52,124 +53,14 @@ Public Class BackendCallTaskExecutor
 
         Console.WriteLine($"[BackendCallTaskExecutor] Executing BackendCall task {task.Id}")
 
-        ' Get variableStore
+        ' ✅ Initialize VariableStore if needed
         If state.VariableStore Is Nothing Then
             state.VariableStore = New Dictionary(Of String, Object)()
         End If
 
-        ' ✅ If mockTable exists and has rows, try to match input values
-        If backendTask.MockTable IsNot Nothing AndAlso backendTask.MockTable.Count > 0 Then
-            Dim inputs = If(backendTask.Inputs, New List(Of Dictionary(Of String, Object))())
-            Dim outputs = If(backendTask.Outputs, New List(Of Dictionary(Of String, Object))())
-
-            ' Build current input values from variableStore
-            Dim currentInputValues As New Dictionary(Of String, Object)()
-            For Each inputDef In inputs
-                If inputDef.ContainsKey("variable") AndAlso inputDef.ContainsKey("internalName") Then
-                    Dim varId = inputDef("variable")?.ToString()
-                    Dim internalName = inputDef("internalName")?.ToString()
-                    If Not String.IsNullOrEmpty(varId) AndAlso Not String.IsNullOrEmpty(internalName) Then
-                        If state.VariableStore.ContainsKey(varId) Then
-                            currentInputValues(internalName) = state.VariableStore(varId)
-                        End If
-                    End If
-                End If
-            Next
-
-            Console.WriteLine($"[BackendCallTaskExecutor] Current input values: {JsonConvert.SerializeObject(currentInputValues)}")
-
-            ' ✅ Find ALL matching rows (for validation)
-            Dim matchingRows As New List(Of Dictionary(Of String, Object))()
-            For Each row In backendTask.MockTable
-                If Not row.ContainsKey("inputs") OrElse Not TypeOf row("inputs") Is Dictionary(Of String, Object) Then
-                    Continue For
-                End If
-
-                Dim rowInputs = CType(row("inputs"), Dictionary(Of String, Object))
-
-                ' ✅ Complete match: ALL inputs must match
-                Dim allMatch = True
-                For Each inputDef In inputs
-                    If Not inputDef.ContainsKey("internalName") Then Continue For
-                    Dim internalName = inputDef("internalName")?.ToString()
-                    If String.IsNullOrEmpty(internalName) Then Continue For
-
-                    Dim rowValue As Object = Nothing
-                    Dim currentValue As Object = Nothing
-
-                    If rowInputs.ContainsKey(internalName) Then
-                        rowValue = rowInputs(internalName)
-                    End If
-                    If currentInputValues.ContainsKey(internalName) Then
-                        currentValue = currentInputValues(internalName)
-                    End If
-
-                    If Not MatchesInput(rowValue, currentValue) Then
-                        allMatch = False
-                        Exit For
-                    End If
-                Next
-
-                If allMatch Then
-                    matchingRows.Add(row)
-                End If
-            Next
-
-            ' ✅ Validation: exactly 0 or 1 row (never 2+)
-            If matchingRows.Count = 0 Then
-                ' No match found: task executed without modifying variables
-                Console.WriteLine($"[BackendCallTaskExecutor] No matching row found. Task executed successfully but no mockTable row matched. No variables modified.")
-                ' ✅ success: True means "task executed without modifying variables" (not "mock found")
-                Return New TaskExecutionResult() With {
-                    .Success = True,
-                    .IsCompleted = True
-                }
-            End If
-
-            If matchingRows.Count > 1 Then
-                ' ⚠️ ERROR: Multiple rows match (non-deterministic)
-                Dim rowIds = String.Join(", ", matchingRows.Select(Function(r) If(r.ContainsKey("id"), r("id")?.ToString(), "no-id")))
-                Console.WriteLine($"[BackendCallTaskExecutor] ❌ ERROR: Multiple mockTable rows match ({matchingRows.Count} rows: {rowIds}). MockTable must have unique input combinations.")
-                Return New TaskExecutionResult() With {
-                    .Success = False,
-                    .Err = $"Multiple mockTable rows match ({matchingRows.Count} rows). MockTable must have unique input combinations.",
-                    .IsCompleted = False
-                }
-            End If
-
-            ' ✅ Exactly 1 row matched
-            Dim matchedRow = matchingRows(0)
-            Console.WriteLine($"[BackendCallTaskExecutor] ✅ Matched row: {If(matchedRow.ContainsKey("id"), matchedRow("id")?.ToString(), "no-id")}")
-
-            If matchedRow.ContainsKey("outputs") AndAlso TypeOf matchedRow("outputs") Is Dictionary(Of String, Object) Then
-                Dim rowOutputs = CType(matchedRow("outputs"), Dictionary(Of String, Object))
-
-                ' Map output values to variableStore varIds
-                Dim outputCount = 0
-                For Each output In outputs
-                    If output.ContainsKey("variable") AndAlso output.ContainsKey("internalName") Then
-                        Dim varId = output("variable")?.ToString()
-                        Dim internalName = output("internalName")?.ToString()
-                        If Not String.IsNullOrEmpty(varId) AndAlso Not String.IsNullOrEmpty(internalName) Then
-                            If rowOutputs.ContainsKey(internalName) Then
-                                Dim outputValue = rowOutputs(internalName)
-                                If outputValue IsNot Nothing Then
-                                    state.VariableStore(varId) = outputValue
-                                    outputCount += 1
-                                    Console.WriteLine($"[BackendCallTaskExecutor] ✅ Wrote output: varId={varId}, value={JsonConvert.SerializeObject(outputValue)}")
-                                End If
-                            End If
-                        End If
-                    End If
-                Next
-
-                Console.WriteLine($"[BackendCallTaskExecutor] ✅ BackendCall completed: {outputCount} output variables written")
-            End If
-
-            Return New TaskExecutionResult() With {
-                .Success = True,
-                .IsCompleted = True
-            }
+        ' ✅ Use compiled MockRows (typed structures)
+        If backendTask.MockRows IsNot Nothing AndAlso backendTask.MockRows.Count > 0 Then
+            Return ExecuteMockupTable(backendTask, state)
         Else
             ' No mockTable: return empty (or could make actual API call in future)
             Console.WriteLine($"[BackendCallTaskExecutor] No mockTable defined. Task executed without backend call.")
@@ -179,4 +70,82 @@ Public Class BackendCallTaskExecutor
             }
         End If
     End Function
+
+    ''' <summary>
+    ''' ✅ Optimized execution: evaluates precompiled boolean formulas
+    ''' Zero internalName, zero intermediate dictionaries, direct VariableStore access
+    ''' Algorithm: Collect all matching rows, then decide (0/1/2+)
+    ''' </summary>
+    Private Function ExecuteMockupTable(backendTask As CompiledBackendCallTask, state As ExecutionState) As TaskExecutionResult
+        ' 🔍 Lista delle righe che matchano le condizioni
+        Dim matchedRows As New List(Of CompiledMockRow)
+
+        ' 🔍 Valuta ogni riga della mockTable
+        For Each row In backendTask.MockRows
+            Dim allMatch = True
+
+            ' 🔍 Valuta ogni condizione della riga (AND)
+            For Each cond In row.Conditions
+                Dim currentValue As Object = Nothing
+
+                If state.VariableStore.ContainsKey(cond.VariableId) Then
+                    currentValue = state.VariableStore(cond.VariableId)
+                Else
+                    Console.WriteLine($"[BackendCallTaskExecutor] ⚠️ VariableStore does not contain varId '{cond.VariableId}'. Using Nothing for comparison.")
+                End If
+
+                ' ❌ Se una condizione fallisce → la riga non matcha
+                If Not ValuesEqual(currentValue, cond.ExpectedValue) Then
+                    allMatch = False
+                    Exit For
+                End If
+            Next
+
+            ' 🔍 Se tutte le condizioni sono vere → riga matchata
+            If allMatch Then
+                matchedRows.Add(row)
+            End If
+        Next
+
+        ' 🔍 Nessuna riga matchata → success senza modifiche
+        If matchedRows.Count = 0 Then
+            Console.WriteLine($"[BackendCallTaskExecutor] No matching row found. Task executed successfully but no mockTable row matched. No variables modified.")
+            Return New TaskExecutionResult() With {
+                .Success = True,
+                .IsCompleted = True
+            }
+        End If
+
+        ' ❌ Più di una riga matchata → errore deterministico
+        If matchedRows.Count > 1 Then
+            Dim ids = String.Join(", ", matchedRows.Select(Function(r) r.Id))
+            Console.WriteLine($"[BackendCallTaskExecutor] ❌ ERROR: Multiple mockTable rows match ({ids}). MockTable must have unique input combinations.")
+            Return New TaskExecutionResult() With {
+                .Success = False,
+                .Err = $"Multiple mockTable rows match ({ids}). MockTable must have unique input combinations.",
+                .IsCompleted = False
+            }
+        End If
+
+        ' ✅ Esattamente una riga matchata → applica gli assignment
+        Dim matchedRow = matchedRows(0)
+        Console.WriteLine($"[BackendCallTaskExecutor] ✅ Matched row: {matchedRow.Id}")
+
+        Dim assignmentCount = 0
+        For Each assign In matchedRow.Assignments
+            If Not String.IsNullOrEmpty(assign.VariableId) Then
+                state.VariableStore(assign.VariableId) = assign.Value
+                assignmentCount += 1
+            Else
+                Console.WriteLine($"[BackendCallTaskExecutor] ⚠️ WARNING: Assignment has empty VariableId. Skipping.")
+            End If
+        Next
+
+        Console.WriteLine($"[BackendCallTaskExecutor] ✅ BackendCall completed: {assignmentCount} output variables written")
+        Return New TaskExecutionResult() With {
+            .Success = True,
+            .IsCompleted = True
+        }
+    End Function
+
 End Class

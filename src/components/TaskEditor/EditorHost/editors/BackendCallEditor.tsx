@@ -5,7 +5,7 @@ import { TaskType } from '../../../../types/taskTypes';
 import { useProjectDataUpdate, useProjectData } from '../../../../context/ProjectDataContext';
 import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
-import { Server, Plus, X, Eye, EyeOff, Pencil, Check, Trash2, Table2 } from 'lucide-react';
+import { Server, Plus, X, Eye, EyeOff, Pencil, Check, Trash2, Table2, RefreshCw } from 'lucide-react';
 import { OmniaSelect } from '../../../../components/common/OmniaSelect';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import type { ToolbarButton } from '../../../../dock/types';
@@ -60,6 +60,12 @@ interface BackendCallConfig {
     id: string;
     inputs: Record<string, any>;  // internalName -> valore
     outputs: Record<string, any>; // internalName -> valore
+  }>;
+  // ✅ NEW: Column definitions (active + parked)
+  mockTableColumns?: Array<{
+    name: string;
+    type: 'input' | 'output';
+    isActive: boolean;
   }>;
 }
 
@@ -147,19 +153,21 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
 
   // ─────────────────────────────────────────────────────────
   // Helper: build a BackendCallConfig from a raw Task object
-  // Fields are stored FLAT on the Task: task.endpoint, task.inputs, task.outputs, task.mockTable
+  // Fields are stored FLAT on the Task: task.endpoint, task.inputs, task.outputs, task.mockTable, task.mockTableColumns
   // ─────────────────────────────────────────────────────────
   const buildConfigFromTask = React.useCallback((rawTask: any): BackendCallConfig => {
     const endpoint = rawTask?.endpoint ?? DEFAULT_CONFIG.endpoint;
     const inputs: BackendCallConfig['inputs'] = rawTask?.inputs ?? [];
     const outputs: BackendCallConfig['outputs'] = rawTask?.outputs ?? [];
     const mockTable: BackendCallConfig['mockTable'] = rawTask?.mockTable;
+    const mockTableColumns: BackendCallConfig['mockTableColumns'] = rawTask?.mockTableColumns;
 
     const cfg: BackendCallConfig = {
       endpoint,
       inputs: inputs.length > 0 ? inputs : [{ internalName: '', apiParam: '', variable: '' }],
       outputs: outputs.length > 0 ? outputs : [{ internalName: '', apiField: '', variable: '' }],
-      ...(mockTable !== undefined ? { mockTable } : {})
+      ...(mockTable !== undefined ? { mockTable } : {}),
+      ...(mockTableColumns !== undefined ? { mockTableColumns } : {})
     };
     return cfg;
   }, []);
@@ -249,10 +257,135 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
         endpoint: config.endpoint,
         inputs: config.inputs,
         outputs: config.outputs,
-        ...(config.mockTable !== undefined ? { mockTable: config.mockTable } : {})
+        ...(config.mockTable !== undefined ? { mockTable: config.mockTable } : {}),
+        ...(config.mockTableColumns !== undefined ? { mockTableColumns: config.mockTableColumns } : {})
       } as any, projectId);
     }
   }, [config, instanceId, projectId]);
+
+  // ✅ NEW: Update mockTable columns based on current signature (active + parked columns)
+  const updateMockTableColumns = React.useCallback(() => {
+    setConfig(prev => {
+      const currentInputs = prev.inputs || [];
+      const currentOutputs = prev.outputs || [];
+      const existingRows = prev.mockTable || [];
+      const existingColumns = prev.mockTableColumns || [];
+
+      // ✅ Build sets of current signature column names
+      const currentInputNames = new Set(currentInputs.map(inp => inp.internalName).filter(Boolean));
+      const currentOutputNames = new Set(currentOutputs.map(out => out.internalName).filter(Boolean));
+
+      // ✅ Build dictionary of existing columns by name
+      const columnsByName = new Map<string, { name: string; type: 'input' | 'output'; isActive: boolean }>();
+      for (const col of existingColumns) {
+        columnsByName.set(col.name, col);
+      }
+
+      // ✅ Collect all column names from existing rows (to preserve parked columns with data)
+      const allColumnNamesInRows = new Set<string>();
+      for (const row of existingRows) {
+        if (row.inputs) {
+          for (const key of Object.keys(row.inputs)) {
+            allColumnNamesInRows.add(key);
+          }
+        }
+        if (row.outputs) {
+          for (const key of Object.keys(row.outputs)) {
+            allColumnNamesInRows.add(key);
+          }
+        }
+      }
+
+      // ✅ Process input columns
+      for (const inputName of currentInputNames) {
+        if (columnsByName.has(inputName)) {
+          // ✅ Column exists → reactivate it
+          const col = columnsByName.get(inputName)!;
+          col.isActive = true;
+          col.type = 'input';
+        } else {
+          // ✅ New column → create it as active
+          columnsByName.set(inputName, { name: inputName, type: 'input', isActive: true });
+        }
+      }
+
+      // ✅ Process output columns
+      for (const outputName of currentOutputNames) {
+        if (columnsByName.has(outputName)) {
+          // ✅ Column exists → reactivate it
+          const col = columnsByName.get(outputName)!;
+          col.isActive = true;
+          col.type = 'output';
+        } else {
+          // ✅ New column → create it as active
+          columnsByName.set(outputName, { name: outputName, type: 'output', isActive: true });
+        }
+      }
+
+      // ✅ Park columns that are no longer in signature
+      for (const colName of allColumnNamesInRows) {
+        if (!currentInputNames.has(colName) && !currentOutputNames.has(colName)) {
+          if (columnsByName.has(colName)) {
+            // ✅ Park existing column
+            const col = columnsByName.get(colName)!;
+            col.isActive = false;
+          } else {
+            // ✅ Create parked column (preserve data from rows)
+            // Try to infer type from existing cells
+            const isInInputs = existingRows.some(row => row.inputs && row.inputs[colName] !== undefined);
+            const colType = isInInputs ? 'input' : 'output';
+            columnsByName.set(colName, { name: colName, type: colType, isActive: false });
+          }
+        }
+      }
+
+      // ✅ Update columns array
+      const updatedColumns = Array.from(columnsByName.values());
+
+      return {
+        ...prev,
+        mockTableColumns: updatedColumns
+      };
+    });
+  }, []);
+
+  // ✅ NEW: Funzione per riorganizzare la mockTable (mantiene compatibilità)
+  const reorganizeMockTable = React.useCallback(() => {
+    updateMockTableColumns();
+  }, [updateMockTableColumns]);
+
+  // ✅ NEW: Auto-riorganizza mockTable quando cambiano input/output (se mockTable esiste)
+  React.useEffect(() => {
+    if (config.mockTable && config.mockTable.length > 0) {
+      const hasInputs = (config.inputs || []).some(inp => inp.internalName);
+      const hasOutputs = (config.outputs || []).some(out => out.internalName);
+
+      if (hasInputs || hasOutputs) {
+        // Verifica se serve riorganizzare (se ci sono internalName che non corrispondono)
+        const needsReorganization = config.mockTable.some(row => {
+          const rowInputNames = Object.keys(row.inputs || {});
+          const rowOutputNames = Object.keys(row.outputs || {});
+          const currentInputNames = (config.inputs || []).map(inp => inp.internalName).filter(Boolean);
+          const currentOutputNames = (config.outputs || []).map(out => out.internalName).filter(Boolean);
+
+          // Se ci sono colonne nella riga che non esistono più negli input/output attuali
+          const hasObsoleteInputs = rowInputNames.some(name => !currentInputNames.includes(name));
+          const hasObsoleteOutputs = rowOutputNames.some(name => !currentOutputNames.includes(name));
+
+          // O se mancano colonne per gli input/output attuali
+          const missingInputs = currentInputNames.some(name => !rowInputNames.includes(name));
+          const missingOutputs = currentOutputNames.some(name => !rowOutputNames.includes(name));
+
+          return hasObsoleteInputs || hasObsoleteOutputs || missingInputs || missingOutputs;
+        });
+
+        if (needsReorganization) {
+          // ✅ Auto-riorganizza
+          reorganizeMockTable();
+        }
+      }
+    }
+  }, [config.inputs, config.outputs, reorganizeMockTable]); // ✅ Dipende da inputs/outputs per riorganizzare quando cambiano
 
   // ✅ REMOVED: updateInstance (legacy act_instances) - taskRepository.updateTask already saves to database
   const handleClose = async () => {
@@ -293,6 +426,14 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
       // Auto-fill: se apiParam è selezionato e internalName è vuoto, auto-compila
       if (updates.apiParam && !inputs[index].internalName) {
         inputs[index].internalName = updates.apiParam;
+      }
+
+      // ✅ NEW: Auto-fill: se variable è selezionato e internalName è vuoto, auto-compila con varName
+      if (updates.variable && !inputs[index].internalName) {
+        const varName = getVarNameFromVarId(updates.variable);
+        if (varName) {
+          inputs[index].internalName = varName;
+        }
       }
 
       return { ...prev, inputs };
@@ -634,18 +775,33 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
 
         {/* Two Column Layout: Input (left) + Output (right) OR Table View */}
         {showTableView ? (
-          <TableEditor
-            inputs={(config.inputs || []).map(input => ({
+          <>
+            {/* ✅ NEW: Pulsante Ricrea MockTable */}
+            <div className="flex items-center gap-2 mb-2">
+              <button
+                onClick={reorganizeMockTable}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded flex items-center gap-1.5"
+                title="Riorganizza la mockTable in base agli input/output attuali, mantenendo i valori esistenti quando possibile"
+              >
+                <RefreshCw size={14} />
+                Ricrea MockTable
+              </button>
+            </div>
+            <TableEditor
+              inputs={(config.inputs || []).map(input => ({
               ...input,
-              variable: input.variable ? getVarNameFromVarId(input.variable) || undefined : undefined
-            }))}
-            outputs={(config.outputs || []).map(output => ({
-              ...output,
-              variable: output.variable ? getVarNameFromVarId(output.variable) || undefined : undefined
-            }))}
-            rows={config.mockTable || []}
-            onChange={(rows) => setConfig(prev => ({ ...prev, mockTable: rows }))}
-          />
+                variable: input.variable ? getVarNameFromVarId(input.variable) || undefined : undefined
+              }))}
+              outputs={(config.outputs || []).map(output => ({
+                ...output,
+                variable: output.variable ? getVarNameFromVarId(output.variable) || undefined : undefined
+              }))}
+              rows={config.mockTable || []}
+              columns={config.mockTableColumns}
+              onChange={(rows) => setConfig(prev => ({ ...prev, mockTable: rows }))}
+              onColumnsChange={(columns) => setConfig(prev => ({ ...prev, mockTableColumns: columns }))}
+            />
+          </>
         ) : (
         <div className="flex gap-3 items-start">
           {/* Input - Left Column */}

@@ -32,11 +32,20 @@ Namespace ApiServer.Handlers
                 End If
             End If
 
-            If taskType.HasValue AndAlso taskType.Value = TaskEngine.TaskTypes.UtteranceInterpretation Then
-                ' ✅ Deserialize as UtteranceTaskDefinition for UtteranceInterpretation tasks
-                Return JsonConvert.DeserializeObject(Of Compiler.UtteranceTaskDefinition)(jsonString, settings)
+            If taskType.HasValue Then
+                Select Case taskType.Value
+                    Case TaskEngine.TaskTypes.UtteranceInterpretation
+                        ' ✅ Deserialize as UtteranceTaskDefinition for UtteranceInterpretation tasks
+                        Return JsonConvert.DeserializeObject(Of Compiler.UtteranceTaskDefinition)(jsonString, settings)
+                    Case TaskEngine.TaskTypes.BackendCall
+                        ' ✅ NEW: Deserialize as BackendCallTaskDefinition for BackendCall tasks
+                        Return JsonConvert.DeserializeObject(Of Compiler.BackendCallTaskDefinition)(jsonString, settings)
+                    Case Else
+                        ' ✅ Deserialize as base TaskDefinition for other types
+                        Return JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(jsonString, settings)
+                End Select
             Else
-                ' ✅ Deserialize as base TaskDefinition for other types
+                ' ✅ Deserialize as base TaskDefinition if type is not recognized
                 Return JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(jsonString, settings)
             End If
         End Function

@@ -166,6 +166,24 @@ Public Class FlowOrchestrator
         Console.WriteLine($"[FlowOrchestrator] RunUntilInput START")
         _state.RequiresInput = False
 
+        ' ✅ NEW: Initialize VariableStore with all variables (including manual ones)
+        ' Manual variables (empty nodeId/taskInstanceId) need to be in VariableStore
+        ' even if they haven't been extracted yet (they might be written by BackendCall)
+        If _state.VariableStore Is Nothing Then
+            _state.VariableStore = New Dictionary(Of String, Object)()
+        End If
+
+        ' ✅ Initialize all variables in VariableStore (set to Nothing if not yet extracted)
+        ' This ensures manual variables are available for BackendCall inputs/outputs
+        For Each var In _variables
+            If Not _state.VariableStore.ContainsKey(var.VarId) Then
+                ' ✅ Initialize with Nothing (will be set when extracted or written by BackendCall)
+                _state.VariableStore(var.VarId) = Nothing
+                Dim isManual = String.IsNullOrEmpty(var.NodeId)
+                Console.WriteLine($"[FlowOrchestrator] ✅ Initialized variable in VariableStore: varId={var.VarId}, isManual={isManual}")
+            End If
+        Next
+
         Const MaxIterations As Integer = 500
         Dim iterations As Integer = 0
 
@@ -527,10 +545,39 @@ Public Class FlowOrchestrator
     End Function
 
     ''' <summary>
-    ''' Handler per BackendCall (placeholder — completa automaticamente per ora).
+    ''' Handler per BackendCall: esegue il task tramite TaskExecutor (che esegue la mockTable).
+    ''' BackendCallTaskExecutor esegue la mockTable:
+    '''   - Legge input dal VariableStore
+    '''   - Cerca nella mockTable la riga matchante
+    '''   - Scrive output nel VariableStore
     ''' </summary>
     Private Async Function ProcessBackendTurn(rowTask As CompiledTask) As System.Threading.Tasks.Task(Of RowTurnResult)
-        Console.WriteLine($"[FlowOrchestrator] BackendCall {rowTask.Id} — not yet implemented, auto-complete")
+        Console.WriteLine($"[FlowOrchestrator] ProcessBackendTurn task={rowTask.Id}")
+
+        ' ✅ Chiama TaskExecutor.ExecuteTask che:
+        '    1. Identifica BackendCallTaskExecutor
+        '    2. Esegue BackendCallTaskExecutor.Execute
+        '    3. BackendCallTaskExecutor.Execute esegue la mockTable:
+        '       - Legge input dal VariableStore
+        '       - Cerca nella mockTable la riga matchante
+        '       - Scrive output nel VariableStore
+        Dim result = Await TaskExecutor.ExecuteTask(
+            rowTask,
+            _state,
+            Sub(text, stepType, escalationNumber)
+                ' Callback per messaggi (BackendCall non emette messaggi, ma callback richiesto)
+                Console.WriteLine($"[FlowOrchestrator] BackendCall message: {text}")
+            End Sub
+        )
+
+        ' ✅ Gestisci errori
+        If Not result.Success Then
+            Dim errorMsg = If(String.IsNullOrEmpty(result.Err), "Unknown error", result.Err)
+            Console.WriteLine($"[FlowOrchestrator] ❌ BackendCall failed: {errorMsg}")
+            ' ✅ In caso di errore, completa comunque il turno (non blocca il flow)
+        End If
+
+        ' ✅ Completa il turno (BackendCall non emette messaggi, solo aggiorna VariableStore)
         Return RowTurnResult.Completed()
     End Function
 

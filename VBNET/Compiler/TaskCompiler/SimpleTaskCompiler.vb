@@ -2,6 +2,8 @@ Option Strict On
 Option Explicit On
 Imports TaskEngine
 Imports Compiler.DTO.IDE
+Imports Compiler.DTO.Runtime
+Imports Newtonsoft.Json.Linq
 
 ''' <summary>
 ''' Compiler per task semplici (SayMessage, ClassifyProblem, BackendCall, CloseSession, Transfer)
@@ -42,132 +44,87 @@ Public Class SimpleTaskCompiler
 
             Case TaskTypes.BackendCall
                 Dim backendTask As New CompiledBackendCallTask()
-                If task.Value IsNot Nothing Then
-                    ' ✅ Endpoint come oggetto (può essere Dictionary o JObject)
-                    If task.Value.ContainsKey("endpoint") Then
-                        Dim endpointObj = task.Value("endpoint")
-                        If endpointObj IsNot Nothing Then
-                            ' Gestisci Dictionary(Of String, Object)
-                            If TypeOf endpointObj Is Dictionary(Of String, Object) Then
-                                Dim ep = CType(endpointObj, Dictionary(Of String, Object))
-                                If ep.ContainsKey("url") Then
-                                    backendTask.Endpoint = If(ep("url")?.ToString(), "")
-                                End If
-                                If ep.ContainsKey("method") Then
-                                    backendTask.Method = If(ep("method")?.ToString(), "POST")
-                                End If
-                                ' Gestisci anche JObject (se viene da JSON)
-                            ElseIf TypeOf endpointObj Is Newtonsoft.Json.Linq.JObject Then
-                                Dim ep = CType(endpointObj, Newtonsoft.Json.Linq.JObject)
-                                If ep("url") IsNot Nothing Then
-                                    backendTask.Endpoint = If(ep("url")?.ToString(), "")
-                                End If
-                                If ep("method") IsNot Nothing Then
-                                    backendTask.Method = If(ep("method")?.ToString(), "POST")
-                                End If
-                                ' Fallback: se è già una stringa (retrocompatibilità)
-                            ElseIf TypeOf endpointObj Is String Then
-                                backendTask.Endpoint = CStr(endpointObj)
-                            End If
+
+                ' ✅ Cast a BackendCallTaskDefinition per accedere alle proprietà type-safe
+                Dim backendDef = TryCast(task, BackendCallTaskDefinition)
+
+                If backendDef IsNot Nothing Then
+                    ' ✅ DEBUG: Log per verificare la deserializzazione
+                    Console.WriteLine($"[SimpleTaskCompiler] ✅ Task deserialized as BackendCallTaskDefinition: taskId={task.Id}")
+                    Console.WriteLine($"[SimpleTaskCompiler] 🔍 Inputs count: {If(backendDef.Inputs IsNot Nothing, backendDef.Inputs.Count, 0)}")
+                    Console.WriteLine($"[SimpleTaskCompiler] 🔍 Outputs count: {If(backendDef.Outputs IsNot Nothing, backendDef.Outputs.Count, 0)}")
+
+                    ' ✅ Usa proprietà dirette (type-safe, no dictionary lookup)
+
+                    ' ✅ Endpoint
+                    If backendDef.Endpoint IsNot Nothing Then
+                        If backendDef.Endpoint.ContainsKey("url") Then
+                            backendTask.Endpoint = If(backendDef.Endpoint("url")?.ToString(), "")
+                        End If
+                        If backendDef.Endpoint.ContainsKey("method") Then
+                            backendTask.Method = If(backendDef.Endpoint("method")?.ToString(), "POST")
                         End If
                     End If
 
-                    ' ✅ Method separato (per retrocompatibilità se non è dentro endpoint)
-                    If task.Value.ContainsKey("method") AndAlso String.IsNullOrEmpty(backendTask.Method) Then
-                        backendTask.Method = If(task.Value("method")?.ToString(), "POST")
+                    ' ✅ Inputs
+                    If backendDef.Inputs IsNot Nothing Then
+                        ' ✅ DEBUG: Log ogni input per verificare internalName
+                        For Each inputDef In backendDef.Inputs
+                            Dim internalName = If(inputDef.ContainsKey("internalName"), inputDef("internalName")?.ToString(), "")
+                            Dim varId = If(inputDef.ContainsKey("variable"), inputDef("variable")?.ToString(), "")
+                            Console.WriteLine($"[SimpleTaskCompiler] 🔍 Input: internalName={If(String.IsNullOrEmpty(internalName), "EMPTY", internalName)}, varId={If(String.IsNullOrEmpty(varId), "EMPTY", varId)}")
+                        Next
+                        backendTask.Inputs = backendDef.Inputs
+                    Else
+                        Console.WriteLine($"[SimpleTaskCompiler] ⚠️ WARNING: backendDef.Inputs is Nothing")
                     End If
 
-                    ' ✅ Copia inputs se esiste
-                    If task.Value.ContainsKey("inputs") Then
-                        Dim inputsValue = task.Value("inputs")
-                        If inputsValue IsNot Nothing Then
-                            If TypeOf inputsValue Is List(Of Object) Then
-                                ' Converti List(Of Object) in List(Of Dictionary)
-                                Dim inputsList = CType(inputsValue, List(Of Object))
-                                For Each inp In inputsList
-                                    If TypeOf inp Is Dictionary(Of String, Object) Then
-                                        backendTask.Inputs.Add(CType(inp, Dictionary(Of String, Object)))
-                                    End If
-                                Next
-                            ElseIf TypeOf inputsValue Is List(Of Dictionary(Of String, Object)) Then
-                                backendTask.Inputs = CType(inputsValue, List(Of Dictionary(Of String, Object)))
-                            End If
-                        End If
+                    ' ✅ Outputs
+                    If backendDef.Outputs IsNot Nothing Then
+                        ' ✅ DEBUG: Log ogni output per verificare internalName
+                        For Each outputDef In backendDef.Outputs
+                            Dim internalName = If(outputDef.ContainsKey("internalName"), outputDef("internalName")?.ToString(), "")
+                            Dim varId = If(outputDef.ContainsKey("variable"), outputDef("variable")?.ToString(), "")
+                            Console.WriteLine($"[SimpleTaskCompiler] 🔍 Output: internalName={If(String.IsNullOrEmpty(internalName), "EMPTY", internalName)}, varId={If(String.IsNullOrEmpty(varId), "EMPTY", varId)}")
+                        Next
+                        backendTask.Outputs = backendDef.Outputs
+                    Else
+                        Console.WriteLine($"[SimpleTaskCompiler] ⚠️ WARNING: backendDef.Outputs is Nothing")
                     End If
 
-                    ' ✅ Copia outputs se esiste
-                    If task.Value.ContainsKey("outputs") Then
-                        Dim outputsValue = task.Value("outputs")
-                        If outputsValue IsNot Nothing Then
-                            If TypeOf outputsValue Is List(Of Object) Then
-                                ' Converti List(Of Object) in List(Of Dictionary)
-                                Dim outputsList = CType(outputsValue, List(Of Object))
-                                For Each outp In outputsList
-                                    If TypeOf outp Is Dictionary(Of String, Object) Then
-                                        backendTask.Outputs.Add(CType(outp, Dictionary(Of String, Object)))
-                                    End If
-                                Next
-                            ElseIf TypeOf outputsValue Is List(Of Dictionary(Of String, Object)) Then
-                                backendTask.Outputs = CType(outputsValue, List(Of Dictionary(Of String, Object)))
-                            End If
-                        End If
+                    ' ✅ MockTable (solo se ha righe)
+                    If backendDef.MockTable IsNot Nothing AndAlso backendDef.MockTable.Count > 0 Then
+                        backendTask.MockTable = backendDef.MockTable
+
+                        ' ✅ NEW: Parse JSON → MockTableDesign
+                        Dim mockTableDesign = ParseMockTableJson(backendDef.MockTable, backendDef.Inputs, backendDef.Outputs)
+
+                        ' ✅ NEW: Build ColumnMapping
+                        Dim columnMapping = BuildColumnMapping(backendDef.Inputs, backendDef.Outputs, task.Id)
+
+                        ' ✅ NEW: Compile MockTableDesign + ColumnMapping → MockRows
+                        Dim mockRows = CompileMockTable(mockTableDesign, columnMapping, task.Id)
+
+                        ' ✅ Assign to compiled task
+                        backendTask.MockTableDesign = mockTableDesign
+                        backendTask.ColumnMapping = columnMapping
+                        backendTask.MockRows = mockRows
                     End If
 
-                    ' ✅ Copia mockTable SOLO se esiste E ha almeno una riga
-                    If task.Value.ContainsKey("mockTable") Then
-                        Dim mockTableValue = task.Value("mockTable")
-                        If mockTableValue IsNot Nothing Then
-                            ' Verifica se è una lista/array con almeno un elemento
-                            Dim hasRows As Boolean = False
-
-                            If TypeOf mockTableValue Is IList Then
-                                Dim list = CType(mockTableValue, IList)
-                                hasRows = list.Count > 0
-                            ElseIf TypeOf mockTableValue Is Array Then
-                                Dim arr = CType(mockTableValue, Array)
-                                hasRows = arr.Length > 0
-                            ElseIf TypeOf mockTableValue Is List(Of Object) Then
-                                Dim list = CType(mockTableValue, List(Of Object))
-                                hasRows = list.Count > 0
-                            ElseIf TypeOf mockTableValue Is Newtonsoft.Json.Linq.JArray Then
-                                Dim jArray = CType(mockTableValue, Newtonsoft.Json.Linq.JArray)
-                                hasRows = jArray.Count > 0
-                            End If
-
-                            ' ✅ Compila mockTable solo se ha righe
-                            If hasRows Then
-                                If TypeOf mockTableValue Is List(Of Object) Then
-                                    ' Converti List(Of Object) in List(Of Dictionary)
-                                    Dim mockList = CType(mockTableValue, List(Of Object))
-                                    For Each row In mockList
-                                        If TypeOf row Is Dictionary(Of String, Object) Then
-                                            backendTask.MockTable.Add(CType(row, Dictionary(Of String, Object)))
-                                        End If
-                                    Next
-                                ElseIf TypeOf mockTableValue Is List(Of Dictionary(Of String, Object)) Then
-                                    backendTask.MockTable = CType(mockTableValue, List(Of Dictionary(Of String, Object)))
-                                ElseIf TypeOf mockTableValue Is Newtonsoft.Json.Linq.JArray Then
-                                    ' Converti JArray in List(Of Dictionary)
-                                    Dim jArray = CType(mockTableValue, Newtonsoft.Json.Linq.JArray)
-                                    For Each item In jArray
-                                        If TypeOf item Is Newtonsoft.Json.Linq.JObject Then
-                                            Dim dict = New Dictionary(Of String, Object)()
-                                            Dim jObj = CType(item, Newtonsoft.Json.Linq.JObject)
-                                            For Each prop In jObj.Properties()
-                                                dict(prop.Name) = prop.Value?.ToObject(Of Object)()
-                                            Next
-                                            backendTask.MockTable.Add(dict)
-                                        End If
-                                    Next
-                                End If
-                            End If
-                        End If
+                    ' ✅ Copia anche tutto in Config per retrocompatibilità
+                    If backendDef.Value IsNot Nothing Then
+                        For Each kvp As KeyValuePair(Of String, Object) In backendDef.Value
+                            backendTask.Config(kvp.Key) = kvp.Value
+                        Next
                     End If
-
-                    ' ✅ Copia anche tutto il value in Config per retrocompatibilità
-                    For Each kvp In task.Value
-                        backendTask.Config(kvp.Key) = kvp.Value
-                    Next
+                Else
+                    ' ❌ ERRORE BLOCCANTE: BackendCall task deve essere deserializzato come BackendCallTaskDefinition
+                    Dim errorMsg = $"BackendCall task '{task.Id}' was not deserialized as BackendCallTaskDefinition. " &
+                                   $"Actual type: {task.GetType().Name}. " &
+                                   $"This indicates a deserialization error. " &
+                                   $"The task must be properly deserialized using DeserializeTaskFromJson in CompilationHandlers."
+                    Console.WriteLine($"[SimpleTaskCompiler] ❌ ERROR: {errorMsg}")
+                    Throw New InvalidOperationException(errorMsg)
                 End If
                 compiledTask = backendTask
 
@@ -279,6 +236,329 @@ Public Class SimpleTaskCompiler
         Catch
             Return False
         End Try
+    End Function
+
+    ''' <summary>
+    ''' ✅ Parses JSON mockTable into MockTableDesign
+    ''' Transforms Dictionary structure into clean table structure
+    ''' ⚠️ FIX: Supports both Dictionary and JObject (Newtonsoft.Json deserialization)
+    ''' </summary>
+    Private Function ParseMockTableJson(
+        mockTableJson As List(Of Dictionary(Of String, Object)),
+        inputs As List(Of Dictionary(Of String, Object)),
+        outputs As List(Of Dictionary(Of String, Object))
+    ) As Compiler.DTO.IDE.MockTableDesign
+        Dim design As New Compiler.DTO.IDE.MockTableDesign()
+
+        ' ✅ Parse rows: transform Dictionary structure into RowDesign with Cells
+        If mockTableJson IsNot Nothing Then
+            Console.WriteLine($"[SimpleTaskCompiler] 🔍 Parsing {mockTableJson.Count} mockTable rows")
+
+            For i = 0 To mockTableJson.Count - 1
+                Dim rowJson = mockTableJson(i)
+                Dim rowId = If(rowJson.ContainsKey("id"), rowJson("id")?.ToString(), $"row_{i}")
+                Dim row As New Compiler.DTO.IDE.RowDesign(rowId)
+
+                ' ✅ Parse inputs → Cells
+                ' ⚠️ FIX: Support both Dictionary and JObject (Newtonsoft.Json)
+                If rowJson.ContainsKey("inputs") Then
+                    Dim inputsValue = rowJson("inputs")
+                    Dim rowInputs As Dictionary(Of String, Object) = Nothing
+
+                    If TypeOf inputsValue Is Dictionary(Of String, Object) Then
+                        rowInputs = CType(inputsValue, Dictionary(Of String, Object))
+                    ElseIf TypeOf inputsValue Is JObject Then
+                        ' ✅ Convert JObject to Dictionary
+                        Dim jobj = CType(inputsValue, JObject)
+                        rowInputs = New Dictionary(Of String, Object)()
+                        For Each prop In jobj.Properties()
+                            Dim propValue As Object = Nothing
+                            If prop.Value IsNot Nothing Then
+                                If prop.Value.Type = JTokenType.Null Then
+                                    propValue = Nothing
+                                Else
+                                    propValue = prop.Value.ToObject(Of Object)()
+                                End If
+                            End If
+                            rowInputs(prop.Name) = propValue
+                        Next
+                    End If
+
+                    If rowInputs IsNot Nothing Then
+                        For Each kvp In rowInputs
+                            If Not String.IsNullOrEmpty(kvp.Key) Then
+                                row.Cells.Add(New Compiler.DTO.IDE.CellDesign(kvp.Key, kvp.Value))
+                            End If
+                        Next
+                    End If
+                End If
+
+                ' ✅ Parse outputs → Cells
+                ' ⚠️ FIX: Support both Dictionary and JObject (Newtonsoft.Json)
+                If rowJson.ContainsKey("outputs") Then
+                    Dim outputsValue = rowJson("outputs")
+                    Dim rowOutputs As Dictionary(Of String, Object) = Nothing
+
+                    If TypeOf outputsValue Is Dictionary(Of String, Object) Then
+                        rowOutputs = CType(outputsValue, Dictionary(Of String, Object))
+                    ElseIf TypeOf outputsValue Is JObject Then
+                        ' ✅ Convert JObject to Dictionary
+                        Dim jobj = CType(outputsValue, JObject)
+                        rowOutputs = New Dictionary(Of String, Object)()
+                        For Each prop In jobj.Properties()
+                            Dim propValue As Object = Nothing
+                            If prop.Value IsNot Nothing Then
+                                If prop.Value.Type = JTokenType.Null Then
+                                    propValue = Nothing
+                                Else
+                                    propValue = prop.Value.ToObject(Of Object)()
+                                End If
+                            End If
+                            rowOutputs(prop.Name) = propValue
+                        Next
+                    End If
+
+                    If rowOutputs IsNot Nothing Then
+                        For Each kvp In rowOutputs
+                            If Not String.IsNullOrEmpty(kvp.Key) Then
+                                row.Cells.Add(New Compiler.DTO.IDE.CellDesign(kvp.Key, kvp.Value))
+                            End If
+                        Next
+                    End If
+                End If
+
+                Console.WriteLine($"[SimpleTaskCompiler] ✅ Row {rowId}: {row.Cells.Count} cells created")
+                design.Rows.Add(row)
+            Next
+        End If
+
+        ' ✅ Update columns based on current signature
+        design = UpdateMockTableColumns(design, inputs, outputs)
+
+        Dim totalCells = design.Rows.Sum(Function(r) If(r.Cells IsNot Nothing, r.Cells.Count, 0))
+        Console.WriteLine($"[SimpleTaskCompiler] ✅ Parsed {design.Rows.Count} rows with {totalCells} total cells")
+        Return design
+    End Function
+
+    ''' <summary>
+    ''' ✅ Updates MockTableDesign columns based on current backend signature
+    ''' Rules:
+    ''' A. If column exists in signature → IsActive = True (create or reactivate)
+    ''' B. If column NOT in signature → IsActive = False (park, don't delete)
+    ''' C. If parked column returns to signature → IsActive = True (reactivate)
+    ''' </summary>
+    Private Function UpdateMockTableColumns(
+        mockTable As Compiler.DTO.IDE.MockTableDesign,
+        inputs As List(Of Dictionary(Of String, Object)),
+        outputs As List(Of Dictionary(Of String, Object))
+    ) As Compiler.DTO.IDE.MockTableDesign
+        If mockTable Is Nothing Then
+            mockTable = New Compiler.DTO.IDE.MockTableDesign()
+        End If
+
+        ' ✅ Build sets of current signature column names
+        Dim currentInputNames As New HashSet(Of String)()
+        Dim currentOutputNames As New HashSet(Of String)()
+
+        If inputs IsNot Nothing Then
+            For Each inputDef In inputs
+                Dim columnName = If(inputDef.ContainsKey("internalName"), inputDef("internalName")?.ToString(), "")
+                If Not String.IsNullOrEmpty(columnName) Then
+                    currentInputNames.Add(columnName)
+                End If
+            Next
+        End If
+
+        If outputs IsNot Nothing Then
+            For Each outputDef In outputs
+                Dim columnName = If(outputDef.ContainsKey("internalName"), outputDef("internalName")?.ToString(), "")
+                If Not String.IsNullOrEmpty(columnName) Then
+                    currentOutputNames.Add(columnName)
+                End If
+            Next
+        End If
+
+        ' ✅ Build dictionary of existing columns by name
+        Dim existingColumns As New Dictionary(Of String, Compiler.DTO.IDE.ColumnDefinition)()
+        If mockTable.Columns IsNot Nothing Then
+            For Each col In mockTable.Columns
+                existingColumns(col.Name) = col
+            Next
+        End If
+
+        ' ✅ Process input columns
+        For Each inputName In currentInputNames
+            If existingColumns.ContainsKey(inputName) Then
+                ' ✅ Column exists → reactivate it
+                existingColumns(inputName).IsActive = True
+                existingColumns(inputName).Type = Compiler.DTO.IDE.ColumnType.Input
+            Else
+                ' ✅ New column → create it as active
+                Dim newCol As New Compiler.DTO.IDE.ColumnDefinition(inputName, Compiler.DTO.IDE.ColumnType.Input, True)
+                existingColumns(inputName) = newCol
+            End If
+        Next
+
+        ' ✅ Process output columns
+        For Each outputName In currentOutputNames
+            If existingColumns.ContainsKey(outputName) Then
+                ' ✅ Column exists → reactivate it
+                existingColumns(outputName).IsActive = True
+                existingColumns(outputName).Type = Compiler.DTO.IDE.ColumnType.Output
+            Else
+                ' ✅ New column → create it as active
+                Dim newCol As New Compiler.DTO.IDE.ColumnDefinition(outputName, Compiler.DTO.IDE.ColumnType.Output, True)
+                existingColumns(outputName) = newCol
+            End If
+        Next
+
+        ' ✅ Park columns that are no longer in signature
+        ' First, collect all column names from existing rows (to preserve parked columns with data)
+        Dim allColumnNamesInRows As New HashSet(Of String)()
+        If mockTable.Rows IsNot Nothing Then
+            For Each row In mockTable.Rows
+                If row.Cells IsNot Nothing Then
+                    For Each cell In row.Cells
+                        If Not String.IsNullOrEmpty(cell.ColumnName) Then
+                            allColumnNamesInRows.Add(cell.ColumnName)
+                        End If
+                    Next
+                End If
+            Next
+        End If
+
+        ' ✅ For columns in rows but not in signature → park them
+        For Each colName In allColumnNamesInRows
+            If Not currentInputNames.Contains(colName) AndAlso Not currentOutputNames.Contains(colName) Then
+                If existingColumns.ContainsKey(colName) Then
+                    ' ✅ Park existing column
+                    existingColumns(colName).IsActive = False
+                Else
+                    ' ✅ Create parked column (preserve data from rows)
+                    ' Try to infer type from existing cells (if all cells are in inputs or outputs)
+                    Dim colType = Compiler.DTO.IDE.ColumnType.Input ' Default
+                    ' Note: We can't reliably infer type from parked columns, so we use Input as default
+                    Dim newCol As New Compiler.DTO.IDE.ColumnDefinition(colName, colType, False)
+                    existingColumns(colName) = newCol
+                End If
+            End If
+        Next
+
+        ' ✅ Update mockTable.Columns
+        mockTable.Columns = New List(Of Compiler.DTO.IDE.ColumnDefinition)(existingColumns.Values)
+
+        Return mockTable
+    End Function
+
+    ''' <summary>
+    ''' ✅ Builds ColumnMapping from Inputs/Outputs definitions
+    ''' Maps columnName (internalName) → varId
+    ''' </summary>
+    Private Function BuildColumnMapping(
+        inputs As List(Of Dictionary(Of String, Object)),
+        outputs As List(Of Dictionary(Of String, Object)),
+        taskId As String
+    ) As Compiler.DTO.IDE.ColumnMapping
+        Dim mapping As New Compiler.DTO.IDE.ColumnMapping()
+
+        ' ✅ Build input mappings: columnName → varId
+        If inputs IsNot Nothing Then
+            For Each inputDef In inputs
+                Dim columnName = If(inputDef.ContainsKey("internalName"), inputDef("internalName")?.ToString(), "")
+                Dim varId = If(inputDef.ContainsKey("variable"), inputDef("variable")?.ToString(), "")
+
+                If Not String.IsNullOrEmpty(columnName) AndAlso Not String.IsNullOrEmpty(varId) Then
+                    mapping.InputMappings(columnName) = varId
+                ElseIf Not String.IsNullOrEmpty(columnName) Then
+                    Console.WriteLine($"[SimpleTaskCompiler] ⚠️ Input column '{columnName}' missing varId in task {taskId}")
+                End If
+            Next
+        End If
+
+        ' ✅ Build output mappings: columnName → varId
+        If outputs IsNot Nothing Then
+            For Each outputDef In outputs
+                Dim columnName = If(outputDef.ContainsKey("internalName"), outputDef("internalName")?.ToString(), "")
+                Dim varId = If(outputDef.ContainsKey("variable"), outputDef("variable")?.ToString(), "")
+
+                If Not String.IsNullOrEmpty(columnName) AndAlso Not String.IsNullOrEmpty(varId) Then
+                    mapping.OutputMappings(columnName) = varId
+                ElseIf Not String.IsNullOrEmpty(columnName) Then
+                    Console.WriteLine($"[SimpleTaskCompiler] ⚠️ Output column '{columnName}' missing varId in task {taskId}")
+                End If
+            Next
+        End If
+
+        Return mapping
+    End Function
+
+    ''' <summary>
+    ''' ✅ Compiles MockTableDesign + ColumnMapping into CompiledMockRows
+    ''' Linear compilation: loop on Rows and Cells, lookup in mapping
+    ''' ⚠️ IMPORTANT: Only compiles ACTIVE columns (parked columns are skipped)
+    ''' </summary>
+    Private Function CompileMockTable(
+        mockTable As Compiler.DTO.IDE.MockTableDesign,
+        mapping As Compiler.DTO.IDE.ColumnMapping,
+        taskId As String
+    ) As List(Of CompiledMockRow)
+        Dim compiled As New List(Of CompiledMockRow)()
+
+        If mockTable Is Nothing OrElse mockTable.Rows Is Nothing OrElse mockTable.Rows.Count = 0 Then
+            Return compiled
+        End If
+
+        ' ✅ Build dictionary of columns by name for fast lookup
+        Dim columnsByName As New Dictionary(Of String, Compiler.DTO.IDE.ColumnDefinition)()
+        If mockTable.Columns IsNot Nothing Then
+            For Each col In mockTable.Columns
+                columnsByName(col.Name) = col
+            Next
+        End If
+
+        For Each row In mockTable.Rows
+            Dim compiledRow As New CompiledMockRow(row.Id)
+
+            ' ✅ Loop on cells: use mapping to find varId
+            ' ⚠️ IMPORTANT: Only compile cells for ACTIVE columns
+            For Each cell In row.Cells
+                ' ✅ Check if column exists and is active
+                If Not columnsByName.ContainsKey(cell.ColumnName) Then
+                    Console.WriteLine($"[SimpleTaskCompiler] ⚠️ Row {row.Id}: column '{cell.ColumnName}' not found in Columns. Skipping.")
+                    Continue For
+                End If
+
+                Dim col = columnsByName(cell.ColumnName)
+
+                ' ✅ Skip parked columns (only compile active columns)
+                If Not col.IsActive Then
+                    Continue For
+                End If
+
+                ' ✅ Compile based on column type
+                If col.Type = Compiler.DTO.IDE.ColumnType.Input Then
+                    If mapping.InputMappings.ContainsKey(cell.ColumnName) Then
+                        Dim varId = mapping.InputMappings(cell.ColumnName)
+                        compiledRow.Conditions.Add(New CompiledMockCondition(varId, cell.Value))
+                    Else
+                        Console.WriteLine($"[SimpleTaskCompiler] ⚠️ Row {row.Id}: input column '{cell.ColumnName}' not mapped to any variable")
+                    End If
+                Else
+                    If mapping.OutputMappings.ContainsKey(cell.ColumnName) Then
+                        Dim varId = mapping.OutputMappings(cell.ColumnName)
+                        compiledRow.Assignments.Add(New CompiledMockAssignment(varId, cell.Value))
+                    Else
+                        Console.WriteLine($"[SimpleTaskCompiler] ⚠️ Row {row.Id}: output column '{cell.ColumnName}' not mapped to any variable")
+                    End If
+                End If
+            Next
+
+            compiled.Add(compiledRow)
+            Console.WriteLine($"[SimpleTaskCompiler] ✅ Compiled row {row.Id}: {compiledRow.Conditions.Count} conditions, {compiledRow.Assignments.Count} assignments")
+        Next
+
+        Console.WriteLine($"[SimpleTaskCompiler] ✅ Compiled {compiled.Count} mockTable rows for task {taskId} (only active columns)")
+        Return compiled
     End Function
 End Class
 
