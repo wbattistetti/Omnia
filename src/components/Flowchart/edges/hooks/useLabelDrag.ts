@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, RefObject } from 'react';
-import { findClosestSegment, getSegmentMidpoint, projectPointToSegment, getPathSegments, PathSegment } from '../utils/pathUtils';
+import { findClosestSegment, getSegmentMidpoint, projectPointToSegment, getPathSegments, PathSegment, distanceToSegment } from '../utils/pathUtils';
 import { CoordinateConverter } from '../utils/coordinateUtils';
 import { useReactFlow } from 'reactflow';
 import { useEdgeHoverDuringLabelDrag } from './useEdgeHoverDuringLabelDrag';
@@ -174,14 +174,127 @@ export function useLabelDrag(
         console.log('[LabelDrag] Salva posizione mouse:', positionToSave);
       }
 
-      // ✅ Converti coordinate SVG in { t, offset } e salva
-      const relative = converter.labelAbsoluteToRelative(positionToSave);
-      if (relative) {
-        onPositionChange(relative);
-        console.log('[LabelDrag] Posizione salvata (relativa):', relative);
-      } else {
-        console.error('[LabelDrag] Impossibile convertire posizione SVG in relativa');
+      // ✅ FIX: Usa il segmento trovato per calcolare t e offset correttamente
+      if (!pathRef.current) {
+        console.error('[LabelDrag] pathRef.current è null');
+        return;
       }
+
+      // Proietta il punto sul segmento trovato
+      const projection = distanceToSegment(positionToSave, finalHighlight.highlightedSegment);
+
+      // Calcola t basandoci sulla posizione del segmento nel path totale
+      const pathLength = pathRef.current.getTotalLength();
+      if (pathLength === 0) {
+        console.error('[LabelDrag] pathLength è 0');
+        return;
+      }
+
+      // Trova la lunghezza accumulata fino al segmento usando getPathSegments
+      const segments = getPathSegments(pathRef.current);
+      let accumulatedLength = 0;
+
+      // Calcola la lunghezza approssimata fino al segmento
+      for (let i = 0; i < finalHighlight.highlightedSegment.index && i < segments.length; i++) {
+        const seg = segments[i];
+        const segLength = Math.sqrt(
+          Math.pow(seg.end.x - seg.start.x, 2) + Math.pow(seg.end.y - seg.start.y, 2)
+        );
+        accumulatedLength += segLength;
+      }
+
+      // Calcola la lunghezza del segmento corrente fino al punto proiettato
+      const segmentStart = finalHighlight.highlightedSegment.start;
+      const segmentEnd = finalHighlight.highlightedSegment.end;
+      const segmentLength = Math.sqrt(
+        Math.pow(segmentEnd.x - segmentStart.x, 2) + Math.pow(segmentEnd.y - segmentStart.y, 2)
+      );
+
+      // t locale sul segmento (0-1) dalla proiezione
+      const localT = projection.t;
+
+      // Lunghezza dal segmento start al punto proiettato
+      const lengthToProjection = segmentLength * localT;
+
+      // Lunghezza totale approssimata dal path start al punto proiettato
+      const totalLengthApprox = accumulatedLength + lengthToProjection;
+
+      // Normalizza usando la lunghezza totale del path
+      // Calcola il rapporto tra lunghezza approssimata e lunghezza totale dei segmenti
+      let totalSegmentsLength = 0;
+      for (const seg of segments) {
+        const segLen = Math.sqrt(
+          Math.pow(seg.end.x - seg.start.x, 2) + Math.pow(seg.end.y - seg.start.y, 2)
+        );
+        totalSegmentsLength += segLen;
+      }
+
+      // Se i segmenti hanno lunghezza totale simile al path, usa il rapporto diretto
+      // Altrimenti, cerca il punto più vicino sul path nella regione del segmento
+      let globalT: number;
+
+      if (totalSegmentsLength > 0 && Math.abs(totalSegmentsLength - pathLength) < pathLength * 0.1) {
+        // I segmenti sono una buona approssimazione
+        globalT = totalLengthApprox / totalSegmentsLength;
+      } else {
+        // Cerca il punto più vicino sul path nella regione del segmento
+        // Stima la regione del path corrispondente al segmento
+        const segmentIndexRatio = finalHighlight.highlightedSegment.index / segments.length;
+        const estimatedPathT = segmentIndexRatio;
+
+        // Cerca intorno a questa posizione
+        const searchRange = 0.1; // 10% del path intorno alla posizione stimata
+        const searchStart = Math.max(0, estimatedPathT - searchRange);
+        const searchEnd = Math.min(1, estimatedPathT + searchRange);
+        const searchSamples = 50;
+
+        let minDistance = Infinity;
+        let bestT = estimatedPathT;
+
+        for (let i = 0; i <= searchSamples; i++) {
+          const t = searchStart + (searchEnd - searchStart) * (i / searchSamples);
+          const length = pathLength * t;
+          const point = pathRef.current.getPointAtLength(length);
+
+          const dist = Math.sqrt(
+            Math.pow(projection.projectedPoint.x - point.x, 2) +
+            Math.pow(projection.projectedPoint.y - point.y, 2)
+          );
+
+          if (dist < minDistance) {
+            minDistance = dist;
+            bestT = t;
+          }
+        }
+
+        globalT = bestT;
+      }
+
+      const clampedT = Math.max(0, Math.min(1, globalT));
+
+      // Calcola offset (distanza perpendicolare dal segmento)
+      const dx = positionToSave.x - projection.projectedPoint.x;
+      const dy = positionToSave.y - projection.projectedPoint.y;
+      const offsetDistance = Math.sqrt(dx * dx + dy * dy);
+
+      // Determina segno dell'offset (destra/sinistra rispetto alla direzione del segmento)
+      const segmentDx = segmentEnd.x - segmentStart.x;
+      const segmentDy = segmentEnd.y - segmentStart.y;
+      const crossProduct = (dx * segmentDy - dy * segmentDx);
+      const signedOffset = crossProduct >= 0 ? offsetDistance : -offsetDistance;
+
+      const relative = {
+        t: clampedT,
+        offset: signedOffset,
+      };
+
+      onPositionChange(relative);
+      console.log('[LabelDrag] Posizione salvata (relativa dal segmento):', relative, {
+        segmentIndex: finalHighlight.highlightedSegment.index,
+        localT: projection.t,
+        globalT: clampedT,
+        offset: signedOffset,
+      });
     } else {
       // CASO C: Rilascio fuori da qualsiasi fascia → ripristina posizione originale
       console.log('[LabelDrag] Rilascio fuori fascia, ripristino:', originalSvg);

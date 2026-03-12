@@ -69,7 +69,7 @@ Public Class FlowCompiler
     ''' Compiles flowchart into TaskGroups (uno per nodo)
     ''' Trasforma IDE.* → Runtime.*
     ''' </summary>
-    Public Function CompileFlow(flow As Flow, Optional variables As List(Of Compiler.VariableInstance) = Nothing) As FlowCompilationResult
+    Public Function CompileFlow(flow As Flow, Optional variables As List(Of Compiler.VariableInstance) = Nothing, Optional projectId As String = Nothing) As FlowCompilationResult
         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
         Console.WriteLine($"🔧 [COMPILER][FlowCompiler] Starting compilation...")
         System.Diagnostics.Debug.WriteLine($"🔧 [COMPILER][FlowCompiler] Starting compilation...")
@@ -84,27 +84,8 @@ Public Class FlowCompiler
         Dim allTasks As New List(Of CompiledTask)()
         Dim errors As New List(Of CompilationError)()
 
-        ' ✅ Build variable mapping: "nodeId:taskInstanceId" → varId
-        ' ✅ Transform variables from frontend to runtime format
-        ' Mantiene solo ID necessari (varId, taskInstanceId, nodeId), aggiunge values per storico
-        Dim compiledVariables As New List(Of CompiledVariable)()
-        If variables IsNot Nothing Then
-            Console.WriteLine($"[FlowCompiler][VARIABLES] 🔍 Transforming {variables.Count} variables for runtime")
-            For Each var In variables
-                ' ✅ Trasformazione: mantieni solo ID, aggiungi values
-                Dim compiledVar As New CompiledVariable() With {
-                    .VarId = var.VarId,                    ' ✅ Mantiene (varKey)
-                    .TaskInstanceId = var.TaskInstanceId,  ' ✅ Mantiene (instanceId)
-                    .NodeId = var.NodeId,                  ' ✅ Mantiene (dataId)
-                    .Values = New List(Of Object)()         ' ✅ AGGIUNGE (runtime) - ❌ RIMUOVE: VarName, DdtPath (solo frontend)
-                }
-                compiledVariables.Add(compiledVar)
-                Console.WriteLine($"[FlowCompiler][VARIABLES] ✅ Transformed: varId={compiledVar.VarId}, nodeId={compiledVar.NodeId}, taskInstanceId={compiledVar.TaskInstanceId}")
-            Next
-            Console.WriteLine($"[FlowCompiler][VARIABLES] ✅ Transformed {compiledVariables.Count} variables")
-        Else
-            Console.WriteLine($"[FlowCompiler][VARIABLES] ⚠️ No variables provided")
-        End If
+        ' ✅ NOTE: Variables will be built automatically from compiled tasks after compilation
+        ' Manual variables (with empty taskInstanceId/nodeId) will be merged later
 
         ' NOTE: flow.Tasks should contain ONLY tasks referenced in node rows
         ' (not all tasks from repository). Frontend filters before sending.
@@ -422,13 +403,18 @@ Public Class FlowCompiler
         End If
         Console.WriteLine($"   Conditions available at runtime: {conditionsDict.Count}")
 
+        ' ✅ Variables are created by frontend when tasks are created
+        ' Backend only uses variables passed as parameter (from database)
+        ' Convert VariableInstance to CompiledVariable
+        Dim compiledVariables = ConvertVariablesToCompiled(variables)
+
         Dim result = New FlowCompilationResult() With {
             .TaskGroups = taskGroups,
             .EntryTaskGroupId = entryTaskGroupId,
             .Tasks = allTasks,
             .Edges = If(flow.Edges, New List(Of FlowEdge)()), ' ✅ FASE 2.4: Topologia separata
             .Conditions = conditionsDict, ' ✅ NEW: Conditions for runtime evaluation
-            .Variables = compiledVariables, ' ✅ NEW: Variables transformed for runtime (with values field)
+            .Variables = compiledVariables, ' ✅ Variables from frontend/DB (single source of truth)
             .Errors = errors ' ✅ Add errors to result
         }
 
@@ -437,6 +423,32 @@ Public Class FlowCompiler
         System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] Compilation completed: {taskGroups.Count} task groups, {allTasks.Count} tasks")
 
         Return result
+    End Function
+
+    ''' <summary>
+    ''' ✅ Convert VariableInstance (from frontend/DB) to CompiledVariable (for runtime)
+    ''' Frontend is the single source of truth for variable creation
+    ''' Backend only uses variables passed as parameter
+    ''' </summary>
+    Private Function ConvertVariablesToCompiled(variables As List(Of Compiler.VariableInstance)) As List(Of CompiledVariable)
+        Dim compiledVariables As New List(Of CompiledVariable)()
+
+        If variables IsNot Nothing Then
+            Console.WriteLine($"[FlowCompiler][VARIABLES] 🔍 Converting {variables.Count} variables from frontend/DB...")
+            For Each var In variables
+                Dim compiledVar As New CompiledVariable() With {
+                    .VarId = var.VarId,
+                    .TaskInstanceId = If(String.IsNullOrEmpty(var.TaskInstanceId), "", var.TaskInstanceId),
+                    .NodeId = If(String.IsNullOrEmpty(var.NodeId), "", var.NodeId),
+                    .Values = New List(Of Object)()
+                }
+                compiledVariables.Add(compiledVar)
+                Console.WriteLine($"[FlowCompiler][VARIABLES] ✅ Converted variable: varId={var.VarId}, varName={var.VarName}, taskInstanceId={compiledVar.TaskInstanceId}, nodeId={compiledVar.NodeId}")
+            Next
+        End If
+
+        Console.WriteLine($"[FlowCompiler][VARIABLES] ✅ Converted {compiledVariables.Count} variables")
+        Return compiledVariables
     End Function
 End Class
 

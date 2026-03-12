@@ -283,11 +283,11 @@ Public Class FlowOrchestrator
     ''' <summary>
     ''' Trova il prossimo TaskGroup eseguibile.
     '''
-    ''' Priorità:
+    ''' Priorità (DETERMINISTICA - NO FALLBACK):
     '''   1. Se FlowCompleted → Nothing (flow terminato)
-    '''   2. Se esiste CurrentNodeId (task sospeso) → riprendi quel gruppo
-    '''   3. Entry TaskGroup (prima esecuzione)
-    '''   4. Primo gruppo con ExecCondition = True non ancora eseguito
+    '''   2. Se esiste CurrentNodeId (task sospeso) → riprendi quel gruppo (solo se non già eseguito)
+    '''   3. Se c'è un nodo appena completato → valuta ExecCondition di tutti i taskgroup non eseguiti
+    '''   4. Prima esecuzione: entra nell'entry TaskGroup (solo se non già eseguito)
     ''' </summary>
     Private Function GetNextTaskGroup() As TaskGroup
         If _compilationResult Is Nothing OrElse _compilationResult.TaskGroups Is Nothing Then
@@ -299,37 +299,46 @@ Public Class FlowOrchestrator
             Return Nothing
         End If
 
-        ' Riprendi gruppo sospeso (RequiresInput precedente)
+        ' ✅ FIX: Riprendi gruppo sospeso (RequiresInput precedente) - SOLO se non già eseguito
         If Not String.IsNullOrEmpty(_state.CurrentNodeId) Then
-            Dim suspended = _compilationResult.TaskGroups.FirstOrDefault(
-                Function(tg) tg.NodeId = _state.CurrentNodeId)
+            ' ✅ FIX: Verifica PRIMA se è già eseguito
+            If _state.ExecutedTaskGroupIds.Contains(_state.CurrentNodeId) Then
+                Console.WriteLine($"[FlowOrchestrator] ⚠️ Suspended TaskGroup {_state.CurrentNodeId} already executed, resetting")
+                _state.CurrentNodeId = Nothing
+                _state.CurrentRowIndex = 0
+            Else
+                Dim suspended = _compilationResult.TaskGroups.FirstOrDefault(
+                    Function(tg) tg.NodeId = _state.CurrentNodeId)
 
-            If suspended IsNot Nothing AndAlso
-               Not _state.ExecutedTaskGroupIds.Contains(suspended.NodeId) Then
-                Dim canResume = suspended.ExecCondition Is Nothing OrElse
-                                ConditionEvaluator.EvaluateTaskGroupExecCondition(suspended.ExecCondition, _state, suspended.NodeId)
-                If canResume Then
-                    Console.WriteLine($"[FlowOrchestrator] ▶️ Resuming suspended TaskGroup {suspended.NodeId}")
-                    Return suspended
+                If suspended IsNot Nothing Then
+                    ' ✅ FIX: EvaluateTaskGroupExecCondition controlla già se è eseguito
+                    Dim canResume = ConditionEvaluator.EvaluateTaskGroupExecCondition(suspended.ExecCondition, _state, suspended.NodeId)
+                    If canResume Then
+                        Console.WriteLine($"[FlowOrchestrator] ▶️ Resuming suspended TaskGroup {suspended.NodeId}")
+                        Return suspended
+                    End If
                 End If
-            End If
 
-            ' Gruppo sospeso non più eseguibile: resetta e cerca il prossimo
-            _state.CurrentNodeId = Nothing
-            _state.CurrentRowIndex = 0
+                ' Gruppo sospeso non più eseguibile: resetta
+                _state.CurrentNodeId = Nothing
+                _state.CurrentRowIndex = 0
+            End If
         End If
 
-        ' ✅ NEW: Se c'è un nodo appena completato, valuta tutte le ExecCondition
+        ' ✅ FIX: Se c'è un nodo appena completato, valuta tutte le ExecCondition
         ' La ExecCondition di ogni TaskGroup è già l'OR delle condizioni degli edge entranti
-        ' A runtime non esistono "edge", solo ExecCondition da valutare
         If Not String.IsNullOrEmpty(_state.LastCompletedNodeId) Then
-            ' Itera su tutti i TaskGroup non ancora eseguiti
-            For Each tg In _compilationResult.TaskGroups
-                If _state.ExecutedTaskGroupIds.Contains(tg.NodeId) Then Continue For
+            Console.WriteLine($"[FlowOrchestrator] 🔍 Evaluating ExecConditions after node {_state.LastCompletedNodeId} completed")
 
-                ' Valuta semplicemente la ExecCondition (che include già tutto)
-                Dim canEnter = tg.ExecCondition Is Nothing OrElse
-                               ConditionEvaluator.EvaluateTaskGroupExecCondition(tg.ExecCondition, _state, tg.NodeId)
+            For Each tg In _compilationResult.TaskGroups
+                ' ✅ FIX: Skip taskgroup già eseguiti
+                If _state.ExecutedTaskGroupIds.Contains(tg.NodeId) Then
+                    Console.WriteLine($"[FlowOrchestrator] ⏭️ Skipping TaskGroup {tg.NodeId} (already executed)")
+                    Continue For
+                End If
+
+                ' ✅ FIX: Valuta ExecCondition (include controllo se già eseguito per entry nodes)
+                Dim canEnter = ConditionEvaluator.EvaluateTaskGroupExecCondition(tg.ExecCondition, _state, tg.NodeId)
 
                 If canEnter Then
                     Console.WriteLine($"[FlowOrchestrator] ▶️ Entering TaskGroup {tg.NodeId} after node {_state.LastCompletedNodeId} completed")
@@ -341,41 +350,32 @@ Public Class FlowOrchestrator
             Next
 
             _state.LastCompletedNodeId = Nothing ' Reset anche se non trovato
+            Console.WriteLine($"[FlowOrchestrator] ⚠️ No TaskGroup executable after node completion")
         End If
 
-        ' Prima esecuzione: entra nell'entry TaskGroup
+        ' ✅ FIX: Prima esecuzione: entra nell'entry TaskGroup (solo se non già eseguito)
         If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
-            Dim entry = _compilationResult.TaskGroups.FirstOrDefault(
-                Function(tg) tg.NodeId = _entryTaskGroupId)
-            If entry IsNot Nothing AndAlso
-               Not _state.ExecutedTaskGroupIds.Contains(entry.NodeId) Then
-                Dim canEnter = entry.ExecCondition Is Nothing OrElse
-                               ConditionEvaluator.EvaluateTaskGroupExecCondition(entry.ExecCondition, _state, entry.NodeId)
-                If canEnter Then
-                    _state.CurrentNodeId = entry.NodeId
-                    _state.CurrentRowIndex = 0
-                    Console.WriteLine($"[FlowOrchestrator] ▶️ Entering entry TaskGroup {entry.NodeId}")
-                    Return entry
+            ' ✅ FIX: Verifica PRIMA se è già eseguito
+            If _state.ExecutedTaskGroupIds.Contains(_entryTaskGroupId) Then
+                Console.WriteLine($"[FlowOrchestrator] ⚠️ Entry TaskGroup {_entryTaskGroupId} already executed")
+            Else
+                Dim entry = _compilationResult.TaskGroups.FirstOrDefault(
+                    Function(tg) tg.NodeId = _entryTaskGroupId)
+                If entry IsNot Nothing Then
+                    ' ✅ FIX: EvaluateTaskGroupExecCondition controlla già se è eseguito per entry nodes
+                    Dim canEnter = ConditionEvaluator.EvaluateTaskGroupExecCondition(entry.ExecCondition, _state, entry.NodeId)
+                    If canEnter Then
+                        _state.CurrentNodeId = entry.NodeId
+                        _state.CurrentRowIndex = 0
+                        Console.WriteLine($"[FlowOrchestrator] ▶️ Entering entry TaskGroup {entry.NodeId}")
+                        Return entry
+                    End If
                 End If
             End If
         End If
 
-        ' Cerca il primo gruppo eseguibile non ancora eseguito (fallback)
-        For Each tg In _compilationResult.TaskGroups
-            If _state.ExecutedTaskGroupIds.Contains(tg.NodeId) Then Continue For
-
-            Dim canExecute = tg.ExecCondition Is Nothing OrElse
-                             ConditionEvaluator.EvaluateTaskGroupExecCondition(tg.ExecCondition, _state, tg.NodeId)
-            If canExecute Then
-                If _state.CurrentNodeId <> tg.NodeId Then
-                    _state.CurrentNodeId = tg.NodeId
-                    _state.CurrentRowIndex = 0
-                End If
-                Console.WriteLine($"[FlowOrchestrator] ▶️ Entering TaskGroup {tg.NodeId}")
-                Return tg
-            End If
-        Next
-
+        ' ✅ NO FALLBACK: Se nessuna condizione è soddisfatta, il flow è completato
+        Console.WriteLine($"[FlowOrchestrator] ✅ No more TaskGroups executable - flow completed")
         Return Nothing
     End Function
 

@@ -211,19 +211,40 @@ Public Class CompiledBackendCallTask
     Inherits CompiledTask
 
     ''' <summary>
-    ''' Endpoint URL
+    ''' Endpoint URL (legacy - mantenuto per retrocompatibilità)
     ''' </summary>
     Public Property Endpoint As String
 
     ''' <summary>
-    ''' HTTP Method (GET, POST, ecc.)
+    ''' HTTP Method (GET, POST, ecc.) (legacy - mantenuto per retrocompatibilità)
     ''' </summary>
     Public Property Method As String
 
     ''' <summary>
-    ''' Payload della richiesta
+    ''' Payload della richiesta (legacy - mantenuto per retrocompatibilità)
     ''' </summary>
     Public Property Payload As Dictionary(Of String, Object)
+
+    ''' <summary>
+    ''' Input mappings: array di { internalName, variable, apiParam }
+    ''' </summary>
+    Public Property Inputs As List(Of Dictionary(Of String, Object))
+
+    ''' <summary>
+    ''' Output mappings: array di { internalName, variable, apiField }
+    ''' </summary>
+    Public Property Outputs As List(Of Dictionary(Of String, Object))
+
+    ''' <summary>
+    ''' Mock table: array di righe con { id, inputs: {...}, outputs: {...} }
+    ''' Compilata solo se esiste e ha almeno una riga
+    ''' </summary>
+    Public Property MockTable As List(Of Dictionary(Of String, Object))
+
+    ''' <summary>
+    ''' Config completo per retrocompatibilità
+    ''' </summary>
+    Public Property Config As Dictionary(Of String, Object)
 
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
@@ -240,6 +261,9 @@ Public Class CompiledBackendCallTask
     Public Sub New()
         MyBase.New()
         Payload = New Dictionary(Of String, Object)()
+        Inputs = New List(Of Dictionary(Of String, Object))()
+        Outputs = New List(Of Dictionary(Of String, Object))()
+        Config = New Dictionary(Of String, Object)()
     End Sub
 End Class
 

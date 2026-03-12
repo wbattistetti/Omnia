@@ -43,15 +43,130 @@ Public Class SimpleTaskCompiler
             Case TaskTypes.BackendCall
                 Dim backendTask As New CompiledBackendCallTask()
                 If task.Value IsNot Nothing Then
+                    ' ✅ Endpoint come oggetto (può essere Dictionary o JObject)
                     If task.Value.ContainsKey("endpoint") Then
-                        backendTask.Endpoint = If(task.Value("endpoint")?.ToString(), "")
+                        Dim endpointObj = task.Value("endpoint")
+                        If endpointObj IsNot Nothing Then
+                            ' Gestisci Dictionary(Of String, Object)
+                            If TypeOf endpointObj Is Dictionary(Of String, Object) Then
+                                Dim ep = CType(endpointObj, Dictionary(Of String, Object))
+                                If ep.ContainsKey("url") Then
+                                    backendTask.Endpoint = If(ep("url")?.ToString(), "")
+                                End If
+                                If ep.ContainsKey("method") Then
+                                    backendTask.Method = If(ep("method")?.ToString(), "POST")
+                                End If
+                                ' Gestisci anche JObject (se viene da JSON)
+                            ElseIf TypeOf endpointObj Is Newtonsoft.Json.Linq.JObject Then
+                                Dim ep = CType(endpointObj, Newtonsoft.Json.Linq.JObject)
+                                If ep("url") IsNot Nothing Then
+                                    backendTask.Endpoint = If(ep("url")?.ToString(), "")
+                                End If
+                                If ep("method") IsNot Nothing Then
+                                    backendTask.Method = If(ep("method")?.ToString(), "POST")
+                                End If
+                                ' Fallback: se è già una stringa (retrocompatibilità)
+                            ElseIf TypeOf endpointObj Is String Then
+                                backendTask.Endpoint = CStr(endpointObj)
+                            End If
+                        End If
                     End If
-                    If task.Value.ContainsKey("method") Then
+
+                    ' ✅ Method separato (per retrocompatibilità se non è dentro endpoint)
+                    If task.Value.ContainsKey("method") AndAlso String.IsNullOrEmpty(backendTask.Method) Then
                         backendTask.Method = If(task.Value("method")?.ToString(), "POST")
                     End If
-                    ' Copia tutto il value come payload
+
+                    ' ✅ Copia inputs se esiste
+                    If task.Value.ContainsKey("inputs") Then
+                        Dim inputsValue = task.Value("inputs")
+                        If inputsValue IsNot Nothing Then
+                            If TypeOf inputsValue Is List(Of Object) Then
+                                ' Converti List(Of Object) in List(Of Dictionary)
+                                Dim inputsList = CType(inputsValue, List(Of Object))
+                                For Each inp In inputsList
+                                    If TypeOf inp Is Dictionary(Of String, Object) Then
+                                        backendTask.Inputs.Add(CType(inp, Dictionary(Of String, Object)))
+                                    End If
+                                Next
+                            ElseIf TypeOf inputsValue Is List(Of Dictionary(Of String, Object)) Then
+                                backendTask.Inputs = CType(inputsValue, List(Of Dictionary(Of String, Object)))
+                            End If
+                        End If
+                    End If
+
+                    ' ✅ Copia outputs se esiste
+                    If task.Value.ContainsKey("outputs") Then
+                        Dim outputsValue = task.Value("outputs")
+                        If outputsValue IsNot Nothing Then
+                            If TypeOf outputsValue Is List(Of Object) Then
+                                ' Converti List(Of Object) in List(Of Dictionary)
+                                Dim outputsList = CType(outputsValue, List(Of Object))
+                                For Each outp In outputsList
+                                    If TypeOf outp Is Dictionary(Of String, Object) Then
+                                        backendTask.Outputs.Add(CType(outp, Dictionary(Of String, Object)))
+                                    End If
+                                Next
+                            ElseIf TypeOf outputsValue Is List(Of Dictionary(Of String, Object)) Then
+                                backendTask.Outputs = CType(outputsValue, List(Of Dictionary(Of String, Object)))
+                            End If
+                        End If
+                    End If
+
+                    ' ✅ Copia mockTable SOLO se esiste E ha almeno una riga
+                    If task.Value.ContainsKey("mockTable") Then
+                        Dim mockTableValue = task.Value("mockTable")
+                        If mockTableValue IsNot Nothing Then
+                            ' Verifica se è una lista/array con almeno un elemento
+                            Dim hasRows As Boolean = False
+
+                            If TypeOf mockTableValue Is IList Then
+                                Dim list = CType(mockTableValue, IList)
+                                hasRows = list.Count > 0
+                            ElseIf TypeOf mockTableValue Is Array Then
+                                Dim arr = CType(mockTableValue, Array)
+                                hasRows = arr.Length > 0
+                            ElseIf TypeOf mockTableValue Is List(Of Object) Then
+                                Dim list = CType(mockTableValue, List(Of Object))
+                                hasRows = list.Count > 0
+                            ElseIf TypeOf mockTableValue Is Newtonsoft.Json.Linq.JArray Then
+                                Dim jArray = CType(mockTableValue, Newtonsoft.Json.Linq.JArray)
+                                hasRows = jArray.Count > 0
+                            End If
+
+                            ' ✅ Compila mockTable solo se ha righe
+                            If hasRows Then
+                                If TypeOf mockTableValue Is List(Of Object) Then
+                                    ' Converti List(Of Object) in List(Of Dictionary)
+                                    Dim mockList = CType(mockTableValue, List(Of Object))
+                                    For Each row In mockList
+                                        If TypeOf row Is Dictionary(Of String, Object) Then
+                                            backendTask.MockTable.Add(CType(row, Dictionary(Of String, Object)))
+                                        End If
+                                    Next
+                                ElseIf TypeOf mockTableValue Is List(Of Dictionary(Of String, Object)) Then
+                                    backendTask.MockTable = CType(mockTableValue, List(Of Dictionary(Of String, Object)))
+                                ElseIf TypeOf mockTableValue Is Newtonsoft.Json.Linq.JArray Then
+                                    ' Converti JArray in List(Of Dictionary)
+                                    Dim jArray = CType(mockTableValue, Newtonsoft.Json.Linq.JArray)
+                                    For Each item In jArray
+                                        If TypeOf item Is Newtonsoft.Json.Linq.JObject Then
+                                            Dim dict = New Dictionary(Of String, Object)()
+                                            Dim jObj = CType(item, Newtonsoft.Json.Linq.JObject)
+                                            For Each prop In jObj.Properties()
+                                                dict(prop.Name) = prop.Value?.ToObject(Of Object)()
+                                            Next
+                                            backendTask.MockTable.Add(dict)
+                                        End If
+                                    Next
+                                End If
+                            End If
+                        End If
+                    End If
+
+                    ' ✅ Copia anche tutto il value in Config per retrocompatibilità
                     For Each kvp In task.Value
-                        backendTask.Payload(kvp.Key) = kvp.Value
+                        backendTask.Config(kvp.Key) = kvp.Value
                     Next
                 End If
                 compiledTask = backendTask

@@ -224,7 +224,25 @@ export function compileFlow(
           type: 'flowchart',
           nodeId: node.id,
           rowId: row.id
-        }
+        },
+        // ✅ Flatten backend-specific fields directly on CompiledTask for runtime access
+        // This allows task.config, task.mockTable, etc. to work directly
+        // Support both flat structure (task.mockTable) and nested (task.config.mockTable)
+        const mockTable = task.mockTable || (task.config?.mockTable);
+        const inputs = task.inputs || (task.config?.inputs);
+        const outputs = task.outputs || (task.config?.outputs);
+        const endpoint = task.endpoint || (task.config?.endpoint);
+
+        ...(task.config ? { config: task.config } : {}),
+        ...(endpoint ? { endpoint } : {}),
+        ...(inputs ? { inputs } : {}),
+        ...(outputs ? { outputs } : {}),
+        ...(mockTable ? { mockTable } : {}),
+        // Also flatten DDT fields for direct access
+        ...(task.mainData ? { mainData: task.mainData } : {}),
+        ...(task.steps ? { steps: task.steps } : {}),
+        ...(task.constraints ? { constraints: task.constraints } : {}),
+        ...(task.intents ? { intents: task.intents } : {})
       };
 
       tasks.push(compiledTask);

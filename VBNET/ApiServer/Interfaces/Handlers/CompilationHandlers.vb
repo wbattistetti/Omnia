@@ -376,9 +376,22 @@ Namespace ApiServer.Handlers
                     Next
                 End If
 
+                ' ✅ Extract projectId from request body (if available)
+                Dim projectId As String = Nothing
+                Try
+                    Dim requestObj = Newtonsoft.Json.Linq.JObject.Parse(body)
+                    If requestObj("projectId") IsNot Nothing Then
+                        projectId = requestObj("projectId").ToString()
+                        Console.WriteLine($"[HandleCompileFlow] ✅ Extracted projectId: {projectId}")
+                    End If
+                Catch
+                    ' projectId not available - will skip variable saving
+                    Console.WriteLine($"[HandleCompileFlow] ⚠️ Could not extract projectId from request body")
+                End Try
+
                 ' Compile flow
                 Dim compiler = New Compiler.FlowCompiler()
-                Dim compilationResult = compiler.CompileFlow(flow, request.Variables)
+                Dim compilationResult = compiler.CompileFlow(flow, request.Variables, projectId)
 
                 Console.WriteLine($"✅ [HandleCompileFlow] Compilation successful: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
                 System.Diagnostics.Debug.WriteLine($"✅ [HandleCompileFlow] Compilation successful: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")

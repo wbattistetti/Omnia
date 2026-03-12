@@ -267,6 +267,201 @@ export class OrchestratorSessionManager {
           });
           eventEmitter.emit('userInputProcessed', { input, matchStatus, extractedValues, taskId: task.id });
         },
+        onBackendCall: async (config: any) => {
+          console.log('[ORCHESTRATOR SESSION] BackendCall requested', {
+            sessionId,
+            taskId: task.id,
+            hasConfig: !!config,
+            hasMockTable: !!(config?.mockTable || (task as any).mockTable || (task as any).value?.mockTable)
+          });
+
+          // Get config from task (support both flattened and value-wrapped structures)
+          const taskConfig = config || (task as any).config || (task as any).value?.config;
+          const mockTable = taskConfig?.mockTable || (task as any).mockTable || (task as any).value?.mockTable;
+
+          if (!taskConfig) {
+            console.error('[ORCHESTRATOR SESSION] BackendCall config not found', {
+              sessionId,
+              taskId: task.id,
+              taskKeys: Object.keys(task),
+              hasValue: !!(task as any).value,
+              valueKeys: (task as any).value ? Object.keys((task as any).value) : []
+            });
+            return {
+              success: false,
+              error: 'BackendCall config not found'
+            };
+          }
+
+          // Get current execution state variableStore
+          const variableStore = session.executionState?.variableStore || {};
+
+          console.log('[ORCHESTRATOR SESSION] BackendCall matching', {
+            sessionId,
+            taskId: task.id,
+            hasMockTable: !!mockTable,
+            mockTableRows: mockTable?.length || 0,
+            inputsCount: taskConfig.inputs?.length || 0,
+            outputsCount: taskConfig.outputs?.length || 0,
+            variableStoreKeys: Object.keys(variableStore)
+          });
+
+          // ✅ Deterministic typed matching function
+          // Matches input values with type checking, null/undefined handling, and deep comparison
+          const matchesInput = (rowValue: any, currentValue: any): boolean => {
+            // ✅ Type check: same type required (10 !== "10")
+            if (typeof rowValue !== typeof currentValue) {
+              return false;
+            }
+
+            // ✅ Null/undefined handling (explicit)
+            if (rowValue === null && currentValue === null) return true;
+            if (rowValue === null || currentValue === null) return false;
+            if (rowValue === undefined && currentValue === undefined) return true;
+            if (rowValue === undefined || currentValue === undefined) return false;
+
+            // ✅ Deep comparison for objects/arrays
+            if (typeof rowValue === 'object' && rowValue !== null) {
+              // Handle arrays and objects
+              return JSON.stringify(rowValue) === JSON.stringify(currentValue);
+            }
+
+            // ✅ Exact match for primitives (case-sensitive for strings)
+            return rowValue === currentValue;
+          };
+
+          // If mockTable exists, try to match input values
+          if (mockTable && Array.isArray(mockTable) && mockTable.length > 0) {
+            const inputs = taskConfig.inputs || [];
+            const outputs = taskConfig.outputs || [];
+
+            // Build current input values from variableStore
+            const currentInputValues: Record<string, any> = {};
+            for (const input of inputs) {
+              if (input.variable && input.internalName) {
+                const varValue = variableStore[input.variable];
+                currentInputValues[input.internalName] = varValue;
+              }
+            }
+
+            console.log('[ORCHESTRATOR SESSION] BackendCall current input values', {
+              sessionId,
+              taskId: task.id,
+              currentInputValues,
+              inputDefinitions: inputs.map((inp: any) => ({
+                internalName: inp.internalName,
+                variable: inp.variable
+              }))
+            });
+
+            // ✅ Find ALL matching rows (for validation)
+            const matchingRows = mockTable.filter((row: any) => {
+              if (!row.inputs || typeof row.inputs !== 'object') {
+                return false;
+              }
+
+              // ✅ Complete match: ALL inputs must match
+              return inputs.every((input: any) => {
+                if (!input.internalName) return false;
+                const rowValue = row.inputs[input.internalName];
+                const currentValue = currentInputValues[input.internalName];
+                return matchesInput(rowValue, currentValue);
+              });
+            });
+
+            // ✅ Validation: exactly 0 or 1 row (never 2+)
+            if (matchingRows.length === 0) {
+              // No match found: task executed without modifying variables
+              console.warn('[ORCHESTRATOR SESSION] BackendCall no matching row found', {
+                sessionId,
+                taskId: task.id,
+                currentInputValues,
+                mockTableRows: mockTable.length,
+                mockTableRowIds: mockTable.map((r: any) => r.id || 'no-id'),
+                message: 'Task executed successfully but no mockTable row matched. No variables modified.'
+              });
+              // ✅ success: true means "task executed without modifying variables" (not "mock found")
+              return {
+                success: true,
+                variables: {} // Empty = no variables modified
+              };
+            }
+
+            if (matchingRows.length > 1) {
+              // ⚠️ ERROR: Multiple rows match (non-deterministic)
+              console.error('[ORCHESTRATOR SESSION] BackendCall multiple rows match', {
+                sessionId,
+                taskId: task.id,
+                matchingRowsCount: matchingRows.length,
+                matchingRowIds: matchingRows.map((r: any) => r.id || 'no-id'),
+                currentInputValues,
+                message: 'MockTable must have unique input combinations. Multiple rows matched.'
+              });
+              return {
+                success: false,
+                error: `Multiple mockTable rows match (${matchingRows.length} rows). MockTable must have unique input combinations.`,
+                variables: {}
+              };
+            }
+
+            // ✅ Exactly 1 row matched
+            const matchedRow = matchingRows[0];
+            console.log('[ORCHESTRATOR SESSION] BackendCall matched row', {
+              sessionId,
+              taskId: task.id,
+              rowId: matchedRow.id || 'no-id',
+              rowInputs: matchedRow.inputs,
+              rowOutputs: matchedRow.outputs
+            });
+
+            if (matchedRow.outputs) {
+              // Map output values to variableStore varIds
+              const outputVariables: Record<string, any> = {};
+              for (const output of outputs) {
+                if (output.variable && output.internalName) {
+                  const outputValue = matchedRow.outputs[output.internalName];
+                  if (outputValue !== undefined) {
+                    outputVariables[output.variable] = outputValue;
+                  }
+                }
+              }
+
+              console.log('[ORCHESTRATOR SESSION] BackendCall returning matched outputs', {
+                sessionId,
+                taskId: task.id,
+                outputVariables,
+                outputCount: Object.keys(outputVariables).length
+              });
+
+              return {
+                success: true,
+                variables: outputVariables
+              };
+            } else {
+              // Row matched but no outputs defined
+              console.warn('[ORCHESTRATOR SESSION] BackendCall matched row has no outputs', {
+                sessionId,
+                taskId: task.id,
+                rowId: matchedRow.id || 'no-id'
+              });
+              return {
+                success: true,
+                variables: {} // No outputs to write
+              };
+            }
+          } else {
+            // No mockTable: return empty (or could make actual API call in future)
+            console.log('[ORCHESTRATOR SESSION] BackendCall no mockTable, returning empty', {
+              sessionId,
+              taskId: task.id,
+              message: 'No mockTable defined. Task executed without backend call.'
+            });
+            return {
+              success: true,
+              variables: {}
+            };
+          }
+        },
         translations: translations
       });
     };

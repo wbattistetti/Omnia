@@ -109,6 +109,49 @@ Public Class VariableMappingService
     End Function
 
     ''' <summary>
+    ''' ✅ NEW: Saves variables to database via POST API
+    ''' Used to stabilize GUIDs for conditions
+    ''' </summary>
+    Public Shared Function SaveVariables(
+        projectId As String,
+        variables As List(Of Dictionary(Of String, Object))
+    ) As Boolean
+        If String.IsNullOrEmpty(projectId) OrElse variables Is Nothing OrElse variables.Count = 0 Then
+            Return False
+        End If
+
+        Try
+            Dim requestBody As New Dictionary(Of String, Object) From {
+                {"variables", variables}
+            }
+
+            Dim json = JsonConvert.SerializeObject(requestBody)
+            Dim content As New StringContent(json, Encoding.UTF8, "application/json")
+
+            Dim response = _httpClient.PostAsync(
+                $"http://localhost:3100/api/projects/{projectId}/variables",
+                content
+            ).Result
+
+            If response.IsSuccessStatusCode Then
+                Dim result = response.Content.ReadAsStringAsync().Result
+                Console.WriteLine($"[VariableMappingService] ✅ Saved {variables.Count} variables to DB: {result}")
+                ' Clear cache after saving to force refresh
+                ClearCache()
+                Return True
+            Else
+                Dim errorText = response.Content.ReadAsStringAsync().Result
+                Console.WriteLine($"[VariableMappingService] ❌ Failed to save variables: {response.StatusCode} - {errorText}")
+                Return False
+            End If
+        Catch ex As Exception
+            Console.WriteLine($"[VariableMappingService] ❌ Error saving variables: {ex.Message}")
+            Console.WriteLine($"[VariableMappingService]   StackTrace: {ex.StackTrace}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
     ''' Clears the cache (useful when variables are created/deleted).
     ''' </summary>
     Public Shared Sub ClearCache()
