@@ -120,7 +120,8 @@ export function transformEdgeToSimplified(edge: any): SimplifiedEdge {
     markerEnd: edge.markerEnd,
   };
 
-  // ✅ Copy persistent fields from top-level (NOT from data)
+  // ✅ Copy persistent fields from top-level OR data (for backward compatibility)
+  // labelPositionRelative is saved in data by FlowActionsContext (ReactFlow doesn't pass top-level custom fields)
   const persistentFields = [
     'conditionId',
     'isElse',
@@ -131,8 +132,12 @@ export function transformEdgeToSimplified(edge: any): SimplifiedEdge {
   ];
 
   persistentFields.forEach(field => {
+    // ✅ CRITICAL FIX: Check both top-level and data for labelPositionRelative
+    // FlowActionsContext saves it in data, but we want to save it top-level in DB
     if (edge[field] !== undefined) {
       (simplified as any)[field] = edge[field];
+    } else if (edge.data && edge.data[field] !== undefined) {
+      (simplified as any)[field] = edge.data[field];
     }
   });
 
@@ -173,7 +178,8 @@ export function transformEdgeToReactFlow(simplified: SimplifiedEdge): any {
     markerEnd: simplified.markerEnd,
   };
 
-  // ✅ Copy persistent fields to top-level (NOT to data)
+  // ✅ Copy persistent fields to top-level AND data (for ReactFlow compatibility)
+  // ReactFlow doesn't pass top-level custom fields to components, so we also put them in data
   const persistentFields = [
     'conditionId',
     'isElse',
@@ -183,9 +189,17 @@ export function transformEdgeToReactFlow(simplified: SimplifiedEdge): any {
     'labelPositionSvg'
   ];
 
+  // Initialize data if it doesn't exist
+  if (!reactFlowEdge.data) {
+    reactFlowEdge.data = {};
+  }
+
   persistentFields.forEach(field => {
     if ((simplified as any)[field] !== undefined) {
+      // ✅ CRITICAL FIX: Put in both top-level AND data
+      // Top-level for consistency, data for ReactFlow component access
       reactFlowEdge[field] = (simplified as any)[field];
+      reactFlowEdge.data[field] = (simplified as any)[field];
     }
   });
 
