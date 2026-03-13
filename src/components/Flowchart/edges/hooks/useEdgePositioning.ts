@@ -109,10 +109,9 @@ export function useEdgePositioning(
     return () => window.removeEventListener('resize', handleResize);
   }, [updatePositions]);
 
-  // ✅ NEW MODEL: Update when labelPositionAbsolute changes
-  useEffect(() => {
-    updatePositions();
-  }, [labelPositionAbsolute?.x, labelPositionAbsolute?.y, updatePositions]);
+  // ✅ REMOVED: Label position is now calculated directly in CustomEdge render
+  // No need to watch labelPositionAbsolute here - it causes lag
+  // Label position is passed directly to EdgeLabel, bypassing this hook
 
   return positions;
 }

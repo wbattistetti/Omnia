@@ -25,7 +25,7 @@ import { CoordinateConverter } from './utils/coordinateUtils';
 import { FlowStateBridge } from '../../../services/FlowStateBridge';
 import { useFlowActions } from '../../../context/FlowActionsContext';
 import { getPathSegments, PathSegment } from './utils/pathUtils';
-import { useLabelPosition } from './hooks/useLabelPosition';
+import { computeAbsoluteFromRelative } from './utils/labelPositionUtils';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -121,25 +121,35 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     });
   }, [id, labelPositionRelative, props, data]);
 
-  // ✅ ARCHITECTURE PRINCIPLE #2: Single hook responsible for derived value
-  // This is the ONLY place that computes {x, y} from labelPositionRelative
-  const labelPositionAbsolute = useLabelPosition(
+  // ✅ ZERO-LAG ARCHITECTURE: Calculate directly during render, no hooks, no effects
+  // This eliminates all lag because calculation happens in same render cycle as path update
+  // Path is already updated by ReactFlow → we calculate {x, y} immediately → same frame
+  const labelPositionAbsolute = computeAbsoluteFromRelative(
     pathRef,
-    labelPositionRelative,
-    sourceX,
-    sourceY,
-    targetX,
-    targetY
+    labelPositionRelative
   );
 
-  // ✅ Use positioning hook with computed absolute coordinates
+  // ✅ Calculate labelSvgPosition directly (no useEdgePositioning for label)
+  // This eliminates the useState/useEffect lag in useEdgePositioning
+  const labelSvgPosition = labelPositionAbsolute || (() => {
+    // Fallback to midpoint if no relative position
+    if (!pathRef.current) return { x: 0, y: 0 };
+    const path = pathRef.current;
+    const pathLength = path.getTotalLength();
+    if (pathLength === 0) return { x: 0, y: 0 };
+    const midPoint = path.getPointAtLength(pathLength / 2);
+    return { x: midPoint.x, y: midPoint.y };
+  })();
+
+  // ✅ Use positioning hook ONLY for EdgeControls (midPoint, sourceScreen)
+  // NOT for label position (which is calculated directly above)
   const positions = useEdgePositioning(
     pathRef,
     sourceX,
     sourceY,
     targetX,
     targetY,
-    labelPositionAbsolute // ✅ Computed, not saved
+    null // ✅ Don't pass labelPositionAbsolute - we calculate it directly above
   );
 
   // ✅ Use hover hook
@@ -690,7 +700,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       <EdgeLabelRenderer>
         <EdgeLabel
           label={label}
-          position={positions.labelSvgPosition}
+          position={labelSvgPosition} // ✅ Direct calculation, no useEdgePositioning
           isHovered={hover.state.labelHovered}
           onEdit={handleEditLabel}
           onUncondition={handleUncondition}
