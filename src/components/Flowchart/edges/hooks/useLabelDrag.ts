@@ -12,8 +12,8 @@ import { PathSegment, getSegmentMidpoint } from '../utils/pathUtils';
 export interface UseLabelDragOptions {
   labelRef: RefObject<HTMLElement>;
   pathRef: RefObject<SVGPathElement>;
-  segments: PathSegment[]; // ✅ Segments for THIS edge only
-  onPositionChange: (position: { x: number; y: number }) => void; // ✅ Absolute coordinates
+  segments: PathSegment[]; // ✅ Segments for hit-area highlighting (used by EdgePathRenderer via CustomEdge, not directly here)
+  onPositionChange: (labelPositionRelative: { t: number; offset: number }) => void; // ✅ ARCHITECTURE PRINCIPLE #3: Only saves relative
   enabled?: boolean;
 }
 
@@ -49,7 +49,7 @@ export function useLabelDrag(
   const {
     labelRef,
     pathRef,
-    segments,
+    segments: _segments, // Used by EdgePathRenderer for hit-areas via CustomEdge, not directly in this hook
     onPositionChange,
     enabled = true,
   } = options;
@@ -85,7 +85,15 @@ export function useLabelDrag(
   const endDrag = useCallback(() => {
     const state = dragStateRef.current; // ✅ Legge sempre lo stato più recente
 
+    console.log('[useLabelDrag] 🔴 endDrag called', {
+      isDragging: state.isDragging,
+      hasHighlightSegment: !!state.highlightSegment,
+      highlightSegment: state.highlightSegment,
+      hasPathRef: !!pathRef.current,
+    });
+
     if (!state.isDragging || !pathRef.current) {
+      console.log('[useLabelDrag] ❌ endDrag early return - not dragging or no pathRef');
       setDragState({
         isDragging: false,
         highlightedEdgeId: null,
@@ -107,18 +115,30 @@ export function useLabelDrag(
         index: state.highlightSegment.index,
       });
 
-      // ✅ Pass absolute coordinates directly - no t, no offset
-      onPositionChange({ x: midpoint.x, y: midpoint.y });
-    }
-    // ✅ Se nessun segmento evidenziato → NON salvare nulla, la label torna alla posizione originale
+      console.log('[useLabelDrag] ✅ midpoint calculated:', midpoint);
 
+      // ✅ ARCHITECTURE PRINCIPLE #3: Convert absolute to relative and save ONLY relative
+      const relative = converter.labelAbsoluteToRelative(midpoint);
+      console.log('[useLabelDrag] ✅ relative calculated:', relative);
+
+      if (relative) {
+        console.log('[useLabelDrag] 📤 Calling onPositionChange with relative:', relative);
+        onPositionChange(relative);
+      } else {
+        console.warn('[useLabelDrag] ❌ Failed to convert midpoint to relative position');
+      }
+    } else {
+      console.log('[useLabelDrag] ⚠️ No highlightSegment, not saving position - label will return to original');
+    }
+
+    // ✅ Clear highlightSegment here (after using it)
     setDragState({
       isDragging: false,
       highlightedEdgeId: null,
       highlightSegment: null,
       mouseSvg: null,
     });
-  }, [pathRef, onPositionChange]); // ✅ NO dragState dep! Ora è stabile
+  }, [pathRef, onPositionChange, converter]); // ✅ Added converter dependency
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -191,12 +211,17 @@ export function useLabelDrag(
   }, []); // ✅ Ora è stabile - nessuna dep su dragState
 
   const onSegmentLeave = useCallback(() => {
-    if (!isDraggingRef.current) return; // ✅ Legge sempre il valore più recente
+    // ✅ ARCHITECTURE FIX: Don't clear highlightSegment during drag
+    // Keep it until drop to ensure we have the segment info when endDrag is called
+    // This prevents the label from returning to original position if mouse briefly leaves hit-area
+    // We'll clear it in endDrag instead
+    if (!isDraggingRef.current) return;
 
+    // ✅ Only clear highlightedEdgeId (for visual feedback), but keep highlightSegment
     setDragState((s) => ({
       ...s,
       highlightedEdgeId: null,
-      highlightSegment: null,
+      // highlightSegment: null, // ✅ Keep this until drop
     }));
   }, []); // ✅ Ora è stabile - nessuna dep su dragState
 
@@ -210,10 +235,10 @@ export function useLabelDrag(
     highlightedEdgeId: dragState.highlightedEdgeId,
     highlightedSegment: dragState.highlightSegment
       ? {
-          start: dragState.highlightSegment.start,
-          end: dragState.highlightSegment.end,
-          index: dragState.highlightSegment.index,
-        }
+        start: dragState.highlightSegment.start,
+        end: dragState.highlightSegment.end,
+        index: dragState.highlightSegment.index,
+      }
       : null,
     onSegmentEnter,
     onSegmentLeave,

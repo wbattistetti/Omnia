@@ -123,13 +123,16 @@ export const FlowActionsProvider: React.FC<FlowActionsProviderProps> = ({
     updateEdge: (edgeId: string, updates: Partial<EdgeData>) => {
       if (setEdgesRef.current) {
         // ✅ Separate persistent fields from data-only fields
+        // ⚠️ CRITICAL: ReactFlow does NOT pass top-level custom fields to edge components
+        // Only standard ReactFlow props (id, source, target, sourceX/Y, targetX/Y, data, style, etc.) are passed
+        // Custom fields MUST be in data to be accessible via props.data.fieldName
         const persistentFields = [
           'conditionId',
           'isElse',
           'linkStyle',
           'controlPoints',
-          'labelPositionRelative',
-          'labelPositionSvg'
+          // ❌ REMOVED: 'labelPositionRelative' — ReactFlow doesn't pass top-level custom fields to components
+          // Must be in data to be readable via props.data.labelPositionRelative
         ];
 
         const persistentUpdates: any = {};
@@ -148,8 +151,8 @@ export const FlowActionsProvider: React.FC<FlowActionsProviderProps> = ({
             edge.id === edgeId
               ? {
                   ...edge,
-                  ...persistentUpdates,  // ✅ Top-level
-                  data: { ...(edge.data || {}), ...dataOnlyUpdates }  // ✅ Only non-persistent
+                  ...persistentUpdates,  // ✅ Top-level (only fields ReactFlow passes as props)
+                  data: { ...(edge.data || {}), ...dataOnlyUpdates }  // ✅ Custom fields (accessible via props.data)
                 }
               : edge
           )

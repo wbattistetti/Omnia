@@ -25,7 +25,7 @@ import { CoordinateConverter } from './utils/coordinateUtils';
 import { FlowStateBridge } from '../../../services/FlowStateBridge';
 import { useFlowActions } from '../../../context/FlowActionsContext';
 import { getPathSegments, PathSegment } from './utils/pathUtils';
-import { useMigrateLabelPosition } from './hooks/useMigrateLabelPosition';
+import { useLabelPosition } from './hooks/useLabelPosition';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -105,28 +105,41 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const linkStyle = (props as any).linkStyle ?? (data as any)?.linkStyle ?? DEFAULT_LINK_STYLE;
   const label = props.label || props.data?.label;
 
-  // ✅ NEW MODEL: Get saved label position in absolute format (x, y) - top-level
-  const labelPositionAbsolute = ((props as any).labelPositionAbsolute ?? (data as any)?.labelPositionAbsolute) || null;
-  const labelPositionRelative = ((props as any).labelPositionRelative ?? (data as any)?.labelPositionRelative) || null; // Legacy
-  const labelPositionSvg = ((props as any).labelPositionSvg ?? (data as any)?.labelPositionSvg) || null; // Legacy
+  // ✅ ARCHITECTURE PRINCIPLE #1: Single source of truth - ONLY labelPositionRelative is persisted
+  // labelPositionAbsolute is ALWAYS computed by useLabelPosition (never saved)
+  const labelPositionRelative = ((props as any).labelPositionRelative ?? (data as any)?.labelPositionRelative) || null;
 
-  // ✅ Isolated migration hook
-  useMigrateLabelPosition(
+  // ✅ Debug: Log when labelPositionRelative changes in props
+  useEffect(() => {
+    console.log('[CustomEdge] 🔄 labelPositionRelative changed in props:', {
+      edgeId: id,
+      labelPositionRelative,
+      fromProps: (props as any).labelPositionRelative,
+      fromData: (data as any)?.labelPositionRelative,
+      propsKeys: Object.keys(props),
+      dataKeys: data ? Object.keys(data) : [],
+    });
+  }, [id, labelPositionRelative, props, data]);
+
+  // ✅ ARCHITECTURE PRINCIPLE #2: Single hook responsible for derived value
+  // This is the ONLY place that computes {x, y} from labelPositionRelative
+  const labelPositionAbsolute = useLabelPosition(
     pathRef,
-    labelPositionAbsolute,
     labelPositionRelative,
-    labelPositionSvg,
-    updateEdgeData
+    sourceX,
+    sourceY,
+    targetX,
+    targetY
   );
 
-  // ✅ NEW MODEL: Use positioning hook with absolute coordinates
+  // ✅ Use positioning hook with computed absolute coordinates
   const positions = useEdgePositioning(
     pathRef,
     sourceX,
     sourceY,
     targetX,
     targetY,
-    labelPositionAbsolute
+    labelPositionAbsolute // ✅ Computed, not saved
   );
 
   // ✅ Use hover hook
@@ -266,12 +279,12 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         eds.map((e) =>
           e.id === id && !e.data?.onUpdate
             ? {
-                ...e,
-                data: {
-                  ...(e.data || {}),
-                  onUpdate,
-                },
-              }
+              ...e,
+              data: {
+                ...(e.data || {}),
+                onUpdate,
+              },
+            }
             : e
         )
       );
@@ -281,34 +294,21 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     }
   }, [id, props.data?.onUpdate, reactFlowInstance]);
 
-  // ✅ NEW MODEL: Label drag hook - saves labelPositionAbsolute
-  const handleLabelPositionChange = useCallback((newAbsolute: { x: number; y: number }) => {
+  // ✅ ARCHITECTURE PRINCIPLE #3: Single point that writes position
+  // This is the ONLY place that saves labelPositionRelative
+  const handleLabelPositionChange = useCallback((labelPositionRelative: { t: number; offset: number }) => {
     console.log('[CustomEdge] 📍 handleLabelPositionChange - called with:', {
       edgeId: id,
-      newAbsolute,
+      labelPositionRelative,
     });
 
-    // ✅ Update source of truth (ReactFlow prop edges) with absolute coordinates
-    const currentEdges = FlowStateBridge.getEdges();
-    const updatedEdges = currentEdges.map((e) =>
-      e.id === id
-        ? { ...e, labelPositionAbsolute: newAbsolute, labelPositionRelative: undefined, labelPositionSvg: undefined }
-        : e
-    );
-
-    FlowStateBridge.setEdges(updatedEdges);
-    const setEdgesFn = FlowStateBridge.getSetEdges();
-    if (typeof setEdgesFn === 'function') {
-      setEdgesFn(updatedEdges);
-    }
-
+    // ✅ ARCHITECTURE FIX: Use ONLY updateEdgeData (which calls flowActions.updateEdge)
+    // This ensures ReactFlow edges props are updated correctly via setEdgesRef.current
+    // Remove FlowStateBridge.setEdges duplication - updateEdgeData handles it
     updateEdgeData({
-      labelPositionAbsolute: newAbsolute,
-      labelPositionRelative: undefined,
-      labelPositionSvg: undefined,
+      labelPositionRelative,
     });
-
-    console.log('[CustomEdge] ✅ Label position saved (absolute):', newAbsolute);
+    console.log('[CustomEdge] ✅ updateEdgeData called with labelPositionRelative:', labelPositionRelative);
   }, [id, updateEdgeData]);
 
   // ✅ NEW MODEL: Simplified label drag hook with discrete hit-area model
