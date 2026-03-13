@@ -54,14 +54,20 @@ export class CoordinateConverter {
    */
   screenToSvg(screenPoint: { x: number; y: number }): { x: number; y: number } | null {
     const svg = this.pathRef.current?.ownerSVGElement;
-    if (!svg) return null;
+    if (!svg) {
+      console.warn('[CoordinateConverter] ❌ screenToSvg: no SVG element');
+      return null;
+    }
 
     const pt = svg.createSVGPoint();
     pt.x = screenPoint.x;
     pt.y = screenPoint.y;
 
     const ctm = svg.getScreenCTM();
-    if (!ctm) return null;
+    if (!ctm) {
+      console.warn('[CoordinateConverter] ❌ screenToSvg: no CTM');
+      return null;
+    }
 
     const svgPoint = pt.matrixTransform(ctm.inverse());
     return { x: svgPoint.x, y: svgPoint.y };

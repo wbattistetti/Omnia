@@ -24,6 +24,8 @@ import { useReactFlow } from 'reactflow';
 import { CoordinateConverter } from './utils/coordinateUtils';
 import { FlowStateBridge } from '../../../services/FlowStateBridge';
 import { useFlowActions } from '../../../context/FlowActionsContext';
+import { getPathSegments, PathSegment } from './utils/pathUtils';
+import { useMigrateLabelPosition } from './hooks/useMigrateLabelPosition';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -103,43 +105,85 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const linkStyle = (props as any).linkStyle ?? (data as any)?.linkStyle ?? DEFAULT_LINK_STYLE;
   const label = props.label || props.data?.label;
 
-  // ✅ PULITO: Get saved label position in relative format (t, offset) - top-level
-  const labelPositionRelative = ((props as any).labelPositionRelative ?? (data as any)?.labelPositionRelative) || null;
+  // ✅ NEW MODEL: Get saved label position in absolute format (x, y) - top-level
+  const labelPositionAbsolute = ((props as any).labelPositionAbsolute ?? (data as any)?.labelPositionAbsolute) || null;
+  const labelPositionRelative = ((props as any).labelPositionRelative ?? (data as any)?.labelPositionRelative) || null; // Legacy
+  const labelPositionSvg = ((props as any).labelPositionSvg ?? (data as any)?.labelPositionSvg) || null; // Legacy
 
-  // Auto-migration from legacy labelPositionSvg
-  useEffect(() => {
-    // Skip if already have relative position
-    if (labelPositionRelative) return;
+  // ✅ Isolated migration hook
+  useMigrateLabelPosition(
+    pathRef,
+    labelPositionAbsolute,
+    labelPositionRelative,
+    labelPositionSvg,
+    updateEdgeData
+  );
 
-    // If we have legacy labelPositionSvg and path is available, migrate
-    const legacySvg = (props as any).labelPositionSvg ?? (data as any)?.labelPositionSvg;
-    if (legacySvg && pathRef.current) {
-      const converter = new CoordinateConverter(reactFlowInstance, pathRef);
-      const migrated = converter.labelAbsoluteToRelative(legacySvg);
-      if (migrated) {
-        updateEdgeData({
-          labelPositionRelative: migrated,  // ✅ Top-level
-          labelPositionSvg: undefined,  // ✅ Top-level
-        });
-        console.log('[CustomEdge] Migrazione labelPositionSvg → labelPositionRelative:', migrated);
-      }
-    }
-  }, [labelPositionRelative, (props as any).labelPositionSvg, (data as any)?.labelPositionSvg, reactFlowInstance]);
-
-  // ✅ PULITO: Use positioning hook con labelPositionRelative
+  // ✅ NEW MODEL: Use positioning hook with absolute coordinates
   const positions = useEdgePositioning(
     pathRef,
     sourceX,
     sourceY,
     targetX,
     targetY,
-    labelPositionRelative
+    labelPositionAbsolute
   );
 
   // ✅ Use hover hook
   const hover = useEdgeHover({
     toolbarTransitionDelay: 200,
   });
+
+  // ✅ FIX: useEffect invece di useMemo - pathRef.current è null durante il render
+  // useEffect gira DOPO il render → pathRef.current è già popolato ✅
+  const [edgeSegments, setEdgeSegments] = useState<PathSegment[]>([]);
+
+  const computeEdgeSegments = useCallback(() => {
+    if (!pathRef.current) {
+      setEdgeSegments([]);
+      return;
+    }
+
+    try {
+      const pathLength = pathRef.current.getTotalLength();
+      if (pathLength === 0) {
+        setEdgeSegments([]);
+        return;
+      }
+
+      setEdgeSegments(getPathSegments(pathRef.current));
+    } catch (e) {
+      console.warn('[CustomEdge] Failed to compute edge segments:', e);
+      setEdgeSegments([]);
+    }
+  }, []); // pathRef è stabile, non serve nelle deps
+
+  // ✅ Aggiorna quando cambia il path (nodi spostati, path modificato)
+  useEffect(() => {
+    computeEdgeSegments();
+  }, [sourceX, sourceY, targetX, targetY, computeEdgeSegments]);
+
+  // ✅ Aggiorna anche quando il path DOM cambia (MutationObserver fallback)
+  useEffect(() => {
+    if (!pathRef.current) return;
+
+    const observer = new MutationObserver(() => {
+      computeEdgeSegments();
+    });
+
+    observer.observe(pathRef.current, {
+      attributes: true,
+      attributeFilter: ['d'],
+      subtree: false,
+    });
+
+    // Check iniziale
+    computeEdgeSegments();
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [computeEdgeSegments]);
 
   // ✅ Get control points from top-level with migration support
   const controlPointsRelative = useMemo((): ControlPointRelative[] => {
@@ -237,31 +281,46 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     }
   }, [id, props.data?.onUpdate, reactFlowInstance]);
 
-  // Label drag hook - saves labelPositionRelative
-  const handleLabelPositionChange = useCallback((newRelative: { t: number; offset: number }) => {
-    const success = updateEdgeData({
-      labelPositionRelative: newRelative,  // ✅ Top-level
-      labelPositionSvg: undefined, // Remove legacy if exists (top-level)
+  // ✅ NEW MODEL: Label drag hook - saves labelPositionAbsolute
+  const handleLabelPositionChange = useCallback((newAbsolute: { x: number; y: number }) => {
+    console.log('[CustomEdge] 📍 handleLabelPositionChange - called with:', {
+      edgeId: id,
+      newAbsolute,
     });
-    if (success) {
-      console.log('[CustomEdge] Label position saved (relative):', newRelative);
-    } else {
-      console.error('[CustomEdge] Failed to save label position for edge:', id);
+
+    // ✅ Update source of truth (ReactFlow prop edges) with absolute coordinates
+    const currentEdges = FlowStateBridge.getEdges();
+    const updatedEdges = currentEdges.map((e) =>
+      e.id === id
+        ? { ...e, labelPositionAbsolute: newAbsolute, labelPositionRelative: undefined, labelPositionSvg: undefined }
+        : e
+    );
+
+    FlowStateBridge.setEdges(updatedEdges);
+    const setEdgesFn = FlowStateBridge.getSetEdges();
+    if (typeof setEdgesFn === 'function') {
+      setEdgesFn(updatedEdges);
     }
+
+    updateEdgeData({
+      labelPositionAbsolute: newAbsolute,
+      labelPositionRelative: undefined,
+      labelPositionSvg: undefined,
+    });
+
+    console.log('[CustomEdge] ✅ Label position saved (absolute):', newAbsolute);
   }, [id, updateEdgeData]);
 
+  // ✅ NEW MODEL: Simplified label drag hook with discrete hit-area model
   const labelDrag = useLabelDrag({
     labelRef: hoverRefs.labelRef,
-    initialPosition: positions.labelSvgPosition, // ✅ REFACTOR: usa coordinate SVG
     pathRef: pathRef,
-    savedLabelSvgPosition: positions.labelSvgPosition, // ✅ Usa coordinate SVG correnti
+    segments: edgeSegments, // ✅ Segments for THIS edge only
     onPositionChange: handleLabelPositionChange,
     enabled: !!label,
-    snapThreshold: 30,
-    edgeId: id,
   });
 
-  // ✅ NUOVO: Determina se questo edge deve mostrare highlight
+  // ✅ NEW MODEL: Determine if this edge should show highlight
   const shouldShowHighlight = labelDrag.highlightedEdgeId === id && labelDrag.highlightedSegment;
 
   // Handlers
@@ -588,6 +647,12 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         onMouseEnter={() => hover.setHovered(true)}
         onMouseLeave={() => hover.setHovered(false)}
         highlightedSegment={shouldShowHighlight ? labelDrag.highlightedSegment : null}
+        // ✅ NEW MODEL: Hit-areas integrate nell'SVG
+        hitAreaSegments={labelDrag.isDragging ? edgeSegments : []}
+        hitAreaWidth={25}
+        onSegmentEnter={labelDrag.onSegmentEnter}
+        onSegmentLeave={labelDrag.onSegmentLeave}
+        isDragging={labelDrag.isDragging}
       />
 
       <EdgeControls

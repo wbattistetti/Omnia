@@ -134,146 +134,34 @@ export interface PathSegment {
 
 /**
  * Estrae segmenti lineari da un path SVG
- * Campiona il path e crea segmenti lineari tra punti consecutivi
+ * ✅ FIX: Usa i vertici reali del path invece di campionare ogni 5px
+ * Questo produce i segmenti geometrici reali (es. 3 segmenti per V-H-V) invece di 80 micro-segmenti
  */
 export function getPathSegments(pathElement: SVGPathElement): PathSegment[] {
-  const segments: PathSegment[] = [];
-  const pathLength = pathElement.getTotalLength();
+  const pathD = pathElement.getAttribute('d');
+  if (!pathD) return [];
 
-  if (pathLength === 0) return segments;
+  // ✅ Estrai i vertici reali dal path string
+  const vertices = extractPathVertices(pathD);
+  if (vertices.length < 2) return [];
 
-  // Campiona il path con densità sufficiente (ogni 5px o minimo 20 punti)
-  const sampleCount = Math.max(20, Math.ceil(pathLength / 5));
-  const step = pathLength / sampleCount;
-
-  let prevPoint: DOMPoint | null = null;
-  let segmentIndex = 0;
-
-  for (let i = 0; i <= sampleCount; i++) {
-    const length = i * step;
-    const point = pathElement.getPointAtLength(length);
-
-    if (prevPoint) {
-      segments.push({
-        start: { x: prevPoint.x, y: prevPoint.y },
-        end: { x: point.x, y: point.y },
-        index: segmentIndex++,
-      });
-    }
-
-    prevPoint = point;
-  }
-
-  return segments;
+  // ✅ Crea segmenti tra vertici consecutivi
+  return vertices.slice(0, -1).map((vertex, i) => ({
+    start: { x: vertex.x, y: vertex.y },
+    end: { x: vertices[i + 1].x, y: vertices[i + 1].y },
+    index: i,
+  }));
 }
 
-/**
- * Calcola la distanza minima da un punto a un segmento
- * Restituisce distanza, punto proiettato e parametro t (0-1)
- */
-export function distanceToSegment(
-  point: { x: number; y: number },
-  segment: PathSegment
-): { distance: number; projectedPoint: { x: number; y: number }; t: number } {
-  const { start, end } = segment;
-
-  // Vettore del segmento
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const segmentLengthSq = dx * dx + dy * dy;
-
-  // Se il segmento è un punto, distanza diretta
-  if (segmentLengthSq < 1e-10) {
-    const dist = Math.sqrt(
-      Math.pow(point.x - start.x, 2) + Math.pow(point.y - start.y, 2)
-    );
-    return {
-      distance: dist,
-      projectedPoint: { x: start.x, y: start.y },
-      t: 0,
-    };
-  }
-
-  // Vettore dal punto iniziale al punto
-  const px = point.x - start.x;
-  const py = point.y - start.y;
-
-  // Proiezione scalare
-  const t = Math.max(0, Math.min(1, (px * dx + py * dy) / segmentLengthSq));
-
-  // Punto proiettato sul segmento
-  const projectedPoint = {
-    x: start.x + t * dx,
-    y: start.y + t * dy,
-  };
-
-  // Distanza dal punto proiettato
-  const distance = Math.sqrt(
-    Math.pow(point.x - projectedPoint.x, 2) + Math.pow(point.y - projectedPoint.y, 2)
-  );
-
-  return { distance, projectedPoint, t };
-}
-
-/**
- * Proietta un punto su un segmento
- */
-export function projectPointToSegment(
-  point: { x: number; y: number },
-  segment: PathSegment
-): { x: number; y: number } {
-  const { projectedPoint } = distanceToSegment(point, segment);
-  return projectedPoint;
-}
-
-/**
- * Trova il segmento più vicino a un punto
- * Restituisce null se nessun segmento è entro la soglia
- */
-export function findClosestSegment(
-  point: { x: number; y: number },
-  segments: PathSegment[],
-  threshold: number
-): { segment: PathSegment; distance: number; projectedPoint: { x: number; y: number } } | null {
-  if (segments.length === 0) return null;
-
-  let minDistance = Infinity;
-  let closestSegment: PathSegment | null = null;
-  let closestProjected: { x: number; y: number } | null = null;
-
-  for (const segment of segments) {
-    const { distance, projectedPoint } = distanceToSegment(point, segment);
-
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestSegment = segment;
-      closestProjected = projectedPoint;
-    }
-  }
-
-  if (minDistance <= threshold && closestSegment && closestProjected) {
-    return {
-      segment: closestSegment,
-      distance: minDistance,
-      projectedPoint: closestProjected,
-    };
-  }
-
-  return null;
-}
-
-/**
- * Identifica il segmento corrente di una label
- * (quello a cui appartiene la posizione salvata)
- */
-export function getCurrentSegment(
-  labelPosition: { x: number; y: number },
-  segments: PathSegment[],
-  threshold: number
-): PathSegment | null {
-  const closest = findClosestSegment(labelPosition, segments, threshold);
-  return closest ? closest.segment : null;
-}
+// ❌ REMOVED: All continuous calculation functions
+// - distanceToSegment: removed (continuous distance calculation)
+// - projectPointToSegment: removed (orthogonal projection)
+// - findClosestSegment: removed (continuous distance-based search)
+// - getCurrentSegment: removed (uses findClosestSegment)
+//
+// ✅ NEW MODEL: Only discrete functions remain:
+// - getPathSegments: extracts segments from path
+// - getSegmentMidpoint: calculates midpoint of a segment
 
 /**
  * Calcola il punto medio di un segmento

@@ -6,15 +6,14 @@ export interface EdgePositioningResult {
   midPointSvg: { x: number; y: number };
   midPointScreen: { x: number; y: number };
   labelScreenPosition: { x: number; y: number };
-  labelSvgPosition: { x: number; y: number }; // ✅ NUOVO: coordinate SVG native per EdgeLabelRenderer
+  labelSvgPosition: { x: number; y: number }; // ✅ Coordinate SVG native per EdgeLabelRenderer
   sourceScreenPosition: { x: number; y: number };
 }
 
 /**
  * Hook for calculating edge positions (SVG and screen coordinates)
- * DETERMINISTICO: nessun polling, nessun hack globale, listener completi
- * ✅ PULITO: Usa labelPositionRelative invece di coordinate SVG assolute
- * ✅ FIX: Monitora anche targetX/targetY e usa MutationObserver per rilevare cambiamenti del path
+ * ✅ NEW MODEL: Uses absolute coordinates directly, no conversion needed
+ * ✅ EdgeLabelRenderer handles SVG→screen conversion automatically
  */
 export function useEdgePositioning(
   pathRef: RefObject<SVGPathElement>,
@@ -22,14 +21,14 @@ export function useEdgePositioning(
   sourceY: number,
   targetX: number,
   targetY: number,
-  labelPositionRelative?: { t: number; offset: number } | null
+  labelPositionAbsolute?: { x: number; y: number } | null // ✅ Absolute coordinates
 ): EdgePositioningResult {
   const reactFlowInstance = useReactFlow();
   const [positions, setPositions] = useState<EdgePositioningResult>({
     midPointSvg: { x: 0, y: 0 },
     midPointScreen: { x: 0, y: 0 },
     labelScreenPosition: { x: 0, y: 0 },
-    labelSvgPosition: { x: 0, y: 0 }, // ✅ NUOVO
+    labelSvgPosition: { x: 0, y: 0 },
     sourceScreenPosition: { x: 0, y: 0 },
   });
 
@@ -42,25 +41,21 @@ export function useEdgePositioning(
 
     const converter = new CoordinateConverter(reactFlowInstance, pathRef);
 
-    // Midpoint del path
+    // Midpoint del path (per EdgeControls)
     const midPoint = path.getPointAtLength(pathLength / 2);
     const midPointScreen = converter.svgToScreen(midPoint) || { x: 0, y: 0 };
     const sourceScreen = converter.flowToScreen({ x: sourceX, y: sourceY });
 
-    // ✅ PULITO: Label position da labelPositionRelative
+    // ✅ NEW MODEL: Use absolute coordinates directly
+    // EdgeLabelRenderer handles SVG→screen conversion automatically
     let labelSvgPos: { x: number; y: number };
     let labelScreenPos: { x: number; y: number };
 
-    if (labelPositionRelative) {
-      // Converti { t, offset } → coordinate SVG
-      const labelSvg = converter.labelRelativeToAbsolute(labelPositionRelative);
-      if (labelSvg) {
-        labelSvgPos = labelSvg;
-        labelScreenPos = converter.svgToScreen(labelSvg) || midPointScreen;
-      } else {
-        labelSvgPos = { x: midPoint.x, y: midPoint.y };
-        labelScreenPos = midPointScreen;
-      }
+    if (labelPositionAbsolute) {
+      // ✅ Direct use - EdgeLabelRenderer will convert SVG to screen
+      labelSvgPos = labelPositionAbsolute;
+      // ✅ Still calculate screen position for backward compatibility (if needed elsewhere)
+      labelScreenPos = converter.svgToScreen(labelSvgPos) || midPointScreen;
     } else {
       labelSvgPos = { x: midPoint.x, y: midPoint.y };
       labelScreenPos = midPointScreen;
@@ -70,10 +65,10 @@ export function useEdgePositioning(
       midPointSvg: { x: midPoint.x, y: midPoint.y },
       midPointScreen,
       labelScreenPosition: labelScreenPos,
-      labelSvgPosition: labelSvgPos, // ✅ NUOVO: coordinate SVG native
+      labelSvgPosition: labelSvgPos, // ✅ Pass SVG coordinates to EdgeLabelRenderer
       sourceScreenPosition: sourceScreen,
     });
-  }, [pathRef, sourceX, sourceY, targetX, targetY, labelPositionRelative, reactFlowInstance]);
+  }, [pathRef, sourceX, sourceY, targetX, targetY, labelPositionAbsolute, reactFlowInstance]);
 
   // ✅ CRITICO: Aggiorna quando cambia il path (rileva cambiamenti del DOM)
   useEffect(() => {
@@ -114,10 +109,10 @@ export function useEdgePositioning(
     return () => window.removeEventListener('resize', handleResize);
   }, [updatePositions]);
 
-  // ✅ PULITO: Aggiorna quando cambia labelPositionRelative
+  // ✅ NEW MODEL: Update when labelPositionAbsolute changes
   useEffect(() => {
     updatePositions();
-  }, [labelPositionRelative?.t, labelPositionRelative?.offset, updatePositions]);
+  }, [labelPositionAbsolute?.x, labelPositionAbsolute?.y, updatePositions]);
 
   return positions;
 }

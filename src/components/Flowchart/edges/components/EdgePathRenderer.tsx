@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useMemo } from 'react';
 import { getBezierPath, getSmoothStepPath } from 'reactflow';
 import { LinkStyle } from '../../types/flowTypes';
 import { Highlight } from '../../executionHighlight/executionHighlightConstants';
@@ -30,7 +30,13 @@ export interface EdgePathRendererProps {
   onContextMenu?: (e: React.MouseEvent) => void;
   onCtrlClick?: (e: React.MouseEvent) => void;
   onShiftClick?: (e: React.MouseEvent) => void;
-  highlightedSegment?: PathSegment | null; // ✅ NUOVO: segmento da evidenziare durante drag label
+  highlightedSegment?: PathSegment | null; // ✅ Segmento da evidenziare durante drag label
+  // ✅ NEW MODEL: Props per hit-area (integrate nell'SVG)
+  hitAreaSegments?: PathSegment[];
+  hitAreaWidth?: number;
+  onSegmentEnter?: (edgeId: string, segment: PathSegment) => void;
+  onSegmentLeave?: () => void;
+  isDragging?: boolean;
 }
 
 /**
@@ -59,7 +65,12 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
       onMouseLeave,
       onContextMenu,
       onShiftClick,
-      highlightedSegment, // ✅ NUOVO
+      highlightedSegment,
+      hitAreaSegments = [],
+      hitAreaWidth = 25,
+      onSegmentEnter,
+      onSegmentLeave,
+      isDragging = false,
     },
     ref
   ) => {
@@ -166,10 +177,47 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
         ? 3
         : 1.5;
 
-    // ✅ NUOVO: Genera path per segmento evidenziato
+    // ✅ Genera path per segmento evidenziato
     const highlightPath = highlightedSegment
       ? `M ${highlightedSegment.start.x},${highlightedSegment.start.y} L ${highlightedSegment.end.x},${highlightedSegment.end.y}`
       : null;
+
+    // ✅ NEW MODEL: Genera hit-areas per segmenti (solo durante drag)
+    const hitAreas = useMemo(() => {
+      if (!isDragging || !hitAreaSegments.length) return [];
+
+      return hitAreaSegments.map((segment) => {
+        const { start, end } = segment;
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+
+        // Filter out degenerate segments
+        if (length < 1e-10) return null;
+
+        // Normalize direction vector
+        const nx = dx / length;
+        const ny = dy / length;
+
+        // Perpendicular vector (for width)
+        const perpX = -ny;
+        const perpY = nx;
+
+        // Half width
+        const halfWidth = hitAreaWidth / 2;
+
+        // Rectangle corners
+        const p1 = { x: start.x + perpX * halfWidth, y: start.y + perpY * halfWidth };
+        const p2 = { x: start.x - perpX * halfWidth, y: start.y - perpY * halfWidth };
+        const p3 = { x: end.x - perpX * halfWidth, y: end.y - perpY * halfWidth };
+        const p4 = { x: end.x + perpX * halfWidth, y: end.y + perpY * halfWidth };
+
+        return {
+          segment,
+          path: `M ${p1.x},${p1.y} L ${p2.x},${p2.y} L ${p3.x},${p3.y} L ${p4.x},${p4.y} Z`,
+        };
+      }).filter((area): area is { segment: PathSegment; path: string } => area !== null);
+    }, [hitAreaSegments, hitAreaWidth, isDragging]);
 
     return (
       <>
@@ -195,7 +243,7 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
           onClick={handleClick}
         />
 
-        {/* ✅ NUOVO: Overlay segmento evidenziato */}
+        {/* ✅ Overlay segmento evidenziato */}
         {highlightPath && (
           <path
             d={highlightPath}
@@ -209,6 +257,24 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
             }}
           />
         )}
+
+        {/* ✅ NEW MODEL: Hit-areas per segmenti (solo durante drag, dentro l'SVG) */}
+        {/* ✅ FIX: fill="transparent" invece di fill="none" per garantire pointer-events in tutti i browser */}
+        {isDragging && hitAreas.map(({ segment, path }) => (
+          <path
+            key={`hit-${id}-${segment.index}`}
+            d={path}
+            fill="transparent"
+            stroke="transparent"
+            opacity={0}
+            pointerEvents="all"
+            style={{
+              cursor: 'move',
+            }}
+            onMouseEnter={() => onSegmentEnter?.(id, segment)}
+            onMouseLeave={onSegmentLeave}
+          />
+        ))}
       </>
     );
   }

@@ -195,7 +195,7 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
         position: 'absolute',
         left: displayPosition.x,
         top: displayPosition.y,
-        transform: 'translate(-50%, -50%)',
+        transform: 'translate(-50%, -50%) rotate(0deg)', // ✅ Label always horizontal
         background: edgeErrors && edgeErrors.strokeColor !== 'transparent'
           ? (edgeErrors.hasError
               ? 'rgba(239, 68, 68, 0.2)' // red-500 with 20% transparency
@@ -208,7 +208,7 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
         padding: '2px 8px',
         fontSize: fontSizes.edgeCaption,
         color: labelColor, // ✅ Apply error color to label text
-        pointerEvents: 'auto',
+        pointerEvents: isDragging ? 'none' : 'auto', // ✅ CRITICAL FIX: durante drag, lascia passare eventi SVG alle hit-area
         zIndex: isDragging ? 1000 : 10,
         boxShadow: isDragging
           ? '0 4px 12px rgba(139,92,246,0.30)'
