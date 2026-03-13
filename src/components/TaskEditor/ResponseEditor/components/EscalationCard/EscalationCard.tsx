@@ -16,6 +16,7 @@ type EscalationCardProps = {
   autoEditTarget: { escIdx: number; taskIdx: number } | null;
   onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
   stepKey: string;
+  hideHeader?: boolean; // Nasconde l'header nella vista ad albero
 };
 
 export function EscalationCard({
@@ -30,7 +31,8 @@ export function EscalationCard({
   onDeleteEscalation,
   autoEditTarget,
   onAutoEditTargetChange,
-  stepKey
+  stepKey,
+  hideHeader = false
 }: EscalationCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const showCard = hasEscalationCard(stepKey);
@@ -40,7 +42,11 @@ export function EscalationCard({
   const isEmpty = tasks.length === 0;
 
   // ✅ Inizializza sempre true (accordion parte sempre aperto)
+  // Se hideHeader è true, forza sempre espanso (vista ad albero)
   const [isExpanded, setIsExpanded] = useState(true);
+
+  // Se hideHeader è true, forza sempre espanso
+  const effectiveIsExpanded = hideHeader ? true : isExpanded;
 
   // Per step senza escalation card (start, success), renderizza solo la lista task
   if (!showCard) {
@@ -81,15 +87,17 @@ export function EscalationCard({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <EscalationHeader
-        name={escalationName}
-        color={color}
-        isHovered={isHovered}
-        isExpanded={isExpanded}
-        onToggleExpand={() => setIsExpanded(!isExpanded)}
-        onDelete={onDeleteEscalation}
-      />
-      {isExpanded && (
+      {!hideHeader && (
+        <EscalationHeader
+          name={escalationName}
+          color={color}
+          isHovered={isHovered}
+          isExpanded={effectiveIsExpanded}
+          onToggleExpand={() => setIsExpanded(!isExpanded)}
+          onDelete={onDeleteEscalation}
+        />
+      )}
+      {effectiveIsExpanded && (
         <div style={{
           flex: 'none',
           minHeight: isEmpty ? '120px' : 'auto',

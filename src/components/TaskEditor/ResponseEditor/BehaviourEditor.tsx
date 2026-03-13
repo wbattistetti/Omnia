@@ -1,10 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import StepsStrip from '@responseEditor/StepsStrip';
 import StepEditor from '@responseEditor/features/step-management/components/StepEditor';
+import { StepTreeView } from '@responseEditor/features/step-management/tree-view/StepTreeView';
 import { getNodeStepKeys } from '@responseEditor/core/domain';
 import { stepMeta } from '@responseEditor/ddtUtils';
 import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { useResponseEditorNavigation } from '@responseEditor/context/ResponseEditorNavigationContext';
+import { LayoutGrid, List } from 'lucide-react';
 
 interface BehaviourEditorProps {
   node: any;
@@ -22,6 +24,10 @@ export default function BehaviourEditor({
   selectedSubIndex,
 }: BehaviourEditorProps) {
   const { taskId } = useResponseEditorContext();
+
+  // Toggle vista: tab o tree
+  const [viewMode, setViewMode] = useState<'tabs' | 'tree'>('tabs');
+
   // Calcola gli step keys disponibili per questo nodo
   const stepKeys = useMemo(() => {
     if (selectedRoot) {
@@ -135,27 +141,91 @@ export default function BehaviourEditor({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
-      {/* StepsStrip in alto */}
-      <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
-      <StepsStrip
-        stepKeys={uiStepKeys}
-        selectedStepKey={selectedStepKey}
-        onSelectStep={handleStepChange}
-        node={node}
-        taskId={taskId}
-        data-step-key={selectedStepKey} // ✅ NEW: Add data attribute for scroll targeting
-      />
+      {/* Toggle vista */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        padding: '8px 16px',
+        borderBottom: '1px solid #1f2340',
+        background: '#0f1422',
+        gap: '8px'
+      }}>
+        <button
+          onClick={() => setViewMode('tabs')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 12px',
+            border: `1px solid ${viewMode === 'tabs' ? '#3b82f6' : '#6b7280'}`,
+            background: viewMode === 'tabs' ? 'rgba(59,130,246,0.1)' : 'transparent',
+            color: viewMode === 'tabs' ? '#3b82f6' : '#6b7280',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '12px',
+            transition: 'all 0.2s'
+          }}
+          title="Vista tab"
+        >
+          <List size={14} />
+          <span>Tab</span>
+        </button>
+        <button
+          onClick={() => setViewMode('tree')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 12px',
+            border: `1px solid ${viewMode === 'tree' ? '#3b82f6' : '#6b7280'}`,
+            background: viewMode === 'tree' ? 'rgba(59,130,246,0.1)' : 'transparent',
+            color: viewMode === 'tree' ? '#3b82f6' : '#6b7280',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '12px',
+            transition: 'all 0.2s'
+          }}
+          title="Vista albero"
+        >
+          <LayoutGrid size={14} />
+          <span>Albero</span>
+        </button>
       </div>
 
-      {/* StepEditor sotto */}
-      <StepEditor
-        escalations={escalations}
-        translations={translations}
-        color={color}
-        allowedActions={allowedActions}
-        updateSelectedNode={updateSelectedNode}
-        stepKey={selectedStepKey}
-      />
+      {/* Vista condizionale */}
+      {viewMode === 'tabs' ? (
+        <>
+          {/* StepsStrip in alto */}
+          <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
+            <StepsStrip
+              stepKeys={uiStepKeys}
+              selectedStepKey={selectedStepKey}
+              onSelectStep={handleStepChange}
+              node={node}
+              taskId={taskId}
+              data-step-key={selectedStepKey}
+            />
+          </div>
+
+          {/* StepEditor sotto */}
+          <StepEditor
+            escalations={escalations}
+            translations={translations}
+            color={color}
+            allowedActions={allowedActions}
+            updateSelectedNode={updateSelectedNode}
+            stepKey={selectedStepKey}
+          />
+        </>
+      ) : (
+        <StepTreeView
+          stepKeys={uiStepKeys}
+          node={node}
+          translations={translations}
+          updateSelectedNode={updateSelectedNode}
+          taskId={taskId}
+        />
+      )}
     </div>
   );
 }
