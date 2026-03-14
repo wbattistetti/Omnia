@@ -1291,12 +1291,22 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     <div
       ref={rootRef}
       className={combinedClass}
+      data-response-editor="true" // ✅ Aggiungi attributo per identificare ResponseEditor
       style={{
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
         flex: 1,
         minHeight: 0,
+        pointerEvents: 'auto', // ✅ Assicura che blocchi gli eventi mouse
+      }}
+      onMouseMove={(e) => {
+        // ✅ Blocca la propagazione degli eventi mouse al flowchart sottostante
+        e.stopPropagation();
+      }}
+      onMouseEnter={(e) => {
+        // ✅ Blocca la propagazione quando il mouse entra nel ResponseEditor
+        e.stopPropagation();
       }}
     >
       {/* ✅ Header: visibile solo quando taskWizardMode === 'none' (STATO 1) */}

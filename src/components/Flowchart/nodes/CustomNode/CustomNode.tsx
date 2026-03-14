@@ -549,6 +549,27 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     };
   }, [selected, setIsHoveredNode]);
 
+  // ✅ NEW: Verifica se il mouse è sopra ResponseEditor durante il movimento
+  // Questo previene che la toolbar del nodo appaia quando il mouse è sopra il ResponseEditor
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      // ✅ Se il nodo non è in hover, non serve verificare
+      if (!isHoveredNode) return;
+
+      // ✅ Verifica se il mouse è sopra il ResponseEditor
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+      const isOverResponseEditor = el?.closest?.('[data-response-editor]');
+
+      // ✅ Se il mouse è sopra ResponseEditor, nascondi la toolbar del nodo
+      if (isOverResponseEditor) {
+        setIsHoveredNode(false);
+      }
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove, { passive: true });
+    return () => window.removeEventListener('mousemove', handleGlobalMouseMove);
+  }, [isHoveredNode, setIsHoveredNode]);
+
   return (
     <>
       {/* Toolbar sopra il nodo - Usa NodeToolbar nativo di React Flow */}
