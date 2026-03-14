@@ -30,6 +30,8 @@ export interface NLPContract {
   templateName: string;
   templateId: string;
   subDataMapping: SubDataMapping;
+  // ✅ TEST PHRASES at contract level (not in engines)
+  testPhrases?: string[];
   regex: {
     patterns: string[];
     patternModes?: string[];  // ✅ Context-aware: ['main', 'day', 'month', 'year', ...]
@@ -41,12 +43,10 @@ export interface NLPContract {
       };
       ambiguousSubIds: string[];  // Lista di subId che possono essere ambigui
     };
-    testCases: string[];
   };
   rules: {
     extractorCode: string;
     validators: any[];
-    testCases: string[];
   };
   ner?: {
     entityTypes: string[];

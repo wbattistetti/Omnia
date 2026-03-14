@@ -31,9 +31,30 @@ Public Class CompiledNlpContract
     Public Property SubDataMapping As Dictionary(Of String, SubDataMappingInfo)
 
     ''' <summary>
-    ''' Array di parsers (fonte di verità unica)
+    ''' Array di parsers (legacy, mantenuto per retrocompatibilità)
     ''' </summary>
     Public Property Parsers As List(Of NLPEngine)
+
+    ''' <summary>
+    ''' Array di engines (nuovo nome, mappa a Parsers se non presente)
+    ''' </summary>
+    Public Property Engines As List(Of NLPEngine)
+        Get
+            ' ✅ Se Engines è Nothing o vuoto, usa Parsers (retrocompatibilità)
+            If _engines Is Nothing OrElse _engines.Count = 0 Then
+                Return If(Parsers IsNot Nothing, Parsers, New List(Of NLPEngine)())
+            End If
+            Return _engines
+        End Get
+        Set(value As List(Of NLPEngine))
+            _engines = value
+            ' ✅ Sincronizza anche Parsers per retrocompatibilità
+            If value IsNot Nothing Then
+                Parsers = value
+            End If
+        End Set
+    End Property
+    Private _engines As List(Of NLPEngine)
 
     ''' <summary>
     ''' Regex principale pre-compilato (primo pattern)
@@ -53,6 +74,7 @@ Public Class CompiledNlpContract
     Public Sub New()
         SubDataMapping = New Dictionary(Of String, SubDataMappingInfo)()
         Parsers = New List(Of NLPEngine)()
+        _engines = New List(Of NLPEngine)()
         ValidationErrors = New List(Of String)()
         IsValid = True
     End Sub

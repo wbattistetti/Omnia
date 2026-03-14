@@ -6,7 +6,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { Plus, ChevronUp, ChevronDown, X, Sparkles } from 'lucide-react';
-import type { DataContract, ContractType } from '@components/DialogueDataEngine/parsers/contractLoader';
+import type { DataContract, ContractType } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 export type ContractMethod = ContractType;
 
@@ -64,9 +64,9 @@ export default function ContractSelector({
     const base = { type, enabled: true };
     switch (type) {
       case 'regex':
-        return { ...base, patterns: [], examples: [], testCases: [] };
+        return { ...base, patterns: [], examples: [], testPhrases: [] };
       case 'rules':
-        return { ...base, extractorCode: '', validators: [], testCases: [] };
+        return { ...base, extractorCode: '', validators: [], testPhrases: [] };
       case 'ner':
         return { ...base, entityTypes: [], confidence: 0.8 };
       case 'llm':

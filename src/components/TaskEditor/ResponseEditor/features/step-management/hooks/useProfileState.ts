@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
 import { getIsTesting } from '@responseEditor/testingState';
 import { getNodeIdStrict, getNodeLabelStrict, getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
+import DialogueTaskService from '@services/DialogueTaskService';
 
 // Helper functions
 function toCommaList(list?: string[] | null): string {
@@ -50,22 +51,36 @@ export function useProfileState(
   const initial: NLPProfile = useMemo(() => {
     const p = (node && (node as any).nlpProfile) || {};
 
-    // ✅ DEBUG: Log node.nlpProfile.examples quando viene calcolato initial
-    const nodeExamples = Array.isArray(p.examples) ? p.examples : undefined;
-    if (nodeExamples || p.examples !== undefined) {
+    // ✅ PRIORITY: Carica testPhrases da template.dataContract.testPhrases (fonte di verità)
+    let testPhrasesFromContract: string[] | undefined;
+    const templateId = node?.templateId;
+    if (templateId) {
+      const template = DialogueTaskService.getTemplate(templateId);
+      if (template?.dataContract?.testPhrases) {
+        testPhrasesFromContract = Array.isArray(template.dataContract.testPhrases)
+          ? template.dataContract.testPhrases
+          : undefined;
+      }
+    }
+
+    // ✅ DEBUG: Log testPhrases quando viene calcolato initial
+    if (testPhrasesFromContract || p.testPhrases) {
       console.log('[useProfileState] Computing initial profile from node', {
         nodeId: node?.id,
+        templateId,
         hasNlpProfile: !!(node as any)?.nlpProfile,
         nlpProfileKeys: (node as any)?.nlpProfile ? Object.keys((node as any).nlpProfile) : [],
-        hasExamples: !!nodeExamples,
-        examplesCount: nodeExamples?.length || 0,
-        examples: nodeExamples?.slice(0, 3),
+        hasTestPhrasesFromContract: !!testPhrasesFromContract,
+        testPhrasesFromContractCount: testPhrasesFromContract?.length || 0,
+        testPhrasesFromContract: testPhrasesFromContract?.slice(0, 3),
+        hasTestPhrasesFromProfile: !!p.testPhrases,
+        testPhrasesFromProfileCount: p.testPhrases?.length || 0,
         hasTestNotes: !!(node as any)?.testNotes,
         testNotesCount: (node as any)?.testNotes ? Object.keys((node as any).testNotes).length : 0
       });
-      }
+    }
 
-      const result = {
+    const result = {
       // After validation strict, node.id is always present
       // Use id as slotId (deterministic, no fallback)
       slotId: node ? getNodeIdStrict(node) : 'slot',
@@ -77,8 +92,10 @@ export function useProfileState(
           ? (node as any).synonyms
           : [(node?.label || '').toString(), (node?.label || '').toString().toLowerCase()].filter(Boolean),
       regex: p.regex,
-      testCases: Array.isArray(p.testCases) ? p.testCases : undefined,
+      // ✅ PRIORITY: testPhrases da template.dataContract.testPhrases (fonte di verità)
+      testPhrases: testPhrasesFromContract || undefined,
       formatHints: Array.isArray(p.formatHints) ? p.formatHints : undefined,
+      // ✅ examples è per training/NER, non per test cases
       examples: Array.isArray(p.examples) ? p.examples : undefined,
       minConfidence: typeof p.minConfidence === 'number' ? p.minConfidence : 0.6,
       postProcess: p.postProcess,
@@ -87,9 +104,8 @@ export function useProfileState(
       waitingEsc2: typeof p.waitingEsc2 === 'string' && p.waitingEsc2.trim() ? p.waitingEsc2 : (node?.kind === 'intent' ? 'Un momento per favore, sto analizzando la sua richiesta' : 'Ancora un istante…'),
     };
 
-
     return result;
-  }, [node, locale, (node as any)?.nlpProfile?.regex, (node as any)?.nlpProfile?.examples]); // ✅ Aggiunto nlpProfile.examples per reagire alle modifiche delle frasi
+  }, [node, locale, (node as any)?.nlpProfile?.regex, node?.templateId]); // ✅ Aggiunto templateId per reagire alle modifiche di testPhrases nel contract
 
   const inferredKind = useMemo(() => inferKindFromNode(node), [node]);
 
@@ -99,14 +115,15 @@ export function useProfileState(
   const [synonymsText, setSynonymsText] = useState<string>(toCommaList(initial.synonyms));
   const [regex, setRegex] = useState<string>(initial.regex || '');
   const [formatText, setFormatText] = useState<string>(toCommaList(initial.formatHints));
-  const [examplesList, setExamplesList] = useState<string[]>(Array.isArray(initial.examples) ? initial.examples : []);
+  // ✅ CORRETTO: examplesList viene da testPhrases (frasi di test), non da examples (training/NER)
+  const [examplesList, setExamplesList] = useState<string[]>(Array.isArray(initial.testPhrases) ? initial.testPhrases : []);
   const [minConf, setMinConf] = useState<number>(initial.minConfidence || 0.6);
   const [postProcessText, setPostProcessText] = useState<string>(initial.postProcess ? JSON.stringify(initial.postProcess, null, 2) : '');
   const [waitingEsc1, setWaitingEsc1] = useState<string>(initial.waitingEsc1 || '');
   const [waitingEsc2, setWaitingEsc2] = useState<string>(initial.waitingEsc2 || '');
   const [jsonError, setJsonError] = useState<string | undefined>(undefined);
-  // ✅ AGGIUNTO: stato locale per testCases per evitare race condition
-  const [testCases, setTestCases] = useState<string[]>(initial.testCases || []);
+  // ✅ AGGIUNTO: stato locale per testPhrases per evitare race condition
+  const [testPhrases, setTestPhrases] = useState<string[]>(initial.testPhrases || []);
   // Test case generation is now on-demand only, not automatic
   const lastNodeLabelRef = useRef<string>('');
 
@@ -219,7 +236,7 @@ export function useProfileState(
   // Sync form when node changes (use stable dependency to avoid loops)
   const prevSlotIdRef = useRef<string>('');
   // ✅ RIMOSSO: prevExamplesRef - non serve più sincronizzare examples quando cambia initial.examples
-  // examplesList è ora uno stato diretto, non derivato (come testCases)
+  // examplesList è ora uno stato diretto, non derivato (come testPhrases)
 
   useEffect(() => {
     const currentSlotId = initial.slotId;
@@ -244,14 +261,15 @@ export function useProfileState(
     // ✅ PULITO: Una sola volta, senza duplicati
     setSynonymsText(toCommaList(initial.synonyms));
     setRegex(initial.regex || ''); // IMPORTANT: Load regex from initial profile (don't reset!)
-    setTestCases(initial.testCases || []);
+    setTestPhrases(initial.testPhrases || []);
     setFormatText(toCommaList(initial.formatHints));
-    setExamplesList(Array.isArray(initial.examples) ? initial.examples : []);
+    // ✅ CORRETTO: examplesList viene da testPhrases (frasi di test), non da examples (training/NER)
+    setExamplesList(Array.isArray(initial.testPhrases) ? initial.testPhrases : []);
     setMinConf(initial.minConfidence || 0.6);
     setPostProcessText(initial.postProcess ? JSON.stringify(initial.postProcess, null, 2) : '');
     setWaitingEsc1(initial.waitingEsc1 || '');
     setWaitingEsc2(initial.waitingEsc2 || '');
-  }, [initial.slotId]); // ✅ RIMOSSO initial.examples - sincronizza solo quando cambia nodo
+  }, [initial.slotId]); // ✅ Sincronizza solo quando cambia nodo
 
   // ✅ CRITICAL FIX: Sincronizza regex quando node.nlpProfile.regex cambia (da contract sync)
   // Questo assicura che quando il contract viene sincronizzato con node.nlpProfile.regex,
@@ -274,48 +292,49 @@ export function useProfileState(
     }
   }, [initial.regex]);
 
-  // ✅ Sync testCases quando riapri l'editor (initial.testCases cambia) MA solo se lo stato locale è vuoto
+  // ✅ Sync testPhrases quando riapri l'editor (initial.testPhrases cambia) MA solo se lo stato locale è vuoto
   // Questo gestisce il caso in cui il componente non viene smontato quando chiudi l'editor
-  const isFirstMountTestCasesRef = useRef(true);
+  const isFirstMountTestPhrasesRef = useRef(true);
   useEffect(() => {
-    if (isFirstMountTestCasesRef.current) {
-      isFirstMountTestCasesRef.current = false;
+    if (isFirstMountTestPhrasesRef.current) {
+      isFirstMountTestPhrasesRef.current = false;
       return; // Prima volta: già inizializzato con useState
     }
 
     // Se lo stato locale è vuoto, sincronizza con initial (riaprimento editor)
-    if (testCases.length === 0 && (initial.testCases || []).length > 0) {
-      setTestCases(initial.testCases || []);
+    if (testPhrases.length === 0 && (initial.testPhrases || []).length > 0) {
+      setTestPhrases(initial.testPhrases || []);
     }
-  }, [initial.testCases]);
+  }, [initial.testPhrases]);
 
-  // ✅ CRITICAL: Sync examplesList quando initial.examples cambia (riaprimento editor o reload)
+  // ✅ CRITICAL: Sync examplesList quando initial.testPhrases cambia (riaprimento editor o reload)
   // Questo gestisce il caso in cui il componente non viene smontato quando chiudi l'editor
-  const prevInitialExamplesRef = useRef<string[] | undefined>(initial.examples);
+  // ✅ CORRETTO: examplesList viene da testPhrases (frasi di test), non da examples (training/NER)
+  const prevInitialTestPhrasesRef = useRef<string[] | undefined>(initial.testPhrases);
   useEffect(() => {
-    const currentExamples = initial.examples || [];
-    const prevExamples = prevInitialExamplesRef.current || [];
+    const currentTestPhrases = initial.testPhrases || [];
+    const prevTestPhrases = prevInitialTestPhrasesRef.current || [];
 
-    // ✅ Sincronizza se initial.examples è cambiato (riaprimento editor o reload)
+    // ✅ Sincronizza se initial.testPhrases è cambiato (riaprimento editor o reload)
     // Confronta array per vedere se sono diversi
     const hasChanged =
-      currentExamples.length !== prevExamples.length ||
-      currentExamples.some((ex, idx) => ex !== prevExamples[idx]);
+      currentTestPhrases.length !== prevTestPhrases.length ||
+      currentTestPhrases.some((ex, idx) => ex !== prevTestPhrases[idx]);
 
     if (hasChanged) {
-      console.log('[useProfileState] Syncing examplesList from node', {
-        prevCount: prevExamples.length,
-        newCount: currentExamples.length,
-        prevExamples: prevExamples.slice(0, 3),
-        newExamples: currentExamples.slice(0, 3)
+      console.log('[useProfileState] Syncing examplesList from template.dataContract.testPhrases', {
+        prevCount: prevTestPhrases.length,
+        newCount: currentTestPhrases.length,
+        prevTestPhrases: prevTestPhrases.slice(0, 3),
+        newTestPhrases: currentTestPhrases.slice(0, 3)
       });
-      prevInitialExamplesRef.current = currentExamples;
-      setExamplesList(currentExamples);
+      prevInitialTestPhrasesRef.current = currentTestPhrases;
+      setExamplesList(currentTestPhrases);
     } else {
       // Aggiorna il ref anche se non cambia (per tracciare)
-      prevInitialExamplesRef.current = currentExamples;
+      prevInitialTestPhrasesRef.current = currentTestPhrases;
     }
-  }, [initial.examples]);
+  }, [initial.testPhrases]);
 
   // Keep kind synced with inferred when lockKind is enabled
   useEffect(() => {
@@ -349,7 +368,7 @@ export function useProfileState(
       kind: (kind === 'generic' && (node?.kind && node.kind !== 'generic')) ? node.kind : kind,
       synonyms: syns,
       regex: regex || undefined,
-      testCases: testCases.length > 0 ? testCases : undefined, // ✅ Usa stato locale invece di node
+      testPhrases: testPhrases.length > 0 ? testPhrases : undefined, // ✅ Usa stato locale invece di node
       formatHints: formats.length ? formats : undefined,
       examples: ex.length ? ex : undefined,
       minConfidence: minConf,
@@ -361,7 +380,7 @@ export function useProfileState(
 
 
     return out;
-  }, [initial.slotId, initial.locale, kind, synonymsText, regex, testCases, formatText, examplesList, minConf, postProcessText, waitingEsc1, waitingEsc2, node]);
+  }, [initial.slotId, initial.locale, kind, synonymsText, regex, testPhrases, formatText, examplesList, minConf, postProcessText, waitingEsc1, waitingEsc2, node]);
 
   // Ensure latest profile is flushed on unmount
   const profileRef = useRef<NLPProfile | null>(null);
@@ -400,7 +419,7 @@ export function useProfileState(
 
     // ✅ CRITICAL: Exclude examples and autoSubSlots from profile comparison
     // These are only for testing/UI and should not trigger onChange
-    const { examples, subSlots, testCases, ...profileCore } = profile;
+    const { examples, subSlots, testPhrases, ...profileCore } = profile;
     const json = JSON.stringify(profileCore);
 
     // ✅ DOUBLE CHECK: Se siamo entrati in testing mode durante la serializzazione
@@ -417,7 +436,7 @@ export function useProfileState(
       }
 
       // ✅ Emit onChange with FULL profile (for saving), but only when CORE fields change
-      // This prevents onChange from being triggered when only examples/subSlots/testCases change
+      // This prevents onChange from being triggered when only examples/subSlots/testPhrases change
       onChangeRef.current?.(profile);
     }
   }, [profile]);
@@ -452,9 +471,9 @@ export function useProfileState(
     waitingEsc2,
     setWaitingEsc2,
     jsonError,
-    // Test Cases
-    testCases,
-    setTestCases,
+    // Test Phrases
+    testPhrases,
+    setTestPhrases,
     // Computed
     profile,
     initial,

@@ -10,8 +10,8 @@ interface LLMInlineEditorProps {
   onClose: () => void;
   node?: any;
   profile?: NLPProfile;
-  testCases?: string[]; // ✅ Test cases passed directly from useProfileState
-  setTestCases?: (cases: string[]) => void; // ✅ Setter passed directly from useProfileState
+  testPhrases?: string[]; // ✅ Test phrases passed directly from useProfileState
+  setTestPhrases?: (phrases: string[]) => void; // ✅ Setter passed directly from useProfileState
   onProfileUpdate?: (profile: NLPProfile) => void;
 }
 
@@ -32,26 +32,26 @@ export default function LLMInlineEditor({
   onClose,
   node,
   profile,
-  testCases: testCasesProp,
-  setTestCases: setTestCasesProp,
+  testPhrases: testPhrasesProp,
+  setTestPhrases: setTestPhrasesProp,
   onProfileUpdate,
 }: LLMInlineEditorProps) {
   const [llmPrompt, setLlmPrompt] = React.useState<string>(TEMPLATE_PROMPT);
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
   const [generating, setGenerating] = React.useState<boolean>(false);
 
-  // ✅ Usa testCases da props se disponibili, altrimenti fallback a profile
-  const testCases = testCasesProp || profile?.testCases || [];
+  // ✅ Usa testPhrases da props se disponibili, altrimenti fallback a profile
+  const testPhrases = testPhrasesProp || profile?.testPhrases || [];
 
-  const setTestCases = React.useCallback((cases: string[]) => {
+  const setTestPhrases = React.useCallback((phrases: string[]) => {
     // ✅ Usa setter diretto se disponibile
-    if (setTestCasesProp) {
-      setTestCasesProp(cases);
+    if (setTestPhrasesProp) {
+      setTestPhrasesProp(phrases);
     } else if (onProfileUpdate && profile) {
       // Fallback: aggiorna tramite onProfileUpdate
-      onProfileUpdate({ ...profile, testCases: cases });
+      onProfileUpdate({ ...profile, testPhrases: phrases });
     }
-  }, [setTestCasesProp, profile, onProfileUpdate]);
+  }, [setTestPhrasesProp, profile, onProfileUpdate]);
 
   // Use unified editor mode hook
   const { currentValue, setCurrentValue, isCreateMode } = useEditorMode({
@@ -97,20 +97,20 @@ export default function LLMInlineEditor({
   const handleButtonClick = async () => {
     let prompt = llmPrompt || '';
 
-    // Find test cases that don't match
-    const unmatchedTestCases: string[] = [];
-    if (llmPrompt && llmPrompt.trim() && testCases.length > 0) {
-      testCases.forEach((testCase) => {
-        const result = testLLM(testCase);
+    // Find test phrases that don't match
+    const unmatchedTestPhrases: string[] = [];
+    if (llmPrompt && llmPrompt.trim() && testPhrases.length > 0) {
+      testPhrases.forEach((testPhrase) => {
+        const result = testLLM(testPhrase);
         if (!result.matched) {
-          unmatchedTestCases.push(testCase);
+          unmatchedTestPhrases.push(testPhrase);
         }
       });
     }
 
     // Build prompt with validation errors if needed
-    if (unmatchedTestCases.length > 0) {
-      prompt += `\n\n⚠️ These test cases should match but currently don't:\n${unmatchedTestCases.map(tc => `- ${tc}`).join('\n')}`;
+    if (unmatchedTestPhrases.length > 0) {
+      prompt += `\n\n⚠️ These test phrases should match but currently don't:\n${unmatchedTestPhrases.map(tp => `- ${tp}`).join('\n')}`;
     }
 
     setGenerating(true);
@@ -138,8 +138,8 @@ export default function LLMInlineEditor({
     }
   };
 
-  // Show button if user edited or there are unmatched test cases
-  const hasUnmatchedTests = testCases.some(tc => !testLLM(tc).matched);
+  // Show button if user edited or there are unmatched test phrases
+  const hasUnmatchedTests = testPhrases.some(tp => !testLLM(tp).matched);
   const shouldShowButton = !generating && (hasUserEdited || hasUnmatchedTests);
 
   return (

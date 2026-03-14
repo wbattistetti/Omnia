@@ -1,5 +1,4 @@
 import React from 'react';
-import { flushSync } from 'react-dom';
 import { Plus, ChevronsRight, BarChart2, Play } from 'lucide-react';
 import * as testingState from '@responseEditor/testingState';
 
@@ -72,6 +71,10 @@ export default function TesterGridActionsColumn({
 
   // Row 0: Run All button
   if (rowIndex === 0 && runAllRows) {
+    // ✅ FIX: Usa solo la prop `testing` (stato React) invece di testingState.getIsTesting()
+    // testingState.getIsTesting() non causa re-render perché non è uno stato React
+    const isDisabled = testing || examplesListLength === 0;
+
     return (
       <td style={{
         padding: 4,
@@ -86,27 +89,21 @@ export default function TesterGridActionsColumn({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            // ✅ CRITICAL: Attiva testing state PRIMA di qualsiasi operazione
-            // Usa flushSync per forzare React a processare il cambio IMMEDIATAMENTE
-            // Questo previene il feedback loop che parte prima che runAllRows venga eseguito
-            testingState.startTesting();
-            flushSync(() => {
-              // Forza React a processare il cambio di getIsTesting() immediatamente
-              // Questo assicura che DataExtractionEditor venga smontato PRIMA che runAllRows() venga chiamato
-            });
+            // ✅ FIX: Non chiamare testingState.startTesting() qui, sarà chiamato in runAllRows
+            // Questo evita duplicazioni e garantisce sincronizzazione corretta
             void runAllRows();
           }}
-          disabled={testing || examplesListLength === 0}
+          disabled={isDisabled}
           title="Prova tutte"
           style={{
             border: '1px solid #22c55e',
-            background: testing ? '#eab308' : '#14532d',
+            background: isDisabled ? '#eab308' : '#14532d',
             color: '#dcfce7',
             borderRadius: 8,
             padding: '8px 10px',
-            cursor: testing || examplesListLength === 0 ? 'not-allowed' : 'pointer',
+            cursor: isDisabled ? 'not-allowed' : 'pointer',
             width: '100%',
-            opacity: testing || examplesListLength === 0 ? 0.5 : 1,
+            opacity: isDisabled ? 0.5 : 1,
           }}
         >
           <ChevronsRight size={16} />

@@ -3,7 +3,13 @@ import TesterGridInput from './TesterGridInput';
 import TesterGridActionsColumn from './TesterGridActionsColumn';
 import TesterGridHeaderColumn from './TesterGridHeaderColumn';
 import AddContractDropdown from './AddContractDropdown';
-import type { DataContract, ContractType } from '@components/DialogueDataEngine/parsers/contractLoader';
+import type { DataContract, ContractType } from '@components/DialogueDataEngine/contracts/contractLoader';
+
+// ✅ Helper: Get engines from contract (supports both engines and parsers for retrocompatibilità)
+function getEngines(contract: DataContract | null): any[] {
+  if (!contract) return [];
+  return contract.engines || contract.parsers || [];
+}
 
 // 🎨 Colori centralizzati per extractors
 const EXTRACTOR_COLORS = {
@@ -93,33 +99,34 @@ export default function TesterGridHeader({
   // State per gestire quale colonna ha il dropdown "+" aperto
   const [openDropdownAfter, setOpenDropdownAfter] = React.useState<string | null>(null);
 
-  // Leggi parsers dal dataContract - ordine implicito (ordine array = ordine escalation)
-  const parsers = useMemo(() => {
+  // Leggi engines dal dataContract - ordine implicito (ordine array = ordine escalation)
+  const engines = useMemo(() => {
     // ✅ DEBUG: Log dettagliato per capire perché le colonne non vengono mostrate
-    console.log('[TesterGridHeader] 🔍 Reading parsers from DataContract', {
+    const enginesArray = getEngines(contract);
+    console.log('[TesterGridHeader] 🔍 Reading engines from DataContract', {
       hasContract: !!contract,
       contractType: contract ? typeof contract : 'null',
-      hasContractsArray: !!contract?.parsers,
-      parsersIsArray: Array.isArray(contract?.parsers),
-      parsersRaw: contract?.parsers,
-      parsersCount: contract?.parsers?.length || 0,
-      parsersTypes: contract?.parsers?.map((c: any) => c?.type) || [],
+      hasEnginesArray: enginesArray.length > 0,
+      enginesIsArray: Array.isArray(enginesArray),
+      enginesRaw: enginesArray,
+      enginesCount: enginesArray.length,
+      enginesTypes: enginesArray.map((c: any) => c?.type) || [],
       contractKeys: contract ? Object.keys(contract) : []
     });
 
-    if (!contract?.parsers || !Array.isArray(contract.parsers)) {
-      console.log('[TesterGridHeader] ⚠️ No parsers array found, returning empty array');
+    if (!enginesArray || enginesArray.length === 0) {
+      console.log('[TesterGridHeader] ⚠️ No engines array found, returning empty array');
       return [];
     }
-    // Filtra solo i contract con enabled: true
-    const filtered = contract.parsers.filter(c => c.enabled !== false);
-    console.log('[TesterGridHeader] ✅ Contracts filtered', {
-      totalContracts: contract.parsers.length,
-      enabledContracts: filtered.length,
+    // Filtra solo gli engine con enabled: true
+    const filtered = enginesArray.filter(c => c.enabled !== false);
+    console.log('[TesterGridHeader] ✅ Engines filtered', {
+      totalEngines: enginesArray.length,
+      enabledEngines: filtered.length,
       filteredTypes: filtered.map(c => c.type)
     });
     return filtered;
-  }, [contract?.parsers]);
+  }, [contract]);
 
   // Map contract type to component type
   const mapContractTypeToComponentType = (type: ContractType): 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings' => {
@@ -130,8 +137,8 @@ export default function TesterGridHeader({
   // Get available methods (excluding already added ones)
   const getAvailableMethods = (): ContractType[] => {
     const allMethods: ContractType[] = ['regex', 'rules', 'ner', 'llm', 'embeddings'];
-    if (!parsers || parsers.length === 0) return allMethods;
-    const usedTypes = parsers.map(c => c.type);
+    if (!engines || engines.length === 0) return allMethods;
+    const usedTypes = engines.map(c => c.type);
     return allMethods.filter(m => !usedTypes.includes(m));
   };
 
@@ -143,23 +150,27 @@ export default function TesterGridHeader({
         return;
       }
 
-      const currentContracts = parsers || [];
-      const insertIndex = currentContracts.findIndex(c => c.type === insertAfterType) + 1;
+      const currentEngines = engines || [];
+      const insertIndex = currentEngines.findIndex(c => c.type === insertAfterType) + 1;
 
-      // Crea nuovo contract item
-      const newContractItem = createDefaultContract(newType);
+      // Crea nuovo engine item
+      const newEngineItem = createDefaultContract(newType);
 
       // Inserisci nel posto corretto
-      const newContracts = [
-        ...currentContracts.slice(0, insertIndex),
-        newContractItem,
-        ...currentContracts.slice(insertIndex),
+      const newEngines = [
+        ...currentEngines.slice(0, insertIndex),
+        newEngineItem,
+        ...currentEngines.slice(insertIndex),
       ];
 
       const updatedContract: DataContract = {
         ...contract,
-        parsers: newContracts,
+        engines: newEngines,
       };
+      // ✅ Rimuovi parsers se presente (migrazione)
+      if (updatedContract.parsers) {
+        delete updatedContract.parsers;
+      }
 
       setOpenDropdownAfter(null);
       onContractChange(updatedContract);
@@ -192,12 +203,13 @@ export default function TesterGridHeader({
       return;
     }
 
-    const newContractItem = createDefaultContract(type);
+    const newEngineItem = createDefaultContract(type);
     const newContract: DataContract = {
       templateName: contract?.templateName ?? '',
       templateId: contract?.templateId || '',
       subDataMapping: contract?.subDataMapping || {},
-      parsers: [newContractItem],
+      engines: [newEngineItem],
+      outputCanonical: contract?.outputCanonical || { format: 'value' }
     };
 
     onContractChange(newContract);
@@ -207,18 +219,22 @@ export default function TesterGridHeader({
   const handleRemoveContract = (typeToRemove: ContractType) => {
     if (!contract || !onContractChange) return;
 
-    const newContracts = parsers.filter(c => c.type !== typeToRemove);
+    const newEngines = engines.filter(c => c.type !== typeToRemove);
 
-    if (newContracts.length === 0) {
-      // Se non ci sono più contratti, rimuovi tutto
+    if (newEngines.length === 0) {
+      // Se non ci sono più engine, rimuovi tutto
       onContractChange(null);
       return;
     }
 
     const updatedContract: DataContract = {
       ...contract,
-      parsers: newContracts,
+      engines: newEngines,
     };
+    // ✅ Rimuovi parsers se presente (migrazione)
+    if (updatedContract.parsers) {
+      delete updatedContract.parsers;
+    }
 
     onContractChange(updatedContract);
   };
@@ -238,19 +254,19 @@ export default function TesterGridHeader({
     return calculatedWidth;
   };
 
-  // Render dynamic columns based on parsers array
+  // Render dynamic columns based on engines array
   const renderDynamicColumns = () => {
     // ✅ DEBUG: Log per capire perché le colonne non vengono renderizzate
     console.log('[TesterGridHeader] 🔍 renderDynamicColumns called', {
-      parsersCount: parsers?.length || 0,
-      parsersTypes: parsers?.map(c => c.type) || [],
-      willShowAddContract: !parsers || parsers.length === 0,
-      willShowColumns: parsers && parsers.length > 0
+      enginesCount: engines?.length || 0,
+      enginesTypes: engines?.map(c => c.type) || [],
+      willShowAddContract: !engines || engines.length === 0,
+      willShowColumns: engines && engines.length > 0
     });
 
-    if (!parsers || parsers.length === 0) {
-      // Show "Add contract" dropdown when no contract
-      console.log('[TesterGridHeader] ⚠️ No parsers found, showing "Add contract" dropdown');
+    if (!engines || engines.length === 0) {
+      // Show "Add contract" dropdown when no engine
+      console.log('[TesterGridHeader] ⚠️ No engines found, showing "Add contract" dropdown');
       return (
         <th colSpan={1} style={{ padding: 8, background: '#f9fafb', textAlign: 'center', width: '200px' }}>
           <AddContractDropdown
@@ -262,18 +278,18 @@ export default function TesterGridHeader({
       );
     }
 
-    console.log('[TesterGridHeader] ✅ Rendering columns for parsers', {
-      parsersCount: parsers.length,
-      parsersTypes: parsers.map(c => c.type)
+    console.log('[TesterGridHeader] ✅ Rendering columns for engines', {
+      enginesCount: engines.length,
+      enginesTypes: engines.map(c => c.type)
     });
 
-    const columnWidth = calculateColumnWidth(parsers.length);
+    const columnWidth = calculateColumnWidth(engines.length);
 
-    return parsers.map((contractItem, index) => {
-      const componentType = mapContractTypeToComponentType(contractItem.type);
+    return engines.map((engineItem, index) => {
+      const componentType = mapContractTypeToComponentType(engineItem.type);
       const labels = COLUMN_LABELS[componentType] || COLUMN_LABELS.regex;
       const color = EXTRACTOR_COLORS[componentType] || EXTRACTOR_COLORS.regex;
-      const enabled = contractItem.enabled !== false;
+      const enabled = engineItem.enabled !== false;
 
       // Map to enabledMethods prop (for backward compatibility)
       const enabledMethodKey = componentType === 'deterministic' ? 'deterministic' : componentType;
@@ -281,13 +297,13 @@ export default function TesterGridHeader({
 
       // Get available methods for this column
       const availableMethods = getAvailableMethods();
-      const isDropdownOpen = openDropdownAfter === contractItem.type;
+      const isDropdownOpen = openDropdownAfter === engineItem.type;
 
       return (
         <TesterGridHeaderColumn
-          key={contractItem.type}
+          key={engineItem.type}
           type={componentType}
-          contractType={contractItem.type}
+          contractType={engineItem.type}
           mainLabel={labels.main}
           techLabel={labels.tech}
           tooltip={labels.tooltip}
@@ -299,16 +315,16 @@ export default function TesterGridHeader({
           showPostProcess={componentType === 'deterministic'}
           onAddContract={availableMethods.length > 0 && onContractChange ? () => {
             // Toggle dropdown for this column
-            setOpenDropdownAfter(isDropdownOpen ? null : contractItem.type);
+            setOpenDropdownAfter(isDropdownOpen ? null : engineItem.type);
           } : undefined}
           availableMethods={availableMethods}
           isDropdownOpen={isDropdownOpen}
           onSelectMethod={onContractChange ? (selectedMethod) => {
-            handleAddContractAfter(contractItem.type)(selectedMethod);
+            handleAddContractAfter(engineItem.type)(selectedMethod);
             setOpenDropdownAfter(null);
           } : undefined}
           columnWidth={columnWidth}
-          onRemoveContract={onContractChange && parsers.length > 1 ? () => handleRemoveContract(contractItem.type) : undefined}
+          onRemoveContract={onContractChange && engines.length > 1 ? () => handleRemoveContract(engineItem.type) : undefined}
         />
       );
     });
@@ -364,8 +380,8 @@ export default function TesterGridHeader({
           />
         </th>
         <TesterGridActionsColumn rowIndex={-1} newExample={newExample} onAddExample={onAddExample} phraseColumnWidth={phraseColumnWidth} />
-        {/* Render dynamic columns based on parsers array */}
-        {parsers && parsers.length > 0 ? (
+        {/* Render dynamic columns based on engines array */}
+        {engines && engines.length > 0 ? (
           renderDynamicColumns()
         ) : (
           // Show "Add contract" dropdown when no contract

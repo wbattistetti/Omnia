@@ -1,38 +1,37 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { taskRepository } from '@services/TaskRepository';
+import DialogueTaskService from '@services/DialogueTaskService';
 
 /**
- * Centralized service for persisting examplesList to node.nlpProfile.examples
+ * Centralized service for persisting testPhrases (frasi di test) to template.dataContract.testPhrases
  *
- * This service ensures that examplesList is synchronized across:
- * - node.nlpProfile.examples (in Zustand store)
- * - TaskRepository cache (in-memory)
+ * This service ensures that testPhrases are saved in the correct location:
+ * - template.dataContract.testPhrases (fonte di verità)
  *
  * The database is updated ONLY on explicit save (handleEditorClose).
  *
  * Architecture:
- * - Single source of truth: Zustand store (via updateSelectedNode)
- * - TaskRepository cache: mirror of store, updated synchronously
+ * - Single source of truth: template.dataContract.testPhrases
+ * - Test phrases are part of the contract, not the node profile
  * - Database: updated only on explicit save
  */
 export class ExamplesPersistenceService {
   /**
-   * Set examples for a node and synchronize across all layers
+   * Set testPhrases for a node and save to template.dataContract.testPhrases
    *
    * This method:
-   * 1. Updates node.nlpProfile.examples in Zustand store (via updateSelectedNode)
-   * 2. Updates TaskRepository cache (in-memory)
+   * 1. Saves testPhrases to template.dataContract.testPhrases (fonte di verità)
+   * 2. Marks template as modified for future save
    *
    * The database is NOT updated here - it's updated only on explicit save.
    *
-   * @param nodeId - The node ID
-   * @param nodeTemplateId - The node template ID (for finding in taskTree.nodes)
-   * @param taskId - The task ID (for TaskRepository cache)
-   * @param examplesList - The new examples list
-   * @param updateSelectedNode - Callback to update the node in Zustand store
-   * @returns void (updates are applied via callbacks)
+   * @param nodeId - The node ID (for logging)
+   * @param nodeTemplateId - The node template ID (required - used to find template)
+   * @param taskId - The task ID (for logging, not used for persistence)
+   * @param examplesList - The new test phrases list (frasi di test)
+   * @param updateSelectedNode - Callback (not used anymore, kept for compatibility)
+   * @returns void (updates are applied directly to template)
    */
   static setExamplesForNode(
     nodeId: string,
@@ -41,77 +40,69 @@ export class ExamplesPersistenceService {
     examplesList: string[],
     updateSelectedNode: (updater: (node: any) => any) => void
   ): void {
-    if (!taskId) {
-      console.warn('[ExamplesPersistence] No taskId provided, skipping TaskRepository sync');
+    if (!nodeTemplateId) {
+      console.warn('[ExamplesPersistence] No nodeTemplateId provided, cannot save testPhrases to template');
+      return;
     }
 
-    // Step 1: Update node in Zustand store via updateSelectedNode
-    updateSelectedNode((prev: any) => {
-      if (!prev) return prev;
+    // Normalize testPhrases (empty array becomes undefined)
+    const newTestPhrases = examplesList.length > 0 ? [...examplesList] : undefined;
 
-      const updated = { ...prev };
+    // ✅ CORRETTO: Salva testPhrases nel template.dataContract.testPhrases
+    const template = DialogueTaskService.getTemplate(nodeTemplateId);
 
-      // Ensure nlpProfile exists
-      if (!updated.nlpProfile) {
-        updated.nlpProfile = {};
-      }
+    if (!template) {
+      console.warn('[ExamplesPersistence] Template not found:', nodeTemplateId);
+      return;
+    }
 
-      // Normalize examples (empty array becomes undefined)
-      const newExamples = examplesList.length > 0 ? [...examplesList] : undefined;
-      const prevExamples = updated.nlpProfile.examples;
+    // Assicurati che dataContract esista
+    if (!template.dataContract) {
+      template.dataContract = {
+        templateId: nodeTemplateId,
+        templateName: template.label || nodeTemplateId,
+        subDataMapping: {},
+        engines: [],
+        outputCanonical: { format: 'value' }
+      };
+    }
 
-      // Check if changed (avoid unnecessary updates and infinite loops)
-      const hasChanged =
-        (prevExamples?.length || 0) !== (newExamples?.length || 0) ||
-        (prevExamples || []).some((ex: string, idx: number) => ex !== newExamples?.[idx]);
+    // Salva testPhrases nel dataContract
+    const prevTestPhrases = template.dataContract.testPhrases;
+    const hasChanged =
+      (prevTestPhrases?.length || 0) !== (newTestPhrases?.length || 0) ||
+      (prevTestPhrases || []).some((ex: string, idx: number) => ex !== newTestPhrases?.[idx]);
 
-      if (!hasChanged) {
-        return prev; // No change, return original to avoid unnecessary updates
-      }
+    if (hasChanged) {
+      template.dataContract.testPhrases = newTestPhrases;
+      DialogueTaskService.markTemplateAsModified(nodeTemplateId);
 
-      // Log the update (for debugging)
-      console.log('[ExamplesPersistence] Saving examplesList to node', {
+      console.log('[ExamplesPersistence] ✅ Saved testPhrases to template.dataContract.testPhrases', {
+        templateId: nodeTemplateId,
         nodeId,
-        prevCount: prevExamples?.length || 0,
-        newCount: newExamples?.length || 0,
-        examples: newExamples?.slice(0, 3)
+        prevCount: prevTestPhrases?.length || 0,
+        newCount: newTestPhrases?.length || 0,
+        testPhrases: newTestPhrases?.slice(0, 3)
       });
-
-      // Update nlpProfile.examples
-      updated.nlpProfile.examples = newExamples;
-
-      // Step 2: Update TaskRepository cache (if taskId provided)
-      // ✅ NUOVO MODELLO: Task non ha più .data[], usa TaskTree.nodes[] costruito runtime
-      // Non serve più aggiornare cache con .data[] - il TaskTree viene ricostruito da template + instance
-      // Examples vengono salvati nel template, non nell'istanza
-      if (taskId) {
-        try {
-          const currentTask = taskRepository.getTask(taskId);
-          // ✅ Cache update non necessario - TaskTree viene ricostruito runtime da template + instance
-          console.log('[ExamplesPersistence] Examples saved to node (cache update not needed)', {
-            taskId,
-            nodeId,
-            examplesCount: newExamples?.length || 0
-          });
-        } catch (error) {
-          console.error('[ExamplesPersistence] Error accessing TaskRepository', error);
-        }
-      }
-
-      return updated;
-    });
+    }
   }
 
   /**
-   * Get examples for a node from the current state
+   * Get testPhrases for a node from template.dataContract.testPhrases
    *
-   * @param node - The node object
-   * @returns The examples list (or empty array if not set)
+   * @param node - The node object (must have templateId)
+   * @returns The testPhrases list (or empty array if not set)
    */
   static getExamplesForNode(node: any): string[] {
-    if (!node?.nlpProfile?.examples) {
+    if (!node?.templateId) {
       return [];
     }
-    return Array.isArray(node.nlpProfile.examples) ? node.nlpProfile.examples : [];
+
+    const template = DialogueTaskService.getTemplate(node.templateId);
+    if (!template?.dataContract?.testPhrases) {
+      return [];
+    }
+
+    return Array.isArray(template.dataContract.testPhrases) ? template.dataContract.testPhrases : [];
   }
 }

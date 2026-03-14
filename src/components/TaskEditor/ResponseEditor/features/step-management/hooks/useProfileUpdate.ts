@@ -49,7 +49,7 @@ export function useProfileUpdate(params: UseProfileUpdateParams) {
         synonyms: partialProfile.synonyms !== undefined ? partialProfile.synonyms : updated.nlpContract.synonyms,
         kind: partialProfile.kind !== undefined ? partialProfile.kind : updated.nlpContract.kind,
         examples: partialProfile.examples !== undefined ? partialProfile.examples : updated.nlpContract.examples,
-        testCases: partialProfile.testCases !== undefined ? partialProfile.testCases : updated.nlpContract.testCases,
+        testPhrases: partialProfile.testPhrases !== undefined ? partialProfile.testPhrases : updated.nlpContract.testPhrases,
         formatHints: partialProfile.formatHints !== undefined ? partialProfile.formatHints : updated.nlpContract.formatHints,
         minConfidence: partialProfile.minConfidence !== undefined ? partialProfile.minConfidence : updated.nlpContract.minConfidence,
         postProcess: partialProfile.postProcess !== undefined ? partialProfile.postProcess : updated.nlpContract.postProcess,

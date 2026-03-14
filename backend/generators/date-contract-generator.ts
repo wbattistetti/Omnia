@@ -36,6 +36,27 @@ export class DateContractGenerator extends BaseContractGenerator {
       templateName: 'date',
       templateId,
       subDataMapping,
+      // ✅ TEST PHRASES at contract level (not in engines)
+      testPhrases: [
+        // Completo
+        '12 aprile 1980',
+        '12 abril 1980',
+        '2/4/1980',
+        '16-12-1980',
+        // Parziale
+        '12 aprile',
+        'aprile 1980',
+        'dic. 80',
+        // Con preposizioni
+        '12 di aprile',
+        '12 de abril',
+        // Negativo
+        'pizza margherita',
+        '123456',
+        '16/12/1980',
+        'dicembre 12',
+        '1980'
+      ],
 
       regex: {
         // ✅ SINGOLA REGEX UNIVERSALE costruita dinamicamente dal DB
@@ -51,23 +72,6 @@ export class DateContractGenerator extends BaseContractGenerator {
           'aprile 1980',
           'dic. 80',
           '16 dicembre'
-        ],
-        testCases: [
-          // Completo
-          '12 aprile 1980',
-          '12 abril 1980',
-          '2/4/1980',
-          '16-12-1980',
-          // Parziale
-          '12 aprile',
-          'aprile 1980',
-          'dic. 80',
-          // Con preposizioni
-          '12 di aprile',
-          '12 de abril',
-          // Negativo
-          'pizza margherita',
-          '123456'
         ]
       },
 
@@ -77,11 +81,6 @@ export class DateContractGenerator extends BaseContractGenerator {
           { type: 'range', field: 'day', min: 1, max: 31 },
           { type: 'range', field: 'month', min: 1, max: 12 },
           { type: 'range', field: 'year', min: 1900, max: 2100 }
-        ],
-        testCases: [
-          '16/12/1980',
-          'dicembre 12',
-          '1980'
         ]
       },
 

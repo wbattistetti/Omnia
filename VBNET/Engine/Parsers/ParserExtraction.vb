@@ -22,8 +22,9 @@ Partial Public Class Parser
     ''' Extracts a single value from an utterance using the node NLP contract.
     ''' Returns Nothing when no match; throws on structural errors.
     ''' ✅ STATELESS: Accetta IParsableTask per evitare dipendenza circolare
+    ''' ✅ PUBLIC: Accessibile per test extraction (non richiede metadati runtime)
     ''' </summary>
-    Private Shared Function ExtractSimple(input As String, node As IParsableTask) As String
+    Public Shared Function ExtractSimple(input As String, node As IParsableTask) As String
         If String.IsNullOrEmpty(input) Then
             Throw New ArgumentException("Input cannot be empty.", NameOf(input))
         End If

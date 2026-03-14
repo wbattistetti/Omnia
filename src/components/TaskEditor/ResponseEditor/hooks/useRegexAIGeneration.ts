@@ -21,7 +21,7 @@ interface FeedbackItem {
 interface UseRegexAIGenerationOptions {
   node?: any;
   kind?: string;
-  testCases?: string[];
+  testPhrases?: string[];
   onSuccess?: (newRegex: string) => void;
   onError?: (error: Error) => void;
   // ✅ NEW: Feedback from test notes
@@ -37,7 +37,7 @@ interface UseRegexAIGenerationOptions {
 export function useRegexAIGeneration({
   node,
   kind,
-  testCases = [],
+  testPhrases = [],
   onSuccess,
   onError,
   examplesList = [],
@@ -184,7 +184,7 @@ export function useRegexAIGeneration({
     } finally {
       setGeneratingRegex(false);
     }
-  }, [node, kind, testCases, onSuccess, onError, examplesList, rowResults, getNote]);
+  }, [node, kind, testPhrases, onSuccess, onError, examplesList, rowResults, getNote]);
 
   return {
     generatingRegex,

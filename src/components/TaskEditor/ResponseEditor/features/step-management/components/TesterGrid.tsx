@@ -6,7 +6,13 @@ import { MemoizedEditorOverlay } from '@responseEditor/features/step-management/
 import { useColumnResize } from '@responseEditor/features/step-management/components/TesterGrid/hooks/useColumnResize';
 import { useEditorOverlay } from '@responseEditor/features/step-management/components/TesterGrid/hooks/useEditorOverlay';
 import { RowResult } from '@responseEditor/features/step-management/hooks/useExtractionTesting';
-import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+
+// ✅ Helper: Get engines from contract (supports both engines and parsers for retrocompatibilità)
+function getEngines(contract: DataContract | null): any[] {
+  if (!contract) return [];
+  return contract.engines || contract.parsers || [];
+}
 
 // 🎨 Colori centralizzati per extractors (usati solo per editor overlay)
 const EXTRACTOR_COLORS = {
@@ -198,6 +204,22 @@ function TesterGridComponent({
     contractTableRef: scrollContainerRef,
   });
 
+  // ✅ Calculate global maximum milliseconds across all rows and all engines
+  // This ensures all progress bars use the same scale for visual comparison
+  const globalMaxMs = React.useMemo(() => {
+    let max = 0;
+    for (const rowResult of rowResults) {
+      max = Math.max(
+        max,
+        rowResult.regexMs || 0,
+        rowResult.detMs || 0,
+        rowResult.nerMs || 0,
+        rowResult.llmMs || 0
+      );
+    }
+    return max || 1; // At least 1 to avoid division by zero
+  }, [rowResults]);
+
   // State for editor button and error message to display in header
   const [editorButton, setEditorButton] = React.useState<React.ReactNode>(null);
   const [editorErrorMessage, setEditorErrorMessage] = React.useState<React.ReactNode>(null);
@@ -357,6 +379,7 @@ function TesterGridComponent({
                   setReportOpen={setReportOpen}
                   baselineStats={baselineStats}
                   lastStats={lastStats}
+                  globalMaxMs={globalMaxMs}
                 />
               ))}
               {examplesList.length === 0 && (

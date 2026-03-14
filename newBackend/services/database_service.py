@@ -144,12 +144,12 @@ class DatabaseService:
             "regex": {
                 "patterns": factory_type.regexPatterns,
                 "examples": factory_type.examples,
-                "testCases": []
+                "testPhrases": []
             },
             "rules": {
                 "extractorCode": factory_type.extractorCode,
                 "validators": factory_type.validators,
-                "testCases": []
+                "testPhrases": []
             },
             "llm": {
                 "systemPrompt": factory_type.llmPrompt,

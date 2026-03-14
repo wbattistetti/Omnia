@@ -3,7 +3,7 @@
  * Utilities for loading and saving Data parsers
  */
 
-import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 import DialogueTaskService from '@services/DialogueTaskService';
 
 /**
@@ -29,60 +29,86 @@ export function loadContractFromNode(node: any): DataContract | null {
     const template = DialogueTaskService.getTemplate(templateId);
     if (!template) return null;
 
-    // ✅ PRIORITY 1: Se esiste dataContract, usalo
+    // ✅ PRIORITY 1: Se esiste dataContract, unificalo con semanticContract se presente
     if (template?.dataContract) {
-      const regexPattern = template.dataContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+      let contract = template.dataContract as DataContract;
+
+      // ✅ Unifica semanticContract in dataContract se presente
+      if (template?.semanticContract && !contract.entity) {
+        contract = {
+          ...contract,
+          entity: template.semanticContract.entity,
+          subentities: template.semanticContract.subentities,
+          constraints: template.semanticContract.constraints,
+          normalization: template.semanticContract.normalization,
+          redefinitionPolicy: template.semanticContract.redefinitionPolicy,
+          outputCanonical: template.semanticContract.outputCanonical,
+          canonicalExamples: template.semanticContract.canonicalExamples
+        };
+      }
+
+      // ✅ Normalizza: parsers → engines (retrocompatibilità)
+      if (contract.parsers && !contract.engines) {
+        contract.engines = contract.parsers;
+      }
+
+      const regexPattern = contract?.engines?.find((c: any) => c.type === 'regex')?.patterns?.[0];
       console.log('[CONTRACT] LOAD - From template.dataContract', {
         nodeId: node.id,
         templateId,
         regexPattern: regexPattern || '(none)',
-        parsersCount: template.dataContract.parsers?.length || 0
+        enginesCount: contract.engines?.length || 0
       });
-      return template.dataContract as DataContract;
+      return contract;
     }
 
-    // ✅ PRIORITY 2: Se esiste semanticContract ma non dataContract, crea DataContract vuoto
+    // ✅ PRIORITY 2: Se esiste semanticContract ma non dataContract, crea DataContract unificato
     if (template?.semanticContract) {
-      console.log('[CONTRACT] LOAD - Creating empty DataContract from SemanticContract', {
+      console.log('[CONTRACT] LOAD - Creating DataContract from SemanticContract', {
         nodeId: node.id,
         templateId,
         hasSemanticContract: true,
         entityLabel: template.semanticContract.entity?.label
       });
 
-      // Crea DataContract iniziale vuoto con parsers array vuoto
-      // Le colonne verranno mostrate ma vuote, l'utente può aggiungere contratti manualmente
-      const emptyDataContract: DataContract = {
+      // ✅ Crea DataContract unificato con semanticContract
+      const unifiedDataContract: DataContract = {
         templateName: template.label || templateId,
         templateId: templateId,
         subDataMapping: {},
-        parsers: [] // Array vuoto = nessun engine configurato, ma le colonne possono essere mostrate
+        engines: [], // Array vuoto = nessun engine configurato, ma le colonne possono essere mostrate
+        // ✅ Unifica semanticContract
+        entity: template.semanticContract.entity,
+        subentities: template.semanticContract.subentities,
+        constraints: template.semanticContract.constraints,
+        normalization: template.semanticContract.normalization,
+        redefinitionPolicy: template.semanticContract.redefinitionPolicy,
+        outputCanonical: template.semanticContract.outputCanonical,
+        canonicalExamples: template.semanticContract.canonicalExamples
       };
 
       // ✅ DEBUG: Log dettagliato del DataContract creato
-      console.log('[CONTRACT] LOAD - Empty DataContract created', {
+      console.log('[CONTRACT] LOAD - Unified DataContract created', {
         nodeId: node.id,
         templateId,
-        templateName: emptyDataContract.templateName,
-        parsersCount: emptyDataContract.parsers.length,
-        parsersArray: emptyDataContract.parsers,
-        hasSemanticContract: !!template.semanticContract,
-        semanticContractEntity: template.semanticContract?.entity?.label,
-        dataContractKeys: Object.keys(emptyDataContract)
+        templateName: unifiedDataContract.templateName,
+        enginesCount: unifiedDataContract.engines.length,
+        hasEntity: !!unifiedDataContract.entity,
+        subentitiesCount: unifiedDataContract.subentities?.length || 0
       });
 
-      // Salva il DataContract vuoto nel template per evitare di ricrearlo ogni volta
-      template.dataContract = emptyDataContract;
+      // Salva il DataContract unificato nel template per evitare di ricrearlo ogni volta
+      template.dataContract = unifiedDataContract;
       DialogueTaskService.markTemplateAsModified(templateId);
 
-      console.log('[CONTRACT] LOAD - Empty DataContract created and saved', {
+      console.log('[CONTRACT] LOAD - Unified DataContract created and saved', {
         nodeId: node.id,
         templateId,
         savedToTemplate: !!template.dataContract,
-        savedContractsCount: template.dataContract?.parsers?.length || 0
+        savedEnginesCount: template.dataContract?.engines?.length || 0
       });
 
-      return emptyDataContract;
+      return unifiedDataContract;
     }
   }
 

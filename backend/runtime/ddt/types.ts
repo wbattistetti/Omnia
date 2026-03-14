@@ -153,6 +153,8 @@ export interface NLPContract {
       patternIndex?: number;
     };
   };
+  // ✅ TEST PHRASES at contract level (not in engines)
+  testPhrases?: string[];
   regex: {
     patterns: string[];
     patternModes?: string[];
@@ -164,12 +166,10 @@ export interface NLPContract {
       };
       ambiguousCanonicalKeys: string[];
     };
-    testCases: string[];
   };
   rules: {
     extractorCode: string;
     validators: any[];
-    testCases: string[];
   };
   ner?: {
     entityTypes: string[];

@@ -94,7 +94,8 @@ function ensureSubDataMapping(
         templateId,
         templateName: template.label || templateId,
         subDataMapping: {},
-        parsers: [],
+        engines: [],
+        outputCanonical: { format: 'value' }
       };
     }
     template.dataContract.subDataMapping = newMapping;
@@ -243,7 +244,7 @@ export default function RegexInlineEditor({
   const { generatingRegex, generateRegex } = useRegexAIGeneration({
     node,
     kind,
-    testCases: [],
+    testPhrases: [],
     examplesList,
     rowResults,
     onSuccess: (newRegex: string) => {
@@ -329,17 +330,27 @@ export default function RegexInlineEditor({
     }
 
     if (!template.dataContract) {
-      template.dataContract = { parsers: [] };
+      template.dataContract = {
+        templateId: node.templateId,
+        templateName: template.label || node.templateId,
+        subDataMapping: {},
+        engines: [],
+        outputCanonical: { format: 'value' }
+      };
     }
 
-    const regexContract = template.dataContract.parsers?.find((c: any) => c.type === 'regex');
-    if (regexContract) {
-      regexContract.patterns = [techValue];
+    // ✅ Support both engines (new) and parsers (old) for retrocompatibilità
+    const engines = template.dataContract.engines || template.dataContract.parsers || [];
+    const regexEngine = engines.find((c: any) => c.type === 'regex');
+    if (regexEngine) {
+      regexEngine.patterns = [techValue];
     } else {
-      if (!template.dataContract.parsers) {
-        template.dataContract.parsers = [];
+      engines.push({ type: 'regex', enabled: true, patterns: [techValue], examples: [] });
+      template.dataContract.engines = engines;
+      // ✅ Rimuovi parsers se presente (migrazione)
+      if (template.dataContract.parsers) {
+        delete template.dataContract.parsers;
       }
-      template.dataContract.parsers.push({ type: 'regex', patterns: [techValue] });
     }
 
     DialogueTaskService.markTemplateAsModified(node.templateId);

@@ -17,31 +17,19 @@
  */
 
 let isTesting = false;
-// ✅ CRITICAL: Flag per bloccare onChange anche se l'useEffect è già schedulato
-// Questo previene race conditions dove onChange viene emesso PRIMA che getIsTesting() diventi true
-let isTestingLocked = false;
 
 export const startTesting = (): void => {
-  // ✅ Lock IMMEDIATAMENTE, prima di qualsiasi operazione
-  isTestingLocked = true;
   isTesting = true;
-
-  // ✅ CRITICAL: Unlock immediatamente dopo che React ha processato
-  // Usa requestAnimationFrame per garantire che React abbia finito di processare
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      isTestingLocked = false;
-    });
-  });
+  console.log('[testingState] startTesting called', { isTesting: true });
 };
 
 export const stopTesting = (): void => {
   isTesting = false;
-  isTestingLocked = false;
+  console.log('[testingState] stopTesting called', { isTesting: false });
 };
 
 export const getIsTesting = (): boolean => {
-  return isTesting || isTestingLocked;
+  return isTesting;
 };
 
 // ✅ Helper per verificare se una mutazione è permessa durante batch

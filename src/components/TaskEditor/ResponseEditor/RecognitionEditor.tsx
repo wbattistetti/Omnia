@@ -6,7 +6,13 @@ import WaitingMessagesConfig from '@responseEditor/Config/WaitingMessagesConfig'
 import TesterGrid from '@responseEditor/features/step-management/components/TesterGrid';
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 import { loadContractFromNode } from '@responseEditor/ContractSelector/contractHelpers';
-import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+
+// ✅ Helper: Get engines from contract (supports both engines and parsers for retrocompatibilità)
+function getEngines(contract: DataContract | null): any[] {
+  if (!contract) return [];
+  return contract.engines || contract.parsers || [];
+}
 import DialogueTaskService from '@services/DialogueTaskService';
 import { useProjectData } from '@context/ProjectDataContext';
 import { useNotesStore } from '@responseEditor/features/step-management/stores/notesStore';
@@ -68,8 +74,8 @@ interface RecognitionEditorProps {
     node?: any;
     kind?: string;
     profile?: any;
-    testCases?: string[];
-    setTestCases?: (cases: string[]) => void;
+    testPhrases?: string[];
+    setTestPhrases?: (phrases: string[]) => void;
     onProfileUpdate?: (profile: any) => void;
     task?: any;
   };
@@ -177,7 +183,9 @@ export default function RecognitionEditor({
 
       // ✅ Carica dal template UNA VOLTA quando apri l'editor
       const loadedContract = loadContractFromNode(node);
-      const regexPattern = loadedContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+      // ✅ Support both engines (new) and parsers (old) for retrocompatibilità
+      const engines = loadedContract?.engines || loadedContract?.parsers || [];
+      const regexPattern = engines.find((c: any) => c.type === 'regex')?.patterns?.[0];
 
       // ✅ DEBUG: Log dettagliato del contract caricato
       console.log('[RecognitionEditor] 🔍 Contract loaded from node', {
@@ -185,9 +193,9 @@ export default function RecognitionEditor({
         templateId: node.templateId,
         hasContract: !!loadedContract,
         contractType: loadedContract ? typeof loadedContract : 'null',
-        parsersArray: loadedContract?.parsers,
-        parsersCount: loadedContract?.parsers?.length || 0,
-        parsersTypes: loadedContract?.parsers?.map((c: any) => c.type) || [],
+        enginesArray: engines,
+        enginesCount: engines.length,
+        enginesTypes: engines.map((c: any) => c.type),
         contractKeys: loadedContract ? Object.keys(loadedContract) : [],
         templateName: loadedContract?.templateName,
         templateId: loadedContract?.templateId
@@ -357,12 +365,13 @@ export default function RecognitionEditor({
 
   // ✅ DEBUG: Log contract quando cambia (per vedere cosa viene passato a TesterGrid)
   React.useEffect(() => {
+    const engines = getEngines(contract);
     console.log('[RecognitionEditor] 🔍 Contract state changed', {
       hasContract: !!contract,
       contractType: contract ? typeof contract : 'null',
-      parsersArray: contract?.parsers,
-      parsersCount: contract?.parsers?.length || 0,
-      parsersTypes: contract?.parsers?.map((c: any) => c?.type) || [],
+      enginesArray: engines,
+      enginesCount: engines.length,
+      enginesTypes: engines.map((c: any) => c?.type),
       contractKeys: contract ? Object.keys(contract) : [],
       templateName: contract?.templateName,
       templateId: contract?.templateId,
@@ -372,7 +381,8 @@ export default function RecognitionEditor({
   }, [contract, editorProps?.node?.id, editorProps?.node?.templateId]);
 
   // ✅ Stato locale per regex (non salvato durante digitazione)
-  const contractItem = activeEditor && contract ? contract.parsers?.find((c: any) => {
+  const engines = getEngines(contract);
+  const contractItem = activeEditor && contract ? engines.find((c: any) => {
     const getContractTypeFromEditorType = (editorType: string): string => {
       if (editorType === 'extractor') return 'rules';
       return editorType;
@@ -397,30 +407,36 @@ export default function RecognitionEditor({
 
       const template = DialogueTaskService.getTemplate(editorProps.node.templateId);
       if (template?.dataContract) {
-        const regexParser = template.dataContract.parsers?.find((c: any) => c.type === 'regex');
-        const regexPattern = regexParser?.patterns?.[0] || '';
+        const templateEngines = getEngines(template.dataContract);
+        const regexEngine = templateEngines.find((c: any) => c.type === 'regex');
+        const regexPattern = regexEngine?.patterns?.[0] || '';
 
         console.log('[RecognitionEditor] 📝 Found regex pattern in template', {
-          hasParser: !!regexParser,
+          hasEngine: !!regexEngine,
           pattern: regexPattern || '(empty)',
-          parsersCount: template.dataContract.parsers?.length || 0
+          enginesCount: templateEngines.length
         });
 
         // ✅ CRITICAL: Update local contract AND trigger prop update for RegexInlineEditor
         // The RegexInlineEditor receives regex via props, so we need to ensure it gets the latest value
         if (contract) {
-          const updatedParsers = contract.parsers ? [...contract.parsers] : [];
-          const existingRegexIndex = updatedParsers.findIndex((c: any) => c.type === 'regex');
+          const currentEngines = getEngines(contract);
+          const updatedEngines = [...currentEngines];
+          const existingRegexIndex = updatedEngines.findIndex((c: any) => c.type === 'regex');
 
           if (existingRegexIndex >= 0) {
-            // Update existing regex parser
-            updatedParsers[existingRegexIndex] = { ...updatedParsers[existingRegexIndex], patterns: [regexPattern] };
+            // Update existing regex engine
+            updatedEngines[existingRegexIndex] = { ...updatedEngines[existingRegexIndex], patterns: [regexPattern] };
           } else if (regexPattern) {
-            // Add new regex parser if pattern exists
-            updatedParsers.push({ type: 'regex', patterns: [regexPattern] });
+            // Add new regex engine if pattern exists
+            updatedEngines.push({ type: 'regex', enabled: true, patterns: [regexPattern], examples: [] });
           }
 
-          const updatedContract = { ...contract, parsers: updatedParsers };
+          const updatedContract = { ...contract, engines: updatedEngines };
+          // ✅ Rimuovi parsers se presente (migrazione)
+          if (updatedContract.parsers) {
+            delete updatedContract.parsers;
+          }
           setLocalContract(updatedContract);
 
           console.log('[RecognitionEditor] ✅ Updated local contract with regex pattern', {
@@ -468,7 +484,7 @@ export default function RecognitionEditor({
       hasNode: !!editorProps?.node,
       nodeTemplateId: editorProps?.node?.templateId,
       skipAutoSave,
-      updatedContractRegex: updatedContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0],
+      updatedContractRegex: getEngines(updatedContract).find((c: any) => c.type === 'regex')?.patterns?.[0],
     });
 
     const node = editorProps?.node;
@@ -478,7 +494,8 @@ export default function RecognitionEditor({
     }
 
     const nodeTemplateId = node.templateId;
-    const regexPattern = updatedContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+    const updatedEngines = getEngines(updatedContract);
+    const regexPattern = updatedEngines.find((c: any) => c.type === 'regex')?.patterns?.[0];
     console.log('[RecognitionEditor][handleContractChange] 📊 Regex pattern extracted:', regexPattern);
 
     // ✅ Confronta con template
@@ -495,7 +512,7 @@ export default function RecognitionEditor({
           : null;
         console.log('[RecognitionEditor][handleContractChange] ✅ Template dataContract updated:', {
           hasContract: !!template.dataContract,
-          regexInContract: template.dataContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0],
+          regexInContract: getEngines(template.dataContract).find((c: any) => c.type === 'regex')?.patterns?.[0],
         });
         // ✅ Marca template come modificato per salvataggio futuro
         DialogueTaskService.markTemplateAsModified(nodeTemplateId);
@@ -579,22 +596,33 @@ export default function RecognitionEditor({
       console.warn('[RecognitionEditor] ⚠️ No contract available, cannot save regex');
       return;
     }
-    const regexContract = contract.parsers?.find((c: any) => c.type === 'regex');
-    if (regexContract) {
-      console.log('[RecognitionEditor] 📝 Updating existing regex contract');
-      const updatedContracts = contract.parsers.map((c: any) =>
+    const currentEngines = getEngines(contract);
+    const regexEngine = currentEngines.find((c: any) => c.type === 'regex');
+    if (regexEngine) {
+      console.log('[RecognitionEditor] 📝 Updating existing regex engine');
+      const updatedEngines = currentEngines.map((c: any) =>
         c.type === 'regex' ? { ...c, patterns: [newRegex] } : c
       );
-      const updatedContract = { ...contract, parsers: updatedContracts };
+      const updatedContract = { ...contract, engines: updatedEngines };
+      // ✅ Rimuovi parsers se presente (migrazione)
+      if (updatedContract.parsers) {
+        delete updatedContract.parsers;
+      }
       console.log('[RecognitionEditor] 📝 Updated contract:', updatedContract);
       handleContractChange(updatedContract, false);
     } else {
-      console.log('[RecognitionEditor] 📝 Creating new regex contract');
-      const newContracts = [...(contract.parsers || []), {
+      console.log('[RecognitionEditor] 📝 Creating new regex engine');
+      const newEngines = [...currentEngines, {
         type: 'regex',
-        patterns: [newRegex]
+        enabled: true,
+        patterns: [newRegex],
+        examples: []
       }];
-      const updatedContract = { ...contract, parsers: newContracts };
+      const updatedContract = { ...contract, engines: newEngines };
+      // ✅ Rimuovi parsers se presente (migrazione)
+      if (updatedContract.parsers) {
+        delete updatedContract.parsers;
+      }
       console.log('[RecognitionEditor] 📝 New contract:', updatedContract);
       handleContractChange(updatedContract, false);
     }
@@ -617,7 +645,8 @@ export default function RecognitionEditor({
     };
 
     // ✅ Ricalcola contractItem per altri editor (per regex usa quello calcolato sopra)
-    const contractItemForEditor = activeEditor && contract ? contract.parsers?.find((c: any) => {
+    const contractEngines = getEngines(contract);
+    const contractItemForEditor = activeEditor && contract ? contractEngines.find((c: any) => {
       const expectedContractType = getContractTypeFromEditorType(activeEditor);
       return c.type === expectedContractType;
     }) : null;
@@ -626,8 +655,8 @@ export default function RecognitionEditor({
       node,
       kind: editorProps?.kind,
       profile: editorProps?.profile,
-      testCases: editorProps?.testCases,
-      setTestCases: editorProps?.setTestCases,
+      testPhrases: editorProps?.testPhrases,
+      setTestPhrases: editorProps?.setTestPhrases,
       onProfileUpdate: editorProps?.onProfileUpdate,
       task: editorProps?.task,
       // ✅ NEW: Feedback from test notes
@@ -653,10 +682,15 @@ export default function RecognitionEditor({
           setExtractorCode: (value: string) => {
             if (contractItemForEditor && contract) {
               const contractType = contractItemForEditor.type; // Should be 'rules'
-              const updatedContracts = contract.parsers.map((c: any) =>
+              const currentEngines = getEngines(contract);
+              const updatedEngines = currentEngines.map((c: any) =>
                 c.type === contractType ? { ...c, extractorCode: value } : c
               );
-              const updatedContract = { ...contract, parsers: updatedContracts };
+              const updatedContract = { ...contract, engines: updatedEngines };
+              // ✅ Rimuovi parsers se presente (migrazione)
+              if (updatedContract.parsers) {
+                delete updatedContract.parsers;
+              }
               handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },
@@ -668,10 +702,15 @@ export default function RecognitionEditor({
           setEntityTypes: (value: string[]) => {
             if (contractItemForEditor && contract) {
               const contractType = contractItemForEditor.type;
-              const updatedContracts = contract.parsers.map((c: any) =>
+              const currentEngines = getEngines(contract);
+              const updatedEngines = currentEngines.map((c: any) =>
                 c.type === contractType ? { ...c, entityTypes: value } : c
               );
-              const updatedContract = { ...contract, parsers: updatedContracts };
+              const updatedContract = { ...contract, engines: updatedEngines };
+              // ✅ Rimuovi parsers se presente (migrazione)
+              if (updatedContract.parsers) {
+                delete updatedContract.parsers;
+              }
               handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },
@@ -683,10 +722,15 @@ export default function RecognitionEditor({
           setSystemPrompt: (value: string) => {
             if (contractItemForEditor && contract) {
               const contractType = contractItemForEditor.type;
-              const updatedContracts = contract.parsers.map((c: any) =>
+              const currentEngines = getEngines(contract);
+              const updatedEngines = currentEngines.map((c: any) =>
                 c.type === contractType ? { ...c, systemPrompt: value } : c
               );
-              const updatedContract = { ...contract, parsers: updatedContracts };
+              const updatedContract = { ...contract, engines: updatedEngines };
+              // ✅ Rimuovi parsers se presente (migrazione)
+              if (updatedContract.parsers) {
+                delete updatedContract.parsers;
+              }
               handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },

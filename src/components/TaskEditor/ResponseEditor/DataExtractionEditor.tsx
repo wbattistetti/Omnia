@@ -39,9 +39,9 @@ export interface NLPProfile {
   kind: string;
   synonyms: string[];
   regex?: string;
-  testCases?: string[]; // Test cases generali per tutti gli estrattori (regex, extractor, NER, LLM)
+  testPhrases?: string[]; // Test phrases generali per tutti gli estrattori (regex, extractor, NER, LLM)
   formatHints?: string[];
-  examples?: string[]; // Esempi NLP per training/NER (diversi da testCases)
+  examples?: string[]; // Esempi NLP per training/NER (diversi da testPhrases)
   minConfidence?: number;
   postProcess?: any;
   subSlots?: any;
@@ -122,8 +122,8 @@ export default function DataExtractionEditor({
     waitingEsc2,
     setWaitingEsc2,
     jsonError,
-    testCases,
-    setTestCases,
+    testPhrases,
+    setTestPhrases,
     profile,
   } = useProfileState(node, locale, onChange);
 
@@ -367,8 +367,8 @@ export default function DataExtractionEditor({
     node,
     kind,
     profile,
-    testCases,
-    setTestCases,
+    testPhrases,
+    setTestPhrases,
     onProfileUpdate: (updatedProfile: any) => {
       onChange?.(updatedProfile);
     },
@@ -380,9 +380,9 @@ export default function DataExtractionEditor({
     kind,
     profile?.slotId, // Use only key identifiers instead of entire profile
     profile?.regex,
-    profile?.testCases,
-    testCases,
-    setTestCases, // setTestCases is stable
+    profile?.testPhrases,
+    testPhrases,
+    setTestPhrases, // setTestPhrases is stable
     onChange, // onChange is stable
     task?.id, // Use only task.id instead of entire task object
   ]);

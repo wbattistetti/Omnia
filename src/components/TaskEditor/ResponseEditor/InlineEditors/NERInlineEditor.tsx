@@ -9,8 +9,8 @@ interface NERInlineEditorProps {
   onClose: () => void;
   node?: any;
   profile?: NLPProfile;
-  testCases?: string[]; // ✅ Test cases passed directly from useProfileState
-  setTestCases?: (cases: string[]) => void; // ✅ Setter passed directly from useProfileState
+  testPhrases?: string[]; // ✅ Test phrases passed directly from useProfileState
+  setTestPhrases?: (phrases: string[]) => void; // ✅ Setter passed directly from useProfileState
   onProfileUpdate?: (profile: NLPProfile) => void;
 }
 
@@ -22,26 +22,26 @@ export default function NERInlineEditor({
   onClose,
   node,
   profile,
-  testCases: testCasesProp,
-  setTestCases: setTestCasesProp,
+  testPhrases: testPhrasesProp,
+  setTestPhrases: setTestPhrasesProp,
   onProfileUpdate,
 }: NERInlineEditorProps) {
   const [nerConfig, setNerConfig] = React.useState<string>('{}'); // JSON config placeholder
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
   const [generating, setGenerating] = React.useState<boolean>(false);
 
-  // ✅ Usa testCases da props se disponibili, altrimenti fallback a profile
-  const testCases = testCasesProp || profile?.testCases || [];
+  // ✅ Usa testPhrases da props se disponibili, altrimenti fallback a profile
+  const testPhrases = testPhrasesProp || profile?.testPhrases || [];
 
-  const setTestCases = React.useCallback((cases: string[]) => {
+  const setTestPhrases = React.useCallback((phrases: string[]) => {
     // ✅ Usa setter diretto se disponibile
-    if (setTestCasesProp) {
-      setTestCasesProp(cases);
+    if (setTestPhrasesProp) {
+      setTestPhrasesProp(phrases);
     } else if (onProfileUpdate && profile) {
       // Fallback: aggiorna tramite onProfileUpdate
-      onProfileUpdate({ ...profile, testCases: cases });
+      onProfileUpdate({ ...profile, testPhrases: phrases });
     }
-  }, [setTestCasesProp, profile, onProfileUpdate]);
+  }, [setTestPhrasesProp, profile, onProfileUpdate]);
 
   // Use unified test values hook
   // No local state - read directly from profile (single source of truth)
@@ -107,8 +107,8 @@ export default function NERInlineEditor({
     }
   };
 
-  // Show button if user edited or there are unmatched test cases
-  const hasUnmatchedTests = testCases.some(tc => !testNER(tc).matched);
+  // Show button if user edited or there are unmatched test phrases
+  const hasUnmatchedTests = testPhrases.some(tp => !testNER(tp).matched);
   const shouldShowButton = !generating && (hasUserEdited || hasUnmatchedTests);
 
   return (

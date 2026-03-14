@@ -236,6 +236,12 @@ Module Program
                                                     Return ApiServer.Handlers.CompilationHandlers.HandleSaveDialog(context)
                                                 End Function)
 
+        ' POST /api/runtime/task/{taskId}/test-extraction - Test regex extraction (VB.NET)
+        app.MapPost("/api/runtime/task/{taskId}/test-extraction",
+            Async Function(context As HttpContext, taskId As String) As Task(Of IResult)
+                Return Await ApiServer.Handlers.TestExtractionHandlers.HandleTestExtraction(context, taskId)
+            End Function)
+
         ' POST /api/runtime/task/session/start - Chat Simulator diretto (solo UtteranceInterpretation)
         Console.WriteLine("🔥 REGISTERING ENDPOINT: /api/runtime/task/session/start")
         System.Diagnostics.Debug.WriteLine("🔥 REGISTERING ENDPOINT: /api/runtime/task/session/start")

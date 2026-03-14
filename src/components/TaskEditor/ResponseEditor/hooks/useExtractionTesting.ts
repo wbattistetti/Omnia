@@ -7,6 +7,7 @@ import * as testingState from '@responseEditor/testingState';
 import { loadContractFromNode } from '@responseEditor/ContractSelector/contractHelpers';
 import { TestExtractionService } from '@services/TestExtractionService';
 import { useCellOverridesStore } from '@responseEditor/features/step-management/stores/cellOverridesStore';
+import DialogueTaskService from '@services/DialogueTaskService';
 
 export interface RowResult {
   regex?: string;
@@ -274,7 +275,7 @@ export function useExtractionTesting({
     if (node) {
       try {
         const contract = loadContractFromNode(node);
-        const regexPattern = contract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+        const regexPattern = contract?.engines?.find((c: any) => c.type === 'regex')?.patterns?.[0];
         if (regexPattern) {
           console.log('[TEST] 🔄 Fallback: Using regex from contract', {
             nodeId: node.id,
@@ -451,40 +452,150 @@ export function useExtractionTesting({
     }));
   }, []);
 
-  // ✅ STEP 1: Run test for a single row - uses backend runtime (engine + contract)
+  // ✅ STEP 1: Run test for a single row - tests all enabled engines from contract
   const runRowTest = useCallback(async (idx: number, isBatch: boolean = false) => {
     const phrase = examplesList[idx] || '';
     if (!phrase) {
       return;
     }
 
-    // ✅ Use backend runtime if node.id is available
-    if (node?.id && enabledMethods.regex) {
-      const t0Regex = performance.now();
-      try {
-        const result = await TestExtractionService.testExtraction(node.id, phrase);
-        const regexMs = Math.round(performance.now() - t0Regex);
+    if (!node?.id) {
+      return;
+    }
 
-        // Convert ExtractionResult to RowResult format
-        const summary = Object.keys(result.values).length > 0
-          ? summarizeVars(result.values, result.values.value || '')
-          : (result.hasMatch ? 'value=matched' : '—');
+    // ✅ Load contract to see which engines are enabled
+    const contract = loadContractFromNode(node);
+    // ✅ Support both engines (new) and parsers (old) for retrocompatibilità
+    const engines = contract?.engines || contract?.parsers || [];
+    if (!engines || engines.length === 0) {
+      console.warn('[TEST] No engines found in contract, falling back to local extraction');
+      // Fall through to local extraction
+    } else {
+      // ✅ Get enabled engines from contract
+      const enabledEngines = engines.filter((p: any) => p.enabled !== false);
 
+      if (enabledEngines.length === 0) {
+        console.warn('[TEST] No enabled engines found in contract');
+        // Fall through to local extraction
+      } else {
+        // ✅ Initialize row result
+        const initialRowResult: RowResult = {
+          running: false,
+          detRunning: false,
+          nerRunning: false,
+          llmRunning: false,
+          regex: '—',
+          deterministic: '—',
+          ner: '—',
+          llm: '—',
+          variables: {}
+        };
+
+        // ✅ Set running state for active engines
         setRowResults(prev => {
           const next = [...prev];
-          next[idx] = {
-            regex: enabledMethods.regex ? summary : '—',
-            regexMs: enabledMethods.regex ? regexMs : undefined,
-            spans: result.hasMatch ? [] : undefined, // TODO: Calculate spans from match
-            deterministic: `dummy-det-${idx}`,
-            ner: `dummy-ner-${idx}`,
-            llm: `dummy-llm-${idx}`,
-            running: false,
-            detRunning: false,
-            nerRunning: false,
-            llmRunning: false,
-            variables: result.values
-          };
+          const runningState: RowResult = { ...initialRowResult };
+
+          enabledEngines.forEach((engine: any) => {
+            const engineType = engine.type === 'rules' ? 'deterministic' : engine.type;
+            if (engineType === 'regex') runningState.running = true;
+            if (engineType === 'deterministic') runningState.detRunning = true;
+            if (engineType === 'ner') runningState.nerRunning = true;
+            if (engineType === 'llm') runningState.llmRunning = true;
+          });
+
+          next[idx] = { ...(next[idx] || {}), ...runningState };
+          return next;
+        });
+
+        // ✅ Get dataContract from template for VB.NET regex engine
+        const templateId = node.templateId;
+        let contractJson: string | undefined;
+        if (templateId) {
+          const template = DialogueTaskService.getTemplate(templateId);
+          // ✅ Use dataContract (unified) instead of semanticContract
+          if (template?.dataContract) {
+            contractJson = JSON.stringify(template.dataContract);
+          }
+        }
+
+        // ✅ Test each enabled engine in parallel
+        const enginePromises = enabledEngines.map(async (engine: any) => {
+          const engineType = engine.type === 'rules' ? 'rules' : engine.type;
+          const t0 = performance.now();
+
+          try {
+            // ✅ Call appropriate backend based on engine type
+            // Pass contractJson for regex engine (VB.NET)
+            const result = await TestExtractionService.testExtraction(
+              node.id,
+              phrase,
+              engineType as 'regex' | 'ner' | 'llm' | 'embedding' | 'rules',
+              engineType === 'regex' ? contractJson : undefined
+            );
+
+            const ms = Math.round(performance.now() - t0);
+
+            // ✅ FIX: Extract actual value instead of showing "matched"
+            let summary: string;
+            if (Object.keys(result.values).length > 0) {
+              // If there are extracted values, use them
+              summary = summarizeVars(result.values, result.values.value || '');
+            } else if (result.hasMatch) {
+              // If there's a match but no values, use the input phrase as the extracted value
+              summary = `value=${phrase}`;
+            } else {
+              summary = '—';
+            }
+
+            // ✅ Map engine type to row result field
+            const fieldMap: Record<string, keyof RowResult> = {
+              'regex': 'regex',
+              'rules': 'deterministic',
+              'ner': 'ner',
+              'llm': 'llm',
+              'embedding': 'embeddings' as any
+            };
+
+            const field = fieldMap[engineType] || 'regex';
+            const msField = `${field}Ms` as keyof RowResult;
+            const runningField = `${field}Running` as keyof RowResult;
+
+            return {
+              field,
+              msField,
+              runningField,
+              summary,
+              ms,
+              values: result.values,
+              hasMatch: result.hasMatch
+            };
+          } catch (error) {
+            console.error(`[TEST] Error testing ${engineType}:`, error);
+            return null;
+          }
+        });
+
+        // ✅ Wait for all engines to complete
+        const results = await Promise.all(enginePromises);
+
+        // ✅ Update row result with all engine results
+        setRowResults(prev => {
+          const next = [...prev];
+          const updated: RowResult = { ...(next[idx] || {}), ...initialRowResult };
+
+          results.forEach(result => {
+            if (result) {
+              (updated as any)[result.field] = result.summary;
+              (updated as any)[result.msField] = result.ms;
+              (updated as any)[result.runningField] = false;
+              if (result.values) {
+                updated.variables = { ...updated.variables, ...result.values };
+              }
+            }
+          });
+
+          next[idx] = updated;
           return next;
         });
 
@@ -496,9 +607,6 @@ export function useExtractionTesting({
         }
 
         return;
-      } catch (error) {
-        console.error('[TEST] Error calling backend test extraction:', error);
-        // Fallback to local extraction
       }
     }
 
@@ -718,16 +826,13 @@ export function useExtractionTesting({
   const runAllRows = useCallback(async () => {
     console.log('[BATCH_TEST] START (minimal)', { count: examplesList.length });
 
-    // ✅ Prevent multiple simultaneous test runs
-    if (testingRef.current || testing) {
-      console.warn('[BATCH_TEST] Already testing, ignoring');
+    // ✅ Guard: usa solo testingRef (sync, no closure stale) per evitare doppi lanci
+    if (testingRef.current) {
       return;
     }
 
     // ✅ Start testing state
-    if (!testingState.getIsTesting()) {
-      testingState.startTesting();
-    }
+    testingState.startTesting();
     testingRef.current = true;
     setTesting(true);
     cancelledRef.current = false;
@@ -767,14 +872,12 @@ export function useExtractionTesting({
     } catch (e) {
       console.error('[BATCH_TEST] Error:', e);
     } finally {
-      // ✅ ALWAYS cleanup, even on error
       testingRef.current = false;
       setTesting(false);
       testingState.stopTesting();
-
-      console.log('[BATCH_TEST] END');
     }
-  }, [examplesList, testing, runRowTest, computeStatsFromResults, onStatsUpdate]);
+  // ✅ NO `testing` in deps: testingRef.current è il guard sync, non la closure stale
+  }, [examplesList, runRowTest, computeStatsFromResults, onStatsUpdate]);
 
   return {
     // State

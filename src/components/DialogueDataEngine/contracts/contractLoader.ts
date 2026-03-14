@@ -67,12 +67,44 @@ export interface EmbeddingsContract {
 
 export type DataContractItem = RegexContract | RulesContract | NERContract | LLMContract | EmbeddingsContract;
 
+// Import semantic types
+import type { StructuredConstraint, RedefinitionPolicy, CanonicalValueSets } from '../../../types/semanticContract';
+
 export interface DataContract {
+    // ✅ METADATI
     templateName: string;
     templateId: string;
-    sourceTemplateId?: string;  // GUID of the original template (for instances)
+    // ❌ RIMOSSO: sourceTemplateId (ridondante)
+
+    // ✅ SEMANTICA (unificata da SemanticContract)
+    entity?: {
+        label: string;
+        type: string;
+        description: string;
+        constraints?: StructuredConstraint;  // ✅ Constraints dell'entity principale
+    };
+    subentities?: Array<{
+        subTaskKey: string;
+        label: string;
+        meaning: string;
+        type?: string;
+        optional?: boolean;
+        formats?: string[];
+        constraints?: StructuredConstraint;  // ✅ Constraints del sub-entity
+        normalization?: string;  // ⚠️ Da valutare se rimuovere
+    }>;
+    redefinitionPolicy?: RedefinitionPolicy;
+    outputCanonical: {
+        format: 'object' | 'value';
+        keys?: string[];
+    };
+    canonicalExamples?: CanonicalValueSets;
+    constraints?: StructuredConstraint;  // ✅ Constraints per entity principale (se non composite)
+    normalization?: string;  // ⚠️ Da valutare se rimuovere
+
+    // ✅ MAPPING TECNICO (per regex) - Key = GUID del nodo (non templateId!)
     subDataMapping: {
-        [subId: string]: {
+        [nodeId: string]: {  // ✅ Key = GUID del nodo nel data schema
             /** Technical regex group name (format: s[0-9]+ or g_[a-f0-9]{12}). Sole source of truth for extraction. */
             groupName: string;
             label: string;
@@ -80,10 +112,17 @@ export interface DataContract {
             patternIndex?: number;  // Context-aware: quale pattern usare per questo sub
         };
     };
-    // Array di parsers - ordine implicito (ordine array = ordine escalation)
-    parsers: DataContractItem[];
-    // Test cases common to all engines (moved from individual engines)
-    testCases?: string[];
+
+    // ✅ CONFIGURAZIONE ENGINE (RINOMINATO da parsers)
+    engines: DataContractItem[];  // ✅ RINOMINATO: parsers → engines
+
+    // ✅ TEST
+    testPhrases?: string[];
+
+    // ✅ METADATI VERSIONING
+    version?: number;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 
 // Alias per retrocompatibilità durante la migrazione

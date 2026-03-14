@@ -42,12 +42,14 @@ class ContractExtractor:
 
         if engine_type == "regex":
             return self._apply_regex_engine(text)
+        elif engine_type == "ner":
+            return self._apply_ner_engine(text)
+        elif engine_type == "embedding":
+            return self._apply_embedding_engine(text)
         elif engine_type == "llm":
-            # TODO: Implement LLM engine
-            return {}
-        elif engine_type == "rule_based":
-            # TODO: Implement rule-based engine
-            return {}
+            return self._apply_llm_engine(text)
+        elif engine_type == "rules" or engine_type == "rule_based":
+            return self._apply_rule_based_engine(text)
         else:
             return {}
 
@@ -77,6 +79,91 @@ class ContractExtractor:
         except Exception as e:
             print(f"[ContractExtractor] Regex error: {e}")
             return {}
+
+    def _apply_ner_engine(self, text: str) -> Dict[str, Any]:
+        """Apply NER engine using spaCy or similar"""
+        # TODO: Implement NER extraction using spaCy
+        # For now, return empty (will be implemented later)
+        print(f"[ContractExtractor] NER engine not yet implemented")
+        return {}
+
+    def _apply_embedding_engine(self, text: str) -> Dict[str, Any]:
+        """Apply embedding engine using similarity matching"""
+        examples = self.engine.get("config", {}).get("embeddingExamples", {})
+        threshold = self.engine.get("config", {}).get("embeddingThreshold", 0.7)
+
+        positive_examples = examples.get("positive", [])
+        negative_examples = examples.get("negative", [])
+
+        if not positive_examples:
+            return {}
+
+        try:
+            # Import embedding functions
+            from backend.ai_endpoints.intent_embeddings import (
+                compute_embedding_local,
+                cosine_similarity
+            )
+
+            # Compute embedding for input text
+            text_embedding = compute_embedding_local(text)
+
+            # Find best match among positive examples
+            best_match_score = 0.0
+            best_match_text = ""
+
+            for example_text in positive_examples:
+                example_embedding = compute_embedding_local(example_text)
+                score = cosine_similarity(text_embedding, example_embedding)
+
+                if score > best_match_score:
+                    best_match_score = score
+                    best_match_text = example_text
+
+            # Apply penalty for negative examples
+            penalty = 0.0
+            for neg_example in negative_examples:
+                neg_embedding = compute_embedding_local(neg_example)
+                neg_score = cosine_similarity(text_embedding, neg_embedding)
+                if neg_score > 0.7:
+                    penalty += (neg_score - 0.7) * 0.5
+
+            final_score = max(0.0, best_match_score - penalty)
+
+            # If score >= threshold, extract value
+            if final_score >= threshold:
+                extracted = {}
+                subgroups = self.contract.get("subgroups", [])
+
+                # If single subentity, use that
+                if len(subgroups) == 1:
+                    extracted[subgroups[0].get("subTaskKey")] = text
+                else:
+                    # Otherwise map from best_match_text
+                    extracted["value"] = best_match_text
+
+                return extracted
+
+            return {}
+        except Exception as e:
+            print(f"[ContractExtractor] Embedding error: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+
+    def _apply_llm_engine(self, text: str) -> Dict[str, Any]:
+        """Apply LLM engine using OpenAI/Anthropic"""
+        # TODO: Implement LLM extraction
+        # For now, return empty (will be implemented later)
+        print(f"[ContractExtractor] LLM engine not yet implemented")
+        return {}
+
+    def _apply_rule_based_engine(self, text: str) -> Dict[str, Any]:
+        """Apply rule-based engine using extractor code"""
+        # TODO: Implement rule-based extraction
+        # For now, return empty (will be implemented later)
+        print(f"[ContractExtractor] Rule-based engine not yet implemented")
+        return {}
 
     def _apply_contract_normalization(self, raw_values: Dict[str, Any]) -> Dict[str, Any]:
         """Apply contract normalization rules"""

@@ -7,7 +7,7 @@ import NoteEditor from '@responseEditor/CellNote/NoteEditor';
 import NoteDisplay from '@responseEditor/CellNote/NoteDisplay';
 import NoteSeparator from '@responseEditor/CellNote/NoteSeparator';
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
-import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/features/step-management/stores/notesStore';
 
 interface TesterGridRowProps {
@@ -48,6 +48,7 @@ interface TesterGridRowProps {
   setReportOpen?: (open: boolean) => void;
   baselineStats?: { matched: number; falseAccept: number; totalGt: number } | null;
   lastStats?: { matched: number; falseAccept: number; totalGt: number } | null;
+  globalMaxMs?: number; // ✅ Global maximum milliseconds across all rows and engines
 }
 
 /**
@@ -87,13 +88,19 @@ function TesterGridRowComponent({
   setReportOpen,
   baselineStats,
   lastStats,
+  globalMaxMs,
 }: TesterGridRowProps) {
   // ✅ REMOVED: Notes are now managed via Zustand store
 
   const leading = rowResult.running ? (
     <span title="Analisi in corso" style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />
   ) : null;
-  const maxMs = Math.max(rowResult.detMs || 0, rowResult.nerMs || 0, rowResult.llmMs || 0);
+
+  // ✅ FIX: Use globalMaxMs for consistent scale across all rows
+  // If globalMaxMs is not provided, fallback to row-local max (backward compatibility)
+  const maxMs = globalMaxMs !== undefined
+    ? globalMaxMs
+    : Math.max(rowResult.regexMs || 0, rowResult.detMs || 0, rowResult.nerMs || 0, rowResult.llmMs || 0);
 
   return (
     <tr
@@ -124,12 +131,178 @@ function TesterGridRowComponent({
         phraseColumnWidth={phraseColumnWidth}
         rowBackground={selectedRow === rowIndex ? '#fff7ed' : '#fff'} // ✅ FIX: Passa il background della riga
       />
-      {/* Render colonne dinamiche basate su contract.parsers */}
-      {contract?.parsers && contract.parsers.length > 0 ? (
-        contract.parsers
-          .filter(c => c.enabled !== false) // Filtra solo contract abilitati
-          .map((contractItem) => {
-          const componentType = contractItem.type === 'rules' ? 'deterministic' : contractItem.type;
+      {/* Render colonne dinamiche basate su contract.engines */}
+      {(() => {
+        // ✅ Support both engines (new) and parsers (old) for retrocompatibilità
+        const engines = contract?.engines || contract?.parsers || [];
+        if (engines.length === 0) {
+          // ✅ Fallback legacy: mostra colonne hardcoded se contract non è presente
+          return (
+            <>
+              {/* Regex column */}
+              <td
+                style={{
+                  padding: 8,
+                  color: enabledMethods.regex ? '#374151' : '#9ca3af',
+                  overflow: 'visible',
+                  background: '#93c5fd',
+                  position: 'relative',
+                  verticalAlign: 'top',
+                  opacity: enabledMethods.regex ? 1 : 0.6,
+                  visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
+                }}
+                onMouseEnter={() => {
+                  const { setHovered } = useNotesStore.getState();
+                  setHovered(getCellKeyFromPhrase(phrase, 'regex'));
+                }}
+                onMouseLeave={() => {
+                  const { setHovered } = useNotesStore.getState();
+                  setHovered(null);
+                }}
+              >
+                <ExtractionResultCell
+                  summary={rowResult.regex}
+                  processingTime={rowResult.regexMs}
+                  maxMs={maxMs}
+                  rowIdx={rowIndex}
+                  phrase={phrase}
+                  col="regex"
+                  kind={kind}
+                  expectedKeysForKind={expectedKeysForKind}
+                  enabled={enabledMethods.regex}
+                  isRunning={rowResult.running}
+                  editingCell={editingCell}
+                  editingText={editingText}
+                  setEditingCell={setEditingCell}
+                  setEditingText={setEditingText}
+                />
+              </td>
+              {/* Deterministic column */}
+              {showDeterministic && (
+                <td
+                  style={{
+                    padding: 8,
+                    color: enabledMethods.deterministic ? '#374151' : '#9ca3af',
+                    overflow: 'visible',
+                    background: '#e5e7eb',
+                    position: 'relative',
+                    verticalAlign: 'top',
+                    opacity: enabledMethods.deterministic ? 1 : 0.6,
+                    visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
+                  }}
+                  onMouseEnter={() => {
+                    const { setHovered } = useNotesStore.getState();
+                    setHovered(getCellKeyFromPhrase(phrase, 'deterministic'));
+                  }}
+                  onMouseLeave={() => {
+                    const { setHovered } = useNotesStore.getState();
+                    setHovered(null);
+                  }}
+                >
+                  <ExtractionResultCell
+                    summary={rowResult.deterministic}
+                    processingTime={rowResult.detMs}
+                    maxMs={maxMs}
+                    rowIdx={rowIndex}
+                    phrase={phrase}
+                    col="deterministic"
+                    kind={kind}
+                    expectedKeysForKind={expectedKeysForKind}
+                    enabled={enabledMethods.deterministic}
+                    isRunning={rowResult.detRunning}
+                    editingCell={editingCell}
+                    editingText={editingText}
+                    setEditingCell={setEditingCell}
+                    setEditingText={setEditingText}
+                  />
+                </td>
+              )}
+              {/* NER column */}
+              {showNER && (
+                <td
+                  style={{
+                    padding: 8,
+                    color: enabledMethods.ner ? '#374151' : '#9ca3af',
+                    overflow: 'visible',
+                    background: '#fef3c7',
+                    position: 'relative',
+                    verticalAlign: 'top',
+                    opacity: enabledMethods.ner ? 1 : 0.6,
+                    visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
+                  }}
+                  onMouseEnter={() => {
+                    const { setHovered } = useNotesStore.getState();
+                    setHovered(getCellKeyFromPhrase(phrase, 'ner'));
+                  }}
+                  onMouseLeave={() => {
+                    const { setHovered } = useNotesStore.getState();
+                    setHovered(null);
+                  }}
+                >
+                  <ExtractionResultCell
+                    summary={rowResult.ner}
+                    processingTime={rowResult.nerMs}
+                    maxMs={maxMs}
+                    rowIdx={rowIndex}
+                    phrase={phrase}
+                    col="ner"
+                    kind={kind}
+                    expectedKeysForKind={expectedKeysForKind}
+                    enabled={enabledMethods.ner}
+                    isRunning={rowResult.nerRunning}
+                    editingCell={editingCell}
+                    editingText={editingText}
+                    setEditingCell={setEditingCell}
+                    setEditingText={setEditingText}
+                  />
+                </td>
+              )}
+              {/* LLM column */}
+              <td
+                style={{
+                  padding: 8,
+                  color: enabledMethods.llm ? '#374151' : '#9ca3af',
+                  overflow: 'visible',
+                  background: '#fed7aa',
+                  position: 'relative',
+                  verticalAlign: 'top',
+                  opacity: enabledMethods.llm ? 1 : 0.6,
+                  visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
+                }}
+                onMouseEnter={() => {
+                  const { setHovered } = useNotesStore.getState();
+                  setHovered(getCellKeyFromPhrase(phrase, 'llm'));
+                }}
+                onMouseLeave={() => {
+                  const { setHovered } = useNotesStore.getState();
+                  setHovered(null);
+                }}
+              >
+                <ExtractionResultCell
+                  summary={rowResult.llm}
+                  processingTime={rowResult.llmMs}
+                  maxMs={maxMs}
+                  rowIdx={rowIndex}
+                  phrase={phrase}
+                  col="llm"
+                  kind={kind}
+                  expectedKeysForKind={expectedKeysForKind}
+                  enabled={enabledMethods.llm}
+                  isRunning={rowResult.llmRunning}
+                  editingCell={editingCell}
+                  editingText={editingText}
+                  setEditingCell={setEditingCell}
+                  setEditingText={setEditingText}
+                />
+              </td>
+            </>
+          );
+        }
+
+        return engines
+          .filter(c => c.enabled !== false) // Filtra solo engine abilitati
+          .map((engineItem) => {
+          const componentType = engineItem.type === 'rules' ? 'deterministic' : engineItem.type;
           const color = {
             regex: '#93c5fd',
             deterministic: '#e5e7eb',
@@ -170,7 +343,7 @@ function TesterGridRowComponent({
           if (componentType === 'embeddings') {
             return (
               <td
-                key={contractItem.type}
+                key={engineItem.type}
                 style={{
                   padding: 8,
                   color: '#374151',
@@ -226,7 +399,7 @@ function TesterGridRowComponent({
           // Regular extraction columns
           return (
             <td
-              key={contractItem.type}
+              key={engineItem.type}
               style={{
                 padding: 8,
                 color: enabled ? '#374151' : '#9ca3af',
@@ -266,230 +439,8 @@ function TesterGridRowComponent({
               />
             </td>
           );
-        })
-      ) : (
-        // ✅ Fallback legacy: mostra colonne hardcoded se contract non è presente
-        <>
-          {/* Regex column */}
-          <td
-            style={{
-              padding: 8,
-              color: enabledMethods.regex ? '#374151' : '#9ca3af',
-              overflow: 'visible',
-              background: '#93c5fd',
-              position: 'relative',
-              verticalAlign: 'top',
-              opacity: enabledMethods.regex ? 1 : 0.6,
-              visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-            }}
-            onMouseEnter={() => {
-              const { setHovered } = useNotesStore.getState();
-              setHovered(getCellKeyFromPhrase(phrase, 'regex'));
-            }}
-            onMouseLeave={() => {
-              const { setHovered } = useNotesStore.getState();
-              setHovered(null);
-            }}
-          >
-            <ExtractionResultCell
-              summary={rowResult.regex}
-              processingTime={rowResult.regexMs}
-              maxMs={maxMs}
-              rowIdx={rowIndex}
-              phrase={phrase}
-              col="regex"
-              kind={kind}
-              expectedKeysForKind={expectedKeysForKind}
-              enabled={enabledMethods.regex}
-              isRunning={rowResult.running}
-              editingCell={editingCell}
-              editingText={editingText}
-              setEditingCell={setEditingCell}
-              setEditingText={setEditingText}
-              // ✅ REMOVED: Notes props - now managed via Zustand store
-            />
-          </td>
-          {/* Deterministic column */}
-          {showDeterministic && (
-            <td
-              style={{
-                padding: 8,
-                color: enabledMethods.deterministic ? '#374151' : '#9ca3af',
-                overflow: 'visible',
-                background: '#e5e7eb',
-                position: 'relative',
-                verticalAlign: 'top',
-                opacity: enabledMethods.deterministic ? 1 : 0.6,
-                visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-              }}
-              onMouseEnter={() => {
-                const { setHovered } = useNotesStore.getState();
-                setHovered(getCellKeyFromPhrase(phrase, 'deterministic'));
-              }}
-              onMouseLeave={() => {
-                const { setHovered } = useNotesStore.getState();
-                setHovered(null);
-              }}
-            >
-              <ExtractionResultCell
-                summary={rowResult.deterministic}
-                processingTime={rowResult.detMs}
-                maxMs={maxMs}
-                rowIdx={rowIndex}
-                phrase={phrase}
-                col="det"
-                kind={kind}
-                expectedKeysForKind={expectedKeysForKind}
-                enabled={enabledMethods.deterministic}
-                isRunning={rowResult.detRunning}
-                editingCell={editingCell}
-                editingText={editingText}
-                setEditingCell={setEditingCell}
-                setEditingText={setEditingText}
-                // ✅ REMOVED: Notes props - now managed via Zustand store
-              />
-            </td>
-          )}
-          {/* NER column */}
-          {showNER && (
-            <td
-              style={{
-                padding: 8,
-                color: enabledMethods.ner ? '#374151' : '#9ca3af',
-                overflow: 'visible',
-                background: '#fef3c7',
-                position: 'relative',
-                verticalAlign: 'top',
-                opacity: enabledMethods.ner ? 1 : 0.6,
-                visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-              }}
-              onMouseEnter={() => {
-                const { setHovered } = useNotesStore.getState();
-                setHovered(getCellKeyFromPhrase(phrase, 'ner'));
-              }}
-              onMouseLeave={() => {
-                const { setHovered } = useNotesStore.getState();
-                setHovered(null);
-              }}
-            >
-              <ExtractionResultCell
-                summary={rowResult.ner}
-                processingTime={rowResult.nerMs}
-                maxMs={maxMs}
-                rowIdx={rowIndex}
-                phrase={phrase}
-                col="ner"
-                kind={kind}
-                expectedKeysForKind={expectedKeysForKind}
-                enabled={enabledMethods.ner}
-                isRunning={rowResult.nerRunning}
-                editingCell={editingCell}
-                editingText={editingText}
-                setEditingCell={setEditingCell}
-                setEditingText={setEditingText}
-                // ✅ REMOVED: Notes props - now managed via Zustand store
-              />
-            </td>
-          )}
-          {/* Embeddings column */}
-          {showEmbeddings && (
-            <td
-              style={{
-                padding: 8,
-                color: '#374151',
-                overflow: 'visible',
-                background: '#e0e7ff',
-                position: 'relative',
-                verticalAlign: 'top',
-                opacity: 1
-              }}
-              onMouseEnter={() => {
-                const { setHovered } = useNotesStore.getState();
-                setHovered(getCellKeyFromPhrase(phrase, 'embeddings'));
-              }}
-              onMouseLeave={() => {
-                const { setHovered } = useNotesStore.getState();
-                setHovered(null);
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                <div style={{ flex: 1 }}>
-                  {/* TODO: Show classification results here in Fase 9 */}
-                  {'—'}
-                </div>
-                {(() => {
-                  const { isHovered, hasNote, startEditing, stopEditing, editingNote } = useNotesStore();
-                  const cellKey = getCellKeyFromPhrase(phrase, 'embeddings');
-                  return (isHovered(cellKey) || hasNote(cellKey)) && (
-                    <NoteButton
-                      hasNote={hasNote(cellKey)}
-                      onClick={() => editingNote === cellKey ? stopEditing() : startEditing(cellKey)}
-                    />
-                  );
-                })()}
-              </div>
-              {(() => {
-                const { getNote, editingNote, addNote, deleteNote, stopEditing } = useNotesStore();
-                const cellKey = getCellKeyFromPhrase(phrase, 'embeddings');
-                return (getNote(cellKey) || editingNote === cellKey) && (
-                  <>
-                    <NoteSeparator />
-                    {editingNote === cellKey ? (
-                      <NoteEditor
-                        value={getNote(cellKey)}
-                        onSave={(text) => { addNote(cellKey, text); stopEditing(); }}
-                        onDelete={() => { deleteNote(cellKey); stopEditing(); }}
-                        onCancel={stopEditing}
-                      />
-                    ) : (
-                      <NoteDisplay text={getNote(cellKey)} />
-                    )}
-                  </>
-                );
-              })()}
-            </td>
-          )}
-          {/* LLM column */}
-          <td
-            style={{
-              padding: 8,
-              color: enabledMethods.llm ? '#374151' : '#9ca3af',
-              overflow: 'visible',
-              background: '#fed7aa',
-              position: 'relative',
-              verticalAlign: 'top',
-              opacity: enabledMethods.llm ? 1 : 0.6,
-              visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-            }}
-            onMouseEnter={() => {
-              const { setHovered } = useNotesStore.getState();
-              setHovered(getCellKeyFromPhrase(phrase, 'llm'));
-            }}
-            onMouseLeave={() => {
-              const { setHovered } = useNotesStore.getState();
-              setHovered(null);
-            }}
-          >
-            <ExtractionResultCell
-              summary={rowResult.llm}
-              processingTime={rowResult.llmMs}
-              maxMs={maxMs}
-              rowIdx={rowIndex}
-              phrase={phrase}
-              col="llm"
-              kind={kind}
-              expectedKeysForKind={expectedKeysForKind}
-              enabled={enabledMethods.llm}
-              isRunning={rowResult.llmRunning}
-              editingCell={editingCell}
-              editingText={editingText}
-              setEditingCell={setEditingCell}
-              setEditingText={setEditingText}
-              // ✅ REMOVED: Notes props - now managed via Zustand store
-            />
-          </td>
-        </>
-      )}
+        });
+      })()}
     </tr>
   );
 }
@@ -527,6 +478,8 @@ const TesterGridRow = React.memo(TesterGridRowComponent, (prev, next) => {
   if (prev.phrase !== next.phrase) return false; // Re-render if phrase changed
   if (prev.kind !== next.kind) return false; // Re-render if kind changed
   if (prev.enabledMethods !== next.enabledMethods) return false; // Re-render if methods changed
+  if (prev.testing !== next.testing) return false; // Re-render if testing state changed
+  if (prev.runAllRows !== next.runAllRows) return false; // Re-render if runAllRows ref changed
 
   // ✅ UI state props (compare by reference for performance)
   if (prev.activeEditor !== next.activeEditor) return false;

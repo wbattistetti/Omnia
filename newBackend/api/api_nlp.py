@@ -119,11 +119,23 @@ DO NOT use semantic names like "day", "month", "year", "giorno", "mese", "anno".
 @router.post("/api/task/{task_id}/test-extraction")
 async def test_extraction(task_id: str, body: dict = Body(...)):
     """
-    Test extraction using full runtime (engine + contract)
-    Backend executes engine and applies contract for normalization/validation
+    Test extraction using Python engines (NER, LLM, Embedding, Rules)
+    Regex is handled by VB.NET API
     """
     try:
         text = body.get("text", "")
+        engine_type = body.get("engineType", "regex")  # Get engine type from request
+
+        # Only handle non-regex engines (regex goes to VB.NET)
+        if engine_type == "regex":
+            return {
+                "values": {},
+                "hasMatch": False,
+                "source": None,
+                "errors": ["Regex engine should be called via VB.NET API at /api/runtime/task/{taskId}/test-extraction"],
+                "confidence": 0
+            }
+
         if not text:
             return {
                 "values": {},
@@ -133,10 +145,8 @@ async def test_extraction(task_id: str, body: dict = Body(...)):
                 "confidence": 0
             }
 
-        # Load contract and engine from template
+        # Load contract from database
         from newBackend.services.database_service import databaseService
-
-        # Load task from database
         collection = databaseService.db["Tasks"]
         task = collection.find_one({
             "$or": [
@@ -154,10 +164,8 @@ async def test_extraction(task_id: str, body: dict = Body(...)):
                 "confidence": 0
             }
 
-        # Extract semantic contract and engine
+        # Extract semantic contract
         contract = task.get("semanticContract")
-        engine = task.get("engine")
-
         if not contract:
             return {
                 "values": {},
@@ -167,18 +175,56 @@ async def test_extraction(task_id: str, body: dict = Body(...)):
                 "confidence": 0
             }
 
-        if not engine:
+        # ✅ Support both engines (new) and parsers (old) for retrocompatibilità
+        engines = contract.get("engines") or contract.get("parsers", [])
+        if not engines:
             return {
                 "values": {},
                 "hasMatch": False,
                 "source": None,
-                "errors": [f"Engine not found for task: {task_id}"],
+                "errors": [f"No engines found in contract for task: {task_id}"],
                 "confidence": 0
             }
 
+        selected_parser = None
+        for parser in engines:
+            if parser.get("type") == engine_type and parser.get("enabled", True):
+                selected_parser = parser
+                break
+
+        if not selected_parser:
+            return {
+                "values": {},
+                "hasMatch": False,
+                "source": None,
+                "errors": [f"Parser {engine_type} not found or disabled in contract"],
+                "confidence": 0
+            }
+
+        # Build engine config from parser
+        engine = {
+            "type": engine_type,
+            "config": {}
+        }
+
+        # Extract config based on parser type
+        if engine_type == "ner":
+            engine["config"]["entityTypes"] = selected_parser.get("entityTypes", [])
+            engine["config"]["confidence"] = selected_parser.get("confidence", 0.7)
+        elif engine_type == "embedding":
+            engine["config"]["embeddingExamples"] = {
+                "positive": selected_parser.get("positiveExamples", []),
+                "negative": selected_parser.get("negativeExamples", [])
+            }
+            engine["config"]["embeddingThreshold"] = selected_parser.get("threshold", 0.7)
+        elif engine_type == "llm":
+            engine["config"]["systemPrompt"] = selected_parser.get("systemPrompt", "")
+            engine["config"]["userPromptTemplate"] = selected_parser.get("userPromptTemplate", "")
+        elif engine_type == "rules" or engine_type == "rule_based":
+            engine["config"]["extractorCode"] = selected_parser.get("extractorCode", "")
+
         # Create ContractExtractor and extract
         from newBackend.services.contract_extractor import ContractExtractor
-
         extractor = ContractExtractor(contract, engine)
         result = extractor.extract(text)
 
