@@ -101,14 +101,15 @@ function getScrollbarWidth(element: HTMLElement): number {
 
 /**
  * Calculates the overlay style based on cell positions and container dimensions
+ * ✅ MODIFIED: When editor is active, expand to full width of container
  */
 function calculateOverlayStyle(params: OverlayStyleParams): React.CSSProperties {
   const { startCellRect, endCellRect, scrollContainerRect, scrollbarOffset } = params;
 
-  const left = startCellRect.left - scrollContainerRect.left;
-  const naturalWidth = endCellRect.right - startCellRect.left;
-  const availableWidth = scrollContainerRect.width - left - scrollbarOffset;
-  const width = Math.min(naturalWidth, availableWidth);
+  // ✅ NEW: Expand to full width when editor is active
+  const left = 0; // Start from left edge of container
+  const availableWidth = scrollContainerRect.width - scrollbarOffset;
+  const width = availableWidth; // Use full available width
 
   return {
     position: 'absolute' as const,
