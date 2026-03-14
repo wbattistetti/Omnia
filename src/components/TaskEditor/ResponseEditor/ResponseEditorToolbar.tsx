@@ -1,5 +1,5 @@
 import React from 'react';
-import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Wand2, Star } from 'lucide-react';
+import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Wand2, Star, LayoutGrid, TreePine } from 'lucide-react';
 import { RightPanelMode } from './RightPanel';
 import { useWizardContext } from '@responseEditor/context/WizardContext';
 import { useGlobalTestPanel } from '@context/GlobalTestPanelContext';
@@ -41,6 +41,9 @@ interface ResponseEditorToolbarProps {
   currentProjectId?: string | null;
   // ✅ NEW: Dock tree setter for opening chat panel as dockable tab
   setDockTree?: (updater: (prev: any) => any) => void;
+  // ✅ NEW: View mode for Behaviour (tabs or tree)
+  viewMode?: 'tabs' | 'tree';
+  onViewModeChange?: (mode: 'tabs' | 'tree') => void;
 }
 
 /**
@@ -80,7 +83,14 @@ export function useResponseEditorToolbar({
   currentProjectId: currentProjectIdProp,
   // ✅ NEW: Dock tree setter for opening chat panel as dockable tab
   setDockTree,
+  // ✅ NEW: View mode for Behaviour
+  viewMode: externalViewMode,
+  onViewModeChange,
 }: ResponseEditorToolbarProps) {
+  // ✅ View mode: usa esterno se fornito, altrimenti stato interno
+  const [internalViewMode, setInternalViewMode] = React.useState<'tabs' | 'tree'>('tabs');
+  const viewMode = externalViewMode ?? internalViewMode;
+  const setViewMode = onViewModeChange ?? setInternalViewMode;
 
   // ✅ CRITICAL: Hooks devono essere chiamati PRIMA di qualsiasi return condizionale
   // ✅ NEW: Get global test panel and context data (MUST be at the top - hooks rule)
@@ -498,24 +508,130 @@ export function useResponseEditorToolbar({
   };
 
 
+  // ✅ Handler per toggle view mode
+  const handleTreeViewClick = () => {
+    if (leftPanelMode !== 'actions') {
+      handleBehaviourClick(); // Apri Behaviour se non è già aperto
+    }
+    setViewMode('tree');
+  };
+
+  const handleTabViewClick = () => {
+    if (leftPanelMode !== 'actions') {
+      handleBehaviourClick(); // Apri Behaviour se non è già aperto
+    }
+    setViewMode('tabs');
+  };
+
+  // ✅ Componente per pulsante composto
+  const DialogueStepsCompoundButtonContent = React.useMemo(() => (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem',
+        height: '100%'
+      }}
+    >
+      <span style={{ fontSize: '13px', fontWeight: 500 }}>Dialogue Steps</span>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.25rem',
+        paddingLeft: '0.5rem',
+        borderLeft: '1px solid rgba(255, 255, 255, 0.2)'
+      }}>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleTreeViewClick();
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '24px',
+            height: '24px',
+            border: 'none',
+            background: viewMode === 'tree' ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            color: 'inherit'
+          }}
+          title="Tree view"
+        >
+          <TreePine size={14} />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleTabViewClick();
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '24px',
+            height: '24px',
+            border: 'none',
+            background: viewMode === 'tabs' ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            color: 'inherit'
+          }}
+          title="Tab view"
+        >
+          <LayoutGrid size={14} />
+        </button>
+      </div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        paddingLeft: '0.5rem',
+        borderLeft: '1px solid rgba(255, 255, 255, 0.2)'
+      }}>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleTasksClick();
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+            padding: '0 0.5rem',
+            border: 'none',
+            background: tasksPanelMode === 'actions' ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            color: 'inherit',
+            fontSize: '13px',
+            fontWeight: 500
+          }}
+          title="View and manage available tasks for the dialogue flow."
+        >
+          <CheckSquare size={14} />
+          <span>Tasks</span>
+        </button>
+      </div>
+    </div>
+  ), [viewMode, leftPanelMode, tasksPanelMode, handleTreeViewClick, handleTabViewClick, handleTasksClick]);
+
+  // ✅ Pulsante composto: Dialogue Steps | 🌳 | 📋 | Tasks
+  const DialogueStepsCompoundButton: ToolbarButton = {
+    icon: DialogueStepsCompoundButtonContent,
+    label: undefined, // Icon contiene tutto
+    onClick: handleBehaviourClick, // Click principale apre Behaviour
+    title: "Define the agent's response flow: prompts, confirmations, error handling, and escalation logic.",
+    active: leftPanelMode === 'actions'
+  };
+
   return [
     { icon: <Undo2 size={16} />, onClick: () => { }, title: "Undo" },
     { icon: <Redo2 size={16} />, onClick: () => { }, title: "Redo" },
-    // ✅ REORDERED: Central buttons in the specified order
-    {
-      icon: <Rocket size={16} />,
-      label: "Behaviour",
-      onClick: handleBehaviourClick,
-      title: "Define the agent's response flow: prompts, confirmations, error handling, and escalation logic.",
-      active: leftPanelMode === 'actions'
-    },
-    {
-      icon: <CheckSquare size={16} />,
-      label: "Tasks",
-      onClick: handleTasksClick,
-      title: "View and manage available tasks for the dialogue flow.",
-      active: tasksPanelMode === 'actions'
-    },
+    // ✅ Pulsante composto: Dialogue Steps | 🌳 | 📋 | Tasks
+    DialogueStepsCompoundButton,
     {
       icon: <BookOpen size={16} />,
       label: "Recognition",

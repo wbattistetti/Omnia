@@ -50,6 +50,9 @@ export interface UseResponseEditorInitializationParams {
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
   // ✅ NEW: Dock tree setter for opening chat panel as dockable tab
   setDockTree?: (updater: (prev: any) => any) => void;
+  // ✅ NEW: View mode for Behaviour (tabs or tree)
+  viewMode?: 'tabs' | 'tree';
+  onViewModeChange?: (mode: 'tabs' | 'tree') => void;
 }
 
 export interface UseResponseEditorInitializationResult {
@@ -217,6 +220,9 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     currentProjectId: params.currentProjectId,
     // ✅ NEW: Pass setDockTree for dockable chat panel
     setDockTree: params.setDockTree,
+    // ✅ NEW: Pass view mode for Behaviour
+    viewMode: params.viewMode,
+    onViewModeChange: params.onViewModeChange,
   });
 
   return {

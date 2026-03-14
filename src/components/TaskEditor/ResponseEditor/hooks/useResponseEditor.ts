@@ -452,5 +452,8 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     onTaskContextualizationComplete: handleTaskContextualizationComplete,
     onTaskBuilderComplete: handleTaskBuilderComplete,
     onTaskBuilderCancel: handleTaskBuilderCancel,
+    // ✅ NEW: View mode for Behaviour
+    viewMode: core.viewMode,
+    onViewModeChange: core.onViewModeChange,
   };
 }

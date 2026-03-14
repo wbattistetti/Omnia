@@ -389,6 +389,9 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     testPanelMode,
   });
 
+  // ✅ View mode state for Behaviour (tabs or tree)
+  const [viewMode, setViewMode] = React.useState<'tabs' | 'tree'>('tabs');
+
   // Initialization
   const initialization = useResponseEditorInitialization({
     task: taskMeta,
@@ -430,6 +433,9 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     onOpenSaveDialog: onOpenSaveDialog,
     // ✅ NEW: Ref per il pulsante save-to-library
     saveToLibraryButtonRef: saveToLibraryButtonRef,
+    // ✅ NEW: View mode for Behaviour
+    viewMode,
+    onViewModeChange: setViewMode,
   });
   const {
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
@@ -534,5 +540,8 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     contextualizationTemplateId,
     taskLabel,
     wizardMode,
+    // ✅ NEW: View mode for Behaviour
+    viewMode,
+    onViewModeChange: setViewMode,
   };
 }

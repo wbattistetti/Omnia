@@ -14,6 +14,10 @@ interface BehaviourEditorProps {
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   selectedRoot?: boolean;
   selectedSubIndex?: number | null;
+  // ✅ NEW: Props per gestire StepsStrip esternamente
+  hideStepsStrip?: boolean; // Se true, non mostra StepsStrip (gestito dal container)
+  selectedStepKey?: string; // Step selezionato (se gestito esternamente)
+  onStepChange?: (stepKey: string) => void; // Callback per cambio step (se gestito esternamente)
 }
 
 export default function BehaviourEditor({
@@ -22,6 +26,9 @@ export default function BehaviourEditor({
   updateSelectedNode,
   selectedRoot,
   selectedSubIndex,
+  hideStepsStrip = false,
+  selectedStepKey: externalSelectedStepKey,
+  onStepChange: externalOnStepChange,
 }: BehaviourEditorProps) {
   const { taskId } = useResponseEditorContext();
 
@@ -55,13 +62,17 @@ export default function BehaviourEditor({
   // ✅ NEW: Get navigation context for programmatic step changes
   const navigation = useResponseEditorNavigation();
 
-  // Stato locale per lo step selezionato
-  const [selectedStepKey, setSelectedStepKey] = useState<string>(() => {
+  // ✅ Stato locale per lo step selezionato (usato solo se non gestito esternamente)
+  const [internalSelectedStepKey, setInternalSelectedStepKey] = useState<string>(() => {
     if (uiStepKeys.length > 0) {
       return uiStepKeys[0];
     }
     return 'start';
   });
+
+  // ✅ Usa step esterno se fornito, altrimenti interno
+  const selectedStepKey = externalSelectedStepKey ?? internalSelectedStepKey;
+  const setSelectedStepKey = externalOnStepChange ?? setInternalSelectedStepKey;
 
   // ✅ NEW: Sync with navigation context
   useEffect(() => {
@@ -123,8 +134,14 @@ export default function BehaviourEditor({
   // Non serve salvare perché selectedNode è sempre aggiornato
   const handleStepChange = React.useCallback((newStepKey: string) => {
     if (newStepKey === selectedStepKey) return;
-    setSelectedStepKey(newStepKey);
-  }, [selectedStepKey]);
+    // ✅ Se è gestito esternamente, usa il callback diretto
+    if (externalOnStepChange) {
+      externalOnStepChange(newStepKey);
+    } else {
+      // ✅ Altrimenti usa il setter interno
+      setInternalSelectedStepKey(newStepKey);
+    }
+  }, [selectedStepKey, externalOnStepChange]);
 
   // ✅ Meta per color e allowedActions
   const meta = (stepMeta as any)[selectedStepKey];
@@ -195,17 +212,19 @@ export default function BehaviourEditor({
       {/* Vista condizionale */}
       {viewMode === 'tabs' ? (
         <>
-          {/* StepsStrip in alto */}
-          <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
-            <StepsStrip
-              stepKeys={uiStepKeys}
-              selectedStepKey={selectedStepKey}
-              onSelectStep={handleStepChange}
-              node={node}
-              taskId={taskId}
-              data-step-key={selectedStepKey}
-            />
-          </div>
+          {/* StepsStrip in alto - solo se non nascosto */}
+          {!hideStepsStrip && (
+            <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
+              <StepsStrip
+                stepKeys={uiStepKeys}
+                selectedStepKey={selectedStepKey}
+                onSelectStep={handleStepChange}
+                node={node}
+                taskId={taskId}
+                data-step-key={selectedStepKey}
+              />
+            </div>
+          )}
 
           {/* StepEditor sotto */}
           <StepEditor

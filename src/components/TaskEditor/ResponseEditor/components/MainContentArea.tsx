@@ -13,6 +13,7 @@
 
 import React from 'react';
 import BehaviourEditor from '@responseEditor/BehaviourEditor';
+import BehaviourContainer from '@responseEditor/components/BehaviourContainer';
 import MessageReviewView from '@responseEditor/MessageReview/MessageReviewView';
 import DataExtractionEditor from '@responseEditor/DataExtractionEditor';
 import { CenterPanel } from '../../../../../TaskBuilderAIWizard/components/CenterPanel';
@@ -24,6 +25,8 @@ import type { Task } from '@types/taskTypes';
 import { TabContentContainer } from '@responseEditor/components/TabContentContainer';
 import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 import type { WizardTaskTreeNode, WizardStep, WizardModuleTemplate } from '../../../../../TaskBuilderAIWizard/types';
+import { RightPanelMode } from '@responseEditor/RightPanel';
+import type { TaskTree } from '@types/taskTypes';
 
 // ✅ Container styles estratti in costanti esterne (per pulizia)
 const BASE_CONTAINER_STYLE: React.CSSProperties = {
@@ -79,6 +82,19 @@ export interface MainContentAreaProps {
   // Pending editor open
   pendingEditorOpen: { editorType: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'; nodeId: string } | null;
 
+  // ✅ NEW: TaskPanel props (solo per Behaviour)
+  tasksPanelMode?: RightPanelMode;
+  tasksPanelWidth?: number;
+  setTasksPanelWidth?: (width: number) => void;
+  taskTree?: TaskTree | null | undefined;
+  projectId?: string | null;
+  onUpdateDDT?: (updater: (tree: TaskTree) => TaskTree) => void;
+  escalationTasks?: any[]; // ✅ Tasks da mostrare nel TaskPanel
+
+  // ✅ NEW: View mode for Behaviour (tabs or tree)
+  viewMode?: 'tabs' | 'tree';
+  onViewModeChange?: (mode: 'tabs' | 'tree') => void;
+
   // ✅ REMOVED: wizardProps - now from WizardContext
   // wizardProps?: { ... };
 }
@@ -100,10 +116,23 @@ export function MainContentArea({
   handleProfileUpdate,
   contractChangeRef,
   pendingEditorOpen,
+  // ✅ NEW: TaskPanel props
+  tasksPanelMode,
+  tasksPanelWidth,
+  setTasksPanelWidth,
+  taskTree: taskTreeProp,
+  projectId,
+  onUpdateDDT,
+  escalationTasks = [],
+  // ✅ NEW: View mode for Behaviour
+  viewMode,
+  onViewModeChange,
   // ✅ REMOVED: wizardProps - now from Context
 }: MainContentAreaProps) {
   // ✅ NEW: Get data from Context
-  const { taskMeta: task, taskType, taskTree } = useResponseEditorContext();
+  const { taskMeta: task, taskType, taskTree: taskTreeFromContext } = useResponseEditorContext();
+  // ✅ Usa taskTree da props se disponibile, altrimenti da context
+  const taskTree = taskTreeProp ?? taskTreeFromContext;
 
   // ✅ NEW: Get wizard context (may be null if wizard not active)
   let wizardContext: ReturnType<typeof useWizardContext> | null = null;
@@ -229,14 +258,26 @@ export function MainContentArea({
         );
       }
 
+      // ✅ Usa BehaviourContainer con split container per TaskPanel
       return (
         <div style={DEFAULT_CONTAINER_STYLE}>
-          <BehaviourEditor
+          <BehaviourContainer
             node={selectedNode}
             translations={localTranslations}
             updateSelectedNode={updateSelectedNode}
             selectedRoot={selectedRoot}
             selectedSubIndex={selectedSubIndex}
+            tasksPanelMode={tasksPanelMode ?? 'none'}
+            tasksPanelWidth={tasksPanelWidth ?? 360}
+            setTasksPanelWidth={setTasksPanelWidth ?? (() => {})}
+            taskTree={taskTree}
+            task={task}
+            projectId={projectId ?? null}
+            selectedNode={selectedNode}
+            onUpdateDDT={onUpdateDDT}
+            escalationTasks={escalationTasks} // ✅ Passa escalationTasks al TaskPanel
+            viewMode={viewMode}
+            onViewModeChange={onViewModeChange}
           />
         </div>
       );

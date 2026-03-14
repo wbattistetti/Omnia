@@ -228,6 +228,9 @@ export interface ResponseEditorLayoutProps {
   originalLabel?: string;
   // ✅ FIX: Ref per il pulsante save-to-library (passato da ResponseEditorInner)
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
+  // ✅ NEW: View mode for Behaviour (tabs or tree)
+  viewMode?: 'tabs' | 'tree';
+  onViewModeChange?: (mode: 'tabs' | 'tree') => void;
 }
 
 /**
@@ -328,6 +331,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     originalLabel: originalLabelProp,
     // ✅ FIX: Ref per il pulsante save-to-library (passato da ResponseEditorInner)
     saveToLibraryButtonRef: saveToLibraryButtonRefProp,
+    // ✅ NEW: View mode for Behaviour
+    viewMode: viewModeProp,
+    onViewModeChange: onViewModeChangeProp,
   } = props;
 
   // ✅ ARCHITECTURE: Extract generalization values from wizardIntegration to populate WizardContext
@@ -1196,6 +1202,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         // ✅ NEW: Passa mainViewMode e wizardProps
         mainViewMode={mainViewMode}
         wizardProps={wizardProps}
+        // ✅ NEW: Passa viewMode per Behaviour
+        viewMode={viewModeProp}
+        onViewModeChange={onViewModeChangeProp}
       />
     );
   }, [

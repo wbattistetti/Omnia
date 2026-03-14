@@ -99,6 +99,10 @@ export interface ResponseEditorNormalLayoutProps {
   // ✅ NEW: Main view mode enum
   mainViewMode?: MainViewMode;
 
+  // ✅ NEW: View mode for Behaviour (tabs or tree)
+  viewMode?: 'tabs' | 'tree';
+  onViewModeChange?: (mode: 'tabs' | 'tree') => void;
+
   // ✅ NEW: Props per Wizard (quando mainViewMode === 'wizard')
   wizardProps?: {
     showStructureConfirmation?: boolean;
@@ -182,6 +186,9 @@ export function ResponseEditorNormalLayout({
   taskWizardMode,
   mainViewMode = MainViewMode.BEHAVIOUR,
   wizardProps,
+  // ✅ NEW: View mode for Behaviour
+  viewMode,
+  onViewModeChange,
 }: ResponseEditorNormalLayoutProps) {
   // ✅ NEW: Get data from Context
   const { taskTree, taskMeta: task, currentProjectId } = useResponseEditorContext();
@@ -356,13 +363,25 @@ export function ResponseEditorNormalLayout({
           handleProfileUpdate={handleProfileUpdate}
           contractChangeRef={contractChangeRef}
           pendingEditorOpen={pendingEditorOpen}
+          // ✅ NEW: TaskPanel props (solo per Behaviour)
+          tasksPanelMode={mainViewMode === MainViewMode.BEHAVIOUR ? tasksPanelMode : 'none'}
+          tasksPanelWidth={tasksPanelWidth}
+          setTasksPanelWidth={setTasksPanelWidth}
+          taskTree={taskTree}
+          projectId={currentProjectId}
+          onUpdateDDT={replaceSelectedTaskTree}
+          escalationTasks={escalationTasks} // ✅ Passa escalationTasks per TaskPanel
           // ✅ NEW: Passa wizardProps quando mainViewMode === 'wizard'
           wizardProps={mainViewMode === MainViewMode.WIZARD ? wizardProps : undefined}
+          // ✅ NEW: Passa viewMode per Behaviour
+          viewMode={viewMode}
+          onViewModeChange={onViewModeChange}
         />
         <PanelContainer
           leftPanelMode={leftPanelMode}
           testPanelMode={testPanelMode}
-          tasksPanelMode={tasksPanelMode}
+          // ✅ TaskPanel è SEMPRE gestito in BehaviourContainer, mai in PanelContainer
+          tasksPanelMode="none"
           rightWidth={rightWidth}
           testPanelWidth={testPanelWidth}
           tasksPanelWidth={tasksPanelWidth}

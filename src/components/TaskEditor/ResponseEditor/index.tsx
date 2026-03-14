@@ -450,6 +450,9 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       originalLabel={editor.headerTitle} // ✅ SINGLE SOURCE: Use headerTitle from editor (node row label)
       // ✅ FIX: Pass ref per il pulsante save-to-library
       saveToLibraryButtonRef={saveToLibraryButtonRef}
+      // ✅ NEW: Pass viewMode for Behaviour
+      viewMode={editor.viewMode}
+      onViewModeChange={editor.onViewModeChange}
     />
   );
 
