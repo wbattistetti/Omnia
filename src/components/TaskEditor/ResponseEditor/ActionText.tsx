@@ -16,7 +16,7 @@ const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editVa
     return text ? (
       <span style={{ color: '#fff', fontWeight: 500 }}>{text}</span>
     ) : (
-      <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Text missing...</span>
+      <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Scrivi un testo qui...</span>
     );
   }
   return (

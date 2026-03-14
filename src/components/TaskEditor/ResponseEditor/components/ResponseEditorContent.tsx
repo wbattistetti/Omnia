@@ -131,18 +131,15 @@ export function ResponseEditorContent({
   // ✅ EXISTING: Contract Wizard (unchanged)
   // ✅ IMPORTANTE: Solo se NON siamo in wizard mode
   if (showContractWizard && effectiveWizardMode === 'none') {
-    // ✅ FASE 2.3: Usa solo store - no fallback chain
     const currentTaskTree = taskTreeFromStore;
     return (
-      <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
-        <ContractWizard
-          taskTree={currentTaskTree}
-          integrated={true}
-          onClose={handleContractWizardClose}
-          onNodeUpdate={handleContractWizardNodeUpdate}
-          onComplete={handleContractWizardComplete}
-        />
-      </div>
+      <ContractWizard
+        taskTree={currentTaskTree}
+        integrated={true}
+        onClose={handleContractWizardClose}
+        onNodeUpdate={handleContractWizardNodeUpdate}
+        onComplete={handleContractWizardComplete}
+      />
     );
   }
 
@@ -160,19 +157,9 @@ export function ResponseEditorContent({
   }
 
   // ✅ STATO 1: Normal editor layout (sempre, anche quando taskWizardMode === 'full')
-  // ✅ NormalEditorLayout viene sempre passato, anche quando taskWizardMode === 'full'
   // Il wizard viene gestito tramite mainViewMode nel MainContentArea
   if (normalEditorLayout) {
-    return (
-      <div style={{
-        flex: 1,
-        minHeight: 0,
-        height: '100%',
-        overflow: 'hidden',
-      }}>
-        {normalEditorLayout}
-      </div>
-    );
+    return <>{normalEditorLayout}</>;
   }
 
   // ✅ Fallback: Se normalEditorLayout non è passato, c'è un problema

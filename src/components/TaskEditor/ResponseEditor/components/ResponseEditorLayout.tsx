@@ -1283,13 +1283,11 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       ref={rootRef}
       className={combinedClass}
       style={{
-        background: '#0b0f17',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
         flex: 1,
         minHeight: 0,
-        height: '100%',
       }}
     >
       {/* ✅ Header: visibile solo quando taskWizardMode === 'none' (STATO 1) */}
@@ -1321,41 +1319,23 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         />
       )}
 
-      <div style={{
-        display: 'flex',
-        flex: 1,
-        minHeight: 0,
-        height: '100%',
-        overflow: 'hidden',
-      }}>
-        <ResponseEditorContent
-          showContractWizard={showContractWizard}
-          needsIntentMessages={needsIntentMessages}
-          // ✅ REMOVED: task, taskTree - now from Context
-          handleContractWizardClose={handleContractWizardClose}
-          handleContractWizardNodeUpdate={handleContractWizardNodeUpdate}
-          handleContractWizardComplete={handleContractWizardComplete}
-          onIntentMessagesComplete={handleIntentMessagesComplete}
-          // ✅ NEW: Wizard mode (primary)
-          taskWizardMode={taskWizardMode}
-          // ✅ DEPRECATED: Backward compatibility wizard props
-          needsTaskContextualization={needsTaskContextualization}
-          needsTaskBuilder={needsTaskBuilder}
-          // ✅ REMOVED: taskLabel - now from Context
-          templateId={contextualizationTemplateId || undefined}
-          // ✅ ARCHITECTURE: Use memoized sidebar (stable reference)
-          // ✅ CRITICAL: sidebar viene passato SOLO quando taskWizardMode === 'adaptation'
-          sidebar={taskWizardMode === 'adaptation' ? sidebarElement : undefined}
-          // ✅ ARCHITECTURE: Use stable callbacks from hook (no inline functions)
-          onTaskContextualizationComplete={onTaskContextualizationComplete}
-          onTaskBuilderComplete={onTaskBuilderComplete}
-          onTaskBuilderCancel={onTaskBuilderCancel}
-          // ✅ ARCHITECTURE: Use memoized normalEditorLayout (stable reference)
-          // ✅ REFACTORED: normalEditorLayout viene passato anche quando taskWizardMode === 'full'
-          // Il wizard viene gestito tramite mainViewMode nel MainContentArea
-          normalEditorLayout={normalEditorLayoutElement}
-        />
-      </div>
+      <ResponseEditorContent
+        showContractWizard={showContractWizard}
+        needsIntentMessages={needsIntentMessages}
+        handleContractWizardClose={handleContractWizardClose}
+        handleContractWizardNodeUpdate={handleContractWizardNodeUpdate}
+        handleContractWizardComplete={handleContractWizardComplete}
+        onIntentMessagesComplete={handleIntentMessagesComplete}
+        taskWizardMode={taskWizardMode}
+        needsTaskContextualization={needsTaskContextualization}
+        needsTaskBuilder={needsTaskBuilder}
+        templateId={contextualizationTemplateId || undefined}
+        sidebar={taskWizardMode === 'adaptation' ? sidebarElement : undefined}
+        onTaskContextualizationComplete={onTaskContextualizationComplete}
+        onTaskBuilderComplete={onTaskBuilderComplete}
+        onTaskBuilderCancel={onTaskBuilderCancel}
+        normalEditorLayout={normalEditorLayoutElement}
+      />
 
       {/* ✅ FIX: TaskDragLayer only rendered when taskWizardMode === 'none' */}
       {taskWizardMode === 'none' && <TaskDragLayer />}

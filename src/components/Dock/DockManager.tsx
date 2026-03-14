@@ -54,7 +54,7 @@ export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent, 
   };
 
   return (
-    <div className="flex w-full h-full min-h-0">
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, width: '100%' }}>
       <DockRenderer
         node={root}
         onDragTabStart={(tab) => setDragTab(tab)}
@@ -91,7 +91,8 @@ function SplitRenderer(props: {
   editorCloseRefsMap?: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
 }) {
   const { node } = props;
-  const cls = node.orientation === 'row' ? 'flex flex-row w-full h-full' : 'flex flex-col w-full h-full';
+  // ✅ FIX: Removed h-full - flex: 1 in style handles height correctly
+  const cls = node.orientation === 'row' ? 'flex flex-row w-full' : 'flex flex-col w-full';
   const [isResizing, setIsResizing] = React.useState(false);
   // Initialize sizes from node.sizes or default to equal distribution
   const defaultSizes = React.useMemo(() => node.children.map(() => 1 / node.children.length), [node.children.length]);
@@ -155,7 +156,7 @@ function SplitRenderer(props: {
   }, [node.id, node.orientation, props.rootNode, props.setRoot]);
 
   return (
-    <div className={cls} style={{ minHeight: 0, minWidth: 0, position: 'relative' }}>
+    <div className={cls} style={{ flex: 1, minHeight: 0, minWidth: 0, position: 'relative' }}>
       {node.children.map((c, idx) => {
         const size = sizes[idx];
         const isLast = idx === node.children.length - 1;
@@ -165,8 +166,11 @@ function SplitRenderer(props: {
               className="min-w-0 min-h-0"
               style={{
                 flex: `0 0 ${size * 100}%`,
+                display: 'flex',
+                flexDirection: 'column',
                 width: node.orientation === 'row' ? `${size * 100}%` : undefined,
-                height: node.orientation === 'col' ? `${size * 100}%` : undefined
+                // ✅ FIX: Removed height: ${size * 100}% - flex: 0 0 ${size * 100}% already handles height in column layout
+                // The flex-basis percentage works correctly when parent has flex-determined height
               }}
             >
               <DockRenderer {...props} node={c} />
@@ -296,8 +300,8 @@ function TabSet(props: {
   return (
     <div
       ref={hostRef}
-      className="relative w-full h-full rounded min-h-0 flex flex-col"
-      style={{ border: '1px solid #38bdf8', backgroundColor: '#e0f2fe', height: '100%', display: 'flex', flexDirection: 'column' }}
+      className="relative w-full rounded min-h-0 flex flex-col"
+      style={{ flex: 1, border: '1px solid #38bdf8', backgroundColor: '#e0f2fe', display: 'flex', flexDirection: 'column' }}
       onDragOver={(e) => {
         e.preventDefault();
         // Only show overlay when dragging dock tabs, not other elements like tasks
@@ -470,7 +474,7 @@ function TabSet(props: {
           <div
             key={stableKey}
             className="w-full min-h-0 flex-1"
-            style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%', backgroundColor: '#ffffff', overflow: 'hidden' }}
+            style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, backgroundColor: '#ffffff', overflow: 'hidden' }}
           >
             {props.renderTabContent(activeTab)}
           </div>

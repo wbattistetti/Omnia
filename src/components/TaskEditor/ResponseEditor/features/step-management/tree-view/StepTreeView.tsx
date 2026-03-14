@@ -64,7 +64,7 @@ export function StepTreeView({
         flex: 1,
         overflowY: 'auto',
         position: 'relative', // Importante per calcolo drop zone corretto
-        padding: '1rem'
+        padding: '0.5rem'
       }}
     >
       {stepTree.map((item, index) => {

@@ -31,8 +31,8 @@ const BASE_CONTAINER_STYLE: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   minWidth: 0,
-  height: '100%',
-  overflow: 'hidden',
+  minHeight: 0,
+  overflow: 'hidden', // ✅ Changed from 'auto' - children scroll internally (StepEditor has overflowY: auto)
 };
 
 const MESSAGE_REVIEW_CONTAINER_STYLE: React.CSSProperties = {

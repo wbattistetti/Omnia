@@ -646,7 +646,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const { combinedClass } = useFontClasses();
 
   return (
-    <div className={`min-h-screen ${combinedClass}`} style={{ position: 'relative' }}>
+    <div className={`h-screen overflow-hidden ${combinedClass}`} style={{ position: 'relative' }}>
       {/* overlay ricarico rimosso per test */}
       {/* Toast feedback */}
       {toast && (
@@ -1109,7 +1109,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             </div>
 
             {/* Canvas */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col min-w-0" style={{ minHeight: 0 }}>
               <div id="flow-canvas-host" style={{
                 flex: 1,
                 minHeight: 0,
@@ -1124,7 +1124,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 ) : (
                   <>
                     {/* Canvas - occupa tutto lo spazio disponibile */}
-                    <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
+                    <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                       {currentPid ? (
                         <FlowWorkspaceProvider>
                           <DockManagerWithFlows

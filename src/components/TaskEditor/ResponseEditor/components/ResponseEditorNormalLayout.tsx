@@ -257,10 +257,10 @@ export function ResponseEditorNormalLayout({
     display: 'grid',
     gridTemplateColumns,
     gridTemplateRows: '1fr',
-    height: '100%',
-    minHeight: 0,
-    overflow: 'hidden',
     flex: 1,
+    minHeight: 0,
+    height: '100%', // ✅ Use 100% height to fill parent flex container
+    overflow: 'hidden', // ✅ Changed from 'auto' - children scroll internally
   };
 
   // ✅ Stile per l'area del contenuto centrale (MainContentArea + PanelContainer)
@@ -269,7 +269,7 @@ export function ResponseEditorNormalLayout({
     flexDirection: 'row',
     minHeight: 0,
     height: '100%',
-    overflow: 'hidden',
+    overflow: 'hidden', // ✅ Changed to hidden - children scroll internally
     gridColumn: hasSidebar ? '3' : hasIntentEditor ? '2' : '1',
   };
 

@@ -12,7 +12,7 @@ import { FlowCanvasHost } from '../../FlowWorkspace/FlowCanvasHost';
 import ResponseEditor from '../../TaskEditor/ResponseEditor';
 import NonInteractiveResponseEditor from '../../TaskEditor/ResponseEditor/NonInteractiveResponseEditor';
 import ConditionEditor from '../../conditions/ConditionEditor';
-import ResizableTaskEditorHost from '../../TaskEditor/EditorHost/ResizableTaskEditorHost';
+import TaskEditorHost from '../../TaskEditor/EditorHost/TaskEditorHost';
 import { AssistantPanel } from '@components/ChatPanel/AssistantPanel';
 import { ErrorReportPanel } from '@components/ChatPanel/ErrorReportPanel';
 
@@ -214,11 +214,9 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
             width: '100%',
             flex: 1,
             minHeight: 0,
-            backgroundColor: '#0b1220',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            height: '100%',
           }}
         >
           <ResponseEditor
@@ -473,7 +471,7 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
             flexDirection: 'column',
           }}
         >
-          <ResizableTaskEditorHost
+          <TaskEditorHost
             task={tab.task || { id: '', type: TaskType.SayMessage, label: '' }}
             onClose={() => {
               // Closure is handled by tab.onClose (only for TaskTree editor)

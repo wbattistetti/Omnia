@@ -51,7 +51,6 @@ export interface TabContentContainerProps {
  * - flex: 1
  * - minHeight: 0
  * - overflow: 'hidden' (or 'auto' if specified)
- * - height: '100%' (ensures full height in flex context)
  */
 export function TabContentContainer({
   children,
@@ -65,7 +64,6 @@ export function TabContentContainer({
     flexDirection: 'column',
     flex: 1,
     minHeight: 0,
-    height: '100%',
     overflow,
     padding,
     ...style,

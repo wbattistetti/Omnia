@@ -17,6 +17,7 @@ type EscalationCardProps = {
   onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
   stepKey: string;
   hideHeader?: boolean; // Nasconde l'header nella vista ad albero
+  isHovered?: boolean; // ✅ Hover gestito dal container esterno
 };
 
 export function EscalationCard({
@@ -32,9 +33,9 @@ export function EscalationCard({
   autoEditTarget,
   onAutoEditTargetChange,
   stepKey,
-  hideHeader = false
+  hideHeader = false,
+  isHovered = false // ✅ Ricevuto come prop dal container esterno
 }: EscalationCardProps) {
-  const [isHovered, setIsHovered] = useState(false);
   const showCard = hasEscalationCard(stepKey);
 
   // ✅ Calcola isEmpty PRIMA di useState
@@ -71,12 +72,9 @@ export function EscalationCard({
     <div
       data-escalation-index={escalationIdx} // ✅ NEW: Add data attribute for scroll targeting
       style={{
-        borderWidth: isHovered ? '2px' : '1px',
-        borderStyle: 'solid',
-        borderColor: isHovered ? color : `${color}40`,
-        borderRadius: '12px',
-        padding: '1rem',
-        backgroundColor: `${color}08`,
+        // ✅ Rimosso border, borderRadius - ora gestiti dal container esterno (EscalationFascia)
+        padding: '0.5rem',
+        backgroundColor: 'transparent', // ✅ Trasparente - il background è sul container esterno
         transition: 'all 0.2s',
         display: 'flex',
         flexDirection: 'column',
@@ -84,8 +82,7 @@ export function EscalationCard({
         minHeight: 'auto',
         overflow: 'visible',
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      // ✅ Rimosso onMouseEnter/onMouseLeave - ora gestiti dal container esterno (EscalationFascia)
     >
       {!hideHeader && (
         <EscalationHeader

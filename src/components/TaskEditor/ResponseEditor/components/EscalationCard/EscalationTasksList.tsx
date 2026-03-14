@@ -290,9 +290,11 @@ export function EscalationTasksList({
               isEditing={isEditing}
             >
               <TaskRow
-                icon={task.iconName
-                  ? getIconComponent(task.iconName, ensureHexColor(task.color))
-                  : getTaskIconNode(templateId, ensureHexColor(task.color))}
+                icon={templateId === 'sayMessage'
+                  ? undefined // ✅ sayMessage: no icona (si capisce dal testo)
+                  : (task.iconName
+                      ? getIconComponent(task.iconName, ensureHexColor(task.color))
+                      : getTaskIconNode(templateId, ensureHexColor(task.color)))}
                 text={getTaskText(task, translations)}
                 color={color}
                 draggable

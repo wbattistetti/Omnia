@@ -34,7 +34,7 @@ export function StepCard({
     <div
       style={{
         marginLeft: isRoot ? '0' : '50px', // Indentazione livello 1 per step non-root
-        marginBottom: '1rem'
+        marginBottom: '0.25rem'
       }}
     >
       {/* Contenuto: ogni escalation ha la sua fascia con indentazione progressiva */}

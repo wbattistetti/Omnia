@@ -39,8 +39,8 @@ export function EscalationFascia({
   const icon = meta.icon;
   const color = meta.border || meta.color;
 
-  // Colori smorzati con trasparenza
-  const bgColor = isHovered ? `${color}20` : `${color}10`; // Trasparenza ridotta
+  // Colori con maggiore saturazione
+  const bgColor = isHovered ? `${color}35` : `${color}25`; // ✅ Saturazione aumentata
   const borderColor = `${color}40`; // Bordo smorzato
 
   return (
@@ -50,7 +50,13 @@ export function EscalationFascia({
         flexDirection: 'row',
         alignItems: 'stretch',
         marginLeft: `${(escalationIdx + 1) * 50}px`, // Indentazione progressiva
-        marginBottom: '0.5rem'
+        marginBottom: '0.25rem',
+        borderWidth: isHovered ? '2px' : '1px',
+        borderStyle: 'solid',
+        borderColor: isHovered ? color : `${color}40`,
+        borderRadius: '12px',
+        overflow: 'hidden', // ✅ Importante: fa rispettare il borderRadius ai figli
+        backgroundColor: `${color}08` // Background unificato per tutta la card
       }}
     >
       {/* Fascia verticale */}
@@ -62,21 +68,22 @@ export function EscalationFascia({
         style={{
           width: '50px',
           alignSelf: 'stretch',
-          backgroundColor: bgColor,
-          borderLeft: `3px solid ${color}60`, // Bordo smorzato
+          // ✅ Gradiente: più saturo a destra (come intestazione colorata)
+          background: `linear-gradient(to right, ${bgColor}, ${isHovered ? `${color}50` : `${color}40`})`,
+          // ✅ Rimosso borderLeft - il bordo è ora sul container esterno
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'center', // ✅ Center/center: icona centrata
           cursor: 'pointer',
           transition: 'background-color 0.2s',
           position: 'relative',
-          padding: '8px 0',
-          minHeight: '50px'
+          padding: '4px 0',
+          minHeight: '40px'
         }}
       >
-        {/* Chevron solo sulla prima escalation */}
-        {showChevron && (
+        {/* Chevron solo sulla prima escalation e solo su hover */}
+        {showChevron && isHovered && (
           <div
             style={{
               position: 'absolute',
@@ -86,7 +93,8 @@ export function EscalationFascia({
               color: `${color}80`,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              transition: 'opacity 0.2s'
             }}
           >
             {isCollapsed ? (
@@ -110,7 +118,7 @@ export function EscalationFascia({
         </div>
       </div>
 
-      {/* Contenuto escalation - EscalationCard ha già il suo bordo e area di drop */}
+      {/* Contenuto escalation - EscalationCard senza bordo esterno (gestito dal container) */}
       <div
         style={{
           flex: 1

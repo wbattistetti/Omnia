@@ -23,7 +23,7 @@ export function EscalationHeader({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: isExpanded ? '0.75rem' : '0',
+      marginBottom: isExpanded ? '0.25rem' : '0',
       cursor: 'pointer',
       userSelect: 'none'
     }}

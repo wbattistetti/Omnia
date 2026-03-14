@@ -83,6 +83,7 @@ function EscalationCardWrapper({
         onAutoEditTargetChange={onAutoEditTargetChange}
         stepKey={stepKey}
         hideHeader={true} // Nasconde etichette nella vista ad albero
+        isHovered={isHovered} // ✅ Passa hover state alla card
       />
     </EscalationFascia>
   );
@@ -126,7 +127,7 @@ export function StepContent({
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        gap: '0.5rem'
+        gap: '0.25rem'
       }}
     >
       {escalations.map((escalation, idx) => {
