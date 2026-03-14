@@ -170,6 +170,8 @@ export default function RegexInlineEditor({
   const preservedValueRef = useRef<string>(initialDisplay);
   // ✅ Track previous GUID regex prop to avoid unnecessary updates
   const prevGuidRegexRef = useRef<string>(regex || '');
+  // ✅ Track all active timeouts for cleanup
+  const timeoutRefs = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   // Keep textboxTextRef and preservedValueRef in sync
   useEffect(() => {
@@ -285,6 +287,7 @@ export default function RegexInlineEditor({
 
     // Debounce normalization validation
     const timeoutId = setTimeout(() => {
+      timeoutRefs.current.delete(timeoutId);
       try {
         normalizeRegexFromEditor(textboxText, subDataMappingRef.current);
         setValidationError(null);
@@ -293,41 +296,16 @@ export default function RegexInlineEditor({
         setValidationError(errorMessage);
       }
     }, 500);
+    timeoutRefs.current.add(timeoutId);
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      timeoutRefs.current.delete(timeoutId);
+    };
   }, [textboxText, lastTextboxText]);
 
-  // The AI sees and works with label-based regex (what is shown in the editor).
-  // The AI is expected to preserve the label group names in its output.
-  const handleAIClick = useCallback(async () => {
-    if (!textboxText.trim()) return;
-
-    console.log('[RegexEditor] AI button clicked, current display regex:', textboxText);
-
-    try {
-      const result = await new Promise<string>((resolve, reject) => {
-        aiPromiseRef.current = { resolve, reject };
-        generateRegex(textboxText, null).catch((err) => {
-          console.error('[RegexEditor] generateRegex error:', err);
-          reject(err);
-        });
-      });
-
-      console.log('[RegexEditor] AI generation result (label regex):', result);
-
-      // Update both states so the "dirty" button disappears
-      setLastTextboxText(result);
-      setTextboxText(result);
-      textboxTextRef.current = result;
-      preservedValueRef.current = result;
-    } catch (e) {
-      console.error('[RegexEditor] AI generation failed:', e);
-    }
-  }, [textboxText, generateRegex]);
-
   // -----------------------------------------------------------------------
-  // Save immediately to template when user types
-  // Saves directly to template.dataContract (not just on close)
+  // Save to template (explicit save only when clicking "Refine Regex")
   // -----------------------------------------------------------------------
   const saveToTemplate = useCallback((displayValue: string) => {
     if (!displayValue || !displayValue.trim() || !node?.templateId) {
@@ -377,33 +355,50 @@ export default function RegexInlineEditor({
     }
   }, [node?.templateId]);
 
-  // ✅ Save immediately when textboxText changes (debounced to avoid too many saves)
-  useEffect(() => {
-    if (!textboxText || textboxText.trim() === '' || textboxText === lastTextboxText) {
-      return;
+  // The AI sees and works with label-based regex (what is shown in the editor).
+  // The AI is expected to preserve the label group names in its output.
+  const handleAIClick = useCallback(async () => {
+    if (!textboxText.trim()) return;
+
+    console.log('[RegexEditor] AI button clicked, current display regex:', textboxText);
+
+    try {
+      const result = await new Promise<string>((resolve, reject) => {
+        aiPromiseRef.current = { resolve, reject };
+        generateRegex(textboxText, null).catch((err) => {
+          console.error('[RegexEditor] generateRegex error:', err);
+          reject(err);
+        });
+      });
+
+      console.log('[RegexEditor] AI generation result (label regex):', result);
+
+      // ✅ Save the AI result to template (explicit save only when clicking "Refine Regex")
+      saveToTemplate(result);
+
+      // ✅ Update baseline: the new value becomes the baseline for this session
+      setLastTextboxText(result);
+      setTextboxText(result);
+      textboxTextRef.current = result;
+      preservedValueRef.current = result;
+    } catch (e) {
+      console.error('[RegexEditor] AI generation failed:', e);
     }
-
-    // Debounce: save after 500ms of no typing
-    const timeoutId = setTimeout(() => {
-      saveToTemplate(textboxText);
-      // Update lastTextboxText after save to track that it's been saved
-      setLastTextboxText(textboxText);
-    }, 500);
-
-    return () => clearTimeout(timeoutId);
-  }, [textboxText, lastTextboxText, saveToTemplate]);
+  }, [textboxText, generateRegex, saveToTemplate]);
 
   // -----------------------------------------------------------------------
-  // Save on close (backup - in case debounce didn't fire)
+  // Cleanup all timeouts on unmount
   // -----------------------------------------------------------------------
   useEffect(() => {
     return () => {
-      const displayValue = preservedValueRef.current || textboxTextRef.current;
-      if (displayValue && displayValue.trim() && node?.templateId) {
-        saveToTemplate(displayValue);
-      }
+      // ✅ Clear all active timeouts to prevent errors during unmount
+      timeoutRefs.current.forEach((timeoutId) => {
+        clearTimeout(timeoutId);
+      });
+      timeoutRefs.current.clear();
+      // ✅ NO save on close - modifications are discarded if user doesn't click "Refine Regex"
     };
-  }, [node?.templateId, saveToTemplate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // -----------------------------------------------------------------------
   // Backward compatibility: Support onButtonRender and onErrorRender callbacks

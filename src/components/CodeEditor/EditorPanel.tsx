@@ -87,11 +87,31 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
         }
       }
 
+      // Check if error has a name property containing "Canceled"
+      if (typeof error === 'object' && 'name' in error) {
+        const name = (error as { name?: any }).name;
+        if (typeof name === 'string' && name.includes('Canceled')) {
+          return true;
+        }
+      }
+
       // Check if error.toString() contains "Canceled"
       try {
         const errorStr = String(error);
         if (errorStr.includes('Canceled')) {
           return true;
+        }
+      } catch {
+        // Ignore
+      }
+
+      // Check if error is a CanceledError instance (Monaco's internal error type)
+      try {
+        if (error && typeof error === 'object' && error.constructor) {
+          const constructorName = error.constructor.name;
+          if (constructorName && constructorName.includes('Canceled')) {
+            return true;
+          }
         }
       } catch {
         // Ignore
@@ -104,7 +124,8 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
       // Suppress "Canceled" errors from Monaco during dispose
       if (isCanceledError(event.error) || isCanceledError(event.message)) {
         event.preventDefault();
-        return;
+        event.stopPropagation();
+        return false;
       }
     };
 
@@ -112,16 +133,28 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
       // Suppress "Canceled" promise rejections from Monaco during dispose
       if (isCanceledError(event.reason)) {
         event.preventDefault();
-        return;
+        event.stopPropagation();
+        // Also catch the promise to prevent it from being logged
+        if (event.reason && typeof event.reason === 'object' && 'catch' in event.reason) {
+          try {
+            (event.reason as Promise<any>).catch(() => {
+              // Silently ignore canceled promises
+            });
+          } catch {
+            // Ignore
+          }
+        }
+        return false;
       }
     };
 
-    window.addEventListener('error', errorHandler);
-    window.addEventListener('unhandledrejection', unhandledRejectionHandler);
+    // Use capture phase to catch errors early
+    window.addEventListener('error', errorHandler, true);
+    window.addEventListener('unhandledrejection', unhandledRejectionHandler, true);
 
     return () => {
-      window.removeEventListener('error', errorHandler);
-      window.removeEventListener('unhandledrejection', unhandledRejectionHandler);
+      window.removeEventListener('error', errorHandler, true);
+      window.removeEventListener('unhandledrejection', unhandledRejectionHandler, true);
     };
   }, []);
 
