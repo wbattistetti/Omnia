@@ -85,6 +85,7 @@ interface RecognitionEditorProps {
   setReportOpen?: (open: boolean) => void;
   baselineStats?: { matched: number; falseAccept: number; totalGt: number } | null;
   lastStats?: { matched: number; falseAccept: number; totalGt: number } | null;
+  cancelTesting?: () => void; // ✅ Cancel function to abort running tests
 }
 
 /**
@@ -139,6 +140,7 @@ export default function RecognitionEditor({
   lastStats,
   updateSelectedNode,
   contractChangeRef,
+  cancelTesting,
 }: RecognitionEditorProps) {
   // ✅ REMOVED: Notes are now managed via Zustand store
 
@@ -836,6 +838,7 @@ export default function RecognitionEditor({
           setReportOpen={setReportOpen}
           baselineStats={baselineStats}
           lastStats={lastStats}
+          cancelTesting={cancelTesting}
         />
       </div>
     </div>

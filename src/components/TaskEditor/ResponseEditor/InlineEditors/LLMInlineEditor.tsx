@@ -5,6 +5,7 @@ import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
 import { type TestResult } from '@responseEditor/InlineEditors/shared/TestValuesColumn';
 import { useEditorMode } from '@responseEditor/hooks/useEditorMode';
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 interface LLMInlineEditorProps {
   onClose: () => void;
@@ -13,6 +14,8 @@ interface LLMInlineEditorProps {
   testPhrases?: string[]; // ✅ Test phrases passed directly from useProfileState
   setTestPhrases?: (phrases: string[]) => void; // ✅ Setter passed directly from useProfileState
   onProfileUpdate?: (profile: NLPProfile) => void;
+  contract?: DataContract | null;
+  onContractChange?: (contract: DataContract) => void;
 }
 
 const TEMPLATE_PROMPT = `// LLM Prompt Template
@@ -35,10 +38,102 @@ export default function LLMInlineEditor({
   testPhrases: testPhrasesProp,
   setTestPhrases: setTestPhrasesProp,
   onProfileUpdate,
+  contract,
+  onContractChange,
 }: LLMInlineEditorProps) {
-  const [llmPrompt, setLlmPrompt] = React.useState<string>(TEMPLATE_PROMPT);
+  // Build prompt from contract if aiPrompt is empty
+  const buildPromptFromContract = React.useCallback((): string => {
+    if (!contract) return TEMPLATE_PROMPT;
+
+    const entity = contract.entity || {};
+    const entityLabel = entity.label || node?.label || '';
+    const entityDesc = entity.description || '';
+
+    // Support both subentities (new) and subgroups (legacy)
+    const subgroups = contract.subentities || contract.subgroups || [];
+
+    // Build subentities description
+    const subentitiesList: string[] = [];
+    subgroups.forEach((sg: any) => {
+      let subDesc = `- ${sg.subTaskKey || 'unknown'}: ${sg.label || ''}`;
+      if (sg.meaning) subDesc += ` (${sg.meaning})`;
+      if (sg.type) subDesc += ` [type: ${sg.type}]`;
+      if (sg.constraints) subDesc += ` [constraints: ${JSON.stringify(sg.constraints)}]`;
+      subentitiesList.push(subDesc);
+    });
+
+    // Get output format
+    const outputFormat = contract.outputCanonical || {};
+    const outputKeys = outputFormat.keys || [];
+
+    // Build the prompt template
+    let prompt = 'Extract information from the following text.\n\n';
+
+    if (entityLabel) {
+      prompt += `Entity to extract: ${entityLabel}\n`;
+    }
+    if (entityDesc) {
+      prompt += `Description: ${entityDesc}\n`;
+    }
+
+    if (subentitiesList.length > 0) {
+      prompt += '\nFields to extract:\n';
+      prompt += subentitiesList.join('\n');
+      prompt += '\n';
+    }
+
+    prompt += `\nOutput format: ${outputFormat.format || 'object'}\n`;
+    if (outputKeys.length > 0) {
+      prompt += `Output keys: ${outputKeys.join(', ')}\n`;
+    }
+
+    prompt += '\nText to analyze:\n{text}\n\n';
+    prompt += 'Return a JSON object with the extracted values matching the output format above.';
+
+    return prompt;
+  }, [contract, node]);
+
+  // Load prompt from contract or generate from contract
+  const initialPrompt = React.useMemo(() => {
+    if (!contract) return TEMPLATE_PROMPT;
+
+    // ✅ Support both engines (new) and parsers (legacy) for retrocompatibilità
+    const engines = contract.engines || contract.parsers || [];
+    const llmParser = engines.find((p: any) => p.type === 'llm');
+
+    if (llmParser?.aiPrompt && llmParser.aiPrompt.trim()) {
+      // Use saved prompt if it exists and is not empty
+      return llmParser.aiPrompt;
+    } else {
+      // Generate from contract - always show generated prompt instead of empty template
+      const generated = buildPromptFromContract();
+      // ✅ Only fallback to TEMPLATE_PROMPT if generated is empty or invalid
+      return generated && generated.trim() ? generated : TEMPLATE_PROMPT;
+    }
+  }, [contract, buildPromptFromContract]);
+
+  const [llmPrompt, setLlmPrompt] = React.useState<string>(initialPrompt);
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
   const [generating, setGenerating] = React.useState<boolean>(false);
+
+  // Update prompt when contract changes
+  React.useEffect(() => {
+    if (!contract) return;
+
+    // ✅ Support both engines (new) and parsers (legacy)
+    const engines = contract.engines || contract.parsers || [];
+    const llmParser = engines.find((p: any) => p.type === 'llm');
+
+    if (llmParser?.aiPrompt && llmParser.aiPrompt.trim() && llmParser.aiPrompt !== llmPrompt) {
+      setLlmPrompt(llmParser.aiPrompt);
+    } else if ((!llmParser?.aiPrompt || !llmParser.aiPrompt.trim()) && contract) {
+      const generated = buildPromptFromContract();
+      // ✅ Only update if generated is valid and different
+      if (generated && generated.trim() && generated !== llmPrompt) {
+        setLlmPrompt(generated);
+      }
+    }
+  }, [contract, buildPromptFromContract, llmPrompt]);
 
   // ✅ Usa testPhrases da props se disponibili, altrimenti fallback a profile
   const testPhrases = testPhrasesProp || profile?.testPhrases || [];
@@ -163,7 +258,47 @@ export default function LLMInlineEditor({
         isGenerating={generating}
         shouldShowButton={shouldShowButton}
         onButtonClick={handleButtonClick}
-        onClose={onClose}
+        onClose={() => {
+          // Save prompt to contract when closing (validates/persists the prompt)
+          if (contract && onContractChange && llmPrompt.trim()) {
+            // ✅ Support both engines (new) and parsers (legacy)
+            const engines = contract.engines || contract.parsers || [];
+            const llmParserIndex = engines.findIndex((p: any) => p.type === 'llm');
+
+            if (llmParserIndex >= 0) {
+              // Update existing LLM parser
+              const updatedEngines = [...engines];
+              updatedEngines[llmParserIndex] = {
+                ...updatedEngines[llmParserIndex],
+                aiPrompt: llmPrompt.trim(),
+                systemPrompt: updatedEngines[llmParserIndex].systemPrompt || 'You are a data extraction expert. Always return valid JSON.'
+              };
+              onContractChange({
+                ...contract,
+                engines: contract.engines ? updatedEngines : undefined,
+                parsers: contract.parsers ? updatedEngines : undefined
+              });
+            } else {
+              // Create new LLM parser
+              const newEngines = [
+                ...engines,
+                {
+                  type: 'llm',
+                  enabled: true,
+                  systemPrompt: 'You are a data extraction expert. Always return valid JSON.',
+                  aiPrompt: llmPrompt.trim(),
+                  responseSchema: {}
+                }
+              ];
+              onContractChange({
+                ...contract,
+                engines: contract.engines ? newEngines : undefined,
+                parsers: contract.parsers ? newEngines : undefined
+              });
+            }
+          }
+          onClose();
+        }}
       />
 
         {/* Monaco Editor for LLM Prompt */}

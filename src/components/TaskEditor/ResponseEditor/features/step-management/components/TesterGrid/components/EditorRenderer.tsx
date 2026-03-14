@@ -6,6 +6,7 @@ import LLMInlineEditor from '@responseEditor/InlineEditors/LLMInlineEditor';
 import IntentEditorInlineEditor from '@responseEditor/InlineEditors/IntentEditorInlineEditor';
 
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 interface EditorRendererProps {
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | null;
@@ -28,6 +29,8 @@ interface EditorRendererProps {
   toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
   setEditorButton: (button: React.ReactNode) => void;
   setEditorErrorMessage: (error: React.ReactNode) => void;
+  contract?: DataContract | null;
+  onContractChange?: (contract: DataContract | null) => void;
 }
 
 /**
@@ -40,6 +43,8 @@ export function EditorRenderer({
   toggleEditor,
   setEditorButton,
   setEditorErrorMessage,
+  contract,
+  onContractChange,
 }: EditorRendererProps) {
   if (!activeEditor || !['regex', 'extractor', 'ner', 'llm', 'embeddings'].includes(activeEditor) || !editorProps) {
     return null;
@@ -73,7 +78,13 @@ export function EditorRenderer({
     case 'ner':
       return <NERInlineEditor {...commonProps} />;
     case 'llm':
-      return <LLMInlineEditor {...commonProps} />;
+      return (
+        <LLMInlineEditor
+          {...commonProps}
+          contract={contract}
+          onContractChange={onContractChange}
+        />
+      );
     case 'embeddings':
       const taskForEmbeddings = editorProps.task;
       const actForEmbeddings = taskForEmbeddings ? {

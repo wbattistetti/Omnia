@@ -153,10 +153,177 @@ class ContractExtractor:
 
     def _apply_llm_engine(self, text: str) -> Dict[str, Any]:
         """Apply LLM engine using OpenAI/Anthropic"""
-        # TODO: Implement LLM extraction
-        # For now, return empty (will be implemented later)
-        print(f"[ContractExtractor] LLM engine not yet implemented")
-        return {}
+        try:
+            from newBackend.services.svc_ai_client import chat_json
+            from newBackend.core.core_settings import OPENAI_KEY
+
+            if not OPENAI_KEY:
+                print(f"[ContractExtractor] LLM engine: OPENAI_KEY not configured")
+                return {}
+
+            config = self.engine.get("config", {})
+            system_prompt = config.get("systemPrompt", "You are a data extraction expert. Always return valid JSON.")
+            # Support both userPromptTemplate (backend) and aiPrompt (frontend field name)
+            user_prompt_template = (
+                config.get("userPromptTemplate") or
+                config.get("aiPrompt") or ""
+            )
+
+            print(f"[ContractExtractor] LLM engine: systemPrompt present={bool(system_prompt)}, userPromptTemplate present={bool(user_prompt_template)}")
+
+            # If no user prompt template, generate it from contract (deterministic, not saved)
+            if not user_prompt_template:
+                print(f"[ContractExtractor] LLM engine: userPromptTemplate empty, generating from contract")
+                user_prompt_template = self._build_llm_prompt_from_contract()
+                if not user_prompt_template:
+                    print(f"[ContractExtractor] LLM engine: ERROR - could not generate prompt from contract")
+                    return {}
+
+            # Replace placeholders in user prompt
+            user_prompt = user_prompt_template.replace("{text}", text)
+
+            # Replace {subData} placeholder if present
+            if "{subData}" in user_prompt:
+                subgroups = self.contract.get("subentities") or self.contract.get("subgroups", [])
+                sub_data_list = "\n".join([
+                    f"- {sg.get('subTaskKey', 'unknown')}: {sg.get('label', '')} ({sg.get('type', 'text')})"
+                    for sg in subgroups
+                ])
+                user_prompt = user_prompt.replace("{subData}", sub_data_list)
+
+            # Call LLM
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+
+            print(f"[ContractExtractor] LLM engine: Calling OpenAI with text={repr(text[:100])}")
+            response_text = chat_json(messages, provider="openai")
+
+            # Parse JSON response
+            import json
+            try:
+                # chat_json returns a string, parse it
+                if isinstance(response_text, str):
+                    response_data = json.loads(response_text)
+                else:
+                    response_data = response_text
+
+                print(f"[ContractExtractor] LLM engine: Parsed response: {type(response_data)} = {repr(str(response_data)[:200])}")
+
+                # Extract values from response
+                extracted = {}
+
+                # Check if response is a dict
+                if isinstance(response_data, dict):
+                    # Get contract structure — support both subentities (new) and subgroups (legacy)
+                    subgroups = self.contract.get("subentities") or self.contract.get("subgroups", [])
+                    subgroup_keys = [sg.get("subTaskKey") for sg in subgroups if sg.get("subTaskKey")]
+
+                    # Also check outputCanonical.keys as fallback
+                    output_keys = self.contract.get("outputCanonical", {}).get("keys", [])
+                    all_expected_keys = list(set(subgroup_keys + output_keys))
+
+                    print(f"[ContractExtractor] LLM engine: Expected keys: {all_expected_keys}")
+                    print(f"[ContractExtractor] LLM engine: Response keys: {list(response_data.keys())}")
+
+                    # Strategy 1: Direct key mapping
+                    for key, value in response_data.items():
+                        if key in all_expected_keys:
+                            extracted[key] = value
+                        # Also check case-insensitive match
+                        elif all_expected_keys:
+                            for expected_key in all_expected_keys:
+                                if key.lower() == expected_key.lower():
+                                    extracted[expected_key] = value
+                                    break
+
+                    # Strategy 2: If single expected key and response has "value", map it
+                    if not extracted and len(all_expected_keys) == 1 and "value" in response_data:
+                        extracted[all_expected_keys[0]] = response_data["value"]
+
+                    # Strategy 3: If no mapping worked but we have a "value", use it as generic
+                    if not extracted and "value" in response_data:
+                        # If we have expected keys, try to map to first one
+                        if all_expected_keys:
+                            extracted[all_expected_keys[0]] = response_data["value"]
+                        else:
+                            extracted["value"] = response_data["value"]
+
+                    # Strategy 4: If response is a simple string value, use it
+                    if not extracted and len(response_data) == 1:
+                        first_key = list(response_data.keys())[0]
+                        if all_expected_keys:
+                            extracted[all_expected_keys[0]] = response_data[first_key]
+                        else:
+                            extracted["value"] = response_data[first_key]
+
+                print(f"[ContractExtractor] LLM engine: Final extracted {len(extracted)} values: {list(extracted.keys())}")
+                return extracted
+
+            except json.JSONDecodeError as e:
+                print(f"[ContractExtractor] LLM engine: Failed to parse JSON response: {e}")
+                print(f"[ContractExtractor] LLM engine: Response was: {repr(response_text[:200])}")
+                return {}
+
+        except Exception as e:
+            print(f"[ContractExtractor] LLM engine error: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+
+    def _build_llm_prompt_from_contract(self) -> str:
+        """Build LLM prompt template from contract (deterministic, not saved)"""
+        try:
+            entity = self.contract.get("entity", {})
+            entity_label = entity.get("label", "")
+            entity_desc = entity.get("description", "")
+
+            # Support both subentities (new) and subgroups (legacy)
+            subgroups = self.contract.get("subentities") or self.contract.get("subgroups", [])
+
+            # Build subentities description
+            subentities_list = []
+            for sg in subgroups:
+                sub_desc = f"- {sg.get('subTaskKey', 'unknown')}: {sg.get('label', '')}"
+                if sg.get('meaning'):
+                    sub_desc += f" ({sg.get('meaning')})"
+                if sg.get('type'):
+                    sub_desc += f" [type: {sg.get('type')}]"
+                if sg.get('constraints'):
+                    sub_desc += f" [constraints: {sg.get('constraints')}]"
+                subentities_list.append(sub_desc)
+
+            # Get output format
+            output_format = self.contract.get("outputCanonical", {})
+            output_keys = output_format.get("keys", [])
+
+            # Build the prompt template
+            prompt = f"Extract information from the following text.\n\n"
+
+            if entity_label:
+                prompt += f"Entity to extract: {entity_label}\n"
+            if entity_desc:
+                prompt += f"Description: {entity_desc}\n"
+
+            if subentities_list:
+                prompt += f"\nFields to extract:\n"
+                prompt += "\n".join(subentities_list)
+                prompt += "\n"
+
+            prompt += f"\nOutput format: {output_format.get('format', 'object')}\n"
+            if output_keys:
+                prompt += f"Output keys: {', '.join(output_keys)}\n"
+
+            prompt += "\nText to analyze:\n{text}\n\n"
+            prompt += "Return a JSON object with the extracted values matching the output format above."
+
+            return prompt
+        except Exception as e:
+            print(f"[ContractExtractor] Error building LLM prompt from contract: {e}")
+            import traceback
+            traceback.print_exc()
+            return ""
 
     def _apply_rule_based_engine(self, text: str) -> Dict[str, Any]:
         """Apply rule-based engine using extractor code"""

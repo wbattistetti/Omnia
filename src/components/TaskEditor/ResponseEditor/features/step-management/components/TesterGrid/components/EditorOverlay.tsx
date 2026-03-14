@@ -1,5 +1,6 @@
 import React from 'react';
 import { MemoizedEditorRenderer } from './EditorRenderer';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 interface EditorOverlayProps {
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | null;
@@ -25,6 +26,8 @@ interface EditorOverlayProps {
   getTextColor: (color: string) => string;
   setEditorButton: (button: React.ReactNode) => void;
   setEditorErrorMessage: (error: React.ReactNode) => void;
+  contract?: DataContract | null;
+  onContractChange?: (contract: DataContract | null) => void;
   // ✅ REMOVED: Header-related props are no longer needed (header removed from overlay)
 }
 
@@ -41,6 +44,8 @@ export function EditorOverlay({
   onCloseEditor,
   setEditorButton,
   setEditorErrorMessage,
+  contract,
+  onContractChange,
   // ✅ REMOVED: editorButton, editorErrorMessage, getActiveEditorColor, getActiveEditorTitle, getTextColor
   // These are no longer used since header was removed
 }: EditorOverlayProps) {
@@ -73,6 +78,8 @@ export function EditorOverlay({
           toggleEditor={toggleEditor}
           setEditorButton={setEditorButton}
           setEditorErrorMessage={setEditorErrorMessage}
+          contract={contract}
+          onContractChange={onContractChange}
         />
       </div>
     </div>

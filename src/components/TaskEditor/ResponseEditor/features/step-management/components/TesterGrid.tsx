@@ -108,6 +108,7 @@ interface TesterGridProps {
   setReportOpen?: (open: boolean) => void;
   baselineStats?: { matched: number; falseAccept: number; totalGt: number } | null;
   lastStats?: { matched: number; falseAccept: number; totalGt: number } | null;
+  cancelTesting?: () => void; // ✅ Cancel function to abort running tests
 }
 
 
@@ -144,6 +145,7 @@ function TesterGridComponent({
   setReportOpen,
   baselineStats,
   lastStats,
+  cancelTesting,
 }: TesterGridProps) {
   // ✅ REMOVED: Notes are now managed via Zustand store
 
@@ -380,6 +382,7 @@ function TesterGridComponent({
                   baselineStats={baselineStats}
                   lastStats={lastStats}
                   globalMaxMs={globalMaxMs}
+                  cancelTesting={cancelTesting}
                 />
               ))}
               {examplesList.length === 0 && (
@@ -408,6 +411,8 @@ function TesterGridComponent({
           getTextColor={getTextColor}
           setEditorButton={setEditorButton}
           setEditorErrorMessage={setEditorErrorMessage}
+          contract={contract}
+          onContractChange={onContractChange}
         />
       </div>
     </>

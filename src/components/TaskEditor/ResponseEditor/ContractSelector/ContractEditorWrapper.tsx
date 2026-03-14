@@ -38,12 +38,14 @@ export default function ContractEditorWrapper({
   onProfileUpdate,
   onClose,
 }: ContractEditorWrapperProps) {
-  // Get method data from contract.parsers array
+  // Get method data from contract.engines or contract.parsers array (retrocompatibilità)
   const methodData = React.useMemo(() => {
-    if (!contract?.parsers || !Array.isArray(contract.parsers)) {
+    // ✅ Support both engines (new) and parsers (legacy) for retrocompatibilità
+    const engines = contract?.engines || contract?.parsers;
+    if (!engines || !Array.isArray(engines)) {
       return null;
     }
-    return contract.parsers.find(c => c.type === method) || null;
+    return engines.find(c => c.type === method) || null;
   }, [contract, method]);
 
   if (!methodData || methodData.enabled === false) {
@@ -66,12 +68,15 @@ export default function ContractEditorWrapper({
           regex={(methodData as any).patterns?.[0] || ''}
           onRegexSave={(value: string) => {
             if (!contract) return;
-            const updatedContracts = contract.parsers.map(c =>
+            // ✅ Support both engines (new) and parsers (legacy)
+            const engines = contract.engines || contract.parsers || [];
+            const updatedEngines = engines.map(c =>
               c.type === 'regex' ? { ...c, patterns: [value] } : c
             );
             const updatedContract: DataContract = {
               ...contract,
-              parsers: updatedContracts,
+              engines: contract.engines ? updatedEngines : undefined,
+              parsers: contract.parsers ? updatedEngines : undefined,
             };
             onContractChange(updatedContract);
           }}
@@ -97,6 +102,8 @@ export default function ContractEditorWrapper({
     case 'llm':
       return (
         <LLMInlineEditor
+          contract={contract}
+          onContractChange={onContractChange}
           {...commonProps}
         />
       );

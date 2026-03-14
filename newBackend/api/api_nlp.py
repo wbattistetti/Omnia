@@ -164,14 +164,14 @@ async def test_extraction(task_id: str, body: dict = Body(...)):
                 "confidence": 0
             }
 
-        # Extract semantic contract
-        contract = task.get("semanticContract")
+        # Extract contract — frontend saves as "dataContract", fallback to "semanticContract"
+        contract = task.get("dataContract") or task.get("semanticContract")
         if not contract:
             return {
                 "values": {},
                 "hasMatch": False,
                 "source": None,
-                "errors": [f"Semantic contract not found for task: {task_id}"],
+                "errors": [f"Contract not found for task: {task_id}. Available fields: {[k for k in task.keys() if k != '_id']}"],
                 "confidence": 0
             }
 
@@ -219,7 +219,11 @@ async def test_extraction(task_id: str, body: dict = Body(...)):
             engine["config"]["embeddingThreshold"] = selected_parser.get("threshold", 0.7)
         elif engine_type == "llm":
             engine["config"]["systemPrompt"] = selected_parser.get("systemPrompt", "")
-            engine["config"]["userPromptTemplate"] = selected_parser.get("userPromptTemplate", "")
+            # aiPrompt is the renamed field from userPromptTemplate (see contractLoader.ts LLMContract)
+            engine["config"]["userPromptTemplate"] = (
+                selected_parser.get("userPromptTemplate") or
+                selected_parser.get("aiPrompt") or ""
+            )
         elif engine_type == "rules" or engine_type == "rule_based":
             engine["config"]["extractorCode"] = selected_parser.get("extractorCode", "")
 

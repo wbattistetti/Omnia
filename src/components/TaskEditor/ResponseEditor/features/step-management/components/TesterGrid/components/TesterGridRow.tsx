@@ -49,6 +49,7 @@ interface TesterGridRowProps {
   baselineStats?: { matched: number; falseAccept: number; totalGt: number } | null;
   lastStats?: { matched: number; falseAccept: number; totalGt: number } | null;
   globalMaxMs?: number; // ✅ Global maximum milliseconds across all rows and engines
+  cancelTesting?: () => void; // ✅ Cancel function to abort running tests
 }
 
 /**
@@ -89,6 +90,7 @@ function TesterGridRowComponent({
   baselineStats,
   lastStats,
   globalMaxMs,
+  cancelTesting,
 }: TesterGridRowProps) {
   // ✅ REMOVED: Notes are now managed via Zustand store
 
@@ -130,6 +132,7 @@ function TesterGridRowComponent({
         setReportOpen={rowIndex === 1 ? setReportOpen : undefined}
         phraseColumnWidth={phraseColumnWidth}
         rowBackground={selectedRow === rowIndex ? '#fff7ed' : '#fff'} // ✅ FIX: Passa il background della riga
+        cancelTesting={rowIndex === 0 ? cancelTesting : undefined} // ✅ Only show cancel on row 0 (Run All button)
       />
       {/* Render colonne dinamiche basate su contract.engines */}
       {(() => {

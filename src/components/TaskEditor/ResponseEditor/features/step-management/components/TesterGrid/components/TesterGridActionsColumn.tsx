@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, ChevronsRight, BarChart2, Play } from 'lucide-react';
+import { Plus, ChevronsRight, BarChart2, Play, X } from 'lucide-react';
 import * as testingState from '@responseEditor/testingState';
 
 interface TesterGridActionsColumnProps {
@@ -14,6 +14,7 @@ interface TesterGridActionsColumnProps {
   runRowTest?: (idx: number) => Promise<void>;
   phraseColumnWidth?: number; // ✅ FIX: Necessario per calcolare left per sticky
   rowBackground?: string; // ✅ FIX: Background della riga per mantenere coerenza
+  cancelTesting?: () => void; // ✅ Cancel function to abort running tests
 }
 
 /**
@@ -31,6 +32,7 @@ export default function TesterGridActionsColumn({
   runRowTest,
   phraseColumnWidth = 280, // ✅ FIX: Default per calcolare left
   rowBackground = '#f9fafb', // ✅ FIX: Default background
+  cancelTesting, // ✅ Cancel function
 }: TesterGridActionsColumnProps) {
   // Header: Add button
   if (rowIndex === -1) {
@@ -71,42 +73,53 @@ export default function TesterGridActionsColumn({
 
   // Row 0: Run All button
   if (rowIndex === 0 && runAllRows) {
-    // ✅ FIX: Usa solo la prop `testing` (stato React) invece di testingState.getIsTesting()
-    // testingState.getIsTesting() non causa re-render perché non è uno stato React
-    const isDisabled = testing || examplesListLength === 0;
+    // ✅ Quando testing è true, il pulsante diventa rosso con X e può essere cliccato per interrompere
+    // ✅ Quando testing è false, il pulsante è verde normale e può essere cliccato per avviare
+    const isDisabled = !testing && examplesListLength === 0; // ✅ Solo disabilitato se NON sta testando E non ci sono esempi
 
     return (
       <td style={{
         padding: 4,
         textAlign: 'center',
         verticalAlign: 'middle',
-        background: rowBackground, // ✅ FIX: Usa il background della riga
+        background: rowBackground,
         width: 46,
-        position: 'sticky', // ✅ FIX: Sticky per rimanere fissa
-        left: phraseColumnWidth, // ✅ FIX: Posizionata subito dopo la colonna Frase
-        zIndex: 9, // ✅ FIX: zIndex per rimanere sopra le colonne scrollabili
+        position: 'sticky',
+        left: phraseColumnWidth,
+        zIndex: 9,
       }}>
         <button
           onClick={(e) => {
             e.stopPropagation();
-            // ✅ FIX: Non chiamare testingState.startTesting() qui, sarà chiamato in runAllRows
-            // Questo evita duplicazioni e garantisce sincronizzazione corretta
-            void runAllRows();
+            if (testing && cancelTesting) {
+              // ✅ Se sta testando, cliccare interrompe
+              cancelTesting();
+            } else if (!testing) {
+              // ✅ Se NON sta testando, cliccare avvia i test
+              void runAllRows();
+            }
           }}
           disabled={isDisabled}
-          title="Prova tutte"
+          title={testing ? "Interrompi test" : "Prova tutte"}
           style={{
-            border: '1px solid #22c55e',
-            background: isDisabled ? '#eab308' : '#14532d',
-            color: '#dcfce7',
+            border: testing ? '1px solid #ef4444' : '1px solid #22c55e',
+            background: testing ? '#dc2626' : (isDisabled ? '#eab308' : '#14532d'),
+            color: testing ? '#fff' : '#dcfce7',
             borderRadius: 8,
             padding: '8px 10px',
             cursor: isDisabled ? 'not-allowed' : 'pointer',
             width: '100%',
             opacity: isDisabled ? 0.5 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          <ChevronsRight size={16} />
+          {testing ? (
+            <X size={16} />
+          ) : (
+            <ChevronsRight size={16} />
+          )}
         </button>
       </td>
     );

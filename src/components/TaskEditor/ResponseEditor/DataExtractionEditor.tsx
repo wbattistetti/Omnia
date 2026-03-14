@@ -507,6 +507,7 @@ export default function DataExtractionEditor({
         baselineStats={baselineStats}
         lastStats={lastStats}
         updateSelectedNode={updateSelectedNode}
+        cancelTesting={cancelTesting}
       />
 
       {/* OLD tab editors - now replaced by inline editors */}
