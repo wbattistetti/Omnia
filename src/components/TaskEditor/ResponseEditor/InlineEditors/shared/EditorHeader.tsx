@@ -23,6 +23,8 @@ interface EditorHeaderProps {
   hideButton?: boolean; // Hide button (for overlay header)
   onButtonRender?: (button: React.ReactNode) => void; // Callback to render button elsewhere
   buttonCaption?: string; // Optional custom button caption
+  editorMode?: 'text' | 'graph'; // Editor mode: text (Monaco) or graph (Grammar Editor)
+  onModeToggle?: () => void; // Callback to toggle editor mode
 }
 
 /**
@@ -42,6 +44,8 @@ export default function EditorHeader({
   hideButton = false,
   onButtonRender,
   buttonCaption,
+  editorMode,
+  onModeToggle,
 }: EditorHeaderProps) {
   const getButtonLabel = () => {
     // Use custom caption if provided, otherwise use default
@@ -156,6 +160,27 @@ export default function EditorHeader({
         )}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+        {editorMode !== undefined && onModeToggle && (
+          <button
+            type="button"
+            onClick={onModeToggle}
+            title={editorMode === 'text' ? 'Switch to Graph Editor' : 'Switch to Text Editor'}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #d1d5db',
+              borderRadius: 4,
+              background: '#fff',
+              cursor: 'pointer',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              fontWeight: 500,
+            }}
+          >
+            {editorMode === 'text' ? '📊 Graph' : '📝 Text'}
+          </button>
+        )}
         {buttonElement}
         {onClose && (
           <button

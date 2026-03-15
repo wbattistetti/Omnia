@@ -14,6 +14,8 @@ import {
 } from '@responseEditor/utils/regexGroupTransform';
 import { generateGroupName } from '@responseEditor/utils/regexGroupUtils';
 import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
+import { GrammarEditor } from '@components/GrammarEditor';
+import type { Grammar, SemanticSlot } from '@components/GrammarEditor/types/grammarTypes';
 
 interface RegexInlineEditorProps {
   regex: string; // contract.regex.value (GUID-based, stored form)
@@ -163,6 +165,31 @@ export default function RegexInlineEditor({
 
   const [lastTextboxText, setLastTextboxText] = useState(() => initialDisplay);
   const [textboxText, setTextboxText] = useState(() => initialDisplay);
+
+  // -----------------------------------------------------------------------
+  // Grammar Editor mode state
+  // -----------------------------------------------------------------------
+  const [editorMode, setEditorMode] = useState<'text' | 'graph'>(() => {
+    // Check if grammar exists in contract, default to graph mode if it does
+    if (node?.templateId) {
+      const template = DialogueTaskService.getTemplate(node.templateId);
+      if (template?.dataContract?.grammar) {
+        return 'graph';
+      }
+    }
+    return 'text';
+  });
+
+  const [grammar, setGrammar] = useState<Grammar | null>(() => {
+    // Load grammar from contract if it exists
+    if (node?.templateId) {
+      const template = DialogueTaskService.getTemplate(node.templateId);
+      if (template?.dataContract?.grammar) {
+        return template.dataContract.grammar as Grammar;
+      }
+    }
+    return null;
+  });
 
   // ✅ CRITICAL: Use ref to preserve value during cleanup
   const textboxTextRef = useRef<string>(initialDisplay);
@@ -398,6 +425,61 @@ export default function RegexInlineEditor({
   }, [textboxText, generateRegex, saveToTemplate]);
 
   // -----------------------------------------------------------------------
+  // Grammar Editor handlers
+  // -----------------------------------------------------------------------
+
+  /**
+   * Converts subDataMapping to semantic slots for Grammar Editor
+   */
+  const convertSubDataMappingToSlots = useCallback((): SemanticSlot[] => {
+    const mapping = subDataMappingRef.current;
+    return Object.entries(mapping).map(([nodeId, info]) => ({
+      id: nodeId,
+      name: info.label || nodeId,
+      type: (info.type as SemanticSlot['type']) || 'string',
+    }));
+  }, []);
+
+  /**
+   * Handler for saving grammar from Grammar Editor
+   */
+  const handleGrammarSave = useCallback((exportedGrammar: Grammar) => {
+    setGrammar(exportedGrammar);
+
+    // Save grammar to contract
+    if (node?.templateId) {
+      const template = DialogueTaskService.getTemplate(node.templateId);
+      if (!template) {
+        console.warn('[RegexEditor] Template not found:', node.templateId);
+        return;
+      }
+
+      if (!template.dataContract) {
+        template.dataContract = {
+          templateId: node.templateId,
+          templateName: template.label || node.templateId,
+          subDataMapping: {},
+          engines: [],
+          outputCanonical: { format: 'value' }
+        };
+      }
+
+      // Save grammar in contract
+      (template.dataContract as any).grammar = exportedGrammar;
+      DialogueTaskService.markTemplateAsModified(node.templateId);
+
+      console.log('[RegexEditor] ✅ Grammar saved to contract');
+    }
+  }, [node?.templateId]);
+
+  /**
+   * Handler for toggling editor mode
+   */
+  const handleModeToggle = useCallback(() => {
+    setEditorMode(prev => prev === 'text' ? 'graph' : 'text');
+  }, []);
+
+  // -----------------------------------------------------------------------
   // Cleanup all timeouts on unmount
   // -----------------------------------------------------------------------
   useEffect(() => {
@@ -559,22 +641,42 @@ export default function RegexInlineEditor({
         validationBadge={validationBadge}
         errorMessage={errorMessage}
         buttonCaption={buttonCaption}
+        editorMode={editorMode}
+        onModeToggle={handleModeToggle}
       />
 
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-      <EditorPanel
-        ref={editorRef}
-        code={editorValue}
-        language="regex"
-        customLanguage={{ id: 'regex', tokenizer: { root: [] } } as CustomLanguage}
-        onChange={(value) => {
-          if (value && value !== PLACEHOLDER_TEXT) {
-            setTextboxText(value);
-              // Don't clear validationError here - let debounced validation handle it
-          }
-        }}
-        useTemplate={false}
-      />
+      <div style={{
+        flex: 1,
+        minHeight: 0,
+        overflow: 'hidden',
+        position: 'relative',
+      }}>
+        {editorMode === 'text' ? (
+          <EditorPanel
+            key="regex-text-editor"
+            ref={editorRef}
+            code={editorValue}
+            language="regex"
+            customLanguage={{ id: 'regex', tokenizer: { root: [] } } as CustomLanguage}
+            onChange={(value) => {
+              if (value && value !== PLACEHOLDER_TEXT) {
+                setTextboxText(value);
+                // Don't clear validationError here - let debounced validation handle it
+              }
+            }}
+            useTemplate={false}
+          />
+        ) : (
+          <GrammarEditor
+            key="regex-graph-editor"
+            initialGrammar={grammar}
+            onSave={handleGrammarSave}
+            slots={convertSubDataMappingToSlots()}
+            semanticSets={[]}
+            hideToolbar={true}
+            editorMode={editorMode}
+          />
+        )}
       </div>
     </div>
   );
