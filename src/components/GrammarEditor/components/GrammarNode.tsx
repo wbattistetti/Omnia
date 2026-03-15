@@ -7,61 +7,38 @@ import type { GrammarNode as GrammarNodeType } from '../types/grammarTypes';
 import { useNodeEditingState } from '../hooks/useNodeEditingState';
 import { useNodeKeyboardHandlers } from '../hooks/useNodeKeyboardHandlers';
 import { useNodeEditing } from '../features/node-editing/useNodeEditing';
+import { useGrammarStore } from '../core/state/grammarStore';
+import { NODE_PLACEHOLDER, NODE_FONT, NODE_PADDING_H, NODE_MIN_WIDTH } from '../constants/nodeConstants';
+import { measureText, calculateNodeWidth } from '../utils/nodeGeometry';
+import {
+  getNodeBackground, getBorderColor,
+  nodeBaseStyles, nodeInputStyles, nodeLabelStyles, nodeMetadataStyles,
+} from '../utils/nodeStyles';
+import { NodeToolbar } from './NodeToolbar';
 
 interface GrammarNodeData {
   node: GrammarNodeType;
 }
 
-export const NODE_FONT = '13px sans-serif';
-export const NODE_PADDING_H = 12; // 6px left + 6px right
-export const NODE_MIN_WIDTH = 32;
-export const NODE_PLACEHOLDER = 'Type word...';
-
-/**
- * Measures text width using Canvas API for accurate sizing.
- */
-function measureText(text: string, font: string): number {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return NODE_MIN_WIDTH;
-  ctx.font = font;
-  return ctx.measureText(text).width;
-}
-
-/**
- * Calculates the actual width of a node based on its label.
- * Uses the same logic as the GrammarNode component.
- */
-export function calculateNodeWidth(label: string): number {
-  if (!label) return NODE_MIN_WIDTH;
-  const textWidth = measureText(label, NODE_FONT);
-  return Math.max(textWidth + NODE_PADDING_H, NODE_MIN_WIDTH);
-}
-
-/**
- * Calculates the right edge (X coordinate) of a node.
- * Right = position.x + width
- */
-export function getNodeRight(node: { position: { x: number; y: number }; label: string }): number {
-  const nodeWidth = calculateNodeWidth(node.label);
-  return node.position.x + nodeWidth;
-}
-
 /**
  * Grammar node component.
  * Single Responsibility: Rendering and composition of editing hooks.
+ *
+ * Focus strategy:
+ * - New nodes: focus is handled in creation handlers (useGrammarCanvasEvents, useNodeKeyboardHandlers)
+ * - Existing nodes (double-click): useLayoutEffect in useNodeEditingState for immediate focus
+ *
+ * Toolbar: shown only on hover (not during editing) to avoid clutter.
  */
 export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
   const { node } = data;
   const { editNodeLabel } = useNodeEditing();
+  const { deleteNode, updateNode } = useGrammarStore();
+  const [isHovered, setIsHovered] = React.useState(false);
+
   const {
-    isEditing,
-    editValue,
-    setEditValue,
-    inputRef,
-    startEditing,
-    stopEditing,
-    resetValue,
+    isEditing, editValue, setEditValue,
+    inputRef, startEditing, stopEditing, resetValue,
   } = useNodeEditingState(node.label);
 
   const { handleKeyDown } = useNodeKeyboardHandlers({
@@ -74,57 +51,44 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
   });
 
   const handleBlur = () => {
-    const trimmedValue = editValue.trim();
-    if (trimmedValue) {
-      editNodeLabel(node.id, trimmedValue);
-    }
+    if (editValue.trim()) editNodeLabel(node.id, editValue.trim());
     stopEditing();
   };
 
-  // Compute input width dynamically based on current text or placeholder.
   const inputWidth = React.useMemo(() => {
-    const textToMeasure = editValue || NODE_PLACEHOLDER;
-    const measured = measureText(textToMeasure, NODE_FONT);
+    const measured = measureText(editValue || NODE_PLACEHOLDER, NODE_FONT);
     return Math.max(measured + NODE_PADDING_H, NODE_MIN_WIDTH);
   }, [editValue]);
 
-  // Compute label width when not editing.
-  const labelWidth = React.useMemo(() => {
-    if (!node.label) return NODE_MIN_WIDTH;
-    const measured = measureText(node.label, NODE_FONT);
-    return Math.max(measured + NODE_PADDING_H, NODE_MIN_WIDTH);
-  }, [node.label]);
+  const labelWidth = React.useMemo(() => calculateNodeWidth(node.label), [node.label]);
 
-  const getNodeBackground = (): string => {
-    if (node.semanticType === 'value') return '#2a2010';
-    if (node.semanticType === 'set') return '#1e2010';
-    return '#1a1f2e';
-  };
-
-  const getBorderColor = (): string => {
-    if (selected) return '#3b82f6';
-    return '#4a5568';
+  const containerStyle: React.CSSProperties = {
+    ...nodeBaseStyles,
+    border: `1px solid ${getBorderColor(selected)}`,
+    backgroundColor: getNodeBackground(node.semanticType),
+    width: isEditing ? `${inputWidth}px` : `${labelWidth}px`,
+    position: 'relative',
   };
 
   return (
     <div
-      style={{
-        padding: '2px 6px',
-        border: `1px solid ${getBorderColor()}`,
-        borderRadius: '3px',
-        backgroundColor: getNodeBackground(),
-        width: isEditing ? `${inputWidth}px` : `${labelWidth}px`,
-        fontSize: '13px',
-        fontFamily: 'sans-serif',
-        textAlign: 'center',
-        lineHeight: '1.4',
-        color: '#c9d1d9',
-        boxSizing: 'border-box',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-      }}
+      data-node-id={node.id}  // For immediate focus after node creation
+      style={containerStyle}
       onDoubleClick={startEditing}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Toolbar: visible only on hover and when not editing */}
+      {isHovered && !isEditing && (
+        <NodeToolbar
+          nodeId={node.id}
+          onDelete={() => deleteNode(node.id)}
+          onEditCaption={startEditing}
+          onSetOptional={() => updateNode(node.id, { optional: !node.optional })}
+          onSetRepetitions={() => updateNode(node.id, { repeatable: !node.repeatable })}
+        />
+      )}
+
       <Handle type="target" position={Position.Left} style={{ width: 6, height: 6 }} />
 
       {isEditing ? (
@@ -135,46 +99,30 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           onDoubleClick={(e) => e.stopPropagation()}
-          style={{
-            border: 'none',
-            outline: 'none',
-            background: 'transparent',
-            textAlign: 'center',
-            fontWeight: 'normal',
-            width: '100%',
-            fontSize: '13px',
-            fontFamily: 'sans-serif',
-            padding: 0,
-            margin: 0,
-            cursor: 'text',
-            color: '#c9d1d9',
-          }}
+          style={nodeInputStyles}
           placeholder={NODE_PLACEHOLDER}
         />
       ) : (
-        <span style={{ fontSize: '13px', fontFamily: 'sans-serif', color: '#c9d1d9' }}>
-          {node.label}
-        </span>
+        <span style={nodeLabelStyles}>{node.label}</span>
       )}
 
       {!isEditing && node.synonyms.length > 0 && (
-        <div style={{ fontSize: '8px', color: '#6b7280', marginTop: '1px' }}>
+        <div style={nodeMetadataStyles.synonyms}>
           {node.synonyms.slice(0, 2).join(', ')}
           {node.synonyms.length > 2 && '...'}
         </div>
       )}
       {!isEditing && node.slotId && (
-        <div style={{ fontSize: '8px', color: '#059669', marginTop: '1px' }}>
-          → {node.slotId}
-        </div>
+        <div style={nodeMetadataStyles.slot}>→ {node.slotId}</div>
       )}
       {!isEditing && node.optional && (
-        <div style={{ fontSize: '7px', color: '#dc2626', marginTop: '1px' }}>
-          (opt)
-        </div>
+        <div style={nodeMetadataStyles.optional}>(opt)</div>
       )}
 
       <Handle type="source" position={Position.Right} style={{ width: 6, height: 6 }} />
     </div>
   );
 }
+
+// Re-export for backward compatibility
+export { calculateNodeWidth, getNodeRight } from '../utils/nodeGeometry';

@@ -4,27 +4,26 @@
 import { useState, useRef, useLayoutEffect } from 'react';
 
 /**
- * Hook for managing node editing state.
- * Single Responsibility: Editing state management only.
+ * Manages local editing state for a grammar node.
  *
- * A node starts in editing mode automatically if its label is empty (newly created).
- * Subsequent label changes from outside do NOT re-trigger editing to avoid flickering.
+ * Focus strategy:
+ * - New nodes: focus is handled in creation handlers (useGrammarCanvasEvents, useNodeKeyboardHandlers)
+ * - Existing nodes (double-click): useLayoutEffect for immediate focus when entering edit mode
  */
 export function useNodeEditingState(nodeLabel: string) {
-  // Determine initial editing state once: edit if empty on first mount.
-  const [isEditing, setIsEditing] = useState(() => nodeLabel === '');
+  const isNew = nodeLabel === '';
+  const [isEditing, setIsEditing] = useState(isNew);
   const [editValue, setEditValue] = useState(nodeLabel);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus input when entering editing mode.
+  // Focus when an existing node enters editing mode (e.g. double-click).
+  // For new nodes this is NOT needed because autoFocus handles it natively.
   useLayoutEffect(() => {
-    if (isEditing && inputRef.current) {
-      const t = setTimeout(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      }, 30);
-      return () => clearTimeout(t);
+    if (isEditing && !isNew && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing]);
 
   const startEditing = () => {
@@ -32,22 +31,12 @@ export function useNodeEditingState(nodeLabel: string) {
     setIsEditing(true);
   };
 
-  const stopEditing = () => {
-    setIsEditing(false);
-  };
+  const stopEditing = () => setIsEditing(false);
 
   const resetValue = () => {
     setEditValue(nodeLabel);
     setIsEditing(false);
   };
 
-  return {
-    isEditing,
-    editValue,
-    setEditValue,
-    inputRef,
-    startEditing,
-    stopEditing,
-    resetValue,
-  };
+  return { isEditing, editValue, setEditValue, inputRef, startEditing, stopEditing, resetValue };
 }

@@ -4,7 +4,8 @@
 import { useCallback } from 'react';
 import { useGrammarStore } from '../../core/state/grammarStore';
 import { createGrammarNode } from '../../core/domain/node';
-import { NODE_MIN_WIDTH, getNodeRight } from '../../components/GrammarNode';
+import { NODE_MIN_WIDTH } from '../../constants/nodeConstants';
+import { getNodeRight } from '../../utils/nodeGeometry';
 import type { GrammarNode } from '../../types/grammarTypes';
 
 /**

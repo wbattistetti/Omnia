@@ -49,7 +49,8 @@ export function GrammarCanvasView({
       const isControl = !!target?.closest('.react-flow__controls');
 
       if (!isNode && !isEdge && !isControl) {
-        e.preventDefault();
+        // Do NOT call preventDefault — it can interfere with focus acquisition
+        // on the input that gets created immediately after this call.
         e.stopPropagation();
         onPaneDoubleClick(e as any);
       }

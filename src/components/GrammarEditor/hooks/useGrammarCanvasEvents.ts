@@ -8,10 +8,7 @@ import { useGrammarStore } from '../core/state/grammarStore';
 import { createGrammarNode } from '../core/domain/node';
 import { v4 as uuidv4 } from 'uuid';
 import type { GrammarEdge } from '../types/grammarTypes';
-
-// Estimated node size in flow units used to center the node on the click point.
-const ESTIMATED_NODE_WIDTH = 40;
-const ESTIMATED_NODE_HEIGHT = 20;
+import { ESTIMATED_NODE_WIDTH, ESTIMATED_NODE_HEIGHT } from '../constants/nodeConstants';
 
 /**
  * Hook for handling canvas-level events.
@@ -38,6 +35,19 @@ export function useGrammarCanvasEvents() {
 
       const newNode = createGrammarNode('', centeredPos);
       addNode(newNode);
+
+      // Focus immediately after ReactFlow renders the node
+      // Double RAF: first waits for React commit, second waits for browser paint
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const selector = `[data-node-id="${newNode.id}"] input`;
+          const input = document.querySelector(selector) as HTMLInputElement | null;
+          if (input) {
+            input.focus();
+            input.select();
+          }
+        });
+      });
     },
     [rf, addNode, grammar]
   );

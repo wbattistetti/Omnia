@@ -474,9 +474,41 @@ export default function RegexInlineEditor({
 
   /**
    * Handler for toggling editor mode
+   * Event-driven: React's key prop on EditorPanel ensures clean unmount
    */
   const handleModeToggle = useCallback(() => {
     setEditorMode(prev => prev === 'text' ? 'graph' : 'text');
+  }, []);
+
+  // -----------------------------------------------------------------------
+  // Suppress Monaco "Canceled" errors when switching modes
+  // EditorPanel already has error handling, but we add a global handler
+  // to catch any errors that escape during the unmount transition
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    const isCanceledError = (error: any): boolean => {
+      if (!error) return false;
+      const errorStr = String(error);
+      const errorMessage = error?.message ? String(error.message) : '';
+      const errorName = error?.name ? String(error.name) : '';
+      return errorStr.includes('Canceled') ||
+             errorMessage.includes('Canceled') ||
+             errorName.includes('Canceled');
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (isCanceledError(event.reason)) {
+        // Suppress the error - it's harmless cleanup noise from Monaco
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    // Use capture phase to catch errors early
+    window.addEventListener('unhandledrejection', handleUnhandledRejection, true);
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection, true);
+    };
   }, []);
 
   // -----------------------------------------------------------------------
