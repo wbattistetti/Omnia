@@ -7,6 +7,7 @@ import 'reactflow/dist/style.css';
 import { useReactFlowAdapter } from '../hooks/useReactFlowAdapter';
 import { useGrammarCanvasEvents } from '../hooks/useGrammarCanvasEvents';
 import { GrammarCanvasView } from './GrammarCanvasView';
+import { DragProvider } from '../context/DragContext';
 
 /**
  * Inner component — must be inside ReactFlowProvider.
@@ -20,6 +21,7 @@ function GrammarCanvasInner() {
     handleNodesChange,
     handleConnect,
     handleNodeClick,
+    handlePaneMouseUp,
   } = useGrammarCanvasEvents();
 
   return (
@@ -31,6 +33,7 @@ function GrammarCanvasInner() {
       onNodesChange={handleNodesChange}
       onConnect={handleConnect}
       onNodeClick={handleNodeClick}
+      onPaneMouseUp={handlePaneMouseUp}
     />
   );
 }
@@ -41,7 +44,9 @@ function GrammarCanvasInner() {
 export function GrammarCanvas() {
   return (
     <ReactFlowProvider>
-      <GrammarCanvasInner />
+      <DragProvider>
+        <GrammarCanvasInner />
+      </DragProvider>
     </ReactFlowProvider>
   );
 }

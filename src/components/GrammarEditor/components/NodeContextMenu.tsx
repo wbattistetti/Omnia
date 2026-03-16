@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import React from 'react';
-import * as ContextMenu from '@radix-ui/react-context-menu';
+import ReactDOM from 'react-dom';
 import {
   Edit,
   FileText,
@@ -22,6 +22,10 @@ import {
 } from 'lucide-react';
 
 interface NodeContextMenuProps {
+  /** Anchor element — the gear button DOM node */
+  anchorRef: React.RefObject<HTMLButtonElement>;
+  open: boolean;
+  onClose: () => void;
   nodeId: string;
   onEditCaption?: () => void;
   onEditWords?: () => void;
@@ -38,11 +42,14 @@ interface NodeContextMenuProps {
 }
 
 /**
- * Complex context menu for grammar nodes.
- * Uses Radix UI ContextMenu for accessibility and submenu support.
+ * Fully custom dropdown menu for grammar nodes.
+ * Opens on click, closes only on outside mousedown.
+ * Does NOT use Radix DropdownMenu to avoid mousedown/mouseup conflicts.
  */
 export function NodeContextMenu({
-  nodeId,
+  anchorRef,
+  open,
+  onClose,
   onEditCaption,
   onEditWords,
   onAddAllWordsToHints,
@@ -56,383 +63,273 @@ export function NodeContextMenu({
   onMatchInProgress,
   onSetNodeContext,
 }: NodeContextMenuProps) {
-  return (
-    <>
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+  const [activeSubmenu, setActiveSubmenu] = React.useState<string | null>(null);
+
+  // Compute position from anchor when open
+  React.useLayoutEffect(() => {
+    if (!open || !anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    setPos({
+      top: rect.bottom + 4,
+      left: rect.right,
+    });
+    setActiveSubmenu(null);
+  }, [open, anchorRef]);
+
+  // Close on outside mousedown
+  React.useEffect(() => {
+    if (!open) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        menuRef.current && menuRef.current.contains(target)
+      ) return;
+      if (
+        anchorRef.current && anchorRef.current.contains(target)
+      ) return;
+      onClose();
+    };
+
+    // Use mousedown (not click) so it fires before click
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [open, onClose, anchorRef]);
+
+  // Close on ESC
+  React.useEffect(() => {
+    if (!open) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const handleItem = (callback?: () => void) => {
+    callback?.();
+    onClose();
+  };
+
+  const menu = (
+    <div
+      ref={menuRef}
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        transform: 'translateX(-100%)',
+        minWidth: '220px',
+        backgroundColor: '#1a1f2e',
+        border: '1px solid #4a5568',
+        borderRadius: '6px',
+        padding: '4px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+        zIndex: 99999,
+        userSelect: 'none',
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       <style>{`
-        .grammar-node-context-menu .context-menu-item[data-highlighted] {
-          background-color: #2a2010 !important;
-        }
-        .grammar-node-context-menu .context-menu-item[data-disabled] {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
+        .gcm-item:hover { background-color: #2d3448; }
+        .gcm-item { cursor: pointer; }
       `}</style>
-      <ContextMenu.Portal>
-        <ContextMenu.Content
-          className="grammar-node-context-menu"
-          style={{
-            minWidth: '220px',
-            backgroundColor: '#1a1f2e',
-            border: '1px solid #4a5568',
-            borderRadius: '6px',
-            padding: '4px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-            zIndex: 10000,
-          }}
-          onCloseAutoFocus={(e) => e.preventDefault()}
+
+      {/* Append submenu */}
+      <div style={{ position: 'relative' }}>
+        <div
+          className="gcm-item"
+          style={itemStyle}
+          onMouseEnter={() => setActiveSubmenu('append')}
+          onMouseLeave={() => setActiveSubmenu(null)}
         >
-        {/* Append submenu */}
-        <ContextMenu.Sub>
-          <ContextMenu.SubTrigger
-            className="context-menu-item"
-            style={menuItemStyle}
+          <span>Append</span>
+          <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
+        </div>
+        {activeSubmenu === 'append' && (
+          <div
+            style={submenuStyle}
+            onMouseEnter={() => setActiveSubmenu('append')}
+            onMouseLeave={() => setActiveSubmenu(null)}
           >
-            <span>Append</span>
-            <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
-          </ContextMenu.SubTrigger>
-          <ContextMenu.Portal>
-            <ContextMenu.SubContent
-              style={submenuStyle}
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-              <ContextMenu.Item
-                className="context-menu-item"
-                style={menuItemStyle}
-                onSelect={(e) => {
-                  e.preventDefault();
-                  console.log('Append Normal Node');
-                }}
-              >
-                <span>Normal Node</span>
-                <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#6b7280' }}>
-                  Ctrl+N
-                </span>
-              </ContextMenu.Item>
-              <ContextMenu.Sub>
-                <ContextMenu.SubTrigger
-                  className="context-menu-item"
-                  style={menuItemStyle}
-                >
-                  <span>Garbage Node</span>
-                  <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
-                </ContextMenu.SubTrigger>
-                <ContextMenu.Portal>
-                  <ContextMenu.SubContent
-                    style={submenuStyle}
-                    onCloseAutoFocus={(e) => e.preventDefault()}
-                  >
-                    <ContextMenu.Item
-                      className="context-menu-item"
-                      style={menuItemStyle}
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        console.log('Append Garbage Node');
-                      }}
-                    >
-                      <span>Garbage Node</span>
-                    </ContextMenu.Item>
-                  </ContextMenu.SubContent>
-                </ContextMenu.Portal>
-              </ContextMenu.Sub>
-              <ContextMenu.Sub>
-                <ContextMenu.SubTrigger
-                  className="context-menu-item"
-                  style={menuItemStyle}
-                >
-                  <span>Grammar Node</span>
-                  <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
-                </ContextMenu.SubTrigger>
-                <ContextMenu.Portal>
-                  <ContextMenu.SubContent
-                    style={submenuStyle}
-                    onCloseAutoFocus={(e) => e.preventDefault()}
-                  >
-                    <ContextMenu.Item
-                      className="context-menu-item"
-                      style={menuItemStyle}
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        console.log('Append Grammar Node');
-                      }}
-                    >
-                      <span>Grammar Node</span>
-                    </ContextMenu.Item>
-                  </ContextMenu.SubContent>
-                </ContextMenu.Portal>
-              </ContextMenu.Sub>
-            </ContextMenu.SubContent>
-          </ContextMenu.Portal>
-        </ContextMenu.Sub>
+            <div className="gcm-item" style={itemStyle} onClick={() => handleItem()}>
+              <span>Normal Node</span>
+              <span style={kbdStyle}>Ctrl+N</span>
+            </div>
+            <div className="gcm-item" style={itemStyle} onClick={() => handleItem()}>
+              <span>Garbage Node</span>
+            </div>
+            <div className="gcm-item" style={itemStyle} onClick={() => handleItem()}>
+              <span>Grammar Node</span>
+            </div>
+          </div>
+        )}
+      </div>
 
-        {/* Edit Caption */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onEditCaption?.();
-          }}
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onEditCaption)}>
+        <Edit size={14} style={iconStyle} />
+        <span>Edit Caption</span>
+        <span style={kbdStyle}>F2</span>
+      </div>
+
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem()}>
+        <FileText size={14} style={iconStyle} />
+        <span>Notes</span>
+      </div>
+
+      <div style={separatorStyle} />
+
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onEditWords)}>
+        <MessageSquare size={14} style={iconStyle} />
+        <span>Edit Words</span>
+        <span style={kbdStyle}>Ctrl+W</span>
+      </div>
+
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onAddAllWordsToHints)}>
+        <span>Add All Node Words To Hints</span>
+      </div>
+
+      <div style={separatorStyle} />
+
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onCopy)}>
+        <Copy size={14} style={iconStyle} />
+        <span>Copy</span>
+        <span style={kbdStyle}>Ctrl+C</span>
+      </div>
+
+      <div
+        className="gcm-item"
+        style={{ ...itemStyle, color: '#dc2626' }}
+        onClick={() => handleItem(onDelete)}
+      >
+        <X size={14} style={iconStyle} />
+        <span>Delete Node</span>
+        <span style={{ ...kbdStyle, color: '#dc2626' }}>CANC</span>
+      </div>
+
+      <div style={separatorStyle} />
+
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onSetRepetitions)}>
+        <Hash size={14} style={iconStyle} />
+        <span>Set Repetitions</span>
+        <span style={kbdStyle}>Ctrl+R</span>
+      </div>
+
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onSetOptional)}>
+        <Square size={14} style={iconStyle} />
+        <span>Set As Optional</span>
+        <span style={kbdStyle}>Ctrl+O</span>
+      </div>
+
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onSetGarbage)}>
+        <Trash2 size={14} style={iconStyle} />
+        <span>Set As Garbage</span>
+      </div>
+
+      {/* Regular Expression submenu */}
+      <div style={{ position: 'relative' }}>
+        <div
+          className="gcm-item"
+          style={itemStyle}
+          onMouseEnter={() => setActiveSubmenu('regex')}
+          onMouseLeave={() => setActiveSubmenu(null)}
         >
-          <Edit size={14} style={{ marginRight: '8px' }} />
-          <span>Edit Caption</span>
-          <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#6b7280' }}>
-            F2
-          </span>
-        </ContextMenu.Item>
-
-        {/* Notes */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            console.log('Notes');
-          }}
-        >
-          <FileText size={14} style={{ marginRight: '8px' }} />
-          <span>Notes</span>
-        </ContextMenu.Item>
-
-        <ContextMenu.Separator style={separatorStyle} />
-
-        {/* Edit Words */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onEditWords?.();
-          }}
-        >
-          <MessageSquare size={14} style={{ marginRight: '8px' }} />
-          <span>Edit Words</span>
-          <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#6b7280' }}>
-            Ctrl+W
-          </span>
-        </ContextMenu.Item>
-
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onAddAllWordsToHints?.();
-          }}
-        >
-          <span>Add All Node Words To Hints</span>
-        </ContextMenu.Item>
-
-        <ContextMenu.Separator style={separatorStyle} />
-
-        {/* Copy */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onCopy?.();
-          }}
-        >
-          <Copy size={14} style={{ marginRight: '8px' }} />
-          <span>Copy</span>
-          <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#6b7280' }}>
-            Ctrl+C
-          </span>
-        </ContextMenu.Item>
-
-        {/* Delete Node */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={{ ...menuItemStyle, color: '#dc2626' }}
-          onSelect={(e) => {
-            e.preventDefault();
-            onDelete?.();
-          }}
-        >
-          <X size={14} style={{ marginRight: '8px' }} />
-          <span>Delete Node</span>
-          <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#6b7280' }}>
-            CANC
-          </span>
-        </ContextMenu.Item>
-
-        <ContextMenu.Separator style={separatorStyle} />
-
-        {/* Set Repetitions */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onSetRepetitions?.();
-          }}
-        >
-          <Hash size={14} style={{ marginRight: '8px' }} />
-          <span>Set Repetitions</span>
-          <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#6b7280' }}>
-            Ctrl+R
-          </span>
-        </ContextMenu.Item>
-
-        {/* Set As Optional */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onSetOptional?.();
-          }}
-        >
-          <Square size={14} style={{ marginRight: '8px' }} />
-          <span>Set As Optional</span>
-          <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#6b7280' }}>
-            Ctrl+O
-          </span>
-        </ContextMenu.Item>
-
-        {/* Set As Garbage */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onSetGarbage?.();
-          }}
-        >
-          <Trash2 size={14} style={{ marginRight: '8px' }} />
-          <span>Set As Garbage</span>
-        </ContextMenu.Item>
-
-        {/* Regular Expression (with submenu) */}
-        <ContextMenu.Sub>
-          <ContextMenu.SubTrigger
-            className="context-menu-item"
-            style={menuItemStyle}
+          <Code size={14} style={iconStyle} />
+          <span>Regular Expression</span>
+          <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
+        </div>
+        {activeSubmenu === 'regex' && (
+          <div
+            style={submenuStyle}
+            onMouseEnter={() => setActiveSubmenu('regex')}
+            onMouseLeave={() => setActiveSubmenu(null)}
           >
-            <Code size={14} style={{ marginRight: '8px' }} />
-            <span>Regular Expression</span>
-            <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
-          </ContextMenu.SubTrigger>
-          <ContextMenu.Portal>
-            <ContextMenu.SubContent
-              style={submenuStyle}
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-              <ContextMenu.Item
-                className="context-menu-item"
-                style={menuItemStyle}
-                onSelect={(e) => {
-                  e.preventDefault();
-                  console.log('Regular Expression options');
-                }}
-              >
-                <span>Regex Options</span>
-              </ContextMenu.Item>
-            </ContextMenu.SubContent>
-          </ContextMenu.Portal>
-        </ContextMenu.Sub>
+            <div className="gcm-item" style={itemStyle} onClick={() => handleItem()}>
+              <span>Regex Options</span>
+            </div>
+          </div>
+        )}
+      </div>
 
-        {/* Processing (with submenu) */}
-        <ContextMenu.Sub>
-          <ContextMenu.SubTrigger
-            className="context-menu-item"
-            style={menuItemStyle}
+      {/* Processing submenu */}
+      <div style={{ position: 'relative' }}>
+        <div
+          className="gcm-item"
+          style={itemStyle}
+          onMouseEnter={() => setActiveSubmenu('processing')}
+          onMouseLeave={() => setActiveSubmenu(null)}
+        >
+          <Settings size={14} style={iconStyle} />
+          <span>Processing</span>
+          <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
+        </div>
+        {activeSubmenu === 'processing' && (
+          <div
+            style={submenuStyle}
+            onMouseEnter={() => setActiveSubmenu('processing')}
+            onMouseLeave={() => setActiveSubmenu(null)}
           >
-            <Settings size={14} style={{ marginRight: '8px' }} />
-            <span>Processing</span>
-            <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
-          </ContextMenu.SubTrigger>
-          <ContextMenu.Portal>
-            <ContextMenu.SubContent
-              style={submenuStyle}
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-              <ContextMenu.Item
-                className="context-menu-item"
-                style={menuItemStyle}
-                onSelect={(e) => {
-                  e.preventDefault();
-                  console.log('Processing options');
-                }}
-              >
-                <span>Processing Options</span>
-              </ContextMenu.Item>
-            </ContextMenu.SubContent>
-          </ContextMenu.Portal>
-        </ContextMenu.Sub>
+            <div className="gcm-item" style={itemStyle} onClick={() => handleItem()}>
+              <span>Processing Options</span>
+            </div>
+          </div>
+        )}
+      </div>
 
-        <ContextMenu.Separator style={separatorStyle} />
+      <div style={separatorStyle} />
 
-        {/* Bind */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onBind?.();
-          }}
-        >
-          <Link size={14} style={{ marginRight: '8px' }} />
-          <span>Bind</span>
-        </ContextMenu.Item>
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onBind)}>
+        <Link size={14} style={iconStyle} />
+        <span>Bind</span>
+      </div>
 
-        {/* No Free Speech */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onNoFreeSpeech?.();
-          }}
-        >
-          <Mic size={14} style={{ marginRight: '8px' }} />
-          <span>No Free Speech</span>
-        </ContextMenu.Item>
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onNoFreeSpeech)}>
+        <Mic size={14} style={iconStyle} />
+        <span>No Free Speech</span>
+      </div>
 
-        {/* Match In Progress */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onMatchInProgress?.();
-          }}
-        >
-          <Play size={14} style={{ marginRight: '8px' }} />
-          <span>Match In Progress</span>
-        </ContextMenu.Item>
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onMatchInProgress)}>
+        <Play size={14} style={iconStyle} />
+        <span>Match In Progress</span>
+      </div>
 
-        <ContextMenu.Separator style={separatorStyle} />
+      <div style={separatorStyle} />
 
-        {/* Set node context */}
-        <ContextMenu.Item
-          className="context-menu-item"
-          style={menuItemStyle}
-          onSelect={(e) => {
-            e.preventDefault();
-            onSetNodeContext?.();
-          }}
-        >
-          <Parentheses size={14} style={{ marginRight: '8px' }} />
-          <span>Set node context</span>
-        </ContextMenu.Item>
-      </ContextMenu.Content>
-    </ContextMenu.Portal>
-    </>
+      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onSetNodeContext)}>
+        <Parentheses size={14} style={iconStyle} />
+        <span>Set node context</span>
+      </div>
+    </div>
   );
+
+  return ReactDOM.createPortal(menu, document.body);
 }
 
-// Shared styles
-const menuItemStyle: React.CSSProperties = {
+const itemStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   padding: '6px 12px',
   fontSize: '13px',
   color: '#c9d1d9',
-  cursor: 'pointer',
   borderRadius: '4px',
   outline: 'none',
-  userSelect: 'none',
+  gap: '8px',
+  whiteSpace: 'nowrap',
+};
+
+const iconStyle: React.CSSProperties = {
+  flexShrink: 0,
+};
+
+const kbdStyle: React.CSSProperties = {
+  marginLeft: 'auto',
+  fontSize: '11px',
+  color: '#6b7280',
+  paddingLeft: '16px',
 };
 
 const separatorStyle: React.CSSProperties = {
@@ -442,10 +339,15 @@ const separatorStyle: React.CSSProperties = {
 };
 
 const submenuStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  right: '100%',
+  marginRight: '2px',
   minWidth: '180px',
   backgroundColor: '#1a1f2e',
   border: '1px solid #4a5568',
   borderRadius: '6px',
   padding: '4px',
-  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+  zIndex: 100000,
 };

@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import React from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
 import type { GrammarNode as GrammarNodeType } from '../types/grammarTypes';
 import { useNodeEditingState } from '../hooks/useNodeEditingState';
 import { useNodeKeyboardHandlers } from '../hooks/useNodeKeyboardHandlers';
@@ -15,6 +15,7 @@ import {
   nodeBaseStyles, nodeInputStyles, nodeLabelStyles, nodeMetadataStyles,
 } from '../utils/nodeStyles';
 import { NodeToolbar } from './NodeToolbar';
+import { useDrag } from '../context/DragContext';
 
 interface GrammarNodeData {
   node: GrammarNodeType;
@@ -35,6 +36,8 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
   const { editNodeLabel } = useNodeEditing();
   const { deleteNode, updateNode } = useGrammarStore();
   const [isHovered, setIsHovered] = React.useState(false);
+  const { setDragState } = useDrag();
+  const { screenToFlowPosition } = useReactFlow();
 
   const {
     isEditing, editValue, setEditValue,
@@ -54,6 +57,25 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
     if (editValue.trim()) editNodeLabel(node.id, editValue.trim());
     stopEditing();
   };
+
+  const handleDragStart = React.useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    const nodeElement = e.currentTarget.closest('.react-flow__node') as HTMLElement;
+    if (!nodeElement) return;
+
+    const rect = nodeElement.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const flowPos = screenToFlowPosition({ x: centerX, y: centerY });
+
+    setDragState({
+      sourceNodeId: node.id,
+      startPos: flowPos,
+    });
+  }, [node.id, screenToFlowPosition, setDragState]);
 
   const inputWidth = React.useMemo(() => {
     const measured = measureText(editValue || NODE_PLACEHOLDER, NODE_FONT);
@@ -90,6 +112,33 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
       )}
 
       <Handle type="target" position={Position.Left} style={{ width: 6, height: 6 }} />
+
+      {/* Center drag handle - appears on hover */}
+      {isHovered && !isEditing && (
+        <div
+          className="nodrag"
+          data-drag-handle="link"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '12px',
+            height: '12px',
+            borderRadius: '50%',
+            backgroundColor: '#4a9eff',
+            border: '2px solid #1a1f2e',
+            cursor: 'crosshair',
+            zIndex: 10,
+            pointerEvents: 'auto',
+          }}
+          onMouseDown={handleDragStart}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.cursor = 'crosshair';
+          }}
+          title="Drag to create edge and new node"
+        />
+      )}
 
       {isEditing ? (
         <input
