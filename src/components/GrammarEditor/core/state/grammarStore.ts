@@ -295,11 +295,11 @@ export const useGrammarStore = create<GrammarStore>((set, get) => ({
     })),
 
   // Actions - Semantic Sets
-  addSemanticSet: (set) => set((state) => ({
+  addSemanticSet: (semanticSet) => set((state) => ({
     grammar: state.grammar
       ? {
           ...state.grammar,
-          semanticSets: [...state.grammar.semanticSets, set],
+          semanticSets: [...state.grammar.semanticSets, semanticSet],
           metadata: {
             ...state.grammar.metadata,
             updatedAt: Date.now(),
