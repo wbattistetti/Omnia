@@ -8,12 +8,13 @@ import {
   addSynonym,
   removeSynonym,
   updateNodeRegex,
-  bindSemanticValue,
-  bindSemanticSet,
-  unbindSemantic,
+  addBinding,
+  removeBinding,
+  clearBindings,
   setNodeOptional,
   setNodeRepeatable,
 } from '../../core/domain/node';
+import type { NodeBinding } from '../../types/grammarTypes';
 
 /**
  * Hook for handling node editing
@@ -49,32 +50,35 @@ export function useNodeEditing() {
     updateNode(nodeId, updated);
   }, [getNode, updateNode]);
 
-  const bindValueToNode = useCallback((
+  const addNodeBinding = useCallback((
     nodeId: string,
-    valueId: string,
-    slotId: string
+    binding: NodeBinding
+  ) => {
+    const node = getNode(nodeId);
+    if (!node) return { success: false, error: 'Node not found' };
+    const result = addBinding(node, binding);
+    if (result.isValid) {
+      updateNode(nodeId, result.node);
+      return { success: true };
+    }
+    return { success: false, error: result.error };
+  }, [getNode, updateNode]);
+
+  const removeNodeBinding = useCallback((
+    nodeId: string,
+    bindingType: NodeBinding['type'],
+    id: string
   ) => {
     const node = getNode(nodeId);
     if (!node) return;
-    const updated = bindSemanticValue(node, valueId, slotId);
+    const updated = removeBinding(node, bindingType, id);
     updateNode(nodeId, updated);
   }, [getNode, updateNode]);
 
-  const bindSetToNode = useCallback((
-    nodeId: string,
-    setId: string,
-    slotId: string
-  ) => {
+  const clearNodeBindings = useCallback((nodeId: string) => {
     const node = getNode(nodeId);
     if (!node) return;
-    const updated = bindSemanticSet(node, setId, slotId);
-    updateNode(nodeId, updated);
-  }, [getNode, updateNode]);
-
-  const unbindNodeSemantic = useCallback((nodeId: string) => {
-    const node = getNode(nodeId);
-    if (!node) return;
-    const updated = unbindSemantic(node);
+    const updated = clearBindings(node);
     updateNode(nodeId, updated);
   }, [getNode, updateNode]);
 
@@ -97,9 +101,9 @@ export function useNodeEditing() {
     addNodeSynonym,
     removeNodeSynonym,
     editNodeRegex,
-    bindValueToNode,
-    bindSetToNode,
-    unbindNodeSemantic,
+    addNodeBinding,
+    removeNodeBinding,
+    clearNodeBindings,
     setOptional,
     setRepeatable,
   };

@@ -22,6 +22,8 @@ function GrammarCanvasInner() {
     handleConnect,
     handleNodeClick,
     handlePaneMouseUp,
+    handleDrop,
+    handleDragOver,
   } = useGrammarCanvasEvents();
 
   return (
@@ -34,6 +36,8 @@ function GrammarCanvasInner() {
       onConnect={handleConnect}
       onNodeClick={handleNodeClick}
       onPaneMouseUp={handlePaneMouseUp}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
     />
   );
 }

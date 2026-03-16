@@ -17,6 +17,8 @@ interface SlotTreeNodeProps {
   level: number;
   theme: Theme;
   labelColor?: string;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
 }
 
 /**
@@ -35,12 +37,15 @@ export function SlotTreeNode({
   level,
   theme,
   labelColor,
+  draggable = false,
+  onDragStart,
 }: SlotTreeNodeProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   const nodeStyle: React.CSSProperties = {
     ...treeNodeStyle(theme, level, isSelected),
     ...(isHovered ? treeNodeHoverStyle(theme) : {}),
+    ...(draggable ? { cursor: 'grab' } : {}),
   };
 
   const labelStyleWithColor: React.CSSProperties = {
@@ -52,6 +57,8 @@ export function SlotTreeNode({
     <div>
       <div
         style={nodeStyle}
+        draggable={draggable}
+        onDragStart={onDragStart}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onClick={onSelect}

@@ -2,6 +2,15 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 /**
+ * NodeBinding: Heterogeneous binding for a grammar node
+ * Supports: slot, semantic-set, semantic-value
+ */
+export type NodeBinding =
+  | { type: 'slot'; slotId: string }
+  | { type: 'semantic-set'; setId: string }
+  | { type: 'semantic-value'; valueId: string };
+
+/**
  * GrammarNode: Node in the grammar graph
  * The VB.NET runtime reads this format directly
  */
@@ -11,11 +20,11 @@ export interface GrammarNode {
   synonyms: string[];                // List of synonyms (e.g., ["vorrei", "desidero"])
   regex?: string;                    // Optional regex pattern (e.g., "[Vv]oglio")
 
-  // Semantics
-  semanticType: 'none' | 'value' | 'set';
-  semanticValueId?: string;          // Semantic value ID (if type = 'value')
-  semanticSetId?: string;            // Semantic set ID (if type = 'set')
-  slotId?: string;                   // Output slot (if type = 'value' or 'set')
+  // Semantics: heterogeneous bindings list
+  // Constraints (enforced by validateBindings):
+  // - Maximum one slot
+  // - Either one or more semantic sets OR one semantic value (not both)
+  bindings: NodeBinding[];
 
   // Node properties
   optional: boolean;                 // Optional node

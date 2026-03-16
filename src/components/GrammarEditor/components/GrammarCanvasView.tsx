@@ -19,6 +19,8 @@ interface GrammarCanvasViewProps {
   onConnect: (connection: any) => void;
   onNodeClick: (event: React.MouseEvent, node: { id: string }) => void;
   onPaneMouseUp?: (event: React.MouseEvent) => void;
+  onDrop?: (event: React.DragEvent) => void;
+  onDragOver?: (event: React.DragEvent) => void;
 }
 
 /**
@@ -37,6 +39,8 @@ export function GrammarCanvasView({
   onConnect,
   onNodeClick,
   onPaneMouseUp,
+  onDrop,
+  onDragOver,
 }: GrammarCanvasViewProps) {
   const canvasRef = React.useRef<HTMLDivElement>(null);
 
@@ -73,6 +77,8 @@ export function GrammarCanvasView({
         className="grammar-canvas"
         style={{ width: '100%', height: '100%', position: 'relative' }}
         onMouseUp={onPaneMouseUp}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
       >
         <ReactFlow
           nodes={nodes}
@@ -84,7 +90,8 @@ export function GrammarCanvasView({
           onConnect={onConnect}
           onNodeClick={onNodeClick}
           noDragClassName="nodrag"
-          panOnDrag
+          selectionOnDrag={true}
+          panOnDrag={[1, 2]}
           fitView={false}
           defaultViewport={{ x: 0, y: 0, zoom: 1 }}
           style={{ width: '100%', height: '100%' }}

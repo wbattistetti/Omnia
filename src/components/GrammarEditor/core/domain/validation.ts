@@ -2,6 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import type { Grammar, GrammarNode, GrammarEdge } from '../../types/grammarTypes';
+import { validateBindings } from './node';
 
 /**
  * Validation error
@@ -31,27 +32,11 @@ export function validateGrammar(grammar: Grammar): ValidationError[] {
 
   // Check for nodes with invalid semantic bindings
   grammar.nodes.forEach(node => {
-    if (node.semanticType === 'value' && !node.semanticValueId) {
+    const validation = validateBindings(node.bindings);
+    if (!validation.isValid) {
       errors.push({
         type: 'error',
-        message: `Node "${node.label}" has semantic type 'value' but no semanticValueId`,
-        nodeId: node.id,
-      });
-    }
-    if (node.semanticType === 'set' && !node.semanticSetId) {
-      errors.push({
-        type: 'error',
-        message: `Node "${node.label}" has semantic type 'set' but no semanticSetId`,
-        nodeId: node.id,
-      });
-    }
-    if (
-      (node.semanticType === 'value' || node.semanticType === 'set') &&
-      !node.slotId
-    ) {
-      errors.push({
-        type: 'error',
-        message: `Node "${node.label}" has semantic binding but no slotId`,
+        message: `Node "${node.label}": ${validation.error}`,
         nodeId: node.id,
       });
     }

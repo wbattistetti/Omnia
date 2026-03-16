@@ -3,7 +3,8 @@
 
 import { useCallback } from 'react';
 import { useGrammarStore } from '../../core/state/grammarStore';
-import { bindSemanticValue, bindSemanticSet } from '../../core/domain/node';
+import { addBinding } from '../../core/domain/node';
+import type { NodeBinding } from '../../types/grammarTypes';
 
 /**
  * Hook for handling drag & drop semantic → node
@@ -13,30 +14,55 @@ export function useSemanticBinding() {
 
   const bindValueToNode = useCallback((
     nodeId: string,
-    valueId: string,
-    slotId: string
+    valueId: string
   ) => {
     const node = getNode(nodeId);
-    if (!node) return;
+    if (!node) return { success: false, error: 'Node not found' };
 
-    const updated = bindSemanticValue(node, valueId, slotId);
-    updateNode(nodeId, updated);
+    const binding: NodeBinding = { type: 'semantic-value', valueId };
+    const result = addBinding(node, binding);
+    if (result.isValid) {
+      updateNode(nodeId, result.node);
+      return { success: true };
+    }
+    return { success: false, error: result.error };
   }, [getNode, updateNode]);
 
   const bindSetToNode = useCallback((
     nodeId: string,
-    setId: string,
+    setId: string
+  ) => {
+    const node = getNode(nodeId);
+    if (!node) return { success: false, error: 'Node not found' };
+
+    const binding: NodeBinding = { type: 'semantic-set', setId };
+    const result = addBinding(node, binding);
+    if (result.isValid) {
+      updateNode(nodeId, result.node);
+      return { success: true };
+    }
+    return { success: false, error: result.error };
+  }, [getNode, updateNode]);
+
+  const bindSlotToNode = useCallback((
+    nodeId: string,
     slotId: string
   ) => {
     const node = getNode(nodeId);
-    if (!node) return;
+    if (!node) return { success: false, error: 'Node not found' };
 
-    const updated = bindSemanticSet(node, setId, slotId);
-    updateNode(nodeId, updated);
+    const binding: NodeBinding = { type: 'slot', slotId };
+    const result = addBinding(node, binding);
+    if (result.isValid) {
+      updateNode(nodeId, result.node);
+      return { success: true };
+    }
+    return { success: false, error: result.error };
   }, [getNode, updateNode]);
 
   return {
     bindValueToNode,
     bindSetToNode,
+    bindSlotToNode,
   };
 }

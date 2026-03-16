@@ -2,7 +2,15 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { v4 as uuidv4 } from 'uuid';
-import type { GrammarNode } from '../../types/grammarTypes';
+import type { GrammarNode, NodeBinding } from '../../types/grammarTypes';
+
+/**
+ * Validation result for bindings
+ */
+export interface BindingValidationResult {
+  isValid: boolean;
+  error?: string;
+}
 
 /**
  * Creates a new grammar node
@@ -10,13 +18,14 @@ import type { GrammarNode } from '../../types/grammarTypes';
  */
 export function createGrammarNode(
   label: string,
-  position: { x: number; y: number }
+  position: { x: number; y: number },
+  bindings: NodeBinding[] = []
 ): GrammarNode {
   return {
     id: uuidv4(),
     label,
     synonyms: [],
-    semanticType: 'none',
+    bindings,
     optional: false,
     repeatable: false,
     position,
@@ -89,52 +98,141 @@ export function updateNodeRegex(
 }
 
 /**
- * Binds semantic value to a node
+ * Validates bindings according to constraints:
+ * - Maximum one slot
+ * - Either one or more semantic sets OR one semantic value (not both)
+ * Pure function: no side effects
+ */
+export function validateBindings(bindings: NodeBinding[]): BindingValidationResult {
+  const slots = bindings.filter(b => b.type === 'slot');
+  const sets = bindings.filter(b => b.type === 'semantic-set');
+  const values = bindings.filter(b => b.type === 'semantic-value');
+
+  // Constraint 1: Maximum one slot
+  if (slots.length > 1) {
+    return {
+      isValid: false,
+      error: 'Only one slot binding allowed per node',
+    };
+  }
+
+  // Constraint 2: Cannot have semantic sets AND semantic value together
+  if (sets.length > 0 && values.length > 0) {
+    return {
+      isValid: false,
+      error: 'Cannot have semantic sets and semantic value together. Use either sets or a single value.',
+    };
+  }
+
+  // Constraint 3: Maximum one semantic value
+  if (values.length > 1) {
+    return {
+      isValid: false,
+      error: 'Only one semantic value binding allowed per node',
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Adds a binding to a node
+ * Validates before adding and returns the updated node if valid
  * Pure function: returns new node, does not mutate input
  */
-export function bindSemanticValue(
+export function addBinding(
   node: GrammarNode,
-  valueId: string,
-  slotId: string
+  binding: NodeBinding
+): { node: GrammarNode; isValid: boolean; error?: string } {
+  // Check if binding already exists
+  const exists = node.bindings.some(b => {
+    if (b.type === binding.type) {
+      if (binding.type === 'slot') {
+        return b.slotId === binding.slotId;
+      } else if (binding.type === 'semantic-set') {
+        return b.setId === binding.setId;
+      } else if (binding.type === 'semantic-value') {
+        return b.valueId === binding.valueId;
+      }
+    }
+    return false;
+  });
+
+  if (exists) {
+    return { node, isValid: false, error: 'Binding already exists' };
+  }
+
+  // Create new bindings array with the new binding
+  const newBindings = [...node.bindings, binding];
+
+  // Validate
+  const validation = validateBindings(newBindings);
+  if (!validation.isValid) {
+    return { node, isValid: false, error: validation.error };
+  }
+
+  return {
+    node: {
+      ...node,
+      bindings: newBindings,
+      updatedAt: Date.now(),
+    },
+    isValid: true,
+  };
+}
+
+/**
+ * Removes a binding from a node
+ * Pure function: returns new node, does not mutate input
+ */
+export function removeBinding(
+  node: GrammarNode,
+  bindingType: NodeBinding['type'],
+  id: string
 ): GrammarNode {
+  const newBindings = node.bindings.filter(b => {
+    if (b.type === bindingType) {
+      if (bindingType === 'slot') {
+        return b.slotId !== id;
+      } else if (bindingType === 'semantic-set') {
+        return b.setId !== id;
+      } else if (bindingType === 'semantic-value') {
+        return b.valueId !== id;
+      }
+    }
+    return true;
+  });
+
   return {
     ...node,
-    semanticType: 'value',
-    semanticValueId: valueId,
-    slotId,
+    bindings: newBindings,
     updatedAt: Date.now(),
   };
 }
 
 /**
- * Binds semantic set to a node
+ * Removes all bindings of a specific type from a node
  * Pure function: returns new node, does not mutate input
  */
-export function bindSemanticSet(
+export function removeBindingsByType(
   node: GrammarNode,
-  setId: string,
-  slotId: string
+  bindingType: NodeBinding['type']
 ): GrammarNode {
   return {
     ...node,
-    semanticType: 'set',
-    semanticSetId: setId,
-    slotId,
+    bindings: node.bindings.filter(b => b.type !== bindingType),
     updatedAt: Date.now(),
   };
 }
 
 /**
- * Removes semantic binding from a node
+ * Removes all bindings from a node
  * Pure function: returns new node, does not mutate input
  */
-export function unbindSemantic(node: GrammarNode): GrammarNode {
+export function clearBindings(node: GrammarNode): GrammarNode {
   return {
     ...node,
-    semanticType: 'none',
-    semanticValueId: undefined,
-    semanticSetId: undefined,
-    slotId: undefined,
+    bindings: [],
     updatedAt: Date.now(),
   };
 }

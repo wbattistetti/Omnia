@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import type { GrammarNode } from '../types/grammarTypes';
+import type { GrammarNode, NodeBinding } from '../types/grammarTypes';
 
 /**
  * Node styling utilities.
@@ -9,12 +9,64 @@ import type { GrammarNode } from '../types/grammarTypes';
  */
 
 /**
- * Gets the background color for a node based on its semantic type.
+ * Binding hierarchy: slot (highest) > semantic-set > semantic-value (lowest)
  */
-export function getNodeBackground(semanticType: GrammarNode['semanticType']): string {
-  if (semanticType === 'value') return '#2a2010';
-  if (semanticType === 'set') return '#1e2010';
-  return '#1a1f2e';
+export function getHighestBinding(bindings: NodeBinding[]): NodeBinding | null {
+  if (bindings.length === 0) return null;
+
+  // Check for slot (highest priority)
+  const slot = bindings.find(b => b.type === 'slot');
+  if (slot) return slot;
+
+  // Check for semantic set
+  const set = bindings.find(b => b.type === 'semantic-set');
+  if (set) return set;
+
+  // Check for semantic value
+  const value = bindings.find(b => b.type === 'semantic-value');
+  if (value) return value;
+
+  return null;
+}
+
+/**
+ * Gets the icon color for a binding type.
+ * Colors match Slot Editor icons.
+ */
+export function getBindingIconColor(bindingType: NodeBinding['type']): string {
+  switch (bindingType) {
+    case 'slot':
+      return '#10b981'; // Green (ArrowRight)
+    case 'semantic-set':
+      return '#fbbf24'; // Yellow (Box)
+    case 'semantic-value':
+      return '#fb923c'; // Orange (Pencil)
+    default:
+      return '#1a1f2e';
+  }
+}
+
+/**
+ * Gets the background color for a node based on its highest binding.
+ * Uses the icon color with 50% opacity (rgba).
+ */
+export function getNodeBackground(node: GrammarNode): string {
+  const highestBinding = getHighestBinding(node.bindings);
+
+  if (!highestBinding) {
+    return '#1a1f2e'; // Default dark background
+  }
+
+  const iconColor = getBindingIconColor(highestBinding.type);
+
+  // Convert hex to rgba with 50% opacity
+  // Remove # if present
+  const hex = iconColor.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, 0.5)`;
 }
 
 /**

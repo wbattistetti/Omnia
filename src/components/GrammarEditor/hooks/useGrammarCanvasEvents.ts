@@ -5,9 +5,9 @@ import React, { useCallback } from 'react';
 import { useReactFlow } from 'reactflow';
 import type { NodeChange, Connection } from 'reactflow';
 import { useGrammarStore } from '../core/state/grammarStore';
-import { createGrammarNode } from '../core/domain/node';
+import { createGrammarNode, addBinding } from '../core/domain/node';
 import { v4 as uuidv4 } from 'uuid';
-import type { GrammarEdge } from '../types/grammarTypes';
+import type { GrammarEdge, NodeBinding } from '../types/grammarTypes';
 import { ESTIMATED_NODE_WIDTH, ESTIMATED_NODE_HEIGHT } from '../constants/nodeConstants';
 import { useDrag } from '../context/DragContext';
 
@@ -169,6 +169,110 @@ export function useGrammarCanvasEvents() {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [dragState, setDragState]);
 
+  // Handle drop from Slot Editor to create new node with binding or add binding to existing node
+  const handleDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!rf || !grammar) return;
+
+      // Check if data is from Slot Editor
+      const dataStr = event.dataTransfer.getData('application/json');
+      if (!dataStr) return; // Not from Slot Editor
+
+      try {
+        const data = JSON.parse(dataStr);
+        if (!data.type || !['slot', 'semantic-set', 'semantic-value'].includes(data.type)) {
+          return; // Invalid drag data
+        }
+
+        // Create binding based on type
+        let binding: NodeBinding;
+        if (data.type === 'slot') {
+          binding = { type: 'slot', slotId: data.slotId };
+        } else if (data.type === 'semantic-set') {
+          binding = { type: 'semantic-set', setId: data.setId };
+        } else {
+          binding = { type: 'semantic-value', valueId: data.valueId };
+        }
+
+        // Check if drop is on an existing node
+        const target = event.target as HTMLElement;
+        const nodeElement = target?.closest('.react-flow__node') as HTMLElement;
+
+        if (nodeElement) {
+          // Drop on existing node: find the node ID
+          // ReactFlow wraps our node, so we need to find data-node-id inside
+          const nodeIdElement = nodeElement.querySelector('[data-node-id]') as HTMLElement;
+          const nodeId = nodeIdElement?.getAttribute('data-node-id');
+
+          if (nodeId) {
+            const existingNode = grammar.nodes.find(n => n.id === nodeId);
+            if (existingNode) {
+              const result = addBinding(existingNode, binding);
+              if (result.isValid) {
+                updateNode(nodeId, result.node);
+              } else {
+                // Show error if binding is invalid (e.g., constraint violation)
+                console.warn('Cannot add binding:', result.error);
+              }
+              return; // Done, don't create new node
+            }
+          }
+        }
+
+        // Drop on canvas: create new node with binding
+        const dropPos = rf.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
+
+        const centeredPos = {
+          x: dropPos.x - ESTIMATED_NODE_WIDTH / 2,
+          y: dropPos.y - ESTIMATED_NODE_HEIGHT / 2,
+        };
+
+        const newNode = createGrammarNode(data.label || '', centeredPos, [binding]);
+        addNode(newNode);
+
+        // Focus the new node
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const selector = `[data-node-id="${newNode.id}"] input`;
+            const input = document.querySelector(selector) as HTMLInputElement | null;
+            if (input) {
+              input.focus();
+              input.select();
+            }
+          });
+        });
+      } catch (error) {
+        console.error('Error handling drop:', error);
+      }
+    },
+    [rf, grammar, addNode, updateNode]
+  );
+
+  // Handle drag over to allow drop
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Check if data is from Slot Editor
+    const dataStr = event.dataTransfer.getData('application/json');
+    if (dataStr) {
+      try {
+        const data = JSON.parse(dataStr);
+        if (data.type && ['slot', 'semantic-set', 'semantic-value'].includes(data.type)) {
+          event.dataTransfer.dropEffect = 'copy';
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+  }, []);
+
   return {
     handlePaneDoubleClick,
     handlePaneClick,
@@ -176,5 +280,7 @@ export function useGrammarCanvasEvents() {
     handleConnect,
     handleNodeClick,
     handlePaneMouseUp,
+    handleDrop,
+    handleDragOver,
   };
 }

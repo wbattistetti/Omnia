@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
+import { ArrowRight, Box, Pencil } from 'lucide-react';
 import type { GrammarNode as GrammarNodeType } from '../types/grammarTypes';
 import { useNodeEditingState } from '../hooks/useNodeEditingState';
 import { useNodeKeyboardHandlers } from '../hooks/useNodeKeyboardHandlers';
@@ -11,7 +12,7 @@ import { useGrammarStore } from '../core/state/grammarStore';
 import { NODE_PLACEHOLDER, NODE_FONT, NODE_PADDING_H, NODE_MIN_WIDTH } from '../constants/nodeConstants';
 import { measureText, calculateNodeWidth } from '../utils/nodeGeometry';
 import {
-  getNodeBackground, getBorderColor,
+  getNodeBackground, getBorderColor, getHighestBinding, getBindingIconColor,
   nodeBaseStyles, nodeInputStyles, nodeLabelStyles, nodeMetadataStyles,
 } from '../utils/nodeStyles';
 import { NodeToolbar } from './NodeToolbar';
@@ -34,7 +35,7 @@ interface GrammarNodeData {
 export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
   const { node } = data;
   const { editNodeLabel } = useNodeEditing();
-  const { deleteNode, updateNode } = useGrammarStore();
+  const { deleteNode, updateNode, getSlot } = useGrammarStore();
   const [isHovered, setIsHovered] = React.useState(false);
   const { setDragState } = useDrag();
   const { screenToFlowPosition } = useReactFlow();
@@ -77,19 +78,52 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
     });
   }, [node.id, screenToFlowPosition, setDragState]);
 
+  // Get highest binding for icon and color
+  const highestBinding = React.useMemo(() => getHighestBinding(node.bindings), [node.bindings]);
+  const bindingIconColor = highestBinding ? getBindingIconColor(highestBinding.type) : null;
+
+  // Calculate padding for icon (if binding exists)
+  const iconPadding = highestBinding ? 18 : 0; // 12px icon + 6px spacing
+
   const inputWidth = React.useMemo(() => {
     const measured = measureText(editValue || NODE_PLACEHOLDER, NODE_FONT);
-    return Math.max(measured + NODE_PADDING_H, NODE_MIN_WIDTH);
-  }, [editValue]);
+    return Math.max(measured + NODE_PADDING_H, NODE_MIN_WIDTH) + iconPadding;
+  }, [editValue, iconPadding]);
 
-  const labelWidth = React.useMemo(() => calculateNodeWidth(node.label), [node.label]);
+  const labelWidth = React.useMemo(() => {
+    return calculateNodeWidth(node.label) + iconPadding;
+  }, [node.label, iconPadding]);
+
+  // Get icon component for highest binding
+  const getBindingIcon = () => {
+    if (!highestBinding) return null;
+
+    const iconSize = 12;
+    const iconColor = bindingIconColor || '#c9d1d9';
+
+    switch (highestBinding.type) {
+      case 'slot':
+        return <ArrowRight size={iconSize} color={iconColor} />;
+      case 'semantic-set':
+        return <Box size={iconSize} color={iconColor} />;
+      case 'semantic-value':
+        return <Pencil size={iconSize} color={iconColor} />;
+      default:
+        return null;
+    }
+  };
 
   const containerStyle: React.CSSProperties = {
     ...nodeBaseStyles,
     border: `1px solid ${getBorderColor(selected)}`,
-    backgroundColor: getNodeBackground(node.semanticType),
+    backgroundColor: getNodeBackground(node),
     width: isEditing ? `${inputWidth}px` : `${labelWidth}px`,
     position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '4px',
+    paddingLeft: highestBinding ? `${iconPadding}px` : undefined,
   };
 
   return (
@@ -140,6 +174,23 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
         />
       )}
 
+      {/* Icon for highest binding - shown on the left */}
+      {!isEditing && highestBinding && (
+        <div
+          style={{
+            position: 'absolute',
+            left: '4px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            zIndex: 1,
+          }}
+        >
+          {getBindingIcon()}
+        </div>
+      )}
+
       {isEditing ? (
         <input
           ref={inputRef}
@@ -161,9 +212,17 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
           {node.synonyms.length > 2 && '...'}
         </div>
       )}
-      {!isEditing && node.slotId && (
-        <div style={nodeMetadataStyles.slot}>→ {node.slotId}</div>
-      )}
+      {!isEditing && (() => {
+        const slotBinding = node.bindings.find(b => b.type === 'slot');
+        if (slotBinding && slotBinding.type === 'slot') {
+          const slot = getSlot(slotBinding.slotId);
+          // Only show metadata if slot name is different from node label (to avoid duplication)
+          if (slot && slot.name !== node.label) {
+            return <div style={nodeMetadataStyles.slot}>→ {slot.name}</div>;
+          }
+        }
+        return null;
+      })()}
       {!isEditing && node.optional && (
         <div style={nodeMetadataStyles.optional}>(opt)</div>
       )}
