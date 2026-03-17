@@ -442,7 +442,7 @@ export default function RegexInlineEditor({
         clearTimeout(timeoutId);
       });
       timeoutRefs.current.clear();
-      
+
       // ✅ Save on close (component unmount)
       saveIfValid();
     };

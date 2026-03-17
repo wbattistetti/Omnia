@@ -30,8 +30,9 @@ import { openBottomDockedTab } from './AppContent/infrastructure/docking/Docking
 import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
 // ✅ M1: Domain model mapper (introduced, not yet used - will be used in M2)
 import { mapUIStateToDomain } from '../domain/project/mapper';
-// ✅ M2: Project save orchestrator (introduced, dry-run only - will be used in M4)
+// ✅ M5: Project save orchestrator (now with executeSave)
 import { ProjectSaveOrchestrator } from '../services/project-save/ProjectSaveOrchestrator';
+import { FEATURE_FLAGS } from '../config/featureFlags';
 // ✅ REMOVED: Migration moved to DB script - keep codebase clean
 // Migration should be a separate DB script, not executed during save
 import { ProjectManager } from './AppContent/application/services/ProjectManager';
@@ -848,6 +849,75 @@ export const AppContent: React.FC<AppContentProps> = ({
                   // Non blocca il save flow esistente
                 }
 
+                // ✅ M5: Use new orchestrator if feature flag is enabled
+                if (FEATURE_FLAGS.USE_NEW_SAVE_ORCHESTRATOR) {
+                  try {
+                    console.log('[Save][M5-Orchestrator] 🚀 Using NEW save orchestrator');
+                    
+                    const orchestrator = new ProjectSaveOrchestrator();
+                    const saveRequest = orchestrator.prepareSave(domain, {
+                      flows: allFlows,
+                      allTemplates: allTemplates,
+                    });
+
+                    // Validate request
+                    const validation = orchestrator.validateRequest(saveRequest);
+                    if (!validation.valid) {
+                      throw new Error(`Save request validation failed: ${validation.errors.join(', ')}`);
+                    }
+
+                    // Import services needed for execution
+                    const { FlowPersistService } = await import('../services/FlowPersistService');
+                    const { taskRepository } = await import('../services/TaskRepository');
+                    const { variableCreationService } = await import('../services/VariableCreationService');
+                    const { DialogueTaskService } = await import('../services/DialogueTaskService');
+                    const { transformNodesToSimplified, transformEdgesToSimplified } = await import('../flows/flowTransformers');
+
+                    // Execute save using orchestrator
+                    const saveResult = await orchestrator.executeSave(saveRequest, {
+                      translationsContext: (window as any).__projectTranslationsContext,
+                      flowState: {
+                        flushFlowPersist: async () => {
+                          await FlowPersistService.flushFlowPersist();
+                        },
+                        getFlowById: (id: string) => FlowStateBridge.getFlowById(id),
+                        getNodes: () => FlowStateBridge.getNodes(),
+                        getEdges: () => FlowStateBridge.getEdges(),
+                        transformNodesToSimplified,
+                        transformEdgesToSimplified,
+                      },
+                      taskRepository,
+                      variableService: variableCreationService,
+                      dialogueTaskService: DialogueTaskService,
+                      projectDataService: ProjectDataService,
+                      projectData,
+                    });
+
+                    if (saveResult.success) {
+                      console.log('[Save][M5-Orchestrator] ✅ Save completed successfully', {
+                        projectId: pid,
+                        duration: saveResult.duration,
+                      });
+                    } else {
+                      console.error('[Save][M5-Orchestrator] ❌ Save completed with errors', {
+                        projectId: pid,
+                        duration: saveResult.duration,
+                        errors: saveResult.errors,
+                      });
+                    }
+
+                    // Return early - new orchestrator handles everything
+                    return;
+                  } catch (e) {
+                    console.error('[Save][M5-Orchestrator] ❌ Failed to execute save with orchestrator', {
+                      error: e instanceof Error ? e.message : String(e),
+                    });
+                    // Fall through to old save flow as fallback
+                    console.warn('[Save][M5-Orchestrator] ⚠️ Falling back to old save flow');
+                  }
+                }
+
+                // ✅ OLD SAVE FLOW: Keep as fallback when feature flag is disabled
                 // ✅ OPTIMIZATION: Parallelize all independent save operations
                 const saveStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 

@@ -13,6 +13,8 @@ export interface FeatureFlags {
   DISABLE_MERGE_PROFONDO: boolean;
   // Development: enable verbose logging
   LOG_VERBOSE: boolean;
+  // M5: Use new ProjectSaveOrchestrator instead of old save flow
+  USE_NEW_SAVE_ORCHESTRATOR: boolean;
 }
 
 /**
@@ -56,6 +58,7 @@ export function getFeatureFlags(): FeatureFlags {
   return {
     DISABLE_MERGE_PROFONDO: getFeatureFlag('DISABLE_MERGE_PROFONDO', false),
     LOG_VERBOSE: getFeatureFlag('LOG_VERBOSE', false),
+    USE_NEW_SAVE_ORCHESTRATOR: getFeatureFlag('USE_NEW_SAVE_ORCHESTRATOR', false),
   };
 }
 
