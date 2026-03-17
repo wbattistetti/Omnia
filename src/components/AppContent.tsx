@@ -769,10 +769,17 @@ export const AppContent: React.FC<AppContentProps> = ({
                 });
 
                 if (orphanTasks.length > 0) {
+                  const orphanTasksInfo = orphanTasks.map(t => ({
+                    id: t.id,
+                    name: t.name || '(unnamed)',
+                    type: t.type || 'unknown'
+                  }));
                   console.warn('[Save][Cleanup] ⚠️ Orphan tasks excluded from save', {
                     count: orphanTasks.length,
-                    ids: orphanTasks.map(t => t.id)
+                    tasks: orphanTasksInfo
                   });
+                  // Log details in a table for better readability
+                  console.table(orphanTasksInfo);
                 }
 
                 // ✅ M2: Prepare save request using orchestrator (DRY-RUN - not executed yet)
@@ -798,13 +805,22 @@ export const AppContent: React.FC<AppContentProps> = ({
                   const migratedProject = migrateProject(rawProjectData);
 
                   if (migratedProject.migrated || migratedProject.warnings) {
+                    const warnings = migratedProject.warnings || [];
                     console.log('[Save][M3-Migration] ✅ Project migrated/normalized (DRY-RUN)', {
                       projectId: pid,
                       detectedVersion,
                       migratedVersion: migratedProject.version,
                       migrated: migratedProject.migrated,
-                      warningsCount: migratedProject.warnings?.length || 0,
+                      warningsCount: warnings.length,
                     });
+                    // Log warnings separately for better visibility
+                    if (warnings.length > 0) {
+                      console.group('[Save][M3-Migration] 📋 Migration Warnings:');
+                      warnings.forEach((warning: string, index: number) => {
+                        console.log(`${index + 1}. ${warning}`);
+                      });
+                      console.groupEnd();
+                    }
                   }
 
                   const domain = mapUIStateToDomain({
