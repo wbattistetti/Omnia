@@ -39,10 +39,9 @@ export default function ContractEditorWrapper({
   onProfileUpdate,
   onClose,
 }: ContractEditorWrapperProps) {
-  // Get method data from contract.engines or contract.parsers array (retrocompatibilità)
+  // Get method data from contract.engines array
   const methodData = React.useMemo(() => {
-    // ✅ Support both engines (new) and parsers (legacy) for retrocompatibilità
-    const engines = contract?.engines || contract?.parsers;
+    const engines = contract?.engines;
     if (!engines || !Array.isArray(engines)) {
       return null;
     }
@@ -69,15 +68,13 @@ export default function ContractEditorWrapper({
           regex={(methodData as any).patterns?.[0] || ''}
           onRegexSave={(value: string) => {
             if (!contract) return;
-            // ✅ Support both engines (new) and parsers (legacy)
-            const engines = contract.engines || contract.parsers || [];
+            const engines = contract.engines || [];
             const updatedEngines = engines.map(c =>
               c.type === 'regex' ? { ...c, patterns: [value] } : c
             );
             const updatedContract: DataContract = {
               ...contract,
-              engines: contract.engines ? updatedEngines : undefined,
-              parsers: contract.parsers ? updatedEngines : undefined,
+              engines: updatedEngines,
             };
             onContractChange(updatedContract);
           }}

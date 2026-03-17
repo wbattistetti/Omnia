@@ -8,10 +8,10 @@ import type { ProjectDomainModel } from '../domain/project/model';
 
 /**
  * Migrates a project to the current version
- * 
+ *
  * This is the entry point for project migration.
  * It detects the project version and applies the necessary migrations.
- * 
+ *
  * @param raw - Raw project data from database
  * @returns Migrated project ready for domain model mapping
  */
@@ -47,10 +47,10 @@ export function migrateProject(raw: any): ProjectDomainModel & MigrationResult {
 
 /**
  * Normalizes a project (applies migrations without changing version)
- * 
+ *
  * Useful for normalizing projects that are already at the current version
  * but may have inconsistencies (orphan tasks, broken conditions, etc.)
- * 
+ *
  * @param project - Project to normalize
  * @returns Normalized project
  */

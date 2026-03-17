@@ -3,13 +3,11 @@ Option Explicit On
 
 Imports System.Collections.Generic
 
-Namespace GrammarInterpreter.Models
-
-    ''' <summary>
-    ''' Complete grammar structure
-    ''' This is the format that the VB.NET runtime reads directly from JSON
-    ''' </summary>
-    Public Class Grammar
+''' <summary>
+''' Complete grammar structure
+''' This is the format that the VB.NET runtime reads directly from JSON
+''' </summary>
+Public Class Grammar
         Public Property Id As String
         Public Property Name As String
         Public Property Nodes As List(Of GrammarNode)
@@ -35,5 +33,3 @@ Namespace GrammarInterpreter.Models
         Public Property UpdatedAt As Long
         Public Property Version As String
     End Class
-
-End Namespace

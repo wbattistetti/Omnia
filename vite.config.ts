@@ -66,11 +66,14 @@ export default defineConfig({
       '/step3b': { target: 'http://localhost:8000', changeOrigin: true },
       '/step4': { target: 'http://localhost:8000', changeOrigin: true },
 
+      // VB.NET ApiServer endpoints (porta 5000) - MUST come BEFORE Node.js and FastAPI
+      '/api/grammar': { target: 'http://localhost:5000', changeOrigin: true },
+      '/api/runtime': { target: 'http://localhost:5000', changeOrigin: true },
+
       // Node.js backend endpoints (MongoDB) - MUST come BEFORE generic /api
       '/api/factory': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/projects': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/constants': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/runtime': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/embeddings': { target: 'http://localhost:3100', changeOrigin: true },
       '/projects': { target: 'http://localhost:3100', changeOrigin: true },
 

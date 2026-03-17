@@ -29,10 +29,10 @@ Public Class NLPContract
     Public Property SubDataMapping As Dictionary(Of String, SubDataMappingInfo)
 
     ''' <summary>
-    ''' ✅ NEW: Array di parsers (fonte di verità unica)
+    ''' Array di engines (fonte di verità unica)
     ''' Usa NLPEngine da Common
     ''' </summary>
-    Public Property Parsers As List(Of NLPEngine)
+    Public Property Engines As List(Of NLPEngine)
 
     ''' <summary>
     ''' Test phrases per il GrammarFlow engine
@@ -41,7 +41,7 @@ Public Class NLPContract
 
     Public Sub New()
         SubDataMapping = New Dictionary(Of String, SubDataMappingInfo)()
-        Parsers = New List(Of NLPEngine)()
+        Engines = New List(Of NLPEngine)()
         TestPhrases = New List(Of String)()
     End Sub
 End Class

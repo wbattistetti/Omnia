@@ -823,14 +823,31 @@ export const AppContent: React.FC<AppContentProps> = ({
                     }
                   }
 
+                  // ✅ M4: Load templates and variables for orchestrator
+                  const { DialogueTaskService } = await import('../services/DialogueTaskService');
+                  const { variableCreationService } = await import('../services/VariableCreationService');
+                  
+                  const allTemplates = DialogueTaskService.getAllTemplates();
+                  const allVariables = variableCreationService.getAllVariables(pid);
+
+                  console.log('[Save][M4-Data] 📊 Loaded data for orchestrator', {
+                    templatesCount: allTemplates.length,
+                    variablesCount: allVariables.length,
+                    templatesSource: allTemplates.reduce((acc: Record<string, number>, t: any) => {
+                      const source = t.source || 'Project';
+                      acc[source] = (acc[source] || 0) + 1;
+                      return acc;
+                    }, {}),
+                  });
+
                   const domain = mapUIStateToDomain({
                     projectId: pid,
                     projectName: currentProject?.name,
                     flows: allFlows,
                     tasks: allTasksInMemory,
                     conditions: projectData?.conditions?.flatMap((cat: any) => cat.items || []) || [],
-                    templates: [], // Will be populated from DialogueTaskService in M4
-                    variables: [], // Will be populated from VariableCreationService in M4
+                    templates: allTemplates, // ✅ M4: Populated from DialogueTaskService
+                    variables: allVariables, // ✅ M4: Populated from VariableCreationService
                     metadata: {
                       ownerCompany: currentProject?.ownerCompany,
                       ownerClient: currentProject?.ownerClient,
@@ -840,7 +857,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                   const orchestrator = new ProjectSaveOrchestrator();
                   const saveRequest = orchestrator.prepareSave(domain, {
                     flows: allFlows,
-                    allTemplates: [], // Will be populated in M4
+                    allTemplates: allTemplates, // ✅ M4: Populated from DialogueTaskService
                   });
 
                   // Validate request

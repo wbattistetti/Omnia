@@ -8,10 +8,10 @@ import { useEditorOverlay } from '@responseEditor/features/step-management/compo
 import { RowResult } from '@responseEditor/features/step-management/hooks/useExtractionTesting';
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
-// ✅ Helper: Get engines from contract (supports both engines and parsers for retrocompatibilità)
+// Helper: Get engines from contract
 function getEngines(contract: DataContract | null): any[] {
   if (!contract) return [];
-  return contract.engines || contract.parsers || [];
+  return contract.engines || [];
 }
 
 // 🎨 Colori centralizzati per extractors (usati solo per editor overlay)
@@ -439,9 +439,9 @@ const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
   if (prev.contract !== next.contract) {
     return false;
   }
-  // Compare parsers array
-  const prevContractsKey = prev.contract?.parsers?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
-  const nextContractsKey = next.contract?.parsers?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
+  // Compare engines array
+  const prevContractsKey = prev.contract?.engines?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
+  const nextContractsKey = next.contract?.engines?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
   if (prevContractsKey !== nextContractsKey) {
     return false;
   }

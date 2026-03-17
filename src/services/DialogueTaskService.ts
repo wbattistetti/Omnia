@@ -98,10 +98,33 @@ export class DialogueTaskService {
       // ✅ Tag every Factory template with source:'Factory' so saveModifiedTemplates
       // routes them back to the Factory DB instead of the project DB.
       const raw = Array.isArray(data) ? data : [];
-      this.cache = raw.map((t: any) =>
-        t.source ? t : { ...t, source: 'Factory' }
-      );
+      this.cache = raw.map((t: any) => {
+        const template = t.source ? t : { ...t, source: 'Factory' };
+
+        // ✅ DEEP LOG: Check grammarFlow in loaded templates
+        const grammarFlowEngine = template.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+        const hasGrammarFlow = !!grammarFlowEngine?.grammarFlow;
+        if (hasGrammarFlow) {
+          console.log('[DialogueTaskService] 📥 Factory template with grammarFlow loaded', {
+            templateId: template.id,
+            grammarFlowNodesCount: grammarFlowEngine.grammarFlow?.nodes?.length || 0,
+            grammarFlowEdgesCount: grammarFlowEngine.grammarFlow?.edges?.length || 0,
+          });
+        }
+        return template;
+      });
       this.cacheLoaded = true;
+
+      // ✅ DEEP LOG: Summary of loaded templates
+      const templatesWithGrammarFlow = this.cache.filter((t: any) => {
+        const grammarFlowEngine = t.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+        return !!grammarFlowEngine?.grammarFlow;
+      });
+      console.log('[DialogueTaskService] 📥 Factory templates loaded', {
+        totalCount: this.cache.length,
+        templatesWithGrammarFlowCount: templatesWithGrammarFlow.length,
+        templatesWithGrammarFlowIds: templatesWithGrammarFlow.map((t: any) => t.id),
+      });
 
       // ✅ Resetta lista templates modificati quando si ricarica la cache
       // (i templates ricaricati sono quelli dal database, quindi non sono più "modificati")
@@ -221,9 +244,45 @@ export class DialogueTaskService {
    * Marca un template come modificato (da chiamare quando si modifica dataContract in memoria)
    */
   static markTemplateAsModified(templateId: string): void {
-    this.modifiedTemplates.add(templateId);
-    // ✅ Log dettagliato per debugging
+    console.log('[DialogueTaskService] 📝 markTemplateAsModified CALLED', {
+      templateId,
+      templateIdType: typeof templateId,
+      templateIdLength: templateId?.length,
+      cacheLoaded: this.cacheLoaded,
+      cacheSize: this.cache.length,
+      wasAlreadyModified: this.modifiedTemplates.has(templateId),
+    });
+
+    // ✅ DEEP LOG: Check if template exists before marking as modified
     const template = this.getTemplate(templateId);
+    if (!template) {
+      console.error('[DialogueTaskService] ❌ CANNOT MARK AS MODIFIED: Template not found!', {
+        templateId,
+        cacheSize: this.cache.length,
+        cacheTemplateIds: this.cache.map(t => t.id || t._id).slice(0, 20),
+        allTemplateIds: this.cache.map(t => ({
+          id: t.id,
+          _id: t._id ? (typeof t._id === 'object' ? t._id.toString() : String(t._id)) : null,
+        })).slice(0, 20),
+      });
+      // Still add to modified list in case template is loaded later
+    } else {
+      // ✅ DEEP LOG: Check grammarFlow in template before marking as modified
+      const grammarFlowEngine = template.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+      console.log('[DialogueTaskService] 📝 Template found, checking grammarFlow', {
+        templateId,
+        hasDataContract: !!template.dataContract,
+        enginesCount: template.dataContract?.engines?.length || 0,
+        hasGrammarFlowEngine: !!grammarFlowEngine,
+        hasGrammarFlow: !!grammarFlowEngine?.grammarFlow,
+        grammarFlowNodesCount: grammarFlowEngine?.grammarFlow?.nodes?.length || 0,
+        templateSource: (template as any).source,
+      });
+    }
+
+    this.modifiedTemplates.add(templateId);
+
+    // ✅ Log dettagliato per debugging
     const templateInfo = template ? {
       has_id: !!template._id,
       _id: template._id ? (typeof template._id === 'object' ? template._id.toString() : String(template._id)) : null,
@@ -234,7 +293,8 @@ export class DialogueTaskService {
     console.log('[DialogueTaskService] 📝 Template marked as modified', {
       templateId,
       totalModified: this.modifiedTemplates.size,
-      templateInfo
+      templateInfo,
+      modifiedTemplateIds: Array.from(this.modifiedTemplates),
     });
   }
 
@@ -280,6 +340,24 @@ export class DialogueTaskService {
           throw new Error(`Template not found: ${templateId}`);
         }
 
+        // ✅ DEEP LOG: Check template state BEFORE preparing payload
+        const grammarFlowEngineBefore = template.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+        console.log('[DialogueTaskService] 🔍 Template state BEFORE payload preparation', {
+          templateId,
+          hasDataContract: !!template.dataContract,
+          enginesCount: template.dataContract?.engines?.length || 0,
+          grammarFlowEngineFound: !!grammarFlowEngineBefore,
+          grammarFlowEngineKeys: grammarFlowEngineBefore ? Object.keys(grammarFlowEngineBefore) : [],
+          hasGrammarFlow: !!grammarFlowEngineBefore?.grammarFlow,
+          grammarFlowNodesCount: grammarFlowEngineBefore?.grammarFlow?.nodes?.length || 0,
+          grammarFlowType: typeof grammarFlowEngineBefore?.grammarFlow,
+          grammarFlowIsArray: Array.isArray(grammarFlowEngineBefore?.grammarFlow),
+          grammarFlowIsObject: grammarFlowEngineBefore?.grammarFlow && typeof grammarFlowEngineBefore?.grammarFlow === 'object',
+          grammarFlowIsNull: grammarFlowEngineBefore?.grammarFlow === null,
+          grammarFlowIsUndefined: grammarFlowEngineBefore?.grammarFlow === undefined,
+          fullGrammarFlowEngine: grammarFlowEngineBefore ? JSON.stringify(grammarFlowEngineBefore, null, 2).substring(0, 2000) : 'null',
+        });
+
         try {
           const templateForSave = template as any;
           const mongoId = templateForSave._id
@@ -293,19 +371,66 @@ export class DialogueTaskService {
             updatedAt: new Date()
           };
 
+          // ✅ DEEP LOG: Check payload state AFTER preparation
+          const payloadGrammarFlowEngine = payload.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+          console.log('[DialogueTaskService] 🔍 Payload state AFTER preparation', {
+            templateId,
+            hasDataContract: !!payload.dataContract,
+            enginesCount: payload.dataContract?.engines?.length || 0,
+            grammarFlowEngineFound: !!payloadGrammarFlowEngine,
+            grammarFlowEngineKeys: payloadGrammarFlowEngine ? Object.keys(payloadGrammarFlowEngine) : [],
+            hasGrammarFlow: !!payloadGrammarFlowEngine?.grammarFlow,
+            grammarFlowNodesCount: payloadGrammarFlowEngine?.grammarFlow?.nodes?.length || 0,
+            grammarFlowType: typeof payloadGrammarFlowEngine?.grammarFlow,
+            grammarFlowIsNull: payloadGrammarFlowEngine?.grammarFlow === null,
+            grammarFlowIsUndefined: payloadGrammarFlowEngine?.grammarFlow === undefined,
+            payloadKeys: Object.keys(payload).slice(0, 20),
+            fullPayloadGrammarFlowEngine: payloadGrammarFlowEngine ? JSON.stringify(payloadGrammarFlowEngine, null, 2).substring(0, 2000) : 'null',
+          });
+
+          // ✅ VERIFY: Check if grammarFlow was lost during payload preparation
+          if (grammarFlowEngineBefore?.grammarFlow && !payloadGrammarFlowEngine?.grammarFlow) {
+            console.error('[DialogueTaskService] ❌ GRAMMARFLOW LOST DURING PAYLOAD PREPARATION!', {
+              templateId,
+              hadGrammarFlowBefore: !!grammarFlowEngineBefore?.grammarFlow,
+              hasGrammarFlowAfter: !!payloadGrammarFlowEngine?.grammarFlow,
+              grammarFlowNodesCountBefore: grammarFlowEngineBefore?.grammarFlow?.nodes?.length || 0,
+              grammarFlowNodesCountAfter: payloadGrammarFlowEngine?.grammarFlow?.nodes?.length || 0,
+              templatePayloadKeys: Object.keys(templatePayload).slice(0, 20),
+              templatePayloadDataContractKeys: templatePayload.dataContract ? Object.keys(templatePayload.dataContract) : [],
+            });
+          }
+
           // Route to correct DB based on template.source:
           // - source === 'Factory' → PUT /api/factory/tasks/:id
           // - otherwise (source === 'Project' or undefined) → POST /api/projects/:pid/templates
           const isFactory = templateForSave.source === 'Factory';
+
+          // ✅ DEEP LOG: Check grammarFlow specifically (for existing log)
+          const grammarFlowEngine = payloadGrammarFlowEngine || templateForSave.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+          const hasGrammarFlow = !!grammarFlowEngine?.grammarFlow;
+          const grammarFlowNodesCount = grammarFlowEngine?.grammarFlow?.nodes?.length || 0;
 
           console.log('[DialogueTaskService] 💾 Saving template', {
             templateId,
             mongoId,
             source: templateForSave.source,
             isFactory,
-            hasDataContract: !!templateForSave.dataContract,
-            hasConstraints: !!templateForSave.constraints,
-            hasSteps: !!templateForSave.steps
+            hasDataContract: !!payload.dataContract,
+            hasConstraints: !!payload.constraints,
+            hasSteps: !!payload.steps,
+            enginesCount: payload.dataContract?.engines?.length || 0,
+            hasGrammarFlowEngine: !!grammarFlowEngine,
+            hasGrammarFlow: hasGrammarFlow,
+            grammarFlowNodesCount: grammarFlowNodesCount,
+            dataContractKeys: payload.dataContract ? Object.keys(payload.dataContract) : [],
+          });
+
+          // ✅ DEEP LOG: Full payload preview (first 2000 chars)
+          const payloadPreview = JSON.stringify(payload, null, 2).substring(0, 2000);
+          console.log('[DialogueTaskService] 📦 Payload preview (first 2000 chars)', {
+            templateId,
+            payloadPreview,
           });
 
           let response: Response;
@@ -339,12 +464,34 @@ export class DialogueTaskService {
           }
 
           const saved = await response.json();
+
+          // ✅ DEEP LOG: Check saved response for grammarFlow
+          const savedGrammarFlowEngine = saved?.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+          const savedHasGrammarFlow = !!savedGrammarFlowEngine?.grammarFlow;
+          const savedGrammarFlowNodesCount = savedGrammarFlowEngine?.grammarFlow?.nodes?.length || 0;
+
           console.log('[DialogueTaskService] ✅ Template saved', {
             templateId,
             source: templateForSave.source,
             isFactory,
-            hasDataContract: !!saved?.dataContract
+            hasDataContract: !!saved?.dataContract,
+            savedEnginesCount: saved?.dataContract?.engines?.length || 0,
+            savedHasGrammarFlowEngine: !!savedGrammarFlowEngine,
+            savedHasGrammarFlow: savedHasGrammarFlow,
+            savedGrammarFlowNodesCount: savedGrammarFlowNodesCount,
+            savedDataContractKeys: saved?.dataContract ? Object.keys(saved.dataContract) : [],
           });
+
+          // ✅ VERIFY: Check if grammarFlow was actually saved
+          if (hasGrammarFlow && !savedHasGrammarFlow) {
+            console.error('[DialogueTaskService] ❌ GRAMMARFLOW LOST DURING SAVE!', {
+              templateId,
+              hadGrammarFlowBefore: hasGrammarFlow,
+              hasGrammarFlowAfter: savedHasGrammarFlow,
+              grammarFlowNodesCountBefore: grammarFlowNodesCount,
+              grammarFlowNodesCountAfter: savedGrammarFlowNodesCount,
+            });
+          }
           this.clearModifiedTemplate(templateId);
           return { templateId, success: true };
         } catch (error: any) {
@@ -386,6 +533,104 @@ export class DialogueTaskService {
   }
 
   /**
+   * ✅ SAVE GRAMMARFLOW FROM STORE: Save all grammarFlow from GrammarEditor store to templates
+   * This ensures grammarFlow is saved even if the editor is still open when saving the project
+   */
+  static async saveAllGrammarFlowFromStore(): Promise<{ saved: number; failed: number }> {
+    try {
+      // Import useGrammarStore dynamically to avoid circular dependencies
+      const { useGrammarStore } = await import('../components/GrammarEditor/core/state/grammarStore');
+      const currentGrammar = useGrammarStore.getState().grammar;
+
+      if (!currentGrammar) {
+        console.log('[DialogueTaskService] ✅ No grammar in store to save');
+        return { saved: 0, failed: 0 };
+      }
+
+      console.log('[DialogueTaskService] 🔄 Saving grammarFlow from store', {
+        grammarId: currentGrammar.id,
+        nodesCount: currentGrammar.nodes?.length || 0,
+        edgesCount: currentGrammar.edges?.length || 0,
+      });
+
+      // ✅ Get templates that have grammarFlow editor open (registered in window.__grammarFlowEditors)
+      const grammarFlowEditors = (globalThis as any).__grammarFlowEditors as Map<string, boolean> | undefined;
+      const openTemplateIds = grammarFlowEditors ? Array.from(grammarFlowEditors.keys()) : [];
+
+      console.log('[DialogueTaskService] 📊 Templates with open grammarFlow editor', {
+        count: openTemplateIds.length,
+        templateIds: openTemplateIds,
+      });
+
+      if (openTemplateIds.length === 0) {
+        console.log('[DialogueTaskService] ✅ No templates with open grammarFlow editor found');
+        return { saved: 0, failed: 0 };
+      }
+
+      // Update each template with the current grammar from store
+      let saved = 0;
+      let failed = 0;
+
+      for (const templateId of openTemplateIds) {
+        try {
+          const template = this.getTemplate(templateId);
+          if (!template) {
+            console.warn('[DialogueTaskService] ⚠️ Template not found for grammarFlow save', {
+              templateId,
+            });
+            failed++;
+            continue;
+          }
+
+          if (!template.dataContract) {
+            template.dataContract = {
+              templateId,
+              templateName: template.label || templateId,
+              subDataMapping: {},
+              engines: [],
+              outputCanonical: { format: 'value' }
+            };
+          }
+
+          const engines = template.dataContract.engines || [];
+          let grammarFlowEngine = engines.find((e: any) => e.type === 'grammarflow');
+
+          if (grammarFlowEngine) {
+            // Update existing GrammarFlow engine
+            grammarFlowEngine.grammarFlow = currentGrammar;
+          } else {
+            // Create new GrammarFlow engine
+            engines.push({
+              type: 'grammarflow',
+              enabled: true,
+              grammarFlow: currentGrammar
+            });
+            template.dataContract.engines = engines;
+          }
+
+          this.markTemplateAsModified(templateId);
+          saved++;
+          console.log('[DialogueTaskService] ✅ Updated grammarFlow in template', {
+            templateId,
+            nodesCount: currentGrammar.nodes?.length || 0,
+          });
+        } catch (error) {
+          console.error('[DialogueTaskService] ❌ Error updating grammarFlow in template', {
+            templateId,
+            error,
+          });
+          failed++;
+        }
+      }
+
+      return { saved, failed };
+    } catch (error) {
+      console.error('[DialogueTaskService] ❌ Error saving grammarFlow from store', error);
+      return { saved: 0, failed: 1 };
+    }
+  }
+
+  /**
    * Resetta la lista dei templates modificati (utile per testing o reset)
    */
   static clearAllModifiedTemplates(): void {
@@ -399,12 +644,21 @@ export class DialogueTaskService {
    * Use this when loading a project to make project templates resolvable via getTemplate().
    */
   static registerExternalTemplates(templates: DialogueTask[]): void {
+    console.log('[DialogueTaskService] 📥 registerExternalTemplates START', {
+      templatesCount: templates.length,
+      cacheSizeBefore: this.cache.length,
+    });
+
     let added = 0;
     let updated = 0;
 
     templates.forEach(rawTemplate => {
       const templateId = String(rawTemplate.id || rawTemplate._id || '').trim();
       if (!templateId) return;
+
+      // ✅ DEEP LOG: Check grammarFlow in incoming template
+      const incomingGrammarFlowEngine = rawTemplate.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+      const incomingHasGrammarFlow = !!incomingGrammarFlowEngine?.grammarFlow;
 
       // ✅ Tag every project template with source:'Project' so saveModifiedTemplates
       // routes them back to the project DB instead of the Factory DB.
@@ -417,9 +671,83 @@ export class DialogueTaskService {
       );
 
       if (existingIdx >= 0) {
-        // ✅ Preserve existing source if already set; do not downgrade Factory → Project
         const existing = this.cache[existingIdx] as any;
-        this.cache[existingIdx] = existing.source ? { ...template, source: existing.source } : template;
+        const existingGrammarFlowEngine = existing.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+        const existingHasGrammarFlow = !!existingGrammarFlowEngine?.grammarFlow;
+
+        console.log('[DialogueTaskService] 🔄 Template duplicate found during registration', {
+          templateId,
+          existingSource: existing.source,
+          incomingSource: (template as any).source,
+          existingHasDataContract: !!existing.dataContract,
+          incomingHasDataContract: !!template.dataContract,
+          existingHasGrammarFlow: existingHasGrammarFlow,
+          incomingHasGrammarFlow: incomingHasGrammarFlow,
+          existingGrammarFlowNodesCount: existingGrammarFlowEngine?.grammarFlow?.nodes?.length || 0,
+          incomingGrammarFlowNodesCount: incomingGrammarFlowEngine?.grammarFlow?.nodes?.length || 0,
+        });
+
+        // ✅ CRITICAL: Smart merge to preserve Factory data (e.g., grammarFlow)
+        // If existing is Factory and has dataContract, preserve it instead of overwriting with Project version
+        const existingSource = existing.source;
+        const incomingSource = (template as any).source || 'Project';
+
+        // If existing is Factory and has dataContract, merge intelligently
+        if (existingSource === 'Factory' && existing.dataContract) {
+          // Merge: keep Factory dataContract (which has grammarFlow), but update other fields from Project
+          const merged = {
+            ...template, // Start with incoming (Project) data
+            source: existingSource, // Preserve Factory source
+            dataContract: existing.dataContract, // CRITICAL: Preserve Factory dataContract (has grammarFlow)
+            // Also preserve other Factory-specific fields that might be more recent
+            ...(existing.constraints && { constraints: existing.constraints }),
+            ...(existing.steps && { steps: existing.steps }),
+          };
+          this.cache[existingIdx] = merged;
+
+          // ✅ DEEP LOG: Verify merge result
+          const mergedGrammarFlowEngine = merged.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+          const mergedHasGrammarFlow = !!mergedGrammarFlowEngine?.grammarFlow;
+          console.log('[DialogueTaskService] 🔄 Merged Factory template (preserved dataContract)', {
+            templateId,
+            hasGrammarFlow: mergedHasGrammarFlow,
+            grammarFlowNodesCount: mergedGrammarFlowEngine?.grammarFlow?.nodes?.length || 0,
+            preservedFromFactory: true,
+          });
+
+          // ✅ VERIFY: Check if grammarFlow was preserved
+          if (existingHasGrammarFlow && !mergedHasGrammarFlow) {
+            console.error('[DialogueTaskService] ❌ GRAMMARFLOW LOST DURING MERGE!', {
+              templateId,
+              hadGrammarFlowBefore: existingHasGrammarFlow,
+              hasGrammarFlowAfter: mergedHasGrammarFlow,
+            });
+          }
+        } else {
+          // Normal merge: preserve source, update other fields
+          const merged = existingSource ? { ...template, source: existingSource } : template;
+          this.cache[existingIdx] = merged;
+
+          // ✅ DEEP LOG: Verify merge result
+          const mergedGrammarFlowEngine = merged.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
+          const mergedHasGrammarFlow = !!mergedGrammarFlowEngine?.grammarFlow;
+          console.log('[DialogueTaskService] 🔄 Normal merge completed', {
+            templateId,
+            existingSource,
+            incomingSource,
+            hasGrammarFlow: mergedHasGrammarFlow,
+            grammarFlowNodesCount: mergedGrammarFlowEngine?.grammarFlow?.nodes?.length || 0,
+          });
+
+          // ✅ VERIFY: Check if grammarFlow was preserved
+          if (existingHasGrammarFlow && !mergedHasGrammarFlow) {
+            console.error('[DialogueTaskService] ❌ GRAMMARFLOW LOST DURING NORMAL MERGE!', {
+              templateId,
+              hadGrammarFlowBefore: existingHasGrammarFlow,
+              hasGrammarFlowAfter: mergedHasGrammarFlow,
+            });
+          }
+        }
         updated++;
       } else {
         this.cache.push(template);

@@ -95,8 +95,8 @@ Public Class TaskCompiler
         End If
 
         ' Valida regex nel contract (se presente)
-        If compiledTask.NlpContract IsNot Nothing AndAlso compiledTask.NlpContract.Parsers IsNot Nothing Then
-            Dim regexContract = compiledTask.NlpContract.Parsers.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
+        If compiledTask.NlpContract IsNot Nothing AndAlso compiledTask.NlpContract.Engines IsNot Nothing Then
+            Dim regexContract = compiledTask.NlpContract.Engines.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
             If regexContract IsNot Nothing Then
                 ValidateRegexPatterns(regexContract, compiledTask, errors)
             End If

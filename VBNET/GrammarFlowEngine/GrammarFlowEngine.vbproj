@@ -6,7 +6,7 @@
     <OptionStrict>On</OptionStrict>
     <OptionExplicit>On</OptionExplicit>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <RootNamespace>GrammarInterpreter</RootNamespace>
+    <RootNamespace>GrammarFlowEngine</RootNamespace>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
@@ -44,7 +44,7 @@
     <Compile Include="Interpreter\MatchContext.vb" />
     <Compile Include="Interpreter\MatchResult.vb" />
     <Compile Include="Interpreter\ParseResult.vb" />
-    <Compile Include="Interpreter\GrammarInterpreter.vb" />
+    <Compile Include="Interpreter\GrammarEngine.vb" />
     <Compile Include="Interpreter\NodeMatcher.vb" />
     <Compile Include="Interpreter\NavigationEngine.vb" />
     <Compile Include="Interpreter\EdgeNavigator.vb" />

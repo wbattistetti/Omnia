@@ -350,8 +350,8 @@ Public Class UtteranceTaskCompiler
                     ' Verifica se parsers è presente
                     ' DataContract è NLPContract (tipizzato), non JObject
                     If subTemplate.DataContract IsNot Nothing Then
-                        If subTemplate.DataContract.Parsers IsNot Nothing Then
-                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ parsers found: count={subTemplate.DataContract.Parsers.Count}")
+                        If subTemplate.DataContract.Engines IsNot Nothing Then
+                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ engines found: count={subTemplate.DataContract.Engines.Count}")
                         Else
                             Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ⚠️ parsers NOT found in DataContract")
                         End If

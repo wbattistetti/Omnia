@@ -31,13 +31,16 @@ export function getHighestBinding(bindings: NodeBinding[]): NodeBinding | null {
 
 /**
  * Gets the highest binding for VISUAL DISPLAY only.
- * Excludes slots (they exist as bindings but are not displayed visually).
- * Binding hierarchy: semantic-set > semantic-value (lowest)
+ * INCLUDES slots (they have highest priority for icon display).
+ * Binding hierarchy: slot (highest) > semantic-set > semantic-value (lowest)
  */
 export function getHighestBindingForDisplay(bindings: NodeBinding[]): NodeBinding | null {
   if (bindings.length === 0) return null;
 
-  // Skip slots - they are not displayed visually
+  // ✅ Slots have highest priority for icon display
+  const slot = bindings.find(b => b.type === 'slot');
+  if (slot) return slot;
+
   // Check for semantic set
   const set = bindings.find(b => b.type === 'semantic-set');
   if (set) return set;
@@ -69,7 +72,7 @@ export function getBindingIconColor(bindingType: NodeBinding['type']): string {
 /**
  * Gets the background color for a node based on its highest binding.
  * Uses the icon color with 50% opacity (rgba).
- * NOTE: Slots are excluded from visual display, so they don't affect background color.
+ * ✅ Now includes slots (they have highest priority).
  */
 export function getNodeBackground(node: GrammarNode): string {
   const highestBinding = getHighestBindingForDisplay(node.bindings);

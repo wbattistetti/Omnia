@@ -20,6 +20,7 @@ export interface GrammarEditorProps {
   editorMode?: 'text' | 'graph';
   initialTestPhrases?: string[];
   onTestPhrasesChange?: (phrases: string[]) => void;
+  hideExportButtons?: boolean; // ✅ Hide Export/Download/Copy buttons for auto-save mode
 }
 
 /**
@@ -36,6 +37,7 @@ export function GrammarEditor({
   editorMode = 'text',
   initialTestPhrases = [],
   onTestPhrasesChange,
+  hideExportButtons = false,
 }: GrammarEditorProps) {
   const { loadGrammar, createGrammar, grammar: currentGrammar } = useGrammarStore();
 

@@ -46,11 +46,11 @@ export default function ContractSelector({
   onContractChange,
   kind,
 }: ContractSelectorProps) {
-  // Get enabled parsers from contract.parsers array
+  // Get enabled engines from contract.engines array
   const enabledContracts = React.useMemo(() => {
-    if (!contract?.parsers || !Array.isArray(contract.parsers)) return [];
-    return contract.parsers.filter(c => c.enabled !== false);
-  }, [contract?.parsers]);
+    if (!contract?.engines || !Array.isArray(contract.engines)) return [];
+    return contract.engines.filter(c => c.enabled !== false);
+  }, [contract?.engines]);
 
   // Get enabled method types (for compatibility)
   const enabledMethods = React.useMemo(() => {
@@ -93,7 +93,7 @@ export default function ContractSelector({
         templateName: '',
         templateId: '',
         subDataMapping: {},
-        parsers: [createDefaultContract(method)],
+        engines: [createDefaultContract(method)],
       };
       onContractChange(newContract);
       setShowAddMenu(false);
@@ -101,15 +101,15 @@ export default function ContractSelector({
     }
 
     // Check if contract already exists
-    const existingContract = contract.parsers.find(c => c.type === method);
+    const existingContract = contract.engines?.find(c => c.type === method);
     if (existingContract) {
       // Re-enable if disabled
-      const updatedContracts = contract.parsers.map(c =>
+      const updatedContracts = (contract.engines || []).map(c =>
         c.type === method ? { ...c, enabled: true } : c
       );
       const updatedContract: DataContract = {
         ...contract,
-        parsers: updatedContracts,
+        engines: updatedContracts,
       };
       onContractChange(updatedContract);
     } else {
@@ -117,7 +117,7 @@ export default function ContractSelector({
       const newContractItem = createDefaultContract(method);
       const updatedContract: DataContract = {
         ...contract,
-        parsers: [...contract.parsers, newContractItem],
+        engines: [...(contract.engines || []), newContractItem],
       };
       onContractChange(updatedContract);
     }
@@ -128,13 +128,13 @@ export default function ContractSelector({
   const handleRemoveContract = useCallback((method: ContractMethod) => {
     if (!contract) return;
 
-    const updatedContracts = contract.parsers.map(c =>
+    const updatedContracts = (contract.engines || []).map(c =>
       c.type === method ? { ...c, enabled: false } : c
     );
 
     const updatedContract: DataContract = {
       ...contract,
-      parsers: updatedContracts,
+      engines: updatedContracts,
     };
 
     onContractChange(updatedContract);
@@ -147,15 +147,15 @@ export default function ContractSelector({
     const currentIndex = enabledContracts.findIndex(c => c.type === method);
     if (currentIndex <= 0) return;
 
-    const newContracts = [...contract.parsers];
-    // Find indices in full parsers array
-    const fullIndex1 = contract.parsers.findIndex(c => c.type === enabledContracts[currentIndex - 1].type);
-    const fullIndex2 = contract.parsers.findIndex(c => c.type === method);
+    const newContracts = [...(contract.engines || [])];
+    // Find indices in full engines array
+    const fullIndex1 = (contract.engines || []).findIndex(c => c.type === enabledContracts[currentIndex - 1].type);
+    const fullIndex2 = (contract.engines || []).findIndex(c => c.type === method);
     [newContracts[fullIndex1], newContracts[fullIndex2]] = [newContracts[fullIndex2], newContracts[fullIndex1]];
 
     const updatedContract: DataContract = {
       ...contract,
-      parsers: newContracts,
+      engines: newContracts,
     };
 
     onContractChange(updatedContract);
@@ -168,15 +168,15 @@ export default function ContractSelector({
     const currentIndex = enabledContracts.findIndex(c => c.type === method);
     if (currentIndex < 0 || currentIndex >= enabledContracts.length - 1) return;
 
-    const newContracts = [...contract.parsers];
-    // Find indices in full parsers array
-    const fullIndex1 = contract.parsers.findIndex(c => c.type === method);
-    const fullIndex2 = contract.parsers.findIndex(c => c.type === enabledContracts[currentIndex + 1].type);
+    const newContracts = [...(contract.engines || [])];
+    // Find indices in full engines array
+    const fullIndex1 = (contract.engines || []).findIndex(c => c.type === method);
+    const fullIndex2 = (contract.engines || []).findIndex(c => c.type === enabledContracts[currentIndex + 1].type);
     [newContracts[fullIndex1], newContracts[fullIndex2]] = [newContracts[fullIndex2], newContracts[fullIndex1]];
 
     const updatedContract: DataContract = {
       ...contract,
-      parsers: newContracts,
+      engines: newContracts,
     };
 
     onContractChange(updatedContract);

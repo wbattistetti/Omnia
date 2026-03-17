@@ -3,13 +3,11 @@ Option Explicit On
 
 Imports System.Collections.Generic
 
-Namespace GrammarInterpreter.Models
-
-    ''' <summary>
-    ''' Node in the grammar graph
-    ''' The VB.NET runtime reads this format directly from JSON
-    ''' </summary>
-    Public Class GrammarNode
+''' <summary>
+''' Node in the grammar graph
+''' The VB.NET runtime reads this format directly from JSON
+''' </summary>
+Public Class GrammarNode
         Public Property Id As String ' UUID
         Public Property Label As String ' Main word (e.g., "voglio")
         Public Property Synonyms As List(Of String) ' List of synonyms (e.g., ["vorrei", "desidero"])
@@ -26,7 +24,7 @@ Namespace GrammarInterpreter.Models
         ''' <summary>
         ''' Node properties
         ''' </summary>
-        Public Property Optional As Boolean ' Optional node
+        Public Property [Optional] As Boolean ' Optional node
         Public Property Repeatable As Boolean ' Repeatable node
 
         ''' <summary>
@@ -53,6 +51,4 @@ Namespace GrammarInterpreter.Models
     Public Class Position
         Public Property X As Double
         Public Property Y As Double
-    End Class
-
-End Namespace
+End Class

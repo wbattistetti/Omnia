@@ -468,8 +468,7 @@ export function useExtractionTesting({
 
     // ✅ Load contract to see which engines are enabled
     const contract = loadContractFromNode(node);
-    // ✅ Support both engines (new) and parsers (old) for retrocompatibilità
-    const engines = contract?.engines || contract?.parsers || [];
+    const engines = contract?.engines || [];
     if (!engines || engines.length === 0) {
       console.warn('[TEST] No engines found in contract, falling back to local extraction');
       // Fall through to local extraction

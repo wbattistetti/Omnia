@@ -47,11 +47,6 @@ export function loadContractFromNode(node: any): DataContract | null {
         };
       }
 
-      // ✅ Normalizza: parsers → engines (retrocompatibilità)
-      if (contract.parsers && !contract.engines) {
-        contract.engines = contract.parsers;
-      }
-
       const regexPattern = contract?.engines?.find((c: any) => c.type === 'regex')?.patterns?.[0];
       console.log('[CONTRACT] LOAD - From template.dataContract', {
         nodeId: node.id,

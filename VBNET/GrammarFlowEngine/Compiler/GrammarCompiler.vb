@@ -4,16 +4,13 @@ Option Explicit On
 Imports System.Collections.Generic
 Imports System.Linq
 Imports System.Text.RegularExpressions
-Imports GrammarInterpreter.Models
-Imports GrammarInterpreter.Compiler
+Imports GrammarFlowEngine.Models
 
-Namespace GrammarInterpreter.Compiler
-
-    ''' <summary>
-    ''' Compiles Grammar JSON to optimized CompiledGrammar structure
-    ''' Front end → Grammar Compiler → Grammar Interpreter
-    ''' </summary>
-    Public Module GrammarCompiler
+''' <summary>
+''' Compiles Grammar JSON to optimized CompiledGrammar structure
+''' Front end → Grammar Compiler → Grammar Interpreter
+''' </summary>
+Public Module GrammarCompiler
 
         ''' <summary>
         ''' Compiles a Grammar to an optimized CompiledGrammar
@@ -94,7 +91,7 @@ Namespace GrammarInterpreter.Compiler
                 .Id = node.Id,
                 .Label = node.Label,
                 .Bindings = node.Bindings,
-                .Optional = node.Optional,
+                .[Optional] = node.[Optional],
                 .Repeatable = node.Repeatable
             }
 
@@ -121,5 +118,3 @@ Namespace GrammarInterpreter.Compiler
         End Function
 
     End Module
-
-End Namespace

@@ -2,14 +2,12 @@ Option Strict On
 Option Explicit On
 
 Imports System.Collections.Generic
-Imports GrammarInterpreter.Models
+Imports GrammarFlowEngine.Models
 
-Namespace GrammarInterpreter.Compiler
-
-    ''' <summary>
-    ''' Compiled grammar with optimized structures for fast interpretation
-    ''' </summary>
-    Public Class CompiledGrammar
+''' <summary>
+''' Compiled grammar with optimized structures for fast interpretation
+''' </summary>
+Public Class CompiledGrammar
         Public Property Id As String
         Public Property Name As String
         Public Property Nodes As Dictionary(Of String, CompiledNode) ' Keyed by node ID
@@ -28,5 +26,3 @@ Namespace GrammarInterpreter.Compiler
             EntryNodes = New List(Of CompiledNode)()
         End Sub
     End Class
-
-End Namespace

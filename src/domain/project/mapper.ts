@@ -25,20 +25,20 @@ interface UIState {
 
 /**
  * Maps UI state to stable domain model
- * 
+ *
  * This function extracts the pure domain logic from React/UI state,
  * making it testable and deterministic.
- * 
+ *
  * IMPORTANT: This function excludes orphan tasks (tasks not referenced in flows).
  * This is the key invariant that ensures data integrity.
- * 
+ *
  * @param uiState - Current UI state (from AppContent.tsx, TaskRepository, etc.)
  * @returns Stable domain model
  */
 export function mapUIStateToDomain(uiState: UIState): ProjectDomainModel {
   // Extract referenced task IDs from flows (to identify orphans)
   const referencedTaskIds = new Set<string>();
-  
+
   Object.values(uiState.flows || {}).forEach((flow) => {
     if (flow?.nodes && Array.isArray(flow.nodes)) {
       flow.nodes.forEach((node: any) => {
@@ -119,9 +119,9 @@ function mapTaskToDomain(task: Task): TaskDomainModel {
     updatedAt: task.updatedAt,
     // Preserve additional fields for backward compatibility
     ...Object.fromEntries(
-      Object.entries(task).filter(([key]) => 
-        !['id', 'type', 'templateId', 'templateVersion', 'source', 'labelKey', 
-          'subTasksIds', 'steps', 'introduction', 'intents', 'endpoint', 
+      Object.entries(task).filter(([key]) =>
+        !['id', 'type', 'templateId', 'templateVersion', 'source', 'labelKey',
+          'subTasksIds', 'steps', 'introduction', 'intents', 'endpoint',
           'method', 'params', 'createdAt', 'updatedAt'].includes(key)
       )
     ),
@@ -148,7 +148,7 @@ function mapFlowToDomain(flow: Flow<any, any>): FlowDomainModel {
           order: row.order,
         })),
         ...Object.fromEntries(
-          Object.entries(node.data || {}).filter(([key]) => 
+          Object.entries(node.data || {}).filter(([key]) =>
             !['label', 'rows'].includes(key)
           )
         ),
@@ -160,7 +160,7 @@ function mapFlowToDomain(flow: Flow<any, any>): FlowDomainModel {
       target: edge.target,
       conditionId: edge.data?.conditionId || edge.conditionId,
       ...Object.fromEntries(
-        Object.entries(edge).filter(([key]) => 
+        Object.entries(edge).filter(([key]) =>
           !['id', 'source', 'target', 'data', 'conditionId'].includes(key)
         )
       ),
@@ -203,8 +203,8 @@ function mapTemplateToDomain(template: any): TemplateDomainModel {
     updatedAt: template.updatedAt,
     // Preserve additional fields for backward compatibility
     ...Object.fromEntries(
-      Object.entries(template).filter(([key]) => 
-        !['id', '_id', 'label', 'name', 'type', 'source', 'dataContract', 
+      Object.entries(template).filter(([key]) =>
+        !['id', '_id', 'label', 'name', 'type', 'source', 'dataContract',
           'steps', 'constraints', 'examples', 'patterns', 'createdAt', 'updatedAt'].includes(key)
       )
     ),
@@ -212,23 +212,41 @@ function mapTemplateToDomain(template: any): TemplateDomainModel {
 }
 
 /**
- * Maps a Variable (UI type) to VariableDomainModel
+ * Maps a VariableInstance (UI type) to VariableDomainModel
+ *
+ * VariableInstance structure:
+ * - varId: GUID univoco
+ * - varName: Nome leggibile
+ * - taskInstanceId: ID dell'istanza task
+ * - nodeId: GUID del nodo nel template
+ * - ddtPath: Path nel DDT
  */
 function mapVariableToDomain(variable: any): VariableDomainModel {
+  // VariableInstance uses varId and varName, not id and name
   return {
-    id: variable.id || variable._id,
-    name: variable.name || '',
+    id: variable.varId || variable.id || variable._id,
+    name: variable.varName || variable.name || '',
     type: variable.type || 'string',
     description: variable.description,
     defaultValue: variable.defaultValue,
+    taskInstanceId: variable.taskInstanceId,
+    nodeId: variable.nodeId,
+    ddtPath: variable.ddtPath,
     createdAt: variable.createdAt,
     updatedAt: variable.updatedAt,
+    // Preserve additional fields for backward compatibility
+    ...Object.fromEntries(
+      Object.entries(variable).filter(([key]) =>
+        !['varId', 'varName', 'id', '_id', 'name', 'type', 'description',
+          'defaultValue', 'taskInstanceId', 'nodeId', 'ddtPath', 'createdAt', 'updatedAt'].includes(key)
+      )
+    ),
   };
 }
 
 /**
  * Maps domain model back to UI state (for backward compatibility during migration)
- * 
+ *
  * This is a temporary function for gradual migration.
  * Eventually, UI should work directly with domain models.
  */

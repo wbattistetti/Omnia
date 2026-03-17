@@ -3,20 +3,18 @@ Option Explicit On
 
 Imports System.Collections.Generic
 Imports System.Text.RegularExpressions
-Imports GrammarInterpreter.Models
+Imports GrammarFlowEngine.Models
 
-Namespace GrammarInterpreter.Compiler
-
-    ''' <summary>
-    ''' Compiled node with pre-compiled regex and optimized structures
-    ''' </summary>
-    Public Class CompiledNode
+''' <summary>
+''' Compiled node with pre-compiled regex and optimized structures
+''' </summary>
+Public Class CompiledNode
         Public Property Id As String
         Public Property Label As String
         Public Property Synonyms As HashSet(Of String) ' For fast lookup
         Public Property CompiledRegex As Regex ' Pre-compiled regex (if present)
         Public Property Bindings As List(Of NodeBinding)
-        Public Property Optional As Boolean
+        Public Property [Optional] As Boolean
         Public Property Repeatable As Boolean
 
         ''' <summary>
@@ -31,4 +29,3 @@ Namespace GrammarInterpreter.Compiler
         End Sub
     End Class
 
-End Namespace

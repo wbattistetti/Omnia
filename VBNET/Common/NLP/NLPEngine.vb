@@ -64,7 +64,9 @@ Public Class NLPEngine
     ''' <summary>
     ''' Grammar flow definition (solo per type="grammarflow")
     ''' Serializzato/deserializzato come Object per preservare la struttura del grafo.
+    ''' Supporta sia "grammarFlow" (camelCase dal frontend) che "GrammarFlow" (PascalCase)
     ''' </summary>
+    <Newtonsoft.Json.JsonProperty("grammarFlow")>
     Public Property GrammarFlow As Object
 
     ''' <summary>

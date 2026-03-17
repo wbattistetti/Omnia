@@ -22,16 +22,24 @@ export function useGrammarCanvasEvents() {
 
   const handlePaneDoubleClick = useCallback(
     (event: React.MouseEvent) => {
+      console.log('[GrammarCanvas] 🔍 handlePaneDoubleClick CALLED', {
+        hasRf: !!rf,
+        hasGrammar: !!grammar,
+        grammarId: grammar?.id,
+        eventType: event.type,
+        target: (event.target as HTMLElement)?.tagName,
+      });
+
       event.preventDefault();
       event.stopPropagation();
 
       if (!rf) {
-        console.warn('[GrammarCanvas] ⚠️ ReactFlow instance not available');
+        console.error('[GrammarCanvas] ❌ ReactFlow instance not available');
         return;
       }
 
       if (!grammar) {
-        console.warn('[GrammarCanvas] ⚠️ Grammar not loaded, cannot create node', {
+        console.error('[GrammarCanvas] ❌ Grammar not loaded, cannot create node', {
           hasGrammar: !!grammar,
           grammarId: grammar?.id,
         });
@@ -53,7 +61,13 @@ export function useGrammarCanvasEvents() {
       });
 
       const newNode = createGrammarNode('', centeredPos);
+      console.log('[GrammarCanvas] 📝 Calling addNode', {
+        newNodeId: newNode.id,
+        newNodeLabel: newNode.label,
+        newNodePosition: newNode.position,
+      });
       addNode(newNode);
+      console.log('[GrammarCanvas] ✅ addNode called successfully');
 
       // Node will automatically enter editing mode via useNodeEditingState (label === '')
       // Focus is handled by useLayoutEffect in useNodeEditingState

@@ -4,12 +4,10 @@ Option Explicit On
 Imports System.Collections.Generic
 Imports System.Linq
 
-Namespace GrammarInterpreter.Interpreter
-
-    ''' <summary>
-    ''' Selects the best results from multiple match attempts
-    ''' </summary>
-    Public Module ResultSelector
+''' <summary>
+''' Selects the best results from multiple match attempts
+''' </summary>
+Public Module ResultSelector
 
         ''' <summary>
         ''' Selects the best results based on:
@@ -47,5 +45,3 @@ Namespace GrammarInterpreter.Interpreter
         End Function
 
     End Module
-
-End Namespace

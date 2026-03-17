@@ -7,17 +7,17 @@ import type { SaveResult } from './SaveResult';
 
 /**
  * ProjectSaveOrchestrator: Orchestrates project save flow
- * 
+ *
  * M2: This is a DRY-RUN version. It only prepares the save request,
  * but does not execute it. Execution will be added in M4.
  */
 export class ProjectSaveOrchestrator {
   /**
    * Prepares save request from domain model (DRY-RUN)
-   * 
+   *
    * This method transforms the domain model into the exact payload
    * structure expected by backend endpoints, but does NOT execute the save.
-   * 
+   *
    * @param domain - Stable domain model
    * @param uiState - Additional UI state needed for save (flows, translations context, etc.)
    * @returns SaveProjectRequest ready to be sent to backend
@@ -64,10 +64,10 @@ export class ProjectSaveOrchestrator {
 
     // Transform domain templates to save format
     const templatesToSave: SaveProjectRequest['templates'] = [];
-    
+
     // Get all templates from UI state (includes Factory templates with grammarFlow)
     const allTemplates = uiState.allTemplates || [];
-    
+
     // Filter: Only save local templates (not Factory templates, not instances)
     const localTemplates = allTemplates.filter((t: any) => {
       const isFactory = t.source === 'Factory';
@@ -79,7 +79,7 @@ export class ProjectSaveOrchestrator {
       const mongoId = template._id
         ? (typeof template._id === 'object' ? template._id.toString() : String(template._id))
         : template.id;
-      
+
       templatesToSave.push({
         templateId: template.id,
         template: {
@@ -133,7 +133,7 @@ export class ProjectSaveOrchestrator {
 
   /**
    * Validates save request before execution
-   * 
+   *
    * @param request - Save request to validate
    * @returns Validation result
    */

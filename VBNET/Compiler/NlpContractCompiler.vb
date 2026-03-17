@@ -37,10 +37,10 @@ Public Module NlpContractCompiler
             Console.WriteLine($"[NlpContractCompiler.Compile] ⚠️ compiled.SubDataMapping is Nothing after copy!")
         End If
 
-        compiled.Parsers = baseContract.Parsers ' ✅ NEW: Copy Parsers directly
+        compiled.Engines = baseContract.Engines
 
         ' ✅ Pre-compila solo il main regex pattern (primo pattern)
-        Dim regexContract = baseContract.Parsers?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
+        Dim regexContract = baseContract.Engines?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
         If regexContract IsNot Nothing AndAlso regexContract.Patterns IsNot Nothing Then
             ' Compila main pattern (primo pattern)
             If regexContract.Patterns.Count > 0 Then

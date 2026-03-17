@@ -19,7 +19,7 @@ export interface ValidationError {
 
 /**
  * Validates a ProjectDomainModel against invariants
- * 
+ *
  * INVARIANTS CHECKED:
  * - No orphan tasks (all tasks must be referenced in flows)
  * - No conditions with missing variables

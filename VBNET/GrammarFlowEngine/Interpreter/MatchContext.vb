@@ -3,12 +3,11 @@ Option Explicit On
 
 Imports System.Collections.Generic
 
-Namespace GrammarInterpreter.Interpreter
 
-    ''' <summary>
-    ''' Context for matching during grammar interpretation
-    ''' </summary>
-    Public Class MatchContext
+''' <summary>
+''' Context for matching during grammar interpretation
+''' </summary>
+Public Class MatchContext
         Public Property Text As String ' Full input text
         Public Property Position As Integer ' Current position in text
         Public Property GarbageUsed As Integer ' Number of garbage words used in this path
@@ -33,5 +32,3 @@ Namespace GrammarInterpreter.Interpreter
             }
         End Function
     End Class
-
-End Namespace

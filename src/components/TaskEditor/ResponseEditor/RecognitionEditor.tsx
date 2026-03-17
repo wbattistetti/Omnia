@@ -8,10 +8,10 @@ import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 import { loadContractFromNode } from '@responseEditor/ContractSelector/contractHelpers';
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
-// ✅ Helper: Get engines from contract (supports both engines and parsers for retrocompatibilità)
+// Helper: Get engines from contract
 function getEngines(contract: DataContract | null): any[] {
   if (!contract) return [];
-  return contract.engines || contract.parsers || [];
+  return contract.engines || [];
 }
 import DialogueTaskService from '@services/DialogueTaskService';
 import { useProjectData } from '@context/ProjectDataContext';
@@ -185,8 +185,7 @@ export default function RecognitionEditor({
 
       // ✅ Carica dal template UNA VOLTA quando apri l'editor
       const loadedContract = loadContractFromNode(node);
-      // ✅ Support both engines (new) and parsers (old) for retrocompatibilità
-      const engines = loadedContract?.engines || loadedContract?.parsers || [];
+      const engines = loadedContract?.engines || [];
       const regexPattern = engines.find((c: any) => c.type === 'regex')?.patterns?.[0];
 
       // ✅ DEBUG: Log dettagliato del contract caricato
@@ -435,10 +434,6 @@ export default function RecognitionEditor({
           }
 
           const updatedContract = { ...contract, engines: updatedEngines };
-          // ✅ Rimuovi parsers se presente (migrazione)
-          if (updatedContract.parsers) {
-            delete updatedContract.parsers;
-          }
           setLocalContract(updatedContract);
 
           console.log('[RecognitionEditor] ✅ Updated local contract with regex pattern', {
@@ -606,10 +601,6 @@ export default function RecognitionEditor({
         c.type === 'regex' ? { ...c, patterns: [newRegex] } : c
       );
       const updatedContract = { ...contract, engines: updatedEngines };
-      // ✅ Rimuovi parsers se presente (migrazione)
-      if (updatedContract.parsers) {
-        delete updatedContract.parsers;
-      }
       console.log('[RecognitionEditor] 📝 Updated contract:', updatedContract);
       handleContractChange(updatedContract, false);
     } else {
@@ -621,10 +612,6 @@ export default function RecognitionEditor({
         examples: []
       }];
       const updatedContract = { ...contract, engines: newEngines };
-      // ✅ Rimuovi parsers se presente (migrazione)
-      if (updatedContract.parsers) {
-        delete updatedContract.parsers;
-      }
       console.log('[RecognitionEditor] 📝 New contract:', updatedContract);
       handleContractChange(updatedContract, false);
     }
@@ -690,9 +677,6 @@ export default function RecognitionEditor({
               );
               const updatedContract = { ...contract, engines: updatedEngines };
               // ✅ Rimuovi parsers se presente (migrazione)
-              if (updatedContract.parsers) {
-                delete updatedContract.parsers;
-              }
               handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },
@@ -710,9 +694,6 @@ export default function RecognitionEditor({
               );
               const updatedContract = { ...contract, engines: updatedEngines };
               // ✅ Rimuovi parsers se presente (migrazione)
-              if (updatedContract.parsers) {
-                delete updatedContract.parsers;
-              }
               handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },
@@ -730,9 +711,6 @@ export default function RecognitionEditor({
               );
               const updatedContract = { ...contract, engines: updatedEngines };
               // ✅ Rimuovi parsers se presente (migrazione)
-              if (updatedContract.parsers) {
-                delete updatedContract.parsers;
-              }
               handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },

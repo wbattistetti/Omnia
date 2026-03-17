@@ -5,11 +5,11 @@ import type { VersionedProject } from './types';
 
 /**
  * Detects project version from raw project data
- * 
+ *
  * Version detection strategy:
  * - v2.0: Has version field and uses engines (not parsers)
  * - v1.0: No version field or uses parsers (legacy)
- * 
+ *
  * @param raw - Raw project data from database
  * @returns Detected version
  */
@@ -21,20 +21,20 @@ export function detectVersion(raw: any): string {
 
   // Check for v2.0 indicators: uses engines (not parsers)
   // This is a heuristic - projects with engines are likely v2.0
-  const hasEngines = raw.tasks?.some((t: any) => 
-    t.dataContract?.engines || 
+  const hasEngines = raw.tasks?.some((t: any) =>
+    t.dataContract?.engines ||
     t.engines
-  ) || raw.templates?.some((t: any) => 
-    t.dataContract?.engines || 
+  ) || raw.templates?.some((t: any) =>
+    t.dataContract?.engines ||
     t.engines
   );
 
   // Check for v1.0 indicators: uses parsers (legacy)
-  const hasParsers = raw.tasks?.some((t: any) => 
-    t.dataContract?.parsers || 
+  const hasParsers = raw.tasks?.some((t: any) =>
+    t.dataContract?.parsers ||
     t.parsers
-  ) || raw.templates?.some((t: any) => 
-    t.dataContract?.parsers || 
+  ) || raw.templates?.some((t: any) =>
+    t.dataContract?.parsers ||
     t.parsers
   );
 

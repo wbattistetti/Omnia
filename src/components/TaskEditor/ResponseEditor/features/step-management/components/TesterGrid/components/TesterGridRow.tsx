@@ -136,8 +136,7 @@ function TesterGridRowComponent({
       />
       {/* Render colonne dinamiche basate su contract.engines */}
       {(() => {
-        // ✅ Support both engines (new) and parsers (old) for retrocompatibilità
-        const engines = contract?.engines || contract?.parsers || [];
+        const engines = contract?.engines || [];
 
         // ✅ Se non ci sono engines, non mostrare colonne (unificato: sempre logica dinamica)
         if (engines.length === 0) {

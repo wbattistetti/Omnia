@@ -74,7 +74,6 @@ Namespace ApiServer.Handlers
                         Console.WriteLine($"[TestExtraction] ✅ Contract deserialized successfully")
                         Console.WriteLine($"[TestExtraction]   - Contract is Nothing: {contract Is Nothing}")
                         If contract IsNot Nothing Then
-                            ' ✅ Support both Engines (new) and Parsers (old) for retrocompatibilità
                             Dim contractEngines = contract.Engines
                             Console.WriteLine($"[TestExtraction]   - Engines count: {If(contractEngines IsNot Nothing, contractEngines.Count, 0)}")
                             If contractEngines IsNot Nothing Then
@@ -105,7 +104,6 @@ Namespace ApiServer.Handlers
 
                 ' Find regex parser
                 Console.WriteLine($"[TestExtraction] Searching for regex engine...")
-                ' ✅ Support both Engines (new) and Parsers (old) for retrocompatibilità
                 Dim engines = contract.Engines
                 Dim regexParser = engines?.FirstOrDefault(
                     Function(p) p.Type = "regex" AndAlso p.Enabled

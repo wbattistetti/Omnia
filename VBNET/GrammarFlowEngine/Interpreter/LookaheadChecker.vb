@@ -2,14 +2,12 @@ Option Strict On
 Option Explicit On
 
 Imports System.Linq
-Imports GrammarInterpreter.Compiler
+Imports GrammarFlowEngine.Compiler
 
-Namespace GrammarInterpreter.Interpreter
-
-    ''' <summary>
-    ''' Quick lookahead check to avoid unnecessary backtracking
-    ''' </summary>
-    Public Module LookaheadChecker
+''' <summary>
+''' Quick lookahead check to avoid unnecessary backtracking
+''' </summary>
+Public Module LookaheadChecker
 
         ''' <summary>
         ''' Checks if any child node can potentially match at the given position
@@ -67,4 +65,3 @@ Namespace GrammarInterpreter.Interpreter
 
     End Module
 
-End Namespace

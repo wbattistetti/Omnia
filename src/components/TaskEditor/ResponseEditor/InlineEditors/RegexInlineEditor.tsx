@@ -340,18 +340,13 @@ export default function RegexInlineEditor({
       };
     }
 
-    // ✅ Support both engines (new) and parsers (old) for retrocompatibilità
-    const engines = template.dataContract.engines || template.dataContract.parsers || [];
+    const engines = template.dataContract.engines || [];
     const regexEngine = engines.find((c: any) => c.type === 'regex');
     if (regexEngine) {
       regexEngine.patterns = [techValue];
     } else {
       engines.push({ type: 'regex', enabled: true, patterns: [techValue], examples: [] });
       template.dataContract.engines = engines;
-      // ✅ Rimuovi parsers se presente (migrazione)
-      if (template.dataContract.parsers) {
-        delete template.dataContract.parsers;
-      }
     }
 
     DialogueTaskService.markTemplateAsModified(node.templateId);

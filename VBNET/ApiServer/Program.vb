@@ -360,6 +360,16 @@ Module Program
                                                                     Return HandleOrchestratorSessionDelete(context, id)
                                                                 End Function)
 
+        ' ✅ POST /api/grammar/test-phrase - Test a single phrase against grammar
+        app.MapPost("/api/grammar/test-phrase", Function(context As HttpContext) As Task(Of IResult)
+                                                    Return ApiServer.Handlers.GrammarTestHandlers.HandleTestPhrase(context)
+                                                End Function)
+
+        ' ✅ POST /api/grammar/test-phrases - Test multiple phrases against grammar
+        app.MapPost("/api/grammar/test-phrases", Function(context As HttpContext) As Task(Of IResult)
+                                                     Return ApiServer.Handlers.GrammarTestHandlers.HandleTestPhrases(context)
+                                                 End Function)
+
         ' ✅ POST /api/runtime/translations/invalidate-cache - Invalida cache traduzioni
         app.MapPost("/api/runtime/translations/invalidate-cache", Function(req As HttpRequest) As IResult
                                                                       Try

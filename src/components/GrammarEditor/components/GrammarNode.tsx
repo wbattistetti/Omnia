@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
-import { Box, Pencil } from 'lucide-react';
+import { ArrowRight, Box, Pencil } from 'lucide-react';
 import type { GrammarNode as GrammarNodeType } from '../types/grammarTypes';
 import { useNodeEditingState } from '../hooks/useNodeEditingState';
 import { useNodeEditing } from '../features/node-editing/useNodeEditing';
@@ -227,7 +227,7 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
     });
   }, [node.id, screenToFlowPosition, setDragState]);
 
-  // Get highest binding for icon and color (EXCLUDING slots - they are not displayed visually)
+  // Get highest binding for icon and color (INCLUDING slots - they have highest priority)
   const highestBinding = React.useMemo(() => getHighestBindingForDisplay(node.bindings), [node.bindings]);
   const bindingIconColor = highestBinding ? getBindingIconColor(highestBinding.type) : null;
 
@@ -243,16 +243,17 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
     return calculateNodeWidth(node.label) + iconPadding;
   }, [node.label, iconPadding]);
 
-  // Get icon component for highest binding (only semantic-set and semantic-value)
+  // Get icon component for highest binding (including slots - they have highest priority)
   const getBindingIcon = () => {
     if (!highestBinding) return null;
-    // Slots are never displayed, so this should only be semantic-set or semantic-value
-    if (highestBinding.type === 'slot') return null;
 
     const iconSize = 12;
     const iconColor = bindingIconColor || '#c9d1d9';
 
     switch (highestBinding.type) {
+      case 'slot':
+        // ✅ ArrowRight icon for slots (green) - icon only, no label
+        return <ArrowRight size={iconSize} color={iconColor} />;
       case 'semantic-set':
         return <Box size={iconSize} color={iconColor} />;
       case 'semantic-value':
@@ -338,8 +339,8 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
         />
       )}
 
-      {/* Icon for highest binding - shown on the left (only for semantic-set and semantic-value) */}
-      {!isEditing && highestBinding && highestBinding.type !== 'slot' && (
+      {/* Icon for highest binding - shown on the left (slots have highest priority) */}
+      {!isEditing && highestBinding && (
         <div
           style={{
             position: 'absolute',

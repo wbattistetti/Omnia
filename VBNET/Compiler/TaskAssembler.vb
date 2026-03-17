@@ -530,7 +530,7 @@ Public Class TaskAssembler
         If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then Return
 
         ' ✅ NEW: Leggi regex contract da Parsers invece di contract.Regex
-        Dim regexContract = contract.Parsers?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
+        Dim regexContract = contract.Engines?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
         If regexContract Is Nothing OrElse
            regexContract.Patterns Is Nothing OrElse
            regexContract.Patterns.Count = 0 Then

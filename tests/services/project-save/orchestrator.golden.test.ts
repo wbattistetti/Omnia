@@ -9,7 +9,7 @@ import { TaskType } from '../../../src/types/taskTypes';
 describe('ProjectSaveOrchestrator - Golden Master Tests', () => {
   it('should prepare save request from minimal domain model', () => {
     const orchestrator = new ProjectSaveOrchestrator();
-    
+
     const domain: ProjectDomainModel = {
       id: 'test-project',
       name: 'Test Project',
@@ -106,14 +106,14 @@ describe('ProjectSaveOrchestrator - Golden Master Tests', () => {
         if (row.id) flowTaskIds.add(row.id);
       });
     });
-    
+
     const orphanTasks = Array.from(taskIds).filter((id) => !flowTaskIds.has(id));
     expect(orphanTasks).toHaveLength(0);
   });
 
   it('should validate save request', () => {
     const orchestrator = new ProjectSaveOrchestrator();
-    
+
     const validRequest = {
       version: '1.0' as const,
       projectId: 'test-project',
@@ -132,7 +132,7 @@ describe('ProjectSaveOrchestrator - Golden Master Tests', () => {
 
   it('should detect invalid save request', () => {
     const orchestrator = new ProjectSaveOrchestrator();
-    
+
     const invalidRequest = {
       version: '1.0' as const,
       projectId: '', // Invalid: empty projectId

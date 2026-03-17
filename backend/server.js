@@ -1420,8 +1420,9 @@ app.get('/api/projects/:pid/tasks', async (req, res) => {
 
     // ✅ Rimuovi duplicati (usa id o _id come chiave)
     const templateMap = new Map();
+    const duplicateIds = [];
 
-    // Aggiungi prima i task del progetto (hanno priorità)
+    // Aggiungi prima i task del progetto
     projectTasks.forEach(task => {
       const taskId = task.id || task._id?.toString();
       if (taskId) {
@@ -1429,13 +1430,36 @@ app.get('/api/projects/:pid/tasks', async (req, res) => {
       }
     });
 
-    // Aggiungi i template del factory (solo se non già presenti)
+    // ✅ CRITICAL: Check for duplicates between Project and Factory templates
     factoryTemplates.forEach(template => {
       const templateId = template.id || template._id?.toString();
-      if (templateId && !templateMap.has(templateId)) {
+      if (!templateId) return;
+
+      const existing = templateMap.get(templateId);
+      if (existing) {
+        // Duplicate found: add to error list
+        duplicateIds.push(templateId);
+      } else {
+        // No duplicate: add Factory template
         templateMap.set(templateId, template);
       }
     });
+
+    // ✅ ERROR: If duplicates found, return error with duplicate IDs
+    if (duplicateIds.length > 0) {
+      const errorMessage = `Template duplication detected: templates with IDs [${duplicateIds.join(', ')}] exist in both Project and Factory databases. Please remove duplicates from project database.`;
+      console.error('[TaskTemplates.get] ❌ DUPLICATE TEMPLATES', {
+        projectId,
+        duplicateIds,
+        count: duplicateIds.length
+      });
+      logError('TaskTemplates.get', new Error(errorMessage), { projectId, duplicateIds });
+      return res.status(409).json({
+        error: 'template_duplication',
+        message: errorMessage,
+        duplicateIds
+      });
+    }
 
     const allTasks = Array.from(templateMap.values());
 
@@ -2063,13 +2087,37 @@ app.post('/api/projects/:pid/templates', async (req, res) => {
   const projectId = req.params.pid;
   const payload = req.body || {};
 
+  // ✅ DEEP LOG: Check grammarFlow in payload
+  const grammarFlowEngine = payload.dataContract?.engines?.find((e) => e.type === 'grammarflow');
+  const hasGrammarFlow = !!grammarFlowEngine?.grammarFlow;
+  const grammarFlowNodesCount = grammarFlowEngine?.grammarFlow?.nodes?.length || 0;
+
+  console.log('[POST /api/projects/:pid/templates] 📥 Request received', {
+    projectId,
+    hasPayload: !!payload,
+    payloadId: payload.id,
+    payloadKeys: payload ? Object.keys(payload).slice(0, 10) : [],
+    hasDataContract: !!payload.dataContract,
+    enginesCount: payload.dataContract?.engines?.length || 0,
+    hasGrammarFlowEngine: !!grammarFlowEngine,
+    hasGrammarFlow: hasGrammarFlow,
+    grammarFlowNodesCount: grammarFlowNodesCount,
+    dataContractKeys: payload.dataContract ? Object.keys(payload.dataContract) : [],
+  });
+
   if (!payload.id) {
     return res.status(400).json({ error: 'id_required', message: 'Template id is required' });
   }
 
-  const client = await getMongoClient();
+  let client;
   try {
+    console.log('[POST /api/projects/:pid/templates] 🔌 Getting MongoDB client...');
+    client = await getMongoClient();
+    console.log('[POST /api/projects/:pid/templates] ✅ MongoDB client obtained');
+
+    console.log('[POST /api/projects/:pid/templates] 🔌 Getting project database...');
     const projDb = await getProjectDb(client, projectId);
+    console.log('[POST /api/projects/:pid/templates] ✅ Project database obtained');
     const now = new Date();
 
     // Save template exactly as received — no classification, no field stripping
@@ -2083,6 +2131,34 @@ app.post('/api/projects/:pid/templates', async (req, res) => {
     );
 
     const saved = await projDb.collection('tasks').findOne({ projectId, id: payload.id });
+
+    // ✅ DEEP LOG: Verify grammarFlow was saved
+    const savedGrammarFlowEngine = saved?.dataContract?.engines?.find((e) => e.type === 'grammarflow');
+    const savedHasGrammarFlow = !!savedGrammarFlowEngine?.grammarFlow;
+    const savedGrammarFlowNodesCount = savedGrammarFlowEngine?.grammarFlow?.nodes?.length || 0;
+
+    console.log('[POST /api/projects/:pid/templates] ✅ SAVE COMPLETE', {
+      projectId,
+      templateId: saved?.id,
+      hasDataContract: !!saved?.dataContract,
+      savedEnginesCount: saved?.dataContract?.engines?.length || 0,
+      savedHasGrammarFlowEngine: !!savedGrammarFlowEngine,
+      savedHasGrammarFlow: savedHasGrammarFlow,
+      savedGrammarFlowNodesCount: savedGrammarFlowNodesCount,
+      savedDataContractKeys: saved?.dataContract ? Object.keys(saved.dataContract) : [],
+    });
+
+    // ✅ VERIFY: Check if grammarFlow was actually saved
+    if (hasGrammarFlow && !savedHasGrammarFlow) {
+      console.error('[POST /api/projects/:pid/templates] ❌ GRAMMARFLOW LOST DURING SAVE!', {
+        projectId,
+        templateId: saved?.id,
+        hadGrammarFlowBefore: hasGrammarFlow,
+        hasGrammarFlowAfter: savedHasGrammarFlow,
+        grammarFlowNodesCountBefore: grammarFlowNodesCount,
+        grammarFlowNodesCountAfter: savedGrammarFlowNodesCount,
+      });
+    }
 
     // ✅ DEBUG: Log payload to understand why embedding might not be saved
     console.log('[POST /api/projects/:pid/templates] 🔍 Checking embedding save conditions', {
@@ -2176,8 +2252,16 @@ app.post('/api/projects/:pid/templates', async (req, res) => {
       hasConstraints: !!saved?.constraints,
       hasSteps: !!saved?.steps
     });
+    console.log('[POST /api/projects/:pid/templates] ✅ Template saved successfully');
     res.json(saved);
   } catch (e) {
+    console.error('[POST /api/projects/:pid/templates] ❌ ERROR:', {
+      projectId,
+      templateId: payload.id,
+      error: e?.message || String(e),
+      stack: e?.stack,
+      errorType: e?.constructor?.name
+    });
     logError('Templates.post', e, { projectId, templateId: payload.id });
     res.status(500).json({ error: String(e?.message || e) });
   }
@@ -4956,6 +5040,22 @@ app.put('/api/factory/tasks/:id', async (req, res) => {
     const payload = req.body || {};
     const now = new Date();
 
+    // ✅ DEEP LOG: Check grammarFlow in payload
+    const grammarFlowEngine = payload.dataContract?.engines?.find((e) => e.type === 'grammarflow');
+    const hasGrammarFlow = !!grammarFlowEngine?.grammarFlow;
+    const grammarFlowNodesCount = grammarFlowEngine?.grammarFlow?.nodes?.length || 0;
+
+    console.log('[PUT /api/factory/tasks/:id] 💾 SAVE START', {
+      id,
+      templateId: payload.id,
+      hasDataContract: !!payload.dataContract,
+      enginesCount: payload.dataContract?.engines?.length || 0,
+      hasGrammarFlowEngine: !!grammarFlowEngine,
+      hasGrammarFlow: hasGrammarFlow,
+      grammarFlowNodesCount: grammarFlowNodesCount,
+      dataContractKeys: payload.dataContract ? Object.keys(payload.dataContract) : [],
+    });
+
     const updateDoc = {
       ...payload,
       updatedAt: now
@@ -5003,6 +5103,34 @@ app.put('/api/factory/tasks/:id', async (req, res) => {
 
     if (!saved) {
       return res.status(404).json({ error: 'Template not found' });
+    }
+
+    // ✅ DEEP LOG: Verify grammarFlow was saved
+    const savedGrammarFlowEngine = saved.dataContract?.engines?.find((e) => e.type === 'grammarflow');
+    const savedHasGrammarFlow = !!savedGrammarFlowEngine?.grammarFlow;
+    const savedGrammarFlowNodesCount = savedGrammarFlowEngine?.grammarFlow?.nodes?.length || 0;
+
+    console.log('[PUT /api/factory/tasks/:id] ✅ SAVE COMPLETE', {
+      id,
+      templateId: saved.id,
+      hasDataContract: !!saved.dataContract,
+      savedEnginesCount: saved.dataContract?.engines?.length || 0,
+      savedHasGrammarFlowEngine: !!savedGrammarFlowEngine,
+      savedHasGrammarFlow: savedHasGrammarFlow,
+      savedGrammarFlowNodesCount: savedGrammarFlowNodesCount,
+      savedDataContractKeys: saved.dataContract ? Object.keys(saved.dataContract) : [],
+    });
+
+    // ✅ VERIFY: Check if grammarFlow was actually saved
+    if (hasGrammarFlow && !savedHasGrammarFlow) {
+      console.error('[PUT /api/factory/tasks/:id] ❌ GRAMMARFLOW LOST DURING SAVE!', {
+        id,
+        templateId: saved.id,
+        hadGrammarFlowBefore: hasGrammarFlow,
+        hasGrammarFlowAfter: savedHasGrammarFlow,
+        grammarFlowNodesCountBefore: grammarFlowNodesCount,
+        grammarFlowNodesCountAfter: savedGrammarFlowNodesCount,
+      });
     }
 
     logInfo('TaskTemplates.put', { id });

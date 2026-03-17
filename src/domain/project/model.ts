@@ -5,7 +5,7 @@ import { TaskType } from '@types/taskTypes';
 
 /**
  * ProjectDomainModel: Stable domain model for project data
- * 
+ *
  * INVARIANTS:
  * - No orphan tasks (all tasks must be referenced in flows)
  * - No conditions with missing variables
@@ -32,7 +32,7 @@ export interface ProjectDomainModel {
 
 /**
  * TaskDomainModel: Pure domain representation of a task
- * 
+ *
  * INVARIANTS:
  * - id must be unique within project
  * - type must be valid TaskType enum
@@ -59,7 +59,7 @@ export interface TaskDomainModel {
 
 /**
  * FlowDomainModel: Pure domain representation of a flow
- * 
+ *
  * INVARIANTS:
  * - All node rows must reference existing tasks (row.id === task.id)
  * - No edges pointing to non-existent nodes
@@ -93,7 +93,7 @@ export interface FlowNodeDomainModel {
 
 /**
  * FlowRowDomainModel: Row in a flow node
- * 
+ *
  * INVARIANTS:
  * - id must match task.id if task exists
  */
@@ -106,7 +106,7 @@ export interface FlowRowDomainModel {
 
 /**
  * FlowEdgeDomainModel: Edge in a flow
- * 
+ *
  * INVARIANTS:
  * - source and target must reference existing nodes
  * - conditionId (if present) must reference existing condition
@@ -121,7 +121,7 @@ export interface FlowEdgeDomainModel {
 
 /**
  * ConditionDomainModel: Pure domain representation of a condition
- * 
+ *
  * INVARIANTS:
  * - All referenced variables must exist in project variables
  * - Script must be valid (syntax check)
@@ -139,7 +139,7 @@ export interface ConditionDomainModel {
 
 /**
  * TemplateDomainModel: Pure domain representation of a template
- * 
+ *
  * INVARIANTS:
  * - Must have at least one language
  * - dataContract.engines must be valid array
@@ -177,13 +177,19 @@ export interface EngineConfigDomainModel {
 
 /**
  * VariableDomainModel: Pure domain representation of a variable
+ *
+ * Maps from VariableInstance (varId, varName) to domain model (id, name)
  */
 export interface VariableDomainModel {
-  id: string;
-  name: string;
-  type: string;
+  id: string; // Maps from varId (GUID)
+  name: string; // Maps from varName (human-readable)
+  type?: string;
   description?: string;
   defaultValue?: any;
+  taskInstanceId?: string; // ID of the task instance this variable belongs to
+  nodeId?: string; // GUID of the node in the template
+  ddtPath?: string; // Path in the DDT structure
   createdAt?: Date;
   updatedAt?: Date;
+  [key: string]: any; // Allow additional fields for backward compatibility
 }

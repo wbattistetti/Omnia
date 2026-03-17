@@ -97,8 +97,7 @@ export default function LLMInlineEditor({
   const initialPrompt = React.useMemo(() => {
     if (!contract) return TEMPLATE_PROMPT;
 
-    // ✅ Support both engines (new) and parsers (legacy) for retrocompatibilità
-    const engines = contract.engines || contract.parsers || [];
+    const engines = contract.engines || [];
     const llmParser = engines.find((p: any) => p.type === 'llm');
 
     if (llmParser?.aiPrompt && llmParser.aiPrompt.trim()) {
@@ -120,8 +119,7 @@ export default function LLMInlineEditor({
   React.useEffect(() => {
     if (!contract) return;
 
-    // ✅ Support both engines (new) and parsers (legacy)
-    const engines = contract.engines || contract.parsers || [];
+    const engines = contract.engines || [];
     const llmParser = engines.find((p: any) => p.type === 'llm');
 
     if (llmParser?.aiPrompt && llmParser.aiPrompt.trim() && llmParser.aiPrompt !== llmPrompt) {
@@ -261,8 +259,7 @@ export default function LLMInlineEditor({
         onClose={() => {
           // Save prompt to contract when closing (validates/persists the prompt)
           if (contract && onContractChange && llmPrompt.trim()) {
-            // ✅ Support both engines (new) and parsers (legacy)
-            const engines = contract.engines || contract.parsers || [];
+            const engines = contract.engines || [];
             const llmParserIndex = engines.findIndex((p: any) => p.type === 'llm');
 
             if (llmParserIndex >= 0) {
@@ -275,8 +272,7 @@ export default function LLMInlineEditor({
               };
               onContractChange({
                 ...contract,
-                engines: contract.engines ? updatedEngines : undefined,
-                parsers: contract.parsers ? updatedEngines : undefined
+                engines: updatedEngines
               });
             } else {
               // Create new LLM parser
@@ -292,8 +288,7 @@ export default function LLMInlineEditor({
               ];
               onContractChange({
                 ...contract,
-                engines: contract.engines ? newEngines : undefined,
-                parsers: contract.parsers ? newEngines : undefined
+                engines: newEngines
               });
             }
           }

@@ -15,6 +15,7 @@
     <ProjectReference Include="..\Orchestrator\Orchestrator.vbproj" />
     <ProjectReference Include="..\Engine\Engine.vbproj" />
     <ProjectReference Include="..\Common\Common.vbproj" />
+    <ProjectReference Include="..\GrammarFlowEngine\GrammarFlowEngine.vbproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -61,6 +62,7 @@
     <Compile Include="Interfaces\Handlers\CompilationHandlers.vb" />
     <Compile Include="Interfaces\Handlers\TaskSessionHandlers.vb" />
     <Compile Include="Interfaces\Handlers\TestExtractionHandlers.vb" />
+    <Compile Include="Interfaces\Handlers\GrammarTestHandlers.vb" />
     <Compile Include="Middleware\Utf8EncodingMiddleware.vb" />
     <Compile Include="Middleware\ExceptionLoggingMiddleware.vb" />
     <!-- ❌ RIMOSSO: Migration\ContractMigrationRunner.vb - migrazione completata -->

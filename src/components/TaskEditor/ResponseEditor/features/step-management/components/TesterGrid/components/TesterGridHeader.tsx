@@ -5,10 +5,10 @@ import TesterGridHeaderColumn from './TesterGridHeaderColumn';
 import AddContractDropdown from './AddContractDropdown';
 import type { DataContract, ContractType } from '@components/DialogueDataEngine/contracts/contractLoader';
 
-// ✅ Helper: Get engines from contract (supports both engines and parsers for retrocompatibilità)
+// Helper: Get engines from contract
 function getEngines(contract: DataContract | null): any[] {
   if (!contract) return [];
-  return contract.engines || contract.parsers || [];
+  return contract.engines || [];
 }
 
 // 🎨 Colori centralizzati per extractors
@@ -173,10 +173,6 @@ export default function TesterGridHeader({
         ...contract,
         engines: newEngines,
       };
-      // ✅ Rimuovi parsers se presente (migrazione)
-      if (updatedContract.parsers) {
-        delete updatedContract.parsers;
-      }
 
       setOpenDropdownAfter(null);
       onContractChange(updatedContract);
@@ -239,10 +235,6 @@ export default function TesterGridHeader({
       ...contract,
       engines: newEngines,
     };
-    // ✅ Rimuovi parsers se presente (migrazione)
-    if (updatedContract.parsers) {
-      delete updatedContract.parsers;
-    }
 
     onContractChange(updatedContract);
   };

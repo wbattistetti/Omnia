@@ -5,7 +5,7 @@ import type { VersionedProject, MigrationResult } from './types';
 
 /**
  * Migrates project from v1.0 to v2.0
- * 
+ *
  * MIGRATIONS PERFORMED:
  * 1. Normalize parsers → engines (if present)
  * 2. Normalize GrammarFlow → grammarFlow (camelCase)
@@ -13,7 +13,7 @@ import type { VersionedProject, MigrationResult } from './types';
  * 4. Fix broken conditions (remove references to missing variables)
  * 5. Fix incomplete templates (add default language if missing)
  * 6. Fix flow edges pointing to non-existent tasks
- * 
+ *
  * @param v1Project - Project in v1.0 format
  * @returns Migrated project in v2.0 format
  */
@@ -111,7 +111,7 @@ export function migrate_v1_to_v2(v1Project: VersionedProject): VersionedProject 
   // 4. Remove orphan tasks (tasks not referenced in flows)
   if (migrated.flows && migrated.tasks) {
     const referencedTaskIds = new Set<string>();
-    
+
     // Extract referenced task IDs from flows
     Object.values(migrated.flows).forEach((flow: any) => {
       if (flow?.nodes && Array.isArray(flow.nodes)) {
@@ -138,7 +138,7 @@ export function migrate_v1_to_v2(v1Project: VersionedProject): VersionedProject 
   // 5. Fix broken conditions (remove references to missing variables)
   if (migrated.conditions && migrated.variables) {
     const variableIds = new Set((migrated.variables || []).map((v: any) => v.id || v._id));
-    
+
     migrated.conditions = migrated.conditions.map((condition: any) => {
       if (condition.variables && Array.isArray(condition.variables)) {
         const missingVars = condition.variables.filter((varId: string) => !variableIds.has(varId));
@@ -163,7 +163,7 @@ export function migrate_v1_to_v2(v1Project: VersionedProject): VersionedProject 
         (template.patterns.PT && template.patterns.PT.length > 0)
       );
       const hasLabel = !!template.label || !!template.name;
-      
+
       if (!hasPatterns && !hasLabel) {
         warnings.push(`Template ${template.id}: Added default label (no language patterns found)`);
         return {
@@ -178,20 +178,20 @@ export function migrate_v1_to_v2(v1Project: VersionedProject): VersionedProject 
   // 7. Fix flow edges pointing to non-existent tasks (remove invalid edges)
   if (migrated.flows && migrated.tasks) {
     const taskIds = new Set(migrated.tasks.map((t: any) => t.id));
-    
+
     Object.keys(migrated.flows).forEach((flowId) => {
       const flow = migrated.flows[flowId];
       if (flow?.nodes && flow?.edges) {
         const nodeIds = new Set(flow.nodes.map((n: any) => n.id));
-        
+
         // Remove edges pointing to non-existent nodes
-        const invalidEdges = flow.edges.filter((edge: any) => 
+        const invalidEdges = flow.edges.filter((edge: any) =>
           !nodeIds.has(edge.source) || !nodeIds.has(edge.target)
         );
-        
+
         if (invalidEdges.length > 0) {
           warnings.push(`Flow ${flowId}: Removed ${invalidEdges.length} invalid edges`);
-          flow.edges = flow.edges.filter((edge: any) => 
+          flow.edges = flow.edges.filter((edge: any) =>
             nodeIds.has(edge.source) && nodeIds.has(edge.target)
           );
         }

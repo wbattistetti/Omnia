@@ -3,12 +3,10 @@ Option Explicit On
 
 Imports System.Collections.Generic
 
-Namespace GrammarInterpreter.Interpreter
-
-    ''' <summary>
-    ''' Final result of parsing text with grammar
-    ''' </summary>
-    Public Class ParseResult
+''' <summary>
+''' Final result of parsing text with grammar
+''' </summary>
+Public Class ParseResult
         Public Property Success As Boolean
         Public Property Bindings As Dictionary(Of String, Object) ' All extracted bindings
         Public Property ConsumedWords As Integer ' Total words consumed
@@ -20,5 +18,3 @@ Namespace GrammarInterpreter.Interpreter
             Success = False
         End Sub
     End Class
-
-End Namespace

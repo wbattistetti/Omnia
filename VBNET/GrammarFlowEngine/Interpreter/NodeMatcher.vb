@@ -2,15 +2,13 @@ Option Strict On
 Option Explicit On
 
 Imports System.Text.RegularExpressions
-Imports GrammarInterpreter.Compiler
-Imports GrammarInterpreter.Models
+Imports GrammarFlowEngine.Compiler
+Imports GrammarFlowEngine.Models
 
-Namespace GrammarInterpreter.Interpreter
-
-    ''' <summary>
-    ''' Matches a single node against text
-    ''' </summary>
-    Public Module NodeMatcher
+''' <summary>
+''' Matches a single node against text
+''' </summary>
+Public Module NodeMatcher
 
         ''' <summary>
         ''' Tries to match a node at the current position
@@ -163,5 +161,3 @@ Namespace GrammarInterpreter.Interpreter
         End Function
 
     End Module
-
-End Namespace

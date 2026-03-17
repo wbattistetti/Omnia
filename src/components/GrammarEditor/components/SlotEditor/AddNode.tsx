@@ -91,7 +91,15 @@ export function AddNode({
   };
 
   const handleSave = (value: string) => {
+    console.log('[AddNode] 🔍 handleSave CALLED', {
+      value,
+      valueTrimmed: value.trim(),
+      hasValidation: !!validation,
+      onSave: !!onSave,
+    });
+
     if (!value.trim()) {
+      console.log('[AddNode] ⚠️ Empty value, canceling save');
       setIsEditing(false);
       hasAutoEditedRef.current = false;
       return;
@@ -101,10 +109,19 @@ export function AddNode({
     if (validation) {
       const result = validation(value.trim());
       setValidationResult(result);
+      console.log('[AddNode] 🔍 Validation result', {
+        isValid: result.isValid,
+        error: result.error,
+      });
       if (!result.isValid) {
+        console.log('[AddNode] ❌ Validation failed, not saving');
         return; // Don't save if invalid
       }
     }
+
+    console.log('[AddNode] ✅ Calling onSave', {
+      value: value.trim(),
+    });
 
     // Get suggestions if provider available
     if (suggestions) {

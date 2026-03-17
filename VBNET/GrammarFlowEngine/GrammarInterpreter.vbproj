@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <OptionStrict>On</OptionStrict>
+    <OptionExplicit>On</OptionExplicit>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>GrammarFlowEngine</RootNamespace>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Common for common interfaces -->
+    <ProjectReference Include="..\Common\Common.vbproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Models: Grammar structure (from TypeScript) -->
+    <Compile Include="Models\NodeBinding.vb" />
+    <Compile Include="Models\GrammarNode.vb" />
+    <Compile Include="Models\GrammarEdge.vb" />
+    <Compile Include="Models\SemanticSlot.vb" />
+    <Compile Include="Models\SemanticValue.vb" />
+    <Compile Include="Models\SemanticSet.vb" />
+    <Compile Include="Models\Grammar.vb" />
+
+    <!-- Compiler: Compiles Grammar JSON to optimized structure -->
+    <Compile Include="Compiler\GrammarCompiler.vb" />
+    <Compile Include="Compiler\CompiledGrammar.vb" />
+    <Compile Include="Compiler\CompiledNode.vb" />
+    <Compile Include="Compiler\CompiledEdge.vb" />
+
+    <!-- Interpreter: Core interpretation logic -->
+    <Compile Include="Interpreter\MatchContext.vb" />
+    <Compile Include="Interpreter\MatchResult.vb" />
+    <Compile Include="Interpreter\ParseResult.vb" />
+    <Compile Include="Interpreter\GrammarFlowEngine.vb" />
+    <Compile Include="Interpreter\NodeMatcher.vb" />
+    <Compile Include="Interpreter\NavigationEngine.vb" />
+    <Compile Include="Interpreter\EdgeNavigator.vb" />
+    <Compile Include="Interpreter\GarbageHandler.vb" />
+    <Compile Include="Interpreter\LookaheadChecker.vb" />
+    <Compile Include="Interpreter\ResultSelector.vb" />
+  </ItemGroup>
+
+</Project>

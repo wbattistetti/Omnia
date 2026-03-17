@@ -1,6 +1,6 @@
-# Grammar Interpreter
+# Grammar Flow Engine
 
-Grammar Interpreter è un motore per interpretare grammatiche basate su grafi (grammar flow) in VB.NET.
+Grammar Flow Engine è un motore per interpretare grammatiche basate su grafi (grammar flow) in VB.NET.
 
 ## Architettura
 
@@ -9,22 +9,22 @@ Front end (TypeScript/React)
     ↓ (Grammar JSON)
 Grammar Compiler (VB.NET)
     ↓ (CompiledGrammar)
-Grammar Interpreter (VB.NET)
+Grammar Flow Engine (VB.NET)
     ↓ (ParseResult con bindings estratti)
 ```
 
 ## Struttura del Progetto
 
 ```
-GrammarInterpreter/
+GrammarFlowEngine/
 ├── Models/              # Modelli base (Grammar, GrammarNode, GrammarEdge, ecc.)
 ├── Compiler/            # GrammarCompiler: compila Grammar → CompiledGrammar
 │   ├── GrammarCompiler.vb
 │   ├── CompiledGrammar.vb
 │   ├── CompiledNode.vb
 │   └── CompiledEdge.vb
-└── Interpreter/         # GrammarInterpreter: interpreta CompiledGrammar
-    ├── GrammarInterpreter.vb    # Classe principale pubblica
+└── Interpreter/         # Grammar Flow Engine: interpreta CompiledGrammar
+    ├── GrammarFlowEngine.vb    # Classe principale pubblica
     ├── NavigationEngine.vb      # Motore di navigazione con memoization
     ├── NodeMatcher.vb           # Match di un singolo nodo
     ├── EdgeNavigator.vb         # Navigazione edge (sequential/alternative/optional)
@@ -79,8 +79,8 @@ GrammarInterpreter/
 Dim json = File.ReadAllText("grammar.json")
 Dim grammar = JsonConvert.DeserializeObject(Of Grammar)(json)
 
-' Crea interprete (compila automaticamente)
-Dim interpreter As New GrammarInterpreter(grammar)
+' Crea engine (compila automaticamente)
+Dim engine As New GrammarFlowEngine(grammar)
 
 ' Parse testo
 Dim result = interpreter.Parse("voglio un biglietto per Milano")
@@ -99,8 +99,8 @@ End If
 ' Compila grammar una volta
 Dim compiledGrammar = GrammarCompiler.Compile(grammar)
 
-' Crea interprete con grammar già compilato
-Dim interpreter As New GrammarInterpreter(compiledGrammar)
+' Crea engine con grammar già compilato
+Dim engine As New GrammarFlowEngine(compiledGrammar)
 
 ' Parse multipli (riutilizza la compilazione)
 Dim result1 = interpreter.Parse("voglio un biglietto")
