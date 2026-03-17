@@ -830,8 +830,8 @@ export const AppContent: React.FC<AppContentProps> = ({
 
                 // Import services needed for execution
                 const { FlowPersistService } = await import('../services/FlowPersistService');
-                const { taskRepository } = await import('../services/TaskRepository');
                 const { transformNodesToSimplified, transformEdgesToSimplified } = await import('../flows/flowTransformers');
+                // Note: taskRepository is already imported statically at the top of the file
 
                 // Execute save using orchestrator
                 const saveResult = await orchestrator.executeSave(saveRequest, {
