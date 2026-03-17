@@ -32,7 +32,6 @@ import { EditorCoordinator } from './AppContent/application/coordinators/EditorC
 import { mapUIStateToDomain } from '../domain/project/mapper';
 // ✅ M5: Project save orchestrator (now with executeSave)
 import { ProjectSaveOrchestrator } from '../services/project-save/ProjectSaveOrchestrator';
-import { FEATURE_FLAGS } from '../config/featureFlags';
 // ✅ REMOVED: Migration moved to DB script - keep codebase clean
 // Migration should be a separate DB script, not executed during save
 import { ProjectManager } from './AppContent/application/services/ProjectManager';
@@ -783,446 +782,90 @@ export const AppContent: React.FC<AppContentProps> = ({
                   console.table(orphanTasksInfo);
                 }
 
-                // ✅ M2: Prepare save request using orchestrator (DRY-RUN - not executed yet)
-                // This is a characterization step to verify the orchestrator produces correct payload
-                try {
-                  // ✅ REMOVED: Migration moved to DB script - keep codebase clean
-                  // Migration should be a separate DB script, not executed during save
-                  // Rows must always be preserved during save (even if no task instance exists yet)
+                // ✅ M5: Use new orchestrator for project save
+                // Load templates and variables for orchestrator
+                const { DialogueTaskService } = await import('../services/DialogueTaskService');
+                const { variableCreationService } = await import('../services/VariableCreationService');
 
-                  // ✅ M4: Load templates and variables for orchestrator
-                  const { DialogueTaskService } = await import('../services/DialogueTaskService');
-                  const { variableCreationService } = await import('../services/VariableCreationService');
+                const allTemplates = DialogueTaskService.getAllTemplates();
+                const allVariables = variableCreationService.getAllVariables(pid);
 
-                  const allTemplates = DialogueTaskService.getAllTemplates();
-                  const allVariables = variableCreationService.getAllVariables(pid);
-
-                  console.log('[Save][M4-Data] 📊 Loaded data for orchestrator', {
-                    templatesCount: allTemplates.length,
-                    variablesCount: allVariables.length,
-                    templatesSource: allTemplates.reduce((acc: Record<string, number>, t: any) => {
-                      const source = t.source || 'Project';
-                      acc[source] = (acc[source] || 0) + 1;
-                      return acc;
-                    }, {}),
-                  });
-
-                  const domain = mapUIStateToDomain({
-                    projectId: pid,
-                    projectName: currentProject?.name,
-                    flows: allFlows,
-                    tasks: allTasksInMemory,
-                    conditions: projectData?.conditions?.flatMap((cat: any) => cat.items || []) || [],
-                    templates: allTemplates, // ✅ M4: Populated from DialogueTaskService
-                    variables: allVariables, // ✅ M4: Populated from VariableCreationService
-                    metadata: {
-                      ownerCompany: currentProject?.ownerCompany,
-                      ownerClient: currentProject?.ownerClient,
-                    },
-                  });
-
-                  const orchestrator = new ProjectSaveOrchestrator();
-                  const saveRequest = orchestrator.prepareSave(domain, {
-                    flows: allFlows,
-                    allTemplates: allTemplates, // ✅ M4: Populated from DialogueTaskService
-                  });
-
-                  // Validate request
-                  const validation = orchestrator.validateRequest(saveRequest);
-                  if (validation.valid) {
-                    console.log('[Save][M2-Orchestrator] ✅ Save request prepared (DRY-RUN)', {
-                      projectId: pid,
-                      tasksCount: saveRequest.tasks.items.length,
-                      conditionsCount: saveRequest.conditions.items.length,
-                      templatesCount: saveRequest.templates.length,
-                      variablesCount: saveRequest.variables.variables.length,
-                    });
-                  } else {
-                    console.warn('[Save][M2-Orchestrator] ⚠️ Save request validation failed (DRY-RUN)', {
-                      errors: validation.errors,
-                    });
-                  }
-                } catch (e) {
-                  console.warn('[Save][M2-Orchestrator] ⚠️ Failed to prepare save request (DRY-RUN)', {
-                    error: e instanceof Error ? e.message : String(e),
-                  });
-                  // Non blocca il save flow esistente
-                }
-
-                // ✅ M5: Use new orchestrator if feature flag is enabled
-                if (FEATURE_FLAGS.USE_NEW_SAVE_ORCHESTRATOR) {
-                  try {
-                    console.log('[Save][M5-Orchestrator] 🚀 Using NEW save orchestrator');
-
-                    const orchestrator = new ProjectSaveOrchestrator();
-                    const saveRequest = orchestrator.prepareSave(domain, {
-                      flows: allFlows,
-                      allTemplates: allTemplates,
-                    });
-
-                    // Validate request
-                    const validation = orchestrator.validateRequest(saveRequest);
-                    if (!validation.valid) {
-                      throw new Error(`Save request validation failed: ${validation.errors.join(', ')}`);
-                    }
-
-                    // Import services needed for execution
-                    const { FlowPersistService } = await import('../services/FlowPersistService');
-                    const { taskRepository } = await import('../services/TaskRepository');
-                    const { variableCreationService } = await import('../services/VariableCreationService');
-                    const { DialogueTaskService } = await import('../services/DialogueTaskService');
-                    const { transformNodesToSimplified, transformEdgesToSimplified } = await import('../flows/flowTransformers');
-
-                    // Execute save using orchestrator
-                    const saveResult = await orchestrator.executeSave(saveRequest, {
-                      translationsContext: (window as any).__projectTranslationsContext,
-                      flowState: {
-                        flushFlowPersist: async () => {
-                          await FlowPersistService.flushFlowPersist();
-                        },
-                        getFlowById: (id: string) => FlowStateBridge.getFlowById(id),
-                        getNodes: () => FlowStateBridge.getNodes(),
-                        getEdges: () => FlowStateBridge.getEdges(),
-                        transformNodesToSimplified,
-                        transformEdgesToSimplified,
-                      },
-                      taskRepository,
-                      variableService: variableCreationService,
-                      dialogueTaskService: DialogueTaskService,
-                      projectDataService: ProjectDataService,
-                      projectData,
-                    });
-
-                    if (saveResult.success) {
-                      console.log('[Save][M5-Orchestrator] ✅ Save completed successfully', {
-                        projectId: pid,
-                        duration: saveResult.duration,
-                      });
-                    } else {
-                      console.error('[Save][M5-Orchestrator] ❌ Save completed with errors', {
-                        projectId: pid,
-                        duration: saveResult.duration,
-                        errors: saveResult.errors,
-                      });
-                    }
-
-                    // Return early - new orchestrator handles everything
-                    return;
-                  } catch (e) {
-                    console.error('[Save][M5-Orchestrator] ❌ Failed to execute save with orchestrator', {
-                      error: e instanceof Error ? e.message : String(e),
-                    });
-                    // Fall through to old save flow as fallback
-                    console.warn('[Save][M5-Orchestrator] ⚠️ Falling back to old save flow');
-                  }
-                }
-
-                // ✅ OLD SAVE FLOW: Keep as fallback when feature flag is disabled
-                // ✅ OPTIMIZATION: Parallelize all independent save operations
-                const saveStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-
-                const saveResults = await Promise.allSettled([
-                  // 1. Update catalog timestamp
-                  (async () => {
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][1-catalog] 🚀 START');
-                      await fetch('/api/projects/catalog/update-timestamp', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          projectId: pid,
-                          ownerCompany: currentProject?.ownerCompany || null,
-                          ownerClient: currentProject?.ownerClient || null
-                        })
-                      });
-                      const tEnd = performance.now();
-                      console.log('[Save][1-catalog] ✅ DONE', { ms: Math.round(tEnd - tStart) });
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][1-catalog] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // 2. Save translations
-                  (async () => {
-                    if (!pid) return;
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][2-translations] 🚀 START');
-                      const translationsContext = (window as any).__projectTranslationsContext;
-                      if (translationsContext?.saveAllTranslations) {
-                        await translationsContext.saveAllTranslations();
-                        const tEnd = performance.now();
-                        console.log('[Save][2-translations] ✅ DONE', { ms: Math.round(tEnd - tStart) });
-                      } else {
-                        const tEnd = performance.now();
-                        console.warn('[Save][2-translations] ⚠️ Context not available', { ms: Math.round(tEnd - tStart) });
-                      }
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][2-translations] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // 3. Save flow (SPOSTATO PRIMA dei tasks per evitare cleanup degli orphan tasks)
-                  (async () => {
-                    if (!pid) return;
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][3-flow] 🚀 START');
-                      const svc = await import('../services/FlowPersistService');
-                      const tFlush = performance.now();
-                      await svc.flushFlowPersist();
-                      const tFlushEnd = performance.now();
-                      console.log('[Save][3-flow][flush] ✅ DONE', { ms: Math.round(tFlushEnd - tFlush) });
-
-                      // Final PUT immediate (explicit Save)
-                      const tPut = performance.now();
-                      const mainFlow = FlowStateBridge.getFlowById('main');
-                      const flowData = mainFlow
-                        ? { nodes: mainFlow.nodes, edges: mainFlow.edges }
-                        : { nodes: FlowStateBridge.getNodes(), edges: FlowStateBridge.getEdges() };
-
-                      // ✅ Log edges with conditionId before saving (top-level)
-                      const edgesWithCondition = flowData.edges.filter((e: any) => e.conditionId);
-                      if (edgesWithCondition.length > 0) {
-                        console.log('[Save][3-flow] 📊 Edges with conditionId before save', {
-                          count: edgesWithCondition.length,
-                          edges: edgesWithCondition.map((e: any) => ({
-                            id: e.id,
-                            label: e.label,
-                            conditionId: e.conditionId  // ✅ Top-level
-                          }))
-                        });
-                      }
-
-                      // ✅ Transform to simplified format
-                      const { transformNodesToSimplified, transformEdgesToSimplified } = await import('../flows/flowTransformers');
-                      const simplifiedNodes = transformNodesToSimplified(flowData.nodes);
-                      const simplifiedEdges = transformEdgesToSimplified(flowData.edges);
-
-                      // ✅ Log edges with conditionId after transformation
-                      const simplifiedEdgesWithCondition = simplifiedEdges.filter((e: any) => e.conditionId);
-                      if (simplifiedEdgesWithCondition.length > 0) {
-                        console.log('[Save][3-flow] 📊 Edges with conditionId after transformation', {
-                          count: simplifiedEdgesWithCondition.length,
-                          edges: simplifiedEdgesWithCondition.map((e: any) => ({
-                            id: e.id,
-                            label: e.label,
-                            conditionId: e.conditionId
-                          }))
-                        });
-                      }
-
-                      const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ nodes: simplifiedNodes, edges: simplifiedEdges })
-                      });
-                      const tPutEnd = performance.now();
-                      if (!putRes.ok) {
-                        console.error('[Save][3-flow][put] ❌ ERROR', { ms: Math.round(tPutEnd - tPut), status: putRes.status, statusText: putRes.statusText });
-                      } else {
-                        console.log('[Save][3-flow][put] ✅ DONE', { ms: Math.round(tPutEnd - tPut) });
-                      }
-
-                      const tEnd = performance.now();
-                      console.log('[Save][3-flow] ✅ DONE', {
-                        totalMs: Math.round(tEnd - tStart),
-                        flushMs: Math.round(tFlushEnd - tFlush),
-                        putMs: Math.round(tPutEnd - tPut)
-                      });
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][3-flow] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // 4. Save tasks (SPOSTATO DOPO il flow)
-                  (async () => {
-                    if (!pid) return;
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][4-tasks] 🚀 START');
-                      const { taskRepository } = await import('../services/TaskRepository');
-                      const tasksCount = taskRepository.getInternalTasksCount();
-
-                      // ✅ NEW: Log dettagliato PRIMA del salvataggio
-                      const allTasksBefore = taskRepository.getAllTasks();
-                      const instancesBefore = allTasksBefore.filter(t => t.templateId);
-                      console.log('[Save][4-tasks] 🔍 REPOSITORY STATE BEFORE SAVE', {
-                        projectId: pid,
-                        totalTasks: allTasksBefore.length,
-                        instancesCount: instancesBefore.length,
-                        allTaskIds: allTasksBefore.map(t => t.id),
-                        allInstances: instancesBefore.map(t => ({
-                          id: t.id,
-                          templateId: t.templateId,
-                          type: t.type,
-                          hasSteps: t.steps ? Object.keys(t.steps).length > 0 : false,
-                        })),
-                      });
-
-                      // ✅ ARCHITECTURAL FIX: Use tasksToSave (filtered orphan tasks) instead of all tasks
-                      console.log('[Save][4-tasks] 📊 Tasks to save', {
-                        count: tasksToSave.length,
-                        orphanTasksExcluded: orphanTasks.length
-                      });
-                      const saved = await taskRepository.saveAllTasksToDatabase(pid, tasksToSave);
-                      const tEnd = performance.now();
-                      if (saved) {
-                        console.log('[Save][4-tasks] ✅ DONE', { ms: Math.round(tEnd - tStart), tasksCount });
-                      } else {
-                        console.warn('[Save][4-tasks] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), tasksCount });
-                      }
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][4-tasks] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // 5. Save variables (new system)
-                  (async () => {
-                    if (!pid) return;
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][5-variables] 🚀 START');
-                      const { variableCreationService } = await import('../services/VariableCreationService');
-                      const count = variableCreationService.getCount(pid);
-                      console.log('[Save][5-variables] 📊 Variables to save', { count });
-                      const saved = await variableCreationService.saveToDatabase(pid);
-                      const tEnd = performance.now();
-                      if (saved) {
-                        console.log('[Save][5-variables] ✅ DONE', { ms: Math.round(tEnd - tStart), count });
-                      } else {
-                        console.warn('[Save][5-variables] ⚠️ FAILED', { ms: Math.round(tEnd - tStart) });
-                      }
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][5-variables] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // 6. Save all local templates from memory to database
-                  (async () => {
-                    if (!pid) return;
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][6-templates] 🚀 START');
-                      const { DialogueTaskService } = await import('../services/DialogueTaskService');
-
-                      // ✅ Get ALL templates from memory
-                      const allTemplates = DialogueTaskService.getAllTemplates();
-
-                      // ✅ Filter: Only save local templates (not Factory templates, not instances)
-                      // Local template = source !== 'Factory' AND templateId === null
-                      const localTemplates = allTemplates.filter(t => {
-                        const isFactory = t.source === 'Factory';
-                        const isInstance = t.templateId !== null && t.templateId !== undefined;
-                        return !isFactory && !isInstance;
-                      });
-
-                      console.log('[Save][6-templates] 📊 Local templates to save', {
-                        count: localTemplates.length,
-                        templateIds: localTemplates.map(t => t.id)
-                      });
-
-                      // ✅ Mark all local templates as modified so they get saved
-                      localTemplates.forEach(t => {
-                        if (t.id) {
-                          DialogueTaskService.markTemplateAsModified(t.id);
-                        }
-                      });
-
-                      // ✅ SAVE GRAMMARFLOW FROM STORE: Save all grammarFlow from GrammarEditor store
-                      // This ensures grammarFlow is saved even if the editor is still open
-                      await DialogueTaskService.saveAllGrammarFlowFromStore();
-
-                      // ✅ Save ALL marked templates (including Factory templates with grammarflow)
-                      // This ensures grammarflow engines are persisted even if they're on Factory templates
-                      const result = await DialogueTaskService.saveModifiedTemplates(pid);
-                      const tEnd = performance.now();
-                      if (result.failed === 0) {
-                        console.log('[Save][6-templates] ✅ DONE', {
-                          ms: Math.round(tEnd - tStart),
-                          saved: result.saved,
-                          total: localTemplates.length
-                        });
-                      } else {
-                        console.warn('[Save][6-templates] ⚠️ PARTIAL', {
-                          ms: Math.round(tEnd - tStart),
-                          saved: result.saved,
-                          failed: result.failed,
-                          total: localTemplates.length
-                        });
-                      }
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][6-templates] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // 7. Save acts and conditions
-                  (async () => {
-                    if (!pid || !projectData) return;
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][7-conditions] 🚀 START');
-                      const conditionsCount = projectData?.conditions?.flatMap((cat: any) => cat.items || []).length || 0;
-                      console.log('[Save][7-conditions] 📊 Items to save', { conditionsCount });
-
-                      // ✅ REMOVED: saveProjectActsToDb - acts migrati a tasks, salvati via taskRepository
-
-                      const tCond = performance.now();
-                      await (ProjectDataService as any).saveProjectConditionsToDb?.(pid, projectData);
-                      const tCondEnd = performance.now();
-                      console.log('[Save][7-conditions] ✅ DONE', { ms: Math.round(tCondEnd - tCond), conditionsCount });
-
-                      // ✅ REMOVED: Patch to link edges by label
-                      // Edges are now updated synchronously when conditions are created via EdgeConditionUpdater
-                      // No need to patch during save - edges already have conditionId if conditions were created correctly
-
-                      // ✅ REMOVED: Reload completo non necessario - i dati sono già in memoria e aggiornati
-                      // - task.problem è già nel TaskRepository dopo il salvataggio
-                      // - Non serve ricaricare tutto il progetto dal database
-                      // - Evita re-render inutili e perdita di stato in memoria (wizardIntegrationProp, template cache, etc.)
-
-                      const tEnd = performance.now();
-                      console.log('[Save][7-acts-conditions] ✅ DONE', {
-                        totalMs: Math.round(tEnd - tStart),
-                        conditionsMs: Math.round(tCondEnd - tCond)
-                      });
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][7-acts-conditions] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // ✅ REMOVED: Cleanup orphan tasks endpoint - cleanup now happens in frontend BEFORE save
-                  // Orphan tasks are filtered out before sending to backend, so no cleanup needed
-                  (async () => {
-                    // No-op: cleanup is done in frontend before Promise.allSettled
-                    return Promise.resolve();
-                  })()
-                ]);
-
-                const saveEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                const totalMs = Math.round(saveEnd - saveStart);
-
-                console.log('[Save] ═══════════════════════════════════════════════════════');
-                console.log('[Save] ✅ ALL OPERATIONS COMPLETED', {
-                  totalMs,
-                  timestamp: new Date().toISOString(),
-                  results: saveResults.map((r, i) => ({
-                    operation: ['catalog', 'translations', 'flow', 'tasks', 'mappings', 'templates', 'conditions'][i],
-                    status: r.status,
-                    error: r.status === 'rejected' ? String(r.reason) : undefined
-                  }))
+                console.log('[Save][Orchestrator] 📊 Loaded data for orchestrator', {
+                  templatesCount: allTemplates.length,
+                  variablesCount: allVariables.length,
+                  templatesSource: allTemplates.reduce((acc: Record<string, number>, t: any) => {
+                    const source = t.source || 'Project';
+                    acc[source] = (acc[source] || 0) + 1;
+                    return acc;
+                  }, {}),
                 });
-                console.log('[Save] ═══════════════════════════════════════════════════════');
-                const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                // Removed noisy meta POST; language is already stored during bootstrap
+
+                // Map UI state to domain model
+                const domain = mapUIStateToDomain({
+                  projectId: pid,
+                  projectName: currentProject?.name,
+                  flows: allFlows,
+                  tasks: allTasksInMemory,
+                  conditions: projectData?.conditions?.flatMap((cat: any) => cat.items || []) || [],
+                  templates: allTemplates,
+                  variables: allVariables,
+                  metadata: {
+                    ownerCompany: currentProject?.ownerCompany,
+                    ownerClient: currentProject?.ownerClient,
+                  },
+                });
+
+                // Prepare and validate save request
+                const orchestrator = new ProjectSaveOrchestrator();
+                const saveRequest = orchestrator.prepareSave(domain, {
+                  flows: allFlows,
+                  allTemplates: allTemplates,
+                });
+
+                // Validate request
+                const validation = orchestrator.validateRequest(saveRequest);
+                if (!validation.valid) {
+                  throw new Error(`Save request validation failed: ${validation.errors.join(', ')}`);
+                }
+
+                // Import services needed for execution
+                const { FlowPersistService } = await import('../services/FlowPersistService');
+                const { taskRepository } = await import('../services/TaskRepository');
+                const { transformNodesToSimplified, transformEdgesToSimplified } = await import('../flows/flowTransformers');
+
+                // Execute save using orchestrator
+                const saveResult = await orchestrator.executeSave(saveRequest, {
+                  translationsContext: (window as any).__projectTranslationsContext,
+                  flowState: {
+                    flushFlowPersist: async () => {
+                      await FlowPersistService.flushFlowPersist();
+                    },
+                    getFlowById: (id: string) => FlowStateBridge.getFlowById(id),
+                    getNodes: () => FlowStateBridge.getNodes(),
+                    getEdges: () => FlowStateBridge.getEdges(),
+                    transformNodesToSimplified,
+                    transformEdgesToSimplified,
+                  },
+                  taskRepository,
+                  variableService: variableCreationService,
+                  dialogueTaskService: DialogueTaskService,
+                  projectDataService: ProjectDataService,
+                  projectData,
+                });
+
+                if (saveResult.success) {
+                  console.log('[Save][Orchestrator] ✅ Save completed successfully', {
+                    projectId: pid,
+                    duration: saveResult.duration,
+                  });
+                } else {
+                  console.error('[Save][Orchestrator] ❌ Save completed with errors', {
+                    projectId: pid,
+                    duration: saveResult.duration,
+                    errors: saveResult.errors,
+                  });
+                  throw new Error(`Save failed: ${saveResult.errors?.join(', ') || 'Unknown error'}`);
+                }
               } catch (e) {
                 console.error('[SaveProject] commit error', e);
               } finally {
