@@ -34,7 +34,7 @@ export interface MatchDetail {
 }
 
 const MIN_HEIGHT = 150;
-const MAX_HEIGHT = 250;
+const MAX_HEIGHT = 600; // ✅ Increased to allow more expansion
 const DEFAULT_HEIGHT = 250;
 const DEFAULT_RIGHT_PANEL_WIDTH = 25; // Percentuale iniziale per pannello destro
 
@@ -212,6 +212,7 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
   const handleSplitterMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    console.log('[TestPhrases] 🎯 Splitter mouse down', { clientY: e.clientY, panelHeight });
     setIsResizing(true);
     resizeStartRef.current = {
       y: e.clientY,
@@ -223,6 +224,7 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
   const handleVerticalSplitterMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    console.log('[TestPhrases] 🎯 Vertical splitter mouse down', { clientX: e.clientX, rightPanelWidth });
     setIsResizingVertical(true);
     if (containerRef.current) {
       resizeVerticalStartRef.current = {
@@ -235,14 +237,30 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
 
   // Handle horizontal resize (altezza)
   useEffect(() => {
-    if (!isResizing) return;
+    if (!isResizing) {
+      // Remove no-pan class when not resizing
+      document.body.classList.remove('grammar-editor-resizing');
+      return;
+    }
+
+    // ✅ Add class to disable ReactFlow pan during resize
+    document.body.classList.add('grammar-editor-resizing');
 
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault();
+      e.stopPropagation(); // ✅ Stop propagation to prevent ReactFlow from intercepting
       if (!resizeStartRef.current) return;
 
       const delta = resizeStartRef.current.y - e.clientY; // Inverted: dragging up increases height
       const newHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, resizeStartRef.current.height + delta));
+
+      console.log('[TestPhrases] 🔄 Resizing', {
+        delta,
+        oldHeight: resizeStartRef.current.height,
+        newHeight,
+        clientY: e.clientY,
+        startY: resizeStartRef.current.y
+      });
 
       setPanelHeight(newHeight);
       localStorage.setItem('grammar-test-phrases-height', newHeight.toString());
@@ -253,33 +271,53 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
       resizeStartRef.current = null;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      document.body.classList.remove('grammar-editor-resizing');
     };
 
     document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handleMouseMove, { passive: false });
-    document.addEventListener('mouseup', handleMouseUp);
+    // ✅ Use capture phase to intercept events before ReactFlow
+    document.addEventListener('mousemove', handleMouseMove, { passive: false, capture: true });
+    document.addEventListener('mouseup', handleMouseUp, { capture: true });
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousemove', handleMouseMove, { capture: true });
+      document.removeEventListener('mouseup', handleMouseUp, { capture: true });
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      document.body.classList.remove('grammar-editor-resizing');
     };
   }, [isResizing]);
 
   // Handle vertical resize (larghezza pannello destro)
   useEffect(() => {
-    if (!isResizingVertical) return;
+    if (!isResizingVertical) {
+      // Remove no-pan class when not resizing
+      document.body.classList.remove('grammar-editor-resizing');
+      return;
+    }
+
+    // ✅ Add class to disable ReactFlow pan during resize
+    document.body.classList.add('grammar-editor-resizing');
 
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault();
+      e.stopPropagation(); // ✅ Stop propagation to prevent ReactFlow from intercepting
       if (!resizeVerticalStartRef.current || !containerRef.current) return;
 
       const delta = e.clientX - resizeVerticalStartRef.current.x;
       const deltaPercent = (delta / resizeVerticalStartRef.current.containerWidth) * 100;
 
       const newWidth = Math.max(20, Math.min(60, resizeVerticalStartRef.current.width + deltaPercent));
+
+      console.log('[TestPhrases] 🔄 Vertical resizing', {
+        delta,
+        deltaPercent,
+        oldWidth: resizeVerticalStartRef.current.width,
+        newWidth,
+        clientX: e.clientX,
+        startX: resizeVerticalStartRef.current.x
+      });
 
       setRightPanelWidth(newWidth);
       localStorage.setItem('grammar-test-phrases-right-width', newWidth.toString());
@@ -290,18 +328,21 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
       resizeVerticalStartRef.current = null;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      document.body.classList.remove('grammar-editor-resizing');
     };
 
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handleMouseMove, { passive: false });
-    document.addEventListener('mouseup', handleMouseUp);
+    // ✅ Use capture phase to intercept events before ReactFlow
+    document.addEventListener('mousemove', handleMouseMove, { passive: false, capture: true });
+    document.addEventListener('mouseup', handleMouseUp, { capture: true });
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousemove', handleMouseMove, { capture: true });
+      document.removeEventListener('mouseup', handleMouseUp, { capture: true });
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      document.body.classList.remove('grammar-editor-resizing');
     };
   }, [isResizingVertical]);
 
@@ -361,23 +402,24 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
           bottom: panelHeight,
           left: 0,
           right: 0,
-          height: '4px',
-          backgroundColor: isResizing ? '#3b82f6' : 'transparent',
+          height: '6px', // ✅ Increased from 4px to 6px for easier capture
+          backgroundColor: isResizing ? '#3b82f6' : 'rgba(59, 130, 246, 0.3)', // ✅ Always visible, not transparent
           cursor: 'row-resize',
-          zIndex: 100,
+          zIndex: 1000, // ✅ Increased from 100 to 1000 to be above everything
           transition: isResizing ? 'none' : 'background-color 0.2s',
           userSelect: 'none',
           WebkitUserSelect: 'none',
           touchAction: 'none',
+          pointerEvents: 'auto', // ✅ Ensure mouse events work
         }}
         onMouseEnter={(e) => {
           if (!isResizing) {
-            (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(59, 130, 246, 0.5)';
+            (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(59, 130, 246, 0.6)';
           }
         }}
         onMouseLeave={(e) => {
           if (!isResizing) {
-            (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+            (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(59, 130, 246, 0.3)';
           }
         }}
       />

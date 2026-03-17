@@ -39,6 +39,88 @@ export function GrammarEditor({
 }: GrammarEditorProps) {
   const { loadGrammar, createGrammar, grammar: currentGrammar } = useGrammarStore();
 
+  // ✅ State for SemanticPanel width
+  const [semanticPanelWidth, setSemanticPanelWidth] = React.useState(300);
+  const [isResizingSemanticPanel, setIsResizingSemanticPanel] = React.useState(false);
+  const semanticResizeStartRef = React.useRef<{ x: number; width: number } | null>(null);
+
+  // ✅ Load saved width from localStorage
+  React.useEffect(() => {
+    const savedWidth = localStorage.getItem('grammar-semantic-panel-width');
+    if (savedWidth) {
+      const width = parseInt(savedWidth, 10);
+      if (width >= 200 && width <= 600) {
+        setSemanticPanelWidth(width);
+      }
+    }
+  }, []);
+
+  // ✅ Handle SemanticPanel splitter mouse down
+  const handleSemanticPanelSplitterMouseDown = React.useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[GrammarEditor] 🎯 SemanticPanel splitter mouse down', { clientX: e.clientX, semanticPanelWidth });
+    setIsResizingSemanticPanel(true);
+    semanticResizeStartRef.current = {
+      x: e.clientX,
+      width: semanticPanelWidth,
+    };
+  }, [semanticPanelWidth]);
+
+  // ✅ Handle SemanticPanel resize
+  React.useEffect(() => {
+    if (!isResizingSemanticPanel) {
+      // Remove no-pan class when not resizing
+      document.body.classList.remove('grammar-editor-resizing');
+      return;
+    }
+
+    // ✅ Add class to disable ReactFlow pan during resize
+    document.body.classList.add('grammar-editor-resizing');
+
+    const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation(); // ✅ Stop propagation to prevent ReactFlow from intercepting
+      if (!semanticResizeStartRef.current) return;
+
+      const delta = semanticResizeStartRef.current.x - e.clientX; // Inverted: dragging left increases width
+      const newWidth = Math.max(200, Math.min(600, semanticResizeStartRef.current.width + delta));
+
+      console.log('[GrammarEditor] 🔄 SemanticPanel resizing', {
+        delta,
+        oldWidth: semanticResizeStartRef.current.width,
+        newWidth,
+        clientX: e.clientX,
+        startX: semanticResizeStartRef.current.x
+      });
+
+      setSemanticPanelWidth(newWidth);
+      localStorage.setItem('grammar-semantic-panel-width', newWidth.toString());
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingSemanticPanel(false);
+      semanticResizeStartRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.body.classList.remove('grammar-editor-resizing');
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    // ✅ Use capture phase to intercept events before ReactFlow
+    document.addEventListener('mousemove', handleMouseMove, { passive: false, capture: true });
+    document.addEventListener('mouseup', handleMouseUp, { capture: true });
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove, { capture: true });
+      document.removeEventListener('mouseup', handleMouseUp, { capture: true });
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.body.classList.remove('grammar-editor-resizing');
+    };
+  }, [isResizingSemanticPanel]);
+
   // Track last loaded grammar ID to detect changes
   const lastGrammarIdRef = React.useRef<string | null>(null);
 
@@ -190,7 +272,39 @@ export function GrammarEditor({
             onPhrasesChange={onTestPhrasesChange}
           />
         </div>
-        <SemanticPanel editorMode={editorMode} />
+
+        {/* ✅ Horizontal splitter for SemanticPanel */}
+        <div
+          onMouseDown={handleSemanticPanelSplitterMouseDown}
+          style={{
+            width: '6px',
+            backgroundColor: isResizingSemanticPanel ? '#3b82f6' : 'rgba(59, 130, 246, 0.3)',
+            cursor: 'col-resize',
+            flexShrink: 0,
+            transition: isResizingSemanticPanel ? 'none' : 'background-color 0.2s',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            touchAction: 'none',
+            zIndex: 10,
+            position: 'relative',
+            pointerEvents: 'auto',
+          }}
+          onMouseEnter={(e) => {
+            if (!isResizingSemanticPanel) {
+              (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(59, 130, 246, 0.6)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isResizingSemanticPanel) {
+              (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(59, 130, 246, 0.3)';
+            }
+          }}
+        />
+
+        {/* ✅ SemanticPanel with fixed width */}
+        <div style={{ width: `${semanticPanelWidth}px`, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <SemanticPanel editorMode={editorMode} />
+        </div>
       </div>
     </div>
   );

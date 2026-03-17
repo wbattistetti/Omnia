@@ -130,7 +130,7 @@ export function SlotEditor({ editorMode = 'text', onClose }: SlotEditorProps) {
   return (
     <div
       style={{
-        width: '300px',
+        width: '100%', // ✅ Use 100% of container width (set by splitter)
         height: '100%',
         display: 'flex',
         flexDirection: 'column',

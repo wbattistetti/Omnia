@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
-import { ArrowRight, Box, Pencil } from 'lucide-react';
+import { Box, Pencil } from 'lucide-react';
 import type { GrammarNode as GrammarNodeType } from '../types/grammarTypes';
 import { useNodeEditingState } from '../hooks/useNodeEditingState';
 import { useNodeEditing } from '../features/node-editing/useNodeEditing';
@@ -14,7 +14,7 @@ import { isFloatingNode } from '../core/domain/grammar';
 import { NODE_PLACEHOLDER, NODE_FONT, NODE_PADDING_H, NODE_MIN_WIDTH } from '../constants/nodeConstants';
 import { measureText, calculateNodeWidth } from '../utils/nodeGeometry';
 import {
-  getNodeBackground, getBorderColor, getHighestBinding, getBindingIconColor,
+  getNodeBackground, getBorderColor, getHighestBinding, getHighestBindingForDisplay, getBindingIconColor,
   nodeBaseStyles, nodeLabelStyles, nodeMetadataStyles,
 } from '../utils/nodeStyles';
 import { NodeToolbar } from './NodeToolbar';
@@ -227,8 +227,8 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
     });
   }, [node.id, screenToFlowPosition, setDragState]);
 
-  // Get highest binding for icon and color
-  const highestBinding = React.useMemo(() => getHighestBinding(node.bindings), [node.bindings]);
+  // Get highest binding for icon and color (EXCLUDING slots - they are not displayed visually)
+  const highestBinding = React.useMemo(() => getHighestBindingForDisplay(node.bindings), [node.bindings]);
   const bindingIconColor = highestBinding ? getBindingIconColor(highestBinding.type) : null;
 
   // Calculate padding for icon (if binding exists)
@@ -243,16 +243,16 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
     return calculateNodeWidth(node.label) + iconPadding;
   }, [node.label, iconPadding]);
 
-  // Get icon component for highest binding
+  // Get icon component for highest binding (only semantic-set and semantic-value)
   const getBindingIcon = () => {
     if (!highestBinding) return null;
+    // Slots are never displayed, so this should only be semantic-set or semantic-value
+    if (highestBinding.type === 'slot') return null;
 
     const iconSize = 12;
     const iconColor = bindingIconColor || '#c9d1d9';
 
     switch (highestBinding.type) {
-      case 'slot':
-        return <ArrowRight size={iconSize} color={iconColor} />;
       case 'semantic-set':
         return <Box size={iconSize} color={iconColor} />;
       case 'semantic-value':
@@ -338,8 +338,8 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
         />
       )}
 
-      {/* Icon for highest binding - shown on the left */}
-      {!isEditing && highestBinding && (
+      {/* Icon for highest binding - shown on the left (only for semantic-set and semantic-value) */}
+      {!isEditing && highestBinding && highestBinding.type !== 'slot' && (
         <div
           style={{
             position: 'absolute',
@@ -394,17 +394,7 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
         <span style={nodeLabelStyles}>{node.label}</span>
       )}
 
-      {!isEditing && (() => {
-        const slotBinding = node.bindings.find(b => b.type === 'slot');
-        if (slotBinding && slotBinding.type === 'slot') {
-          const slot = getSlot(slotBinding.slotId);
-          // Only show metadata if slot name is different from node label (to avoid duplication)
-          if (slot && slot.name !== node.label) {
-            return <div style={nodeMetadataStyles.slot}>→ {slot.name}</div>;
-          }
-        }
-        return null;
-      })()}
+      {/* REMOVED: Slot name display - slots are not displayed visually in the node */}
       {!isEditing && node.optional && (
         <div style={nodeMetadataStyles.optional}>(opt)</div>
       )}

@@ -71,6 +71,10 @@ export function GrammarCanvasView({
       <style>{`
         .grammar-canvas .react-flow__pane { cursor: default !important; }
         .grammar-canvas .react-flow__node { cursor: default; }
+        /* ✅ Disable ReactFlow pan when resizing splitter */
+        body.grammar-editor-resizing .grammar-canvas .react-flow__pane {
+          pointer-events: none !important;
+        }
       `}</style>
       <div
         ref={canvasRef}
