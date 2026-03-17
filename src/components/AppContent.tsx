@@ -30,6 +30,8 @@ import { openBottomDockedTab } from './AppContent/infrastructure/docking/Docking
 import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
 // ✅ M1: Domain model mapper (introduced, not yet used - will be used in M2)
 import { mapUIStateToDomain } from '../domain/project/mapper';
+// ✅ M2: Project save orchestrator (introduced, dry-run only - will be used in M4)
+import { ProjectSaveOrchestrator } from '../services/project-save/ProjectSaveOrchestrator';
 import { ProjectManager } from './AppContent/application/services/ProjectManager';
 import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
@@ -769,6 +771,51 @@ export const AppContent: React.FC<AppContentProps> = ({
                     count: orphanTasks.length,
                     ids: orphanTasks.map(t => t.id)
                   });
+                }
+
+                // ✅ M2: Prepare save request using orchestrator (DRY-RUN - not executed yet)
+                // This is a characterization step to verify the orchestrator produces correct payload
+                try {
+                  const domain = mapUIStateToDomain({
+                    projectId: pid,
+                    projectName: currentProject?.name,
+                    flows: allFlows,
+                    tasks: allTasksInMemory,
+                    conditions: projectData?.conditions?.flatMap((cat: any) => cat.items || []) || [],
+                    templates: [], // Will be populated from DialogueTaskService in M4
+                    variables: [], // Will be populated from VariableCreationService in M4
+                    metadata: {
+                      ownerCompany: currentProject?.ownerCompany,
+                      ownerClient: currentProject?.ownerClient,
+                    },
+                  });
+
+                  const orchestrator = new ProjectSaveOrchestrator();
+                  const saveRequest = orchestrator.prepareSave(domain, {
+                    flows: allFlows,
+                    allTemplates: [], // Will be populated in M4
+                  });
+
+                  // Validate request
+                  const validation = orchestrator.validateRequest(saveRequest);
+                  if (validation.valid) {
+                    console.log('[Save][M2-Orchestrator] ✅ Save request prepared (DRY-RUN)', {
+                      projectId: pid,
+                      tasksCount: saveRequest.tasks.items.length,
+                      conditionsCount: saveRequest.conditions.items.length,
+                      templatesCount: saveRequest.templates.length,
+                      variablesCount: saveRequest.variables.variables.length,
+                    });
+                  } else {
+                    console.warn('[Save][M2-Orchestrator] ⚠️ Save request validation failed (DRY-RUN)', {
+                      errors: validation.errors,
+                    });
+                  }
+                } catch (e) {
+                  console.warn('[Save][M2-Orchestrator] ⚠️ Failed to prepare save request (DRY-RUN)', {
+                    error: e instanceof Error ? e.message : String(e),
+                  });
+                  // Non blocca il save flow esistente
                 }
 
                 // ✅ OPTIMIZATION: Parallelize all independent save operations
