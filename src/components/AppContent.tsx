@@ -829,7 +829,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 }
 
                 // Import services needed for execution
-                const { FlowPersistService } = await import('../services/FlowPersistService');
+                const { flushFlowPersist } = await import('../services/FlowPersistService');
                 const { transformNodesToSimplified, transformEdgesToSimplified } = await import('../flows/flowTransformers');
                 // Note: taskRepository is already imported statically at the top of the file
 
@@ -838,7 +838,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                   translationsContext: (window as any).__projectTranslationsContext,
                   flowState: {
                     flushFlowPersist: async () => {
-                      await FlowPersistService.flushFlowPersist();
+                      await flushFlowPersist();
                     },
                     getFlowById: (id: string) => FlowStateBridge.getFlowById(id),
                     getNodes: () => FlowStateBridge.getNodes(),
