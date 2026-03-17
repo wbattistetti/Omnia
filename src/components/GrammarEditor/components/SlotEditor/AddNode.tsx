@@ -3,8 +3,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Box, Pencil, MessageSquare } from 'lucide-react';
-import { EditingNode } from './EditingNode';
-import { addNodeStyle, iconStyle, type Theme } from './styles';
+import { EditableText } from '../../../common/EditableText';
+import { addNodeStyle, iconStyle, editingInputStyle, type Theme } from './styles';
 import type { ValidationResult, SynonymSuggestion } from '../../types/slotEditorTypes';
 
 type IconType = 'arrow' | 'box' | 'pencil' | 'message';
@@ -154,25 +154,56 @@ export function AddNode({
     }
   };
 
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-focus when entering editing mode
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 0);
+    }
+  }, [isEditing]);
+
   if (isEditing) {
     // Use key to force reset when entering auto-edit mode
     const editingKey = autoEditKey && currentAutoEditKey === autoEditKey
       ? `auto-edit-${autoEditKey}-${Date.now()}`
       : 'manual-edit';
 
+    // Convert ValidationResult to EditableText validation format
+    const validationForEditableText = validation
+      ? (value: string) => {
+          const result = validation(value);
+          return {
+            isValid: result.isValid,
+            errors: result.errors,
+            warnings: result.warnings,
+          };
+        }
+      : undefined;
+
     return (
       <div style={addNodeStyle(theme, level)}>
-        <EditingNode
+        <EditableText
           key={editingKey}
-          initialValue=""
-          placeholder={placeholder}
+          value=""
+          editing={true}
           onSave={handleSave}
           onCancel={handleCancel}
-          autoFocus={true}
-          validation={validationResult}
-          suggestions={suggestionList.length > 0 ? suggestionList : undefined}
-          theme={theme}
-          onValidate={validation}
+          placeholder={placeholder}
+          showActionButtons={true}
+          expectedLanguage="it"
+          showLanguageWarning={true}
+          enableVoice={true}
+          multiline={false}
+          validation={validationForEditableText}
+          inputRef={inputRef}
+          style={{
+            ...editingInputStyle(theme),
+            width: '100%',
+          }}
         />
       </div>
     );

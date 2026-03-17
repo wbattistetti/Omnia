@@ -1,10 +1,12 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ArrowRight, Box, Pencil, MessageSquare, MoreHorizontal } from 'lucide-react';
 import { SlotTreeNode } from './SlotTreeNode';
 import { AddNode } from './AddNode';
+import { EditableText } from '../../../common/EditableText';
+import { useInlineEditing } from '../../hooks/SlotEditor/useInlineEditing';
 import type { TreeNode } from '../../types/slotEditorTypes';
 import type { Theme } from './styles';
 import {
@@ -26,6 +28,14 @@ interface SlotTreeProps {
   onCreateSemanticSet: (name: string) => void;
   onCreateSemanticValue: (setId: string, value: string) => void;
   onCreateLinguisticValue: (setId: string, valueId: string, synonym: string) => void;
+  onUpdateSlot: (id: string, name: string) => void;
+  onDeleteSlot: (id: string) => void;
+  onUpdateSemanticSet: (id: string, name: string) => void;
+  onDeleteSemanticSet: (id: string) => void;
+  onUpdateSemanticValue: (setId: string, valueId: string, newValue: string) => void;
+  onDeleteSemanticValue: (setId: string, valueId: string) => void;
+  onUpdateLinguisticValue: (setId: string, valueId: string, oldSynonym: string, newSynonym: string) => void;
+  onDeleteLinguisticValue: (setId: string, valueId: string, synonym: string) => void;
   slots: SemanticSlot[];
   semanticSets: SemanticSet[];
   theme: Theme;
@@ -93,12 +103,26 @@ export function SlotTree({
   onCreateSemanticSet,
   onCreateSemanticValue,
   onCreateLinguisticValue,
+  onUpdateSlot,
+  onDeleteSlot,
+  onUpdateSemanticSet,
+  onDeleteSemanticSet,
+  onUpdateSemanticValue,
+  onDeleteSemanticValue,
+  onUpdateLinguisticValue,
+  onDeleteLinguisticValue,
   slots,
   semanticSets,
   theme,
   autoEditKey,
   onAutoEditComplete,
 }: SlotTreeProps) {
+  // Use inline editing hook for slots
+  const slotEditing = useInlineEditing(slots, (slot) => slot.name);
+
+  // Use inline editing hook for semantic sets
+  const semanticSetEditing = useInlineEditing(semanticSets, (set) => set.name);
+
   const renderNode = (node: TreeNode): React.ReactNode => {
     const isExpanded = expanded.has(node.id);
     const isSelected = selected === node.id;
@@ -142,6 +166,10 @@ export function SlotTree({
 
       // Actual slot node - draggable
       const handleSlotDragStart = (e: React.DragEvent) => {
+        if (slotEditing.isEditing(slot.id)) {
+          e.preventDefault();
+          return;
+        }
         e.dataTransfer.setData('application/json', JSON.stringify({
           type: 'slot',
           slotId: slot.id,
@@ -150,6 +178,23 @@ export function SlotTree({
         e.dataTransfer.effectAllowed = 'copy';
         attachDragImage(e, '#10b981', 'M5 12h14M12 5l7 7-7 7', slot.name);
       };
+
+      const handleEditSlot = () => slotEditing.handleEdit(slot.id);
+      const handleSaveSlot = (newName: string) => {
+        if (!onUpdateSlot) {
+          console.error('[SlotTree] onUpdateSlot is not defined');
+          return;
+        }
+        onUpdateSlot(slot.id, newName);
+        slotEditing.handleCancel();
+      };
+      const handleCancelEditSlot = () => slotEditing.handleCancel();
+      const handleDeleteSlot = () => {
+        if (window.confirm(`Delete slot "${slot.name}"?`)) {
+          onDeleteSlot(slot.id);
+        }
+      };
+      const isEditing = slotEditing.isEditing(slot.id);
 
       return (
         <SlotTreeNode
@@ -162,8 +207,38 @@ export function SlotTree({
           isSelected={isSelected}
           level={node.level}
           theme={theme}
-          draggable={true}
+          draggable={!isEditing}
           onDragStart={handleSlotDragStart}
+          onEdit={handleEditSlot}
+          onDelete={handleDeleteSlot}
+          isEditing={isEditing}
+          editingComponent={
+            isEditing ? (
+              <EditableText
+                value={slotEditing.editingValue}
+                editing={isEditing}
+                onSave={handleSaveSlot}
+                onCancel={handleCancelEditSlot}
+                placeholder="Slot name..."
+                showActionButtons={true}
+                expectedLanguage="it"
+                showLanguageWarning={true}
+                enableVoice={true}
+                multiline={false}
+                validation={(value) => {
+                  const result = validateSlotName(value, slots, slot.id);
+                  return {
+                    isValid: result.isValid,
+                    errors: result.errors,
+                    warnings: result.warnings,
+                  };
+                }}
+                style={{
+                  fontSize: '12px',
+                }}
+              />
+            ) : undefined
+          }
         >
           {isExpanded && node.children?.map((child) => renderNode(child))}
         </SlotTreeNode>
@@ -208,6 +283,10 @@ export function SlotTree({
       // Actual semantic set node - draggable
       // Always expandable (hasChildren=true) because it always has AddNode for semantic values
       const handleSetDragStart = (e: React.DragEvent) => {
+        if (semanticSetEditing.isEditing(set.id)) {
+          e.preventDefault();
+          return;
+        }
         e.dataTransfer.setData('application/json', JSON.stringify({
           type: 'semantic-set',
           setId: set.id,
@@ -217,10 +296,16 @@ export function SlotTree({
         attachDragImage(e, '#fbbf24', 'M3 3h18v18H3z', set.name);
       };
 
+      const handleEditSet = () => semanticSetEditing.handleEdit(set.id);
+      const handleSaveSet = (newName: string) => semanticSetEditing.handleSave(set.id, newName, onUpdateSemanticSet);
+      const handleCancelEditSet = () => semanticSetEditing.handleCancel();
+      const handleDeleteSet = () => semanticSetEditing.handleDelete(set.id, set.name, onDeleteSemanticSet);
+      const isEditingSet = semanticSetEditing.isEditing(set.id);
+
       return (
         <SlotTreeNode
           icon={<Box size={14} color="#fbbf24" />}
-          label={node.label}
+          label={set.name}
           isExpanded={isExpanded}
           hasChildren={true}
           onToggle={() => onToggleExpanded(node.id)}
@@ -228,8 +313,38 @@ export function SlotTree({
           isSelected={isSelected}
           level={node.level}
           theme={theme}
-          draggable={true}
+          draggable={!isEditingSet}
           onDragStart={handleSetDragStart}
+          onEdit={handleEditSet}
+          onDelete={handleDeleteSet}
+          isEditing={isEditingSet}
+          editingComponent={
+            isEditingSet ? (
+              <EditableText
+                value={semanticSetEditing.editingValue}
+                editing={isEditingSet}
+                onSave={handleSaveSet}
+                onCancel={handleCancelEditSet}
+                placeholder="Semantic set name..."
+                showActionButtons={true}
+                expectedLanguage="it"
+                showLanguageWarning={true}
+                enableVoice={true}
+                multiline={false}
+                validation={(value) => {
+                  const result = validateSemanticSetName(value, semanticSets, set.id);
+                  return {
+                    isValid: result.isValid,
+                    errors: result.errors,
+                    warnings: result.warnings,
+                  };
+                }}
+                style={{
+                  fontSize: '12px',
+                }}
+              />
+            ) : undefined
+          }
         >
           {isExpanded && (
             <>
@@ -299,7 +414,17 @@ export function SlotTree({
                 autoEditKey={`linguistic-value-${value.id}`}
                 currentAutoEditKey={autoEditKey}
                 onAutoEditComplete={onAutoEditComplete}
-                validation={(synonym) => validateLinguisticValue(synonym, value.synonyms)}
+                validation={(synonym) => {
+                  // Get all synonyms from all semantic values in the set
+                  const setId = node.parentId?.replace('set-', '') || '';
+                  const set = semanticSets.find((s) => s.id === setId);
+                  if (!set) {
+                    return { isValid: false, errors: ['Semantic set not found'] };
+                  }
+                  // Collect all synonyms from all values in the set
+                  const allSynonyms = set.values.flatMap((v) => v.synonyms);
+                  return validateLinguisticValue(synonym, allSynonyms);
+                }}
                 suggestions={(synonym) => {
                   const set = semanticSets.find((s) => s.values.some((v) => v.id === value.id));
                   if (!set) return [];

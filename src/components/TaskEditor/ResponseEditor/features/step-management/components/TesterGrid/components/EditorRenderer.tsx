@@ -4,12 +4,13 @@ import ExtractorInlineEditor from '@responseEditor/InlineEditors/ExtractorInline
 import NERInlineEditor from '@responseEditor/InlineEditors/NERInlineEditor';
 import LLMInlineEditor from '@responseEditor/InlineEditors/LLMInlineEditor';
 import IntentEditorInlineEditor from '@responseEditor/InlineEditors/IntentEditorInlineEditor';
+import ContractEditorWrapper from '@responseEditor/ContractSelector/ContractEditorWrapper';
 
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 interface EditorRendererProps {
-  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | null;
+  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow' | null;
   editorProps?: {
     regex?: string;
     setRegex?: (value: string) => void;
@@ -26,7 +27,7 @@ interface EditorRendererProps {
     getNote?: (rowIndex: number, col: string) => string | undefined;
   };
   onCloseEditor?: () => void;
-  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
+  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow') => void;
   setEditorButton: (button: React.ReactNode) => void;
   setEditorErrorMessage: (error: React.ReactNode) => void;
   contract?: DataContract | null;
@@ -46,7 +47,7 @@ export function EditorRenderer({
   contract,
   onContractChange,
 }: EditorRendererProps) {
-  if (!activeEditor || !['regex', 'extractor', 'ner', 'llm', 'embeddings'].includes(activeEditor) || !editorProps) {
+  if (!activeEditor || !['regex', 'extractor', 'ner', 'llm', 'embeddings', 'grammarflow'].includes(activeEditor) || !editorProps) {
     return null;
   }
 
@@ -107,6 +108,21 @@ export function EditorRenderer({
         <IntentEditorInlineEditor
           {...commonProps}
           act={actForEmbeddings}
+        />
+      );
+    case 'grammarflow':
+      return (
+        <ContractEditorWrapper
+          method="grammarflow"
+          contract={contract}
+          onContractChange={onContractChange || (() => {})}
+          node={editorProps.node}
+          kind={editorProps.kind}
+          profile={editorProps.profile}
+          testCases={editorProps.testCases}
+          setTestCases={editorProps.setTestCases}
+          onProfileUpdate={editorProps.onProfileUpdate}
+          onClose={onCloseEditor || (() => toggleEditor('grammarflow'))}
         />
       );
     default:

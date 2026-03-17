@@ -4,7 +4,7 @@ import { useState, useLayoutEffect, useCallback, useRef } from 'react';
 // CONSTANTS
 // ============================================================================
 
-const VALID_EDITOR_TYPES = ['regex', 'extractor', 'ner', 'llm'] as const;
+const VALID_EDITOR_TYPES = ['regex', 'extractor', 'ner', 'llm', 'embeddings', 'grammarflow'] as const;
 const EXTRACTOR_START_OFFSET = 2; // After "Frase" and "Buttons" columns
 const FALLBACK_SCROLLBAR_WIDTH = 12;
 const OVERLAY_Z_INDEX = 1000;
@@ -16,7 +16,7 @@ const OVERLAY_Z_INDEX = 1000;
 type ValidEditorType = typeof VALID_EDITOR_TYPES[number];
 
 interface UseEditorOverlayOptions {
-  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
+  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | 'grammarflow' | null;
   contractTableRef?: React.RefObject<HTMLDivElement>;
 }
 

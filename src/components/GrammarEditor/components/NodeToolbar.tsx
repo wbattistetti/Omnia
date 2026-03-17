@@ -22,7 +22,7 @@ interface NodeToolbarProps {
 }
 
 /**
- * Toolbar displayed above a grammar node (bottom edge aligns with node top edge).
+ * Toolbar displayed to the right of a grammar node.
  * Gear button opens a fully custom dropdown menu on click.
  * Trash button deletes the node.
  */
@@ -119,18 +119,17 @@ export function NodeToolbar({
 
 const toolbarContainerStyle: React.CSSProperties = {
   position: 'absolute',
-  bottom: '100%',
-  right: '0px',
+  left: '100%',
+  top: '0px',
   display: 'flex',
   flexDirection: 'row',
   gap: '2px',
   zIndex: 20,
   backgroundColor: '#1a1f2e',
-  borderRadius: '4px 4px 0 0',
+  borderRadius: '4px',
   padding: '2px',
   border: '1px solid #4a5568',
-  borderBottom: 'none',
-  marginBottom: '-1px',
+  marginLeft: '4px',
 };
 
 const gearButtonStyle: React.CSSProperties = {

@@ -34,9 +34,15 @@ Public Class NLPContract
     ''' </summary>
     Public Property Parsers As List(Of NLPEngine)
 
+    ''' <summary>
+    ''' Test phrases per il GrammarFlow engine
+    ''' </summary>
+    Public Property TestPhrases As List(Of String)
+
     Public Sub New()
         SubDataMapping = New Dictionary(Of String, SubDataMappingInfo)()
         Parsers = New List(Of NLPEngine)()
+        TestPhrases = New List(Of String)()
     End Sub
 End Class
 

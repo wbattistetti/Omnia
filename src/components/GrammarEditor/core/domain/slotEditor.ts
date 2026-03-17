@@ -62,12 +62,6 @@ export function validateSlotName(
     errors.push(`Slot "${duplicate.name}" already exists`);
   }
 
-  // Check format (should be alphanumeric with underscores)
-  if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)) {
-    warnings.push('Slot name should start with a letter and contain only letters, numbers, and underscores');
-    suggestions.push(name.replace(/[^a-zA-Z0-9_]/g, '_'));
-  }
-
   return {
     isValid: errors.length === 0,
     errors,
@@ -152,11 +146,16 @@ export function validateSemanticValue(
 
 /**
  * Validates linguistic value (synonym)
+ * IMPORTANT: Checks for duplicates across the ENTIRE semantic set, not just within a single semantic value.
+ *
+ * @param synonym - The synonym to validate
+ * @param allSynonymsInSet - All synonyms from ALL semantic values in the semantic set
+ * @param excludeSynonym - Optional synonym to exclude from duplicate check (when editing)
  */
 export function validateLinguisticValue(
   synonym: string,
-  existingSynonyms: string[],
-  excludeIndex?: number
+  allSynonymsInSet: string[],
+  excludeSynonym?: string
 ): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -166,14 +165,20 @@ export function validateLinguisticValue(
     return { isValid: false, errors, warnings };
   }
 
-  // Check for duplicates (case-insensitive)
+  // Check for duplicates across the entire semantic set (case-insensitive, normalized)
   const normalized = normalizeForComparison(synonym);
-  const duplicateIndex = existingSynonyms.findIndex(
-    (s, idx) => idx !== excludeIndex && normalizeForComparison(s) === normalized
+  const duplicate = allSynonymsInSet.find(
+    (s) => {
+      // Exclude the synonym being edited
+      if (excludeSynonym && normalizeForComparison(s) === normalizeForComparison(excludeSynonym)) {
+        return false;
+      }
+      return normalizeForComparison(s) === normalized;
+    }
   );
 
-  if (duplicateIndex !== -1) {
-    errors.push(`Synonym "${existingSynonyms[duplicateIndex]}" already exists`);
+  if (duplicate) {
+    errors.push(`Synonym "${duplicate}" already exists in this semantic set`);
   }
 
   return {

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus } from 'lucide-react';
-
-type ContractMethod = 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings';
+import type { ContractMethod } from '@responseEditor/ContractSelector/ContractSelector';
+import { getContractMethodLabel } from '@responseEditor/ContractSelector/ContractSelector';
 
 interface AddContractDropdownProps {
   onSelect: (method: ContractMethod) => void;
@@ -9,20 +9,12 @@ interface AddContractDropdownProps {
   label?: string;
 }
 
-const METHOD_LABELS: Record<ContractMethod, string> = {
-  regex: 'Regex',
-  rules: 'Rules',
-  ner: 'NER',
-  llm: 'LLM',
-  embeddings: 'Embeddings',
-};
-
 /**
  * Dropdown component for adding a new contract method
  */
 export default function AddContractDropdown({
   onSelect,
-  availableMethods = ['regex', 'rules', 'ner', 'llm', 'embeddings'],
+  availableMethods = ['regex', 'rules', 'ner', 'llm', 'embeddings', 'grammarflow'],
   label = 'Aggiungi contract',
 }: AddContractDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -116,7 +108,7 @@ export default function AddContractDropdown({
                 e.currentTarget.style.background = 'transparent';
               }}
             >
-              {METHOD_LABELS[method]}
+              {getContractMethodLabel(method)}
             </button>
           ))}
         </div>

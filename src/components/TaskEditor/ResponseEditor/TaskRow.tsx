@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Check, X } from 'lucide-react';
 import TaskRowActions from './TaskRowActions';
-import ActionText from './ActionText';
+import { EditableText } from '../../common/EditableText';
 import styles from './TaskRow.module.css';
 import { useFontContext } from '@context/FontContext';
 
@@ -38,7 +37,6 @@ function TaskRowInner({
 }: TaskRowProps) {
   const { combinedClass } = useFontContext();
   const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState(text);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Removed verbose log
@@ -51,69 +49,25 @@ function TaskRowInner({
     onEditingChange?.(editing);
   }, [editing, onEditingChange]);
 
-  // Sync editValue when text prop changes and we're not editing
-  React.useEffect(() => {
-    if (!editing) {
-      setEditValue(text);
-    }
-  }, [text, editing]);
-
   // Open editor automatically when asked
   React.useEffect(() => {
     if (autoEdit && taskId === 'sayMessage' && !editing) {
-      setEditValue(text || '');
       setEditing(true);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [autoEdit, text, taskId, editing]);
+  }, [autoEdit, taskId, editing]);
 
   const handleEdit = () => {
     if (taskId !== 'sayMessage') return;
-    setEditValue(text);
     setEditing(true);
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  const handleEditKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
-      const newValue = editValue?.trim() || '';
-      setEditing(false);
-      try { inputRef.current?.blur(); } catch { }
-
-      // If the value is empty after trimming, delete the row
-      if (newValue.length === 0 && onDelete) {
-        onDelete();
-        return;
-      }
-
-      // Always call onEdit when saving, regardless of whether value changed
-      // This ensures edits are saved even if text prop hasn't updated yet
-      if (onEdit) {
-        onEdit(newValue);
-      }
-    }
-    if (e.key === 'Escape') {
-      // If this row is newly added and still empty, ESC removes it
-      const trimmedValue = editValue?.trim() || '';
-      if ((!text || text.trim().length === 0) && trimmedValue.length === 0) {
-        if (onDelete) {
-          e.preventDefault();
-          onDelete();
-          return;
-        }
-      }
-      setEditing(false);
-      setEditValue(text);
-    }
-  };
-
-  const handleEditConfirm = () => {
-    const newValue = (editValue || '').trim();
+  const handleSave = (newValue: string) => {
     setEditing(false);
+    try { inputRef.current?.blur(); } catch { }
 
-    // If the value is empty, delete the row
+    // If the value is empty after trimming, delete the row
     if (newValue.length === 0 && onDelete) {
       onDelete();
       return;
@@ -126,14 +80,13 @@ function TaskRowInner({
     }
   };
 
-  const handleEditCancel = () => {
+  const handleCancel = () => {
     setEditing(false);
-    setEditValue(text);
     // Notify parent that editing was cancelled
     onEditingChange?.(false);
   };
 
-  const handleBlur = (e: React.FocusEvent) => {
+  const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     if (!editing) {
       return;
     }
@@ -144,8 +97,8 @@ function TaskRowInner({
       return;
     }
 
-    // Use the EXACT same logic as ESC key handler
-    const trimmedValue = editValue?.trim() || '';
+    // If we were editing and there's a value, save it
+    const trimmedValue = e.target.value?.trim() || '';
     const trimmedText = text?.trim() || '';
 
     // Same check as ESC: if this row is newly added and still empty, remove it
@@ -157,16 +110,12 @@ function TaskRowInner({
       return;
     }
 
-    // If we were editing and there's a value, save it
     setEditing(false);
     if (trimmedValue.length > 0) {
       // Save the new value if it's not empty
       if (onEdit) {
         onEdit(trimmedValue);
       }
-    } else {
-      // If value is empty but original text exists, restore it
-      setEditValue(text);
     }
   };
 
@@ -208,39 +157,30 @@ function TaskRowInner({
             {label}
           </span>
         )}
-        {taskId === 'sayMessage' && (
-          <ActionText
-            text={text}
+        {taskId === 'sayMessage' ? (
+          <EditableText
+            value={text}
             editing={editing}
-            inputRef={inputRef}
-            editValue={editValue}
-            onChange={setEditValue}
-            onKeyDown={handleEditKeyDown}
+            onSave={handleSave}
+            onCancel={handleCancel}
+            onStartEditing={handleEdit}
             onBlur={handleBlur}
+            inputRef={inputRef}
+            placeholder="Scrivi un testo qui..."
+            displayMode="text"
+            showActionButtons={true}
+            expectedLanguage="it"
+            showLanguageWarning={true}
+            enableVoice={true}
+            multiline={true}
+            style={{
+              marginRight: 10,
+            }}
           />
-        )}
-        {editing && taskId === 'sayMessage' ? (
-          <>
-            <button
-              onClick={handleEditConfirm}
-              style={{ background: 'none', border: 'none', color: '#22c55e', cursor: 'pointer', marginRight: 6, display: 'flex', alignItems: 'center' }}
-              tabIndex={-1}
-              title="Conferma modifica"
-              aria-label="Conferma modifica"
-            >
-              <Check size={18} />
-            </button>
-            <button
-              onClick={handleEditCancel}
-              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-              tabIndex={-1}
-              title="Annulla modifica"
-              aria-label="Annulla modifica"
-            >
-              <X size={18} />
-            </button>
-          </>
         ) : (
+          <span style={{ color: '#fff', fontWeight: 500 }}>{text}</span>
+        )}
+        {!editing && (
           <TaskRowActions
             onEdit={taskId === 'sayMessage' ? handleEdit : undefined}
             onDelete={onDelete}

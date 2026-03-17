@@ -96,7 +96,7 @@ export default function DataExtractionEditor({
     nodeTemplateId: string | undefined;
     nodeLabel: string | undefined;
   }>;
-  initialEditor?: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'; // ✅ NEW: Editor to open on mount
+  initialEditor?: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow'; // ✅ NEW: Editor to open on mount
 }) {
   // Profile state management (extracted to hook)
   const {

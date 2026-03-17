@@ -3,7 +3,7 @@ import { MemoizedEditorRenderer } from './EditorRenderer';
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 interface EditorOverlayProps {
-  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | null;
+  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow' | null;
   testing: boolean;
   editorOverlayStyle: React.CSSProperties;
   editorProps?: {
@@ -17,7 +17,7 @@ interface EditorOverlayProps {
     onProfileUpdate?: (profile: any) => void;
     task?: any;
   };
-  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
+  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow') => void;
   onCloseEditor?: () => void;
   editorButton: React.ReactNode;
   editorErrorMessage: React.ReactNode;
@@ -49,7 +49,7 @@ export function EditorOverlay({
   // ✅ REMOVED: editorButton, editorErrorMessage, getActiveEditorColor, getActiveEditorTitle, getTextColor
   // These are no longer used since header was removed
 }: EditorOverlayProps) {
-  if (!activeEditor || testing || !['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) || Object.keys(editorOverlayStyle).length === 0 || !editorProps) {
+  if (!activeEditor || testing || !['regex', 'extractor', 'ner', 'llm', 'embeddings', 'grammarflow'].includes(activeEditor) || Object.keys(editorOverlayStyle).length === 0 || !editorProps) {
     return null;
   }
 

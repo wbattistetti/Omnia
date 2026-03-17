@@ -12,6 +12,7 @@ import ExtractorInlineEditor from '@responseEditor/InlineEditors/ExtractorInline
 import NERInlineEditor from '@responseEditor/InlineEditors/NERInlineEditor';
 import LLMInlineEditor from '@responseEditor/InlineEditors/LLMInlineEditor';
 import IntentEditorInlineEditor from '@responseEditor/InlineEditors/IntentEditorInlineEditor';
+import GrammarFlowInlineEditor from '@responseEditor/InlineEditors/GrammarFlowInlineEditor';
 
 interface ContractEditorWrapperProps {
   method: ContractMethod;
@@ -113,6 +114,15 @@ export default function ContractEditorWrapper({
         <IntentEditorInlineEditor
           {...commonProps}
           task={node?.task}
+        />
+      );
+
+    case 'grammarflow':
+      return (
+        <GrammarFlowInlineEditor
+          contract={contract}
+          onContractChange={onContractChange}
+          {...commonProps}
         />
       );
 

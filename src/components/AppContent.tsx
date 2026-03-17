@@ -979,12 +979,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                         templateIds: localTemplates.map(t => t.id)
                       });
 
-                      if (localTemplates.length === 0) {
-                        const tEnd = performance.now();
-                        console.log('[Save][6-templates] ✅ DONE (no local templates)', { ms: Math.round(tEnd - tStart) });
-                        return;
-                      }
-
                       // ✅ Mark all local templates as modified so they get saved
                       localTemplates.forEach(t => {
                         if (t.id) {
@@ -992,7 +986,8 @@ export const AppContent: React.FC<AppContentProps> = ({
                         }
                       });
 
-                      // ✅ Save all marked templates
+                      // ✅ Save ALL marked templates (including Factory templates with grammarflow)
+                      // This ensures grammarflow engines are persisted even if they're on Factory templates
                       const result = await DialogueTaskService.saveModifiedTemplates(pid);
                       const tEnd = performance.now();
                       if (result.failed === 0) {

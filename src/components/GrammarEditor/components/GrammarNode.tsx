@@ -6,17 +6,22 @@ import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
 import { ArrowRight, Box, Pencil } from 'lucide-react';
 import type { GrammarNode as GrammarNodeType } from '../types/grammarTypes';
 import { useNodeEditingState } from '../hooks/useNodeEditingState';
-import { useNodeKeyboardHandlers } from '../hooks/useNodeKeyboardHandlers';
 import { useNodeEditing } from '../features/node-editing/useNodeEditing';
+import { useNodeCreation } from '../features/node-creation/useNodeCreation';
+import { useEdgeInteractions } from '../hooks/useEdgeInteractions';
 import { useGrammarStore } from '../core/state/grammarStore';
+import { isFloatingNode } from '../core/domain/grammar';
 import { NODE_PLACEHOLDER, NODE_FONT, NODE_PADDING_H, NODE_MIN_WIDTH } from '../constants/nodeConstants';
 import { measureText, calculateNodeWidth } from '../utils/nodeGeometry';
 import {
   getNodeBackground, getBorderColor, getHighestBinding, getBindingIconColor,
-  nodeBaseStyles, nodeInputStyles, nodeLabelStyles, nodeMetadataStyles,
+  nodeBaseStyles, nodeLabelStyles, nodeMetadataStyles,
 } from '../utils/nodeStyles';
 import { NodeToolbar } from './NodeToolbar';
+import { BindingTooltip } from './BindingTooltip';
+import { WordsEditor } from './WordsEditor';
 import { useDrag } from '../context/DragContext';
+import { EditableText } from '../../common/EditableText';
 
 interface GrammarNodeData {
   node: GrammarNodeType;
@@ -35,8 +40,9 @@ interface GrammarNodeData {
 export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
   const { node } = data;
   const { editNodeLabel } = useNodeEditing();
-  const { deleteNode, updateNode, getSlot } = useGrammarStore();
+  const { deleteNode, getSlot, getNode, grammar } = useGrammarStore();
   const [isHovered, setIsHovered] = React.useState(false);
+  const [isWordsEditorOpen, setIsWordsEditorOpen] = React.useState(false);
   const { setDragState } = useDrag();
   const { screenToFlowPosition } = useReactFlow();
 
@@ -45,19 +51,162 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
     inputRef, startEditing, stopEditing, resetValue,
   } = useNodeEditingState(node.label);
 
-  const { handleKeyDown } = useNodeKeyboardHandlers({
-    nodeId: node.id,
-    editValue,
-    isEditing,
-    onSave: () => {},
-    onCancel: resetValue,
-    onStopEditing: stopEditing,
-  });
+  const { createNodeAfterFloating } = useNodeCreation();
+  const { handleEdgeCreate } = useEdgeInteractions();
 
-  const handleBlur = () => {
-    if (editValue.trim()) editNodeLabel(node.id, editValue.trim());
+  // Handle save: save label and potentially create new node if floating
+  const handleSave = React.useCallback((newLabel: string) => {
+    const trimmedValue = newLabel.trim();
+
+    console.log('[GrammarNode] 💾 handleSave called', {
+      nodeId: node.id,
+      newLabel,
+      trimmedValue,
+      currentLabel: node.label,
+    });
+
+    // Always save the current node label if not empty
+    if (trimmedValue) {
+      editNodeLabel(node.id, trimmedValue);
+      console.log('[GrammarNode] ✅ Label saved', {
+        nodeId: node.id,
+        newLabel: trimmedValue,
+      });
+    }
+
     stopEditing();
-  };
+
+    // Use requestAnimationFrame to ensure store is updated before checking if floating
+    // This is necessary because React state updates might not be synchronous
+    requestAnimationFrame(() => {
+      const updatedGrammar = useGrammarStore.getState().grammar;
+      const currentNode = updatedGrammar ? updatedGrammar.nodes.find(n => n.id === node.id) : undefined;
+
+      if (updatedGrammar && currentNode) {
+        const shouldCreateNewNode = isFloatingNode(
+          updatedGrammar,
+          currentNode,
+          false, // not editing anymore
+          trimmedValue // use saved label
+        );
+
+        console.log('[GrammarNode] 🔍 Checking if should create new node', {
+          nodeId: node.id,
+          shouldCreateNewNode,
+          currentNodeLabel: currentNode.label,
+          hasDescendants: updatedGrammar.edges.some(e => e.source === node.id),
+        });
+
+        // If node was floating, create new node after it
+        if (shouldCreateNewNode) {
+          const newNode = createNodeAfterFloating(currentNode, trimmedValue || undefined);
+          if (newNode) {
+            handleEdgeCreate(node.id, newNode.id, 'sequential');
+
+            // New node will automatically enter editing mode via useNodeEditingState (isNew = true)
+            // Focus is handled by useLayoutEffect in useNodeEditingState
+          }
+        }
+      }
+    });
+  }, [node.id, node.label, editNodeLabel, stopEditing, createNodeAfterFloating, handleEdgeCreate]);
+
+  const handleCancel = React.useCallback(() => {
+    resetValue();
+  }, [resetValue]);
+
+  // Handle blur: if empty, delete floating node; otherwise save (like Enter)
+  const handleBlur = React.useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
+    // Use a small delay to check if focus moved to another element in the same component
+    // This prevents blur from firing when clicking action buttons
+    const relatedTarget = e.relatedTarget as HTMLElement | null;
+    if (relatedTarget && e.currentTarget.contains(relatedTarget)) {
+      // Focus moved within the same component, ignore blur
+      return;
+    }
+
+    const trimmedValue = editValue.trim();
+
+    // If text is not empty, save (like Enter) - don't cancel
+    if (trimmedValue) {
+      console.log('[GrammarNode] 💾 Blur with text, saving...', {
+        nodeId: node.id,
+        trimmedValue,
+        editValue,
+      });
+      // Save immediately - this will update the node label in the store
+      editNodeLabel(node.id, trimmedValue);
+      stopEditing();
+      // Don't create new node on blur - only on Enter
+      return;
+    }
+
+    // If text is empty, check if node is floating (new, no descendants)
+    const currentNode = grammar ? getNode(node.id) : undefined;
+    if (grammar && currentNode) {
+      const isFloating = isFloatingNode(
+        grammar,
+        currentNode,
+        true, // is editing
+        editValue // use current edit value
+      );
+
+      console.log('[GrammarNode] 🗑️ Blur with empty text', {
+        nodeId: node.id,
+        isFloating,
+        hasDescendants: grammar.edges.some(e => e.source === node.id),
+      });
+
+      // If floating and empty, delete the node
+      if (isFloating) {
+        console.log('[GrammarNode] 🗑️ Deleting floating empty node', { nodeId: node.id });
+        deleteNode(node.id);
+        stopEditing();
+        return;
+      }
+    }
+
+    // If empty but not floating, just cancel editing (don't delete)
+    console.log('[GrammarNode] ❌ Blur with empty text but not floating, canceling...', {
+      nodeId: node.id,
+    });
+    handleCancel();
+  }, [editValue, grammar, getNode, node.id, deleteNode, stopEditing, editNodeLabel, handleCancel]);
+
+  // Custom key handler that integrates EditableText with node creation logic
+  const handleKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle Enter: save and potentially create new node
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleSave(editValue);
+    }
+    // Handle Escape: cancel editing (and potentially delete floating node)
+    else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Check if node is floating (new, empty, no descendants)
+      const currentNode = grammar ? getNode(node.id) : undefined;
+      if (grammar && currentNode) {
+        const isFloating = isFloatingNode(
+          grammar,
+          currentNode,
+          true, // is editing
+          editValue // use current edit value
+        );
+
+        // If floating and empty, delete the node
+        if (isFloating && !editValue.trim()) {
+          deleteNode(node.id);
+          stopEditing();
+          return;
+        }
+      }
+
+      handleCancel();
+    }
+  }, [editValue, handleSave, handleCancel, grammar, getNode, node.id, deleteNode, stopEditing]);
 
   const handleDragStart = React.useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -134,14 +283,29 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Binding Tooltip: shows all bindings with remove buttons */}
+      {isHovered && !isEditing && node.bindings.length > 0 && (
+        <BindingTooltip nodeId={node.id} bindings={node.bindings} />
+      )}
+
       {/* Toolbar: visible only on hover and when not editing */}
       {isHovered && !isEditing && (
         <NodeToolbar
           nodeId={node.id}
           onDelete={() => deleteNode(node.id)}
           onEditCaption={startEditing}
+          onEditWords={() => setIsWordsEditorOpen(true)}
           onSetOptional={() => updateNode(node.id, { optional: !node.optional })}
           onSetRepetitions={() => updateNode(node.id, { repeatable: !node.repeatable })}
+        />
+      )}
+
+      {/* Words Editor: shown when Edit Words is clicked */}
+      {isWordsEditorOpen && (
+        <WordsEditor
+          nodeId={node.id}
+          synonyms={node.synonyms}
+          onClose={() => setIsWordsEditorOpen(false)}
         />
       )}
 
@@ -192,26 +356,44 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
       )}
 
       {isEditing ? (
-        <input
+        <EditableText
           ref={inputRef}
           value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
+          editing={isEditing}
+          onSave={handleSave}
+          onCancel={handleCancel}
+          onStartEditing={startEditing}
+          placeholder={NODE_PLACEHOLDER}
+          showActionButtons={false}
+          expectedLanguage="it"
+          showLanguageWarning={false}
+          enableVoice={true}
+          micSize={10}
+          micBackground="transparent"
+          multiline={false}
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
-          onDoubleClick={(e) => e.stopPropagation()}
-          style={nodeInputStyles}
-          placeholder={NODE_PLACEHOLDER}
+          style={{
+            width: '100%',
+            minWidth: `${inputWidth}px`,
+            textAlign: 'center',
+            // Remove border (node already has border)
+            border: 'none',
+            outline: 'none',
+            // Reduce height
+            padding: '2px 4px',
+            height: 'auto',
+            minHeight: '20px',
+            lineHeight: '1.2',
+            // Transparent background to match node
+            background: 'transparent',
+            color: '#c9d1d9', // Match node text color
+          }}
         />
       ) : (
         <span style={nodeLabelStyles}>{node.label}</span>
       )}
 
-      {!isEditing && node.synonyms.length > 0 && (
-        <div style={nodeMetadataStyles.synonyms}>
-          {node.synonyms.slice(0, 2).join(', ')}
-          {node.synonyms.length > 2 && '...'}
-        </div>
-      )}
       {!isEditing && (() => {
         const slotBinding = node.bindings.find(b => b.type === 'slot');
         if (slotBinding && slotBinding.type === 'slot') {

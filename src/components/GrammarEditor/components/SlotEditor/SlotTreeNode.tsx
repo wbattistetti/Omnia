@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { ChevronRight, ChevronDown, Pencil, Trash2 } from 'lucide-react';
 import { treeNodeStyle, treeNodeHoverStyle, iconStyle, labelStyle, expandIconStyle, type Theme } from './styles';
 
 interface SlotTreeNodeProps {
@@ -19,6 +19,10 @@ interface SlotTreeNodeProps {
   labelColor?: string;
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  isEditing?: boolean;
+  editingComponent?: React.ReactNode;
 }
 
 /**
@@ -39,6 +43,10 @@ export function SlotTreeNode({
   labelColor,
   draggable = false,
   onDragStart,
+  onEdit,
+  onDelete,
+  isEditing = false,
+  editingComponent,
 }: SlotTreeNodeProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -46,6 +54,7 @@ export function SlotTreeNode({
     ...treeNodeStyle(theme, level, isSelected),
     ...(isHovered ? treeNodeHoverStyle(theme) : {}),
     ...(draggable ? { cursor: 'grab' } : {}),
+    position: 'relative',
   };
 
   const labelStyleWithColor: React.CSSProperties = {
@@ -57,7 +66,7 @@ export function SlotTreeNode({
     <div>
       <div
         style={nodeStyle}
-        draggable={draggable}
+        draggable={draggable && !isEditing}
         onDragStart={onDragStart}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -81,7 +90,73 @@ export function SlotTreeNode({
         )}
 
         {icon && <div style={iconStyle}>{icon}</div>}
-        <div style={labelStyleWithColor}>{label}</div>
+        {isEditing && editingComponent ? (
+          <div style={{ flex: 1, minWidth: 0 }}>{editingComponent}</div>
+        ) : (
+          <div style={labelStyleWithColor}>{label}</div>
+        )}
+
+        {/* Toolbar on hover - only show if not editing and actions are available */}
+        {!isEditing && (onEdit || onDelete) && isHovered && (
+          <div
+            style={{
+              position: 'absolute',
+              right: '4px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              gap: '4px',
+              alignItems: 'center',
+              backgroundColor: theme.background,
+              padding: '2px 4px',
+              borderRadius: '4px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+              zIndex: 10,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {onEdit && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#fb923c',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                title="Edit"
+              >
+                <Pencil size={14} />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#ef4444',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                title="Delete"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {isExpanded && children && (

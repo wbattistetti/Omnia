@@ -51,7 +51,7 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
   onShow,
 }) => {
   const [showTooltip, setShowTooltip] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement | HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
@@ -356,10 +356,19 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
     default: { background: 'transparent', color: foreColor || '#2563eb', border: `1px solid ${foreColor || '#2563eb'}` },
   };
 
+  // Check if children is a button element to avoid nesting issues
+  const isButtonChild = React.isValidElement(children) &&
+    (children.type === 'button' || (typeof children.type === 'string' && children.type === 'button'));
+
+  const WrapperComponent = isButtonChild ? 'span' : 'div';
+  const wrapperStyle = isButtonChild
+    ? { position: 'relative', display: 'inline-block' }
+    : { position: 'relative', display: 'inline-block' };
+
   return (
-    <div
+    <WrapperComponent
       ref={wrapperRef}
-      style={{ position: 'relative', display: 'inline-block' }}
+      style={wrapperStyle}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -511,7 +520,7 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </WrapperComponent>
   );
 };
 

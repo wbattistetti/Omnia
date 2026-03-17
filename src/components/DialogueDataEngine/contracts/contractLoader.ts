@@ -6,7 +6,7 @@
 import type { DDTNode } from '../model/ddt.v2.types';
 
 // Base contract types
-export type ContractType = 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings';
+export type ContractType = 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings' | 'grammarflow';
 
 export interface RegexContract {
     type: 'regex';
@@ -65,7 +65,16 @@ export interface EmbeddingsContract {
     threshold?: number;
 }
 
-export type DataContractItem = RegexContract | RulesContract | NERContract | LLMContract | EmbeddingsContract;
+// Import Grammar type for GrammarFlowContract
+import type { Grammar } from '../../../components/GrammarEditor/types/grammarTypes';
+
+export interface GrammarFlowContract {
+    type: 'grammarflow';
+    enabled: boolean;
+    grammarFlow: Grammar;  // Complete grammar graph (nodes, edges, slots, semanticSets)
+}
+
+export type DataContractItem = RegexContract | RulesContract | NERContract | LLMContract | EmbeddingsContract | GrammarFlowContract;
 
 // Import semantic types
 import type { StructuredConstraint, RedefinitionPolicy, CanonicalValueSets } from '../../../types/semanticContract';

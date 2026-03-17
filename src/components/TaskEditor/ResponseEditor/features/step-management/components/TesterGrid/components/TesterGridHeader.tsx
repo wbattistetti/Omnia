@@ -18,6 +18,7 @@ const EXTRACTOR_COLORS = {
   ner: '#fef3c7',
   llm: '#fed7aa',
   embeddings: '#e0e7ff',
+  grammarflow: '#c084fc', // Purple color for grammarflow
 };
 
 // 📊 Etichette colonne con tooltip
@@ -46,6 +47,11 @@ const COLUMN_LABELS = {
     main: "Embeddings",
     tech: "Embeddings",
     tooltip: "Capisce sinonimi, parafrasi e modi molto diversi di dire la stessa cosa. Serve quando il dato richiesto appartiene a una lista di valori possibili. Trova il valore più simile anche se l'utente usa parole diverse."
+  },
+  grammarflow: {
+    main: "GrammarFlow",
+    tech: "GrammarFlow",
+    tooltip: "Motore basato su grammatica visuale (flowchart). Permette di definire pattern complessi tramite un grafo di nodi e archi. Utile per riconoscere strutture linguistiche articolate."
   }
 };
 
@@ -64,9 +70,9 @@ interface TesterGridHeaderProps {
     llm: boolean;
   };
   toggleMethod: (method: keyof TesterGridHeaderProps['enabledMethods']) => void;
-  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
-  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
-  openEditor?: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
+  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | 'grammarflow' | null;
+  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow') => void;
+  openEditor?: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow') => void;
   showDeterministic: boolean;
   showNER: boolean;
   showEmbeddings: boolean;
@@ -129,14 +135,14 @@ export default function TesterGridHeader({
   }, [contract]);
 
   // Map contract type to component type
-  const mapContractTypeToComponentType = (type: ContractType): 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings' => {
+  const mapContractTypeToComponentType = (type: ContractType): 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings' | 'grammarflow' => {
     if (type === 'rules') return 'deterministic';
     return type;
   };
 
   // Get available methods (excluding already added ones)
   const getAvailableMethods = (): ContractType[] => {
-    const allMethods: ContractType[] = ['regex', 'rules', 'ner', 'llm', 'embeddings'];
+    const allMethods: ContractType[] = ['regex', 'rules', 'ner', 'llm', 'embeddings', 'grammarflow'];
     if (!engines || engines.length === 0) return allMethods;
     const usedTypes = engines.map(c => c.type);
     return allMethods.filter(m => !usedTypes.includes(m));
@@ -191,6 +197,8 @@ export default function TesterGridHeader({
         return { ...base, systemPrompt: '', aiPrompt: '', responseSchema: {} };
       case 'embeddings':
         return { ...base, intents: [] };
+      case 'grammarflow':
+        return { ...base, grammarFlow: null }; // Empty grammar, will be created in Grammar Editor
       default:
         return base;
     }

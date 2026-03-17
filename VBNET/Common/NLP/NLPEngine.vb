@@ -61,6 +61,17 @@ Public Class NLPEngine
     ''' </summary>
     Public Property ResponseSchema As Object
 
+    ''' <summary>
+    ''' Grammar flow definition (solo per type="grammarflow")
+    ''' Serializzato/deserializzato come Object per preservare la struttura del grafo.
+    ''' </summary>
+    Public Property GrammarFlow As Object
+
+    ''' <summary>
+    ''' Test phrases associate al grammar (solo per type="grammarflow")
+    ''' </summary>
+    Public Property TestPhrases As List(Of String)
+
     Public Sub New()
         Enabled = True
         Patterns = New List(Of String)()
@@ -68,5 +79,6 @@ Public Class NLPEngine
         Validators = New List(Of Object)()
         EntityTypes = New List(Of String)()
         Confidence = 0.7
+        TestPhrases = New List(Of String)()
     End Sub
 End Class

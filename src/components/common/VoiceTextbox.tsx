@@ -28,6 +28,8 @@ interface VoiceTextboxProps extends React.TextareaHTMLAttributes<HTMLTextAreaEle
   style?: React.CSSProperties;
   payoffConfig?: VoiceTextboxPayoffConfig;
   autoStartWhenEmpty?: boolean;
+  micSize?: number; // Custom microphone icon size
+  micBackground?: string; // Custom microphone background color
 }
 
 /**
@@ -50,6 +52,8 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
   style,
   payoffConfig,
   autoStartWhenEmpty = false,
+  micSize = 12,
+  micBackground = 'transparent',
   ...rest
 }, forwardedRef) => {
   const internalRef = useRef<HTMLTextAreaElement>(null);
@@ -263,10 +267,13 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            backgroundColor: micBackground,
+            borderRadius: '2px',
+            padding: micBackground === 'transparent' ? '0' : '2px',
           }}
         >
           <Mic
-            size={12}
+            size={micSize}
             color={isListening ? '#22c55e' : '#6b7280'}
             style={{
               animation: isListening ? 'speechMicPulse 1.5s ease-in-out infinite' : 'none',

@@ -14,8 +14,6 @@ import {
 } from '@responseEditor/utils/regexGroupTransform';
 import { generateGroupName } from '@responseEditor/utils/regexGroupUtils';
 import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
-import { GrammarEditor } from '@components/GrammarEditor';
-import type { Grammar, SemanticSlot } from '@components/GrammarEditor/types/grammarTypes';
 
 interface RegexInlineEditorProps {
   regex: string; // contract.regex.value (GUID-based, stored form)
@@ -132,7 +130,7 @@ export default function RegexInlineEditor({
   kind,
   examplesList = [],
   rowResults = [],
-  onButtonRender,
+  onButtonRender: _onButtonRender, // Unused - kept for backward compatibility
   onErrorRender,
 }: RegexInlineEditorProps) {
   // -----------------------------------------------------------------------
@@ -167,29 +165,6 @@ export default function RegexInlineEditor({
   const [textboxText, setTextboxText] = useState(() => initialDisplay);
 
   // -----------------------------------------------------------------------
-  // Grammar Editor mode state
-  // -----------------------------------------------------------------------
-  const [editorMode, setEditorMode] = useState<'text' | 'graph'>(() => {
-    // Check if grammar exists in contract, default to graph mode if it does
-    if (node?.templateId) {
-      const template = DialogueTaskService.getTemplate(node.templateId);
-      if (template?.dataContract?.grammar) {
-        return 'graph';
-      }
-    }
-    return 'text';
-  });
-
-  const [grammar, setGrammar] = useState<Grammar | null>(() => {
-    // Load grammar from contract if it exists
-    if (node?.templateId) {
-      const template = DialogueTaskService.getTemplate(node.templateId);
-      if (template?.dataContract?.grammar) {
-        return template.dataContract.grammar as Grammar;
-      }
-    }
-    return null;
-  });
 
   // ✅ CRITICAL: Use ref to preserve value during cleanup
   const textboxTextRef = useRef<string>(initialDisplay);
@@ -271,7 +246,6 @@ export default function RegexInlineEditor({
   const { generatingRegex, generateRegex } = useRegexAIGeneration({
     node,
     kind,
-    testPhrases: [],
     examplesList,
     rowResults,
     onSuccess: (newRegex: string) => {
@@ -424,92 +398,6 @@ export default function RegexInlineEditor({
     }
   }, [textboxText, generateRegex, saveToTemplate]);
 
-  // -----------------------------------------------------------------------
-  // Grammar Editor handlers
-  // -----------------------------------------------------------------------
-
-  /**
-   * Converts subDataMapping to semantic slots for Grammar Editor
-   */
-  const convertSubDataMappingToSlots = useCallback((): SemanticSlot[] => {
-    const mapping = subDataMappingRef.current;
-    return Object.entries(mapping).map(([nodeId, info]) => ({
-      id: nodeId,
-      name: info.label || nodeId,
-      type: (info.type as SemanticSlot['type']) || 'string',
-    }));
-  }, []);
-
-  /**
-   * Handler for saving grammar from Grammar Editor
-   */
-  const handleGrammarSave = useCallback((exportedGrammar: Grammar) => {
-    setGrammar(exportedGrammar);
-
-    // Save grammar to contract
-    if (node?.templateId) {
-      const template = DialogueTaskService.getTemplate(node.templateId);
-      if (!template) {
-        console.warn('[RegexEditor] Template not found:', node.templateId);
-        return;
-      }
-
-      if (!template.dataContract) {
-        template.dataContract = {
-          templateId: node.templateId,
-          templateName: template.label || node.templateId,
-          subDataMapping: {},
-          engines: [],
-          outputCanonical: { format: 'value' }
-        };
-      }
-
-      // Save grammar in contract
-      (template.dataContract as any).grammar = exportedGrammar;
-      DialogueTaskService.markTemplateAsModified(node.templateId);
-
-      console.log('[RegexEditor] ✅ Grammar saved to contract');
-    }
-  }, [node?.templateId]);
-
-  /**
-   * Handler for toggling editor mode
-   * Event-driven: React's key prop on EditorPanel ensures clean unmount
-   */
-  const handleModeToggle = useCallback(() => {
-    setEditorMode(prev => prev === 'text' ? 'graph' : 'text');
-  }, []);
-
-  // -----------------------------------------------------------------------
-  // Suppress Monaco "Canceled" errors when switching modes
-  // EditorPanel already has error handling, but we add a global handler
-  // to catch any errors that escape during the unmount transition
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    const isCanceledError = (error: any): boolean => {
-      if (!error) return false;
-      const errorStr = String(error);
-      const errorMessage = error?.message ? String(error.message) : '';
-      const errorName = error?.name ? String(error.name) : '';
-      return errorStr.includes('Canceled') ||
-             errorMessage.includes('Canceled') ||
-             errorName.includes('Canceled');
-    };
-
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      if (isCanceledError(event.reason)) {
-        // Suppress the error - it's harmless cleanup noise from Monaco
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-
-    // Use capture phase to catch errors early
-    window.addEventListener('unhandledrejection', handleUnhandledRejection, true);
-    return () => {
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection, true);
-    };
-  }, []);
 
   // -----------------------------------------------------------------------
   // Cleanup all timeouts on unmount
@@ -535,9 +423,9 @@ export default function RegexInlineEditor({
         onErrorRender(
           <span style={{ color: '#ef4444', fontSize: '12px' }}>{validationError}</span>
         );
-    } else {
+      } else {
         onErrorRender(null);
-    }
+      }
     }
   }, [validationError, onErrorRender]);
 
@@ -549,10 +437,10 @@ export default function RegexInlineEditor({
     // Priority 1: Show normalization error (groups not recognized)
     if (validationError) {
       return (
-              <span style={{ color: '#ef4444', fontSize: '12px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span>⚠️</span>
-                <span>{validationError}</span>
-              </span>
+        <span style={{ color: '#ef4444', fontSize: '12px', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span>⚠️</span>
+          <span>{validationError}</span>
+        </span>
       );
     }
 
@@ -582,8 +470,8 @@ export default function RegexInlineEditor({
           <span style={{
             color: '#ef4444',
             fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
+            display: 'flex',
+            alignItems: 'center',
             gap: 4,
             fontWeight: 500
           }}>
@@ -673,8 +561,6 @@ export default function RegexInlineEditor({
         validationBadge={validationBadge}
         errorMessage={errorMessage}
         buttonCaption={buttonCaption}
-        editorMode={editorMode}
-        onModeToggle={handleModeToggle}
       />
 
       <div style={{
@@ -683,32 +569,20 @@ export default function RegexInlineEditor({
         overflow: 'hidden',
         position: 'relative',
       }}>
-        {editorMode === 'text' ? (
-          <EditorPanel
-            key="regex-text-editor"
-            ref={editorRef}
-            code={editorValue}
-            language="regex"
-            customLanguage={{ id: 'regex', tokenizer: { root: [] } } as CustomLanguage}
-            onChange={(value) => {
-              if (value && value !== PLACEHOLDER_TEXT) {
-                setTextboxText(value);
-                // Don't clear validationError here - let debounced validation handle it
-              }
-            }}
-            useTemplate={false}
-          />
-        ) : (
-          <GrammarEditor
-            key="regex-graph-editor"
-            initialGrammar={grammar}
-            onSave={handleGrammarSave}
-            slots={convertSubDataMappingToSlots()}
-            semanticSets={[]}
-            hideToolbar={true}
-            editorMode={editorMode}
-          />
-        )}
+        <EditorPanel
+          key="regex-text-editor"
+          ref={editorRef}
+          code={editorValue}
+          language="regex"
+          customLanguage={{ id: 'regex', tokenizer: { root: [] } } as CustomLanguage}
+          onChange={(value) => {
+            if (value && value !== PLACEHOLDER_TEXT) {
+              setTextboxText(value);
+              // Don't clear validationError here - let debounced validation handle it
+            }
+          }}
+          useTemplate={false}
+        />
       </div>
     </div>
   );

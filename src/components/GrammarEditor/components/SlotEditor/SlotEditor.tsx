@@ -23,9 +23,17 @@ export function SlotEditor({ editorMode = 'text', onClose }: SlotEditorProps) {
     semanticSets,
     theme,
     createSlot,
+    updateSlotName,
+    removeSlot,
     createSemanticSet,
+    updateSemanticSetName,
+    removeSemanticSet,
     addSemanticValue,
+    updateSemanticValue,
+    removeSemanticValue,
     addLinguisticValue,
+    updateLinguisticValue,
+    removeLinguisticValue,
     undo,
     redo,
     canUndo,
@@ -211,9 +219,57 @@ export function SlotEditor({ editorMode = 'text', onClose }: SlotEditorProps) {
           onToggleExpanded={toggleExpanded}
           onSelect={setSelected}
           onCreateSlot={handleCreateSlot}
+          onUpdateSlot={(slotId, name) => {
+            const result = updateSlotName(slotId, name);
+            if (!result.success && result.error) {
+              console.error('Failed to update slot:', result.error);
+            }
+          }}
+          onDeleteSlot={(slotId) => {
+            const result = removeSlot(slotId);
+            if (!result.success && result.error) {
+              console.error('Failed to delete slot:', result.error);
+            }
+          }}
           onCreateSemanticSet={handleCreateSemanticSet}
+          onUpdateSemanticSet={(setId, name) => {
+            const result = updateSemanticSetName(setId, name);
+            if (!result.success && result.error) {
+              console.error('Failed to update semantic set:', result.error);
+            }
+          }}
+          onDeleteSemanticSet={(setId) => {
+            const result = removeSemanticSet(setId);
+            if (!result.success && result.error) {
+              console.error('Failed to delete semantic set:', result.error);
+            }
+          }}
           onCreateSemanticValue={handleCreateSemanticValue}
+          onUpdateSemanticValue={(setId, valueId, newValue) => {
+            const result = updateSemanticValue(setId, valueId, newValue);
+            if (!result.success && result.error) {
+              console.error('Failed to update semantic value:', result.error);
+            }
+          }}
+          onDeleteSemanticValue={(setId, valueId) => {
+            const result = removeSemanticValue(setId, valueId);
+            if (!result.success && result.error) {
+              console.error('Failed to delete semantic value:', result.error);
+            }
+          }}
           onCreateLinguisticValue={handleCreateLinguisticValue}
+          onUpdateLinguisticValue={(setId, valueId, oldSynonym, newSynonym) => {
+            const result = updateLinguisticValue(setId, valueId, oldSynonym, newSynonym);
+            if (!result.success && result.error) {
+              console.error('Failed to update linguistic value:', result.error);
+            }
+          }}
+          onDeleteLinguisticValue={(setId, valueId, synonym) => {
+            const result = removeLinguisticValue(setId, valueId, synonym);
+            if (!result.success && result.error) {
+              console.error('Failed to delete linguistic value:', result.error);
+            }
+          }}
           slots={slots}
           semanticSets={semanticSets}
           theme={theme}

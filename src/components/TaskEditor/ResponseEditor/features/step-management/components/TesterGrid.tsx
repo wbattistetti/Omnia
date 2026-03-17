@@ -79,9 +79,9 @@ interface TesterGridProps {
   // ✅ REMOVED: Notes props - now managed via Zustand store (stores/notesStore.ts)
   // All note-related functionality is accessed via useNotesStore() hook
   // Editor toggle
-  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
-  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings') => void;
-  openEditor?: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings') => void;
+  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | 'grammarflow' | null;
+  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | 'grammarflow') => void;
+  openEditor?: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | 'grammarflow') => void;
   // Mode: extraction (default) or classification
   mode?: 'extraction' | 'classification';
   // Input for adding new phrases

@@ -54,9 +54,9 @@ interface RecognitionEditorProps {
   editingText: string;
   setEditingText: React.Dispatch<React.SetStateAction<string>>;
   // ✅ REMOVED: Notes props - now managed via Zustand store (stores/notesStore.ts)
-  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
-  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
-  openEditor?: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
+  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | 'grammarflow' | null;
+  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow') => void;
+  openEditor?: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow') => void;
   mode?: 'extraction' | 'classification';
   newExample: string;
   setNewExample: React.Dispatch<React.SetStateAction<string>>;

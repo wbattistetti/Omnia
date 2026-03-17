@@ -14,14 +14,17 @@ export interface RowResult {
   deterministic?: string;
   ner?: string;
   llm?: string;
+  grammarflow?: string; // GrammarFlow extraction result (placeholder until interpreter is ready)
   regexMs?: number;
   detMs?: number;
   nerMs?: number;
   llmMs?: number;
+  grammarflowMs?: number; // GrammarFlow processing time
   running?: boolean;
   detRunning?: boolean;
   nerRunning?: boolean;
   llmRunning?: boolean;
+  grammarflowRunning?: boolean; // GrammarFlow running state
   spans?: Array<{ start: number; end: number }>;
   value?: string;
   confidence?: number;

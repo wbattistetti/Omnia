@@ -24,9 +24,16 @@ const ALL_CONTRACTS: ContractMethodInfo[] = [
   { id: 'ner', label: 'NER', shortLabel: 'NER', color: '#fef3c7' },
   { id: 'llm', label: 'LLM', shortLabel: 'LLM', color: '#fed7aa' },
   { id: 'embeddings', label: 'Embeddings', shortLabel: 'Embeddings', color: '#e0e7ff' },
+  { id: 'grammarflow', label: 'GrammarFlow', shortLabel: 'GrammarFlow', color: '#c084fc' },
 ];
 
-const SUGGESTED_ORDER: ContractMethod[] = ['regex', 'rules', 'ner', 'llm', 'embeddings'];
+const SUGGESTED_ORDER: ContractMethod[] = ['regex', 'rules', 'ner', 'llm', 'embeddings', 'grammarflow'];
+
+// Helper function to get contract method label
+export function getContractMethodLabel(method: ContractMethod): string {
+  const info = ALL_CONTRACTS.find(c => c.id === method);
+  return info?.label || method;
+}
 
 interface ContractSelectorProps {
   contract: DataContract | null;

@@ -9,7 +9,9 @@ import {
   createSemanticSet,
   createSemanticValue,
   addValueToSet,
+  removeValueFromSet,
   addSynonymToValue,
+  removeSynonymFromValue,
 } from '../../core/domain/semantic';
 import {
   validateSlotName,
@@ -306,13 +308,197 @@ export function useSlotEditorActions(
         return { success: false, error: 'Semantic value not found' };
       }
 
-      const validation = validateLinguisticValue(synonym, semanticValue.synonyms);
+      // Collect all synonyms from all values in the set for validation
+      const allSynonymsInSet = set.values.flatMap((v) => v.synonyms);
+      const validation = validateLinguisticValue(synonym, allSynonymsInSet);
       if (!validation.isValid) {
         return { success: false, error: validation.errors[0] };
       }
 
       const normalizedSynonym = normalizeInput(synonym);
       const updatedValue = addSynonymToValue(semanticValue, normalizedSynonym);
+
+      const updatedSet = {
+        ...set,
+        values: set.values.map((v) => (v.id === valueId ? updatedValue : v)),
+      };
+
+      // Record operation for undo
+      recordOperation({
+        id: uuidv4(),
+        type: 'update',
+        entityType: 'semantic-value',
+        entityId: valueId,
+        previousState: semanticValue,
+        newState: updatedValue,
+        timestamp: Date.now(),
+      });
+
+      updateSemanticSet(setId, { values: updatedSet.values });
+      return { success: true };
+    },
+    [grammar, updateSemanticSet, recordOperation]
+  );
+
+  /**
+   * Updates a semantic value name
+   */
+  const updateSemanticValue = useCallback(
+    (setId: string, valueId: string, newValue: string): { success: boolean; error?: string } => {
+      if (!grammar) {
+        return { success: false, error: 'No grammar loaded' };
+      }
+
+      const set = grammar.semanticSets.find((s) => s.id === setId);
+      if (!set) {
+        return { success: false, error: 'Semantic set not found' };
+      }
+
+      const semanticValue = set.values.find((v) => v.id === valueId);
+      if (!semanticValue) {
+        return { success: false, error: 'Semantic value not found' };
+      }
+
+      const validation = validateSemanticValue(newValue, set.values, valueId);
+      if (!validation.isValid) {
+        return { success: false, error: validation.errors[0] };
+      }
+
+      const normalizedValue = normalizeInput(newValue);
+      const updatedValue = { ...semanticValue, value: normalizedValue };
+
+      const updatedSet = {
+        ...set,
+        values: set.values.map((v) => (v.id === valueId ? updatedValue : v)),
+      };
+
+      // Record operation for undo
+      recordOperation({
+        id: uuidv4(),
+        type: 'update',
+        entityType: 'semantic-value',
+        entityId: valueId,
+        previousState: semanticValue,
+        newState: updatedValue,
+        timestamp: Date.now(),
+      });
+
+      updateSemanticSet(setId, { values: updatedSet.values });
+      return { success: true };
+    },
+    [grammar, updateSemanticSet, recordOperation]
+  );
+
+  /**
+   * Removes a semantic value
+   */
+  const removeSemanticValue = useCallback(
+    (setId: string, valueId: string): { success: boolean; error?: string } => {
+      if (!grammar) {
+        return { success: false, error: 'No grammar loaded' };
+      }
+
+      const set = grammar.semanticSets.find((s) => s.id === setId);
+      if (!set) {
+        return { success: false, error: 'Semantic set not found' };
+      }
+
+      const semanticValue = set.values.find((v) => v.id === valueId);
+      if (!semanticValue) {
+        return { success: false, error: 'Semantic value not found' };
+      }
+
+      const updatedSet = removeValueFromSet(set, valueId);
+
+      // Record operation for undo
+      recordOperation({
+        id: uuidv4(),
+        type: 'delete',
+        entityType: 'semantic-value',
+        entityId: valueId,
+        previousState: semanticValue,
+        newState: null,
+        timestamp: Date.now(),
+      });
+
+      updateSemanticSet(setId, { values: updatedSet.values });
+      return { success: true };
+    },
+    [grammar, updateSemanticSet, recordOperation]
+  );
+
+  /**
+   * Updates a linguistic value (synonym)
+   */
+  const updateLinguisticValue = useCallback(
+    (setId: string, valueId: string, oldSynonym: string, newSynonym: string): { success: boolean; error?: string } => {
+      if (!grammar) {
+        return { success: false, error: 'No grammar loaded' };
+      }
+
+      const set = grammar.semanticSets.find((s) => s.id === setId);
+      if (!set) {
+        return { success: false, error: 'Semantic set not found' };
+      }
+
+      const semanticValue = set.values.find((v) => v.id === valueId);
+      if (!semanticValue) {
+        return { success: false, error: 'Semantic value not found' };
+      }
+
+      // Validate new synonym (check against all synonyms in the entire semantic set)
+      const allSynonymsInSet = set.values.flatMap((v) => v.synonyms);
+      const validation = validateLinguisticValue(newSynonym, allSynonymsInSet, oldSynonym);
+      if (!validation.isValid) {
+        return { success: false, error: validation.errors[0] };
+      }
+
+      const normalizedSynonym = normalizeInput(newSynonym);
+      const updatedSynonyms = semanticValue.synonyms.map(s => s === oldSynonym ? normalizedSynonym : s);
+      const updatedValue = { ...semanticValue, synonyms: updatedSynonyms };
+
+      const updatedSet = {
+        ...set,
+        values: set.values.map((v) => (v.id === valueId ? updatedValue : v)),
+      };
+
+      // Record operation for undo
+      recordOperation({
+        id: uuidv4(),
+        type: 'update',
+        entityType: 'linguistic-value',
+        entityId: valueId,
+        previousState: semanticValue,
+        newState: updatedValue,
+        timestamp: Date.now(),
+      });
+
+      updateSemanticSet(setId, { values: updatedSet.values });
+      return { success: true };
+    },
+    [grammar, updateSemanticSet, recordOperation]
+  );
+
+  /**
+   * Removes a linguistic value (synonym)
+   */
+  const removeLinguisticValue = useCallback(
+    (setId: string, valueId: string, synonym: string): { success: boolean; error?: string } => {
+      if (!grammar) {
+        return { success: false, error: 'No grammar loaded' };
+      }
+
+      const set = grammar.semanticSets.find((s) => s.id === setId);
+      if (!set) {
+        return { success: false, error: 'Semantic set not found' };
+      }
+
+      const semanticValue = set.values.find((v) => v.id === valueId);
+      if (!semanticValue) {
+        return { success: false, error: 'Semantic value not found' };
+      }
+
+      const updatedValue = removeSynonymFromValue(semanticValue, synonym);
 
       const updatedSet = {
         ...set,
@@ -344,6 +530,10 @@ export function useSlotEditorActions(
     updateSemanticSetName,
     removeSemanticSet,
     addSemanticValue,
+    updateSemanticValue,
+    removeSemanticValue,
     addLinguisticValue,
+    updateLinguisticValue,
+    removeLinguisticValue,
   };
 }

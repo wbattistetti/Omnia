@@ -2,21 +2,22 @@ import React, { useEffect, useRef } from 'react';
 import { Wand2, TypeIcon, Plus, X } from 'lucide-react';
 import SmartTooltip from '@components/SmartTooltip';
 import { getEditorTypeFromContractType } from '@responseEditor/features/step-management/components/TesterGrid/helpers/contractTypeMapper';
+import { getContractMethodLabel } from '@responseEditor/ContractSelector/ContractSelector';
 
 interface TesterGridHeaderColumnProps {
-  type: 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings';
-  contractType: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'; // ✅ Original contract type from DataContract
+  type: 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings' | 'grammarflow';
+  contractType: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings' | 'grammarflow'; // ✅ Original contract type from DataContract
   mainLabel: string;
   techLabel: string;
   tooltip: string;
   backgroundColor: string;
   enabled: boolean;
-  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
+  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | 'grammarflow' | null;
   onToggleMethod: () => void;
-  onToggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
+  onToggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow') => void;
   showPostProcess?: boolean;
   onAddContract?: () => void; // ✅ STEP 7: Callback per aprire dropdown
-  availableMethods?: Array<'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'>; // ✅ STEP 8: Methods disponibili
+  availableMethods?: Array<'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'>; // ✅ STEP 8: Methods disponibili (grammarflow not included - added manually)
   isDropdownOpen?: boolean; // ✅ STEP 8: Se il dropdown è aperto
   onSelectMethod?: (method: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings') => void; // ✅ STEP 8: Callback per selezionare method
   columnWidth?: number; // ✅ FIX: Explicit column width to prevent overlapping
@@ -50,8 +51,9 @@ export default function TesterGridHeaderColumn({
   // Editor is active if:
   // 1. activeEditor matches the mapped editor type (e.g., 'extractor' for 'rules' contract)
   // 2. OR it's a 'rules' contract and activeEditor is 'post' (post-process editor)
+  // Note: grammarflow doesn't have an inline editor (uses separate Grammar Editor), so it's never "active"
   const isEditorActive = activeEditor === editorType || (contractType === 'rules' && activeEditor === 'post');
-  const shouldHide = activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) && !isEditorActive;
+  const shouldHide = activeEditor && ['regex', 'extractor', 'ner', 'llm', 'grammarflow'].includes(activeEditor) && !isEditorActive;
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // ✅ Close dropdown when clicking outside
@@ -264,13 +266,6 @@ export default function TesterGridHeaderColumn({
           }}
         >
           {availableMethods.map((method) => {
-            const METHOD_LABELS: Record<'regex' | 'rules' | 'ner' | 'llm' | 'embeddings', string> = {
-              regex: 'Regex',
-              rules: 'Rules',
-              ner: 'NER',
-              llm: 'LLM',
-              embeddings: 'Embeddings',
-            };
             return (
               <button
                 key={method}
@@ -305,7 +300,7 @@ export default function TesterGridHeaderColumn({
                   e.currentTarget.style.background = 'transparent';
                 }}
               >
-                {METHOD_LABELS[method]}
+                {getContractMethodLabel(method)}
               </button>
             );
           })}

@@ -25,8 +25,18 @@ export function useGrammarCanvasEvents() {
       event.preventDefault();
       event.stopPropagation();
 
-      if (!grammar) return;
-      if (!rf) return;
+      if (!rf) {
+        console.warn('[GrammarCanvas] ⚠️ ReactFlow instance not available');
+        return;
+      }
+
+      if (!grammar) {
+        console.warn('[GrammarCanvas] ⚠️ Grammar not loaded, cannot create node', {
+          hasGrammar: !!grammar,
+          grammarId: grammar?.id,
+        });
+        return;
+      }
 
       const clickPos = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
@@ -35,21 +45,18 @@ export function useGrammarCanvasEvents() {
         y: clickPos.y - ESTIMATED_NODE_HEIGHT / 2,
       };
 
+      console.log('[GrammarCanvas] ✅ Creating node at position', {
+        clickPos,
+        centeredPos,
+        grammarId: grammar.id,
+        nodesCount: grammar.nodes.length,
+      });
+
       const newNode = createGrammarNode('', centeredPos);
       addNode(newNode);
 
-      // Focus immediately after ReactFlow renders the node
-      // Double RAF: first waits for React commit, second waits for browser paint
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const selector = `[data-node-id="${newNode.id}"] input`;
-          const input = document.querySelector(selector) as HTMLInputElement | null;
-          if (input) {
-            input.focus();
-            input.select();
-          }
-        });
-      });
+      // Node will automatically enter editing mode via useNodeEditingState (label === '')
+      // Focus is handled by useLayoutEffect in useNodeEditingState
     },
     [rf, addNode, grammar]
   );
@@ -108,16 +115,8 @@ export function useGrammarCanvasEvents() {
 
       setDragState(null);
 
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const selector = `[data-node-id="${newNode.id}"] input`;
-          const input = document.querySelector(selector) as HTMLInputElement | null;
-          if (input) {
-            input.focus();
-            input.select();
-          }
-        });
-      });
+      // Node will automatically enter editing mode via useNodeEditingState (label === '')
+      // Focus is handled by useLayoutEffect in useNodeEditingState
     },
     [dragState, rf, grammar, addNode, addEdge, setDragState]
   );
@@ -236,17 +235,8 @@ export function useGrammarCanvasEvents() {
         const newNode = createGrammarNode(data.label || '', centeredPos, [binding]);
         addNode(newNode);
 
-        // Focus the new node
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            const selector = `[data-node-id="${newNode.id}"] input`;
-            const input = document.querySelector(selector) as HTMLInputElement | null;
-            if (input) {
-              input.focus();
-              input.select();
-            }
-          });
-        });
+        // Node will automatically enter editing mode via useNodeEditingState (isNew = true)
+        // Focus is handled by useLayoutEffect in useNodeEditingState
       } catch (error) {
         console.error('Error handling drop:', error);
       }
