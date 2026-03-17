@@ -75,6 +75,17 @@ export class ProjectSaveOrchestrator {
       return !isFactory && !isInstance;
     });
 
+    // Log filtering details for debugging
+    if (allTemplates.length > 0) {
+      console.log('[Save][Orchestrator] 📊 Template filtering', {
+        totalTemplates: allTemplates.length,
+        factoryTemplates: allTemplates.filter((t: any) => t.source === 'Factory').length,
+        projectTemplates: allTemplates.filter((t: any) => t.source !== 'Factory').length,
+        instances: allTemplates.filter((t: any) => t.templateId !== null && t.templateId !== undefined).length,
+        localTemplatesToSave: localTemplates.length,
+      });
+    }
+
     localTemplates.forEach((template: any) => {
       const mongoId = template._id
         ? (typeof template._id === 'object' ? template._id.toString() : String(template._id))
