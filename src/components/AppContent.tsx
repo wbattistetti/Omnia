@@ -33,7 +33,7 @@ import { mapUIStateToDomain } from '../domain/project/mapper';
 // ✅ M2: Project save orchestrator (introduced, dry-run only - will be used in M4)
 import { ProjectSaveOrchestrator } from '../services/project-save/ProjectSaveOrchestrator';
 // ✅ M3: Project migration (introduced, not yet used - will be used in M4)
-import { migrateProject, detectVersion } from '../migrations/migrateProject';
+import { migrateProject, detectVersion } from '../migrations';
 import { ProjectManager } from './AppContent/application/services/ProjectManager';
 import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
@@ -796,7 +796,7 @@ export const AppContent: React.FC<AppContentProps> = ({
 
                   const detectedVersion = detectVersion(rawProjectData);
                   const migratedProject = migrateProject(rawProjectData);
-                  
+
                   if (migratedProject.migrated || migratedProject.warnings) {
                     console.log('[Save][M3-Migration] ✅ Project migrated/normalized (DRY-RUN)', {
                       projectId: pid,
