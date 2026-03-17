@@ -4,6 +4,14 @@
 import type { ProjectDomainModel } from '../../domain/project/model';
 import type { SaveProjectRequest } from './SaveProjectRequest';
 import type { SaveResult } from './SaveResult';
+import type {
+  ITaskRepository,
+  IVariableService,
+  IDialogueTaskService,
+  IProjectDataService,
+  ITranslationsContext,
+  IFlowStateService,
+} from './SaveServiceInterfaces';
 
 /**
  * ProjectSaveOrchestrator: Orchestrates project save flow
@@ -188,20 +196,13 @@ export class ProjectSaveOrchestrator {
   async executeSave(
     request: SaveProjectRequest,
     uiState: {
-      translationsContext?: any; // translationsContext from window
-      flowState?: {
-        flushFlowPersist: () => Promise<void>;
-        getFlowById: (id: string) => any;
-        getNodes: () => any[];
-        getEdges: () => any[];
-        transformNodesToSimplified: (nodes: any[]) => any[];
-        transformEdgesToSimplified: (edges: any[]) => any[];
-      };
-      taskRepository?: any; // TaskRepository instance
-      variableService?: any; // VariableCreationService instance
-      dialogueTaskService?: any; // DialogueTaskService instance
-      projectDataService?: any; // ProjectDataService instance
-      projectData?: any; // ProjectData for conditions
+      translationsContext?: ITranslationsContext;
+      flowState?: IFlowStateService;
+      taskRepository?: ITaskRepository;
+      variableService?: IVariableService;
+      dialogueTaskService?: IDialogueTaskService;
+      projectDataService?: IProjectDataService;
+      projectData?: any; // ProjectData for conditions (TODO: type this properly)
     }
   ): Promise<SaveResult> {
     const startTime = performance.now();
@@ -426,10 +427,14 @@ export class ProjectSaveOrchestrator {
             throw new Error('ProjectData not provided');
           }
 
-          await (uiState.projectDataService as any).saveProjectConditionsToDb?.(
-            projectId,
-            uiState.projectData
-          );
+          if (uiState.projectDataService?.saveProjectConditionsToDb) {
+            await uiState.projectDataService.saveProjectConditionsToDb(
+              projectId,
+              uiState.projectData
+            );
+          } else {
+            throw new Error('ProjectDataService.saveProjectConditionsToDb not available');
+          }
 
           results.conditions = {
             success: true,
