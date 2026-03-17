@@ -32,6 +32,8 @@ import { EditorCoordinator } from './AppContent/application/coordinators/EditorC
 import { mapUIStateToDomain } from '../domain/project/mapper';
 // ✅ M2: Project save orchestrator (introduced, dry-run only - will be used in M4)
 import { ProjectSaveOrchestrator } from '../services/project-save/ProjectSaveOrchestrator';
+// ✅ M3: Project migration (introduced, not yet used - will be used in M4)
+import { migrateProject, detectVersion } from '../migrations/migrateProject';
 import { ProjectManager } from './AppContent/application/services/ProjectManager';
 import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
@@ -776,6 +778,35 @@ export const AppContent: React.FC<AppContentProps> = ({
                 // ✅ M2: Prepare save request using orchestrator (DRY-RUN - not executed yet)
                 // This is a characterization step to verify the orchestrator produces correct payload
                 try {
+                  // ✅ M3: Migrate project data before mapping to domain (DRY-RUN - not persisted yet)
+                  // This ensures old projects are normalized before processing
+                  const rawProjectData = {
+                    id: pid,
+                    name: currentProject?.name,
+                    tasks: allTasksInMemory,
+                    flows: allFlows,
+                    conditions: projectData?.conditions?.flatMap((cat: any) => cat.items || []) || [],
+                    templates: [], // Will be populated from DialogueTaskService in M4
+                    variables: [], // Will be populated from VariableCreationService in M4
+                    metadata: {
+                      ownerCompany: currentProject?.ownerCompany,
+                      ownerClient: currentProject?.ownerClient,
+                    },
+                  };
+
+                  const detectedVersion = detectVersion(rawProjectData);
+                  const migratedProject = migrateProject(rawProjectData);
+                  
+                  if (migratedProject.migrated || migratedProject.warnings) {
+                    console.log('[Save][M3-Migration] ✅ Project migrated/normalized (DRY-RUN)', {
+                      projectId: pid,
+                      detectedVersion,
+                      migratedVersion: migratedProject.version,
+                      migrated: migratedProject.migrated,
+                      warningsCount: migratedProject.warnings?.length || 0,
+                    });
+                  }
+
                   const domain = mapUIStateToDomain({
                     projectId: pid,
                     projectName: currentProject?.name,
