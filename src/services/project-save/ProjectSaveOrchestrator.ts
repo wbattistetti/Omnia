@@ -68,7 +68,9 @@ export class ProjectSaveOrchestrator {
     // Get all templates from UI state (includes Factory templates with grammarFlow)
     const allTemplates = uiState.allTemplates || [];
 
-    // Filter: Only save local templates (not Factory templates, not instances)
+    // ✅ SOLUTION 2: Save ALL Project templates (not Factory, not instances)
+    // This ensures we don't lose templates referenced by orphan tasks
+    // that are excluded from the bulk task save
     const localTemplates = allTemplates.filter((t: any) => {
       const isFactory = t.source === 'Factory';
       const isInstance = t.templateId !== null && t.templateId !== undefined;
@@ -77,12 +79,17 @@ export class ProjectSaveOrchestrator {
 
     // Log filtering details for debugging
     if (allTemplates.length > 0) {
-      console.log('[Save][Orchestrator] 📊 Template filtering', {
+      const factoryTemplates = allTemplates.filter((t: any) => t.source === 'Factory');
+      const projectTemplates = allTemplates.filter((t: any) => t.source !== 'Factory');
+      const instances = allTemplates.filter((t: any) => t.templateId !== null && t.templateId !== undefined);
+      
+      console.log('[Save][Orchestrator] 📊 Template filtering (Solution 2: All Project templates)', {
         totalTemplates: allTemplates.length,
-        factoryTemplates: allTemplates.filter((t: any) => t.source === 'Factory').length,
-        projectTemplates: allTemplates.filter((t: any) => t.source !== 'Factory').length,
-        instances: allTemplates.filter((t: any) => t.templateId !== null && t.templateId !== undefined).length,
+        factoryTemplates: factoryTemplates.length,
+        projectTemplates: projectTemplates.length,
+        instances: instances.length,
         localTemplatesToSave: localTemplates.length,
+        note: 'Saving all Project templates (including those referenced by orphan tasks)',
       });
     }
 
