@@ -307,7 +307,7 @@ export default function RegexInlineEditor({
   }, [textboxText, lastTextboxText]);
 
   // -----------------------------------------------------------------------
-  // Save to template (explicit save only when clicking "Refine Regex")
+  // Save to template
   // -----------------------------------------------------------------------
   const saveToTemplate = useCallback((displayValue: string) => {
     if (!displayValue || !displayValue.trim() || !node?.templateId) {
@@ -362,6 +362,28 @@ export default function RegexInlineEditor({
     }
   }, [node?.templateId]);
 
+  // ✅ Helper: Save regex if valid and changed
+  const saveIfValid = useCallback(() => {
+    if (!textboxText || textboxText.trim() === '' || textboxText === lastTextboxText || validationError) {
+      return false; // Nothing to save
+    }
+
+    try {
+      // Validate normalization before saving
+      normalizeRegexFromEditor(textboxText, subDataMappingRef.current);
+      saveToTemplate(textboxText);
+      console.log('[RegexEditor] ✅ Auto-saved regex', {
+        templateId: node?.templateId,
+        pattern: textboxText.substring(0, 50),
+      });
+      return true;
+    } catch (normError) {
+      // Normalization failed - don't save
+      console.log('[RegexEditor] ⏸️ Auto-save skipped (normalization failed)');
+      return false;
+    }
+  }, [textboxText, lastTextboxText, validationError, saveToTemplate, node?.templateId]);
+
   // The AI sees and works with label-based regex (what is shown in the editor).
   // The AI is expected to preserve the label group names in its output.
   const handleAIClick = useCallback(async () => {
@@ -394,8 +416,24 @@ export default function RegexInlineEditor({
   }, [textboxText, generateRegex, saveToTemplate]);
 
 
+  // ✅ Save on blur (editor loses focus)
+  useEffect(() => {
+    const monacoEditor = monacoEditorRef.current;
+    if (!monacoEditor || typeof monacoEditor.onDidBlurEditorWidget !== 'function') {
+      return;
+    }
+
+    const blurDisposable = monacoEditor.onDidBlurEditorWidget(() => {
+      saveIfValid();
+    });
+
+    return () => {
+      blurDisposable.dispose();
+    };
+  }, [saveIfValid]);
+
   // -----------------------------------------------------------------------
-  // Cleanup all timeouts on unmount
+  // Cleanup all timeouts on unmount and save on close
   // -----------------------------------------------------------------------
   useEffect(() => {
     return () => {
@@ -404,9 +442,11 @@ export default function RegexInlineEditor({
         clearTimeout(timeoutId);
       });
       timeoutRefs.current.clear();
-      // ✅ NO save on close - modifications are discarded if user doesn't click "Refine Regex"
+      
+      // ✅ Save on close (component unmount)
+      saveIfValid();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [saveIfValid]);
 
   // -----------------------------------------------------------------------
   // Backward compatibility: Support onButtonRender and onErrorRender callbacks
@@ -506,6 +546,7 @@ export default function RegexInlineEditor({
 
   const PLACEHOLDER_TEXT = "Write the regular expression you need";
   const editorRef = useRef<any>(null);
+  const monacoEditorRef = useRef<any>(null);
 
   const editorValue = React.useMemo(() => {
     // ✅ CRITICAL FIX: Don't show placeholder if we have a value (even if empty string from template)
@@ -575,6 +616,10 @@ export default function RegexInlineEditor({
               setTextboxText(value);
               // Don't clear validationError here - let debounced validation handle it
             }
+          }}
+          onEditorMount={(editor) => {
+            // Store Monaco editor reference for blur event
+            monacoEditorRef.current = editor;
           }}
           useTemplate={false}
         />
