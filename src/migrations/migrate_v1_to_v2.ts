@@ -196,16 +196,19 @@ export function migrate_v1_to_v2(v1Project: VersionedProject): VersionedProject 
           );
         }
 
-        // Remove rows pointing to non-existent tasks
-        flow.nodes.forEach((node: any) => {
-          if (node.data?.rows && Array.isArray(node.data.rows)) {
-            const invalidRows = node.data.rows.filter((row: any) => !taskIds.has(row.id));
-            if (invalidRows.length > 0) {
-              warnings.push(`Flow ${flowId}, Node ${node.id}: Removed ${invalidRows.length} invalid rows`);
-              node.data.rows = node.data.rows.filter((row: any) => taskIds.has(row.id));
-            }
-          }
-        });
+        // ✅ REMOVED: Don't remove rows - they must always be preserved
+        // Rows without tasks are valid (they will show gray icon)
+        // This is the original logic that must be preserved
+        // Migration is now DB script only, not executed in codebase
+        // flow.nodes.forEach((node: any) => {
+        //   if (node.data?.rows && Array.isArray(node.data.rows)) {
+        //     const invalidRows = node.data.rows.filter((row: any) => !taskIds.has(row.id));
+        //     if (invalidRows.length > 0) {
+        //       warnings.push(`Flow ${flowId}, Node ${node.id}: Removed ${invalidRows.length} invalid rows`);
+        //       node.data.rows = node.data.rows.filter((row: any) => taskIds.has(row.id));
+        //     }
+        //   }
+        // });
       }
     });
   }

@@ -82,7 +82,7 @@ export class ProjectSaveOrchestrator {
       const factoryTemplates = allTemplates.filter((t: any) => t.source === 'Factory');
       const projectTemplates = allTemplates.filter((t: any) => t.source !== 'Factory');
       const instances = allTemplates.filter((t: any) => t.templateId !== null && t.templateId !== undefined);
-      
+
       console.log('[Save][Orchestrator] 📊 Template filtering (Solution 2: All Project templates)', {
         totalTemplates: allTemplates.length,
         factoryTemplates: factoryTemplates.length,
