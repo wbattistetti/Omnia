@@ -28,6 +28,8 @@ import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/op
 import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
 import { openBottomDockedTab } from './AppContent/infrastructure/docking/DockingHelpers';
 import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
+// ✅ M1: Domain model mapper (introduced, not yet used - will be used in M2)
+import { mapUIStateToDomain } from '../domain/project/mapper';
 import { ProjectManager } from './AppContent/application/services/ProjectManager';
 import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
@@ -985,6 +987,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                           DialogueTaskService.markTemplateAsModified(t.id);
                         }
                       });
+
+                      // ✅ SAVE GRAMMARFLOW FROM STORE: Save all grammarFlow from GrammarEditor store
+                      // This ensures grammarFlow is saved even if the editor is still open
+                      await DialogueTaskService.saveAllGrammarFlowFromStore();
 
                       // ✅ Save ALL marked templates (including Factory templates with grammarflow)
                       // This ensures grammarflow engines are persisted even if they're on Factory templates

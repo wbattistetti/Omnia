@@ -1,0 +1,40 @@
+{
+  "projectId": "test-project-minimal",
+  "projectName": "Minimal Test Project",
+  "flows": {
+    "main": {
+      "id": "main",
+      "title": "Main Flow",
+      "nodes": [
+        {
+          "id": "node-1",
+          "type": "default",
+          "position": { "x": 100, "y": 100 },
+          "data": {
+            "label": "Start",
+            "rows": [
+              {
+                "id": "task-1",
+                "text": "Hello",
+                "included": true,
+                "order": 0
+              }
+            ]
+          }
+        }
+      ],
+      "edges": []
+    }
+  },
+  "tasks": [
+    {
+      "id": "task-1",
+      "type": 0,
+      "templateId": null,
+      "labelKey": "hello_message"
+    }
+  ],
+  "conditions": [],
+  "templates": [],
+  "variables": []
+}
