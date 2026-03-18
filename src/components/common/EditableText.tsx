@@ -127,6 +127,20 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
     }
   }, [value, editing]);
 
+  // ✅ LOG: Track when EditableText renders in editing mode
+  React.useEffect(() => {
+    if (editing) {
+      console.log('[EditableText] 🔍 RENDER editing mode', {
+        editing,
+        hasForwardedRef: !!forwardedRef,
+        hasExternalRef: !!externalInputRef,
+        hasInternalRef: !!internalInputRef,
+        hasInputRef: !!inputRef.current,
+        inputRefType: inputRef?.constructor?.name,
+      });
+    }
+  }, [editing, forwardedRef, externalInputRef, internalInputRef]);
+
   // Check if value has changed from initial
   const hasChanged = editing && editValue.trim() !== initialValue.trim();
 
@@ -294,6 +308,17 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
   // Editing mode
   const hasErrors = validationResult && validationResult.errors && validationResult.errors.length > 0;
   const hasWarnings = validationResult && validationResult.warnings && validationResult.warnings.length > 0;
+
+  // ✅ LOG: Track ref before passing to VoiceTextbox/textarea
+  if (editing) {
+    console.log('[EditableText] 🔍 BEFORE render VoiceTextbox/textarea', {
+      enableVoice,
+      hasInputRef: !!inputRef.current,
+      inputRefValue: inputRef.current,
+      forwardedRefType: forwardedRef?.constructor?.name,
+      externalInputRefType: externalInputRef?.constructor?.name,
+    });
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>

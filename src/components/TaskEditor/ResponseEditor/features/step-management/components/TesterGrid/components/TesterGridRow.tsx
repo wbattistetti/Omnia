@@ -143,8 +143,9 @@ function TesterGridRowComponent({
           return null;
         }
 
+        // ✅ CRITICAL: Show ALL engines (enabled and disabled) to match header columns
+        // Filtering for enabled engines happens during escalation execution, not in UI
         return engines
-          .filter(c => c.enabled !== false) // Filtra solo engine abilitati
           .map((engineItem) => {
           const componentType = engineItem.type === 'rules' ? 'deterministic' : engineItem.type;
           const color = {

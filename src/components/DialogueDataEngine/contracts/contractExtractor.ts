@@ -8,7 +8,7 @@ import type { NLPContract } from './contractLoader';
 export interface ExtractionResult {
     values: Record<string, any>; // subId → value (direct mapping, no canonicalKey)
     hasMatch: boolean;
-    source: 'regex' | 'rules' | 'ner' | 'llm' | null;
+    source: 'regex' | 'rules' | 'ner' | 'llm' | 'grammarflow' | null;
     confidence?: number;
 }
 
@@ -46,15 +46,16 @@ export async function extractWithContractAsync(
     text: string,
     contract: NLPContract
 ): Promise<ExtractionResult> {
-    // ✅ NEW: Escalation based on contracts array order
-    if (!contract.parsers || contract.parsers.length === 0) {
+    // ✅ NEW: Escalation based on engines array order (only enabled engines)
+    if (!contract.engines || contract.engines.length === 0) {
         return { values: {}, hasMatch: false, source: null };
     }
 
-    // Try contracts in order (escalation)
-    for (const contractItem of contract.parsers) {
-        if (!contractItem.enabled) continue;
+    // ✅ Filter only enabled engines and use them in column order (escalation)
+    const enabledEngines = contract.engines.filter(engine => engine.enabled !== false);
 
+    // Try engines in order (escalation)
+    for (const contractItem of enabledEngines) {
         switch (contractItem.type) {
             case 'ner':
                 const nerResult = await tryNERExtraction(text, contract);
@@ -67,6 +68,13 @@ export async function extractWithContractAsync(
                 const llmResult = await tryLLMExtraction(text, contract, contractItem);
                 if (llmResult.hasMatch) {
                     return { ...llmResult, source: 'llm' };
+                }
+                break;
+
+            case 'grammarflow':
+                const grammarFlowResult = await tryGrammarFlowExtraction(text, contract, contractItem);
+                if (grammarFlowResult.hasMatch) {
+                    return { ...grammarFlowResult, source: 'grammarflow' };
                 }
                 break;
         }
@@ -82,8 +90,8 @@ export async function extractWithContractAsync(
 function tryRegexExtraction(text: string, contract: NLPContract, activeSubId?: string): ExtractionResult {
     const values: Record<string, any> = {};
 
-    // ✅ NEW: Find regex contract from contracts array
-    const regexContract = contract.parsers?.find(c => c.type === 'regex' && c.enabled);
+    // ✅ NEW: Find regex contract from engines array (only enabled)
+    const regexContract = contract.engines?.find(c => c.type === 'regex' && c.enabled !== false);
     if (!regexContract || regexContract.type !== 'regex' || !regexContract.patterns || regexContract.patterns.length === 0) {
         console.warn('⚠️ [NLP Regex] Regex contract not found or no patterns');
         return { values: {}, hasMatch: false, source: null };
@@ -176,8 +184,8 @@ function tryRegexExtraction(text: string, contract: NLPContract, activeSubId?: s
  * @returns true se il valore è ambiguo
  */
 function checkAmbiguity(text: string, contract: NLPContract): boolean {
-    // ✅ NEW: Find regex contract from contracts array
-    const regexContract = contract.parsers?.find(c => c.type === 'regex' && c.enabled);
+    // ✅ NEW: Find regex contract from engines array (only enabled)
+    const regexContract = contract.engines?.find(c => c.type === 'regex' && c.enabled !== false);
     if (!regexContract || regexContract.type !== 'regex') {
         return false;
     }
@@ -292,3 +300,58 @@ async function tryLLMExtraction(text: string, contract: NLPContract, llmContract
     return { values: {}, hasMatch: false, source: null };
 }
 
+/**
+ * Prova estrazione con GrammarFlow
+ */
+async function tryGrammarFlowExtraction(text: string, contract: NLPContract, grammarFlowContractItem: any): Promise<ExtractionResult> {
+    try {
+        if (grammarFlowContractItem.type !== 'grammarflow' || !grammarFlowContractItem.grammarFlow) {
+            return { values: {}, hasMatch: false, source: null };
+        }
+
+        // ✅ Call backend GrammarFlow engine
+        const response = await fetch('/api/nlp/grammarflow-extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text,
+                grammar: grammarFlowContractItem.grammarFlow,
+                contract: {
+                    templateName: contract.templateName,
+                    subDataMapping: contract.subDataMapping
+                }
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.values && Object.keys(data.values).length > 0) {
+                // ✅ Map values using subDataMapping (similar to LLM extraction)
+                const values: Record<string, any> = {};
+                Object.entries(data.values).forEach(([key, value]) => {
+                    // Check if key is a groupName and find corresponding subId
+                    const subId = Object.entries(contract.subDataMapping).find(
+                        ([_, info]) => (info as any).groupName === key
+                    )?.[0];
+                    if (subId) {
+                        values[subId] = value;
+                    } else if (contract.subDataMapping[key]) {
+                        // Key is already a subId
+                        values[key] = value;
+                    }
+                });
+
+                if (Object.keys(values).length > 0) {
+                    return {
+                        values,
+                        hasMatch: true,
+                        source: 'grammarflow',
+                        confidence: data.confidence || 0.8
+                    };
+                }
+            }
+        }
+    } catch (error) {
+        console.warn('[ContractExtractor] GrammarFlow extraction failed', error);
+    }    return { values: {}, hasMatch: false, source: null };
+}

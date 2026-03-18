@@ -222,7 +222,8 @@ export function useExtractionTesting({
     regex: true,
     deterministic: true,
     ner: true,
-    llm: true
+    llm: true,
+    grammarflow: true, // ✅ Added: GrammarFlow engine support
   });
 
   // Map kind to field name

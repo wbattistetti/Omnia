@@ -24,6 +24,8 @@
     <ProjectReference Include="..\Common\Common.vbproj" />
     <!-- Compiler for CompiledUtteranceTask (used by ProcessTurnEngine) -->
     <ProjectReference Include="..\Compiler\Compiler.vbproj" />
+    <!-- GrammarFlowEngine for GrammarFlow extraction -->
+    <ProjectReference Include="..\GrammarFlowEngine\GrammarFlowEngine.vbproj" />
   </ItemGroup>
 
   <!-- Interfaces (moved from DDTEngine) -->

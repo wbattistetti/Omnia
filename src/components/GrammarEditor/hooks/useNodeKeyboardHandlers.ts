@@ -65,27 +65,17 @@ export function useNodeKeyboardHandlers({
           onSave(trimmedValue);
         }
 
-        // If node was floating, create new node after it
+        // If node was floating, create new node after it (with edge created atomically)
         if (shouldCreateNewNode && currentNode) {
-          // Pass saved label for accurate width calculation
-          const newNode = createNodeAfterFloating(currentNode, trimmedValue || undefined);
-          if (newNode) {
-            handleEdgeCreate(nodeId, newNode.id, 'sequential');
+          // ✅ ATOMIC: Pass handleEdgeCreate callback to create edge immediately with node
+          const newNode = createNodeAfterFloating(
+            currentNode,
+            trimmedValue || undefined,
+            (source, target, type) => handleEdgeCreate(source, target, type)
+          );
 
-            // Focus immediately on the new node
-            // Double RAF: first waits for React commit (after onStopEditing re-render),
-            // second waits for browser paint to ensure focus is stable
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                const selector = `[data-node-id="${newNode.id}"] input`;
-                const input = document.querySelector(selector) as HTMLInputElement | null;
-                if (input) {
-                  input.focus();
-                  input.select();
-                }
-              });
-            });
-          }
+          // Focus is handled deterministically by useNodeEditingState and EditableText
+          // No need for requestAnimationFrame or manual focus logic
         }
         // If node is not floating (has descendants), do nothing
         // Just save the caption and stop editing

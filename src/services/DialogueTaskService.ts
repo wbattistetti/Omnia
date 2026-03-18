@@ -101,6 +101,16 @@ export class DialogueTaskService {
       this.cache = raw.map((t: any) => {
         const template = t.source ? t : { ...t, source: 'Factory' };
 
+        // ✅ CRITICAL: Normalize engine.enabled - ensure all engines have enabled property (default: true)
+        if (template.dataContract?.engines && Array.isArray(template.dataContract.engines)) {
+          template.dataContract.engines = template.dataContract.engines.map((engine: any) => {
+            if (engine.enabled === undefined || engine.enabled === null) {
+              return { ...engine, enabled: true };
+            }
+            return engine;
+          });
+        }
+
         // ✅ DEEP LOG: Check grammarFlow in loaded templates
         const grammarFlowEngine = template.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
         const hasGrammarFlow = !!grammarFlowEngine?.grammarFlow;
@@ -666,6 +676,16 @@ export class DialogueTaskService {
         ? rawTemplate
         : { ...rawTemplate, source: 'Project' };
 
+      // ✅ CRITICAL: Normalize engine.enabled - ensure all engines have enabled property (default: true)
+      if (template.dataContract?.engines && Array.isArray(template.dataContract.engines)) {
+        template.dataContract.engines = template.dataContract.engines.map((engine: any) => {
+          if (engine.enabled === undefined || engine.enabled === null) {
+            return { ...engine, enabled: true };
+          }
+          return engine;
+        });
+      }
+
       const existingIdx = this.cache.findIndex(t =>
         String(t.id || t._id || '').trim() === templateId
       );
@@ -703,6 +723,17 @@ export class DialogueTaskService {
             ...(existing.constraints && { constraints: existing.constraints }),
             ...(existing.steps && { steps: existing.steps }),
           };
+          
+          // ✅ CRITICAL: Normalize engine.enabled after merge
+          if (merged.dataContract?.engines && Array.isArray(merged.dataContract.engines)) {
+            merged.dataContract.engines = merged.dataContract.engines.map((engine: any) => {
+              if (engine.enabled === undefined || engine.enabled === null) {
+                return { ...engine, enabled: true };
+              }
+              return engine;
+            });
+          }
+          
           this.cache[existingIdx] = merged;
 
           // ✅ DEEP LOG: Verify merge result
@@ -726,6 +757,17 @@ export class DialogueTaskService {
         } else {
           // Normal merge: preserve source, update other fields
           const merged = existingSource ? { ...template, source: existingSource } : template;
+          
+          // ✅ CRITICAL: Normalize engine.enabled after merge
+          if (merged.dataContract?.engines && Array.isArray(merged.dataContract.engines)) {
+            merged.dataContract.engines = merged.dataContract.engines.map((engine: any) => {
+              if (engine.enabled === undefined || engine.enabled === null) {
+                return { ...engine, enabled: true };
+              }
+              return engine;
+            });
+          }
+          
           this.cache[existingIdx] = merged;
 
           // ✅ DEEP LOG: Verify merge result

@@ -4,8 +4,7 @@
 import { useCallback } from 'react';
 import { useGrammarStore } from '../../core/state/grammarStore';
 import { createGrammarNode } from '../../core/domain/node';
-import { NODE_MIN_WIDTH } from '../../constants/nodeConstants';
-import { getNodeRight } from '../../utils/nodeGeometry';
+import { calculateNodeWidth, getNodeRight } from '../../utils/nodeGeometry';
 import type { GrammarNode } from '../../types/grammarTypes';
 
 /**
@@ -30,18 +29,24 @@ export function useNodeCreation() {
    * Position: current node's right edge + w0 spacing
    * Only called when the current node is floating (new, no descendants).
    *
+   * ✅ ATOMIC: Creates node + edge together to ensure deterministic behavior.
+   *
    * @param currentNode - The current node
    * @param currentLabel - Optional label to use for width calculation.
    *   If provided, uses this instead of currentNode.label (useful when label was just saved).
+   * @param createEdge - Optional callback to create edge atomically with node creation.
+   *   If provided, edge is created immediately after node, ensuring the new node is properly connected.
    */
   const createNodeAfterFloating = useCallback((
     currentNode: GrammarNode,
-    currentLabel?: string
+    currentLabel?: string,
+    createEdge?: (source: string, target: string, type: 'sequential' | 'alternative' | 'optional') => void
   ) => {
     if (!grammar) return null;
 
-    // w0 = initial empty node width
-    const w0 = NODE_MIN_WIDTH;
+    // ✅ Use calculateNodeWidth('') to get default node width for spacing
+    // This ensures spacing equals the width of an empty node
+    const defaultNodeWidth = calculateNodeWidth('');
 
     // Calculate right edge of current node
     // Use provided label if available, otherwise use node.label
@@ -51,14 +56,20 @@ export function useNodeCreation() {
       label: labelToUse,
     });
 
-    // New node position: right edge + w0 spacing
+    // New node position: right edge + default node width spacing
     const newPosition = {
-      x: currentNodeRight + w0,
+      x: currentNodeRight + defaultNodeWidth,
       y: currentNode.position.y,
     };
 
     const newNode = createGrammarNode('', newPosition);
     addNode(newNode);
+
+    // ✅ Create edge atomically with node creation (no delay, deterministic)
+    if (createEdge) {
+      createEdge(currentNode.id, newNode.id, 'sequential');
+    }
+
     return newNode;
   }, [grammar, addNode]);
 

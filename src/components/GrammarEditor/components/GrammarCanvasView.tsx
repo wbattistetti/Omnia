@@ -98,6 +98,8 @@ export function GrammarCanvasView({
           panOnDrag={[1, 2]}
           fitView={false}
           defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          disableKeyboardA11y={true}
+          nodesFocusable={false}
           style={{ width: '100%', height: '100%' }}
         >
           <Background />

@@ -1,14 +1,20 @@
 import { ParseResult } from './types';
+import { extractWithContractAsync } from '../../DialogueDataEngine/contracts/contractExtractor';
+import { NLPContract } from '../../DialogueDataEngine/contracts/types';
 
 /**
- * Parses user input using an LLM (mocked here, ready for OpenAI integration).
- * Extracts date subfields and detects missing subdata.
+ * Parses user input using the NLP contract extraction system.
+ * Supports GrammarFlow, regex, NER, LLM engines based on contract configuration.
+ * ⚠️ NO HARDCODED FALLBACK: Uses only the contract extraction with escalation between enabled engines.
  * @param input User's raw input
  * @param expectedType The type of data expected (e.g., 'date', 'number')
+ * @param contract NLP contract for extraction (required)
  */
-export async function parseInput(input: string, expectedType: string): Promise<ParseResult> {
-  // --- MOCKED LOGIC ---
-  // In real use, call OpenAI API here and parse the result.
+export async function parseInput(
+  input: string,
+  expectedType: string,
+  contract?: NLPContract
+): Promise<ParseResult> {
   if (!input.trim()) {
     return {
       success: false,
@@ -17,45 +23,44 @@ export async function parseInput(input: string, expectedType: string): Promise<P
     };
   }
 
-  if (expectedType === 'date') {
-    // Naive parsing for demo: dd/mm/yyyy or d-m-yyyy
-    const dateMatch = input.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-    if (dateMatch) {
-      const [_, day, month, year] = dateMatch;
-      return {
-        success: true,
-        variables: {
-          day: parseInt(day, 10),
-          month: parseInt(month, 10),
-          year: parseInt(year, 10),
-          dateOfBirth: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
-        },
-      };
-    } else {
-      // Try to extract partials
-      const yearMatch = input.match(/\b(\d{4})\b/);
-      const monthMatch = input.match(/\b(0?[1-9]|1[0-2])\b/);
-      const dayMatch = input.match(/\b(0?[1-9]|[12][0-9]|3[01])\b/);
-      const missing: string[] = [];
-      if (!dayMatch) missing.push('day');
-      if (!monthMatch) missing.push('month');
-      if (!yearMatch) missing.push('year');
+  // ✅ Use contract-based extraction if available
+  if (contract) {
+    try {
+      const extractionResult = await extractWithContractAsync(input, contract);
+
+      if (extractionResult.hasMatch && extractionResult.values) {
+        // Convert extraction values to variables format
+        const variables: Record<string, any> = {};
+        Object.entries(extractionResult.values).forEach(([key, value]) => {
+          variables[key] = value;
+        });
+
+        return {
+          success: true,
+          variables,
+          source: extractionResult.source,
+        };
+      } else {
+        return {
+          success: false,
+          variables: {},
+          error: 'No match found with any enabled extraction engine',
+        };
+      }
+    } catch (error) {
+      console.error('[Parser] Contract extraction failed:', error);
       return {
         success: false,
-        variables: {
-          ...(dayMatch ? { day: parseInt(dayMatch[0], 10) } : {}),
-          ...(monthMatch ? { month: parseInt(monthMatch[0], 10) } : {}),
-          ...(yearMatch ? { year: parseInt(yearMatch[0], 10) } : {}),
-        },
-        missingSubdata: missing,
-        error: 'Incomplete date',
+        variables: {},
+        error: error instanceof Error ? error.message : 'Extraction failed',
       };
     }
   }
 
-  // Fallback for other types
+  // ⚠️ NO HARDCODED FALLBACK: Return error if no contract provided
   return {
-    success: true,
-    variables: { value: input },
+    success: false,
+    variables: {},
+    error: 'No NLP contract provided for extraction',
   };
 }

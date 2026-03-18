@@ -67,12 +67,13 @@ export function useGrammarCanvasEvents() {
         newNodePosition: newNode.position,
       });
       addNode(newNode);
+      clearSelection(); // ✅ CRITICAL: Prevent React Flow from auto-selecting new node
       console.log('[GrammarCanvas] ✅ addNode called successfully');
 
       // Node will automatically enter editing mode via useNodeEditingState (label === '')
       // Focus is handled by useLayoutEffect in useNodeEditingState
     },
-    [rf, addNode, grammar]
+    [rf, addNode, grammar, clearSelection]
   );
 
   const handlePaneClick = useCallback(() => {
@@ -81,6 +82,13 @@ export function useGrammarCanvasEvents() {
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      // ✅ CRITICAL: Don't process changes if any node is in editing mode
+      // This prevents React Flow from stealing focus during editing
+      const editingNode = document.querySelector('[data-editing="true"]');
+      if (editingNode) {
+        return; // Ignore changes during editing to prevent focus loss
+      }
+
       changes.forEach((change) => {
         if (change.type === 'position' && change.position) {
           updateNode(change.id, { position: change.position });
@@ -118,6 +126,7 @@ export function useGrammarCanvasEvents() {
 
       const newNode = createGrammarNode('', centeredPos);
       addNode(newNode);
+      clearSelection(); // ✅ CRITICAL: Prevent React Flow from auto-selecting new node
 
       const edge: GrammarEdge = {
         id: uuidv4(),
@@ -132,7 +141,7 @@ export function useGrammarCanvasEvents() {
       // Node will automatically enter editing mode via useNodeEditingState (label === '')
       // Focus is handled by useLayoutEffect in useNodeEditingState
     },
-    [dragState, rf, grammar, addNode, addEdge, setDragState]
+    [dragState, rf, grammar, addNode, addEdge, setDragState, clearSelection]
   );
 
   // Cancel drag on escape or mouseup anywhere (if not on canvas)
@@ -162,7 +171,18 @@ export function useGrammarCanvasEvents() {
   }, [dragState, setDragState]);
 
   const handleNodeClick = useCallback(
-    (_: React.MouseEvent, node: { id: string }) => {
+    (event: React.MouseEvent, node: { id: string }) => {
+      // ✅ CRITICAL: Don't select node if it's in editing mode
+      // Check if the node is in editing by looking for input/textarea or data-editing attribute
+      const target = event.target as HTMLElement;
+      const isEditing = !!target?.closest('input, textarea') ||
+                        !!target?.closest('[data-editing="true"]');
+
+      if (isEditing) {
+        event.stopPropagation();
+        return; // Don't select during editing to preserve focus
+      }
+
       selectNode(node.id);
     },
     [selectNode]
@@ -248,6 +268,7 @@ export function useGrammarCanvasEvents() {
 
         const newNode = createGrammarNode(data.label || '', centeredPos, [binding]);
         addNode(newNode);
+        clearSelection(); // ✅ CRITICAL: Prevent React Flow from auto-selecting new node
 
         // Node will automatically enter editing mode via useNodeEditingState (isNew = true)
         // Focus is handled by useLayoutEffect in useNodeEditingState
@@ -255,7 +276,7 @@ export function useGrammarCanvasEvents() {
         console.error('Error handling drop:', error);
       }
     },
-    [rf, grammar, addNode, updateNode]
+    [rf, grammar, addNode, updateNode, clearSelection]
   );
 
   // Handle drag over to allow drop

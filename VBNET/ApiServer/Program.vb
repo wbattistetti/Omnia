@@ -370,6 +370,11 @@ Module Program
                                                      Return GrammarTestHandlers.HandleTestPhrases(context)
                                                  End Function)
 
+        ' ✅ POST /api/nlp/grammarflow-extract - Extract values using GrammarFlow engine
+        app.MapPost("/api/nlp/grammarflow-extract", Function(context As HttpContext) As Task(Of IResult)
+                                                        Return GrammarFlowExtractHandlers.HandleGrammarFlowExtract(context)
+                                                    End Function)
+
         ' ✅ POST /api/runtime/translations/invalidate-cache - Invalida cache traduzioni
         app.MapPost("/api/runtime/translations/invalidate-cache", Function(req As HttpRequest) As IResult
                                                                       Try

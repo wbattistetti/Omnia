@@ -76,40 +76,39 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
 
     stopEditing();
 
-    // Use requestAnimationFrame to ensure store is updated before checking if floating
-    // This is necessary because React state updates might not be synchronous
-    requestAnimationFrame(() => {
-      const updatedGrammar = useGrammarStore.getState().grammar;
-      const currentNode = updatedGrammar ? updatedGrammar.nodes.find(n => n.id === node.id) : undefined;
+    // ✅ SYNCHRONOUS: Check immediately if floating (before edge is created)
+    // This ensures the node is still "floating" when we check, since we create edge atomically
+    const updatedGrammar = useGrammarStore.getState().grammar;
+    const currentNode = updatedGrammar ? updatedGrammar.nodes.find(n => n.id === node.id) : undefined;
 
-      if (updatedGrammar && currentNode) {
-        const shouldCreateNewNode = isFloatingNode(
-          updatedGrammar,
+    if (updatedGrammar && currentNode) {
+      const shouldCreateNewNode = isFloatingNode(
+        updatedGrammar,
+        currentNode,
+        false, // not editing anymore
+        trimmedValue // use saved label
+      );
+
+      console.log('[GrammarNode] 🔍 Checking if should create new node', {
+        nodeId: node.id,
+        shouldCreateNewNode,
+        currentNodeLabel: currentNode.label,
+        hasDescendants: updatedGrammar.edges.some(e => e.source === node.id),
+      });
+
+      // If node was floating, create new node after it (with edge created atomically)
+      if (shouldCreateNewNode) {
+        const newNode = createNodeAfterFloating(
           currentNode,
-          false, // not editing anymore
-          trimmedValue // use saved label
+          trimmedValue || undefined,
+          (source, target, type) => handleEdgeCreate(source, target, type)
         );
 
-        console.log('[GrammarNode] 🔍 Checking if should create new node', {
-          nodeId: node.id,
-          shouldCreateNewNode,
-          currentNodeLabel: currentNode.label,
-          hasDescendants: updatedGrammar.edges.some(e => e.source === node.id),
-        });
-
-        // If node was floating, create new node after it
-        if (shouldCreateNewNode) {
-          const newNode = createNodeAfterFloating(currentNode, trimmedValue || undefined);
-          if (newNode) {
-            handleEdgeCreate(node.id, newNode.id, 'sequential');
-
-            // New node will automatically enter editing mode via useNodeEditingState (isNew = true)
-            // Focus is handled by useLayoutEffect in useNodeEditingState
-          }
-        }
+        // New node will automatically enter editing mode via useNodeEditingState (label === '')
+        // Focus is handled deterministically by useLayoutEffect in useNodeEditingState and EditableText
       }
-    });
-  }, [node.id, node.label, editNodeLabel, stopEditing, createNodeAfterFloating, handleEdgeCreate]);
+    }
+  }, [node.id, node.label, editNodeLabel, stopEditing, createNodeAfterFloating, handleEdgeCreate, grammar]);
 
   const handleCancel = React.useCallback(() => {
     resetValue();
@@ -117,11 +116,17 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
 
   // Handle blur: if empty, delete floating node; otherwise save (like Enter)
   const handleBlur = React.useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
-    // Use a small delay to check if focus moved to another element in the same component
-    // This prevents blur from firing when clicking action buttons
     const relatedTarget = e.relatedTarget as HTMLElement | null;
+
+    // ✅ CRITICAL: Ignore blur caused by React 18 StrictMode simulate-unmount.
+    // In StrictMode, components unmount+remount in dev; the blur fires with
+    // relatedTarget=null and activeElement=body, which is NOT a real user action.
+    if (!relatedTarget && document.activeElement === document.body) {
+      return;
+    }
+
+    // Focus moved within the same component, ignore blur
     if (relatedTarget && e.currentTarget.contains(relatedTarget)) {
-      // Focus moved within the same component, ignore blur
       return;
     }
 
@@ -279,8 +284,32 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
   return (
     <div
       data-node-id={node.id}  // For immediate focus after node creation
+      data-editing={isEditing ? 'true' : undefined}  // ✅ For identifying nodes in editing mode
       style={containerStyle}
       onDoubleClick={startEditing}
+      onMouseDown={(e) => {
+        // ✅ CRITICAL: Prevent React Flow from selecting the node during editing
+        // This stops React Flow from stealing focus when the node is clicked
+        if (isEditing) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }}
+      onClick={(e) => {
+        // ✅ CRITICAL: Prevent React Flow from handling click during editing
+        if (isEditing) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }}
+      onPointerDown={(e) => {
+        // ✅ CRITICAL: Prevent React Flow from handling pointer events during editing
+        // React Flow uses pointer events for selection and focus management
+        if (isEditing) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -361,6 +390,8 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
           ref={inputRef}
           value={editValue}
           editing={isEditing}
+          // ✅ LOG: Track when GrammarNode passes ref to EditableText
+          // (log added via useEffect in EditableText)
           onSave={handleSave}
           onCancel={handleCancel}
           onStartEditing={startEditing}
@@ -374,6 +405,14 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
           multiline={false}
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
+          onFocus={(e) => {
+            // ✅ DIAGNOSTIC: Verify focus was received
+            console.log('[GrammarNode] ✅ onFocus received', {
+              nodeId: node.id,
+              activeElement: document.activeElement?.tagName,
+              isTextarea: document.activeElement === e.currentTarget,
+            });
+          }}
           style={{
             width: '100%',
             minWidth: `${inputWidth}px`,

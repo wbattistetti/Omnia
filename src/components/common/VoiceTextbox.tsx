@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, forwardRef } from 'react';
+import React, { useRef, useCallback, forwardRef } from 'react';
 import { Mic } from 'lucide-react';
 import SmartTooltip, { ToolbarButton } from '../SmartTooltip';
 import { useVoiceRecognition } from '../../hooks/useVoiceRecognition';
@@ -57,7 +57,29 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
   ...rest
 }, forwardedRef) => {
   const internalRef = useRef<HTMLTextAreaElement>(null);
-  const textareaRef = (forwardedRef as React.RefObject<HTMLTextAreaElement>) || internalRef;
+  // ✅ Use internalRef as fallback, but prefer forwardedRef if it's a RefObject
+  // If forwardedRef is a callback, we'll handle it in the ref callback
+  const textareaRef = (forwardedRef && typeof forwardedRef !== 'function' && 'current' in forwardedRef)
+    ? (forwardedRef as React.RefObject<HTMLTextAreaElement>)
+    : internalRef;
+
+  // ✅ FIX #3: Stable ref callback — prevents React from calling old(null)+new(el)
+  // on every render (which would briefly set forwardedRef.current = null and lose focus).
+  const setTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
+    if (el) {
+      console.log('[VoiceTextbox] ✅ textarea ref SET', {
+        hasForwardedRef: !!forwardedRef,
+        forwardedRefType: typeof forwardedRef,
+        element: el,
+      });
+    }
+    if (typeof forwardedRef === 'function') {
+      forwardedRef(el);
+    } else if (forwardedRef && 'current' in forwardedRef) {
+      (forwardedRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+    }
+    internalRef.current = el;
+  }, [forwardedRef]);
 
   // Use voice recognition hook
   const voiceRecognition = useVoiceRecognition({
@@ -200,7 +222,7 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
           onShow={payoffConfig.onShow}
         >
           <textarea
-            ref={textareaRef}
+            ref={setTextareaRef}
             value={value}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
@@ -228,7 +250,7 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
         </SmartTooltip>
       ) : (
         <textarea
-          ref={textareaRef}
+          ref={setTextareaRef}
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}

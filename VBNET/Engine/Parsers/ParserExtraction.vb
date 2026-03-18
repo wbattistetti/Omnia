@@ -1,5 +1,6 @@
 ' ParserExtraction.vb
 ' Regex-based data extraction helpers for Parser.
+' ✅ UPDATED: Support for GrammarFlow engine
 
 Option Strict On
 Option Explicit On
@@ -8,123 +9,151 @@ Imports System.Text.RegularExpressions
 Imports Compiler.DTO.IDE
 Imports TaskEngine
 Imports IParsableTask = TaskEngine.IParsableTask
+Imports GrammarFlowEngine
+Imports GrammarFlowEngine.Models
+Imports Newtonsoft.Json
 
-''' <summary>
-''' Low-level extraction logic: simple regex and composite regex extraction.
-''' </summary>
 Partial Public Class Parser
 
     ' -------------------------------------------------------------------------
     ' Simple (leaf node) extraction
     ' -------------------------------------------------------------------------
 
-    ''' <summary>
-    ''' Extracts a single value from an utterance using the node NLP contract.
-    ''' Returns Nothing when no match; throws on structural errors.
-    ''' ✅ STATELESS: Accetta IParsableTask per evitare dipendenza circolare
-    ''' ✅ PUBLIC: Accessibile per test extraction (non richiede metadati runtime)
-    ''' </summary>
     Public Shared Function ExtractSimple(input As String, node As IParsableTask) As String
         If String.IsNullOrEmpty(input) Then
             Throw New ArgumentException("Input cannot be empty.", NameOf(input))
         End If
 
         If node.NlpContract Is Nothing Then
-            Throw New InvalidOperationException($"Task '{node.Id}' has no NlpContract. NlpContract is mandatory for data extraction.")
+            Throw New InvalidOperationException($"Task '{node.Id}' has no NlpContract.")
         End If
 
         Dim contract = node.NlpContract
-        If contract.CompiledMainRegex Is Nothing Then
-            Throw New InvalidOperationException($"Task '{node.Id}' has no CompiledMainRegex in NlpContract.")
+        Dim grammarFlowEngine = GetActiveGrammarFlowEngine(contract)
+        Dim regexEngine = GetActiveRegexEngine(contract)
+
+        ' ✅ ESCALATION: Try GrammarFlow first if enabled
+        If grammarFlowEngine IsNot Nothing Then
+            Dim grammarFlowResult = ExtractWithGrammarFlow(input, grammarFlowEngine)
+            If Not String.IsNullOrEmpty(grammarFlowResult) Then
+                Return grammarFlowResult
+            End If
+            ' ⚠️ GrammarFlow failed, continue to next engine (escalation)
         End If
 
-        Try
-            Dim m = contract.CompiledMainRegex.Match(input.Trim())
-            If Not m.Success Then Return Nothing
+        ' ✅ ESCALATION: Try regex if enabled (as fallback after GrammarFlow)
+        If regexEngine IsNot Nothing Then
+            If contract.CompiledMainRegex Is Nothing Then
+                Throw New InvalidOperationException($"Task '{node.Id}' has no CompiledMainRegex.")
+            End If
 
-            ' Prefer first named group with a value.
-            For i As Integer = 1 To m.Groups.Count - 1
-                If Not String.IsNullOrEmpty(m.Groups(i).Value) Then Return m.Groups(i).Value
-            Next
-            Return m.Value
-        Catch ex As Exception
-            Throw New InvalidOperationException($"Regex match failed for task '{node.Id}': {ex.Message}", ex)
-        End Try
+            Dim m = contract.CompiledMainRegex.Match(input.Trim())
+            If m.Success Then
+                For i As Integer = 1 To m.Groups.Count - 1
+                    If Not String.IsNullOrEmpty(m.Groups(i).Value) Then Return m.Groups(i).Value
+                Next
+                Return m.Value
+            End If
+        End If
+
+        ' ⚠️ All enabled engines failed - return Nothing
+        Return Nothing
     End Function
 
     ' -------------------------------------------------------------------------
     ' Composite extraction
     ' -------------------------------------------------------------------------
 
-    ''' <summary>
-    ''' Extracts multiple sub-field values from a composite utterance.
-    ''' Iterates SubDataMapping and uses EffectiveGroupName() as the sole group-name source.
-    ''' Returns Nothing when the pattern does not match; throws on structural errors.
-    ''' ✅ STATELESS: Accetta IParsableTask per evitare dipendenza circolare
-    ''' </summary>
     Private Shared Function ExtractComposite(
             input As String,
-            node As IParsableTask) As System.Collections.Generic.Dictionary(Of String, Object)
+            node As IParsableTask) As Dictionary(Of String, Object)
 
         If node Is Nothing OrElse Not node.HasSubTasks() Then Return Nothing
 
         Dim contract = node.NlpContract
         If contract Is Nothing Then
-            Throw New InvalidOperationException(
-                $"Task '{node.Id}' has no NlpContract. Cannot perform composite extraction.")
+            Throw New InvalidOperationException($"Task '{node.Id}' has no NlpContract.")
         End If
 
-        ' ✅ NEW: Leggi regex contract da Parsers invece di contract.Regex
-        Dim regexContract = contract.Engines?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
-        If regexContract Is Nothing OrElse
-           regexContract.Patterns Is Nothing OrElse
-           regexContract.Patterns.Count = 0 Then
-            Throw New InvalidOperationException(
-                $"Task '{node.Id}': NlpContract has no enabled regex contract. " &
-                $"The contract must contain a 'regex' parser in the 'parsers' array with at least one pattern.")
+        ' TODO: GrammarFlow composite extraction
+        Dim grammarFlowEngine = GetActiveGrammarFlowEngine(contract)
+        Dim regexEngine = GetActiveRegexEngine(contract)
+        If grammarFlowEngine IsNot Nothing AndAlso regexEngine Is Nothing Then
+            ' Composite GrammarFlow extraction not yet implemented
+            Throw New InvalidOperationException($"Task '{node.Id}': GrammarFlow composite extraction not yet supported.")
+        End If
+
+        ' Use regex
+        Dim regexContract = GetActiveRegexEngine(contract)
+        If regexContract Is Nothing OrElse regexContract.Patterns Is Nothing OrElse regexContract.Patterns.Count = 0 Then
+            Throw New InvalidOperationException($"Task '{node.Id}': No enabled regex contract.")
         End If
 
         If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then
-            Throw New InvalidOperationException(
-                $"Task '{node.Id}': SubDataMapping is empty. Cannot map extracted groups to sub-tasks.")
+            Throw New InvalidOperationException($"Task '{node.Id}': SubDataMapping is empty.")
         End If
 
-        Try
-            Dim pattern = regexContract.Patterns(0)
-            Dim rx As New Regex(pattern, RegexOptions.IgnoreCase)
-            Dim m = rx.Match(input.Trim())
-            If Not m.Success Then Return Nothing
+        Dim pattern = regexContract.Patterns(0)
+        Dim m = New Regex(pattern, RegexOptions.IgnoreCase).Match(input.Trim())
+        If Not m.Success Then Return Nothing
 
-            Dim result As New System.Collections.Generic.Dictionary(Of String, Object)()
-
-            For Each kvp As System.Collections.Generic.KeyValuePair(Of String, SubDataMappingInfo) In contract.SubDataMapping
-                Dim subId As String = kvp.Key
-                Dim info As SubDataMappingInfo = kvp.Value
-                Dim groupName As String = info.GroupName
-
-                If String.IsNullOrWhiteSpace(groupName) Then
-                    Throw New InvalidOperationException(
-                        $"Task '{node.Id}': SubDataMapping entry '{subId}' is missing a GroupName. " &
-                        $"GroupName is required (format: g_[a-f0-9]{{12}}).")
-                End If
-
-                Dim group = m.Groups(groupName)
-
-                ' Group not captured in this match (optional group) → skip.
-                If group Is Nothing OrElse Not group.Success Then Continue For
-
+        Dim result As New Dictionary(Of String, Object)()
+        For Each kvp In contract.SubDataMapping
+            Dim group = m.Groups(kvp.Value.GroupName)
+            If group IsNot Nothing AndAlso group.Success Then
                 Dim value = group.Value.Trim()
+                If Not String.IsNullOrEmpty(value) Then
+                    result(kvp.Key) = value
+                End If
+            End If
+        Next
 
-                ' Whitespace-only → treat as not captured.
-                If String.IsNullOrEmpty(value) Then Continue For
+        Return If(result.Count > 0, result, Nothing)
+    End Function
 
-                result(subId) = value
-            Next
+    ' -------------------------------------------------------------------------
+    ' GrammarFlow extraction
+    ' -------------------------------------------------------------------------
 
-            Return If(result.Count > 0, result, Nothing)
-        Catch ex As Exception
-            Throw New InvalidOperationException(
-                $"Composite extraction failed for task '{node.Id}': {ex.Message}", ex)
+    Private Shared Function ExtractWithGrammarFlow(
+            input As String,
+            grammarFlowEngine As NLPEngine) As String
+
+        Dim grammar = DeserializeGrammar(grammarFlowEngine.GrammarFlow)
+        If grammar Is Nothing Then Return Nothing
+
+        Dim engine As New GrammarEngine(grammar, useRegex:=True)
+        Dim parseResult = engine.Parse(input)
+
+        If Not parseResult.Success Then Return Nothing
+        If parseResult.Bindings Is Nothing OrElse parseResult.Bindings.Count = 0 Then Return Nothing
+
+        ' Simple case: one slot → one variable
+        Dim firstValue = parseResult.Bindings.Values.FirstOrDefault()
+        Return If(firstValue IsNot Nothing, firstValue.ToString(), Nothing)
+    End Function
+
+    ' -------------------------------------------------------------------------
+    ' Helpers
+    ' -------------------------------------------------------------------------
+
+    Private Shared Function GetActiveGrammarFlowEngine(contract As CompiledNlpContract) As NLPEngine
+        Return contract.Engines?.FirstOrDefault(
+            Function(e) e.Type = "grammarflow" AndAlso e.Enabled AndAlso e.GrammarFlow IsNot Nothing)
+    End Function
+
+    Private Shared Function GetActiveRegexEngine(contract As CompiledNlpContract) As NLPEngine
+        Return contract.Engines?.FirstOrDefault(
+            Function(e) e.Type = "regex" AndAlso e.Enabled)
+    End Function
+
+    Private Shared Function DeserializeGrammar(grammarFlow As Object) As GrammarFlowEngine.Grammar
+        Try
+            Dim grammarJson = JsonConvert.SerializeObject(grammarFlow)
+            Return JsonConvert.DeserializeObject(Of GrammarFlowEngine.Grammar)(grammarJson)
+        Catch
+            Return Nothing
         End Try
     End Function
+
 End Class

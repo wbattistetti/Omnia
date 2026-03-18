@@ -124,14 +124,14 @@ export default function TesterGridHeader({
       console.log('[TesterGridHeader] ⚠️ No engines array found, returning empty array');
       return [];
     }
-    // Filtra solo gli engine con enabled: true
-    const filtered = enginesArray.filter(c => c.enabled !== false);
-    console.log('[TesterGridHeader] ✅ Engines filtered', {
+    // ✅ CRITICAL: Show ALL engines (enabled and disabled) so user can toggle checkbox
+    // Filtering for enabled engines happens during escalation execution, not in UI
+    console.log('[TesterGridHeader] ✅ Engines loaded (all engines shown)', {
       totalEngines: enginesArray.length,
-      enabledEngines: filtered.length,
-      filteredTypes: filtered.map(c => c.type)
+      enginesTypes: enginesArray.map(c => c.type),
+      enabledCount: enginesArray.filter(c => c.enabled !== false).length
     });
-    return filtered;
+    return enginesArray;
   }, [contract]);
 
   // Map contract type to component type
@@ -291,7 +291,7 @@ export default function TesterGridHeader({
       const color = EXTRACTOR_COLORS[componentType] || EXTRACTOR_COLORS.regex;
       const enabled = engineItem.enabled !== false;
 
-      // Map to enabledMethods prop (for backward compatibility)
+      // Map to enabledMethods prop (for backward compatibility - used for testing)
       const enabledMethodKey = componentType === 'deterministic' ? 'deterministic' : componentType;
       const isEnabledInProps = enabledMethods[enabledMethodKey as keyof typeof enabledMethods] ?? false;
 
@@ -308,9 +308,29 @@ export default function TesterGridHeader({
           techLabel={labels.tech}
           tooltip={labels.tooltip}
           backgroundColor={color}
-          enabled={isEnabledInProps}
+          enabled={enabled} // ✅ CRITICAL: Use engine.enabled directly from DataContract, not enabledMethods
           activeEditor={activeEditor}
-          onToggleMethod={() => toggleMethod(enabledMethodKey as keyof typeof enabledMethods)}
+          onToggleMethod={() => {
+            // ✅ CRITICAL: Update engine.enabled in DataContract and save
+            if (onContractChange && contract) {
+              const updatedEngines = contract.engines.map(engine => {
+                if (engine.type === engineItem.type) {
+                  return { ...engine, enabled: !enabled };
+                }
+                return engine;
+              });
+
+              const updatedContract: DataContract = {
+                ...contract,
+                engines: updatedEngines,
+              };
+
+              onContractChange(updatedContract);
+            }
+
+            // ✅ Also toggle enabledMethods (per UI testing compatibility)
+            toggleMethod(enabledMethodKey as keyof typeof enabledMethods);
+          }}
           onToggleEditor={openEditor ? (type) => openEditor(type) : toggleEditor}
           showPostProcess={componentType === 'deterministic'}
           onAddContract={availableMethods.length > 0 && onContractChange ? () => {

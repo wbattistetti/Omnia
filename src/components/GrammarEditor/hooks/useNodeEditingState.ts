@@ -28,6 +28,19 @@ export function useNodeEditingState(nodeLabel: string) {
     }
   }, [isNew, nodeLabel, isEditing]);
 
+  // ✅ CRITICAL: Sync isEditing when node becomes new (label changes from non-empty to empty)
+  // useState(isNew) only initializes on first mount, so we need to sync when isNew changes
+  useLayoutEffect(() => {
+    if (isNew && !isEditing) {
+      console.log('[useNodeEditingState] 🔄 Syncing isEditing to true (node became new)', {
+        nodeLabel,
+        isNew,
+        wasEditing: isEditing,
+      });
+      setIsEditing(true);
+    }
+  }, [isNew, isEditing, nodeLabel]);
+
   // Sync editValue when nodeLabel changes (e.g., when node is updated externally)
   useLayoutEffect(() => {
     if (nodeLabel !== editValue && !isEditing) {
@@ -36,55 +49,59 @@ export function useNodeEditingState(nodeLabel: string) {
   }, [nodeLabel, editValue, isEditing]);
 
   // Focus when entering editing mode (both new and existing nodes)
+  // ✅ DETERMINISTIC: Immediate focus, no retry logic, no fallback
   useLayoutEffect(() => {
-    if (isEditing) {
-      console.log('[useNodeEditingState] 🎯 Entering editing mode', {
+    if (isEditing && inputRef.current) {
+      console.log('[useNodeEditingState] 🎯 FOCUS useNodeEditingState', {
         nodeLabel,
         isEditing,
-        hasRef: !!inputRef.current,
+        refOk: !!inputRef.current,
+        refElement: inputRef.current,
       });
 
-      // Use callback ref pattern for more reliable ref access
-      const focusInput = () => {
-        if (inputRef.current) {
-          console.log('[useNodeEditingState] ✅ Focusing input', {
-            nodeLabel,
-            inputValue: inputRef.current.value,
-          });
-          inputRef.current.focus();
-          inputRef.current.select();
-          return true;
-        }
-        return false;
-      };
+      // ✅ DIAGNOSTIC: Track focus before applying
+      const beforeFocus = document.activeElement;
+      console.log('[useNodeEditingState] 🔍 BEFORE focus', {
+        activeElement: beforeFocus?.tagName,
+        activeElementId: beforeFocus?.id,
+        activeElementClass: beforeFocus?.className,
+      });
 
-      // Try immediate focus first
-      if (focusInput()) {
-        return;
-      }
+      inputRef.current.focus();
+      inputRef.current.select();
 
-      // If ref not ready, use requestAnimationFrame with retry
-      let retryCount = 0;
-      const maxRetries = 5;
+      // ✅ DIAGNOSTIC: Track focus after applying
+      const afterFocus = document.activeElement;
+      console.log('[useNodeEditingState] 🔍 AFTER focus', {
+        activeElement: afterFocus?.tagName,
+        activeElementId: afterFocus?.id,
+        activeElementClass: afterFocus?.className,
+        isTextarea: afterFocus === inputRef.current,
+      });
 
-      const tryFocus = () => {
-        if (focusInput()) {
-          return;
-        }
-        retryCount++;
-        if (retryCount < maxRetries) {
-          requestAnimationFrame(tryFocus);
-        } else {
-          console.warn('[useNodeEditingState] ⚠️ Input ref not available after retries', {
-            nodeLabel,
-            isEditing,
-            retryCount,
+      // ✅ DIAGNOSTIC: Monitor focus loss
+      const checkFocus = () => {
+        if (document.activeElement !== inputRef.current && isEditing) {
+          console.error('[useNodeEditingState] ❌ FOCUS STOLEN', {
+            expected: 'textarea',
+            actual: document.activeElement?.tagName,
+            actualId: document.activeElement?.id,
+            actualClass: document.activeElement?.className,
+            stack: new Error().stack,
           });
         }
       };
 
-      requestAnimationFrame(() => {
-        requestAnimationFrame(tryFocus);
+      // Check immediately and after short delays to catch focus theft
+      setTimeout(checkFocus, 0);
+      setTimeout(checkFocus, 10);
+      setTimeout(checkFocus, 50);
+      setTimeout(checkFocus, 100);
+    } else if (isEditing && !inputRef.current) {
+      console.log('[useNodeEditingState] ❌ FOCUS FAILED - ref is null', {
+        nodeLabel,
+        isEditing,
+        refOk: false,
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
