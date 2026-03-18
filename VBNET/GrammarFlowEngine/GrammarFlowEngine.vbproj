@@ -29,6 +29,7 @@
     <Compile Include="Models\NodeBinding.vb" />
     <Compile Include="Models\GrammarNode.vb" />
     <Compile Include="Models\GrammarEdge.vb" />
+    <Compile Include="Models\EdgeType.vb" />
     <Compile Include="Models\SemanticSlot.vb" />
     <Compile Include="Models\SemanticValue.vb" />
     <Compile Include="Models\SemanticSet.vb" />
@@ -39,11 +40,17 @@
     <Compile Include="Compiler\CompiledGrammar.vb" />
     <Compile Include="Compiler\CompiledNode.vb" />
     <Compile Include="Compiler\CompiledEdge.vb" />
+    <Compile Include="Compiler\CompiledRegexGrammar.vb" />
+    <Compile Include="Compiler\RegexGrammarCompiler.vb" />
 
     <!-- Interpreter: Core interpretation logic -->
-    <Compile Include="Interpreter\MatchContext.vb" />
+    <Compile Include="Interpreter\PathMatchState.vb" />
+    <Compile Include="Interpreter\PathMatchStateExtensions.vb" />
+    <Compile Include="Interpreter\CompiledNodeExtensions.vb" />
+    <Compile Include="Interpreter\StringExtensions.vb" />
     <Compile Include="Interpreter\MatchResult.vb" />
     <Compile Include="Interpreter\ParseResult.vb" />
+    <Compile Include="Interpreter\RegexMatchResult.vb" />
     <Compile Include="Interpreter\GrammarEngine.vb" />
     <Compile Include="Interpreter\NodeMatcher.vb" />
     <Compile Include="Interpreter\NavigationEngine.vb" />

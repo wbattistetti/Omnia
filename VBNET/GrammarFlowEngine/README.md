@@ -31,7 +31,7 @@ GrammarFlowEngine/
     ├── GarbageHandler.vb        # Gestione garbage words
     ├── LookaheadChecker.vb      # Lookahead per early termination
     ├── ResultSelector.vb        # Selezione migliori risultati
-    ├── MatchContext.vb          # Contesto di match
+    ├── PathMatchState.vb        # State for a specific path during matching
     ├── MatchResult.vb           # Risultato di un match
     └── ParseResult.vb           # Risultato finale del parsing
 ```

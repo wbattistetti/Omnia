@@ -7,13 +7,13 @@ Imports System.Threading.Tasks
 Imports Microsoft.AspNetCore.Http
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports Newtonsoft.Json.Serialization
 Imports GrammarFlowEngine
 
-Namespace ApiServer.Handlers
-    ''' <summary>
-    ''' Handles grammar test endpoints for Grammar Editor
-    ''' </summary>
-    Public Module GrammarTestHandlers
+''' <summary>
+''' Handles grammar test endpoints for Grammar Editor
+''' </summary>
+Public Module GrammarTestHandlers
 
         ''' <summary>
         ''' Request model for test-phrase endpoint
@@ -66,7 +66,7 @@ Namespace ApiServer.Handlers
         ''' Handles POST /api/grammar/test-phrase
         ''' Tests a single phrase against the grammar
         ''' </summary>
-        Public Async Function HandleTestPhrase(context As HttpContext) As Task(Of IResult)
+        Public Async Function HandleTestPhrase(context As HttpContext) As Task
             Try
                 Console.WriteLine("[GrammarTest] ========================================")
                 Console.WriteLine("[GrammarTest] POST /api/grammar/test-phrase - Request received")
@@ -79,26 +79,33 @@ Namespace ApiServer.Handlers
 
                 If String.IsNullOrEmpty(body) Then
                     Console.WriteLine("[GrammarTest] ❌ ERROR: Request body is empty")
-                    Return Results.BadRequest(New With {.error = "Request body is required"})
+                    context.Response.StatusCode = 400
+                    Await OkJson(New With {.error = "Request body is required"}, context)
+                    Return
                 End If
 
                 Dim request = JsonConvert.DeserializeObject(Of TestPhraseRequest)(body)
 
                 If request.Grammar Is Nothing Then
                     Console.WriteLine("[GrammarTest] ❌ ERROR: Grammar is required")
-                    Return Results.BadRequest(New With {.error = "Grammar is required"})
+                    context.Response.StatusCode = 400
+                    Await OkJson(New With {.error = "Grammar is required"}, context)
+                    Return
                 End If
 
                 If String.IsNullOrEmpty(request.Text) Then
                     Console.WriteLine("[GrammarTest] ❌ ERROR: Text is required")
-                    Return Results.BadRequest(New With {.error = "Text is required"})
+                    context.Response.StatusCode = 400
+                    Await OkJson(New With {.error = "Text is required"}, context)
+                    Return
                 End If
 
                 Console.WriteLine($"[GrammarTest] Testing phrase: '{request.Text}'")
                 Console.WriteLine($"[GrammarTest] Grammar: {request.Grammar.Name} (Nodes: {request.Grammar.Nodes.Count}, Edges: {request.Grammar.Edges.Count})")
 
-                ' Create interpreter and parse
-                Dim interpreter As New GrammarEngine(request.Grammar)
+                ' Create interpreter with regex mode enabled
+                Dim interpreter As New GrammarEngine(request.Grammar, useRegex:=True)
+                Console.WriteLine($"[GrammarTest] ✅ Using REGEX mode for parsing")
                 Dim parseResult = interpreter.Parse(request.Text)
 
                 ' Map ParseResult to TestPhraseResult
@@ -106,12 +113,13 @@ Namespace ApiServer.Handlers
 
                 Console.WriteLine($"[GrammarTest] ✅ Parse completed: Success={testResult.Success}, Bindings={testResult.Bindings.Count}, ConsumedWords={testResult.ConsumedWords}")
 
-                Return Results.Ok(New With {.result = testResult})
+                Await OkJson(New With {.result = testResult}, context)
+                Return ' Response already written
 
             Catch ex As Exception
                 Console.WriteLine($"[GrammarTest] ❌ ERROR: {ex.Message}")
                 Console.WriteLine($"[GrammarTest] Stack trace: {ex.StackTrace}")
-                Return Results.Json(New With {.error = $"Internal server error: {ex.Message}"}, statusCode:=500)
+                WriteErrorJson($"Internal server error: {ex.Message}", context, 500)
             End Try
         End Function
 
@@ -119,7 +127,7 @@ Namespace ApiServer.Handlers
         ''' Handles POST /api/grammar/test-phrases
         ''' Tests multiple phrases against the grammar
         ''' </summary>
-        Public Async Function HandleTestPhrases(context As HttpContext) As Task(Of IResult)
+        Public Async Function HandleTestPhrases(context As HttpContext) As Task
             Try
                 Console.WriteLine("[GrammarTest] ========================================")
                 Console.WriteLine("[GrammarTest] POST /api/grammar/test-phrases - Request received")
@@ -132,33 +140,53 @@ Namespace ApiServer.Handlers
 
                 If String.IsNullOrEmpty(body) Then
                     Console.WriteLine("[GrammarTest] ❌ ERROR: Request body is empty")
-                    Return Results.BadRequest(New With {.error = "Request body is required"})
+                    context.Response.StatusCode = 400
+                    Await OkJson(New With {.error = "Request body is required"}, context)
+                    Return
                 End If
 
                 Dim request = JsonConvert.DeserializeObject(Of TestPhrasesRequest)(body)
 
                 If request.Grammar Is Nothing Then
                     Console.WriteLine("[GrammarTest] ❌ ERROR: Grammar is required")
-                    Return Results.BadRequest(New With {.error = "Grammar is required"})
+                    context.Response.StatusCode = 400
+                    Await OkJson(New With {.error = "Grammar is required"}, context)
+                    Return
                 End If
 
                 If request.Phrases Is Nothing OrElse request.Phrases.Count = 0 Then
                     Console.WriteLine("[GrammarTest] ❌ ERROR: Phrases list is required and cannot be empty")
-                    Return Results.BadRequest(New With {.error = "Phrases list is required and cannot be empty"})
+                    context.Response.StatusCode = 400
+                    Await OkJson(New With {.error = "Phrases list is required and cannot be empty"}, context)
+                    Return
                 End If
 
                 Console.WriteLine($"[GrammarTest] Testing {request.Phrases.Count} phrases")
                 Console.WriteLine($"[GrammarTest] Grammar: {request.Grammar.Name} (Nodes: {request.Grammar.Nodes.Count}, Edges: {request.Grammar.Edges.Count})")
 
-                ' Create interpreter once (reuse for all phrases)
-                Dim interpreter As New GrammarEngine(request.Grammar)
+                ' Create interpreter once (reuse for all phrases) with regex mode enabled
+                Dim interpreter As GrammarEngine = Nothing
+                Try
+                    interpreter = New GrammarEngine(request.Grammar, useRegex:=True)
+                    Console.WriteLine($"[GrammarTest] ✅ Using REGEX mode for parsing")
+                Catch ex As Exception
+                    Console.WriteLine($"[GrammarTest] ❌ ERROR creating GrammarEngine: {ex.Message}")
+                    Console.WriteLine($"[GrammarTest] Stack trace: {ex.StackTrace}")
+                    WriteErrorJson($"Failed to create grammar engine: {ex.Message}", context, 500)
+                    Return
+                End Try
 
                 ' Test all phrases
                 Dim testResults As New List(Of Object)()
                 For Each phrase In request.Phrases
                     Try
+                        Console.WriteLine($"[GrammarTest] Testing phrase: '{phrase.Text}'")
                         Dim parseResult = interpreter.Parse(phrase.Text)
+                        Console.WriteLine($"[GrammarTest] Parse result: Success={parseResult.Success}, MatchTree={If(parseResult.MatchTree IsNot Nothing, "present", "null")}")
+
                         Dim testResult = MapParseResultToTestResult(parseResult, request.Grammar, phrase.Text)
+                        Console.WriteLine($"[GrammarTest] Test result: Success={testResult.Success}, MatchDetails count={testResult.MatchDetails.Count}")
+
                         testResults.Add(New With {
                             .phraseId = phrase.Id,
                             .success = testResult.Success,
@@ -169,6 +197,7 @@ Namespace ApiServer.Handlers
                         })
                     Catch ex As Exception
                         Console.WriteLine($"[GrammarTest] ⚠️ Error testing phrase '{phrase.Text}': {ex.Message}")
+                        Console.WriteLine($"[GrammarTest] Stack trace: {ex.StackTrace}")
                         testResults.Add(New With {
                             .phraseId = phrase.Id,
                             .success = False,
@@ -183,17 +212,82 @@ Namespace ApiServer.Handlers
 
                 Console.WriteLine($"[GrammarTest] ✅ All phrases tested: {testResults.Count} results")
 
-                Return Results.Ok(New With {.results = testResults})
+                Try
+                    Dim response = New With {.results = testResults}
+                    Console.WriteLine($"[GrammarTest] Attempting to serialize {testResults.Count} results...")
+                    Await OkJson(response, context)
+                    Console.WriteLine($"[GrammarTest] ✅ Response written successfully")
+                    Return ' Response already written
+                Catch ex As Exception
+                    Console.WriteLine($"[GrammarTest] ❌ ERROR serializing response: {ex.Message}")
+                    Console.WriteLine($"[GrammarTest] Stack trace: {ex.StackTrace}")
+                    Console.WriteLine($"[GrammarTest] Inner exception: {If(ex.InnerException IsNot Nothing, ex.InnerException.Message, "None")}")
+                    WriteErrorJson($"Failed to serialize response: {ex.Message}", context, 500)
+                End Try
 
             Catch ex As Exception
-                Console.WriteLine($"[GrammarTest] ❌ ERROR: {ex.Message}")
+                Console.WriteLine($"[GrammarTest] ❌ ERROR in HandleTestPhrases: {ex.Message}")
                 Console.WriteLine($"[GrammarTest] Stack trace: {ex.StackTrace}")
-                Return Results.Json(New With {.error = $"Internal server error: {ex.Message}"}, statusCode:=500)
+                WriteErrorJson($"Internal server error: {ex.Message}", context, 500)
+            End Try
+        End Function
+
+        ''' <summary>
+        ''' Writes error JSON directly to response stream (synchronous version for catch blocks)
+        ''' </summary>
+        Private Sub WriteErrorJson(errorMessage As String, context As HttpContext, statusCode As Integer)
+            Try
+                context.Response.StatusCode = statusCode
+                Dim errorData = New With {.error = errorMessage}
+                Dim settings As New JsonSerializerSettings() With {
+                    .ContractResolver = New CamelCasePropertyNamesContractResolver(),
+                    .NullValueHandling = NullValueHandling.Ignore
+                }
+                Dim json = JsonConvert.SerializeObject(errorData, settings)
+                Dim jsonBytes = System.Text.Encoding.UTF8.GetBytes(json)
+                context.Response.ContentType = "application/json; charset=utf-8"
+                context.Response.ContentLength = jsonBytes.Length
+                context.Response.Body.WriteAsync(jsonBytes, 0, jsonBytes.Length).GetAwaiter().GetResult()
+            Catch
+                ' If writing fails, at least status code is set
+            End Try
+        End Sub
+
+        ''' <summary>
+        ''' Serializes data using Newtonsoft with CamelCase and writes directly to response stream.
+        ''' This ensures correct camelCase JSON, proper Content-Length, and UTF-8 encoding.
+        ''' Results.Content() and Results.Text() can produce empty responses with complex objects.
+        ''' </summary>
+        Private Async Function OkJson(data As Object, context As HttpContext) As Task
+            Try
+                Dim settings As New JsonSerializerSettings() With {
+                    .ContractResolver = New CamelCasePropertyNamesContractResolver(),
+                    .NullValueHandling = NullValueHandling.Ignore,
+                    .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                    .MaxDepth = 100 ' Increase max depth for recursive structures
+                }
+                Dim json = JsonConvert.SerializeObject(data, settings)
+                Console.WriteLine($"[GrammarTest] Serialized JSON length: {json.Length} characters")
+                If json.Length = 0 Then
+                    Console.WriteLine($"[GrammarTest] ⚠️ WARNING: Serialized JSON is empty!")
+                End If
+
+                ' Write directly to response stream with proper headers
+                context.Response.ContentType = "application/json; charset=utf-8"
+                Dim jsonBytes = System.Text.Encoding.UTF8.GetBytes(json)
+                context.Response.ContentLength = jsonBytes.Length
+                Await context.Response.Body.WriteAsync(jsonBytes, 0, jsonBytes.Length)
+                Console.WriteLine($"[GrammarTest] ✅ Response written: {jsonBytes.Length} bytes")
+            Catch ex As Exception
+                Console.WriteLine($"[GrammarTest] ❌ ERROR in OkJson: {ex.Message}")
+                Console.WriteLine($"[GrammarTest] Stack trace: {ex.StackTrace}")
+                Throw
             End Try
         End Function
 
         ''' <summary>
         ''' Maps ParseResult to TestPhraseResult with matchDetails
+        ''' ✅ Costruisce MatchDetails dalla struttura gerarchica MatchTree
         ''' </summary>
         Private Function MapParseResultToTestResult(
             parseResult As ParseResult,
@@ -208,21 +302,92 @@ Namespace ApiServer.Handlers
                 .MatchDetails = New List(Of MatchDetail)()
             }
 
-            ' Generate matchDetails from bindings
-            If parseResult.Success AndAlso parseResult.Bindings IsNot Nothing Then
-                For Each kvp In parseResult.Bindings
-                    Dim bindingKey = kvp.Key
-                    Dim bindingValue = kvp.Value
+            ' ✅ Costruisci MatchDetails dalla lista di match (no fake root)
+            ' I match reali sono in MatchTree.Children, non nel root stesso
+            If parseResult.Success AndAlso parseResult.MatchTree IsNot Nothing AndAlso
+               parseResult.MatchTree.Children IsNot Nothing AndAlso parseResult.MatchTree.Children.Count > 0 Then
+                ' Process each match directly (no root)
+                Dim allDetails As New List(Of MatchDetail)()
+                For Each match In parseResult.MatchTree.Children
+                    Dim matchDetails = BuildMatchDetails(match, grammar)
+                    allDetails.AddRange(matchDetails)
+                Next
+                result.MatchDetails = allDetails
+            End If
 
-                    ' Try to identify binding type by checking grammar
-                    Dim matchDetail = CreateMatchDetail(bindingKey, bindingValue, grammar)
-                    If matchDetail IsNot Nothing Then
-                        result.MatchDetails.Add(matchDetail)
+            Return result
+        End Function
+
+        ''' <summary>
+        ''' Costruisce MatchDetails ricorsivamente dalla struttura gerarchica MatchResult
+        ''' </summary>
+        Private Function BuildMatchDetails(matchResult As MatchResult, grammar As GrammarFlowEngine.Grammar) As List(Of MatchDetail)
+            Dim details As New List(Of MatchDetail)()
+
+            ' Se il nodo ha uno slot, crea MatchDetail per lo slot
+            If matchResult.SlotBinding IsNot Nothing Then
+                Dim slotDetail = New MatchDetail() With {
+                    .Type = "slot",
+                    .Id = matchResult.SlotBinding.Id,
+                    .Label = matchResult.SlotBinding.Name,
+                    .Children = New List(Of MatchDetail)()
+                }
+                ' ⚠️ NON impostare LinguisticText sullo slot se c'è un semantic-value child
+
+                ' Se ha anche un semantic value, aggiungilo come figlio dello slot
+                If matchResult.SemanticValueBinding IsNot Nothing Then
+                    Dim semanticDetail = New MatchDetail() With {
+                        .Type = "semantic-value",
+                        .Id = matchResult.SemanticValueBinding.Id,
+                        .Label = matchResult.SemanticValueBinding.Name,
+                        .SemanticValue = matchResult.SemanticValueBinding.Value,
+                        .Children = New List(Of MatchDetail)()
+                    }
+                    ' ⚠️ NON aggiungere linguistic qui - è già nei children processati ricorsivamente
+                    slotDetail.Children.Add(semanticDetail)
+                End If
+
+                details.Add(slotDetail)
+            ElseIf matchResult.SemanticValueBinding IsNot Nothing Then
+                ' Solo semantic value, senza slot
+                Dim semanticDetail = New MatchDetail() With {
+                    .Type = "semantic-value",
+                    .Id = matchResult.SemanticValueBinding.Id,
+                    .Label = matchResult.SemanticValueBinding.Name,
+                    .SemanticValue = matchResult.SemanticValueBinding.Value,
+                    .Children = New List(Of MatchDetail)()
+                }
+                ' ⚠️ NON aggiungere linguistic qui - è già nei children processati ricorsivamente
+                details.Add(semanticDetail)
+            ElseIf Not String.IsNullOrEmpty(matchResult.MatchedText) Then
+                ' Solo linguistic match (label/synonym senza bindings)
+                Dim linguisticDetail = New MatchDetail() With {
+                    .Type = "linguistic",
+                    .Id = matchResult.NodeId,
+                    .Label = matchResult.NodeLabel,
+                    .LinguisticText = matchResult.MatchedText,
+                    .Children = New List(Of MatchDetail)()
+                }
+                details.Add(linguisticDetail)
+            End If
+
+            ' ✅ Ricorsivamente costruisci i figli (linguistiche, semantic-values, etc.)
+            ' I children sono già strutturati correttamente (slot → semantic-value → linguistic)
+            If matchResult.Children IsNot Nothing AndAlso matchResult.Children.Count > 0 Then
+                For Each child In matchResult.Children
+                    Dim childDetails = BuildMatchDetails(child, grammar)
+                    ' Aggiungi i figli all'ultimo detail creato (se esiste)
+                    If details.Count > 0 Then
+                        ' Aggiungi i children all'ultimo detail (slot o semantic-value)
+                        details.Last().Children.AddRange(childDetails)
+                    Else
+                        ' Se non c'è un detail principale, aggiungi i figli direttamente
+                        details.AddRange(childDetails)
                     End If
                 Next
             End If
 
-            Return result
+            Return details
         End Function
 
         ''' <summary>
@@ -302,4 +467,3 @@ Namespace ApiServer.Handlers
         End Function
 
     End Module
-End Namespace

@@ -11,7 +11,7 @@ Public Class CompiledEdge
         Public Property Id As String
         Public Property Source As String
         Public Property Target As String
-        Public Property Type As String ' "sequential" | "alternative" | "optional"
+        Public Property Type As EdgeType ' Type-safe enum instead of string
         Public Property Label As String
         Public Property Order As Integer ' For sequential edges
     End Class

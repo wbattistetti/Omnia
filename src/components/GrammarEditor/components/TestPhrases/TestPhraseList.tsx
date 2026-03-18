@@ -47,7 +47,11 @@ export function TestPhraseList({
           return (
             <div
               key={phrase.id}
-              onClick={() => onSelectPhrase(phrase.id)}
+              onClick={(e) => {
+                // ✅ Solo selezione, NON lancia il test
+                e.stopPropagation();
+                onSelectPhrase(phrase.id);
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',

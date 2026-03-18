@@ -3,11 +3,10 @@ Option Explicit On
 Imports StackExchange.Redis
 Imports System.Threading
 
-Namespace ApiServer.Infrastructure
-    ''' <summary>
-    ''' ✅ FASE 4: Gestisce la connessione Redis (singleton thread-safe)
-    ''' </summary>
-    Public Class RedisConnectionManager
+''' <summary>
+''' ✅ FASE 4: Gestisce la connessione Redis (singleton thread-safe)
+''' </summary>
+Public Class RedisConnectionManager
         Private Shared _connection As IConnectionMultiplexer
         Private Shared ReadOnly _lock As New Object()
         Private Shared _isConnected As Boolean = False
@@ -25,14 +24,14 @@ Namespace ApiServer.Infrastructure
 
                             ' Eventi per monitoraggio connessione
                             AddHandler _connection.ConnectionFailed, Sub(sender, e)
-                                                                          _isConnected = False
-                                                                          Console.WriteLine($"[RedisConnectionManager] Connection failed: {e.FailureType} - {e.Exception?.Message}")
-                                                                      End Sub
+                                                                         _isConnected = False
+                                                                         Console.WriteLine($"[RedisConnectionManager] Connection failed: {e.FailureType} - {e.Exception?.Message}")
+                                                                     End Sub
 
                             AddHandler _connection.ConnectionRestored, Sub(sender, e)
-                                                                          _isConnected = True
-                                                                          Console.WriteLine($"[RedisConnectionManager] Connection restored")
-                                                                      End Sub
+                                                                           _isConnected = True
+                                                                           Console.WriteLine($"[RedisConnectionManager] Connection restored")
+                                                                       End Sub
 
                             Console.WriteLine($"[RedisConnectionManager] Connected to Redis: {connectionString}")
                         Catch ex As Exception
@@ -77,4 +76,3 @@ Namespace ApiServer.Infrastructure
             End SyncLock
         End Sub
     End Class
-End Namespace

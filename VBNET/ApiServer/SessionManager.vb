@@ -768,7 +768,7 @@ Public Class SessionManager
             If Not String.IsNullOrEmpty(_redisConnectionString) Then
                 Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                          Try
-                                                                             Dim redis = ApiServer.Infrastructure.RedisConnectionManager.GetConnection(_redisConnectionString)
+                                                                             Dim redis = RedisConnectionManager.GetConnection(_redisConnectionString)
                                                                              Dim subscriber = redis.GetSubscriber()
                                                                              Dim channelName = $"omnia:events:sse-connected:{sessionId}"
                                                                              Dim handler As Action(Of StackExchange.Redis.RedisChannel, StackExchange.Redis.RedisValue) = Sub(redisChannel, message)

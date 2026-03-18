@@ -15,10 +15,10 @@ Public Module GarbageHandler
     ''' </summary>
     Public Function TryWithGarbage(
             node As CompiledNode,
-            context As MatchContext,
+            context As PathMatchState,
             compiledGrammar As CompiledGrammar,
             visited As HashSet(Of String),
-            navigateFunc As Func(Of CompiledNode, MatchContext, HashSet(Of String), List(Of MatchResult))
+            navigateFunc As Func(Of CompiledNode, PathMatchState, HashSet(Of String), List(Of MatchResult))
         ) As List(Of MatchResult)
 
         Dim results As New List(Of MatchResult)()
@@ -29,20 +29,20 @@ Public Module GarbageHandler
         End If
 
         ' Get children nodes
-        Dim children = GetChildren(node, compiledGrammar)
+        Dim children = node.GetChildren(compiledGrammar)
         If children.Count = 0 Then
             Return results
         End If
 
         ' Get words from current position
-        Dim words = GetWords(context.Text, context.Position)
+        Dim words = context.Text.GetWordsAt(context.Position)
         If words.Count = 0 Then
             Return results
         End If
 
         ' Try with 1, 2, ..., remainingGarbage words of garbage
         For garbageCount = 1 To Math.Min(remainingGarbage, words.Count - 1)
-            Dim newPosition = GetPositionAfterWords(context.Text, context.Position, garbageCount)
+            Dim newPosition = context.Text.GetPositionAfterWords(context.Position, garbageCount)
 
             ' Quick lookahead: if children can't match, skip this garbage count
             If LookaheadChecker.LookaheadFails(children, newPosition, context.Text, compiledGrammar) Then
@@ -64,81 +64,5 @@ Public Module GarbageHandler
         Return results
     End Function
 
-    ''' <summary>
-    ''' Gets children nodes for a given node
-    ''' </summary>
-    Private Function GetChildren(node As CompiledNode, compiledGrammar As CompiledGrammar) As List(Of CompiledNode)
-        Dim children As New List(Of CompiledNode)()
-
-        If compiledGrammar.Edges.ContainsKey(node.Id) Then
-            For Each edge In compiledGrammar.Edges(node.Id)
-                Dim childNode = compiledGrammar.Nodes.GetValueOrDefault(edge.Target)
-                If childNode IsNot Nothing Then
-                    children.Add(childNode)
-                End If
-            Next
-        End If
-
-        Return children
-    End Function
-
-    ''' <summary>
-    ''' Gets words from text starting at position
-    ''' </summary>
-    Private Function GetWords(text As String, position As Integer) As List(Of String)
-        Dim remainingText = text.Substring(position).Trim()
-        If String.IsNullOrEmpty(remainingText) Then
-            Return New List(Of String)()
-        End If
-
-        Return remainingText.Split({" "c, vbTab, vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries).ToList()
-    End Function
-
-    ''' <summary>
-    ''' Gets position after consuming N words
-    ''' </summary>
-    Private Function GetPositionAfterWords(text As String, startPosition As Integer, wordCount As Integer) As Integer
-        Dim remainingText = text.Substring(startPosition).Trim()
-        If String.IsNullOrEmpty(remainingText) Then
-            Return startPosition
-        End If
-
-        Dim words = remainingText.Split({" "c, vbTab, vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
-        If wordCount >= words.Length Then
-            Return text.Length ' End of text
-        End If
-
-        ' Find position after N words
-        Dim charsConsumed = 0
-        For i = 0 To wordCount - 1
-            charsConsumed += words(i).Length
-            If i < wordCount - 1 Then
-                ' Add space
-                charsConsumed += 1
-            End If
-        Next
-
-        ' Find actual position in original text
-        Dim currentPos = startPosition
-        Dim wordsFound = 0
-        While currentPos < text.Length AndAlso wordsFound < wordCount
-            If Char.IsWhiteSpace(text(currentPos)) Then
-                currentPos += 1
-                While currentPos < text.Length AndAlso Char.IsWhiteSpace(text(currentPos))
-                    currentPos += 1
-                End While
-                wordsFound += 1
-            Else
-                currentPos += 1
-            End If
-        End While
-
-        ' Skip whitespace
-        While currentPos < text.Length AndAlso Char.IsWhiteSpace(text(currentPos))
-            currentPos += 1
-        End While
-
-        Return currentPos
-    End Function
 
 End Module

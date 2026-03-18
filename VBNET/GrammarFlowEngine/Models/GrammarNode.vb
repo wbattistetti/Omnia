@@ -26,6 +26,7 @@ Public Class GrammarNode
         ''' </summary>
         Public Property [Optional] As Boolean ' Optional node
         Public Property Repeatable As Boolean ' Repeatable node
+        Public Property FreeSpeech As Boolean = True ' Free speech mode: if True, allows garbage before/after this node
 
         ''' <summary>
         ''' Graphical position (for editor, not used in runtime)

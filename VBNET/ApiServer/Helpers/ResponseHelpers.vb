@@ -7,15 +7,14 @@ Imports Newtonsoft.Json
 ''' <summary>
 ''' Helper utilities for HTTP responses
 ''' </summary>
-Namespace Helpers
 
-    ''' <summary>
-    ''' Creates a standardized JSON error response
-    ''' </summary>
-    ''' <param name="errorMessage">The error message to include in the response.</param>
-    ''' <param name="statusCode">The HTTP status code to return.</param>
-    ''' <returns>An IResult containing the error response.</returns>
-    Public Module ResponseHelpers
+''' <summary>
+''' Creates a standardized JSON error response
+''' </summary>
+''' <param name="errorMessage">The error message to include in the response.</param>
+''' <param name="statusCode">The HTTP status code to return.</param>
+''' <returns>An IResult containing the error response.</returns>
+Public Module ResponseHelpers
 
         Public Function CreateErrorResponse(errorMessage As String, statusCode As Integer) As IResult
             Dim errorObj = New With {
@@ -48,5 +47,3 @@ Namespace Helpers
         End Function
 
     End Module
-
-End Namespace

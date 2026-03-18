@@ -33,13 +33,13 @@ Namespace ApiServer.SessionStorage
         ''' <exception cref="Exception">Solleva eccezione se Redis non è disponibile</exception>
         Public Sub New(connectionString As String, keyPrefix As String, sessionTTL As Integer)
             Try
-                _connection = ApiServer.Infrastructure.RedisConnectionManager.GetConnection(connectionString)
+                _connection = RedisConnectionManager.GetConnection(connectionString)
                 _database = _connection.GetDatabase()
                 _keyPrefix = keyPrefix
                 _sessionTTL = TimeSpan.FromSeconds(sessionTTL)
 
                 ' ✅ STATELESS: Verifica che Redis sia connesso, altrimenti solleva eccezione
-                If Not ApiServer.Infrastructure.RedisConnectionManager.IsConnected() Then
+                If Not RedisConnectionManager.IsConnected() Then
                     Throw New Exception("Redis connection is not available. Service cannot start without Redis.")
                 End If
             Catch ex As Exception

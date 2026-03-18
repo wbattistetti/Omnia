@@ -586,11 +586,22 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
             backgroundColor: '#fff',
             borderLeft: '1px solid #e5e7eb',
           }}>
-            {selectedPhrase && selectedPhrase.result ? (
-              <TestPhraseDetails
-                phrase={selectedPhrase}
-                grammar={grammar}
-              />
+            {selectedPhrase ? (
+              selectedPhrase.result ? (
+                <TestPhraseDetails
+                  phrase={selectedPhrase}
+                  grammar={grammar}
+                />
+              ) : (
+                <div style={{
+                  padding: '24px',
+                  textAlign: 'center',
+                  color: '#6b7280',
+                  fontSize: '14px',
+                }}>
+                  No match details available. Click the play button to test this phrase.
+                </div>
+              )
             ) : (
               <div style={{
                 padding: '24px',
@@ -598,9 +609,7 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
                 color: '#6b7280',
                 fontSize: '14px',
               }}>
-                {selectedPhrase
-                  ? 'No match details available. Test this phrase first.'
-                  : 'Select a phrase to view match details'}
+                Select a phrase to view match details
               </div>
             )}
           </div>

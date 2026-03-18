@@ -16,15 +16,15 @@ Public Module EdgeNavigator
     ''' </summary>
     Public Function NavigateChildren(
             node As CompiledNode,
-            context As MatchContext,
+            context As PathMatchState,
             compiledGrammar As CompiledGrammar,
             visited As HashSet(Of String),
-            navigateFunc As Func(Of CompiledNode, MatchContext, HashSet(Of String), List(Of MatchResult))
+            navigateFunc As Func(Of CompiledNode, PathMatchState, HashSet(Of String), List(Of MatchResult))
         ) As List(Of MatchResult)
 
         If Not compiledGrammar.Edges.ContainsKey(node.Id) Then
             ' End node: check if we're at end of text
-            If IsEndOfText(context) Then
+            If context.IsEndOfText() Then
                 Return New List(Of MatchResult) From {
                         New MatchResult() With {
                             .Success = True,
@@ -42,9 +42,9 @@ Public Module EdgeNavigator
         End If
 
         ' Group edges by type
-        Dim sequential = edges.Where(Function(e) e.Type = "sequential").ToList()
-        Dim alternative = edges.Where(Function(e) e.Type = "alternative").ToList()
-        Dim optionalEdges = edges.Where(Function(e) e.Type = "optional").ToList()
+        Dim sequential = edges.Where(Function(e) e.Type = EdgeType.Sequential).ToList()
+        Dim alternative = edges.Where(Function(e) e.Type = EdgeType.Alternative).ToList()
+        Dim optionalEdges = edges.Where(Function(e) e.Type = EdgeType.IsOptional).ToList()
 
         ' Navigate based on edge type (priority: sequential > alternative > optional)
         If sequential.Any() Then
@@ -63,10 +63,10 @@ Public Module EdgeNavigator
     ''' </summary>
     Private Function NavigateSequential(
             edges As List(Of CompiledEdge),
-            context As MatchContext,
+            context As PathMatchState,
             compiledGrammar As CompiledGrammar,
             visited As HashSet(Of String),
-            navigateFunc As Func(Of CompiledNode, MatchContext, HashSet(Of String), List(Of MatchResult))
+            navigateFunc As Func(Of CompiledNode, PathMatchState, HashSet(Of String), List(Of MatchResult))
         ) As List(Of MatchResult)
 
         ' Sort by Order
@@ -74,6 +74,7 @@ Public Module EdgeNavigator
 
         Dim currentContext = context.Clone()
         Dim allBindings As New Dictionary(Of String, Object)(context.Bindings)
+        Dim sequentialChildren As New List(Of MatchResult)() ' ✅ Raccogli figli durante il loop
 
         ' Try to match all edges in sequence
         For Each edge In orderedEdges
@@ -95,6 +96,9 @@ Public Module EdgeNavigator
                 Return New List(Of MatchResult)()
             End If
 
+            ' ✅ Aggiungi il miglior risultato come figlio
+            sequentialChildren.Add(bestStep)
+
             ' Merge bindings
             For Each kvp In bestStep.Bindings
                 allBindings(kvp.Key) = kvp.Value
@@ -106,13 +110,15 @@ Public Module EdgeNavigator
             currentContext.Bindings = New Dictionary(Of String, Object)(allBindings)
         Next
 
-        ' All steps succeeded
+        ' All steps succeeded - crea risultato sequenziale con tutti i figli
         Return New List(Of MatchResult) From {
                 New MatchResult() With {
                     .Success = True,
                     .Bindings = allBindings,
-                    .ConsumedWords = CountWords(context.Text, context.Position, currentContext.Position),
-                    .ConsumedChars = currentContext.Position - context.Position
+                    .ConsumedWords = context.Text.CountWordsBetween(context.Position, currentContext.Position),
+                    .ConsumedChars = currentContext.Position - context.Position,
+                    .GarbageUsed = currentContext.GarbageUsed - context.GarbageUsed,
+                    .Children = sequentialChildren ' ✅ Figli nella gerarchia
                 }
             }
     End Function
@@ -122,10 +128,10 @@ Public Module EdgeNavigator
     ''' </summary>
     Private Function NavigateAlternative(
             edges As List(Of CompiledEdge),
-            context As MatchContext,
+            context As PathMatchState,
             compiledGrammar As CompiledGrammar,
             visited As HashSet(Of String),
-            navigateFunc As Func(Of CompiledNode, MatchContext, HashSet(Of String), List(Of MatchResult))
+            navigateFunc As Func(Of CompiledNode, PathMatchState, HashSet(Of String), List(Of MatchResult))
         ) As List(Of MatchResult)
 
         Dim results As New List(Of MatchResult)()
@@ -148,10 +154,10 @@ Public Module EdgeNavigator
     ''' </summary>
     Private Function NavigateOptional(
             edges As List(Of CompiledEdge),
-            context As MatchContext,
+            context As PathMatchState,
             compiledGrammar As CompiledGrammar,
             visited As HashSet(Of String),
-            navigateFunc As Func(Of CompiledNode, MatchContext, HashSet(Of String), List(Of MatchResult))
+            navigateFunc As Func(Of CompiledNode, PathMatchState, HashSet(Of String), List(Of MatchResult))
         ) As List(Of MatchResult)
 
         Dim results As New List(Of MatchResult)()
@@ -181,28 +187,5 @@ Public Module EdgeNavigator
         Return results
     End Function
 
-    ''' <summary>
-    ''' Checks if we're at the end of text
-    ''' </summary>
-    Private Function IsEndOfText(context As MatchContext) As Boolean
-        Dim remainingText = context.Text.Substring(context.Position).Trim()
-        Return String.IsNullOrEmpty(remainingText)
-    End Function
-
-    ''' <summary>
-    ''' Counts words between two positions
-    ''' </summary>
-    Private Function CountWords(text As String, startPos As Integer, endPos As Integer) As Integer
-        If endPos <= startPos OrElse endPos > text.Length Then
-            Return 0
-        End If
-
-        Dim segment = text.Substring(startPos, endPos - startPos).Trim()
-        If String.IsNullOrEmpty(segment) Then
-            Return 0
-        End If
-
-        Return segment.Split({" "c, vbTab, vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries).Length
-    End Function
 
 End Module

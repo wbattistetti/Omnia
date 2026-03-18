@@ -30,7 +30,7 @@ Namespace ApiServer.Repositories
         ''' <param name="connectionString">Connection string Redis</param>
         ''' <param name="keyPrefix">Prefisso per le chiavi Redis (default: "omnia:")</param>
         Public Sub New(connectionString As String, Optional keyPrefix As String = "omnia:")
-                    _connection = ApiServer.Infrastructure.RedisConnectionManager.GetConnection(connectionString)
+            _connection = RedisConnectionManager.GetConnection(connectionString)
             _database = _connection.GetDatabase()
             _keyPrefix = keyPrefix
         End Sub

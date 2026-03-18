@@ -41,7 +41,7 @@
     <Compile Include="Compiler\CompiledEdge.vb" />
 
     <!-- Interpreter: Core interpretation logic -->
-    <Compile Include="Interpreter\MatchContext.vb" />
+    <Compile Include="Interpreter\PathMatchState.vb" />
     <Compile Include="Interpreter\MatchResult.vb" />
     <Compile Include="Interpreter\ParseResult.vb" />
     <Compile Include="Interpreter\GrammarFlowEngine.vb" />

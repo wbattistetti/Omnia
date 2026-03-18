@@ -223,17 +223,17 @@ Module Program
 
         ' POST /api/runtime/compile - Read body manually to use Newtonsoft.Json (handles string->int conversion)
         app.MapPost("/api/runtime/compile", Function(context As HttpContext) As System.Threading.Tasks.Task
-                                                Return ApiServer.Handlers.CompilationHandlers.HandleCompileFlow(context)
+                                                Return CompilationHandlers.HandleCompileFlow(context)
                                             End Function)
 
         ' POST /api/runtime/compile/task - Compile a single task (for chat simulator)
         app.MapPost("/api/runtime/compile/task", Function(context As HttpContext) As System.Threading.Tasks.Task
-                                                     Return ApiServer.Handlers.CompilationHandlers.HandleCompileTask(context)
+                                                     Return CompilationHandlers.HandleCompileTask(context)
                                                  End Function)
 
         ' ✅ STATELESS: POST /api/runtime/dialog/save - Salva dialogo compilato nel repository
         app.MapPost("/api/runtime/dialog/save", Function(context As HttpContext) As System.Threading.Tasks.Task(Of IResult)
-                                                    Return ApiServer.Handlers.CompilationHandlers.HandleSaveDialog(context)
+                                                    Return CompilationHandlers.HandleSaveDialog(context)
                                                 End Function)
 
         ' POST /api/runtime/task/{taskId}/test-extraction - Test regex extraction (VB.NET)
@@ -361,13 +361,13 @@ Module Program
                                                                 End Function)
 
         ' ✅ POST /api/grammar/test-phrase - Test a single phrase against grammar
-        app.MapPost("/api/grammar/test-phrase", Function(context As HttpContext) As Task(Of IResult)
-                                                    Return ApiServer.Handlers.GrammarTestHandlers.HandleTestPhrase(context)
+        app.MapPost("/api/grammar/test-phrase", Function(context As HttpContext) As Task
+                                                    Return GrammarTestHandlers.HandleTestPhrase(context)
                                                 End Function)
 
         ' ✅ POST /api/grammar/test-phrases - Test multiple phrases against grammar
-        app.MapPost("/api/grammar/test-phrases", Function(context As HttpContext) As Task(Of IResult)
-                                                     Return ApiServer.Handlers.GrammarTestHandlers.HandleTestPhrases(context)
+        app.MapPost("/api/grammar/test-phrases", Function(context As HttpContext) As Task
+                                                     Return GrammarTestHandlers.HandleTestPhrases(context)
                                                  End Function)
 
         ' ✅ POST /api/runtime/translations/invalidate-cache - Invalida cache traduzioni

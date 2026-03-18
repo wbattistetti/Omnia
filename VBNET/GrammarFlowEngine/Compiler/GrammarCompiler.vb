@@ -41,7 +41,7 @@ Public Module GrammarCompiler
                     .Id = edge.Id,
                     .Source = edge.Source,
                     .Target = edge.Target,
-                    .Type = edge.Type,
+                    .Type = edge.Type.ToEdgeType(), ' Convert string to enum
                     .Label = edge.Label,
                     .Order = edge.Order
                 }
@@ -51,7 +51,7 @@ Public Module GrammarCompiler
 
             ' Sort sequential edges by Order
             For Each edgeList In compiled.Edges.Values
-                Dim sequentialEdges = edgeList.Where(Function(e) e.Type = "sequential").ToList()
+                Dim sequentialEdges = edgeList.Where(Function(e) e.Type = EdgeType.Sequential).ToList()
                 If sequentialEdges.Any() Then
                     sequentialEdges.Sort(Function(e1, e2) e1.Order.CompareTo(e2.Order))
                 End If
@@ -92,7 +92,8 @@ Public Module GrammarCompiler
                 .Label = node.Label,
                 .Bindings = node.Bindings,
                 .[Optional] = node.[Optional],
-                .Repeatable = node.Repeatable
+                .Repeatable = node.Repeatable,
+                .FreeSpeech = node.FreeSpeech
             }
 
             ' Compile synonyms to HashSet for fast lookup
@@ -101,8 +102,11 @@ Public Module GrammarCompiler
                 compiled.AllWords.Add(synonym)
             Next
 
-            ' Add label to all words
-            compiled.AllWords.Add(node.Label)
+            ' ⚠️ IMPORTANT: Add label to AllWords ONLY if there are NO synonyms
+            ' If synonyms exist, label does NOT count as a word
+            If node.Synonyms Is Nothing OrElse node.Synonyms.Count = 0 Then
+                compiled.AllWords.Add(node.Label)
+            End If
 
             ' Pre-compile regex if present
             If Not String.IsNullOrEmpty(node.Regex) Then

@@ -18,8 +18,8 @@ Public Module LookaheadChecker
                 Return True ' No children = fail
             End If
 
-            ' Create a temporary context for lookahead
-            Dim tempContext As New MatchContext() With {
+            ' Create a temporary path state for lookahead
+            Dim tempContext As New PathMatchState() With {
                 .Text = text,
                 .Position = position,
                 .GarbageUsed = 0,
@@ -29,7 +29,7 @@ Public Module LookaheadChecker
             ' Quick check: verify if at least ONE child can potentially match
             For Each child In children
                 ' Quick check: verify only label/synonyms (fast)
-                Dim currentWord = GetCurrentWord(tempContext)
+                Dim currentWord = tempContext.GetCurrentWord()
                 If Not String.IsNullOrEmpty(currentWord) Then
                     ' Check if current word matches label or synonyms
                     If child.AllWords.Contains(currentWord) Then
@@ -49,19 +49,6 @@ Public Module LookaheadChecker
             Return True ' No child can match
         End Function
 
-        ''' <summary>
-        ''' Gets the current word at position
-        ''' </summary>
-        Private Function GetCurrentWord(context As MatchContext) As String
-            Dim remainingText = context.Text.Substring(context.Position).Trim()
-            If String.IsNullOrEmpty(remainingText) Then Return String.Empty
-
-            Dim words = remainingText.Split({" "c, vbTab, vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
-            If words.Length > 0 Then
-                Return words(0)
-            End If
-            Return String.Empty
-        End Function
 
     End Module
 

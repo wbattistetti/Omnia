@@ -39,56 +39,63 @@ export function TestPhraseDetails({ phrase, grammar }: TestPhraseDetailsProps) {
     );
   }
 
+  const matchDetails = phrase.result.matchDetails || [];
+  const hasMultipleMatches = matchDetails.length > 1;
+
   return (
     <div style={{ padding: '16px' }}>
-      {/* Match #1 Header */}
-      <div style={{
-        padding: '12px',
-        backgroundColor: '#10b981',
-        color: '#fff',
-        borderRadius: '6px 6px 0 0',
-        fontWeight: 600,
-        fontSize: '14px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-      }}>
-        <div style={{
-          width: '16px',
-          height: '16px',
-          backgroundColor: '#fff',
-          borderRadius: '2px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <div style={{
-            width: '8px',
-            height: '8px',
-            backgroundColor: '#10b981',
-            borderRadius: '1px',
-          }} />
-        </div>
-        Match #1
-      </div>
-
       {/* Tree structure */}
       <div style={{
         border: '1px solid #e5e7eb',
-        borderTop: 'none',
-        borderRadius: '0 0 6px 6px',
+        borderRadius: '6px',
         padding: '8px',
         backgroundColor: '#fff',
       }}>
-        {phrase.result.matchDetails && phrase.result.matchDetails.length > 0 ? (
-          phrase.result.matchDetails.map((detail) => (
-            <MatchDetailNode
-              key={detail.id}
-              detail={detail}
-              level={0}
-              expandedNodes={expandedNodes}
-              onToggle={toggleNode}
-            />
+        {matchDetails.length > 0 ? (
+          matchDetails.map((detail, index) => (
+            <div key={detail.id}>
+              {/* Show "Match #N" header only if multiple matches */}
+              {hasMultipleMatches && (
+                <div style={{
+                  marginTop: index > 0 ? '16px' : '0',
+                  marginBottom: '8px',
+                  padding: '8px',
+                  backgroundColor: '#10b981',
+                  color: '#fff',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}>
+                  <div style={{
+                    width: '12px',
+                    height: '12px',
+                    backgroundColor: '#fff',
+                    borderRadius: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <div style={{
+                      width: '6px',
+                      height: '6px',
+                      backgroundColor: '#10b981',
+                      borderRadius: '1px',
+                    }} />
+                  </div>
+                  Match #{index + 1}
+                </div>
+              )}
+              <MatchDetailNode
+                key={detail.id}
+                detail={detail}
+                level={0}
+                expandedNodes={expandedNodes}
+                onToggle={toggleNode}
+              />
+            </div>
           ))
         ) : (
           <div style={{ padding: '12px', color: '#6b7280', fontSize: '12px' }}>

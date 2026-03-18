@@ -13,8 +13,12 @@ Public Module NodeMatcher
         ''' <summary>
         ''' Tries to match a node at the current position
         ''' </summary>
-        Public Function MatchNode(node As CompiledNode, context As MatchContext, compiledGrammar As CompiledGrammar) As MatchResult
+        Public Function MatchNode(node As CompiledNode, context As PathMatchState, compiledGrammar As CompiledGrammar) As MatchResult
             Dim result As New MatchResult()
+
+            ' ✅ Popolare informazioni base del nodo
+            result.NodeId = node.Id
+            result.NodeLabel = node.Label
 
             ' 1. Try regex match (if present)
             If node.CompiledRegex IsNot Nothing Then
@@ -24,20 +28,28 @@ Public Module NodeMatcher
                     ' Regex matched at the start
                     result.Success = True
                     result.ConsumedChars = match.Length
-                    result.ConsumedWords = CountWords(match.Value)
+                    result.ConsumedWords = match.Value.CountWords()
+                    result.MatchedText = match.Value
+                    result.MatchType = "regex"
                     result.Bindings = ExtractBindings(node, compiledGrammar, match.Value)
+                    ' ✅ Tracciare informazioni sui bindings
+                    ExtractBindingInfo(node, compiledGrammar, match.Value, Nothing, result)
                     Return result
                 End If
             End If
 
             ' 2. Try label and synonyms (word-by-word matching)
-            Dim currentWord = GetCurrentWord(context)
+            Dim currentWord = context.GetCurrentWord()
             If Not String.IsNullOrEmpty(currentWord) Then
                 If node.AllWords.Contains(currentWord) Then
                     result.Success = True
                     result.ConsumedWords = 1
                     result.ConsumedChars = currentWord.Length
+                    result.MatchedText = currentWord
+                    result.MatchType = "label"
                     result.Bindings = ExtractBindings(node, compiledGrammar, currentWord)
+                    ' ✅ Tracciare informazioni sui bindings
+                    ExtractBindingInfo(node, compiledGrammar, currentWord, Nothing, result)
                     Return result
                 End If
             End If
@@ -49,10 +61,15 @@ Public Module NodeMatcher
                 If semanticSet IsNot Nothing Then
                     For Each value In semanticSet.Values
                         If MatchSemanticValue(value, context) Then
+                            Dim matchedWord = context.GetCurrentWord()
                             result.Success = True
                             result.ConsumedWords = 1
-                            result.ConsumedChars = GetCurrentWord(context).Length
+                            result.ConsumedChars = matchedWord.Length
+                            result.MatchedText = matchedWord
+                            result.MatchType = "semantic-set"
                             result.Bindings = ExtractBindings(node, compiledGrammar, value.Value, value)
+                            ' ✅ Tracciare informazioni sui bindings
+                            ExtractBindingInfo(node, compiledGrammar, matchedWord, value, result)
                             Return result
                         End If
                     Next
@@ -64,10 +81,15 @@ Public Module NodeMatcher
             If semanticValueBinding IsNot Nothing Then
                 Dim semanticValue = compiledGrammar.SemanticValues.GetValueOrDefault(semanticValueBinding.ValueId)
                 If semanticValue IsNot Nothing AndAlso MatchSemanticValue(semanticValue, context) Then
+                    Dim matchedWord = context.GetCurrentWord()
                     result.Success = True
                     result.ConsumedWords = 1
-                    result.ConsumedChars = GetCurrentWord(context).Length
+                    result.ConsumedChars = matchedWord.Length
+                    result.MatchedText = matchedWord
+                    result.MatchType = "semantic-value"
                     result.Bindings = ExtractBindings(node, compiledGrammar, semanticValue.Value, semanticValue)
+                    ' ✅ Tracciare informazioni sui bindings
+                    ExtractBindingInfo(node, compiledGrammar, matchedWord, semanticValue, result)
                     Return result
                 End If
             End If
@@ -76,32 +98,10 @@ Public Module NodeMatcher
         End Function
 
         ''' <summary>
-        ''' Gets the current word at the position
-        ''' </summary>
-        Private Function GetCurrentWord(context As MatchContext) As String
-            Dim remainingText = context.Text.Substring(context.Position).Trim()
-            If String.IsNullOrEmpty(remainingText) Then Return String.Empty
-
-            Dim words = remainingText.Split({" "c, vbTab, vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
-            If words.Length > 0 Then
-                Return words(0)
-            End If
-            Return String.Empty
-        End Function
-
-        ''' <summary>
-        ''' Counts words in a string
-        ''' </summary>
-        Private Function CountWords(text As String) As Integer
-            If String.IsNullOrEmpty(text) Then Return 0
-            Return text.Split({" "c, vbTab, vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries).Length
-        End Function
-
-        ''' <summary>
         ''' Matches a semantic value against the current word
         ''' </summary>
-        Private Function MatchSemanticValue(value As SemanticValue, context As MatchContext) As Boolean
-            Dim currentWord = GetCurrentWord(context)
+        Private Function MatchSemanticValue(value As SemanticValue, context As PathMatchState) As Boolean
+            Dim currentWord = context.GetCurrentWord()
             If String.IsNullOrEmpty(currentWord) Then Return False
 
             ' Check exact match (case-insensitive)
@@ -159,5 +159,47 @@ Public Module NodeMatcher
 
             Return bindings
         End Function
+
+        ''' <summary>
+        ''' Estrae informazioni sui bindings del nodo per costruire la struttura gerarchica
+        ''' </summary>
+        Private Sub ExtractBindingInfo(
+            node As CompiledNode,
+            compiledGrammar As CompiledGrammar,
+            matchedText As String,
+            matchedValue As SemanticValue,
+            result As MatchResult
+        )
+            For Each binding In node.Bindings
+                Select Case binding.Type
+                    Case "slot"
+                        Dim slot = compiledGrammar.Slots.GetValueOrDefault(binding.SlotId)
+                        If slot IsNot Nothing Then
+                            result.SlotBinding = New NodeBindingInfo() With {
+                                .Type = "slot",
+                                .Id = slot.Id,
+                                .Name = slot.Name,
+                                .Value = If(matchedValue IsNot Nothing, matchedValue.Value, matchedText)
+                            }
+                        End If
+
+                    Case "semantic-value"
+                        ' ✅ Quando il match avviene via AllWords (label), matchedValue è Nothing.
+                        ' Fallback: cerca il semantic value per ID dalla grammar.
+                        Dim sv As SemanticValue = matchedValue
+                        If sv Is Nothing Then
+                            sv = compiledGrammar.SemanticValues.GetValueOrDefault(binding.ValueId)
+                        End If
+                        If sv IsNot Nothing Then
+                            result.SemanticValueBinding = New NodeBindingInfo() With {
+                                .Type = "semantic-value",
+                                .Id = sv.Id,
+                                .Name = sv.Value,
+                                .Value = matchedText ' Il testo effettivamente matchato dall'input
+                            }
+                        End If
+                End Select
+            Next
+        End Sub
 
     End Module

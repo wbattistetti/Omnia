@@ -428,7 +428,7 @@ Namespace ApiServer.Handlers
 
                 ' ✅ STATELESS: Pubblica evento Redis Pub/Sub per notificare che SSE è connesso
                 Try
-                    Dim redis = ApiServer.Infrastructure.RedisConnectionManager.GetConnection("localhost:6379")
+                    Dim redis = RedisConnectionManager.GetConnection("localhost:6379")
                     Dim subscriber = redis.GetSubscriber()
                     Dim channel = $"omnia:events:sse-connected:{sessionId}"
                     Await subscriber.PublishAsync(channel, "connected")

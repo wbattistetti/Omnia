@@ -16,6 +16,7 @@ Public Class CompiledNode
         Public Property Bindings As List(Of NodeBinding)
         Public Property [Optional] As Boolean
         Public Property Repeatable As Boolean
+        Public Property FreeSpeech As Boolean = True ' Free speech mode: if True, allows garbage before/after this node
 
         ''' <summary>
         ''' All words to match (label + synonyms) for quick lookup

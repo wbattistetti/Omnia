@@ -6,22 +6,35 @@ Imports System.Linq
 ''' <summary>
 ''' Main Grammar Flow Engine
 ''' Front end → Grammar Compiler → Grammar Flow Engine
+''' Supports both navigation-based and regex-based parsing
 ''' </summary>
 Public Class GrammarEngine
     Private compiledGrammar As CompiledGrammar
+    Private compiledRegexGrammar As CompiledRegexGrammar
+    Private useRegexMode As Boolean = False
 
     ''' <summary>
     ''' Creates a new engine from a compiled grammar
     ''' </summary>
-    Public Sub New(compiledGrammar As CompiledGrammar)
+    Public Sub New(compiledGrammar As CompiledGrammar, Optional useRegex As Boolean = False)
         Me.compiledGrammar = compiledGrammar
+        Me.useRegexMode = useRegex
+
+        If useRegex Then
+            Me.compiledRegexGrammar = RegexGrammarCompiler.CompileToRegex(compiledGrammar)
+        End If
     End Sub
 
     ''' <summary>
     ''' Creates a new engine from a raw grammar (compiles it first)
     ''' </summary>
-    Public Sub New(grammar As Grammar)
+    Public Sub New(grammar As Grammar, Optional useRegex As Boolean = False)
         Me.compiledGrammar = GrammarCompiler.Compile(grammar)
+        Me.useRegexMode = useRegex
+
+        If useRegex Then
+            Me.compiledRegexGrammar = RegexGrammarCompiler.CompileToRegex(compiledGrammar)
+        End If
     End Sub
 
     ''' <summary>
@@ -42,11 +55,60 @@ Public Class GrammarEngine
                 }
         End If
 
+        ' Use regex mode if enabled and compiled
+        If useRegexMode AndAlso compiledRegexGrammar IsNot Nothing Then
+            Return ParseWithRegex(text)
+        Else
+            Return ParseWithNavigation(text, maxGarbage)
+        End If
+    End Function
+
+    ''' <summary>
+    ''' Parses text using regex-based matching
+    ''' </summary>
+    Private Function ParseWithRegex(text As String) As ParseResult
+        Dim regexResult = RegexGrammarCompiler.MatchAndExtract(compiledRegexGrammar, text)
+
+        If Not regexResult.Success Then
+            Return New ParseResult() With {
+                .Success = False,
+                .ErrorMessage = "No match found"
+            }
+        End If
+
+        ' Convert RegexMatchResult to ParseResult
+        ' Build list of matches (no fake root)
+        Dim matches = BuildMatchTreeFromRegexResult(regexResult, compiledRegexGrammar)
+
+        ' Create a temporary root for compatibility with ParseResult.MatchTree
+        ' But we'll use matches directly in BuildMatchDetails
+        Dim root As New MatchResult() With {
+            .Success = True,
+            .MatchedText = regexResult.MatchedText,
+            .ConsumedWords = regexResult.ConsumedWords,
+            .ConsumedChars = regexResult.MatchedText.Length,
+            .Bindings = regexResult.Bindings,
+            .Children = matches ' Store matches as children (will be processed directly)
+        }
+
+        Return New ParseResult() With {
+            .Success = True,
+            .Bindings = regexResult.Bindings,
+            .ConsumedWords = regexResult.ConsumedWords,
+            .GarbageUsed = regexResult.GarbageUsed,
+            .MatchTree = root ' Temporary root, but matches are in Children
+        }
+    End Function
+
+    ''' <summary>
+    ''' Parses text using navigation-based matching (original implementation)
+    ''' </summary>
+    Private Function ParseWithNavigation(text As String, maxGarbage As Integer) As ParseResult
         Dim allResults As New List(Of MatchResult)()
 
         ' Try each entry node
         For Each entryNode In compiledGrammar.EntryNodes
-            Dim context As New MatchContext() With {
+            Dim context As New PathMatchState() With {
                     .Text = text,
                     .Position = 0,
                     .GarbageUsed = 0,
@@ -75,10 +137,225 @@ Public Class GrammarEngine
                 .Success = True,
                 .Bindings = bestResult.Bindings,
                 .ConsumedWords = bestResult.ConsumedWords,
-                .GarbageUsed = bestResult.GarbageUsed
+                .GarbageUsed = bestResult.GarbageUsed,
+                .MatchTree = bestResult ' ✅ Passa l'albero gerarchico completo
             }
 
         Return parseResult
+    End Function
+
+    ''' <summary>
+    ''' Builds MatchTree from RegexMatchResult for UI display
+    ''' ✅ SIMPLIFIED: Process each matched node directly, check its bindings, build hierarchy
+    ''' Returns a list of root matches (each match is independent, no fake root)
+    ''' Structure: Slot → SemanticValue → Linguistic (or SemanticValue → Linguistic, or Linguistic)
+    ''' </summary>
+    Private Function BuildMatchTreeFromRegexResult(
+        regexResult As RegexMatchResult,
+        compiledRegexGrammar As CompiledRegexGrammar
+    ) As List(Of MatchResult)
+        Dim matches As New List(Of MatchResult)()
+        Dim processedNodeIds = New HashSet(Of String)()
+
+        ' ✅ SIMPLIFIED: Process each matched node directly
+        For Each nodeMatch In regexResult.NodeMatches
+            ' Skip if already processed (avoid duplicates)
+            If processedNodeIds.Contains(nodeMatch.NodeId) Then Continue For
+
+            Dim node = compiledRegexGrammar.OriginalGrammar.Nodes.GetValueOrDefault(nodeMatch.NodeId)
+            If node Is Nothing Then Continue For
+
+            ' Check bindings of THIS node (source of truth)
+            Dim hasSlot = node.Bindings IsNot Nothing AndAlso
+                          node.Bindings.Any(Function(b) b.Type = "slot" AndAlso Not String.IsNullOrEmpty(b.SlotId))
+            Dim hasSemanticValue = node.Bindings IsNot Nothing AndAlso
+                                   node.Bindings.Any(Function(b) b.Type = "semantic-value" AndAlso Not String.IsNullOrEmpty(b.ValueId))
+
+            ' Get slot and semantic-value IDs from node bindings
+            Dim slotId As String = Nothing
+            Dim semanticValueId As String = Nothing
+
+            If hasSlot Then
+                Dim slotBinding = node.Bindings.FirstOrDefault(Function(b) b.Type = "slot")
+                If slotBinding IsNot Nothing Then
+                    slotId = slotBinding.SlotId
+                End If
+            End If
+
+            If hasSemanticValue Then
+                Dim svBinding = node.Bindings.FirstOrDefault(Function(b) b.Type = "semantic-value")
+                If svBinding IsNot Nothing Then
+                    semanticValueId = svBinding.ValueId
+                End If
+            End If
+
+            ' Build hierarchy based on bindings
+            If hasSlot AndAlso hasSemanticValue Then
+                ' ✅ Caso 1: Slot + SemanticValue → Slot → SemanticValue → Linguistic
+                Dim slot = compiledRegexGrammar.OriginalGrammar.Slots.GetValueOrDefault(slotId)
+                Dim semanticValue = compiledRegexGrammar.OriginalGrammar.SemanticValues.GetValueOrDefault(semanticValueId)
+
+                If slot IsNot Nothing AndAlso semanticValue IsNot Nothing Then
+                    ' Create Slot
+                    Dim slotResult As New MatchResult() With {
+                        .Success = True,
+                        .NodeId = nodeMatch.NodeId,
+                        .NodeLabel = nodeMatch.NodeLabel,
+                        .MatchedText = nodeMatch.MatchedText,
+                        .MatchType = "slot",
+                        .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                        .ConsumedChars = nodeMatch.MatchedText.Length,
+                        .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                        .Children = New List(Of MatchResult)(),
+                        .SlotBinding = New NodeBindingInfo() With {
+                            .Type = "slot",
+                            .Id = slot.Id,
+                            .Name = slot.Name,
+                            .Value = nodeMatch.MatchedText
+                        }
+                    }
+
+                    ' Create SemanticValue as child of Slot
+                    Dim svResult As New MatchResult() With {
+                        .Success = True,
+                        .NodeId = nodeMatch.NodeId,
+                        .NodeLabel = nodeMatch.NodeLabel,
+                        .MatchedText = nodeMatch.MatchedText,
+                        .MatchType = "semantic-value",
+                        .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                        .ConsumedChars = nodeMatch.MatchedText.Length,
+                        .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                        .Children = New List(Of MatchResult)(),
+                        .SemanticValueBinding = New NodeBindingInfo() With {
+                            .Type = "semantic-value",
+                            .Id = semanticValue.Id,
+                            .Name = semanticValue.Value,
+                            .Value = nodeMatch.MatchedText
+                        }
+                    }
+
+                    ' Add Linguistic as child of SemanticValue
+                    If Not String.IsNullOrEmpty(nodeMatch.MatchedText) Then
+                        svResult.Children.Add(New MatchResult() With {
+                            .Success = True,
+                            .NodeId = $"ling-{nodeMatch.NodeId}",
+                            .NodeLabel = nodeMatch.MatchedText,
+                            .MatchedText = nodeMatch.MatchedText,
+                            .MatchType = "linguistic",
+                            .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                            .ConsumedChars = nodeMatch.MatchedText.Length,
+                            .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                            .Children = New List(Of MatchResult)()
+                        })
+                    End If
+
+                    slotResult.Children.Add(svResult)
+                    matches.Add(slotResult)
+                    processedNodeIds.Add(nodeMatch.NodeId)
+                End If
+
+            ElseIf hasSlot Then
+                ' ✅ Caso 2: Solo Slot → Slot → Linguistic
+                Dim slot = compiledRegexGrammar.OriginalGrammar.Slots.GetValueOrDefault(slotId)
+                If slot IsNot Nothing Then
+                    Dim slotResult As New MatchResult() With {
+                        .Success = True,
+                        .NodeId = nodeMatch.NodeId,
+                        .NodeLabel = nodeMatch.NodeLabel,
+                        .MatchedText = nodeMatch.MatchedText,
+                        .MatchType = "slot",
+                        .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                        .ConsumedChars = nodeMatch.MatchedText.Length,
+                        .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                        .Children = New List(Of MatchResult)(),
+                        .SlotBinding = New NodeBindingInfo() With {
+                            .Type = "slot",
+                            .Id = slot.Id,
+                            .Name = slot.Name,
+                            .Value = nodeMatch.MatchedText
+                        }
+                    }
+
+                    ' Add Linguistic as child of Slot
+                    If Not String.IsNullOrEmpty(nodeMatch.MatchedText) Then
+                        slotResult.Children.Add(New MatchResult() With {
+                            .Success = True,
+                            .NodeId = $"ling-{nodeMatch.NodeId}",
+                            .NodeLabel = nodeMatch.MatchedText,
+                            .MatchedText = nodeMatch.MatchedText,
+                            .MatchType = "linguistic",
+                            .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                            .ConsumedChars = nodeMatch.MatchedText.Length,
+                            .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                            .Children = New List(Of MatchResult)()
+                        })
+                    End If
+
+                    matches.Add(slotResult)
+                    processedNodeIds.Add(nodeMatch.NodeId)
+                End If
+
+            ElseIf hasSemanticValue Then
+                ' ✅ Caso 3: Solo SemanticValue → SemanticValue → Linguistic
+                Dim semanticValue = compiledRegexGrammar.OriginalGrammar.SemanticValues.GetValueOrDefault(semanticValueId)
+                If semanticValue IsNot Nothing Then
+                    Dim svResult As New MatchResult() With {
+                        .Success = True,
+                        .NodeId = nodeMatch.NodeId,
+                        .NodeLabel = nodeMatch.NodeLabel,
+                        .MatchedText = nodeMatch.MatchedText,
+                        .MatchType = "semantic-value",
+                        .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                        .ConsumedChars = nodeMatch.MatchedText.Length,
+                        .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                        .Children = New List(Of MatchResult)(),
+                        .SemanticValueBinding = New NodeBindingInfo() With {
+                            .Type = "semantic-value",
+                            .Id = semanticValue.Id,
+                            .Name = semanticValue.Value,
+                            .Value = nodeMatch.MatchedText
+                        }
+                    }
+
+                    ' Add Linguistic as child of SemanticValue
+                    If Not String.IsNullOrEmpty(nodeMatch.MatchedText) Then
+                        svResult.Children.Add(New MatchResult() With {
+                            .Success = True,
+                            .NodeId = $"ling-{nodeMatch.NodeId}",
+                            .NodeLabel = nodeMatch.MatchedText,
+                            .MatchedText = nodeMatch.MatchedText,
+                            .MatchType = "linguistic",
+                            .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                            .ConsumedChars = nodeMatch.MatchedText.Length,
+                            .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                            .Children = New List(Of MatchResult)()
+                        })
+                    End If
+
+                    matches.Add(svResult)
+                    processedNodeIds.Add(nodeMatch.NodeId)
+                End If
+
+            Else
+                ' ✅ Caso 4: Nessun binding → Solo Linguistic
+                If Not String.IsNullOrEmpty(nodeMatch.MatchedText) Then
+                    matches.Add(New MatchResult() With {
+                        .Success = True,
+                        .NodeId = nodeMatch.NodeId,
+                        .NodeLabel = nodeMatch.NodeLabel,
+                        .MatchedText = nodeMatch.MatchedText,
+                        .MatchType = "linguistic",
+                        .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                        .ConsumedChars = nodeMatch.MatchedText.Length,
+                        .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                        .Children = New List(Of MatchResult)()
+                    })
+                    processedNodeIds.Add(nodeMatch.NodeId)
+                End If
+            End If
+        Next
+
+        Return matches
     End Function
 
     ''' <summary>
@@ -87,6 +364,24 @@ Public Class GrammarEngine
     Public ReadOnly Property Grammar As CompiledGrammar
         Get
             Return compiledGrammar
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' Gets the compiled regex grammar (if regex mode is enabled)
+    ''' </summary>
+    Public ReadOnly Property RegexGrammar As CompiledRegexGrammar
+        Get
+            Return compiledRegexGrammar
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' Gets whether regex mode is enabled
+    ''' </summary>
+    Public ReadOnly Property IsRegexMode As Boolean
+        Get
+            Return useRegexMode
         End Get
     End Property
 
