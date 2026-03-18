@@ -44,23 +44,47 @@ export function useNodeEditingState(nodeLabel: string) {
         hasRef: !!inputRef.current,
       });
 
-      // Use double requestAnimationFrame to ensure DOM is fully ready
+      // Use callback ref pattern for more reliable ref access
+      const focusInput = () => {
+        if (inputRef.current) {
+          console.log('[useNodeEditingState] ✅ Focusing input', {
+            nodeLabel,
+            inputValue: inputRef.current.value,
+          });
+          inputRef.current.focus();
+          inputRef.current.select();
+          return true;
+        }
+        return false;
+      };
+
+      // Try immediate focus first
+      if (focusInput()) {
+        return;
+      }
+
+      // If ref not ready, use requestAnimationFrame with retry
+      let retryCount = 0;
+      const maxRetries = 5;
+
+      const tryFocus = () => {
+        if (focusInput()) {
+          return;
+        }
+        retryCount++;
+        if (retryCount < maxRetries) {
+          requestAnimationFrame(tryFocus);
+        } else {
+          console.warn('[useNodeEditingState] ⚠️ Input ref not available after retries', {
+            nodeLabel,
+            isEditing,
+            retryCount,
+          });
+        }
+      };
+
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (inputRef.current) {
-            console.log('[useNodeEditingState] ✅ Focusing input', {
-              nodeLabel,
-              inputValue: inputRef.current.value,
-            });
-            inputRef.current.focus();
-            inputRef.current.select();
-          } else {
-            console.warn('[useNodeEditingState] ⚠️ Input ref is null', {
-              nodeLabel,
-              isEditing,
-            });
-          }
-        });
+        requestAnimationFrame(tryFocus);
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

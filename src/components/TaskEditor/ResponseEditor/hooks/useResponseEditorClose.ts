@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { saveTaskToRepository, saveTaskOnEditorClose } from '@responseEditor/features/persistence/ResponseEditorPersistence';
+import { saveTaskToRepository, saveTaskOnEditorClose } from '@responseEditor/core/persistence/ResponseEditorPersistence';
 import { getMainNodes } from '@responseEditor/core/domain';
 import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 import DialogueTaskService from '@services/DialogueTaskService';

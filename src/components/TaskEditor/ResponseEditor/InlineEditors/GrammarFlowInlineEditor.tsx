@@ -398,7 +398,6 @@ export default function GrammarFlowInlineEditor({
           slots={grammar?.slots || []}
           semanticSets={grammar?.semanticSets || []}
           hideToolbar={false} // Show toolbar with close button only
-          hideExportButtons={true} // ✅ Hide Export/Download/Copy buttons - auto-save enabled
           editorMode="graph"
           initialTestPhrases={testPhrases}
           onTestPhrasesChange={handleTestPhrasesChange}

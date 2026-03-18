@@ -4,7 +4,7 @@
 import { validateTaskStructure } from '@utils/taskSemantics';
 import { getTemplateId } from '@utils/taskHelpers';
 import { taskRepository } from '@services/TaskRepository';
-import { saveTaskToRepository } from '@responseEditor/features/persistence/ResponseEditorPersistence';
+import { saveTaskToRepository } from '@responseEditor/core/persistence/ResponseEditorPersistence';
 import { mapNode } from '@dock/ops';
 import { validateNodeStructure } from '@responseEditor/core/domain/validators';
 import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';

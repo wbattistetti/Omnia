@@ -9,20 +9,19 @@ import type { TaskTree } from '@types/taskTypes';
 /**
  * Tests for useResponseEditorRefs
  *
- * This hook provides all refs for ResponseEditor: taskTreeRef, prevInstanceRef, contractChangeRef, rootRef,
+ * This hook provides all refs for ResponseEditor: prevInstanceRef, contractChangeRef, rootRef,
  * preAssembledTaskTreeCache, wizardOwnsDataRef, and drag-related refs.
+ * ✅ FASE 3: taskTreeRef rimosso - store è single source of truth
  * We test observable behaviors: ref creation, initial values, and ref stability.
  *
  * WHAT WE TEST:
  * - All refs are created and returned
  * - Initial values are correct for each ref
- * - taskTreeRef.current is initialized with taskTree
  * - Refs are stable across re-renders
  * - Edge cases (null/undefined taskTree, null/undefined task)
  *
  * WHY IT'S IMPORTANT:
  * - Refs are critical for accessing mutable values without causing re-renders
- * - taskTreeRef is used throughout the component for direct TaskTree manipulation
  * - contractChangeRef tracks unsaved contract changes
  * - Drag refs are used for sidebar and panel resizing
  * - Incorrect ref initialization can break component functionality
@@ -54,7 +53,7 @@ describe('useResponseEditorRefs', () => {
         })
       );
 
-      expect(result.current.taskTreeRef).toBeDefined();
+      // ✅ FASE 3: taskTreeRef rimosso - non più presente
       expect(result.current.prevInstanceRef).toBeDefined();
       expect(result.current.contractChangeRef).toBeDefined();
       expect(result.current.rootRef).toBeDefined();
@@ -64,17 +63,6 @@ describe('useResponseEditorRefs', () => {
       expect(result.current.sidebarStartXRef).toBeDefined();
       expect(result.current.tasksStartWidthRef).toBeDefined();
       expect(result.current.tasksStartXRef).toBeDefined();
-    });
-
-    it('should initialize taskTreeRef.current with taskTree', () => {
-      const { result } = renderHook(() =>
-        useResponseEditorRefs({
-          taskTree: mockTaskTree,
-          task: mockTask,
-        })
-      );
-
-      expect(result.current.taskTreeRef.current).toBe(mockTaskTree);
     });
 
     it('should initialize prevInstanceRef.current as undefined', () => {
@@ -164,7 +152,7 @@ describe('useResponseEditorRefs', () => {
       );
 
       const firstRefs = {
-        taskTreeRef: result.current.taskTreeRef,
+        // ✅ FASE 3: taskTreeRef rimosso
         prevInstanceRef: result.current.prevInstanceRef,
         contractChangeRef: result.current.contractChangeRef,
         rootRef: result.current.rootRef,
@@ -178,7 +166,7 @@ describe('useResponseEditorRefs', () => {
 
       rerender();
 
-      expect(result.current.taskTreeRef).toBe(firstRefs.taskTreeRef);
+      // ✅ FASE 3: taskTreeRef rimosso
       expect(result.current.prevInstanceRef).toBe(firstRefs.prevInstanceRef);
       expect(result.current.contractChangeRef).toBe(firstRefs.contractChangeRef);
       expect(result.current.rootRef).toBe(firstRefs.rootRef);
@@ -199,8 +187,7 @@ describe('useResponseEditorRefs', () => {
       );
 
       // Mutate ref values
-      const newTaskTree = { ...mockTaskTree, label: 'Updated' };
-      result.current.taskTreeRef.current = newTaskTree;
+      // ✅ FASE 3: taskTreeRef rimosso - non più presente
       result.current.prevInstanceRef.current = 'instance-1';
       result.current.contractChangeRef.current.hasUnsavedChanges = true;
       result.current.wizardOwnsDataRef.current = true;
@@ -210,7 +197,7 @@ describe('useResponseEditorRefs', () => {
       result.current.tasksStartXRef.current = 400;
 
       // Verify mutations persist
-      expect(result.current.taskTreeRef.current).toBe(newTaskTree);
+      // ✅ FASE 3: taskTreeRef rimosso
       expect(result.current.prevInstanceRef.current).toBe('instance-1');
       expect(result.current.contractChangeRef.current.hasUnsavedChanges).toBe(true);
       expect(result.current.wizardOwnsDataRef.current).toBe(true);
@@ -251,7 +238,7 @@ describe('useResponseEditorRefs', () => {
         })
       );
 
-      expect(result.current.taskTreeRef.current).toBeNull();
+      // ✅ FASE 3: taskTreeRef rimosso - non più presente
       expect(result.current.prevInstanceRef.current).toBeUndefined();
     });
 
@@ -263,7 +250,7 @@ describe('useResponseEditorRefs', () => {
         })
       );
 
-      expect(result.current.taskTreeRef.current).toBeUndefined();
+      // ✅ FASE 3: taskTreeRef rimosso - non più presente
       expect(result.current.prevInstanceRef.current).toBeUndefined();
     });
 
@@ -275,8 +262,8 @@ describe('useResponseEditorRefs', () => {
         })
       );
 
-      expect(result.current.taskTreeRef.current).toBe(mockTaskTree);
-      // task parameter is not used in the hook, so null is fine
+      // ✅ FASE 3: taskTreeRef rimosso - task parameter is not used in the hook, so null is fine
+      expect(result.current.prevInstanceRef.current).toBeUndefined();
     });
 
     it('should handle undefined task', () => {
@@ -287,8 +274,8 @@ describe('useResponseEditorRefs', () => {
         })
       );
 
-      expect(result.current.taskTreeRef.current).toBe(mockTaskTree);
-      // task parameter is not used in the hook, so undefined is fine
+      // ✅ FASE 3: taskTreeRef rimosso - task parameter is not used in the hook, so undefined is fine
+      expect(result.current.prevInstanceRef.current).toBeUndefined();
     });
 
     it('should handle empty TaskTree', () => {
@@ -305,7 +292,8 @@ describe('useResponseEditorRefs', () => {
         })
       );
 
-      expect(result.current.taskTreeRef.current).toBe(emptyTaskTree);
+      // ✅ FASE 3: taskTreeRef rimosso - non più presente
+      expect(result.current.prevInstanceRef.current).toBeUndefined();
     });
 
     it('should handle TaskTree with only label', () => {
@@ -320,7 +308,8 @@ describe('useResponseEditorRefs', () => {
         })
       );
 
-      expect(result.current.taskTreeRef.current).toBe(minimalTaskTree);
+      // ✅ FASE 3: taskTreeRef rimosso - non più presente
+      expect(result.current.prevInstanceRef.current).toBeUndefined();
     });
   });
 
@@ -334,7 +323,7 @@ describe('useResponseEditorRefs', () => {
       );
 
       // MutableRefObject has .current property that can be mutated
-      expect('current' in result.current.taskTreeRef).toBe(true);
+      // ✅ FASE 3: taskTreeRef rimosso - non più presente
       expect('current' in result.current.prevInstanceRef).toBe(true);
       expect('current' in result.current.contractChangeRef).toBe(true);
       expect('current' in result.current.preAssembledTaskTreeCache).toBe(true);

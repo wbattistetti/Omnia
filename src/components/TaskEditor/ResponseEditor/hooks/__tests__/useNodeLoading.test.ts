@@ -2,8 +2,9 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useNodeLoading } from '@responseEditor/features/node-editing/hooks/useNodeLoading';
+import { useTaskTreeStore } from '@responseEditor/core/state';
 import type { Task, TaskTree } from '@types/taskTypes';
 
 /**
@@ -33,8 +34,7 @@ describe('useNodeLoading', () => {
     selectedRoot: false,
     introduction: null,
     task: null,
-    taskTree: null,
-    taskTreeRef: { current: null },
+    // ✅ FASE 3: taskTree e taskTreeRef rimossi - store è single source of truth
     setSelectedNode: mockSetSelectedNode,
     setSelectedNodePath: mockSetSelectedNodePath,
     getStepsForNode: mockGetStepsForNode,
@@ -47,6 +47,12 @@ describe('useNodeLoading', () => {
     (getSubDataList as any).mockReturnValue([]);
     (mockGetStepsForNode as any).mockReturnValue({});
     (mockGetStepsAsArray as any).mockReturnValue([]);
+
+    // ✅ FASE 3: Reset store before each test
+    const { result } = renderHook(() => useTaskTreeStore());
+    act(() => {
+      result.current.reset();
+    });
   });
 
   describe('empty TaskTree', () => {
@@ -76,13 +82,16 @@ describe('useNodeLoading', () => {
 
       (getdataList as any).mockReturnValue([{ id: 'node-1' }]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       renderHook(() =>
         useNodeLoading({
           ...defaultParams,
           selectedRoot: true,
-          taskTreeRef,
         })
       );
 
@@ -106,13 +115,16 @@ describe('useNodeLoading', () => {
 
       (getdataList as any).mockReturnValue([{ id: 'node-1' }]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       renderHook(() =>
         useNodeLoading({
           ...defaultParams,
           selectedRoot: true,
-          taskTreeRef,
         })
       );
 
@@ -153,7 +165,11 @@ describe('useNodeLoading', () => {
         { type: 'start', escalations: [] },
       ]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       renderHook(() =>
         useNodeLoading({
@@ -161,7 +177,6 @@ describe('useNodeLoading', () => {
           selectedMainIndex: 0,
           selectedSubIndex: null,
           task,
-          taskTreeRef,
         })
       );
 
@@ -192,7 +207,11 @@ describe('useNodeLoading', () => {
         { type: 'start', escalations: [] },
       ]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       renderHook(() =>
         useNodeLoading({
@@ -200,7 +219,6 @@ describe('useNodeLoading', () => {
           selectedMainIndex: 0,
           selectedSubIndex: null,
           task,
-          taskTreeRef,
         })
       );
 
@@ -249,7 +267,11 @@ describe('useNodeLoading', () => {
         { type: 'start', escalations: [] },
       ]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       renderHook(() =>
         useNodeLoading({
@@ -257,7 +279,6 @@ describe('useNodeLoading', () => {
           selectedMainIndex: 0,
           selectedSubIndex: 0,
           task,
-          taskTreeRef,
         })
       );
 
@@ -280,14 +301,17 @@ describe('useNodeLoading', () => {
       ]);
       (getSubDataList as any).mockReturnValue([]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       renderHook(() =>
         useNodeLoading({
           ...defaultParams,
           selectedMainIndex: 0,
           selectedSubIndex: 0,
-          taskTreeRef,
         })
       );
 
@@ -322,14 +346,17 @@ describe('useNodeLoading', () => {
         { type: 'noMatch', escalations: [] },
       ]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       renderHook(() =>
         useNodeLoading({
           ...defaultParams,
           selectedMainIndex: 0,
           task,
-          taskTreeRef,
         })
       );
 
@@ -346,14 +373,17 @@ describe('useNodeLoading', () => {
       (mockGetStepsForNode as any).mockReturnValue({});
       (mockGetStepsAsArray as any).mockReturnValue([]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       renderHook(() =>
         useNodeLoading({
           ...defaultParams,
           selectedMainIndex: 0,
           task: null,
-          taskTreeRef,
         })
       );
 
@@ -369,13 +399,16 @@ describe('useNodeLoading', () => {
 
       (getdataList as any).mockReturnValue([{ id: 'node-1' }]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       renderHook(() =>
         useNodeLoading({
           ...defaultParams,
           selectedMainIndex: 999,
-          taskTreeRef,
         })
       );
 
@@ -383,13 +416,13 @@ describe('useNodeLoading', () => {
       // Behavior depends on getdataList implementation
     });
 
-    it('should handle taskTreeRef.current being null', () => {
+    it('should handle store taskTree being null', () => {
       (getdataList as any).mockReturnValue([]);
 
+      // ✅ FASE 3: Store is already null (reset in beforeEach)
       renderHook(() =>
         useNodeLoading({
           ...defaultParams,
-          taskTreeRef: { current: null },
         })
       );
 

@@ -7,7 +7,7 @@ import { getTemplateId } from '@utils/taskHelpers';
 import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '@types/taskTypes';
 import type { TaskTree } from '@types/taskTypes';
-import { useTaskTreeStore } from '@responseEditor/core/state';
+import { useTaskTreeStore, useTaskTreeVersion } from '@responseEditor/core/state';
 
 export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose, setDockTree }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per TaskTree
@@ -57,15 +57,10 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
   // ✅ FASE 3: Store è single source of truth
   const { setTaskTree: setTaskTreeInStore } = useTaskTreeStore();
   const taskTreeFromStore = useTaskTreeStore((state) => state.taskTree);
+  const taskTreeVersion = useTaskTreeStore((state) => state.taskTreeVersion);
 
-  // ✅ FASE 3: taskTree locale mantenuto temporaneamente per backward compatibility
-  // TODO: Rimuovere dopo migrazione completa - ResponseEditor dovrebbe leggere solo dallo store
-  const [taskTree, setTaskTree] = React.useState<TaskTree | null>(null);
+  // ✅ FASE 3: Loading state per async operations
   const [taskTreeLoading, setTaskTreeLoading] = React.useState(true);
-
-  // ✅ FIX STRUTTURALE: Non leggere più dallo store per ricalcolare safeTaskTree
-  // L'editor vive su taskTree locale, non su currentTaskTree che dipende dallo store
-  // const currentTaskTree = taskTreeFromStore ?? taskTree; // ❌ RIMOSSO - causava feedback loop
 
   // ✅ FIX STRUTTURALE: Popola lo store solo una volta per istanza
   const initializedRef = React.useRef(false);
@@ -81,7 +76,6 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       // Skip buildTaskTree if needsTaskBuilder is true AND no task exists yet
       if ((taskMeta as any).needsTaskBuilder === true && !fullTask) {
         setTaskTreeInStore(null);
-        setTaskTree(null);
         setTaskTreeLoading(false);
         initializedRef.current = true;
         return;
@@ -95,7 +89,6 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       // Skip buildTaskTree if needsTaskBuilder is true (wizard will create TaskTree)
       if ((taskMeta as any).needsTaskBuilder === true) {
         setTaskTreeInStore(null);
-        setTaskTree(null);
         setTaskTreeLoading(false);
         initializedRef.current = true;
         return;
@@ -110,28 +103,22 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         // ✅ TaskTree caricato
         if (result) {
           const { taskTree: tree, instance: updatedTask } = result;
-          // ✅ FASE 3: Store è primary - aggiorna sempre lo store
+          // ✅ FASE 3: Store è single source of truth - aggiorna solo lo store
           setTaskTreeInStore(tree);
-          // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility
-          setTaskTree(tree);
           initializedRef.current = true;
 
           // Log rimosso: non essenziale per flusso motore
         } else {
-          // ✅ FASE 3: Store è primary - aggiorna sempre lo store
+          // ✅ FASE 3: Store è single source of truth
           setTaskTreeInStore(null);
-          // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility
-          setTaskTree(null);
           initializedRef.current = true;
         }
       } catch (error) {
         console.error('[TaskTreeHostAdapter] Error loading TaskTree:', error);
         // ✅ ARCHITECTURE: No fallback - template must exist by construction
         // If template is missing, it's a critical error that must be fixed
-        // ✅ FASE 3: Store è primary - aggiorna sempre lo store
+        // ✅ FASE 3: Store è single source of truth
         setTaskTreeInStore(null);
-        // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility
-        setTaskTree(null);
         initializedRef.current = true;
       } finally {
         setTaskTreeLoading(false);
@@ -322,18 +309,15 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       document.dispatchEvent(new CustomEvent('flowchart:variablesUpdated', { bubbles: true }));
     } catch { }
 
-    // ✅ FASE 3: Store è primary - aggiorna sempre lo store
+    // ✅ FASE 3: Store è single source of truth - aggiorna solo lo store
     setTaskTreeInStore(finalTaskTree);
-    // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility
-    setTaskTree(finalTaskTree);
     initializedRef.current = true; // ✅ Marca come inizializzato dopo wizard
   }, [taskId, currentProjectId, taskMeta.label, setTaskTreeInStore]);
 
   // ✅ ARCHITETTURA ESPERTO: Ensure nodes is always an array before passing to ResponseEditor
-  // ✅ FIX STRUTTURALE: safeTaskTree dipende solo da taskTree locale, non da currentTaskTree che legge dallo store
-  // Questo rompe il feedback loop: l'editor vive su taskTree locale, lo store è solo un mirror
+  // ✅ FASE 3: Usa solo store come single source of truth
   const safeTaskTree = React.useMemo(() => {
-    const source = taskTree; // ✅ Solo taskTree locale, non currentTaskTree
+    const source = taskTreeFromStore; // ✅ Usa solo store, non più locale
     if (!source) {
       return null;
     }
@@ -343,14 +327,15 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     };
     return safe;
   }, [
-    taskTree?.id,
-    taskTree?.nodes?.length,
+    taskTreeFromStore?.id,
+    taskTreeFromStore?.nodes?.length,
     // ✅ FIX: Aggiungi dipendenza per steps per forzare ricalcolo quando cambiano
-    taskTree?.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
-      ? Object.keys(taskTree.steps).length
-      : taskTree?.steps && Array.isArray(taskTree.steps)
-      ? taskTree.steps.length
+    taskTreeFromStore?.steps && typeof taskTreeFromStore.steps === 'object' && !Array.isArray(taskTreeFromStore.steps)
+      ? Object.keys(taskTreeFromStore.steps).length
+      : taskTreeFromStore?.steps && Array.isArray(taskTreeFromStore.steps)
+      ? taskTreeFromStore.steps.length
       : 0,
+    taskTreeVersion, // ✅ Usa version per forzare re-render quando store cambia
     loading
   ]); // ✅ Dipendenze stabili (ID, lunghezza nodes, numero di steps)
 
@@ -370,7 +355,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       console.error('[TaskTreeHostAdapter] Error reloading task:', error);
       return fullTask; // Fallback al task originale
     }
-  }, [taskId, taskTree]); // ✅ Dipende da taskTree per ricaricare quando cambia
+  }, [taskId, taskTreeVersion]); // ✅ FASE 3: Dipende da taskTreeVersion per ricaricare quando store cambia
 
   // ✅ Stable callbacks per evitare re-render
   const stableOnClose = React.useCallback(() => {

@@ -11,7 +11,7 @@
 
 **File**: `features/node-editing/core/applyNodeUpdate.ts`
 **Linea**: 7
-**Import**: `import { saveTaskToRepository } from '@responseEditor/features/persistence/ResponseEditorPersistence';`
+**Import**: `import { saveTaskToRepository } from '@responseEditor/core/persistence/ResponseEditorPersistence';` ✅ FIXED: Moved to core/persistence/
 
 **Problema**: La feature `node-editing` importa da `persistence`, violando la regola che le feature non devono importare tra loro.
 

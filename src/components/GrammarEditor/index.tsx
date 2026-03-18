@@ -20,7 +20,6 @@ export interface GrammarEditorProps {
   editorMode?: 'text' | 'graph';
   initialTestPhrases?: string[];
   onTestPhrasesChange?: (phrases: string[]) => void;
-  hideExportButtons?: boolean; // ✅ Hide Export/Download/Copy buttons for auto-save mode
 }
 
 /**
@@ -37,7 +36,6 @@ export function GrammarEditor({
   editorMode = 'text',
   initialTestPhrases = [],
   onTestPhrasesChange,
-  hideExportButtons = false,
 }: GrammarEditorProps) {
   const { loadGrammar, createGrammar, grammar: currentGrammar } = useGrammarStore();
 
@@ -148,7 +146,7 @@ export function GrammarEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only on mount
 
-  // Watch for changes to initialGrammar
+  // Watch for changes to initialGrammar (only reload when initialGrammar prop changes, not when currentGrammar changes)
   useEffect(() => {
     console.log('[GrammarEditor] 🔍 useEffect triggered', {
       hasInitialGrammar: !!initialGrammar,
@@ -174,15 +172,23 @@ export function GrammarEditor({
         loadGrammar(initialGrammar);
         lastGrammarIdRef.current = initialGrammar.id;
       } else {
-        // Same grammar ID but might have been updated - check if structure changed
-        const structureChanged =
-          currentGrammar.nodes?.length !== initialGrammar.nodes?.length ||
-          currentGrammar.edges?.length !== initialGrammar.edges?.length ||
-          currentGrammar.slots?.length !== initialGrammar.slots?.length ||
-          currentGrammar.semanticSets?.length !== initialGrammar.semanticSets?.length;
+        // Same grammar ID - check if initialGrammar structure changed (not currentGrammar)
+        // Only reload if initialGrammar prop actually changed, not when user edits currentGrammar
+        const initialStructureChanged =
+          (currentGrammar?.nodes?.length || 0) !== (initialGrammar.nodes?.length || 0) ||
+          (currentGrammar?.edges?.length || 0) !== (initialGrammar.edges?.length || 0) ||
+          (currentGrammar?.slots?.length || 0) !== (initialGrammar.slots?.length || 0) ||
+          (currentGrammar?.semanticSets?.length || 0) !== (initialGrammar.semanticSets?.length || 0);
 
-        if (structureChanged) {
-          console.log('[GrammarEditor] 🔄 Grammar updated (structure changed), reloading', {
+        // Only reload if initialGrammar prop has more items (external update), not if currentGrammar has more (user edit)
+        const shouldReload =
+          (initialGrammar.nodes?.length || 0) > (currentGrammar?.nodes?.length || 0) ||
+          (initialGrammar.edges?.length || 0) > (currentGrammar?.edges?.length || 0) ||
+          (initialGrammar.slots?.length || 0) > (currentGrammar?.slots?.length || 0) ||
+          (initialGrammar.semanticSets?.length || 0) > (currentGrammar?.semanticSets?.length || 0);
+
+        if (shouldReload) {
+          console.log('[GrammarEditor] 🔄 Grammar updated externally (initialGrammar prop changed), reloading', {
             grammarId: initialGrammar.id,
             oldNodesCount: currentGrammar?.nodes?.length || 0,
             newNodesCount: initialGrammar.nodes?.length || 0,
@@ -195,9 +201,10 @@ export function GrammarEditor({
           });
           loadGrammar(initialGrammar);
         } else {
-          console.log('[GrammarEditor] ✅ Grammar already loaded and up-to-date', {
+          console.log('[GrammarEditor] ✅ Grammar already loaded and up-to-date (user edits preserved)', {
             grammarId: initialGrammar.id,
-            nodesCount: currentGrammar.nodes?.length || 0,
+            nodesCount: currentGrammar?.nodes?.length || 0,
+            slotsCount: currentGrammar?.slots?.length || 0,
           });
         }
       }
@@ -212,7 +219,9 @@ export function GrammarEditor({
         lastGrammarIdRef.current = null;
       }
     }
-  }, [initialGrammar, loadGrammar, createGrammar, currentGrammar]);
+    // ✅ FIX: Remove currentGrammar from dependencies - only react to initialGrammar prop changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialGrammar, loadGrammar, createGrammar]);
 
   // Debug: Log grammar state before render
   React.useEffect(() => {

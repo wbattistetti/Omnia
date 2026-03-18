@@ -4,22 +4,20 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTaskTreeDerived } from '@responseEditor/hooks/useTaskTreeDerived';
+import { useTaskTreeStore } from '@responseEditor/core/state';
 import type { TaskTree } from '@types/taskTypes';
 
 /**
  * Tests for useTaskTreeDerived
  *
  * This hook provides derived values from TaskTree: mainList, isAggregatedAtomic, and introduction.
- * We test observable behaviors: value derivation, fallback logic, and memoization triggers.
+ * ✅ FASE 3: Hook now reads ONLY from Zustand store (single source of truth)
  *
  * WHAT WE TEST:
- * - Calculation of mainList from TaskTree
- * - Fallback to taskTreeRef.current when taskTree is null
+ * - Calculation of mainList from store taskTree
  * - isAggregatedAtomic calculation (true when >1 main)
- * - introduction from taskTreeRef.current
- * - Updates when taskTreeVersion changes
- * - Updates when taskTree.label changes
- * - Updates when taskTree.nodes.length changes
+ * - introduction from store taskTree
+ * - Updates when taskTreeVersion changes (via store)
  * - Edge cases (null/undefined TaskTree, empty TaskTree, empty nodes)
  *
  * WHY IT'S IMPORTANT:
@@ -48,10 +46,15 @@ import { getdataList } from '../../ddtSelectors';
 describe('useTaskTreeDerived', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // ✅ FASE 3: Reset store before each test
+    const { result } = renderHook(() => useTaskTreeStore());
+    act(() => {
+      result.current.reset();
+    });
   });
 
   describe('mainList calculation', () => {
-    it('should calculate mainList from taskTree.nodes', () => {
+    it('should calculate mainList from store taskTree.nodes', () => {
       const taskTree: TaskTree = {
         nodes: [
           { id: 'node-1', label: 'Node 1' },
@@ -59,14 +62,13 @@ describe('useTaskTreeDerived', () => {
         ],
       };
 
-      const taskTreeRef = { current: null };
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+      // ✅ FASE 3: Set taskTree in store instead of passing as prop
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(getdataList).toHaveBeenCalledWith(taskTree);
       expect(result.current.mainList).toEqual([
@@ -75,64 +77,9 @@ describe('useTaskTreeDerived', () => {
       ]);
     });
 
-    it('should use taskTreeRef.current when taskTree is null', () => {
-      const taskTreeRef = {
-        current: {
-          nodes: [
-            { id: 'node-1', label: 'Node 1' },
-          ],
-        },
-      };
-
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree: null,
-          taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
-
-      expect(getdataList).toHaveBeenCalledWith(taskTreeRef.current);
-      expect(result.current.mainList).toEqual([
-        { id: 'node-1', label: 'Node 1' },
-      ]);
-    });
-
-    it('should prefer taskTree over taskTreeRef.current', () => {
-      const taskTree: TaskTree = {
-        nodes: [{ id: 'node-from-prop', label: 'From Prop' }],
-      };
-
-      const taskTreeRef = {
-        current: {
-          nodes: [{ id: 'node-from-ref', label: 'From Ref' }],
-        },
-      };
-
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
-
-      expect(getdataList).toHaveBeenCalledWith(taskTree);
-      expect(result.current.mainList).toEqual([
-        { id: 'node-from-prop', label: 'From Prop' },
-      ]);
-    });
-
-    it('should return empty array when both taskTree and taskTreeRef.current are null', () => {
-      const taskTreeRef = { current: null };
-
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree: null,
-          taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+    it('should return empty array when store taskTree is null', () => {
+      // ✅ FASE 3: Store is already null (reset in beforeEach)
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.mainList).toEqual([]);
     });
@@ -142,13 +89,13 @@ describe('useTaskTreeDerived', () => {
         nodes: [],
       };
 
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+      // ✅ FASE 3: Set taskTree in store
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.mainList).toEqual([]);
     });
@@ -163,13 +110,13 @@ describe('useTaskTreeDerived', () => {
         ],
       };
 
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+      // ✅ FASE 3: Set taskTree in store
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.mainList).toEqual([
         { id: 'node-1', label: 'Node 1' },
@@ -184,13 +131,13 @@ describe('useTaskTreeDerived', () => {
         nodes: [],
       };
 
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+      // ✅ FASE 3: Set taskTree in store
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.isAggregatedAtomic).toBe(false);
     });
@@ -200,13 +147,13 @@ describe('useTaskTreeDerived', () => {
         nodes: [{ id: 'node-1', label: 'Node 1' }],
       };
 
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+      // ✅ FASE 3: Set taskTree in store
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.isAggregatedAtomic).toBe(false);
     });
@@ -219,115 +166,94 @@ describe('useTaskTreeDerived', () => {
         ],
       };
 
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+      // ✅ FASE 3: Set taskTree in store
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.isAggregatedAtomic).toBe(true);
     });
 
     it('should update when mainList changes from 1 to 2 items', () => {
-      const taskTreeRef = {
-        current: {
-          nodes: [{ id: 'node-1', label: 'Node 1' }],
-        },
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+
+      // Start with 1 node
+      const taskTree1: TaskTree = {
+        nodes: [{ id: 'node-1', label: 'Node 1' }],
       };
 
-      const { result, rerender } = renderHook(
-        ({ taskTree }) =>
-          useTaskTreeDerived({
-            taskTree,
-            taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-            taskTreeVersion: 0,
-          }),
-        {
-          initialProps: {
-            taskTree: null as TaskTree | null,
-          },
-        }
-      );
+      act(() => {
+        storeResult.current.setTaskTree(taskTree1);
+      });
+
+      const { result, rerender } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.isAggregatedAtomic).toBe(false);
 
-      // Update taskTreeRef to have 2 nodes
-      taskTreeRef.current = {
+      // Update to 2 nodes
+      const taskTree2: TaskTree = {
         nodes: [
           { id: 'node-1', label: 'Node 1' },
           { id: 'node-2', label: 'Node 2' },
         ],
       };
 
-      rerender({ taskTree: null });
-
-      // Note: mainList depends on taskTree.label and taskTree.nodes.length
-      // Since we're passing null, it uses taskTreeRef.current
-      // But the memoization depends on taskTree?.nodes?.length, so we need to change that
-      rerender({
-        taskTree: {
-          nodes: [
-            { id: 'node-1', label: 'Node 1' },
-            { id: 'node-2', label: 'Node 2' },
-          ],
-        } as TaskTree,
+      act(() => {
+        storeResult.current.setTaskTree(taskTree2);
       });
+
+      // ✅ FASE 3: Force re-render by incrementing version
+      act(() => {
+        storeResult.current.incrementVersion();
+      });
+
+      rerender();
 
       expect(result.current.isAggregatedAtomic).toBe(true);
     });
   });
 
   describe('introduction', () => {
-    it('should return introduction from taskTreeRef.current', () => {
+    it('should return introduction from store taskTree', () => {
       const introduction = { type: 'introduction', escalations: [] };
-      const taskTreeRef = {
-        current: {
-          nodes: [],
-          introduction,
-        },
+      const taskTree: TaskTree = {
+        nodes: [],
+        introduction,
       };
 
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree: null,
-          taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+      // ✅ FASE 3: Set taskTree in store
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.introduction).toEqual(introduction);
     });
 
-    it('should return null when taskTreeRef.current has no introduction', () => {
-      const taskTreeRef = {
-        current: {
-          nodes: [],
-        },
+    it('should return null when store taskTree has no introduction', () => {
+      const taskTree: TaskTree = {
+        nodes: [],
       };
 
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree: null,
-          taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+      // ✅ FASE 3: Set taskTree in store
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.introduction).toBeNull();
     });
 
-    it('should return null when taskTreeRef.current is null', () => {
-      const taskTreeRef = { current: null };
-
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree: null,
-          taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+    it('should return null when store taskTree is null', () => {
+      // ✅ FASE 3: Store is already null (reset in beforeEach)
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.introduction).toBeNull();
     });
@@ -336,68 +262,38 @@ describe('useTaskTreeDerived', () => {
       const introduction1 = { type: 'introduction', escalations: [] };
       const introduction2 = { type: 'introduction', escalations: [{ tasks: [] }] };
 
-      const taskTreeRef = {
-        current: {
-          nodes: [],
-          introduction: introduction1,
-        },
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+
+      // Set initial introduction
+      const taskTree1: TaskTree = {
+        nodes: [],
+        introduction: introduction1,
       };
 
-      const { result, rerender } = renderHook(
-        ({ taskTreeVersion }) =>
-          useTaskTreeDerived({
-            taskTree: null,
-            taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-            taskTreeVersion,
-          }),
-        {
-          initialProps: { taskTreeVersion: 0 },
-        }
-      );
-
-      expect(result.current.introduction).toEqual(introduction1);
-
-      // Update introduction in ref
-      taskTreeRef.current.introduction = introduction2;
-
-      // Update taskTreeVersion to trigger recalculation
-      rerender({ taskTreeVersion: 1 });
-
-      expect(result.current.introduction).toEqual(introduction2);
-    });
-
-    it('should update when taskTree.introduction changes', () => {
-      const introduction1 = { type: 'introduction', escalations: [] };
-      const introduction2 = { type: 'introduction', escalations: [{ tasks: [] }] };
-
-      const taskTreeRef = {
-        current: {
-          nodes: [],
-          introduction: introduction1,
-        },
-      };
-
-      const { result, rerender } = renderHook(
-        ({ taskTree }) =>
-          useTaskTreeDerived({
-            taskTree,
-            taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-            taskTreeVersion: 0,
-          }),
-        {
-          initialProps: {
-            taskTree: { nodes: [], introduction: introduction1 } as TaskTree,
-          },
-        }
-      );
-
-      expect(result.current.introduction).toEqual(introduction1);
-
-      // Update both taskTree.introduction (for memoization key) and taskTreeRef.current.introduction (for actual value)
-      taskTreeRef.current.introduction = introduction2;
-      rerender({
-        taskTree: { nodes: [], introduction: introduction2 } as TaskTree,
+      act(() => {
+        storeResult.current.setTaskTree(taskTree1);
       });
+
+      const { result, rerender } = renderHook(() => useTaskTreeDerived());
+
+      expect(result.current.introduction).toEqual(introduction1);
+
+      // Update introduction
+      const taskTree2: TaskTree = {
+        nodes: [],
+        introduction: introduction2,
+      };
+
+      act(() => {
+        storeResult.current.setTaskTree(taskTree2);
+      });
+
+      // ✅ FASE 3: Force re-render by incrementing version
+      act(() => {
+        storeResult.current.incrementVersion();
+      });
+
+      rerender();
 
       expect(result.current.introduction).toEqual(introduction2);
     });
@@ -409,21 +305,21 @@ describe('useTaskTreeDerived', () => {
         nodes: [{ id: 'node-1', label: 'Node 1' }],
       };
 
-      const { result, rerender } = renderHook(
-        ({ taskTreeVersion }) =>
-          useTaskTreeDerived({
-            taskTree,
-            taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-            taskTreeVersion,
-          }),
-        {
-          initialProps: { taskTreeVersion: 0 },
-        }
-      );
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result, rerender } = renderHook(() => useTaskTreeDerived());
 
       const initialMainList = result.current.mainList;
 
-      rerender({ taskTreeVersion: 1 });
+      // ✅ FASE 3: Increment version to trigger recalculation
+      act(() => {
+        storeResult.current.incrementVersion();
+      });
+
+      rerender();
 
       // getdataList should be called again
       expect(getdataList).toHaveBeenCalledTimes(2);
@@ -431,151 +327,54 @@ describe('useTaskTreeDerived', () => {
       expect(result.current.mainList).toEqual(initialMainList);
     });
 
-    it('should update mainList when taskTree.label changes', () => {
-      const taskTreeRef = { current: null };
-
-      const { result, rerender } = renderHook(
-        ({ taskTree }) =>
-          useTaskTreeDerived({
-            taskTree,
-            taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-            taskTreeVersion: 0,
-          }),
-        {
-          initialProps: {
-            taskTree: { nodes: [{ id: 'node-1' }], label: 'Label 1' } as TaskTree,
-          },
-        }
-      );
-
-      const initialMainList = result.current.mainList;
-
-      rerender({
-        taskTree: { nodes: [{ id: 'node-1' }], label: 'Label 2' } as TaskTree,
-      });
-
-      expect(getdataList).toHaveBeenCalledTimes(2);
-      expect(result.current.mainList).toEqual(initialMainList);
-    });
-
     it('should update mainList when taskTree.nodes.length changes', () => {
-      const { result, rerender } = renderHook(
-        ({ taskTree }) =>
-          useTaskTreeDerived({
-            taskTree,
-            taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-            taskTreeVersion: 0,
-          }),
-        {
-          initialProps: {
-            taskTree: { nodes: [{ id: 'node-1' }] } as TaskTree,
-          },
-        }
-      );
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
 
-      expect(result.current.mainList).toHaveLength(1);
-
-      rerender({
-        taskTree: {
-          nodes: [
-            { id: 'node-1' },
-            { id: 'node-2' },
-          ],
-        } as TaskTree,
-      });
-
-      expect(result.current.mainList).toHaveLength(2);
-    });
-
-    it('should update mainList when isTaskTreeLoading changes', () => {
-      const taskTree: TaskTree = {
+      const taskTree1: TaskTree = {
         nodes: [{ id: 'node-1' }],
       };
 
-      const { result, rerender } = renderHook(
-        ({ isTaskTreeLoading }) =>
-          useTaskTreeDerived({
-            taskTree,
-            taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-            taskTreeVersion: 0,
-            isTaskTreeLoading,
-          }),
-        {
-          initialProps: { isTaskTreeLoading: false },
-        }
-      );
+      act(() => {
+        storeResult.current.setTaskTree(taskTree1);
+      });
 
-      const initialMainList = result.current.mainList;
+      const { result, rerender } = renderHook(() => useTaskTreeDerived());
 
-      rerender({ isTaskTreeLoading: true });
+      expect(result.current.mainList).toHaveLength(1);
 
-      expect(getdataList).toHaveBeenCalledTimes(2);
-      expect(result.current.mainList).toEqual(initialMainList);
+      const taskTree2: TaskTree = {
+        nodes: [
+          { id: 'node-1' },
+          { id: 'node-2' },
+        ],
+      };
+
+      act(() => {
+        storeResult.current.setTaskTree(taskTree2);
+      });
+
+      // ✅ FASE 3: Force re-render by incrementing version
+      act(() => {
+        storeResult.current.incrementVersion();
+      });
+
+      rerender();
+
+      expect(result.current.mainList).toHaveLength(2);
     });
   });
 
   describe('edge cases', () => {
-    it('should handle undefined taskTree', () => {
-      const taskTreeRef = {
-        current: {
-          nodes: [{ id: 'node-1' }],
-        },
-      };
-
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree: undefined,
-          taskTreeRef: taskTreeRef as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
-
-      expect(result.current.mainList).toEqual([{ id: 'node-1' }]);
-    });
-
-    it('should handle undefined isTaskTreeLoading', () => {
-      const taskTree: TaskTree = {
-        nodes: [{ id: 'node-1' }],
-      };
-
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-          isTaskTreeLoading: undefined,
-        })
-      );
-
-      expect(result.current.mainList).toEqual([{ id: 'node-1' }]);
-    });
-
-    it('should handle undefined taskTreeVersion', () => {
-      const taskTree: TaskTree = {
-        nodes: [{ id: 'node-1' }],
-      };
-
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: undefined as any,
-        })
-      );
-
-      expect(result.current.mainList).toEqual([{ id: 'node-1' }]);
-    });
-
     it('should handle taskTree without nodes property', () => {
       const taskTree = {} as TaskTree;
 
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+      // ✅ FASE 3: Set taskTree in store
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.mainList).toEqual([]);
     });
@@ -585,13 +384,13 @@ describe('useTaskTreeDerived', () => {
         nodes: 'not-an-array',
       } as any;
 
-      const { result } = renderHook(() =>
-        useTaskTreeDerived({
-          taskTree,
-          taskTreeRef: { current: null } as React.MutableRefObject<TaskTree | null | undefined>,
-          taskTreeVersion: 0,
-        })
-      );
+      // ✅ FASE 3: Set taskTree in store
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const { result } = renderHook(() => useTaskTreeDerived());
 
       expect(result.current.mainList).toEqual([]);
     });

@@ -95,7 +95,7 @@ export function AddNode({
       value,
       valueTrimmed: value.trim(),
       hasValidation: !!validation,
-      onSave: !!onSave,
+      onAdd: !!onAdd,
     });
 
     if (!value.trim()) {

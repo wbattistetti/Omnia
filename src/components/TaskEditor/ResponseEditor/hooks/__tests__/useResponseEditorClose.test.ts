@@ -2,8 +2,9 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { useResponseEditorClose } from '@responseEditor/hooks/useResponseEditorClose';
+import { useTaskTreeStore } from '@responseEditor/core/state';
 import type { Task, TaskTree } from '@types/taskTypes';
 
 /**
@@ -37,7 +38,7 @@ vi.mock('../../../../../dock/ops', () => ({
   closeTab: vi.fn(),
 }));
 
-import { saveTaskOnEditorClose, saveTaskToRepository } from '@responseEditor/features/persistence/ResponseEditorPersistence';
+import { saveTaskOnEditorClose, saveTaskToRepository } from '@responseEditor/core/persistence/ResponseEditorPersistence';
 import { getdataList } from '@responseEditor/ddtSelectors';
 import DialogueTaskService from '@services/DialogueTaskService';
 import { closeTab } from '@dock/ops';
@@ -57,7 +58,7 @@ describe('useResponseEditorClose', () => {
     selectedNodePath: null,
     selectedRoot: false,
     task: null,
-    taskTreeRef: { current: null },
+    // ✅ FASE 3: taskTreeRef rimosso - store è single source of truth
     currentProjectId: 'proj-1',
     tabId: undefined,
     setDockTree: mockSetDockTree,
@@ -71,6 +72,12 @@ describe('useResponseEditorClose', () => {
     (DialogueTaskService.getTemplate as any).mockReturnValue(null);
     (saveTaskOnEditorClose as any).mockResolvedValue(undefined);
     (saveTaskToRepository as any).mockResolvedValue(undefined);
+
+    // ✅ FASE 3: Reset store before each test
+    const { result } = renderHook(() => useTaskTreeStore());
+    act(() => {
+      result.current.reset();
+    });
   });
 
   describe('normal close (no contract changes)', () => {
@@ -233,13 +240,16 @@ describe('useResponseEditorClose', () => {
 
       (getdataList as any).mockReturnValue([{ id: 'node-1', templateId: 'template-1' }]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
           task,
-          taskTreeRef,
         })
       );
 
@@ -269,13 +279,16 @@ describe('useResponseEditorClose', () => {
 
       (getdataList as any).mockReturnValue([{ id: 'node-1', templateId: 'template-1' }]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
           task,
-          taskTreeRef,
         })
       );
 
@@ -316,13 +329,16 @@ describe('useResponseEditorClose', () => {
 
       (getdataList as any).mockReturnValue([]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
           task,
-          taskTreeRef,
         })
       );
 
@@ -349,13 +365,16 @@ describe('useResponseEditorClose', () => {
 
       (getdataList as any).mockReturnValue([{ id: 'node-1', templateId: 'template-1' }]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
           task,
-          taskTreeRef,
         })
       );
 
@@ -380,13 +399,16 @@ describe('useResponseEditorClose', () => {
 
       (getdataList as any).mockReturnValue([{ id: 'node-1', templateId: 'template-1' }]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
           task: null,
-          taskTreeRef,
           replaceSelectedDDT: mockReplaceSelectedDDT,
         })
       );
@@ -409,13 +431,16 @@ describe('useResponseEditorClose', () => {
 
       (getdataList as any).mockReturnValue([{ id: 'node-1', templateId: 'template-1' }]);
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
           task,
-          taskTreeRef,
           replaceSelectedDDT: mockReplaceSelectedDDT,
         })
       );
@@ -448,7 +473,11 @@ describe('useResponseEditorClose', () => {
         ],
       };
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       const { result } = renderHook(() =>
         useResponseEditorClose({
@@ -456,14 +485,14 @@ describe('useResponseEditorClose', () => {
           selectedNode,
           selectedNodePath: { mainIndex: 0 },
           selectedRoot: true,
-          taskTreeRef,
         })
       );
 
       await result.current();
 
-      expect(taskTreeRef.current?.introduction).toBeDefined();
-      expect(taskTreeRef.current?.introduction?.escalations).toHaveLength(1);
+      // ✅ FASE 3: Check store instead of taskTreeRef
+      expect(storeResult.current.taskTree?.introduction).toBeDefined();
+      expect(storeResult.current.taskTree?.introduction?.escalations).toHaveLength(1);
     });
 
     it('should remove introduction when root node has no tasks', async () => {
@@ -484,7 +513,11 @@ describe('useResponseEditorClose', () => {
         ],
       };
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       const { result } = renderHook(() =>
         useResponseEditorClose({
@@ -492,13 +525,13 @@ describe('useResponseEditorClose', () => {
           selectedNode,
           selectedNodePath: { mainIndex: 0 },
           selectedRoot: true,
-          taskTreeRef,
         })
       );
 
       await result.current();
 
-      expect(taskTreeRef.current?.introduction).toBeUndefined();
+      // ✅ FASE 3: Check store instead of taskTreeRef
+      expect(storeResult.current.taskTree?.introduction).toBeUndefined();
     });
   });
 
@@ -517,7 +550,11 @@ describe('useResponseEditorClose', () => {
       (getdataList as any).mockReturnValue([{ id: 'node-1', templateId: 'template-1' }]);
       (saveTaskOnEditorClose as any).mockRejectedValue(new Error('Save failed'));
 
-      const taskTreeRef = { current: taskTree };
+      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
 
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -525,7 +562,6 @@ describe('useResponseEditorClose', () => {
         useResponseEditorClose({
           ...defaultParams,
           task,
-          taskTreeRef,
         })
       );
 
