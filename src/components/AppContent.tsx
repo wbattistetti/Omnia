@@ -58,6 +58,7 @@ import ResponseEditor from './TaskEditor/ResponseEditor'; // ✅ RINOMINATO: Act
 import NonInteractiveResponseEditor from './TaskEditor/ResponseEditor/NonInteractiveResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import { taskRepository } from '../services/TaskRepository';
 import { getTemplateId } from '../utils/taskHelpers';
+import { getNextMinor, getNextMajor, getLatestVersion, compareVersions } from '../utils/versionUtils';
 import { TaskType } from '../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, le fonti emettono direttamente TaskType enum
 import type { TaskMeta, TaskWizardMode } from './TaskEditor/EditorHost/types'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import type { TaskTree, Task } from '../types/taskTypes';
@@ -320,6 +321,58 @@ export const AppContent: React.FC<AppContentProps> = ({
     });
   }, [currentPid, projectData, pdUpdate]);
 
+  /** Clone project via API and open the new project. Payload uses projectName, version, versionQualifier, clientName, ownerCompany, ownerClient. */
+  const handleCloneAndOpen = React.useCallback(
+    async (payload: {
+      sourceProjectId: string;
+      projectName: string;
+      version: string;
+      versionQualifier: string;
+      clientName?: string | null;
+      ownerCompany?: string | null;
+      ownerClient?: string | null;
+    }) => {
+      const res = await fetch('/api/projects/clone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceProjectId: payload.sourceProjectId,
+          projectName: payload.projectName,
+          version: payload.version,
+          versionQualifier: payload.versionQualifier || 'production',
+          clientName: payload.clientName ?? null,
+          ownerCompany: payload.ownerCompany ?? null,
+          ownerClient: payload.ownerClient ?? null,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || err.message || `Clone failed: ${res.status}`);
+      }
+      const { projectId } = await res.json();
+      if (!projectId) throw new Error('Clone response missing projectId');
+      await projectManager.openProjectById(projectId);
+    },
+    [projectManager]
+  );
+
+  /** Build clone payload from current project and override version/name/etc. */
+  const buildClonePayload = React.useCallback(
+    (overrides: { projectName?: string; version: string; versionQualifier?: string; clientName?: string | null }) => {
+      if (!currentProject?.id) throw new Error('No project open');
+      return {
+        sourceProjectId: currentProject.id,
+        projectName: overrides.projectName ?? (currentProject.name || ''),
+        version: overrides.version,
+        versionQualifier: overrides.versionQualifier ?? currentProject.versionQualifier ?? 'production',
+        clientName: overrides.clientName ?? currentProject.clientName ?? null,
+        ownerCompany: (currentProject as any).ownerCompany ?? null,
+        ownerClient: (currentProject as any).ownerClient ?? null,
+      };
+    },
+    [currentProject]
+  );
+
   // Listen for TaskEditor open events (open as docking tab)
   React.useEffect(() => {
     const h = async (e: any) => {
@@ -354,7 +407,39 @@ export const AppContent: React.FC<AppContentProps> = ({
   // const [saveSuccess, setSaveSuccess] = useState(false);
   // const [saveError, setSaveError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [cloneError, setCloneError] = useState<string | null>(null);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [latestVersionInfo, setLatestVersionInfo] = useState<{ isLatest: boolean; latestVersion: string | null }>({ isLatest: true, latestVersion: null });
+  const [catalogForSaveAs, setCatalogForSaveAs] = useState<Array<{ projectName?: string; name?: string; clientName?: string; version?: string }>>([]);
+  useEffect(() => {
+    if (!currentProject?.id || !currentProject?.name) {
+      setLatestVersionInfo({ isLatest: true, latestVersion: null });
+      setCatalogForSaveAs([]);
+      return;
+    }
+    let cancelled = false;
+    ProjectService.getAllProjects()
+      .then((list) => {
+        if (cancelled) return;
+        const name = (currentProject.name || '').trim();
+        const client = (currentProject.clientName ?? '').trim();
+        const sameFamily = list.filter(
+          (p: any) => (p.projectName || p.name || '').trim() === name && (p.clientName ?? '').trim() === client
+        );
+        const versions = sameFamily.map((p: any) => (p.version || '').trim()).filter(Boolean);
+        const latest = getLatestVersion(versions);
+        const current = (currentProject.version || '1.0').trim();
+        const isLatest = latest !== null && compareVersions(current, latest) === 0;
+        setLatestVersionInfo({ isLatest, latestVersion: latest });
+        setCatalogForSaveAs(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        setLatestVersionInfo({ isLatest: true, latestVersion: null });
+        setCatalogForSaveAs([]);
+      });
+    return () => { cancelled = true; };
+  }, [currentProject?.id, currentProject?.name, currentProject?.clientName, currentProject?.version]);
+
   const [showBackendBuilder, setShowBackendBuilder] = useState(false);
   const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
   const [debuggerWidth, setDebuggerWidth] = useState(380); // Larghezza dinamica invece di fissa
@@ -698,18 +783,69 @@ export const AppContent: React.FC<AppContentProps> = ({
           {/* Toolbar a tutta larghezza */}
           <Toolbar
             onHome={() => setAppState('landing')}
+            onOpenProject={() => setAppState('landing')}
             isSaving={isCreatingProject}
             currentProject={currentProject}
             currentProjectId={currentPid || null}
+            existingProjectsForSaveAs={catalogForSaveAs}
             onCloseProject={() => {
-              // Chiudi progetto e torna alla home
               setCurrentProject(null);
               setAppState('landing');
-              // Pulisci localStorage del progetto corrente
               localStorage.removeItem('currentProjectId');
             }}
+            onSaveAs={async (payload) => {
+              if (!currentProject?.id) return;
+              setCloneError(null);
+              setIsCreatingProject(true);
+              try {
+                await handleCloneAndOpen({
+                  ...buildClonePayload({
+                    projectName: payload.name,
+                    version: payload.version,
+                    versionQualifier: payload.versionQualifier,
+                    clientName: payload.clientName ?? undefined,
+                  }),
+                });
+              } catch (e) {
+                setCloneError(e instanceof Error ? e.message : String(e));
+              } finally {
+                setIsCreatingProject(false);
+              }
+            }}
+            isLatestVersion={latestVersionInfo.isLatest}
+            latestVersion={latestVersionInfo.latestVersion}
+            onSaveAsNewMinor={currentProject?.id ? async () => {
+              setCloneError(null);
+              setIsCreatingProject(true);
+              try {
+                const newVersion = getNextMinor(currentProject.version || '1.0');
+                await handleCloneAndOpen(
+                  buildClonePayload({ version: newVersion })
+                );
+              } catch (e) {
+                setCloneError(e instanceof Error ? e.message : String(e));
+              } finally {
+                setIsCreatingProject(false);
+              }
+            } : undefined}
+            onSaveAsNewMajor={currentProject?.id ? async () => {
+              setCloneError(null);
+              setIsCreatingProject(true);
+              try {
+                const newVersion = getNextMajor(currentProject.version || '1.0');
+                await handleCloneAndOpen(
+                  buildClonePayload({ version: newVersion })
+                );
+              } catch (e) {
+                setCloneError(e instanceof Error ? e.message : String(e));
+              } finally {
+                setIsCreatingProject(false);
+              }
+            } : undefined}
+            saveError={cloneError}
             onSave={async () => {
               try {
+                setCloneError(null);
                 // show spinner in toolbar while saving
                 setIsCreatingProject(true);
                 const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();

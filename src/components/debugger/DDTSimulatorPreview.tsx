@@ -7,7 +7,7 @@ import { useDDTSimulator } from '../DialogueDataEngine/useSimulator';
 
 type Props = { currentDDT?: AssembledTaskTree };
 
-// ✅ REMOVED RUBY: Backend DDT Engine now uses VB.NET ApiServer directly (port 5000)
+// DDT runtime uses VB.NET ApiServer (port 5000).
 // Backend sempre attivo - chiama direttamente VB.NET ApiServer
 
 const demoTemplate: DDTTemplateV2 = {
@@ -35,7 +35,7 @@ const demoTemplate: DDTTemplateV2 = {
 
 export default function DDTSimulatorPreview({ currentDDT }: Props) {
   const [template, setTemplate] = useState<DDTTemplateV2>(demoTemplate);
-  // ⭐ Backend DDT sempre attivo - Ruby è l'unica fonte di verità
+  // Backend DDT uses VB.NET ApiServer.
   const useBackend = true;
   const [backendError, setBackendError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -73,7 +73,6 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
     }
   }, [currentDDT]);
 
-  // ✅ REMOVED RUBY: Backend DDT Engine now calls VB.NET ApiServer directly (port 5000)
   useEffect(() => {
     if (!useBackend || !currentDDT) return;
 
@@ -288,7 +287,6 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
     }
   }, [state, planById, useBackend]);
 
-  // ✅ REMOVED RUBY: Handle input for backend (VB.NET ApiServer on port 5000)
   const handleBackendInput = async (inputText: string) => {
     if (!sessionId || !useBackend) return;
 

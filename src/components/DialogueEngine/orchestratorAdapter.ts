@@ -30,19 +30,7 @@ export async function executeOrchestratorBackend(
   translations: Record<string, string>,
   callbacks: OrchestratorCallbacks
 ): Promise<{ sessionId: string; stop: () => void }> {
-  // ✅ REMOVED RUBY: Frontend now calls VB.NET ApiServer directly (port 5000)
   const baseUrl = 'http://localhost:5000';
-
-  // ❌ POSTEGGIATO: Logica switch backendType - non usata per ora
-  // const backendType = (() => {
-  //   try {
-  //     const stored = localStorage.getItem('omnia_backend_type');
-  //     return stored === 'vbnet' ? 'vbnet' : 'react';
-  //   } catch {
-  //     return 'react';
-  //   }
-  // })();
-  // const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
 
   let sessionId: string | null = null;
   let eventSource: EventSource | null = null;

@@ -453,20 +453,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         ddtsCount: allDDTs.length
       });
 
-      // ✅ REMOVED RUBY: Frontend now calls VB.NET ApiServer directly (port 5000)
-      // This eliminates the unnecessary proxy hop and ensures conditions are passed correctly
       const baseUrl = 'http://localhost:5000';
-
-      // ❌ POSTEGGIATO: Logica switch backendType - non usata per ora
-      // const backendType = (() => {
-      //   try {
-      //     const stored = localStorage.getItem('omnia_backend_type');
-      //     return stored === 'vbnet' ? 'vbnet' : 'react';
-      //   } catch {
-      //     return 'react';
-      //   }
-      // })();
-      // const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
 
       // Transform nodes from ReactFlow structure (data.rows) to simplified structure (rows directly)
       // VB.NET backend expects: { id, label, rows: [...] } (no data wrapper)
@@ -928,11 +915,10 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       console.log('');
       console.log('📊 [ARCHITECTURE SUMMARY]');
       console.log('');
-      console.log('✅ [COMPILATION] Location: BACKEND');
+      console.log('✅ [COMPILATION] Location: VB.NET ApiServer');
       console.log('   └─ Endpoint: POST /api/runtime/compile');
-      console.log('   └─ Compiler: backend/runtime/compiler/compiler.ts');
       console.log('   └─ Status: COMPLETED');
-      console.log('   └─ CompiledBy:', compileData.compiledBy || 'BACKEND_RUNTIME');
+      console.log('   └─ CompiledBy:', compileData.compiledBy || 'VB.NET');
       console.log('   └─ TaskGroups:', compileData.taskGroups?.length || 0);
       console.log('   └─ EntryTaskGroupId:', compileData.entryTaskGroupId);
       console.log('');
@@ -949,21 +935,19 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       })();
 
       if (useBackendOrchestrator) {
-        console.log('✅ [ORCHESTRATOR] Location: BACKEND');
+        console.log('✅ [ORCHESTRATOR] Location: VB.NET ApiServer');
         console.log('   └─ Endpoint: POST /api/runtime/orchestrator/session/start');
-        console.log('   └─ Engine: backend/runtime/orchestrator/engine.ts');
         console.log('   └─ Communication: SSE (Server-Sent Events)');
         console.log('   └─ Status: USING BACKEND ✅');
         console.log('');
-        console.log('✅ [DDT ENGINE] Location: BACKEND');
+        console.log('✅ [DDT ENGINE] Location: VB.NET ApiServer');
         console.log('   └─ Endpoint: POST /api/runtime/ddt/session/start');
-        console.log('   └─ Engine: backend/runtime/ddt/ddtEngine.ts');
         console.log('   └─ Called: When GetData task executes');
         console.log('');
         console.log('📝 [CURRENT STATE]');
-        console.log('   • Compilation: BACKEND ✅');
-        console.log('   • Orchestrator: BACKEND ✅');
-        console.log('   • DDT Engine: BACKEND ✅');
+        console.log('   • Compilation: VB.NET ✅');
+        console.log('   • Orchestrator: VB.NET ✅');
+        console.log('   • DDT Engine: VB.NET ✅');
         console.log('═══════════════════════════════════════════════════════════════════════════');
 
         // Use backend orchestrator via SSE

@@ -723,7 +723,7 @@ export class DialogueTaskService {
             ...(existing.constraints && { constraints: existing.constraints }),
             ...(existing.steps && { steps: existing.steps }),
           };
-          
+
           // ✅ CRITICAL: Normalize engine.enabled after merge
           if (merged.dataContract?.engines && Array.isArray(merged.dataContract.engines)) {
             merged.dataContract.engines = merged.dataContract.engines.map((engine: any) => {
@@ -733,7 +733,7 @@ export class DialogueTaskService {
               return engine;
             });
           }
-          
+
           this.cache[existingIdx] = merged;
 
           // ✅ DEEP LOG: Verify merge result
@@ -757,7 +757,7 @@ export class DialogueTaskService {
         } else {
           // Normal merge: preserve source, update other fields
           const merged = existingSource ? { ...template, source: existingSource } : template;
-          
+
           // ✅ CRITICAL: Normalize engine.enabled after merge
           if (merged.dataContract?.engines && Array.isArray(merged.dataContract.engines)) {
             merged.dataContract.engines = merged.dataContract.engines.map((engine: any) => {
@@ -767,7 +767,7 @@ export class DialogueTaskService {
               return engine;
             });
           }
-          
+
           this.cache[existingIdx] = merged;
 
           // ✅ DEEP LOG: Verify merge result

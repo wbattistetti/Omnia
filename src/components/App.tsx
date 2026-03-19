@@ -14,7 +14,6 @@ import { TaskEditorProvider } from './TaskEditor/EditorHost/TaskEditorContext'; 
 import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
 import { AIProviderProvider } from '../context/AIProviderContext';
 import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext';
-import { BackendTypeProvider } from '../context/BackendTypeContext';
 import { CompilationErrorsProvider } from '../context/CompilationErrorsContext';
 import { FlowchartStateProvider } from '../context/FlowchartStateContext';
 import { TypeTemplateService } from '../services/TypeTemplateService';
@@ -164,13 +163,11 @@ export default function App() {
                     <TaskTreeManagerProvider>
                       <TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
                         <InMemoryConditionsProvider>
-                          <BackendTypeProvider>
                             <CompilationErrorsProvider>
                               <FlowchartStateProvider>
                                 <AppInner />
                               </FlowchartStateProvider>
                             </CompilationErrorsProvider>
-                          </BackendTypeProvider>
                         </InMemoryConditionsProvider>
                       </TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
                     </TaskTreeManagerProvider>

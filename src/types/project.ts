@@ -72,6 +72,8 @@ export type ProjectData = {
   clientName?: string;
   ownerCompany?: string; // Owner del progetto lato azienda (chi lo costruisce)
   ownerClient?: string; // Owner del progetto lato cliente (chi lo commissiona)
+  version?: string; // es. "1.0"
+  versionQualifier?: 'alpha' | 'beta' | 'rc' | 'production';
   taskTemplates?: { id?: string; name?: string; items: TaskTemplateItem[] }[];
   userTasks?: any[]; // ✅ RINOMINATO: userActs → userTasks
   backendActions?: any[];

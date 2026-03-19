@@ -26,7 +26,7 @@ function getUseNewEngine(): boolean {
   }
 }
 
-// ✅ REMOVED RUBY: Backend DDT Engine now uses VB.NET ApiServer directly (port 5000)
+// DDT runtime uses VB.NET ApiServer (port 5000).
 // Rimossa funzione getUseBackendDDTEngine() - backend sempre attivo
 
 /**
@@ -51,7 +51,6 @@ async function executeGetDataHierarchicalBackend(
   let eventSource: EventSource | null = null;
 
   try {
-    // ✅ REMOVED RUBY: DDT Engine now calls VB.NET ApiServer directly (port 5000)
     const baseUrl = 'http://localhost:5000';
 
     // 1. Crea sessione backend
@@ -93,7 +92,6 @@ async function executeGetDataHierarchicalBackend(
         }
         if (sessionId) {
           try {
-            // ✅ REMOVED RUBY: Delete session via VB.NET ApiServer (port 5000)
             const baseUrl = 'http://localhost:5000';
             await fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}`, {
               method: 'DELETE'
@@ -105,7 +103,6 @@ async function executeGetDataHierarchicalBackend(
         }
       };
 
-      // ✅ REMOVED RUBY: Open SSE stream via VB.NET ApiServer (port 5000)
       const baseUrl = 'http://localhost:5000';
 
       console.log('[DDT ENGINE] Opening SSE stream...');
@@ -171,7 +168,6 @@ async function executeGetDataHierarchicalBackend(
                 valueLength: inputValue.length
               });
 
-              // ✅ REMOVED RUBY: Send input via VB.NET ApiServer (port 5000)
               const baseUrl = 'http://localhost:5000';
 
               const inputResponse = await fetch(
@@ -325,7 +321,7 @@ export async function executeGetDataHierarchicalNew(
   callbacks: DDTNavigatorCallbacks
 ): Promise<RetrieveResult> {
   // ✅ Check se usare backend
-  // ✅ REMOVED RUBY: Backend DDT Engine now uses VB.NET ApiServer directly (port 5000)
+  // DDT runtime uses VB.NET ApiServer (port 5000).
   if (true) {
     return executeGetDataHierarchicalBackend(ddt, state, callbacks);
   }

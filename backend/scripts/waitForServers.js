@@ -15,7 +15,6 @@ const servers = [
     healthCheck: 'http://localhost:8000/api/ping', // Usa /api/ping come startPythonService.js
     port: 8000
   },
-  // ✅ REMOVED: Ruby backend (port 3101) - Frontend now calls VB.NET ApiServer directly (port 5000)
 ];
 
 const maxAttempts = 60; // 60 seconds total

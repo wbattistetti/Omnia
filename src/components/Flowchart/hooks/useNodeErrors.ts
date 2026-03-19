@@ -1,4 +1,4 @@
-// Hook to get compilation errors for a specific node
+// Hook to get compilation errors for a specific nodevai
 // Uses error index for performance
 
 import { useMemo } from 'react';

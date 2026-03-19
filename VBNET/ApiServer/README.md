@@ -102,7 +102,6 @@ echo '{"command":"compile-flow","data":{...}}' | ApiServer.exe
 
 ## Note
 
-- Usato dal server Ruby per esporre API REST
 - Tutta la comunicazione è via JSON (stdin/stdout)
 - Gli errori vengono scritti su stdout come JSON con `success: false`
 

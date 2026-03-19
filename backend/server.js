@@ -521,6 +521,13 @@ function makeProjectId() {
   return `proj_${randomId(10)}`;
 }
 
+/** Version format: major.minor (e.g. 1.0, 2.3). Validated with regex. */
+const VERSION_PATTERN = /^\d+\.\d+$/;
+function isValidVersion(version) {
+  if (typeof version !== 'string' || !version.trim()) return false;
+  return VERSION_PATTERN.test(version.trim());
+}
+
 async function getProjectCatalogRecord(mongoClient, projectId) {
   const db = mongoClient.db(dbProjects);
   const rec = await db.collection('projects_catalog').findOne({ $or: [{ _id: projectId }, { projectId }] });
@@ -1159,10 +1166,13 @@ app.post('/api/projects/bootstrap', async (req, res) => {
   const ownerCompanyFinal = ownerCompany && ownerCompany.length > 0 ? ownerCompany : null;
   const ownerClient = payload.ownerClient ? String(payload.ownerClient).trim() : null;
   const ownerClientFinal = ownerClient && ownerClient.length > 0 ? ownerClient : null;
-  const version = payload.version || '1.0';
+  const version = (payload.version || '1.0').trim();
   const versionQualifier = payload.versionQualifier || 'alpha';
   if (!projectName) {
     return res.status(400).json({ error: 'projectName_required' });
+  }
+  if (!isValidVersion(version)) {
+    return res.status(400).json({ error: 'invalid_version', message: 'Version must be major.minor (e.g. 1.0, 2.3)' });
   }
 
   console.log('[Bootstrap] 🚀 START - Creating project:', { projectName, clientName, industry, language });
@@ -6136,6 +6146,157 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
   }
 });
 
+// -----------------------------
+// POST /api/projects/clone - Create new project by cloning source (new version)
+// -----------------------------
+app.post('/api/projects/clone', async (req, res) => {
+  const payload = req.body || {};
+  const sourceProjectId = payload.sourceProjectId;
+  const projectName = (payload.projectName || '').trim();
+  const version = (payload.version || '1.0').trim();
+  const versionQualifier = payload.versionQualifier || 'production';
+  const clientName = payload.clientName ? String(payload.clientName).trim() : null;
+  const clientNameFinal = clientName && clientName.length > 0 ? clientName : null;
+  const ownerCompany = payload.ownerCompany ? String(payload.ownerCompany).trim() : null;
+  const ownerCompanyFinal = ownerCompany && ownerCompany.length > 0 ? ownerCompany : null;
+  const ownerClient = payload.ownerClient ? String(payload.ownerClient).trim() : null;
+  const ownerClientFinal = ownerClient && ownerClient.length > 0 ? ownerClient : null;
+
+  if (!sourceProjectId) {
+    return res.status(400).json({ error: 'sourceProjectId_required' });
+  }
+  if (!projectName) {
+    return res.status(400).json({ error: 'projectName_required' });
+  }
+  if (!isValidVersion(version)) {
+    return res.status(400).json({ error: 'invalid_version', message: 'Version must be major.minor (e.g. 1.0, 2.3)' });
+  }
+
+  try {
+    const client = await getMongoClient();
+    const catalogDb = client.db(dbProjects);
+    const cat = catalogDb.collection('projects_catalog');
+
+    const sourceRec = await getProjectCatalogRecord(client, sourceProjectId);
+    if (!sourceRec || !sourceRec.dbName) {
+      return res.status(404).json({ error: 'source_project_not_found' });
+    }
+
+    const sourceDb = client.db(sourceRec.dbName);
+    const newProjectId = makeProjectId();
+    const newDbName = makeProjectDbName(clientNameFinal, projectName, version);
+    const now = new Date();
+
+    const catalogDoc = {
+      _id: newProjectId,
+      projectId: newProjectId,
+      tenantId: sourceRec.tenantId || null,
+      clientName: clientNameFinal,
+      projectName,
+      clientSlug: clientNameFinal ? slugifyName(clientNameFinal) : null,
+      projectSlug: slugifyName(projectName),
+      industry: sourceRec.industry || null,
+      language: sourceRec.language || 'pt',
+      ownerCompany: ownerCompanyFinal,
+      ownerClient: ownerClientFinal,
+      version,
+      versionQualifier,
+      dbName: newDbName,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now
+    };
+    await cat.insertOne(catalogDoc);
+
+    const newDb = client.db(newDbName);
+
+    await newDb.collection('project_meta').updateOne(
+      { _id: 'meta' },
+      {
+        $set: {
+          projectId: newProjectId,
+          tenantId: sourceRec.tenantId || null,
+          clientName: clientNameFinal,
+          projectName,
+          clientSlug: clientNameFinal ? slugifyName(clientNameFinal) : null,
+          projectSlug: slugifyName(projectName),
+          industry: sourceRec.industry || null,
+          language: sourceRec.language || 'pt',
+          ownerCompany: ownerCompanyFinal,
+          ownerClient: ownerClientFinal,
+          version,
+          versionQualifier,
+          updatedAt: now
+        },
+        $setOnInsert: { createdAt: now }
+      },
+      { upsert: true }
+    );
+
+    /** Strip undefined values so MongoDB driver does not throw on insert. Keep Date, ObjectId, etc. */
+    function stripUndefined(obj) {
+      if (obj === null || typeof obj !== 'object') return obj;
+      if (Array.isArray(obj)) return obj.map(stripUndefined);
+      if (Object.prototype.toString.call(obj) !== '[object Object]') return obj; // keep Date, ObjectId, etc.
+      const out = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (v === undefined) continue;
+        out[k] = (typeof v === 'object' && v !== null && Object.prototype.toString.call(v) === '[object Object]')
+          ? stripUndefined(v) : v;
+      }
+      return out;
+    }
+
+    const copyCollection = async (collName, transform) => {
+      let list;
+      try {
+        list = await sourceDb.collection(collName).find({}).toArray();
+      } catch (findErr) {
+        console.warn('[Clone] Collection not found or error reading:', collName, findErr.message);
+        return;
+      }
+      if (list.length === 0) return;
+      const docs = transform ? list.map(transform) : list;
+      const sanitized = docs.map((d) => stripUndefined(d));
+      await newDb.collection(collName).insertMany(sanitized);
+    };
+
+    const collectionsToCopy = [
+      ['tasks', (doc) => { const { _id, ...rest } = doc; return { ...rest, projectId: newProjectId }; }],
+      ['flow_nodes', null],
+      ['flow_edges', null],
+      ['project_conditions', null],
+      ['Translations', null],
+      ['task_heuristics', null],
+      ['variables', (doc) => { const { _id, ...rest } = doc; return { ...rest, projectId: newProjectId }; }]
+    ];
+    for (const [collName, transform] of collectionsToCopy) {
+      try {
+        await copyCollection(collName, transform);
+      } catch (err) {
+        console.error('[Clone] Failed to copy collection:', collName, err);
+        throw new Error(`Clone failed at collection "${collName}": ${err.message}`);
+      }
+    }
+    try {
+      await copyCollection('embeddings', (doc) => {
+        const { _id, ...rest } = doc;
+        if (rest.projectId !== undefined) rest.projectId = newProjectId;
+        return rest;
+      });
+    } catch (embErr) {
+      console.warn('[Clone] embeddings collection missing or error:', embErr.message);
+    }
+
+    console.log('[Clone] ✅ Project cloned', { sourceProjectId, newProjectId, version });
+    res.json({ projectId: newProjectId });
+  } catch (e) {
+    const msg = e?.message || String(e);
+    console.error('[Clone] ERROR', msg, e?.stack);
+    res.status(500).json({ error: msg });
+  }
+});
+
 // ✅ Funzione per precaricare tutte le cache del server
 async function preloadAllServerCaches() {
   console.log('[SERVER] 🚀 Precaricando tutte le cache del server...');
@@ -6171,1009 +6332,8 @@ preloadAllServerCaches();
   }
 })();
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🚀 RUNTIME API - Flow Compiler Endpoint
-// ═══════════════════════════════════════════════════════════════════════════
+// (Node/TypeScript runtime dialogue engine removed - VB.NET ApiServer is the only backend)
 
-app.post('/api/runtime/compile', async (req, res) => {
-  try {
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('🚀 [API] POST /api/runtime/compile - REQUEST RECEIVED');
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-
-    const { nodes, edges, tasks, ddts, projectId, translations } = req.body;
-
-    console.log('[API] Compile request:', {
-      nodesCount: nodes?.length || 0,
-      edgesCount: edges?.length || 0,
-      tasksCount: tasks?.length || 0,
-      ddtsCount: ddts?.length || 0,
-      projectId,
-      translationsCount: translations ? Object.keys(translations).length : 0
-    });
-
-    // ✅ Translations come from frontend (already in memory from ProjectTranslationsContext)
-    // Frontend passes translations table directly - no database access needed
-    // Runtime will do lookup at execution time instead of "baking" translations during compilation
-    const projectTranslations = translations || {};
-
-    // Import compiler (TypeScript - using ts-node)
-    let compileFlow;
-    try {
-      // Register ts-node to execute TypeScript
-      require('ts-node').register({
-        transpileOnly: true,
-        compilerOptions: {
-          module: 'commonjs',
-          esModuleInterop: true,
-          resolveJsonModule: true
-        }
-      });
-
-      // Import TypeScript compiler
-      const compilerModule = require('./runtime/compiler/compiler.ts');
-      compileFlow = compilerModule.compileFlow;
-
-      if (!compileFlow) {
-        throw new Error('compileFlow function not found in compiler module');
-      }
-
-      console.log('[API] ✅ Backend compiler loaded successfully');
-    } catch (err) {
-      console.error('[API] ❌ Error loading compiler:', err);
-      return res.status(500).json({
-        error: 'Compiler not available',
-        message: 'Failed to load TypeScript compiler. Make sure ts-node is installed.',
-        details: err.message,
-        stack: err.stack
-      });
-    }
-
-    // Create getTask function from tasks array
-    const taskMap = new Map();
-    if (tasks && Array.isArray(tasks)) {
-      tasks.forEach(task => {
-        taskMap.set(task.id, task);
-      });
-    }
-
-    const getTask = (taskId) => {
-      return taskMap.get(taskId) || null;
-    };
-
-    // Create getDDT function from ddts array
-    const ddtMap = new Map();
-    if (ddts && Array.isArray(ddts)) {
-      ddts.forEach(ddt => {
-        if (ddt.id) {
-          ddtMap.set(ddt.id, ddt);
-        }
-      });
-    }
-
-    const getDDT = (taskId) => {
-      // Find DDT associated with task
-      const task = getTask(taskId);
-      // ✅ DDT fields directly on task (no value wrapper)
-      if (task && task.mainData && task.mainData.length > 0) {
-        return {
-          label: task.label,
-          mainData: task.mainData,
-          steps: task.steps,
-          constraints: task.constraints,
-          examples: task.examples
-        };
-      }
-      // Try to find by taskId in ddts
-      return ddtMap.get(taskId) || null;
-    };
-
-    // Call compiler
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('🔧 [BACKEND] Flow Compiler - EXECUTING ON BACKEND');
-    console.log('📍 Location: BACKEND (Node.js server)');
-    console.log('🔨 Compiler: backend/runtime/compiler/compiler.ts');
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('[API] Calling backend compiler...');
-    const result = compileFlow(nodes, edges, {
-      getTask,
-      getDDT,
-      translations: projectTranslations // ✅ Pass translation table to compiler
-    });
-
-    // Convert Map to object for JSON serialization
-    const taskMapObj = {};
-    result.taskMap.forEach((value, key) => {
-      taskMapObj[key] = value;
-    });
-
-    const response = {
-      tasks: result.tasks,
-      entryTaskId: result.entryTaskId,
-      taskMap: taskMapObj,
-      translations: result.translations || {}, // ✅ Include translation table for runtime lookup
-      compiledBy: 'BACKEND_RUNTIME', // ✅ Flag to confirm backend compiler was used
-      timestamp: new Date().toISOString()
-    };
-
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('✅ [BACKEND] Flow Compiler - COMPLETED');
-    console.log('📍 Execution: BACKEND (Node.js server)');
-    console.log('✅ Compilation: SUCCESS');
-    console.log('[API] Compile result:', {
-      tasksCount: result.tasks.length,
-      entryTaskId: result.entryTaskId,
-      translationsCount: Object.keys(result.translations || {}).length,
-      compiledBy: 'BACKEND_RUNTIME',
-      timestamp: response.timestamp
-    });
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-
-    res.json(response);
-  } catch (error) {
-    console.error('═══════════════════════════════════════════════════════════════════════════');
-    console.error('❌ [API] POST /api/runtime/compile - ERROR');
-    console.error('[API] Error:', error);
-    console.error('═══════════════════════════════════════════════════════════════════════════');
-    res.status(500).json({
-      error: 'Compilation failed',
-      message: error.message,
-      stack: error.stack
-    });
-  }
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🚀 RUNTIME API - DDT Engine Endpoint
-// ═══════════════════════════════════════════════════════════════════════════
-
-app.post('/api/runtime/ddt/run', async (req, res) => {
-  try {
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('🚀 [API] POST /api/runtime/ddt/run - REQUEST RECEIVED');
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-
-    const { ddtInstance, userInputs, translations, limits } = req.body;
-
-    console.log('[API] DDT run request:', {
-      ddtId: ddtInstance?.id,
-      ddtLabel: ddtInstance?.label,
-      userInputsCount: userInputs?.length || 0,
-      hasTranslations: !!translations,
-      timestamp: new Date().toISOString()
-    });
-
-    if (!ddtInstance) {
-      return res.status(400).json({
-        error: 'Missing ddtInstance',
-        message: 'ddtInstance is required'
-      });
-    }
-
-    // Import DDT Engine (TypeScript - using ts-node)
-    let runDDT;
-    try {
-      // Register ts-node if not already registered
-      try {
-        require('ts-node').register({
-          transpileOnly: true,
-          compilerOptions: {
-            module: 'commonjs',
-            esModuleInterop: true,
-            resolveJsonModule: true
-          }
-        });
-      } catch (e) {
-        // Already registered, ignore
-      }
-
-      // Import TypeScript DDT Engine
-      const ddtModule = require('./runtime/ddt/ddtEngine.ts');
-      runDDT = ddtModule.runDDT;
-
-      if (!runDDT) {
-        throw new Error('runDDT function not found in DDT engine module');
-      }
-
-      console.log('[API] ✅ Backend DDT Engine loaded successfully');
-    } catch (err) {
-      console.error('[API] ❌ Error loading DDT Engine:', err);
-      return res.status(500).json({
-        error: 'DDT Engine not available',
-        message: 'Failed to load TypeScript DDT Engine. Make sure ts-node is installed.',
-        details: err.message,
-        stack: err.stack
-      });
-    }
-
-    // Prepare callbacks for DDT Engine
-    const messages = [];
-    const inputQueue = userInputs || [];
-    let inputIndex = 0;
-
-    const callbacks = {
-      onMessage: (text, stepType, escalationNumber) => {
-        messages.push({
-          text,
-          stepType: stepType || 'message',
-          escalationNumber,
-          timestamp: new Date().toISOString()
-        });
-        console.log('[API][DDT] Message:', { text: text?.substring(0, 50), stepType, escalationNumber });
-      },
-      onGetRetrieveEvent: async (nodeId, ddt) => {
-        // Get next input from queue
-        if (inputIndex < inputQueue.length) {
-          const input = inputQueue[inputIndex++];
-          console.log('[API][DDT] Retrieving input:', { nodeId, input: input?.substring(0, 50) });
-          return { type: 'match', value: input };
-        } else {
-          // No more inputs - return noInput
-          console.log('[API][DDT] No more inputs available');
-          return { type: 'noInput' };
-        }
-      },
-      onProcessInput: async (input, node) => {
-        // Simple processing - in real scenario, this would use NLP contracts
-        console.log('[API][DDT] Processing input:', { input: input?.substring(0, 50), nodeId: node?.id });
-        return {
-          status: 'match',
-          value: input
-        };
-      },
-      onUserInputProcessed: (input, matchStatus, extractedValues) => {
-        console.log('[API][DDT] Input processed:', { input: input?.substring(0, 50), matchStatus });
-      },
-      translations: translations || {}
-    };
-
-    // Run DDT Engine
-    console.log('[API] Calling backend DDT Engine...');
-    const result = await runDDT(ddtInstance, callbacks, limits);
-
-    const response = {
-      success: result.success,
-      value: result.value,
-      messages: messages,
-      executedBy: 'BACKEND_RUNTIME', // ✅ Flag to confirm backend DDT Engine was used
-      timestamp: new Date().toISOString()
-    };
-
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('✅ [API] POST /api/runtime/ddt/run - COMPLETED');
-    console.log('[API] DDT result:', {
-      success: result.success,
-      messagesCount: messages.length,
-      memoryKeys: result.value ? Object.keys(result.value) : [],
-      executedBy: 'BACKEND_RUNTIME',
-      timestamp: response.timestamp
-    });
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-
-    res.json(response);
-  } catch (error) {
-    console.error('═══════════════════════════════════════════════════════════════════════════');
-    console.error('❌ [API] POST /api/runtime/ddt/run - ERROR');
-    console.error('[API] Error:', error);
-    console.error('═══════════════════════════════════════════════════════════════════════════');
-    res.status(500).json({
-      error: 'DDT execution failed',
-      message: error.message,
-      stack: error.stack
-    });
-  }
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🚀 RUNTIME API - DDT Engine Session Endpoints (Interactive)
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Import DDT Session Manager
-let DDTSessionManager;
-try {
-  require('ts-node').register({
-    transpileOnly: true,
-    compilerOptions: {
-      module: 'commonjs',
-      esModuleInterop: true,
-      resolveJsonModule: true
-    }
-  });
-  const sessionModule = require('./runtime/session/DDTSessionManager.ts');
-  DDTSessionManager = sessionModule.ddtSessionManager;
-  console.log('[SERVER] ✅ DDT Session Manager loaded successfully');
-} catch (err) {
-  console.warn('[SERVER] ⚠️ DDT Session Manager not available:', err.message);
-}
-
-// POST /api/runtime/ddt/session/start - Start a new DDT session
-app.post('/api/runtime/ddt/session/start', async (req, res) => {
-  try {
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('🚀 [API] POST /api/runtime/ddt/session/start - REQUEST');
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-
-    const { ddtInstance, translations, limits } = req.body;
-
-    if (!ddtInstance) {
-      return res.status(400).json({
-        error: 'Missing ddtInstance',
-        message: 'ddtInstance is required'
-      });
-    }
-
-    if (!DDTSessionManager) {
-      return res.status(500).json({
-        error: 'DDT Session Manager not available',
-        message: 'Failed to load DDT Session Manager'
-      });
-    }
-
-    const sessionId = DDTSessionManager.createSession(
-      ddtInstance,
-      translations || {},
-      limits || {}
-    );
-
-    console.log('✅ [API] POST /api/runtime/ddt/session/start - Session created:', { sessionId });
-    res.json({
-      sessionId,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ [API] POST /api/runtime/ddt/session/start - ERROR', error);
-    res.status(500).json({
-      error: 'Failed to create session',
-      message: error.message,
-      stack: error.stack
-    });
-  }
-});
-
-// POST /api/runtime/ddt/session/:id/input - Provide user input to session
-app.post('/api/runtime/ddt/session/:id/input', async (req, res) => {
-  try {
-    const { id: sessionId } = req.params;
-    const { input } = req.body;
-
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('📥 [API] POST /api/runtime/ddt/session/:id/input - REQUEST', {
-      sessionId,
-      inputLength: input?.length || 0
-    });
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-
-    if (!DDTSessionManager) {
-      return res.status(500).json({
-        error: 'DDT Session Manager not available'
-      });
-    }
-
-    const result = DDTSessionManager.provideInput(sessionId, input || '');
-
-    if (!result.success) {
-      console.warn('⚠️ [API] POST /api/runtime/ddt/session/:id/input - Failed:', result.error);
-      return res.status(400).json({
-        error: result.error || 'Failed to provide input'
-      });
-    }
-
-    console.log('✅ [API] POST /api/runtime/ddt/session/:id/input - Input provided');
-    res.json({
-      success: true,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ [API] POST /api/runtime/ddt/session/:id/input - ERROR', error);
-    res.status(500).json({
-      error: 'Failed to provide input',
-      message: error.message
-    });
-  }
-});
-
-// GET /api/runtime/ddt/session/:id/stream - SSE stream for real-time events
-app.get('/api/runtime/ddt/session/:id/stream', (req, res) => {
-  try {
-    const { id: sessionId } = req.params;
-
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('📡 [API] GET /api/runtime/ddt/session/:id/stream - SSE connection opened', { sessionId });
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-
-    if (!DDTSessionManager) {
-      res.status(500).write('event: error\n');
-      res.write(`data: ${JSON.stringify({ error: 'DDT Session Manager not available' })}\n\n`);
-      res.end();
-      return;
-    }
-
-    const session = DDTSessionManager.getSession(sessionId);
-    if (!session) {
-      res.status(404).write('event: error\n');
-      res.write(`data: ${JSON.stringify({ error: 'Session not found' })}\n\n`);
-      res.end();
-      return;
-    }
-
-    // Setup SSE headers
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
-
-    // Send existing messages first
-    if (session.messages.length > 0) {
-      for (const msg of session.messages) {
-        res.write(`event: message\n`);
-        res.write(`data: ${JSON.stringify(msg)}\n\n`);
-      }
-    }
-
-    // ✅ Send waitingForInput event if already waiting (handles case where event was emitted before listener registered)
-    if (session.waitingForInput) {
-      console.log('[API] 📡 Sending pending waitingForInput event to SSE client', {
-        sessionId,
-        nodeId: session.waitingForInput.nodeId
-      });
-      res.write(`event: waitingForInput\n`);
-      res.write(`data: ${JSON.stringify({ nodeId: session.waitingForInput.nodeId })}\n\n`);
-    }
-
-    // If session is already complete, send result immediately
-    if (session.result) {
-      res.write(`event: complete\n`);
-      res.write(`data: ${JSON.stringify(session.result)}\n\n`);
-      res.end();
-      return;
-    }
-
-    // Listen to events from session
-    const eventEmitter = session.eventEmitter;
-    if (!eventEmitter) {
-      res.write('event: error\n');
-      res.write(`data: ${JSON.stringify({ error: 'Session event emitter not available' })}\n\n`);
-      res.end();
-      return;
-    }
-
-    const onMessage = (msg) => {
-      if (!res.writableEnded) {
-        res.write(`event: message\n`);
-        res.write(`data: ${JSON.stringify(msg)}\n\n`);
-      }
-    };
-
-    const onWaitingForInput = (data) => {
-      if (!res.writableEnded) {
-        res.write(`event: waitingForInput\n`);
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-      }
-    };
-
-    const onComplete = (result) => {
-      if (!res.writableEnded) {
-        res.write(`event: complete\n`);
-        res.write(`data: ${JSON.stringify(result)}\n\n`);
-        res.end();
-      }
-    };
-
-    const onError = (error) => {
-      if (!res.writableEnded) {
-        res.write(`event: error\n`);
-        res.write(`data: ${JSON.stringify({ error: error.message || String(error) })}\n\n`);
-        res.end();
-      }
-    };
-
-    // Register event listeners
-    eventEmitter.on('message', onMessage);
-    eventEmitter.on('waitingForInput', onWaitingForInput);
-    eventEmitter.on('complete', onComplete);
-    eventEmitter.on('error', onError);
-
-    // Cleanup on client disconnect
-    req.on('close', () => {
-      console.log('✅ [API] GET /api/runtime/ddt/session/:id/stream - SSE connection closed', { sessionId });
-      eventEmitter.removeListener('message', onMessage);
-      eventEmitter.removeListener('waitingForInput', onWaitingForInput);
-      eventEmitter.removeListener('complete', onComplete);
-      eventEmitter.removeListener('error', onError);
-    });
-
-    // Send heartbeat every 30 seconds to keep connection alive
-    const heartbeatInterval = setInterval(() => {
-      if (!res.writableEnded) {
-        res.write(': heartbeat\n\n');
-      } else {
-        clearInterval(heartbeatInterval);
-      }
-    }, 30000);
-
-    // Clear heartbeat on close
-    req.on('close', () => {
-      clearInterval(heartbeatInterval);
-    });
-  } catch (error) {
-    console.error('❌ [API] GET /api/runtime/ddt/session/:id/stream - ERROR', error);
-    if (!res.headersSent) {
-      res.status(500).write('event: error\n');
-      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-    }
-    res.end();
-  }
-});
-
-// GET /api/runtime/ddt/session/:id/status - Get session status (kept for compatibility)
-app.get('/api/runtime/ddt/session/:id/status', async (req, res) => {
-  try {
-    const { id: sessionId } = req.params;
-    const { lastMessageIndex } = req.query;
-
-    if (!DDTSessionManager) {
-      return res.status(500).json({
-        error: 'DDT Session Manager not available'
-      });
-    }
-
-    const status = DDTSessionManager.getSessionStatus(sessionId);
-
-    if (!status.found) {
-      return res.status(404).json({
-        error: 'Session not found'
-      });
-    }
-
-    // If lastMessageIndex is provided, return only new messages
-    if (lastMessageIndex !== undefined) {
-      const lastIndex = parseInt(String(lastMessageIndex), 10);
-      const newMessages = DDTSessionManager.getNewMessages(sessionId, lastIndex);
-
-      res.json({
-        ...status.session,
-        newMessages: newMessages.messages || [],
-        hasMore: newMessages.hasMore
-      });
-    } else {
-      res.json(status.session);
-    }
-  } catch (error) {
-    console.error('❌ [API] GET /api/runtime/ddt/session/:id/status - ERROR', error);
-    res.status(500).json({
-      error: 'Failed to get session status',
-      message: error.message
-    });
-  }
-});
-
-// DELETE /api/runtime/ddt/session/:id - Delete session
-app.delete('/api/runtime/ddt/session/:id', async (req, res) => {
-  try {
-    const { id: sessionId } = req.params;
-
-    if (!DDTSessionManager) {
-      return res.status(500).json({
-        error: 'DDT Session Manager not available'
-      });
-    }
-
-    const deleted = DDTSessionManager.deleteSession(sessionId);
-
-    if (!deleted) {
-      return res.status(404).json({
-        error: 'Session not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ [API] DELETE /api/runtime/ddt/session/:id - ERROR', error);
-    res.status(500).json({
-      error: 'Failed to delete session',
-      message: error.message
-    });
-  }
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🚀 RUNTIME API - Flow Orchestrator Session Endpoints (Interactive)
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Import Orchestrator Session Manager (lazy load to avoid blocking server startup)
-let OrchestratorSessionManager;
-let orchestratorSessionManagerInstance;
-
-function loadOrchestratorSessionManager() {
-  if (OrchestratorSessionManager && orchestratorSessionManagerInstance) {
-    return { OrchestratorSessionManager, orchestratorSessionManagerInstance };
-  }
-
-  try {
-    require('ts-node').register({
-      transpileOnly: true,
-      compilerOptions: {
-        module: 'commonjs',
-        esModuleInterop: true,
-        resolveJsonModule: true
-      }
-    });
-    const orchestratorSessionModule = require('./runtime/session/OrchestratorSessionManager.ts');
-    OrchestratorSessionManager = orchestratorSessionModule.OrchestratorSessionManager;
-    orchestratorSessionManagerInstance = orchestratorSessionModule.orchestratorSessionManager || new OrchestratorSessionManager();
-    console.log('[SERVER] ✅ Orchestrator Session Manager loaded successfully');
-    return { OrchestratorSessionManager, orchestratorSessionManagerInstance };
-  } catch (err) {
-    console.warn('[SERVER] ⚠️ Orchestrator Session Manager not available:', err.message);
-    return { OrchestratorSessionManager: null, orchestratorSessionManagerInstance: null };
-  }
-}
-
-// POST /api/runtime/orchestrator/session/start - Start a new orchestrator session
-app.post('/api/runtime/orchestrator/session/start', async (req, res) => {
-  try {
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('🚀 [API] POST /api/runtime/orchestrator/session/start - REQUEST');
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-
-    const { compilationResult, tasks, ddts, translations } = req.body;
-
-    if (!compilationResult) {
-      return res.status(400).json({
-        error: 'Missing compilationResult',
-        message: 'compilationResult is required'
-      });
-    }
-
-    const { OrchestratorSessionManager: Manager, orchestratorSessionManagerInstance: instance } = loadOrchestratorSessionManager();
-    if (!Manager || !instance) {
-      return res.status(500).json({
-        error: 'Orchestrator Session Manager not available',
-        message: 'Failed to load Orchestrator Session Manager'
-      });
-    }
-
-    // Convert taskMap from object to Map if needed
-    if (compilationResult.taskMap && typeof compilationResult.taskMap === 'object') {
-      const taskMap = new Map();
-      Object.entries(compilationResult.taskMap).forEach(([key, value]) => {
-        taskMap.set(key, value);
-      });
-      compilationResult.taskMap = taskMap;
-    }
-
-    const sessionManager = orchestratorSessionManagerInstance;
-    const projectId = req.body.projectId || null;
-    const sessionId = sessionManager.createSession(
-      compilationResult,
-      tasks || [],
-      ddts || [],
-      translations || {},
-      projectId
-    );
-
-    console.log('✅ [API] POST /api/runtime/orchestrator/session/start - Session created:', { sessionId });
-    res.json({
-      sessionId,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ [API] POST /api/runtime/orchestrator/session/start - ERROR', error);
-    res.status(500).json({
-      error: 'Failed to create session',
-      message: error.message,
-      stack: error.stack
-    });
-  }
-});
-
-// POST /api/runtime/orchestrator/session/:id/input - Provide user input to session
-app.post('/api/runtime/orchestrator/session/:id/input', async (req, res) => {
-  try {
-    const { id: sessionId } = req.params;
-    const { input } = req.body;
-
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('📥 [API] POST /api/runtime/orchestrator/session/:id/input - REQUEST', {
-      sessionId,
-      inputLength: input?.length || 0
-    });
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-
-    const { OrchestratorSessionManager: Manager, orchestratorSessionManagerInstance: instance } = loadOrchestratorSessionManager();
-    if (!Manager || !instance) {
-      return res.status(500).json({
-        error: 'Orchestrator Session Manager not available'
-      });
-    }
-
-    const sessionManager = instance;
-    const result = sessionManager.provideInput(sessionId, input || '');
-
-    if (!result.success) {
-      console.warn('⚠️ [API] POST /api/runtime/orchestrator/session/:id/input - Failed:', result.error);
-      return res.status(400).json({
-        error: result.error || 'Failed to provide input'
-      });
-    }
-
-    console.log('✅ [API] POST /api/runtime/orchestrator/session/:id/input - Input provided');
-    res.json({
-      success: true,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ [API] POST /api/runtime/orchestrator/session/:id/input - ERROR', error);
-    res.status(500).json({
-      error: 'Failed to provide input',
-      message: error.message
-    });
-  }
-});
-
-// GET /api/runtime/orchestrator/session/:id/stream - SSE stream for real-time events
-app.get('/api/runtime/orchestrator/session/:id/stream', (req, res) => {
-  try {
-    const { id: sessionId } = req.params;
-
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('📡 [API] GET /api/runtime/orchestrator/session/:id/stream - SSE connection opened', { sessionId });
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-
-    const { OrchestratorSessionManager: Manager, orchestratorSessionManagerInstance: instance } = loadOrchestratorSessionManager();
-    if (!Manager || !instance) {
-      res.status(500).write('event: error\n');
-      res.write(`data: ${JSON.stringify({ error: 'Orchestrator Session Manager not available' })}\n\n`);
-      res.end();
-      return;
-    }
-
-    const sessionManager = instance;
-    const session = sessionManager.getSession(sessionId);
-    if (!session) {
-      res.status(404).write('event: error\n');
-      res.write(`data: ${JSON.stringify({ error: 'Session not found' })}\n\n`);
-      res.end();
-      return;
-    }
-
-    // Setup SSE headers
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-
-    // Send existing messages first
-    if (session.messages.length > 0) {
-      for (const msg of session.messages) {
-        res.write(`event: message\n`);
-        res.write(`data: ${JSON.stringify(msg)}\n\n`);
-      }
-    }
-
-    // Send waitingForInput event if already waiting
-    if (session.waitingForInput) {
-      // Try to get DDT from the task that's waiting
-      let ddtForEvent = null;
-      try {
-        // Get the task from compilation result to find its DDT
-        const waitingTask = session.compilationResult.tasks.find(t => t.id === session.waitingForInput.taskId);
-        if (waitingTask && waitingTask.mainData && waitingTask.mainData.length > 0) {
-          // ✅ DDT fields directly on task (no value wrapper)
-          ddtForEvent = {
-            label: waitingTask.label,
-            mainData: waitingTask.mainData,
-            steps: waitingTask.steps, // ✅ Usa steps invece di steps
-            constraints: waitingTask.constraints,
-            examples: waitingTask.examples
-          };
-        }
-      } catch (e) {
-        console.warn('[API] Could not get DDT for waitingForInput event', e);
-      }
-
-      console.log('[API] 📡 Sending pending waitingForInput event to SSE client', {
-        sessionId,
-        taskId: session.waitingForInput.taskId,
-        nodeId: session.waitingForInput.nodeId,
-        hasDDT: !!ddtForEvent
-      });
-      res.write(`event: waitingForInput\n`);
-      res.write(`data: ${JSON.stringify({
-        taskId: session.waitingForInput.taskId,
-        nodeId: session.waitingForInput.nodeId,
-        ddt: ddtForEvent // Include DDT so frontend can show input box
-      })}\n\n`);
-    }
-
-    // If session is already complete, send result immediately
-    if (session.isComplete) {
-      res.write(`event: complete\n`);
-      res.write(`data: ${JSON.stringify({ success: true })}\n\n`);
-      res.end();
-      return;
-    }
-
-    // Listen to events from session
-    const eventEmitter = session.eventEmitter;
-    if (!eventEmitter) {
-      res.write('event: error\n');
-      res.write(`data: ${JSON.stringify({ error: 'Session event emitter not available' })}\n\n`);
-      res.end();
-      return;
-    }
-
-    const onMessage = (msg) => {
-      if (!res.writableEnded) {
-        res.write(`event: message\n`);
-        res.write(`data: ${JSON.stringify(msg)}\n\n`);
-      }
-    };
-
-    const onDDTStart = (data) => {
-      if (!res.writableEnded) {
-        res.write(`event: ddtStart\n`);
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-      }
-    };
-
-    const onWaitingForInput = (data) => {
-      if (!res.writableEnded) {
-        res.write(`event: waitingForInput\n`);
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-      }
-    };
-
-    const onStateUpdate = (state) => {
-      if (!res.writableEnded) {
-        res.write(`event: stateUpdate\n`);
-        res.write(`data: ${JSON.stringify({
-          currentNodeId: state.currentNodeId,
-          executedTaskIds: Array.from(state.executedTaskIds),
-          variableStore: state.variableStore
-        })}\n\n`);
-      }
-    };
-
-    const onComplete = (result) => {
-      if (!res.writableEnded) {
-        res.write(`event: complete\n`);
-        res.write(`data: ${JSON.stringify(result)}\n\n`);
-        res.end();
-      }
-    };
-
-    const onError = (error) => {
-      if (!res.writableEnded) {
-        res.write(`event: error\n`);
-        res.write(`data: ${JSON.stringify({ error: error.error || error.message || String(error) })}\n\n`);
-        res.end();
-      }
-    };
-
-    // Register event listeners
-    eventEmitter.on('message', onMessage);
-    eventEmitter.on('ddtStart', onDDTStart);
-    eventEmitter.on('waitingForInput', onWaitingForInput);
-    eventEmitter.on('stateUpdate', onStateUpdate);
-    eventEmitter.on('complete', onComplete);
-    eventEmitter.on('error', onError);
-
-    // Cleanup on client disconnect
-    req.on('close', () => {
-      console.log('✅ [API] GET /api/runtime/orchestrator/session/:id/stream - SSE connection closed', { sessionId });
-      eventEmitter.removeListener('message', onMessage);
-      eventEmitter.removeListener('ddtStart', onDDTStart);
-      eventEmitter.removeListener('waitingForInput', onWaitingForInput);
-      eventEmitter.removeListener('stateUpdate', onStateUpdate);
-      eventEmitter.removeListener('complete', onComplete);
-      eventEmitter.removeListener('error', onError);
-    });
-
-    // Send heartbeat every 30 seconds
-    const heartbeatInterval = setInterval(() => {
-      if (!res.writableEnded) {
-        res.write(': heartbeat\n\n');
-      } else {
-        clearInterval(heartbeatInterval);
-      }
-    }, 30000);
-
-    req.on('close', () => {
-      clearInterval(heartbeatInterval);
-    });
-  } catch (error) {
-    console.error('❌ [API] GET /api/runtime/orchestrator/session/:id/stream - ERROR', error);
-    if (!res.headersSent) {
-      res.status(500).write('event: error\n');
-      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-    }
-    res.end();
-  }
-});
-
-// GET /api/runtime/orchestrator/session/:id/status - Get session status
-app.get('/api/runtime/orchestrator/session/:id/status', async (req, res) => {
-  try {
-    const { id: sessionId } = req.params;
-
-    const { OrchestratorSessionManager: Manager, orchestratorSessionManagerInstance: instance } = loadOrchestratorSessionManager();
-    if (!Manager || !instance) {
-      return res.status(500).json({
-        error: 'Orchestrator Session Manager not available'
-      });
-    }
-
-    const sessionManager = instance;
-    const status = sessionManager.getSessionStatus(sessionId);
-
-    if (!status.found) {
-      return res.status(404).json({
-        error: 'Session not found'
-      });
-    }
-
-    if (!status.session) {
-      return res.status(404).json({
-        error: 'Session not found'
-      });
-    }
-
-    res.json({
-      session: {
-        id: status.session.id,
-        isRunning: status.session.isRunning,
-        isComplete: status.session.isComplete,
-        messages: status.session.messages,
-        executionState: status.session.executionState,
-        error: status.session.error ? status.session.error.message : undefined
-      }
-    });
-  } catch (error) {
-    console.error('❌ [API] GET /api/runtime/orchestrator/session/:id/status - ERROR', error);
-    res.status(500).json({
-      error: 'Failed to get session status',
-      message: error.message
-    });
-  }
-});
-
-// DELETE /api/runtime/orchestrator/session/:id - Delete session
-app.delete('/api/runtime/orchestrator/session/:id', async (req, res) => {
-  try {
-    const { id: sessionId } = req.params;
-
-    const { OrchestratorSessionManager: Manager, orchestratorSessionManagerInstance: instance } = loadOrchestratorSessionManager();
-    if (!Manager || !instance) {
-      return res.status(500).json({
-        error: 'Orchestrator Session Manager not available'
-      });
-    }
-
-    const sessionManager = instance;
-    const deleted = sessionManager.deleteSession(sessionId);
-
-    if (!deleted) {
-      return res.status(404).json({
-        error: 'Session not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ [API] DELETE /api/runtime/orchestrator/session/:id - ERROR', error);
-    res.status(500).json({
-      error: 'Failed to delete session',
-      message: error.message
-    });
-  }
-});
 
 // ✅ Global error handler (must be after all routes)
 app.use((err, req, res, next) => {
