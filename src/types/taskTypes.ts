@@ -34,7 +34,8 @@ export enum TaskType {
   ClassifyProblem = 5, // TaskTypes.ClassifyProblem
   AIAgent = 6,         // ✅ AI Agent task
   Summarizer = 7,      // ✅ Summarizer task
-  Negotiation = 8      // ✅ Negotiation task
+  Negotiation = 8,     // ✅ Negotiation task
+  Flow = 9             // ✅ Flow: opens a subflow in a new tab (no task editor)
 }
 
 /**
@@ -51,6 +52,7 @@ export function taskTypeToTemplateId(type: TaskType): string | null {
     case TaskType.AIAgent: return 'AIAgent';
     case TaskType.Summarizer: return 'Summarizer';
     case TaskType.Negotiation: return 'Negotiation';
+    case TaskType.Flow: return 'Flow';
     case TaskType.UNDEFINED: return 'UNDEFINED';
     default: return null;
   }
@@ -72,6 +74,7 @@ export function templateIdToTaskType(templateId: string | null | undefined): Tas
     case 'aiagent': return TaskType.AIAgent;
     case 'summarizer': return TaskType.Summarizer;
     case 'negotiation': return TaskType.Negotiation;
+    case 'flow': return TaskType.Flow;
     case 'undefined': return TaskType.UNDEFINED;
     default: return TaskType.UNDEFINED;
   }
@@ -101,6 +104,7 @@ export function taskIdToTaskType(taskId: string): TaskType { // ✅ RINOMINATO: 
     case 'aiagent': return TaskType.AIAgent;
     case 'summarizer': return TaskType.Summarizer;
     case 'negotiation': return TaskType.Negotiation;
+    case 'flow': return TaskType.Flow;
     case 'undefined': return TaskType.UNDEFINED;
     default: return TaskType.UNDEFINED;
   }
@@ -141,8 +145,10 @@ export function taskTypeToHeuristicString(type: TaskType): string | null {
 /**
  * Helper: Deriva il tipo di editor da TaskType
  */
-export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'problem' | 'backend' | 'simple' | 'aiagent' | 'summarizer' | 'negotiation' {
+export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'problem' | 'backend' | 'simple' | 'aiagent' | 'summarizer' | 'negotiation' | 'flow' {
   switch (type) {
+    case TaskType.Flow:
+      return 'flow'; // Opens subflow tab, no task editor
     case TaskType.SayMessage:
     case TaskType.CloseSession:
     case TaskType.Transfer:

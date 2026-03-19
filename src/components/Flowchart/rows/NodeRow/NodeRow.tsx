@@ -31,6 +31,7 @@ import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '@types/taskTyp
 import { idMappingService } from '@services/IdMappingService';
 import { generateId } from '@utils/idGenerator';
 import { updateRowTaskType, createRowWithTask, getTemplateId, getTaskIdFromRow } from '@utils/taskHelpers';
+import { taskRepository } from '@services/TaskRepository';
 import { useRowErrors } from '../../hooks/useRowErrors';
 import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
 import { TaskTreeOpener } from './application/TaskTreeOpener';
@@ -70,7 +71,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     onCreateBackendCall,
     onCreateTask,
     getProjectId,
-    onWidthChange
+    onWidthChange,
+    onOpenSubflowForTask
   }: NodeRowProps,
   ref
 ) => {
@@ -266,13 +268,18 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // ✅ All useEffect logic is now extracted to useNodeRowEffects hook (see above)
   // Note: openTypePickerFromIcon and handleMouseDown remain in component due to complex event listener logic
 
+  /** Estimated height of the type picker dropdown (main options + Other). Used to flip above when no space below. */
+  const TYPE_PICKER_ESTIMATED_HEIGHT = 360;
+
   const openTypePickerFromIcon = (anchor?: DOMRect, currentType?: TaskType) => { // ✅ TaskType enum invece di stringa
     const rect = anchor || labelRef.current?.getBoundingClientRect();
     if (!rect) { return; }
-    // Position menu directly under icon with small negative offset to eliminate dead zone
-    // Overlap by a few pixels to ensure smooth transition from button to picker
-    const finalPos = { left: rect.left, top: (rect as any).bottom - 4 } as { left: number; top: number };
-    // Removed verbose log
+    const spaceBelow = typeof window !== 'undefined' ? window.innerHeight - rect.bottom : TYPE_PICKER_ESTIMATED_HEIGHT + 1;
+    const openAbove = spaceBelow < TYPE_PICKER_ESTIMATED_HEIGHT;
+    const top = openAbove
+      ? Math.max(8, rect.top - TYPE_PICKER_ESTIMATED_HEIGHT)
+      : (rect as DOMRect).bottom - 4;
+    const finalPos = { left: rect.left, top } as { left: number; top: number };
     setPickerPosition(finalPos);
     setShowIntellisense(false);
     setAllowCreatePicker(true);
@@ -596,8 +603,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               return isUndefined && !hasTaskTree(row); // Disabilitato se undefined e nessun TaskTree
             })()}
             onOpenTaskTree={(() => {
-              // ✅ REFACTOR: Use TaskTreeOpener service
               const taskType = resolveTaskType(row);
+              // Flow type: open subflow in new tab (no task editor)
+              if (taskType === TaskType.Flow && onOpenSubflowForTask) {
+                return () => {
+                  const task = taskRepository.getTask(row.id) ?? null;
+                  const existingFlowId = task?.parameters?.flowId ?? (task as any)?.flowId;
+                  const rowLabel = (row.text || '').trim() || task?.name || 'Subflow';
+                  onOpenSubflowForTask(row.id, existingFlowId, rowLabel);
+                };
+              }
+              // ✅ REFACTOR: Use TaskTreeOpener service for other types
               if (taskType === TaskType.UtteranceInterpretation) {
                 // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskTree
                 return async () => {

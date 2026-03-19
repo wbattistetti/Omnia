@@ -324,9 +324,11 @@ export function useNodeRowEventHandlers(
                       ? 'Summarizer'
                       : result.taskType === TaskType.Negotiation
                         ? 'Negotiation'
-                        : isTaskObject && selectedTask
-                          ? 'Other'
-                          : 'Message';
+                        : result.taskType === TaskType.Flow
+                          ? 'Flow'
+                          : isTaskObject && selectedTask
+                            ? 'Other'
+                            : 'Message';
 
         const updateMeta = {
           id: row.id,
@@ -374,6 +376,30 @@ export function useNodeRowEventHandlers(
           }
         }
 
+        setIsEditing(false);
+        setShowIntellisense(false);
+        setIntellisenseQuery('');
+        toolbarSM.picker.close();
+        return;
+      }
+
+      // Flow type: create/update local task only (no factory task)
+      if (selectedTaskType === TaskType.Flow) {
+        const typeHandler = new RowTypeHandler({ row, getProjectId });
+        const result = await typeHandler.createTaskForNewRow(selectedTaskType, null, label);
+        if (result.success) {
+          const updateMeta = {
+            id: row.id,
+            type: 'Flow',
+            heuristics: { ...((row as any)?.heuristics || {}), type: TaskType.Flow },
+            isUndefined: false,
+          };
+          if (onUpdateWithCategory) {
+            (onUpdateWithCategory as any)(row, label, 'taskTemplates', updateMeta);
+          } else {
+            onUpdate({ ...row, ...updateMeta } as any, label);
+          }
+        }
         setIsEditing(false);
         setShowIntellisense(false);
         setIntellisenseQuery('');

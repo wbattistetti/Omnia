@@ -530,7 +530,13 @@ function isValidVersion(version) {
 
 async function getProjectCatalogRecord(mongoClient, projectId) {
   const db = mongoClient.db(dbProjects);
-  const rec = await db.collection('projects_catalog').findOne({ $or: [{ _id: projectId }, { projectId }] });
+  const coll = db.collection('projects_catalog');
+  let rec = await coll.findOne({ $or: [{ _id: projectId }, { projectId: projectId }] });
+  if (!rec && projectId && /^[a-fA-F0-9]{24}$/.test(String(projectId))) {
+    try {
+      rec = await coll.findOne({ _id: new ObjectId(projectId) });
+    } catch (_) { /* ignore */ }
+  }
   return rec || null;
 }
 
@@ -600,6 +606,35 @@ app.get('/api/projects/catalog', async (req, res) => {
       error: String(e?.message || e),
       details: process.env.NODE_ENV === 'development' ? e?.stack : undefined
     });
+  }
+});
+
+// GET /api/projects/:id/meta - Project metadata from project_meta (fallback when catalog misses clientName etc.)
+app.get('/api/projects/:id/meta', async (req, res) => {
+  const projectId = req.params.id;
+  if (!projectId) {
+    return res.status(400).json({ error: 'projectId_required' });
+  }
+  try {
+    const client = await getMongoClient();
+    const projDb = await getProjectDb(client, projectId);
+    const meta = await projDb.collection('project_meta').findOne({ _id: 'meta' });
+    if (!meta) {
+      return res.status(404).json({ error: 'project_meta_not_found' });
+    }
+    res.json({
+      clientName: meta.clientName ?? null,
+      projectName: meta.projectName ?? null,
+      version: meta.version ?? null,
+      versionQualifier: meta.versionQualifier ?? null,
+      industry: meta.industry ?? null,
+      language: meta.language ?? null,
+      ownerCompany: meta.ownerCompany ?? null,
+      ownerClient: meta.ownerClient ?? null
+    });
+  } catch (e) {
+    console.error('[Projects.meta] Error:', e?.message);
+    res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
@@ -1233,14 +1268,14 @@ app.post('/api/projects/bootstrap', async (req, res) => {
         $set: {
           projectId,
           tenantId: payload.tenantId || null,
-          clientName: clientName || null,
+          clientName: clientNameFinal,
           projectName,
-          clientSlug: clientName ? slugifyName(clientName) : null,
+          clientSlug: clientNameFinal ? slugifyName(clientNameFinal) : null,
           projectSlug: slugifyName(projectName),
           industry,
           language,
-          ownerCompany: ownerCompany || null,
-          ownerClient: ownerClient || null,
+          ownerCompany: ownerCompanyFinal,
+          ownerClient: ownerClientFinal,
           version,
           versionQualifier,
           updatedAt: now

@@ -25,8 +25,92 @@ export interface CreateProjectResult {
   error: string | null;
 }
 
+/** Prefix for draft project ids; project is only created in backend on first Save. */
+export const DRAFT_PROJECT_ID_PREFIX = 'draft_';
+
+export function isDraftProjectId(id: string | null | undefined): boolean {
+  return Boolean(id && String(id).startsWith(DRAFT_PROJECT_ID_PREFIX));
+}
+
 export class ProjectManager {
   constructor(private params: ProjectManagerParams) {}
+
+  /**
+   * Opens a new project as draft (no backend creation). Project is created on first Save.
+   */
+  async createDraftProject(projectInfo: ProjectInfo): Promise<CreateProjectResult> {
+    try {
+      const draftId = `${DRAFT_PROJECT_ID_PREFIX}${Date.now()}`;
+      const draftProject: ProjectData & ProjectInfo = {
+        ...projectInfo,
+        id: draftId,
+        name: projectInfo.name || 'Project',
+        industry: projectInfo.industry || 'utility_gas',
+        ownerCompany: (projectInfo.ownerCompany || '').trim() || null,
+        ownerClient: (projectInfo.ownerClient || '').trim() || null,
+        clientName: (projectInfo.clientName || '').trim() || undefined,
+        taskTemplates: [],
+        userActs: [],
+        backendActions: [],
+        conditions: [],
+        tasks: [],
+        macrotasks: [],
+      };
+      this.params.setCurrentProject(draftProject);
+      this.params.pdUpdate.setCurrentProjectId(null);
+      try {
+        localStorage.removeItem('currentProjectId');
+      } catch { }
+      FlowStateBridge.clear();
+      await this.params.refreshData();
+      this.params.setAppState('mainApp');
+      return { success: true, error: null };
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      console.error('[ProjectManager] createDraftProject failed:', e);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Creates the project in the backend (bootstrap) and replaces draft with real project. Returns the new projectId.
+   */
+  async commitDraftProject(draftProject: ProjectData & ProjectInfo): Promise<string> {
+    const clientName = (draftProject.clientName || '').trim() || null;
+    const ownerCompany = (draftProject.ownerCompany || '').trim() || null;
+    const ownerClient = (draftProject.ownerClient || '').trim() || null;
+    const resp = await fetch('/api/projects/bootstrap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientName,
+        projectName: draftProject.name || 'Project',
+        industry: draftProject.industry || 'utility_gas',
+        language: draftProject.language || 'pt',
+        ownerCompany,
+        ownerClient,
+        version: draftProject.version || '1.0',
+        versionQualifier: draftProject.versionQualifier || 'alpha',
+        tenantId: 'tenant_default',
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || err.message || resp.statusText || 'Bootstrap failed');
+    }
+    const boot = await resp.json();
+    const projectId = boot.projectId;
+    this.params.pdUpdate.setCurrentProjectId(projectId);
+    try {
+      localStorage.setItem('currentProjectId', projectId);
+    } catch { }
+    const updatedProject: ProjectData & ProjectInfo = {
+      ...draftProject,
+      id: projectId,
+    };
+    this.params.setCurrentProject(updatedProject);
+    return projectId;
+  }
 
   /**
    * Fetches recent projects (last 10)
@@ -180,7 +264,8 @@ export class ProjectManager {
         throw new Error('Errore nel recupero catalogo');
       }
       const list = await catRes.json();
-      const meta = (list || []).find((x: any) => x._id === id || x.projectId === id) || {};
+      const normId = (v: any) => v == null ? '' : (typeof v === 'string' ? v : (v && (v as any).$oid ? (v as any).$oid : (v && typeof (v as any).toString === 'function' ? (v as any).toString() : String(v))));
+      const meta = (list || []).find((x: any) => normId(x._id) === normId(id) || normId(x.projectId) === normId(id)) || {};
       if (showPerfLogs) {
         console.log(`[PERF][${new Date().toISOString()}] ✅ END fetch catalog`, {
           duration: `${(performance.now() - catStart).toFixed(2)}ms`,
@@ -379,27 +464,49 @@ export class ProjectManager {
         }
       }
 
+      // ✅ Fonte primaria: project_meta (DB del progetto). Fallback: catalogo (per clientName/version se meta non li ha).
+      let resolvedMeta = { ...meta };
+      try {
+        const metaRes = await fetch(`/api/projects/${encodeURIComponent(id)}/meta`);
+        if (metaRes.ok) {
+          const projectMeta = await metaRes.json();
+          resolvedMeta = { ...resolvedMeta, ...projectMeta };
+          // Non sovrascrivere con null: se project_meta non ha clientName (progetto vecchio), tiene il valore dal catalogo
+          if ((resolvedMeta.clientName == null || String(resolvedMeta.clientName).trim() === '') && (meta.clientName != null && String(meta.clientName).trim() !== '')) {
+            resolvedMeta.clientName = meta.clientName;
+          }
+          if ((resolvedMeta.projectName == null || String(resolvedMeta.projectName).trim() === '') && (meta.projectName != null && String(meta.projectName).trim() !== '')) {
+            resolvedMeta.projectName = meta.projectName;
+          }
+          if ((resolvedMeta.version == null || String(resolvedMeta.version).trim() === '') && (meta.version != null && String(meta.version).trim() !== '')) {
+            resolvedMeta.version = meta.version;
+          }
+        }
+      } catch {
+        // Usa solo il catalogo
+      }
+
       // Load project data and set currentProject
       const data = await ProjectDataService.loadProjectData();
 
-      // Initialize UI state with project info
+      // Initialize UI state: clientName e campi progetto da project_meta (o catalogo se /meta fallisce)
       const openedProject: ProjectData & ProjectInfo = {
         id: id,
-        name: meta.projectName || meta.name || '', // ✅ FIX: Mappa projectName -> name
-        description: meta.description || '',
-        template: meta.template || '',
-        language: meta.language || 'pt',
-        clientName: meta.clientName || null,
-        industry: meta.industry || 'utility_gas',
-        ownerCompany: meta.ownerCompany || null,
-        ownerClient: meta.ownerClient || null,
-        version: meta.version || '1.0', // ✅ Aggiungi versione
-        versionQualifier: meta.versionQualifier || 'production', // ✅ Aggiungi qualificatore
+        name: resolvedMeta.projectName || resolvedMeta.name || '',
+        description: resolvedMeta.description || '',
+        template: resolvedMeta.template || '',
+        language: resolvedMeta.language || 'pt',
+        clientName: resolvedMeta.clientName ?? null,
+        industry: resolvedMeta.industry || 'utility_gas',
+        ownerCompany: resolvedMeta.ownerCompany ?? null,
+        ownerClient: resolvedMeta.ownerClient ?? null,
+        version: resolvedMeta.version || '1.0',
+        versionQualifier: resolvedMeta.versionQualifier || 'production',
         taskTemplates: data.taskTemplates,
         userActs: data.userActs,
         backendActions: data.backendActions,
         conditions: data.conditions,
-        tasks: [], // Deprecated: tasks migrated to macrotasks
+        tasks: [],
         macrotasks: data.macrotasks,
       };
 

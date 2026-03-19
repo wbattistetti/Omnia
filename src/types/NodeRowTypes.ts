@@ -29,4 +29,6 @@ export interface NodeRowProps {
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
   getProjectId?: () => string | null;
   onWidthChange?: (width: number) => void;
+  /** Opens a subflow tab for Flow-type rows (taskId, optional existingFlowId, optional title = row label) */
+  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string) => void;
 }

@@ -1,4 +1,4 @@
-import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot, List, CheckCircle } from 'lucide-react';
+import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot, List, CheckCircle, Workflow } from 'lucide-react';
 import { SIDEBAR_TYPE_COLORS } from '../../Sidebar/sidebarTheme';
 import { taskRepository } from '../../../services/TaskRepository';
 import { TaskType } from '../../../types/taskTypes';
@@ -46,7 +46,8 @@ export function resolveTaskType(row: any): TaskType {
         'ProblemClassification': TaskType.ClassifyProblem,
         'AIAgent': TaskType.AIAgent,
         'Summarizer': TaskType.Summarizer,
-        'Negotiation': TaskType.Negotiation
+        'Negotiation': TaskType.Negotiation,
+        'Flow': TaskType.Flow
       };
       return typeMap[row.type] ?? TaskType.UNDEFINED;
     }
@@ -203,6 +204,11 @@ export function getTaskVisualsByType(type: TaskType, hasTaskTree: boolean) {
       Icon = Server;
       labelColor = green;
       iconColor = hasTaskTree ? green : gray;
+      break;
+    case TaskType.Flow:
+      Icon = Workflow;
+      labelColor = '#0ea5e9';
+      iconColor = hasTaskTree ? '#0ea5e9' : gray;
       break;
     case TaskType.SayMessage:
     default:

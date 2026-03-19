@@ -150,6 +150,10 @@ export class TaskContentResolver {
           (task.data && task.data.length > 0)
         );
 
+      case TaskType.Flow:
+        // Flow always allows opening subflow tab
+        return true;
+
       default:
         // For other types: check if there's relevant content
         return Boolean(

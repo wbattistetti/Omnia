@@ -19,12 +19,16 @@ import { ErrorReportPanel } from '@components/ChatPanel/ErrorReportPanel';
 export interface TabRendererProps {
   tab: DockTab;
   currentPid?: string;
+  /** When true, flow tab is shown with empty canvas (no project in backend until first Save). */
+  isDraft?: boolean;
   setDockTree: React.Dispatch<React.SetStateAction<DockNode>>;
   editorCloseRefsMap: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
   pdUpdate: any;
   testSingleNode?: (nodeId: string, nodeRows?: any[]) => Promise<void>;
   onFlowCreateTaskFlow?: (tabId: string, newFlowId: string, title: string, nodes: any[], edges: any[]) => void;
   onFlowOpenTaskFlow?: (tabId: string, taskFlowId: string, title: string) => void;
+  /** Opens a subflow tab for a Flow-type row; creates flow if existingFlowId not provided. Title = row label for tab. */
+  onOpenSubflowForTask?: (tabId: string, taskId: string, existingFlowId?: string, title?: string) => void;
 }
 
 /**
@@ -63,10 +67,10 @@ function tabContentComparator(prev: { tab: DockTab }, next: { tab: DockTab }): b
 }
 
 export const TabRenderer: React.FC<TabRendererProps> = React.memo(
-  ({ tab, currentPid, setDockTree, editorCloseRefsMap, pdUpdate, testSingleNode, onFlowCreateTaskFlow, onFlowOpenTaskFlow }) => {
+  ({ tab, currentPid, isDraft, setDockTree, editorCloseRefsMap, pdUpdate, testSingleNode, onFlowCreateTaskFlow, onFlowOpenTaskFlow, onOpenSubflowForTask }) => {
     // Flow tab - FlowCanvasHost handles useFlowActions internally
     if (tab.type === 'flow') {
-      if (!currentPid) {
+      if (!currentPid && !isDraft) {
         return (
           <div
             style={{
@@ -83,7 +87,7 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
       }
       return (
         <FlowCanvasHost
-          projectId={currentPid}
+          projectId={currentPid ?? undefined}
           flowId={tab.flowId}
           testSingleNode={testSingleNode}
           onCreateTaskFlow={
@@ -91,8 +95,11 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
               ? (newFlowId, title, nodes, edges) => onFlowCreateTaskFlow(tab.id, newFlowId, title, nodes, edges)
               : undefined
           }
-          onOpenTaskFlow={
+            onOpenTaskFlow={
             onFlowOpenTaskFlow ? (taskFlowId, title) => onFlowOpenTaskFlow(tab.id, taskFlowId, title) : undefined
+          }
+          onOpenSubflowForTask={
+            onOpenSubflowForTask ? (taskId, existingFlowId, title) => onOpenSubflowForTask(tab.id, taskId, existingFlowId, title) : undefined
           }
         />
       );

@@ -265,9 +265,7 @@ export function Toolbar({
                 type="button"
                 onClick={() => {
                   setShowSaveMenu(false);
-                  if (window.confirm('Confermi di sovrascrivere la versione corrente?')) {
-                    onSave();
-                  }
+                  onSave();
                 }}
                 disabled={isSaving}
                 className="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-700 flex items-center gap-2"

@@ -73,9 +73,11 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [availableIndustries, setAvailableIndustries] = useState<string[]>([]);
   const [availableClients, setAvailableClients] = useState<string[]>([]);
+  const [clientInputValue, setClientInputValue] = useState('');
 
   useEffect(() => {
     if (isOpen) {
+      setClientInputValue('');
       fetch('/projects')
         .then(res => res.json())
         .then(data => setRecentProjects(data))
@@ -244,6 +246,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
   };
 
   const handleClientChange = (value: string | null) => {
+    setClientInputValue('');
     handleInputChange('clientName', value || '');
   };
 
@@ -257,6 +260,15 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
         return prev;
       });
       handleInputChange('clientName', clientName);
+    }
+  };
+
+  /** Al blur del campo Cliente: se il testo non è vuoto, consideralo come cliente selezionato (senza dover premere Invio o cliccare su un’opzione). */
+  const handleClientBlur = () => {
+    const trimmed = (clientInputValue || '').trim();
+    if (trimmed) {
+      handleClientCreate(trimmed);
+      setClientInputValue('');
     }
   };
 
@@ -326,6 +338,9 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
                 value={formData.clientName || null}
                 onChange={handleClientChange}
                 onCreateOption={handleClientCreate}
+                onBlur={handleClientBlur}
+                inputValue={clientInputValue}
+                onInputChange={(v) => setClientInputValue(v || '')}
                 placeholder="Nome del cliente (es. Indesit)"
                 isDisabled={isLoading}
                 isInvalid={!!errors.clientName}

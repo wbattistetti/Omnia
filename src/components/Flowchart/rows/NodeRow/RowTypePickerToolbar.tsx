@@ -1,5 +1,5 @@
 import React from 'react';
-import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Check, Bot, ChevronRight, ChevronDown, MoreHorizontal, Tag } from 'lucide-react';
+import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Check, Bot, ChevronRight, ChevronDown, MoreHorizontal, Tag, Workflow } from 'lucide-react';
 import { useFontContext } from '../../../../context/FontContext';
 import { TaskType } from '../../../../types/taskTypes';
 import { TaskContext } from '../../../../types/taskContext';
@@ -21,7 +21,8 @@ const MAIN_TYPE_OPTIONS = [
     { value: TaskType.ClassifyProblem, label: 'Problem', Icon: GitBranch, color: '#f59e0b' },
     { value: TaskType.AIAgent, label: 'AI Agent', Icon: Bot, color: '#a855f7' },
     { value: TaskType.Summarizer, label: 'Summarizer', Icon: FileText, color: '#06b6d4' },
-    { value: TaskType.Negotiation, label: 'Negotiation', Icon: CheckCircle2, color: '#6366f1' }
+    { value: TaskType.Negotiation, label: 'Negotiation', Icon: CheckCircle2, color: '#6366f1' },
+    { value: TaskType.Flow, label: 'Flow', Icon: Workflow, color: '#0ea5e9' }
 ];
 
 interface RowTypePickerToolbarProps {

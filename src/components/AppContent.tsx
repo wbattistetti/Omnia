@@ -34,7 +34,7 @@ import { mapUIStateToDomain } from '../domain/project/mapper';
 import { ProjectSaveOrchestrator } from '../services/project-save/ProjectSaveOrchestrator';
 // ✅ REMOVED: Migration moved to DB script - keep codebase clean
 // Migration should be a separate DB script, not executed during save
-import { ProjectManager } from './AppContent/application/services/ProjectManager';
+import { ProjectManager, isDraftProjectId } from './AppContent/application/services/ProjectManager';
 import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
@@ -204,6 +204,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         <TabRenderer
           tab={tab}
           currentPid={currentPid}
+          isDraft={Boolean(currentProject && isDraftProjectId(currentProject.id))}
           setDockTree={setDockTree}
           editorCloseRefsMap={editorCloseRefsMap}
           pdUpdate={pdUpdate}
@@ -232,10 +233,23 @@ export const AppContent: React.FC<AppContentProps> = ({
               })
             );
           }}
+          onOpenSubflowForTask={(tabId, taskId, existingFlowId, title) => {
+            const flowId = existingFlowId || `subflow_${taskId}_${Date.now()}`;
+            const tabTitle = (title || '').trim() || 'Subflow';
+            upsertFlow({ id: flowId, title: tabTitle, nodes: [], edges: [] });
+            setDockTree(prev =>
+              upsertAddNextTo(prev, tabId, {
+                id: `tab_${flowId}`,
+                title: tabTitle,
+                type: 'flow',
+                flowId,
+              })
+            );
+          }}
         />
       );
     },
-    [currentPid, setDockTree, pdUpdate, handleTestSingleNode]
+    [currentPid, currentProject, setDockTree, pdUpdate, handleTestSingleNode]
   );
   // Safe access: avoid calling context hook if provider not mounted (e.g., during hot reload glitches)
   let refreshData: () => Promise<void> = async () => { };
@@ -670,9 +684,9 @@ export const AppContent: React.FC<AppContentProps> = ({
     setCreateError(null);
     setIsCreatingProject(true);
     try {
-      const result = await projectManager.createProject(projectInfo);
+      const result = await projectManager.createDraftProject(projectInfo);
       if (!result.success) {
-        setCreateError(result.error || 'Errore nella creazione del progetto');
+        setCreateError(result.error || 'Errore nell\'apertura della bozza');
       }
       return result.success;
     } finally {
@@ -846,10 +860,21 @@ export const AppContent: React.FC<AppContentProps> = ({
             onSave={async () => {
               try {
                 setCloneError(null);
-                // show spinner in toolbar while saving
                 setIsCreatingProject(true);
                 const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                const pid = pdUpdate.getCurrentProjectId();
+                let pid = pdUpdate.getCurrentProjectId();
+                if (!pid && currentProject && isDraftProjectId(currentProject.id)) {
+                  try {
+                    pid = await projectManager.commitDraftProject(currentProject);
+                    await refreshData();
+                  } catch (e) {
+                    setCloneError(e instanceof Error ? e.message : String(e));
+                    return;
+                  } finally {
+                    setIsCreatingProject(false);
+                  }
+                  setIsCreatingProject(true);
+                }
                 if (!pid) {
                   console.warn('[Save] No project ID available');
                   return;

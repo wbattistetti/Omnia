@@ -14,6 +14,7 @@ import 'reactflow/dist/style.css';
 import { debug, error } from '../../utils/logger';
 import { CustomNode } from './nodes/CustomNode/CustomNode';
 import { TaskNode } from './nodes/TaskNode/TaskNode';
+import { FlowSubflowProvider } from './context/FlowSubflowContext';
 import { useEdgeManager } from '../../hooks/useEdgeManager';
 import { useConnectionMenu } from '../../hooks/useConnectionMenu';
 import { useNodeManager } from '../../hooks/useNodeManager';
@@ -50,8 +51,7 @@ import { FlowStateBridge } from '../../services/FlowStateBridge';
 import { useCompilationErrors } from '../../context/CompilationErrorsContext';
 import { useFlowchartState } from '../../context/FlowchartStateContext';
 
-// Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
-const nodeTypes = { custom: CustomNode, task: TaskNode };
+// Edge types stabile per evitare warning React Flow
 const edgeTypes = { custom: CustomEdge };
 
 interface FlowEditorProps {
@@ -65,6 +65,8 @@ interface FlowEditorProps {
   setCurrentProject: (project: any) => void;
   onCreateTaskFlow?: (flowId: string, title: string, nodes: Node<FlowNode>[], edges: Edge<EdgeData>[]) => void;
   onOpenTaskFlow?: (flowId: string, title: string) => void;
+  /** Opens a subflow tab for a Flow-type row (taskId, optional existingFlowId, optional title = row label) */
+  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string) => void;
 }
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({
@@ -75,6 +77,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   setEdges,
   onCreateTaskFlow,
   onOpenTaskFlow,
+  onOpenSubflowForTask,
   executionState: propExecutionState,
   currentTask: propCurrentTask,
   isRunning: propIsRunning
@@ -109,6 +112,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   useEffect(() => {
     setContextNodes(nodes);
   }, [nodes, setContextNodes]);
+
+  const nodeTypes = useMemo(() => ({ custom: CustomNode, task: TaskNode }), []);
 
   // ✅ ERROR SIDEBAR: Removed - errors are always visible on nodes/edges, not in optional sidebar
 
@@ -678,15 +683,18 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     };
   }, []);
 
+  const subflowContextValue = useMemo(() => ({ onOpenSubflowForTask }), [onOpenSubflowForTask]);
+
   return (
-    <div
-      className="flex-1 h-full relative"
-      ref={canvasRef}
-      onDoubleClick={eventHandlers.handleCanvasDoubleClick}
-      onMouseLeave={() => setCursorTooltip(null)}
-      onMouseDown={eventHandlers.onMouseDown}
-    >
-      {/* Sync nodes/edges to FlowStateBridge for global access */}
+    <FlowSubflowProvider value={subflowContextValue}>
+      <div
+        className="flex-1 h-full relative"
+        ref={canvasRef}
+        onDoubleClick={eventHandlers.handleCanvasDoubleClick}
+        onMouseLeave={() => setCursorTooltip(null)}
+        onMouseDown={eventHandlers.onMouseDown}
+      >
+        {/* Sync nodes/edges to FlowStateBridge for global access */}
       {(() => {
         try {
           FlowStateBridge.setNodes(nodes);
@@ -838,7 +846,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           }}
         />
       )}
-    </div>
+      </div>
+    </FlowSubflowProvider>
   );
 };
 

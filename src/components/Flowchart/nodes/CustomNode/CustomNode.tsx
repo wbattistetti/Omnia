@@ -22,6 +22,7 @@ import { FlowStateBridge } from '../../../../services/FlowStateBridge';
 import { useFlowActions } from '../../../../context/FlowActionsContext';
 import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
 import { taskRepository } from '../../../../services/TaskRepository';
+import { useFlowSubflow } from '../../context/FlowSubflowContext';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -52,6 +53,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   isConnectable,
   selected
 }) => {
+  const { onOpenSubflowForTask } = useFlowSubflow();
   // Context for node operations (with fallback to legacy)
   const flowActions = useFlowActions();
 
@@ -985,6 +987,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               onCreateFactoryTask={data.onCreateFactoryTask}
               onCreateBackendCall={data.onCreateBackendCall}
               onCreateTask={data.onCreateTask}
+              onOpenSubflowForTask={onOpenSubflowForTask}
               getProjectId={() => {
                 try { return (window as any).__omniaRuntime?.getCurrentProjectId?.() || null; } catch { return null; }
               }}

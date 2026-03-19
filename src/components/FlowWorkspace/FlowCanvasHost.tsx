@@ -9,14 +9,17 @@ import { FlowActionsProvider } from '../../context/FlowActionsContext';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 
 type Props = {
-  projectId: string;
+  /** When undefined (draft project), flow is kept in memory only until first Save. */
+  projectId: string | undefined;
   flowId: string;
   testSingleNode?: (nodeId: string, nodeRows?: any[]) => Promise<void>;
   onCreateTaskFlow?: (flowId: string, title: string, nodes: any[], edges: any[]) => void;
   onOpenTaskFlow?: (flowId: string, title: string) => void;
+  /** Opens a subflow tab for a Flow-type row (taskId, optional existingFlowId, optional title = row label) */
+  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string) => void;
 };
 
-export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleNode, onCreateTaskFlow, onOpenTaskFlow }) => {
+export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleNode, onCreateTaskFlow, onOpenTaskFlow, onOpenSubflowForTask }) => {
   const { flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph } = useFlowStoreActions();
   const pd = useProjectDataUpdate();
@@ -24,6 +27,12 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
   const entityCreation = useEntityCreation();
 
   useEffect(() => {
+    if (!projectId) {
+      if (!flows[flowId]) {
+        upsertFlow({ id: flowId, title: flowId === 'main' ? 'Main' : flowId, nodes: [], edges: [] });
+      }
+      return;
+    }
     (async () => {
       if (!flows[flowId] || (!flows[flowId].nodes?.length && !flows[flowId].edges?.length)) {
         const data = await loadFlow(projectId, flowId);
@@ -68,6 +77,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
       setTestNodeId={() => { }}
       onCreateTaskFlow={onCreateTaskFlow}
       onOpenTaskFlow={onOpenTaskFlow}
+      onOpenSubflowForTask={onOpenSubflowForTask}
     />
   );
 
