@@ -1,7 +1,81 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { HelpCircle, XCircle, Trash2, Building2, Folder, Loader2, RotateCcw, ChevronDown, FileText, ExternalLink, Search } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { HelpCircle, XCircle, Trash2, Building2, Folder, Loader2, RotateCcw, ChevronDown, ChevronUp, ChevronsUpDown, FileText, ExternalLink, Search } from 'lucide-react';
 import { useFontClasses } from '../hooks/useFontClasses';
 import { OmniaSelect, OmniaSelectOption } from './common/OmniaSelect';
+
+type GridSortColumnKey = 'cliente' | 'progetto' | 'industry' | 'data' | 'ownerAzienda' | 'ownerCliente';
+
+function SortChevronButton({
+  column,
+  sortColumn,
+  sortDir,
+  onSort,
+}: {
+  column: GridSortColumnKey;
+  sortColumn: GridSortColumnKey | null;
+  sortDir: 'asc' | 'desc';
+  onSort: (c: GridSortColumnKey) => void;
+}) {
+  const active = sortColumn === column;
+  const Icon = active ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
+  return (
+    <button
+      type="button"
+      aria-label={
+        active
+          ? sortDir === 'asc'
+            ? `Ordine crescente; clic per decrescente`
+            : `Ordine decrescente; clic per ordinamento predefinito`
+          : `Ordina per ${column} (crescente, poi decrescente, poi predefinito)`
+      }
+      title="Clic: crescente → decrescente → predefinito"
+      className="p-0.5 rounded hover:bg-emerald-200/80 text-emerald-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onSort(column);
+      }}
+    >
+      <Icon className={`w-3.5 h-3.5 ${active ? 'text-emerald-900' : 'text-emerald-600'}`} strokeWidth={2.5} />
+    </button>
+  );
+}
+
+function getProjectSortComparable(p: any, column: GridSortColumnKey): string | number {
+  switch (column) {
+    case 'cliente':
+      return (p.clientName || '').toString().trim().toLowerCase();
+    case 'progetto':
+      return (p.projectName || p.name || '').toString().trim().toLowerCase();
+    case 'industry': {
+      let v = (p.industry || '').toString().trim();
+      if (!v || v === 'undefined' || v === 'null') v = '';
+      return v.toLowerCase();
+    }
+    case 'data': {
+      const d = p.updatedAt || p.createdAt;
+      return d ? new Date(d).getTime() : Number.POSITIVE_INFINITY;
+    }
+    case 'ownerAzienda':
+      return (p.ownerCompany || '').toString().trim().toLowerCase();
+    case 'ownerCliente':
+      return (p.ownerClient || '').toString().trim().toLowerCase();
+    default:
+      return '';
+  }
+}
+
+function compareByColumn(a: any, b: any, column: GridSortColumnKey, dir: 'asc' | 'desc'): number {
+  const va = getProjectSortComparable(a, column);
+  const vb = getProjectSortComparable(b, column);
+  let cmp = 0;
+  if (typeof va === 'number' && typeof vb === 'number') {
+    cmp = va - vb;
+  } else {
+    cmp = String(va).localeCompare(String(vb), undefined, { sensitivity: 'base', numeric: true });
+  }
+  return dir === 'asc' ? cmp : -cmp;
+}
 
 interface LandingPageProps {
   onNewProject: () => void;
@@ -62,6 +136,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   // Stato per tracciare quale colonna è in modalità ricerca
   const [searchingColumn, setSearchingColumn] = useState<string | null>(null);
+
+  /** Ordinamento griglia: null = predefinito (sortProjects). Stesso bottone: asc → desc → off. */
+  const [gridSort, setGridSort] = useState<{
+    column: GridSortColumnKey | null;
+    dir: 'asc' | 'desc';
+  }>({ column: null, dir: 'asc' });
+  const sortColumn = gridSort.column;
+  const sortDir = gridSort.dir;
+
+  const handleSortClick = useCallback((column: GridSortColumnKey) => {
+    setGridSort((prev) => {
+      if (prev.column !== column) {
+        return { column, dir: 'asc' };
+      }
+      if (prev.dir === 'asc') {
+        return { column, dir: 'desc' };
+      }
+      return { column: null, dir: 'asc' };
+    });
+  }, []);
 
   // Stato per tipo di progetti visualizzati
   const [projectViewType, setProjectViewType] = useState<'all' | 'recent' | 'recovered'>('recent');
@@ -286,9 +380,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     return clientMatch && projectMatch && industryMatch && dateMatch && ownerCompanyMatch && ownerClientMatch;
   });
 
-  // Ordina i progetti
   const sortedRecentProjects = sortProjects(uniqueRecentProjects);
-  const sortedFilteredProjects = sortProjects(filteredProjects);
+
+  const sortedFilteredProjects = useMemo(() => {
+    const list = [...filteredProjects];
+    if (!sortColumn) {
+      return sortProjects(list);
+    }
+    list.sort((a, b) => compareByColumn(a, b, sortColumn, sortDir));
+    return list;
+  }, [filteredProjects, sortColumn, sortDir]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-900 flex flex-col items-center justify-center relative overflow-hidden">
@@ -452,12 +553,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       isCreatable={false}
                     />
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Cliente</span>
-                      <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setSearchingColumn('cliente')}
-                      />
+                    <div className="flex items-center gap-2 w-full min-w-0">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold shrink-0`}>Cliente</span>
+                      <div
+                        className={`flex items-center gap-0.5 shrink-0 ml-auto transition-opacity ${
+                          sortColumn === 'cliente' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        <Search
+                          className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                          onClick={() => setSearchingColumn('cliente')}
+                        />
+                        <SortChevronButton column="cliente" sortColumn={sortColumn} sortDir={sortDir} onSort={handleSortClick} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -478,12 +586,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       isCreatable={false}
                     />
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Progetto</span>
-                      <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setSearchingColumn('progetto')}
-                      />
+                    <div className="flex items-center gap-2 w-full min-w-0">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold shrink-0`}>Progetto</span>
+                      <div
+                        className={`flex items-center gap-0.5 shrink-0 ml-auto transition-opacity ${
+                          sortColumn === 'progetto' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        <Search
+                          className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                          onClick={() => setSearchingColumn('progetto')}
+                        />
+                        <SortChevronButton column="progetto" sortColumn={sortColumn} sortDir={sortDir} onSort={handleSortClick} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -503,12 +618,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       isCreatable={false}
                     />
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Industry</span>
-                      <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setSearchingColumn('industry')}
-                      />
+                    <div className="flex items-center gap-2 w-full min-w-0">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold shrink-0`}>Industry</span>
+                      <div
+                        className={`flex items-center gap-0.5 shrink-0 ml-auto transition-opacity ${
+                          sortColumn === 'industry' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        <Search
+                          className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                          onClick={() => setSearchingColumn('industry')}
+                        />
+                        <SortChevronButton column="industry" sortColumn={sortColumn} sortDir={sortDir} onSort={handleSortClick} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -528,12 +650,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       isCreatable={false}
                     />
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Data</span>
-                      <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setSearchingColumn('data')}
-                      />
+                    <div className="flex items-center gap-2 w-full min-w-0">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold shrink-0`}>Data</span>
+                      <div
+                        className={`flex items-center gap-0.5 shrink-0 ml-auto transition-opacity ${
+                          sortColumn === 'data' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        <Search
+                          className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                          onClick={() => setSearchingColumn('data')}
+                        />
+                        <SortChevronButton column="data" sortColumn={sortColumn} sortDir={sortDir} onSort={handleSortClick} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -553,12 +682,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       isCreatable={false}
                     />
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Owner (Azienda)</span>
-                      <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setSearchingColumn('ownerAzienda')}
-                      />
+                    <div className="flex items-center gap-2 w-full min-w-0">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold shrink-0`}>Owner (Azienda)</span>
+                      <div
+                        className={`flex items-center gap-0.5 shrink-0 ml-auto transition-opacity ${
+                          sortColumn === 'ownerAzienda' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        <Search
+                          className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                          onClick={() => setSearchingColumn('ownerAzienda')}
+                        />
+                        <SortChevronButton column="ownerAzienda" sortColumn={sortColumn} sortDir={sortDir} onSort={handleSortClick} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -578,12 +714,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       isCreatable={false}
                     />
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Owner (Cliente)</span>
-                      <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setSearchingColumn('ownerCliente')}
-                      />
+                    <div className="flex items-center gap-2 w-full min-w-0">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold shrink-0`}>Owner (Cliente)</span>
+                      <div
+                        className={`flex items-center gap-0.5 shrink-0 ml-auto transition-opacity ${
+                          sortColumn === 'ownerCliente' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        <Search
+                          className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                          onClick={() => setSearchingColumn('ownerCliente')}
+                        />
+                        <SortChevronButton column="ownerCliente" sortColumn={sortColumn} sortDir={sortDir} onSort={handleSortClick} />
+                      </div>
                     </div>
                   )}
                 </div>
