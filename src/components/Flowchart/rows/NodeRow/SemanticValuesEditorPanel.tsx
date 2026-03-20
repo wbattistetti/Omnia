@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tag } from 'lucide-react';
+import { Loader2, Tag } from 'lucide-react';
 import ItemListEditor from '@components/common/ItemListEditor';
 import { taskRepository } from '@services/TaskRepository';
 import type { SemanticValue } from '@types/taskTypes';
@@ -14,6 +14,8 @@ interface SemanticValuesEditorPanelProps {
   updateNodeRows: (mutate: (rows: NodeRowData[]) => NodeRowData[]) => void;
   onClose: () => void;
   onSaved?: () => void;
+  onAppendNodes?: (row: NodeRowData, values: SemanticValue[]) => Promise<void> | void;
+  popoverTop?: number;
 }
 
 /**
@@ -25,8 +27,11 @@ export default function SemanticValuesEditorPanel({
   updateNodeRows,
   onClose,
   onSaved,
+  onAppendNodes,
+  popoverTop,
 }: SemanticValuesEditorPanelProps) {
   const [refreshTick, setRefreshTick] = React.useState(0);
+  const [isAppending, setIsAppending] = React.useState(false);
   const task = React.useMemo(() => taskRepository.getTask(row.id), [row.id, refreshTick]);
 
   const normalized = React.useMemo(() => {
@@ -53,6 +58,28 @@ export default function SemanticValuesEditorPanel({
     },
     [row.id, updateNodeRows, touch]
   );
+
+  const [viewportHeight, setViewportHeight] = React.useState<number>(
+    typeof window !== 'undefined' ? window.innerHeight : 900
+  );
+
+  React.useEffect(() => {
+    const onResize = () => setViewportHeight(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const panelHeight = React.useMemo(() => {
+    const rowHeight = 38;
+    const baseHeight = 220;
+    const estimated = 170 + values.length * rowHeight;
+    const desired = Math.max(baseHeight, estimated);
+    const available = Math.max(
+      baseHeight,
+      viewportHeight - (popoverTop ?? 120) - 12
+    );
+    return Math.max(baseHeight, Math.min(desired, available));
+  }, [values.length, viewportHeight, popoverTop]);
 
   return (
     <div
@@ -96,10 +123,34 @@ export default function SemanticValuesEditorPanel({
           >
             Close
           </button>
+          <button
+            type="button"
+            className="text-xs px-2 py-1 rounded border border-indigo-500 bg-indigo-700 text-indigo-100 hover:bg-indigo-600 disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={!onAppendNodes || values.length === 0 || isAppending}
+            title="Append child nodes from allowed values"
+            onClick={async () => {
+              if (!onAppendNodes || values.length === 0 || isAppending) return;
+              setIsAppending(true);
+              try {
+                await onAppendNodes(row, values);
+              } finally {
+                setIsAppending(false);
+              }
+            }}
+          >
+            {isAppending ? (
+              <span className="inline-flex items-center gap-1">
+                <Loader2 size={12} className="animate-spin" />
+                Appending...
+              </span>
+            ) : (
+              'Append nodes'
+            )}
+          </button>
         </div>
       </div>
 
-      <div style={{ height: 220 }}>
+      <div style={{ height: panelHeight, transition: 'height 120ms ease' }}>
         <ItemListEditor
           items={values.map((v) => ({ id: v.id, label: v.label }))}
           selectedId={null}

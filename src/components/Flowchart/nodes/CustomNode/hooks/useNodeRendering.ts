@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { NodeRowData } from '../../../../../types/project';
 import { useDynamicFontSizes } from '../../../../../hooks/useDynamicFontSizes';
+import type { SemanticValue } from '../../../../../types/taskTypes';
 
 interface UseNodeRenderingProps {
     nodeRows: NodeRowData[];
@@ -28,6 +29,7 @@ interface UseNodeRenderingProps {
     setIsHoveredNode: (hovered: boolean) => void;
     setIsHoverHeader: (hovered: boolean) => void;
     id: string;
+    onAppendSemanticNodes?: (row: NodeRowData, values: SemanticValue[]) => Promise<void> | void;
     nodeWidth?: number | null;
     isEmpty?: boolean;
     onWidthChange?: (width: number) => void;
@@ -63,6 +65,7 @@ export function useNodeRendering({
     setIsHoveredNode,
     setIsHoverHeader,
     id,
+    onAppendSemanticNodes,
     nodeWidth = null,
     isEmpty = false,
     onWidthChange
@@ -79,9 +82,11 @@ export function useNodeRendering({
     // Props per NodeRowList
     const nodeRowListProps = useMemo(() => ({
         rows: visibleRows,
+        nodeId: id,
         editingRowId,
         handleInsertRow: handleInsertRow,
         updateNodeRows,
+        onAppendSemanticNodes,
         onUpdate: (row: any, newText: string) => {
           // Estrai tutti i campi importanti dalla row per preservarli (incluso isUndefined e heuristics)
           const meta = {
@@ -113,8 +118,10 @@ export function useNodeRendering({
         onWidthChange: onWidthChange
     }), [
         visibleRows,
+        id,
         editingRowId,
         updateNodeRows,
+        onAppendSemanticNodes,
         handleUpdateRow,
         handleDeleteRow,
         handleInsertRow,

@@ -24,6 +24,12 @@ import { useCompilationErrors } from '../../../../context/CompilationErrorsConte
 import { taskRepository } from '../../../../services/TaskRepository';
 import { useFlowSubflow } from '../../context/FlowSubflowContext';
 import { SEMANTIC_DRAFT_FLUSH_EVENT } from '../../../../utils/semanticValuesRowState';
+import { useProjectData, useProjectDataUpdate } from '../../../../context/ProjectDataContext';
+import { ProjectDataService } from '../../../../services/ProjectDataService';
+import { generateId } from '../../../../utils/idGenerator';
+import { TaskType, type SemanticValue } from '../../../../types/taskTypes';
+import { LinkStyle, type EdgeData } from '../../types/flowTypes';
+import { variableCreationService } from '../../../../services/VariableCreationService';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -55,6 +61,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   selected
 }) => {
   const { onOpenSubflowForTask } = useFlowSubflow();
+  const { data: projectData } = useProjectData();
+  const { addItem, addCategory, updateDataDirectly } = useProjectDataUpdate();
   // Context for node operations (with fallback to legacy)
   const flowActions = useFlowActions();
 
@@ -112,7 +120,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const nodeContainerRef = useRef<HTMLDivElement>(null);
 
   // ✅ NODE DRAG: Hook per accedere a React Flow per aggiornare posizione nodo (deve essere prima di findAllDescendants)
-  const { getNode, setNodes, getViewport, getEdges } = useReactFlow();
+  const { getNode, setNodes, setEdges, getViewport, getEdges } = useReactFlow();
 
   // ✅ Funzione per trovare tutti i discendenti di un nodo (ricorsivo) - deve essere prima del useEffect che la usa
   const findAllDescendants = useCallback((nodeId: string, visited: Set<string> = new Set()): string[] => {
@@ -315,6 +323,249 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     handleNodeMouseLeave
   } = handlers;
 
+  const ensureConditionsCategory = useCallback(async (): Promise<string | null> => {
+    const conditions = (projectData as any)?.conditions || [];
+    if (conditions.length > 0 && conditions[0]?.id) {
+      return conditions[0].id;
+    }
+    await addCategory('conditions', 'Default Conditions');
+    const refreshed = await ProjectDataService.loadProjectData();
+    const updatedConditions = (refreshed as any)?.conditions || [];
+    return updatedConditions[0]?.id || null;
+  }, [projectData, addCategory]);
+
+  const getCurrentProjectId = useCallback((): string | null => {
+    try {
+      const runtime = (window as any).__omniaRuntime?.getCurrentProjectId?.();
+      if (runtime) return runtime;
+    } catch {}
+    try {
+      const fromStorage = localStorage.getItem('currentProjectId');
+      if (fromStorage) return fromStorage;
+    } catch {}
+    return null;
+  }, []);
+
+  const createConditionForValue = useCallback(async (
+    categoryId: string,
+    slotGuid: string,
+    slotLabel: string,
+    valueLabel: string
+  ): Promise<string | null> => {
+    const conditionName = `${slotLabel}: ${valueLabel}`;
+    const escaped = valueLabel.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const executableCode = `[${slotGuid}] = "${escaped}"`;
+    const compiledCode = `return ctx["${slotGuid}"] === "${escaped}";`;
+
+    const created = await addItem('conditions', categoryId, conditionName, '', 'global');
+    const conditionId = (created as any)?._id || (created as any)?.id;
+    if (!conditionId) return null;
+
+    const currentPd = JSON.parse(JSON.stringify((window as any).__projectData || projectData || {}));
+    const categories = currentPd.conditions || [];
+    let conditionPatched = false;
+    for (const cat of categories) {
+      if (cat.id !== categoryId) continue;
+      const items = cat.items || [];
+      const existingIdx = items.findIndex((item: any) => (item.id || item._id) === conditionId);
+      if (existingIdx >= 0) {
+        cat.items = items.map((item: any) => {
+          if ((item.id || item._id) !== conditionId) return item;
+          return {
+            ...item,
+            label: conditionName,
+            expression: {
+              executableCode,
+              compiledCode,
+              format: 'dsl',
+            },
+          };
+        });
+      } else {
+        // The provider refresh can lag behind addItem; inject immediately so editor can open now.
+        cat.items = [
+          ...items,
+          {
+            ...(created as any),
+            id: (created as any)?.id || (created as any)?._id || conditionId,
+            _id: (created as any)?._id || (created as any)?.id || conditionId,
+            label: conditionName,
+            expression: {
+              executableCode,
+              compiledCode,
+              format: 'dsl',
+            },
+          },
+        ];
+      }
+      conditionPatched = true;
+      break;
+    }
+    if (!conditionPatched) {
+      throw new Error(`Conditions category not found while creating condition: ${categoryId}`);
+    }
+    updateDataDirectly(currentPd);
+
+    const verifyConditions = (((window as any).__projectData || currentPd)?.conditions || [])
+      .flatMap((cat: any) => cat.items || []);
+    const existsNow = verifyConditions.some((item: any) => (item.id || item._id) === conditionId);
+    if (!existsNow) {
+      throw new Error(`Condition ${conditionId} was not visible in project data after creation.`);
+    }
+
+    return conditionId;
+  }, [addItem, projectData, updateDataDirectly]);
+
+  const handleAppendSemanticNodes = useCallback(async (row: NodeRowData, values: SemanticValue[]) => {
+    if (!values.length) {
+      return;
+    }
+
+    const parentNode = getNode(id);
+    if (!parentNode) {
+      window.alert('Parent node not found.');
+      return;
+    }
+
+    const allEdges = getEdges();
+    const existingEdgeLabels = new Set(
+      allEdges
+        .filter((e: any) => e.source === id)
+        .map((e: any) => String(e.label || '').trim().toLowerCase())
+    );
+
+    const uniqueValues = values
+      .map((v) => v.label.trim())
+      .filter((label) => label.length > 0)
+      .filter((label) => !existingEdgeLabels.has(label.toLowerCase()));
+
+    if (!uniqueValues.length) {
+      window.alert('All values already have outgoing branches from this node.');
+      return;
+    }
+
+    const slotGuid = row.meta?.semanticSlotRefId || generateId();
+    const projectId = getCurrentProjectId();
+    if (projectId) {
+      // Ensure GUID->label mapping exists so ConditionEditor can show readable labels.
+      const normalizedSlotLabel = variableCreationService.normalizeTaskLabel(
+        (row.text || 'slot').trim() || 'slot'
+      );
+      variableCreationService.ensureManualVariableWithId(
+        projectId,
+        slotGuid,
+        normalizedSlotLabel
+      );
+    }
+    updateNodeRows((rows) =>
+      rows.map((r) => (
+        r.id === row.id
+          ? { ...r, meta: { ...(r.meta || {}), semanticSlotRefId: slotGuid } }
+          : r
+      ))
+    );
+
+    const categoryId = await ensureConditionsCategory();
+    if (!categoryId) {
+      throw new Error('Conditions category not available.');
+    }
+
+    const parentX = parentNode.position.x;
+    const parentY = parentNode.position.y;
+    const parentWidth = (parentNode as any)?.measured?.width || (parentNode as any)?.width || 260;
+    const dx = 260;
+    const dy = 220;
+    const center = (uniqueValues.length - 1) / 2;
+
+    const newNodes: any[] = [];
+    const newEdges: any[] = [];
+    const skipped: string[] = [];
+
+    for (let i = 0; i < uniqueValues.length; i += 1) {
+      const valueLabel = uniqueValues[i];
+      const conditionId = await createConditionForValue(categoryId, slotGuid, row.text || 'slot', valueLabel);
+      if (!conditionId) {
+        skipped.push(valueLabel);
+        continue;
+      }
+
+      const childNodeId = generateId();
+      const childRowId = generateId();
+      const childCenterX = parentX + parentWidth / 2 + (i - center) * dx;
+      const childNodeWidth = 260;
+      const childX = Math.round(childCenterX - childNodeWidth / 2);
+      const childY = Math.round(parentY + dy);
+
+      newNodes.push({
+        id: childNodeId,
+        type: 'custom',
+        position: { x: childX, y: childY },
+        data: {
+          label: '',
+          rows: [
+            {
+              id: childRowId,
+              text: valueLabel,
+              included: true,
+              heuristics: {
+                type: TaskType.Flow,
+                templateId: null,
+              },
+            },
+          ],
+          onDelete: () => flowActions?.deleteNode?.(childNodeId),
+          onUpdate: (updates: any) => flowActions?.updateNode?.(childNodeId, updates),
+          onCreateFactoryTask: data.onCreateFactoryTask,
+          onCreateBackendCall: data.onCreateBackendCall,
+          onCreateTask: data.onCreateTask,
+          focusRowId: childRowId,
+        },
+      });
+
+      newEdges.push({
+        id: generateId(),
+        source: id,
+        sourceHandle: 'bottom',
+        target: childNodeId,
+        targetHandle: 'top-target',
+        type: 'custom',
+        label: valueLabel,
+        markerEnd: 'arrowhead',
+        conditionId,
+        linkStyle: LinkStyle.VHV,
+        data: {
+          linkStyle: LinkStyle.VHV,
+        } as EdgeData,
+      });
+    }
+
+    if (!newNodes.length) {
+      window.alert('No branches created. Conditions could not be created for selected values.');
+      return;
+    }
+
+    setNodes((nds: any[]) => [...nds, ...newNodes]);
+    setEdges((eds: any[]) => [...eds, ...newEdges]);
+
+    if (skipped.length) {
+      window.alert(`Created ${newNodes.length} branches, skipped ${skipped.length}.`);
+    }
+  }, [
+    id,
+    data.onCreateFactoryTask,
+    data.onCreateBackendCall,
+    data.onCreateTask,
+    flowActions,
+    getNode,
+    getEdges,
+    getCurrentProjectId,
+    setNodes,
+    setEdges,
+    updateNodeRows,
+    ensureConditionsCategory,
+    createConditionForValue,
+  ]);
+
   // ✅ RENDERING: Manage rendering logic and props (AFTER state and handlers)
   const rendering = useNodeRendering({
     nodeWidth: editingRowId ? nodeWidth : null,
@@ -343,6 +594,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     setIsHoveredNode,
     setIsHoverHeader,
     id,
+    onAppendSemanticNodes: handleAppendSemanticNodes,
     isEmpty,
     onWidthChange: handleRowWidthChange
   });
@@ -420,19 +672,19 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     const onFlush = (e: Event) => {
       const detail = (e as CustomEvent<{ rowId: string; nextRow: NodeRowData }>).detail;
       if (!detail?.rowId || !detail?.nextRow) return;
-      setNodeRows((prev) => {
-        if (!prev.some((r) => r.id === detail.rowId)) return prev;
-        const next = prev.map((r) => (r.id === detail.rowId ? detail.nextRow : r));
+      if (!nodeRows.some((r) => r.id === detail.rowId)) return;
+      const nextRows = nodeRows.map((r) => (r.id === detail.rowId ? detail.nextRow : r));
+      setNodeRows(nextRows);
+      queueMicrotask(() => {
         normalizedData.onUpdate?.({
-          rows: next,
+          rows: nextRows,
           isTemporary: normalizedData.isTemporary,
         });
-        return next;
       });
     };
     window.addEventListener(SEMANTIC_DRAFT_FLUSH_EVENT, onFlush as EventListener);
     return () => window.removeEventListener(SEMANTIC_DRAFT_FLUSH_EVENT, onFlush as EventListener);
-  }, [normalizedData, setNodeRows]);
+  }, [nodeRows, normalizedData, setNodeRows]);
 
   // ✅ CROSS-NODE DRAG: Listen for cross-node row moves - VERSIONE SEMPLIFICATA
   React.useEffect(() => {

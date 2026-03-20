@@ -79,6 +79,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     onWidthChange,
     onOpenSubflowForTask,
     updateNodeRows,
+    onAppendSemanticNodes,
   }: NodeRowProps,
   ref
 ) => {
@@ -781,6 +782,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             <SemanticValuesEditorPanel
               row={row}
               updateNodeRows={updateNodeRows}
+              onAppendNodes={onAppendSemanticNodes}
+              popoverTop={semanticPopoverPos.top}
               onClose={() => {
                 setShowSemanticValuesEditor(false);
                 setSemanticPopoverPos(null);

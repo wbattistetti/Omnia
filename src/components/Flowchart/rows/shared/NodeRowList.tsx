@@ -2,6 +2,7 @@ import React from 'react';
 import { NodeRowData } from '../../../../types/project';
 import { NodeRow } from '../NodeRow/NodeRow';
 import { RowInserter } from './RowInserter';
+import type { SemanticValue } from '../../../../types/taskTypes';
 
 interface NodeRowListProps {
   rows: NodeRowData[];
@@ -31,6 +32,8 @@ interface NodeRowListProps {
   onWidthChange?: (width: number) => void;
   onOpenSubflowForTask?: (taskId: string, existingFlowId?: string) => void;
   updateNodeRows?: (mutate: (rows: NodeRowData[]) => NodeRowData[]) => void;
+  nodeId?: string;
+  onAppendSemanticNodes?: (row: NodeRowData, values: SemanticValue[]) => Promise<void> | void;
 }
 
 export const NodeRowList: React.FC<NodeRowListProps> = ({
@@ -60,7 +63,9 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   getProjectId,
   onWidthChange,
   onOpenSubflowForTask,
-  updateNodeRows
+  updateNodeRows,
+  nodeId,
+  onAppendSemanticNodes,
 }) => {
 
   // Filter rows based on hideUnchecked setting
@@ -99,6 +104,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             index={idx}
           />
           <NodeRow
+            nodeId={nodeId}
             row={row}
             nodeTitle={nodeTitle}
             nodeCanvasPosition={undefined}
@@ -147,6 +153,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             onWidthChange={onWidthChange}
             onOpenSubflowForTask={onOpenSubflowForTask}
             updateNodeRows={updateNodeRows}
+            onAppendSemanticNodes={onAppendSemanticNodes}
           />
         </React.Fragment>
       ))}

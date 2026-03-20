@@ -348,17 +348,15 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
      */
     const updateNodeRows = useCallback(
         (mutate: (rows: NodeRowData[]) => NodeRowData[]) => {
-            setNodeRows((prev) => {
-                const nextRows = mutate(prev.map((r) => ({ ...r })));
-                setIsEmpty(computeIsEmpty(nextRows));
-                normalizedData.onUpdate?.({
-                    rows: nextRows,
-                    isTemporary: normalizedData.isTemporary,
-                });
-                return nextRows;
+            const nextRows = mutate(nodeRows.map((r) => ({ ...r })));
+            setNodeRows(nextRows);
+            setIsEmpty(computeIsEmpty(nextRows));
+            normalizedData.onUpdate?.({
+                rows: nextRows,
+                isTemporary: normalizedData.isTemporary,
             });
         },
-        [normalizedData, computeIsEmpty]
+        [nodeRows, normalizedData, computeIsEmpty]
     );
 
     // Gestione exit editing

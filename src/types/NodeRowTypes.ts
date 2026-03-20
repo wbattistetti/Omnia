@@ -1,4 +1,5 @@
 export interface NodeRowProps {
+  nodeId?: string;
   row: import('./project').NodeRowData;
   nodeTitle?: string;
   nodeCanvasPosition?: { x: number; y: number };
@@ -33,4 +34,6 @@ export interface NodeRowProps {
   onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string) => void;
   /** Immutable update of all rows in this node (flowchart); required for row.meta draft fields */
   updateNodeRows?: (mutate: (rows: import('./project').NodeRowData[]) => import('./project').NodeRowData[]) => void;
+  /** Generates child nodes/edges from semantic values of this row. */
+  onAppendSemanticNodes?: (row: import('./project').NodeRowData, values: import('./taskTypes').SemanticValue[]) => Promise<void> | void;
 }

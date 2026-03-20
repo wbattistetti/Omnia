@@ -133,6 +133,11 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // This eliminates the useState/useEffect lag in useEdgePositioning
   const labelSvgPosition = labelPositionAbsolute || (() => {
     // Fallback to midpoint if no relative position
+    if (linkStyle === LinkStyle.VHV) {
+      // For VHV place label at the midpoint of the last vertical segment (near target).
+      const midY = (sourceY + targetY) / 2;
+      return { x: targetX, y: (midY + targetY) / 2 };
+    }
     if (!pathRef.current) return { x: 0, y: 0 };
     const path = pathRef.current;
     const pathLength = path.getTotalLength();

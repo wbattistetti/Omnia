@@ -32,7 +32,7 @@ class VariableCreationService {
    * the semantic variable name.
    * e.g. "chiedi la data di nascita" → "data di nascita"
    */
-  private normalizeTaskLabel(label: string): string {
+  normalizeTaskLabel(label: string): string {
     let normalized = label.trim();
 
     // Remove common Italian conversational verbs
@@ -221,6 +221,42 @@ class VariableCreationService {
     });
 
     return newVariable;
+  }
+
+  /**
+   * Ensure a manual variable exists with the given GUID and label.
+   * Useful when a condition needs a stable promised GUID before task materialization.
+   */
+  ensureManualVariableWithId(projectId: string, varId: string, varName: string): VariableInstance {
+    const existing = this.store.get(projectId) ?? [];
+    const normalizedName = varName.trim();
+
+    // 1) Exact varId already exists → keep GUID and refresh label if needed
+    const byId = existing.find(v => v.varId === varId);
+    if (byId) {
+      if (normalizedName && byId.varName !== normalizedName) {
+        const updated = existing.map(v => v.varId === varId ? { ...v, varName: normalizedName } : v);
+        this.store.set(projectId, updated);
+        return updated.find(v => v.varId === varId)!;
+      }
+      return byId;
+    }
+
+    // 2) Same label exists with another GUID → preserve existing stable mapping
+    const byName = existing.find(v => v.varName === normalizedName);
+    if (byName) {
+      return byName;
+    }
+
+    const created: VariableInstance = {
+      varId,
+      varName: normalizedName,
+      taskInstanceId: '',
+      nodeId: '',
+      ddtPath: '',
+    };
+    this.store.set(projectId, [...existing, created]);
+    return created;
   }
 
   // ---------------------------------------------------------------------------
