@@ -61,7 +61,7 @@ export const createTask = (item: any): Task => {
     params,
     // Copy other task properties if present
     // ❌ RIMOSSO: data, steps, constraints - vengono sempre dal template
-    ...(task?.intents && { intents: task.intents }),
+    ...(task?.semanticValues && { semanticValues: task.semanticValues }),
     ...(task?.endpoint && { endpoint: task.endpoint }),
     ...(task?.method && { method: task.method }),
     createdAt: new Date(),

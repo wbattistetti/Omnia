@@ -35,11 +35,11 @@ export function useIntellisenseHandlers(
       actId = item.value; // L'ID del template
 
       // Recupera gli intents dal task se esiste già
-      const initialIntents: any[] = [];
+      const initialSemantic: any[] = [];
       try {
         const task = taskRepository.getTask(actId);
-        if (task?.intents) {
-          initialIntents.push(...task.intents);
+        if (task?.semanticValues?.length) {
+          initialSemantic.push(...task.semanticValues);
         }
       } catch (err) {
         // Ignore
@@ -60,15 +60,15 @@ export function useIntellisenseHandlers(
       instanceId = rowWithTask.taskId;
 
       // Se ci sono intents iniziali, aggiorna il Task
-      if (initialIntents.length > 0) {
-        taskRepository.updateTask(instanceId, { intents: initialIntents }, projectId);
+      if (initialSemantic.length > 0) {
+        taskRepository.updateTask(instanceId, { semanticValues: initialSemantic }, projectId);
       }
 
       console.log("✅ [INTELLISENSE] Created Task for ProblemClassification:", {
         instanceId,
         taskId: rowWithTask.taskId,
         actId,
-        initialIntentsCount: initialIntents.length,
+        initialIntentsCount: initialSemantic.length,
         timestamp: Date.now()
       });
     }

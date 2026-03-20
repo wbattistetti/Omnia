@@ -473,14 +473,27 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     const parentX = parentNode.position.x;
     const parentY = parentNode.position.y;
     const parentWidth = (parentNode as any)?.measured?.width || (parentNode as any)?.width || 260;
-    const dx = 260;
     const dy = 220;
-    const center = (uniqueValues.length - 1) / 2;
+
+    // Keep child strip centered on parent median using per-label width estimates.
+    // This avoids visual drift caused by a single hardcoded child width.
+    const estimateChildWidth = (label: string): number => {
+      const approxCharWidth = 8.4; // aligned with node width heuristic (14px * 0.6)
+      const padding = 40;
+      return Math.max(140, Math.ceil(label.length * approxCharWidth + padding));
+    };
+    const childWidths = uniqueValues.map((label) => estimateChildWidth(label));
+    const childGap = 120;
+    const totalChildrenWidth = childWidths.reduce((acc, width) => acc + width, 0)
+      + childGap * Math.max(0, uniqueValues.length - 1);
+    const parentCenterX = parentX + parentWidth / 2;
+    const stripStartX = parentCenterX - totalChildrenWidth / 2;
 
     const newNodes: any[] = [];
     const newEdges: any[] = [];
     const skipped: string[] = [];
 
+    let cursorX = stripStartX;
     for (let i = 0; i < uniqueValues.length; i += 1) {
       const valueLabel = uniqueValues[i];
       const conditionId = await createConditionForValue(categoryId, slotGuid, row.text || 'slot', valueLabel);
@@ -491,10 +504,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
       const childNodeId = generateId();
       const childRowId = generateId();
-      const childCenterX = parentX + parentWidth / 2 + (i - center) * dx;
-      const childNodeWidth = 260;
-      const childX = Math.round(childCenterX - childNodeWidth / 2);
+      const childNodeWidth = childWidths[i];
+      const childX = Math.round(cursorX);
       const childY = Math.round(parentY + dy);
+      cursorX += childNodeWidth + childGap;
 
       newNodes.push({
         id: childNodeId,

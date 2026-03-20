@@ -1,4 +1,5 @@
 import type { Task, TaskInstance, MaterializedStep } from '../types/taskTypes';
+import { migrateLegacyIntentsOnTask, problemIntentsToSemanticValues } from '../utils/semanticValueClassificationBridge';
 import { TaskType } from '../types/taskTypes';
 import { StepType } from '../types/stepTypes';
 import { generateId } from '../utils/idGenerator';
@@ -101,6 +102,14 @@ class TaskRepository {
     const existingTask = this.tasks.get(taskId);
     if (!existingTask) {
       return false;
+    }
+
+    if ((updates as any).intents !== undefined) {
+      (updates as Partial<Task>).semanticValues = problemIntentsToSemanticValues(
+        Array.isArray((updates as any).intents) ? (updates as any).intents : [],
+        existingTask.semanticValues ?? null
+      );
+      delete (updates as any).intents;
     }
 
     // ✅ CRITICAL: Preserve type field - never allow it to be removed
@@ -411,6 +420,7 @@ class TaskRepository {
           }
         }
 
+        migrateLegacyIntentsOnTask(task);
         this.tasks.set(task.id, task);
       }
 

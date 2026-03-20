@@ -111,7 +111,7 @@ function mapTaskToDomain(task: Task): TaskDomainModel {
     subTasksIds: task.subTasksIds,
     steps: task.steps,
     introduction: task.introduction,
-    intents: task.intents,
+    semanticValues: task.semanticValues,
     endpoint: task.endpoint,
     method: task.method,
     params: task.params,
@@ -121,7 +121,7 @@ function mapTaskToDomain(task: Task): TaskDomainModel {
     ...Object.fromEntries(
       Object.entries(task).filter(([key]) =>
         !['id', 'type', 'templateId', 'templateVersion', 'source', 'labelKey',
-          'subTasksIds', 'steps', 'introduction', 'intents', 'endpoint',
+          'subTasksIds', 'steps', 'introduction', 'semanticValues', 'endpoint',
           'method', 'params', 'createdAt', 'updatedAt'].includes(key)
       )
     ),

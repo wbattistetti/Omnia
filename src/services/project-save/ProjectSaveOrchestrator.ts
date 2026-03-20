@@ -198,6 +198,11 @@ export class ProjectSaveOrchestrator {
     uiState: {
       translationsContext?: ITranslationsContext;
       flowState?: IFlowStateService;
+      /**
+       * Snapshot of all workspace flows (FlowStore): one PUT /flow?flowId= per key.
+       * When omitted, only `main` is saved (legacy behavior).
+       */
+      flowsById?: Record<string, { nodes?: unknown[]; edges?: unknown[] }>;
       taskRepository?: ITaskRepository;
       variableService?: IVariableService;
       dialogueTaskService?: IDialogueTaskService;
@@ -254,7 +259,7 @@ export class ProjectSaveOrchestrator {
         }
       })(),
 
-      // 3. Flow
+      // 3. Flow (all workspace flows when flowsById is provided; otherwise main only)
       (async () => {
         try {
           if (!uiState.flowState) {
@@ -266,29 +271,58 @@ export class ProjectSaveOrchestrator {
             await uiState.flowState.flushFlowPersist();
           }
 
-          // Get flow data
-          const mainFlow = uiState.flowState.getFlowById('main');
-          const flowData = mainFlow
-            ? { nodes: mainFlow.nodes, edges: mainFlow.edges }
-            : { nodes: uiState.flowState.getNodes(), edges: uiState.flowState.getEdges() };
+          const fs = uiState.flowState;
+          const snapshot = uiState.flowsById;
+          const snapshotKeys = snapshot && Object.keys(snapshot).length > 0 ? Object.keys(snapshot) : null;
+          const flowIds = snapshotKeys
+            ? (() => {
+                const idSet = new Set<string>(snapshotKeys);
+                idSet.add('main');
+                const merged = Array.from(idSet);
+                return merged.includes('main')
+                  ? ['main', ...merged.filter((id) => id !== 'main').sort()]
+                  : merged.sort();
+              })()
+            : ['main'];
 
-          // Transform to simplified format
-          const simplifiedNodes = uiState.flowState.transformNodesToSimplified(flowData.nodes);
-          const simplifiedEdges = uiState.flowState.transformEdgesToSimplified(flowData.edges);
+          for (const flowId of flowIds) {
+            let flowData: { nodes: any[]; edges: any[] };
+            if (snapshot && Object.prototype.hasOwnProperty.call(snapshot, flowId)) {
+              const entry = snapshot[flowId];
+              flowData = {
+                nodes: (entry?.nodes as any[]) || [],
+                edges: (entry?.edges as any[]) || [],
+              };
+            } else if (flowId === 'main') {
+              const mainFlow = fs.getFlowById('main');
+              flowData = mainFlow
+                ? { nodes: mainFlow.nodes, edges: mainFlow.edges }
+                : { nodes: fs.getNodes(), edges: fs.getEdges() };
+            } else {
+              continue;
+            }
 
-          // Save flow
-          const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/flow?flowId=main`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nodes: simplifiedNodes, edges: simplifiedEdges }),
-          });
+            const simplifiedNodes = fs.transformNodesToSimplified(flowData.nodes);
+            const simplifiedEdges = fs.transformEdgesToSimplified(flowData.edges);
 
-          if (!response.ok) {
-            throw new Error(`Flow save failed: ${response.status} ${response.statusText}`);
+            const response = await fetch(
+              `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`,
+              {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nodes: simplifiedNodes, edges: simplifiedEdges }),
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(
+                `Flow save failed for ${flowId}: ${response.status} ${response.statusText}`
+              );
+            }
           }
 
           results.flow = { success: true };
-          console.log('[Save][Orchestrator][3-flow] ✅ DONE');
+          console.log('[Save][Orchestrator][3-flow] ✅ DONE', { flowCount: flowIds.length });
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           errors.push(`Flow: ${errorMsg}`);

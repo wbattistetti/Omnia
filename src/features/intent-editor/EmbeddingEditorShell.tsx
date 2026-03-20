@@ -10,6 +10,9 @@ import { Brain, Loader2 } from 'lucide-react';
 
 interface EmbeddingEditorShellProps {
   inlineMode?: boolean;
+  /** When set with onInlineClose, title + training controls + Close share one header row (saves vertical space). */
+  inlineHeaderTitle?: string;
+  onInlineClose?: () => void;
   intentSelected?: string; // Not used anymore, but kept for backward compatibility
   instanceId?: string; // Not used anymore, but kept for backward compatibility
   onTrainStateChange?: (state: { training: boolean; modelReady: boolean; canTrain: boolean }) => void;
@@ -40,7 +43,15 @@ const BASE_MODELS = [
 ];
 
 const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditorShellProps>(
-  ({ inlineMode: _inlineMode = false, onTrainStateChange, training: externalTraining, modelReady: externalModelReady, canTrain: externalCanTrain }, ref) => {
+  ({
+    inlineMode = false,
+    inlineHeaderTitle,
+    onInlineClose,
+    onTrainStateChange,
+    training: externalTraining,
+    modelReady: externalModelReady,
+    canTrain: externalCanTrain,
+  }, ref) => {
     // Training state
     const [training, setTraining] = useState(false);
     const [modelReady, setModelReady] = useState(false);
@@ -355,119 +366,130 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
       }
     }, [intents.length, currentTraining, onTrainStateChange]);
 
-    // ✅ SOLUZIONE ESPERTO: Rimuovere tutti i ResizeObserver e log di debug, usare solo flex-1 min-h-0
+    const compactSelectClass =
+      'px-2 py-1 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 max-w-[min(280px,40vw)]';
+
+    const trainingControlsRow = (
+      <>
+        <div className="flex items-center gap-2 min-w-0">
+          <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
+            Threshold: <span className="text-blue-600 font-semibold">{(threshold * 100).toFixed(0)}%</span>
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={threshold}
+            onChange={(e) => setThreshold(parseFloat(e.target.value))}
+            className="w-20 sm:w-24 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 shrink-0"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-slate-700 whitespace-nowrap">Top K:</label>
+          <input
+            type="number"
+            min="1"
+            max="100"
+            value={topK}
+            onChange={(e) => setTopK(Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 5)))}
+            className="w-14 px-2 py-1 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center text-sm"
+          />
+        </div>
+        <div className="flex items-center gap-2 min-w-0">
+          <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
+            Alpha: <span className="text-blue-600 font-semibold">{(alpha * 100).toFixed(0)}%</span>
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={alpha}
+            onChange={(e) => setAlpha(parseFloat(e.target.value))}
+            className="w-20 sm:w-24 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 shrink-0"
+          />
+        </div>
+        <div className="flex items-center gap-2 min-w-0">
+          <label className="text-sm font-medium text-slate-700 whitespace-nowrap">Base Model:</label>
+          <select
+            value={baseModel}
+            onChange={(e) => setBaseModel(e.target.value)}
+            className={inlineHeaderTitle ? `${compactSelectClass} min-w-[12rem]` : 'px-3 py-1 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[280px]'}
+          >
+            {BASE_MODELS.map(model => (
+              <option key={model.value} value={model.value}>
+                {model.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleTrain}
+            disabled={!currentCanTrain || currentTraining}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid rgba(0,0,0,0.2)',
+              borderRadius: 8,
+              background: currentModelReady ? '#fef3c7' : 'transparent',
+              color: currentModelReady ? '#92400e' : '#1e293b',
+              cursor: currentCanTrain && !currentTraining ? 'pointer' : 'not-allowed',
+              fontSize: 14,
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              opacity: currentCanTrain && !currentTraining ? 1 : 0.6,
+            }}
+            title={currentTraining ? 'Training in corso...' : currentModelReady ? 'Model ready - Click to retrain' : 'Train embeddings model'}
+          >
+            {currentTraining ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Training...
+              </>
+            ) : (
+              <>
+                <Brain size={14} />
+                Train Model
+              </>
+            )}
+          </button>
+        </div>
+      </>
+    );
+
     return (
       <div className="flex gap-0 flex-1 min-w-0 min-h-0 overflow-hidden flex-col">
-        {/* Riga parametri in alto - tutti sulla stessa riga */}
-        {/* ✅ FIX ALTEZZA: Aggiungi flex-shrink-0 per evitare che i controlli vengano compressi */}
-        <div className="flex items-center gap-4 px-4 pt-4 pb-2 flex-shrink-0" style={{ minHeight: '60px' }}>
-          {/* Threshold slider - compatto */}
-          <div className="flex items-center gap-2 min-w-0">
-            <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
-              Threshold: <span className="text-blue-600 font-semibold">{(threshold * 100).toFixed(0)}%</span>
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={threshold}
-              onChange={(e) => setThreshold(parseFloat(e.target.value))}
-              className="w-24 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-              style={{ minWidth: '96px' }}
-            />
+        {inlineHeaderTitle ? (
+          <div
+            className="flex items-center gap-2 px-2 sm:px-3 py-2 flex-shrink-0 border-b border-slate-200 flex-wrap"
+            style={{ rowGap: '8px' }}
+          >
+            <h3 className="m-0 text-sm sm:text-base font-semibold text-slate-800 shrink-0">{inlineHeaderTitle}</h3>
+            <div className="flex flex-1 min-w-[12rem] flex-wrap items-center justify-end gap-x-3 gap-y-1">
+              {trainingControlsRow}
+            </div>
+            {onInlineClose ? (
+              <button
+                type="button"
+                onClick={onInlineClose}
+                className="shrink-0 px-3 py-1.5 text-sm border border-slate-300 rounded-md bg-white text-slate-800 hover:bg-slate-50 cursor-pointer"
+              >
+                Close
+              </button>
+            ) : null}
           </div>
-
-          {/* TopK input - largo solo per 3 cifre */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
-              Top K:
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="100"
-              value={topK}
-              onChange={(e) => setTopK(Math.max(1, Math.min(100, parseInt(e.target.value) || 5)))}
-              className="w-16 px-2 py-1 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center"
-              style={{ maxWidth: '64px' }}
-            />
+        ) : (
+          <div
+            className={`flex items-center gap-4 px-4 ${inlineMode ? 'pt-2 pb-2' : 'pt-4 pb-2'} flex-shrink-0 flex-wrap`}
+            style={{ minHeight: inlineMode ? undefined : '60px' }}
+          >
+            {trainingControlsRow}
           </div>
-
-          {/* Alpha slider - compatto */}
-          <div className="flex items-center gap-2 min-w-0">
-            <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
-              Alpha: <span className="text-blue-600 font-semibold">{(alpha * 100).toFixed(0)}%</span>
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={alpha}
-              onChange={(e) => setAlpha(parseFloat(e.target.value))}
-              className="w-24 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-              style={{ minWidth: '96px' }}
-            />
-          </div>
-
-          {/* Spacer per spingere Base Model a destra */}
-          <div style={{ flex: 1 }} />
-
-          {/* Base model dropdown */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
-              Base Model:
-            </label>
-            <select
-              value={baseModel}
-              onChange={(e) => setBaseModel(e.target.value)}
-              className="px-3 py-1 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              style={{ minWidth: '320px' }}
-            >
-              {BASE_MODELS.map(model => (
-                <option key={model.value} value={model.value}>
-                  {model.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* ✅ FIX DOPPIO HEADER: Train Model button spostato qui dalla toolbar */}
-          <div className="flex items-center gap-2 ml-4">
-            <button
-              onClick={handleTrain}
-              disabled={!currentCanTrain || currentTraining}
-              style={{
-                padding: '6px 12px',
-                border: '1px solid rgba(0,0,0,0.2)',
-                borderRadius: 8,
-                background: currentModelReady ? '#fef3c7' : 'transparent',
-                color: currentModelReady ? '#92400e' : '#1e293b',
-                cursor: currentCanTrain && !currentTraining ? 'pointer' : 'not-allowed',
-                fontSize: 14,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                opacity: currentCanTrain && !currentTraining ? 1 : 0.6
-              }}
-              title={currentTraining ? 'Training in corso...' : currentModelReady ? 'Model ready - Click to retrain' : 'Train embeddings model'}
-            >
-              {currentTraining ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  Training...
-                </>
-              ) : (
-                <>
-                  <Brain size={14} />
-                  Train Model
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* Tre colonne anche in inlineMode (overlay Recognition): senza questo resta solo la riga parametri e un vuoto flex-1 */}
         <div

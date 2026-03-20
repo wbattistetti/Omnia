@@ -1,4 +1,4 @@
-import { TaskType, type SemanticValue } from './taskTypes'; // ✅ Import TaskType enum
+import { TaskType, type SemanticValue } from './taskTypes';
 
 export type EntityType = 'taskTemplates' | 'userTasks' | 'backendActions' | 'conditions' | 'macrotasks'; // ✅ RINOMINATO: userActs → userTasks
 
@@ -108,7 +108,8 @@ export type ProblemEditorState = {
 
 export type ProblemPayload = {
   version: 1;
-  intents: ProblemIntent[];
+  /** Labels + optional embedding training; persisted on Task.semanticValues. */
+  semanticValues?: SemanticValue[];
   editor?: ProblemEditorState;
 };
 

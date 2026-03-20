@@ -188,14 +188,14 @@ export class IntellisenseSelectionHandler {
       const taskTypeToUse = this.item.type ?? 'ProblemClassification';
 
       // Load initial intents from existing task if available
-      let initialIntents: any[] = [];
+      let initialSemantic: any[] = [];
       try {
         const task = taskRepository.getTask(instanceIdToUse);
-        if (task?.intents) {
-          initialIntents = task.intents;
+        if (task?.semanticValues?.length) {
+          initialSemantic = [...task.semanticValues];
         }
       } catch (err) {
-        console.warn('[IntellisenseSelectionHandler] Could not load template intents:', err);
+        console.warn('[IntellisenseSelectionHandler] Could not load template semantic values:', err);
       }
 
       // Create or update task
@@ -211,8 +211,8 @@ export class IntellisenseSelectionHandler {
         // Create Task for this row
         const task = createRowWithTask(instanceId, taskTypeEnum, this.row.text ?? '', projectId);
         // Update Task with intents if ProblemClassification
-        if (initialIntents.length > 0) {
-          taskRepository.updateTask(task.id, { intents: initialIntents }, projectId);
+        if (initialSemantic.length > 0) {
+          taskRepository.updateTask(task.id, { semanticValues: initialSemantic }, projectId);
         }
       } else {
         // Update Task type

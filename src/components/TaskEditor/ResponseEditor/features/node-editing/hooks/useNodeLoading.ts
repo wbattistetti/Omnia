@@ -109,68 +109,8 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
           : 0;
         const nodeStepTypes = Object.keys(nodeStepsDict);
 
-
-        // Log rimosso: non essenziale per flusso motore
-        const nodeStepsDetails = nodeStepTypes.length > 0 ? (() => {
-          let escalationsCount = 0;
-          let tasksCount = 0;
-
-          for (const stepType in nodeStepsDict) {
-            const step = nodeStepsDict[stepType];
-            if (step?.escalations && Array.isArray(step.escalations)) {
-              escalationsCount += step.escalations.length;
-              tasksCount += step.escalations.reduce((acc: number, esc: any) =>
-                acc + (esc?.tasks?.length || 0), 0);
-            }
-          }
-
-          return {
-            stepsType: 'dictionary',
-            isArray: false,
-            isObject: true,
-            stepTypes: nodeStepTypes,
-            stepTypesCount: nodeStepTypes.length,
-            escalationsCount,
-            tasksCount,
-            nodeHasStepsBefore: !!node.steps,
-            nodeStepsType: typeof node.steps
-          };
-        })() : null;
-
-        // Usa nodeStepsDict già dichiarato sopra
         if (nodeStepTypes.length > 0) {
           node.steps = nodeStepsDict;
-
-          // 🔍 DEBUG: Verifica quali GUID sono in node.steps quando viene popolato
-          const firstStepKey = nodeStepTypes[0];
-          const firstStep = nodeStepsDict[firstStepKey];
-          const firstEscalation = firstStep?.escalations?.[0];
-          const firstTask = firstEscalation?.tasks?.[0];
-          const firstTaskTextKey = firstTask?.parameters?.find((p: any) => p.parameterId === 'text')?.value;
-          console.log('[useNodeLoading] 🔍 DEBUG node.steps populated', {
-            nodeTemplateId,
-            nodeStepsKeys: nodeStepTypes,
-            firstStepKey,
-            firstStepHasEscalations: !!firstStep?.escalations,
-            firstEscalationHasTasks: !!firstEscalation?.tasks,
-            firstTaskTextKey,
-            firstTaskTextKeyIsGuid: firstTaskTextKey ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(firstTaskTextKey) : false,
-            taskTreeStepsKeys: currentTaskTree.steps ? Object.keys(currentTaskTree.steps) : [],
-            taskTreeStepsSource: 'from buildTaskTree'
-          });
-
-          let totalEscalations = 0;
-          let totalTasks = 0;
-          for (const stepType in nodeStepsDict) {
-            const step = nodeStepsDict[stepType];
-            if (step?.escalations && Array.isArray(step.escalations)) {
-              totalEscalations += step.escalations.length;
-              totalTasks += step.escalations.reduce((acc: number, esc: any) =>
-                acc + (esc?.tasks?.length || 0), 0);
-            }
-          }
-
-          // Log rimosso: non essenziale per flusso motore
         } else {
           // No steps found for node
         }

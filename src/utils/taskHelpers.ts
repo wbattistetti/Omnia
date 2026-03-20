@@ -225,8 +225,7 @@ export function updateRowTaskType( // ✅ RINOMINATO: updateRowTaskAction → up
 export function getRowData(row: NodeRowData): {
   message?: { text: string };
   ddt?: any;
-  intents?: any[];
-  // ❌ RIMOSSO: action field (legacy, non più necessario)
+  semanticValues?: any[];
 } {
   const taskId = getTaskIdFromRow(row);
   const task = taskRepository.getTask(taskId);
@@ -240,8 +239,7 @@ export function getRowData(row: NodeRowData): {
         steps: task.steps,
         constraints: task.constraints,
       } : undefined,
-      intents: task.intents
-      // ❌ RIMOSSO: action field (legacy)
+      semanticValues: task.semanticValues ?? undefined,
     };
   }
 
@@ -262,7 +260,7 @@ export function updateRowData(
   data: {
     message?: { text: string };
     ddt?: any;
-    intents?: any[];
+    semanticValues?: any[];
   },
   projectId?: string
 ): void {
@@ -284,8 +282,8 @@ export function updateRowData(
     taskUpdates.label = data.ddt.label;
     // ❌ RIMOSSO: data, steps, constraints, examples - vengono sempre dal template
   }
-  if (data.intents !== undefined) {
-    taskUpdates.intents = data.intents;
+  if (data.semanticValues !== undefined) {
+    taskUpdates.semanticValues = data.semanticValues;
   }
 
   if (Object.keys(taskUpdates).length > 0) {
@@ -297,7 +295,7 @@ export function updateRowData(
     taskId,
     hasMessage: !!data.message,
     hasDDT: !!data.ddt,
-    hasIntents: !!data.intents,
+    hasSemanticValues: !!data.semanticValues,
     projectId
   });
 }

@@ -159,7 +159,7 @@ export class TaskContentResolver {
         return Boolean(
           this.hasMessage(taskId) ||
           task.endpoint ||
-          task.intents
+          (Array.isArray(task.semanticValues) && task.semanticValues.length > 0)
         );
     }
   }

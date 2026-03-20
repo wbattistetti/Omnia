@@ -144,8 +144,11 @@ export function useFlowEventHandlers(
       return false;
     }
 
-    // Allow only if it's a toolbar drag
-    if (isToolbarDrag) {
+    const selectedSet = new Set(selectedNodeIds);
+    const canDragSelectedGroup = selectedSet.size > 1 && selectedSet.has(node.id);
+
+    // Allow toolbar drag OR selected-group drag
+    if (isToolbarDrag || canDragSelectedGroup) {
       FlowStateBridge.setBlockNodeDrag(false);
     } else {
       // If not toolbar drag, block
@@ -155,7 +158,27 @@ export function useFlowEventHandlers(
     }
 
     FlowStateBridge.setBlockNodeDrag(false);
-    // Prepare context for rigid drag ONLY if started from anchor
+
+    // If dragging a node inside a multi-selection, move the whole selection rigidly.
+    // This is the primary behavior for group manipulation.
+    if (canDragSelectedGroup) {
+      const startPositions = new Map<string, { x: number; y: number }>();
+      nodes.forEach(n => {
+        if (selectedSet.has(n.id)) {
+          startPositions.set(n.id, { x: (n.position as any).x, y: (n.position as any).y });
+        }
+      });
+      rigidDragCtxRef.current = {
+        rootId: node.id,
+        ids: selectedSet,
+        startPositions,
+        rootStart: { x: (node.position as any).x, y: (node.position as any).y },
+        rootLast: { x: (node.position as any).x, y: (node.position as any).y },
+      };
+      return;
+    }
+
+    // Fallback: rigid drag from anchor keeps existing descendants behavior.
     if (FlowStateBridge.isRigidDrag() || isAnchor) {
       const rootId = node.id;
       // BFS su edges per raccogliere tutti i discendenti
@@ -186,7 +209,7 @@ export function useFlowEventHandlers(
     } else {
       rigidDragCtxRef.current = null;
     }
-  }, [nodes, edges]);
+  }, [nodes, edges, selectedNodeIds]);
 
   /**
    * Handles node drag - applies rigid drag movement if context exists

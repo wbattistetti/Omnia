@@ -293,11 +293,26 @@ export interface MaterializedStep {
 }
 
 /**
+ * Embedding motor training data for one semantic value (classify / similarity).
+ */
+export interface SemanticValueEmbedding {
+  threshold?: number;
+  enabled?: boolean;
+  phrases?: {
+    matching: Array<{ id: string; text: string; lang?: string }>;
+    notMatching: Array<{ id: string; text: string; lang?: string }>;
+    keywords: Array<{ t: string; w: number }>;
+  };
+}
+
+/**
  * Closed-domain value for semantic slots (e.g. motivo = {billing, cancellation, ...}).
+ * Optional embedding holds phrases/threshold when using the embedding recognizer.
  */
 export interface SemanticValue {
   id: string;
   label: string;
+  embedding?: SemanticValueEmbedding;
 }
 
 export interface Task {
@@ -323,9 +338,8 @@ export interface Task {
   // ❌ RIMOSSO: text?: string - Il task deve contenere solo GUID nei parameters
   // Il modello corretto è: task.parameters = [{ parameterId: 'text', value: GUID }]
   // La traduzione è in translations[GUID], NON in task.text
-  // Per ClassifyProblem:
-  intents?: any[];               // Intents array
   // Closed semantic domain for a data slot. null/undefined = open domain (no fixed values).
+  // ClassifyProblem / embedding: use semanticValues[].embedding for training (no separate intents field).
   semanticValues?: SemanticValue[] | null;
   // Per BackendCall:
   endpoint?: string;             // API endpoint

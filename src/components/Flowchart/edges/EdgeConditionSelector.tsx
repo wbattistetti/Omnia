@@ -4,6 +4,7 @@ import { IntellisenseMenu } from '../../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../../Intellisense/IntellisenseTypes';
 import { useProjectData } from '../../../context/ProjectDataContext';
 import { taskRepository } from '../../../services/TaskRepository';
+import { normalizeProblemPayload, semanticValuesToProblemIntents } from '../../../utils/semanticValueClassificationBridge';
 import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../../utils/fontSizeUtils';
 import { getValuesFromTask, buildConditionName } from '../../TaskEditor/ResponseEditor/utils/getNodeValues';
@@ -214,14 +215,15 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
           const key = `problem.${pid}.${actId}`;
           let payload: any = null;
           try { const raw = localStorage.getItem(key); payload = raw ? JSON.parse(raw) : null; } catch { }
-          let intentsSrc: any[] = Array.isArray(payload?.intents) ? payload.intents : [];
+          const normalized = payload ? normalizeProblemPayload(payload) : { version: 1 as const, semanticValues: [] };
+          let intentsSrc: any[] = semanticValuesToProblemIntents(normalized.semanticValues);
           if (intentsSrc.length === 0) {
             try {
               const taskId = r?.taskId || r?.id;
               if (taskId) {
                 const task = taskRepository.getTask(taskId);
-                if (task?.intents && Array.isArray(task.intents)) {
-                  intentsSrc = task.intents;
+                if (task?.semanticValues?.length) {
+                  intentsSrc = semanticValuesToProblemIntents(task.semanticValues);
                 }
               }
             } catch (err) {

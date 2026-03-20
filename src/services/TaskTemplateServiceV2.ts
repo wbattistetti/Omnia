@@ -17,7 +17,7 @@ export interface TaskTemplateV2 {
     ddtId?: string;
     ddt?: any;
     text?: string;
-    intents?: any[];
+    semanticValues?: any[];
   };
   category?: string;
   isBuiltIn?: boolean;

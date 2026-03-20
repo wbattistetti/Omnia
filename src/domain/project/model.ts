@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { TaskType } from '@types/taskTypes';
+import { TaskType, type SemanticValue } from '@types/taskTypes';
 
 /**
  * ProjectDomainModel: Stable domain model for project data
@@ -48,7 +48,7 @@ export interface TaskDomainModel {
   subTasksIds?: string[];
   steps?: Record<string, Record<string, any>>;
   introduction?: any;
-  intents?: any[];
+  semanticValues?: SemanticValue[] | null;
   endpoint?: string;
   method?: string;
   params?: Record<string, any>;

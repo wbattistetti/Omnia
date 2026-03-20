@@ -237,6 +237,18 @@ export const AppContent: React.FC<AppContentProps> = ({
             const flowId = existingFlowId || `subflow_${taskId}_${Date.now()}`;
             const tabTitle = (title || '').trim() || 'Subflow';
             upsertFlow({ id: flowId, title: tabTitle, nodes: [], edges: [] });
+            const t = taskRepository.getTask(taskId);
+            const prevParams =
+              t &&
+              typeof (t as { parameters?: unknown }).parameters === 'object' &&
+              (t as { parameters?: object }).parameters !== null &&
+              !Array.isArray((t as { parameters?: unknown }).parameters)
+                ? ((t as { parameters: Record<string, unknown> }).parameters as Record<string, unknown>)
+                : {};
+            taskRepository.updateTask(taskId, {
+              parameters: { ...prevParams, flowId },
+              flowId,
+            } as Partial<Task>);
             setDockTree(prev =>
               upsertAddNextTo(prev, tabId, {
                 id: `tab_${flowId}`,
@@ -995,8 +1007,16 @@ export const AppContent: React.FC<AppContentProps> = ({
                 // Note: taskRepository is already imported statically at the top of the file
 
                 // Execute save using orchestrator
+                const flowsById = Object.fromEntries(
+                  Object.entries(allFlows).map(([fid, f]: [string, any]) => [
+                    fid,
+                    { nodes: f?.nodes ?? [], edges: f?.edges ?? [] },
+                  ])
+                );
+
                 const saveResult = await orchestrator.executeSave(saveRequest, {
                   translationsContext: (window as any).__projectTranslationsContext,
+                  flowsById,
                   flowState: {
                     flushFlowPersist: async () => {
                       await flushFlowPersist();

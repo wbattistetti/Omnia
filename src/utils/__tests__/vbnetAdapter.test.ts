@@ -120,7 +120,7 @@ describe('VB.NET Adapter', () => {
       const task: TaskInstance = {
         id: 'task_3',
         templateId: 'ClassifyProblem',
-        value: { intents: [] }
+        value: { semanticValues: [] }
       };
 
       const prepared = prepareTaskForVBNet(task);

@@ -8,7 +8,7 @@
  * Eliminates race conditions, multiple sources of truth, and complex hook dependencies.
  */
 
-import { create } from 'zustand';
+import { createWithEqualityFn } from 'zustand/traditional';
 import type { WizardTaskTreeNode, WizardStepMessages, WizardConstraint } from '../types';
 import { WizardMode } from '../types/WizardMode';
 import type { WizardStep } from '../types/WizardStep';
@@ -152,7 +152,7 @@ const initialPipelineSteps: PipelineStep[] = [
   }
 ];
 
-export const useWizardStore = create<WizardStore>((set, get) => ({
+export const useWizardStore = createWithEqualityFn<WizardStore>((set, get) => ({
   // ============================================
   // INITIAL STATE
   // ============================================

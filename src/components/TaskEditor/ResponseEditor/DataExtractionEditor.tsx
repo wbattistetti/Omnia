@@ -1,6 +1,7 @@
 import React from 'react';
 import { Wand2 } from 'lucide-react';
 import { taskRepository } from '@services/TaskRepository';
+import { semanticValuesToProblemIntents } from '@utils/semanticValueClassificationBridge';
 import type { ProblemIntent } from '@types/project';
 import RegexEditor from '@responseEditor/RegexEditor';
 import NLPCompactEditor from '@responseEditor/NLPCompactEditor';
@@ -294,21 +295,19 @@ export default function DataExtractionEditor({
       return;
     }
 
-    // Read intents from Task
     const taskInstance = taskRepository.getTask(task.instanceId);
-    if (!taskInstance?.value?.intents) return;
+    const problemIntents = semanticValuesToProblemIntents(taskInstance?.semanticValues);
+    if (!problemIntents.length && testPhraseMode !== 'test-phrases') return;
 
     let phrases: string[] = [];
 
     if (testPhraseMode === 'all-training') {
-      // Tutte le frasi di training di tutti gli intenti
-      phrases = taskInstance.intents?.flatMap((pi: ProblemIntent) =>
+      phrases = problemIntents.flatMap((pi: ProblemIntent) =>
         (pi.phrases?.matching || []).map((p: any) => p.text)
-      ) || [];
+      );
     } else if (testPhraseMode === 'selected-training') {
-      // Solo frasi dell'intento selezionato
       if (intentSelected) {
-        const intent = taskInstance.intents?.find(
+        const intent = problemIntents.find(
           (pi: ProblemIntent) => pi.id === intentSelected || pi.name === intentSelected
         );
         phrases = (intent?.phrases?.matching || []).map((p: any) => p.text);

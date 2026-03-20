@@ -328,12 +328,12 @@ class TaskTemplateService {
       valueSchema: {
         editor: 'problem',
         keys: {
-          intents: {
+          semanticValues: {
             type: 'problem',
             required: true,
             ideMapping: {
               control: 'problem-editor',
-              label: 'Intents di classificazione'
+              label: 'Semantic values (classi / embedding)'
             }
           }
         }

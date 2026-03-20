@@ -31,15 +31,47 @@ Public Class SimpleTaskCompiler
 
             Case TaskTypes.ClassifyProblem
                 Dim classifyTask As New CompiledClassifyProblemTask()
-                ' Estrai intents da value
-                If task.Value IsNot Nothing AndAlso task.Value.ContainsKey("intents") Then
-                    Dim intentsValue = task.Value("intents")
-                    If TypeOf intentsValue Is List(Of String) Then
-                        classifyTask.Intents = CType(intentsValue, List(Of String))
-                    ElseIf TypeOf intentsValue Is String() Then
-                        classifyTask.Intents = New List(Of String)(CType(intentsValue, String()))
+                Dim labels As New List(Of String)
+
+                If task.Value IsNot Nothing Then
+                    ' Prefer semanticValues[].label (canonical model)
+                    If task.Value.ContainsKey("semanticValues") Then
+                        Dim svTok = task.Value("semanticValues")
+                        Dim svArr = TryCast(svTok, JArray)
+                        If svArr IsNot Nothing Then
+                            For Each el In svArr
+                                Dim jo = TryCast(el, JObject)
+                                If jo IsNot Nothing Then
+                                    Dim lab = jo("label")?.ToString()
+                                    If Not String.IsNullOrWhiteSpace(lab) Then labels.Add(lab)
+                                End If
+                            Next
+                        End If
+                    End If
+
+                    ' Legacy: value("intents") as strings or objects with name
+                    If labels.Count = 0 AndAlso task.Value.ContainsKey("intents") Then
+                        Dim intentsValue = task.Value("intents")
+                        If TypeOf intentsValue Is List(Of String) Then
+                            labels = CType(intentsValue, List(Of String))
+                        ElseIf TypeOf intentsValue Is String() Then
+                            labels = New List(Of String)(CType(intentsValue, String()))
+                        Else
+                            Dim legacyArr = TryCast(intentsValue, JArray)
+                            If legacyArr IsNot Nothing Then
+                                For Each el In legacyArr
+                                    Dim jo = TryCast(el, JObject)
+                                    If jo IsNot Nothing Then
+                                        Dim n = jo("name")?.ToString()
+                                        If Not String.IsNullOrWhiteSpace(n) Then labels.Add(n)
+                                    End If
+                                Next
+                            End If
+                        End If
                     End If
                 End If
+
+                If labels.Count > 0 Then classifyTask.Intents = labels
                 compiledTask = classifyTask
 
             Case TaskTypes.BackendCall

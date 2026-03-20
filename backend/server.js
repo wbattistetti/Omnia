@@ -2354,7 +2354,7 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
     // Route by document type
     let task;
     if (isInstance(payload)) {
-      // Instance: save only the required instance fields
+      // Instance: required fields + closed semantic domain / embedding config
       task = {
         projectId,
         id: payload.id,
@@ -2363,6 +2363,7 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
         templateVersion: payload.templateVersion || 1,
         labelKey: payload.labelKey,
         steps: payload.steps,
+        semanticValues: payload.semanticValues,
         updatedAt: now
       };
     } else if (isLocalTemplate(payload)) {
@@ -2587,7 +2588,7 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
     // ✅ Se è Instance, filtra solo campi permessi
     if (isInstance(mergedDoc)) {
       // Mantieni solo campi permessi per istanze (incluso type che è necessario per il caricamento)
-      const allowedFields = ['type', 'templateId', 'templateVersion', 'labelKey', 'steps', 'updatedAt'];
+      const allowedFields = ['type', 'templateId', 'templateVersion', 'labelKey', 'steps', 'semanticValues', 'updatedAt'];
       const filteredUpdate = {};
       for (const key of allowedFields) {
         if (update[key] !== undefined) {
@@ -2702,7 +2703,7 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
           // Route by document type
           let task;
           if (isInstance(item)) {
-            // Instance: save only the required instance fields
+            // Instance: required instance fields + semantic domain / embedding config
             task = {
               projectId,
               id: item.id,
@@ -2711,6 +2712,7 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
               templateVersion: item.templateVersion || 1,
               labelKey: item.labelKey,
               steps: item.steps,
+              semanticValues: item.semanticValues,
               updatedAt: now
             };
           } else if (isLocalTemplate(item)) {

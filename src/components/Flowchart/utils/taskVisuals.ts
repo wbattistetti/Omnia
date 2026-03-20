@@ -146,7 +146,7 @@ function hasTaskTreeLegacy(row: any): boolean {
     }
 
     // Per altri tipi: controlla se c'è contenuto rilevante
-    return Boolean(task?.text || task?.endpoint || task?.intents);
+    return Boolean(task?.text || task?.endpoint || (Array.isArray(task?.semanticValues) && task.semanticValues.length > 0));
   } catch (err) {
     return false;
   }

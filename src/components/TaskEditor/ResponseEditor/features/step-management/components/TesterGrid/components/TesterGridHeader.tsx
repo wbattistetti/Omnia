@@ -192,7 +192,7 @@ export default function TesterGridHeader({
       case 'llm':
         return { ...base, systemPrompt: '', aiPrompt: '', responseSchema: {} };
       case 'embeddings':
-        return { ...base, intents: [] };
+        return { ...base, semanticValues: [] };
       case 'grammarflow':
         return { ...base, grammarFlow: null }; // Empty grammar, will be created in Grammar Editor
       default:

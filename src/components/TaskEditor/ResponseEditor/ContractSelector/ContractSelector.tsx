@@ -79,7 +79,7 @@ export default function ContractSelector({
       case 'llm':
         return { ...base, systemPrompt: '', aiPrompt: '', responseSchema: {} };
       case 'embeddings':
-        return { ...base, intents: [] };
+        return { ...base, semanticValues: [] };
       default:
         return base;
     }

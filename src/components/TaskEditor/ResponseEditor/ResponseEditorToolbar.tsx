@@ -542,10 +542,20 @@ export function useResponseEditorToolbar({
         paddingLeft: '0.5rem',
         borderLeft: '1px solid rgba(255, 255, 255, 0.2)'
       }}>
-        <button
+        {/* div+role="button": Dock tab toolbar wraps the row in <button>; nested <button> is invalid HTML */}
+        <div
+          role="button"
+          tabIndex={0}
           onClick={(e) => {
             e.stopPropagation();
             handleTreeViewClick();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              handleTreeViewClick();
+            }
           }}
           style={{
             display: 'flex',
@@ -562,11 +572,20 @@ export function useResponseEditorToolbar({
           title="Tree view"
         >
           <TreePine size={14} />
-        </button>
-        <button
+        </div>
+        <div
+          role="button"
+          tabIndex={0}
           onClick={(e) => {
             e.stopPropagation();
             handleTabViewClick();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              handleTabViewClick();
+            }
           }}
           style={{
             display: 'flex',
@@ -583,7 +602,7 @@ export function useResponseEditorToolbar({
           title="Tab view"
         >
           <LayoutGrid size={14} />
-        </button>
+        </div>
       </div>
       <div style={{
         display: 'flex',
@@ -591,10 +610,19 @@ export function useResponseEditorToolbar({
         paddingLeft: '0.5rem',
         borderLeft: '1px solid rgba(255, 255, 255, 0.2)'
       }}>
-        <button
+        <div
+          role="button"
+          tabIndex={0}
           onClick={(e) => {
             e.stopPropagation();
             handleTasksClick();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              handleTasksClick();
+            }
           }}
           style={{
             display: 'flex',
@@ -613,7 +641,7 @@ export function useResponseEditorToolbar({
         >
           <CheckSquare size={14} />
           <span>Tasks</span>
-        </button>
+        </div>
       </div>
     </div>
   ), [viewMode, leftPanelMode, tasksPanelMode, handleTreeViewClick, handleTabViewClick, handleTasksClick]);

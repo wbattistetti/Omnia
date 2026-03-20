@@ -1,9 +1,22 @@
+/**
+ * Inline embedding editor: Task.semanticValues (with embedding) ↔ useIntentStore.
+ * Bootstrap: if task has no semantic values, seed from row closed-domain values (see getSemanticValuesForRow).
+ */
+
 import React, { useEffect } from 'react';
 import EmbeddingEditorShell from '@features/intent-editor/EmbeddingEditorShell';
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
 import { useIntentStore } from '@features/intent-editor/state/intentStore';
+import { FlowStateBridge } from '@services/FlowStateBridge';
 import { taskRepository } from '@services/TaskRepository';
-import type { ProblemIntent } from '@types/project';
+import { variableCreationService } from '@services/VariableCreationService';
+import { getSemanticValuesForRow } from '@utils/semanticValuesRowState';
+import {
+  problemIntentsToSemanticValues,
+  semanticValuesToProblemIntents,
+} from '@utils/semanticValueClassificationBridge';
+import type { NodeRowData, ProblemIntent } from '@types/project';
+import type { SemanticValue } from '@types/taskTypes';
 
 interface IntentEditorInlineEditorProps {
   onClose: () => void;
@@ -14,7 +27,6 @@ interface IntentEditorInlineEditorProps {
   act?: { id: string; type: string; label?: string; instanceId?: string };
 }
 
-// FASE 3: Convert ProblemIntent[] from Task to useIntentStore format
 function toEditorState(intents: ProblemIntent[] = []) {
   return intents.map((pi: ProblemIntent) => ({
     id: pi.id,
@@ -32,11 +44,46 @@ function toEditorState(intents: ProblemIntent[] = []) {
   }));
 }
 
-/**
- * Inline editor wrapper for EmbeddingEditorShell
- * Adapts EmbeddingEditorShell for use within DataExtractionEditor
- * Shows intent classifier/embeddings configuration
- */
+function resolveCurrentProjectId(): string | null {
+  if (typeof window === 'undefined') return null;
+  const fromRuntime = (window as unknown as { __omniaRuntime?: { getCurrentProjectId?: () => string } })
+    .__omniaRuntime?.getCurrentProjectId?.();
+  if (typeof fromRuntime === 'string' && fromRuntime) return fromRuntime;
+  return localStorage.getItem('currentProjectId');
+}
+
+function findRowForTaskId(taskId: string): NodeRowData | null {
+  for (const n of FlowStateBridge.getNodes()) {
+    const rows = n.data?.rows;
+    if (!rows?.length) continue;
+    const row = rows.find(r => r.id === taskId);
+    if (row) return row as NodeRowData;
+  }
+  return null;
+}
+
+function bootstrapSemanticValuesFromItems(items: SemanticValue[]): SemanticValue[] {
+  const out: SemanticValue[] = [];
+  for (const v of items) {
+    const label = v.label?.trim();
+    if (!label) continue;
+    out.push({
+      id: v.id || crypto.randomUUID(),
+      label,
+      embedding: {
+        threshold: v.embedding?.threshold ?? 0.6,
+        enabled: true,
+        phrases: v.embedding?.phrases ?? {
+          matching: [],
+          notMatching: [],
+          keywords: [],
+        },
+      },
+    });
+  }
+  return out;
+}
+
 export default function IntentEditorInlineEditor({
   onClose,
   node,
@@ -45,34 +92,59 @@ export default function IntentEditorInlineEditor({
   intentSelected,
   act,
 }: IntentEditorInlineEditorProps) {
-  // FASE 3: Sync intents from Task to useIntentStore when editor opens
   useEffect(() => {
     if (!act) return;
 
-    // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
     const instanceId = (act as any)?.instanceId ?? act.id ?? 'unknown';
+    if (instanceId === 'unknown') return;
+
     const task = taskRepository.getTask(instanceId);
+    const sv = task?.semanticValues;
+    const stored = semanticValuesToProblemIntents(Array.isArray(sv) ? sv : null);
 
-    if (task?.intents) {
-      // Convert ProblemIntent[] to useIntentStore format
-      const intents = toEditorState(task.intents || []);
-      useIntentStore.setState({ intents });
-
-      console.log('[IntentEditorInlineEditor][SYNC] Synced intents from Task to useIntentStore', {
-        instanceId,
-        intentsCount: intents.length,
-        intents: intents.map(it => ({ id: it.id, name: it.name, curatedCount: it.variants.curated.length, hardNegCount: it.variants.hardNeg.length }))
-      });
+    if (stored.length > 0) {
+      useIntentStore.setState({ intents: toEditorState(stored) });
+      return;
     }
+
+    const row = findRowForTaskId(instanceId);
+    if (!row) {
+      useIntentStore.setState({ intents: [] });
+      return;
+    }
+
+    const { items, isOpenDomain } = getSemanticValuesForRow(row);
+    if (isOpenDomain || items.length === 0) {
+      useIntentStore.setState({ intents: [] });
+      return;
+    }
+
+    const boot = bootstrapSemanticValuesFromItems(items);
+    if (boot.length === 0) {
+      useIntentStore.setState({ intents: [] });
+      return;
+    }
+
+    const projectId = resolveCurrentProjectId();
+    const slotId = row.meta?.semanticSlotRefId;
+    if (projectId && slotId) {
+      const rawLabel = (task as { label?: string } | undefined)?.label ?? row.text ?? '';
+      variableCreationService.ensureManualVariableWithId(
+        projectId,
+        slotId,
+        variableCreationService.normalizeTaskLabel(rawLabel)
+      );
+    }
+
+    taskRepository.updateTask(instanceId, { semanticValues: boot });
+    useIntentStore.setState({ intents: toEditorState(semanticValuesToProblemIntents(boot)) });
   }, [act?.id, act?.instanceId]);
 
-  // FASE 3: Subscribe to useIntentStore changes and sync back to Task
   useEffect(() => {
     if (!act) return;
 
-    // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
     const instanceId = (act as any)?.instanceId ?? act.id ?? 'unknown';
-    let t: any;
+    let t: ReturnType<typeof setTimeout>;
 
     const unsubscribe = useIntentStore.subscribe(() => {
       clearTimeout(t);
@@ -90,17 +162,13 @@ export default function IntentEditorInlineEditor({
             }
           }));
 
-          // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-          taskRepository.updateTask(instanceId, { intents: problemIntents });
-
-          console.log('[IntentEditorInlineEditor][SYNC_TO_TASK] Synced intents from useIntentStore to Task', {
-            instanceId,
-            intentsCount: problemIntents.length
-          });
+          const prev = taskRepository.getTask(instanceId)?.semanticValues;
+          const semanticValues = problemIntentsToSemanticValues(problemIntents, prev ?? null);
+          taskRepository.updateTask(instanceId, { semanticValues });
         } catch (err) {
           console.error('[IntentEditorInlineEditor][SYNC_TO_TASK][ERROR]', err);
         }
-      }, 300); // Debounce di 300ms
+      }, 300);
     });
 
     return () => {
@@ -119,37 +187,12 @@ export default function IntentEditorInlineEditor({
         overflow: 'hidden',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexShrink: 0,
-          marginBottom: 8,
-          paddingBottom: 8,
-          borderBottom: '1px solid #e5e7eb',
-        }}
-      >
-        <h3 style={{ margin: 0, fontWeight: 600 }}>Intent Classifier (Embeddings)</h3>
-        <button
-          onClick={onClose}
-          style={{
-            padding: '6px 12px',
-            border: '1px solid #d1d5db',
-            borderRadius: 6,
-            background: '#fff',
-            cursor: 'pointer',
-            fontSize: 14
-          }}
-        >
-          Close
-        </button>
-      </div>
-
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {act ? (
           <EmbeddingEditorShell
-            inlineMode={true}
+            inlineMode
+            inlineHeaderTitle="Intent Classifier (Embeddings)"
+            onInlineClose={onClose}
             intentSelected={intentSelected}
             instanceId={(act as any)?.instanceId ?? act.id ?? 'unknown'}
           />
@@ -165,4 +208,3 @@ export default function IntentEditorInlineEditor({
     </div>
   );
 }
-

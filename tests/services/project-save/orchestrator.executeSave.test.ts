@@ -309,4 +309,43 @@ describe('ProjectSaveOrchestrator - executeSave Tests', () => {
     expect(result.duration).toBeGreaterThanOrEqual(0);
     expect(typeof result.duration).toBe('number');
   });
+
+  it('should PUT every flow when flowsById lists multiple flows', async () => {
+    const request: SaveProjectRequest = {
+      version: '1.0',
+      projectId: 'test-project',
+      catalog: { projectId: 'test-project' },
+      tasks: { items: [], source: 'Project' },
+      flow: { flowId: 'main', flow: { id: 'main', title: 'Main', nodes: [], edges: [] } },
+      variables: { projectId: 'test-project', variables: [] },
+      templates: [],
+      conditions: { items: [] },
+    };
+
+    mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+
+    const flowsById = {
+      main: { nodes: [{ id: 'n1' }], edges: [] },
+      subflow_x: { nodes: [{ id: 'n2' }], edges: [{ id: 'e1' }] },
+    };
+
+    const result = await orchestrator.executeSave(request, {
+      translationsContext: mockTranslationsContext,
+      flowsById,
+      flowState: mockFlowState,
+      taskRepository: mockTaskRepository,
+      variableService: mockVariableService,
+      dialogueTaskService: mockDialogueTaskService,
+      projectDataService: mockProjectDataService,
+      projectData: { conditions: [] },
+    });
+
+    expect(result.results.flow?.success).toBe(true);
+    const flowPuts = mockFetch.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && (c[0] as string).includes('/flow?flowId=')
+    );
+    expect(flowPuts.length).toBeGreaterThanOrEqual(2);
+    expect(flowPuts.some((c) => (c[0] as string).includes('flowId=main'))).toBe(true);
+    expect(flowPuts.some((c) => (c[0] as string).includes('flowId=subflow_x'))).toBe(true);
+  });
 });
