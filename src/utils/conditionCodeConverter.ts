@@ -3,6 +3,7 @@
 
 import { ASTNode } from '../components/conditions/dsl/parser/AST';
 import { variableCreationService } from '@services/VariableCreationService';
+import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 
 /**
  * ✅ FASE 2: Converts DSL with labels to DSL with GUIDs
@@ -163,26 +164,27 @@ export function transformASTGuidsToLabels(
 }
 
 /**
- * Creates variable mappings from VariableCreationService.
- * Returns Map<varId, varName> for conversion.
+ * Creates a complete Map<varId, varName> from VariableInstance rows visible on the given flow canvas.
+ * Primary key is varId: every loaded variable participates exactly once (no name-only indirection).
  */
-export function createVariableMappings(): Map<string, string> {
+export function createVariableMappings(flowCanvasId?: string): Map<string, string> {
   const mappings = new Map<string, string>();
 
   try {
-    // ✅ Use static import instead of require (ES modules compatible)
     const projectId: string | null = typeof localStorage !== 'undefined'
       ? localStorage.getItem('currentProjectId')
       : null;
 
     if (!projectId) return mappings;
 
-    const allVarNames: string[] = variableCreationService.getAllVarNames(projectId) ?? [];
-    for (const varName of allVarNames) {
-      const varId: string | null = variableCreationService.getVarIdByVarName(projectId, varName);
-      if (varId) {
-        mappings.set(varId, varName);
-      }
+    const fid = flowCanvasId ?? getActiveFlowCanvasId();
+    const instances = variableCreationService.getVariablesForFlowScope(projectId, fid) ?? [];
+    for (const v of instances) {
+      const varId = typeof v.varId === 'string' ? v.varId.trim() : '';
+      if (!varId) continue;
+      const varName = typeof v.varName === 'string' ? v.varName.trim() : '';
+      if (!varName) continue;
+      mappings.set(varId, varName);
     }
   } catch (error) {
     console.warn('[ConditionCodeConverter] Could not load variable mappings', error);

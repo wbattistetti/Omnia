@@ -3,7 +3,13 @@
 
 import type { Task } from '@types/taskTypes';
 import type { DialogueTask } from '@services/DialogueTaskService';
-import type { VariableInstance } from '@types/variableTypes';
+import type { EnsureManualVariableOptions, VariableInstance, VariableScope } from '@types/variableTypes';
+import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
+import {
+  isVariableVisibleInFlow,
+  normalizeVariableInstance,
+  sameVariableScopeBucket,
+} from '@utils/variableScopeUtils';
 
 interface CreateVariablesOptions {
   taskInstance: Task;
@@ -144,6 +150,7 @@ class VariableCreationService {
           taskInstanceId: taskInstance.id,
           nodeId: subNodeId,
           ddtPath: `data[${mainIndex}].subData[${subIndex}]`,
+          scope: 'project',
         });
       });
     });
@@ -186,8 +193,10 @@ class VariableCreationService {
   createManualVariable(projectId: string, varName: string): VariableInstance {
     const existing = this.store.get(projectId) ?? [];
 
-    // Check if variable with same name already exists
-    const existingVar = existing.find(v => v.varName === varName.trim());
+    // Check if variable with same name already exists at project scope
+    const existingVar = existing.find(
+      v => v.varName === varName.trim() && (v.scope ?? 'project') === 'project'
+    );
     if (existingVar) {
       console.log('[VariableCreationService] ⚠️ Variable already exists', {
         projectId,
@@ -203,7 +212,8 @@ class VariableCreationService {
       varName: varName.trim(), // ✅ Label stored (creates label-GUID mapping)
       taskInstanceId: '', // Empty as requested
       nodeId: '', // Empty as requested
-      ddtPath: '' // Empty for manual variables
+      ddtPath: '', // Empty for manual variables
+      scope: 'project',
     };
 
     // ✅ Add to the same in-memory store (unified collection)
@@ -227,7 +237,18 @@ class VariableCreationService {
    * Ensure a manual variable exists with the given GUID and label.
    * Useful when a condition needs a stable promised GUID before task materialization.
    */
-  ensureManualVariableWithId(projectId: string, varId: string, varName: string): VariableInstance {
+  ensureManualVariableWithId(
+    projectId: string,
+    varId: string,
+    varName: string,
+    options?: EnsureManualVariableOptions
+  ): VariableInstance {
+    const scope: VariableScope = options?.scope ?? 'project';
+    const scopeFlowId =
+      scope === 'flow'
+        ? String(options?.scopeFlowId ?? getActiveFlowCanvasId()).trim()
+        : '';
+
     const existing = this.store.get(projectId) ?? [];
     const normalizedName = varName.trim();
 
@@ -235,15 +256,19 @@ class VariableCreationService {
     const byId = existing.find(v => v.varId === varId);
     if (byId) {
       if (normalizedName && byId.varName !== normalizedName) {
-        const updated = existing.map(v => v.varId === varId ? { ...v, varName: normalizedName } : v);
+        const updated = existing.map(v => (v.varId === varId ? { ...v, varName: normalizedName } : v));
         this.store.set(projectId, updated);
         return updated.find(v => v.varId === varId)!;
       }
       return byId;
     }
 
-    // 2) Same label exists with another GUID → preserve existing stable mapping
-    const byName = existing.find(v => v.varName === normalizedName);
+    // 2) Same label in the same scope bucket → preserve existing stable mapping
+    const byName = existing.find(
+      v =>
+        v.varName === normalizedName &&
+        sameVariableScopeBucket(v, scope, scope === 'flow' ? scopeFlowId : null)
+    );
     if (byName) {
       return byName;
     }
@@ -254,6 +279,8 @@ class VariableCreationService {
       taskInstanceId: '',
       nodeId: '',
       ddtPath: '',
+      scope,
+      scopeFlowId: scope === 'flow' ? scopeFlowId : undefined,
     };
     this.store.set(projectId, [...existing, created]);
     return created;
@@ -266,12 +293,22 @@ class VariableCreationService {
   /**
    * Find a varId by exact varName (and optionally taskInstanceId).
    */
-  getVarIdByVarName(projectId: string, varName: string, taskInstanceId?: string): string | null {
-    const vars = this.store.get(projectId) ?? [];
-    const match = vars.find(v =>
-      v.varName === varName &&
-      (taskInstanceId === undefined || v.taskInstanceId === taskInstanceId)
-    );
+  getVarIdByVarName(
+    projectId: string,
+    varName: string,
+    taskInstanceId?: string,
+    flowCanvasId?: string
+  ): string | null {
+    const all = this.store.get(projectId) ?? [];
+    if (taskInstanceId !== undefined) {
+      const match = all.find(
+        v => v.varName === varName && v.taskInstanceId === taskInstanceId
+      );
+      return match?.varId ?? null;
+    }
+    const flowId = flowCanvasId ?? getActiveFlowCanvasId();
+    const visible = all.filter(v => isVariableVisibleInFlow(v, flowId));
+    const match = visible.find(v => v.varName === varName);
     return match?.varId ?? null;
   }
 
@@ -294,9 +331,20 @@ class VariableCreationService {
   /**
    * Return all variable names for use in condition editor autocomplete.
    */
-  getAllVarNames(projectId: string): string[] {
-    const vars = this.store.get(projectId) ?? [];
+  getAllVarNames(projectId: string, flowCanvasId?: string): string[] {
+    const flowId = flowCanvasId ?? getActiveFlowCanvasId();
+    const vars = (this.store.get(projectId) ?? []).filter(v =>
+      isVariableVisibleInFlow(v, flowId)
+    );
     return [...new Set(vars.map(v => v.varName))].sort();
+  }
+
+  /**
+   * Variables visible when authoring conditions on a given flow canvas (project + that flow's slots).
+   */
+  getVariablesForFlowScope(projectId: string, flowCanvasId?: string): VariableInstance[] {
+    const flowId = flowCanvasId ?? getActiveFlowCanvasId();
+    return (this.store.get(projectId) ?? []).filter(v => isVariableVisibleInFlow(v, flowId));
   }
 
   /**
@@ -361,14 +409,19 @@ class VariableCreationService {
 
     try {
       // ✅ Ensure all variables have required fields (MongoDB compatibility)
-      const variablesToSave = variables.map(v => ({
-        varId: v.varId,
-        varName: v.varName,
-        taskInstanceId: v.taskInstanceId || '', // ✅ Explicit empty string (not null/undefined)
-        nodeId: v.nodeId || '', // ✅ Explicit empty string (not null/undefined)
-        ddtPath: v.ddtPath || '', // ✅ Explicit empty string (not null/undefined)
-        projectId: projectId // ✅ Will be set by backend, but include for clarity
-      }));
+      const variablesToSave = variables.map(v => {
+        const scope: VariableScope = v.scope === 'flow' ? 'flow' : 'project';
+        return {
+          varId: v.varId,
+          varName: v.varName,
+          taskInstanceId: v.taskInstanceId || '', // ✅ Explicit empty string (not null/undefined)
+          nodeId: v.nodeId || '', // ✅ Explicit empty string (not null/undefined)
+          ddtPath: v.ddtPath || '', // ✅ Explicit empty string (not null/undefined)
+          scope,
+          scopeFlowId: scope === 'flow' ? (v.scopeFlowId ?? '') : '',
+          projectId: projectId // ✅ Will be set by backend, but include for clarity
+        };
+      });
 
       console.log('[VariableCreationService] 📤 Sending variables to backend', {
         projectId,
@@ -454,24 +507,35 @@ class VariableCreationService {
         manualVarNames: manualVariables.map(v => v.varName)
       });
 
-      // ✅ DEDUPLICATE: Remove duplicates by varName (case-insensitive)
-      const seen = new Map<string, VariableInstance>();
-      const deduplicated: VariableInstance[] = [];
-
+      // Deduplicate by varId (canonical key). Same name + different varId = both kept (DSL references varId).
+      const byVarId = new Map<string, VariableInstance>();
       for (const v of variables) {
-        const normalizedName = v.varName.trim().toLowerCase();
-        if (!seen.has(normalizedName)) {
-          seen.set(normalizedName, v);
-          deduplicated.push(v);
-        } else {
-          console.warn('[VariableCreationService] ⚠️ Duplicate variable found and removed', {
+        const rawId = typeof v.varId === 'string' ? v.varId.trim() : '';
+        if (!rawId) {
+          console.warn('[VariableCreationService] ⚠️ Skipping variable row without varId', {
             projectId,
             varName: v.varName,
-            varId: v.varId,
-            keptVarId: seen.get(normalizedName)?.varId
+          });
+          continue;
+        }
+        if (byVarId.has(rawId)) {
+          console.warn('[VariableCreationService] ⚠️ Duplicate varId in DB response; keeping last row', {
+            projectId,
+            varId: rawId,
           });
         }
+        byVarId.set(rawId, normalizeVariableInstance({
+          ...v,
+          varId: rawId,
+          varName: typeof v.varName === 'string' ? v.varName.trim() : String(v.varName ?? ''),
+          taskInstanceId: v.taskInstanceId ?? '',
+          nodeId: v.nodeId ?? '',
+          ddtPath: v.ddtPath ?? '',
+          scope: (v as VariableInstance).scope,
+          scopeFlowId: (v as VariableInstance).scopeFlowId,
+        }));
       }
+      const deduplicated = Array.from(byVarId.values());
 
       this.store.set(projectId, deduplicated);
 
@@ -483,7 +547,7 @@ class VariableCreationService {
         totalCount: deduplicated.length,
         manualVariables: finalManualVariables.length,
         taskVariables: finalTaskVariables.length,
-        duplicatesRemoved: variables.length - deduplicated.length,
+        duplicatesRemovedByVarId: variables.length - deduplicated.length,
         manualVarNames: finalManualVariables.map(v => v.varName)
       });
     } catch (error) {

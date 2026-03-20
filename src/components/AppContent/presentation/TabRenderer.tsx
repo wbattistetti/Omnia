@@ -366,6 +366,7 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
             isGenerating={tab.isGenerating} // ✅ Pass isGenerating flag
             edgeId={tab.edgeId} // ✅ Pass edgeId for error removal
             conditionId={tab.conditionId} // ✅ Pass conditionId (if edge is linked)
+            flowId={tab.flowId}
             registerOnClose={handleRegisterOnClose} // ✅ NEW: Register close handler for dock tab
             onRename={(next) => {
               setDockTree(prev =>

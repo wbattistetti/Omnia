@@ -10,6 +10,7 @@ import { getNodesWithFallback } from '@utils/taskTreeMigrationHelpers';
 import { ConditionAIService } from '@components/conditions/application/ConditionAIService';
 import { ScriptManagerService } from '@components/conditions/application/ScriptManagerService';
 import { updateEdgeWithConditionId } from '@services/EdgeConditionUpdater';
+import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 
 export interface ConditionEditorEventHandlerParams {
   projectData: any;
@@ -37,11 +38,13 @@ export class ConditionEditorEventHandler {
       throw new Error('Invalid ConditionEditorOpenEvent');
     }
 
+    const flowCanvasId = event.flowId ?? getActiveFlowCanvasId();
+
     // Build complete variables (staticVars + flowchartVars)
     const provided = event.variables || {};
     const hasProvided = provided && Object.keys(provided).length > 0;
     const staticVars = this.buildStaticVars();
-    const flowchartVars = this.buildFlowchartVars();
+    const flowchartVars = this.buildFlowchartVars(flowCanvasId);
     const varsTree = this.buildVarsTree();
 
     // Merge all variables
@@ -80,6 +83,7 @@ export class ConditionEditorEventHandler {
       label: conditionLabel,
       edgeId, // ✅ Edge ID
       conditionId, // ✅ Condition ID (if exists, undefined for new condition)
+      flowId: flowCanvasId,
     };
 
     console.log('[ConditionEditorEventHandler] 📤 [TRACE] Created dockTab', {
@@ -213,12 +217,12 @@ export class ConditionEditorEventHandler {
   /**
    * Builds flowchart variables
    */
-  private buildFlowchartVars(): Record<string, any> {
+  private buildFlowchartVars(flowCanvasId: string): Record<string, any> {
     const vars: Record<string, any> = {};
     try {
       const projectId = this.params.pdUpdate?.getCurrentProjectId();
       if (projectId) {
-        variableCreationService.getAllVarNames(projectId).forEach(name => {
+        variableCreationService.getAllVarNames(projectId, flowCanvasId).forEach(name => {
           vars[name] = '';
         });
       }

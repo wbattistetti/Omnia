@@ -1651,7 +1651,16 @@ app.get('/api/projects/:pid/flow', async (req, res) => {
     });
 
     logInfo('Flow.get', { projectId: pid, flowId, nodesCount: nodes?.length || 0, edgesCount: edges?.length || 0, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
-    res.json({ nodes, edges });
+    let meta = null;
+    try {
+      const metaDoc = await db.collection('flow_meta').findOne({ flowId });
+      if (metaDoc && metaDoc.meta && typeof metaDoc.meta === 'object') {
+        meta = metaDoc.meta;
+      }
+    } catch (_metaErr) {
+      // non-fatal: older DBs without flow_meta
+    }
+    res.json({ nodes, edges, ...(meta ? { meta } : {}) });
   } catch (e) {
     const duration = Date.now() - startTime;
     logError('Flow.get', e, { projectId: pid, flowId, duration: `${duration}ms` });
@@ -1665,6 +1674,7 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
   const payload = req.body || {};
   const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
   const edges = Array.isArray(payload.edges) ? payload.edges : [];
+  const flowMetaPayload = payload.meta;
 
   // ✅ LOG: Traccia cosa viene ricevuto dal frontend
   console.log(`[SAVE][backend] 📥 Received from frontend`, {
@@ -1790,6 +1800,15 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
         payload: { nodes: nodes.length, edges: edges.length },
         result: { upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } }
       });
+
+      if (flowMetaPayload !== undefined) {
+        await db.collection('flow_meta').updateOne(
+          { flowId },
+          { $set: { flowId, meta: flowMetaPayload, updatedAt: now } },
+          { upsert: true }
+        );
+      }
+
       res.json({ ok: true, nodes: nodes.length, edges: edges.length });
     });
   } catch (e) {
@@ -2941,22 +2960,28 @@ app.post('/api/projects/:pid/variables', async (req, res) => {
 
     // Insert variables (upsert by varId to avoid duplicates)
     // ✅ Ensure empty strings are preserved (not converted to null/undefined)
-    const operations = variables.map(v => ({
-      updateOne: {
-        filter: { varId: v.varId },
-        update: {
-          $set: {
-            varId: v.varId,
-            varName: v.varName,
-            taskInstanceId: v.taskInstanceId || '', // ✅ Explicit empty string
-            nodeId: v.nodeId || '', // ✅ Explicit empty string
-            ddtPath: v.ddtPath || '', // ✅ Explicit empty string
-            projectId: projectId
-          }
-        },
-        upsert: true
-      }
-    }));
+    const operations = variables.map(v => {
+      const scope = v.scope === 'flow' ? 'flow' : 'project';
+      const scopeFlowId = scope === 'flow' ? String(v.scopeFlowId || '').trim() : '';
+      return {
+        updateOne: {
+          filter: { varId: v.varId },
+          update: {
+            $set: {
+              varId: v.varId,
+              varName: v.varName,
+              taskInstanceId: v.taskInstanceId || '', // ✅ Explicit empty string
+              nodeId: v.nodeId || '', // ✅ Explicit empty string
+              ddtPath: v.ddtPath || '', // ✅ Explicit empty string
+              scope,
+              scopeFlowId,
+              projectId: projectId
+            }
+          },
+          upsert: true
+        }
+      };
+    });
 
     const result = await projDb.collection('variables').bulkWrite(operations);
 
@@ -2983,7 +3008,7 @@ app.post('/api/projects/:pid/variables', async (req, res) => {
 // GET /api/projects/:pid/variables - Get variables (with optional filters)
 app.get('/api/projects/:pid/variables', async (req, res) => {
   const projectId = req.params.pid;
-  const { taskInstanceId, varName, nodeId } = req.query;
+  const { taskInstanceId, varName, nodeId, scope, scopeFlowId } = req.query;
   const client = await getMongoClient();
   const startTime = Date.now();
   try {
@@ -2998,6 +3023,12 @@ app.get('/api/projects/:pid/variables', async (req, res) => {
     }
     if (nodeId) {
       query.nodeId = nodeId;
+    }
+    if (scope) {
+      query.scope = scope;
+    }
+    if (scopeFlowId) {
+      query.scopeFlowId = scopeFlowId;
     }
 
     const variables = await projDb.collection('variables').find(query).toArray();

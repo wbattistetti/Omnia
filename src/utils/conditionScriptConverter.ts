@@ -6,6 +6,7 @@
 // varName is the human-readable label displayed in the editor.
 
 import { variableCreationService } from '../services/VariableCreationService';
+import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 
 /** UUID pattern used to detect varIds in scripts. */
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,7 +36,7 @@ export function convertScriptLabelsToGuids(script: string): string {
   if (!projectId) return script;
 
   const replaceLabel = (match: string, quote: string, label: string, isGetVar: boolean): string => {
-    const varId = variableCreationService.getVarIdByVarName(projectId, label);
+    const varId = variableCreationService.getVarIdByVarName(projectId, label, undefined, getActiveFlowCanvasId());
     if (varId) {
       return isGetVar
         ? `getVar(ctx, ${quote}${varId}${quote})`

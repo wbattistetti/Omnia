@@ -8,6 +8,7 @@ import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderTool
 import { Server, Plus, X, Eye, EyeOff, Pencil, Check, Trash2, Table2, RefreshCw } from 'lucide-react';
 import { OmniaSelect } from '../../../../components/common/OmniaSelect';
 import { variableCreationService } from '../../../../services/VariableCreationService';
+import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import type { ToolbarButton } from '../../../../dock/types';
 import TableEditor from './TableEditor';
 
@@ -142,7 +143,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
   // ✅ Helper: Get varId from varName for saving
   const getVarIdFromVarName = React.useCallback((varName: string | undefined): string | null => {
     if (!varName || !projectId) return null;
-    return variableCreationService.getVarIdByVarName(projectId, varName);
+    return variableCreationService.getVarIdByVarName(projectId, varName, undefined, getActiveFlowCanvasId());
   }, [projectId]);
 
   // Get available API params (placeholder - in futuro da Backend Builder)

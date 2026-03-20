@@ -5,11 +5,14 @@ import { DSLParser } from '../dsl/parser/DSLParser';
 import { ASTCompiler } from '../dsl/compiler/ASTCompiler';
 import { VariableMappingService } from '../dsl/compiler/VariableMappingService';
 import { transformASTLabelsToGuids, convertDSLLabelsToGUIDs, convertDSLGUIDsToLabels, createVariableMappings } from '@utils/conditionCodeConverter';
+import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
 
 export interface ScriptManagerServiceDependencies {
   projectData: any;
   pdUpdate: any;
   variables?: Record<string, any>; // Variables map for variable mapping service
+  /** Flow canvas for scoped flowchart variables (conditions on this canvas). */
+  flowId?: string;
 }
 
 /**
@@ -22,9 +25,14 @@ export class ScriptManagerService {
   private compiler: ASTCompiler;
 
   constructor(private deps: ScriptManagerServiceDependencies) {
-    this.variableMappingService = new VariableMappingService();
+    const flowCanvasId = deps.flowId ?? getActiveFlowCanvasId();
+    this.variableMappingService = new VariableMappingService(flowCanvasId);
     this.parser = new DSLParser();
     this.compiler = new ASTCompiler(this.variableMappingService);
+  }
+
+  private resolveFlowCanvasId(): string {
+    return this.deps.flowId ?? getActiveFlowCanvasId();
   }
 
   /**
@@ -69,7 +77,7 @@ export class ScriptManagerService {
     }
 
     // ✅ FASE 2: Generate executableCode (DSL with GUIDs)
-    const variableMappings = createVariableMappings();
+    const variableMappings = createVariableMappings(this.resolveFlowCanvasId());
     const executableCode = convertDSLLabelsToGUIDs(dsl, variableMappings);
 
     // ✅ FASE 2: Parse executableCode → AST (with GUIDs) for compilation
@@ -364,7 +372,7 @@ export class ScriptManagerService {
     }
 
     // ✅ FASE 2: Generate executableCode (DSL with GUIDs)
-    const variableMappings = createVariableMappings();
+    const variableMappings = createVariableMappings(this.resolveFlowCanvasId());
     const executableCode = convertDSLLabelsToGUIDs(dsl, variableMappings);
 
     // ✅ FASE 2: Parse executableCode → AST (with GUIDs) for compilation
@@ -518,7 +526,7 @@ export class ScriptManagerService {
           }
 
           // Convert GUID → label on-the-fly
-          const variableMappings = createVariableMappings();
+          const variableMappings = createVariableMappings(this.resolveFlowCanvasId());
           const readableCode = convertDSLGUIDsToLabels(executableCode, variableMappings);
 
           console.log('[LOAD_SCRIPT] ✅ SUCCESS', {

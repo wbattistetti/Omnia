@@ -49,6 +49,8 @@ export interface ConditionEditorOpenEvent {
   conditionId?: string;
   /** DSL with labels (readableCode) - only if condition exists */
   readableCode?: string;
+  /** Flow canvas id for scoped flowchart variables (main, subflow_...) */
+  flowId?: string;
 }
 
 /**

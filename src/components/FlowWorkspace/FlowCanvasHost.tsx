@@ -2,6 +2,7 @@ import React, { useEffect, useCallback } from 'react';
 import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '../../flows/FlowStore.tsx';
 import { loadFlow } from '../../flows/FlowPersistence';
 import { FlowEditor } from '../Flowchart/FlowEditor';
+import { FlowVariablesRail } from './FlowVariablesRail';
 import { dlog } from '../../utils/debug';
 import { useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { FlowTestProvider } from '../../context/FlowTestContext';
@@ -36,7 +37,15 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
     (async () => {
       if (!flows[flowId] || (!flows[flowId].nodes?.length && !flows[flowId].edges?.length)) {
         const data = await loadFlow(projectId, flowId);
-        upsertFlow({ id: flowId, title: flowId === 'main' ? 'Main' : flowId, nodes: data.nodes, edges: data.edges });
+        upsertFlow({
+          id: flowId,
+          title: flowId === 'main' ? 'Main' : flowId,
+          nodes: data.nodes,
+          edges: data.edges,
+          ...(data.meta !== undefined
+            ? { meta: { ...flows[flowId]?.meta, ...data.meta } }
+            : {}),
+        });
       }
     })();
   }, [projectId, flowId]);
@@ -61,7 +70,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
     [flowId, updateFlowGraph]
   );
 
-  // Wrap FlowEditor with providers
+  // Wrap FlowEditor with providers + right Variables rail (per flowId)
   const flowEditor = (
     <FlowEditor
       flowId={flowId}
@@ -90,7 +99,10 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
       createTask={entityCreation.createTask}
       createCondition={entityCreation.createCondition}
     >
-      {flowEditor}
+      <div className="relative flex flex-1 min-h-0 w-full h-full flex-col">
+        <div className="flex-1 min-h-0">{flowEditor}</div>
+        <FlowVariablesRail flowId={flowId} />
+      </div>
     </FlowActionsProvider>
   );
 

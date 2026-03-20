@@ -4,12 +4,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { convertDSLGUIDsToLabels } from '../../../utils/conditionCodeConverter';
 import { createVariableMappings } from '../../../utils/conditionCodeConverter';
+import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
 
 export interface UseConditionEditorStateProps {
   open: boolean;
   initialScript?: string;
   label?: string;
   defaultCode: string;
+  /** Flow canvas for GUID/label mappings when loading script */
+  flowCanvasId?: string;
 }
 
 export interface UseConditionEditorStateReturn {
@@ -83,7 +86,7 @@ export interface UseConditionEditorStateReturn {
  * Centralizes state management to reduce component complexity.
  */
 export function useConditionEditorState(props: UseConditionEditorStateProps): UseConditionEditorStateReturn {
-  const { open, initialScript, label, defaultCode } = props;
+  const { open, initialScript, label, defaultCode, flowCanvasId } = props;
 
   // Script state
   const [script, setScript] = useState(initialScript && initialScript.trim() ? initialScript : defaultCode);
@@ -147,7 +150,8 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
       const GUID_PATTERN = /\[[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\]/i;
       if (GUID_PATTERN.test(base)) {
         // Convert GUIDs to labels for human-readable display
-        const variableMappings = createVariableMappings();
+        const fid = flowCanvasId ?? getActiveFlowCanvasId();
+        const variableMappings = createVariableMappings(fid);
         base = convertDSLGUIDsToLabels(base, variableMappings);
       }
     }
@@ -161,7 +165,7 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
     setWVars(280);
     setWTester(360);
     setFontPx(13);
-  }, [open, initialScript, label, defaultCode]);
+  }, [open, initialScript, label, defaultCode, flowCanvasId]);
 
   // Sync title when label changes
   useEffect(() => {

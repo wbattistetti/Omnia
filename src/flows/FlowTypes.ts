@@ -1,3 +1,5 @@
+import type { FlowVariableDefinition } from './flowVariableTypes';
+
 export type FlowId = string;
 
 export type Flow<NodeT = any, EdgeT = any> = {
@@ -9,6 +11,8 @@ export type Flow<NodeT = any, EdgeT = any> = {
     createdAt?: string;
     updatedAt?: string;
     fromTaskId?: string;
+    /** Author-defined flow variables (internal / input / output / inout). */
+    variables?: FlowVariableDefinition[];
   };
 };
 

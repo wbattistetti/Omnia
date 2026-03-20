@@ -37,6 +37,8 @@ interface Props {
   edgeId?: string; // ✅ Edge ID for error removal
   conditionId?: string; // ✅ Condition ID (if edge is linked)
   registerOnClose?: (fn: () => Promise<boolean>) => void; // ✅ NEW: Register close handler for dock tab
+  /** Flow canvas for scoped variables (matches DockTabConditionEditor.flowId) */
+  flowId?: string;
 }
 
 // ✅ REFACTOR: Use domain function
@@ -49,10 +51,11 @@ import { useConditionEditorState } from './hooks/useConditionEditorState';
 import { useVariablesIntellisense } from './hooks/useVariablesIntellisense';
 import { ConditionEditorHeader } from './presentation/ConditionEditorHeader';
 import { DSLEditor } from './dsl/editor/DSLEditor';
+import { getActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
 
 // No local template; EditorPanel injects the scaffold
 
-export default function ConditionEditor({ open, onClose, variables, initialScript, dockWithinParent, variablesTree, label, onRename, isGenerating = false, onSave, edgeId, conditionId, registerOnClose }: Props) {
+export default function ConditionEditor({ open, onClose, variables, initialScript, dockWithinParent, variablesTree, label, onRename, isGenerating = false, onSave, edgeId, conditionId, registerOnClose, flowId }: Props) {
   const [nl, setNl] = React.useState('');
   // ✅ RIMOSSO: DEFAULT_CODE - ora usiamo stringa vuota
   const DEFAULT_CODE = ''; // Stringa vuota invece del testo di esempio
@@ -63,6 +66,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     initialScript,
     label,
     defaultCode: DEFAULT_CODE,
+    flowCanvasId: flowId,
   });
 
   const {
@@ -105,8 +109,12 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
   // ✅ REFACTOR: Use ScriptManagerService
   const scriptManager = React.useMemo(() => {
-    return new ScriptManagerService({ projectData, pdUpdate });
-  }, [projectData, pdUpdate]);
+    return new ScriptManagerService({
+      projectData,
+      pdUpdate,
+      flowId: flowId ?? getActiveFlowCanvasId(),
+    });
+  }, [projectData, pdUpdate, flowId]);
 
   // ✅ FIX: Track conditionId locally — updated after createCondition
   const localConditionIdRef = React.useRef<string | undefined>(conditionId);

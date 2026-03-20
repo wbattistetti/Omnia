@@ -15,6 +15,7 @@ import { debug, error } from '../../utils/logger';
 import { CustomNode } from './nodes/CustomNode/CustomNode';
 import { TaskNode } from './nodes/TaskNode/TaskNode';
 import { FlowSubflowProvider } from './context/FlowSubflowContext';
+import { FlowCanvasProvider } from './context/FlowCanvasContext';
 import { useEdgeManager } from '../../hooks/useEdgeManager';
 import { useConnectionMenu } from '../../hooks/useConnectionMenu';
 import { useNodeManager } from '../../hooks/useNodeManager';
@@ -687,6 +688,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   return (
     <FlowSubflowProvider value={subflowContextValue}>
+      <FlowCanvasProvider flowId={flowId ?? 'main'}>
       <div
         className="flex-1 h-full relative"
         ref={canvasRef}
@@ -847,6 +849,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         />
       )}
       </div>
+      </FlowCanvasProvider>
     </FlowSubflowProvider>
   );
 };

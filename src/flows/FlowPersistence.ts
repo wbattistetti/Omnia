@@ -1,4 +1,5 @@
 import type { FlowId } from './FlowTypes';
+import type { FlowVariableDefinition } from './flowVariableTypes';
 import type { Node } from 'reactflow';
 import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
 import { transformNodesToSimplified, transformEdgesToSimplified, transformNodesToReactFlow, transformEdgesToReactFlow } from './flowTransformers';
@@ -19,7 +20,13 @@ export async function listFlows(projectId: string): Promise<{ id: FlowId; update
  * Database stores: { id, label, rows, ... } (simplified)
  * Returns: Node<FlowNode>[] with data wrapper (ReactFlow format)
  */
-export async function loadFlow(projectId: string, flowId: FlowId): Promise<{ nodes: Node<FlowNode>[]; edges: any[] }> {
+export type FlowLoadResult = {
+  nodes: Node<FlowNode>[];
+  edges: any[];
+  meta?: { variables?: FlowVariableDefinition[] };
+};
+
+export async function loadFlow(projectId: string, flowId: FlowId): Promise<FlowLoadResult> {
   const url = `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`;
   // Log rimosso: non essenziale per flusso motore
 
@@ -30,6 +37,10 @@ export async function loadFlow(projectId: string, flowId: FlowId): Promise<{ nod
   // Database returns simplified structure: { id, label, rows, ... }
   const simplifiedNodes = Array.isArray(json?.nodes) ? json.nodes : [];
   const simplifiedEdges = Array.isArray(json?.edges) ? json.edges : [];
+  const meta =
+    json?.meta && typeof json.meta === 'object'
+      ? (json.meta as { variables?: FlowVariableDefinition[] })
+      : undefined;
 
   // ✅ LOG: Traccia cosa viene ricevuto dal backend
   const edgesWithCondition = simplifiedEdges.filter((e: any) => e.condition || e.conditionId);
@@ -51,7 +62,7 @@ export async function loadFlow(projectId: string, flowId: FlowId): Promise<{ nod
   const nodes = transformNodesToReactFlow(simplifiedNodes);
   const edges = transformEdgesToReactFlow(simplifiedEdges);
 
-  return { nodes, edges };
+  return { nodes, edges, meta };
 }
 
 /**
@@ -59,14 +70,21 @@ export async function loadFlow(projectId: string, flowId: FlowId): Promise<{ nod
  * Receives: Node<FlowNode>[] with data wrapper (ReactFlow format)
  * Saves: { id, label, rows, ... } (simplified)
  */
-export async function saveFlow(projectId: string, flowId: FlowId, nodes: Node<FlowNode>[], edges: any[]): Promise<void> {
+export async function saveFlow(
+  projectId: string,
+  flowId: FlowId,
+  nodes: Node<FlowNode>[],
+  edges: any[],
+  meta?: { variables?: FlowVariableDefinition[] }
+): Promise<void> {
   const url = `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`;
 
   console.log(`[SAVE][saveFlow] 🚀 START saving flow`, {
     projectId,
     flowId,
     nodesCount: nodes.length,
-    edgesCount: edges.length
+    edgesCount: edges.length,
+    hasMeta: meta !== undefined,
   });
 
   // Transform from ReactFlow format to simplified structure
@@ -103,7 +121,11 @@ export async function saveFlow(projectId: string, flowId: FlowId, nodes: Node<Fl
   const res = await fetch(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes: simplifiedNodes, edges: simplifiedEdges })
+    body: JSON.stringify({
+      nodes: simplifiedNodes,
+      edges: simplifiedEdges,
+      ...(meta !== undefined ? { meta } : {}),
+    }),
   });
   if (!res.ok) throw new Error('saveFlow_failed');
 

@@ -3,6 +3,7 @@
 
 import { VariableMappingService as IVariableMappingService } from './ASTCompiler';
 import { variableCreationService } from '@services/VariableCreationService';
+import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 
 /**
  * Implements VariableMappingService for the DSL compiler.
@@ -13,6 +14,8 @@ import { variableCreationService } from '@services/VariableCreationService';
  * condition compilation.
  */
 export class VariableMappingService implements IVariableMappingService {
+  constructor(private readonly flowCanvasId?: string) {}
+
   /**
    * Return the varId for a variable identified by label and optional sub-path.
    * e.g. label="data di nascita", path=["giorno"] → varId for "data di nascita.giorno"
@@ -26,7 +29,8 @@ export class VariableMappingService implements IVariableMappingService {
       }
 
       const varName = path && path.length > 0 ? `${label}.${path.join('.')}` : label;
-      const varId = variableCreationService.getVarIdByVarName(projectId, varName);
+      const flowId = this.flowCanvasId ?? getActiveFlowCanvasId();
+      const varId = variableCreationService.getVarIdByVarName(projectId, varName, undefined, flowId);
 
       if (!varId) {
         console.warn('[VariableMappingService] Variable not found', { varName, projectId });

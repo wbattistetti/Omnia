@@ -30,6 +30,7 @@ import { generateId } from '../../../../utils/idGenerator';
 import { TaskType, type SemanticValue } from '../../../../types/taskTypes';
 import { LinkStyle, type EdgeData } from '../../types/flowTypes';
 import { variableCreationService } from '../../../../services/VariableCreationService';
+import { useFlowCanvasId } from '../../context/FlowCanvasContext';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -61,6 +62,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   selected
 }) => {
   const { onOpenSubflowForTask } = useFlowSubflow();
+  const flowCanvasId = useFlowCanvasId();
   const { data: projectData } = useProjectData();
   const { addItem, addCategory, updateDataDirectly } = useProjectDataUpdate();
   // Context for node operations (with fallback to legacy)
@@ -454,7 +456,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       variableCreationService.ensureManualVariableWithId(
         projectId,
         slotGuid,
-        normalizedSlotLabel
+        normalizedSlotLabel,
+        { scope: 'flow', scopeFlowId: flowCanvasId }
       );
     }
     updateNodeRows((rows) =>
@@ -577,6 +580,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     updateNodeRows,
     ensureConditionsCategory,
     createConditionForValue,
+    flowCanvasId,
   ]);
 
   // ✅ RENDERING: Manage rendering logic and props (AFTER state and handlers)

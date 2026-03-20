@@ -10,6 +10,7 @@ import { useIntentStore } from '@features/intent-editor/state/intentStore';
 import { FlowStateBridge } from '@services/FlowStateBridge';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
+import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import { getSemanticValuesForRow } from '@utils/semanticValuesRowState';
 import {
   problemIntentsToSemanticValues,
@@ -129,10 +130,14 @@ export default function IntentEditorInlineEditor({
     const slotId = row.meta?.semanticSlotRefId;
     if (projectId && slotId) {
       const rawLabel = (task as { label?: string } | undefined)?.label ?? row.text ?? '';
+      const flowForSlot =
+        String((task as any)?.parameters?.flowId ?? (task as any)?.flowId ?? '').trim() ||
+        getActiveFlowCanvasId();
       variableCreationService.ensureManualVariableWithId(
         projectId,
         slotId,
-        variableCreationService.normalizeTaskLabel(rawLabel)
+        variableCreationService.normalizeTaskLabel(rawLabel),
+        { scope: 'flow', scopeFlowId: flowForSlot }
       );
     }
 

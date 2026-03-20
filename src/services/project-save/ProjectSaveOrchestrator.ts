@@ -201,8 +201,12 @@ export class ProjectSaveOrchestrator {
       /**
        * Snapshot of all workspace flows (FlowStore): one PUT /flow?flowId= per key.
        * When omitted, only `main` is saved (legacy behavior).
+       * Optional `meta` is persisted in flow_meta (flow variables interface).
        */
-      flowsById?: Record<string, { nodes?: unknown[]; edges?: unknown[] }>;
+      flowsById?: Record<
+        string,
+        { nodes?: unknown[]; edges?: unknown[]; meta?: { variables?: unknown[] } }
+      >;
       taskRepository?: ITaskRepository;
       variableService?: IVariableService;
       dialogueTaskService?: IDialogueTaskService;
@@ -305,12 +309,21 @@ export class ProjectSaveOrchestrator {
             const simplifiedNodes = fs.transformNodesToSimplified(flowData.nodes);
             const simplifiedEdges = fs.transformEdgesToSimplified(flowData.edges);
 
+            const flowMeta =
+              snapshot && Object.prototype.hasOwnProperty.call(snapshot, flowId)
+                ? snapshot[flowId]?.meta
+                : undefined;
+
             const response = await fetch(
               `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`,
               {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nodes: simplifiedNodes, edges: simplifiedEdges }),
+                body: JSON.stringify({
+                  nodes: simplifiedNodes,
+                  edges: simplifiedEdges,
+                  ...(flowMeta !== undefined ? { meta: flowMeta } : {}),
+                }),
               }
             );
 

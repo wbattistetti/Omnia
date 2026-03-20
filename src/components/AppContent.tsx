@@ -1010,7 +1010,11 @@ export const AppContent: React.FC<AppContentProps> = ({
                 const flowsById = Object.fromEntries(
                   Object.entries(allFlows).map(([fid, f]: [string, any]) => [
                     fid,
-                    { nodes: f?.nodes ?? [], edges: f?.edges ?? [] },
+                    {
+                      nodes: f?.nodes ?? [],
+                      edges: f?.edges ?? [],
+                      ...(f?.meta !== undefined ? { meta: f.meta } : {}),
+                    },
                   ])
                 );
 
@@ -1130,6 +1134,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                         >
                           <FlowTestProvider testSingleNode={handleTestSingleNode}>
                             <FlowEditor
+                              flowId="main"
                               nodes={FlowStateBridge.getNodes()}
                               setNodes={(updater: any) => {
                                 try {

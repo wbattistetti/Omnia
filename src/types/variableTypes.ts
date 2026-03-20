@@ -25,6 +25,18 @@ export interface Variable {
 }
 
 /**
+ * Where a variable row is visible in the authoring/runtime UI.
+ * Task-bound rows (non-empty taskInstanceId) are always treated as project-wide.
+ */
+export type VariableScope = 'project' | 'flow';
+
+/** Options when registering a manual variable with a fixed GUID (e.g. semantic slot on a flow canvas). */
+export interface EnsureManualVariableOptions {
+  scope?: VariableScope;
+  scopeFlowId?: string | null;
+}
+
+/**
  * VariableInstance: Variabile associata a un'istanza di task
  * Ogni variabile ha un varId univoco per evitare collisioni quando lo stesso template è usato in istanze diverse
  */
@@ -34,6 +46,10 @@ export interface VariableInstance {
   taskInstanceId: string; // rowId dell'istanza (sempre = task.id)
   nodeId: string;         // GUID del nodo nel template (riferimento struttura)
   ddtPath: string;        // Path nel DDT: "data[0]" | "data[0].subData[1]"
+  /** Manual/slot visibility. Omitted or 'project' = visible in every flow. */
+  scope?: VariableScope;
+  /** When scope is 'flow', the canvas id (e.g. 'main', 'subflow_...'). */
+  scopeFlowId?: string | null;
 }
 
 /**
