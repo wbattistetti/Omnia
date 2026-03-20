@@ -41,6 +41,9 @@ interface NodeRowActionsOverlayProps {
   showErrorPopover?: boolean;
   onCloseErrorPopover?: () => void;
   onErrorFix?: (error: CompilationError) => void;
+  onOpenSemanticValuesEditor?: () => void;
+  hasSemanticValues?: boolean;
+  semanticValuesAnchorRef?: React.RefObject<HTMLButtonElement | null>;
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -75,7 +78,10 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   errorIconRef,
   showErrorPopover,
   onCloseErrorPopover,
-  onErrorFix
+  onErrorFix,
+  onOpenSemanticValuesEditor,
+  hasSemanticValues,
+  semanticValuesAnchorRef
 }) => {
   // ✅ Toolbar appears only on hover (showIcons), error icon is added at the end if errors exist
   if (!showIcons || !iconPos) return null;
@@ -324,6 +330,46 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           <Settings style={{ width: size, height: size, color: hasTaskTree ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasTaskTree ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
         </button>
       </SmartTooltip>
+      {onOpenSemanticValuesEditor && (
+        <SmartTooltip text="Edit semantic values" tutorId="semantic_values_help" placement="bottom">
+          <button
+            ref={semanticValuesAnchorRef}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenSemanticValuesEditor();
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className="hover:opacity-100 hover:scale-110 nodrag"
+            style={{
+              background: 'none',
+              border: hasSemanticValues ? '1px solid rgba(56,189,248,0.9)' : '1px solid transparent',
+              borderRadius: 4,
+              padding: 2,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: size,
+              height: size,
+              opacity: hasSemanticValues ? 1 : 0.88,
+              color: hasSemanticValues ? '#38bdf8' : '#cbd5e1',
+              fontSize: Math.max(10, Math.round(size * 0.65)),
+              fontWeight: 700,
+              lineHeight: 1,
+              transition: 'opacity 120ms linear, transform 120ms ease'
+            }}
+            onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
+            title="Closed-domain values"
+          >
+            V
+          </button>
+        </SmartTooltip>
+      )}
       {/* Checkbox: moved from left side to toolbar, before trash icon */}
       {included !== undefined && setIncluded && (
         <SmartTooltip text="Include this row in the flow" tutorId="include_row_help" placement="bottom">

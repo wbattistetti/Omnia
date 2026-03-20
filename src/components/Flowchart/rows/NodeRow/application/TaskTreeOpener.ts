@@ -5,6 +5,8 @@ import { TaskType } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
 import { resolveTaskType } from '../../../utils/taskVisuals';
 import type { Row } from '@types/NodeRowTypes';
+import type { NodeRowData } from '@types/project';
+import { flushSemanticDraftToTaskOnTaskCreated } from '@utils/semanticValuesRowState';
 
 export interface TaskTreeOpenerDependencies {
   taskEditorCtx: {
@@ -583,6 +585,8 @@ export class TaskTreeOpener {
       projectId
     );
 
+    flushSemanticDraftToTaskOnTaskCreated(row as unknown as NodeRowData, row.id);
+
     let taskForType = newTask;
 
     // If there's templateId, use centralized function to clone and adapt
@@ -722,6 +726,8 @@ export class TaskTreeOpener {
         row.id,
         projectId
       );
+
+      flushSemanticDraftToTaskOnTaskCreated(row as unknown as NodeRowData, row.id);
 
       // If there's templateId, copy steps (escalations) from template
       if (metaTemplateId) {

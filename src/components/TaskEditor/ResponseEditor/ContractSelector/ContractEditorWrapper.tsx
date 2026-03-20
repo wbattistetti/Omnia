@@ -14,6 +14,20 @@ import LLMInlineEditor from '@responseEditor/InlineEditors/LLMInlineEditor';
 import IntentEditorInlineEditor from '@responseEditor/InlineEditors/IntentEditorInlineEditor';
 import GrammarFlowInlineEditor from '@responseEditor/InlineEditors/GrammarFlowInlineEditor';
 
+/** Maps task meta (from node.task or editorProps.task) to IntentEditorInlineEditor `act`. */
+function taskToAct(t: unknown): { id: string; type: string; label?: string; instanceId?: string } | undefined {
+  if (!t || typeof t !== 'object') return undefined;
+  const o = t as Record<string, unknown>;
+  const id = (o.id ?? o.instanceId) as string | undefined;
+  if (id === undefined || id === '') return undefined;
+  return {
+    id: String(o.id ?? o.instanceId ?? ''),
+    type: String(o.type ?? ''),
+    label: o.label as string | undefined,
+    instanceId: o.instanceId as string | undefined,
+  };
+}
+
 interface ContractEditorWrapperProps {
   method: ContractMethod;
   contract: DataContract | null;
@@ -106,13 +120,15 @@ export default function ContractEditorWrapper({
         />
       );
 
-    case 'embeddings':
+    case 'embeddings': {
+      const act = taskToAct(node?.task);
       return (
         <IntentEditorInlineEditor
           {...commonProps}
-          task={node?.task}
+          act={act}
         />
       );
+    }
 
     case 'grammarflow':
       return (

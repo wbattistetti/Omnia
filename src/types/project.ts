@@ -1,4 +1,4 @@
-import { TaskType } from './taskTypes'; // ✅ Import TaskType enum
+import { TaskType, type SemanticValue } from './taskTypes'; // ✅ Import TaskType enum
 
 export type EntityType = 'taskTemplates' | 'userTasks' | 'backendActions' | 'conditions' | 'macrotasks'; // ✅ RINOMINATO: userActs → userTasks
 
@@ -127,6 +127,14 @@ export interface ProjectInfo {
 }
 
 /**
+ * Row-level metadata (UI-only / pre-task draft before TaskRepository has a task).
+ */
+export interface RowMeta {
+  /** Pre-task semantic slot values; cleared after task creation. See semanticValuesRowState.ts */
+  semanticValuesDraft?: SemanticValue[] | null;
+}
+
+/**
  * Rappresenta una riga/azione di un nodo del flowchart
  *
  * Architettura pulita:
@@ -150,6 +158,9 @@ export interface NodeRowData {
   // ✅ Metadati UI/organizzativi
   factoryId?: string;             // ID template factory (quando la riga referenzia un template)
   isUndefined?: boolean;          // Flag tipo undefined (per UI - mostra icona "?")
+
+  /** UI-only / pre-task draft storage (cleared when task is materialized). */
+  meta?: RowMeta;
 }
 
 // --- Macrotask model (for grouping nodes into a macro action) ---

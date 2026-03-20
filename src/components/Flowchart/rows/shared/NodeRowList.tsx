@@ -30,6 +30,7 @@ interface NodeRowListProps {
   getProjectId?: () => string | null;
   onWidthChange?: (width: number) => void;
   onOpenSubflowForTask?: (taskId: string, existingFlowId?: string) => void;
+  updateNodeRows?: (mutate: (rows: NodeRowData[]) => NodeRowData[]) => void;
 }
 
 export const NodeRowList: React.FC<NodeRowListProps> = ({
@@ -58,7 +59,8 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   onCreateTask,
   getProjectId,
   onWidthChange,
-  onOpenSubflowForTask
+  onOpenSubflowForTask,
+  updateNodeRows
 }) => {
 
   // Filter rows based on hideUnchecked setting
@@ -144,6 +146,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             getProjectId={getProjectId}
             onWidthChange={onWidthChange}
             onOpenSubflowForTask={onOpenSubflowForTask}
+            updateNodeRows={updateNodeRows}
           />
         </React.Fragment>
       ))}

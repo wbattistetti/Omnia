@@ -23,6 +23,7 @@ import { useFlowActions } from '../../../../context/FlowActionsContext';
 import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { useFlowSubflow } from '../../context/FlowSubflowContext';
+import { SEMANTIC_DRAFT_FLUSH_EVENT } from '../../../../utils/semanticValuesRowState';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -78,7 +79,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     editingRowId, setEditingRowId,
     isEmpty, setIsEmpty,
     handleUpdateRow, handleDeleteRow, handleInsertRow,
-    handleExitEditing, validateRows, computeIsEmpty,
+    handleExitEditing, updateNodeRows, validateRows, computeIsEmpty,
     inAutoAppend
   } = rowManagement;
 
@@ -318,6 +319,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const rendering = useNodeRendering({
     nodeWidth: editingRowId ? nodeWidth : null,
     nodeRows,
+    updateNodeRows,
     normalizedData,
     isHoveredNode,
     selected,
@@ -412,6 +414,25 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ EXECUTION HIGHLIGHT: Get execution highlight styles
   const executionHighlight = useNodeExecutionHighlight(id, nodeRows);
+
+  // Sync row.meta after draft flush (TaskTreeOpener / task creation)
+  React.useEffect(() => {
+    const onFlush = (e: Event) => {
+      const detail = (e as CustomEvent<{ rowId: string; nextRow: NodeRowData }>).detail;
+      if (!detail?.rowId || !detail?.nextRow) return;
+      setNodeRows((prev) => {
+        if (!prev.some((r) => r.id === detail.rowId)) return prev;
+        const next = prev.map((r) => (r.id === detail.rowId ? detail.nextRow : r));
+        normalizedData.onUpdate?.({
+          rows: next,
+          isTemporary: normalizedData.isTemporary,
+        });
+        return next;
+      });
+    };
+    window.addEventListener(SEMANTIC_DRAFT_FLUSH_EVENT, onFlush as EventListener);
+    return () => window.removeEventListener(SEMANTIC_DRAFT_FLUSH_EVENT, onFlush as EventListener);
+  }, [normalizedData, setNodeRows]);
 
   // ✅ CROSS-NODE DRAG: Listen for cross-node row moves - VERSIONE SEMPLIFICATA
   React.useEffect(() => {

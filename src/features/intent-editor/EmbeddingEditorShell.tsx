@@ -40,7 +40,7 @@ const BASE_MODELS = [
 ];
 
 const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditorShellProps>(
-  ({ inlineMode = false, onTrainStateChange, training: externalTraining, modelReady: externalModelReady, canTrain: externalCanTrain }, ref) => {
+  ({ inlineMode: _inlineMode = false, onTrainStateChange, training: externalTraining, modelReady: externalModelReady, canTrain: externalCanTrain }, ref) => {
     // Training state
     const [training, setTraining] = useState(false);
     const [modelReady, setModelReady] = useState(false);
@@ -469,25 +469,21 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
           </div>
         </div>
 
-        {/* ✅ SOLUZIONE ESPERTO: Layout completo a 3 colonne - usa solo flex-1 min-h-0 */}
-        {!inlineMode && (
-          <div className="flex-1 min-h-0 flex gap-2 px-2 pb-2" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'row', alignItems: 'stretch' }}>
-            {/* Sinistra: Lista Intent - aggiungi height: 100% per forzare espansione verticale in flex row */}
-            <div className="w-64 flex-shrink-0 flex flex-col min-h-0" style={{ height: '100%' }}>
-              <LeftGrid />
-            </div>
-
-            {/* Centro: Frasi Matching/Not Matching - flex-1 per espansione orizzontale, height: 100% per verticale */}
-            <div className="flex-1 min-w-0 flex flex-col min-h-0" style={{ height: '100%' }}>
-              <CenterPane intentId={selectedIntentId} />
-            </div>
-
-            {/* Destra: Test Console - aggiungi height: 100% per forzare espansione verticale in flex row */}
-            <div className="w-80 flex-shrink-0 flex flex-col min-h-0" style={{ height: '100%' }}>
-              <TestConsole />
-            </div>
+        {/* Tre colonne anche in inlineMode (overlay Recognition): senza questo resta solo la riga parametri e un vuoto flex-1 */}
+        <div
+          className="flex-1 min-h-0 flex gap-2 px-2 pb-2"
+          style={{ overflow: 'hidden', display: 'flex', flexDirection: 'row', alignItems: 'stretch' }}
+        >
+          <div className="w-64 flex-shrink-0 flex flex-col min-h-0" style={{ height: '100%' }}>
+            <LeftGrid />
           </div>
-        )}
+          <div className="flex-1 min-w-0 flex flex-col min-h-0" style={{ height: '100%' }}>
+            <CenterPane intentId={selectedIntentId} />
+          </div>
+          <div className="w-80 flex-shrink-0 flex flex-col min-h-0" style={{ height: '100%' }}>
+            <TestConsole />
+          </div>
+        </div>
       </div>
     );
   }

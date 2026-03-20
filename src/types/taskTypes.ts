@@ -292,6 +292,14 @@ export interface MaterializedStep {
   escalations: any[];             // ✅ Escalations (unica parte modificabile)
 }
 
+/**
+ * Closed-domain value for semantic slots (e.g. motivo = {billing, cancellation, ...}).
+ */
+export interface SemanticValue {
+  id: string;
+  label: string;
+}
+
 export interface Task {
   id: string;                    // ✅ GUID univoco
   type: TaskType;                 // ✅ Enum numerico (0-19) - Determina il comportamento del task
@@ -317,6 +325,8 @@ export interface Task {
   // La traduzione è in translations[GUID], NON in task.text
   // Per ClassifyProblem:
   intents?: any[];               // Intents array
+  // Closed semantic domain for a data slot. null/undefined = open domain (no fixed values).
+  semanticValues?: SemanticValue[] | null;
   // Per BackendCall:
   endpoint?: string;             // API endpoint
   method?: string;              // HTTP method

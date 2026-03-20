@@ -4,6 +4,7 @@ import { useDynamicFontSizes } from '../../../../../hooks/useDynamicFontSizes';
 
 interface UseNodeRenderingProps {
     nodeRows: NodeRowData[];
+    updateNodeRows: (mutate: (rows: NodeRowData[]) => NodeRowData[]) => void;
     normalizedData: any;
     isHoveredNode: boolean;
     selected: boolean;
@@ -38,6 +39,7 @@ interface UseNodeRenderingProps {
  */
 export function useNodeRendering({
     nodeRows,
+    updateNodeRows,
     normalizedData,
     isHoveredNode,
     selected,
@@ -79,6 +81,7 @@ export function useNodeRendering({
         rows: visibleRows,
         editingRowId,
         handleInsertRow: handleInsertRow,
+        updateNodeRows,
         onUpdate: (row: any, newText: string) => {
           // Estrai tutti i campi importanti dalla row per preservarli (incluso isUndefined e heuristics)
           const meta = {
@@ -88,7 +91,8 @@ export function useNodeRendering({
             isUndefined: (row as any).isUndefined, // ✅ Preserva flag isUndefined
             factoryId: (row as any).factoryId,
             // Preserva row.heuristics (contiene type e templateId dall'euristica)
-            heuristics: (row as any).heuristics || undefined
+            heuristics: (row as any).heuristics || undefined,
+            meta: (row as NodeRowData).meta,
           };
           return handleUpdateRow(row.id, newText, row.categoryType, meta);
         },
@@ -99,6 +103,7 @@ export function useNodeRendering({
             isUndefined: (row as any).isUndefined, // ✅ Preserva flag isUndefined
             // ✅ FIX: Preserva row.heuristics se non è già presente nel meta passato
             heuristics: (meta && (meta as any).heuristics !== undefined) ? (meta as any).heuristics : ((row as any).heuristics || undefined),
+            meta: (meta && (meta as any).meta !== undefined) ? (meta as any).meta : (row as NodeRowData).meta,
             ...(meta || {})
           };
           return handleUpdateRow(row.id, newText, categoryType, mergedMeta);
@@ -109,6 +114,7 @@ export function useNodeRendering({
     }), [
         visibleRows,
         editingRowId,
+        updateNodeRows,
         handleUpdateRow,
         handleDeleteRow,
         handleInsertRow,

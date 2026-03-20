@@ -31,4 +31,6 @@ export interface NodeRowProps {
   onWidthChange?: (width: number) => void;
   /** Opens a subflow tab for Flow-type rows (taskId, optional existingFlowId, optional title = row label) */
   onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string) => void;
+  /** Immutable update of all rows in this node (flowchart); required for row.meta draft fields */
+  updateNodeRows?: (mutate: (rows: import('./project').NodeRowData[]) => import('./project').NodeRowData[]) => void;
 }

@@ -4,7 +4,9 @@
 import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
 import { createRowWithTask, updateRowTaskType } from '@utils/taskHelpers';
+import { flushSemanticDraftToTaskOnTaskCreated } from '@utils/semanticValuesRowState';
 import type { Row } from '@types/NodeRowTypes';
+import type { NodeRowData } from '@types/project';
 
 export interface RowTypeHandlerDependencies {
   row: Row;
@@ -71,6 +73,7 @@ export class RowTypeHandler {
             color: selectedTask.color || null,
           };
           taskRepository.createTask(finalTaskType, templateId, taskData, taskId, projectId);
+          flushSemanticDraftToTaskOnTaskCreated(this.row as unknown as NodeRowData, taskId);
         }
       } else if (selectedTaskType !== null) {
         // TaskType enum: use directly
@@ -116,6 +119,7 @@ export class RowTypeHandler {
           taskId,
           projectId
         );
+        flushSemanticDraftToTaskOnTaskCreated(this.row as unknown as NodeRowData, taskId);
 
         return {
           success: true,
@@ -174,6 +178,7 @@ export class RowTypeHandler {
             taskId,
             projectId
           );
+          flushSemanticDraftToTaskOnTaskCreated(this.row as unknown as NodeRowData, taskId);
         } else {
           taskRepository.updateTask(taskId, { type: finalTaskType, templateId }, projectId);
         }
@@ -194,9 +199,11 @@ export class RowTypeHandler {
               taskId,
               projectId
             );
+            flushSemanticDraftToTaskOnTaskCreated(this.row as unknown as NodeRowData, taskId);
           } else {
             // Create Task for this row
             createRowWithTask(taskId, taskType, label, projectId);
+            flushSemanticDraftToTaskOnTaskCreated(this.row as unknown as NodeRowData, taskId);
           }
         } else {
           // Update Task type

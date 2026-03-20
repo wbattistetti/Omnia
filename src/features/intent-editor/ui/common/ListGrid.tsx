@@ -78,10 +78,16 @@ export default function ListGrid({
 
   const handleAdd = () => {
     const t = value.trim();
-    if (!t || !onEnterAdd) return;
+    if (!t || !onEnterAdd) return false;
+    try {
+      if (typeof window !== 'undefined' && localStorage.getItem('debug.semanticValues') === '1') {
+        console.debug('[ListGrid] add via input', { text: t, length: t.length });
+      }
+    } catch {}
     onEnterAdd(t);
     setValue('');
     inputRef.current?.focus();
+    return true;
   };
 
   const beginEdit = (id: string, label: string) => {
@@ -112,11 +118,27 @@ export default function ListGrid({
             type="text"
             placeholder={placeholder}
             className="flex-1 outline-none bg-transparent"
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+            onKeyDownCapture={(e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              e.stopPropagation();
+              handleAdd();
+            }}
+            onKeyUp={(e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              e.stopPropagation();
+              handleAdd();
+            }}
           />
         </div>
         {onEnterAdd && (
-          <button className="px-2 py-1 rounded-lg border" onClick={handleAdd}>{addButtonLabel}</button>
+          <button type="button" className="px-2 py-1 rounded-lg border" onClick={handleAdd}>{addButtonLabel}</button>
         )}
       </div>
       {/* ✅ LISTA SCROLLABILE - solo questa parte scrolla */}

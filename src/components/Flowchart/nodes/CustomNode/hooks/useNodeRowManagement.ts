@@ -151,7 +151,10 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 // ✅ FIX: Preserva heuristics esplicitamente (contiene type e templateId dall'euristica)
                 heuristics: (incoming as any)?.heuristics !== undefined
                     ? (incoming as any).heuristics
-                    : ((row as any)?.heuristics || undefined)
+                    : ((row as any)?.heuristics || undefined),
+                meta: (incoming as any)?.meta !== undefined
+                    ? (incoming as any).meta
+                    : (row as any)?.meta,
             } as any;
 
             return updatedRow;
@@ -340,6 +343,24 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         normalizedData.onUpdate?.({ rows: updatedRows });
     }, [nodeRows, makeRowId, normalizedData, saveOriginalContent]);
 
+    /**
+     * Immutable row updates for the whole node (used by semantic draft / meta).
+     */
+    const updateNodeRows = useCallback(
+        (mutate: (rows: NodeRowData[]) => NodeRowData[]) => {
+            setNodeRows((prev) => {
+                const nextRows = mutate(prev.map((r) => ({ ...r })));
+                setIsEmpty(computeIsEmpty(nextRows));
+                normalizedData.onUpdate?.({
+                    rows: nextRows,
+                    isTemporary: normalizedData.isTemporary,
+                });
+                return nextRows;
+            });
+        },
+        [normalizedData, computeIsEmpty]
+    );
+
     // Gestione exit editing
     const handleExitEditing = useCallback((rowIdToCheck?: string | null) => {
         if (inAutoAppend()) {
@@ -434,6 +455,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         handleDeleteRow,
         handleInsertRow,
         handleExitEditing,
+        updateNodeRows,
         validateRows,
         computeIsEmpty,
         makeRowId,

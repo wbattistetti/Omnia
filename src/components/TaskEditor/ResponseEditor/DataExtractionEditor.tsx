@@ -23,9 +23,6 @@ import NoteEditor from './CellNote/NoteEditor';
 import NoteDisplay from './CellNote/NoteDisplay';
 import NoteSeparator from './CellNote/NoteSeparator';
 
-// ✏️ Inline Editors
-import IntentEditorInlineEditor from './InlineEditors/IntentEditorInlineEditor';
-
 // 📊 Tester Components
 import TesterGrid from './features/step-management/components/TesterGrid';
 import TesterControls from './features/step-management/components/TesterControls';
@@ -711,30 +708,7 @@ export default function DataExtractionEditor({
         )}
       </div>
 
-      {/* Editor senza Test Values: embeddings, post */}
-      {activeEditor === 'embeddings' && (
-        <div style={{
-          border: '1px solid #e5e7eb',
-          borderRadius: 12,
-          padding: 12,
-          flex: 1,
-          minHeight: 0,
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        }}>
-          <IntentEditorInlineEditor
-            onClose={closeEditor}
-            node={node}
-            profile={profile}
-            onProfileUpdate={(updatedProfile) => {
-              onChange?.(updatedProfile);
-            }}
-            intentSelected={intentSelected}
-            task={task}
-          />
-        </div>
-      )}
+      {/* Embeddings: solo overlay su TesterGrid (EditorRenderer), niente secondo pannello sotto */}
 
       {activeEditor === 'post' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

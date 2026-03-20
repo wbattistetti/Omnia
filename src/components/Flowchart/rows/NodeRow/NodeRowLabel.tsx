@@ -276,6 +276,9 @@ interface NodeRowLabelProps {
   showErrorPopover?: boolean;
   onCloseErrorPopover?: () => void;
   onErrorFix?: (error: import('../../../../FlowCompiler/types').CompilationError) => void;
+  onOpenSemanticValuesEditor?: () => void;
+  hasSemanticValues?: boolean;
+  semanticValuesAnchorRef?: React.RefObject<HTMLButtonElement | null>;
 }
 
 export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
@@ -313,7 +316,10 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   errorIconRef,
   showErrorPopover,
   onCloseErrorPopover,
-  onErrorFix
+  onErrorFix,
+  onOpenSemanticValuesEditor,
+  hasSemanticValues,
+  semanticValuesAnchorRef
 }) => {
   // ✅ ARCHITECTURAL: Use GlobalTestPanel context for testing
   const { openWithTask } = useGlobalTestPanel();
@@ -511,6 +517,9 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           showErrorPopover={showErrorPopover}
           onCloseErrorPopover={onCloseErrorPopover}
           onErrorFix={onErrorFix}
+          onOpenSemanticValuesEditor={onOpenSemanticValuesEditor}
+          hasSemanticValues={hasSemanticValues}
+          semanticValuesAnchorRef={semanticValuesAnchorRef}
         />,
         document.body
       )}

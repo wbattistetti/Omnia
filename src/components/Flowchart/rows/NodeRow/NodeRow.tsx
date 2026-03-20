@@ -32,6 +32,10 @@ import { idMappingService } from '@services/IdMappingService';
 import { generateId } from '@utils/idGenerator';
 import { updateRowTaskType, createRowWithTask, getTemplateId, getTaskIdFromRow } from '@utils/taskHelpers';
 import { taskRepository } from '@services/TaskRepository';
+import {
+  getSemanticValuesCountForRow,
+  reconcileRowMetaWithExistingTask,
+} from '@utils/semanticValuesRowState';
 import { useRowErrors } from '../../hooks/useRowErrors';
 import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
 import { TaskTreeOpener } from './application/TaskTreeOpener';
@@ -40,6 +44,7 @@ import { RowHeuristicsHandler } from './application/RowHeuristicsHandler';
 import { IntellisenseSelectionHandler } from './application/IntellisenseSelectionHandler';
 import { RowTypeHandler } from './application/RowTypeHandler';
 import { FactoryTaskCreator } from './application/FactoryTaskCreator';
+import SemanticValuesEditorPanel from './SemanticValuesEditorPanel';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -72,7 +77,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     onCreateTask,
     getProjectId,
     onWidthChange,
-    onOpenSubflowForTask
+    onOpenSubflowForTask,
+    updateNodeRows,
   }: NodeRowProps,
   ref
 ) => {
@@ -143,6 +149,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Type picker state (moved here to be accessible in handleKeyDownInternal)
   const [pickerCurrentType, setPickerCurrentType] = useState<TaskType | undefined>(undefined);
   const [pickerPosition, setPickerPosition] = useState<{ left: number; top: number } | null>(null);
+  const [showSemanticValuesEditor, setShowSemanticValuesEditor] = useState(false);
+  const semanticValuesAnchorRef = useRef<HTMLButtonElement>(null);
+  const [semanticPopoverPos, setSemanticPopoverPos] = useState<{ top: number; left: number } | null>(null);
 
 
 
@@ -523,11 +532,73 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     instanceUpdateTrigger,
   });
 
+  const isDataRequestRow = resolveTaskType(row) === TaskType.UtteranceInterpretation;
+
+  const semanticValuesCount = React.useMemo(() => {
+    if (!isDataRequestRow) return 0;
+    return getSemanticValuesCountForRow(row);
+  }, [row, instanceUpdateTrigger, isDataRequestRow]);
+
+  React.useEffect(() => {
+    if (!updateNodeRows) return;
+    const next = reconcileRowMetaWithExistingTask(row);
+    if (next) {
+      updateNodeRows((rows) => rows.map((r) => (r.id === row.id ? next : r)));
+    }
+  }, [row, updateNodeRows]);
+
+  React.useEffect(() => {
+    if (!isDataRequestRow) {
+      setShowSemanticValuesEditor(false);
+      setSemanticPopoverPos(null);
+    }
+  }, [isDataRequestRow, row.id]);
+
+  const updateSemanticPopoverPosition = useCallback(() => {
+    const el = semanticValuesAnchorRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const panelWidth = 400;
+    let left = r.left;
+    if (typeof window !== 'undefined') {
+      if (left + panelWidth > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - panelWidth - 8);
+      }
+    }
+    setSemanticPopoverPos({ top: r.bottom + 6, left });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!showSemanticValuesEditor || !isDataRequestRow) {
+      if (!showSemanticValuesEditor) setSemanticPopoverPos(null);
+      return;
+    }
+    updateSemanticPopoverPosition();
+    window.addEventListener('scroll', updateSemanticPopoverPosition, true);
+    window.addEventListener('resize', updateSemanticPopoverPosition);
+    return () => {
+      window.removeEventListener('scroll', updateSemanticPopoverPosition, true);
+      window.removeEventListener('resize', updateSemanticPopoverPosition);
+    };
+  }, [showSemanticValuesEditor, isDataRequestRow, updateSemanticPopoverPosition, instanceUpdateTrigger]);
+
+  const handleToggleSemanticValuesEditor = useCallback(() => {
+    setShowSemanticValuesEditor((prev) => {
+      const next = !prev;
+      if (next) {
+        requestAnimationFrame(() => updateSemanticPopoverPosition());
+      } else {
+        setSemanticPopoverPos(null);
+      }
+      return next;
+    });
+  }, [updateSemanticPopoverPosition]);
+
   return (
     <>
       <div
         ref={nodeContainerRef}
-        className={`node-row-outer nodrag flex items-center group ${conditionalClasses} ${!isBeingDragged && visualState !== 'highlight' ? 'node-row-hover-target' : ''}`}
+        className={`node-row-outer nodrag flex flex-col group ${conditionalClasses} ${!isBeingDragged && visualState !== 'highlight' ? 'node-row-hover-target' : ''}`}
         style={{
           ...conditionalStyles,
           ...checkboxStyles,
@@ -543,79 +614,97 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         {...(onMouseLeave ? { onMouseLeave } : {})}
         {...(onMouseMove ? { onMouseMove } : {})}
       >
-        {isEditing ? (
-          <div
-            style={{
-              flex: 1,
-              minWidth: 0,
-              marginRight: '8px', // Piccola marginatura a destra
-              marginLeft: '4px'  // Piccola marginatura a sinistra
-            }}
-            data-row-id={row.id}
-            ref={(divEl) => {
-              // Editor container ref (debug disabled)
-            }}
-          >
-            <NodeRowEditor
-              value={currentText}
-              onChange={handleTextChange}
-              onKeyDown={handleKeyDownInternal}
-              inputRef={inputRef}
-              placeholder="Type what you need here..."
-              fontStyles={labelFontStyles}
-              onWidthChange={onWidthChange}
-            />
-          </div>
-        ) : (
-          <NodeRowLabel
-            row={row}
-            included={included}
-            setIncluded={val => {
-              setIncluded(val);
-              if (typeof onUpdate === 'function') {
-                onUpdate({ ...row, included: val }, row.text);
-              }
-            }}
-            labelRef={labelRef}
-            Icon={Icon}
-            iconSize={undefined}
-            showIcons={toolbarSM.showIcons}
-            iconPos={iconPos}
-            canDelete={canDelete}
-            onEdit={() => enterEditing()}
-            onDelete={() => onDelete(row)}
-            onDrag={handleMouseDown}
-            onLabelDragStart={handleMouseDown}
-            isEditing={isEditing}
-            setIsEditing={setIsEditing}
-            bgColor="transparent"
-            labelTextColor={labelTextColor}
-            iconColor={iconColor}
-            hasTaskTree={isUndefined ? false : hasTaskTree(row)} // ✅ Usa hasTaskTree senza actFound
-            gearColor={isUndefined ? '#94a3b8' : labelTextColor} // Se undefined, gear grigio
-            // ✅ Disabilita ingranaggio se tipo UNDEFINED e non c'è template match (nessun TaskTree salvato)
-            // ✅ Per DataRequest, sempre abilitato (può essere creato un TaskTree vuoto)
-            gearDisabled={(() => {
-              const taskType = resolveTaskType(row);
-              if (taskType === TaskType.UtteranceInterpretation) {
-                return false; // ✅ Sempre abilitato per DataRequest
-              }
-              return isUndefined && !hasTaskTree(row); // Disabilitato se undefined e nessun TaskTree
-            })()}
-            onOpenTaskTree={(() => {
-              const taskType = resolveTaskType(row);
-              // Flow type: open subflow in new tab (no task editor)
-              if (taskType === TaskType.Flow && onOpenSubflowForTask) {
-                return () => {
-                  const task = taskRepository.getTask(row.id) ?? null;
-                  const existingFlowId = task?.parameters?.flowId ?? (task as any)?.flowId;
-                  const rowLabel = (row.text || '').trim() || task?.name || 'Subflow';
-                  onOpenSubflowForTask(row.id, existingFlowId, rowLabel);
-                };
-              }
-              // ✅ REFACTOR: Use TaskTreeOpener service for other types
-              if (taskType === TaskType.UtteranceInterpretation) {
-                // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskTree
+        <div className="flex items-center w-full min-w-0">
+          {isEditing ? (
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                marginRight: '8px', // Piccola marginatura a destra
+                marginLeft: '4px'  // Piccola marginatura a sinistra
+              }}
+              data-row-id={row.id}
+              ref={(divEl) => {
+                // Editor container ref (debug disabled)
+              }}
+            >
+              <NodeRowEditor
+                value={currentText}
+                onChange={handleTextChange}
+                onKeyDown={handleKeyDownInternal}
+                inputRef={inputRef}
+                placeholder="Type what you need here..."
+                fontStyles={labelFontStyles}
+                onWidthChange={onWidthChange}
+              />
+            </div>
+          ) : (
+            <NodeRowLabel
+              row={row}
+              included={included}
+              setIncluded={val => {
+                setIncluded(val);
+                if (typeof onUpdate === 'function') {
+                  onUpdate({ ...row, included: val }, row.text);
+                }
+              }}
+              labelRef={labelRef}
+              Icon={Icon}
+              iconSize={undefined}
+              showIcons={toolbarSM.showIcons}
+              iconPos={iconPos}
+              canDelete={canDelete}
+              onEdit={() => enterEditing()}
+              onDelete={() => onDelete(row)}
+              onDrag={handleMouseDown}
+              onLabelDragStart={handleMouseDown}
+              isEditing={isEditing}
+              setIsEditing={setIsEditing}
+              bgColor="transparent"
+              labelTextColor={labelTextColor}
+              iconColor={iconColor}
+              hasTaskTree={isUndefined ? false : hasTaskTree(row)} // ✅ Usa hasTaskTree senza actFound
+              gearColor={isUndefined ? '#94a3b8' : labelTextColor} // Se undefined, gear grigio
+              // ✅ Disabilita ingranaggio se tipo UNDEFINED e non c'è template match (nessun TaskTree salvato)
+              // ✅ Per DataRequest, sempre abilitato (può essere creato un TaskTree vuoto)
+              gearDisabled={(() => {
+                const taskType = resolveTaskType(row);
+                if (taskType === TaskType.UtteranceInterpretation) {
+                  return false; // ✅ Sempre abilitato per DataRequest
+                }
+                return isUndefined && !hasTaskTree(row); // Disabilitato se undefined e nessun TaskTree
+              })()}
+              onOpenTaskTree={(() => {
+                const taskType = resolveTaskType(row);
+                // Flow type: open subflow in new tab (no task editor)
+                if (taskType === TaskType.Flow && onOpenSubflowForTask) {
+                  return () => {
+                    const task = taskRepository.getTask(row.id) ?? null;
+                    const existingFlowId = task?.parameters?.flowId ?? (task as any)?.flowId;
+                    const rowLabel = (row.text || '').trim() || task?.name || 'Subflow';
+                    onOpenSubflowForTask(row.id, existingFlowId, rowLabel);
+                  };
+                }
+                // ✅ REFACTOR: Use TaskTreeOpener service for other types
+                if (taskType === TaskType.UtteranceInterpretation) {
+                  // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskTree
+                  return async () => {
+                    try {
+                      const opener = new TaskTreeOpener({
+                        taskEditorCtx,
+                        getProjectId,
+                        row,
+                      });
+                      await opener.open();
+                    } catch (e) {
+                      console.error('[NodeRow] Error opening editor:', e);
+                    }
+                  };
+                }
+                // ✅ Per altri tipi, disabilita solo se undefined e nessun TaskTree
+                if (isUndefined && !hasTaskTree(row)) {
+                  return undefined;
+                }
                 return async () => {
                   try {
                     const opener = new TaskTreeOpener({
@@ -625,49 +714,38 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     });
                     await opener.open();
                   } catch (e) {
-                    console.error('[NodeRow] Error opening editor:', e);
+                    console.error('[NodeRow][onOpenTaskTree] Failed to open editor', e);
                   }
                 };
-              }
-              // ✅ Per altri tipi, disabilita solo se undefined e nessun TaskTree
-              if (isUndefined && !hasTaskTree(row)) {
-                return undefined;
-              }
-              return async () => {
-                try {
-                  const opener = new TaskTreeOpener({
-                    taskEditorCtx,
-                    getProjectId,
-                    row,
-                  });
-                  await opener.open();
-                } catch (e) {
-                  console.error('[NodeRow][onOpenTaskTree] Failed to open editor', e);
+              })()}
+              onDoubleClick={handleDoubleClick}
+              onIconsHoverChange={(v: boolean) => { v ? toolbarSM.overlay.onEnter() : toolbarSM.overlay.onLeave(); }}
+              onLabelHoverChange={(v: boolean) => { v ? toolbarSM.row.onEnter() : toolbarSM.row.onLeave({ relatedTarget: null } as any); }}
+              onTypeChangeRequest={(anchor) => openTypePickerFromIcon(anchor, currentTypeForPicker)}
+              onRequestClosePicker={() => {
+                if (buttonCloseTimeoutRef.current) {
+                  clearTimeout(buttonCloseTimeoutRef.current);
+                  buttonCloseTimeoutRef.current = null;
                 }
-              };
-            })()}
-            onDoubleClick={handleDoubleClick}
-            onIconsHoverChange={(v: boolean) => { v ? toolbarSM.overlay.onEnter() : toolbarSM.overlay.onLeave(); }}
-            onLabelHoverChange={(v: boolean) => { v ? toolbarSM.row.onEnter() : toolbarSM.row.onLeave({ relatedTarget: null } as any); }}
-            onTypeChangeRequest={(anchor) => openTypePickerFromIcon(anchor, currentTypeForPicker)}
-            onRequestClosePicker={() => {
-              if (buttonCloseTimeoutRef.current) {
-                clearTimeout(buttonCloseTimeoutRef.current);
-                buttonCloseTimeoutRef.current = null;
+                toolbarSM.picker.close();
+              }}
+              buttonCloseTimeoutRef={buttonCloseTimeoutRef}
+              overlayRef={overlayRef}
+              getProjectId={getProjectId}
+              rowErrors={rowErrors}
+              onErrorClick={handleErrorClick}
+              errorIconRef={errorIconRef}
+              showErrorPopover={showErrorPopover}
+              onCloseErrorPopover={() => setShowErrorPopover(false)}
+              onErrorFix={handleErrorFix}
+              onOpenSemanticValuesEditor={
+                isDataRequestRow ? handleToggleSemanticValuesEditor : undefined
               }
-              toolbarSM.picker.close();
-            }}
-            buttonCloseTimeoutRef={buttonCloseTimeoutRef}
-            overlayRef={overlayRef}
-            getProjectId={getProjectId}
-            rowErrors={rowErrors}
-            onErrorClick={handleErrorClick}
-            errorIconRef={errorIconRef}
-            showErrorPopover={showErrorPopover}
-            onCloseErrorPopover={() => setShowErrorPopover(false)}
-            onErrorFix={handleErrorFix}
-          />
-        )}
+              hasSemanticValues={isDataRequestRow && semanticValuesCount > 0}
+              semanticValuesAnchorRef={semanticValuesAnchorRef}
+            />
+          )}
+        </div>
       </div>
 
       <NodeRowIntellisense
@@ -683,6 +761,35 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         onCreateBackendCall={onCreateBackendCall}
         onCreateTask={onCreateTask}
       />
+
+      {!isEditing && isDataRequestRow && updateNodeRows && showSemanticValuesEditor && semanticPopoverPos && typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="nodrag"
+            style={{
+              position: 'fixed',
+              top: semanticPopoverPos.top,
+              left: semanticPopoverPos.left,
+              zIndex: 10050,
+              width: 400,
+              maxWidth: 'min(400px, calc(100vw - 16px))',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.45)',
+              borderRadius: 8,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <SemanticValuesEditorPanel
+              row={row}
+              updateNodeRows={updateNodeRows}
+              onClose={() => {
+                setShowSemanticValuesEditor(false);
+                setSemanticPopoverPos(null);
+              }}
+              onSaved={() => setInstanceUpdateTrigger((v) => v + 1)}
+            />
+          </div>,
+          document.body
+        )}
 
       {toolbarSM.showPicker && pickerPosition && createPortal(
         <>
