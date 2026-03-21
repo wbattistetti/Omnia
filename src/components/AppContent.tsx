@@ -155,11 +155,33 @@ export const AppContent: React.FC<AppContentProps> = ({
   const currentPid = (() => { try { return pdUpdate.getCurrentProjectId(); } catch { return undefined; } })();
 
   // Dock tree (new dock manager)
+  /** Main canvas + right dock: unified mapping panel (backend / interface demo). Drag tab to bottom to try vertical layout. */
   const [dockTree, setDockTree] = useState<DockNode>({
-    kind: 'tabset',
-    id: 'ts_main',
-    tabs: [{ id: 'tab_main', title: 'Main', type: 'flow', flowId: 'main' }],
-    active: 0
+    kind: 'split',
+    id: 'split_root',
+    orientation: 'row',
+    sizes: [0.7, 0.3],
+    children: [
+      {
+        kind: 'tabset',
+        id: 'ts_main',
+        tabs: [{ id: 'tab_main', title: 'Main', type: 'flow', flowId: 'main' }],
+        active: 0,
+      },
+      {
+        kind: 'tabset',
+        id: 'ts_flow_mapping',
+        tabs: [
+          {
+            id: 'tab_flow_mapping_demo',
+            title: 'Mapping',
+            type: 'flowMapping',
+            initialMode: 'backend',
+          },
+        ],
+        active: 0,
+      },
+    ],
   });
 
   // ✅ Initialize ErrorReportPanelService

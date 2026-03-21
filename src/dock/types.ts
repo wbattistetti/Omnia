@@ -99,8 +99,14 @@ export type DockTabErrorReport = DockTabBase & {
   type: 'errorReport';
 };
 
+/** Unified mapping preview: backend API mapping vs subflow interface (demo / editor shell). */
+export type DockTabFlowMapping = DockTabBase & {
+  type: 'flowMapping';
+  initialMode?: 'backend' | 'interface';
+};
+
 // Union type for all tab types
-export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor | DockTabChat | DockTabErrorReport; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
+export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor | DockTabChat | DockTabErrorReport | DockTabFlowMapping; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 
 export type SplitNode = {
   kind: 'split';

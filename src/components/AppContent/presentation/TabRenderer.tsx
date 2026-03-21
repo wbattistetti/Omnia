@@ -2,7 +2,7 @@
 // Renders different tab types (flow, responseEditor, conditionEditor, taskEditor, nonInteractive)
 
 import React, { useMemo, useCallback, useEffect } from 'react';
-import type { DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabConditionEditor, DockTabChat, DockTabErrorReport, ToolbarButton } from '@dock/types';
+import type { DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabConditionEditor, DockTabChat, DockTabErrorReport, DockTabFlowMapping, ToolbarButton } from '@dock/types';
 import type { DockNode } from '@dock/types';
 import { TaskType } from '@types/taskTypes';
 import { resolveEditorKind } from '@taskEditor/EditorHost/resolveKind';
@@ -15,6 +15,7 @@ import ConditionEditor from '../../conditions/ConditionEditor';
 import TaskEditorHost from '../../TaskEditor/EditorHost/TaskEditorHost';
 import { AssistantPanel } from '@components/ChatPanel/AssistantPanel';
 import { ErrorReportPanel } from '@components/ChatPanel/ErrorReportPanel';
+import { UnifiedFlowMappingPanel } from '@components/FlowMappingPanel';
 
 export interface TabRendererProps {
   tab: DockTab;
@@ -60,6 +61,10 @@ function tabContentComparator(prev: { tab: DockTab }, next: { tab: DockTab }): b
 
     // Ignore toolbarButtons and headerColor - don't cause re-render
     return true; // NO re-render
+  }
+
+  if (prevTab.type === 'flowMapping' && nextTab.type === 'flowMapping') {
+    return prevTab.id === nextTab.id && prevTab.initialMode === nextTab.initialMode && prevTab.title === nextTab.title;
   }
 
   // For other tab types, use default behavior (re-render if any prop changes)
@@ -505,6 +510,19 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
             hideHeader={true}
             registerOnClose={isTaskTreeEditor ? handleRegisterOnClose : undefined}
             setDockTree={setDockTree}
+          />
+        </div>
+      );
+    }
+
+    // Unified flow mapping (backend / interface shell — demo)
+    if (tab.type === 'flowMapping') {
+      const mTab = tab as DockTabFlowMapping;
+      return (
+        <div className="h-full w-full min-h-0 flex flex-col bg-[#0c0f14]">
+          <UnifiedFlowMappingPanel
+            initialVariant={mTab.initialMode ?? 'backend'}
+            title={mTab.title || 'Flow mapping'}
           />
         </div>
       );
