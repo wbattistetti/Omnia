@@ -4,6 +4,15 @@
 
 export { UnifiedFlowMappingPanel } from './UnifiedFlowMappingPanel';
 export type { UnifiedFlowMappingPanelProps } from './UnifiedFlowMappingPanel';
+export { InterfaceMappingEditor, BackendParameterDragChip } from './InterfaceMappingEditor';
+export type { InterfaceMappingEditorProps } from './InterfaceMappingEditor';
+export {
+  backendInputsToMappingEntries,
+  backendOutputsToMappingEntries,
+  mappingEntriesToBackendInputs,
+  mappingEntriesToBackendOutputs,
+} from './backendCallMappingAdapter';
+export type { BackendCallInputRow, BackendCallOutputRow } from './backendCallMappingAdapter';
 export { MappingRowShell } from './MappingRowShell';
 export { MappingBlock } from './MappingBlock';
 export { FlowMappingTree } from './FlowMappingTree';

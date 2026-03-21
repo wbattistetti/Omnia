@@ -67,7 +67,7 @@ const FlowHost: React.FC<{ projectId: string }> = ({ projectId }) => {
             }}
           />
         </div>
-        <FlowVariablesRail flowId={activeFlowId} />
+        <FlowVariablesRail flowId={activeFlowId} projectId={projectId} />
       </div>
     </div>
   );

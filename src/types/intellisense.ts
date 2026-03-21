@@ -14,6 +14,8 @@ export type IntellisenseTarget = {
     edgeId?: string;
     mouseX?: number;
     mouseY?: number;
+    /** Punto medio del link (schermo) per ancorare l'editor sul segmento, non sul nodo. */
+    linkMidScreen?: { x: number; y: number };
 } | null;
 
 export type IntellisenseState = {

@@ -1,104 +1,104 @@
 /**
- * Right-edge vertical tab + slide panel for flow-scoped Variables (author view).
- * Single list: variables shown in a tree when labels use dot notation (e.g. a.b.c).
+ * Right-edge panel: single source of truth — VariableCreationService rows visible on this flow
+ * (project-wide manual + this flow's manual + task-bound from any node).
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useReducer } from 'react';
 import { Brackets, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
-import { useFlowWorkspace, useFlowActions } from '../../flows/FlowStore.tsx';
-import {
-  createEmptyFlowVariable,
-  type FlowVariableDataType,
-  type FlowVariableDefinition,
-  type FlowVariableVisibility,
-} from '../../flows/flowVariableTypes';
-import {
-  buildFlowVariableTree,
-  flowVariablesWithoutPath,
-  type FlowVariableTreeNode,
-} from '../../flows/flowVariableTree';
-
-const VIS_OPTIONS: { value: FlowVariableVisibility; label: string }[] = [
-  { value: 'internal', label: 'Internal' },
-  { value: 'input', label: 'Input' },
-  { value: 'output', label: 'Output' },
-  { value: 'inout', label: 'In-Out' },
-];
-
-const TYPE_OPTIONS: { value: FlowVariableDataType; label: string }[] = [
-  { value: 'string', label: 'string' },
-  { value: 'number', label: 'number' },
-  { value: 'boolean', label: 'boolean' },
-  { value: 'semanticValue', label: 'semanticValue' },
-  { value: 'object', label: 'object' },
-  { value: 'array', label: 'array' },
-];
+import type { VariableInstance } from '@types/variableTypes';
+import type { FlowVariableDefinition } from '../../flows/flowVariableTypes';
+import { buildFlowVariableTree, flowVariablesWithoutPath, type FlowVariableTreeNode } from '../../flows/flowVariableTree';
+import { variableCreationService } from '../../services/VariableCreationService';
+import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 
 export interface FlowVariablesRailProps {
   flowId: string;
+  /** When set, uses this project; otherwise falls back to currentProjectId in localStorage. */
+  projectId?: string;
 }
 
-interface VariableEditorCardProps {
-  row: FlowVariableDefinition;
-  updateRow: (id: string, patch: Partial<FlowVariableDefinition>) => void;
-  removeRow: (id: string) => void;
+function instanceToDef(v: VariableInstance): FlowVariableDefinition {
+  return {
+    id: v.varId,
+    label: v.varName,
+    type: 'string',
+    visibility: 'internal',
+  };
 }
 
-function VariableEditorCard({ row, updateRow, removeRow }: VariableEditorCardProps) {
+function scopeLabel(v: VariableInstance): string {
+  if (String(v.taskInstanceId ?? '').trim()) return 'Task';
+  if ((v.scope ?? 'project') === 'flow') return 'Flow';
+  return 'Project';
+}
+
+interface InstanceCardProps {
+  instance: VariableInstance;
+  projectId: string;
+  onRenamed: () => void;
+  onRemoved: () => void;
+}
+
+function InstanceCard({ instance, projectId, onRenamed, onRemoved }: InstanceCardProps) {
+  const taskBound = String(instance.taskInstanceId ?? '').trim().length > 0;
+  const [draft, setDraft] = React.useState(instance.varName);
+
+  React.useEffect(() => {
+    setDraft(instance.varName);
+  }, [instance.varId, instance.varName]);
+
+  const commitRename = useCallback(() => {
+    if (taskBound) return;
+    const t = draft.trim();
+    if (!t || t === instance.varName) return;
+    const ok = variableCreationService.renameVariableByVarId(projectId, instance.varId, t);
+    if (ok) onRenamed();
+    else setDraft(instance.varName);
+  }, [draft, instance.varId, instance.varName, projectId, taskBound, onRenamed]);
+
   return (
     <div className="rounded-md border border-slate-700/80 bg-slate-800/50 p-2 space-y-1.5">
       <div className="flex gap-1 items-start">
         <input
-          className="flex-1 min-w-0 rounded bg-slate-900/80 border border-slate-600 px-1.5 py-1 text-xs text-slate-100"
-          placeholder="label"
-          value={row.label}
-          onChange={(e) => updateRow(row.id, { label: e.target.value })}
+          className="flex-1 min-w-0 rounded bg-slate-900/80 border border-slate-600 px-1.5 py-1 text-xs text-slate-100 disabled:opacity-60"
+          placeholder="name"
+          value={draft}
+          disabled={taskBound}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
         />
-        <button
-          type="button"
-          className="shrink-0 p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800"
-          aria-label="Rimuovi variabile"
-          onClick={() => removeRow(row.id)}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        {!taskBound ? (
+          <button
+            type="button"
+            className="shrink-0 p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800"
+            aria-label="Remove variable"
+            onClick={() => {
+              variableCreationService.removeVariableByVarId(projectId, instance.varId);
+              onRemoved();
+            }}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <span className="shrink-0 text-[10px] text-slate-500 px-1 py-1" title="Defined by task on canvas">
+            —
+          </span>
+        )}
       </div>
-      <div className="flex flex-wrap gap-1">
-        <select
-          className="rounded bg-slate-900/80 border border-slate-600 px-1 py-0.5 text-[11px] text-slate-200"
-          value={row.visibility}
-          onChange={(e) => updateRow(row.id, { visibility: e.target.value as FlowVariableVisibility })}
-        >
-          {VIS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="rounded bg-slate-900/80 border border-slate-600 px-1 py-0.5 text-[11px] text-slate-200"
-          value={row.type}
-          onChange={(e) => updateRow(row.id, { type: e.target.value as FlowVariableDataType })}
-        >
-          {TYPE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[10px] uppercase tracking-wide text-slate-500">{scopeLabel(instance)}</span>
+        {taskBound && (
+          <span className="text-[10px] text-slate-600 truncate max-w-[10rem]" title={instance.taskInstanceId}>
+            {instance.taskInstanceId}
+          </span>
+        )}
       </div>
-      <input
-        className="w-full rounded bg-slate-900/80 border border-slate-600 px-1.5 py-1 text-[11px] text-slate-300"
-        placeholder="semantic domain (opzionale)"
-        value={row.semanticDomain ?? ''}
-        onChange={(e) => updateRow(row.id, { semanticDomain: e.target.value || undefined })}
-      />
-      <input
-        className="w-full rounded bg-slate-900/80 border border-slate-600 px-1.5 py-1 text-[11px] text-slate-400"
-        placeholder="note (opzionale)"
-        value={row.notes ?? ''}
-        onChange={(e) => updateRow(row.id, { notes: e.target.value || undefined })}
-      />
     </div>
   );
 }
@@ -106,14 +106,12 @@ function VariableEditorCard({ row, updateRow, removeRow }: VariableEditorCardPro
 interface TreeNodesProps {
   nodes: FlowVariableTreeNode[];
   depth: number;
-  updateRow: (id: string, patch: Partial<FlowVariableDefinition>) => void;
-  removeRow: (id: string) => void;
+  byVarId: Map<string, VariableInstance>;
+  projectId: string;
+  onRefresh: () => void;
 }
 
-/**
- * Renders one level of the dot-path tree; group nodes (no variable) only show a label + chevron.
- */
-function FlowVariableTreeNodes({ nodes, depth, updateRow, removeRow }: TreeNodesProps) {
+function FlowVariableTreeNodes({ nodes, depth, byVarId, projectId, onRefresh }: TreeNodesProps) {
   return (
     <ul className={depth > 0 ? 'mt-1 space-y-1 border-l border-slate-700/50 pl-2 ml-1' : 'space-y-1'}>
       {nodes.map((node) => (
@@ -121,8 +119,9 @@ function FlowVariableTreeNodes({ nodes, depth, updateRow, removeRow }: TreeNodes
           key={node.pathKey}
           node={node}
           depth={depth}
-          updateRow={updateRow}
-          removeRow={removeRow}
+          byVarId={byVarId}
+          projectId={projectId}
+          onRefresh={onRefresh}
         />
       ))}
     </ul>
@@ -132,18 +131,17 @@ function FlowVariableTreeNodes({ nodes, depth, updateRow, removeRow }: TreeNodes
 function FlowVariableTreeBranch({
   node,
   depth,
-  updateRow,
-  removeRow,
+  byVarId,
+  projectId,
+  onRefresh,
 }: TreeNodesProps & { node: FlowVariableTreeNode }) {
   const hasChildren = node.children.length > 0;
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = React.useState(true);
+  const inst = node.variable ? byVarId.get(node.variable.id) : undefined;
 
   return (
     <li className="text-xs">
-      <div
-        className="flex items-start gap-1"
-        style={{ paddingLeft: depth > 0 ? 0 : undefined }}
-      >
+      <div className="flex items-start gap-1" style={{ paddingLeft: depth > 0 ? 0 : undefined }}>
         {hasChildren ? (
           <button
             type="button"
@@ -151,30 +149,27 @@ function FlowVariableTreeBranch({
             className="shrink-0 mt-1 p-0.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/80"
             onClick={() => setExpanded((e) => !e)}
           >
-            {expanded ? (
-              <ChevronDown className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronRight className="w-3.5 h-3.5" />
-            )}
+            {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           </button>
         ) : (
           <span className="w-5 shrink-0" aria-hidden />
         )}
         <div className="flex-1 min-w-0 space-y-1">
-          {node.variable ? (
-            <VariableEditorCard row={node.variable} updateRow={updateRow} removeRow={removeRow} />
+          {inst ? (
+            <InstanceCard instance={inst} projectId={projectId} onRenamed={onRefresh} onRemoved={onRefresh} />
           ) : hasChildren ? (
             <div className="rounded-md border border-dashed border-slate-600/60 bg-slate-900/30 px-2 py-1.5">
               <span className="text-[11px] font-medium text-slate-400">{node.segment}</span>
-              <span className="block text-[10px] text-slate-600 mt-0.5">Gruppo (nessuna variabile su questo path)</span>
+              <span className="block text-[10px] text-slate-600 mt-0.5">Group (no variable on this path)</span>
             </div>
           ) : null}
           {hasChildren && expanded && (
             <FlowVariableTreeNodes
               nodes={node.children}
               depth={depth + 1}
-              updateRow={updateRow}
-              removeRow={removeRow}
+              byVarId={byVarId}
+              projectId={projectId}
+              onRefresh={onRefresh}
             />
           )}
         </div>
@@ -183,40 +178,52 @@ function FlowVariableTreeBranch({
   );
 }
 
-export function FlowVariablesRail({ flowId }: FlowVariablesRailProps) {
-  const { flows } = useFlowWorkspace();
-  const { updateFlowVariables } = useFlowActions();
-  const [open, setOpen] = useState(false);
+export function FlowVariablesRail({ flowId, projectId: projectIdProp }: FlowVariablesRailProps) {
+  const [open, setOpen] = React.useState(false);
+  const [addScope, setAddScope] = React.useState<'project' | 'flow'>('project');
+  const [, refresh] = useReducer((n: number) => n + 1, 0);
+  const { data: projectData } = useProjectData();
+  const pdUpdate = useProjectDataUpdate();
 
-  const variables = flows[flowId]?.meta?.variables ?? [];
+  const projectId = useMemo(() => {
+    const fromProp = projectIdProp?.trim();
+    if (fromProp) return fromProp;
+    const fromCtx = pdUpdate?.getCurrentProjectId?.()?.trim();
+    if (fromCtx) return fromCtx;
+    try {
+      return localStorage.getItem('currentProjectId') || '';
+    } catch {
+      return '';
+    }
+  }, [projectIdProp, pdUpdate, projectData, refresh]);
 
-  const setVars = useCallback(
-    (next: FlowVariableDefinition[]) => {
-      updateFlowVariables(flowId, next);
-    },
-    [flowId, updateFlowVariables]
-  );
+  const instances = useMemo(() => {
+    if (!projectId) return [];
+    return variableCreationService.getVariablesForFlowScope(projectId, flowId);
+  }, [projectId, flowId, refresh, projectData]);
 
-  const updateRow = useCallback(
-    (id: string, patch: Partial<FlowVariableDefinition>) => {
-      setVars(variables.map((v) => (v.id === id ? { ...v, ...patch } : v)));
-    },
-    [variables, setVars]
-  );
+  const byVarId = useMemo(() => {
+    const m = new Map<string, VariableInstance>();
+    instances.forEach((v) => m.set(v.varId, v));
+    return m;
+  }, [instances]);
 
-  const removeRow = useCallback(
-    (id: string) => {
-      setVars(variables.filter((v) => v.id !== id));
-    },
-    [variables, setVars]
-  );
+  const defs = useMemo(() => instances.map(instanceToDef), [instances]);
+  const orphans = useMemo(() => flowVariablesWithoutPath(defs), [defs]);
+  const tree = useMemo(() => buildFlowVariableTree(defs), [defs]);
 
-  const addRow = useCallback(() => {
-    setVars([...variables, createEmptyFlowVariable()]);
-  }, [variables, setVars]);
-
-  const orphans = useMemo(() => flowVariablesWithoutPath(variables), [variables]);
-  const tree = useMemo(() => buildFlowVariableTree(variables), [variables]);
+  const addVariable = useCallback(() => {
+    if (!projectId) return;
+    const base =
+      addScope === 'flow'
+        ? variableCreationService.createManualVariable(projectId, `var_${Date.now().toString(36)}`, {
+            scope: 'flow',
+            scopeFlowId: flowId,
+          })
+        : variableCreationService.createManualVariable(projectId, `var_${Date.now().toString(36)}`);
+    void base;
+    refresh();
+  }, [projectId, addScope, flowId]);
 
   return (
     <>
@@ -231,9 +238,9 @@ export function FlowVariablesRail({ flowId }: FlowVariablesRailProps) {
                    cursor-pointer group
                    backdrop-blur-sm
                    shadow-lg hover:shadow-xl"
-        title={open ? 'Chiudi Variables' : 'Apri Variables'}
+        title={open ? 'Close Variables' : 'Open Variables'}
         aria-expanded={open}
-        aria-label="Variables del flow"
+        aria-label="Flow variables"
       >
         <div className="flex flex-col items-center gap-2">
           <Brackets className="w-5 h-5 text-slate-300/70 group-hover:text-slate-200 transition-colors" />
@@ -262,11 +269,27 @@ export function FlowVariablesRail({ flowId }: FlowVariablesRailProps) {
             <p className="text-xs text-slate-400 truncate" title={flowId}>
               Flow: {flowId}
             </p>
+            <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+              Single store: project-wide and this flow&apos;s manual vars, plus task-bound names visible here.
+            </p>
           </div>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/80 shrink-0 flex-wrap">
+          <select
+            className="rounded bg-slate-900/80 border border-slate-600 px-1.5 py-1 text-[11px] text-slate-200"
+            value={addScope}
+            onChange={(e) => setAddScope(e.target.value as 'project' | 'flow')}
+            aria-label="Scope for new variable"
+          >
+            <option value="project">Add to project</option>
+            <option value="flow">Add to this flow</option>
+          </select>
           <button
             type="button"
-            onClick={addRow}
-            className="shrink-0 inline-flex items-center gap-1 rounded-md bg-slate-700/80 px-2 py-1 text-xs font-medium text-slate-100 hover:bg-slate-600"
+            onClick={addVariable}
+            disabled={!projectId}
+            className="shrink-0 inline-flex items-center gap-1 rounded-md bg-slate-700/80 px-2 py-1 text-xs font-medium text-slate-100 hover:bg-slate-600 disabled:opacity-40"
           >
             <Plus className="w-3.5 h-3.5" />
             Add
@@ -274,28 +297,47 @@ export function FlowVariablesRail({ flowId }: FlowVariablesRailProps) {
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-3">
-          <section aria-label="Elenco variabili">
+          {!projectId && (
+            <p className="text-xs text-amber-500/90 px-1">Open or save a project to load variables.</p>
+          )}
+          <section aria-label="Variable list">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2 px-1">
-              Tutte le variabili
+              All variables
             </h3>
-            {variables.length === 0 && (
+            {projectId && instances.length === 0 && (
               <p className="text-xs text-slate-500 px-1">
-                Nessuna variabile. Usa Add per crearne una; i nomi con punti (es. <code className="text-slate-400">a.b</code>)
-                compaiono raggruppati ad albero.
+                No variables yet. Use Add or create variables from tasks / backend mapping. Dot names (e.g.{' '}
+                <code className="text-slate-400">a.b</code>) group as a tree.
               </p>
             )}
 
             {orphans.length > 0 && (
               <div className="space-y-2 mb-3">
-                <p className="text-[10px] text-amber-500/90 px-1">Senza nome (imposta il label)</p>
-                {orphans.map((row) => (
-                  <VariableEditorCard key={row.id} row={row} updateRow={updateRow} removeRow={removeRow} />
-                ))}
+                <p className="text-[10px] text-amber-500/90 px-1">Invalid or empty label</p>
+                {orphans.map((row) => {
+                  const inst = byVarId.get(row.id);
+                  if (!inst) return null;
+                  return (
+                    <InstanceCard
+                      key={row.id}
+                      instance={inst}
+                      projectId={projectId}
+                      onRenamed={refresh}
+                      onRemoved={refresh}
+                    />
+                  );
+                })}
               </div>
             )}
 
             {tree.length > 0 && (
-              <FlowVariableTreeNodes nodes={tree} depth={0} updateRow={updateRow} removeRow={removeRow} />
+              <FlowVariableTreeNodes
+                nodes={tree}
+                depth={0}
+                byVarId={byVarId}
+                projectId={projectId}
+                onRefresh={refresh}
+              />
             )}
           </section>
         </div>

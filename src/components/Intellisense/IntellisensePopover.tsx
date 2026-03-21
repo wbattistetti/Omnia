@@ -6,6 +6,8 @@ import { IntellisenseMenu } from "./IntellisenseMenu";
 import { IntellisenseStandalone } from "./IntellisenseStandalone";
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { FlowStateBridge } from '../../services/FlowStateBridge';
+import { generateId } from '../../utils/idGenerator';
+import { TaskType } from '../../types/taskTypes';
 
 export const IntellisensePopover: React.FC = () => {
     const { state, actions } = useIntellisense();
@@ -21,6 +23,12 @@ export const IntellisensePopover: React.FC = () => {
     useLayoutEffect(() => {
 
         if (!state.isOpen || !state.target) {
+            setRect(null);
+            setReferenceElement(null);
+            return;
+        }
+
+        if (state.target.edgeId && state.target.linkMidScreen) {
             setRect(null);
             setReferenceElement(null);
             return;
@@ -60,6 +68,7 @@ export const IntellisensePopover: React.FC = () => {
     // Aggiorna su resize/scroll
     useEffect(() => {
         if (!state.isOpen || !state.target) return;
+        if (state.target.edgeId && state.target.linkMidScreen) return;
 
         const handler = () => {
             let elementId = state.target!.nodeId;
@@ -134,6 +143,7 @@ export const IntellisensePopover: React.FC = () => {
         // ✅ 2. Se è un edge, rendi visibile il nodo temporaneo e aggiorna l'edge
         if (state.target?.edgeId) {
             const edgeId = state.target.edgeId;
+            const isUnconditional = !!(item && (item as any).id === '__unlinked__');
 
             // ✅ GESTISCI CASI SPECIALI
             let label: string | undefined;
@@ -208,39 +218,14 @@ export const IntellisensePopover: React.FC = () => {
             const setEdges = FlowStateBridge.getSetEdges();
 
             if (scheduleApplyLabel && label !== undefined) {
-                // ✅ Passa isElse quando è true
                 const extraData: any = {};
                 if (conditionId) extraData.conditionId = conditionId;
                 if (isElse) extraData.isElse = true;
-
-                // ✅ Log quando si passa isElse a scheduleApplyLabel
-                if (isElse) {
-                    console.log('[IntellisensePopover][scheduleApplyLabel] ✅ Passing isElse flag', {
-                        edgeId,
-                        label,
-                        isElse: true
-                    });
-                }
 
                 scheduleApplyLabel(edgeId, label, Object.keys(extraData).length > 0 ? extraData : undefined);
             } else if (setEdges) {
                 setEdges((eds: any[]) => eds.map(e => {
                     if (e.id === edgeId) {
-                        // ✅ DEBUG: Log when isElse is being set or preserved
-                        if (isElse && e.data?.isElse !== true) {
-                            console.log('[IntellisensePopover][handleSelect] ✅ Setting isElse to true', {
-                                edgeId: e.id,
-                                edgeLabel: e.label,
-                                oldIsElse: e.data?.isElse,
-                                newIsElse: true
-                            });
-                        } else if (e.data?.isElse === true && isElse === true) {
-                            console.log('[IntellisensePopover][handleSelect] ✅ Preserving isElse flag', {
-                                edgeId: e.id,
-                                edgeLabel: e.label,
-                                isElse: true
-                            });
-                        }
                         return {
                             ...e,
                             label,
@@ -248,7 +233,7 @@ export const IntellisensePopover: React.FC = () => {
                                 ...(e.data || {}),
                                 label,
                                 isElse,
-                                conditionId: conditionId || (e.data as any)?.conditionId // ✅ Mantieni o aggiorna conditionId
+                                conditionId: conditionId || (e.data as any)?.conditionId
                             }
                         };
                     }
@@ -256,93 +241,77 @@ export const IntellisensePopover: React.FC = () => {
                 }));
             }
 
-            // Make the temporary node visible (without modifying the title)
             const edge = FlowStateBridge.findEdge(edgeId);
-
-            if (edge && edge.target) {
-                const tempNode = FlowStateBridge.findNode(edge.target);
-
-                if (tempNode && tempNode.data) {
-                    // ✅ Rimuovi solo hidden, NON modificare il titolo
-                    tempNode.data.hidden = false;
-
-                    // Update the node state (only hidden)
-                    const setNodes = FlowStateBridge.getSetNodes();
-                    if (setNodes) {
-                        setNodes((nds: any[]) => nds.map(n =>
-                            n.id === tempNode.id ? { ...n, data: { ...n.data, hidden: false } } : n
-                        ));
-                    }
-                }
+            const setNodes = FlowStateBridge.getSetNodes();
+            if (setNodes && edge?.target) {
+                setNodes((nds: any[]) =>
+                    nds.map((n) => {
+                        if (n.id !== edge.target) return n;
+                        if (isUnconditional) {
+                            const newRowId = generateId();
+                            return {
+                                ...n,
+                                data: {
+                                    ...n.data,
+                                    hidden: false,
+                                    rows: [
+                                        ...(n.data?.rows || []),
+                                        {
+                                            id: newRowId,
+                                            text: '',
+                                            included: true,
+                                            heuristics: { type: TaskType.Flow, templateId: null },
+                                        },
+                                    ],
+                                    focusRowId: newRowId,
+                                },
+                            };
+                        }
+                        return { ...n, data: { ...n.data, hidden: false } };
+                    })
+                );
             }
         }
     };
 
-    if (!state.isOpen || !rect || !referenceElement) {
+    if (!state.isOpen) {
         return null;
     }
 
-    // ✅ Log rimosso per evitare spam
+    const linkMid = state.target?.linkMidScreen;
+    if (state.target?.edgeId && linkMid) {
+        return createPortal(
+            <IntellisenseStandalone
+                anchorScreen={linkMid}
+                extraItems={state.catalog}
+                allowedKinds={['condition', 'intent']}
+                onSelect={handleSelect}
+                onClose={handleClose}
+            />,
+            document.body
+        );
+    }
 
-    // ✅ Calcola posizione centrata sul nodo di DESTINAZIONE (hidden)
-    // La freccia deve puntare al CENTRO della textbox!
-    // Formula: textbox_left = arrowX - (textbox_width / 2)
-    const centeredPosition = state.target?.edgeId && rect
-        ? (() => {
-            // ✅ Larghezze fisse dei pulsanti (come definito in IntellisenseStandalone)
-            const elseButtonWidth = 40; // circa (padding 3px 8px + testo "Else" 8px)
-            const iconButtonWidth = 20; // LinkOff button
-            const cancelButtonWidth = 20; // X button
-            const gap = 6; // gap tra elementi
+    if (!rect || !referenceElement) {
+        return null;
+    }
 
-            // Larghezza totale dei pulsanti + gap
-            const buttonsTotalWidth = elseButtonWidth + iconButtonWidth + cancelButtonWidth + (gap * 2);
+    const legacyEdgeAnchor =
+        state.target?.edgeId && rect
+            ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+            : null;
 
-            // La textbox ha flex: 0.5, quindi occupa circa la metà dello spazio rimanente
-            // Wrapper totale è 420px - padding 24px = 396px disponibili
-            const availableWidth = 396; // 420px wrapper - 24px padding
-            const textboxWidth = (availableWidth - buttonsTotalWidth) * 0.5; // flex: 0.5
-
-            // ✅ FORMULA CORRETTA: textbox_left = arrowX - (textbox_width / 2)
-            const arrowX = rect.left + (rect.width / 2);
-            const textboxLeft = arrowX - (textboxWidth / 2);
-
-            // Il wrapper inizia a: textboxLeft - padding (12px)
-            const wrapperX = textboxLeft - 12;
-
-            // console.log("🎯 [IntellisensePopover] Centering calculation:", {
-            //     arrowX,
-            //     textboxWidth,
-            //     textboxLeft,
-            //     wrapperX,
-            //     rect: { left: rect.left, width: rect.width, center: rect.left + (rect.width / 2) }
-            // });
-
-            return {
-                x: wrapperX,
-                y: rect.top - 8
-            };
-        })()
-        : null;
-
-    // ✅ Log solo UNA VOLTA (non nel render loop)
-    // Spostato nel useLayoutEffect
-
-    // Usa il componente appropriato in base al target
     return createPortal(
         <>
-            {state.target?.edgeId && centeredPosition ? (
-                // ✅ CASO EDGE: usa il wrapper standalone con posizione centrata
+            {state.target?.edgeId && legacyEdgeAnchor ? (
                 <IntellisenseStandalone
-                    position={centeredPosition}
-                    referenceElement={referenceElement}
+                    anchorScreen={legacyEdgeAnchor}
                     extraItems={state.catalog}
                     allowedKinds={['condition', 'intent']}
                     onSelect={handleSelect}
                     onClose={handleClose}
                 />
             ) : (
-                // ✅ CASO RIGA NODO: usa il menu normale
                 <IntellisenseMenu
                     isOpen={state.isOpen}
                     query={state.query}

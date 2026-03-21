@@ -42,6 +42,9 @@ export interface UseVariablesIntellisenseReturn {
   insertVariableToken: (varKey: string) => void;
   toggleAct: (label: string) => void;
   toggleMain: (actLabel: string, mainLabel: string) => void;
+  filteredTreeActs: VarsTreeAct[];
+  filteredVarsForMenu: string[];
+  navIndexByKey: Map<string, number>;
 }
 
 /**
@@ -87,7 +90,7 @@ export function useVariablesIntellisense(props: UseVariablesIntellisenseProps): 
   }, [variablesTree, varsMenuFilter]);
 
   // Build navigation entries
-  const navEntries = useMemo(() => {
+  const { navEntries, navIndexByKey } = useMemo(() => {
     const result = intellisenseService.buildNavigationEntries(
       variablesTree,
       filteredTreeActs,
@@ -95,7 +98,7 @@ export function useVariablesIntellisense(props: UseVariablesIntellisenseProps): 
       expandedActs,
       expandedMains
     );
-    return result.entries;
+    return { navEntries: result.entries, navIndexByKey: result.navIndexByKey };
   }, [intellisenseService, variablesTree, filteredTreeActs, filteredVarsForMenu, expandedActs, expandedMains]);
 
   // Navigate intellisense menu
@@ -224,5 +227,8 @@ export function useVariablesIntellisense(props: UseVariablesIntellisenseProps): 
     insertVariableToken,
     toggleAct,
     toggleMain,
+    filteredTreeActs,
+    filteredVarsForMenu,
+    navIndexByKey,
   };
 }

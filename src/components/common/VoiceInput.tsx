@@ -10,6 +10,8 @@ interface VoiceInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   className?: string;
   style?: React.CSSProperties;
   autoStartWhenEmpty?: boolean;
+  /** Ref al box di layout dell’`<input>` (bordo/campo), escluso il root che contiene il mic assoluto. */
+  chromeRef?: React.Ref<HTMLDivElement | null>;
 }
 
 /**
@@ -32,6 +34,7 @@ export const VoiceInput = forwardRef<HTMLInputElement, VoiceInputProps>(({
   className,
   style,
   autoStartWhenEmpty = false,
+  chromeRef,
   ...rest
 }, forwardedRef) => {
   const internalRef = useRef<HTMLInputElement>(null);
@@ -153,23 +156,38 @@ export const VoiceInput = forwardRef<HTMLInputElement, VoiceInputProps>(({
 
   return (
     <div style={wrapperStyle}>
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onFocus={handleFocus}
-        onMouseDown={combinedMouseDown}
-        onMouseUp={combinedMouseUp}
-        onMouseLeave={combinedMouseLeave}
-        onPointerDown={combinedPointerDown}
-        onPointerUp={combinedPointerUp}
-        placeholder={placeholder}
-        className={`${className || ''} ${isLongPressing || isListening ? 'voice-input-active' : ''} ${isListening ? 'voice-input-listening' : ''}`.trim()}
-        style={inputStyle}
-        {...restWithoutHandlers}
-      />
+      <div
+        ref={chromeRef}
+        style={{
+          display: 'block',
+          width: '100%',
+          boxSizing: 'border-box',
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onFocus={handleFocus}
+          onMouseDown={combinedMouseDown}
+          onMouseUp={combinedMouseUp}
+          onMouseLeave={combinedMouseLeave}
+          onPointerDown={combinedPointerDown}
+          onPointerUp={combinedPointerUp}
+          placeholder={placeholder}
+          className={`${className || ''} ${isLongPressing || isListening ? 'voice-input-active' : ''} ${isListening ? 'voice-input-listening' : ''}`.trim()}
+          style={{
+            ...inputStyle,
+            width: '100%',
+            minWidth: 0,
+            boxSizing: 'border-box',
+            display: 'block',
+          }}
+          {...restWithoutHandlers}
+        />
+      </div>
 
       {/* Microphone icon */}
       {isSupported && (

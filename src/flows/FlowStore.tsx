@@ -1,11 +1,9 @@
 import React, { createContext, useContext, useMemo, useReducer } from 'react';
 import type { Flow, FlowId, WorkspaceState } from './FlowTypes';
-import type { FlowVariableDefinition } from './flowVariableTypes';
 
 type Action<NodeT = any, EdgeT = any> =
   | { type: 'UPSERT_FLOW'; flow: Flow<NodeT, EdgeT> }
   | { type: 'UPDATE_FLOW_GRAPH'; flowId: FlowId; updater: (nodes: NodeT[], edges: EdgeT[]) => { nodes: NodeT[]; edges: EdgeT[] } }
-  | { type: 'UPDATE_FLOW_VARIABLES'; flowId: FlowId; variables: FlowVariableDefinition[] }
   | { type: 'OPEN_FLOW'; flowId: FlowId }
   | { type: 'OPEN_FLOW_BACKGROUND'; flowId: FlowId }
   | { type: 'CLOSE_FLOW'; flowId: FlowId }
@@ -83,8 +81,6 @@ export function useFlowActions<NodeT = any, EdgeT = any>() {
   return {
     upsertFlow: (flow: Flow<NodeT, EdgeT>) => dispatch({ type: 'UPSERT_FLOW', flow } as any),
     updateFlowGraph: (flowId: FlowId, updater: (nodes: NodeT[], edges: EdgeT[]) => { nodes: NodeT[]; edges: EdgeT[] }) => dispatch({ type: 'UPDATE_FLOW_GRAPH', flowId, updater } as any),
-    updateFlowVariables: (flowId: FlowId, variables: FlowVariableDefinition[]) =>
-      dispatch({ type: 'UPDATE_FLOW_VARIABLES', flowId, variables } as any),
     openFlow: (flowId: FlowId) => dispatch({ type: 'OPEN_FLOW', flowId } as any),
     openFlowBackground: (flowId: FlowId) => dispatch({ type: 'OPEN_FLOW_BACKGROUND', flowId } as any),
     closeFlow: (flowId: FlowId) => dispatch({ type: 'CLOSE_FLOW', flowId } as any),

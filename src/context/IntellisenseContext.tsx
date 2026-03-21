@@ -44,7 +44,7 @@ type Ctx = {
     state: IntellisenseState;
     dispatch: React.Dispatch<IntellisenseAction>;
     actions: {
-        openForEdge(edgeId: string): void;
+        openForEdge(edgeId: string, opts?: { linkMidScreen?: { x: number; y: number } }): void;
         close(): void;
         setQuery(q: string): void;
         moveHighlight(delta: number): void;
@@ -59,12 +59,12 @@ export const IntellisenseProvider: React.FC<{ providers: GraphProviders; childre
     const service = useMemo(() => new IntellisenseService(providers), [providers]);
 
     // Actions → tieni il reducer puro, chiama il service FUORI dal reducer
-    const openForEdge = useCallback((edgeId: string, mouseX?: number, mouseY?: number) => {
+    const openForEdge = useCallback((edgeId: string, opts?: { linkMidScreen?: { x: number; y: number } }) => {
         const items = service.getEdgeItems(edgeId);
 
         dispatch({
             type: "OPEN_WITH_ITEMS",
-            target: { edgeId, mouseX, mouseY },
+            target: { edgeId, linkMidScreen: opts?.linkMidScreen },
             items
         });
     }, [service]);

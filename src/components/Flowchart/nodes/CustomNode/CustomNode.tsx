@@ -866,7 +866,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     <>
       {/* Toolbar sopra il nodo - Usa NodeToolbar nativo di React Flow */}
       <NodeToolbar
-        isVisible={(isHoveredNode || selected) && !isEditingNode}
+        isVisible={(isHoveredNode || selected) && !isEditingNode && !normalizedData.hidden}
         position={Position.Top}
         offset={0}
         align="start"
@@ -880,7 +880,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         }}
         className="node-toolbar-custom"
         onMouseEnter={() => {
-          setIsHoveredNode(true);
+          if (!normalizedData.hidden) setIsHoveredNode(true);
         }}
         onMouseLeave={(e) => {
           // ✅ Mantieni la stessa logica custom per hover
@@ -1087,9 +1087,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       </NodeToolbar>
       <div
         ref={wrapperRef}
-        style={{ position: 'relative', display: 'inline-block' }}
+        style={{
+          position: 'relative',
+          display: 'inline-block',
+          pointerEvents: normalizedData.hidden ? 'none' : undefined,
+        }}
         onMouseEnter={() => {
-          setIsHoveredNode(true);
+          if (!normalizedData.hidden) setIsHoveredNode(true);
         }}
         onMouseLeave={(e) => {
           // ✅ Usa elementFromPoint invece di relatedTarget (più affidabile)
@@ -1161,7 +1165,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           tabIndex={-1}
           draggable={false}
           onMouseEnter={() => {
-            setIsHoveredNode(true);
+            if (!normalizedData.hidden) setIsHoveredNode(true);
           }}
           onMouseLeave={(e) => {
             // ✅ Usa elementFromPoint invece di relatedTarget (più affidabile)

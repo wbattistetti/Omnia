@@ -111,17 +111,17 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
         })[0];
         break;
 
-      case LinkStyle.Step:
-        // Orthogonal with single elbow (auto HV or VH)
+      case LinkStyle.Step: {
+        // Orthogonal with single elbow (auto HV or VH); allinea a getVHVPath per colonna quasi verticale
         const preferHV = Math.abs(sourceX - targetX) > Math.abs(sourceY - targetY);
         if (preferHV) {
           const midX = (sourceX + targetX) / 2;
           edgePath = `M ${sourceX},${sourceY} L ${midX},${sourceY} L ${midX},${targetY} L ${targetX},${targetY}`;
         } else {
-          const midY = (sourceY + targetY) / 2;
-          edgePath = `M ${sourceX},${sourceY} L ${sourceX},${midY} L ${targetX},${midY} L ${targetX},${targetY}`;
+          edgePath = getVHVPath(sourceX, sourceY, targetX, targetY);
         }
         break;
+      }
 
       case LinkStyle.SmoothStep:
       default:
@@ -176,6 +176,16 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
         : hovered || selected
         ? 3
         : 1.5;
+
+    const dimOpacity = hovered || selected ? 0.95 : 0.85;
+    const explicitOpacity =
+      typeof style.opacity === 'number'
+        ? style.opacity
+        : typeof style.opacity === 'string' && style.opacity !== ''
+          ? Number.parseFloat(style.opacity)
+          : undefined;
+    const pathOpacity =
+      explicitOpacity !== undefined && !Number.isNaN(explicitOpacity) ? explicitOpacity : dimOpacity;
 
     // ✅ Genera path per segmento evidenziato
     const highlightPath = highlightedSegment
@@ -232,7 +242,7 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
             strokeDasharray: undefined,
             stroke: strokeColor,
             strokeWidth,
-            opacity: hovered || selected ? 0.95 : 0.85,
+            opacity: pathOpacity,
             transition: 'stroke 0.15s',
             cursor: 'default', // Normal cursor, not pointer
           }}

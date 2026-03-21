@@ -5,34 +5,19 @@ import { TaskType } from '../../../../types/taskTypes';
 import { useProjectDataUpdate, useProjectData } from '../../../../context/ProjectDataContext';
 import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
-import { Server, Plus, X, Eye, EyeOff, Pencil, Check, Trash2, Table2, RefreshCw } from 'lucide-react';
-import { OmniaSelect } from '../../../../components/common/OmniaSelect';
+import { Server, Eye, EyeOff, Table2, RefreshCw } from 'lucide-react';
 import { variableCreationService } from '../../../../services/VariableCreationService';
+import { InterfaceMappingEditor } from '../../../../components/FlowMappingPanel/InterfaceMappingEditor';
+import {
+  backendInputsToMappingEntries,
+  backendOutputsToMappingEntries,
+  mappingEntriesToBackendInputs,
+  mappingEntriesToBackendOutputs,
+} from '../../../../components/FlowMappingPanel/backendCallMappingAdapter';
+import type { MappingEntry } from '../../../../components/FlowMappingPanel/mappingTypes';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import type { ToolbarButton } from '../../../../dock/types';
 import TableEditor from './TableEditor';
-
-// Template Globale: solo struttura (parametri interni)
-interface GlobalTemplate {
-  id: string;
-  name: string;
-  inputs: Array<{ internalName: string }>;
-  outputs: Array<{ internalName: string }>;
-}
-
-// Template Locale/Progetto: mapping API + variabili default
-interface LocalTemplate {
-  id: string;
-  globalTemplateId: string;
-  apiMappings: {
-    inputs: Record<string, string>; // internalName -> apiParam
-    outputs: Record<string, string>; // internalName -> apiField
-  };
-  variableMappings: {
-    inputs: Record<string, string>; // internalName -> readableName (e.g., "data di nascita")
-    outputs: Record<string, string>; // internalName -> readableName (e.g., "data di nascita")
-  };
-}
 
 // Config Istanza: può sovrascrivere variabili
 interface BackendCallConfig {
@@ -80,7 +65,7 @@ const DEFAULT_CONFIG: BackendCallConfig = {
   outputs: []
 };
 
-export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hideHeader }: EditorProps) { // ✅ RINOMINATO: act → task
+export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }: EditorProps) { // ✅ RINOMINATO: act → task
   const instanceId = task.instanceId || task.id; // ✅ RINOMINATO: act → task
   const pdUpdate = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
@@ -89,29 +74,11 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
   // ✅ State to force re-render of availableVariables when a new variable is created
   const [variablesRefreshKey, setVariablesRefreshKey] = React.useState(0);
 
-  // Show/hide API column
+  // Show/hide API column (tree: Campo API inputs)
   const [showApiColumn, setShowApiColumn] = React.useState(true);
 
   // Toggle between mapping view and table view
   const [showTableView, setShowTableView] = React.useState(false);
-
-  // Track editing state for inputs and outputs
-  const [editingInputs, setEditingInputs] = React.useState<Set<number>>(new Set());
-  const [editingOutputs, setEditingOutputs] = React.useState<Set<number>>(new Set());
-
-  // Track hover state for showing edit/delete buttons
-  const [hoveredInputRow, setHoveredInputRow] = React.useState<number | null>(null);
-  const [hoveredOutputRow, setHoveredOutputRow] = React.useState<number | null>(null);
-
-  // Track pending edits (for cancel functionality)
-  const [pendingInputEdits, setPendingInputEdits] = React.useState<Record<number, string>>({});
-  const [pendingOutputEdits, setPendingOutputEdits] = React.useState<Record<number, string>>({});
-
-  // Track which placeholders are clicked (to show combo box)
-  const [openInputApiParam, setOpenInputApiParam] = React.useState<number | null>(null);
-  const [openInputVariable, setOpenInputVariable] = React.useState<number | null>(null);
-  const [openOutputApiField, setOpenOutputApiField] = React.useState<number | null>(null);
-  const [openOutputVariable, setOpenOutputVariable] = React.useState<number | null>(null);
 
   // Get available variables for autocomplete
   // ✅ Use readable names directly (e.g., "data di nascita", "data di nascita.giorno")
@@ -158,15 +125,19 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
   // ─────────────────────────────────────────────────────────
   const buildConfigFromTask = React.useCallback((rawTask: any): BackendCallConfig => {
     const endpoint = rawTask?.endpoint ?? DEFAULT_CONFIG.endpoint;
-    const inputs: BackendCallConfig['inputs'] = rawTask?.inputs ?? [];
-    const outputs: BackendCallConfig['outputs'] = rawTask?.outputs ?? [];
+    const rawIn = Array.isArray(rawTask?.inputs) ? rawTask.inputs : [];
+    const rawOut = Array.isArray(rawTask?.outputs) ? rawTask.outputs : [];
+    const inputs: BackendCallConfig['inputs'] = rawIn.filter((i: { internalName?: string }) => Boolean(i?.internalName?.trim()));
+    const outputs: BackendCallConfig['outputs'] = rawOut.filter((o: { internalName?: string }) =>
+      Boolean(o?.internalName?.trim())
+    );
     const mockTable: BackendCallConfig['mockTable'] = rawTask?.mockTable;
     const mockTableColumns: BackendCallConfig['mockTableColumns'] = rawTask?.mockTableColumns;
 
     const cfg: BackendCallConfig = {
       endpoint,
-      inputs: inputs.length > 0 ? inputs : [{ internalName: '', apiParam: '', variable: '' }],
-      outputs: outputs.length > 0 ? outputs : [{ internalName: '', apiField: '', variable: '' }],
+      inputs,
+      outputs,
       ...(mockTable !== undefined ? { mockTable } : {}),
       ...(mockTableColumns !== undefined ? { mockTableColumns } : {})
     };
@@ -179,23 +150,22 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
     if (!instanceId) {
       return {
         ...DEFAULT_CONFIG,
-        inputs: [{ internalName: '', apiParam: '', variable: '' }],
-        outputs: [{ internalName: '', apiField: '', variable: '' }]
+        inputs: [],
+        outputs: [],
       };
     }
     let existingTask = taskRepository.getTask(instanceId);
     if (!existingTask) {
-      // Create task with flat fields, no wrapper
-      const initialInputs = [{ internalName: '', apiParam: '', variable: '' }];
-      const initialOutputs = [{ internalName: '', apiField: '', variable: '' }];
+      const initialInputs: NonNullable<BackendCallConfig['inputs']> = [];
+      const initialOutputs: NonNullable<BackendCallConfig['outputs']> = [];
       taskRepository.createTask(
         TaskType.BackendCall,
         null,
         {
           endpoint: DEFAULT_CONFIG.endpoint,
           inputs: initialInputs,
-          outputs: initialOutputs
-        },
+          outputs: initialOutputs,
+        } as any,
         instanceId,
         projectId || undefined
       );
@@ -212,44 +182,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
 
     const loaded = buildConfigFromTask(storedTask);
     setConfig(loaded);
-
-    // Initialize editing state for empty rows
-    const emptyInputIndices = new Set<number>();
-    const emptyOutputIndices = new Set<number>();
-    (loaded.inputs || []).forEach((input, index) => {
-      if (!input.internalName?.trim()) emptyInputIndices.add(index);
-    });
-    (loaded.outputs || []).forEach((output, index) => {
-      if (!output.internalName?.trim()) emptyOutputIndices.add(index);
-    });
-    if (emptyInputIndices.size > 0) setEditingInputs(emptyInputIndices);
-    if (emptyOutputIndices.size > 0) setEditingOutputs(emptyOutputIndices);
   }, [instanceId, buildConfigFromTask]);
-
-  // Initialize editing state for empty rows on initial mount
-  React.useEffect(() => {
-    const emptyInputIndices = new Set<number>();
-    const emptyOutputIndices = new Set<number>();
-
-    (config.inputs || []).forEach((input, index) => {
-      if (!input.internalName.trim()) {
-        emptyInputIndices.add(index);
-      }
-    });
-
-    (config.outputs || []).forEach((output, index) => {
-      if (!output.internalName.trim()) {
-        emptyOutputIndices.add(index);
-      }
-    });
-
-    if (emptyInputIndices.size > 0) {
-      setEditingInputs(emptyInputIndices);
-    }
-    if (emptyOutputIndices.size > 0) {
-      setEditingOutputs(emptyOutputIndices);
-    }
-  }, []); // Only on mount
 
   // Save config to Task when it changes — flat fields, no wrapper
   React.useEffect(() => {
@@ -388,12 +321,6 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
     }
   }, [config.inputs, config.outputs, reorganizeMockTable]); // ✅ Dipende da inputs/outputs per riorganizzare quando cambiano
 
-  // ✅ REMOVED: updateInstance (legacy act_instances) - taskRepository.updateTask already saves to database
-  const handleClose = async () => {
-    // ✅ TaskRepository automatically syncs with database, no need for separate save
-    onClose?.();
-  };
-
   const updateEndpoint = (updates: Partial<BackendCallConfig['endpoint']>) => {
     setConfig(prev => ({
       ...prev,
@@ -401,298 +328,59 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
     }));
   };
 
-  // Input management
-  const addInput = () => {
-    let newIndex = 0;
-    setConfig(prev => {
-      newIndex = (prev.inputs || []).length;
-      return {
+  const listIdPrefix = React.useMemo(
+    () => `bc${String(instanceId || 'x').replace(/[^a-zA-Z0-9]/g, '') || 'x'}`,
+    [instanceId]
+  );
+
+  /** Persist variable names in mapping rows: resolve label → varId, create manual variable if missing. */
+  const resolveVarIdForLinkedName = React.useCallback(
+    (linkedName: string): string => {
+      const t = linkedName.trim();
+      if (!t) return '';
+      const id = getVarIdFromVarName(t);
+      if (id) return id;
+      if (!projectId) return '';
+      try {
+        const nv = variableCreationService.createManualVariable(projectId, t);
+        setVariablesRefreshKey((k) => k + 1);
+        return nv.varId;
+      } catch {
+        return '';
+      }
+    },
+    [getVarIdFromVarName, projectId]
+  );
+
+  const mappingSend = React.useMemo(
+    () => backendInputsToMappingEntries(config.inputs, getVarNameFromVarId),
+    [config.inputs, getVarNameFromVarId]
+  );
+
+  const mappingReceive = React.useMemo(
+    () => backendOutputsToMappingEntries(config.outputs, getVarNameFromVarId),
+    [config.outputs, getVarNameFromVarId]
+  );
+
+  const handleBackendSendChange = React.useCallback(
+    (entries: MappingEntry[]) => {
+      setConfig((prev) => ({
         ...prev,
-        inputs: [...(prev.inputs || []), { internalName: '', apiParam: '', variable: '' }]
-      };
-    });
-    // New row starts in editing mode
-    setTimeout(() => {
-      setEditingInputs(prev => new Set(prev).add(newIndex));
-      const input = document.querySelector(`input[data-input-index="${newIndex}"]`) as HTMLInputElement;
-      if (input) input.focus();
-    }, 0);
-  };
+        inputs: mappingEntriesToBackendInputs(entries, resolveVarIdForLinkedName),
+      }));
+    },
+    [resolveVarIdForLinkedName]
+  );
 
-  const updateInput = (index: number, updates: Partial<BackendCallConfig['inputs'][0]>) => {
-    setConfig(prev => {
-      const inputs = [...(prev.inputs || [])];
-      inputs[index] = { ...inputs[index], ...updates };
-
-      // Auto-fill: se apiParam è selezionato e internalName è vuoto, auto-compila
-      if (updates.apiParam && !inputs[index].internalName) {
-        inputs[index].internalName = updates.apiParam;
-      }
-
-      // ✅ NEW: Auto-fill: se variable è selezionato e internalName è vuoto, auto-compila con varName
-      if (updates.variable && !inputs[index].internalName) {
-        const varName = getVarNameFromVarId(updates.variable);
-        if (varName) {
-          inputs[index].internalName = varName;
-        }
-      }
-
-      return { ...prev, inputs };
-    });
-  };
-
-  // Auto-append: quando premi Enter nel textbox, aggiungi riga vuota sotto
-  // Se il textbox ha un valore, esce dalla modalità editing e diventa label
-  // ❌ NON aggiungere riga se il campo è vuoto o se l'ultima riga è già vuota
-  const handleInputKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>, value: string) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const trimmedValue = value.trim();
-
-      if (trimmedValue) {
-        // Se ha un valore, salva e esci da editing
-        updateInput(index, { internalName: trimmedValue });
-        setEditingInputs(prev => {
-          const next = new Set(prev);
-          next.delete(index);
-          return next;
-        });
-        delete pendingInputEdits[index];
-        setPendingInputEdits(prev => {
-          const next = { ...prev };
-          delete next[index];
-          return next;
-        });
-
-        // ✅ Aggiungi nuova riga vuota SOLO se l'ultima riga non è già vuota
-        setConfig(prev => {
-          const inputs = [...(prev.inputs || [])];
-          const lastInput = inputs[inputs.length - 1];
-          const isLastEmpty = !lastInput?.internalName?.trim();
-
-          // Se l'ultima riga è già vuota, non aggiungere un'altra riga vuota
-          if (isLastEmpty) {
-            return prev;
-          }
-
-          // Altrimenti, aggiungi nuova riga vuota dopo quella corrente
-          inputs.splice(index + 1, 0, { internalName: '', apiParam: '', variable: '' });
-          return { ...prev, inputs };
-        });
-
-        // Focus sulla nuova riga (next tick)
-        setTimeout(() => {
-          const nextInput = document.querySelector(`input[data-input-index="${index + 1}"]`) as HTMLInputElement;
-          if (nextInput) nextInput.focus();
-          // Nuova riga parte in editing
-          setEditingInputs(prev => new Set(prev).add(index + 1));
-        }, 0);
-      } else {
-        // ✅ Campo vuoto: rimani in editing (non uscire, così l'utente può continuare a digitare)
-        // Non fare nulla, il campo rimane in editing mode
-      }
-    } else if (e.key === 'Escape') {
-      // Annulla editing
-      setEditingInputs(prev => {
-        const next = new Set(prev);
-        next.delete(index);
-        return next;
-      });
-      setPendingInputEdits(prev => {
-        const next = { ...prev };
-        delete next[index];
-        return next;
-      });
-    }
-  };
-
-  const handleOutputKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>, value: string) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const trimmedValue = value.trim();
-
-      if (trimmedValue) {
-        // Se ha un valore, salva e esci da editing
-        updateOutput(index, { internalName: trimmedValue });
-        setEditingOutputs(prev => {
-          const next = new Set(prev);
-          next.delete(index);
-          return next;
-        });
-        delete pendingOutputEdits[index];
-        setPendingOutputEdits(prev => {
-          const next = { ...prev };
-          delete next[index];
-          return next;
-        });
-
-        // ✅ Aggiungi nuova riga vuota SOLO se l'ultima riga non è già vuota
-        setConfig(prev => {
-          const outputs = [...(prev.outputs || [])];
-          const lastOutput = outputs[outputs.length - 1];
-          const isLastEmpty = !lastOutput?.internalName?.trim();
-
-          // Se l'ultima riga è già vuota, non aggiungere un'altra riga vuota
-          if (isLastEmpty) {
-            return prev;
-          }
-
-          // Altrimenti, aggiungi nuova riga vuota dopo quella corrente
-          outputs.splice(index + 1, 0, { internalName: '', apiField: '', variable: '' });
-          return { ...prev, outputs };
-        });
-
-        // Focus sulla nuova riga (next tick)
-        setTimeout(() => {
-          const nextInput = document.querySelector(`input[data-output-index="${index + 1}"]`) as HTMLInputElement;
-          if (nextInput) nextInput.focus();
-          // Nuova riga parte in editing
-          setEditingOutputs(prev => new Set(prev).add(index + 1));
-        }, 0);
-      } else {
-        // ✅ Campo vuoto: rimani in editing (non uscire, così l'utente può continuare a digitare)
-        // Non fare nulla, il campo rimane in editing mode
-      }
-    } else if (e.key === 'Escape') {
-      // Annulla editing
-      setEditingOutputs(prev => {
-        const next = new Set(prev);
-        next.delete(index);
-        return next;
-      });
-      setPendingOutputEdits(prev => {
-        const next = { ...prev };
-        delete next[index];
-        return next;
-      });
-    }
-  };
-
-  // Start editing input
-  const startEditingInput = (index: number) => {
-    const currentValue = config.inputs?.[index]?.internalName || '';
-    setPendingInputEdits(prev => ({ ...prev, [index]: currentValue }));
-    setEditingInputs(prev => new Set(prev).add(index));
-  };
-
-  // Save input edit
-  const saveInputEdit = (index: number) => {
-    const pendingValue = pendingInputEdits[index];
-    if (pendingValue !== undefined) {
-      updateInput(index, { internalName: pendingValue.trim() });
-    }
-    setEditingInputs(prev => {
-      const next = new Set(prev);
-      next.delete(index);
-      return next;
-    });
-    setPendingInputEdits(prev => {
-      const next = { ...prev };
-      delete next[index];
-      return next;
-    });
-  };
-
-  // Cancel input edit
-  const cancelInputEdit = (index: number) => {
-    setEditingInputs(prev => {
-      const next = new Set(prev);
-      next.delete(index);
-      return next;
-    });
-    setPendingInputEdits(prev => {
-      const next = { ...prev };
-      delete next[index];
-      return next;
-    });
-  };
-
-  // Start editing output
-  const startEditingOutput = (index: number) => {
-    const currentValue = config.outputs?.[index]?.internalName || '';
-    setPendingOutputEdits(prev => ({ ...prev, [index]: currentValue }));
-    setEditingOutputs(prev => new Set(prev).add(index));
-  };
-
-  // Save output edit
-  const saveOutputEdit = (index: number) => {
-    const pendingValue = pendingOutputEdits[index];
-    if (pendingValue !== undefined) {
-      updateOutput(index, { internalName: pendingValue.trim() });
-    }
-    setEditingOutputs(prev => {
-      const next = new Set(prev);
-      next.delete(index);
-      return next;
-    });
-    setPendingOutputEdits(prev => {
-      const next = { ...prev };
-      delete next[index];
-      return next;
-    });
-  };
-
-  // Cancel output edit
-  const cancelOutputEdit = (index: number) => {
-    setEditingOutputs(prev => {
-      const next = new Set(prev);
-      next.delete(index);
-      return next;
-    });
-    setPendingOutputEdits(prev => {
-      const next = { ...prev };
-      delete next[index];
-      return next;
-    });
-  };
-
-  const removeInput = (index: number) => {
-    setConfig(prev => {
-      const inputs = [...(prev.inputs || [])];
-      inputs.splice(index, 1);
-      return { ...prev, inputs };
-    });
-  };
-
-  // Output management
-  const addOutput = () => {
-    let newIndex = 0;
-    setConfig(prev => {
-      newIndex = (prev.outputs || []).length;
-      return {
+  const handleBackendReceiveChange = React.useCallback(
+    (entries: MappingEntry[]) => {
+      setConfig((prev) => ({
         ...prev,
-        outputs: [...(prev.outputs || []), { internalName: '', apiField: '', variable: '' }]
-      };
-    });
-    // New row starts in editing mode
-    setTimeout(() => {
-      setEditingOutputs(prev => new Set(prev).add(newIndex));
-      const input = document.querySelector(`input[data-output-index="${newIndex}"]`) as HTMLInputElement;
-      if (input) input.focus();
-    }, 0);
-  };
-
-  const updateOutput = (index: number, updates: Partial<BackendCallConfig['outputs'][0]>) => {
-    setConfig(prev => {
-      const outputs = [...(prev.outputs || [])];
-      outputs[index] = { ...outputs[index], ...updates };
-
-      // Auto-fill: se apiField è selezionato e internalName è vuoto, auto-compila
-      if (updates.apiField && !outputs[index].internalName) {
-        outputs[index].internalName = updates.apiField;
-      }
-
-      return { ...prev, outputs };
-    });
-  };
-
-  const removeOutput = (index: number) => {
-    setConfig(prev => {
-      const outputs = [...(prev.outputs || [])];
-      outputs.splice(index, 1);
-      return { ...prev, outputs };
-    });
-  };
+        outputs: mappingEntriesToBackendOutputs(entries, resolveVarIdForLinkedName),
+      }));
+    },
+    [resolveVarIdForLinkedName]
+  );
 
   // Toolbar buttons
   const toolbarButtons = React.useMemo<ToolbarButton[]>(() => {
@@ -725,7 +413,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
   const type = String(task?.type || 'BackendCall') as any;
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
   // Aggiornare per usare getTaskVisuals(type, task?.category, task?.categoryCustom, false)
-  const { Icon, color } = getTaskVisualsByType(type, false);
+  const { color } = getTaskVisualsByType(type, false);
 
   // ✅ ARCHITECTURE: Inject icon and title into main header (no local header)
   const headerContext = useHeaderToolbarContext();
@@ -804,562 +492,25 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
             />
           </>
         ) : (
-        <div className="flex gap-3 items-start">
-          {/* Input - Left Column */}
-          <div className="border border-slate-700 rounded bg-slate-800 flex flex-shrink-0">
-            {/* Rettangolo laterale vuoto con bordo azzurro arrotondato e testo verticale "SEND" */}
-            <div
-              className="flex-shrink-0 flex items-stretch border-2 border-cyan-500 rounded-lg px-2 py-2"
-              style={{
-                width: '50px',
-                backgroundColor: 'transparent'
-              }}
-            >
-              <div
-                className="flex items-center justify-center text-cyan-500 font-semibold uppercase"
-                style={{
-                  writingMode: 'vertical-rl',
-                  textOrientation: 'mixed',
-                  fontSize: '16px'
-                }}
-              >
-                SEND
-              </div>
-            </div>
-            {/* Contenuto */}
-            <div className="flex-1 flex flex-col">
-              <div className="p-2 space-y-1">
-              {(!config.inputs || config.inputs.length === 0) ? (
-                <div className="text-xs text-slate-400 italic text-center py-2">
-                  <button
-                    onClick={addInput}
-                    className="p-1 hover:bg-slate-700 rounded text-blue-400"
-                    title="Add input parameter"
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-              ) : (
-                config.inputs.map((input, index) => {
-                  const isEditing = editingInputs.has(index);
-                  const hasValue = !!input.internalName.trim();
-                  const displayValue = isEditing && pendingInputEdits[index] !== undefined
-                    ? pendingInputEdits[index]
-                    : input.internalName;
-                  const isHovered = hoveredInputRow === index;
-
-                  return (
-                    <div
-                      key={index}
-                      className="flex gap-1.5 items-center p-1 bg-slate-900 rounded"
-                      onMouseEnter={() => setHoveredInputRow(index)}
-                      onMouseLeave={() => setHoveredInputRow(null)}
-                      style={{ minHeight: '32px' }}
-                    >
-                      {/* Campo 1: Nome interno (label o textbox) */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0" style={{ width: '150px' }}>
-                        {isEditing || !hasValue ? (
-                          // Textbox in editing mode o vuoto
-                          <div className="flex items-center gap-1" style={{ width: '100%' }}>
-                            <input
-                              type="text"
-                              data-input-index={index}
-                              value={displayValue}
-                              onChange={(e) => setPendingInputEdits(prev => ({ ...prev, [index]: e.target.value }))}
-                              onKeyDown={(e) => handleInputKeyDown(index, e, e.currentTarget.value)}
-                              placeholder="Internal name"
-                              className="w-full px-1.5 py-1.5 bg-slate-800 border border-slate-600 rounded text-xs text-cyan-500 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                              style={{ height: '32px', maxWidth: '150px' }}
-                              autoFocus={isEditing}
-                            />
-                            {isEditing && hasValue && (
-                              <div className="flex gap-1 flex-shrink-0">
-                                <button
-                                  onClick={() => saveInputEdit(index)}
-                                  className="p-1 hover:bg-green-600 rounded text-green-400"
-                                  title="Save"
-                                >
-                                  <Check size={14} />
-                                </button>
-                                <button
-                                  onClick={() => cancelInputEdit(index)}
-                                  className="p-1 hover:bg-red-600 rounded text-red-400"
-                                  title="Cancel"
-                                >
-                                  <X size={14} />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          // Label quando compilato (senza icona) - colore azzurro come SEND
-                          <div className="flex items-center gap-1.5" style={{ width: '100%' }}>
-                            <span className="text-xs text-cyan-500 truncate" style={{ maxWidth: '150px' }}>{input.internalName}</span>
-                            {isHovered && (
-                              <div className="flex gap-1 flex-shrink-0">
-                                <button
-                                  onClick={() => startEditingInput(index)}
-                                  className="p-1 hover:bg-slate-700 rounded text-blue-400"
-                                  title="Edit"
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                                <button
-                                  onClick={() => removeInput(index)}
-                                  className="p-1 hover:bg-red-600 rounded text-red-400"
-                                  title="Delete"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      {/* Campo 2: API Param (placeholder cliccabile, label o combobox) - condizionale */}
-                      {showApiColumn && (
-                        <div className="flex-shrink-0" style={{ height: '32px', width: '120px' }}>
-                          {openInputApiParam === index ? (
-                            // Combo box aperta
-                            <div style={{
-                              transform: 'scale(0.75)',
-                              transformOrigin: 'left center',
-                              height: '32px',
-                              width: '133%'
-                            }}>
-                              <OmniaSelect
-                                variant="dark"
-                                options={availableApiParams}
-                                value={input.apiParam || null}
-                                onChange={(value) => {
-                                  updateInput(index, { apiParam: value || '' });
-                                  setOpenInputApiParam(null); // Chiudi dopo selezione
-                                }}
-                                onBlur={() => setOpenInputApiParam(null)}
-                                onMenuClose={() => setOpenInputApiParam(null)}
-                                placeholder="API param"
-                                isCreatable={true}
-                                className="text-xs"
-                                autoFocus={true}
-                              />
-                            </div>
-                          ) : input.apiParam ? (
-                            // Label quando c'è un valore
-                            <button
-                              onClick={() => setOpenInputApiParam(index)}
-                              className="text-xs text-slate-200 px-2 py-1.5 h-8 rounded border border-slate-600 bg-slate-800 w-full text-left hover:border-cyan-500 hover:bg-slate-700 truncate"
-                              title="Click to change API param"
-                            >
-                              {input.apiParam}
-                            </button>
-                          ) : (
-                            // Placeholder quando vuoto
-                            <button
-                              onClick={() => setOpenInputApiParam(index)}
-                              className="text-xs text-slate-400 hover:text-cyan-400 px-2 py-1.5 h-8 rounded border border-dashed border-slate-600 hover:border-cyan-500 bg-slate-800 w-full text-left"
-                            >
-                              API param?
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {/* Campo 3: Variabile (placeholder cliccabile, label o combobox) */}
-                      <div className="flex-shrink-0" style={{ height: '32px', minWidth: '80px' }}>
-                        {openInputVariable === index ? (
-                          // Combo box aperta
-                          <div style={{
-                            transform: 'scale(0.75)',
-                            transformOrigin: 'left center',
-                            height: '32px',
-                            width: '133%'
-                          }}>
-                            <OmniaSelect
-                              variant="dark"
-                              options={availableVariables}
-                              value={input.variable ? getVarNameFromVarId(input.variable) || input.variable : null}
-                              onChange={(value) => {
-                                // ✅ value è varName (label), convertiamo a varId prima di salvare
-                                if (!value || !projectId) {
-                                  updateInput(index, { variable: '' });
-                                  setOpenInputVariable(null);
-                                  return;
-                                }
-
-                                const varId = getVarIdFromVarName(value);
-                                if (varId) {
-                                  updateInput(index, { variable: varId }); // ✅ Salva varId, non varName
-                                  console.log('[BackendCallEditor] Variable assigned to INPUT', {
-                                    varName: value,
-                                    varId: varId,
-                                    internalName: config.inputs[index]?.internalName
-                                  });
-                                } else {
-                                  console.warn('[BackendCallEditor] Variable not found', { varName: value, projectId });
-                                  updateInput(index, { variable: '' });
-                                }
-                                setOpenInputVariable(null); // Chiudi dopo selezione
-                              }}
-                              onCreateOption={async (inputValue) => {
-                                // ✅ Create new variable when user types and presses Enter
-                                if (!inputValue || inputValue.trim() === '') {
-                                  return;
-                                }
-
-                                // ✅ Use projectId from context (already available at component level)
-                                if (!projectId) {
-                                  console.warn('[BackendCallEditor] Cannot create variable: no projectId from context', {
-                                    fallbackLocalStorage: localStorage.getItem('currentProjectId')
-                                  });
-                                  return;
-                                }
-
-                                try {
-                                  // ✅ Create variable using the unified collection
-                                  // This automatically creates the label-GUID mapping (varId = GUID, varName = label)
-                                  const newVariable = variableCreationService.createManualVariable(
-                                    projectId, // ✅ Use projectId from context, not localStorage
-                                    inputValue.trim()
-                                  );
-
-                                  // ✅ Salva varId invece di varName
-                                  updateInput(index, { variable: newVariable.varId });
-
-                                  // ✅ Force re-render of availableVariables by incrementing refresh key
-                                  setVariablesRefreshKey(prev => prev + 1);
-
-                                  setOpenInputVariable(null); // Close after creation
-
-                                  console.log('[BackendCallEditor] ✅ Variable created and assigned to INPUT', {
-                                    varName: newVariable.varName,
-                                    varId: newVariable.varId,
-                                    projectId, // ✅ Log projectId used
-                                    internalName: config.inputs[index]?.internalName || 'N/A',
-                                    paramIndex: index,
-                                    totalVariablesInStore: variableCreationService.getCount(projectId),
-                                    context: 'BackendCallEditor - INPUT parameter',
-                                    taskInstanceId: newVariable.taskInstanceId || '(empty)',
-                                    nodeId: newVariable.nodeId || '(empty)'
-                                  });
-                                } catch (error) {
-                                  console.error('[BackendCallEditor] ❌ Error creating variable', {
-                                    error,
-                                    projectId,
-                                    inputValue
-                                  });
-                                }
-                              }}
-                              onBlur={() => setOpenInputVariable(null)}
-                              onMenuClose={() => setOpenInputVariable(null)}
-                              placeholder="Add Variable"
-                              isCreatable={true}
-                              className="text-xs"
-                              autoFocus={true}
-                            />
-                          </div>
-                        ) : input.variable ? (
-                          // ✅ Mostra varName ma input.variable contiene varId
-                          <button
-                            onClick={() => setOpenInputVariable(index)}
-                            className="text-xs text-slate-200 px-2 py-1.5 h-8 rounded border border-slate-600 bg-slate-800 text-left hover:border-cyan-500 hover:bg-slate-700 whitespace-nowrap"
-                            title="Click to change variable"
-                          >
-                            {getVarNameFromVarId(input.variable) || input.variable}
-                          </button>
-                        ) : (
-                          // Placeholder quando vuoto
-                          <button
-                            onClick={() => setOpenInputVariable(index)}
-                            className="text-xs text-slate-400 hover:text-cyan-400 px-2 py-1.5 h-8 rounded border border-dashed border-slate-600 hover:border-cyan-500 bg-slate-800 w-full text-left"
-                          >
-                            Variable?
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              </div>
-            </div>
-          </div>
-
-          {/* Output - Right Column */}
-          <div className="border border-slate-700 rounded bg-slate-800 flex flex-shrink-0">
-            {/* Rettangolo laterale vuoto con bordo verde arrotondato e testo verticale "RECEIVE" */}
-            <div
-              className="flex-shrink-0 flex items-stretch border-2 border-green-500 rounded-lg px-2 py-2"
-              style={{
-                width: '50px',
-                backgroundColor: 'transparent'
-              }}
-            >
-              <div
-                className="flex items-center justify-center text-green-500 font-semibold uppercase"
-                style={{
-                  writingMode: 'vertical-rl',
-                  textOrientation: 'mixed',
-                  fontSize: '16px'
-                }}
-              >
-                RECEIVE
-              </div>
-            </div>
-            {/* Contenuto */}
-            <div className="flex-1 flex flex-col">
-              <div className="p-2 space-y-1">
-              {(!config.outputs || config.outputs.length === 0) ? (
-                <div className="text-xs text-slate-400 italic text-center py-2">
-                  <button
-                    onClick={addOutput}
-                    className="p-1 hover:bg-slate-700 rounded text-green-400"
-                    title="Add output field"
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-              ) : (
-                config.outputs.map((output, index) => {
-                  const isEditing = editingOutputs.has(index);
-                  const hasValue = !!output.internalName.trim();
-                  const displayValue = isEditing && pendingOutputEdits[index] !== undefined
-                    ? pendingOutputEdits[index]
-                    : output.internalName;
-                  const isHovered = hoveredOutputRow === index;
-
-  return (
-                    <div
-                      key={index}
-                      className="flex gap-1.5 items-center p-1 bg-slate-900 rounded"
-                      onMouseEnter={() => setHoveredOutputRow(index)}
-                      onMouseLeave={() => setHoveredOutputRow(null)}
-                      style={{ minHeight: '32px' }}
-                    >
-                      {/* Campo 1: Nome interno (label o textbox) */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0" style={{ width: '150px' }}>
-                        {isEditing || !hasValue ? (
-                          // Textbox in editing mode o vuoto
-                          <div className="flex items-center gap-1 flex-shrink-0" style={{ width: '150px' }}>
-                            <input
-                              type="text"
-                              data-output-index={index}
-                              value={displayValue}
-                              onChange={(e) => setPendingOutputEdits(prev => ({ ...prev, [index]: e.target.value }))}
-                              onKeyDown={(e) => handleOutputKeyDown(index, e, e.currentTarget.value)}
-                              placeholder="Internal name"
-                              className="w-full px-1.5 py-1.5 bg-slate-800 border border-slate-600 rounded text-xs text-green-500 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-green-500"
-                              style={{ height: '32px' }}
-                              autoFocus={isEditing}
-                            />
-                            {isEditing && hasValue && (
-                              <div className="flex gap-1 flex-shrink-0">
-                                <button
-                                  onClick={() => saveOutputEdit(index)}
-                                  className="p-1 hover:bg-green-600 rounded text-green-400"
-                                  title="Save"
-                                >
-                                  <Check size={14} />
-                                </button>
-                                <button
-                                  onClick={() => cancelOutputEdit(index)}
-                                  className="p-1 hover:bg-red-600 rounded text-red-400"
-                                  title="Cancel"
-                                >
-                                  <X size={14} />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          // Label quando compilato (senza icona) - colore verde come RECEIVE
-                          <div className="flex items-center gap-1.5" style={{ width: '100%' }}>
-                            <span className="text-xs text-green-500 truncate" style={{ maxWidth: '150px' }}>{output.internalName}</span>
-                            {isHovered && (
-                              <div className="flex gap-1 flex-shrink-0">
-                                <button
-                                  onClick={() => startEditingOutput(index)}
-                                  className="p-1 hover:bg-slate-700 rounded text-blue-400"
-                                  title="Edit"
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                                <button
-                                  onClick={() => removeOutput(index)}
-                                  className="p-1 hover:bg-red-600 rounded text-red-400"
-                                  title="Delete"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      {/* Campo 2: API Field (placeholder cliccabile, label o combobox) - condizionale */}
-                      {showApiColumn && (
-                        <div className="flex-shrink-0" style={{ height: '32px', width: '120px' }}>
-                          {openOutputApiField === index ? (
-                            // Combo box aperta
-                            <div style={{
-                              transform: 'scale(0.75)',
-                              transformOrigin: 'left center',
-                              height: '32px',
-                              width: '133%'
-                            }}>
-                              <OmniaSelect
-                                variant="dark"
-                                options={availableApiParams}
-                                value={output.apiField || null}
-                                onChange={(value) => {
-                                  updateOutput(index, { apiField: value || '' });
-                                  setOpenOutputApiField(null); // Chiudi dopo selezione
-                                }}
-                                onBlur={() => setOpenOutputApiField(null)}
-                                onMenuClose={() => setOpenOutputApiField(null)}
-                                placeholder="API field"
-                                isCreatable={true}
-                                className="text-xs"
-                                autoFocus={true}
-                              />
-                            </div>
-                          ) : output.apiField ? (
-                            // Label quando c'è un valore
-                            <button
-                              onClick={() => setOpenOutputApiField(index)}
-                              className="text-xs text-slate-200 px-2 py-1.5 h-8 rounded border border-slate-600 bg-slate-800 w-full text-left hover:border-green-500 hover:bg-slate-700 truncate"
-                              title="Click to change API field"
-                            >
-                              {output.apiField}
-                            </button>
-                          ) : (
-                            // Placeholder quando vuoto
-                            <button
-                              onClick={() => setOpenOutputApiField(index)}
-                              className="text-xs text-slate-400 hover:text-green-400 px-2 py-1.5 h-8 rounded border border-dashed border-slate-600 hover:border-green-500 bg-slate-800 w-full text-left"
-                            >
-                              API field?
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {/* Campo 3: Variabile (placeholder cliccabile, label o combobox) */}
-                      <div className="flex-shrink-0" style={{ height: '32px', minWidth: '80px' }}>
-                        {openOutputVariable === index ? (
-                          // Combo box aperta
-                          <div style={{
-                            transform: 'scale(0.75)',
-                            transformOrigin: 'left center',
-                            height: '32px',
-                            width: '133%'
-                          }}>
-                            <OmniaSelect
-                              variant="dark"
-                              options={availableVariables}
-                              value={output.variable ? getVarNameFromVarId(output.variable) || output.variable : null}
-                              onChange={(value) => {
-                                // ✅ value è varName (label), convertiamo a varId prima di salvare
-                                if (!value || !projectId) {
-                                  updateOutput(index, { variable: '' });
-                                  setOpenOutputVariable(null);
-                                  return;
-                                }
-
-                                const varId = getVarIdFromVarName(value);
-                                if (varId) {
-                                  updateOutput(index, { variable: varId }); // ✅ Salva varId, non varName
-                                  console.log('[BackendCallEditor] Variable assigned to OUTPUT', {
-                                    varName: value,
-                                    varId: varId,
-                                    internalName: config.outputs[index]?.internalName
-                                  });
-                                } else {
-                                  console.warn('[BackendCallEditor] Variable not found', { varName: value, projectId });
-                                  updateOutput(index, { variable: '' });
-                                }
-                                setOpenOutputVariable(null); // Chiudi dopo selezione
-                              }}
-                              onCreateOption={async (inputValue) => {
-                                // ✅ Create new variable when user types and presses Enter
-                                if (!inputValue || inputValue.trim() === '') {
-                                  return;
-                                }
-
-                                // ✅ Use projectId from context (already available at component level)
-                                if (!projectId) {
-                                  console.warn('[BackendCallEditor] Cannot create variable: no projectId from context', {
-                                    fallbackLocalStorage: localStorage.getItem('currentProjectId')
-                                  });
-                                  return;
-                                }
-
-                                try {
-                                  // ✅ Create variable using the unified collection
-                                  // This automatically creates the label-GUID mapping (varId = GUID, varName = label)
-                                  const newVariable = variableCreationService.createManualVariable(
-                                    projectId, // ✅ Use projectId from context, not localStorage
-                                    inputValue.trim()
-                                  );
-
-                                  // ✅ Salva varId invece di varName
-                                  updateOutput(index, { variable: newVariable.varId });
-
-                                  // ✅ Force re-render of availableVariables by incrementing refresh key
-                                  setVariablesRefreshKey(prev => prev + 1);
-
-                                  setOpenOutputVariable(null); // Close after creation
-
-                                  console.log('[BackendCallEditor] ✅ Variable created and assigned to OUTPUT', {
-                                    varName: newVariable.varName,
-                                    varId: newVariable.varId,
-                                    projectId, // ✅ Log projectId used
-                                    internalName: config.outputs[index]?.internalName || 'N/A',
-                                    paramIndex: index,
-                                    totalVariablesInStore: variableCreationService.getCount(projectId),
-                                    context: 'BackendCallEditor - OUTPUT parameter',
-                                    taskInstanceId: newVariable.taskInstanceId || '(empty)',
-                                    nodeId: newVariable.nodeId || '(empty)'
-                                  });
-                                } catch (error) {
-                                  console.error('[BackendCallEditor] ❌ Error creating variable', {
-                                    error,
-                                    projectId,
-                                    inputValue
-                                  });
-                                }
-                              }}
-                              onBlur={() => setOpenOutputVariable(null)}
-                              onMenuClose={() => setOpenOutputVariable(null)}
-                              placeholder="Add Variable"
-                              isCreatable={true}
-                              className="text-xs"
-                              autoFocus={true}
-                            />
-                          </div>
-                        ) : output.variable ? (
-                          // ✅ Mostra varName ma output.variable contiene varId
-                          <button
-                            onClick={() => setOpenOutputVariable(index)}
-                            className="text-xs text-slate-200 px-2 py-1.5 h-8 rounded border border-slate-600 bg-slate-800 text-left hover:border-green-500 hover:bg-slate-700 whitespace-nowrap"
-                            title="Click to change variable"
-                          >
-                            {getVarNameFromVarId(output.variable) || output.variable}
-                          </button>
-                        ) : (
-                          // Placeholder quando vuoto
-                          <button
-                            onClick={() => setOpenOutputVariable(index)}
-                            className="text-xs text-slate-400 hover:text-green-400 px-2 py-1.5 h-8 rounded border border-dashed border-slate-600 hover:border-green-500 bg-slate-800 w-full text-left"
-                          >
-                            Variable?
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              </div>
-            </div>
-          </div>
+        <div className="flex-1 min-h-[320px] min-w-0 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
+          <InterfaceMappingEditor
+            variant="backend"
+            showVariantToggle={false}
+            showEndpoint={false}
+            showLayoutHint={false}
+            title=""
+            listIdPrefix={listIdPrefix}
+            backendSend={mappingSend}
+            backendReceive={mappingReceive}
+            onBackendSendChange={handleBackendSendChange}
+            onBackendReceiveChange={handleBackendReceiveChange}
+            apiOptions={availableApiParams}
+            variableOptions={availableVariables}
+            showApiFields={showApiColumn}
+            showInterfacePalette={false}
+            className="bg-slate-900"
+            innerClassName="!p-2"
+          />
         </div>
         )}
       </div>

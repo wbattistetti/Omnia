@@ -80,6 +80,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     onOpenSubflowForTask,
     updateNodeRows,
     onAppendSemanticNodes,
+    suppressRowToolbar = false,
   }: NodeRowProps,
   ref
 ) => {
@@ -763,7 +764,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         onCreateTask={onCreateTask}
       />
 
-      {!isEditing && isDataRequestRow && updateNodeRows && showSemanticValuesEditor && semanticPopoverPos && typeof document !== 'undefined' &&
+      {!suppressRowToolbar && !isEditing && isDataRequestRow && updateNodeRows && showSemanticValuesEditor && semanticPopoverPos && typeof document !== 'undefined' &&
         createPortal(
           <div
             className="nodrag"
@@ -794,7 +795,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           document.body
         )}
 
-      {toolbarSM.showPicker && pickerPosition && createPortal(
+      {!suppressRowToolbar && toolbarSM.showPicker && pickerPosition && createPortal(
         <>
           <FontProvider>
             <RowTypePickerToolbar

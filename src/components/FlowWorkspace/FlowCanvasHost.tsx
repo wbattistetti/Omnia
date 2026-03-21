@@ -101,7 +101,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
     >
       <div className="relative flex flex-1 min-h-0 w-full h-full flex-col">
         <div className="flex-1 min-h-0">{flowEditor}</div>
-        <FlowVariablesRail flowId={flowId} />
+        <FlowVariablesRail flowId={flowId} projectId={projectId} />
       </div>
     </FlowActionsProvider>
   );

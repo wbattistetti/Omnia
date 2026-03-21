@@ -62,14 +62,17 @@ export function useNodeEffects({
     const latestRowsRef = useRef<NodeRowData[]>(nodeRows);
     useEffect(() => { latestRowsRef.current = nodeRows; }, [nodeRows]);
 
-    // Se l'header viene nascosto, azzera sempre lo stato hover header
+    // Header nascosto → reset hover header; nodo hidden (ancora temp.) → reset hover toolbar.
+    // Tutto in un solo effect per non alterare il conteggio degli hook (HMR / Rules of Hooks).
     useEffect(() => {
         if (!showPermanentHeader) setIsHoverHeader(false);
-    }, [showPermanentHeader, setIsHoverHeader]);
+        if (normalizedData.hidden) setIsHoveredNode(false);
+    }, [showPermanentHeader, normalizedData.hidden, setIsHoverHeader, setIsHoveredNode]);
 
     // Calcola area estesa per toolbar nodo (include nodo + toolbar + padding)
     useEffect(() => {
-        const shouldShowToolbar = (isHoveredNode || selected) && !isEditingNode;
+        const shouldShowToolbar =
+            (isHoveredNode || selected) && !isEditingNode && !normalizedData.hidden;
 
         if (shouldShowToolbar && rootRef.current) {
             const updateRect = () => {
@@ -99,7 +102,7 @@ export function useNodeEffects({
                 window.removeEventListener('scroll', updateRect, true);
             };
         }
-    }, [isHoveredNode, selected, isEditingNode, rootRef]);
+    }, [isHoveredNode, selected, isEditingNode, normalizedData.hidden, rootRef]);
 
     // Nascondi header su click canvas se il titolo è vuoto
     useEffect(() => {

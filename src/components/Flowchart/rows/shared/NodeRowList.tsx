@@ -34,6 +34,7 @@ interface NodeRowListProps {
   updateNodeRows?: (mutate: (rows: NodeRowData[]) => NodeRowData[]) => void;
   nodeId?: string;
   onAppendSemanticNodes?: (row: NodeRowData, values: SemanticValue[]) => Promise<void> | void;
+  suppressRowToolbar?: boolean;
 }
 
 export const NodeRowList: React.FC<NodeRowListProps> = ({
@@ -66,6 +67,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   updateNodeRows,
   nodeId,
   onAppendSemanticNodes,
+  suppressRowToolbar = false,
 }) => {
 
   // Filter rows based on hideUnchecked setting
@@ -154,6 +156,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             onOpenSubflowForTask={onOpenSubflowForTask}
             updateNodeRows={updateNodeRows}
             onAppendSemanticNodes={onAppendSemanticNodes}
+            suppressRowToolbar={suppressRowToolbar}
           />
         </React.Fragment>
       ))}

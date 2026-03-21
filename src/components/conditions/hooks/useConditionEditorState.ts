@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { convertDSLGUIDsToLabels } from '../../../utils/conditionCodeConverter';
 import { createVariableMappings } from '../../../utils/conditionCodeConverter';
 import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
@@ -30,11 +30,9 @@ export interface UseConditionEditorStateReturn {
   aiQuestion: string;
   setAiQuestion: (question: string) => void;
   showCode: boolean;
-  setShowCode: (value: boolean) => void;
+  setShowCode: React.Dispatch<React.SetStateAction<boolean>>;
   showTester: boolean;
-  setShowTester: (value: boolean) => void;
-  showVariablesPanel: boolean;
-  setShowVariablesPanel: (value: boolean) => void;
+  setShowTester: React.Dispatch<React.SetStateAction<boolean>>;
 
   // Title state
   isEditingTitle: boolean;
@@ -49,16 +47,10 @@ export interface UseConditionEditorStateReturn {
   // Layout state
   heightPx: number;
   setHeightPx: (value: number) => void;
-  wVars: number;
-  setWVars: (value: number) => void;
   wTester: number;
   setWTester: (value: number) => void;
   fontPx: number;
-  setFontPx: (value: number) => void;
-
-  // Variables state
-  selectedVars: string[];
-  setSelectedVars: (vars: string[] | ((prev: string[]) => string[])) => void;
+  setFontPx: React.Dispatch<React.SetStateAction<number>>;
 
   // Tester state
   testRows: any[];
@@ -102,7 +94,6 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
   const [aiQuestion, setAiQuestion] = useState<string>('');
   const [showCode, setShowCode] = useState<boolean>(true);
   const [showTester, setShowTester] = useState<boolean>(false);
-  const [showVariablesPanel, setShowVariablesPanel] = useState<boolean>(false);
 
   // Title state
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
@@ -112,12 +103,8 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
 
   // Layout state
   const [heightPx, setHeightPx] = useState<number>(480);
-  const [wVars, setWVars] = useState<number>(280);
   const [wTester, setWTester] = useState<number>(360);
   const [fontPx, setFontPx] = useState<number>(13);
-
-  // Variables state
-  const [selectedVars, setSelectedVars] = useState<string[]>([]);
 
   // Tester state
   const [testRows, setTestRows] = useState<any[]>([]);
@@ -134,8 +121,6 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
     setShowCode(true);
     setShowTester(false);
     setAiQuestion('');
-    setShowVariablesPanel(false);
-    setSelectedVars([]);
     setTesterHints({});
     setTestRows([]);
     setHasFailures(false);
@@ -162,7 +147,6 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
     setLastAcceptedScript(created ? String(base) : '');
     setTesterAllPass(null);
     setHeightPx(480);
-    setWVars(280);
     setWTester(360);
     setFontPx(13);
   }, [open, initialScript, label, defaultCode, flowCanvasId]);
@@ -197,8 +181,6 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
     setShowCode,
     showTester,
     setShowTester,
-    showVariablesPanel,
-    setShowVariablesPanel,
 
     // Title state
     isEditingTitle,
@@ -213,16 +195,10 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
     // Layout state
     heightPx,
     setHeightPx,
-    wVars,
-    setWVars,
     wTester,
     setWTester,
     fontPx,
     setFontPx,
-
-    // Variables state
-    selectedVars,
-    setSelectedVars,
 
     // Tester state
     testRows,

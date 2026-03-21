@@ -13,6 +13,8 @@ export interface MappingRowFieldsProps {
   /** Parent node with children but no row at this path — compact visual spacers */
   groupOnlyBackend?: boolean;
   groupOnlyInterface?: boolean;
+  /** Backend: when false, hide API field (variable only). */
+  showApiFields?: boolean;
   datalistApiId: string;
   datalistVarId: string;
   onPatch: (patch: Partial<MappingEntry>) => void;
@@ -25,6 +27,7 @@ export function MappingRowFields({
   entry,
   groupOnlyBackend,
   groupOnlyInterface,
+  showApiFields = true,
   datalistApiId,
   datalistVarId,
   onPatch,
@@ -36,7 +39,9 @@ export function MappingRowFields({
   if (variant === 'backend' && groupOnlyBackend) {
     return (
       <div className="flex items-center gap-2 shrink-0 opacity-30 pointer-events-none" aria-hidden>
-        <div className="h-7 w-[3.25rem] shrink-0 rounded border border-dashed border-slate-600/70" />
+        {showApiFields ? (
+          <div className="h-7 w-[3.25rem] shrink-0 rounded border border-dashed border-slate-600/70" />
+        ) : null}
         <div className="h-7 w-[3.25rem] shrink-0 rounded border border-slate-600/70" />
       </div>
     );
@@ -57,16 +62,18 @@ export function MappingRowFields({
   if (variant === 'backend') {
     return (
       <div className="flex items-center gap-2 shrink-0 min-w-0">
-        <AutosizeOneLineInput
-          mirrorClassName={mirror10}
-          inputClassName={`${inputBase} border border-dashed border-sky-500/50 text-sky-200/90 placeholder:text-slate-500`}
-          maxWidthClassName="max-w-[min(16rem,92vw)]"
-          minChars={3}
-          list={datalistApiId}
-          placeholder="Campo API"
-          value={entry.apiField}
-          onChange={(e) => onPatch({ apiField: e.target.value })}
-        />
+        {showApiFields ? (
+          <AutosizeOneLineInput
+            mirrorClassName={mirror10}
+            inputClassName={`${inputBase} border border-dashed border-sky-500/50 text-sky-200/90 placeholder:text-slate-500`}
+            maxWidthClassName="max-w-[min(16rem,92vw)]"
+            minChars={3}
+            list={datalistApiId}
+            placeholder="Campo API"
+            value={entry.apiField}
+            onChange={(e) => onPatch({ apiField: e.target.value })}
+          />
+        ) : null}
         <AutosizeOneLineInput
           mirrorClassName={mirror10}
           inputClassName={`${inputBase} border border-amber-600/60 text-amber-100/90 placeholder:text-slate-500`}

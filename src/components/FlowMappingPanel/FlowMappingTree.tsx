@@ -73,6 +73,8 @@ export interface FlowMappingTreeProps {
   onDropVariable?: (internalPath: string) => void;
   /** Backend: enable drag-from-header new parameter + drop targets */
   enableBackendParamDrop?: boolean;
+  /** Backend: when false, only variable field is shown per row */
+  showApiFields?: boolean;
 }
 
 function updateEntry(entries: MappingEntry[], id: string, patch: Partial<MappingEntry>): MappingEntry[] {
@@ -98,6 +100,7 @@ interface RowProps {
   entries: MappingEntry[];
   onEntriesChange: (next: MappingEntry[]) => void;
   enableBackendParamDrop: boolean;
+  showApiFields: boolean;
   dropIndicator: DropIndicatorState;
   onBackendParamDragOver: (pathKey: string, placement: ParamDropPlacement) => void;
   pendingLabelEditId: string | null;
@@ -116,6 +119,7 @@ function MappingTreeRow({
   entries,
   onEntriesChange,
   enableBackendParamDrop,
+  showApiFields,
   dropIndicator,
   onBackendParamDragOver,
   pendingLabelEditId,
@@ -258,6 +262,7 @@ function MappingTreeRow({
           entry={node.entry}
           groupOnlyBackend={variant === 'backend' && isGroupOnly}
           groupOnlyInterface={variant === 'interface' && isGroupOnly}
+          showApiFields={variant === 'backend' ? showApiFields : true}
           datalistApiId={datalistApi}
           datalistVarId={datalistVar}
           onPatch={patchEntry}
@@ -292,6 +297,7 @@ function MappingTreeRow({
               entries={entries}
               onEntriesChange={onEntriesChange}
               enableBackendParamDrop={enableBackendParamDrop}
+              showApiFields={showApiFields}
               dropIndicator={dropIndicator}
               onBackendParamDragOver={onBackendParamDragOver}
               pendingLabelEditId={pendingLabelEditId}
@@ -318,6 +324,7 @@ export function FlowMappingTree({
   showDropZone,
   onDropVariable,
   enableBackendParamDrop = false,
+  showApiFields = true,
 }: FlowMappingTreeProps) {
   const tree = useMemo(() => buildMappingTree(entries), [entries]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -500,6 +507,7 @@ export function FlowMappingTree({
           entries={entries}
           onEntriesChange={onEntriesChange}
           enableBackendParamDrop={Boolean(enableBackendParamDrop && variant === 'backend')}
+          showApiFields={variant === 'backend' ? showApiFields : true}
           dropIndicator={dropIndicator}
           onBackendParamDragOver={onBackendParamDragOver}
           pendingLabelEditId={pendingLabelEditId}

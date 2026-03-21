@@ -5,10 +5,9 @@ import ConditionTester, { CaseRow } from './ConditionTester';
 import CodeEditor, { CodeEditorRef } from '@components/CodeEditor/CodeEditor';
 import * as monacoNS from 'monaco-editor';
 import { setMonacoMarkers, clearMonacoMarkers } from '@utils/monacoMarkers';
-import { X, Pencil, Check, Code2, FlaskConical, ListChecks, Loader2 } from 'lucide-react';
+import { X, Pencil, Check, Code2, FlaskConical, Loader2 } from 'lucide-react';
 import { SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_ICONS } from '@components/Sidebar/sidebarTheme';
 import { setupMonacoEnvironment } from '@utils/monacoWorkerSetup';
-import VariablesPanel from './VariablesPanel';
 import { useAIProvider } from '@context/AIProviderContext';
 import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
 // Note: ScriptManagerService handles ExecCode/UICode conversion internally
@@ -77,16 +76,13 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     aiQuestion, setAiQuestion,
     showCode, setShowCode,
     showTester, setShowTester,
-    showVariablesPanel, setShowVariablesPanel,
     isEditingTitle, setIsEditingTitle,
     titleValue, setTitleValue,
     headerHover, setHeaderHover,
     titleInputPx, setTitleInputPx,
     heightPx, setHeightPx,
-    wVars, setWVars,
     wTester, setWTester,
     fontPx, setFontPx,
-    selectedVars, setSelectedVars,
     testRows, setTestRows,
     testerHints, setTesterHints,
     testerAllPass, setTesterAllPass,
@@ -318,12 +314,17 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
   // Update compiledJs when switching to JavaScript tab
   React.useEffect(() => {
-    if (editorMode === 'javascript' && script && !compiledJs) {
-      const compileResult = scriptManager.compileDSL(script);
-      if (compileResult.success && compileResult.jsCode) {
+    if (editorMode !== 'javascript' || !script || compiledJs) return;
+    let cancelled = false;
+    void (async () => {
+      const compileResult = await scriptManager.compileDSL(script);
+      if (!cancelled && compileResult.success && compileResult.jsCode) {
         setCompiledJs(compileResult.jsCode);
       }
-    }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [editorMode, script, compiledJs, scriptManager, setCompiledJs]);
 
   // ✅ REFACTOR: State reset is now handled in useConditionEditorState hook
@@ -409,6 +410,11 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     insertVariableToken,
     toggleAct,
     toggleMain,
+    filteredTreeActs,
+    filteredVarsForMenu,
+    navIndexByKey,
+    varsNavIndex,
+    setVarsNavIndex,
   } = intellisense;
 
   const [varsMenuMaxH] = React.useState<number>(280);
@@ -479,12 +485,13 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   const variablesUsedInScript = React.useMemo(() => (hasVarsInScript ? usedVarsInScript : variablesFlat), [hasVarsInScript, usedVarsInScript, variablesFlat]);
 
   // Keep variables visible even after regenerate: union of used-in-script and user-selected
+  /** Names for tester / tooling: full authoring set from props + anything referenced in script. */
   const variablesForPanel = React.useMemo(() => {
     const set = new Set<string>();
-    (variablesUsedInScript || []).forEach(k => set.add(k));
-    (selectedVars || []).forEach(k => set.add(k));
+    (variablesFlat || []).forEach((k) => set.add(k));
+    (variablesUsedInScript || []).forEach((k) => set.add(k));
     return Array.from(set);
-  }, [hasCreated, variablesUsedInScript, selectedVars]);
+  }, [variablesFlat, variablesUsedInScript]);
 
   // ✅ REFACTOR: Use domain function
   const variablesForTester = React.useMemo(() => {
@@ -507,15 +514,6 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     });
     return Array.from(chosen);
   }, [variablesFlat, duplicateGroups, preferredVarByTail]);
-
-  // Keep selected vars in sync after script generation (defaults = vars used in script)
-  React.useEffect(() => {
-    if (!hasCreated || !hasVarsInScript) return;
-    try {
-      const defaults = variablesUsedInScript;
-      setSelectedVars(prev => (prev.length === 0 ? defaults : prev));
-    } catch {}
-  }, [hasCreated, hasVarsInScript, script]);
 
   // const userChangedSelection = React.useMemo(() => {
   //   const a = [...(variablesUsedInScript || [])].sort().join('|');
@@ -664,7 +662,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
       const result = await aiService.generateCondition({
         nlText,
         variables: variablesFlatWithPreference,
-        selectedVars,
+        selectedVars: variablesFlatWithPreference,
         variablesFlatWithPreference,
         titleValue,
         duplicateGroups,
@@ -955,42 +953,12 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         {(() => {
           const columns: string[] = [];
           const add = (w: string, addSplitter: boolean) => { columns.push(w); if (addSplitter) columns.push('4px'); };
-          // describe removed; compute columns for remaining panels
-          const hasNextAfterVars = (!!showCode) || (!!showTester);
-          const hasNextAfterCode = (!!showTester);
-          // Describe column removed
-          if (showVariablesPanel) add(`${wVars}px`, hasNextAfterVars);
+          const hasNextAfterCode = !!showTester;
           if (showCode) add('minmax(420px, 2fr)', hasNextAfterCode);
           if (showTester) add(`${wTester}px`, false);
           if (columns.length === 0) columns.push('1fr');
           return (
         <div style={{ display: 'grid', gridTemplateColumns: columns.join(' '), gap: 6, alignItems: 'stretch', flex: '1 1 auto', minHeight: 0 }}>
-          {/* Describe panel removed */}
-          {/* Variables panel (now before Code) */}
-          {showVariablesPanel ? (
-            <VariablesPanel
-              variables={variablesForPanel}
-              selected={selectedVars}
-              onChange={setSelectedVars}
-              onClose={() => setShowVariablesPanel(false)}
-            />
-          ) : null}
-          {/* splitter after Variables if next column exists */}
-          {showVariablesPanel && (showTester || showCode) && (
-            <div
-              onMouseDown={(e) => {
-                e.preventDefault();
-                const startX = e.clientX; const startW = wVars;
-                const onMove = (ev: MouseEvent) => {
-                  const dx = ev.clientX - startX; let nw = startW + dx;
-                  nw = Math.max(200, Math.min(420, nw)); setWVars(nw);
-                };
-                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.style.cursor=''; };
-                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); document.body.style.cursor='col-resize';
-              }}
-              style={{ cursor: 'col-resize', width: 4, margin: '0 2px', background: 'rgba(148,163,184,0.25)', borderRadius: 2 }}
-            />
-          )}
           {/* Code panel - DSL/JavaScript editor with toolbar */}
           {showCode && (
           <div style={{ height: '100%', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0b1220', display: 'grid', gridTemplateRows: 'auto auto 1fr' }}>
@@ -1104,17 +1072,11 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                   </button>
                 );
               })()}
-              <button
-                title="Change the selection of the variables to consider"
-                aria-pressed={showVariablesPanel}
-                onClick={() => setShowVariablesPanel(v => !v)}
-                style={{ border: '1px solid', borderColor: showVariablesPanel ? '#38bdf8' : '#334155', borderRadius: 6, padding: '6px 10px', background: showVariablesPanel ? 'rgba(56,189,248,0.15)' : 'transparent', color: showVariablesPanel ? '#e5e7eb' : '#cbd5e1', fontWeight: showVariablesPanel ? 700 : 500 }}
-              ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><ListChecks className="w-4 h-4" /> {showVariablesPanel ? 'Hide variables' : 'Show variables'}</span></button>
               {hasCreated && (
                 <button
                   title="Open/close the test panel"
                   aria-pressed={showTester}
-                  onClick={() => setShowTester(v => !v)}
+                  onClick={() => setShowTester(!showTester)}
                   style={{ border: '1px solid', borderColor: showTester ? '#38bdf8' : '#334155', borderRadius: 6, padding: '6px 10px', background: showTester ? 'rgba(56,189,248,0.15)' : 'transparent', color: showTester ? '#e5e7eb' : '#cbd5e1', fontWeight: showTester ? 700 : 500 }}
                 ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><FlaskConical className="w-4 h-4" /> Test Code</span></button>
               )}

@@ -279,6 +279,8 @@ interface NodeRowLabelProps {
   onOpenSemanticValuesEditor?: () => void;
   hasSemanticValues?: boolean;
   semanticValuesAnchorRef?: React.RefObject<HTMLButtonElement | null>;
+  /** Nodo nascosto: non montare overlay/toolbar nel body (evita icone flottanti). */
+  suppressFloatingChrome?: boolean;
 }
 
 export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
@@ -319,7 +321,8 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   onErrorFix,
   onOpenSemanticValuesEditor,
   hasSemanticValues,
-  semanticValuesAnchorRef
+  semanticValuesAnchorRef,
+  suppressFloatingChrome = false,
 }) => {
   // ✅ ARCHITECTURAL: Use GlobalTestPanel context for testing
   const { openWithTask } = useGlobalTestPanel();
@@ -416,17 +419,17 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       })()}
       {/* Gear icon intentionally omitted next to label; shown only in the external actions strip */}
       {row.text}
-      {/* Yellow bordered hover area - always visible to trigger toolbar */}
-      {createPortal(
-        <EmptySpaceOverlay
-          labelRef={labelRef}
-          iconPos={iconPos || { top: 0, left: 0 }}
-          onHoverEnter={() => onLabelHoverChange && onLabelHoverChange(true)}
-          onHoverLeave={() => onLabelHoverChange && onLabelHoverChange(false)}
-        />,
-        document.body
-      )}
-      {showIcons && iconPos && createPortal(
+      {!suppressFloatingChrome &&
+        createPortal(
+          <EmptySpaceOverlay
+            labelRef={labelRef}
+            iconPos={iconPos || { top: 0, left: 0 }}
+            onHoverEnter={() => onLabelHoverChange && onLabelHoverChange(true)}
+            onHoverLeave={() => onLabelHoverChange && onLabelHoverChange(false)}
+          />,
+          document.body
+        )}
+      {!suppressFloatingChrome && showIcons && iconPos && createPortal(
         <NodeRowActionsOverlay
           iconPos={iconPos}
           showIcons={showIcons}

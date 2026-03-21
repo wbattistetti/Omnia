@@ -36,4 +36,6 @@ export interface NodeRowProps {
   updateNodeRows?: (mutate: (rows: import('./project').NodeRowData[]) => import('./project').NodeRowData[]) => void;
   /** Generates child nodes/edges from semantic values of this row. */
   onAppendSemanticNodes?: (row: import('./project').NodeRowData, values: import('./taskTypes').SemanticValue[]) => Promise<void> | void;
+  /** Nodo flow nascosto (ancora temporanea): niente toolbar/overlay riga portati nel body. */
+  suppressRowToolbar?: boolean;
 }

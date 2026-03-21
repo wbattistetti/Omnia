@@ -8,10 +8,12 @@ import ReactFlow, {
   BackgroundVariant,
   useReactFlow,
   applyNodeChanges,
-  applyEdgeChanges
+  applyEdgeChanges,
+  useStoreApi,
+  internalsSymbol,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { debug, error } from '../../utils/logger';
+import { debug, error as logError } from '../../utils/logger';
 import { CustomNode } from './nodes/CustomNode/CustomNode';
 import { TaskNode } from './nodes/TaskNode/TaskNode';
 import { FlowSubflowProvider } from './context/FlowSubflowContext';
@@ -51,6 +53,9 @@ import { ExecutionStateProvider } from './executionHighlight/ExecutionStateConte
 import { FlowStateBridge } from '../../services/FlowStateBridge';
 import { useCompilationErrors } from '../../context/CompilationErrorsContext';
 import { useFlowchartState } from '../../context/FlowchartStateContext';
+import { intellisenseAnchorFlowFromHandles, VHV_COLLINEAR_EPS_PX } from './edges/utils/edgeRouting';
+import { waitForHandleBounds } from './utils/waitForHandleBounds';
+import { diagFlowLink } from './utils/flowTempLinkDiag';
 
 // Edge types stabile per evitare warning React Flow
 const edgeTypes = { custom: CustomEdge };
@@ -99,7 +104,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     connectionMenuRef
   } = useConnectionMenu();
   const reactFlowInstance = useReactFlow();
-  // Rimuovo tempEdgeIdState
+  const storeApi = useStoreApi();
   const selection = useSelectionManager();
 
   const { selectedEdgeId, setSelectedEdgeId, selectedNodeIds, setSelectedNodeIds, selectionMenu, setSelectionMenu, handleEdgeClick } = selection;
@@ -188,15 +193,18 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Deferred apply for labels on just-created edges (avoids race with RF state)
   const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler(setEdges, setSelectedEdgeId, connectionMenuRef);
 
-  // Export scheduleApplyLabel and setEdges for Intellisense
+  // Export scheduleApplyLabel, setEdges e setNodes per Intellisense (finalize link → hidden: false sul nodo temp)
+  // Nota: usa `setNodes` (non setNodesWithLog) perché questo effect è sopra alla definizione di setNodesWithLog.
   useEffect(() => {
     FlowStateBridge.setScheduleApplyLabel(scheduleApplyLabel);
     FlowStateBridge.setSetEdges(setEdges);
+    FlowStateBridge.setSetNodes(setNodes);
     return () => {
       FlowStateBridge.setScheduleApplyLabel(undefined);
       FlowStateBridge.setSetEdges(undefined);
+      FlowStateBridge.setSetNodes(undefined);
     };
-  }, [scheduleApplyLabel, setEdges]);
+  }, [scheduleApplyLabel, setEdges, setNodes]);
 
   // Log execution state changes (only when values change)
   const prevStateRef = useRef<{ currentNodeId?: string | null; executedCount?: number; isRunning?: boolean }>({});
@@ -541,6 +549,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setNodes,
     setEdges,
     reactFlowInstance,
+    storeApi,
     connectionMenuRef,
     onDeleteEdge,
     setNodesWithLog,
@@ -561,13 +570,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // ✅ NUOVO: Hook per aprire intellisense
   const { state, actions: intellisenseActions } = useIntellisense();
-  console.debug('[FlowEditor] useIntellisense returned:', {
-    hasActions: !!intellisenseActions,
-    hasOpenForEdge: !!intellisenseActions?.openForEdge,
-    openForEdgeType: typeof intellisenseActions?.openForEdge,
-    isFunction: typeof intellisenseActions?.openForEdge === 'function'
-  });
-
 
   const onConnectEnd = useCallback((event: any) => {
     // Reset connection flag on release
@@ -594,20 +596,116 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       withNodeLock(async () => {
         try {
           const result = await createTemporaryNode(event);
-          const { tempEdgeId } = result;
-          // ✅ Pass mouse coordinates to openForEdge
-          if (intellisenseActions?.openForEdge) {
-            intellisenseActions.openForEdge(tempEdgeId);
+          const { tempEdgeId, tempNodeId, sourceNodeId, sourceHandleId, verticalColumnDrop } = result;
+
+          diagFlowLink('onConnectEnd:afterCreateTemp', {
+            tempEdgeId,
+            tempNodeId,
+            sourceNodeId,
+            sourceHandleId,
+            clientX: event.clientX,
+            clientY: event.clientY,
+          });
+
+          if (!intellisenseActions?.openForEdge) {
+            diagFlowLink('onConnectEnd:skip', { reason: 'no_openForEdge' });
+            return;
+          }
+
+          try {
+            await waitForHandleBounds(storeApi, tempNodeId);
+          } catch (e) {
+            logError('FLOW_EDITOR', 'waitForHandleBounds(temp node)', e);
+            diagFlowLink('openForEdge:fallback', {
+              reason: 'waitForHandleBounds_timeout_or_error',
+              tempEdgeId,
+              tempNodeId,
+              linkMidScreen: { x: event.clientX, y: event.clientY },
+            });
+            intellisenseActions.openForEdge(tempEdgeId, {
+              linkMidScreen: { x: event.clientX, y: event.clientY },
+            });
+            return;
+          }
+
+          const nodeInternals: Map<string, any> = storeApi.getState().nodeInternals;
+          const srcInternal = nodeInternals.get(sourceNodeId);
+          const tgtInternal = nodeInternals.get(tempNodeId);
+
+          const srcHandles = srcInternal?.[internalsSymbol as any]?.handleBounds?.source as Array<{ id: string; x: number; y: number; width: number; height: number }> | undefined;
+          const tgtHandles = tgtInternal?.[internalsSymbol as any]?.handleBounds?.target as Array<{ id: string; x: number; y: number; width: number; height: number }> | undefined;
+
+          const srcHandle = srcHandles?.find(h => h.id === sourceHandleId) ?? srcHandles?.[0];
+          const tgtHandle = tgtHandles?.find(h => h.id === 'top-target') ?? tgtHandles?.[0];
+
+          diagFlowLink('openForEdge:internals', {
+            hasSrcInternal: !!srcInternal,
+            hasTgtInternal: !!tgtInternal,
+            sourceSourceHandleIds: srcHandles?.map((h) => h.id) ?? [],
+            targetTargetHandleIds: tgtHandles?.map((h) => h.id) ?? [],
+            pickedSourceHandleId: srcHandle?.id ?? null,
+            pickedTargetHandleId: tgtHandle?.id ?? null,
+            sourceHandleIdRequested: sourceHandleId,
+          });
+
+          if (srcHandle && tgtHandle && srcInternal && tgtInternal) {
+            const readCenters = () => {
+              const srcP = srcInternal[internalsSymbol as any]?.positionAbsolute ?? srcInternal.positionAbsolute;
+              const tgtP = tgtInternal[internalsSymbol as any]?.positionAbsolute ?? tgtInternal.positionAbsolute;
+              return {
+                sx: (srcP?.x ?? 0) + srcHandle.x + srcHandle.width / 2,
+                sy: (srcP?.y ?? 0) + srcHandle.y + srcHandle.height / 2,
+                tx: (tgtP?.x ?? 0) + tgtHandle.x + tgtHandle.width / 2,
+                ty: (tgtP?.y ?? 0) + tgtHandle.y + tgtHandle.height / 2,
+                srcPos: srcP,
+                tgtPos: tgtP,
+              };
+            };
+
+            const { sx, sy, tx, ty, srcPos, tgtPos } = readCenters();
+
+            const anchorFlow = intellisenseAnchorFlowFromHandles(sx, sy, tx, ty);
+            const linkMidScreen = reactFlowInstance.flowToScreenPosition(anchorFlow);
+            diagFlowLink('openForEdge:anchor', {
+              srcPos,
+              tgtPos,
+              sx,
+              sy,
+              tx,
+              ty,
+              deltaFlowX: Math.abs(tx - sx),
+              verticalColumnDrop,
+              vhvCollinearEps: VHV_COLLINEAR_EPS_PX,
+              anchorFlow,
+              linkMidScreen,
+            });
+            intellisenseActions.openForEdge(tempEdgeId, { linkMidScreen });
+          } else {
+            logError('FLOW_EDITOR', 'openForEdge: missing handle bounds after wait', {
+              sourceNodeId,
+              tempNodeId,
+            });
+            diagFlowLink('openForEdge:fallback', {
+              reason: 'missing_handles_after_wait',
+              tempEdgeId,
+              linkMidScreen: { x: event.clientX, y: event.clientY },
+            });
+            intellisenseActions.openForEdge(tempEdgeId, {
+              linkMidScreen: { x: event.clientX, y: event.clientY },
+            });
           }
         } catch (error) {
-          // Silent fail
+          logError('FLOW_EDITOR', 'onConnectEnd temp node / intellisense', error);
+          diagFlowLink('onConnectEnd:error', {
+            message: error instanceof Error ? error.message : String(error),
+          });
         }
       });
     } else {
       // Solo se NON stiamo creando un nodo, pulisci i temporanei
       cleanupAllTempNodesAndEdges();
     }
-  }, [withNodeLock, createTemporaryNode, openMenu, cleanupAllTempNodesAndEdges, pendingEdgeIdRef, intellisenseActions]);
+  }, [withNodeLock, createTemporaryNode, openMenu, cleanupAllTempNodesAndEdges, pendingEdgeIdRef, intellisenseActions, storeApi, reactFlowInstance]);
 
   // Event handlers moved to useFlowEventHandlers hook
 
@@ -866,14 +964,16 @@ export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
     getFlowEdges: () => FlowStateBridge.getEdges(),
   }), [projectData]);
 
+  // ReactFlowProvider deve avvolgere il canvas; IntellisenseProvider sta *sotto* così
+  // useIntellisense e useReactFlow condividono lo stesso sottoalbero (evita ctx null in dev/HMR).
   return (
     <NodeRegistryProvider>
-      <IntellisenseProvider providers={intellisenseProviders}>
-        <ReactFlowProvider>
+      <ReactFlowProvider>
+        <IntellisenseProvider providers={intellisenseProviders}>
           <FlowEditorContent {...props} />
           <IntellisensePopover />
-        </ReactFlowProvider>
-      </IntellisenseProvider>
+        </IntellisenseProvider>
+      </ReactFlowProvider>
     </NodeRegistryProvider>
   );
 };

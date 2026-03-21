@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { NodeRowData } from '../../../../../types/project';
 import { useDynamicFontSizes } from '../../../../../hooks/useDynamicFontSizes';
+import { getEmptyCustomNodeMinWidthFromNodeRowCss } from '../../../utils/emptyCustomNodeMinWidth';
 import type { SemanticValue } from '../../../../../types/taskTypes';
 
 interface UseNodeRenderingProps {
@@ -87,6 +88,7 @@ export function useNodeRendering({
         handleInsertRow: handleInsertRow,
         updateNodeRows,
         onAppendSemanticNodes,
+        suppressRowToolbar: Boolean((normalizedData as any)?.hidden),
         onUpdate: (row: any, newText: string) => {
           // Estrai tutti i campi importanti dalla row per preservarli (incluso isUndefined e heuristics)
           const meta = {
@@ -122,6 +124,7 @@ export function useNodeRendering({
         editingRowId,
         updateNodeRows,
         onAppendSemanticNodes,
+        normalizedData,
         handleUpdateRow,
         handleDeleteRow,
         handleInsertRow,
@@ -194,13 +197,7 @@ export function useNodeRendering({
 
         // Se il nodo è vuoto, calcola larghezza per 25 caratteri basata sul font size
         if (isEmpty) {
-            const fontSizeNum = parseFloat(fontSizes.nodeRow) || 14;
-            const charWidth = fontSizeNum * 0.6; // Approssimazione larghezza carattere (monospace-like)
-            const textWidth = 25 * charWidth; // 25 caratteri
-            const padding = 40; // Padding laterale (sinistra + destra)
-            const minWidth = Math.ceil(textWidth + padding);
-
-            return Math.max(minWidth, 140); // Almeno 140px come minimo assoluto
+            return getEmptyCustomNodeMinWidthFromNodeRowCss(fontSizes.nodeRow);
         }
 
         // Default: 140px se nodo non è vuoto e non ha larghezza misurata
@@ -212,6 +209,7 @@ export function useNodeRendering({
         const initialWidth = calculateInitialWidth();
         return {
             opacity: normalizedData.hidden ? 0 : 1,
+            pointerEvents: (normalizedData.hidden ? 'none' : 'auto') as 'none' | 'auto',
             minWidth: nodeWidth ? `${nodeWidth}px` : `${initialWidth}px`,
             width: nodeWidth ? `${nodeWidth}px` : 'fit-content',
             position: 'relative' as const,

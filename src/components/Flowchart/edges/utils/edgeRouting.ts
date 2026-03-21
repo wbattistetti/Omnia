@@ -13,7 +13,44 @@
  * @param ty - Target Y coordinate
  * @returns SVG path string in compact format
  */
+/** Sotto questa distanza orizzontale (coord. flow/screen) il VHV collassa in un segmento verticale. */
+export const VHV_COLLINEAR_EPS_PX = 12;
+
+/**
+ * Restituisce il punto medio sulla polilinea VHV generata da getVHVPath.
+ * Usato per allineare l'editor di condizione al segmento realmente disegnato.
+ */
+export function midpointOnVHVPath(
+  sx: number, sy: number,
+  tx: number, ty: number,
+): { x: number; y: number } {
+  if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
+    // segmento verticale: la linea corre a x = (sx+tx)/2
+    return { x: (sx + tx) / 2, y: (sy + ty) / 2 };
+  }
+  // VHV: tre segmenti verticale-orizzontale-verticale; il midpoint cade sul tratto orizzontale
+  const midY = (sy + ty) / 2;
+  return { x: (sx + tx) / 2, y: midY };
+}
+
+/**
+ * Punto flow per ancorare l’editor condizione: colonna verticale → X handle sorgente, Y metà segmento;
+ * altrimenti centro polilinea VHV come il path disegnato.
+ */
+export function intellisenseAnchorFlowFromHandles(
+  sx: number, sy: number, tx: number, ty: number,
+): { x: number; y: number } {
+  if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
+    return { x: sx, y: (sy + ty) / 2 };
+  }
+  return midpointOnVHVPath(sx, sy, tx, ty);
+}
+
 export function getVHVPath(sx: number, sy: number, tx: number, ty: number): string {
+  if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
+    const x = (sx + tx) / 2;
+    return `M ${x},${sy} L ${x},${ty}`;
+  }
   const midY = (sy + ty) / 2;
   return `M ${sx},${sy} L ${sx},${midY} L ${tx},${midY} L ${tx},${ty}`;
 }

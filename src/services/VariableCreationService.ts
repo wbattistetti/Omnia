@@ -190,47 +190,96 @@ class VariableCreationService {
    * The variable is added to the same in-memory store and will be persisted on project save.
    * Creates the label-GUID mapping automatically (varId = GUID, varName = label).
    */
-  createManualVariable(projectId: string, varName: string): VariableInstance {
+  /**
+   * Create a manual variable (no task instance). Default scope is project (visible in all flows).
+   * Use scope "flow" + scopeFlowId to bind to one flow canvas.
+   */
+  createManualVariable(
+    projectId: string,
+    varName: string,
+    options?: EnsureManualVariableOptions
+  ): VariableInstance {
+    const scope: VariableScope = options?.scope ?? 'project';
+    const scopeFlowId =
+      scope === 'flow'
+        ? String(options?.scopeFlowId ?? getActiveFlowCanvasId()).trim()
+        : '';
+
+    const trimmed = varName.trim();
+    if (!trimmed) {
+      throw new Error('[VariableCreationService] createManualVariable: varName must be non-empty');
+    }
+
     const existing = this.store.get(projectId) ?? [];
 
-    // Check if variable with same name already exists at project scope
     const existingVar = existing.find(
-      v => v.varName === varName.trim() && (v.scope ?? 'project') === 'project'
+      v =>
+        v.varName === trimmed &&
+        sameVariableScopeBucket(v, scope, scope === 'flow' ? scopeFlowId : null)
     );
     if (existingVar) {
-      console.log('[VariableCreationService] ⚠️ Variable already exists', {
-        projectId,
-        varName,
-        existingVarId: existingVar.varId
-      });
       return existingVar;
     }
 
-    // ✅ Create variable with GUID (varId) and label (varName) mapping
     const newVariable: VariableInstance = {
-      varId: this.generateGuid(), // ✅ GUID generated automatically
-      varName: varName.trim(), // ✅ Label stored (creates label-GUID mapping)
-      taskInstanceId: '', // Empty as requested
-      nodeId: '', // Empty as requested
-      ddtPath: '', // Empty for manual variables
-      scope: 'project',
+      varId: this.generateGuid(),
+      varName: trimmed,
+      taskInstanceId: '',
+      nodeId: '',
+      ddtPath: '',
+      scope,
+      scopeFlowId: scope === 'flow' ? scopeFlowId : undefined,
     };
 
-    // ✅ Add to the same in-memory store (unified collection)
     this.store.set(projectId, [...existing, newVariable]);
-
-    console.log('[VariableCreationService] ✅ Manual variable created and added to store', {
-      projectId,
-      varId: newVariable.varId, // ✅ GUID
-      varName: newVariable.varName, // ✅ Label (label-GUID mapping created)
-      taskInstanceId: newVariable.taskInstanceId || '(empty)',
-      nodeId: newVariable.nodeId || '(empty)',
-      ddtPath: newVariable.ddtPath || '(empty)',
-      totalVariablesInStore: this.store.get(projectId)?.length || 0,
-      isManualVariable: true // ✅ Flag to identify manual variables
-    });
-
     return newVariable;
+  }
+
+  /**
+   * Remove a variable by id only if it is not bound to a task instance (manual / flow-slot row).
+   */
+  removeVariableByVarId(projectId: string, varId: string): boolean {
+    const existing = this.store.get(projectId) ?? [];
+    const v = existing.find(x => x.varId === varId);
+    if (!v || String(v.taskInstanceId ?? '').trim().length > 0) {
+      return false;
+    }
+    this.store.set(
+      projectId,
+      existing.filter(x => x.varId !== varId)
+    );
+    return true;
+  }
+
+  /**
+   * Rename a manual/flow-only variable; task-bound rows cannot be renamed here.
+   */
+  renameVariableByVarId(projectId: string, varId: string, newName: string): boolean {
+    const trimmed = newName.trim();
+    if (!trimmed) return false;
+
+    const existing = this.store.get(projectId) ?? [];
+    const v = existing.find(x => x.varId === varId);
+    if (!v || String(v.taskInstanceId ?? '').trim().length > 0) {
+      return false;
+    }
+
+    const scope: VariableScope = v.scope ?? 'project';
+    const bucketFlowId = scope === 'flow' ? String(v.scopeFlowId ?? '').trim() : null;
+
+    const dup = existing.some(
+      x =>
+        x.varId !== varId &&
+        x.varName === trimmed &&
+        sameVariableScopeBucket(x, scope, bucketFlowId)
+    );
+    if (dup) return false;
+
+    this.store.set(
+      projectId,
+      existing.map(x => (x.varId === varId ? { ...x, varName: trimmed } : x))
+    );
+    return true;
   }
 
   /**
