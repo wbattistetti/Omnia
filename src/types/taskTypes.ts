@@ -346,6 +346,21 @@ export interface Task {
   method?: string;              // HTTP method
   params?: Record<string, any>;  // Parameters
 
+  // Per AIAgent (design-time + runtime prompt persistence):
+  agentDesignDescription?: string;
+  agentPrompt?: string;
+  outputVariableMappings?: Record<string, string>;
+  agentProposedFields?: Array<{ field_name: string; label: string; type: string; required: boolean }>;
+  agentSampleDialogue?: Array<{ role: string; content: string }>;
+  /** Anteprima design-time per stile (contenuto + note designer). */
+  agentPreviewByStyle?: Record<string, Array<{ role: string; content: string; designerNote?: string; logicalStepId?: string }>>;
+  agentPreviewStyleId?: string;
+  agentInitialStateTemplateJson?: string;
+  /** Dopo "Implement": design congelato (solo lettura fino a sblocco). */
+  agentDesignFrozen?: boolean;
+  /** True dopo almeno una generazione LLM riuscita (etichetta Create vs Refine). */
+  agentDesignHasGeneration?: boolean;
+
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
   // category?: string;              // ID categoria (preset o custom)
   // categoryCustom?: CustomCategory; // Se custom, dettagli completi

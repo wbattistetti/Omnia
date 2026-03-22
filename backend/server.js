@@ -6,6 +6,7 @@ const { MongoClient, ObjectId } = require('mongodb');
 
 // ✅ ENTERPRISE AI SERVICES
 const AIProviderService = require('./services/AIProviderService');
+const { generateAIAgentDesign } = require('./services/AIAgentDesignService');
 const { TemplateIntelligenceOrchestrator } = require('./services/ddt-intelligence');
 
 // ✅ ENTERPRISE MIDDLEWARE
@@ -5892,6 +5893,37 @@ function getPatternMemoryService() {
   }
   return patternMemoryService;
 }
+
+/**
+ * Design-time: generate AI Agent task artifacts from a natural language description.
+ * Body: { userDesc: string, provider?: 'groq'|'openai', model?: string }
+ */
+app.post('/design/ai-agent-generate', async (req, res) => {
+  const requestId = Date.now();
+  try {
+    const { userDesc, provider = 'groq', model } = req.body || {};
+    console.log(`[AI_AGENT_DESIGN][${requestId}] POST /design/ai-agent-generate`, {
+      provider,
+      model,
+      descLen: typeof userDesc === 'string' ? userDesc.length : 0,
+    });
+    const design = await generateAIAgentDesign({
+      userDesc,
+      provider,
+      model,
+      aiProviderService,
+    });
+    return res.json({ success: true, design });
+  } catch (error) {
+    console.error(`[AI_AGENT_DESIGN][${requestId}] Error:`, error.message);
+    const status = error.message && error.message.includes('userDesc') ? 400 : 502;
+    return res.status(status).json({
+      success: false,
+      error: error.message || 'AI agent design failed',
+      rawSnippet: error.rawSnippet,
+    });
+  }
+});
 
 // Provider selection endpoint
 app.post('/step2-with-provider', async (req, res) => {

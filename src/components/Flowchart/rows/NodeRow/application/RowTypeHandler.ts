@@ -108,9 +108,24 @@ export class RowTypeHandler {
 
         // ✅ Caso 3: Tutti gli altri tipi (o UtteranceInterpretation con template) → crea task
         // For BackendCall, create task with default fields (endpoint, inputs, outputs)
-        const taskFields = finalTaskType === TaskType.BackendCall
+        // For AIAgent, create task with design-time fields (prompt, mappings, generated artifacts)
+        const taskFields =
+          finalTaskType === TaskType.BackendCall
             ? { endpoint: '', inputs: [], outputs: [] }
-            : undefined;
+            : finalTaskType === TaskType.AIAgent
+              ? {
+                  agentDesignDescription: '',
+                  agentPrompt: '',
+                  outputVariableMappings: {} as Record<string, string>,
+                  agentProposedFields: [],
+                  agentSampleDialogue: [],
+                  agentPreviewByStyle: {},
+                  agentPreviewStyleId: 'informal',
+                  agentInitialStateTemplateJson: '{}',
+                  agentDesignFrozen: false,
+                  agentDesignHasGeneration: false,
+                }
+              : undefined;
 
         taskRepository.createTask(
           finalTaskType,
@@ -196,6 +211,26 @@ export class RowTypeHandler {
               TaskType.BackendCall,
               null, // templateId: null (standalone, no template concept for BackendCall)
               { endpoint: '', inputs: [], outputs: [] },
+              taskId,
+              projectId
+            );
+            flushSemanticDraftToTaskOnTaskCreated(this.row as unknown as NodeRowData, taskId);
+          } else if (taskType === TaskType.AIAgent) {
+            taskRepository.createTask(
+              TaskType.AIAgent,
+              null,
+              {
+                agentDesignDescription: '',
+                agentPrompt: '',
+                outputVariableMappings: {} as Record<string, string>,
+                agentProposedFields: [],
+                agentSampleDialogue: [],
+                agentPreviewByStyle: {},
+                agentPreviewStyleId: 'informal',
+                agentInitialStateTemplateJson: '{}',
+                agentDesignFrozen: false,
+                agentDesignHasGeneration: false,
+              },
               taskId,
               projectId
             );
