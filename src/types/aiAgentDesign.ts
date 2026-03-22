@@ -18,9 +18,23 @@ export interface AIAgentDesignSampleTurn {
   content: string;
 }
 
-export interface AIAgentDesignPayload {
+/**
+ * Structured runtime instructions (composed server-side into Markdown `agent_prompt`).
+ */
+export interface AIAgentStructuredSectionTexts {
+  behavior_spec: string;
+  positive_constraints: string;
+  negative_constraints: string;
+  operational_sequence: string;
+  correction_rules: string;
+  /** Optional; may be empty when not used. */
+  conversational_state: string;
+}
+
+export interface AIAgentDesignPayload extends AIAgentStructuredSectionTexts {
   proposed_variables: AIAgentProposedVariable[];
   initial_state_template: Record<string, unknown>;
+  /** Assembled Markdown runtime prompt (read-only in UI). */
   agent_prompt: string;
   sample_dialogue: AIAgentDesignSampleTurn[];
   design_notes: string;

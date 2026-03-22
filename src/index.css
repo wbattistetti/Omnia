@@ -152,3 +152,19 @@
   background-color: rgba(16, 185, 129, 0.2) !important;
   border-radius: 8px;
 }
+
+/* AI Agent revision editor — dual-layer mirror (insert/delete) */
+.omnia-text-rev-insert {
+  color: #86efac;                        /* green-300 — leggibile su slate-900 */
+  background: rgba(34, 197, 94, 0.15);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.omnia-text-rev-delete {
+  color: #fca5a5;                        /* red-300 — leggibile su slate-900 */
+  text-decoration: line-through;
+  text-decoration-color: #f87171;
+}
+.omnia-text-rev-base {
+  color: inherit;
+}

@@ -7,6 +7,11 @@ const { MongoClient, ObjectId } = require('mongodb');
 // ✅ ENTERPRISE AI SERVICES
 const AIProviderService = require('./services/AIProviderService');
 const { generateAIAgentDesign } = require('./services/AIAgentDesignService');
+const {
+  generateUseCaseBundle,
+  regenerateUseCase,
+  regenerateTurn,
+} = require('./services/AIAgentUseCaseService');
 const { TemplateIntelligenceOrchestrator } = require('./services/ddt-intelligence');
 
 // ✅ ENTERPRISE MIDDLEWARE
@@ -5901,17 +5906,86 @@ function getPatternMemoryService() {
 app.post('/design/ai-agent-generate', async (req, res) => {
   const requestId = Date.now();
   try {
-    const { userDesc, provider = 'groq', model } = req.body || {};
+    const body = req.body || {};
+    const {
+      action,
+      userDesc,
+      provider = 'groq',
+      model,
+      refinementPatch,
+      baseText,
+      outputLanguage,
+      sectionRefinements,
+      runtimeContext,
+      useCase,
+      allUseCases,
+      logicalSteps,
+      turnId,
+    } = body;
+
+    if (action === 'generate_use_cases') {
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] generate_use_cases`, { provider, model });
+      const bundle = await generateUseCaseBundle({
+        userDesc,
+        runtimeContext,
+        outputLanguage,
+        provider,
+        model,
+        aiProviderService,
+      });
+      return res.json({
+        success: true,
+        logical_steps: bundle.logical_steps,
+        use_cases: bundle.use_cases,
+      });
+    }
+
+    if (action === 'regenerate_use_case') {
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] regenerate_use_case`, { provider, model });
+      const updated = await regenerateUseCase({
+        useCase,
+        allCases: Array.isArray(allUseCases) ? allUseCases : [],
+        logicalSteps: Array.isArray(logicalSteps) ? logicalSteps : [],
+        outputLanguage,
+        provider,
+        model,
+        aiProviderService,
+      });
+      return res.json({ success: true, use_case: updated });
+    }
+
+    if (action === 'regenerate_turn') {
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] regenerate_turn`, { provider, model });
+      const turn = await regenerateTurn({
+        useCase,
+        turnId,
+        outputLanguage,
+        provider,
+        model,
+        aiProviderService,
+      });
+      return res.json({ success: true, turn });
+    }
+
+    const sectionN = Array.isArray(sectionRefinements) ? sectionRefinements.length : 0;
     console.log(`[AI_AGENT_DESIGN][${requestId}] POST /design/ai-agent-generate`, {
       provider,
       model,
       descLen: typeof userDesc === 'string' ? userDesc.length : 0,
+      patchLen: Array.isArray(refinementPatch) ? refinementPatch.length : 0,
+      baseLen: typeof baseText === 'string' ? baseText.length : 0,
+      outputLanguage: typeof outputLanguage === 'string' ? outputLanguage : '',
+      sectionRefinements: sectionN,
     });
     const design = await generateAIAgentDesign({
       userDesc,
       provider,
       model,
       aiProviderService,
+      refinementPatch,
+      baseText,
+      sectionRefinements,
+      outputLanguage,
     });
     return res.json({ success: true, design });
   } catch (error) {

@@ -349,6 +349,8 @@ export interface Task {
   // Per AIAgent (design-time + runtime prompt persistence):
   agentDesignDescription?: string;
   agentPrompt?: string;
+  /** JSON string: structured sections with per-section revision state (base + deletedMask + inserts). */
+  agentStructuredSectionsJson?: string;
   outputVariableMappings?: Record<string, string>;
   agentProposedFields?: Array<{ field_name: string; label: string; type: string; required: boolean }>;
   agentSampleDialogue?: Array<{ role: string; content: string }>;
@@ -360,6 +362,10 @@ export interface Task {
   agentDesignFrozen?: boolean;
   /** True dopo almeno una generazione LLM riuscita (etichetta Create vs Refine). */
   agentDesignHasGeneration?: boolean;
+  /** JSON array: logical steps for use case composer (design-time). */
+  agentLogicalStepsJson?: string;
+  /** JSON array: use cases tree + dialogue (design-time). */
+  agentUseCasesJson?: string;
 
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
   // category?: string;              // ID categoria (preset o custom)

@@ -9,7 +9,79 @@
 
 const META_SYSTEM = `You are an expert conversational AI designer for the OMNIA dialogue engine.
 You MUST respond with a single valid JSON object only (no markdown fences, no commentary).
-The JSON must match the schema described in the user message exactly.`;
+The JSON must match the schema described in the user message exactly.
+When the user message specifies OUTPUT_LANGUAGE, write every human-readable string in the JSON in that language (structured section bodies, sample_dialogue content, design_notes, proposed_variables labels, string values inside initial_state_template such as task id labels if natural language).
+Do NOT include a top-level "agent_prompt" key in your JSON; the server assembles the runtime prompt from structured sections.`;
+
+/** @type {readonly string[]} */
+const STRUCTURED_SECTION_IDS = [
+  'behavior_spec',
+  'positive_constraints',
+  'negative_constraints',
+  'operational_sequence',
+  'correction_rules',
+  'conversational_state',
+];
+
+const REQUIRED_NONEMPTY_SECTION_KEYS = [
+  'behavior_spec',
+  'positive_constraints',
+  'negative_constraints',
+  'operational_sequence',
+  'correction_rules',
+];
+
+const SECTION_MARKDOWN_TITLES = {
+  behavior_spec: 'Behavior Spec',
+  positive_constraints: 'Vincoli positivi',
+  negative_constraints: 'Vincoli negativi',
+  operational_sequence: 'Sequenza operativa',
+  correction_rules: 'Regole di correzione',
+  conversational_state: 'Stato conversazionale',
+};
+
+/**
+ * @param {Record<string, string>} sections
+ * @returns {string}
+ */
+function composeRuntimePromptMarkdownFromSections(sections) {
+  const order = [
+    'behavior_spec',
+    'positive_constraints',
+    'negative_constraints',
+    'operational_sequence',
+    'correction_rules',
+    'conversational_state',
+  ];
+  const chunks = [];
+  for (const id of order) {
+    const body = String(sections[id] ?? '').trim();
+    if (id === 'conversational_state' && !body) continue;
+    const title = SECTION_MARKDOWN_TITLES[id];
+    chunks.push(`## ${title}\n\n${body.length > 0 ? body : '—'}`);
+  }
+  return chunks.join('\n\n').trim();
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {Array<{ sectionId: string, baseText: string, refinementPatch: unknown[] }>|undefined}
+ */
+function normalizeSectionRefinements(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  const out = [];
+  for (const e of raw) {
+    if (!e || typeof e !== 'object') continue;
+    const sectionId = typeof e.sectionId === 'string' ? e.sectionId.trim() : '';
+    if (!STRUCTURED_SECTION_IDS.includes(sectionId)) continue;
+    out.push({
+      sectionId,
+      baseText: typeof e.baseText === 'string' ? e.baseText : '',
+      refinementPatch: Array.isArray(e.refinementPatch) ? e.refinementPatch : [],
+    });
+  }
+  return out.length ? out : undefined;
+}
 
 /** Canonical entity types (keep in sync with frontend src/types/dataEntityTypes.ts). */
 const ENTITY_TYPES = [
@@ -73,6 +145,20 @@ function coerceEntityType(t) {
 }
 
 /**
+ * @param {unknown} raw
+ * @returns {string|undefined}
+ */
+function sanitizeOutputLanguage(raw) {
+  if (typeof raw !== 'string') return undefined;
+  const s = raw.trim();
+  if (!s || s.length > 24) return undefined;
+  if (!/^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$/.test(s)) {
+    return undefined;
+  }
+  return s;
+}
+
+/**
  * Strip markdown code fences and trim content for JSON.parse.
  * @param {string} raw
  * @returns {string}
@@ -93,13 +179,61 @@ function extractJsonString(raw) {
 /**
  * Build the user message for the meta-prompt.
  * @param {string} userDesc
+ * @param {string|undefined} outputLanguage BCP 47 tag
+ * @param {{ refinementPatch?: unknown[], baseText?: string, sectionRefinements?: Array<{ sectionId: string, baseText: string, refinementPatch: unknown[] }> }} [opts]
  * @returns {string}
  */
-function buildMetaUserMessage(userDesc) {
+function buildMetaUserMessage(userDesc, outputLanguage, opts = {}) {
+  const { refinementPatch, baseText, sectionRefinements } = opts;
+  const langBlock =
+    typeof outputLanguage === 'string' && outputLanguage.trim().length > 0
+      ? `
+
+OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}
+Use this language for all natural-language content in the JSON output. Match the designer task description language when it is clearly the same locale; otherwise follow OUTPUT_LANGUAGE.
+`
+      : '';
+
+  let revisionBlock = '';
+  const sr = normalizeSectionRefinements(sectionRefinements);
+  if (sr && sr.length > 0) {
+    revisionBlock = `
+
+STRUCTURED_SECTION_REFINEMENTS (JSON array). Each entry: { "sectionId", "baseText", "refinementPatch" }.
+sectionId is one of: ${STRUCTURED_SECTION_IDS.join(', ')}.
+refinementPatch is chronological delete/insert ops; character positions refer ONLY to that entry's baseText (clean Monaco snapshot before user revisions).
+${JSON.stringify(sr)}
+`;
+  } else if (Array.isArray(refinementPatch) && refinementPatch.length > 0) {
+    revisionBlock = `
+
+STRUCTURED_REVISION_PATCH (legacy single-field refine; positions are in the clean base snapshot below):
+${JSON.stringify(refinementPatch)}
+`;
+    if (typeof baseText === 'string' && baseText.length > 0) {
+      revisionBlock += `
+
+CLEAN_BASE_SNAPSHOT (legacy single prompt):
+"""
+${baseText}
+"""
+`;
+    }
+  } else if (typeof baseText === 'string' && baseText.length > 0) {
+    revisionBlock = `
+
+CLEAN_BASE_SNAPSHOT (Monaco model before user revisions):
+"""
+${baseText}
+"""
+`;
+  }
+
   return `DESIGNER TASK DESCRIPTION (natural language):
 """
 ${userDesc}
 """
+${revisionBlock}${langBlock}
 
 Your job is to design an "AI Agent" task for OMNIA runtime.
 
@@ -119,17 +253,17 @@ Produce JSON with exactly these top-level keys:
    - "history_summary": "" (empty string)
    - "task_completed": false (boolean)
 
-3) "agent_prompt" — string, the FULL system/runtime instructions for the agent that will run in production.
-   The runtime engine sends the user utterance and the current state JSON to the model; the model must ALWAYS reply with ONLY this JSON shape (no extra text):
+3) Structured runtime instructions (strings; the app composes the final Markdown runtime prompt — do NOT output "agent_prompt"):
+   - "behavior_spec": main behavior and goals for the agent.
+   - "positive_constraints": what the agent must do / must respect.
+   - "negative_constraints": what the agent must avoid.
+   - "operational_sequence": ordered steps the agent should follow in the dialogue.
+   - "correction_rules": how to handle user corrections and re-confirmation.
+   - "conversational_state": optional free-text notes on dialogue state usage (may be empty string if not needed).
+   Each of behavior_spec..correction_rules MUST be non-empty. conversational_state may be "".
+   Together these sections MUST still encode that the runtime model replies with ONLY this JSON shape (no extra text):
    { "updated_state": { ...same shape as initial_state_template... }, "assistant_reply": "..." }
-   Rules the agent_prompt MUST encode:
-   - Never rely on memory outside updated_state; state is the source of truth.
-   - Ask only for missing fields until all required fields are filled.
-   - When all required fields are filled, set confirmation_status to "awaiting_user" and ask for confirmation.
-   - If user confirms, set confirmation_status to "confirmed" and task_completed to true.
-   - If user corrects a field (explicitly or implicitly), update the field and set confirmation_status back appropriately; task_completed false until re-confirmed.
-   - Keep assistant_reply concise and in the same language as the designer description when possible.
-   - Always recompute "missing_fields" from null required keys in updated_state.
+   Encode: never rely on memory outside updated_state; ask only for missing fields; confirmation flow; corrections reset confirmation; recompute missing_fields from null required keys; assistant_reply concise.
 
 4) "sample_dialogue" — array of { "role": "assistant" | "user", "content": "..." }
    A realistic 6–14 turn simulation showing tone, order of questions, confirmation, and one correction.
@@ -165,9 +299,23 @@ function validateDesignPayload(parsed) {
   if (!parsed.initial_state_template || typeof parsed.initial_state_template !== 'object') {
     throw new Error('Invalid JSON: initial_state_template must be an object');
   }
-  if (typeof parsed.agent_prompt !== 'string' || !parsed.agent_prompt.trim()) {
-    throw new Error('Invalid JSON: agent_prompt must be a non-empty string');
+
+  const sectionTexts = {};
+  for (const key of REQUIRED_NONEMPTY_SECTION_KEYS) {
+    if (typeof parsed[key] !== 'string' || !parsed[key].trim()) {
+      throw new Error(`Invalid JSON: ${key} must be a non-empty string`);
+    }
+    sectionTexts[key] = parsed[key].trim();
   }
+  const conv =
+    typeof parsed.conversational_state === 'string' ? parsed.conversational_state : '';
+  sectionTexts.conversational_state = conv;
+
+  const agentPromptComposed = composeRuntimePromptMarkdownFromSections(sectionTexts);
+  if (!agentPromptComposed) {
+    throw new Error('Invalid JSON: composed runtime prompt is empty');
+  }
+
   const sd = parsed.sample_dialogue;
   if (!Array.isArray(sd) || sd.length === 0) {
     throw new Error('Invalid JSON: sample_dialogue must be a non-empty array');
@@ -188,7 +336,13 @@ function validateDesignPayload(parsed) {
   return {
     proposed_variables: normalizedVars,
     initial_state_template: parsed.initial_state_template,
-    agent_prompt: parsed.agent_prompt.trim(),
+    behavior_spec: sectionTexts.behavior_spec,
+    positive_constraints: sectionTexts.positive_constraints,
+    negative_constraints: sectionTexts.negative_constraints,
+    operational_sequence: sectionTexts.operational_sequence,
+    correction_rules: sectionTexts.correction_rules,
+    conversational_state: sectionTexts.conversational_state,
+    agent_prompt: agentPromptComposed,
     sample_dialogue: sd,
     design_notes: typeof parsed.design_notes === 'string' ? parsed.design_notes : '',
   };
@@ -200,16 +354,38 @@ function validateDesignPayload(parsed) {
  * @param {string} [params.provider]
  * @param {string} [params.model]
  * @param {import('./AIProviderService')} params.aiProviderService
+ * @param {Array<{ type: string }>|undefined} [params.refinementPatch]
+ * @param {string|undefined} [params.baseText]
+ * @param {unknown} [params.sectionRefinements]
+ * @param {string|undefined} [params.outputLanguage]
  * @returns {Promise<object>}
  */
-async function generateAIAgentDesign({ userDesc, provider = 'groq', model, aiProviderService }) {
+async function generateAIAgentDesign({
+  userDesc,
+  provider = 'groq',
+  model,
+  aiProviderService,
+  refinementPatch,
+  baseText,
+  sectionRefinements,
+  outputLanguage,
+}) {
   if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
     throw new Error('userDesc must be a non-empty string (at least 8 characters)');
   }
 
+  const lang = sanitizeOutputLanguage(outputLanguage);
+
   const messages = [
     { role: 'system', content: META_SYSTEM },
-    { role: 'user', content: buildMetaUserMessage(userDesc.trim()) },
+    {
+      role: 'user',
+      content: buildMetaUserMessage(userDesc.trim(), lang, {
+        refinementPatch,
+        baseText,
+        sectionRefinements,
+      }),
+    },
   ];
 
   // OpenAI chat models often cap completion tokens at 4096; larger values return 400 invalid_request_error.
