@@ -30,6 +30,8 @@ import { openBottomDockedTab } from './AppContent/infrastructure/docking/Docking
 import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
 // ✅ M1: Domain model mapper (introduced, not yet used - will be used in M2)
 import { mapUIStateToDomain } from '../domain/project/mapper';
+import { isAiAgentDebugEnabled, summarizeAgentTaskFields } from './TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDebug';
+import { flushAiAgentEditorsBeforeProjectSave } from './TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentProjectSaveFlush';
 // ✅ M5: Project save orchestrator (now with executeSave)
 import { ProjectSaveOrchestrator } from '../services/project-save/ProjectSaveOrchestrator';
 // ✅ REMOVED: Migration moved to DB script - keep codebase clean
@@ -917,7 +919,9 @@ export const AppContent: React.FC<AppContentProps> = ({
                 console.log('[Save] 🚀 START SAVE PROJECT', { projectId: pid, timestamp: new Date().toISOString() });
                 console.log('[Save] ═══════════════════════════════════════════════════════');
 
-                // FIX: Emetti evento per salvare modifiche in corso negli editor aperti
+                // Flush AI Agent editors into TaskRepository before save reads tasks (explicit, not event-order dependent).
+                flushAiAgentEditorsBeforeProjectSave();
+                // Emetti evento per salvare modifiche in corso negli altri editor (es. ResponseEditor)
                 window.dispatchEvent(new CustomEvent('project:save', {
                   detail: { projectId: pid }
                 }));
@@ -994,6 +998,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                     return acc;
                   }, {}),
                 });
+
+                if (isAiAgentDebugEnabled()) {
+                  console.log('ALL TASKS BEFORE SAVE', allTasksInMemory.map(summarizeAgentTaskFields));
+                }
 
                 // Map UI state to domain model
                 const domain = mapUIStateToDomain({

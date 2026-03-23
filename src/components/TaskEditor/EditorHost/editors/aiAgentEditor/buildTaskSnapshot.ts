@@ -57,11 +57,13 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
 }
 
 /**
- * Whether the user has already run at least one successful generation (explicit flag or inferred).
+ * Whether design-time generation has been run at least once.
+ * Prefer persisted {@link AIAgentTaskSnapshot.agentDesignHasGeneration}; legacy rows without the flag
+ * infer only from proposed fields (API output), not from composed prompt length (avoids false positives).
  */
 export function resolveHasAgentGeneration(snapshot: AIAgentTaskSnapshot): boolean {
-  return (
-    snapshot.agentDesignHasGeneration ??
-    (snapshot.agentProposedFields.length > 0 || snapshot.agentPrompt.trim().length > 0)
-  );
+  if (typeof snapshot.agentDesignHasGeneration === 'boolean') {
+    return snapshot.agentDesignHasGeneration;
+  }
+  return snapshot.agentProposedFields.length > 0;
 }

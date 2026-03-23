@@ -1,8 +1,9 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '@types/taskTypes';
+import { TaskType, taskTypeToTemplateId, taskIdToTaskType, type Task } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
+import { createDefaultAIAgentTaskPayload } from '../../../../TaskEditor/EditorHost/editors/aiAgentEditor/createDefaultAIAgentTaskPayload';
 import { createRowWithTask, updateRowTaskType } from '@utils/taskHelpers';
 import { flushSemanticDraftToTaskOnTaskCreated } from '@utils/semanticValuesRowState';
 import type { Row } from '@types/NodeRowTypes';
@@ -109,22 +110,11 @@ export class RowTypeHandler {
         // ✅ Caso 3: Tutti gli altri tipi (o UtteranceInterpretation con template) → crea task
         // For BackendCall, create task with default fields (endpoint, inputs, outputs)
         // For AIAgent, create task with design-time fields (prompt, mappings, generated artifacts)
-        const taskFields =
+        const taskFields: Partial<Task> | undefined =
           finalTaskType === TaskType.BackendCall
             ? { endpoint: '', inputs: [], outputs: [] }
             : finalTaskType === TaskType.AIAgent
-              ? {
-                  agentDesignDescription: '',
-                  agentPrompt: '',
-                  outputVariableMappings: {} as Record<string, string>,
-                  agentProposedFields: [],
-                  agentSampleDialogue: [],
-                  agentPreviewByStyle: {},
-                  agentPreviewStyleId: 'informal',
-                  agentInitialStateTemplateJson: '{}',
-                  agentDesignFrozen: false,
-                  agentDesignHasGeneration: false,
-                }
+              ? (createDefaultAIAgentTaskPayload() as Partial<Task>)
               : undefined;
 
         taskRepository.createTask(
@@ -219,18 +209,7 @@ export class RowTypeHandler {
             taskRepository.createTask(
               TaskType.AIAgent,
               null,
-              {
-                agentDesignDescription: '',
-                agentPrompt: '',
-                outputVariableMappings: {} as Record<string, string>,
-                agentProposedFields: [],
-                agentSampleDialogue: [],
-                agentPreviewByStyle: {},
-                agentPreviewStyleId: 'informal',
-                agentInitialStateTemplateJson: '{}',
-                agentDesignFrozen: false,
-                agentDesignHasGeneration: false,
-              },
+              createDefaultAIAgentTaskPayload() as Partial<Task>,
               taskId,
               projectId
             );

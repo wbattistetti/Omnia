@@ -2,6 +2,8 @@
 // Service per gestire i Task di dialogo (DDT tasks) con cache in memoria
 
 import type { SemanticContract, EngineConfig, EngineEscalation } from '../types/semanticContract';
+import { TaskType } from '../types/taskTypes';
+import { AI_AGENT_PERSIST_FIELD_KEYS } from '../types/aiAgentPersistFieldKeys';
 
 export interface DialogueTask {
   _id?: string;
@@ -454,7 +456,13 @@ export class DialogueTaskService {
             });
           } else {
             // Project template (source: 'Project' or undefined) → POST /api/projects/:pid/templates
-            // This endpoint saves the template as-is without any field stripping.
+            // AI Agent fields are authored in TaskRepository and saved via tasks/bulk; cache template
+            // can be stale and would race with bulk if included here — omit them.
+            if (templateForSave.type === TaskType.AIAgent) {
+              for (const key of AI_AGENT_PERSIST_FIELD_KEYS) {
+                delete (payload as Record<string, unknown>)[key];
+              }
+            }
             if (!projectId) {
               throw new Error(
                 `Cannot save Project template "${templateId}" without projectId. ` +

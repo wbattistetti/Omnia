@@ -24,9 +24,9 @@ export function AIAgentProposedFieldsTable({
       <table className="w-full text-sm">
         <thead className="bg-slate-900 text-slate-400">
           <tr>
+            <th className="text-center p-2 font-medium w-[72px]">Obbl.</th>
             <th className="text-left p-2 font-medium min-w-[160px]">Nome variabile (flusso)</th>
             <th className="text-left p-2 font-medium w-[150px]">Tipo</th>
-            <th className="text-center p-2 font-medium w-[72px]">Obbl.</th>
           </tr>
         </thead>
         <tbody>
@@ -34,6 +34,15 @@ export function AIAgentProposedFieldsTable({
             const linked = Boolean(outputVariableMappings[f.field_name]);
             return (
               <tr key={f.field_name} className="border-t border-slate-800 align-top">
+                <td className="p-2 text-center align-top">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-600"
+                    checked={f.required}
+                    onChange={(e) => onUpdateField(f.field_name, { required: e.target.checked })}
+                    title="Obbligatorio"
+                  />
+                </td>
                 <td className="p-2">
                   <input
                     className="w-full rounded bg-slate-950 border border-slate-600 px-2 py-1.5 text-sm"
@@ -69,15 +78,6 @@ export function AIAgentProposedFieldsTable({
                       </option>
                     ))}
                   </select>
-                </td>
-                <td className="p-2 text-center">
-                  <input
-                    type="checkbox"
-                    className="rounded border-slate-600"
-                    checked={f.required}
-                    onChange={(e) => onUpdateField(f.field_name, { required: e.target.checked })}
-                    title="Obbligatorio"
-                  />
                 </td>
               </tr>
             );

@@ -2151,6 +2151,39 @@ function removeFactoryFields(doc) {
   return cleaned;
 }
 
+/** @see TaskType.AIAgent in src/types/taskTypes.ts */
+const TASK_TYPE_AI_AGENT = 6;
+
+/**
+ * Design-time + persisted runtime fields for AI Agent tasks.
+ * Instance bulk save used to $set only core instance fields; without these, reload lost all agent data.
+ */
+const AI_AGENT_INSTANCE_FIELD_KEYS = [
+  'agentDesignDescription',
+  'agentPrompt',
+  'agentStructuredSectionsJson',
+  'outputVariableMappings',
+  'agentProposedFields',
+  'agentSampleDialogue',
+  'agentPreviewByStyle',
+  'agentPreviewStyleId',
+  'agentInitialStateTemplateJson',
+  'agentDesignFrozen',
+  'agentDesignHasGeneration',
+  'agentLogicalStepsJson',
+  'agentUseCasesJson',
+];
+
+function pickAiAgentInstanceFields(item) {
+  const out = {};
+  for (const key of AI_AGENT_INSTANCE_FIELD_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(item, key)) {
+      out[key] = item[key];
+    }
+  }
+  return out;
+}
+
 // POST /api/projects/:pid/templates - Save a project-scoped template as-is (no field stripping)
 // Used by DialogueTaskService for templates with source: 'Project'
 app.post('/api/projects/:pid/templates', async (req, res) => {
@@ -2190,9 +2223,18 @@ app.post('/api/projects/:pid/templates', async (req, res) => {
     console.log('[POST /api/projects/:pid/templates] ✅ Project database obtained');
     const now = new Date();
 
-    // Save template exactly as received — no classification, no field stripping
+    // Save template as received; for AI Agent fields, never $set empty/null (avoids stale
+    // template cache wiping values written by tasks/bulk).
     const { _id, createdAt, ...templateData } = payload;
     const doc = { projectId, ...templateData, updatedAt: now };
+    for (const key of AI_AGENT_INSTANCE_FIELD_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(doc, key)) {
+        const v = doc[key];
+        if (v === '' || v === null) {
+          delete doc[key];
+        }
+      }
+    }
 
     await projDb.collection('tasks').updateOne(
       { projectId, id: payload.id },
@@ -2391,6 +2433,9 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
         semanticValues: payload.semanticValues,
         updatedAt: now
       };
+      if (type === TASK_TYPE_AI_AGENT) {
+        Object.assign(task, pickAiAgentInstanceFields(payload));
+      }
     } else if (isLocalTemplate(payload)) {
       // Local template (templateId === null): save all fields as-is, strip only Factory metadata
       const { _id, createdAt, updatedAt: _updatedAt, ...rest } = payload;
@@ -2614,6 +2659,9 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
     if (isInstance(mergedDoc)) {
       // Mantieni solo campi permessi per istanze (incluso type che è necessario per il caricamento)
       const allowedFields = ['type', 'templateId', 'templateVersion', 'labelKey', 'steps', 'semanticValues', 'updatedAt'];
+      if (mergedDoc.type === TASK_TYPE_AI_AGENT) {
+        allowedFields.push(...AI_AGENT_INSTANCE_FIELD_KEYS);
+      }
       const filteredUpdate = {};
       for (const key of allowedFields) {
         if (update[key] !== undefined) {
@@ -2740,6 +2788,9 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
               semanticValues: item.semanticValues,
               updatedAt: now
             };
+            if (item.type === TASK_TYPE_AI_AGENT) {
+              Object.assign(task, pickAiAgentInstanceFields(item));
+            }
           } else if (isLocalTemplate(item)) {
             // Local template (templateId === null): save all fields as-is, strip only Factory metadata
             const { _id, createdAt, updatedAt: _updatedAt, ...rest } = item;

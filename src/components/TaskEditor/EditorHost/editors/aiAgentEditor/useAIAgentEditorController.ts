@@ -1,5 +1,15 @@
 /**
  * State, repository sync, generation, and variable-linking logic for the AI Agent editor.
+ *
+ * Persistence (in-session → TaskRepository):
+ * - `hydrated` is false until `loadFromRepository()` finishes for the current instance; no persist runs before that.
+ * - `dirty` is false after hydration; set true only on user- or action-driven updates (not during load).
+ * - Debounced persist (400ms) runs only when `hydrated && dirty`, reading current local state at flush time.
+ * - Project save: `flushAiAgentEditorsBeforeProjectSave` calls `persistEditorStateToRepository` (no `dirty` gate) so bulk reads latest `agent*` fields.
+ * - Optional downgrade checks live in `aiAgentPersistGuard` (tests / future diagnostics); debounced persist is still gated by `dirty`.
+ * - `tasks:loaded`: re-hydrate from repo, reset hydrated + dirty.
+ * - Unmount: if `dirty`, flush current editor state to repo (tab close before debounce).
+ * - Durability: project save writes tasks to Mongo via the project save orchestrator.
  */
 
 import React from 'react';
@@ -40,6 +50,9 @@ import {
 import { revisionStateToPersisted } from './revisionStateToPersisted';
 import { useStructuredAgentSectionsRevision } from './useStructuredAgentSectionsRevision';
 import type { IaSectionDiffPair } from './AIAgentStructuredSectionsPanel';
+import type { RevisionBatchOp } from './textRevisionLinear';
+import { logAiAgentDebug, summarizeAgentTaskFields } from './aiAgentDebug';
+import { registerAiAgentProjectSaveFlush } from './aiAgentProjectSaveFlush';
 
 export interface UseAIAgentEditorControllerParams {
   instanceId: string | undefined;
@@ -67,9 +80,6 @@ export function useAIAgentEditorController({
   const [iaRevisionDiffBySection, setIaRevisionDiffBySection] = React.useState<Partial<
     Record<AgentStructuredSectionId, IaSectionDiffPair>
   > | null>(null);
-  const [rightPanelTab, setRightPanelTab] = React.useState<'variables' | 'chat' | 'usecases'>(
-    'variables'
-  );
   const [hasAgentGeneration, setHasAgentGeneration] = React.useState(false);
   const [committedDesignDescription, setCommittedDesignDescription] = React.useState('');
   const [logicalSteps, setLogicalSteps] = React.useState<AIAgentLogicalStep[]>([]);
@@ -77,7 +87,17 @@ export function useAIAgentEditorController({
   const [useCaseComposerBusy, setUseCaseComposerBusy] = React.useState(false);
   const [useCaseComposerError, setUseCaseComposerError] = React.useState<string | null>(null);
 
+  /** True only after `loadFromRepository` has applied repo data for this mount / reload. */
+  const [hydrated, setHydrated] = React.useState(false);
+  /** True when local state diverges from last persisted snapshot (user edits or generation). */
+  const [dirty, setDirty] = React.useState(false);
+
   const committedStructuredJsonRef = React.useRef<string>('');
+  /** Pending debounced persist; cleared on flush or unmount. */
+  const persistTimerRef = React.useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  /** Latest `dirty` / persist fn for unmount cleanup (avoids stale closure). */
+  const dirtyRef = React.useRef(false);
+  const persistEditorStateToRepositoryRef = React.useRef<() => void>(() => {});
   const structuredRev = useStructuredAgentSectionsRevision();
   const { loadFromPersisted } = structuredRev;
 
@@ -86,6 +106,24 @@ export function useAIAgentEditorController({
     () => serializePersistedStructuredSections(revisionStateToPersisted(structuredRev.sectionsState)),
     [structuredRev.sectionsState]
   );
+
+  const setDesignDescriptionUser = React.useCallback((v: React.SetStateAction<string>) => {
+    setDirty(true);
+    setDesignDescription(v);
+  }, []);
+
+  const applyRevisionOps = React.useCallback(
+    (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => {
+      setDirty(true);
+      structuredRev.applyRevisionOps(sectionId, ops);
+    },
+    [structuredRev]
+  );
+
+  const setUseCasesUser = React.useCallback((v: React.SetStateAction<AIAgentUseCase[]>) => {
+    setDirty(true);
+    setUseCases(v);
+  }, []);
 
   const loadFromRepository = React.useCallback(() => {
     if (!instanceId) return;
@@ -118,50 +156,44 @@ export function useAIAgentEditorController({
     setUseCases(b.useCases);
     setUseCaseComposerError(null);
     setIaRevisionDiffBySection(null);
+    logAiAgentDebug('loadFromRepository', {
+      instanceId,
+      ...summarizeAgentTaskFields(taskRepository.getTask(instanceId)),
+    });
   }, [instanceId, loadFromPersisted]);
 
-  React.useEffect(() => {
-    if (!hasAgentGeneration && rightPanelTab === 'usecases') {
-      setRightPanelTab('variables');
-    }
-  }, [hasAgentGeneration, rightPanelTab]);
-
-  React.useEffect(() => {
-    if (!instanceId) return;
-    const existing = taskRepository.getTask(instanceId);
-    if (!existing) {
-      taskRepository.createTask(
-        TaskType.AIAgent,
-        null,
-        createDefaultAIAgentTaskPayload() as Partial<Task>,
+  /**
+   * Writes current editor state into TaskRepository (full `buildAIAgentTaskPersistPatch`).
+   * No `dirty` check — used before project save and on unmount when dirty.
+   */
+  const persistEditorStateToRepository = React.useCallback(() => {
+    if (!instanceId || !hydrated) return;
+    const patch = buildAIAgentTaskPersistPatch({
+      designDescription,
+      agentPrompt,
+      agentStructuredSectionsJson,
+      outputVariableMappings,
+      proposedFields,
+      previewByStyle,
+      previewStyleId,
+      initialStateTemplateJson,
+      hasAgentGeneration,
+      agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
+      agentUseCasesJson: serializeUseCases(useCases),
+    }) as Record<string, unknown>;
+    const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
+    if (!ok) {
+      console.error('[useAIAgentEditorController] taskRepository.updateTask failed — task missing from repository', {
         instanceId,
-        projectId
-      );
+      });
+      return;
     }
-    loadFromRepository();
-  }, [instanceId, projectId, loadFromRepository]);
-
-  React.useEffect(() => {
-    if (!instanceId) return;
-    taskRepository.updateTask(
-      instanceId,
-      buildAIAgentTaskPersistPatch({
-        designDescription,
-        agentPrompt,
-        agentStructuredSectionsJson,
-        outputVariableMappings,
-        proposedFields,
-        previewByStyle,
-        previewStyleId,
-        initialStateTemplateJson,
-        hasAgentGeneration,
-        agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
-        agentUseCasesJson: serializeUseCases(useCases),
-      }) as Partial<Task>,
-      projectId
-    );
+    // Do not update committedDesignDescription / committedStructuredJsonRef here — baseline for Create vs Refine only.
+    setDirty(false);
+    logAiAgentDebug('after updateTask', summarizeAgentTaskFields(taskRepository.getTask(instanceId)));
   }, [
     instanceId,
+    hydrated,
     projectId,
     designDescription,
     agentPrompt,
@@ -176,7 +208,96 @@ export function useAIAgentEditorController({
     useCases,
   ]);
 
+  dirtyRef.current = dirty;
+  persistEditorStateToRepositoryRef.current = persistEditorStateToRepository;
+
+  React.useLayoutEffect(() => {
+    if (!instanceId) {
+      setHydrated(false);
+      return;
+    }
+    setHydrated(false);
+    const existing = taskRepository.getTask(instanceId);
+    if (!existing) {
+      taskRepository.createTask(
+        TaskType.AIAgent,
+        null,
+        createDefaultAIAgentTaskPayload() as Partial<Task>,
+        instanceId,
+        projectId
+      );
+    }
+    loadFromRepository();
+    setHydrated(true);
+    setDirty(false);
+  }, [instanceId, projectId, loadFromRepository]);
+
+  /** Re-sync when project tasks are loaded from API into TaskRepository (fixes race: editor before load). */
+  React.useEffect(() => {
+    if (!instanceId || !projectId) return;
+    const onTasksLoaded = (e: Event) => {
+      const detail = (e as CustomEvent<{ projectId?: string }>).detail;
+      if (detail?.projectId !== projectId) return;
+      loadFromRepository();
+      setHydrated(true);
+      setDirty(false);
+    };
+    window.addEventListener('tasks:loaded', onTasksLoaded as EventListener);
+    return () => window.removeEventListener('tasks:loaded', onTasksLoaded as EventListener);
+  }, [instanceId, projectId, loadFromRepository]);
+
+  /** Debounced persist: only after hydration and only when the user (or explicit actions) marked dirty. */
+  React.useEffect(() => {
+    if (!instanceId || !hydrated || !dirty) return;
+    if (persistTimerRef.current) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    persistTimerRef.current = window.setTimeout(() => {
+      persistTimerRef.current = null;
+      persistEditorStateToRepository();
+    }, 400);
+    return () => {
+      if (persistTimerRef.current) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    };
+  }, [
+    dirty,
+    hydrated,
+    instanceId,
+    projectId,
+    persistEditorStateToRepository,
+  ]);
+
+  /** Sync flush before project save pipeline reads TaskRepository (see `flushAiAgentEditorsBeforeProjectSave`). */
+  React.useEffect(() => {
+    const flushBeforeProjectSave = () => {
+      if (persistTimerRef.current) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      persistEditorStateToRepository();
+    };
+    return registerAiAgentProjectSaveFlush(flushBeforeProjectSave);
+  }, [persistEditorStateToRepository]);
+
+  /** On unmount, persist if still dirty (e.g. tab closed before debounce). Uses refs for latest persist + dirty. */
+  React.useEffect(() => {
+    return () => {
+      if (persistTimerRef.current) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      if (dirtyRef.current) {
+        persistEditorStateToRepositoryRef.current();
+      }
+    };
+  }, []);
+
   const dismissIaRevisionForSection = React.useCallback((sectionId: AgentStructuredSectionId) => {
+    setDirty(true);
     setIaRevisionDiffBySection((prev) => {
       if (!prev) return null;
       const next = { ...prev };
@@ -218,7 +339,6 @@ export function useAIAgentEditorController({
       setPreviewByStyle(applied.previewByStyle);
       setInitialStateTemplateJson(applied.initialStateTemplateJson);
       setOutputVariableMappings((prev) => applied.mergeOutputMappings(prev));
-      setRightPanelTab('chat');
       setHasAgentGeneration(true);
       setCommittedDesignDescription(designDescription);
       if (refining) {
@@ -233,6 +353,7 @@ export function useAIAgentEditorController({
       } else {
         setIaRevisionDiffBySection(null);
       }
+      setDirty(true);
     } catch (e) {
       setGenerateError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -242,6 +363,7 @@ export function useAIAgentEditorController({
 
   const updateProposedField = React.useCallback(
     (fieldName: string, patch: Partial<AIAgentProposedVariable>) => {
+      setDirty(true);
       setProposedFields((prev) =>
         prev.map((p) => (p.field_name === fieldName ? { ...p, ...patch } : p))
       );
@@ -252,6 +374,7 @@ export function useAIAgentEditorController({
   const syncFlowVariableFromLabel = React.useCallback(
     (fieldName: string, labelTrimmed: string) => {
       if (!projectId) return;
+      setDirty(true);
       const flowId = getActiveFlowCanvasId();
       setOutputVariableMappings((prev) =>
         nextMappingsAfterLabelBlur(projectId, flowId, prev, fieldName, labelTrimmed)
@@ -285,6 +408,7 @@ export function useAIAgentEditorController({
       });
       setLogicalSteps(ls);
       setUseCases(ucs);
+      setDirty(true);
     } catch (e) {
       setUseCaseComposerError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -323,6 +447,7 @@ export function useAIAgentEditorController({
               : u
           )
         );
+        setDirty(true);
       } catch (e) {
         setUseCaseComposerError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -371,6 +496,7 @@ export function useAIAgentEditorController({
             return { ...u, dialogue };
           })
         );
+        setDirty(true);
       } catch (e) {
         setUseCaseComposerError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -383,20 +509,24 @@ export function useAIAgentEditorController({
   const structuredDesignDirty = agentStructuredSectionsJson !== committedStructuredJsonRef.current;
   const descriptionDirty = designDescription !== committedDesignDescription;
 
+  /** Pre–first generation: enough description to run Create Agent (same gate as handleGenerate). */
+  const canOfferFirstGenerate =
+    !hasAgentGeneration && designDescription.trim().length >= AI_AGENT_MIN_INPUT_CHARS;
+
   const showPrimaryAgentAction = generating
     ? true
     : hasAgentGeneration
       ? structuredDesignDirty || descriptionDirty
-      : descriptionDirty;
+      : descriptionDirty || canOfferFirstGenerate;
 
   return {
     instanceId,
     designDescription,
-    setDesignDescription,
+    setDesignDescription: setDesignDescriptionUser,
     agentPrompt,
     structuredSectionsState: structuredRev.sectionsState,
     composedRuntimeMarkdown: structuredRev.composedRuntimeMarkdown,
-    applyRevisionOps: structuredRev.applyRevisionOps,
+    applyRevisionOps,
     outputVariableMappings,
     proposedFields,
     previewByStyle,
@@ -409,8 +539,6 @@ export function useAIAgentEditorController({
     generateError,
     iaRevisionDiffBySection,
     dismissIaRevisionForSection,
-    rightPanelTab,
-    setRightPanelTab,
     hasAgentGeneration,
     showPrimaryAgentAction,
     handleGenerate,
@@ -419,7 +547,7 @@ export function useAIAgentEditorController({
     logicalSteps,
     useCases,
     setLogicalSteps,
-    setUseCases,
+    setUseCases: setUseCasesUser,
     useCaseComposerBusy,
     useCaseComposerError,
     clearUseCaseComposerError,

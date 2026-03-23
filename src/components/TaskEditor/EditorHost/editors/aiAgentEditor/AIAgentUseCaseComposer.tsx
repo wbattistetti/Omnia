@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { GitBranch, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { GitBranch, Loader2, MessageSquare, RefreshCw, Sparkles } from 'lucide-react';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
 import { AI_AGENT_DEFAULT_PREVIEW_STYLE_ID } from '@types/aiAgentPreview';
 import type { AIAgentPreviewTurn } from '@types/aiAgentPreview';
@@ -51,7 +51,14 @@ export function AIAgentUseCaseComposer({
     });
   }, [useCases]);
 
-  const selected = selectedId ? useCases.find((u) => u.id === selectedId) : undefined;
+  /** Stable selection while the list is non-empty (avoids empty right pane before effect runs). */
+  const effectiveSelectedId = React.useMemo(() => {
+    if (ordered.length === 0) return null;
+    if (selectedId != null && ordered.some((u) => u.id === selectedId)) return selectedId;
+    return ordered[0]?.id ?? null;
+  }, [ordered, selectedId]);
+
+  const selected = effectiveSelectedId ? useCases.find((u) => u.id === effectiveSelectedId) : undefined;
   const previewTurns = React.useMemo(
     () =>
       selected
@@ -62,29 +69,33 @@ export function AIAgentUseCaseComposer({
 
   const patchSelected = React.useCallback(
     (patch: Partial<AIAgentUseCase>) => {
-      if (!selectedId) return;
-      setUseCases((prev) => prev.map((u) => (u.id === selectedId ? { ...u, ...patch } : u)));
+      if (!effectiveSelectedId) return;
+      setUseCases((prev) =>
+        prev.map((u) => (u.id === effectiveSelectedId ? { ...u, ...patch } : u))
+      );
     },
-    [selectedId, setUseCases]
+    [effectiveSelectedId, setUseCases]
   );
 
   const handlePreviewTurnsChange = React.useCallback(
     (next: AIAgentPreviewTurn[]) => {
-      if (!selectedId) return;
+      if (!effectiveSelectedId) return;
       setUseCases((prev) => {
-        const uc = prev.find((u) => u.id === selectedId);
+        const uc = prev.find((u) => u.id === effectiveSelectedId);
         if (!uc) return prev;
         const { dialogue, bubble_notes } = previewToUseCaseDialogue(next, uc.dialogue);
-        return prev.map((u) => (u.id === selectedId ? { ...u, dialogue, bubble_notes } : u));
+        return prev.map((u) =>
+          u.id === effectiveSelectedId ? { ...u, dialogue, bubble_notes } : u
+        );
       });
     },
-    [selectedId, setUseCases]
+    [effectiveSelectedId, setUseCases]
   );
 
   const firstTurnId = selected?.dialogue[0]?.turn_id;
 
   return (
-    <div className="flex flex-col gap-3 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 gap-3">
       {error ? (
         <div className="rounded-lg border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200 flex justify-between gap-2">
           <span className="min-w-0 break-words">{error}</span>
@@ -129,42 +140,42 @@ export function AIAgentUseCaseComposer({
         </details>
       ) : null}
 
-      <div className="flex flex-1 min-h-[280px] gap-2 flex-col sm:flex-row">
-        <div className="sm:w-[38%] min-h-[120px] rounded-lg border border-slate-800 bg-slate-900/40 overflow-y-auto">
-          {ordered.length === 0 ? (
-            <div className="p-4 text-sm text-slate-500 text-center">
+      <div className="flex flex-1 min-h-0 gap-2 flex-col sm:flex-row sm:min-h-[280px]">
+        {ordered.length === 0 ? (
+          <div className="flex-1 min-h-0 w-full rounded-lg border border-slate-800 bg-slate-900/40 overflow-y-auto flex flex-col">
+            <div className="flex-1 min-h-[120px] flex items-center justify-center p-6 text-sm text-slate-500 text-center">
               Nessuno scenario. Genera con IA o crea il design agent prima.
             </div>
-          ) : (
-            <ul className="p-1">
-              {ordered.map((u) => {
-                const depth = depthById[u.id] ?? 0;
-                const active = u.id === selectedId;
-                return (
-                  <li key={u.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedId(u.id)}
-                      className={`w-full text-left px-2 py-1.5 rounded text-sm truncate ${
-                        active ? 'bg-violet-900/50 text-violet-100' : 'text-slate-300 hover:bg-slate-800/80'
-                      }`}
-                      style={{ paddingLeft: `${8 + depth * 12}px` }}
-                    >
-                      <GitBranch size={12} className="inline mr-1 opacity-60" />
-                      {u.label || u.id}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+          </div>
+        ) : (
+          <>
+            <div className="w-full sm:w-[38%] shrink-0 min-h-0 sm:min-h-[120px] rounded-lg border border-slate-800 bg-slate-900/40 overflow-y-auto flex flex-col self-stretch">
+              <ul className="p-1 flex-1 min-h-0">
+                {ordered.map((u) => {
+                  const depth = depthById[u.id] ?? 0;
+                  const active = u.id === effectiveSelectedId;
+                  return (
+                    <li key={u.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(u.id)}
+                        className={`w-full text-left px-2 py-1.5 rounded text-sm truncate ${
+                          active ? 'bg-violet-900/50 text-violet-100' : 'text-slate-300 hover:bg-slate-800/80'
+                        }`}
+                        style={{ paddingLeft: `${8 + depth * 12}px` }}
+                      >
+                        <GitBranch size={12} className="inline mr-1 opacity-60" />
+                        {u.label || u.id}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
 
-        <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto">
-          {!selected ? (
-            <div className="text-sm text-slate-500 p-4">Seleziona uno scenario.</div>
-          ) : (
-            <>
+            <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto self-stretch">
+              {selected ? (
+                <>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -230,6 +241,10 @@ export function AIAgentUseCaseComposer({
                 </label>
               </div>
 
+              <div className="flex items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wide pt-1">
+                <MessageSquare size={14} className="text-violet-400" />
+                Dialogo dello scenario (chat)
+              </div>
               <div className="flex-1 min-h-[200px] rounded-lg border border-slate-800 overflow-hidden">
                 <AIAgentPreviewChatPanel
                   selectedStyleId={AI_AGENT_DEFAULT_PREVIEW_STYLE_ID}
@@ -242,9 +257,11 @@ export function AIAgentUseCaseComposer({
                   }
                 />
               </div>
-            </>
-          )}
-        </div>
+                </>
+              ) : null}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

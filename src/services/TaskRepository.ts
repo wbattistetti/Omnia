@@ -6,6 +6,7 @@ import { generateId } from '../utils/idGenerator';
 import { getTemplateId } from '../utils/taskHelpers';
 import { v4 as uuidv4 } from 'uuid';
 import { FEATURE_FLAGS } from '../config/featureFlags';
+import { isAiAgentDebugEnabled, summarizeAgentTaskFields } from '../components/TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDebug';
 
 /**
  * TaskRepository: Primary repository for Task data
@@ -495,6 +496,15 @@ class TaskRepository {
       window.dispatchEvent(new CustomEvent('tasks:loaded', {
         detail: { projectId: finalProjectId, tasksCount: this.tasks.size }
       }));
+
+      if (isAiAgentDebugEnabled()) {
+        const aiAgents = Array.from(this.tasks.values()).filter((t) => t.type === TaskType.AIAgent);
+        console.log(
+          'TASK AFTER LOAD (AI Agent tasks)',
+          aiAgents.map((t) => ({ id: t.id, ...summarizeAgentTaskFields(t) }))
+        );
+      }
+
       return true;
     } catch (error) {
       return false;

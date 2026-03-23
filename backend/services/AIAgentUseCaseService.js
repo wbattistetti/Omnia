@@ -4,6 +4,7 @@ const { extractJsonString } = require('./AIAgentDesignService');
 
 const UC_SYSTEM = `You are an expert conversational AI designer for OMNIA.
 Respond with a single valid JSON object only (no markdown fences, no commentary).
+Every id and turn_id in the JSON must be a string value (quoted), never a number.
 When OUTPUT_LANGUAGE is set, write every human-readable string in that language.`;
 
 /**
@@ -28,14 +29,23 @@ ${ctx}
 Produce JSON with exactly:
 1) "logical_steps" — array of { "id": string (snake_case), "description": string } — 4–12 ordered steps the agent follows.
 2) "use_cases" — array of 4–10 objects, each:
-   - "id": string unique
+   - "id": string (unique among all use_cases)
    - "label": string
-   - "parent_id": string | null (tree: null = root)
-   - "sort_order": number (sibling order, ascending)
+   - "parent_id": string | null — null = root; if a string, it MUST equal the "id" of another object in this same "use_cases" array (no dangling references)
+   - "sort_order": number — among siblings (same parent_id), use 0-based integers 0,1,2,... with strictly increasing order (no ties per sibling group)
    - "refinement_prompt": string (may be "")
-   - "dialogue": array of { "turn_id": string unique, "role": "assistant"|"user", "content": string } — 4–12 turns, realistic
+   - "dialogue": array of { "turn_id": string, "role": "assistant"|"user", "content": string } — 4–12 turns, realistic; "turn_id" unique within that dialogue and prefer unique across all use_cases in this response (for stable bubble_notes keys)
    - "notes": { "behavior": string, "tone": string }
    - "bubble_notes": object map turn_id -> short designer note (may be {})
+
+ID rules:
+- All "id" and "turn_id" values must be non-empty strings in JSON (never numeric types).
+- "logical_steps"[].id must be pairwise distinct from each other.
+- "use_cases"[].id must be pairwise distinct from each other and must not collide with any "logical_steps"[].id.
+
+Content rules:
+- Every human-readable string (labels, descriptions, dialogue content, notes, bubble_notes) must strictly relate to the DESIGNER_TASK_DESCRIPTION${ctx ? ' and stay consistent with RUNTIME_PROMPT_OR_SECTIONS when provided above' : ''}.
+- Keep each dialogue "content" concise: prefer 1–2 sentences per turn; use a third sentence only if needed for clarity (e.g. ambiguity or correction scenarios).
 
 Include at least: happy path, one correction, one ambiguity, one refusal variant (as separate use_cases or children).
 Return valid JSON only.`;

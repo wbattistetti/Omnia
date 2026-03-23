@@ -76,6 +76,21 @@ export function applyRevisionBatchToSlice(
       ins = nextIns;
       // Record for refine log at original base anchor
       log.push({ type: 'insert', position: o.position, text } as StructuredRefinementOp);
+    } else if (op.t === 'set_insert_text') {
+      const { opId, text } = op;
+      const ix = ins.findIndex((o) => o.id === opId);
+      if (ix < 0) continue;
+      const o = ins[ix];
+      const nextIns = [...ins];
+      if (text.length === 0) {
+        nextIns.splice(ix, 1);
+      } else {
+        nextIns[ix] = { ...o, text };
+      }
+      ins = nextIns;
+      if (text.length > 0) {
+        log.push({ type: 'insert', position: o.position, text } as StructuredRefinementOp);
+      }
     }
   }
 

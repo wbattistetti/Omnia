@@ -4,6 +4,7 @@
 import type { ProjectDomainModel, TaskDomainModel, FlowDomainModel, ConditionDomainModel, TemplateDomainModel, VariableDomainModel } from './model';
 import type { Task } from '@types/taskTypes';
 import type { Flow } from '@flows/FlowTypes';
+import { isAiAgentDebugEnabled } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDebug';
 
 /**
  * UI State structure (as used in AppContent.tsx)
@@ -53,6 +54,10 @@ export function mapUIStateToDomain(uiState: UIState): ProjectDomainModel {
       });
     }
   });
+
+  if (isAiAgentDebugEnabled()) {
+    console.log('REFERENCED TASK IDS', referencedTaskIds);
+  }
 
   // Map tasks (only referenced ones, excluding orphans)
   const tasks: TaskDomainModel[] = (uiState.tasks || [])

@@ -6,13 +6,7 @@
 import React from 'react';
 import { flushSync } from 'react-dom';
 import type { InsertOp } from './effectiveFromRevisionMask';
-import {
-  buildLinearDocument,
-  linearEditToBatchOps,
-  singleContiguousEditBounds,
-  type RevisionBatchOp,
-  type RevisionCharMeta,
-} from './textRevisionLinear';
+import { buildLinearDocument, linearEditToBatchOps, type RevisionBatchOp, type RevisionCharMeta } from './textRevisionLinear';
 
 function revisionMirrorNodes(
   linear: string,
@@ -71,7 +65,7 @@ export function TextDualLayerRevisionEditor({
   const composingRef = React.useRef(false);
   const lastPropLinearRef = React.useRef<string>('');
   const lastKnownDocRef = React.useRef(buildLinearDocument(baseText, deletedMask, inserts));
-  /** After a local edit, caret offset in the synced linear string (end of contiguous change). */
+  /** After a local edit, caret/selection end in the synced linear string (multi-hunk safe). */
   const pendingCaretRef = React.useRef<number | null>(null);
   const [editError, setEditError] = React.useState<string | null>(null);
 
@@ -125,15 +119,6 @@ export function TextDualLayerRevisionEditor({
       const next = el.value;
       if (next === prev.linear) return;
 
-      const bounds = singleContiguousEditBounds(prev.linear, next);
-      if (!bounds) {
-        el.value = prev.linear;
-        setEditError(
-          'Modifica non applicata: serve una singola regione contigua (alcuni undo/redo del browser non sono supportati).'
-        );
-        return;
-      }
-
       const ops = linearEditToBatchOps(
         prev.linear,
         next,
@@ -147,7 +132,9 @@ export function TextDualLayerRevisionEditor({
         return;
       }
 
-      pendingCaretRef.current = bounds.newEnd;
+      const selEnd = el.selectionEnd ?? el.selectionStart ?? next.length;
+      const selStart = el.selectionStart ?? selEnd;
+      pendingCaretRef.current = Math.max(0, Math.min(Math.max(selStart, selEnd), next.length));
 
       setEditError(null);
       onApplyRevisionOps(ops);

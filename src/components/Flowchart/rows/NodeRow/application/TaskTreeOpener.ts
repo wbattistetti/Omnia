@@ -1,8 +1,9 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { TaskType } from '@types/taskTypes';
+import { TaskType, type Task } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
+import { createDefaultAIAgentTaskPayload } from '../../../../TaskEditor/EditorHost/editors/aiAgentEditor/createDefaultAIAgentTaskPayload';
 import { resolveTaskType } from '../../../utils/taskVisuals';
 import type { Row } from '@types/NodeRowTypes';
 import type { NodeRowData } from '@types/project';
@@ -719,10 +720,15 @@ export class TaskTreeOpener {
         metaTemplateId,
       });
 
+      const initialFields: Partial<Task> | undefined =
+        metaTaskType === TaskType.AIAgent
+          ? (createDefaultAIAgentTaskPayload() as Partial<Task>)
+          : undefined;
+
       taskForType = taskRepository.createTask(
         metaTaskType,
         metaTemplateId,
-        undefined,
+        initialFields,
         row.id,
         projectId
       );

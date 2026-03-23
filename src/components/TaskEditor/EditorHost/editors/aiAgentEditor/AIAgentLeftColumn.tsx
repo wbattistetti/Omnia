@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
+import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { AIAgentUnifiedPromptField } from './AIAgentUnifiedPromptField';
 import { AIAgentStructuredSectionsPanel } from './AIAgentStructuredSectionsPanel';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
@@ -82,11 +83,10 @@ export function AIAgentLeftColumn({
       ) : (
         <>
           <section>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Descrizione task (contesto refine)
-            </label>
             <textarea
-              className="w-full min-h-[120px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full min-h-[200px] lg:min-h-[280px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
+              placeholder={AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER}
+              aria-label="Descrizione"
               value={designDescription}
               onChange={(e) => onDesignDescriptionChange(e.target.value)}
               readOnly={generating}
