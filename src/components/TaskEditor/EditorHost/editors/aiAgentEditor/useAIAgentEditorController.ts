@@ -47,7 +47,9 @@ import {
   persistedFromCleanSectionBases,
 } from './structuredSectionPersist';
 import { revisionStateToPersisted } from './revisionStateToPersisted';
+import { isStructuredSectionsOtEnabled } from './structuredOtFlag';
 import { useStructuredAgentSectionsRevision } from './useStructuredAgentSectionsRevision';
+import type { OtOp } from './otTypes';
 import type { IaSectionDiffPair } from './AIAgentStructuredSectionsPanel';
 import type { RevisionBatchOp } from './textRevisionLinear';
 import {
@@ -104,7 +106,8 @@ export function useAIAgentEditorController({
   /** Latest `dirty` / persist fn for unmount cleanup (avoids stale closure). */
   const dirtyRef = React.useRef(false);
   const persistEditorStateToRepositoryRef = React.useRef<() => void>(() => {});
-  const structuredRev = useStructuredAgentSectionsRevision();
+  const structuredOtEnabled = isStructuredSectionsOtEnabled();
+  const structuredRev = useStructuredAgentSectionsRevision(structuredOtEnabled);
   const { loadFromPersisted } = structuredRev;
 
   const agentPrompt = structuredRev.composedRuntimeMarkdown;
@@ -122,6 +125,14 @@ export function useAIAgentEditorController({
     (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => {
       setDirty(true);
       structuredRev.applyRevisionOps(sectionId, ops);
+    },
+    [structuredRev]
+  );
+
+  const applyOtCommit = React.useCallback(
+    (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => {
+      setDirty(true);
+      structuredRev.applyOtCommit(sectionId, newOps);
     },
     [structuredRev]
   );
@@ -359,7 +370,9 @@ export function useAIAgentEditorController({
       const applied = applyGenerateDesignPayload(design);
       setProposedFields(applied.proposedFields);
       structuredRev.resetAllFromApiBases(applied.sectionBases);
-      const nextPersist = persistedFromCleanSectionBases(applied.sectionBases);
+      const nextPersist = persistedFromCleanSectionBases(applied.sectionBases, {
+        structuredOt: structuredOtEnabled,
+      });
       committedStructuredJsonRef.current = serializePersistedStructuredSections(nextPersist);
       setPreviewByStyle(applied.previewByStyle);
       setInitialStateTemplateJson(applied.initialStateTemplateJson);
@@ -384,7 +397,7 @@ export function useAIAgentEditorController({
     } finally {
       setGenerating(false);
     }
-  }, [hasAgentGeneration, designDescription, provider, model, structuredRev]);
+  }, [hasAgentGeneration, designDescription, provider, model, structuredRev, structuredOtEnabled]);
 
   const updateProposedField = React.useCallback(
     (fieldName: string, patch: Partial<AIAgentProposedVariable>) => {
@@ -513,6 +526,8 @@ export function useAIAgentEditorController({
     structuredSectionsState: structuredRev.sectionsState,
     composedRuntimeMarkdown: structuredRev.composedRuntimeMarkdown,
     applyRevisionOps,
+    applyOtCommit,
+    structuredOtEnabled,
     outputVariableMappings,
     proposedFields,
     previewByStyle,

@@ -7,7 +7,7 @@ import type { IDockviewPanelProps } from 'dockview';
 import { AIAgentRevisionEditorShell } from './AIAgentRevisionEditorShell';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { useAgentStructuredDockSlice } from './useAgentStructuredDockSlice';
-import { effectiveFromRevisionMask } from './effectiveFromRevisionMask';
+import { getStructuredSectionEffectiveText } from './structuredSectionEffective';
 import { splitOperationalSequenceLines } from './operationalSequenceDisplay';
 
 export function AgentSectionDockPanel(
@@ -18,6 +18,8 @@ export function AgentSectionDockPanel(
     sectionsState,
     readOnly,
     onApplyRevisionOps,
+    onApplyOtCommit,
+    structuredOtEnabled,
     iaRevisionDiffBySection,
     onDismissIaRevisionForSection,
   } = useAgentStructuredDockSlice();
@@ -31,15 +33,13 @@ export function AgentSectionDockPanel(
 
   const activeSlice = sectionsState[sectionId];
   const activeDiff = iaRevisionDiffBySection?.[sectionId];
-  const effectiveText = effectiveFromRevisionMask(
-    activeSlice.promptBaseText,
-    activeSlice.deletedMask,
-    activeSlice.inserts
-  );
+  const effectiveText = getStructuredSectionEffectiveText(activeSlice);
   const opLines =
     sectionId === 'operational_sequence' && effectiveText.trim()
       ? splitOperationalSequenceLines(effectiveText)
       : null;
+
+  const otMode = Boolean(structuredOtEnabled && activeSlice.storageMode === 'ot' && activeSlice.ot);
 
   return (
     <div className="h-full min-h-0 flex flex-col bg-slate-950/80 overflow-hidden">
@@ -67,6 +67,11 @@ export function AgentSectionDockPanel(
               : null
           }
           onDismissIaRevisionDiff={() => onDismissIaRevisionForSection(sectionId)}
+          otMode={otMode}
+          otCurrentText={activeSlice.ot?.currentText}
+          onApplyOtCommit={
+            otMode ? (ops) => onApplyOtCommit(sectionId, ops) : undefined
+          }
         />
       </div>
     </div>

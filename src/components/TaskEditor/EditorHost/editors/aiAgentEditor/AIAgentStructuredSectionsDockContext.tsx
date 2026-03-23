@@ -4,6 +4,7 @@
 
 import React from 'react';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
+import type { OtOp } from './otTypes';
 import type { StructuredSectionsRevisionState } from './structuredSectionsRevisionReducer';
 import type { RevisionBatchOp } from './textRevisionLinear';
 import type { IaSectionDiffPair } from './iaSectionDiffTypes';
@@ -14,6 +15,8 @@ export interface AIAgentStructuredSectionsDockContextValue {
   sectionsState: StructuredSectionsRevisionState;
   readOnly: boolean;
   onApplyRevisionOps: (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => void;
+  onApplyOtCommit: (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => void;
+  structuredOtEnabled: boolean;
   iaRevisionDiffBySection: Partial<Record<AgentStructuredSectionId, IaSectionDiffPair>> | null;
   onDismissIaRevisionForSection: (sectionId: AgentStructuredSectionId) => void;
 }

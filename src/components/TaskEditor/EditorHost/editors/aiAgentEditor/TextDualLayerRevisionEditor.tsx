@@ -1,48 +1,32 @@
 /**
  * Plaintext revision editor: read-only styled mirror + transparent textarea for input (IME, paste, undo).
- * Emits structured RevisionBatchOp[] for the section reducer (no Monaco).
+ * Emits structured RevisionBatchOp[] (linear) or OtOp[] (OT mode) for the section reducer.
+ * OT mode derives mask/inserts from base+effective so strikethrough/insert colors match the legacy path.
  */
 
 import React from 'react';
 import { flushSync } from 'react-dom';
 import type { InsertOp } from './effectiveFromRevisionMask';
-import { buildLinearDocument, linearEditToBatchOps, type RevisionBatchOp, type RevisionCharMeta } from './textRevisionLinear';
+import { effectiveFromRevisionMask } from './effectiveFromRevisionMask';
+import { diffToOps } from './otDiffToOps';
+import { effectivePairToMaskAndInserts } from './otLinearDisplay';
+import type { OtOp } from './otTypes';
+import { applyRevisionBatchToSlice } from './applyRevisionBatchToSlice';
+import {
+  buildLinearDocument,
+  linearEditToBatchOps,
+  type RevisionBatchOp,
+} from './textRevisionLinear';
+import type { StructuredSectionRevisionSlice } from './structuredSectionsRevisionReducer';
+import {
+  isRevisioningDebugEnabled,
+  revisioningDebugGroup,
+  revisioningGraphemeLikeCount,
+  truncateForRevisioningLog,
+} from './revisioningDebug';
+import { buildRevisionMirrorNodes } from './revisionMirrorRuns';
 
-function revisionMirrorNodes(
-  linear: string,
-  meta: readonly RevisionCharMeta[],
-  deletedMask: readonly boolean[]
-): React.ReactNode[] {
-  const out: React.ReactNode[] = [];
-  for (let i = 0; i < linear.length; i++) {
-    const ch = linear[i];
-    const m = meta[i];
-    const key = `${i}-${m?.kind ?? 'x'}`;
-    if (!m) {
-      out.push(
-        <span key={key} className="omnia-text-rev-base">
-          {ch}
-        </span>
-      );
-      continue;
-    }
-    if (m.kind === 'insert') {
-      out.push(
-        <span key={key} className="omnia-text-rev-insert">
-          {ch}
-        </span>
-      );
-    } else {
-      const struck = m.baseIndex < deletedMask.length && deletedMask[m.baseIndex];
-      out.push(
-        <span key={key} className={struck ? 'omnia-text-rev-delete' : 'omnia-text-rev-base'}>
-          {ch}
-        </span>
-      );
-    }
-  }
-  return out;
-}
+type LastLinearDoc = { linear: string } | ReturnType<typeof buildLinearDocument>;
 
 export interface TextDualLayerRevisionEditorProps {
   baseText: string;
@@ -51,6 +35,10 @@ export interface TextDualLayerRevisionEditorProps {
   readOnly: boolean;
   onApplyRevisionOps: (ops: readonly RevisionBatchOp[]) => void;
   minHeightPx?: number;
+  /** When set with {@link otCurrentText} and {@link onApplyOtCommit}, uses OT diff path. */
+  otMode?: boolean;
+  otCurrentText?: string;
+  onApplyOtCommit?: (ops: readonly OtOp[]) => void;
 }
 
 export function TextDualLayerRevisionEditor({
@@ -60,26 +48,50 @@ export function TextDualLayerRevisionEditor({
   readOnly,
   onApplyRevisionOps,
   minHeightPx = 280,
+  otMode = false,
+  otCurrentText,
+  onApplyOtCommit,
 }: TextDualLayerRevisionEditorProps) {
   const taRef = React.useRef<HTMLTextAreaElement | null>(null);
   const composingRef = React.useRef(false);
   const lastPropLinearRef = React.useRef<string>('');
-  const lastKnownDocRef = React.useRef(buildLinearDocument(baseText, deletedMask, inserts));
+  const lastKnownDocRef = React.useRef<LastLinearDoc>(
+    buildLinearDocument(baseText, deletedMask, inserts)
+  );
+  /** Mask/inserts matching {@link lastKnownDocRef} when OT (for linearEditToBatchOps). */
+  const otMaskRef = React.useRef<boolean[]>([]);
+  const otInsRef = React.useRef<InsertOp[]>([]);
   /** After a local edit, caret/selection end in the synced linear string (multi-hunk safe). */
   const pendingCaretRef = React.useRef<number | null>(null);
   const [editError, setEditError] = React.useState<string | null>(null);
 
-  const docFromProps = React.useMemo(
-    () => buildLinearDocument(baseText, deletedMask, inserts),
-    [baseText, deletedMask, inserts]
-  );
+  const isOt = Boolean(otMode && onApplyOtCommit && otCurrentText !== undefined);
+
+  const otDerived = React.useMemo(() => {
+    if (!isOt || otCurrentText === undefined) {
+      return { deletedMask: [] as boolean[], inserts: [] as InsertOp[] };
+    }
+    return effectivePairToMaskAndInserts(baseText, otCurrentText);
+  }, [isOt, baseText, otCurrentText]);
+
+  const docFromProps = React.useMemo(() => {
+    if (isOt) {
+      return buildLinearDocument(baseText, otDerived.deletedMask, otDerived.inserts);
+    }
+    return buildLinearDocument(baseText, deletedMask, inserts);
+  }, [isOt, baseText, otDerived, deletedMask, inserts]);
 
   React.useLayoutEffect(() => {
     const ta = taRef.current;
     if (!ta) return;
+
     const nextLinear = docFromProps.linear;
     lastPropLinearRef.current = nextLinear;
     lastKnownDocRef.current = docFromProps;
+    if (isOt) {
+      otMaskRef.current = otDerived.deletedMask;
+      otInsRef.current = otDerived.inserts;
+    }
 
     const pending = pendingCaretRef.current;
     const needAssign = ta.value !== nextLinear;
@@ -105,11 +117,22 @@ export function TextDualLayerRevisionEditor({
     } catch {
       pendingCaretRef.current = null;
     }
-  }, [docFromProps]);
+
+    if (!isOt && isRevisioningDebugEnabled() && ta.value !== nextLinear) {
+      console.warn('[revisioning] DESYNC: textarea.value !== docFromProps.linear after layout sync', {
+        textareaCodeUnits: ta.value.length,
+        docCodeUnits: nextLinear.length,
+        textareaPreview: truncateForRevisioningLog(ta.value),
+        docPreview: truncateForRevisioningLog(nextLinear),
+      });
+    }
+  }, [docFromProps, isOt, otDerived]);
+
+  const mirrorDeletedMask = isOt ? otDerived.deletedMask : deletedMask;
 
   const mirrorNodes = React.useMemo(
-    () => revisionMirrorNodes(docFromProps.linear, docFromProps.meta, deletedMask),
-    [docFromProps, deletedMask]
+    () => buildRevisionMirrorNodes(docFromProps.linear, docFromProps.meta, mirrorDeletedMask),
+    [docFromProps, mirrorDeletedMask]
   );
 
   const applyInput = React.useCallback(
@@ -119,10 +142,65 @@ export function TextDualLayerRevisionEditor({
       const next = el.value;
       if (next === prev.linear) return;
 
+      if (isOt) {
+        if (!onApplyOtCommit) return;
+        const prevDoc = prev as ReturnType<typeof buildLinearDocument>;
+        const batchOps = linearEditToBatchOps(
+          prevDoc.linear,
+          next,
+          prevDoc.meta,
+          baseText,
+          otMaskRef.current,
+          otInsRef.current
+        );
+        if (batchOps.length === 0) {
+          return;
+        }
+        const prevSlice: StructuredSectionRevisionSlice = {
+          promptBaseText: baseText,
+          deletedMask: [...otMaskRef.current],
+          inserts: otInsRef.current.map((x) => ({ ...x })),
+          refinementOpLog: [],
+          storageMode: 'linear',
+          ot: null,
+        };
+        const nextSlice = applyRevisionBatchToSlice(prevSlice, batchOps);
+        const prevEff = effectiveFromRevisionMask(baseText, prevSlice.deletedMask, prevSlice.inserts);
+        const nextEff = effectiveFromRevisionMask(baseText, nextSlice.deletedMask, nextSlice.inserts);
+        const otOps = diffToOps(prevEff, nextEff);
+        if (otOps.length === 0) {
+          return;
+        }
+        const selEnd = el.selectionEnd ?? el.selectionStart ?? next.length;
+        const selStart = el.selectionStart ?? selEnd;
+        pendingCaretRef.current = Math.max(0, Math.min(Math.max(selStart, selEnd), next.length));
+        setEditError(null);
+        onApplyOtCommit(otOps);
+        return;
+      }
+
+      const prevDoc = prev as ReturnType<typeof buildLinearDocument>;
+
+      if (isRevisioningDebugEnabled()) {
+        revisioningDebugGroup('TextDualLayerRevisionEditor: input event', () => {
+          const ss = el.selectionStart ?? 0;
+          const se = el.selectionEnd ?? 0;
+          console.log('selectionStart/End', ss, se);
+          console.log(
+            'prevLinear code units / grapheme-like',
+            prevDoc.linear.length,
+            revisioningGraphemeLikeCount(prevDoc.linear)
+          );
+          console.log('nextLinear code units / grapheme-like', next.length, revisioningGraphemeLikeCount(next));
+          console.log('prevLinear preview', truncateForRevisioningLog(prevDoc.linear));
+          console.log('nextLinear preview', truncateForRevisioningLog(next));
+        });
+      }
+
       const ops = linearEditToBatchOps(
-        prev.linear,
+        prevDoc.linear,
         next,
-        prev.meta,
+        prevDoc.meta,
         baseText,
         deletedMask,
         inserts
@@ -139,13 +217,12 @@ export function TextDualLayerRevisionEditor({
       setEditError(null);
       onApplyRevisionOps(ops);
     },
-    [readOnly, baseText, deletedMask, inserts, onApplyRevisionOps]
+    [readOnly, isOt, baseText, deletedMask, inserts, onApplyRevisionOps, onApplyOtCommit]
   );
 
   const onInput = React.useCallback(
     (e: React.FormEvent<HTMLTextAreaElement>) => {
       if (composingRef.current) return;
-      // Synchronous commit so useLayoutEffect updates lastKnownDocRef before the next key event.
       flushSync(() => applyInput(e.currentTarget));
     },
     [applyInput]
@@ -184,28 +261,28 @@ export function TextDualLayerRevisionEditor({
         className="w-full rounded-md border border-slate-600/60 overflow-auto bg-slate-900"
         style={{ minHeight: minHeightPx, maxHeight: 'min(70vh, 560px)' }}
       >
-      <div
-        className="grid [grid-template-areas:'stack'] min-w-0"
-        style={{ minHeight: Math.max(minHeightPx - 16, 200) }}
-      >
-        <pre
-          className="[grid-area:stack] pointer-events-none m-0 p-2 text-[13px] font-mono leading-5 whitespace-pre-wrap break-words text-slate-200"
-          aria-hidden
+        <div
+          className="grid [grid-template-areas:'stack'] min-w-0"
+          style={{ minHeight: Math.max(minHeightPx - 16, 200) }}
         >
-          {mirrorNodes}
-        </pre>
-        <textarea
-          ref={taRef}
-          className="[grid-area:stack] z-10 m-0 resize-none overflow-hidden bg-transparent p-2 text-[13px] font-mono leading-5 whitespace-pre-wrap break-words text-transparent caret-slate-300 min-h-full w-full min-w-0 border-0 outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
-          defaultValue={docFromProps.linear}
-          readOnly={readOnly}
-          spellCheck={false}
-          aria-label="Prompt agente — revisioni suggerite (testo base + insert/cancel)"
-          onInput={onInput}
-          onCompositionStart={onCompositionStart}
-          onCompositionEnd={onCompositionEnd}
-        />
-      </div>
+          <pre
+            className="[grid-area:stack] pointer-events-none m-0 p-2 text-[13px] font-mono leading-5 whitespace-pre-wrap break-words text-slate-200"
+            aria-hidden
+          >
+            {mirrorNodes}
+          </pre>
+          <textarea
+            ref={taRef}
+            className="[grid-area:stack] z-10 m-0 resize-none overflow-hidden bg-transparent p-2 text-[13px] font-mono leading-5 whitespace-pre-wrap break-words text-transparent caret-slate-300 min-h-full w-full min-w-0 border-0 outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+            defaultValue={docFromProps.linear}
+            readOnly={readOnly}
+            spellCheck={false}
+            aria-label="Prompt agente — revisioni suggerite (testo base + insert/cancel)"
+            onInput={onInput}
+            onCompositionStart={onCompositionStart}
+            onCompositionEnd={onCompositionEnd}
+          />
+        </div>
       </div>
     </div>
   );

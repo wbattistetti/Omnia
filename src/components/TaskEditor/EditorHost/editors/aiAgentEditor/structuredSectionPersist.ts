@@ -5,24 +5,66 @@
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { AGENT_STRUCTURED_SECTION_IDS } from './agentStructuredSectionIds';
 import type { InsertOp } from './effectiveFromRevisionMask';
+import type { OtOp } from './otTypes';
+import { applyOperations } from './otTextDocument';
 
-export interface PersistedSectionSnapshot {
+/** Legacy v1 snapshot (mask + inserts on IA base). */
+export interface PersistedSectionSnapshotV1 {
   base: string;
   deletedMask: boolean[];
   inserts: InsertOp[];
 }
+
+/** OT snapshot: canonical op log + materialized body (UTF-16). */
+export interface PersistedSectionSnapshotV2 {
+  version: 2;
+  revisionBase: string;
+  opLog: OtOp[];
+  currentText: string;
+}
+
+export type PersistedSectionSnapshot = PersistedSectionSnapshotV1 | PersistedSectionSnapshotV2;
 
 export type PersistedStructuredSections = Record<AgentStructuredSectionId, PersistedSectionSnapshot>;
 
 const LEGACY_PLACEHOLDER =
   '(Contenuto da definire — usa Refine comportamento o rigenera le sezioni.)';
 
-function emptySnapshot(base: string): PersistedSectionSnapshot {
+function emptySnapshot(base: string): PersistedSectionSnapshotV1 {
   return {
     base,
     deletedMask: new Array(Math.max(0, base.length)).fill(false),
     inserts: [],
   };
+}
+
+function parseOtOpLog(raw: unknown): OtOp[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const out: OtOp[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    if (o.type === 'delete') {
+      const start = typeof o.start === 'number' && Number.isFinite(o.start) ? o.start : 0;
+      const end = typeof o.end === 'number' && Number.isFinite(o.end) ? o.end : 0;
+      out.push({ type: 'delete', start, end });
+    } else if (o.type === 'insert') {
+      const position =
+        typeof o.position === 'number' && Number.isFinite(o.position) ? o.position : 0;
+      const text = typeof o.text === 'string' ? o.text : '';
+      out.push({ type: 'insert', position, text });
+    }
+  }
+  return out;
+}
+
+function normalizeV2Snapshot(row: PersistedSectionSnapshotV2): PersistedSectionSnapshotV2 {
+  const revisionBase = row.revisionBase;
+  const opLog = row.opLog;
+  const currentText = applyOperations(revisionBase, opLog);
+  return { version: 2, revisionBase, opLog, currentText };
 }
 
 /**
@@ -64,6 +106,19 @@ export function parsePersistedStructuredSectionsJson(
         continue;
       }
       const r = row as Record<string, unknown>;
+      if (r.version === 2) {
+        const revisionBase = typeof r.revisionBase === 'string' ? r.revisionBase : '';
+        const currentTextRaw = typeof r.currentText === 'string' ? r.currentText : '';
+        const opLog = parseOtOpLog(r.opLog);
+        out[id] = normalizeV2Snapshot({
+          version: 2,
+          revisionBase,
+          opLog,
+          currentText: currentTextRaw,
+        });
+        continue;
+      }
+
       const base = typeof r.base === 'string' ? r.base : '';
       const dm = Array.isArray(r.deletedMask)
         ? (r.deletedMask as unknown[]).map((x) => Boolean(x))
@@ -93,18 +148,25 @@ export function serializePersistedStructuredSections(p: PersistedStructuredSecti
 
 /**
  * After IA returns clean section bodies, each section starts with no user revisions.
+ * @param structuredOt — when true, persists v2 OT snapshots (empty op log).
  */
 export function persistedFromCleanSectionBases(
-  bases: Record<AgentStructuredSectionId, string>
+  bases: Record<AgentStructuredSectionId, string>,
+  options?: { structuredOt?: boolean }
 ): PersistedStructuredSections {
+  const structuredOt = options?.structuredOt === true;
   const out = {} as PersistedStructuredSections;
   for (const id of AGENT_STRUCTURED_SECTION_IDS) {
     const base = bases[id] ?? '';
-    out[id] = {
-      base,
-      deletedMask: new Array(Math.max(0, base.length)).fill(false),
-      inserts: [],
-    };
+    if (structuredOt) {
+      out[id] = { version: 2, revisionBase: base, opLog: [], currentText: base };
+    } else {
+      out[id] = {
+        base,
+        deletedMask: new Array(Math.max(0, base.length)).fill(false),
+        inserts: [],
+      };
+    }
   }
   return out;
 }

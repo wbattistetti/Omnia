@@ -9,6 +9,13 @@
 
 import { diffChars } from 'diff';
 import type { InsertOp } from './effectiveFromRevisionMask';
+import {
+  isRevisioningDebugEnabled,
+  revisioningDebugGroup,
+  revisioningGraphemeLikeCount,
+  truncateForRevisioningLog,
+} from './revisioningDebug';
+import { isSingleContiguousEdit, splitPrefixSuffixMiddle } from './revisionStringDiff';
 
 export type RevisionCharMeta =
   | { kind: 'base'; baseIndex: number }
@@ -107,13 +114,49 @@ export type LinearDiffHunk = {
 type DiffChange = { value: string; added?: boolean; removed?: boolean };
 
 /**
- * Character-level diff as ordered hunks (Myers via `diff` package).
+ * Ordered hunks between previous and next linear strings (UTF-16).
+ * Uses Myers first; when it fragments a **single** logical edit into many hunks (checkerboard),
+ * collapses to one prefix/suffix region — except when Myers reports **only insert** hunks, in which
+ * case we keep Myers (e.g. `aaa` → `axaya` must stay two inserts for batch ops).
  */
 export function computeLinearDiffHunks(prev: string, next: string): LinearDiffHunk[] {
   if (prev === next) {
     return prev.length > 0 ? [{ type: 'equal', aStart: 0, aEnd: prev.length, bStart: 0, bEnd: next.length }] : [];
   }
 
+  const myersHunks = computeLinearDiffHunksMyers(prev, next);
+  const actionable = myersHunks.filter((h) => h.type !== 'equal');
+  if (actionable.length <= 1) {
+    return myersHunks;
+  }
+
+  const onlyInsertHunks = actionable.every((h) => h.type === 'insert');
+  if (onlyInsertHunks) {
+    return myersHunks;
+  }
+
+  if (isSingleContiguousEdit(prev, next)) {
+    const { prefixLen, suffixLen } = splitPrefixSuffixMiddle(prev, next);
+    const aStart = prefixLen;
+    const aEnd = prev.length - suffixLen;
+    const bStart = prefixLen;
+    const bEnd = next.length - suffixLen;
+    if (aStart === aEnd) {
+      return [{ type: 'insert', aStart, aEnd: aStart, bStart, bEnd }];
+    }
+    if (bStart === bEnd) {
+      return [{ type: 'delete', aStart, aEnd, bStart, bEnd: bStart }];
+    }
+    return [{ type: 'replace', aStart, aEnd, bStart, bEnd }];
+  }
+
+  return myersHunks;
+}
+
+/**
+ * Character-level diff as ordered hunks (Myers via `diff` package). Used when edits are not one contiguous region.
+ */
+function computeLinearDiffHunksMyers(prev: string, next: string): LinearDiffHunk[] {
   const changes = diffChars(prev, next) as DiffChange[];
   let a = 0;
   let b = 0;
@@ -233,27 +276,43 @@ export function resolveLinearInsertToBatchOp(
   }
   const left = aStart > 0 ? meta[aStart - 1] : undefined;
   const right = aStart < meta.length ? meta[aStart] : undefined;
+  let decision: 'splice_after_left_insert' | 'splice_before_right_insert' | 'new_insert_at_base';
+  let op: RevisionBatchOp;
   if (left?.kind === 'insert') {
-    return {
+    decision = 'splice_after_left_insert';
+    op = {
       t: 'splice_insert',
       opId: left.opId,
       atCharIndex: left.charIndex + 1,
       text,
     };
-  }
-  if (right?.kind === 'insert') {
-    return {
+  } else if (right?.kind === 'insert') {
+    decision = 'splice_before_right_insert';
+    op = {
       t: 'splice_insert',
       opId: right.opId,
       atCharIndex: right.charIndex,
       text,
     };
+  } else {
+    decision = 'new_insert_at_base';
+    op = {
+      t: 'insert',
+      position: linearToBaseInsertPosition(aStart, baseText, inserts),
+      text,
+    };
   }
-  return {
-    t: 'insert',
-    position: linearToBaseInsertPosition(aStart, baseText, inserts),
-    text,
-  };
+  if (isRevisioningDebugEnabled()) {
+    console.log('[revisioning] resolveLinearInsertToBatchOp', {
+      aStart,
+      decision,
+      leftMeta: left,
+      rightMeta: right,
+      textPreview: truncateForRevisioningLog(text, 80),
+      op,
+    });
+  }
+  return op;
 }
 
 /**
@@ -270,13 +329,41 @@ export function linearEditToBatchOps(
 ): RevisionBatchOp[] {
   if (prevLinear === nextLinear) return [];
 
+  const debug = isRevisioningDebugEnabled();
+  if (debug) {
+    revisioningDebugGroup('linearEditToBatchOps: diff input', () => {
+      console.log('prevLinear length (code units)', prevLinear.length);
+      console.log('nextLinear length (code units)', nextLinear.length);
+      console.log('grapheme-like counts', revisioningGraphemeLikeCount(prevLinear), revisioningGraphemeLikeCount(nextLinear));
+      console.log('prevLinear preview', truncateForRevisioningLog(prevLinear));
+      console.log('nextLinear preview', truncateForRevisioningLog(nextLinear));
+      const raw = diffChars(prevLinear, nextLinear) as { value: string; added?: boolean; removed?: boolean }[];
+      console.log(
+        'diffChars segments',
+        raw.map((c) => ({
+          added: c.added,
+          removed: c.removed,
+          len: c.value.length,
+          preview: truncateForRevisioningLog(c.value, 60),
+        }))
+      );
+    });
+  }
+
   const hunks = computeLinearDiffHunks(prevLinear, nextLinear);
   const actionable = hunks.filter((h) => h.type !== 'equal');
+  if (debug) {
+    console.log('[revisioning] computeLinearDiffHunks (all)', hunks);
+    console.log('[revisioning] actionable hunks', actionable);
+  }
   if (actionable.length === 0) return [];
 
   if (actionable.length === 1 && actionable[0].type === 'replace') {
     const shortcut = tryReplaceInsertRunOnly(actionable[0], meta, nextLinear, inserts);
     if (shortcut) {
+      if (debug) {
+        console.log('[revisioning] replace shortcut → set_insert_text', shortcut);
+      }
       return [{ t: 'set_insert_text', opId: shortcut.opId, text: shortcut.text }];
     }
   }
@@ -334,11 +421,22 @@ export function linearEditToBatchOps(
   }
 
   insertJobs.sort((x, y) => x.aStart - y.aStart || x.bStart - y.bStart);
+  if (debug) {
+    console.log('[revisioning] sorted actionable hunks', sortedHunks);
+    console.log('[revisioning] insertJobs', insertJobs);
+  }
   for (const job of insertJobs) {
     ops.push(resolveLinearInsertToBatchOp(job.aStart, job.text, meta, baseText, inserts));
   }
 
-  return consolidateSpliceInsertsInBatch(ops, inserts);
+  if (debug) {
+    console.log('[revisioning] batch ops (pre-consolidate)', ops);
+  }
+  const merged = consolidateSpliceInsertsInBatch(ops, inserts);
+  if (debug) {
+    console.log('[revisioning] batch ops (post-consolidate)', merged);
+  }
+  return merged;
 }
 
 type SpliceInsertOp = Extract<RevisionBatchOp, { t: 'splice_insert' }>;

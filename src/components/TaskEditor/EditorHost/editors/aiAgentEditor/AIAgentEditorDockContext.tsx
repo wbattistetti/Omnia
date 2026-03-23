@@ -6,6 +6,7 @@ import React from 'react';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
+import type { OtOp } from './otTypes';
 import type { StructuredSectionsRevisionState } from './structuredSectionsRevisionReducer';
 import type { IaSectionDiffPair } from './iaSectionDiffTypes';
 import type { RevisionBatchOp } from './textRevisionLinear';
@@ -18,6 +19,9 @@ export interface AIAgentEditorDockContextValue {
   composedRuntimeMarkdown: string;
   structuredSectionsState: StructuredSectionsRevisionState;
   onApplyRevisionOps: (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => void;
+  /** When {@link structuredOtEnabled}, structured sections may commit UTF-16 OT ops instead of linear batch ops. */
+  onApplyOtCommit: (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => void;
+  structuredOtEnabled: boolean;
   iaRevisionDiffBySection: Partial<Record<AgentStructuredSectionId, IaSectionDiffPair>> | null;
   onDismissIaRevisionForSection: (sectionId: AgentStructuredSectionId) => void;
   generating: boolean;

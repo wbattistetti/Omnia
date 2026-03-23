@@ -31,6 +31,9 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     hideHeader,
     onToolbarUpdate,
     hasAgentGeneration: c.hasAgentGeneration,
+    showPrimaryAgentAction: c.showPrimaryAgentAction,
+    generating: c.generating,
+    onPrimaryAgentAction: () => void c.handleGenerate(),
   });
 
   const headerColor = AI_AGENT_HEADER_COLOR;
@@ -60,6 +63,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     composedRuntimeMarkdown: c.composedRuntimeMarkdown,
     structuredSectionsState: c.structuredSectionsState,
     onApplyRevisionOps: c.applyRevisionOps,
+    onApplyOtCommit: c.applyOtCommit,
+    structuredOtEnabled: c.structuredOtEnabled,
     iaRevisionDiffBySection: c.iaRevisionDiffBySection,
     onDismissIaRevisionForSection: c.dismissIaRevisionForSection,
     generating: c.generating,
@@ -85,6 +90,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;
 
+  const hasOtSections = React.useMemo(
+    () => Object.values(c.structuredSectionsState).some((s) => s.storageMode === 'ot'),
+    [c.structuredSectionsState]
+  );
+
   return (
     <div className="h-full w-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
       {!hideHeader && (
@@ -94,6 +104,22 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
         >
           <Bot size={20} style={{ color: headerColor }} />
           <span className="font-semibold shrink-0">AI Agent (design-time)</span>
+          {c.structuredOtEnabled ? (
+            <span
+              title={
+                hasOtSections
+                  ? 'Sezioni strutturate in modalità OT: persistenza v2 (revisionBase, opLog, currentText).'
+                  : 'Flag VITE_AI_AGENT_STRUCTURED_OT attivo. Dopo Generate/Refine le sezioni useranno OT e persistenza v2.'
+              }
+              className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide border tabular-nums ${
+                hasOtSections
+                  ? 'border-emerald-500/55 bg-emerald-950/45 text-emerald-200'
+                  : 'border-amber-500/45 bg-amber-950/35 text-amber-200/95'
+              }`}
+            >
+              OT{hasOtSections ? ' v2' : ''}
+            </span>
+          ) : null}
           <div className="ml-auto flex min-w-0 items-center gap-3">
             <span className="text-xs text-slate-500 truncate">Task {c.instanceId}</span>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">

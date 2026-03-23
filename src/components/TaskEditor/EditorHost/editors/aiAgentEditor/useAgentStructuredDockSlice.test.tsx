@@ -29,6 +29,8 @@ function structuredFixture(): AIAgentStructuredSectionsDockContextValue {
     sectionsState: createInitialStructuredSectionsState(emptySectionBases()),
     readOnly: false,
     onApplyRevisionOps: noop,
+    onApplyOtCommit: noop,
+    structuredOtEnabled: false,
     iaRevisionDiffBySection: null,
     onDismissIaRevisionForSection: noop,
   };

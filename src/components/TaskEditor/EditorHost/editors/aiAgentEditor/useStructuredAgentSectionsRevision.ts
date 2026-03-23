@@ -5,9 +5,10 @@
 import React from 'react';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { AGENT_STRUCTURED_SECTION_IDS } from './agentStructuredSectionIds';
-import { effectiveFromRevisionMask } from './effectiveFromRevisionMask';
 import { composeRuntimePromptMarkdown } from './composeRuntimePromptMarkdown';
+import type { OtOp } from './otTypes';
 import type { PersistedStructuredSections } from './structuredSectionPersist';
+import { getStructuredSectionEffectiveText } from './structuredSectionEffective';
 import {
   createInitialStructuredSectionsState,
   structuredSectionsRevisionReducer,
@@ -31,10 +32,13 @@ export interface UseStructuredAgentSectionsRevisionResult {
   applyDeleteRange: (sectionId: AgentStructuredSectionId, start: number, end: number) => void;
   applyInsert: (sectionId: AgentStructuredSectionId, position: number, text: string) => void;
   applyRevisionOps: (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => void;
+  applyOtCommit: (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => void;
   collectRefinementBundles: () => SectionRefinementBundle[];
 }
 
-export function useStructuredAgentSectionsRevision(): UseStructuredAgentSectionsRevisionResult {
+export function useStructuredAgentSectionsRevision(
+  structuredOtEnabled: boolean
+): UseStructuredAgentSectionsRevisionResult {
   const [sectionsState, dispatch] = React.useReducer(
     structuredSectionsRevisionReducer,
     undefined,
@@ -51,7 +55,7 @@ export function useStructuredAgentSectionsRevision(): UseStructuredAgentSections
     const out = {} as Record<AgentStructuredSectionId, string>;
     for (const id of AGENT_STRUCTURED_SECTION_IDS) {
       const s = sectionsState[id];
-      out[id] = effectiveFromRevisionMask(s.promptBaseText, s.deletedMask, s.inserts);
+      out[id] = getStructuredSectionEffectiveText(s);
     }
     return out;
   }, [sectionsState]);
@@ -61,9 +65,12 @@ export function useStructuredAgentSectionsRevision(): UseStructuredAgentSections
     [effectiveBySection]
   );
 
-  const resetAllFromApiBases = React.useCallback((bases: Record<AgentStructuredSectionId, string>) => {
-    dispatch({ type: 'RESET_ALL', bases });
-  }, []);
+  const resetAllFromApiBases = React.useCallback(
+    (bases: Record<AgentStructuredSectionId, string>) => {
+      dispatch({ type: 'RESET_ALL', bases, structuredOt: structuredOtEnabled });
+    },
+    [structuredOtEnabled]
+  );
 
   const loadFromPersisted = React.useCallback((p: PersistedStructuredSections) => {
     dispatch({ type: 'RESET_FROM_PERSISTED', persisted: p });
@@ -90,6 +97,13 @@ export function useStructuredAgentSectionsRevision(): UseStructuredAgentSections
     []
   );
 
+  const applyOtCommit = React.useCallback(
+    (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => {
+      dispatch({ type: 'APPLY_OT_COMMIT', sectionId, newOps });
+    },
+    []
+  );
+
   const collectRefinementBundles = React.useCallback((): SectionRefinementBundle[] => {
     return AGENT_STRUCTURED_SECTION_IDS.map((sectionId) => {
       const s = sectionsState[sectionId];
@@ -111,6 +125,7 @@ export function useStructuredAgentSectionsRevision(): UseStructuredAgentSections
       applyDeleteRange,
       applyInsert,
       applyRevisionOps,
+      applyOtCommit,
       collectRefinementBundles,
     }),
     [
@@ -122,6 +137,7 @@ export function useStructuredAgentSectionsRevision(): UseStructuredAgentSections
       applyDeleteRange,
       applyInsert,
       applyRevisionOps,
+      applyOtCommit,
       collectRefinementBundles,
     ]
   );

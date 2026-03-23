@@ -22,6 +22,8 @@ function slice(base: string): StructuredSectionRevisionSlice {
     deletedMask: new Array(base.length).fill(false),
     inserts: [],
     refinementOpLog: [],
+    storageMode: 'linear',
+    ot: null,
   };
 }
 
@@ -83,6 +85,16 @@ describe('computeLinearDiffHunks', () => {
     expect(hunks.length).toBeGreaterThanOrEqual(2);
     const inserts = hunks.filter((h) => h.type === 'insert');
     expect(inserts.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('uses single replace hunk for full rewrite when contiguous (World → Ciao)', () => {
+    const hunks = computeLinearDiffHunks('World', 'Ciao').filter((h) => h.type !== 'equal');
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0].type).toBe('replace');
+    expect(hunks[0].aStart).toBe(0);
+    expect(hunks[0].aEnd).toBe(5);
+    expect(hunks[0].bStart).toBe(0);
+    expect(hunks[0].bEnd).toBe(4);
   });
 });
 
@@ -150,6 +162,8 @@ describe('linearEditToBatchOps + applyRevisionBatchToSlice', () => {
       deletedMask: [false],
       inserts: [{ id: 'ins1', position: 1, text: 'hello' }],
       refinementOpLog: [],
+      storageMode: 'linear',
+      ot: null,
     };
     const d0 = buildLinearDocument(s0.promptBaseText, s0.deletedMask, s0.inserts);
     expect(d0.linear).toBe('ahello');
@@ -166,6 +180,8 @@ describe('linearEditToBatchOps + applyRevisionBatchToSlice', () => {
       deletedMask: [false],
       inserts: [{ id: 'i', position: 1, text: 'ab' }],
       refinementOpLog: [],
+      storageMode: 'linear',
+      ot: null,
     };
     const d0 = buildLinearDocument(s0.promptBaseText, s0.deletedMask, s0.inserts);
     const nextLinear = 'xazb';
@@ -180,6 +196,8 @@ describe('linearEditToBatchOps + applyRevisionBatchToSlice', () => {
       deletedMask: [false, false],
       inserts: [{ id: 'ins', position: 1, text: 'XY' }],
       refinementOpLog: [],
+      storageMode: 'linear',
+      ot: null,
     };
     const d0 = buildLinearDocument(s0.promptBaseText, s0.deletedMask, s0.inserts);
     expect(d0.linear).toBe('aXYb');
@@ -195,6 +213,8 @@ describe('linearEditToBatchOps + applyRevisionBatchToSlice', () => {
       deletedMask: [false, false],
       inserts: [{ id: 'ins', position: 1, text: 'XY' }],
       refinementOpLog: [],
+      storageMode: 'linear',
+      ot: null,
     };
     const d0 = buildLinearDocument(s0.promptBaseText, s0.deletedMask, s0.inserts);
     expect(d0.linear).toBe('aXYb');
@@ -239,6 +259,8 @@ describe('linearEditToBatchOps + applyRevisionBatchToSlice', () => {
       deletedMask: [false, false, false, false, false],
       inserts: [{ id: 'm', position: 2, text: '|' }],
       refinementOpLog: [],
+      storageMode: 'linear',
+      ot: null,
     };
     const d0 = buildLinearDocument(s0.promptBaseText, s0.deletedMask, s0.inserts);
     expect(d0.linear).toBe('ab|cde');
@@ -268,6 +290,8 @@ describe('linearEditToBatchOps + applyRevisionBatchToSlice', () => {
       deletedMask: [false],
       inserts: [{ id: 'ins1', position: 1, text: 'hello' }],
       refinementOpLog: [],
+      storageMode: 'linear',
+      ot: null,
     };
     const d0 = buildLinearDocument(s0.promptBaseText, s0.deletedMask, s0.inserts);
     const nextLinear = 'aheo';
