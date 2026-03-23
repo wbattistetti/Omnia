@@ -63,6 +63,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     iaRevisionDiffBySection: c.iaRevisionDiffBySection,
     onDismissIaRevisionForSection: c.dismissIaRevisionForSection,
     generating: c.generating,
+    showRightPanel,
     headerAction,
     primaryAgentActionLabel,
     proposedFields: c.proposedFields,
@@ -92,8 +93,28 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
           style={{ borderLeftColor: headerColor, borderLeftWidth: 4 }}
         >
           <Bot size={20} style={{ color: headerColor }} />
-          <span className="font-semibold">AI Agent (design-time)</span>
-          <span className="text-xs text-slate-500 ml-auto">Task {c.instanceId}</span>
+          <span className="font-semibold shrink-0">AI Agent (design-time)</span>
+          <div className="ml-auto flex min-w-0 items-center gap-3">
+            <span className="text-xs text-slate-500 truncate">Task {c.instanceId}</span>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              {headerAction}
+              {c.hasAgentGeneration && showRightPanel ? (
+                <button
+                  type="button"
+                  disabled={c.useCaseComposerBusy || c.generating}
+                  onClick={() => void c.handleGenerateUseCaseBundle()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-3 py-1.5 text-sm font-medium text-white"
+                >
+                  {c.useCaseComposerBusy ? (
+                    <Loader2 className="animate-spin" size={16} aria-hidden />
+                  ) : (
+                    <Sparkles size={16} aria-hidden />
+                  )}
+                  Generate Usecase
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
       )}
 

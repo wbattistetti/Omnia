@@ -17,19 +17,12 @@ import {
   EditorUnifiedDescriptionPanel,
   EditorUseCasesPanel,
 } from './AIAgentEditorDockPanels';
-import { AIAgentDockTopToolbar } from './AIAgentDockTopToolbar';
+import { AI_AGENT_DOCK_PANEL_IDS as PANEL_IDS } from './aiAgentDockPanelIds';
 
 const PROMPT_FINALE_PANEL_ID = 'prompt_finale';
 
 /** Tab title for the task description field. */
 const DESIGNER_DESC_TAB_TITLE = 'Descrizione';
-
-const PANEL_IDS = {
-  unified: 'ai_agent_editor_unified_desc',
-  taskDesc: 'ai_agent_editor_task_desc',
-  dati: 'ai_agent_editor_dati',
-  useCases: 'ai_agent_editor_use_cases',
-} as const;
 
 const UNIFIED_DOCK_COMPONENTS = {
   editorUnifiedDescription: EditorUnifiedDescriptionPanel,
@@ -141,7 +134,6 @@ export function AIAgentEditorDockShell({
   return (
     <AIAgentEditorDockProvider value={value}>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <AIAgentDockTopToolbar showRightPanel={showRightPanel} />
         <div
           className="dockview-theme-dark flex-1 min-h-0 flex flex-col rounded-none border-0 overflow-hidden"
           style={

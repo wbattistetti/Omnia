@@ -21,6 +21,8 @@ export interface AIAgentEditorDockContextValue {
   iaRevisionDiffBySection: Partial<Record<AgentStructuredSectionId, IaSectionDiffPair>> | null;
   onDismissIaRevisionForSection: (sectionId: AgentStructuredSectionId) => void;
   generating: boolean;
+  /** Whether the dock shows the right column (Dati / Use case); drives header actions visibility. */
+  showRightPanel: boolean;
   /** Primary action (Create / Refine) rendered by panels that previously showed it in the left column. */
   headerAction: React.ReactNode;
   primaryAgentActionLabel: string;

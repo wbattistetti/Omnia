@@ -17,6 +17,8 @@ export interface AIAgentPreviewChatPanelProps {
   readOnly?: boolean;
   /** Hide the style row (e.g. when the parent renders the selector in a shared header). */
   hideStyleSelector?: boolean;
+  /** When true, the scroll area has no inner rounded border (parent provides the outer shell). */
+  flushMessagesArea?: boolean;
 }
 
 function replaceTurn(turns: AIAgentPreviewTurn[], index: number, patch: Partial<AIAgentPreviewTurn>) {
@@ -31,6 +33,7 @@ export function AIAgentPreviewChatPanel({
   emptyPlaceholder,
   readOnly = false,
   hideStyleSelector = false,
+  flushMessagesArea = false,
 }: AIAgentPreviewChatPanelProps) {
   const [editingMessageIndex, setEditingMessageIndex] = React.useState<number | null>(null);
   const [editingNoteIndex, setEditingNoteIndex] = React.useState<number | null>(null);
@@ -117,7 +120,13 @@ export function AIAgentPreviewChatPanel({
       {turns.length === 0 ? (
         <div className="flex-1 min-h-0">{emptyPlaceholder}</div>
       ) : (
-        <div className="flex-1 min-h-0 rounded-md border border-slate-800 bg-slate-950/50 p-3 space-y-3 overflow-y-auto">
+        <div
+          className={
+            flushMessagesArea
+              ? 'flex-1 min-h-0 bg-slate-950/50 p-3 space-y-3 overflow-y-auto'
+              : 'flex-1 min-h-0 rounded-md border border-slate-800 bg-slate-950/50 p-3 space-y-3 overflow-y-auto'
+          }
+        >
           {turns.map((turn, i) => {
             const isAssistant = turn.role === 'assistant';
             const isEditingMessage = editingMessageIndex === i;

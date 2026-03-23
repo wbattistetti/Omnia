@@ -33,13 +33,10 @@ export function EditorUnifiedDescriptionPanel(_props: IDockviewPanelProps) {
 }
 
 export function EditorTaskDescriptionPanel(_props: IDockviewPanelProps) {
-  const { designDescription, setDesignDescription, generating, headerAction } = useAIAgentEditorDock();
+  const { designDescription, setDesignDescription, generating } = useAIAgentEditorDock();
 
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-teal-950/25 border-l-4 border-teal-500/55 space-y-2">
-      {headerAction ? (
-        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">{headerAction}</div>
-      ) : null}
       <textarea
         className="w-full flex-1 min-h-[200px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed resize-none"
         placeholder={AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER}

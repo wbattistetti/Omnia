@@ -147,7 +147,7 @@ export function AIAgentUseCaseComposer({
   );
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-3">
+    <div className="flex flex-col flex-1 min-h-0 gap-2">
       {error ? (
         <div className="rounded-lg border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200 flex justify-between gap-2">
           <span className="min-w-0 break-words">{error}</span>
@@ -161,7 +161,7 @@ export function AIAgentUseCaseComposer({
         </div>
       ) : null}
 
-      <div className="flex flex-1 min-h-0 gap-2 flex-col sm:flex-row sm:min-h-[320px]">
+      <div className="flex flex-1 min-h-0 gap-2 flex-col sm:flex-row sm:items-stretch sm:min-h-[320px]">
         {ordered.length === 0 ? (
           <div className="flex-1 min-h-0 w-full rounded-lg border border-slate-800 bg-slate-900/40 overflow-y-auto flex flex-col">
             <div className="flex-1 min-h-[120px] flex items-center justify-center p-6 text-sm text-slate-500 text-center">
@@ -346,10 +346,10 @@ export function AIAgentUseCaseComposer({
               </ul>
             </div>
 
-            <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden self-stretch">
+            <div className="flex flex-1 min-h-0 flex-col overflow-hidden self-stretch">
               {selected ? (
-                <>
-                  <div className="flex shrink-0 items-center justify-between gap-3 min-w-0">
+                <div className="flex flex-1 min-h-0 flex-col rounded-lg border border-slate-800 bg-slate-900/40 overflow-hidden">
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950/50 px-2 py-2 min-w-0">
                     <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wide">
                       <MessageSquare size={14} className="shrink-0 text-violet-400" aria-hidden />
                       <span className="truncate">Esempio di dialogo</span>
@@ -376,7 +376,7 @@ export function AIAgentUseCaseComposer({
                       </select>
                     </div>
                   </div>
-                  <div className="flex-1 min-h-[200px] rounded-lg border border-slate-800 overflow-hidden flex flex-col">
+                  <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
                     <AIAgentPreviewChatPanel
                       selectedStyleId={previewStyleId}
                       onStyleIdChange={onPreviewStyleIdChange}
@@ -384,12 +384,15 @@ export function AIAgentUseCaseComposer({
                       onTurnsChange={handlePreviewTurnsChange}
                       readOnly={busy}
                       hideStyleSelector
+                      flushMessagesArea
                       emptyPlaceholder={
-                        <div className="p-4 text-sm text-slate-500 text-center">Dialogo vuoto.</div>
+                        <div className="flex flex-1 min-h-0 items-center justify-center p-4 text-sm text-slate-500 text-center">
+                          Dialogo vuoto.
+                        </div>
                       }
                     />
                   </div>
-                </>
+                </div>
               ) : null}
             </div>
           </>
