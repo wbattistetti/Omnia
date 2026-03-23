@@ -17,6 +17,7 @@ import {
   EditorUnifiedDescriptionPanel,
   EditorUseCasesPanel,
 } from './AIAgentEditorDockPanels';
+import { AIAgentDockTopToolbar } from './AIAgentDockTopToolbar';
 
 const PROMPT_FINALE_PANEL_ID = 'prompt_finale';
 
@@ -66,7 +67,7 @@ function addLeftDesignTabGroup(api: DockviewApi): string {
   api.addPanel({
     id: PROMPT_FINALE_PANEL_ID,
     component: 'promptFinale',
-    title: 'Prompt finale',
+    title: 'Prompt Finale',
     params: {},
     position: { direction: 'within', referencePanel: PANEL_IDS.taskDesc, index: nextIndex },
   });
@@ -140,6 +141,7 @@ export function AIAgentEditorDockShell({
   return (
     <AIAgentEditorDockProvider value={value}>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <AIAgentDockTopToolbar showRightPanel={showRightPanel} />
         <div
           className="dockview-theme-dark flex-1 min-h-0 flex flex-col rounded-none border-0 overflow-hidden"
           style={

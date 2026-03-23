@@ -27,6 +27,7 @@ export interface AIAgentEditorDockContextValue {
   proposedFields: AIAgentProposedVariable[];
   outputVariableMappings: Record<string, string>;
   onUpdateProposedField: (fieldName: string, patch: Partial<AIAgentProposedVariable>) => void;
+  onRemoveProposedField: (fieldName: string) => void;
   onProposedLabelBlur: (fieldName: string, labelTrimmed: string) => void;
   logicalSteps: readonly AIAgentLogicalStep[];
   useCases: readonly AIAgentUseCase[];
@@ -36,7 +37,9 @@ export interface AIAgentEditorDockContextValue {
   onClearUseCaseComposerError: () => void;
   onGenerateUseCaseBundle: () => void | Promise<void>;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void>;
-  onRegenerateUseCaseTurn: (useCaseId: string, turnId: string) => void | Promise<void>;
+  /** Design-time preview style (persisted with task). */
+  previewStyleId: string;
+  setPreviewStyleId: (styleId: string) => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */
@@ -61,4 +64,9 @@ export function useAIAgentEditorDock(): AIAgentEditorDockContextValue {
     throw new Error('useAIAgentEditorDock must be used within AIAgentEditorDockProvider');
   }
   return ctx;
+}
+
+/** Used by Dockview tabs outside mandatory panel bodies (e.g. tab strip only has context when unified dock is wrapped). */
+export function useOptionalAIAgentEditorDock(): AIAgentEditorDockContextValue | null {
+  return React.useContext(AIAgentEditorDockContext);
 }

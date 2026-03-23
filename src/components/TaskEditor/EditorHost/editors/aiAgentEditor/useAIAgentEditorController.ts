@@ -19,7 +19,6 @@ import {
   generateAIAgentDesign,
   generateAIAgentUseCases,
   regenerateAIAgentUseCaseApi,
-  regenerateAIAgentUseCaseTurnApi,
 } from '@services/aiAgentDesignApi';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
@@ -51,7 +50,12 @@ import { revisionStateToPersisted } from './revisionStateToPersisted';
 import { useStructuredAgentSectionsRevision } from './useStructuredAgentSectionsRevision';
 import type { IaSectionDiffPair } from './AIAgentStructuredSectionsPanel';
 import type { RevisionBatchOp } from './textRevisionLinear';
-import { logAiAgentDebug, summarizeAgentTaskFields } from './aiAgentDebug';
+import {
+  logAiAgentDebug,
+  logAiAgentPersistUseCases,
+  summarizeAgentTaskFields,
+  summarizeUseCasesForPersistLog,
+} from './aiAgentDebug';
 import { registerAiAgentProjectSaveFlush } from './aiAgentProjectSaveFlush';
 
 export interface UseAIAgentEditorControllerParams {
@@ -73,7 +77,7 @@ export function useAIAgentEditorController({
   );
   const [proposedFields, setProposedFields] = React.useState<AIAgentProposedVariable[]>([]);
   const [previewByStyle, setPreviewByStyle] = React.useState<Record<string, AIAgentPreviewTurn[]>>({});
-  const [previewStyleId, setPreviewStyleId] = React.useState<string>(AI_AGENT_DEFAULT_PREVIEW_STYLE_ID);
+  const [previewStyleId, setPreviewStyleIdState] = React.useState<string>(AI_AGENT_DEFAULT_PREVIEW_STYLE_ID);
   const [initialStateTemplateJson, setInitialStateTemplateJson] = React.useState('{}');
   const [generating, setGenerating] = React.useState(false);
   const [generateError, setGenerateError] = React.useState<string | null>(null);
@@ -95,6 +99,8 @@ export function useAIAgentEditorController({
   const committedStructuredJsonRef = React.useRef<string>('');
   /** Pending debounced persist; cleared on flush or unmount. */
   const persistTimerRef = React.useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  /** Why {@link persistEditorStateToRepository} ran (for persist logs). */
+  const persistReasonRef = React.useRef<'debounced' | 'projectSave' | 'unmount' | 'direct'>('direct');
   /** Latest `dirty` / persist fn for unmount cleanup (avoids stale closure). */
   const dirtyRef = React.useRef(false);
   const persistEditorStateToRepositoryRef = React.useRef<() => void>(() => {});
@@ -125,6 +131,11 @@ export function useAIAgentEditorController({
     setUseCases(v);
   }, []);
 
+  const setPreviewStyleId = React.useCallback((id: string) => {
+    setDirty(true);
+    setPreviewStyleIdState(id);
+  }, []);
+
   const loadFromRepository = React.useCallback(() => {
     if (!instanceId) return;
     const raw = taskRepository.getTask(instanceId);
@@ -147,7 +158,7 @@ export function useAIAgentEditorController({
     );
     const { byStyle, styleId } = normalizeAgentPreviewFromTask(raw, legacyTurns);
     setPreviewByStyle(byStyle);
-    setPreviewStyleId(styleId);
+    setPreviewStyleIdState(styleId);
     setInitialStateTemplateJson(
       b.agentInitialStateTemplateJson.trim() ? b.agentInitialStateTemplateJson : '{}'
     );
@@ -168,6 +179,9 @@ export function useAIAgentEditorController({
    */
   const persistEditorStateToRepository = React.useCallback(() => {
     if (!instanceId || !hydrated) return;
+    const reason = persistReasonRef.current;
+    persistReasonRef.current = 'direct';
+    const agentUseCasesJson = serializeUseCases(useCases);
     const patch = buildAIAgentTaskPersistPatch({
       designDescription,
       agentPrompt,
@@ -179,7 +193,7 @@ export function useAIAgentEditorController({
       initialStateTemplateJson,
       hasAgentGeneration,
       agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
-      agentUseCasesJson: serializeUseCases(useCases),
+      agentUseCasesJson,
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -188,6 +202,14 @@ export function useAIAgentEditorController({
       });
       return;
     }
+    logAiAgentPersistUseCases('TaskRepository.updateTask (in-memory before Mongo)', {
+      reason,
+      instanceId,
+      projectId: projectId ?? null,
+      agentUseCasesJsonChars: agentUseCasesJson.length,
+      logicalStepsCount: logicalSteps.length,
+      ...summarizeUseCasesForPersistLog(useCases),
+    });
     // Do not update committedDesignDescription / committedStructuredJsonRef here — baseline for Create vs Refine only.
     setDirty(false);
     logAiAgentDebug('after updateTask', summarizeAgentTaskFields(taskRepository.getTask(instanceId)));
@@ -255,6 +277,7 @@ export function useAIAgentEditorController({
     }
     persistTimerRef.current = window.setTimeout(() => {
       persistTimerRef.current = null;
+      persistReasonRef.current = 'debounced';
       persistEditorStateToRepository();
     }, 400);
     return () => {
@@ -278,6 +301,7 @@ export function useAIAgentEditorController({
         window.clearTimeout(persistTimerRef.current);
         persistTimerRef.current = null;
       }
+      persistReasonRef.current = 'projectSave';
       persistEditorStateToRepository();
     };
     return registerAiAgentProjectSaveFlush(flushBeforeProjectSave);
@@ -291,6 +315,7 @@ export function useAIAgentEditorController({
         persistTimerRef.current = null;
       }
       if (dirtyRef.current) {
+        persistReasonRef.current = 'unmount';
         persistEditorStateToRepositoryRef.current();
       }
     };
@@ -370,6 +395,16 @@ export function useAIAgentEditorController({
     },
     []
   );
+
+  const removeProposedField = React.useCallback((fieldName: string) => {
+    setDirty(true);
+    setProposedFields((prev) => prev.filter((p) => p.field_name !== fieldName));
+    setOutputVariableMappings((prev) => {
+      const next = { ...prev };
+      delete next[fieldName];
+      return next;
+    });
+  }, []);
 
   const syncFlowVariableFromLabel = React.useCallback(
     (fieldName: string, labelTrimmed: string) => {
@@ -457,55 +492,6 @@ export function useAIAgentEditorController({
     [useCases, logicalSteps, provider, model]
   );
 
-  const handleRegenerateUseCaseTurn = React.useCallback(
-    async (useCaseId: string, turnId: string) => {
-      const uc = useCases.find((u) => u.id === useCaseId);
-      if (!uc) {
-        setUseCaseComposerError('Use case non trovato.');
-        return;
-      }
-      const existingTurn = uc.dialogue.find((t) => t.turn_id === turnId);
-      if (!existingTurn) {
-        setUseCaseComposerError('Turno non trovato.');
-        return;
-      }
-      setUseCaseComposerError(null);
-      setUseCaseComposerBusy(true);
-      try {
-        const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
-        const nextTurn = await regenerateAIAgentUseCaseTurnApi({
-          useCase: uc,
-          turnId,
-          provider,
-          model,
-          outputLanguage,
-        });
-        setUseCases((prev) =>
-          prev.map((u) => {
-            if (u.id !== useCaseId) return u;
-            const dialogue = u.dialogue.map((t) =>
-              t.turn_id === turnId
-                ? {
-                    ...t,
-                    turn_id: turnId,
-                    role: existingTurn.role,
-                    content: nextTurn.content,
-                  }
-                : t
-            );
-            return { ...u, dialogue };
-          })
-        );
-        setDirty(true);
-      } catch (e) {
-        setUseCaseComposerError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setUseCaseComposerBusy(false);
-      }
-    },
-    [useCases, provider, model]
-  );
-
   const structuredDesignDirty = agentStructuredSectionsJson !== committedStructuredJsonRef.current;
   const descriptionDirty = designDescription !== committedDesignDescription;
 
@@ -543,6 +529,7 @@ export function useAIAgentEditorController({
     showPrimaryAgentAction,
     handleGenerate,
     updateProposedField,
+    removeProposedField,
     syncFlowVariableFromLabel,
     logicalSteps,
     useCases,
@@ -553,6 +540,5 @@ export function useAIAgentEditorController({
     clearUseCaseComposerError,
     handleGenerateUseCaseBundle,
     handleRegenerateUseCase,
-    handleRegenerateUseCaseTurn,
   };
 }

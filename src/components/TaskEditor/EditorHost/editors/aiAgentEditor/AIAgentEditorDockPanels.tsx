@@ -11,7 +11,7 @@ import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 
 export function EditorUnifiedDescriptionPanel(_props: IDockviewPanelProps) {
-  const { instanceId, designDescription, setDesignDescription, generating, headerAction } = useAIAgentEditorDock();
+  const { instanceId, designDescription, setDesignDescription, generating } = useAIAgentEditorDock();
 
   return (
     <div className="h-full min-h-0 overflow-y-auto p-3 space-y-3 bg-teal-950/25 border-l-4 border-teal-500/55">
@@ -20,7 +20,6 @@ export function EditorUnifiedDescriptionPanel(_props: IDockviewPanelProps) {
         value={designDescription}
         onChange={setDesignDescription}
         readOnly={generating}
-        headerAction={headerAction}
         instanceId={instanceId}
         iaRevisionDiff={null}
         onDismissIaRevisionDiff={() => {}}
@@ -37,12 +36,12 @@ export function EditorTaskDescriptionPanel(_props: IDockviewPanelProps) {
   const { designDescription, setDesignDescription, generating, headerAction } = useAIAgentEditorDock();
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto p-3 bg-teal-950/25 border-l-4 border-teal-500/55 space-y-2">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-teal-950/25 border-l-4 border-teal-500/55 space-y-2">
       {headerAction ? (
-        <div className="flex flex-wrap items-center justify-end gap-2">{headerAction}</div>
+        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">{headerAction}</div>
       ) : null}
       <textarea
-        className="w-full min-h-[200px] lg:min-h-[280px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
+        className="w-full flex-1 min-h-[200px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed resize-none"
         placeholder={AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER}
         aria-label="Descrizione"
         value={designDescription}
@@ -60,22 +59,26 @@ export function EditorDatiPanel(_props: IDockviewPanelProps) {
     proposedFields,
     outputVariableMappings,
     onUpdateProposedField,
+    onRemoveProposedField,
     onProposedLabelBlur,
   } = useAIAgentEditorDock();
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto p-3 space-y-2 bg-slate-950/80">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-slate-950/80">
       {proposedFields.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">
           Usa {primaryAgentActionLabel} per popolare i dati da raccogliere.
         </div>
       ) : (
-        <AIAgentProposedFieldsTable
-          fields={proposedFields}
-          outputVariableMappings={outputVariableMappings}
-          onUpdateField={onUpdateProposedField}
-          onLabelBlur={onProposedLabelBlur}
-        />
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <AIAgentProposedFieldsTable
+            fields={proposedFields}
+            outputVariableMappings={outputVariableMappings}
+            onUpdateField={onUpdateProposedField}
+            onRemoveField={onRemoveProposedField}
+            onLabelBlur={onProposedLabelBlur}
+          />
+        </div>
       )}
     </div>
   );
@@ -89,10 +92,9 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
     useCaseComposerBusy,
     useCaseComposerError,
     onClearUseCaseComposerError,
-    onGenerateUseCaseBundle,
     onRegenerateUseCase,
-    onRegenerateUseCaseTurn,
-    primaryAgentActionLabel,
+    previewStyleId,
+    setPreviewStyleId,
   } = useAIAgentEditorDock();
 
   return (
@@ -104,10 +106,9 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
         busy={useCaseComposerBusy}
         error={useCaseComposerError}
         onDismissError={onClearUseCaseComposerError}
-        onGenerateBundle={onGenerateUseCaseBundle}
         onRegenerateUseCase={onRegenerateUseCase}
-        onRegenerateTurn={onRegenerateUseCaseTurn}
-        primaryAgentActionLabel={primaryAgentActionLabel}
+        previewStyleId={previewStyleId}
+        onPreviewStyleIdChange={setPreviewStyleId}
       />
     </div>
   );

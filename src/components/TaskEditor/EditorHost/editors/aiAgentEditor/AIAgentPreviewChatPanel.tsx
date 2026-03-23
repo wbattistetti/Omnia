@@ -15,6 +15,8 @@ export interface AIAgentPreviewChatPanelProps {
   emptyPlaceholder: React.ReactNode;
   /** When true, style and message/note editing are disabled (frozen design). */
   readOnly?: boolean;
+  /** Hide the style row (e.g. when the parent renders the selector in a shared header). */
+  hideStyleSelector?: boolean;
 }
 
 function replaceTurn(turns: AIAgentPreviewTurn[], index: number, patch: Partial<AIAgentPreviewTurn>) {
@@ -28,6 +30,7 @@ export function AIAgentPreviewChatPanel({
   onTurnsChange,
   emptyPlaceholder,
   readOnly = false,
+  hideStyleSelector = false,
 }: AIAgentPreviewChatPanelProps) {
   const [editingMessageIndex, setEditingMessageIndex] = React.useState<number | null>(null);
   const [editingNoteIndex, setEditingNoteIndex] = React.useState<number | null>(null);
@@ -91,24 +94,26 @@ export function AIAgentPreviewChatPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="flex items-center gap-2 mb-2 shrink-0">
-        <label htmlFor="ai-agent-preview-style" className="text-xs text-slate-500 whitespace-nowrap">
-          Stile
-        </label>
-        <select
-          id="ai-agent-preview-style"
-          value={selectedStyleId}
-          onChange={(e) => onStyleIdChange(e.target.value)}
-          disabled={readOnly}
-          className="flex-1 min-w-0 rounded-md bg-slate-900 border border-slate-600 px-2 py-1.5 text-sm text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {AI_AGENT_PREVIEW_STYLES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {!hideStyleSelector ? (
+        <div className="flex items-center gap-2 mb-2 shrink-0">
+          <label htmlFor="ai-agent-preview-style" className="text-xs text-slate-500 whitespace-nowrap">
+            Stile
+          </label>
+          <select
+            id="ai-agent-preview-style"
+            value={selectedStyleId}
+            onChange={(e) => onStyleIdChange(e.target.value)}
+            disabled={readOnly}
+            className="flex-1 min-w-0 rounded-md bg-slate-900 border border-slate-600 px-2 py-1.5 text-sm text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {AI_AGENT_PREVIEW_STYLES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       {turns.length === 0 ? (
         <div className="flex-1 min-h-0">{emptyPlaceholder}</div>
       ) : (

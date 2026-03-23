@@ -2,6 +2,16 @@
 
 const { extractJsonString } = require('./AIAgentDesignService');
 
+/**
+ * HTTP timeout for the OpenAI/Groq request (BaseProvider.makeRequest).
+ * Must stay >= client abort in src/services/aiAgentDesignApi.ts (GENERATE_USE_CASES_TIMEOUT_MS).
+ */
+const GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS = 300000;
+
+/** Regenerate single scenario / turn: allow more than default 60s provider cap. */
+const REGENERATE_USE_CASE_TIMEOUT_MS = 120000;
+const REGENERATE_TURN_TIMEOUT_MS = 90000;
+
 const UC_SYSTEM = `You are an expert conversational AI designer for OMNIA.
 Respond with a single valid JSON object only (no markdown fences, no commentary).
 Every id and turn_id in the JSON must be a string value (quoted), never a number.
@@ -102,6 +112,7 @@ async function generateUseCaseBundle({
     model: model || undefined,
     temperature: 0.4,
     maxTokens,
+    timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -121,7 +132,7 @@ function buildRegenerateUseCaseUserMessage(outputLanguage, useCase, allCases, lo
     typeof outputLanguage === 'string' && outputLanguage.trim()
       ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
       : '';
-  return `${lang}You refine ONE use case. Current use case (JSON):\n${JSON.stringify(useCase)}\n\nAll use cases (context, do not remove others):\n${JSON.stringify(allCases).slice(0, 8000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nReturn JSON with a single key "use_case" containing the full updated use case object (same shape as input), with dialogue and notes revised according to refinement_prompt in the object (or general improvement if empty). Preserve "id" and "parent_id" unless you are explicitly merging — keep the same "id". Valid JSON only.`;
+  return `${lang}You refine ONE use case. Current use case (JSON):\n${JSON.stringify(useCase)}\n\nAll use cases (context, do not remove others):\n${JSON.stringify(allCases).slice(0, 8000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nReturn JSON with a single key "use_case" containing the full updated use case object (same shape as input). Revise dialogue (and bubble_notes if needed) to match the intent in "notes" (behavior and tone). The field "refinement_prompt" is legacy and may be empty — prefer "notes". Preserve "id" and "parent_id" unless you are explicitly merging — keep the same "id". Valid JSON only.`;
 }
 
 /**
@@ -154,6 +165,7 @@ async function regenerateUseCase({
     model: model || undefined,
     temperature: 0.35,
     maxTokens,
+    timeout: REGENERATE_USE_CASE_TIMEOUT_MS,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -203,6 +215,7 @@ async function regenerateTurn({
     model: model || undefined,
     temperature: 0.35,
     maxTokens,
+    timeout: REGENERATE_TURN_TIMEOUT_MS,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);

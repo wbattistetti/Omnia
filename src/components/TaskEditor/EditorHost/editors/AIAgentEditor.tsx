@@ -68,6 +68,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     proposedFields: c.proposedFields,
     outputVariableMappings: c.outputVariableMappings,
     onUpdateProposedField: c.updateProposedField,
+    onRemoveProposedField: c.removeProposedField,
     onProposedLabelBlur: c.syncFlowVariableFromLabel,
     logicalSteps: c.logicalSteps,
     useCases: c.useCases,
@@ -77,7 +78,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onClearUseCaseComposerError: c.clearUseCaseComposerError,
     onGenerateUseCaseBundle: c.handleGenerateUseCaseBundle,
     onRegenerateUseCase: c.handleRegenerateUseCase,
-    onRegenerateUseCaseTurn: c.handleRegenerateUseCaseTurn,
+    previewStyleId: c.previewStyleId,
+    setPreviewStyleId: c.setPreviewStyleId,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;

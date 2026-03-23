@@ -6,6 +6,7 @@
 import React from 'react';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
+import { AI_AGENT_DEFAULT_PREVIEW_STYLE_ID } from '@types/aiAgentPreview';
 import { AIAgentProposedFieldsTable } from './AIAgentProposedFieldsTable';
 import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
 import type { AIAgentRightPanelTab } from './aiAgentRightPanelTab';
@@ -21,10 +22,10 @@ export interface AIAgentRightPanelProps {
   useCaseComposerBusy: boolean;
   useCaseComposerError: string | null;
   onClearUseCaseComposerError: () => void;
-  onGenerateUseCaseBundle: () => void | Promise<void>;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void>;
-  onRegenerateUseCaseTurn: (useCaseId: string, turnId: string) => void | Promise<void>;
   primaryAgentActionLabel: string;
+  previewStyleId?: string;
+  onPreviewStyleIdChange?: (styleId: string) => void;
   proposedFields: AIAgentProposedVariable[];
   outputVariableMappings: Record<string, string>;
   onUpdateProposedField: (fieldName: string, patch: Partial<AIAgentProposedVariable>) => void;
@@ -46,9 +47,9 @@ export function AIAgentRightPanel({
   useCaseComposerBusy,
   useCaseComposerError,
   onClearUseCaseComposerError,
-  onGenerateUseCaseBundle,
   onRegenerateUseCase,
-  onRegenerateUseCaseTurn,
+  previewStyleId = AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
+  onPreviewStyleIdChange = () => {},
 }: AIAgentRightPanelProps) {
   const variablesPanel = (
     <div className="space-y-2">
@@ -75,10 +76,9 @@ export function AIAgentRightPanel({
       busy={useCaseComposerBusy}
       error={useCaseComposerError}
       onDismissError={onClearUseCaseComposerError}
-      onGenerateBundle={onGenerateUseCaseBundle}
       onRegenerateUseCase={onRegenerateUseCase}
-      onRegenerateTurn={onRegenerateUseCaseTurn}
-      primaryAgentActionLabel={primaryAgentActionLabel}
+      previewStyleId={previewStyleId}
+      onPreviewStyleIdChange={onPreviewStyleIdChange}
     />
   );
 

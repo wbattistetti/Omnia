@@ -35,7 +35,7 @@ function buildPanelDefinitions(): DockPanelDef[] {
     {
       id: PROMPT_FINALE_PANEL_ID,
       component: 'promptFinale',
-      title: 'Prompt finale',
+      title: 'Prompt Finale',
       params: {},
     },
   ];

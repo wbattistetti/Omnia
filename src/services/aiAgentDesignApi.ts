@@ -39,6 +39,9 @@ export interface GenerateAIAgentDesignParams {
 
 const DEFAULT_TIMEOUT_MS = 120000;
 
+/** Use case bundle generation can exceed the default design timeout. */
+const GENERATE_USE_CASES_TIMEOUT_MS = 300000;
+
 export async function generateAIAgentDesign(
   params: GenerateAIAgentDesignParams
 ): Promise<AIAgentDesignPayload> {
@@ -106,7 +109,7 @@ export async function generateAIAgentUseCases(
 ): Promise<GenerateAIAgentUseCasesResult> {
   const { userDesc, provider, model, runtimeContext, outputLanguage } = params;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), GENERATE_USE_CASES_TIMEOUT_MS);
   try {
     const bodyPayload: Record<string, unknown> = {
       action: 'generate_use_cases',

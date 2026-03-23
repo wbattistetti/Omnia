@@ -18,7 +18,7 @@ const sample = (): Record<AgentStructuredSectionId, string> => ({
 describe('composeRuntimePromptMarkdown', () => {
   it('omits empty conversational_state section', () => {
     const md = composeRuntimePromptMarkdown(sample());
-    expect(md).toContain('## Behavior Spec');
+    expect(md).toContain('## Behavior');
     expect(md).toContain('A');
     expect(md).not.toContain('Stato conversazionale');
   });
@@ -35,7 +35,7 @@ describe('composeRuntimePromptMarkdown', () => {
 describe('buildRefineUserDescFromSections', () => {
   it('joins all sections with separators', () => {
     const t = buildRefineUserDescFromSections(sample());
-    expect(t).toContain('Behavior Spec');
+    expect(t).toContain('Behavior:');
     expect(t).toContain('---');
     expect(t).toContain('A');
   });
