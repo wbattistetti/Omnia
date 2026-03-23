@@ -16,6 +16,8 @@ export interface AIAgentStructuredSectionsDockContextValue {
   readOnly: boolean;
   onApplyRevisionOps: (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => void;
   onApplyOtCommit: (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => void;
+  onUndoSection: (sectionId: AgentStructuredSectionId) => void;
+  onRedoSection: (sectionId: AgentStructuredSectionId) => void;
   structuredOtEnabled: boolean;
   iaRevisionDiffBySection: Partial<Record<AgentStructuredSectionId, IaSectionDiffPair>> | null;
   onDismissIaRevisionForSection: (sectionId: AgentStructuredSectionId) => void;

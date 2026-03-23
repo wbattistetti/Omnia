@@ -39,6 +39,9 @@ export interface TextDualLayerRevisionEditorProps {
   otMode?: boolean;
   otCurrentText?: string;
   onApplyOtCommit?: (ops: readonly OtOp[]) => void;
+  /** Applicative undo/redo (Ctrl+Z / Ctrl+Y); not browser native. */
+  onUndoRequest?: () => void;
+  onRedoRequest?: () => void;
 }
 
 export function TextDualLayerRevisionEditor({
@@ -51,6 +54,8 @@ export function TextDualLayerRevisionEditor({
   otMode = false,
   otCurrentText,
   onApplyOtCommit,
+  onUndoRequest,
+  onRedoRequest,
 }: TextDualLayerRevisionEditorProps) {
   const taRef = React.useRef<HTMLTextAreaElement | null>(null);
   const composingRef = React.useRef(false);
@@ -240,6 +245,29 @@ export function TextDualLayerRevisionEditor({
     composingRef.current = true;
   }, []);
 
+  const onKeyDown = React.useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (readOnly || composingRef.current) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) {
+        if (onUndoRequest) {
+          e.preventDefault();
+          onUndoRequest();
+        }
+        return;
+      }
+      if (k === 'y' || (k === 'z' && e.shiftKey)) {
+        if (onRedoRequest) {
+          e.preventDefault();
+          onRedoRequest();
+        }
+      }
+    },
+    [readOnly, onUndoRequest, onRedoRequest]
+  );
+
   return (
     <div className="space-y-1">
       {editError ? (
@@ -279,6 +307,7 @@ export function TextDualLayerRevisionEditor({
             spellCheck={false}
             aria-label="Prompt agente — revisioni suggerite (testo base + insert/cancel)"
             onInput={onInput}
+            onKeyDown={onKeyDown}
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}
           />

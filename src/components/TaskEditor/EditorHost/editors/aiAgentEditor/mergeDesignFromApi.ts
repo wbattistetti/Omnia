@@ -6,6 +6,7 @@ import type { AIAgentDesignPayload, AIAgentProposedVariable } from '@types/aiAge
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import { seedPreviewByStyleFromSample } from '@types/aiAgentPreview';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
+import { formatOperationalSequenceNewlines } from './operationalSequenceDisplay';
 
 /**
  * Normalizes proposed variables from the API payload.
@@ -54,7 +55,7 @@ export function sectionTextsFromDesignPayload(
     behavior_spec: design.behavior_spec.trim(),
     positive_constraints: design.positive_constraints.trim(),
     negative_constraints: design.negative_constraints.trim(),
-    operational_sequence: design.operational_sequence.trim(),
+    operational_sequence: formatOperationalSequenceNewlines(design.operational_sequence),
     correction_rules: design.correction_rules.trim(),
     conversational_state:
       typeof design.conversational_state === 'string' ? design.conversational_state.trim() : '',

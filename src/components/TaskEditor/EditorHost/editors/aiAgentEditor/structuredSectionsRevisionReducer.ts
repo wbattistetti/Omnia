@@ -13,6 +13,8 @@ import type { PersistedSectionSnapshot, PersistedSectionSnapshotV2, PersistedStr
 import type { StructuredRefinementOp } from './structuredRefinementOps';
 import { applyRevisionBatchToSlice } from './applyRevisionBatchToSlice';
 import type { RevisionBatchOp } from './textRevisionLinear';
+import { diffToOps } from './otDiffToOps';
+import { formatOperationalSequenceNewlines } from './operationalSequenceDisplay';
 
 export interface StructuredSectionRevisionSlice {
   promptBaseText: string;
@@ -35,7 +37,13 @@ export type StructuredSectionsRevisionAction =
   | { type: 'DELETE_RANGE'; sectionId: AgentStructuredSectionId; start: number; end: number }
   | { type: 'INSERT'; sectionId: AgentStructuredSectionId; position: number; text: string }
   | { type: 'APPLY_REVISION_OPS'; sectionId: AgentStructuredSectionId; ops: readonly RevisionBatchOp[] }
-  | { type: 'APPLY_OT_COMMIT'; sectionId: AgentStructuredSectionId; newOps: readonly OtOp[] };
+  | { type: 'APPLY_OT_COMMIT'; sectionId: AgentStructuredSectionId; newOps: readonly OtOp[] }
+  /** Replaces one section with a full snapshot (undo/redo). */
+  | {
+      type: 'RESTORE_SECTION_SNAPSHOT';
+      sectionId: AgentStructuredSectionId;
+      slice: StructuredSectionRevisionSlice;
+    };
 
 function isPersistedV2(p: PersistedSectionSnapshot): p is PersistedSectionSnapshotV2 {
   return (p as PersistedSectionSnapshotV2).version === 2;
@@ -61,6 +69,46 @@ function emptyOtSlice(base: string): StructuredSectionRevisionSlice {
     refinementOpLog: [],
     storageMode: 'ot',
     ot,
+  };
+}
+
+/**
+ * Reformats operational_sequence with newlines between steps when safe (OT: recompute op log;
+ * linear: only when there are no mask/insert edits).
+ */
+function normalizeOperationalSequenceSlice(slice: StructuredSectionRevisionSlice): StructuredSectionRevisionSlice {
+  if (slice.storageMode === 'ot' && slice.ot) {
+    const baseF = formatOperationalSequenceNewlines(slice.ot.revisionBase);
+    const curF = formatOperationalSequenceNewlines(slice.ot.currentText);
+    if (baseF === slice.ot.revisionBase && curF === slice.ot.currentText) {
+      return slice;
+    }
+    const opLog = diffToOps(baseF, curF);
+    return {
+      ...slice,
+      promptBaseText: baseF,
+      deletedMask: new Array(Math.max(0, baseF.length)).fill(false),
+      inserts: [],
+      refinementOpLog: baseRelativeDiffToRefinementOps(baseF, curF),
+      ot: {
+        revisionBase: baseF,
+        opLog,
+        currentText: curF,
+      },
+    };
+  }
+  const hasEdits = slice.deletedMask.some(Boolean) || slice.inserts.length > 0;
+  if (hasEdits) {
+    return slice;
+  }
+  const baseF = formatOperationalSequenceNewlines(slice.promptBaseText);
+  if (baseF === slice.promptBaseText) {
+    return slice;
+  }
+  return {
+    ...slice,
+    promptBaseText: baseF,
+    deletedMask: new Array(Math.max(0, baseF.length)).fill(false),
   };
 }
 
@@ -114,7 +162,10 @@ export function structuredSectionsRevisionReducer(
       const next = {} as StructuredSectionsRevisionState;
       const useOt = action.structuredOt === true;
       for (const id of AGENT_STRUCTURED_SECTION_IDS) {
-        const b = action.bases[id] ?? '';
+        let b = action.bases[id] ?? '';
+        if (id === 'operational_sequence') {
+          b = formatOperationalSequenceNewlines(b);
+        }
         next[id] = useOt ? emptyOtSlice(b) : emptySlice(b);
       }
       return next;
@@ -123,7 +174,11 @@ export function structuredSectionsRevisionReducer(
       const next = {} as StructuredSectionsRevisionState;
       for (const id of AGENT_STRUCTURED_SECTION_IDS) {
         const row = action.persisted[id];
-        next[id] = row ? sliceFromPersisted(row) : emptySlice('');
+        let slice = row ? sliceFromPersisted(row) : emptySlice('');
+        if (id === 'operational_sequence') {
+          slice = normalizeOperationalSequenceSlice(slice);
+        }
+        next[id] = slice;
       }
       return next;
     }
@@ -227,6 +282,13 @@ export function structuredSectionsRevisionReducer(
           storageMode: 'ot',
           ot: nextOt,
         },
+      };
+    }
+    case 'RESTORE_SECTION_SNAPSHOT': {
+      const { sectionId, slice } = action;
+      return {
+        ...state,
+        [sectionId]: slice,
       };
     }
     default:

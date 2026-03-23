@@ -23,6 +23,8 @@ export interface AIAgentStructuredSectionsPanelProps {
   readOnly: boolean;
   onApplyRevisionOps: (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => void;
   onApplyOtCommit?: (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => void;
+  onUndoSection?: (sectionId: AgentStructuredSectionId) => void;
+  onRedoSection?: (sectionId: AgentStructuredSectionId) => void;
   structuredOtEnabled?: boolean;
   iaRevisionDiffBySection: Partial<Record<AgentStructuredSectionId, IaSectionDiffPair>> | null;
   onDismissIaRevisionForSection: (sectionId: AgentStructuredSectionId) => void;
@@ -38,6 +40,8 @@ export function AIAgentStructuredSectionsPanel({
   readOnly,
   onApplyRevisionOps,
   onApplyOtCommit: onApplyOtCommitProp,
+  onUndoSection: onUndoSectionProp,
+  onRedoSection: onRedoSectionProp,
   structuredOtEnabled: structuredOtEnabledProp,
   iaRevisionDiffBySection,
   onDismissIaRevisionForSection,
@@ -46,6 +50,8 @@ export function AIAgentStructuredSectionsPanel({
 }: AIAgentStructuredSectionsPanelProps) {
   const suffix = instanceId || 'default';
   const onApplyOtCommit = onApplyOtCommitProp ?? (() => {});
+  const onUndoSection = onUndoSectionProp ?? (() => {});
+  const onRedoSection = onRedoSectionProp ?? (() => {});
   const structuredOtEnabled = structuredOtEnabledProp === true;
 
   const dockValue = React.useMemo<AIAgentStructuredSectionsDockContextValue>(
@@ -56,6 +62,8 @@ export function AIAgentStructuredSectionsPanel({
       readOnly,
       onApplyRevisionOps,
       onApplyOtCommit,
+      onUndoSection,
+      onRedoSection,
       structuredOtEnabled,
       iaRevisionDiffBySection,
       onDismissIaRevisionForSection,
@@ -67,6 +75,8 @@ export function AIAgentStructuredSectionsPanel({
       readOnly,
       onApplyRevisionOps,
       onApplyOtCommit,
+      onUndoSection,
+      onRedoSection,
       structuredOtEnabled,
       iaRevisionDiffBySection,
       onDismissIaRevisionForSection,

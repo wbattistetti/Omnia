@@ -1,5 +1,6 @@
 /**
  * Hook: per-section revision state for structured AI Agent design (textarea revision + refine patches).
+ * Tracks undo/redo stacks (snapshot per commit) for APPLY_REVISION_OPS and APPLY_OT_COMMIT.
  */
 
 import React from 'react';
@@ -12,10 +13,14 @@ import { getStructuredSectionEffectiveText } from './structuredSectionEffective'
 import {
   createInitialStructuredSectionsState,
   structuredSectionsRevisionReducer,
+  type StructuredSectionRevisionSlice,
   type StructuredSectionsRevisionState,
 } from './structuredSectionsRevisionReducer';
 import type { StructuredRefinementOp } from './structuredRefinementOps';
 import type { RevisionBatchOp } from './textRevisionLinear';
+import { cloneStructuredSectionSlice } from './structuredSectionSliceClone';
+
+const MAX_UNDO_DEPTH = 50;
 
 export interface SectionRefinementBundle {
   sectionId: AgentStructuredSectionId;
@@ -33,7 +38,22 @@ export interface UseStructuredAgentSectionsRevisionResult {
   applyInsert: (sectionId: AgentStructuredSectionId, position: number, text: string) => void;
   applyRevisionOps: (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => void;
   applyOtCommit: (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => void;
+  /** Restores previous snapshot for this section (Ctrl+Z). */
+  undoSection: (sectionId: AgentStructuredSectionId) => void;
+  /** Restores next snapshot after undo (Ctrl+Y). */
+  redoSection: (sectionId: AgentStructuredSectionId) => void;
   collectRefinementBundles: () => SectionRefinementBundle[];
+}
+
+type SectionStackMap = Partial<Record<AgentStructuredSectionId, StructuredSectionRevisionSlice[]>>;
+
+function pushPast(map: SectionStackMap, sectionId: AgentStructuredSectionId, snapshot: StructuredSectionRevisionSlice): void {
+  const arr = map[sectionId] ?? [];
+  const next = [...arr, snapshot];
+  while (next.length > MAX_UNDO_DEPTH) {
+    next.shift();
+  }
+  map[sectionId] = next;
 }
 
 export function useStructuredAgentSectionsRevision(
@@ -51,6 +71,17 @@ export function useStructuredAgentSectionsRevision(
       )
   );
 
+  const sectionsStateRef = React.useRef(sectionsState);
+  sectionsStateRef.current = sectionsState;
+
+  const pastRef = React.useRef<SectionStackMap>({});
+  const futureRef = React.useRef<SectionStackMap>({});
+
+  const clearAllHistory = React.useCallback(() => {
+    pastRef.current = {};
+    futureRef.current = {};
+  }, []);
+
   const effectiveBySection = React.useMemo(() => {
     const out = {} as Record<AgentStructuredSectionId, string>;
     for (const id of AGENT_STRUCTURED_SECTION_IDS) {
@@ -67,14 +98,19 @@ export function useStructuredAgentSectionsRevision(
 
   const resetAllFromApiBases = React.useCallback(
     (bases: Record<AgentStructuredSectionId, string>) => {
+      clearAllHistory();
       dispatch({ type: 'RESET_ALL', bases, structuredOt: structuredOtEnabled });
     },
-    [structuredOtEnabled]
+    [clearAllHistory, structuredOtEnabled]
   );
 
-  const loadFromPersisted = React.useCallback((p: PersistedStructuredSections) => {
-    dispatch({ type: 'RESET_FROM_PERSISTED', persisted: p });
-  }, []);
+  const loadFromPersisted = React.useCallback(
+    (p: PersistedStructuredSections) => {
+      clearAllHistory();
+      dispatch({ type: 'RESET_FROM_PERSISTED', persisted: p });
+    },
+    [clearAllHistory]
+  );
 
   const applyDeleteRange = React.useCallback(
     (sectionId: AgentStructuredSectionId, start: number, end: number) => {
@@ -92,6 +128,12 @@ export function useStructuredAgentSectionsRevision(
 
   const applyRevisionOps = React.useCallback(
     (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => {
+      if (!ops.length) {
+        return;
+      }
+      const before = cloneStructuredSectionSlice(sectionsStateRef.current[sectionId]);
+      pushPast(pastRef.current, sectionId, before);
+      futureRef.current[sectionId] = [];
       dispatch({ type: 'APPLY_REVISION_OPS', sectionId, ops });
     },
     []
@@ -99,10 +141,41 @@ export function useStructuredAgentSectionsRevision(
 
   const applyOtCommit = React.useCallback(
     (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => {
+      if (!newOps.length) {
+        return;
+      }
+      const before = cloneStructuredSectionSlice(sectionsStateRef.current[sectionId]);
+      pushPast(pastRef.current, sectionId, before);
+      futureRef.current[sectionId] = [];
       dispatch({ type: 'APPLY_OT_COMMIT', sectionId, newOps });
     },
     []
   );
+
+  const undoSection = React.useCallback((sectionId: AgentStructuredSectionId) => {
+    const past = pastRef.current[sectionId];
+    if (!past || past.length === 0) {
+      return;
+    }
+    const target = past[past.length - 1];
+    pastRef.current[sectionId] = past.slice(0, -1);
+    const current = cloneStructuredSectionSlice(sectionsStateRef.current[sectionId]);
+    const fut = futureRef.current[sectionId] ?? [];
+    futureRef.current[sectionId] = [...fut, current];
+    dispatch({ type: 'RESTORE_SECTION_SNAPSHOT', sectionId, slice: target });
+  }, []);
+
+  const redoSection = React.useCallback((sectionId: AgentStructuredSectionId) => {
+    const fut = futureRef.current[sectionId];
+    if (!fut || fut.length === 0) {
+      return;
+    }
+    const target = fut[fut.length - 1];
+    futureRef.current[sectionId] = fut.slice(0, -1);
+    const current = cloneStructuredSectionSlice(sectionsStateRef.current[sectionId]);
+    pushPast(pastRef.current, sectionId, current);
+    dispatch({ type: 'RESTORE_SECTION_SNAPSHOT', sectionId, slice: target });
+  }, []);
 
   const collectRefinementBundles = React.useCallback((): SectionRefinementBundle[] => {
     return AGENT_STRUCTURED_SECTION_IDS.map((sectionId) => {
@@ -126,6 +199,8 @@ export function useStructuredAgentSectionsRevision(
       applyInsert,
       applyRevisionOps,
       applyOtCommit,
+      undoSection,
+      redoSection,
       collectRefinementBundles,
     }),
     [
@@ -138,6 +213,8 @@ export function useStructuredAgentSectionsRevision(
       applyInsert,
       applyRevisionOps,
       applyOtCommit,
+      undoSection,
+      redoSection,
       collectRefinementBundles,
     ]
   );

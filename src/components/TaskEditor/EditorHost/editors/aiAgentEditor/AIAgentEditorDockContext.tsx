@@ -21,6 +21,9 @@ export interface AIAgentEditorDockContextValue {
   onApplyRevisionOps: (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => void;
   /** When {@link structuredOtEnabled}, structured sections may commit UTF-16 OT ops instead of linear batch ops. */
   onApplyOtCommit: (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => void;
+  /** Undo/redo last committed edit for a structured section (Ctrl+Z / Ctrl+Y in revision editor). */
+  onUndoSection: (sectionId: AgentStructuredSectionId) => void;
+  onRedoSection: (sectionId: AgentStructuredSectionId) => void;
   structuredOtEnabled: boolean;
   iaRevisionDiffBySection: Partial<Record<AgentStructuredSectionId, IaSectionDiffPair>> | null;
   onDismissIaRevisionForSection: (sectionId: AgentStructuredSectionId) => void;

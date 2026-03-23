@@ -64,6 +64,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     structuredSectionsState: c.structuredSectionsState,
     onApplyRevisionOps: c.applyRevisionOps,
     onApplyOtCommit: c.applyOtCommit,
+    onUndoSection: c.undoSection,
+    onRedoSection: c.redoSection,
     structuredOtEnabled: c.structuredOtEnabled,
     iaRevisionDiffBySection: c.iaRevisionDiffBySection,
     onDismissIaRevisionForSection: c.dismissIaRevisionForSection,

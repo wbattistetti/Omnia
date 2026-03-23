@@ -22,6 +22,8 @@ export interface AIAgentRevisionEditorShellProps {
   otMode?: boolean;
   otCurrentText?: string;
   onApplyOtCommit?: (ops: readonly OtOp[]) => void;
+  onUndoRequest?: () => void;
+  onRedoRequest?: () => void;
 }
 
 export function AIAgentRevisionEditorShell({
@@ -36,6 +38,8 @@ export function AIAgentRevisionEditorShell({
   otMode = false,
   otCurrentText,
   onApplyOtCommit,
+  onUndoRequest,
+  onRedoRequest,
 }: AIAgentRevisionEditorShellProps) {
   const suffix = instanceId || 'default';
 
@@ -58,6 +62,8 @@ export function AIAgentRevisionEditorShell({
         otMode={otMode}
         otCurrentText={otCurrentText}
         onApplyOtCommit={onApplyOtCommit}
+        onUndoRequest={onUndoRequest}
+        onRedoRequest={onRedoRequest}
       />
     </div>
   );

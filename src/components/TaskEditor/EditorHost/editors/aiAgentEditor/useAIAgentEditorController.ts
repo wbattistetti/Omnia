@@ -137,6 +137,22 @@ export function useAIAgentEditorController({
     [structuredRev]
   );
 
+  const undoSection = React.useCallback(
+    (sectionId: AgentStructuredSectionId) => {
+      setDirty(true);
+      structuredRev.undoSection(sectionId);
+    },
+    [structuredRev]
+  );
+
+  const redoSection = React.useCallback(
+    (sectionId: AgentStructuredSectionId) => {
+      setDirty(true);
+      structuredRev.redoSection(sectionId);
+    },
+    [structuredRev]
+  );
+
   const setUseCasesUser = React.useCallback((v: React.SetStateAction<AIAgentUseCase[]>) => {
     setDirty(true);
     setUseCases(v);
@@ -527,6 +543,8 @@ export function useAIAgentEditorController({
     composedRuntimeMarkdown: structuredRev.composedRuntimeMarkdown,
     applyRevisionOps,
     applyOtCommit,
+    undoSection,
+    redoSection,
     structuredOtEnabled,
     outputVariableMappings,
     proposedFields,

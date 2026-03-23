@@ -7,9 +7,6 @@ import type { IDockviewPanelProps } from 'dockview';
 import { AIAgentRevisionEditorShell } from './AIAgentRevisionEditorShell';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { useAgentStructuredDockSlice } from './useAgentStructuredDockSlice';
-import { getStructuredSectionEffectiveText } from './structuredSectionEffective';
-import { splitOperationalSequenceLines } from './operationalSequenceDisplay';
-
 export function AgentSectionDockPanel(
   props: IDockviewPanelProps<{ sectionId?: AgentStructuredSectionId }>
 ) {
@@ -19,6 +16,8 @@ export function AgentSectionDockPanel(
     readOnly,
     onApplyRevisionOps,
     onApplyOtCommit,
+    onUndoSection,
+    onRedoSection,
     structuredOtEnabled,
     iaRevisionDiffBySection,
     onDismissIaRevisionForSection,
@@ -33,25 +32,11 @@ export function AgentSectionDockPanel(
 
   const activeSlice = sectionsState[sectionId];
   const activeDiff = iaRevisionDiffBySection?.[sectionId];
-  const effectiveText = getStructuredSectionEffectiveText(activeSlice);
-  const opLines =
-    sectionId === 'operational_sequence' && effectiveText.trim()
-      ? splitOperationalSequenceLines(effectiveText)
-      : null;
 
   const otMode = Boolean(structuredOtEnabled && activeSlice.storageMode === 'ot' && activeSlice.ot);
 
   return (
     <div className="h-full min-h-0 flex flex-col bg-slate-950/80 overflow-hidden">
-      {opLines && opLines.length > 0 ? (
-        <ul className="shrink-0 max-h-[min(40%,240px)] overflow-y-auto list-disc pl-5 pr-2 py-2 mx-2 mt-2 rounded-md border border-slate-800/90 bg-slate-900/40 text-sm text-slate-200 space-y-1">
-          {opLines.map((line, i) => (
-            <li key={i} className="leading-snug">
-              {line}
-            </li>
-          ))}
-        </ul>
-      ) : null}
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col p-2 pt-1">
         <AIAgentRevisionEditorShell
           key={sectionId}
@@ -72,6 +57,8 @@ export function AgentSectionDockPanel(
           onApplyOtCommit={
             otMode ? (ops) => onApplyOtCommit(sectionId, ops) : undefined
           }
+          onUndoRequest={() => onUndoSection(sectionId)}
+          onRedoRequest={() => onRedoSection(sectionId)}
         />
       </div>
     </div>

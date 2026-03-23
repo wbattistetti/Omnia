@@ -27,6 +27,8 @@ export function useAgentStructuredDockSlice(): AIAgentStructuredSectionsDockCont
       readOnly: editor.generating,
       onApplyRevisionOps: editor.onApplyRevisionOps,
       onApplyOtCommit: editor.onApplyOtCommit,
+      onUndoSection: editor.onUndoSection,
+      onRedoSection: editor.onRedoSection,
       structuredOtEnabled: editor.structuredOtEnabled,
       iaRevisionDiffBySection: editor.iaRevisionDiffBySection,
       onDismissIaRevisionForSection: editor.onDismissIaRevisionForSection,
