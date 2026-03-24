@@ -5,3 +5,4 @@ export * from './SaveProjectRequest';
 export * from './SaveResult';
 export * from './ProjectSaveOrchestrator';
 export * from './SaveServiceInterfaces';
+export * from './flowSaveSnapshot';

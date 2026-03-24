@@ -30,7 +30,12 @@ import { mapUIStateToDomain } from '../domain/project/mapper';
 import { isAiAgentDebugEnabled, summarizeAgentTaskFields } from './TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDebug';
 import { flushAiAgentEditorsBeforeProjectSave } from './TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentProjectSaveFlush';
 // ✅ M5: Project save orchestrator (now with executeSave)
-import { ProjectSaveOrchestrator } from '../services/project-save/ProjectSaveOrchestrator';
+import {
+  ProjectSaveOrchestrator,
+  cloneWorkspaceFlowsSnapshot,
+  buildFlowsByIdForOrchestrator,
+} from '../services/project-save';
+import { logFlowSaveDebug, summarizeWorkspaceFlowsForDebug } from '../utils/flowSaveDebug';
 // ✅ REMOVED: Migration moved to DB script - keep codebase clean
 // Migration should be a separate DB script, not executed during save
 import { ProjectManager, isDraftProjectId } from './AppContent/application/services/ProjectManager';
@@ -906,7 +911,18 @@ export const AppContent: React.FC<AppContentProps> = ({
                 setIsCreatingProject(true);
                 const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                 let pid = pdUpdate.getCurrentProjectId();
+                /**
+                 * First save from draft: commitDraftProject() assigns a real projectId → FlowWorkspaceProvider key
+                 * changes → provider remount → flowsRef points at reset (empty) FlowStore. Capture flows before commit.
+                 */
+                let flowsSnapshotBeforeDraftCommit: Record<string, unknown> | null = null;
                 if (!pid && currentProject && isDraftProjectId(currentProject.id)) {
+                  flowsSnapshotBeforeDraftCommit = cloneWorkspaceFlowsSnapshot(
+                    flowsRef.current as Record<string, unknown> | undefined
+                  );
+                  logFlowSaveDebug('save: draft snapshot captured BEFORE commitDraftProject', {
+                    draftSnapshot: summarizeWorkspaceFlowsForDebug(flowsSnapshotBeforeDraftCommit),
+                  });
                   try {
                     pid = await projectManager.commitDraftProject(currentProject);
                     await refreshData();
@@ -938,8 +954,16 @@ export const AppContent: React.FC<AppContentProps> = ({
                 const cleanupStart = performance.now();
                 console.log('[Save][Cleanup] 🔍 START - Detecting orphan tasks from in-memory state');
 
-                // Get all flows and tasks from in-memory state
-                const allFlows = flowsRef.current;
+                // Draft first-save: use snapshot taken before commit (see flowsSnapshotBeforeDraftCommit). Otherwise current store.
+                const allFlows = (flowsSnapshotBeforeDraftCommit ??
+                  flowsRef.current) as Record<string, unknown>;
+                logFlowSaveDebug('save: allFlows used for domain + orchestrator', {
+                  usedDraftSnapshot: Boolean(flowsSnapshotBeforeDraftCommit),
+                  allFlows: summarizeWorkspaceFlowsForDebug(allFlows),
+                  flowsRefCurrent: summarizeWorkspaceFlowsForDebug(
+                    flowsRef.current as Record<string, unknown> | undefined
+                  ),
+                });
                 const allTasksInMemory = taskRepository.getAllTasks();
 
                 // Extract all task IDs referenced in flows
@@ -1044,17 +1068,16 @@ export const AppContent: React.FC<AppContentProps> = ({
                 // Note: taskRepository is already imported statically at the top of the file
 
                 // Execute save using orchestrator
-                const flowsById = Object.fromEntries(
-                  Object.entries(allFlows).map(([fid, f]: [string, any]) => [
-                    fid,
-                    {
-                      nodes: f?.nodes ?? [],
-                      edges: f?.edges ?? [],
-                      ...(f?.meta !== undefined ? { meta: f.meta } : {}),
-                      ...(f?.hasLocalChanges !== undefined ? { hasLocalChanges: f.hasLocalChanges } : {}),
-                    },
-                  ])
-                );
+                const flowsById = buildFlowsByIdForOrchestrator(allFlows);
+                logFlowSaveDebug('save: flowsById after buildFlowsByIdForOrchestrator', {
+                  keys: Object.keys(flowsById),
+                  perFlow: Object.entries(flowsById).map(([id, f]) => ({
+                    flowId: id,
+                    nodes: f.nodes?.length ?? 0,
+                    edges: f.edges?.length ?? 0,
+                    hasLocalChanges: f.hasLocalChanges,
+                  })),
+                });
 
                 const saveResult = await orchestrator.executeSave(saveRequest, {
                   translationsContext: (window as any).__projectTranslationsContext,

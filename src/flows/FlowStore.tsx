@@ -53,8 +53,6 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
       const curr = state.flows[action.flowId];
       if (!curr) return state;
       if (curr.hydrated === true) return state;
-      if (curr.hasLocalChanges === true) return state;
-      if ((curr.nodes?.length ?? 0) > 0 || (curr.edges?.length ?? 0) > 0) return state;
       const p = action.payload;
       const mergedMeta =
         p.meta !== undefined ? { ...curr.meta, ...p.meta } : curr.meta;
@@ -110,7 +108,7 @@ const WorkspaceDispatchContext = createContext<React.Dispatch<Action> | undefine
 /**
  * In-memory flow workspace (draft when no project is selected). Persistence is gated in FlowPersistence
  * (loadFlow/saveFlow no-op without projectId); graph edits use UPDATE_FLOW_GRAPH / UPSERT_FLOW only.
- * Step 3: hydrated / hasLocalChanges coordinate loadFlow vs project save (see flowHydrationPolicy).
+ * Step 3: `hydrated` gates repeat loadFlow; first load applies server data (see flowHydrationPolicy).
  */
 export function FlowWorkspaceProvider({ children }: { children: React.ReactNode }) {
   const initial: WorkspaceState = useMemo(

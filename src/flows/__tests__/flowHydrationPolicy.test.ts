@@ -1,52 +1,48 @@
-import { describe, it, expect } from 'vitest';
-import { shouldLoadFlowFromServer, isRealProjectId } from '../flowHydrationPolicy';
+import { describe, expect, it } from 'vitest';
+import { explainShouldLoadFlowFromServer, shouldLoadFlowFromServer } from '../flowHydrationPolicy';
 import type { Flow } from '../FlowTypes';
 
-const emptyFlow = (over: Partial<Flow> = {}): Flow => ({
-  id: 'main',
-  title: 'Main',
-  nodes: [],
-  edges: [],
-  ...over,
-});
+function flow(partial: Partial<Flow> & Pick<Flow, 'id'>): Flow {
+  return {
+    id: partial.id,
+    title: partial.title ?? partial.id,
+    nodes: partial.nodes ?? [],
+    edges: partial.edges ?? [],
+    hydrated: partial.hydrated,
+    hasLocalChanges: partial.hasLocalChanges,
+  };
+}
 
 describe('flowHydrationPolicy', () => {
-  it('isRealProjectId rejects empty', () => {
-    expect(isRealProjectId(undefined)).toBe(false);
-    expect(isRealProjectId('')).toBe(false);
-    expect(isRealProjectId('   ')).toBe(false);
+  it('explain and shouldLoad agree: fetch when not hydrated (empty canvas)', () => {
+    const f = flow({ id: 'main', nodes: [], edges: [], hydrated: false, hasLocalChanges: false });
+    const ex = explainShouldLoadFlowFromServer('proj1', f);
+    expect(ex.shouldLoad).toBe(true);
+    expect(ex.reason).toBe('not_hydrated_will_fetch_server');
+    expect(shouldLoadFlowFromServer('proj1', f)).toBe(ex.shouldLoad);
   });
 
-  it('isRealProjectId accepts non-empty id', () => {
-    expect(isRealProjectId('p1')).toBe(true);
+  it('still fetches when not hydrated even if local graph or flags look dirty (server wins until hydrated)', () => {
+    const f = flow({
+      id: 'main',
+      nodes: [{ id: 'n1' } as any],
+      edges: [],
+      hydrated: false,
+      hasLocalChanges: true,
+    });
+    const ex = explainShouldLoadFlowFromServer('proj1', f);
+    expect(ex.shouldLoad).toBe(true);
+    expect(ex.reason).toBe('not_hydrated_will_fetch_server');
   });
 
-  it('shouldLoadFlowFromServer is false without project', () => {
-    expect(shouldLoadFlowFromServer(undefined, emptyFlow())).toBe(false);
+  it('skips when hydrated', () => {
+    const f = flow({ id: 'main', nodes: [], edges: [], hydrated: true, hasLocalChanges: false });
+    expect(explainShouldLoadFlowFromServer('proj1', f).shouldLoad).toBe(false);
+    expect(explainShouldLoadFlowFromServer('proj1', f).reason).toBe('already_hydrated');
   });
 
-  it('shouldLoadFlowFromServer is false without flow', () => {
-    expect(shouldLoadFlowFromServer('p1', undefined)).toBe(false);
-  });
-
-  it('shouldLoadFlowFromServer allows empty local graph when not hydrated and no edits', () => {
-    expect(shouldLoadFlowFromServer('p1', emptyFlow({ hydrated: false, hasLocalChanges: false }))).toBe(true);
-  });
-
-  it('shouldLoadFlowFromServer blocks when hydrated', () => {
-    expect(shouldLoadFlowFromServer('p1', emptyFlow({ hydrated: true, hasLocalChanges: false }))).toBe(false);
-  });
-
-  it('shouldLoadFlowFromServer blocks when hasLocalChanges', () => {
-    expect(shouldLoadFlowFromServer('p1', emptyFlow({ hydrated: false, hasLocalChanges: true }))).toBe(false);
-  });
-
-  it('shouldLoadFlowFromServer blocks when local graph is non-empty', () => {
-    expect(
-      shouldLoadFlowFromServer(
-        'p1',
-        emptyFlow({ hydrated: false, hasLocalChanges: false, nodes: [{ id: 'n1' } as any] })
-      )
-    ).toBe(false);
+  it('skips without real project id', () => {
+    const f = flow({ id: 'main', nodes: [], edges: [], hydrated: false });
+    expect(explainShouldLoadFlowFromServer(undefined, f).shouldLoad).toBe(false);
   });
 });

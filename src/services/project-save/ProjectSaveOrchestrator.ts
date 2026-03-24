@@ -12,6 +12,7 @@ import type {
   ITranslationsContext,
   IFlowStateService,
 } from './SaveServiceInterfaces';
+import { logFlowSaveDebug } from '../../utils/flowSaveDebug';
 
 /**
  * ProjectSaveOrchestrator: Orchestrates project save flow
@@ -301,7 +302,24 @@ export class ProjectSaveOrchestrator {
             let flowData: { nodes: any[]; edges: any[] };
             if (snapshot && Object.prototype.hasOwnProperty.call(snapshot, flowId)) {
               const entry = snapshot[flowId];
-              if (entry && typeof entry === 'object' && 'hasLocalChanges' in entry && entry.hasLocalChanges === false) {
+              const nodeCount = (entry?.nodes as any[])?.length ?? 0;
+              const edgeCount = (entry?.edges as any[])?.length ?? 0;
+              const hasGraph = nodeCount > 0 || edgeCount > 0;
+              // Step 3: skip only when explicitly synced AND nothing to persist. Never skip when the snapshot
+              // has nodes/edges (e.g. draft→first save with hasLocalChanges still false on main).
+              if (
+                entry &&
+                typeof entry === 'object' &&
+                'hasLocalChanges' in entry &&
+                entry.hasLocalChanges === false &&
+                !hasGraph
+              ) {
+                logFlowSaveDebug('orchestrator: skip flow PUT (no local changes, empty graph)', {
+                  flowId,
+                  nodeCount,
+                  edgeCount,
+                  hasLocalChanges: entry.hasLocalChanges,
+                });
                 continue;
               }
               flowData = {
@@ -324,6 +342,15 @@ export class ProjectSaveOrchestrator {
               snapshot && Object.prototype.hasOwnProperty.call(snapshot, flowId)
                 ? snapshot[flowId]?.meta
                 : undefined;
+
+            logFlowSaveDebug('orchestrator: PUT /flow', {
+              flowId,
+              rawNodeCount: flowData.nodes?.length ?? 0,
+              rawEdgeCount: flowData.edges?.length ?? 0,
+              simplifiedNodeCount: simplifiedNodes.length,
+              simplifiedEdgeCount: simplifiedEdges.length,
+              hasMeta: flowMeta !== undefined,
+            });
 
             const response = await fetch(
               `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`,

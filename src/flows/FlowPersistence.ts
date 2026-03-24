@@ -3,6 +3,7 @@ import type { FlowVariableDefinition } from './flowVariableTypes';
 import type { Node } from 'reactflow';
 import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
 import { transformNodesToSimplified, transformEdgesToSimplified, transformNodesToReactFlow, transformEdgesToReactFlow } from './flowTransformers';
+import { logFlowSaveDebug } from '../utils/flowSaveDebug';
 
 export async function listFlows(projectId: string): Promise<{ id: FlowId; updatedAt?: string }[]> {
   if (!projectId || String(projectId).trim() === '') {
@@ -47,6 +48,14 @@ export async function loadFlow(projectId: string, flowId: FlowId): Promise<FlowL
     json?.meta && typeof json.meta === 'object'
       ? (json.meta as { variables?: FlowVariableDefinition[] })
       : undefined;
+
+  logFlowSaveDebug('loadFlow: response from API (simplified counts before ReactFlow transform)', {
+    projectId,
+    flowId,
+    simplifiedNodeCount: simplifiedNodes.length,
+    simplifiedEdgeCount: simplifiedEdges.length,
+    hasMeta: meta !== undefined,
+  });
 
   // ✅ LOG: Traccia cosa viene ricevuto dal backend
   const edgesWithCondition = simplifiedEdges.filter((e: any) => e.condition || e.conditionId);

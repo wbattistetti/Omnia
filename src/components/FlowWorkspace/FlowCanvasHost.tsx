@@ -1,7 +1,8 @@
 import React, { useEffect, useCallback } from 'react';
 import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '../../flows/FlowStore.tsx';
 import { loadFlow } from '../../flows/FlowPersistence';
-import { shouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
+import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
+import { logFlowSaveDebug } from '../../utils/flowSaveDebug';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
 import { FlowTestProvider } from '../../context/FlowTestContext';
@@ -35,6 +36,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
   useEffect(() => {
     let cancelled = false;
     if (!projectId || String(projectId).trim() === '') {
+      logFlowSaveDebug('FlowCanvasHost: skip load (no projectId)', { flowId });
       if (!flows[flowId]) {
         upsertFlow({
           id: flowId,
@@ -50,6 +52,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
 
     const flow = flows[flowId];
     if (!flow) {
+      logFlowSaveDebug('FlowCanvasHost: upsert empty flow slice (no slice yet)', { flowId, projectId });
       upsertFlow({
         id: flowId,
         title: flowId === 'main' ? 'Main' : flowId,
@@ -61,9 +64,21 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
       return;
     }
 
-    if (!shouldLoadFlowFromServer(projectId, flow)) {
+    const explain = explainShouldLoadFlowFromServer(projectId, flow);
+    if (!explain.shouldLoad) {
+      logFlowSaveDebug('FlowCanvasHost: skip server loadFlow', {
+        projectId,
+        flowId,
+        ...explain,
+      });
       return;
     }
+
+    logFlowSaveDebug('FlowCanvasHost: fetching loadFlow', {
+      projectId,
+      flowId,
+      ...explain,
+    });
 
     (async () => {
       let data: Awaited<ReturnType<typeof loadFlow>>;
@@ -74,6 +89,13 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
         return;
       }
       if (cancelled) return;
+      logFlowSaveDebug('FlowCanvasHost: applyFlowLoadResult', {
+        projectId,
+        flowId,
+        nodes: data.nodes.length,
+        edges: data.edges.length,
+        hasMeta: data.meta !== undefined,
+      });
       applyFlowLoadResult(flowId, {
         nodes: data.nodes,
         edges: data.edges,
