@@ -3,8 +3,6 @@ import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '../../f
 import { loadFlow } from '../../flows/FlowPersistence';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
-import { dlog } from '../../utils/debug';
-import { useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { FlowTestProvider } from '../../context/FlowTestContext';
 import { FlowActionsProvider } from '../../context/FlowActionsContext';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
@@ -23,7 +21,6 @@ type Props = {
 export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleNode, onCreateTaskFlow, onOpenTaskFlow, onOpenSubflowForTask }) => {
   const { flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph } = useFlowStoreActions();
-  const pd = useProjectDataUpdate();
 
   const entityCreation = useEntityCreation();
 
@@ -117,5 +114,4 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
 
   return withFlowActions;
 };
-
 

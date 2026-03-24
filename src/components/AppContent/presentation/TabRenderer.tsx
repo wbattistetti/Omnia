@@ -20,7 +20,7 @@ import { UnifiedFlowMappingPanel } from '@components/FlowMappingPanel';
 export interface TabRendererProps {
   tab: DockTab;
   currentPid?: string;
-  /** When true, flow tab is shown with empty canvas (no project in backend until first Save). */
+  /** @deprecated Kept for compatibility; flow canvas always uses FlowWorkspaceStore (draft = in-memory). */
   isDraft?: boolean;
   setDockTree: React.Dispatch<React.SetStateAction<DockNode>>;
   editorCloseRefsMap: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
@@ -72,24 +72,9 @@ function tabContentComparator(prev: { tab: DockTab }, next: { tab: DockTab }): b
 }
 
 export const TabRenderer: React.FC<TabRendererProps> = React.memo(
-  ({ tab, currentPid, isDraft, setDockTree, editorCloseRefsMap, pdUpdate, testSingleNode, onFlowCreateTaskFlow, onFlowOpenTaskFlow, onOpenSubflowForTask }) => {
+  ({ tab, currentPid, isDraft: _isDraft, setDockTree, editorCloseRefsMap, pdUpdate, testSingleNode, onFlowCreateTaskFlow, onFlowOpenTaskFlow, onOpenSubflowForTask }) => {
     // Flow tab - FlowCanvasHost handles useFlowActions internally
     if (tab.type === 'flow') {
-      if (!currentPid && !isDraft) {
-        return (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '100%',
-              height: '100%',
-            }}
-          >
-            Waiting for project...
-          </div>
-        );
-      }
       return (
         <FlowCanvasHost
           projectId={currentPid ?? undefined}

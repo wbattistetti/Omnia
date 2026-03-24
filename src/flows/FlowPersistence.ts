@@ -5,6 +5,9 @@ import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes
 import { transformNodesToSimplified, transformEdgesToSimplified, transformNodesToReactFlow, transformEdgesToReactFlow } from './flowTransformers';
 
 export async function listFlows(projectId: string): Promise<{ id: FlowId; updatedAt?: string }[]> {
+  if (!projectId || String(projectId).trim() === '') {
+    return [];
+  }
   const url = `/api/projects/${encodeURIComponent(projectId)}/flows`;
   // RIMOSSO: console.log che causava loop infinito
   const res = await fetch(url);
@@ -27,6 +30,9 @@ export type FlowLoadResult = {
 };
 
 export async function loadFlow(projectId: string, flowId: FlowId): Promise<FlowLoadResult> {
+  if (!projectId || String(projectId).trim() === '') {
+    return { nodes: [], edges: [] };
+  }
   const url = `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`;
   // Log rimosso: non essenziale per flusso motore
 
@@ -77,6 +83,9 @@ export async function saveFlow(
   edges: any[],
   meta?: { variables?: FlowVariableDefinition[] }
 ): Promise<void> {
+  if (!projectId || String(projectId).trim() === '') {
+    return;
+  }
   const url = `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`;
 
   console.log(`[SAVE][saveFlow] 🚀 START saving flow`, {

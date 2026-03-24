@@ -416,32 +416,32 @@ export function useAIAgentEditorController({
   }, [hasAgentGeneration, designDescription, provider, model, structuredRev, structuredOtEnabled]);
 
   const updateProposedField = React.useCallback(
-    (fieldName: string, patch: Partial<AIAgentProposedVariable>) => {
+    (slotId: string, patch: Partial<AIAgentProposedVariable>) => {
       setDirty(true);
       setProposedFields((prev) =>
-        prev.map((p) => (p.field_name === fieldName ? { ...p, ...patch } : p))
+        prev.map((p) => (p.slotId === slotId ? { ...p, ...patch } : p))
       );
     },
     []
   );
 
-  const removeProposedField = React.useCallback((fieldName: string) => {
+  const removeProposedField = React.useCallback((slotId: string) => {
     setDirty(true);
-    setProposedFields((prev) => prev.filter((p) => p.field_name !== fieldName));
+    setProposedFields((prev) => prev.filter((p) => p.slotId !== slotId));
     setOutputVariableMappings((prev) => {
       const next = { ...prev };
-      delete next[fieldName];
+      delete next[slotId];
       return next;
     });
   }, []);
 
   const syncFlowVariableFromLabel = React.useCallback(
-    (fieldName: string, labelTrimmed: string) => {
+    (slotId: string, labelTrimmed: string) => {
       if (!projectId) return;
       setDirty(true);
       const flowId = getActiveFlowCanvasId();
       setOutputVariableMappings((prev) =>
-        nextMappingsAfterLabelBlur(projectId, flowId, prev, fieldName, labelTrimmed)
+        nextMappingsAfterLabelBlur(projectId, flowId, prev, slotId, labelTrimmed)
       );
     },
     [projectId]

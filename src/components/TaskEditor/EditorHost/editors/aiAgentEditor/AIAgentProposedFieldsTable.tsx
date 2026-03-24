@@ -11,9 +11,9 @@ export interface AIAgentProposedFieldsTableProps {
   fields: AIAgentProposedVariable[];
   /** Kept for callers; linkage is no longer shown under each row. */
   outputVariableMappings: Record<string, string>;
-  onUpdateField: (fieldName: string, patch: Partial<AIAgentProposedVariable>) => void;
-  onRemoveField: (fieldName: string) => void;
-  onLabelBlur: (fieldName: string, labelTrimmed: string) => void;
+  onUpdateField: (slotId: string, patch: Partial<AIAgentProposedVariable>) => void;
+  onRemoveField: (slotId: string) => void;
+  onLabelBlur: (slotId: string, labelTrimmed: string) => void;
 }
 
 function typeLabelIt(typeId: string): string {
@@ -205,13 +205,13 @@ export function AIAgentProposedFieldsTable({
       <table className="w-full text-sm border-collapse">
         <tbody>
           {fields.map((f) => (
-            <tr key={f.field_name} className="align-middle">
+            <tr key={f.slotId} className="align-middle">
               <td className="w-[52px] p-2 align-middle text-center">
                 <input
                   type="checkbox"
                   className="rounded border-slate-600 align-middle"
                   checked={f.required}
-                  onChange={(e) => onUpdateField(f.field_name, { required: e.target.checked })}
+                  onChange={(e) => onUpdateField(f.slotId, { required: e.target.checked })}
                   title="Obbligatorio"
                   aria-label="Obbligatorio"
                 />
@@ -220,14 +220,14 @@ export function AIAgentProposedFieldsTable({
                 <LabelCell
                   label={f.label}
                   onSave={(next) => {
-                    onUpdateField(f.field_name, { label: next });
-                    onLabelBlur(f.field_name, next.trim());
+                    onUpdateField(f.slotId, { label: next });
+                    onLabelBlur(f.slotId, next.trim());
                   }}
-                  onRemove={() => onRemoveField(f.field_name)}
+                  onRemove={() => onRemoveField(f.slotId)}
                   afterLabel={
                     <TypeCell
                       typeId={f.type}
-                      onChange={(next) => onUpdateField(f.field_name, { type: next })}
+                      onChange={(next) => onUpdateField(f.slotId, { type: next })}
                     />
                   }
                 />

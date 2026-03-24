@@ -16,6 +16,7 @@ Public Enum TaskTypes
     UtteranceInterpretation    ' ✅ Rinominato da DataRequest (interpreta utterance utente per estrarre dati)
     BackendCall
     ClassifyProblem
+    AIAgent
 End Enum
 
 End Namespace

@@ -170,6 +170,24 @@ Public Class SimpleTaskCompiler
                 End If
                 compiledTask = transferTask
 
+            Case TaskTypes.AIAgent
+                Dim agentTask As New CompiledAIAgentTask()
+                Dim agentDef = TryCast(task, AIAgentTaskDefinition)
+                If agentDef IsNot Nothing Then
+                    agentTask.Rules = If(agentDef.Rules, "")
+                    agentTask.LlmEndpoint = If(agentDef.LlmEndpoint, "")
+                Else
+                    If task.Value IsNot Nothing Then
+                        If task.Value.ContainsKey("rules") Then
+                            agentTask.Rules = If(task.Value("rules")?.ToString(), "")
+                        End If
+                        If task.Value.ContainsKey("llmEndpoint") Then
+                            agentTask.LlmEndpoint = If(task.Value("llmEndpoint")?.ToString(), "")
+                        End If
+                    End If
+                End If
+                compiledTask = agentTask
+
             Case Else
                 ' ❌ ERRORE BLOCCANTE: tipo task sconosciuto, nessun fallback
                 Throw New InvalidOperationException($"Unknown TaskType {_taskType}. The compiler cannot create a fallback task. Every task must have a valid, known type.")

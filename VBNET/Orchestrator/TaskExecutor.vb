@@ -28,6 +28,8 @@ Public Class TaskExecutor
                 Return New TransferTaskExecutor()
             Case TaskTypes.UtteranceInterpretation
                 Return New TaskUtteranceStepExecutor()
+            Case TaskTypes.AIAgent
+                Return New AIAgentTaskExecutor()
             Case Else
                 Console.WriteLine($"⚠️ [TaskExecutor] Unknown TaskType {taskType}")
                 Return Nothing

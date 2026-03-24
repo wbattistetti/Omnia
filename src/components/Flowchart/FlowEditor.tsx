@@ -539,7 +539,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // ✅ REMOVED: onPaneClick - now in useFlowEventHandlers
 
-  // (rimosso onPaneDoubleClick: usiamo il doppio click sul wrapper)
+  // Doppio click sul canvas: listener nativo in capture in useFlowEventHandlers (come GrammarCanvasView)
 
   // ✅ RIMUOVERE le funzioni locali:
   // - cleanupAllTempNodesAndEdges (righe 814-841)
@@ -790,11 +790,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       <div
         className="flex-1 h-full relative"
         ref={canvasRef}
-        onDoubleClick={eventHandlers.handleCanvasDoubleClick}
         onMouseLeave={() => setCursorTooltip(null)}
         onMouseDown={eventHandlers.onMouseDown}
       >
-        {/* Sync nodes/edges to FlowStateBridge for global access */}
+        {/* Legacy mirror: FlowStore/React props are authoritative; bridge is for integrations not yet migrated. */}
       {(() => {
         try {
           FlowStateBridge.setNodes(nodes);
@@ -958,11 +957,14 @@ export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
   const { data: projectData } = useProjectData();
 
   // Providers for IntellisenseService
-  const intellisenseProviders = useMemo(() => ({
-    getProjectData: () => projectData,
-    getFlowNodes: () => FlowStateBridge.getNodes(),
-    getFlowEdges: () => FlowStateBridge.getEdges(),
-  }), [projectData]);
+  const intellisenseProviders = useMemo(
+    () => ({
+      getProjectData: () => projectData,
+      getFlowNodes: () => props.nodes,
+      getFlowEdges: () => props.edges,
+    }),
+    [projectData, props.nodes, props.edges]
+  );
 
   // ReactFlowProvider deve avvolgere il canvas; IntellisenseProvider sta *sotto* così
   // useIntellisense e useReactFlow condividono lo stesso sottoalbero (evita ctx null in dev/HMR).

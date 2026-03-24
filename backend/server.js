@@ -6186,6 +6186,23 @@ app.post('/step2-with-provider', async (req, res) => {
   }
 });
 
+/**
+ * VB.NET AIAgentTaskExecutor bridge: accepts { state, user_message, rules } and returns
+ * { new_state, assistant_message, status }. Set OMNIA_AI_AGENT_LLM_URL to this server, e.g.
+ * http://localhost:<PORT>/api/runtime/ai-agent/step
+ * Optional: OMNIA_AI_AGENT_RUNTIME_PROVIDER=groq|openai, OMNIA_AI_AGENT_RUNTIME_MODEL=<model id>
+ */
+app.post('/api/runtime/ai-agent/step', async (req, res) => {
+  try {
+    const { runAIAgentRuntimeStep } = require('./services/AIAgentRuntimeBridgeService');
+    const result = await runAIAgentRuntimeStep(req.body || {}, aiProviderService);
+    res.json(result);
+  } catch (error) {
+    console.error('[POST /api/runtime/ai-agent/step]', error);
+    res.status(500).json({ error: error.message || String(error) });
+  }
+});
+
 // Provider information endpoint
 app.get('/api/ai-providers', (req, res) => {
   res.json({

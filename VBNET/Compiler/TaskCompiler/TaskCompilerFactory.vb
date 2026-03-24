@@ -23,7 +23,7 @@ Public Class TaskCompilerFactory
                     Console.WriteLine($"✅ [TaskCompilerFactory] Creating UtteranceTaskCompiler for taskType={taskType}")
                     System.Diagnostics.Debug.WriteLine($"✅ [TaskCompilerFactory] Creating UtteranceTaskCompiler for taskType={taskType}")
                     _compilerCache(taskType) = New UtteranceTaskCompiler()
-                Case TaskTypes.SayMessage, TaskTypes.ClassifyProblem, TaskTypes.BackendCall, TaskTypes.CloseSession, TaskTypes.Transfer
+                Case TaskTypes.SayMessage, TaskTypes.ClassifyProblem, TaskTypes.BackendCall, TaskTypes.CloseSession, TaskTypes.Transfer, TaskTypes.AIAgent
                     Console.WriteLine($"✅ [TaskCompilerFactory] Creating SimpleTaskCompiler for taskType={taskType}")
                     System.Diagnostics.Debug.WriteLine($"✅ [TaskCompilerFactory] Creating SimpleTaskCompiler for taskType={taskType}")
                     _compilerCache(taskType) = New SimpleTaskCompiler(taskType)

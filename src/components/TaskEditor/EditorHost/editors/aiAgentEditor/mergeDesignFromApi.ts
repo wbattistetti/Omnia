@@ -7,30 +7,33 @@ import { normalizeEntityType } from '@types/dataEntityTypes';
 import { seedPreviewByStyleFromSample } from '@types/aiAgentPreview';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { formatOperationalSequenceNewlines } from './operationalSequenceDisplay';
+import { createAgentOutputSlotId } from './aiAgentSlotIdentity';
 
 /**
- * Normalizes proposed variables from the API payload.
+ * Maps LLM design rows to editor variables: assigns a new slotId per row (never uses field_name as identity).
  */
 export function proposedFieldsFromDesignPayload(
   design: AIAgentDesignPayload
 ): AIAgentProposedVariable[] {
   return design.proposed_variables.map((v) => ({
-    ...v,
+    slotId: createAgentOutputSlotId(),
+    label: v.label,
     type: normalizeEntityType(v.type),
+    required: Boolean(v.required),
   }));
 }
 
 /**
- * Ensures each new field_name has a mapping slot (empty string until linked).
+ * Ensures each new slotId has a mapping entry (empty string until linked to a project variable).
  */
-export function extendOutputMappingsForNewKeys(
+export function extendOutputMappingsForNewSlotIds(
   previous: Record<string, string>,
-  fieldNames: string[]
+  slotIds: string[]
 ): Record<string, string> {
   const next = { ...previous };
-  for (const name of fieldNames) {
-    if (!(name in next)) {
-      next[name] = '';
+  for (const id of slotIds) {
+    if (!(id in next)) {
+      next[id] = '';
     }
   }
   return next;
@@ -66,13 +69,14 @@ export function sectionTextsFromDesignPayload(
  * Maps a successful `generateAIAgentDesign` response into editor state fragments.
  */
 export function applyGenerateDesignPayload(design: AIAgentDesignPayload): GenerateDesignApplyResult {
-  const keys = design.proposed_variables.map((v) => v.field_name);
+  const proposedFields = proposedFieldsFromDesignPayload(design);
+  const slotIds = proposedFields.map((p) => p.slotId);
   return {
-    proposedFields: proposedFieldsFromDesignPayload(design),
+    proposedFields,
     agentPrompt: design.agent_prompt.trim(),
     sectionBases: sectionTextsFromDesignPayload(design),
     previewByStyle: seedPreviewByStyleFromSample(design.sample_dialogue),
     initialStateTemplateJson: JSON.stringify(design.initial_state_template, null, 2),
-    mergeOutputMappings: (previous) => extendOutputMappingsForNewKeys(previous, keys),
+    mergeOutputMappings: (previous) => extendOutputMappingsForNewSlotIds(previous, slotIds),
   };
 }

@@ -76,6 +76,7 @@
     <Compile Include="TaskExecutors\CloseSessionTaskExecutor.vb" />
     <Compile Include="TaskExecutors\TransferTaskExecutor.vb" />
     <Compile Include="TaskExecutors\ClassifyProblemTaskExecutor.vb" />
+    <Compile Include="TaskExecutors\AIAgentTaskExecutor.vb" />
   </ItemGroup>
 
   <!-- Placeholder files removed - not implemented -->

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Node } from 'reactflow';
 import type { FlowNode, EdgeData } from '@components/Flowchart/types/flowTypes';
 import type { Edge } from 'reactflow';
@@ -97,19 +97,31 @@ export function useFlowEventHandlers(
   }, [nodes.length, setCursorTooltip]);
 
   /**
-   * Handles canvas double click - creates a new node at click position
+   * Double-click on empty canvas: create node. Uses a native capture listener because
+   * React Flow / selection can prevent the outer wrapper's React onDoubleClick from firing
+   * (same approach as GrammarCanvasView).
    */
-  const handleCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement;
-    // Solo se il doppio click avviene DIRETTAMENTE sul pane (non dentro nodi)
-    const isPane = target?.classList?.contains('react-flow__pane');
-    if (!isPane) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const x = e.clientX;
-    const y = e.clientY;
-    createNodeAt(x, y);
-  }, [createNodeAt]);
+  useEffect(() => {
+    const host = canvasRef.current;
+    if (!host) return;
+
+    const handleDoubleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const isNode = !!target?.closest?.('.react-flow__node');
+      const isEdge = !!target?.closest?.('.react-flow__edge');
+      const isControl = !!target?.closest?.('.react-flow__controls');
+      const isOnPane =
+        target?.classList?.contains('react-flow__pane') || !!target?.closest?.('.react-flow__pane');
+      if (!isOnPane || isNode || isEdge || isControl) return;
+      e.stopPropagation();
+      createNodeAt(e.clientX, e.clientY);
+    };
+
+    host.addEventListener('dblclick', handleDoubleClick, true);
+    return () => {
+      host.removeEventListener('dblclick', handleDoubleClick, true);
+    };
+  }, [createNodeAt, canvasRef]);
 
   /**
    * Handles node drag start - sets up rigid drag context if needed
@@ -353,7 +365,6 @@ export function useFlowEventHandlers(
   return {
     onPaneClick,
     handlePaneMouseMove,
-    handleCanvasDoubleClick,
     onNodeDragStart,
     onNodeDrag,
     onNodeDragStop,

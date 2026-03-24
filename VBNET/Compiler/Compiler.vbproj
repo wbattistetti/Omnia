@@ -54,6 +54,7 @@
     <Compile Include="DTO\IDE\TaskDefinition.vb" />
     <Compile Include="DTO\IDE\UtteranceTaskDefinition.vb" />
     <Compile Include="DTO\IDE\BackendCallTaskDefinition.vb" />
+    <Compile Include="DTO\IDE\AIAgentTaskDefinition.vb" />
     <Compile Include="DTO\IDE\MockTableDesign.vb" />
     <Compile Include="DTO\IDE\ColumnMapping.vb" />
     <Compile Include="DTO\IDE\ConditionDefinition.vb" />

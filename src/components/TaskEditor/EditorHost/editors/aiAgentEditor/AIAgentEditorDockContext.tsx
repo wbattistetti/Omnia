@@ -35,9 +35,9 @@ export interface AIAgentEditorDockContextValue {
   primaryAgentActionLabel: string;
   proposedFields: AIAgentProposedVariable[];
   outputVariableMappings: Record<string, string>;
-  onUpdateProposedField: (fieldName: string, patch: Partial<AIAgentProposedVariable>) => void;
-  onRemoveProposedField: (fieldName: string) => void;
-  onProposedLabelBlur: (fieldName: string, labelTrimmed: string) => void;
+  onUpdateProposedField: (slotId: string, patch: Partial<AIAgentProposedVariable>) => void;
+  onRemoveProposedField: (slotId: string) => void;
+  onProposedLabelBlur: (slotId: string, labelTrimmed: string) => void;
   logicalSteps: readonly AIAgentLogicalStep[];
   useCases: readonly AIAgentUseCase[];
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;

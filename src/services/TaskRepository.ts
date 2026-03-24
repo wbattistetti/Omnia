@@ -19,6 +19,12 @@ class TaskRepository {
   private tasks = new Map<string, Task>();
 
   /**
+   * Task ids removed from memory that must be deleted from Mongo on the next explicit project save.
+   * Immediate HTTP DELETE is not used — aligns with TaskRepository update semantics (persist on save).
+   */
+  private pendingRemoteTaskDeletes = new Set<string>();
+
+  /**
    * Get current project ID from localStorage or window
    */
   private getCurrentProjectId(): string | undefined {
@@ -78,6 +84,7 @@ class TaskRepository {
     // ✅ Save to internal storage only (in-memory)
     // ✅ NO automatic database save - save only on explicit user action (project:save event)
     this.tasks.set(finalTaskId, task);
+    this.pendingRemoteTaskDeletes.delete(finalTaskId);
 
     return task;
   }
@@ -252,28 +259,49 @@ class TaskRepository {
   }
 
   /**
-   * Delete Task
+   * Delete Task from in-memory repository only.
+   * MongoDB removal runs on the next successful `saveAllTasksToDatabase` (explicit project save).
    */
-  async deleteTask(taskId: string, projectId?: string): Promise<boolean> {
-    // Remove from internal storage
+  async deleteTask(taskId: string, _projectId?: string): Promise<boolean> {
     const deleted = this.tasks.delete(taskId);
+    if (deleted) {
+      this.pendingRemoteTaskDeletes.add(taskId);
+    }
+    return deleted;
+  }
 
-    // Delete from database if projectId is available
-    const finalProjectId = projectId || this.getCurrentProjectId();
-    if (finalProjectId) {
+  /**
+   * Applies queued remote deletes after a successful bulk upsert (or when there is nothing to upsert).
+   */
+  private async flushPendingRemoteTaskDeletes(projectId: string): Promise<boolean> {
+    if (this.pendingRemoteTaskDeletes.size === 0) {
+      return true;
+    }
+    const ids = [...this.pendingRemoteTaskDeletes];
+    let allOk = true;
+    for (const taskId of ids) {
       try {
-        const response = await fetch(`/api/projects/${finalProjectId}/tasks/${taskId}`, {
-          method: 'DELETE'
-        });
+        const response = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`,
+          { method: 'DELETE' }
+        );
         if (!response.ok) {
-          return false;
+          console.error('[TaskRepository] flushPendingRemoteTaskDeletes failed', {
+            projectId,
+            taskId,
+            status: response.status,
+          });
+          allOk = false;
         }
       } catch (err) {
-        return false;
+        console.error('[TaskRepository] flushPendingRemoteTaskDeletes exception', { projectId, taskId, err });
+        allOk = false;
       }
     }
-
-    return deleted;
+    if (allOk) {
+      this.pendingRemoteTaskDeletes.clear();
+    }
+    return allOk;
   }
 
   /**
@@ -342,6 +370,7 @@ class TaskRepository {
       // Clear and populate internal storage
       const clearedCount = this.tasks.size;
       this.tasks.clear();
+      this.pendingRemoteTaskDeletes.clear();
       console.log('[TaskRepository] 🔍 LOAD TASKS - CLEARED REPOSITORY', {
         projectId: finalProjectId,
         clearedCount,
@@ -555,8 +584,8 @@ class TaskRepository {
       });
 
       if (allTasks.length === 0) {
-        console.log('[TaskRepository] ✅ SAVE TASKS: No tasks to save (all filtered out)');
-        return true; // Nothing to save
+        console.log('[TaskRepository] ✅ SAVE TASKS: No tasks to upsert (all filtered out); applying pending deletes');
+        return await this.flushPendingRemoteTaskDeletes(finalProjectId);
       }
 
       // ✅ LOG: Tasks to save - BEFORE processing
@@ -789,6 +818,13 @@ class TaskRepository {
         }
       }
 
+      const flushed = await this.flushPendingRemoteTaskDeletes(finalProjectId);
+      if (!flushed) {
+        console.error('[TaskRepository] ❌ SAVE TASKS: bulk OK but pending task deletes failed', {
+          projectId: finalProjectId,
+        });
+        return false;
+      }
       return true;
     } catch (error) {
       console.error('[TaskRepository] ❌ SAVE TASKS ERROR - Exception', {

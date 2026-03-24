@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyGenerateDesignPayload,
-  extendOutputMappingsForNewKeys,
+  extendOutputMappingsForNewSlotIds,
   proposedFieldsFromDesignPayload,
 } from '../mergeDesignFromApi';
 import type { AIAgentDesignPayload } from '@types/aiAgentDesign';
@@ -37,17 +37,18 @@ describe('mergeDesignFromApi', () => {
     expect(fields[0].type).toBe('text');
   });
 
-  it('extends mappings only for missing keys', () => {
+  it('extends mappings only for missing slot ids', () => {
     const prev = { existing: 'x' };
-    const next = extendOutputMappingsForNewKeys(prev, ['existing', 'new_field']);
+    const next = extendOutputMappingsForNewSlotIds(prev, ['existing', 'new_slot']);
     expect(next.existing).toBe('x');
-    expect(next.new_field).toBe('');
+    expect(next.new_slot).toBe('');
   });
 
-  it('applyGenerateDesignPayload merges mapping keys from variables', () => {
+  it('applyGenerateDesignPayload merges mapping keys from slotIds', () => {
     const applied = applyGenerateDesignPayload(minimalDesign());
+    const slotId = applied.proposedFields[0].slotId;
     const merged = applied.mergeOutputMappings({ other: 'y' });
     expect(merged.other).toBe('y');
-    expect(merged.user_name).toBe('');
+    expect(merged[slotId]).toBe('');
   });
 });

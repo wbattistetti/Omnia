@@ -28,8 +28,8 @@ export interface AIAgentRightPanelProps {
   onPreviewStyleIdChange?: (styleId: string) => void;
   proposedFields: AIAgentProposedVariable[];
   outputVariableMappings: Record<string, string>;
-  onUpdateProposedField: (fieldName: string, patch: Partial<AIAgentProposedVariable>) => void;
-  onProposedLabelBlur: (fieldName: string, labelTrimmed: string) => void;
+  onUpdateProposedField: (slotId: string, patch: Partial<AIAgentProposedVariable>) => void;
+  onProposedLabelBlur: (slotId: string, labelTrimmed: string) => void;
 }
 
 export function AIAgentRightPanel({

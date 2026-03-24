@@ -14,4 +14,8 @@ Public Enum TaskTypes
     UtteranceInterpretation    ' ✅ Rinominato da DataRequest (interpreta utterance utente per estrarre dati)
     BackendCall
     ClassifyProblem
+    ''' <summary>
+    ''' Task guidato da LLM con stato JSON serializzato in ExecutionState.DialogueContexts
+    ''' </summary>
+    AIAgent
 End Enum

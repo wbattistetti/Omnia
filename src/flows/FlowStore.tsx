@@ -53,6 +53,10 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
 const WorkspaceContext = createContext<WorkspaceState | undefined>(undefined);
 const WorkspaceDispatchContext = createContext<React.Dispatch<Action> | undefined>(undefined);
 
+/**
+ * In-memory flow workspace (draft when no project is selected). Persistence is gated in FlowPersistence
+ * (loadFlow/saveFlow no-op without projectId); graph edits use UPDATE_FLOW_GRAPH / UPSERT_FLOW only.
+ */
 export function FlowWorkspaceProvider({ children }: { children: React.ReactNode }) {
   const initial: WorkspaceState = useMemo(() => ({
     flows: { main: { id: 'main', title: 'Main', nodes: [], edges: [] } },

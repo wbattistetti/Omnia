@@ -442,6 +442,9 @@ Public Class FlowOrchestrator
             Case TaskTypes.UtteranceInterpretation
                 Return ProcessUtteranceTurn(DirectCast(rowTask, CompiledUtteranceTask))
 
+            Case TaskTypes.AIAgent
+                Return Await ProcessAIAgentTurn(DirectCast(rowTask, CompiledAIAgentTask))
+
             Case TaskTypes.SayMessage
                 Return ProcessSayMessageTurn(DirectCast(rowTask, CompiledSayMessageTask))
 
@@ -532,6 +535,44 @@ Public Class FlowOrchestrator
         ' Stato intermedio (es. dopo un Match, prima della Confirmation)
         ' RunUntilInput itera di nuovo sulla stessa riga con PendingUtterance = ""
         Return RowTurnResult.AutoAdvance(result.Messages)
+    End Function
+
+    ''' <summary>
+    ''' Handler per AI Agent: un passo LLM, stato JSON in DialogueContexts (come UtteranceInterpretation).
+    ''' </summary>
+    Private Async Function ProcessAIAgentTurn(rowTask As CompiledAIAgentTask) As System.Threading.Tasks.Task(Of RowTurnResult)
+        Dim stateJson = ""
+        If _state.DialogueContexts IsNot Nothing AndAlso _state.DialogueContexts.ContainsKey(rowTask.Id) Then
+            stateJson = _state.DialogueContexts(rowTask.Id)
+        End If
+
+        Dim utterance = _state.PendingUtterance
+        _state.PendingUtterance = ""
+
+        Dim endpoint = AIAgentTaskExecutor.ResolveLlmEndpoint(rowTask.LlmEndpoint)
+        Dim stepResult = Await AIAgentTaskExecutor.ExecuteStepAsync(
+            stateJson, utterance, rowTask.Rules, endpoint).ConfigureAwait(False)
+
+        If _state.DialogueContexts Is Nothing Then
+            _state.DialogueContexts = New Dictionary(Of String, String)()
+        End If
+        If stepResult.IsCompleted Then
+            If _state.DialogueContexts.ContainsKey(rowTask.Id) Then
+                _state.DialogueContexts.Remove(rowTask.Id)
+            End If
+        Else
+            _state.DialogueContexts(rowTask.Id) = stepResult.NewStateJson
+        End If
+
+        Dim messages As New List(Of String)()
+        If Not String.IsNullOrWhiteSpace(stepResult.AssistantMessage) Then
+            messages.Add(stepResult.AssistantMessage)
+        End If
+
+        If stepResult.IsCompleted Then
+            Return RowTurnResult.Completed(messages)
+        End If
+        Return RowTurnResult.WaitingForInput(rowTask.Id, messages)
     End Function
 
     ''' <summary>

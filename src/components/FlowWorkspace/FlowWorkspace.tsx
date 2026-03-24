@@ -6,20 +6,19 @@ import { loadFlow, saveFlow } from '../../flows/FlowPersistence';
 import { dlog } from '../../utils/debug';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
-import { useProjectDataUpdate } from '../../context/ProjectDataContext';
 
 // Adapter: renderizza l'attuale FlowEditor per activeFlowId con nodes/edges del workspace
-const FlowHost: React.FC<{ projectId: string }> = ({ projectId }) => {
+const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const { activeFlowId, flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph, openFlow, openFlowBackground } = useFlowActions();
-  const pdUpdate = useProjectDataUpdate();
 
   useEffect(() => {
     setActiveFlowCanvasId(activeFlowId);
   }, [activeFlowId]);
 
-  // Lazy load del flusso se non presente
+  // Lazy load from API only when a real project id exists; otherwise keep in-memory draft graph.
   useEffect(() => {
+    if (!projectId || String(projectId).trim() === '') return;
     (async () => {
       if (!flows[activeFlowId] || (flows[activeFlowId].nodes?.length === 0 && flows[activeFlowId].edges?.length === 0)) {
         const data = await loadFlow(projectId, activeFlowId);
@@ -61,9 +60,11 @@ const FlowHost: React.FC<{ projectId: string }> = ({ projectId }) => {
               const derivedTitle = (title && String(title).trim()) || 'Task';
               upsertFlow({ id: newFlowId, title: derivedTitle, nodes, edges });
               setTimeout(() => openFlowBackground(newFlowId), 0);
-              saveFlow(projectId, newFlowId, nodes, edges).catch((e) => {
-                try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
-              });
+              if (projectId && String(projectId).trim() !== '') {
+                saveFlow(projectId, newFlowId, nodes, edges).catch((e) => {
+                  try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
+                });
+              }
             }}
           />
         </div>
@@ -73,12 +74,11 @@ const FlowHost: React.FC<{ projectId: string }> = ({ projectId }) => {
   );
 };
 
-export const FlowWorkspace: React.FC<{ projectId: string }> = ({ projectId }) => {
+export const FlowWorkspace: React.FC<{ projectId?: string }> = ({ projectId }) => {
   return (
     <FlowWorkspaceProvider>
       <FlowHost projectId={projectId} />
     </FlowWorkspaceProvider>
   );
 };
-
 

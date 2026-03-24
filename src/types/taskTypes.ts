@@ -351,8 +351,9 @@ export interface Task {
   agentPrompt?: string;
   /** JSON string: structured sections with per-section revision state (base + deletedMask + inserts). */
   agentStructuredSectionsJson?: string;
+  /** Keys: AI Agent output slotId (GUID). Values: project variable varId. */
   outputVariableMappings?: Record<string, string>;
-  agentProposedFields?: Array<{ field_name: string; label: string; type: string; required: boolean }>;
+  agentProposedFields?: Array<{ slotId: string; label: string; type: string; required: boolean }>;
   agentSampleDialogue?: Array<{ role: string; content: string }>;
   /** Anteprima design-time per stile (contenuto + note designer). */
   agentPreviewByStyle?: Record<string, Array<{ role: string; content: string; designerNote?: string; logicalStepId?: string }>>;

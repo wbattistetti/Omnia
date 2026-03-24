@@ -390,7 +390,7 @@ Public Class TaskAssembler
             Case TaskTypes.Transfer
                 Return New TransferTask()
 
-            Case TaskTypes.UtteranceInterpretation, TaskTypes.BackendCall, TaskTypes.ClassifyProblem
+            Case TaskTypes.UtteranceInterpretation, TaskTypes.BackendCall, TaskTypes.ClassifyProblem, TaskTypes.AIAgent
                 ' These are semantic task types — they compile to TaskUtterance, not ITask.
                 ' Returning Nothing here is intentional and expected: the caller skips Nothing.
                 Return Nothing

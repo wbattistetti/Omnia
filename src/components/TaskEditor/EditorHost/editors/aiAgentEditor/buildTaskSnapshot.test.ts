@@ -8,7 +8,7 @@ import type { AIAgentTaskSnapshot } from './buildTaskSnapshot';
 import { resolveHasAgentGeneration } from './buildTaskSnapshot';
 
 const oneProposed: AIAgentProposedVariable = {
-  field_name: 'patient_name',
+  slotId: '11111111-1111-4111-8111-111111111111',
   label: 'Nome',
   type: 'string',
   required: true,

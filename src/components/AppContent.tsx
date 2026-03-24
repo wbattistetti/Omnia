@@ -16,12 +16,9 @@ import { useEffect } from 'react';
 import { ProjectService } from '../services/ProjectService';
 import { ProjectData } from '../types/project';
 import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
-import { FlowEditor } from './Flowchart/FlowEditor';
-import { FlowWorkspace } from './FlowWorkspace/FlowWorkspace';
 import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
 import { DockManager } from './Dock/DockManager';
 import { DockNode, DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabChat, ToolbarButton } from '../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
-import { FlowCanvasHost } from './FlowWorkspace/FlowCanvasHost';
 import { FlowWorkspaceProvider, useFlowWorkspace } from '../flows/FlowStore.tsx';
 import { useFlowActions } from '../flows/FlowStore.tsx';
 import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/ops';
@@ -40,9 +37,6 @@ import { ProjectManager, isDraftProjectId } from './AppContent/application/servi
 import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
-import { FlowTestProvider } from '../context/FlowTestContext';
-import { FlowActionsProvider } from '../context/FlowActionsContext';
-import { useEntityCreation } from '../hooks/useEntityCreation';
 import { useChatOrchestrator } from '../hooks/useChatOrchestrator';
 import { FlowStateBridge } from '../services/FlowStateBridge';
 import { initializeErrorReportPanelService } from '../services/ErrorReportPanelService';
@@ -307,9 +301,6 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Usa ActEditor context invece di selectedDDT per unificare l'apertura editor
   const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
-
-  // Entity creation for fallback FlowEditor (when no project is loaded)
-  const entityCreationFallback = useEntityCreation();
 
   // ✅ REFACTOR: Initialize ProjectManager
   const projectManager = React.useMemo(() => {
@@ -1131,66 +1122,15 @@ export const AppContent: React.FC<AppContentProps> = ({
                   <>
                     {/* Canvas - occupa tutto lo spazio disponibile */}
                     <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                      {currentPid ? (
-                        <FlowWorkspaceProvider>
-                          <DockManagerWithFlows
-                            root={dockTree}
-                            setRoot={setDockTree}
-                            renderTabContent={renderTabContent}
-                            flowsRef={flowsRef}
-                            editorCloseRefsMap={editorCloseRefsMap}
-                          />
-                        </FlowWorkspaceProvider>
-                      ) : (
-                        <FlowActionsProvider
-                          setNodes={(updater: any) => {
-                            try {
-                              const current = FlowStateBridge.getNodes();
-                              const updated = typeof updater === 'function' ? updater(current) : updater;
-                              FlowStateBridge.setNodes(updated);
-                            } catch { }
-                          }}
-                          setEdges={(updater: any) => {
-                            try {
-                              const current = FlowStateBridge.getEdges();
-                              const updated = typeof updater === 'function' ? updater(current) : updater;
-                              FlowStateBridge.setEdges(updated);
-                            } catch { }
-                          }}
-                          createFactoryTask={entityCreationFallback.createFactoryTask}
-                          createBackendCall={entityCreationFallback.createBackendCall}
-                          createTask={entityCreationFallback.createTask}
-                          createCondition={entityCreationFallback.createCondition}
-                        >
-                          <FlowTestProvider testSingleNode={handleTestSingleNode}>
-                            <FlowEditor
-                              flowId="main"
-                              nodes={FlowStateBridge.getNodes()}
-                              setNodes={(updater: any) => {
-                                try {
-                                  const current = FlowStateBridge.getNodes();
-                                  const updated = typeof updater === 'function' ? updater(current) : updater;
-                                  FlowStateBridge.setNodes(updated);
-                                } catch { }
-                              }}
-                              edges={FlowStateBridge.getEdges()}
-                              setEdges={(updater: any) => {
-                                try {
-                                  const current = FlowStateBridge.getEdges();
-                                  const updated = typeof updater === 'function' ? updater(current) : updater;
-                                  FlowStateBridge.setEdges(updated);
-                                } catch { }
-                              }}
-                              currentProject={currentProject}
-                              setCurrentProject={setCurrentProject}
-                              testPanelOpen={testPanelOpen}
-                              setTestPanelOpen={setTestPanelOpen}
-                              testNodeId={testNodeId}
-                              setTestNodeId={setTestNodeId}
-                            />
-                          </FlowTestProvider>
-                        </FlowActionsProvider>
-                      )}
+                      <FlowWorkspaceProvider key={currentPid ?? '__no_project__'}>
+                        <DockManagerWithFlows
+                          root={dockTree}
+                          setRoot={setDockTree}
+                          renderTabContent={renderTabContent}
+                          flowsRef={flowsRef}
+                          editorCloseRefsMap={editorCloseRefsMap}
+                        />
+                      </FlowWorkspaceProvider>
                     </div>
                   </>
                 )}

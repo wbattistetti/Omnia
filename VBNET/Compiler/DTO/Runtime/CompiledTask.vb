@@ -328,3 +328,41 @@ Public Class CompiledTransferTask
         End Get
     End Property
 End Class
+
+''' <summary>
+''' Task AI Agent: stato JSON persistito in ExecutionState.DialogueContexts; ogni turno chiama un endpoint LLM.
+''' </summary>
+Public Class CompiledAIAgentTask
+    Inherits CompiledTask
+
+    ''' <summary>
+    ''' Prompt sintetico / regole del task (system-side contract).
+    ''' </summary>
+    <JsonProperty("rules")>
+    Public Property Rules As String
+
+    ''' <summary>
+    ''' URL HTTP POST che accetta il payload state/user_message/rules e restituisce new_state, assistant_message, status.
+    ''' Se vuoto, si usa la variabile d'ambiente OMNIA_AI_AGENT_LLM_URL.
+    ''' </summary>
+    <JsonProperty("llmEndpoint")>
+    Public Property LlmEndpoint As String
+
+    Public Overrides ReadOnly Property TaskType As TaskTypes
+        Get
+            Return TaskTypes.AIAgent
+        End Get
+    End Property
+
+    Public Overrides ReadOnly Property RequiresInput As Boolean
+        Get
+            Return True
+        End Get
+    End Property
+
+    Public Sub New()
+        MyBase.New()
+        Rules = ""
+        LlmEndpoint = ""
+    End Sub
+End Class

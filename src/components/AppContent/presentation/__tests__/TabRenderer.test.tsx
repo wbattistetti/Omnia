@@ -9,8 +9,8 @@ import { TaskType } from '@types/taskTypes';
 
 // Mock dependencies
 vi.mock('../../../FlowWorkspace/FlowCanvasHost', () => ({
-  FlowCanvasHost: ({ projectId, flowId }: { projectId: string; flowId: string }) => (
-    <div data-testid="flow-canvas-host">{`Flow: ${projectId}/${flowId}`}</div>
+  FlowCanvasHost: ({ projectId, flowId }: { projectId?: string; flowId: string }) => (
+    <div data-testid="flow-canvas-host">{`Flow: ${projectId ?? 'undefined'}/${flowId}`}</div>
   ),
 }));
 
@@ -95,7 +95,7 @@ describe('TabRenderer', () => {
       expect(screen.getByText(/Flow: test-project\/flow-123/)).toBeInTheDocument();
     });
 
-    it('should show waiting message when currentPid is not provided', () => {
+    it('should render FlowCanvasHost when currentPid is not provided (in-memory draft workspace)', () => {
       const tab: DockTab = {
         id: 'tab-flow-1',
         title: 'Flow Tab',
@@ -113,8 +113,8 @@ describe('TabRenderer', () => {
         />
       );
 
-      expect(screen.getByText('Waiting for project...')).toBeInTheDocument();
-      expect(screen.queryByTestId('flow-canvas-host')).not.toBeInTheDocument();
+      expect(screen.getByTestId('flow-canvas-host')).toBeInTheDocument();
+      expect(screen.getByText(/Flow: undefined\/flow-123/)).toBeInTheDocument();
     });
   });
 

@@ -35,18 +35,18 @@ export function linkUnmappedProposedFields(
   projectId: string,
   flowCanvasId: string | undefined,
   previous: Record<string, string>,
-  fields: Array<{ field_name: string; label: string }>
+  fields: Array<{ slotId: string; label: string }>
 ): ImplementMappingsResult {
   const next = { ...previous };
   const errors: string[] = [];
   for (const f of fields) {
-    if (next[f.field_name]) continue;
-    const label = (f.label || f.field_name).trim();
+    if (next[f.slotId]) continue;
+    const label = (f.label || '').trim();
     if (!label) continue;
     try {
       const vid = resolveOrCreateFlowVarId(projectId, flowCanvasId, label);
       if (vid) {
-        next[f.field_name] = vid;
+        next[f.slotId] = vid;
       } else {
         errors.push(`Impossibile collegare: ${label}`);
       }
@@ -58,21 +58,21 @@ export function linkUnmappedProposedFields(
 }
 
 /**
- * Updates mappings when the designer edits the human-readable label (field_name JSON key unchanged).
+ * Updates mappings when the designer edits the human-readable label (slotId unchanged).
  */
 export function nextMappingsAfterLabelBlur(
   projectId: string,
   flowCanvasId: string | undefined,
   previous: Record<string, string>,
-  fieldName: string,
+  slotId: string,
   labelTrimmed: string
 ): Record<string, string> {
   if (!labelTrimmed) {
     const cleared = { ...previous };
-    delete cleared[fieldName];
+    delete cleared[slotId];
     return cleared;
   }
-  const varIdExisting = previous[fieldName];
+  const varIdExisting = previous[slotId];
   if (varIdExisting) {
     const renamed = variableCreationService.renameVariableByVarId(
       projectId,
@@ -96,5 +96,5 @@ export function nextMappingsAfterLabelBlur(
     });
     vid = nv.varId;
   }
-  return { ...previous, [fieldName]: vid };
+  return { ...previous, [slotId]: vid };
 }

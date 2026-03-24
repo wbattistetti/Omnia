@@ -39,6 +39,8 @@ Public Module CompilationHandlers
                 Case TaskEngine.TaskTypes.BackendCall
                     ' ✅ NEW: Deserialize as BackendCallTaskDefinition for BackendCall tasks
                     Return JsonConvert.DeserializeObject(Of Compiler.BackendCallTaskDefinition)(jsonString, settings)
+                Case TaskEngine.TaskTypes.AIAgent
+                    Return JsonConvert.DeserializeObject(Of Compiler.AIAgentTaskDefinition)(jsonString, settings)
                 Case Else
                     ' ✅ Deserialize as base TaskDefinition for other types
                     Return JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(jsonString, settings)
