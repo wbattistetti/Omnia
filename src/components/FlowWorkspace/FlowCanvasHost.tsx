@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback } from 'react';
 import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '../../flows/FlowStore.tsx';
 import { loadFlow } from '../../flows/FlowPersistence';
+import { shouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
 import { FlowTestProvider } from '../../context/FlowTestContext';
@@ -20,32 +21,70 @@ type Props = {
 
 export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleNode, onCreateTaskFlow, onOpenTaskFlow, onOpenSubflowForTask }) => {
   const { flows } = useFlowWorkspace();
-  const { upsertFlow, updateFlowGraph } = useFlowStoreActions();
+  const { upsertFlow, updateFlowGraph, applyFlowLoadResult } = useFlowStoreActions();
 
   const entityCreation = useEntityCreation();
 
+  const flowSlice = flows[flowId];
+  const flowPresent = flowSlice !== undefined;
+  const hydrated = flowSlice?.hydrated;
+  const hasLocalChanges = flowSlice?.hasLocalChanges;
+  const nodeCount = flowSlice?.nodes?.length ?? 0;
+  const edgeCount = flowSlice?.edges?.length ?? 0;
+
   useEffect(() => {
-    if (!projectId) {
+    let cancelled = false;
+    if (!projectId || String(projectId).trim() === '') {
       if (!flows[flowId]) {
-        upsertFlow({ id: flowId, title: flowId === 'main' ? 'Main' : flowId, nodes: [], edges: [] });
-      }
-      return;
-    }
-    (async () => {
-      if (!flows[flowId] || (!flows[flowId].nodes?.length && !flows[flowId].edges?.length)) {
-        const data = await loadFlow(projectId, flowId);
         upsertFlow({
           id: flowId,
           title: flowId === 'main' ? 'Main' : flowId,
-          nodes: data.nodes,
-          edges: data.edges,
-          ...(data.meta !== undefined
-            ? { meta: { ...flows[flowId]?.meta, ...data.meta } }
-            : {}),
+          nodes: [],
+          edges: [],
+          hydrated: false,
+          hasLocalChanges: false,
         });
       }
+      return;
+    }
+
+    const flow = flows[flowId];
+    if (!flow) {
+      upsertFlow({
+        id: flowId,
+        title: flowId === 'main' ? 'Main' : flowId,
+        nodes: [],
+        edges: [],
+        hydrated: false,
+        hasLocalChanges: false,
+      });
+      return;
+    }
+
+    if (!shouldLoadFlowFromServer(projectId, flow)) {
+      return;
+    }
+
+    (async () => {
+      let data: Awaited<ReturnType<typeof loadFlow>>;
+      try {
+        data = await loadFlow(projectId, flowId);
+      } catch (e) {
+        console.error('[FlowCanvasHost] loadFlow failed', { projectId, flowId, e });
+        return;
+      }
+      if (cancelled) return;
+      applyFlowLoadResult(flowId, {
+        nodes: data.nodes,
+        edges: data.edges,
+        ...(data.meta !== undefined ? { meta: data.meta } : {}),
+      });
     })();
-  }, [projectId, flowId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, flowId, flowPresent, hydrated, hasLocalChanges, nodeCount, edgeCount, upsertFlow, applyFlowLoadResult]);
 
   const flow = flows[flowId];
 
@@ -114,4 +153,3 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
 
   return withFlowActions;
 };
-

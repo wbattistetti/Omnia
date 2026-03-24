@@ -7,7 +7,7 @@ import React, { useEffect } from 'react';
 import EmbeddingEditorShell from '@features/intent-editor/EmbeddingEditorShell';
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
 import { useIntentStore } from '@features/intent-editor/state/intentStore';
-import { FlowStateBridge } from '@services/FlowStateBridge';
+import { FlowWorkspaceSnapshot } from '../../../../flows/FlowWorkspaceSnapshot';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
@@ -54,7 +54,7 @@ function resolveCurrentProjectId(): string | null {
 }
 
 function findRowForTaskId(taskId: string): NodeRowData | null {
-  for (const n of FlowStateBridge.getNodes()) {
+  for (const n of FlowWorkspaceSnapshot.getNodes()) {
     const rows = n.data?.rows;
     if (!rows?.length) continue;
     const row = rows.find(r => r.id === taskId);

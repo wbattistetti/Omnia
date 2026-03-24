@@ -1,9 +1,17 @@
 import React, { createContext, useContext, useMemo, useReducer } from 'react';
 import type { Flow, FlowId, WorkspaceState } from './FlowTypes';
 
+type ApplyFlowLoadPayload<NodeT, EdgeT> = {
+  nodes: NodeT[];
+  edges: EdgeT[];
+  meta?: { variables?: unknown[] };
+};
+
 type Action<NodeT = any, EdgeT = any> =
   | { type: 'UPSERT_FLOW'; flow: Flow<NodeT, EdgeT> }
   | { type: 'UPDATE_FLOW_GRAPH'; flowId: FlowId; updater: (nodes: NodeT[], edges: EdgeT[]) => { nodes: NodeT[]; edges: EdgeT[] } }
+  | { type: 'APPLY_FLOW_LOAD_RESULT'; flowId: FlowId; payload: ApplyFlowLoadPayload<NodeT, EdgeT> }
+  | { type: 'MARK_FLOWS_PERSISTED'; flowIds: FlowId[] }
   | { type: 'OPEN_FLOW'; flowId: FlowId }
   | { type: 'OPEN_FLOW_BACKGROUND'; flowId: FlowId }
   | { type: 'CLOSE_FLOW'; flowId: FlowId }
@@ -13,15 +21,61 @@ type Action<NodeT = any, EdgeT = any> =
 function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, action: Action<NodeT, EdgeT>): WorkspaceState<NodeT, EdgeT> {
   switch (action.type) {
     case 'UPSERT_FLOW': {
-      const flows = { ...state.flows, [action.flow.id]: action.flow };
+      const prev = state.flows[action.flow.id];
+      const inc = action.flow;
+      const nonEmpty = (inc.nodes?.length ?? 0) > 0 || (inc.edges?.length ?? 0) > 0;
+      const flow = {
+        ...inc,
+        hydrated: inc.hydrated !== undefined ? inc.hydrated : (prev?.hydrated ?? false),
+        hasLocalChanges:
+          inc.hasLocalChanges !== undefined
+            ? inc.hasLocalChanges
+            : prev !== undefined
+              ? (prev.hasLocalChanges ?? false)
+              : nonEmpty,
+      } as Flow<NodeT, EdgeT>;
+      const flows = { ...state.flows, [action.flow.id]: flow };
       return { ...state, flows };
     }
     case 'UPDATE_FLOW_GRAPH': {
       const curr = state.flows[action.flowId];
       if (!curr) return state;
       const next = action.updater(curr.nodes as any[], curr.edges as any[]);
-      const flow = { ...curr, nodes: next.nodes as any, edges: next.edges as any } as Flow<NodeT, EdgeT>;
+      const flow = {
+        ...curr,
+        nodes: next.nodes as any,
+        edges: next.edges as any,
+        hasLocalChanges: true,
+      } as Flow<NodeT, EdgeT>;
       return { ...state, flows: { ...state.flows, [action.flowId]: flow } };
+    }
+    case 'APPLY_FLOW_LOAD_RESULT': {
+      const curr = state.flows[action.flowId];
+      if (!curr) return state;
+      if (curr.hydrated === true) return state;
+      if (curr.hasLocalChanges === true) return state;
+      if ((curr.nodes?.length ?? 0) > 0 || (curr.edges?.length ?? 0) > 0) return state;
+      const p = action.payload;
+      const mergedMeta =
+        p.meta !== undefined ? { ...curr.meta, ...p.meta } : curr.meta;
+      const flow = {
+        ...curr,
+        nodes: p.nodes as any,
+        edges: p.edges as any,
+        ...(mergedMeta !== undefined ? { meta: mergedMeta } : {}),
+        hydrated: true,
+        hasLocalChanges: false,
+      } as Flow<NodeT, EdgeT>;
+      return { ...state, flows: { ...state.flows, [action.flowId]: flow } };
+    }
+    case 'MARK_FLOWS_PERSISTED': {
+      const flows = { ...state.flows };
+      for (const flowId of action.flowIds) {
+        const f = flows[flowId];
+        if (!f) continue;
+        flows[flowId] = { ...f, hasLocalChanges: false, hydrated: true } as Flow<NodeT, EdgeT>;
+      }
+      return { ...state, flows };
     }
     case 'OPEN_FLOW': {
       if (state.openFlows.includes(action.flowId)) return { ...state, activeFlowId: action.flowId };
@@ -56,13 +110,26 @@ const WorkspaceDispatchContext = createContext<React.Dispatch<Action> | undefine
 /**
  * In-memory flow workspace (draft when no project is selected). Persistence is gated in FlowPersistence
  * (loadFlow/saveFlow no-op without projectId); graph edits use UPDATE_FLOW_GRAPH / UPSERT_FLOW only.
+ * Step 3: hydrated / hasLocalChanges coordinate loadFlow vs project save (see flowHydrationPolicy).
  */
 export function FlowWorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const initial: WorkspaceState = useMemo(() => ({
-    flows: { main: { id: 'main', title: 'Main', nodes: [], edges: [] } },
-    openFlows: ['main'],
-    activeFlowId: 'main',
-  }), []);
+  const initial: WorkspaceState = useMemo(
+    () => ({
+      flows: {
+        main: {
+          id: 'main',
+          title: 'Main',
+          nodes: [],
+          edges: [],
+          hydrated: false,
+          hasLocalChanges: false,
+        },
+      },
+      openFlows: ['main'],
+      activeFlowId: 'main',
+    }),
+    []
+  );
 
   const [state, dispatch] = useReducer(reducer as any, initial);
 
@@ -82,15 +149,21 @@ export function useFlowWorkspace<NodeT = any, EdgeT = any>(): WorkspaceState<Nod
 export function useFlowActions<NodeT = any, EdgeT = any>() {
   const dispatch = useContext(WorkspaceDispatchContext);
   if (!dispatch) throw new Error('useFlowActions must be used within FlowWorkspaceProvider');
-  return {
-    upsertFlow: (flow: Flow<NodeT, EdgeT>) => dispatch({ type: 'UPSERT_FLOW', flow } as any),
-    updateFlowGraph: (flowId: FlowId, updater: (nodes: NodeT[], edges: EdgeT[]) => { nodes: NodeT[]; edges: EdgeT[] }) => dispatch({ type: 'UPDATE_FLOW_GRAPH', flowId, updater } as any),
-    openFlow: (flowId: FlowId) => dispatch({ type: 'OPEN_FLOW', flowId } as any),
-    openFlowBackground: (flowId: FlowId) => dispatch({ type: 'OPEN_FLOW_BACKGROUND', flowId } as any),
-    closeFlow: (flowId: FlowId) => dispatch({ type: 'CLOSE_FLOW', flowId } as any),
-    setActiveFlow: (flowId: FlowId) => dispatch({ type: 'SET_ACTIVE_FLOW', flowId } as any),
-    renameFlow: (flowId: FlowId, title: string) => dispatch({ type: 'RENAME_FLOW', flowId, title } as any),
-  } as const;
+  return useMemo(
+    () => ({
+      upsertFlow: (flow: Flow<NodeT, EdgeT>) => dispatch({ type: 'UPSERT_FLOW', flow } as any),
+      updateFlowGraph: (flowId: FlowId, updater: (nodes: NodeT[], edges: EdgeT[]) => { nodes: NodeT[]; edges: EdgeT[] }) =>
+        dispatch({ type: 'UPDATE_FLOW_GRAPH', flowId, updater } as any),
+      applyFlowLoadResult: (flowId: FlowId, payload: ApplyFlowLoadPayload<NodeT, EdgeT>) =>
+        dispatch({ type: 'APPLY_FLOW_LOAD_RESULT', flowId, payload } as any),
+      markFlowsPersisted: (flowIds: FlowId[]) => dispatch({ type: 'MARK_FLOWS_PERSISTED', flowIds } as any),
+      openFlow: (flowId: FlowId) => dispatch({ type: 'OPEN_FLOW', flowId } as any),
+      openFlowBackground: (flowId: FlowId) => dispatch({ type: 'OPEN_FLOW_BACKGROUND', flowId } as any),
+      closeFlow: (flowId: FlowId) => dispatch({ type: 'CLOSE_FLOW', flowId } as any),
+      setActiveFlow: (flowId: FlowId) => dispatch({ type: 'SET_ACTIVE_FLOW', flowId } as any),
+      renameFlow: (flowId: FlowId, title: string) => dispatch({ type: 'RENAME_FLOW', flowId, title } as any),
+    }),
+    [dispatch]
+  );
 }
-
 

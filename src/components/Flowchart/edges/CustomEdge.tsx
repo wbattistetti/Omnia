@@ -53,7 +53,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const flowCanvasId = useFlowCanvasId();
 
   // Execution highlight styles
-  const allEdges = FlowStateBridge.getEdges();
+  const allEdges = reactFlowInstance.getEdges() as any[];
   const edgeHighlight = useEdgeExecutionHighlight(props as any, allEdges);
 
   // ✅ COMPILATION ERRORS: Get errors for this edge
@@ -374,7 +374,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       const conditionName = String(label || 'Condition');
 
       // ✅ Check if edge already has conditionId (top-level)
-      const currentEdges = FlowStateBridge.getEdges();
+      const currentEdges = reactFlowInstance.getEdges() as any[];
       const currentEdge = currentEdges.find((e: any) => e.id === id);
       const existingConditionId = currentEdge?.conditionId || (props as any).conditionId;  // ✅ Top-level
 

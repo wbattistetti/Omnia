@@ -11,7 +11,7 @@ export interface SaveResult {
   results: {
     catalog?: { success: boolean; error?: string };
     translations?: { success: boolean; error?: string };
-    flow?: { success: boolean; error?: string };
+    flow?: { success: boolean; error?: string; persistedFlowIds?: string[] };
     tasks?: { success: boolean; saved: number; failed: number; error?: string };
     variables?: { success: boolean; saved: number; error?: string };
     templates?: { success: boolean; saved: number; failed: number; error?: string };

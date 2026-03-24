@@ -3,6 +3,7 @@ import { FlowWorkspaceProvider, useFlowWorkspace, useFlowActions } from '../../f
 import { setActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
 import { FlowTabBar } from './FlowTabBar';
 import { loadFlow, saveFlow } from '../../flows/FlowPersistence';
+import { shouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
 import { dlog } from '../../utils/debug';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
@@ -10,7 +11,14 @@ import { FlowVariablesRail } from './FlowVariablesRail';
 // Adapter: renderizza l'attuale FlowEditor per activeFlowId con nodes/edges del workspace
 const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const { activeFlowId, flows } = useFlowWorkspace();
-  const { upsertFlow, updateFlowGraph, openFlow, openFlowBackground } = useFlowActions();
+  const { upsertFlow, updateFlowGraph, openFlow, openFlowBackground, applyFlowLoadResult, markFlowsPersisted } = useFlowActions();
+
+  const flowSlice = flows[activeFlowId];
+  const flowPresent = flowSlice !== undefined;
+  const hydrated = flowSlice?.hydrated;
+  const hasLocalChanges = flowSlice?.hasLocalChanges;
+  const nodeCount = flowSlice?.nodes?.length ?? 0;
+  const edgeCount = flowSlice?.edges?.length ?? 0;
 
   useEffect(() => {
     setActiveFlowCanvasId(activeFlowId);
@@ -19,22 +27,42 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
   // Lazy load from API only when a real project id exists; otherwise keep in-memory draft graph.
   useEffect(() => {
     if (!projectId || String(projectId).trim() === '') return;
+    let cancelled = false;
+    const flow = flows[activeFlowId];
+    if (!flow) {
+      upsertFlow({
+        id: activeFlowId,
+        title: activeFlowId === 'main' ? 'Main' : activeFlowId,
+        nodes: [],
+        edges: [],
+        hydrated: false,
+        hasLocalChanges: false,
+      });
+      return;
+    }
+    if (!shouldLoadFlowFromServer(projectId, flow)) {
+      return;
+    }
     (async () => {
-      if (!flows[activeFlowId] || (flows[activeFlowId].nodes?.length === 0 && flows[activeFlowId].edges?.length === 0)) {
-        const data = await loadFlow(projectId, activeFlowId);
-        upsertFlow({
-          id: activeFlowId,
-          title: activeFlowId === 'main' ? 'Main' : activeFlowId,
-          nodes: data.nodes,
-          edges: data.edges,
-          ...(data.meta !== undefined
-            ? { meta: { ...flows[activeFlowId]?.meta, ...data.meta } }
-            : {}),
-        });
-        dlog('flow', '[workspace.loaded]', { projectId, activeFlowId, nodes: data.nodes.length, edges: data.edges.length });
+      let data: Awaited<ReturnType<typeof loadFlow>>;
+      try {
+        data = await loadFlow(projectId, activeFlowId);
+      } catch (e) {
+        console.error('[FlowWorkspace] loadFlow failed', { projectId, activeFlowId, e });
+        return;
       }
+      if (cancelled) return;
+      applyFlowLoadResult(activeFlowId, {
+        nodes: data.nodes,
+        edges: data.edges,
+        ...(data.meta !== undefined ? { meta: data.meta } : {}),
+      });
+      dlog('flow', '[workspace.loaded]', { projectId, activeFlowId, nodes: data.nodes.length, edges: data.edges.length });
     })();
-  }, [activeFlowId, projectId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFlowId, projectId, flowPresent, hydrated, hasLocalChanges, nodeCount, edgeCount, upsertFlow, applyFlowLoadResult]);
 
   const flow = flows[activeFlowId];
   return (
@@ -61,9 +89,12 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
               upsertFlow({ id: newFlowId, title: derivedTitle, nodes, edges });
               setTimeout(() => openFlowBackground(newFlowId), 0);
               if (projectId && String(projectId).trim() !== '') {
-                saveFlow(projectId, newFlowId, nodes, edges).catch((e) => {
-                  try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
-                });
+                saveFlow(projectId, newFlowId, nodes, edges).then(
+                  () => markFlowsPersisted([newFlowId]),
+                  (e) => {
+                    try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
+                  }
+                );
               }
             }}
           />
@@ -81,4 +112,3 @@ export const FlowWorkspace: React.FC<{ projectId?: string }> = ({ projectId }) =
     </FlowWorkspaceProvider>
   );
 };
-

@@ -14,6 +14,14 @@ export type Flow<NodeT = any, EdgeT = any> = {
     /** Author-defined flow variables (internal / input / output / inout). */
     variables?: FlowVariableDefinition[];
   };
+  /**
+   * Step 3: True after server data was applied for this flow (or after a successful project save sync).
+   */
+  hydrated?: boolean;
+  /**
+   * Step 3: True when local nodes/edges were edited since last persisted sync (UPDATE_FLOW_GRAPH).
+   */
+  hasLocalChanges?: boolean;
 };
 
 export type WorkspaceState<NodeT = any, EdgeT = any> = {

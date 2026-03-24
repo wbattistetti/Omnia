@@ -38,7 +38,7 @@ import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import { useChatOrchestrator } from '../hooks/useChatOrchestrator';
-import { FlowStateBridge } from '../services/FlowStateBridge';
+import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
 import { initializeErrorReportPanelService } from '../services/ErrorReportPanelService';
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableNonInteractiveEditor from './TaskEditor/ResponseEditor/ResizableNonInteractiveEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
@@ -82,7 +82,8 @@ const DockManagerWithFlows: React.FC<{
   renderTabContent: (tab: DockTab, upsertFlow: (flow: { id: string; title: string; nodes: any[]; edges: any[] }) => void) => React.ReactNode;
   flowsRef: React.MutableRefObject<Record<string, any>>;
   editorCloseRefsMap: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
-}> = ({ root, setRoot, renderTabContent, flowsRef, editorCloseRefsMap }) => {
+  markFlowsPersistedRef: React.MutableRefObject<((flowIds: string[]) => void) | null>;
+}> = ({ root, setRoot, renderTabContent, flowsRef, editorCloseRefsMap, markFlowsPersistedRef }) => {
   const flowWorkspace = useFlowWorkspace<Node<FlowNode>, Edge<EdgeData>>();
   const flowActions = useFlowActions<Node<FlowNode>, Edge<EdgeData>>();
 
@@ -93,7 +94,19 @@ const DockManagerWithFlows: React.FC<{
   // ✅ Also update in useEffect for safety (in case flows change during render)
   React.useEffect(() => {
     flowsRef.current = flowWorkspace.flows;
+    FlowWorkspaceSnapshot.setSnapshot(flowWorkspace.flows as any, flowWorkspace.activeFlowId);
   }, [flowWorkspace.flows]);
+
+  React.useEffect(() => {
+    FlowWorkspaceSnapshot.setSnapshot(flowWorkspace.flows as any, flowWorkspace.activeFlowId);
+  }, [flowWorkspace.activeFlowId, flowWorkspace.flows]);
+
+  React.useEffect(() => {
+    markFlowsPersistedRef.current = flowActions.markFlowsPersisted;
+    return () => {
+      markFlowsPersistedRef.current = null;
+    };
+  }, [flowActions.markFlowsPersisted]);
 
   // ✅ Adapt setRoot to match DockManager's expected signature
   const adaptedSetRoot = React.useCallback((n: DockNode | ((prev: DockNode) => DockNode)) => {
@@ -193,6 +206,9 @@ export const AppContent: React.FC<AppContentProps> = ({
   // ✅ ARCHITECTURAL FIX: Ref per accedere ai flows dal FlowWorkspaceProvider
   // Popolato da DockManagerWithFlows che è dentro FlowWorkspaceProvider
   const flowsRef = React.useRef<Record<string, any>>({});
+
+  /** Step 3: reset hasLocalChanges after orchestrator persisted flows (set by DockManagerWithFlows). */
+  const markFlowsPersistedRef = React.useRef<((flowIds: string[]) => void) | null>(null);
 
   // ✅ Get translations for chat panel (needed for ChatOrchestrator)
   const { translations: globalTranslations, isReady: translationsReady, isLoading: translationsLoading, loadAllTranslations } = useProjectTranslations();
@@ -1035,6 +1051,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                       nodes: f?.nodes ?? [],
                       edges: f?.edges ?? [],
                       ...(f?.meta !== undefined ? { meta: f.meta } : {}),
+                      ...(f?.hasLocalChanges !== undefined ? { hasLocalChanges: f.hasLocalChanges } : {}),
                     },
                   ])
                 );
@@ -1046,9 +1063,12 @@ export const AppContent: React.FC<AppContentProps> = ({
                     flushFlowPersist: async () => {
                       await flushFlowPersist();
                     },
-                    getFlowById: (id: string) => FlowStateBridge.getFlowById(id),
-                    getNodes: () => FlowStateBridge.getNodes(),
-                    getEdges: () => FlowStateBridge.getEdges(),
+                    getFlowById: (id: string) => {
+                      const f = flowsById?.[id];
+                      return f ? { nodes: f.nodes ?? [], edges: f.edges ?? [] } : null;
+                    },
+                    getNodes: () => flowsById?.main?.nodes ?? [],
+                    getEdges: () => flowsById?.main?.edges ?? [],
                     transformNodesToSimplified,
                     transformEdgesToSimplified,
                   },
@@ -1060,6 +1080,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                 });
 
                 if (saveResult.success) {
+                  const persisted = saveResult.results?.flow?.persistedFlowIds;
+                  if (persisted && persisted.length > 0) {
+                    markFlowsPersistedRef.current?.(persisted);
+                  }
                   console.log('[Save][Orchestrator] ✅ Save completed successfully', {
                     projectId: pid,
                     duration: saveResult.duration,
@@ -1129,6 +1153,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                           renderTabContent={renderTabContent}
                           flowsRef={flowsRef}
                           editorCloseRefsMap={editorCloseRefsMap}
+                          markFlowsPersistedRef={markFlowsPersistedRef}
                         />
                       </FlowWorkspaceProvider>
                     </div>

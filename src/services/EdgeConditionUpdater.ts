@@ -25,81 +25,22 @@ export function updateEdgeWithConditionId(edgeId: string, conditionId: string): 
   });
 
   try {
-    const currentEdges = FlowStateBridge.getEdges();
-    console.log('[EdgeConditionUpdater] 🔍 [TRACE] Current edges state', {
-      totalEdges: currentEdges.length,
-      edgesWithConditionId: currentEdges.filter((e: any) => e.conditionId).map((e: any) => ({
-        id: e.id,
-        conditionId: e.conditionId
-      }))
-    });
-
-    const edgeFound = currentEdges.find((e: Edge<EdgeData>) => e.id === edgeId);
-
-    if (!edgeFound) {
-      console.warn('[EdgeConditionUpdater] ❌ [TRACE] Edge not found', {
-        edgeId,
-        availableEdgeIds: currentEdges.map((e: any) => e.id)
-      });
-      return false;
-    }
-
-    console.log('[EdgeConditionUpdater] ✅ [TRACE] Edge found', {
-      edgeId,
-      currentConditionId: (edgeFound as any).conditionId,
-      newConditionId: conditionId,
-      willUpdate: (edgeFound as any).conditionId !== conditionId
-    });
-
-    // ✅ Update edge with conditionId at top-level
-    const updatedEdges = currentEdges.map((edge: Edge<EdgeData>) =>
-      edge.id === edgeId
-        ? {
-            ...edge,
-            conditionId: conditionId  // ✅ Top-level, not in data
-          }
-        : edge
-    );
-
-    // Update FlowStateBridge immediately
-    FlowStateBridge.setEdges(updatedEdges);
-    console.log('[EdgeConditionUpdater] ✅ [TRACE] FlowStateBridge.setEdges called', {
-      edgeId,
-      conditionId
-    });
-
-    // Also update React Flow if setter is available
     const setEdgesFn = FlowStateBridge.getSetEdges();
-    if (typeof setEdgesFn === 'function') {
-      setEdgesFn(updatedEdges);
-      console.log('[EdgeConditionUpdater] ✅ [TRACE] React Flow edges updated synchronously', {
-        edgeId,
-        conditionId
-      });
-    } else {
-      console.warn('[EdgeConditionUpdater] ⚠️ [TRACE] React Flow setter not available', {
-        edgeId,
-        conditionId
-      });
+    if (typeof setEdgesFn !== 'function') {
+      throw new Error('setEdges_not_available');
     }
 
-    // Verify the update
-    const verifyEdges = FlowStateBridge.getEdges();
-    const verifyEdge = verifyEdges.find((e: Edge<EdgeData>) => e.id === edgeId);
-    const verifyConditionId = (verifyEdge as any)?.conditionId;
+    let updated = false;
+    setEdgesFn((currentEdges: any[]) => {
+      const hasEdge = currentEdges.some((edge: Edge<EdgeData>) => edge.id === edgeId);
+      if (!hasEdge) return currentEdges as any;
+      updated = true;
+      return currentEdges.map((edge: Edge<EdgeData>) =>
+        edge.id === edgeId ? { ...edge, conditionId } : edge
+      ) as any;
+    });
 
-    if (verifyConditionId === conditionId) {
-      console.log('[EdgeConditionUpdater] ✅ [TRACE] Edge update verified successfully', {
-        edgeId,
-        conditionId: verifyConditionId
-      });
-    } else {
-      console.error('[EdgeConditionUpdater] ❌ [TRACE] Edge update verification FAILED', {
-        edgeId,
-        expectedConditionId: conditionId,
-        actualConditionId: verifyConditionId
-      });
-    }
+    if (!updated) return false;
 
     return true;
   } catch (e) {

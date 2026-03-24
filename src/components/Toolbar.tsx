@@ -4,7 +4,7 @@ import { ProjectData } from '../types/project';
 import { useAIProvider, AI_PROVIDERS } from '../context/AIProviderContext';
 import { useFontStore } from '../state/fontStore';
 import DeploymentDialog, { type DeploymentConfig } from './TaskEditor/ResponseEditor/Deployment/DeploymentDialog';
-import { FlowStateBridge } from '../services/FlowStateBridge';
+import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
 import { useFlowchartState } from '../context/FlowchartStateContext';
 import { VersionInput } from './common/VersionInput';
 import { isValidVersion, getNextMinor, getNextMajor } from '../utils/versionUtils';
@@ -100,8 +100,9 @@ export function Toolbar({
 
   // Verifica se il progetto è vuoto (non ha contenuti)
   // Check both project data and flowchart nodes/edges
-  const hasFlowchartContent = FlowStateBridge.hasNodes() ||
-    (FlowStateBridge.getFlowById('main')?.nodes?.length || 0) > 0;
+  const hasFlowchartContent =
+    FlowWorkspaceSnapshot.getNodes().length > 0 ||
+    (FlowWorkspaceSnapshot.getFlowById('main')?.nodes?.length || 0) > 0;
 
   const isProjectEmpty = !currentProject ||
     (!currentProject.taskTemplates?.length &&

@@ -205,7 +205,13 @@ export class ProjectSaveOrchestrator {
        */
       flowsById?: Record<
         string,
-        { nodes?: unknown[]; edges?: unknown[]; meta?: { variables?: unknown[] } }
+        {
+          nodes?: unknown[];
+          edges?: unknown[];
+          meta?: { variables?: unknown[] };
+          /** Step 3: when explicitly false, skip PUT for this flow (no local graph changes). */
+          hasLocalChanges?: boolean;
+        }
       >;
       taskRepository?: ITaskRepository;
       variableService?: IVariableService;
@@ -289,10 +295,15 @@ export class ProjectSaveOrchestrator {
               })()
             : ['main'];
 
+          const persistedFlowIds: string[] = [];
+
           for (const flowId of flowIds) {
             let flowData: { nodes: any[]; edges: any[] };
             if (snapshot && Object.prototype.hasOwnProperty.call(snapshot, flowId)) {
               const entry = snapshot[flowId];
+              if (entry && typeof entry === 'object' && 'hasLocalChanges' in entry && entry.hasLocalChanges === false) {
+                continue;
+              }
               flowData = {
                 nodes: (entry?.nodes as any[]) || [],
                 edges: (entry?.edges as any[]) || [],
@@ -332,10 +343,11 @@ export class ProjectSaveOrchestrator {
                 `Flow save failed for ${flowId}: ${response.status} ${response.statusText}`
               );
             }
+            persistedFlowIds.push(flowId);
           }
 
-          results.flow = { success: true };
-          console.log('[Save][Orchestrator][3-flow] ✅ DONE', { flowCount: flowIds.length });
+          results.flow = { success: true, persistedFlowIds };
+          console.log('[Save][Orchestrator][3-flow] ✅ DONE', { flowCount: flowIds.length, persistedFlowIds });
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           errors.push(`Flow: ${errorMsg}`);

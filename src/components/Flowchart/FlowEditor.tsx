@@ -793,18 +793,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         onMouseLeave={() => setCursorTooltip(null)}
         onMouseDown={eventHandlers.onMouseDown}
       >
-        {/* Legacy mirror: FlowStore/React props are authoritative; bridge is for integrations not yet migrated. */}
-      {(() => {
-        try {
-          FlowStateBridge.setNodes(nodes);
-          FlowStateBridge.setEdges(edges);
-          if (flowId) {
-            FlowStateBridge.storeFlow(flowId, nodes, edges);
-          }
-        } catch { }
-        return null;
-      })()}
-
       {/* Execution State Provider */}
       <ExecutionStateProvider
         executionState={propExecutionState ?? FlowStateBridge.getExecutionState()}

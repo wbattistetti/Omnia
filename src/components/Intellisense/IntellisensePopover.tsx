@@ -36,12 +36,11 @@ export const IntellisensePopover: React.FC = () => {
 
         let elementId = state.target.nodeId;
 
-        // If it's an edge, find the DESTINATION node (temporary)
+        // Step 4: edge anchoring should come from linkMidScreen; avoid bridge node/edge lookup.
         if (state.target.edgeId && !state.target.nodeId) {
-            const edge = FlowStateBridge.findEdge(state.target.edgeId);
-            if (edge && edge.target) {
-                elementId = edge.target; // ✅ Questo è il nodo di DESTINAZIONE
-            }
+            setRect(null);
+            setReferenceElement(null);
+            return;
         }
 
         if (!elementId) {
@@ -73,12 +72,8 @@ export const IntellisensePopover: React.FC = () => {
         const handler = () => {
             let elementId = state.target!.nodeId;
 
-            // If it's an edge, find the associated temporary node
             if (state.target!.edgeId && !state.target!.nodeId) {
-                const edge = FlowStateBridge.findEdge(state.target!.edgeId);
-                if (edge && edge.target) {
-                    elementId = edge.target;
-                }
+                return;
             }
 
             if (!elementId) return;
@@ -217,6 +212,7 @@ export const IntellisensePopover: React.FC = () => {
             const scheduleApplyLabel = FlowStateBridge.getScheduleApplyLabel();
             const setEdges = FlowStateBridge.getSetEdges();
 
+            let targetNodeId: string | null = null;
             if (scheduleApplyLabel && label !== undefined) {
                 const extraData: any = {};
                 if (conditionId) extraData.conditionId = conditionId;
@@ -226,6 +222,7 @@ export const IntellisensePopover: React.FC = () => {
             } else if (setEdges) {
                 setEdges((eds: any[]) => eds.map(e => {
                     if (e.id === edgeId) {
+                        targetNodeId = e.target || null;
                         return {
                             ...e,
                             label,
@@ -241,12 +238,19 @@ export const IntellisensePopover: React.FC = () => {
                 }));
             }
 
-            const edge = FlowStateBridge.findEdge(edgeId);
             const setNodes = FlowStateBridge.getSetNodes();
-            if (setNodes && edge?.target) {
+            if (!targetNodeId && setEdges) {
+                setEdges((eds: any[]) =>
+                    eds.map((e) => {
+                        if (e.id === edgeId) targetNodeId = e.target || null;
+                        return e;
+                    })
+                );
+            }
+            if (setNodes && targetNodeId) {
                 setNodes((nds: any[]) =>
                     nds.map((n) => {
-                        if (n.id !== edge.target) return n;
+                        if (n.id !== targetNodeId) return n;
                         if (isUnconditional) {
                             const newRowId = generateId();
                             return {
