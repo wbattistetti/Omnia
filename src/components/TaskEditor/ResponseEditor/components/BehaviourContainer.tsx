@@ -6,6 +6,7 @@ import RightPanel, { RightPanelMode } from '@responseEditor/RightPanel';
 import type { TaskTree, Task } from '@types/taskTypes';
 import { getNodeStepKeys } from '@responseEditor/core/domain';
 import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
+import { useResponseEditorNavigation } from '@responseEditor/context/ResponseEditorNavigationContext';
 
 interface BehaviourContainerProps {
   // BehaviourEditor props
@@ -95,6 +96,24 @@ export default function BehaviourContainer({
   const handleStepChange = React.useCallback((newStepKey: string) => {
     setSelectedStepKey(newStepKey);
   }, []);
+
+  // ── Programmatic navigation from navigateToStep() ──────────────────────
+  // BehaviourEditor only pushes (writes) to the context, never reads back.
+  // BehaviourContainer is the owner of selectedStepKey, so it is the only
+  // component that should apply external navigation requests.
+  const navigation = useResponseEditorNavigation();
+  React.useEffect(() => {
+    if (
+      navigation.currentStepKey &&
+      navigation.currentStepKey !== selectedStepKey &&
+      uiStepKeys.includes(navigation.currentStepKey)
+    ) {
+      setSelectedStepKey(navigation.currentStepKey);
+    }
+  // selectedStepKey intentionally omitted: we only want to react when the
+  // navigation context changes (programmatic navigation), not on every local update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation.currentStepKey, uiStepKeys]);
   const [isResizing, setIsResizing] = useState(false);
   const tasksStartWidthRef = useRef<number>(tasksPanelWidth);
   const tasksStartXRef = useRef<number>(0);
@@ -156,7 +175,6 @@ export default function BehaviourContainer({
             onSelectStep={handleStepChange}
             node={node}
             taskId={taskId}
-            data-step-key={selectedStepKey}
           />
         </div>
       )}

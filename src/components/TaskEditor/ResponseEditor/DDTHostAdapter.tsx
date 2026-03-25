@@ -365,44 +365,18 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
   }, [onClose]);
 
   const stableOnWizardComplete = React.useCallback(async (finalTaskTree: TaskTree) => {
-    // ✅ CRITICAL: taskMeta.id ALWAYS equals row.id (which equals task.id when task exists)
-    // The wizard will create the task with task.id = row.id when completed
-    // No need to extract or convert IDs - just use taskMeta.id directly
-
-    // Now save TaskTree using handleComplete
     await handleComplete(finalTaskTree);
 
-    // ✅ LOG: WIZARD COMPLETION TRACE - Dettagli completi
-    const taskAfterComplete = taskRepository.getTask(taskId);
-    console.log('[DDTHostAdapter] 🔍 WIZARD COMPLETION TRACE', {
-      // Task creato
-      taskId,  // ALWAYS equals row.id
-      rowId: taskMeta.id,  // ID della riga di nodo (ALWAYS equals task.id)
-      taskIdEqualsRowId: taskId === taskMeta.id,  // Should always be true
-
-      // TaskTree ricevuto
-      taskTreeNodesCount: finalTaskTree?.nodes?.length || 0,
-      taskTreeStepsCount: finalTaskTree?.steps ? Object.keys(finalTaskTree.steps).length : 0,
-      taskTreeStepsKeys: finalTaskTree?.steps ? Object.keys(finalTaskTree.steps) : [],
-
-      // Task dopo handleComplete
-      taskAfterComplete: taskAfterComplete ? {
-        id: taskAfterComplete.id,
-        templateId: taskAfterComplete.templateId,
-        hasSteps: taskAfterComplete.steps ? Object.keys(taskAfterComplete.steps).length > 0 : false,
-      } : null,
-
-      projectId: currentProjectId,
-      timestamp: new Date().toISOString(),
-    });
-
-    // ✅ Switch from wizard mode to normal editing mode
-    if ((taskMeta as any).needsTaskBuilder === true) {
-      // Clear wizard flag - this will cause ResponseEditor to show normal layout
-      // Note: We can't directly modify taskMeta, but the next render will see fullTask exists
-      console.log('[DDTHostAdapter] Wizard complete - switching to normal editing mode');
+    if (import.meta.env.DEV) {
+      const taskAfter = taskRepository.getTask(taskId);
+      console.log('[DDTHostAdapter] wizard complete', {
+        taskId,
+        nodes: finalTaskTree?.nodes?.length ?? 0,
+        steps: finalTaskTree?.steps ? Object.keys(finalTaskTree.steps).length : 0,
+        taskHasStepsAfterSave: taskAfter?.steps ? Object.keys(taskAfter.steps).length > 0 : false,
+      });
     }
-  }, [handleComplete, fullTask, taskMeta, taskId, currentProjectId]);
+  }, [handleComplete, taskId, taskMeta.id]);
 
   // ✅ FIX: Preserve wizard properties from taskMeta even when using fullTask
   // These properties (taskWizardMode, contextualizationTemplateId) are not saved in repository Task,

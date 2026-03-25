@@ -74,19 +74,14 @@ export default function BehaviourEditor({
   const selectedStepKey = externalSelectedStepKey ?? internalSelectedStepKey;
   const setSelectedStepKey = externalOnStepChange ?? setInternalSelectedStepKey;
 
-  // ✅ NEW: Sync with navigation context
+  // ✅ Push local step to navigation context (one-way only).
+  // BehaviourContainer is responsible for reading navigation.currentStepKey and updating
+  // selectedStepKey when programmatic navigation (navigateToStep) is triggered.
+  // DO NOT also read navigation.currentStepKey here — that creates a feedback loop that
+  // reverts the user's click (old context value !== new local value → reverts to old).
   useEffect(() => {
-    if (navigation.currentStepKey && navigation.currentStepKey !== selectedStepKey && uiStepKeys.includes(navigation.currentStepKey)) {
-      setSelectedStepKey(navigation.currentStepKey);
-    }
-  }, [navigation.currentStepKey, selectedStepKey, uiStepKeys]);
-
-  // ✅ NEW: Update navigation context when step changes locally
-  useEffect(() => {
-    if (navigation.setCurrentStepKey) {
-      navigation.setCurrentStepKey(selectedStepKey);
-    }
-  }, [selectedStepKey, navigation]);
+    navigation.setCurrentStepKey(selectedStepKey);
+  }, [selectedStepKey, navigation.setCurrentStepKey]);
 
   // Aggiorna selectedStepKey quando cambiano gli step disponibili
   useEffect(() => {
@@ -221,7 +216,6 @@ export default function BehaviourEditor({
                 onSelectStep={handleStepChange}
                 node={node}
                 taskId={taskId}
-                data-step-key={selectedStepKey}
               />
             </div>
           )}

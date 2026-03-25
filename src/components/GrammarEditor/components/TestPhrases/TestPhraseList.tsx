@@ -30,7 +30,9 @@ export function TestPhraseList({
           No test phrases. Add one above.
         </div>
       ) : (
-        phrases.map(phrase => {
+        [...phrases]
+          .sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' }))
+          .map(phrase => {
           const isSelected = phrase.id === selectedPhraseId;
           const statusColor = phrase.status === 'matched'
             ? '#10b981' // green

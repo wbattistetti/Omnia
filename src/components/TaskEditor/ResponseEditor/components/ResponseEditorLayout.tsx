@@ -11,6 +11,7 @@
  */
 
 import React from 'react';
+import { Wand2, PenLine } from 'lucide-react';
 import EditorHeader from '@components/common/EditorHeader';
 import TaskDragLayer from '@responseEditor/TaskDragLayer';
 import { ResponseEditorContent } from '@responseEditor/components/ResponseEditorContent';
@@ -39,6 +40,56 @@ import { useWizardStore } from '../../../../../TaskBuilderAIWizard/store/wizardS
 import { shallow } from 'zustand/shallow';
 import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
 
+/** Orange header theme (matches EditorHeader THEMES.orange) for Wizard/Manual chunk on the left. */
+const ORANGE_HEADER_FG = '#ffffff';
+const ORANGE_HEADER_BG = '#9a4f00';
+
+type WizardToolbarButtonItem = {
+  icon: React.ReactNode;
+  label?: string;
+  title?: string;
+  active?: boolean;
+  disabled?: boolean;
+  visible?: boolean;
+  onClick?: () => void;
+};
+
+/**
+ * Wizard / Manual controls placed after the title (EditorHeader titleActions), left side.
+ */
+function WizardToolbarTitleActions({ buttons }: { buttons: WizardToolbarButtonItem[] }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+      {buttons.map((btn, i) => (
+        <button
+          key={i}
+          type="button"
+          title={btn.title}
+          onClick={btn.onClick}
+          disabled={btn.disabled}
+          style={{
+            display: btn.visible === false ? 'none' : 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: btn.active ? '#fff' : 'transparent',
+            color: btn.active ? ORANGE_HEADER_BG : ORANGE_HEADER_FG,
+            border: '1px solid rgba(255,255,255,0.3)',
+            borderRadius: 8,
+            padding: btn.label ? '8px 14px' : '6px 10px',
+            cursor: btn.disabled ? 'not-allowed' : 'pointer',
+            opacity: btn.disabled ? 0.5 : 1,
+            fontWeight: 400,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {btn.icon}
+          {btn.label ? <span>{btn.label}</span> : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Internal component that wraps EditorHeader with dynamic injection support
  * ✅ ARCHITECTURE: Uses injected icon/title/toolbar from task editors, with fallback to props
@@ -47,12 +98,14 @@ function HeaderWithDynamicToolbar({
   icon: defaultIcon,
   title: defaultTitle,
   toolbarButtons,
+  titleActions,
   onClose,
   color,
 }: {
   icon: React.ReactNode;
   title: string;
   toolbarButtons: any[];
+  titleActions?: React.ReactNode;
   onClose: () => void;
   color: 'slate' | 'orange' | 'purple';
 }) {
@@ -63,22 +116,11 @@ function HeaderWithDynamicToolbar({
   const title = toolbarContext?.title ?? defaultTitle;
   const dynamicToolbar = toolbarContext?.toolbar || null;
 
-  // ✅ DEBUG: Log when dynamic values change
-  React.useEffect(() => {
-    if (dynamicToolbar || toolbarContext?.icon || toolbarContext?.title) {
-      console.log('[HeaderWithDynamicToolbar] ✅ Dynamic header values active', {
-        hasToolbar: !!dynamicToolbar,
-        hasIcon: !!toolbarContext?.icon,
-        hasTitle: !!toolbarContext?.title,
-        injectedTitle: toolbarContext?.title || '(using default)'
-      });
-    }
-  }, [dynamicToolbar, toolbarContext?.icon, toolbarContext?.title]);
-
   return (
     <EditorHeader
       icon={icon}
       title={title}
+      titleActions={titleActions}
       toolbarButtons={toolbarButtons}
       dynamicToolbarSlot={dynamicToolbar}
       onClose={onClose}
@@ -215,6 +257,10 @@ export interface ResponseEditorLayoutProps {
   onTaskBuilderComplete?: (taskTree: TaskTree, messages?: any) => void;
   onTaskBuilderCancel?: () => void;
 
+  // Toolbar wizard-mode toggle actions
+  onStartWizard?: () => void;
+  onSwitchToManual?: () => void;
+
   // ✅ NEW: Toolbar update callback (for hideHeader === true mode)
   onToolbarUpdate?: (toolbar: any[], color: string) => void;
 
@@ -320,6 +366,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     onTaskBuilderComplete,
     onTaskBuilderCancel,
     onToolbarUpdate,
+    onStartWizard,
+    onSwitchToManual,
     // ✅ REMOVED: shouldBeGeneral, generalizedLabel, generalizedMessages, generalizationReason - now from wizardIntegration
     saveDecisionMade: saveDecisionMadeProp,
     onOpenSaveDialog: onOpenSaveDialogProp,
@@ -345,20 +393,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ Project locale (for other uses)
   const projectLocale = 'it-IT'; // TODO: Get from project context
   const generalizationReasonEffective = wizardIntegrationProp?.generalizationReason ?? null;
-
-  // ✅ DEBUG: Log per verificare perché contextualizationTemplateId potrebbe essere undefined
-  React.useEffect(() => {
-    if (taskWizardMode === 'adaptation' || contextualizationTemplateId) {
-      console.log('[ResponseEditorLayout] 📊 DEBUG: Parametri per ResponseEditorContent', {
-        taskWizardMode,
-        contextualizationTemplateId,
-        taskMetaId: taskMeta?.id,
-        taskMetaKeys: taskMeta ? Object.keys(taskMeta) : [],
-        taskMetaContextualizationTemplateId: (taskMeta as any)?.contextualizationTemplateId,
-        taskMetaTaskWizardMode: (taskMeta as any)?.taskWizardMode
-      });
-    }
-  }, [taskWizardMode, contextualizationTemplateId, taskMeta]);
 
   // ✅ ARCHITECTURE: Context is SINGLE SOURCE OF TRUTH for taskWizardMode
   // No derives from taskMeta - use prop directly (which comes from state in useResponseEditorCore)
@@ -409,19 +443,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     }
   }, [onOpenSaveDialogProp, setShowSaveDialog]);
 
-  // ✅ DEBUG: Log per verificare stato del dialog (solo quando showSaveDialog cambia)
-  React.useEffect(() => {
-    if (showSaveDialog) {
-      console.log('[ResponseEditorLayout] 📊 SaveLocationDialog OPENED:', {
-        hasAnchorRef: !!saveToLibraryButtonRef,
-        anchorRefCurrent: saveToLibraryButtonRef?.current,
-        anchorRefTagName: saveToLibraryButtonRef?.current?.tagName,
-        anchorRefDataId: saveToLibraryButtonRef?.current?.getAttribute('data-button-id'),
-        anchorRefRect: saveToLibraryButtonRef?.current?.getBoundingClientRect()
-      });
-    }
-  }, [showSaveDialog]); // ✅ Solo quando showSaveDialog cambia
-
   // ✅ REMOVED: Auto-open dialog - dialog opens only when user clicks button or tries to close
 
   // ✅ State for saving operation (must be declared before handleSaveToFactory)
@@ -429,17 +450,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
   // ✅ FIX: Handler to save to Factory with loading state and dematerialization filter
   const handleSaveToFactory = React.useCallback(async () => {
-    // ✅ FLOW TRACE: START
-    console.log('[handleSaveToFactory] 🚀 FLOW TRACE - START', {
-      hasWizardIntegrationProp: !!wizardIntegrationProp,
-      hasDataSchema: !!wizardIntegrationProp?.dataSchema,
-      dataSchemaIsArray: Array.isArray(wizardIntegrationProp?.dataSchema),
-      dataSchemaLength: wizardIntegrationProp?.dataSchema?.length || 0,
-      wizardMode: wizardIntegrationProp?.wizardMode,
-      taskWizardMode,
-      timestamp: new Date().toISOString(),
-    });
-
     // ✅ Set spinner immediately
     setIsSaving(true);
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -456,21 +466,11 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
           : null;
 
     if (!effectiveDataSchema) {
-      console.error('[handleSaveToFactory] ❌ No data source available', {
-        hasWizardDataSchema: !!wizardIntegrationProp?.dataSchema,
-        hasTaskTreeNodes: !!taskTree?.nodes,
-        taskTreeNodesLength: taskTree?.nodes?.length ?? 0,
-        taskWizardMode,
-      });
+      console.error('[handleSaveToFactory] No data source available for save-to-factory');
       alert('Cannot save to Factory: no template data found. Open the template from the sidebar and try again.');
       setIsSaving(false);
       return;
     }
-
-    console.log('[handleSaveToFactory] 📊 Using data source', {
-      source: wizardIntegrationProp?.dataSchema ? 'wizardIntegration.dataSchema' : 'taskTree.nodes',
-      nodeCount: effectiveDataSchema.length,
-    });
 
     // ✅ Count ALL nodes recursively (root + sub-nodes) - this is the TRUTH
     const collectAllNodeIds = (nodes: any[]): string[] => {
@@ -972,6 +972,34 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     return MainViewMode.BEHAVIOUR;
   }, [taskWizardMode, wizardIntegrationProp?.wizardMode, showMessageReview, showSynonyms]);
 
+  // ── Wizard / Manual toolbar toggle ───────────────────────────────────────
+  // "Manual" resets the orchestrator and returns to the normal editor.
+  // "Wizard" delegates to onStartWizard (sets mode + triggers startFull in index.tsx).
+  const wizardToggleButtons = React.useMemo(() => [
+    {
+      icon: <PenLine size={14} />,
+      label: 'Manuale',
+      title: 'Modalità manuale',
+      active: taskWizardMode === 'none',
+      position: 'title-suffix' as const,
+      onClick: onSwitchToManual ?? (() => setTaskWizardMode('none')),
+    },
+    {
+      icon: <Wand2 size={14} />,
+      label: 'Wizard',
+      title: 'Costruisci con il wizard AI',
+      active: taskWizardMode !== 'none',
+      disabled: taskWizardMode !== 'none',
+      position: 'title-suffix' as const,
+      onClick: onStartWizard ?? (() => {}),
+    },
+  ], [taskWizardMode, onSwitchToManual, onStartWizard, setTaskWizardMode]);
+
+  const wizardTitleActions = React.useMemo(
+    () => <WizardToolbarTitleActions buttons={wizardToggleButtons} />,
+    [wizardToggleButtons]
+  );
+
   // ✅ NEW: Prepara wizardProps per CenterPanel e Sidebar (con useMemo per evitare ricostruzioni)
   const wizardProps = React.useMemo(() => {
     if (!wizardIntegrationProp) {
@@ -1264,14 +1292,12 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ FIX: Usa il ref passato come prop (creato in ResponseEditorInner)
   const saveToLibraryButtonRef = saveToLibraryButtonRefProp || React.useRef<HTMLButtonElement>(null);
 
-  // ✅ FIX: Sync toolbarButtons to onToolbarUpdate when hideHeader is true
-  // Il pulsante è sempre presente nella toolbar, quindi non serve più toolbarButtonsWithRef
+  // Dock tab (hideHeader): Wizard/Manual first (after tab title), then main toolbar.
   React.useEffect(() => {
-    if (hideHeader && onToolbarUpdate && taskWizardMode === 'none') {
-      // ✅ FIX: Passa direttamente toolbarButtons (il pulsante è sempre presente con ref)
-      onToolbarUpdate(toolbarButtons, 'orange');
+    if (hideHeader && onToolbarUpdate) {
+      onToolbarUpdate([...wizardToggleButtons, ...toolbarButtons], 'orange');
     }
-  }, [hideHeader, onToolbarUpdate, taskWizardMode, toolbarButtons]);
+  }, [hideHeader, onToolbarUpdate, toolbarButtons, wizardToggleButtons, taskWizardMode]);
 
   // ✅ LOG: Verification log for debugging (moved to useEffect to keep render pure)
   // ✅ FIX: Use only primitive dependencies to prevent loop
@@ -1309,12 +1335,12 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         e.stopPropagation();
       }}
     >
-      {/* ✅ Header: visibile solo quando taskWizardMode === 'none' (STATO 1) */}
-      {/* ✅ CRITICAL: Quando taskWizardMode === 'full', header e toolbar devono essere completamente nascosti */}
-      {!hideHeader && taskWizardMode === 'none' && (
+      {/* Header is always visible so the Wizard / Manual toggle stays accessible */}
+      {!hideHeader && (
         <HeaderWithDynamicToolbar
           icon={<Icon size={18} style={{ color: iconColor }} />}
           title={headerTitle}
+          titleActions={wizardTitleActions}
           toolbarButtons={toolbarButtons}
           onClose={handleEditorCloseWithTutor}
           color="orange"

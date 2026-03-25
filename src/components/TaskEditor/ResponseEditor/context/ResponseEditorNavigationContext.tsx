@@ -2,7 +2,7 @@
 // Provides programmatic navigation primitives for Response Editor
 // Allows external code to navigate to specific steps, escalations, and open panels
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 
 export interface ResponseEditorNavigationContextValue {
   // Step navigation
@@ -51,16 +51,15 @@ export function ResponseEditorNavigationProvider({
 
   const navigateToStep = useCallback((stepKey: string) => {
     setCurrentStepKey(stepKey);
-    // Scroll to step element if available
+    // Scroll to step tab if available — use a short outline flash (no errorPulse) to avoid flicker on text
     setTimeout(() => {
       const stepElement = document.querySelector(`[data-step-key="${stepKey}"]`);
       if (stepElement) {
-        stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Highlight temporarily
-        stepElement.classList.add('error-highlight');
+        stepElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        stepElement.classList.add('navigation-step-flash');
         setTimeout(() => {
-          stepElement.classList.remove('error-highlight');
-        }, 2000);
+          stepElement.classList.remove('navigation-step-flash');
+        }, 450);
       }
     }, 100);
   }, []);
@@ -72,11 +71,11 @@ export function ResponseEditorNavigationProvider({
     setTimeout(() => {
       const escalationElement = document.querySelector(`[data-escalation-index="${escalationIndex}"]`);
       if (escalationElement) {
-        escalationElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        escalationElement.classList.add('error-highlight');
+        escalationElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        escalationElement.classList.add('navigation-step-flash');
         setTimeout(() => {
-          escalationElement.classList.remove('error-highlight');
-        }, 2000);
+          escalationElement.classList.remove('navigation-step-flash');
+        }, 450);
       }
     }, 200);
   }, [navigateToStep]);
@@ -90,11 +89,11 @@ export function ResponseEditorNavigationProvider({
           `[data-escalation-index="${target.escIdx}"][data-task-index="${target.taskIdx}"]`
         );
         if (taskElement) {
-          taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          taskElement.classList.add('error-highlight');
+          taskElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          taskElement.classList.add('navigation-step-flash');
           setTimeout(() => {
-            taskElement.classList.remove('error-highlight');
-          }, 2000);
+            taskElement.classList.remove('navigation-step-flash');
+          }, 450);
         }
       }, 300);
     }
@@ -165,20 +164,35 @@ export function ResponseEditorNavigationProvider({
     };
   }, [navigateToStep, navigateToEscalation, setAutoEditTarget, openBehaviorPanel, openTasksPanel]);
 
-  const value: ResponseEditorNavigationContextValue = {
-    navigateToStep,
-    currentStepKey,
-    setCurrentStepKey,
-    navigateToEscalation,
-    setAutoEditTarget,
-    autoEditTarget,
-    openTasksPanel,
-    openBehaviorPanel,
-    closeTasksPanel,
-    closeBehaviorPanel,
-    pendingNavigation,
-    clearPendingNavigation,
-  };
+  const value = useMemo<ResponseEditorNavigationContextValue>(
+    () => ({
+      navigateToStep,
+      currentStepKey,
+      setCurrentStepKey,
+      navigateToEscalation,
+      setAutoEditTarget,
+      autoEditTarget,
+      openTasksPanel,
+      openBehaviorPanel,
+      closeTasksPanel,
+      closeBehaviorPanel,
+      pendingNavigation,
+      clearPendingNavigation,
+    }),
+    [
+      navigateToStep,
+      currentStepKey,
+      navigateToEscalation,
+      setAutoEditTarget,
+      autoEditTarget,
+      openTasksPanel,
+      openBehaviorPanel,
+      closeTasksPanel,
+      closeBehaviorPanel,
+      pendingNavigation,
+      clearPendingNavigation,
+    ]
+  );
 
   return (
     <ResponseEditorNavigationContext.Provider value={value}>

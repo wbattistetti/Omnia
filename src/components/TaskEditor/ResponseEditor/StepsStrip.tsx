@@ -429,7 +429,9 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
                 if (el) buttonRefs.current[key] = el;
               }}
               type="button"
+              data-step-key={key}
               aria-label={`Step ${label}`}
+              aria-current={selected ? 'step' : undefined}
               onClick={() => onSelectStep(key)}
               style={{
                 display: 'inline-flex',
@@ -442,13 +444,12 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
                   ? `1px dashed ${color}80`
                   : isDisabled
                     ? `1px dashed ${color}`
-                    : selected
-                      ? `3px solid ${color}`
-                      : `1px solid ${color}`,
+                    : `1px solid ${color}`,
+                boxShadow: selected && !isDeleted && !isDisabled ? `0 0 0 2px ${color}` : 'none',
                 borderRadius: 10,
                 padding: '5px 10px',
                 cursor: 'pointer',
-                transition: 'border 0.15s',
+                transition: 'box-shadow 0.12s ease',
                 minWidth: 0,
                 whiteSpace: 'nowrap',
                 flexShrink: 0,

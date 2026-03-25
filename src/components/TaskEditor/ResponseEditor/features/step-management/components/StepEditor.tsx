@@ -80,19 +80,20 @@ export default function StepEditor({
   const [autoEditTarget, setAutoEditTarget] = React.useState<{ escIdx: number; taskIdx: number } | null>(contextAutoEditTarget);
   const stepLabel = stepMeta[stepKey]?.label || 'Escalation';
 
-  // ✅ NEW: Sync with navigation context
+  // ✅ Sync from navigation context (programmatic auto-edit)
   React.useEffect(() => {
     if (contextAutoEditTarget && contextAutoEditTarget !== autoEditTarget) {
       setAutoEditTarget(contextAutoEditTarget);
     }
   }, [contextAutoEditTarget, autoEditTarget]);
 
-  // ✅ NEW: Update navigation context when autoEditTarget changes locally
+  // ✅ Push local auto-edit to context — depend on stable setter only, not full navigation object
+  const setNavAutoEditTarget = navigation?.setAutoEditTarget;
   React.useEffect(() => {
-    if (navigation?.setAutoEditTarget) {
-      navigation.setAutoEditTarget(autoEditTarget);
+    if (setNavAutoEditTarget) {
+      setNavAutoEditTarget(autoEditTarget);
     }
-  }, [autoEditTarget, navigation]);
+  }, [autoEditTarget, setNavAutoEditTarget]);
 
   const handleAddEscalation = React.useCallback(() => {
     updateSelectedNode((node) => {

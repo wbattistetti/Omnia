@@ -328,6 +328,35 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     [wizardResult?.handleCorrectionSubmit]
   );
 
+  // ── Wizard toolbar actions ────────────────────────────────────────────────
+  // Marks a deferred-start intent so the next render (when wizardResult is
+  // available) can call startFull() rather than auto-starting in useWizard.
+  const shouldStartWizardRef = React.useRef(false);
+
+  const handleStartWizard = React.useCallback(() => {
+    shouldStartWizardRef.current = true;
+    editor.setTaskWizardMode('full');
+  }, [editor.setTaskWizardMode]);
+
+  const handleSwitchToManual = React.useCallback(() => {
+    wizardResult?.resetOrchestrator?.();
+    editor.setTaskWizardMode('none');
+  }, [wizardResult?.resetOrchestrator, editor.setTaskWizardMode]);
+
+  // Trigger startFull() once wizard mode and result are both available.
+  React.useEffect(() => {
+    if (
+      taskWizardMode === 'full' &&
+      wizardResult?.startFull &&
+      shouldStartWizardRef.current
+    ) {
+      shouldStartWizardRef.current = false;
+      wizardResult.startFull().catch((err) => {
+        console.error('[ResponseEditor] startFull failed:', err);
+      });
+    }
+  }, [taskWizardMode, wizardResult?.startFull]);
+
   // ✅ B1: WizardContext value (only when wizard is active OR shouldBeGeneral is true)
   // ✅ NEW: Use unified wizard hook result
   const wizardContextValue = React.useMemo(() => {
@@ -447,6 +476,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       setShowSaveDialog={setShowSaveDialog}
       setSaveDecisionMade={setEffectiveSaveDecisionMade}
       wizardIntegration={wizardIntegration}
+      onStartWizard={handleStartWizard}
+      onSwitchToManual={handleSwitchToManual}
       originalLabel={editor.headerTitle} // ✅ SINGLE SOURCE: Use headerTitle from editor (node row label)
       // ✅ FIX: Pass ref per il pulsante save-to-library
       saveToLibraryButtonRef={saveToLibraryButtonRef}

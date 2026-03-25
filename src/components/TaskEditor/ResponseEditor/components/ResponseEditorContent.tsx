@@ -108,19 +108,6 @@ export function ResponseEditorContent({
   // Sidebar visible + wizard adattamento (genera solo messaggi)
   // ✅ FIX: Rimuovere dipendenza da taskTreeFromStore - può essere null inizialmente e verrà caricato asincronamente
 
-  // ✅ DEBUG: Log solo quando cambiano i valori critici (evita loop infinito)
-  React.useEffect(() => {
-    if (effectiveWizardMode === 'adaptation') {
-      console.log('[ResponseEditorContent] 📊 DEBUG: Verifica wizard mode', {
-        effectiveWizardMode,
-        templateId: effectiveTemplateId,
-        hasTaskTreeFromStore: !!taskTreeFromStore,
-        taskTreeFromStoreKeys: taskTreeFromStore ? Object.keys(taskTreeFromStore) : [],
-        willShowAdaptationWizard: effectiveWizardMode === 'adaptation' && !!effectiveTemplateId
-      });
-    }
-  }, [effectiveWizardMode, effectiveTemplateId, taskTreeFromStore]);
-
   // ✅ REMOVED: TaskContextualizationPanel - now wizard handles adaptation mode
   // The wizard will be shown via MainViewMode.WIZARD in MainContentArea
   // This allows showing template structure and asking for confirmation before adaptation

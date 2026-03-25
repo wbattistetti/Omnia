@@ -35,6 +35,10 @@ export type ToolbarButton = {
   buttonRef?: React.RefObject<HTMLButtonElement>;
   buttonId?: string;
   visible?: boolean;
+  /** Placement hint for dock-tab rendering.
+   *  'title-suffix' → rendered immediately after the tab title (not pushed right).
+   *  Default (undefined) → rendered right-aligned in the tab toolbar strip. */
+  position?: 'title-suffix';
 };
 
 // Response Editor tab - for DDT editing

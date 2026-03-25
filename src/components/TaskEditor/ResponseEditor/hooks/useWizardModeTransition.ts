@@ -22,9 +22,6 @@ export function useWizardModeTransition(
   // ✅ REMOVED: Log rumoroso che causava spam in console
   // Il problema di rendering continuo verrà risolto con refactoring architetturale
 
-  // ✅ MINIMAL CONDITIONS: Only check wizardMode and taskTree
-  // If this works, the problem is pipelineSteps
-  // If this doesn't work, wizardMode never becomes COMPLETED or taskTree is null
   return (
     taskWizardMode === 'full' &&
     wizardMode === WizardMode.COMPLETED &&

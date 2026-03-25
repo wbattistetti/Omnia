@@ -7,12 +7,11 @@
 export function scrollToStep(stepKey: string): void {
   const stepElement = document.querySelector(`[data-step-key="${stepKey}"]`);
   if (stepElement) {
-    stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // Highlight temporarily
-    stepElement.classList.add('error-highlight');
+    stepElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    stepElement.classList.add('navigation-step-flash');
     setTimeout(() => {
-      stepElement.classList.remove('error-highlight');
-    }, 2000);
+      stepElement.classList.remove('navigation-step-flash');
+    }, 450);
   }
 }
 
@@ -39,10 +38,10 @@ export function highlightTask(escalationIndex: number, taskIndex: number): void 
     `[data-escalation-index="${escalationIndex}"][data-task-index="${taskIndex}"]`
   );
   if (taskElement) {
-    taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    taskElement.classList.add('error-highlight');
+    taskElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    taskElement.classList.add('navigation-step-flash');
     setTimeout(() => {
-      taskElement.classList.remove('error-highlight');
-    }, 2000);
+      taskElement.classList.remove('navigation-step-flash');
+    }, 450);
   }
 }

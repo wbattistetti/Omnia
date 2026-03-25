@@ -247,21 +247,13 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     // ✅ Inizializza SOLO per nuovo task.id
     const taskMeta = isTaskMeta(task) ? task : getTaskMeta(task);
 
-      // ✅ Priority: explicit taskWizardMode > backward compatibility with booleans
+      // Wizard mode: adaptation auto-starts when a template is assigned;
+      // full mode is no longer auto-started — the user triggers it via the toolbar button.
       let wizardMode: TaskWizardMode = 'none';
-      if (taskMeta.taskWizardMode && (taskMeta.taskWizardMode === 'none' || taskMeta.taskWizardMode === 'adaptation' || taskMeta.taskWizardMode === 'full')) {
-        wizardMode = taskMeta.taskWizardMode;
-      } else {
-        // ✅ Backward compatibility: derive from boolean flags
-        const needsContextualization = (taskMeta as any).needsTaskContextualization === true;
-        const needsBuilder = (taskMeta as any).needsTaskBuilder === true;
-        if (needsBuilder) {
-          wizardMode = 'full';
-        } else if (needsContextualization) {
-          wizardMode = 'adaptation';
-        } else {
-          wizardMode = 'none';
-        }
+      if (taskMeta.taskWizardMode === 'adaptation') {
+        wizardMode = 'adaptation';
+      } else if ((taskMeta as any).needsTaskContextualization === true) {
+        wizardMode = 'adaptation';
       }
 
       const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;
@@ -278,9 +270,6 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
       if (wizardMode === 'adaptation') {
         setNeedsTaskContextualization(true);
         setNeedsTaskBuilder(false);
-      } else if (wizardMode === 'full') {
-        setNeedsTaskContextualization(false);
-        setNeedsTaskBuilder(true);
       } else {
         setNeedsTaskContextualization(false);
         setNeedsTaskBuilder(false);

@@ -124,7 +124,10 @@ export function SlotTree({
   const semanticSetEditing = useInlineEditing(semanticSets, (set) => set.name);
 
   const renderNode = (node: TreeNode): React.ReactNode => {
-    const isExpanded = expanded.has(node.id);
+    // Section headers (node.data == null) respect the toggle state so users can
+    // collapse the whole section. Actual data nodes (slots, sets, values) are
+    // always expanded so the full hierarchy is always visible without any clicks.
+    const isExpanded = node.data != null ? true : expanded.has(node.id);
     const isSelected = selected === node.id;
     const hasChildren = node.children && node.children.length > 0;
 

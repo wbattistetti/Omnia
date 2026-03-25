@@ -273,6 +273,65 @@ function DockRenderer(props: {
   );
 }
 
+/**
+ * Renders a single toolbar button inside a dock tab strip.
+ * Extracted to avoid duplicating the ref-cloning and tooltip logic.
+ */
+function renderTabButton(btn: import('../../dock/types').ToolbarButton, idx: number, _tabColor?: string) {
+  const buttonRef = btn.buttonRef && 'current' in btn.buttonRef
+    ? btn.buttonRef as React.RefObject<HTMLButtonElement>
+    : null;
+  const buttonId = btn.buttonId;
+
+  const buttonProps = {
+    onClick: (e: React.MouseEvent) => {
+      e.stopPropagation();
+      btn.onClick?.();
+    },
+    disabled: btn.disabled,
+    'data-button-id': buttonId,
+    style: {
+      display: btn.visible === false ? 'none' : 'flex',
+      alignItems: 'center',
+      gap: 4,
+      background: btn.primary ? '#0b1220' : (btn.active ? 'rgba(255,255,255,0.2)' : 'transparent'),
+      color: '#ffffff',
+      border: btn.primary ? 'none' : '1px solid rgba(255,255,255,0.3)',
+      borderRadius: 6,
+      padding: btn.label ? '4px 8px' : '4px 6px',
+      cursor: btn.disabled ? 'not-allowed' : 'pointer',
+      opacity: btn.disabled ? 0.5 : 1,
+      fontSize: '11px',
+      whiteSpace: 'nowrap' as const,
+    },
+  };
+
+  const button = (
+    <button {...buttonProps}>
+      {btn.icon}
+      {btn.label && <span>{btn.label}</span>}
+    </button>
+  );
+
+  const buttonWithRef = buttonRef
+    ? React.cloneElement(button, {
+        ref: (el: HTMLButtonElement | null) => {
+          if (buttonRef && 'current' in buttonRef) {
+            (buttonRef as React.MutableRefObject<HTMLButtonElement | null>).current = el;
+          }
+        },
+      })
+    : button;
+
+  return btn.title ? (
+    <SmartTooltip key={idx} text={btn.title} tutorId={`toolbar_btn_${idx}_help`} placement="bottom">
+      {buttonWithRef}
+    </SmartTooltip>
+  ) : (
+    <React.Fragment key={idx}>{buttonWithRef}</React.Fragment>
+  );
+}
+
 function TabSet(props: {
   nodeId: string;
   tabs: DockTab[];
@@ -340,6 +399,8 @@ function TabSet(props: {
             ? (responseEditorTab?.toolbarButtons || taskEditorTab?.toolbarButtons || []) // ✅ RINOMINATO: actEditorTab → taskEditorTab
             : [];
           const showToolbar = isActive && (isResponseEditor || isTaskEditor) && toolbarButtons.length > 0; // ✅ RINOMINATO: isActEditor → isTaskEditor
+          const titleSuffixButtons = toolbarButtons.filter(b => b.position === 'title-suffix');
+          const rightButtons = toolbarButtons.filter(b => b.position !== 'title-suffix');
 
           return (
             <div key={t.id}
@@ -366,8 +427,10 @@ function TabSet(props: {
               }}>
               {/* icona dinamica in base al tipo */}
               {getTabIcon(t)}
+              {/* Title: no flex:1 here — a spacer div below fills the gap instead,
+                  so that title-suffix buttons sit immediately after the label. */}
               <span style={{
-                flex: isActive ? 1 : '0 0 auto',
+                flex: '0 1 auto',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
@@ -375,68 +438,20 @@ function TabSet(props: {
                 minWidth: 0
               }}>{t.title}</span>
 
-              {/* Toolbar dalla tab (solo se tab attiva e ResponseEditor) */}
-              {showToolbar && (
-                <div style={{ display: 'flex', gap: 4, marginLeft: 8, alignItems: 'center' }}>
-                  {toolbarButtons.map((btn, idx) => {
-                    // ✅ FIX: Monta sempre il pulsante, controlla visibilità con CSS
-                    // NON usare return null - il pulsante deve essere sempre montato per il ref
+              {/* title-suffix buttons: immediately after title, not pushed right */}
+              {showToolbar && titleSuffixButtons.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, marginLeft: 6, alignItems: 'center', flexShrink: 0 }}>
+                  {titleSuffixButtons.map((btn, idx) => renderTabButton(btn, idx, tabColor))}
+                </div>
+              )}
 
-                    // ✅ FIX: Estrai buttonRef e buttonId
-                    const buttonRef = btn.buttonRef && 'current' in btn.buttonRef
-                      ? btn.buttonRef as React.RefObject<HTMLButtonElement>
-                      : null;
-                    const buttonId = btn.buttonId;
+              {/* Spacer: pushes right-aligned toolbar to the end of the tab */}
+              {isActive && <div style={{ flex: 1 }} />}
 
-                    const buttonProps = {
-                      onClick: (e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        btn.onClick();
-                      },
-                      disabled: btn.disabled,
-                      'data-button-id': buttonId, // ✅ FIX: Aggiungi data-button-id per fallback
-                      style: {
-                        display: btn.visible === false ? 'none' : 'flex', // ✅ FIX: Usa display invece di return null
-                        alignItems: 'center',
-                        gap: 4,
-                        background: btn.primary ? '#0b1220' : (btn.active ? 'rgba(255,255,255,0.2)' : 'transparent'),
-                        color: '#ffffff',
-                        border: btn.primary ? 'none' : '1px solid rgba(255,255,255,0.3)',
-                        borderRadius: 6,
-                        padding: btn.label ? '4px 8px' : '4px 6px',
-                        cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                        opacity: btn.disabled ? 0.5 : 1,
-                        fontSize: '11px',
-                        whiteSpace: 'nowrap' as const,
-                      },
-                    };
-
-                    const button = (
-                      <button {...buttonProps}>
-                        {btn.icon}
-                        {btn.label && <span>{btn.label}</span>}
-                      </button>
-                    );
-
-                    // ✅ FIX: Gestisci il ref per entrambi i casi (con e senza title)
-                    // ✅ FIX: Callback ref semplificato senza log per evitare loop infiniti
-                    const buttonWithRef = buttonRef ? React.cloneElement(button, {
-                      ref: (el: HTMLButtonElement | null) => {
-                        // ✅ FIX: Propaga il ref senza log (rimosso per evitare loop infiniti)
-                        if (buttonRef && 'current' in buttonRef) {
-                          (buttonRef as React.MutableRefObject<HTMLButtonElement | null>).current = el;
-                        }
-                      }
-                    }) : button;
-
-                    return btn.title ? (
-                      <SmartTooltip key={idx} text={btn.title} tutorId={`toolbar_btn_${idx}_help`} placement="bottom">
-                        {buttonWithRef}
-                      </SmartTooltip>
-                    ) : (
-                      <React.Fragment key={idx}>{buttonWithRef}</React.Fragment>
-                    );
-                  })}
+              {/* Right-aligned toolbar buttons */}
+              {showToolbar && rightButtons.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, marginLeft: 4, alignItems: 'center', flexShrink: 0 }}>
+                  {rightButtons.map((btn, idx) => renderTabButton(btn, idx + titleSuffixButtons.length, tabColor))}
                 </div>
               )}
 

@@ -130,7 +130,7 @@ export function MainContentArea({
   // ✅ REMOVED: wizardProps - now from Context
 }: MainContentAreaProps) {
   // ✅ NEW: Get data from Context
-  const { taskMeta: task, taskType, taskTree: taskTreeFromContext } = useResponseEditorContext();
+  const { taskMeta: task, taskType, taskTree: taskTreeFromContext, taskWizardMode } = useResponseEditorContext();
   // ✅ Usa taskTree da props se disponibile, altrimenti da context
   const taskTree = taskTreeProp ?? taskTreeFromContext;
 
@@ -241,7 +241,40 @@ export function MainContentArea({
         (taskTree.nodes && taskTree.nodes.length > 0)
       );
 
+      const isManualEmptyStructure =
+        taskWizardMode === 'none' &&
+        (!taskTree ||
+          ((!taskTree.nodes || taskTree.nodes.length === 0) &&
+            (!taskTree.steps || Object.keys(taskTree.steps).length === 0)));
+
       if (!selectedNode || !isDDTReady) {
+        if (isManualEmptyStructure) {
+          return (
+            <div style={DEFAULT_CONTAINER_STYLE}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  color: '#94a3b8',
+                  fontSize: '14px',
+                  textAlign: 'center',
+                  padding: 24,
+                  maxWidth: 420,
+                  margin: '0 auto',
+                }}
+              >
+                <p style={{ marginBottom: 12 }}>Nessuna struttura ancora disponibile.</p>
+                <p style={{ fontSize: 13, lineHeight: 1.5 }}>
+                  Usa <strong>Wizard</strong> nella barra in alto per generare il task con l&apos;AI,
+                  oppure resta in <strong>Manuale</strong> e continua quando sei pronto.
+                </p>
+              </div>
+            </div>
+          );
+        }
         return (
           <div style={DEFAULT_CONTAINER_STYLE}>
             <div style={{

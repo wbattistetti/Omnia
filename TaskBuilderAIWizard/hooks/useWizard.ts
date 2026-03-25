@@ -57,6 +57,8 @@ export interface UseWizardResult {
   startAdaptation: (templateId: string) => Promise<void>;
   confirmStructure: () => Promise<void>;
   rejectStructure: () => void;
+  /** Reset orchestrator and store — call before switching back to manual mode. */
+  resetOrchestrator: () => void;
   handleCorrectionSubmit: () => Promise<void>;
 
   // Data
@@ -201,32 +203,11 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
     }
   }, [taskLabel, store.correctionInput, store.dataSchema, store, rowId]); // ✅ FIX: Use store values instead of orchestrator
 
-  // Auto-start wizard.
+  // Auto-start for ADAPTATION MODE only.
+  // Full mode is started explicitly via the toolbar Wizard button (startFull is exposed below).
   // wizardSync is intentionally NOT in the deps array — syncVariablesRef.current is used
   // instead to avoid firing this effect on every render (wizardSync object was unstable).
   useEffect(() => {
-    // FULL MODE: unchanged behaviour — starts only when wizardState === START
-    if (
-      mode === 'full' &&
-      taskLabel?.trim() &&
-      store.wizardState === WizardMode.START &&
-      !hasStartedRef.current
-    ) {
-      hasStartedRef.current = true;
-      const startFn = orchestrator.startFull ?? orchestrator.start;
-      if (startFn) {
-        startFn()
-          .then(async () => {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            await syncVariablesRef.current();
-          })
-          .catch((error) => {
-            console.error('[useWizard] Error in startFull:', error);
-            hasStartedRef.current = false;
-          });
-      }
-    }
-
     // ADAPTATION MODE: starts immediately when templateId is available.
     // Does NOT wait for wizardState === START.
     if (
@@ -280,6 +261,8 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
       store.setWizardState(WizardMode.DATA_STRUCTURE_CORRECTION);
       store.setStructureConfirmed(false);
     },
+    /** Reset the orchestrator and store — call before switching back to manual mode. */
+    resetOrchestrator: () => orchestrator.reset?.(),
     handleCorrectionSubmit,
 
     // ── Data ──────────────────────────────────────────────────────────────
