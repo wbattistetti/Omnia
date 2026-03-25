@@ -29,6 +29,7 @@ export type WizardTaskTreeNode = {
   readableName?: string;      // Nome completo variabile (es: "Data di nascita del paziente")
   dottedName?: string;        // Nome gerarchico (es: "Data di nascita del paziente.Giorno")
   taskId?: string;            // Task ID (used for variable creation in VariableCreationService)
+  variableRefId?: string;     // Stable promised variable GUID reused as VariableInstance.varId
 
   // ✅ NEW: Generalization fields (solo sul nodo root)
   shouldBeGeneral?: boolean;

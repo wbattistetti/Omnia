@@ -59,6 +59,11 @@ import {
   summarizeUseCasesForPersistLog,
 } from './aiAgentDebug';
 import { registerAiAgentProjectSaveFlush } from './aiAgentProjectSaveFlush';
+import {
+  readAiAgentRuntimeRulesVariant,
+  writeAiAgentRuntimeRulesVariant,
+  type AiAgentRuntimeRulesVariant,
+} from './aiAgentRuntimeRulesVariant';
 
 export interface UseAIAgentEditorControllerParams {
   instanceId: string | undefined;
@@ -81,6 +86,7 @@ export function useAIAgentEditorController({
   const [previewByStyle, setPreviewByStyle] = React.useState<Record<string, AIAgentPreviewTurn[]>>({});
   const [previewStyleId, setPreviewStyleIdState] = React.useState<string>(AI_AGENT_DEFAULT_PREVIEW_STYLE_ID);
   const [initialStateTemplateJson, setInitialStateTemplateJson] = React.useState('{}');
+  const [agentRuntimeCompactJson, setAgentRuntimeCompactJson] = React.useState('');
   const [generating, setGenerating] = React.useState(false);
   const [generateError, setGenerateError] = React.useState<string | null>(null);
   const [iaRevisionDiffBySection, setIaRevisionDiffBySection] = React.useState<Partial<
@@ -92,6 +98,15 @@ export function useAIAgentEditorController({
   const [useCases, setUseCases] = React.useState<AIAgentUseCase[]>([]);
   const [useCaseComposerBusy, setUseCaseComposerBusy] = React.useState(false);
   const [useCaseComposerError, setUseCaseComposerError] = React.useState<string | null>(null);
+
+  const [runtimeRulesVariant, setRuntimeRulesVariantState] = React.useState<AiAgentRuntimeRulesVariant>(
+    () => readAiAgentRuntimeRulesVariant()
+  );
+
+  const setRuntimeRulesVariant = React.useCallback((v: AiAgentRuntimeRulesVariant) => {
+    setRuntimeRulesVariantState(v);
+    writeAiAgentRuntimeRulesVariant(v);
+  }, []);
 
   /** True only after `loadFromRepository` has applied repo data for this mount / reload. */
   const [hydrated, setHydrated] = React.useState(false);
@@ -189,6 +204,7 @@ export function useAIAgentEditorController({
     setInitialStateTemplateJson(
       b.agentInitialStateTemplateJson.trim() ? b.agentInitialStateTemplateJson : '{}'
     );
+    setAgentRuntimeCompactJson(b.agentRuntimeCompactJson.trim());
     setHasAgentGeneration(resolveHasAgentGeneration(b));
     setLogicalSteps(b.logicalSteps);
     setUseCases(b.useCases);
@@ -218,6 +234,7 @@ export function useAIAgentEditorController({
       previewByStyle,
       previewStyleId,
       initialStateTemplateJson,
+      agentRuntimeCompactJson,
       hasAgentGeneration,
       agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
       agentUseCasesJson,
@@ -252,6 +269,7 @@ export function useAIAgentEditorController({
     previewByStyle,
     previewStyleId,
     initialStateTemplateJson,
+    agentRuntimeCompactJson,
     hasAgentGeneration,
     logicalSteps,
     useCases,
@@ -392,6 +410,7 @@ export function useAIAgentEditorController({
       committedStructuredJsonRef.current = serializePersistedStructuredSections(nextPersist);
       setPreviewByStyle(applied.previewByStyle);
       setInitialStateTemplateJson(applied.initialStateTemplateJson);
+      setAgentRuntimeCompactJson(applied.agentRuntimeCompactJson);
       setOutputVariableMappings((prev) => applied.mergeOutputMappings(prev));
       setHasAgentGeneration(true);
       setCommittedDesignDescription(designDescription);
@@ -541,6 +560,7 @@ export function useAIAgentEditorController({
     agentPrompt,
     structuredSectionsState: structuredRev.sectionsState,
     composedRuntimeMarkdown: structuredRev.composedRuntimeMarkdown,
+    structuredDesignDirty,
     applyRevisionOps,
     applyOtCommit,
     undoSection,
@@ -554,6 +574,7 @@ export function useAIAgentEditorController({
     setPreviewStyleId,
     initialStateTemplateJson,
     setInitialStateTemplateJson,
+    agentRuntimeCompactJson,
     generating,
     generateError,
     iaRevisionDiffBySection,
@@ -573,5 +594,7 @@ export function useAIAgentEditorController({
     clearUseCaseComposerError,
     handleGenerateUseCaseBundle,
     handleRegenerateUseCase,
+    runtimeRulesVariant,
+    setRuntimeRulesVariant,
   };
 }

@@ -132,6 +132,7 @@ function convertNode(
     type: apiNode.type,
     emoji: emoji, // ✅ Emoji directly from API (UI-only) - e.g. "📅", "👤", "📍"
     subNodes,
+    variableRefId: nodeId,
     pipelineStatus,
     // Note: readableName, dottedName will be added later by VariableNameGeneratorService
   };

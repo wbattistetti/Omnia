@@ -1,4 +1,5 @@
 import type { FlowVariableDefinition } from './flowVariableTypes';
+import type { MappingEntry } from '../components/FlowMappingPanel/mappingTypes';
 
 export type FlowId = string;
 
@@ -13,6 +14,11 @@ export type Flow<NodeT = any, EdgeT = any> = {
     fromTaskId?: string;
     /** Author-defined flow variables (internal / input / output / inout). */
     variables?: FlowVariableDefinition[];
+    /** Flow-as-task: exposed Input / Output wiring (persisted in flow_meta). */
+    flowInterface?: {
+      input: MappingEntry[];
+      output: MappingEntry[];
+    };
   };
   /**
    * Step 3: True after server data was applied for this flow (or after a successful project save sync).

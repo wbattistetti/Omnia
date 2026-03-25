@@ -29,7 +29,6 @@ import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { resolveTaskType, hasTaskTree } from '@components/Flowchart/utils/taskVisuals';
 import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '@types/taskTypes';
 import { idMappingService } from '@services/IdMappingService';
-import { generateId } from '@utils/idGenerator';
 import { updateRowTaskType, createRowWithTask, getTemplateId, getTaskIdFromRow } from '@utils/taskHelpers';
 import { taskRepository } from '@services/TaskRepository';
 import {

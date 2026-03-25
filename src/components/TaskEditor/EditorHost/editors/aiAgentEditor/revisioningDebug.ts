@@ -36,7 +36,7 @@ export function isRevisioningDebugEnabled(): boolean {
     sessionBannerShown = true;
     console.warn(
       '[revisioning] Debug logging is ON. You should see [revisioning] groups when editing structured sections. ' +
-        'If not: Console filter must show "Verbose" / all levels; ensure this tab is focused; try typing in Behavior etc.'
+        'If not: Console filter must show "Verbose" / all levels; ensure this tab is focused; try typing in a structured section tab.'
     );
   }
   return on;

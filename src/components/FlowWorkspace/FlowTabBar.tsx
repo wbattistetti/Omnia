@@ -1,5 +1,5 @@
 import React from 'react';
-import { useFlowWorkspace, useFlowActions } from '../../flows/FlowStore.tsx';
+import { useFlowWorkspace, useFlowActions } from '@flows/FlowStore';
 import { GitBranch } from 'lucide-react';
 
 export const FlowTabBar: React.FC = () => {

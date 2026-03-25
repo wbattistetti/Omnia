@@ -14,7 +14,7 @@ vi.mock('../../../FlowWorkspace/FlowCanvasHost', () => ({
   ),
 }));
 
-vi.mock('../../../../flows/FlowStore', () => ({
+vi.mock('@flows/FlowStore', () => ({
   useFlowActions: () => ({
     upsertFlow: vi.fn(),
     openFlowBackground: vi.fn(),

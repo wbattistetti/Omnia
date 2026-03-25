@@ -287,7 +287,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     setNodeRows,
     data: normalizedData,
     rowsContainerRef,
-    nodeId: id
+    nodeId: id,
+    flowCanvasId: flowCanvasId,
   });
   const {
     draggedRowId, handleRowDragStart
@@ -446,7 +447,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       return;
     }
 
-    const slotGuid = row.meta?.semanticSlotRefId || generateId();
+    const variableRefId = row.meta?.variableRefId || generateId();
     const projectId = getCurrentProjectId();
     if (projectId) {
       // Ensure GUID->label mapping exists so ConditionEditor can show readable labels.
@@ -455,7 +456,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       );
       variableCreationService.ensureManualVariableWithId(
         projectId,
-        slotGuid,
+        variableRefId,
         normalizedSlotLabel,
         { scope: 'flow', scopeFlowId: flowCanvasId }
       );
@@ -463,7 +464,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     updateNodeRows((rows) =>
       rows.map((r) => (
         r.id === row.id
-          ? { ...r, meta: { ...(r.meta || {}), semanticSlotRefId: slotGuid } }
+          ? { ...r, meta: { ...(r.meta || {}), variableRefId } }
           : r
       ))
     );

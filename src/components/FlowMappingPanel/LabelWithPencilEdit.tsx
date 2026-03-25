@@ -8,6 +8,8 @@ import { AutosizeOneLineInput } from './AutosizeOneLineInput';
 
 export interface LabelWithPencilEditProps {
   segment: string;
+  /** Shown instead of `segment` when not editing (e.g. row label while path is stable id). */
+  displayLabel?: string;
   /** When false, pencil hidden (e.g. group-only node). */
   editable: boolean;
   onCommit: (newSegment: string) => void;
@@ -22,6 +24,7 @@ export interface LabelWithPencilEditProps {
 
 export function LabelWithPencilEdit({
   segment,
+  displayLabel,
   editable,
   onCommit,
   editIntent,
@@ -85,11 +88,13 @@ export function LabelWithPencilEdit({
     setEditing(false);
   }, [segment, ephemeralNew, onAbandonEphemeral]);
 
+  const viewLabel = displayLabel ?? segment;
+
   if (!editable) {
-    return <span className="truncate text-slate-100 text-[11px] font-medium">{segment}</span>;
+    return <span className="truncate text-slate-100 text-[11px] font-medium">{viewLabel}</span>;
   }
 
-  const displaySegment = ephemeralNew ? '\u00a0' : segment;
+  const displaySegment = ephemeralNew ? '\u00a0' : viewLabel;
 
   if (editing) {
     return (

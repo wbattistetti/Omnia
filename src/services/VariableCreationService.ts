@@ -121,7 +121,10 @@ class VariableCreationService {
 
       // Root / main data node → varName is the normalized task label
       variables.push({
-        varId: this.generateGuid(),
+        varId:
+          typeof node.variableRefId === 'string' && node.variableRefId.trim().length > 0
+            ? node.variableRefId.trim()
+            : this.generateGuid(),
         varName: this.buildVarName(normalizedLabel, []),
         taskInstanceId: taskInstance.id,
         nodeId,
@@ -145,7 +148,10 @@ class VariableCreationService {
           .trim();
 
         variables.push({
-          varId: this.generateGuid(),
+          varId:
+            typeof sub.variableRefId === 'string' && sub.variableRefId.trim().length > 0
+              ? sub.variableRefId.trim()
+              : this.generateGuid(),
           varName: this.buildVarName(normalizedLabel, [subLabel]),
           taskInstanceId: taskInstance.id,
           nodeId: subNodeId,

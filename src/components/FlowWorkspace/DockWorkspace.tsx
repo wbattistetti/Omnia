@@ -1,5 +1,5 @@
 import React from 'react';
-import { FlowWorkspaceProvider, useFlowActions, useFlowWorkspace } from '../../flows/FlowStore.tsx';
+import { FlowWorkspaceProvider, useFlowActions, useFlowWorkspace } from '@flows/FlowStore';
 import { FlowCanvasHost } from './FlowCanvasHost';
 import { FlowTabBar } from './FlowTabBar';
 import { dlog } from '../../utils/debug';

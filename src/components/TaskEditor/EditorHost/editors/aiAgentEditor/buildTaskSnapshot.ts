@@ -19,6 +19,7 @@ export interface AIAgentTaskSnapshot {
   agentProposedFields: AIAgentProposedVariable[];
   agentSampleDialogue: AIAgentDesignSampleTurn[];
   agentInitialStateTemplateJson: string;
+  agentRuntimeCompactJson: string;
   agentDesignHasGeneration: boolean | undefined;
   agentLogicalStepsJson: string;
   agentUseCasesJson: string;
@@ -47,6 +48,7 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
       ? (r!.agentSampleDialogue as AIAgentDesignSampleTurn[])
       : [],
     agentInitialStateTemplateJson: String(r?.agentInitialStateTemplateJson ?? '{}'),
+    agentRuntimeCompactJson: String(r?.agentRuntimeCompactJson ?? ''),
     agentDesignHasGeneration:
       typeof r?.agentDesignHasGeneration === 'boolean' ? r.agentDesignHasGeneration : undefined,
     agentLogicalStepsJson: String(r?.agentLogicalStepsJson ?? ''),

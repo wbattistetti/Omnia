@@ -10,6 +10,8 @@ import { getTemplateId } from '../../utils/taskHelpers';
 import { DialogueTaskService } from '../../services/DialogueTaskService';
 import { taskTemplateService } from '../../services/TaskTemplateService';
 import { templateIdToTaskType, TaskType } from '../../types/taskTypes';
+import { buildMinimalAiAgentCompileTask } from '../TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
+import { readAiAgentRuntimeRulesVariant } from '../TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentRuntimeRulesVariant';
 import { useProjectData } from '../../context/ProjectDataContext';
 
 interface UseDialogueEngineOptions {
@@ -307,6 +309,14 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         ...referencedInstances,
         ...referencedTemplates
       ];
+
+      /** VB compiler: minimal AI Agent DTO (`rules` + `llmEndpoint`; rules = compact or rich per toolbar). */
+      const aiAgentRulesVariant = readAiAgentRuntimeRulesVariant();
+      const tasksForCompile = allTasksWithTemplates.map((t: any) =>
+        t.type === TaskType.AIAgent
+          ? buildMinimalAiAgentCompileTask(t, { rulesVariant: aiAgentRulesVariant })
+          : t
+      );
 
       console.log('[useDialogueEngine] 📦 Final task list (instances + templates):', {
         instancesCount: referencedInstances.length,
@@ -674,7 +684,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       const requestBody = {
         nodes: nodesWithTaskId,  // ✅ Use nodes with taskId field (backend VB.NET requires it)
         edges: filteredEdges,  // ✅ Use filtered edges (no orphans)
-        tasks: allTasksWithTemplates,  // ✅ Include both instance tasks and referenced templates
+        tasks: tasksForCompile, // ✅ AI Agent: includes `rules` / `llmEndpoint` for VB compiler
         ddts: allDDTs,
         projectId: projectId,
         translations: translations, // ✅ Pass translations table (already in memory) - runtime will do lookup at execution time
@@ -979,7 +989,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         // Pass original JSON from compiler directly to orchestrator (no transformation!)
         const orchestratorControl = await executeOrchestratorBackend(
           compileData, // ✅ Pass original JSON - preserves taskGroups, entryTaskGroupId, etc.
-          allTasksWithTemplates, // ✅ Use allTasksWithTemplates (contains instances + templates)
+          allTasksWithTemplates, // ✅ Full tasks for session metadata; compiled graph is in compileData
           allDDTs,
           translations,
           {

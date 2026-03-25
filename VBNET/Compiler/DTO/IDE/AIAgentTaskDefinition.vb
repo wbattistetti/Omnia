@@ -15,7 +15,7 @@ Public Class AIAgentTaskDefinition
     Public Property Rules As String
 
     ''' <summary>
-    ''' URL POST per lo step LLM. Se assente, runtime usa OMNIA_AI_AGENT_LLM_URL.
+    ''' URL POST per lo step LLM (assoluto). Il compile deve fornire un default se omesso in progettazione.
     ''' </summary>
     <JsonProperty("llmEndpoint")>
     Public Property LlmEndpoint As String

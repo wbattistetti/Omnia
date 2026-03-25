@@ -92,7 +92,13 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
     onRegenerateUseCase,
     previewStyleId,
     setPreviewStyleId,
+    hasAgentGeneration,
+    showRightPanel,
+    generating,
+    onGenerateUseCaseBundle,
   } = useAIAgentEditorDock();
+
+  const showGenerateCta = hasAgentGeneration && showRightPanel;
 
   return (
     <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-950/80">
@@ -106,6 +112,8 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
         onRegenerateUseCase={onRegenerateUseCase}
         previewStyleId={previewStyleId}
         onPreviewStyleIdChange={setPreviewStyleId}
+        onGenerateUseCaseBundle={showGenerateCta ? onGenerateUseCaseBundle : undefined}
+        generating={generating}
       />
     </div>
   );

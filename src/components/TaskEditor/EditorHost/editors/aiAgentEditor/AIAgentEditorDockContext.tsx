@@ -5,11 +5,13 @@
 import React from 'react';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
+import type { AIAgentPreviewTurn } from '@types/aiAgentPreview';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import type { OtOp } from './otTypes';
 import type { StructuredSectionsRevisionState } from './structuredSectionsRevisionReducer';
 import type { IaSectionDiffPair } from './iaSectionDiffTypes';
 import type { RevisionBatchOp } from './textRevisionLinear';
+import type { AiAgentRuntimeRulesVariant } from './aiAgentRuntimeRulesVariant';
 
 export interface AIAgentEditorDockContextValue {
   instanceId: string | undefined;
@@ -17,6 +19,8 @@ export interface AIAgentEditorDockContextValue {
   designDescription: string;
   setDesignDescription: (value: string) => void;
   composedRuntimeMarkdown: string;
+  /** True when structured sections diverge from last committed snapshot (Create/Refine baseline). */
+  structuredDesignDirty: boolean;
   structuredSectionsState: StructuredSectionsRevisionState;
   onApplyRevisionOps: (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => void;
   /** When {@link structuredOtEnabled}, structured sections may commit UTF-16 OT ops instead of linear batch ops. */
@@ -49,6 +53,15 @@ export interface AIAgentEditorDockContextValue {
   /** Design-time preview style (persisted with task). */
   previewStyleId: string;
   setPreviewStyleId: (styleId: string) => void;
+  /** Runtime state template edited in design-time and persisted on task. */
+  initialStateTemplateJson: string;
+  /** Persisted JSON string for `runtime_compact` (token-efficient rules); empty for legacy tasks. */
+  agentRuntimeCompactJson: string;
+  /** Optional style-indexed preview turns that can be projected into runtime examples. */
+  previewByStyle: Record<string, AIAgentPreviewTurn[]>;
+  /** Compile/debug: `rules` = compact join vs rich Markdown (persisted in localStorage for DialogueEngine). */
+  runtimeRulesVariant: AiAgentRuntimeRulesVariant;
+  setRuntimeRulesVariant: (v: AiAgentRuntimeRulesVariant) => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

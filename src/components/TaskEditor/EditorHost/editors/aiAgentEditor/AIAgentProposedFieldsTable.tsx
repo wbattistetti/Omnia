@@ -133,7 +133,11 @@ function LabelCell({
   }, [editing, cancel]);
 
   return (
-    <div className="group relative flex flex-wrap items-center gap-x-2 gap-y-1 min-h-[36px] min-w-0">
+    <div
+      className={`group relative flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0 ${
+        editing ? 'min-h-[36px]' : 'min-h-0'
+      }`}
+    >
       {editing ? (
         <div className="flex w-full min-w-0 items-center gap-1">
           <input
@@ -167,9 +171,9 @@ function LabelCell({
         </div>
       ) : (
         <>
-          <span className="min-w-0 text-sm text-slate-200 break-words py-0.5">{label || '—'}</span>
+          <span className="min-w-0 text-sm text-slate-200 break-words">{label || '—'}</span>
           {afterLabel}
-          <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="ml-auto flex shrink-0 items-center gap-0.5 self-center opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               type="button"
               className="p-1 rounded text-slate-400 hover:text-violet-300 hover:bg-slate-800"
@@ -206,7 +210,7 @@ export function AIAgentProposedFieldsTable({
         <tbody>
           {fields.map((f) => (
             <tr key={f.slotId} className="align-middle">
-              <td className="w-[52px] p-2 align-middle text-center">
+              <td className="w-8 min-w-[2rem] py-0.5 pl-2 pr-0 align-middle">
                 <input
                   type="checkbox"
                   className="rounded border-slate-600 align-middle"
@@ -216,7 +220,7 @@ export function AIAgentProposedFieldsTable({
                   aria-label="Obbligatorio"
                 />
               </td>
-              <td className="p-2 align-middle min-w-0">
+              <td className="py-0.5 pl-1.5 pr-2 align-middle min-w-0">
                 <LabelCell
                   label={f.label}
                   onSave={(next) => {

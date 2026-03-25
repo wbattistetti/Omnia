@@ -5,4 +5,6 @@ interface ImportMetaEnv {
   readonly VITE_REVISIONING_DEBUG?: string;
   /** When `"true"`, structured sections use OT persistence + textarea commit path. */
   readonly VITE_AI_AGENT_STRUCTURED_OT?: string;
+  /** Override default AI Agent runtime step URL (default: http://localhost:3100/api/runtime/ai-agent/step). */
+  readonly VITE_AI_AGENT_STEP_URL?: string;
 }

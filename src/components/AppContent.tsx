@@ -19,8 +19,7 @@ import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
 import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
 import { DockManager } from './Dock/DockManager';
 import { DockNode, DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabChat, ToolbarButton } from '../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
-import { FlowWorkspaceProvider, useFlowWorkspace } from '../flows/FlowStore.tsx';
-import { useFlowActions } from '../flows/FlowStore.tsx';
+import { FlowWorkspaceProvider, useFlowWorkspace, useFlowActions } from '@flows/FlowStore';
 import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/ops';
 import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
 import { openBottomDockedTab } from './AppContent/infrastructure/docking/DockingHelpers';
@@ -168,34 +167,12 @@ export const AppContent: React.FC<AppContentProps> = ({
   const pdUpdate = useProjectDataUpdate();
   const currentPid = (() => { try { return pdUpdate.getCurrentProjectId(); } catch { return undefined; } })();
 
-  // Dock tree (new dock manager)
-  /** Main canvas + right dock: unified mapping panel (backend / interface demo). Drag tab to bottom to try vertical layout. */
+  // Dock tree: main flow tabset only (per-flow Interface is on canvas via FlowInterfaceBottomPanel).
   const [dockTree, setDockTree] = useState<DockNode>({
-    kind: 'split',
-    id: 'split_root',
-    orientation: 'row',
-    sizes: [0.7, 0.3],
-    children: [
-      {
-        kind: 'tabset',
-        id: 'ts_main',
-        tabs: [{ id: 'tab_main', title: 'Main', type: 'flow', flowId: 'main' }],
-        active: 0,
-      },
-      {
-        kind: 'tabset',
-        id: 'ts_flow_mapping',
-        tabs: [
-          {
-            id: 'tab_flow_mapping_demo',
-            title: 'Mapping',
-            type: 'flowMapping',
-            initialMode: 'backend',
-          },
-        ],
-        active: 0,
-      },
-    ],
+    kind: 'tabset',
+    id: 'ts_main',
+    tabs: [{ id: 'tab_main', title: 'Main', type: 'flow', flowId: 'main' }],
+    active: 0,
   });
 
   // ✅ Initialize ErrorReportPanelService

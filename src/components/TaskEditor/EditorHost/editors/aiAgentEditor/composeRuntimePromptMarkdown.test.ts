@@ -7,36 +7,36 @@ import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { composeRuntimePromptMarkdown, buildRefineUserDescFromSections } from './composeRuntimePromptMarkdown';
 
 const sample = (): Record<AgentStructuredSectionId, string> => ({
-  behavior_spec: 'A',
-  positive_constraints: 'B',
-  negative_constraints: 'C',
-  operational_sequence: 'D',
-  correction_rules: 'E',
-  conversational_state: '',
+  goal: 'G',
+  operational_sequence: 'S',
+  context: '',
+  constraints: 'Must:\n\nM\n\nMust not:\n\nN',
+  personality: 'P',
+  tone: 'Tone: neutral\n\nT',
 });
 
 describe('composeRuntimePromptMarkdown', () => {
-  it('omits empty conversational_state section', () => {
+  it('includes Goal and omits empty Context from composed markdown', () => {
     const md = composeRuntimePromptMarkdown(sample());
-    expect(md).toContain('## Behavior');
-    expect(md).toContain('A');
-    expect(md).not.toContain('Stato conversazionale');
+    expect(md).toContain('### Goal');
+    expect(md).toContain('G');
+    expect(md).not.toContain('### Context');
   });
 
-  it('includes conversational_state when non-empty', () => {
+  it('includes Context when non-empty', () => {
     const s = sample();
-    s.conversational_state = 'State notes';
+    s.context = 'Ctx';
     const md = composeRuntimePromptMarkdown(s);
-    expect(md).toContain('Stato conversazionale');
-    expect(md).toContain('State notes');
+    expect(md).toContain('### Context');
+    expect(md).toContain('Ctx');
   });
 });
 
 describe('buildRefineUserDescFromSections', () => {
   it('joins all sections with separators', () => {
     const t = buildRefineUserDescFromSections(sample());
-    expect(t).toContain('Behavior:');
+    expect(t).toContain('Scopo');
     expect(t).toContain('---');
-    expect(t).toContain('A');
+    expect(t).toContain('Tone: neutral');
   });
 });

@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Check, GitBranch, Loader2, MessageSquare, Pencil, RefreshCw, X } from 'lucide-react';
+import { Check, GitBranch, Loader2, MessageSquare, Pencil, RefreshCw, Sparkles, X } from 'lucide-react';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
   AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
@@ -14,6 +14,7 @@ import { AIAgentPreviewChatPanel } from './AIAgentPreviewChatPanel';
 import { orderUseCasesWithDepth } from './useCaseTreeOrder';
 import { previewToUseCaseDialogue, useCaseDialogueToPreview } from './useCaseDialogueBridge';
 import { HoverEditMultiline } from './HoverEditMultiline';
+import { LABEL_GENERATE_USE_CASES } from './constants';
 
 export interface AIAgentUseCaseComposerProps {
   logicalSteps: readonly AIAgentLogicalStep[];
@@ -25,6 +26,10 @@ export interface AIAgentUseCaseComposerProps {
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void>;
   previewStyleId?: string;
   onPreviewStyleIdChange?: (styleId: string) => void;
+  /** When set, empty state shows a primary CTA (e.g. tab toolbar hidden). */
+  onGenerateUseCaseBundle?: () => void | Promise<void>;
+  /** Disables generate CTA while Create/Refine agent is running. */
+  generating?: boolean;
 }
 
 export function AIAgentUseCaseComposer({
@@ -37,6 +42,8 @@ export function AIAgentUseCaseComposer({
   onRegenerateUseCase,
   previewStyleId = AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
   onPreviewStyleIdChange = () => {},
+  onGenerateUseCaseBundle,
+  generating = false,
 }: AIAgentUseCaseComposerProps) {
   const { ordered, depthById } = React.useMemo(() => orderUseCasesWithDepth(useCases), [useCases]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -164,8 +171,23 @@ export function AIAgentUseCaseComposer({
       <div className="flex flex-1 min-h-0 gap-2 flex-col sm:flex-row sm:items-stretch sm:min-h-[320px]">
         {ordered.length === 0 ? (
           <div className="flex-1 min-h-0 w-full rounded-lg border border-slate-800 bg-slate-900/40 overflow-y-auto flex flex-col">
-            <div className="flex-1 min-h-[120px] flex items-center justify-center p-6 text-sm text-slate-500 text-center">
-              Nessuno scenario. Genera con IA o crea il design agent prima.
+            <div className="flex-1 min-h-[120px] flex flex-col items-center justify-center gap-4 p-6 text-center">
+              <p className="text-sm text-slate-500 max-w-md">
+                {onGenerateUseCaseBundle
+                  ? 'Nessuno scenario ancora. Puoi generarli con IA usando il pulsante qui sotto.'
+                  : 'Nessuno scenario. Genera con IA o crea il design agent prima.'}
+              </p>
+              {onGenerateUseCaseBundle ? (
+                <button
+                  type="button"
+                  disabled={busy || generating}
+                  onClick={() => void onGenerateUseCaseBundle()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white"
+                >
+                  {busy ? <Loader2 className="animate-spin" size={16} aria-hidden /> : <Sparkles size={16} aria-hidden />}
+                  {busy ? 'Generazione scenari…' : LABEL_GENERATE_USE_CASES}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : (

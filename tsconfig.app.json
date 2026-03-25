@@ -33,6 +33,7 @@
       "@ui/*": ["ui/*"],
       "@features/*": ["../features/*"],
       "@config/*": ["../config/*"],
+      "@flows/*": ["flows/*"],
       "@taskEditor/*": ["components/TaskEditor/*"],
       "@responseEditor/*": ["components/TaskEditor/ResponseEditor/*"],
       "@TaskBuilderAIWizard/*": ["../TaskBuilderAIWizard/*"],

@@ -33,15 +33,28 @@ export interface AIAgentDesignSampleTurn {
 
 /**
  * Structured runtime instructions (composed server-side into Markdown `agent_prompt`).
+ * Six sections: goal → steps → context → guardrails (Must / Must not) → role → register (`tone`).
  */
 export interface AIAgentStructuredSectionTexts {
-  behavior_spec: string;
-  positive_constraints: string;
-  negative_constraints: string;
+  goal: string;
   operational_sequence: string;
-  correction_rules: string;
-  /** Optional; may be empty when not used. */
-  conversational_state: string;
+  context: string;
+  /** Must / Must not structure (see meta-prompt). */
+  constraints: string;
+  personality: string;
+  /** First line `Tone: <token>` — see aiAgentStructuredSectionEnums. */
+  tone: string;
+}
+
+/**
+ * Token-efficient runtime instructions from design-time JSON (persisted as `agentRuntimeCompactJson`).
+ */
+export interface AIAgentRuntimeCompact {
+  behavior_compact: string;
+  constraints_compact: string;
+  sequence_compact: string;
+  corrections_compact: string;
+  examples_compact: AIAgentDesignSampleTurn[];
 }
 
 export interface AIAgentDesignPayload extends AIAgentStructuredSectionTexts {
@@ -51,6 +64,8 @@ export interface AIAgentDesignPayload extends AIAgentStructuredSectionTexts {
   agent_prompt: string;
   sample_dialogue: AIAgentDesignSampleTurn[];
   design_notes: string;
+  /** Required on successful generate/refine; used for compile/runtime preview and engine rules. */
+  runtime_compact: AIAgentRuntimeCompact;
 }
 
 export interface AIAgentDesignApiSuccess {

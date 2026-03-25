@@ -8,12 +8,13 @@ import {
   Database,
   FileText,
   GitBranch,
+  Globe2,
   ListOrdered,
-  MessageSquareMore,
   ScrollText,
   Shield,
-  SlidersHorizontal,
-  Wrench,
+  Sparkles,
+  Target,
+  UserCircle,
 } from 'lucide-react';
 import { AGENT_STRUCTURED_SECTION_TAB_TITLE } from './agentStructuredSectionIds';
 
@@ -22,11 +23,12 @@ const EMPTY = 'text-slate-500';
 /** Filled: accent matches tab role; empty: grey icon + grey caption. */
 const FILLED = {
   desc: 'text-sky-300',
-  behaviorFlow: 'text-sky-300',
-  positive: 'text-emerald-400',
-  negative: 'text-red-400',
-  correction: 'text-orange-400',
-  conversational: 'text-cyan-300',
+  goal: 'text-sky-300',
+  sequence: 'text-emerald-400',
+  context: 'text-cyan-300',
+  guardrails: 'text-amber-300',
+  personality: 'text-violet-300',
+  tone: 'text-fuchsia-300',
   promptFinale: 'text-green-400',
   dati: 'text-amber-300',
   useCases: 'text-violet-300',
@@ -61,39 +63,42 @@ export function getAiAgentDockTabPresentation(
         icon: Ic(FileText, c(FILLED.desc)),
         titleClassName: c(FILLED.desc),
       };
-    case 'behavior_spec':
+    case 'goal':
       return {
-        icon: Ic(SlidersHorizontal, c(FILLED.behaviorFlow)),
-        titleClassName: c(FILLED.behaviorFlow),
+        icon: Ic(Target, c(FILLED.goal)),
+        titleClassName: c(FILLED.goal),
+        nativeTitle: AGENT_STRUCTURED_SECTION_TAB_TITLE.goal,
       };
     case 'operational_sequence':
       return {
-        icon: Ic(ListOrdered, c(FILLED.behaviorFlow)),
-        titleClassName: c(FILLED.behaviorFlow),
+        icon: Ic(ListOrdered, c(FILLED.sequence)),
+        titleClassName: c(FILLED.sequence),
+        nativeTitle: AGENT_STRUCTURED_SECTION_TAB_TITLE.operational_sequence,
       };
-    case 'positive_constraints':
+    case 'context':
       return {
-        icon: Ic(Shield, c(FILLED.positive)),
-        titleClassName: c(FILLED.positive),
+        icon: Ic(Globe2, c(FILLED.context)),
+        titleClassName: c(FILLED.context),
+        nativeTitle: AGENT_STRUCTURED_SECTION_TAB_TITLE.context,
       };
-    case 'negative_constraints':
+    case 'constraints':
       return {
-        icon: Ic(Shield, c(FILLED.negative)),
-        titleClassName: c(FILLED.negative),
+        icon: Ic(Shield, c(FILLED.guardrails)),
+        titleClassName: c(FILLED.guardrails),
+        nativeTitle: AGENT_STRUCTURED_SECTION_TAB_TITLE.constraints,
       };
-    case 'correction_rules':
+    case 'personality':
       return {
-        icon: Ic(Wrench, c(FILLED.correction)),
-        titleClassName: c(FILLED.correction),
+        icon: Ic(UserCircle, c(FILLED.personality)),
+        titleClassName: c(FILLED.personality),
+        nativeTitle: AGENT_STRUCTURED_SECTION_TAB_TITLE.personality,
       };
-    case 'conversational_state': {
-      const hint = AGENT_STRUCTURED_SECTION_TAB_TITLE.conversational_state;
+    case 'tone':
       return {
-        icon: Ic(MessageSquareMore, c(FILLED.conversational)),
-        titleClassName: c(FILLED.conversational),
-        nativeTitle: hint,
+        icon: Ic(Sparkles, c(FILLED.tone)),
+        titleClassName: c(FILLED.tone),
+        nativeTitle: AGENT_STRUCTURED_SECTION_TAB_TITLE.tone,
       };
-    }
     case 'prompt_finale':
       return {
         icon: Ic(ScrollText, c(FILLED.promptFinale)),

@@ -3,41 +3,78 @@
 
 /**
  * Design-time AI Agent task generation.
- * Calls an LLM with a meta-prompt to produce: proposed variables, initial state template,
- * runtime agent prompt, and a sample dialogue for UX preview.
+ * Produces rich editor content (sections, sample_dialogue) and REQUIRED runtime_compact for execution.
+ * Application code only concatenates compact text fields into one rules string (no stylistic rewrite).
  */
 
-const META_SYSTEM = `You are an expert conversational AI designer for the OMNIA dialogue engine.
+const META_SYSTEM = `You are an expert AI agent designer for the OMNIA dialogue engine.
+
+ARCHITECTURE (non-negotiable):
+- Rich design (structured sections, sample_dialogue, design_notes) exists for the EDITOR and persistence only. It is NOT the runtime instruction set sent to the execution engine as a whole.
+- runtime_compact is REQUIRED on every response. It is the ONLY authoritative behavioral contract for runtime: the runtime engine receives rules built ONLY from runtime_compact (four text fields concatenated in fixed order by code). The rich Markdown composed from sections is NOT sent to runtime execution.
+- You MUST write runtime_compact yourself in this JSON. Never assume code will infer or summarize compact text from rich sections.
+- runtime_compact is the agent "voice" at runtime: stylistic and semantic distillation so the runtime LLM can match tone and flow of sample_dialogue without receiving the full rich text.
+- On every Generate and Refine, output a fresh runtime_compact aligned with the current rich design.
+
 You MUST respond with a single valid JSON object only (no markdown fences, no commentary).
-The JSON must match the schema described in the user message exactly.
-When the user message specifies OUTPUT_LANGUAGE, write every human-readable string in the JSON in that language (structured section bodies, sample_dialogue content, design_notes, proposed_variables labels, string values inside initial_state_template such as task id labels if natural language).
-Do NOT include a top-level "agent_prompt" key in your JSON; the server assembles the runtime prompt from structured sections.`;
+The JSON must match exactly the schema described in the user message.
+
+When OUTPUT_LANGUAGE is specified, write every human-readable string in that language
+(structured sections, sample_dialogue content, design_notes, proposed_variables labels,
+runtime_compact strings, and natural-language values inside initial_state_template).
+
+Do NOT include a top-level "agent_prompt" key.
+The server assembles editor Markdown from structured sections only.
+
+STRICT RULES FOR structured sections:
+- "tone" MUST begin with Tone: <token> on line 1; token MUST be one of: neutral, friendly_professional, warm, concise, formal, playful.
+- "constraints" MUST contain two labeled blocks: Must: ... and Must not: ... (plain text, no markdown headings).
+
+STRICT RULES FOR runtime_compact (LLM-authored; code only joins fields with blank lines, never rewrites wording):
+- NON-OVERLAP: behavior_compact, constraints_compact, sequence_compact, corrections_compact must each hold unique information. No duplicated meaning across these four fields.
+- MINIMALITY, imperative, token-efficient, no markdown in compact strings.
+- examples_compact: 2–3 turns, ≤ 12 words per turn, tone and structure reflecting the rich sample_dialogue.
+- The compact is a stylistic operational contract, not a dry label list.
+
+Before returning JSON, run this self-check:
+1) runtime_compact present; all keys non-empty where required.
+2) Remove duplicated meaning across the four main compact strings.
+3) Ensure examples_compact matches dialogue style of sample_dialogue in brief form.`;
 
 /** @type {readonly string[]} */
 const STRUCTURED_SECTION_IDS = [
-  'behavior_spec',
-  'positive_constraints',
-  'negative_constraints',
+  'goal',
   'operational_sequence',
-  'correction_rules',
-  'conversational_state',
+  'context',
+  'constraints',
+  'personality',
+  'tone',
+];
+
+const TONE_TOKENS = [
+  'neutral',
+  'friendly_professional',
+  'warm',
+  'concise',
+  'formal',
+  'playful',
 ];
 
 const REQUIRED_NONEMPTY_SECTION_KEYS = [
-  'behavior_spec',
-  'positive_constraints',
-  'negative_constraints',
+  'goal',
   'operational_sequence',
-  'correction_rules',
+  'constraints',
+  'personality',
+  'tone',
 ];
 
 const SECTION_MARKDOWN_TITLES = {
-  behavior_spec: 'Behavior Spec',
-  positive_constraints: 'Vincoli positivi',
-  negative_constraints: 'Vincoli negativi',
-  operational_sequence: 'Sequenza operativa',
-  correction_rules: 'Regole di correzione',
-  conversational_state: 'Stato conversazionale',
+  goal: 'Goal',
+  operational_sequence: 'Operational sequence',
+  context: 'Context',
+  constraints: 'Guardrails',
+  personality: 'Personality',
+  tone: 'Tone',
 };
 
 /**
@@ -46,19 +83,19 @@ const SECTION_MARKDOWN_TITLES = {
  */
 function composeRuntimePromptMarkdownFromSections(sections) {
   const order = [
-    'behavior_spec',
-    'positive_constraints',
-    'negative_constraints',
+    'goal',
     'operational_sequence',
-    'correction_rules',
-    'conversational_state',
+    'context',
+    'constraints',
+    'personality',
+    'tone',
   ];
   const chunks = [];
   for (const id of order) {
     const body = String(sections[id] ?? '').trim();
-    if (id === 'conversational_state' && !body) continue;
+    if (id === 'context' && !body) continue;
     const title = SECTION_MARKDOWN_TITLES[id];
-    chunks.push(`## ${title}\n\n${body.length > 0 ? body : '—'}`);
+    chunks.push(`### ${title}\n\n${body.length > 0 ? body : '—'}`);
   }
   return chunks.join('\n\n').trim();
 }
@@ -235,43 +272,152 @@ ${userDesc}
 """
 ${revisionBlock}${langBlock}
 
-Your job is to design an "AI Agent" task for OMNIA runtime.
+Your job is to design an "AI Agent" task for OMNIA.
 
-Produce JSON with exactly these top-level keys:
-1) "proposed_variables" — array of objects, each with:
-   - "field_name": string, snake_case, unique (e.g. "visit_type", "first_name") — JSON key in updated_state only; Omnia shows a separate human variable name from "label"
-   - "label": string, human-readable name for the flow variable (may include spaces, e.g. "Data di nascita")
-   - "type": string, MUST be exactly one of: ${ENTITY_TYPES.join(', ')}
+Produce JSON with exactly these REQUIRED top-level keys:
+
+1) "proposed_variables" — array of objects:
+   - "field_name": string, snake_case, unique (JSON key in updated_state; "label" is human-facing)
+   - "label": string, human-readable
+   - "type": string, MUST be one of: ${ENTITY_TYPES.join(', ')}
    - "required": boolean
 
-2) "initial_state_template" — object representing the EMPTY state before any user message.
-   It MUST include:
-   - "task": short string id derived from the scenario (e.g. "booking_visit")
-   - one key per field_name from proposed_variables, each set to null
-   - "confirmation_status": "collecting" | "awaiting_user" | "confirmed" (start with "collecting")
-   - "missing_fields": array of field_name strings (all required fields that are null)
-   - "history_summary": "" (empty string)
-   - "task_completed": false (boolean)
+2) "initial_state_template" — object. MUST include:
+   - "task": short string id
+   - one key per field_name from proposed_variables, each null
+   - "confirmation_status": "collecting" | "awaiting_user" | "confirmed" (start "collecting")
+   - "missing_fields": array of required field_name values initially missing
+   - "history_summary": ""
+   - "task_completed": false
 
-3) Structured runtime instructions (strings; the app composes the final Markdown runtime prompt — do NOT output "agent_prompt"):
-   - "behavior_spec": main behavior and goals for the agent.
-   - "positive_constraints": what the agent must do / must respect.
-   - "negative_constraints": what the agent must avoid.
-   - "operational_sequence": ordered steps the agent should follow in the dialogue.
-   - "correction_rules": how to handle user corrections and re-confirmation.
-   - "conversational_state": optional free-text notes on dialogue state usage (may be empty string if not needed).
-   Each of behavior_spec..correction_rules MUST be non-empty. conversational_state may be "".
-   Together these sections MUST still encode that the runtime model replies with ONLY this JSON shape (no extra text):
-   { "updated_state": { ...same shape as initial_state_template... }, "assistant_reply": "..." }
-   Encode: never rely on memory outside updated_state; ask only for missing fields; confirmation flow; corrections reset confirmation; recompute missing_fields from null required keys; assistant_reply concise.
+3) "goal": string (non-empty, rich) — what the agent must achieve by the end of the conversation.
+4) "operational_sequence": string (non-empty, rich) — ordered steps: which data to collect, in what order, confirmations, corrections.
+5) "context": string (may be empty) — where the conversation happens, who the user is, what is already known.
+6) "constraints": string (non-empty, rich) — MUST use exactly two labeled blocks (plain lines, no markdown):
+   Must:
+   <obligations>
+   Must not:
+   <prohibitions>
+7) "personality": string (non-empty, rich) — who the agent is: role, attitude, empathy (no register/voice details; those go in "tone").
+8) "tone": string (non-empty, rich). MUST start with line 1 exactly: Tone: <token> where <token> is one of: ${TONE_TOKENS.join(', ')}. After a blank line, how the agent speaks: brevity, clarity, formality, empathy in 2–6 short sentences.
 
-4) "sample_dialogue" — array of { "role": "assistant" | "user", "content": "..." }
-   A realistic 6–14 turn simulation showing tone, order of questions, confirmation, and one correction.
-   Must be consistent with proposed_variables.
+Sections 3–8 are for the editor and Mongo persistence. The execution engine does NOT receive these rich strings as the runtime prompt; runtime behavior is driven by runtime_compact below.
 
-5) "design_notes" — string, 1–3 sentences for the designer (optional hints).
+Together, sections 3–8 MUST still imply that the model replies with ONLY:
+{ "updated_state": { ...same shape as initial_state_template... }, "assistant_reply": "..." }
+Never rely on memory outside updated_state; ask missing fields only; confirmation and corrections as designed.
+The server may compose editor Markdown from sections 3–8 — do NOT output top-level "agent_prompt".
 
-Remember: output valid JSON only.`;
+9) "sample_dialogue" — non-empty array of { "role": "assistant" | "user", "content": string }
+   Realistic 6–14 turns; include confirmation and one correction; consistent with proposed_variables.
+
+10) "design_notes" — string (1–3 sentences)
+
+11) "runtime_compact" — REQUIRED. Regenerate on every Generate and Refine. This is the sole runtime behavioral source (plus initial state at execution). Object with EXACT keys:
+   - "behavior_compact": string (<= 20 words, goal only, imperative, no markdown)
+   - "constraints_compact": string (<= 28 words, MUST/MUST NOT style constraints only, no sequence, no markdown)
+   - "sequence_compact": string (<= 32 words, ordered steps only, no policy prose, no markdown)
+   - "corrections_compact": string (<= 20 words, correction and reconfirmation only, no markdown)
+   - "examples_compact": array of 2–3 turns: { "role": "assistant" | "user", "content": string (<= 12 words) }
+   Stylistic anchor: examples_compact MUST reflect tone and structure of sample_dialogue in shortened form.
+
+Compact quality (MANDATORY):
+- NON-OVERLAP across the four main compact strings; no paraphrase duplication.
+- Minimal, imperative, token-efficient; coherent with the rich design.
+- The compact is the runtime "voice"; downstream code concatenates the four strings with blank lines only — it does NOT rewrite style.
+
+Before returning JSON:
+1) Confirm runtime_compact is complete and non-empty where required.
+2) Deduplicate meaning across behavior_compact, constraints_compact, sequence_compact, corrections_compact.
+3) Align examples_compact with sample_dialogue tone.
+
+Output ONLY valid JSON. No markdown fences, no commentary outside JSON.`;
+}
+
+function countWords(s) {
+  return String(s || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+/**
+ * @param {string} text
+ * @returns {string|null}
+ */
+function parseToneTokenFromSection(text) {
+  const lines = String(text)
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  const first = lines[0];
+  if (!first) return null;
+  const m = /^Tone:\s*([a-z0-9_]+)\s*$/i.exec(first);
+  return m ? m[1].toLowerCase() : null;
+}
+
+/**
+ * Validate required runtime_compact object from the model.
+ * @param {unknown} raw
+ * @returns {{behavior_compact:string,constraints_compact:string,sequence_compact:string,corrections_compact:string,examples_compact:Array<{role:'assistant'|'user',content:string}>}}
+ */
+function validateRuntimeCompact(raw) {
+  if (raw === undefined || raw === null) {
+    throw new Error('Invalid JSON: runtime_compact is required');
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('Invalid JSON: runtime_compact must be an object');
+  }
+  const rc = raw;
+  const required = [
+    'behavior_compact',
+    'constraints_compact',
+    'sequence_compact',
+    'corrections_compact',
+    'examples_compact',
+  ];
+  for (const k of required) {
+    if (!(k in rc)) {
+      throw new Error(`Invalid JSON: runtime_compact missing required key '${k}'`);
+    }
+  }
+  const behavior = String(rc.behavior_compact ?? '').trim();
+  const constraints = String(rc.constraints_compact ?? '').trim();
+  const sequence = String(rc.sequence_compact ?? '').trim();
+  const corrections = String(rc.corrections_compact ?? '').trim();
+  if (!behavior || !constraints || !sequence || !corrections) {
+    throw new Error('Invalid JSON: runtime_compact strings must be non-empty');
+  }
+  if (countWords(behavior) > 20) throw new Error('Invalid JSON: behavior_compact exceeds 20 words');
+  if (countWords(constraints) > 28) throw new Error('Invalid JSON: constraints_compact exceeds 28 words');
+  if (countWords(sequence) > 32) throw new Error('Invalid JSON: sequence_compact exceeds 32 words');
+  if (countWords(corrections) > 20) throw new Error('Invalid JSON: corrections_compact exceeds 20 words');
+
+  const ex = rc.examples_compact;
+  if (!Array.isArray(ex) || ex.length < 2 || ex.length > 3) {
+    throw new Error('Invalid JSON: examples_compact must be an array of 2-3 turns');
+  }
+  const normalizedExamples = ex.map((t, idx) => {
+    if (!t || (t.role !== 'assistant' && t.role !== 'user')) {
+      throw new Error(`Invalid JSON: runtime_compact.examples_compact[${idx}] has invalid role`);
+    }
+    const content = String(t.content ?? '').trim();
+    if (!content) {
+      throw new Error(`Invalid JSON: runtime_compact.examples_compact[${idx}].content is empty`);
+    }
+    if (countWords(content) > 12) {
+      throw new Error(`Invalid JSON: runtime_compact.examples_compact[${idx}] exceeds 12 words`);
+    }
+    return { role: t.role, content };
+  });
+
+  return {
+    behavior_compact: behavior,
+    constraints_compact: constraints,
+    sequence_compact: sequence,
+    corrections_compact: corrections,
+    examples_compact: normalizedExamples,
+  };
 }
 
 /**
@@ -307,9 +453,15 @@ function validateDesignPayload(parsed) {
     }
     sectionTexts[key] = parsed[key].trim();
   }
-  const conv =
-    typeof parsed.conversational_state === 'string' ? parsed.conversational_state : '';
-  sectionTexts.conversational_state = conv;
+  const ctx = typeof parsed.context === 'string' ? parsed.context : '';
+  sectionTexts.context = ctx.trim();
+
+  const toneTok = parseToneTokenFromSection(sectionTexts.tone);
+  if (!toneTok || !TONE_TOKENS.includes(toneTok)) {
+    throw new Error(
+      `Invalid JSON: tone must start with Tone: <token> where token is one of: ${TONE_TOKENS.join(', ')}`
+    );
+  }
 
   const agentPromptComposed = composeRuntimePromptMarkdownFromSections(sectionTexts);
   if (!agentPromptComposed) {
@@ -332,19 +484,21 @@ function validateDesignPayload(parsed) {
     ...v,
     type: coerceEntityType(v.type),
   }));
+  const runtimeCompact = validateRuntimeCompact(parsed.runtime_compact);
 
   return {
     proposed_variables: normalizedVars,
     initial_state_template: parsed.initial_state_template,
-    behavior_spec: sectionTexts.behavior_spec,
-    positive_constraints: sectionTexts.positive_constraints,
-    negative_constraints: sectionTexts.negative_constraints,
+    goal: sectionTexts.goal,
     operational_sequence: sectionTexts.operational_sequence,
-    correction_rules: sectionTexts.correction_rules,
-    conversational_state: sectionTexts.conversational_state,
+    context: sectionTexts.context,
+    constraints: sectionTexts.constraints,
+    personality: sectionTexts.personality,
+    tone: sectionTexts.tone,
     agent_prompt: agentPromptComposed,
     sample_dialogue: sd,
     design_notes: typeof parsed.design_notes === 'string' ? parsed.design_notes : '',
+    runtime_compact: runtimeCompact,
   };
 }
 
@@ -388,7 +542,6 @@ async function generateAIAgentDesign({
     },
   ];
 
-  // OpenAI chat models often cap completion tokens at 4096; larger values return 400 invalid_request_error.
   const maxTokens = provider === 'openai' ? 4096 : 8192;
 
   const response = await aiProviderService.callAI(provider, messages, {

@@ -133,8 +133,8 @@ export interface ProjectInfo {
 export interface RowMeta {
   /** Pre-task semantic slot values; cleared after task creation. See semanticValuesRowState.ts */
   semanticValuesDraft?: SemanticValue[] | null;
-  /** Stable placeholder GUID used in generated edge conditions before data task is materialized. */
-  semanticSlotRefId?: string;
+  /** Stable promised variable GUID used by conditions, interface exposure, and utterance variable materialization. */
+  variableRefId?: string;
 }
 
 /**

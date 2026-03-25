@@ -1,31 +1,46 @@
 /**
  * Canonical IDs for structured AI Agent design sections (aligned with backend JSON keys).
+ * Order: Goal → operational steps → context → constraints → personality → tone.
  */
 
-/** Order: Descrizione (separate tab) → Behavior → Sequenza → Vincoli ± → Regole → Stato → Prompt finale (separate). */
 export const AGENT_STRUCTURED_SECTION_IDS = [
-  'behavior_spec',
+  'goal',
   'operational_sequence',
-  'positive_constraints',
-  'negative_constraints',
-  'correction_rules',
-  'conversational_state',
+  'context',
+  'constraints',
+  'personality',
+  'tone',
 ] as const;
 
 export type AgentStructuredSectionId = (typeof AGENT_STRUCTURED_SECTION_IDS)[number];
 
-/** UI labels (Italian) for section headings. */
+/** UI labels (Italian) for section tabs. */
 export const AGENT_STRUCTURED_SECTION_LABELS: Record<AgentStructuredSectionId, string> = {
-  behavior_spec: 'Behavior',
+  goal: 'Scopo',
   operational_sequence: 'Sequenza operativa',
-  positive_constraints: 'Vincoli positivi',
-  negative_constraints: 'Vincoli negativi',
-  correction_rules: 'Regole di correzione',
-  conversational_state: 'Stato conversazionale',
+  context: 'Contesto',
+  constraints: 'Vincoli',
+  personality: 'Personalità',
+  tone: 'Tono',
 };
 
-/** Tooltip for tab title (accessibility + “cosa significa”). */
+/** Markdown H3 titles for the read-only composed agent prompt (English, stable). */
+export const AGENT_STRUCTURED_SECTION_PROMPT_HEADINGS: Record<AgentStructuredSectionId, string> = {
+  goal: 'Goal',
+  operational_sequence: 'Operational sequence',
+  context: 'Context',
+  constraints: 'Guardrails',
+  personality: 'Personality',
+  tone: 'Tone',
+};
+
+/** Tooltip for tab title (accessibility). */
 export const AGENT_STRUCTURED_SECTION_TAB_TITLE: Partial<Record<AgentStructuredSectionId, string>> = {
-  conversational_state:
-    'Memoria e fasi della conversazione: cosa è già stato chiesto, obiettivi intermedi, stato del flusso.',
+  goal: 'Cosa deve ottenere l’agente a fine conversazione.',
+  operational_sequence:
+    'Ordine di domande, raccolta dati, conferme e correzioni.',
+  context: 'Dove avviene la conversazione, chi è l’utente, cosa è già noto.',
+  constraints: 'Must e Must not: obblighi e divieti.',
+  personality: 'Chi è l’agente: ruolo e atteggiamento.',
+  tone: 'Come parla: registro, brevità, chiarezza (prima riga Tone: …).',
 };

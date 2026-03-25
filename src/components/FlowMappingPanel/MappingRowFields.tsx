@@ -1,6 +1,5 @@
 /**
- * Per-row field strip: backend (API + variable) or interface (external only).
- * Inputs use autosize width (content-sized), no shared column minWidth.
+ * Per-row field strip: backend (API + variable). Interface: no extra fields — label lives in the tree.
  */
 
 import React from 'react';
@@ -88,17 +87,5 @@ export function MappingRowFields({
     );
   }
 
-  return (
-    <div className="flex items-center gap-2 shrink-0 min-w-0">
-      <AutosizeOneLineInput
-        mirrorClassName={mirror10}
-        inputClassName={`${inputBase} border border-amber-600/60 text-amber-100/90 placeholder:text-slate-500`}
-        maxWidthClassName="max-w-[min(16rem,92vw)]"
-        minChars={3}
-        placeholder="Nome esterno"
-        value={entry.externalName}
-        onChange={(e) => onPatch({ externalName: e.target.value })}
-      />
-    </div>
-  );
+  return null;
 }

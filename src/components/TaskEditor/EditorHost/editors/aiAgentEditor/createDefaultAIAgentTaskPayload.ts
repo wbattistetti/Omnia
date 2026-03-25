@@ -20,6 +20,7 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentPreviewByStyle: {},
     agentPreviewStyleId: AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
     agentInitialStateTemplateJson: '{}',
+    agentRuntimeCompactJson: '',
     agentDesignFrozen: false,
     agentDesignHasGeneration: false,
     agentLogicalStepsJson: '[]',

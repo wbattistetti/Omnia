@@ -27,7 +27,10 @@ export function isAiAgentDockPanelContentFilled(
       return true;
     }
     case 'prompt_finale':
-      return ctx.composedRuntimeMarkdown.trim().length > 0;
+      return (
+        ctx.composedRuntimeMarkdown.trim().length > 0 ||
+        ctx.agentRuntimeCompactJson.trim().length > 0
+      );
     case 'ai_agent_editor_dati':
       return ctx.proposedFields.length > 0;
     case 'ai_agent_editor_use_cases':

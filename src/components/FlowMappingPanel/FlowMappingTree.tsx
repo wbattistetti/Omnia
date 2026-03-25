@@ -7,7 +7,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Trash2, Circle, Brackets } from 'lucide-react';
 import type { MappingEntry } from './mappingTypes';
-import { buildMappingTree, renameLeafSegment, type MappingTreeNode } from './mappingTreeUtils';
+import {
+  buildMappingTree,
+  renameLeafSegment,
+  reorderMappingEntries,
+  type MappingTreeNode,
+} from './mappingTreeUtils';
 import { LabelWithPencilEdit } from './LabelWithPencilEdit';
 import { MappingRowFields } from './MappingRowFields';
 import {
@@ -18,11 +23,24 @@ import {
   type ParamDropPlacement,
   type ParamDropPosition,
 } from './backendParamInsert';
+import {
+  DND_FLOWROW_VAR,
+  DND_IFACE_REORDER,
+  FLOW_INTERFACE_POINTER_PREVIEW,
+  parseFlowInterfaceDropFromDataTransfer,
+  type FlowInterfaceDropPayload,
+  type FlowInterfacePointerPreviewDetail,
+} from './flowInterfaceDragTypes';
+import { getInterfaceLeafDisplayName } from './interfaceMappingLabels';
 
 const DND_TYPE = 'application/x-omnia-varlabel';
 
 function hasNewParamDrag(e: React.DragEvent): boolean {
   return [...e.dataTransfer.types].includes(DND_NEW_BACKEND_PARAM);
+}
+
+function hasIfaceReorderDrag(e: React.DragEvent): boolean {
+  return [...e.dataTransfer.types].includes(DND_IFACE_REORDER);
 }
 
 function placementFromY(clientY: number, rowRect: DOMRect, hasChildren: boolean): ParamDropPlacement {
@@ -70,11 +88,16 @@ export interface FlowMappingTreeProps {
   variableOptions: string[];
   listIdPrefix: string;
   showDropZone?: boolean;
-  onDropVariable?: (internalPath: string) => void;
+  onDropVariable?: (payload: FlowInterfaceDropPayload) => void;
   /** Backend: enable drag-from-header new parameter + drop targets */
   enableBackendParamDrop?: boolean;
   /** Backend: when false, only variable field is shown per row */
   showApiFields?: boolean;
+  /** Interface: resolve variable display names */
+  projectId?: string;
+  /** Interface: canvas flow id for pointer-drag preview + row data-* attributes. */
+  flowCanvasId?: string;
+  interfaceZone?: 'input' | 'output';
 }
 
 function updateEntry(entries: MappingEntry[], id: string, patch: Partial<MappingEntry>): MappingEntry[] {
@@ -107,6 +130,14 @@ interface RowProps {
   onConsumeLabelEditIntent: () => void;
   onInsertBackendParam: (pos: ParamDropPosition) => void;
   onAbandonEphemeralEntry: (entryId: string) => void;
+  projectId?: string;
+  flowCanvasId?: string;
+  ifacePointerPreview: FlowInterfacePointerPreviewDetail | null;
+  enableInterfaceReorder: boolean;
+  ifaceReorderDrag: { targetPathKey: string; placement: 'before' | 'after' } | null;
+  reorderDragSourceIdRef: React.MutableRefObject<string | null>;
+  onIfaceReorderHover: (pathKey: string, placement: 'before' | 'after') => void;
+  onIfaceReorderCommit: (fromId: string, targetId: string, placeAfter: boolean) => void;
 }
 
 function MappingTreeRow({
@@ -126,6 +157,14 @@ function MappingTreeRow({
   onConsumeLabelEditIntent,
   onInsertBackendParam,
   onAbandonEphemeralEntry,
+  projectId,
+  flowCanvasId,
+  ifacePointerPreview,
+  enableInterfaceReorder,
+  ifaceReorderDrag,
+  reorderDragSourceIdRef,
+  onIfaceReorderHover,
+  onIfaceReorderCommit,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const hasChildren = node.children.length > 0;
@@ -133,6 +172,8 @@ function MappingTreeRow({
   const hasEntry = Boolean(node.entry);
   const isGroupOnly = hasChildren && !hasEntry;
   const canRenameLabel = Boolean(node.entry && !hasChildren);
+  /** Interface: single variable name in tree; no separate alias column. */
+  const leafLabelEditable = canRenameLabel && variant !== 'interface';
 
   const patchEntry = useCallback(
     (patch: Partial<MappingEntry>) => {
@@ -196,6 +237,61 @@ function MappingTreeRow({
     [enableBackendParamDrop, variant, hasChildren, node.pathKey, onInsertBackendParam]
   );
 
+  const handleIfaceReorderDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!enableInterfaceReorder || variant !== 'interface' || !node.entry) return;
+      if (!hasIfaceReorderDrag(e)) return;
+      const fromId = reorderDragSourceIdRef.current;
+      if (!fromId || fromId === node.entry.id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = rowRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const placement = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+      onIfaceReorderHover(node.pathKey, placement);
+    },
+    [enableInterfaceReorder, variant, node.entry, node.pathKey, onIfaceReorderHover, reorderDragSourceIdRef]
+  );
+
+  const handleIfaceReorderDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!enableInterfaceReorder || variant !== 'interface' || !node.entry) return;
+      if (!hasIfaceReorderDrag(e)) return;
+      const fromId = reorderDragSourceIdRef.current;
+      if (!fromId || fromId === node.entry.id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = rowRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const placeAfter = e.clientY >= rect.top + rect.height / 2;
+      onIfaceReorderCommit(fromId, node.entry.id, placeAfter);
+    },
+    [enableInterfaceReorder, variant, node.entry, onIfaceReorderCommit, reorderDragSourceIdRef]
+  );
+
+  const combinedRowDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (enableInterfaceReorder && variant === 'interface' && hasIfaceReorderDrag(e)) {
+        handleIfaceReorderDragOver(e);
+        return;
+      }
+      onRowDragOver(e);
+    },
+    [enableInterfaceReorder, variant, handleIfaceReorderDragOver, onRowDragOver]
+  );
+
+  const combinedRowDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (enableInterfaceReorder && variant === 'interface' && hasIfaceReorderDrag(e)) {
+        handleIfaceReorderDrop(e);
+        return;
+      }
+      onRowDrop(e);
+    },
+    [enableInterfaceReorder, variant, handleIfaceReorderDrop, onRowDrop]
+  );
+
   const showBefore =
     enableBackendParamDrop &&
     dropIndicator?.targetPathKey === node.pathKey &&
@@ -211,20 +307,66 @@ function MappingTreeRow({
     dropIndicator?.targetPathKey === node.pathKey &&
     dropIndicator.placement === 'child';
 
+  const showIfaceBefore =
+    variant === 'interface' &&
+    ifacePointerPreview?.targetPathKey === node.pathKey &&
+    ifacePointerPreview.placement === 'before';
+  const showIfaceAfter =
+    variant === 'interface' &&
+    ifacePointerPreview?.targetPathKey === node.pathKey &&
+    ifacePointerPreview.placement === 'after';
+  const showReorderBefore =
+    enableInterfaceReorder &&
+    ifaceReorderDrag?.targetPathKey === node.pathKey &&
+    ifaceReorderDrag.placement === 'before';
+  const showReorderAfter =
+    enableInterfaceReorder &&
+    ifaceReorderDrag?.targetPathKey === node.pathKey &&
+    ifaceReorderDrag.placement === 'after';
+
   const ephemeralNew = Boolean(node.entry && isEphemeralNewSegment(node.segment));
 
   const handleAbandonEphemeral = useCallback(() => {
     if (node.entry) onAbandonEphemeralEntry(node.entry.id);
   }, [node.entry, onAbandonEphemeralEntry]);
 
+  const ifaceRowAttrs =
+    variant === 'interface' && flowCanvasId
+      ? ({
+          'data-flow-iface-row': '',
+          'data-path-key': node.pathKey,
+          'data-flow-canvas-id': flowCanvasId,
+        } as const)
+      : {};
+
   return (
-    <div className="select-none">
-      {showBefore && <DropPreviewLine indentPx={siblingDropLineIndentPx(depth)} />}
+    <div className="select-none" {...ifaceRowAttrs}>
+      {(showBefore || showIfaceBefore || showReorderBefore) && (
+        <DropPreviewLine indentPx={siblingDropLineIndentPx(depth)} />
+      )}
       <div
         ref={rowRef}
-        className={`group/row flex items-center gap-1 min-h-[32px] rounded-md px-1 py-0.5 -mx-1 hover:bg-slate-800/50 ${depth > 0 ? 'ml-2 border-l border-slate-700/40 pl-2' : ''}`}
-        onDragOver={onRowDragOver}
-        onDrop={onRowDrop}
+        draggable={Boolean(enableInterfaceReorder && node.entry)}
+        onDragStart={(e) => {
+          if (!enableInterfaceReorder || !node.entry) return;
+          const t = e.target as HTMLElement;
+          if (t.closest('button, input, textarea, select, [role="combobox"]')) {
+            e.preventDefault();
+            return;
+          }
+          e.stopPropagation();
+          reorderDragSourceIdRef.current = node.entry.id;
+          e.dataTransfer.setData(DND_IFACE_REORDER, node.entry.id);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragEnd={() => {
+          reorderDragSourceIdRef.current = null;
+        }}
+        className={`group/row flex items-center gap-1 min-h-[32px] rounded-md px-1 py-0.5 -mx-1 hover:bg-slate-800/50 ${depth > 0 ? 'ml-2 border-l border-slate-700/40 pl-2' : ''} ${
+          enableInterfaceReorder && node.entry ? 'cursor-grab active:cursor-grabbing' : ''
+        }`}
+        onDragOver={combinedRowDragOver}
+        onDrop={combinedRowDrop}
       >
         <div className="flex items-center gap-0.5 shrink-0 w-5 justify-start">
           {hasChildren ? (
@@ -242,13 +384,24 @@ function MappingTreeRow({
         </div>
 
         <div className="shrink-0 text-slate-500" title={isGroupOnly ? 'Gruppo' : 'Parametro'}>
-          {isGroupOnly ? <Circle className="w-3.5 h-3.5" strokeWidth={2} /> : <Brackets className="w-3.5 h-3.5" />}
+          {isGroupOnly ? (
+            <Circle className="w-3.5 h-3.5" strokeWidth={2} />
+          ) : variant === 'interface' ? (
+            <span className="w-3.5 h-3.5 inline-block" aria-hidden />
+          ) : (
+            <Brackets className="w-3.5 h-3.5" />
+          )}
         </div>
 
         <div className="shrink-0 min-w-0 max-w-[min(18rem,55vw)]">
           <LabelWithPencilEdit
             segment={node.segment}
-            editable={canRenameLabel}
+            displayLabel={
+              variant === 'interface' && node.entry
+                ? getInterfaceLeafDisplayName(node.entry, projectId)
+                : undefined
+            }
+            editable={leafLabelEditable}
             onCommit={handleRenameSegment}
             editIntent={Boolean(node.entry && pendingLabelEditId === node.entry.id)}
             onConsumeEditIntent={onConsumeLabelEditIntent}
@@ -304,12 +457,22 @@ function MappingTreeRow({
               onConsumeLabelEditIntent={onConsumeLabelEditIntent}
               onInsertBackendParam={onInsertBackendParam}
               onAbandonEphemeralEntry={onAbandonEphemeralEntry}
+              projectId={projectId}
+              flowCanvasId={flowCanvasId}
+              ifacePointerPreview={ifacePointerPreview}
+              enableInterfaceReorder={enableInterfaceReorder}
+              ifaceReorderDrag={ifaceReorderDrag}
+              reorderDragSourceIdRef={reorderDragSourceIdRef}
+              onIfaceReorderHover={onIfaceReorderHover}
+              onIfaceReorderCommit={onIfaceReorderCommit}
             />
           ))}
         </div>
       )}
 
-      {showAfter && <DropPreviewLine indentPx={siblingDropLineIndentPx(depth)} />}
+      {(showAfter || showIfaceAfter || showReorderAfter) && (
+        <DropPreviewLine indentPx={siblingDropLineIndentPx(depth)} />
+      )}
     </div>
   );
 }
@@ -325,12 +488,55 @@ export function FlowMappingTree({
   onDropVariable,
   enableBackendParamDrop = false,
   showApiFields = true,
+  projectId,
+  flowCanvasId,
+  interfaceZone,
 }: FlowMappingTreeProps) {
   const tree = useMemo(() => buildMappingTree(entries), [entries]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dropIndicator, setDropIndicator] = useState<DropIndicatorState>(null);
   const [rootEdgeDrop, setRootEdgeDrop] = useState<'top' | 'bottom' | null>(null);
   const [pendingLabelEditId, setPendingLabelEditId] = useState<string | null>(null);
+  const reorderDragSourceIdRef = useRef<string | null>(null);
+  const [ifaceReorderDrag, setIfaceReorderDrag] = useState<{
+    targetPathKey: string;
+    placement: 'before' | 'after';
+  } | null>(null);
+  const [ifacePointerPreview, setIfacePointerPreview] = useState<FlowInterfacePointerPreviewDetail | null>(null);
+
+  const enableInterfaceReorder = variant === 'interface';
+
+  useEffect(() => {
+    if (!flowCanvasId || variant !== 'interface' || !interfaceZone) return;
+    const h = (e: Event) => {
+      const d = (e as CustomEvent<FlowInterfacePointerPreviewDetail | null>).detail;
+      if (d === null) {
+        setIfacePointerPreview(null);
+        return;
+      }
+      if (d.flowId !== flowCanvasId || d.zone !== interfaceZone) {
+        setIfacePointerPreview(null);
+        return;
+      }
+      setIfacePointerPreview(d);
+    };
+    window.addEventListener(FLOW_INTERFACE_POINTER_PREVIEW, h);
+    return () => window.removeEventListener(FLOW_INTERFACE_POINTER_PREVIEW, h);
+  }, [flowCanvasId, variant, interfaceZone]);
+
+  const onIfaceReorderHover = useCallback((pathKey: string, placement: 'before' | 'after') => {
+    setIfaceReorderDrag({ targetPathKey: pathKey, placement });
+  }, []);
+
+  const onIfaceReorderCommit = useCallback(
+    (fromId: string, targetId: string, placeAfter: boolean) => {
+      reorderDragSourceIdRef.current = null;
+      setIfaceReorderDrag(null);
+      const next = reorderMappingEntries(entries, fromId, targetId, placeAfter);
+      onEntriesChange(next);
+    },
+    [entries, onEntriesChange]
+  );
 
   const toggleCollapsed = useCallback((pathKey: string) => {
     setCollapsed((prev) => {
@@ -345,6 +551,8 @@ export function FlowMappingTree({
     const clear = () => {
       setDropIndicator(null);
       setRootEdgeDrop(null);
+      reorderDragSourceIdRef.current = null;
+      setIfaceReorderDrag(null);
     };
     window.addEventListener('dragend', clear);
     return () => window.removeEventListener('dragend', clear);
@@ -387,10 +595,17 @@ export function FlowMappingTree({
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      if (onDropVariable) {
+        const fromRow = parseFlowInterfaceDropFromDataTransfer(e.dataTransfer);
+        if (fromRow) {
+          onDropVariable(fromRow);
+          return;
+        }
+      }
       const label =
         e.dataTransfer.getData(DND_TYPE) || e.dataTransfer.getData('text/plain');
       if (label?.trim() && onDropVariable) {
-        onDropVariable(label.trim());
+        onDropVariable({ internalPath: label.trim() });
       }
     },
     [onDropVariable]
@@ -428,8 +643,14 @@ export function FlowMappingTree({
     [showDropZone, onDragOver, enableBackendParamDrop, variant, tree.length]
   );
 
+  const ifaceTreeRootProps =
+    variant === 'interface' && flowCanvasId
+      ? ({ 'data-flow-iface-tree-root': '', 'data-flow-canvas-id': flowCanvasId } as const)
+      : {};
+
   return (
     <div
+      {...ifaceTreeRootProps}
       className={
         showDropZone
           ? `min-h-[88px] rounded-lg p-1 transition-colors ${entries.length === 0 ? 'border-2 border-dashed border-violet-600/45 bg-violet-950/20' : 'border border-dashed border-violet-700/25 bg-slate-950/15'}`
@@ -453,7 +674,8 @@ export function FlowMappingTree({
 
       {showDropZone && entries.length === 0 && (
         <p className="text-[10px] text-violet-300/80 text-center py-6 px-2">
-          Trascina qui una variabile dalla lista sotto (internal = nome trascinato, external editabile).
+          Con questo pannello aperto: puoi rilasciare una <span className="font-semibold">riga del nodo</span> qui (la riga resta sul nodo). Oppure chip demo / Variabili. Il legame usa{' '}
+          <span className="font-semibold">variableRefId</span> quando disponibile.
         </p>
       )}
 
@@ -495,6 +717,11 @@ export function FlowMappingTree({
         </div>
       )}
 
+      {variant === 'interface' &&
+        ifacePointerPreview?.placement === 'append' &&
+        ifacePointerPreview.targetPathKey === null &&
+        tree.length === 0 && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
+
       {tree.map((n) => (
         <MappingTreeRow
           key={n.pathKey}
@@ -514,8 +741,21 @@ export function FlowMappingTree({
           onConsumeLabelEditIntent={onConsumeLabelEditIntent}
           onInsertBackendParam={onInsertBackendParam}
           onAbandonEphemeralEntry={onAbandonEphemeralEntry}
+          projectId={projectId}
+          flowCanvasId={flowCanvasId}
+          ifacePointerPreview={ifacePointerPreview}
+          enableInterfaceReorder={enableInterfaceReorder}
+          ifaceReorderDrag={ifaceReorderDrag}
+          reorderDragSourceIdRef={reorderDragSourceIdRef}
+          onIfaceReorderHover={onIfaceReorderHover}
+          onIfaceReorderCommit={onIfaceReorderCommit}
         />
       ))}
+
+      {variant === 'interface' &&
+        ifacePointerPreview?.placement === 'append' &&
+        ifacePointerPreview.targetPathKey === null &&
+        tree.length > 0 && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
 
       {enableBackendParamDrop && variant === 'backend' && tree.length > 0 && (
         <div
@@ -546,4 +786,5 @@ export function FlowMappingTree({
   );
 }
 
-export { DND_TYPE, DND_NEW_BACKEND_PARAM };
+export { DND_TYPE, DND_NEW_BACKEND_PARAM, DND_FLOWROW_VAR };
+export type { FlowInterfaceDropPayload } from './flowInterfaceDragTypes';

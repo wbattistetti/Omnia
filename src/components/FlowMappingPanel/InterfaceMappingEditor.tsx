@@ -7,8 +7,14 @@ import React, { useCallback, useMemo, useRef } from 'react';
 import { Brackets } from 'lucide-react';
 import { MappingBlock } from './MappingBlock';
 import { FlowMappingTree, DND_NEW_BACKEND_PARAM, DND_TYPE } from './FlowMappingTree';
+import type { FlowInterfaceDropPayload } from './flowInterfaceDragTypes';
 import type { FlowMappingVariant } from './types';
 import { createMappingEntry, type MappingEntry } from './mappingTypes';
+import {
+  computeInterfaceEntryLabels,
+  ensureFlowVariableBindingForInterfaceRow,
+  shouldSkipInterfaceDuplicate,
+} from './interfaceMappingLabels';
 import { useContainerWidth } from './useContainerWidth';
 
 /** Draggable chip in SEND/RECEIVE headers: drop on tree to insert a new parameter. */
@@ -62,6 +68,17 @@ export interface InterfaceMappingEditorProps {
   showLayoutHint?: boolean;
   className?: string;
   innerClassName?: string;
+  /** Enables pointer row-drag from canvas into INPUT/OUTPUT (data-* on MappingBlocks). */
+  flowDropTarget?: { flowCanvasId: string };
+  /** Subflow: single full-width bar above both columns: "Interface · {name}". */
+  interfaceFlowTitle?: string;
+  /** Flow workspace: drag the title bar to move the Interface dock to another screen edge. */
+  interfaceTitleBarDockDragHandlers?: Pick<
+    React.HTMLAttributes<HTMLElement>,
+    'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel'
+  >;
+  /** Resolves human variable names for linkedVariable when saving drops. */
+  projectId?: string;
 }
 
 export function InterfaceMappingEditor({
@@ -91,6 +108,10 @@ export function InterfaceMappingEditor({
   showLayoutHint = true,
   className = '',
   innerClassName = '',
+  flowDropTarget,
+  interfaceFlowTitle,
+  interfaceTitleBarDockDragHandlers,
+  projectId,
 }: InterfaceMappingEditorProps) {
   const interfaceInput = interfaceInputProp ?? [];
   const interfaceOutput = interfaceOutputProp ?? [];
@@ -119,30 +140,89 @@ export function InterfaceMappingEditor({
   );
 
   const onIfaceInDrop = useCallback(
-    (path: string) => {
-      if (interfaceInput.some((e) => e.internalPath === path)) return;
-      onInterfaceInputChange([...interfaceInput, createMappingEntry({ internalPath: path, externalName: path })]);
+    (payload: FlowInterfaceDropPayload) => {
+      /** Row-acquired HTML5 drag carries variableRefId; pointer row-drop is Output-only. */
+      if (payload.variableRefId) return;
+      const path = payload.internalPath.trim();
+      if (!path) return;
+      const rowText = (payload.rowLabel ?? '').trim();
+      if (flowDropTarget?.flowCanvasId) {
+        ensureFlowVariableBindingForInterfaceRow(
+          projectId,
+          flowDropTarget.flowCanvasId,
+          payload.variableRefId,
+          rowText,
+          path
+        );
+      }
+      const { externalName, linkedVariable } = computeInterfaceEntryLabels(
+        projectId,
+        payload.variableRefId,
+        rowText,
+        path
+      );
+      const newEntry = createMappingEntry({
+        internalPath: path,
+        externalName,
+        variableRefId: payload.variableRefId,
+        linkedVariable,
+      });
+      if (shouldSkipInterfaceDuplicate(interfaceInput, newEntry)) return;
+      onInterfaceInputChange([...interfaceInput, newEntry]);
     },
-    [interfaceInput, onInterfaceInputChange]
+    [projectId, flowDropTarget, interfaceInput, onInterfaceInputChange]
   );
 
   const onIfaceOutDrop = useCallback(
-    (path: string) => {
-      if (interfaceOutput.some((e) => e.internalPath === path)) return;
-      onInterfaceOutputChange([...interfaceOutput, createMappingEntry({ internalPath: path, externalName: path })]);
+    (payload: FlowInterfaceDropPayload) => {
+      const path = payload.internalPath.trim();
+      if (!path) return;
+      const rowText = (payload.rowLabel ?? '').trim();
+      if (flowDropTarget?.flowCanvasId) {
+        ensureFlowVariableBindingForInterfaceRow(
+          projectId,
+          flowDropTarget.flowCanvasId,
+          payload.variableRefId,
+          rowText,
+          path
+        );
+      }
+      const { externalName, linkedVariable } = computeInterfaceEntryLabels(
+        projectId,
+        payload.variableRefId,
+        rowText,
+        path
+      );
+      const newEntry = createMappingEntry({
+        internalPath: path,
+        externalName,
+        variableRefId: payload.variableRefId,
+        linkedVariable,
+      });
+      if (shouldSkipInterfaceDuplicate(interfaceOutput, newEntry)) return;
+      onInterfaceOutputChange([...interfaceOutput, newEntry]);
     },
-    [interfaceOutput, onInterfaceOutputChange]
+    [projectId, flowDropTarget, interfaceOutput, onInterfaceOutputChange]
   );
 
   const blocksClass = useMemo(
     () =>
       layout === 'stacked'
         ? 'flex flex-col gap-3 flex-1 min-h-0'
-        : 'flex flex-row gap-3 flex-1 min-h-0 items-start',
+        : 'flex flex-row gap-3 flex-1 min-h-0 items-stretch',
     [layout]
   );
 
   const mappingBlockRootClass = layout === 'stacked' ? 'w-full' : 'flex-1 min-w-0';
+
+  /** Columns inside the Interface shell: equal height (row) or split height (stacked). */
+  const ifaceShellColumnClass = useMemo(
+    () =>
+      layout === 'stacked'
+        ? 'w-full flex-1 min-h-0 flex flex-col min-h-0'
+        : 'flex-1 min-w-0 flex flex-col min-h-0',
+    [layout]
+  );
 
   const sendPrefix = `${listIdPrefix}-send`;
   const recvPrefix = `${listIdPrefix}-recv`;
@@ -202,7 +282,9 @@ export function InterfaceMappingEditor({
         </div>
       )}
 
-      <div className={`flex-1 min-h-0 overflow-y-auto p-3 flex flex-col ${innerClassName}`}>
+      <div
+        className={`flex-1 min-h-0 flex flex-col p-3 ${interfaceFlowTitle && variant === 'interface' ? 'overflow-hidden min-h-0' : 'overflow-y-auto'} ${innerClassName}`}
+      >
         {showLayoutHint ? (
           <p className="text-[10px] text-slate-500 mb-2">
             {layout === 'stacked' ? 'Layout impilato' : 'Layout affiancato'} · Matita solo su label (foglia) al hover ·{' '}
@@ -241,32 +323,126 @@ export function InterfaceMappingEditor({
 
         {variant === 'interface' && (
           <>
-            <div className={blocksClass}>
-              <MappingBlock accent="input" rootClassName={mappingBlockRootClass}>
-                <FlowMappingTree
-                  variant="interface"
-                  entries={interfaceInput}
-                  onEntriesChange={setInterfaceInputWrapped}
-                  apiOptions={[]}
-                  variableOptions={[]}
-                  listIdPrefix={inPrefix}
-                  showDropZone
-                  onDropVariable={onIfaceInDrop}
-                />
-              </MappingBlock>
-              <MappingBlock accent="output" rootClassName={mappingBlockRootClass}>
-                <FlowMappingTree
-                  variant="interface"
-                  entries={interfaceOutput}
-                  onEntriesChange={setInterfaceOutputWrapped}
-                  apiOptions={[]}
-                  variableOptions={[]}
-                  listIdPrefix={outPrefix}
-                  showDropZone
-                  onDropVariable={onIfaceOutDrop}
-                />
-              </MappingBlock>
-            </div>
+            {interfaceFlowTitle ? (
+              <div className="flex flex-col flex-1 min-h-0 rounded-xl border-2 border-violet-500/90 bg-[#0a0c10] shadow-inner overflow-hidden">
+                <header
+                  className={`shrink-0 px-4 py-3 bg-gradient-to-r from-fuchsia-600 via-violet-600 to-indigo-600 border-b-2 border-fuchsia-300/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_4px_24px_rgba(139,92,246,0.35)] flex items-center justify-center gap-2 ${
+                    interfaceTitleBarDockDragHandlers
+                      ? 'cursor-grab active:cursor-grabbing touch-none select-none ring-2 ring-white/20'
+                      : ''
+                  }`}
+                  title={
+                    interfaceTitleBarDockDragHandlers
+                      ? 'Trascina verso i bordi: anteprima aggancio a schermo intero'
+                      : undefined
+                  }
+                  {...interfaceTitleBarDockDragHandlers}
+                >
+                  <span className="text-sm font-semibold text-white tracking-tight select-none text-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
+                    Interface · {interfaceFlowTitle}
+                  </span>
+                </header>
+                <div className={`${blocksClass} p-2 pt-3`}>
+                  <MappingBlock
+                    accent="input"
+                    fillBodyHeight
+                    rootClassName={ifaceShellColumnClass}
+                    flowDropTarget={
+                      flowDropTarget
+                        ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'input' }
+                        : undefined
+                    }
+                  >
+                    <FlowMappingTree
+                      variant="interface"
+                      entries={interfaceInput}
+                      onEntriesChange={setInterfaceInputWrapped}
+                      apiOptions={[]}
+                      variableOptions={[]}
+                      listIdPrefix={inPrefix}
+                      showDropZone
+                      onDropVariable={onIfaceInDrop}
+                      projectId={projectId}
+                      flowCanvasId={flowDropTarget?.flowCanvasId}
+                      interfaceZone="input"
+                    />
+                  </MappingBlock>
+                  <MappingBlock
+                    accent="output"
+                    fillBodyHeight
+                    rootClassName={ifaceShellColumnClass}
+                    flowDropTarget={
+                      flowDropTarget
+                        ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'output' }
+                        : undefined
+                    }
+                  >
+                    <FlowMappingTree
+                      variant="interface"
+                      entries={interfaceOutput}
+                      onEntriesChange={setInterfaceOutputWrapped}
+                      apiOptions={[]}
+                      variableOptions={[]}
+                      listIdPrefix={outPrefix}
+                      showDropZone
+                      onDropVariable={onIfaceOutDrop}
+                      projectId={projectId}
+                      flowCanvasId={flowDropTarget?.flowCanvasId}
+                      interfaceZone="output"
+                    />
+                  </MappingBlock>
+                </div>
+              </div>
+            ) : (
+              <div className={blocksClass}>
+                <MappingBlock
+                  accent="input"
+                  rootClassName={mappingBlockRootClass}
+                  flowDropTarget={
+                    flowDropTarget
+                      ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'input' }
+                      : undefined
+                  }
+                >
+                  <FlowMappingTree
+                    variant="interface"
+                    entries={interfaceInput}
+                    onEntriesChange={setInterfaceInputWrapped}
+                    apiOptions={[]}
+                    variableOptions={[]}
+                    listIdPrefix={inPrefix}
+                    showDropZone
+                    onDropVariable={onIfaceInDrop}
+                    projectId={projectId}
+                    flowCanvasId={flowDropTarget?.flowCanvasId}
+                    interfaceZone="input"
+                  />
+                </MappingBlock>
+                <MappingBlock
+                  accent="output"
+                  rootClassName={mappingBlockRootClass}
+                  flowDropTarget={
+                    flowDropTarget
+                      ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'output' }
+                      : undefined
+                  }
+                >
+                  <FlowMappingTree
+                    variant="interface"
+                    entries={interfaceOutput}
+                    onEntriesChange={setInterfaceOutputWrapped}
+                    apiOptions={[]}
+                    variableOptions={[]}
+                    listIdPrefix={outPrefix}
+                    showDropZone
+                    onDropVariable={onIfaceOutDrop}
+                    projectId={projectId}
+                    flowCanvasId={flowDropTarget?.flowCanvasId}
+                    interfaceZone="output"
+                  />
+                </MappingBlock>
+              </div>
+            )}
             {showInterfacePalette && interfaceDragLabels.length > 0 ? (
               <div className="mt-2 rounded-lg border border-slate-700/80 bg-slate-950/50 p-2">
                 <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1.5">Variabili (demo drag)</p>

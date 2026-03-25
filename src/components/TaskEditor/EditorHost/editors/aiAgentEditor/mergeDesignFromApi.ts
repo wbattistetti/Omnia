@@ -45,6 +45,8 @@ export interface GenerateDesignApplyResult {
   sectionBases: Record<AgentStructuredSectionId, string>;
   previewByStyle: ReturnType<typeof seedPreviewByStyleFromSample>;
   initialStateTemplateJson: string;
+  /** Serialized {@link AIAgentDesignPayload.runtime_compact} for persistence and compact preview. */
+  agentRuntimeCompactJson: string;
   mergeOutputMappings: (previous: Record<string, string>) => Record<string, string>;
 }
 
@@ -55,13 +57,12 @@ export function sectionTextsFromDesignPayload(
   design: AIAgentDesignPayload
 ): Record<AgentStructuredSectionId, string> {
   return {
-    behavior_spec: design.behavior_spec.trim(),
-    positive_constraints: design.positive_constraints.trim(),
-    negative_constraints: design.negative_constraints.trim(),
+    goal: design.goal.trim(),
     operational_sequence: formatOperationalSequenceNewlines(design.operational_sequence),
-    correction_rules: design.correction_rules.trim(),
-    conversational_state:
-      typeof design.conversational_state === 'string' ? design.conversational_state.trim() : '',
+    context: typeof design.context === 'string' ? design.context.trim() : '',
+    constraints: design.constraints.trim(),
+    personality: design.personality.trim(),
+    tone: design.tone.trim(),
   };
 }
 
@@ -77,6 +78,7 @@ export function applyGenerateDesignPayload(design: AIAgentDesignPayload): Genera
     sectionBases: sectionTextsFromDesignPayload(design),
     previewByStyle: seedPreviewByStyleFromSample(design.sample_dialogue),
     initialStateTemplateJson: JSON.stringify(design.initial_state_template, null, 2),
+    agentRuntimeCompactJson: JSON.stringify(design.runtime_compact, null, 2),
     mergeOutputMappings: (previous) => extendOutputMappingsForNewSlotIds(previous, slotIds),
   };
 }

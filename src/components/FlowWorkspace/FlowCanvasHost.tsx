@@ -1,10 +1,12 @@
 import React, { useEffect, useCallback } from 'react';
-import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '../../flows/FlowStore.tsx';
+import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '@flows/FlowStore';
 import { loadFlow } from '../../flows/FlowPersistence';
 import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
 import { logFlowSaveDebug } from '../../utils/flowSaveDebug';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
+import { FlowInterfaceBottomPanel } from './FlowInterfaceBottomPanel';
+import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
 import { FlowTestProvider } from '../../context/FlowTestContext';
 import { FlowActionsProvider } from '../../context/FlowActionsContext';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
@@ -159,6 +161,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
     >
       <div className="relative flex flex-1 min-h-0 w-full h-full flex-col">
         <div className="flex-1 min-h-0">{flowEditor}</div>
+        {isFlowInterfacePanelEnabled(flowId) ? <FlowInterfaceBottomPanel flowId={flowId} /> : null}
         <FlowVariablesRail flowId={flowId} projectId={projectId} />
       </div>
     </FlowActionsProvider>

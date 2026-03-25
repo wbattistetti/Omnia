@@ -7,7 +7,7 @@ import type { EditorProps } from '../types';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { useAIProvider } from '@context/AIProviderContext';
 import { Bot, Loader2, Sparkles } from 'lucide-react';
-import { AI_AGENT_HEADER_COLOR } from './aiAgentEditor/constants';
+import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES } from './aiAgentEditor/constants';
 import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEditorDockContext';
 import { AIAgentEditorDockShell } from './aiAgentEditor/AIAgentEditorDockShell';
 import { useAIAgentEditorController } from './aiAgentEditor/useAIAgentEditorController';
@@ -26,22 +26,25 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     model,
   });
 
+  const showRightPanel =
+    c.hasAgentGeneration ||
+    c.proposedFields.length > 0 ||
+    c.agentPrompt.trim().length > 0;
+
   const { primaryAgentActionLabel } = useAIAgentToolbarController({
     task,
     hideHeader,
     onToolbarUpdate,
     hasAgentGeneration: c.hasAgentGeneration,
+    showRightPanel,
     showPrimaryAgentAction: c.showPrimaryAgentAction,
     generating: c.generating,
+    useCaseComposerBusy: c.useCaseComposerBusy,
     onPrimaryAgentAction: () => void c.handleGenerate(),
+    onGenerateUseCaseBundle: () => void c.handleGenerateUseCaseBundle(),
   });
 
   const headerColor = AI_AGENT_HEADER_COLOR;
-
-  const showRightPanel =
-    c.hasAgentGeneration ||
-    c.proposedFields.length > 0 ||
-    c.agentPrompt.trim().length > 0;
 
   const headerAction = c.showPrimaryAgentAction ? (
     <button
@@ -61,6 +64,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     designDescription: c.designDescription,
     setDesignDescription: c.setDesignDescription,
     composedRuntimeMarkdown: c.composedRuntimeMarkdown,
+    structuredDesignDirty: c.structuredDesignDirty,
     structuredSectionsState: c.structuredSectionsState,
     onApplyRevisionOps: c.applyRevisionOps,
     onApplyOtCommit: c.applyOtCommit,
@@ -88,6 +92,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onRegenerateUseCase: c.handleRegenerateUseCase,
     previewStyleId: c.previewStyleId,
     setPreviewStyleId: c.setPreviewStyleId,
+    initialStateTemplateJson: c.initialStateTemplateJson,
+    agentRuntimeCompactJson: c.agentRuntimeCompactJson,
+    previewByStyle: c.previewByStyle,
+    runtimeRulesVariant: c.runtimeRulesVariant,
+    setRuntimeRulesVariant: c.setRuntimeRulesVariant,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;
@@ -95,6 +104,22 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const hasOtSections = React.useMemo(
     () => Object.values(c.structuredSectionsState).some((s) => s.storageMode === 'ot'),
     [c.structuredSectionsState]
+  );
+
+  const renderRulesRuntimeSelect = () => (
+    <label className="flex items-center gap-2 text-xs text-slate-400 shrink-0">
+      <span>Rules runtime</span>
+      <select
+        value={c.runtimeRulesVariant}
+        onChange={(e) => c.setRuntimeRulesVariant(e.target.value as 'distilled' | 'rich')}
+        className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-slate-200 max-w-[min(220px,40vw)]"
+        title="Compile/debug: distillato = compact; ricco = Markdown + esempi dal compact."
+        aria-label="Variante rules per compile e debug"
+      >
+        <option value="distilled">Distillato (compact)</option>
+        <option value="rich">Ricco (Markdown)</option>
+      </select>
+    </label>
   );
 
   return (
@@ -123,6 +148,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
             </span>
           ) : null}
           <div className="ml-auto flex min-w-0 items-center gap-3">
+            {renderRulesRuntimeSelect()}
             <span className="text-xs text-slate-500 truncate">Task {c.instanceId}</span>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
               {headerAction}
@@ -138,13 +164,19 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
                   ) : (
                     <Sparkles size={16} aria-hidden />
                   )}
-                  Generate Usecase
+                  {LABEL_GENERATE_USE_CASES}
                 </button>
               ) : null}
             </div>
           </div>
         </div>
       )}
+
+      {hideHeader ? (
+        <div className="flex shrink-0 items-center gap-3 border-b border-slate-800 bg-slate-900/80 px-3 py-1.5">
+          {renderRulesRuntimeSelect()}
+        </div>
+      ) : null}
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <AIAgentEditorDockShell

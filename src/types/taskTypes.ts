@@ -359,6 +359,8 @@ export interface Task {
   agentPreviewByStyle?: Record<string, Array<{ role: string; content: string; designerNote?: string; logicalStepId?: string }>>;
   agentPreviewStyleId?: string;
   agentInitialStateTemplateJson?: string;
+  /** JSON string: compact runtime rules from design-time generate (`runtime_compact`). */
+  agentRuntimeCompactJson?: string;
   /** Dopo "Implement": design congelato (solo lettura fino a sblocco). */
   agentDesignFrozen?: boolean;
   /** True dopo almeno una generazione LLM riuscita (etichetta Create vs Refine). */

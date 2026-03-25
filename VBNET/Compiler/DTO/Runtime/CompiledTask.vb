@@ -342,8 +342,9 @@ Public Class CompiledAIAgentTask
     Public Property Rules As String
 
     ''' <summary>
-    ''' URL HTTP POST che accetta il payload state/user_message/rules e restituisce new_state, assistant_message, status.
-    ''' Se vuoto, si usa la variabile d'ambiente OMNIA_AI_AGENT_LLM_URL.
+    ''' URL HTTP POST che accetta il payload runtime solo <c>state</c> e <c>user_message</c> (le rules compilate
+    ''' sono iniettate in <c>state.__omnia_runtime_rules</c> dal motore). Risposta: new_state, assistant_message, status.
+    ''' Obbligatorio (non vuoto) dopo compile: il client di compile deve sempre valorizzarlo.
     ''' </summary>
     <JsonProperty("llmEndpoint")>
     Public Property LlmEndpoint As String

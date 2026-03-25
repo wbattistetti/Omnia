@@ -15,6 +15,7 @@ export default defineConfig({
       '@components': path.resolve(__dirname, 'src/components'),
       '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
       '@config': path.resolve(__dirname, 'src/config'),
+      '@flows': path.resolve(__dirname, 'src/flows'),
     },
   },
   test: {

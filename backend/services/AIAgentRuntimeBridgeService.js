@@ -1,5 +1,8 @@
-// Runtime bridge for VB.NET AIAgentTaskExecutor: POST body { state, user_message, rules }
+// Runtime bridge for VB.NET AIAgentTaskExecutor: POST body { state, user_message } only.
+// Compiled rules are carried in state.__omnia_runtime_rules (injected by the engine each turn).
 // -> LLM -> { new_state, assistant_message, status }.
+
+const RUNTIME_RULES_STATE_KEY = '__omnia_runtime_rules';
 
 const { extractJsonString } = require('./AIAgentDesignService');
 
@@ -51,8 +54,22 @@ function normalizeBody(body) {
     throw new Error('state must be a JSON object');
   }
   const user_message = typeof body.user_message === 'string' ? body.user_message : '';
-  const rules = typeof body.rules === 'string' ? body.rules : '';
+  let rules = typeof body.rules === 'string' ? body.rules : '';
+  if (!rules && state && typeof state === 'object' && !Array.isArray(state)) {
+    const embedded = state[RUNTIME_RULES_STATE_KEY];
+    if (typeof embedded === 'string') rules = embedded;
+  }
   return { state, user_message, rules };
+}
+
+/**
+ * Stato mostrato nel prompt utente (senza la copia ingombrante delle rules già in TASK_RULES).
+ * @param {object} state
+ */
+function stateForPrompt(state) {
+  if (!state || typeof state !== 'object' || Array.isArray(state)) return state;
+  const { [RUNTIME_RULES_STATE_KEY]: _omit, ...rest } = state;
+  return rest;
 }
 
 /**
@@ -93,7 +110,7 @@ ${rules}
 """
 
 CURRENT_STATE (JSON object — update this logically into new_state):
-${JSON.stringify(state)}
+${JSON.stringify(stateForPrompt(state))}
 
 USER_MESSAGE (latest user utterance, may be empty on first turn):
 """
@@ -108,7 +125,7 @@ Instructions:
 
 /**
  * One runtime step for the VB.NET AI Agent task executor.
- * @param {object} body - { state, user_message, rules, provider?, model? }
+ * @param {object} body - { state, user_message, provider?, model? } (legacy top-level rules optional)
  * @param {import('./AIProviderService')} aiProviderService
  * @returns {Promise<{ new_state: object, assistant_message: string, status: string }>}
  */

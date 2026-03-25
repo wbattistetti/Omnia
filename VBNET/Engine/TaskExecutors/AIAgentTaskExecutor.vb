@@ -22,27 +22,23 @@ End Class
 Public Class AIAgentTaskExecutor
     Inherits TaskExecutorBase
 
-    ''' <summary>
-    ''' Variabile d'ambiente per l'URL POST se il task non definisce llmEndpoint.
-    ''' Esempio backend Node Omnia: http://localhost:3100/api/runtime/ai-agent/step
-    ''' </summary>
-    Public Const EnvLlmUrl As String = "OMNIA_AI_AGENT_LLM_URL"
-
     Private Shared ReadOnly Http As New HttpClient With {.Timeout = TimeSpan.FromMinutes(2)}
+
+    ''' <summary>
+    ''' Chiave in <c>state</c> dove il runtime inserisce le rules compilate (non è un campo top-level del POST).
+    ''' </summary>
+    Public Const RuntimeRulesStateKey As String = "__omnia_runtime_rules"
 
     Public Sub New()
         MyBase.New()
     End Sub
 
     ''' <summary>
-    ''' Risolve l'URL dell'endpoint: task prima, poi variabile d'ambiente.
+    ''' URL dell'endpoint: solo quello compilato nel task (<see cref="CompiledAIAgentTask.LlmEndpoint"/>).
+    ''' Nessun fallback da variabile d'ambiente: il compile deve includere sempre un URL assoluto.
     ''' </summary>
     Public Shared Function ResolveLlmEndpoint(taskEndpoint As String) As String
-        If Not String.IsNullOrWhiteSpace(taskEndpoint) Then
-            Return taskEndpoint.Trim()
-        End If
-        Dim env = Environment.GetEnvironmentVariable(EnvLlmUrl)
-        Return If(env, "").Trim()
+        Return If(taskEndpoint, "").Trim()
     End Function
 
     ''' <summary>
@@ -58,8 +54,7 @@ Public Class AIAgentTaskExecutor
 
         If String.IsNullOrWhiteSpace(llmEndpoint) Then
             Throw New InvalidOperationException(
-                "AI Agent LLM endpoint is not configured. Set CompiledAIAgentTask.llmEndpoint or environment variable " &
-                EnvLlmUrl & ".")
+                "AI Agent LLM endpoint is not configured. CompiledAIAgentTask.llmEndpoint must be a non-empty absolute URL.")
         End If
 
         If Not Uri.TryCreate(llmEndpoint, UriKind.Absolute, Nothing) Then
@@ -73,10 +68,15 @@ Public Class AIAgentTaskExecutor
             stateObj = JToken.Parse(stateJson)
         End If
 
+        If stateObj.Type <> JTokenType.Object Then
+            stateObj = New JObject()
+        End If
+        Dim stateJo = CType(stateObj, JObject)
+        stateJo(RuntimeRulesStateKey) = If(rules, "")
+
         Dim payload As New JObject From {
             {"state", stateObj},
-            {"user_message", If(userInput, "")},
-            {"rules", If(rules, "")}
+            {"user_message", If(userInput, "")}
         }
 
         Dim body = payload.ToString(Formatting.None)

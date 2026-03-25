@@ -127,15 +127,15 @@ export default function IntentEditorInlineEditor({
     }
 
     const projectId = resolveCurrentProjectId();
-    const slotId = row.meta?.semanticSlotRefId;
-    if (projectId && slotId) {
+    const variableRefId = row.meta?.variableRefId;
+    if (projectId && variableRefId) {
       const rawLabel = (task as { label?: string } | undefined)?.label ?? row.text ?? '';
       const flowForSlot =
         String((task as any)?.parameters?.flowId ?? (task as any)?.flowId ?? '').trim() ||
         getActiveFlowCanvasId();
       variableCreationService.ensureManualVariableWithId(
         projectId,
-        slotId,
+        variableRefId,
         variableCreationService.normalizeTaskLabel(rawLabel),
         { scope: 'flow', scopeFlowId: flowForSlot }
       );

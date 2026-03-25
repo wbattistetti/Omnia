@@ -19,7 +19,7 @@ describe('dockGroupHasDesignAnchor', () => {
   });
 
   it('is false for a lone structured section tab', () => {
-    expect(dockGroupHasDesignAnchor([{ id: 'behavior_spec' }])).toBe(false);
+    expect(dockGroupHasDesignAnchor([{ id: 'goal' }])).toBe(false);
   });
 });
 

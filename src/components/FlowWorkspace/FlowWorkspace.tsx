@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { FlowWorkspaceProvider, useFlowWorkspace, useFlowActions } from '../../flows/FlowStore.tsx';
+import { FlowWorkspaceProvider, useFlowWorkspace, useFlowActions } from '@flows/FlowStore';
 import { setActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
 import { FlowTabBar } from './FlowTabBar';
 import { loadFlow, saveFlow } from '../../flows/FlowPersistence';
@@ -7,6 +7,8 @@ import { shouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
 import { dlog } from '../../utils/debug';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
+import { FlowInterfaceBottomPanel } from './FlowInterfaceBottomPanel';
+import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
 
 // Adapter: renderizza l'attuale FlowEditor per activeFlowId con nodes/edges del workspace
 const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
@@ -99,6 +101,9 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
             }}
           />
         </div>
+        {isFlowInterfacePanelEnabled(activeFlowId) ? (
+          <FlowInterfaceBottomPanel flowId={activeFlowId} projectId={projectId} />
+        ) : null}
         <FlowVariablesRail flowId={activeFlowId} projectId={projectId} />
       </div>
     </div>

@@ -2168,6 +2168,7 @@ const AI_AGENT_INSTANCE_FIELD_KEYS = [
   'agentPreviewByStyle',
   'agentPreviewStyleId',
   'agentInitialStateTemplateJson',
+  'agentRuntimeCompactJson',
   'agentDesignFrozen',
   'agentDesignHasGeneration',
   'agentLogicalStepsJson',
@@ -6187,9 +6188,9 @@ app.post('/step2-with-provider', async (req, res) => {
 });
 
 /**
- * VB.NET AIAgentTaskExecutor bridge: accepts { state, user_message, rules } and returns
- * { new_state, assistant_message, status }. Set OMNIA_AI_AGENT_LLM_URL to this server, e.g.
- * http://localhost:<PORT>/api/runtime/ai-agent/step
+ * VB.NET AIAgentTaskExecutor bridge: accepts { state, user_message } (rules in state.__omnia_runtime_rules)
+ * and returns { new_state, assistant_message, status }. URL must be set on CompiledAIAgentTask.llmEndpoint (compile default).
+ * Example: http://localhost:<PORT>/api/runtime/ai-agent/step
  * Optional: OMNIA_AI_AGENT_RUNTIME_PROVIDER=groq|openai, OMNIA_AI_AGENT_RUNTIME_MODEL=<model id>
  */
 app.post('/api/runtime/ai-agent/step', async (req, res) => {

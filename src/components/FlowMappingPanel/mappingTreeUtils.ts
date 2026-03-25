@@ -99,3 +99,47 @@ export function renameLeafSegment(pathKey: string, newSegment: string): string {
   if (!trimmed) return pathKey;
   return parent ? `${parent}.${trimmed}` : trimmed;
 }
+
+/** Insert a new Interface mapping row at a position relative to an existing leaf path. */
+export function insertInterfaceEntryAt(
+  entries: MappingEntry[],
+  entry: MappingEntry,
+  targetPathKey: string | null,
+  placement: 'before' | 'after' | 'append'
+): MappingEntry[] {
+  if (placement === 'append') {
+    return [...entries, entry];
+  }
+  if (!targetPathKey) {
+    return [...entries, entry];
+  }
+  const idx = entries.findIndex((e) => e.internalPath === targetPathKey);
+  if (idx < 0) return [...entries, entry];
+  const insertAt = placement === 'before' ? idx : idx + 1;
+  const next = [...entries];
+  next.splice(insertAt, 0, entry);
+  return next;
+}
+
+/** Reorder two sibling entries (same parent path prefix). */
+export function reorderMappingEntries(
+  entries: MappingEntry[],
+  dragId: string,
+  targetId: string,
+  placeAfter: boolean
+): MappingEntry[] {
+  const dragE = entries.find((e) => e.id === dragId);
+  const targetE = entries.find((e) => e.id === targetId);
+  if (!dragE || !targetE) return entries;
+  if (parentPathKey(dragE.internalPath) !== parentPathKey(targetE.internalPath)) return entries;
+  const fromIdx = entries.findIndex((e) => e.id === dragId);
+  const toIdx = entries.findIndex((e) => e.id === targetId);
+  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return entries;
+  const next = [...entries];
+  const [item] = next.splice(fromIdx, 1);
+  let insertAt = toIdx;
+  if (fromIdx < toIdx) insertAt -= 1;
+  if (placeAfter) insertAt += 1;
+  next.splice(insertAt, 0, item);
+  return next;
+}

@@ -24,6 +24,8 @@ export default defineConfig({
       '@features': path.resolve(__dirname, 'src/features'),
       '@config': path.resolve(__dirname, 'config'),
       '@domain': path.resolve(__dirname, 'src/domain'),
+      /** Single resolution path for flow workspace context (avoids duplicate-module HMR bugs). */
+      '@flows': path.resolve(__dirname, 'src/flows'),
       '@taskEditor': path.resolve(__dirname, 'src/components/TaskEditor'),
       '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
       '@TaskBuilderAIWizard': path.resolve(__dirname, 'TaskBuilderAIWizard'),
@@ -46,6 +48,7 @@ export default defineConfig({
         '@features': path.resolve(__dirname, 'src/features'),
         '@config': path.resolve(__dirname, 'config'),
         '@domain': path.resolve(__dirname, 'src/domain'),
+        '@flows': path.resolve(__dirname, 'src/flows'),
         '@taskEditor': path.resolve(__dirname, 'src/components/TaskEditor'),
         '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
         '@TaskBuilderAIWizard': path.resolve(__dirname, 'TaskBuilderAIWizard'),

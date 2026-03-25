@@ -12,6 +12,8 @@ export interface MappingEntry {
   linkedVariable: string;
   /** Interface: exposed parameter name (defaults to internal when dropped). */
   externalName: string;
+  /** Promised variable GUID when wired from a flow row or wizard (stable for runtime). */
+  variableRefId?: string;
 }
 
 export function createMappingEntry(partial: Partial<MappingEntry> & Pick<MappingEntry, 'internalPath'>): MappingEntry {
@@ -19,11 +21,13 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
     typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
       : `me_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const vid = partial.variableRefId?.trim();
   return {
     id,
     internalPath: partial.internalPath.trim(),
     apiField: partial.apiField ?? '',
-    linkedVariable: partial.linkedVariable ?? '',
+    linkedVariable: partial.linkedVariable?.trim() ?? (vid ? vid : ''),
     externalName: partial.externalName ?? partial.internalPath.trim(),
+    ...(vid ? { variableRefId: vid } : {}),
   };
 }

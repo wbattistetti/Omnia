@@ -4,6 +4,8 @@
 
 export const LABEL_CREATE_AGENT = 'Create Agent';
 export const LABEL_REFINE_AGENT = 'Refine comportamento';
+/** Toolbar / empty-state CTA for IA scenario generation. */
+export const LABEL_GENERATE_USE_CASES = 'Genera use case';
 
 /** Accent used in header, toolbar, and borders. */
 export const AI_AGENT_HEADER_COLOR = '#a78bfa';

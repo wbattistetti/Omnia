@@ -15,18 +15,28 @@ const minimalDesign = (): AIAgentDesignPayload => ({
     { field_name: 'user_name', label: 'Nome', type: 'text', required: true },
   ],
   initial_state_template: { task_completed: false },
-  behavior_spec: 'Main behavior.',
-  positive_constraints: 'Do X.',
-  negative_constraints: 'Avoid Y.',
-  operational_sequence: 'Step 1 then 2.',
-  correction_rules: 'On fix, reconfirm.',
-  conversational_state: '',
-  agent_prompt: '## Behavior Spec\n\nMain behavior.',
+  goal: 'Collect and confirm user name.',
+  operational_sequence: 'Greet, ask name, confirm.',
+  context: '',
+  constraints: 'Must:\n\nAsk before saving.\n\nMust not:\n\nStore without consent.',
+  personality: 'Helpful assistant.',
+  tone: 'Tone: neutral\n\nBrief and clear.',
+  agent_prompt: '### Goal\n\nCollect...',
   sample_dialogue: [
     { role: 'assistant', content: 'Hi' },
     { role: 'user', content: 'Hello' },
   ],
   design_notes: 'note',
+  runtime_compact: {
+    behavior_compact: 'Collect user name and confirm.',
+    constraints_compact: 'Must ask before storing.',
+    sequence_compact: 'Greet ask confirm save.',
+    corrections_compact: 'On change reconfirm.',
+    examples_compact: [
+      { role: 'assistant', content: 'Hi there' },
+      { role: 'user', content: 'Hello' },
+    ],
+  },
 });
 
 describe('mergeDesignFromApi', () => {
@@ -50,5 +60,10 @@ describe('mergeDesignFromApi', () => {
     const merged = applied.mergeOutputMappings({ other: 'y' });
     expect(merged.other).toBe('y');
     expect(merged[slotId]).toBe('');
+  });
+
+  it('applyGenerateDesignPayload serializes runtime_compact for persistence', () => {
+    const applied = applyGenerateDesignPayload(minimalDesign());
+    expect(JSON.parse(applied.agentRuntimeCompactJson).behavior_compact).toContain('Collect');
   });
 });

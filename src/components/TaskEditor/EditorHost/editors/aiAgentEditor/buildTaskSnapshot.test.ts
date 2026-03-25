@@ -23,6 +23,7 @@ function baseSnapshot(over: Partial<AIAgentTaskSnapshot>): AIAgentTaskSnapshot {
     agentProposedFields: [],
     agentSampleDialogue: [],
     agentInitialStateTemplateJson: '{}',
+    agentRuntimeCompactJson: '',
     agentDesignHasGeneration: undefined,
     agentLogicalStepsJson: '',
     agentUseCasesJson: '',

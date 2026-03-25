@@ -4,6 +4,11 @@
 
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { AGENT_STRUCTURED_SECTION_IDS } from './agentStructuredSectionIds';
+import {
+  DEFAULT_CONSTRAINTS_SECTION_TEXT,
+  DEFAULT_PERSONALITY_SECTION_TEXT,
+  DEFAULT_TONE_SECTION_TEXT,
+} from './agentStructuredSectionDefaults';
 import type { InsertOp } from './effectiveFromRevisionMask';
 import type { OtOp } from './otTypes';
 import { applyOperations } from './otTextDocument';
@@ -67,23 +72,128 @@ function normalizeV2Snapshot(row: PersistedSectionSnapshotV2): PersistedSectionS
   return { version: 2, revisionBase, opLog, currentText };
 }
 
+function extractSnapshotPlainText(row: unknown): string {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return '';
+  const r = row as Record<string, unknown>;
+  if (r.version === 2) {
+    return typeof r.currentText === 'string' ? r.currentText : '';
+  }
+  if (typeof r.base === 'string') return r.base;
+  return '';
+}
+
 /**
- * When no persisted structured JSON exists, map legacy flat agentPrompt into behavior_spec only.
+ * When no persisted structured JSON exists, map legacy flat agentPrompt into goal;
+ * seed other sections with templates.
  */
 export function migrateLegacyAgentPromptToPersisted(agentPrompt: string): PersistedStructuredSections {
   const main = agentPrompt.trim();
   const baseMain = main.length > 0 ? main : LEGACY_PLACEHOLDER;
   const out = {} as PersistedStructuredSections;
   for (const id of AGENT_STRUCTURED_SECTION_IDS) {
-    if (id === 'behavior_spec') {
+    if (id === 'goal') {
       out[id] = emptySnapshot(baseMain);
-    } else if (id === 'conversational_state') {
+    } else if (id === 'context') {
       out[id] = emptySnapshot('');
+    } else if (id === 'constraints') {
+      out[id] = emptySnapshot(DEFAULT_CONSTRAINTS_SECTION_TEXT);
+    } else if (id === 'personality') {
+      out[id] = emptySnapshot(DEFAULT_PERSONALITY_SECTION_TEXT);
+    } else if (id === 'tone') {
+      out[id] = emptySnapshot(DEFAULT_TONE_SECTION_TEXT);
     } else {
       out[id] = emptySnapshot(LEGACY_PLACEHOLDER);
     }
   }
   return out;
+}
+
+/** Strips leading Tone: line from legacy combined personality block. */
+function stripLeadingToneBlock(text: string): string {
+  const lines = String(text).split(/\r?\n/);
+  const first = lines[0]?.trim() ?? '';
+  if (/^Tone:\s*[a-z0-9_]+\s*$/i.test(first)) {
+    return lines.slice(1).join('\n').trim();
+  }
+  return text.trim();
+}
+
+/**
+ * Renames legacy section keys and merges into the 6-section layout (goal → tone).
+ */
+function migratePersistedStructuredSectionsRoot(parsed: Record<string, unknown>): Record<string, unknown> {
+  const hasV6 =
+    'goal' in parsed &&
+    'tone' in parsed &&
+    'context' in parsed &&
+    'constraints' in parsed &&
+    'operational_sequence' in parsed &&
+    'personality' in parsed;
+  if (hasV6) {
+    const p = { ...parsed };
+    delete p.task_scope;
+    delete p.behavior_spec;
+    delete p.positive_constraints;
+    delete p.negative_constraints;
+    delete p.constraints_must;
+    delete p.constraints_forbidden;
+    delete p.correction_rules;
+    delete p.conversational_state;
+    return p;
+  }
+
+  const goalText =
+    extractSnapshotPlainText(parsed.goal) ||
+    extractSnapshotPlainText(parsed.task_scope) ||
+    extractSnapshotPlainText(parsed.behavior_spec) ||
+    LEGACY_PLACEHOLDER;
+
+  let opText = extractSnapshotPlainText(parsed.operational_sequence);
+  const corrText = extractSnapshotPlainText(parsed.correction_rules);
+  if (corrText) {
+    opText = opText
+      ? `${opText}\n\n---\n\nCorrections / recovery:\n${corrText}`
+      : `Corrections / recovery:\n${corrText}`;
+  }
+  if (!opText) opText = LEGACY_PLACEHOLDER;
+
+  const ctxText =
+    extractSnapshotPlainText(parsed.context) || extractSnapshotPlainText(parsed.conversational_state) || '';
+
+  let consText = extractSnapshotPlainText(parsed.constraints);
+  if (!consText) {
+    const must = extractSnapshotPlainText(parsed.constraints_must);
+    const not = extractSnapshotPlainText(parsed.constraints_forbidden);
+    if (must || not) {
+      consText = `Must:\n\n${must || LEGACY_PLACEHOLDER}\n\nMust not:\n\n${not || LEGACY_PLACEHOLDER}`;
+    } else {
+      consText = DEFAULT_CONSTRAINTS_SECTION_TEXT;
+    }
+  }
+
+  let persText = extractSnapshotPlainText(parsed.personality);
+  let toneText = extractSnapshotPlainText(parsed.tone);
+
+  if (!toneText && persText) {
+    const firstLine = persText.split(/\r?\n/).find((l) => l.trim().length > 0)?.trim() ?? '';
+    if (/^Tone:\s*[a-z0-9_]+\s*$/i.test(firstLine)) {
+      toneText = persText.trim();
+      persText = stripLeadingToneBlock(persText) || DEFAULT_PERSONALITY_SECTION_TEXT;
+    } else {
+      toneText = DEFAULT_TONE_SECTION_TEXT;
+    }
+  }
+  if (!persText) persText = DEFAULT_PERSONALITY_SECTION_TEXT;
+  if (!toneText) toneText = DEFAULT_TONE_SECTION_TEXT;
+
+  return {
+    goal: emptySnapshot(goalText),
+    operational_sequence: emptySnapshot(opText),
+    context: emptySnapshot(ctxText),
+    constraints: emptySnapshot(consText),
+    personality: emptySnapshot(persText),
+    tone: emptySnapshot(toneText),
+  };
 }
 
 /**
@@ -97,12 +207,22 @@ export function parsePersistedStructuredSectionsJson(
     return migrateLegacyAgentPromptToPersisted(fallbackAgentPrompt);
   }
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = migratePersistedStructuredSectionsRoot(JSON.parse(raw) as Record<string, unknown>);
     const out = {} as PersistedStructuredSections;
     for (const id of AGENT_STRUCTURED_SECTION_IDS) {
       const row = parsed[id];
       if (!row || typeof row !== 'object' || Array.isArray(row)) {
-        out[id] = emptySnapshot(id === 'conversational_state' ? '' : LEGACY_PLACEHOLDER);
+        if (id === 'context') {
+          out[id] = emptySnapshot('');
+        } else if (id === 'personality') {
+          out[id] = emptySnapshot(DEFAULT_PERSONALITY_SECTION_TEXT);
+        } else if (id === 'tone') {
+          out[id] = emptySnapshot(DEFAULT_TONE_SECTION_TEXT);
+        } else if (id === 'constraints') {
+          out[id] = emptySnapshot(DEFAULT_CONSTRAINTS_SECTION_TEXT);
+        } else {
+          out[id] = emptySnapshot(LEGACY_PLACEHOLDER);
+        }
         continue;
       }
       const r = row as Record<string, unknown>;

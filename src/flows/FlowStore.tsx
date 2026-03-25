@@ -10,6 +10,7 @@ type ApplyFlowLoadPayload<NodeT, EdgeT> = {
 type Action<NodeT = any, EdgeT = any> =
   | { type: 'UPSERT_FLOW'; flow: Flow<NodeT, EdgeT> }
   | { type: 'UPDATE_FLOW_GRAPH'; flowId: FlowId; updater: (nodes: NodeT[], edges: EdgeT[]) => { nodes: NodeT[]; edges: EdgeT[] } }
+  | { type: 'UPDATE_FLOW_META'; flowId: FlowId; patch: Record<string, unknown> }
   | { type: 'APPLY_FLOW_LOAD_RESULT'; flowId: FlowId; payload: ApplyFlowLoadPayload<NodeT, EdgeT> }
   | { type: 'MARK_FLOWS_PERSISTED'; flowIds: FlowId[] }
   | { type: 'OPEN_FLOW'; flowId: FlowId }
@@ -45,6 +46,17 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
         ...curr,
         nodes: next.nodes as any,
         edges: next.edges as any,
+        hasLocalChanges: true,
+      } as Flow<NodeT, EdgeT>;
+      return { ...state, flows: { ...state.flows, [action.flowId]: flow } };
+    }
+    case 'UPDATE_FLOW_META': {
+      const curr = state.flows[action.flowId];
+      if (!curr) return state;
+      const prevMeta = (curr.meta && typeof curr.meta === 'object' ? curr.meta : {}) as Record<string, unknown>;
+      const flow = {
+        ...curr,
+        meta: { ...prevMeta, ...action.patch } as Flow<NodeT, EdgeT>['meta'],
         hasLocalChanges: true,
       } as Flow<NodeT, EdgeT>;
       return { ...state, flows: { ...state.flows, [action.flowId]: flow } };
@@ -152,6 +164,8 @@ export function useFlowActions<NodeT = any, EdgeT = any>() {
       upsertFlow: (flow: Flow<NodeT, EdgeT>) => dispatch({ type: 'UPSERT_FLOW', flow } as any),
       updateFlowGraph: (flowId: FlowId, updater: (nodes: NodeT[], edges: EdgeT[]) => { nodes: NodeT[]; edges: EdgeT[] }) =>
         dispatch({ type: 'UPDATE_FLOW_GRAPH', flowId, updater } as any),
+      updateFlowMeta: (flowId: FlowId, patch: Record<string, unknown>) =>
+        dispatch({ type: 'UPDATE_FLOW_META', flowId, patch } as any),
       applyFlowLoadResult: (flowId: FlowId, payload: ApplyFlowLoadPayload<NodeT, EdgeT>) =>
         dispatch({ type: 'APPLY_FLOW_LOAD_RESULT', flowId, payload } as any),
       markFlowsPersisted: (flowIds: FlowId[]) => dispatch({ type: 'MARK_FLOWS_PERSISTED', flowIds } as any),

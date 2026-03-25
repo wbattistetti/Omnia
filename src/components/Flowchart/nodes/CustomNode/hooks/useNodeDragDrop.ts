@@ -3,6 +3,15 @@ import { NodeRowData } from '../../../../../types/project';
 import { useRowRegistry } from '../../../rows/NodeRow/hooks/useRowRegistry';
 import { useFlowActions } from '../../../../../context/FlowActionsContext';
 import { taskRepository } from '../../../../../services/TaskRepository';
+import { generateId } from '../../../../../utils/idGenerator';
+import {
+  FLOW_INTERFACE_POINTER_PREVIEW,
+  FLOW_INTERFACE_ROW_POINTER_DROP,
+  computeInterfacePointerPreview,
+  stableInterfacePathForVariable,
+  type FlowInterfacePointerPreviewDetail,
+  type FlowInterfaceRowPointerDropDetail,
+} from '../../../../FlowMappingPanel/flowInterfaceDragTypes';
 
 interface UseNodeDragDropProps {
     nodeRows: NodeRowData[];
@@ -10,6 +19,8 @@ interface UseNodeDragDropProps {
     data: any;
     rowsContainerRef: React.RefObject<HTMLElement>;
     nodeId: string;
+    /** Current flow canvas id — enables drop on Interface INPUT/OUTPUT without removing the row. */
+    flowCanvasId?: string;
 }
 
 /**
@@ -21,7 +32,8 @@ export function useNodeDragDrop({
     setNodeRows,
     data,
     rowsContainerRef,
-    nodeId
+    nodeId,
+    flowCanvasId,
 }: UseNodeDragDropProps) {
     // Context for node operations (with fallback to legacy)
     const flowActions = useFlowActions();
@@ -31,6 +43,7 @@ export function useNodeDragDrop({
 
     // Ref per salvare la posizione iniziale della riga (per verificare se è stata spostata)
     const initialRowPositionRef = useRef<{ index: number; top: number } | null>(null);
+    const lastIfacePreviewKeyRef = useRef<string | null>(null);
 
     // Stato per il drag personalizzato
     const [isRowDragging, setIsRowDragging] = useState(false);
@@ -139,6 +152,7 @@ export function useNodeDragDrop({
         setDragElement(clone);
         setDraggedRowData(rowData || null);
         setTargetNodeId(null);
+        lastIfacePreviewKeyRef.current = null;
 
         // 6. Cursor
         document.body.style.cursor = 'grabbing';
@@ -205,11 +219,33 @@ export function useNodeDragDrop({
         } else {
             setTargetNodeId(null);
         }
-    }, [isRowDragging, dragElement, nodeId, rowsContainerRef]);
+
+        if (flowCanvasId) {
+            const pv = computeInterfacePointerPreview(e.clientX, e.clientY, flowCanvasId);
+            const key = pv ? `${pv.flowId}|${pv.zone}|${pv.targetPathKey}|${pv.placement}` : 'null';
+            if (key !== lastIfacePreviewKeyRef.current) {
+                lastIfacePreviewKeyRef.current = key;
+                window.dispatchEvent(
+                    new CustomEvent<FlowInterfacePointerPreviewDetail | null>(FLOW_INTERFACE_POINTER_PREVIEW, {
+                        detail: pv,
+                    })
+                );
+            }
+        }
+    }, [isRowDragging, dragElement, nodeId, rowsContainerRef, flowCanvasId]);
 
     // Gestione rilascio del mouse - VERSIONE SEMPLIFICATA
     const handleMouseUp = useCallback(() => {
         if (!isRowDragging || !draggedRowId || draggedRowIndex === null) return;
+
+        if (flowCanvasId) {
+            lastIfacePreviewKeyRef.current = null;
+            window.dispatchEvent(
+                new CustomEvent<FlowInterfacePointerPreviewDetail | null>(FLOW_INTERFACE_POINTER_PREVIEW, {
+                    detail: null,
+                })
+            );
+        }
 
         // Drag ended
 
@@ -324,6 +360,83 @@ export function useNodeDragDrop({
             }
 
         } else if (!targetNodeId) {
+            // Drop on Flow Interface: row-acquired pointer drop is Output-only; Input cancels without canvas spawn.
+            let handledFlowInterface = false;
+            if (flowCanvasId) {
+                const el = document.elementFromPoint(mousePosition.x, mousePosition.y);
+                const dropRoot = el?.closest('[data-flow-interface-zone][data-flow-canvas-id]') as HTMLElement | null;
+                if (dropRoot) {
+                    const zone = dropRoot.getAttribute('data-flow-interface-zone') as 'input' | 'output' | null;
+                    const fid = dropRoot.getAttribute('data-flow-canvas-id');
+                    if (fid === flowCanvasId && zone) {
+                        if (zone === 'input') {
+                            handledFlowInterface = true;
+                        } else if (zone === 'output') {
+                            const rowDataToMove = draggedRowData || nodeRows.find(row => row.id === draggedRowId);
+                            if (rowDataToMove) {
+                                let variableRefId = rowDataToMove.meta?.variableRefId?.trim();
+                                if (!variableRefId) {
+                                    variableRefId = generateId();
+                                    const nextRows = nodeRows.map((r) =>
+                                        r.id === rowDataToMove.id
+                                            ? { ...r, meta: { ...r.meta, variableRefId } }
+                                            : r
+                                    );
+                                    setNodeRows(nextRows);
+                                    if (flowActions?.updateNode) {
+                                        flowActions.updateNode(nodeId, { rows: nextRows });
+                                    } else if (data.onUpdate) {
+                                        data.onUpdate({ rows: nextRows });
+                                    }
+                                }
+                                const rowLabel = (rowDataToMove.text ?? '').trim() || 'field';
+                                const internalPath = stableInterfacePathForVariable(variableRefId);
+                                const pv = computeInterfacePointerPreview(mousePosition.x, mousePosition.y, flowCanvasId);
+                                const insertTargetPathKey = pv?.targetPathKey ?? null;
+                                const insertPlacement = pv?.placement ?? 'append';
+                                const detail: FlowInterfaceRowPointerDropDetail = {
+                                    flowId: fid,
+                                    zone: 'output',
+                                    internalPath,
+                                    variableRefId,
+                                    rowId: rowDataToMove.id,
+                                    fromNodeId: nodeId,
+                                    rowLabel,
+                                    insertTargetPathKey,
+                                    insertPlacement,
+                                };
+                                window.dispatchEvent(
+                                    new CustomEvent<FlowInterfaceRowPointerDropDetail>(FLOW_INTERFACE_ROW_POINTER_DROP, {
+                                        detail,
+                                    })
+                                );
+                            }
+                            handledFlowInterface = true;
+                        }
+                    }
+                }
+            }
+
+            if (handledFlowInterface) {
+                if (dragElement) {
+                    document.body.removeChild(dragElement);
+                }
+                const originalRowComponent = getRowComponent(draggedRowId);
+                if (originalRowComponent) {
+                    originalRowComponent.normal();
+                }
+                setIsRowDragging(false);
+                setDraggedRowId(null);
+                setDraggedRowIndex(null);
+                setDragElement(null);
+                setDraggedRowData(null);
+                setTargetNodeId(null);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                initialRowPositionRef.current = null;
+                return;
+            }
+
             // ✅ CANVAS DROP: Crea un nuovo nodo sul canvas con la riga trascinata
             const rowDataToMove = draggedRowData || nodeRows.find(row => row.id === draggedRowId);
 
@@ -485,7 +598,7 @@ export function useNodeDragDrop({
 
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-    }, [isRowDragging, draggedRowId, draggedRowIndex, mousePosition, nodeRows, setNodeRows, data, dragElement, rowsContainerRef, targetNodeId, nodeId, draggedRowData, getRowComponent]);
+    }, [isRowDragging, draggedRowId, draggedRowIndex, mousePosition, nodeRows, setNodeRows, data, dragElement, rowsContainerRef, targetNodeId, nodeId, draggedRowData, getRowComponent, flowCanvasId, flowActions]);
 
     // Event listeners
     useEffect(() => {
