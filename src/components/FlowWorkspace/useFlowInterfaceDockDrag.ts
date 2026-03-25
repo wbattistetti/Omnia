@@ -8,8 +8,26 @@ import type { FlowInterfaceDockRegion } from './flowInterfaceDockStorage';
 
 const MOVE_THRESHOLD_PX = 14;
 
-/** Chooses which screen edge is closest (for dock commit on pointer release). Exported for tests. */
-export function nearestDockRegionForPoint(clientX: number, clientY: number): FlowInterfaceDockRegion {
+/**
+ * Chooses which edge is closest for dock commit / preview.
+ * When `flowBounds` is set (flow canvas rect from getBoundingClientRect), uses that inset; otherwise viewport.
+ */
+export function nearestDockRegionForPoint(
+  clientX: number,
+  clientY: number,
+  flowBounds?: DOMRect | null
+): FlowInterfaceDockRegion {
+  if (flowBounds && flowBounds.width > 1 && flowBounds.height > 1) {
+    const dTop = clientY - flowBounds.top;
+    const dBot = flowBounds.bottom - clientY;
+    const dLeft = clientX - flowBounds.left;
+    const dRight = flowBounds.right - clientX;
+    const m = Math.min(dTop, dBot, dLeft, dRight);
+    if (m === dTop) return 'top';
+    if (m === dBot) return 'bottom';
+    if (m === dLeft) return 'left';
+    return 'right';
+  }
   const w = window.innerWidth;
   const h = window.innerHeight;
   const dTop = clientY;
@@ -23,7 +41,10 @@ export function nearestDockRegionForPoint(clientX: number, clientY: number): Flo
   return 'right';
 }
 
-export function useFlowInterfaceDockDrag(onCommit: (region: FlowInterfaceDockRegion) => void) {
+export function useFlowInterfaceDockDrag(
+  onCommit: (region: FlowInterfaceDockRegion) => void,
+  getFlowBounds?: () => DOMRect | null
+) {
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const activeRef = useRef(false);
   const [dockDragPreview, setDockDragPreview] = useState<FlowInterfaceDockRegion | null>(null);
@@ -48,9 +69,10 @@ export function useFlowInterfaceDockDrag(onCommit: (region: FlowInterfaceDockReg
     const dy = e.clientY - s.y;
     if (dx * dx + dy * dy >= MOVE_THRESHOLD_PX * MOVE_THRESHOLD_PX) {
       activeRef.current = true;
-      setDockDragPreview(nearestDockRegionForPoint(e.clientX, e.clientY));
+      const bounds = getFlowBounds?.() ?? null;
+      setDockDragPreview(nearestDockRegionForPoint(e.clientX, e.clientY, bounds));
     }
-  }, []);
+  }, [getFlowBounds]);
 
   const end = useCallback(
     (e: React.PointerEvent) => {
@@ -65,9 +87,10 @@ export function useFlowInterfaceDockDrag(onCommit: (region: FlowInterfaceDockReg
       if (!s) return;
       if (!activeRef.current) return;
       activeRef.current = false;
-      onCommit(nearestDockRegionForPoint(e.clientX, e.clientY));
+      const bounds = getFlowBounds?.() ?? null;
+      onCommit(nearestDockRegionForPoint(e.clientX, e.clientY, bounds));
     },
-    [onCommit]
+    [onCommit, getFlowBounds]
   );
 
   const onPointerUp = useCallback(

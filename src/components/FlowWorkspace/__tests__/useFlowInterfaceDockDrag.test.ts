@@ -25,4 +25,12 @@ describe('nearestDockRegionForPoint', () => {
     vi.stubGlobal('innerHeight', 600);
     expect(nearestDockRegionForPoint(780, 300)).toBe('right');
   });
+
+  it('uses flow bounds inset when provided (not full window)', () => {
+    const bounds = new DOMRect(200, 100, 400, 500);
+    expect(nearestDockRegionForPoint(210, 110, bounds)).toBe('top');
+    expect(nearestDockRegionForPoint(400, 598, bounds)).toBe('bottom');
+    expect(nearestDockRegionForPoint(205, 300, bounds)).toBe('left');
+    expect(nearestDockRegionForPoint(590, 300, bounds)).toBe('right');
+  });
 });

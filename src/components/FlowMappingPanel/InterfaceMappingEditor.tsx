@@ -77,6 +77,8 @@ export interface InterfaceMappingEditorProps {
     React.HTMLAttributes<HTMLElement>,
     'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel'
   >;
+  /** Flow workspace: e.g. close button on the main “Interface · …” header (right). */
+  interfaceShellHeaderExtra?: React.ReactNode;
   /** Resolves human variable names for linkedVariable when saving drops. */
   projectId?: string;
 }
@@ -111,6 +113,7 @@ export function InterfaceMappingEditor({
   flowDropTarget,
   interfaceFlowTitle,
   interfaceTitleBarDockDragHandlers,
+  interfaceShellHeaderExtra,
   projectId,
 }: InterfaceMappingEditorProps) {
   const interfaceInput = interfaceInputProp ?? [];
@@ -325,22 +328,27 @@ export function InterfaceMappingEditor({
           <>
             {interfaceFlowTitle ? (
               <div className="flex flex-col flex-1 min-h-0 rounded-xl border-2 border-violet-500/90 bg-[#0a0c10] shadow-inner overflow-hidden">
-                <header
-                  className={`shrink-0 px-4 py-3 bg-gradient-to-r from-fuchsia-600 via-violet-600 to-indigo-600 border-b-2 border-fuchsia-300/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_4px_24px_rgba(139,92,246,0.35)] flex items-center justify-center gap-2 ${
-                    interfaceTitleBarDockDragHandlers
-                      ? 'cursor-grab active:cursor-grabbing touch-none select-none ring-2 ring-white/20'
-                      : ''
-                  }`}
-                  title={
-                    interfaceTitleBarDockDragHandlers
-                      ? 'Trascina verso i bordi: anteprima aggancio a schermo intero'
-                      : undefined
-                  }
-                  {...interfaceTitleBarDockDragHandlers}
-                >
-                  <span className="text-sm font-semibold text-white tracking-tight select-none text-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-                    Interface · {interfaceFlowTitle}
-                  </span>
+                <header className="shrink-0 px-2 py-0.5 h-7 min-h-7 box-border bg-gradient-to-r from-fuchsia-600 via-violet-600 to-indigo-600 border-b border-fuchsia-300/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] flex items-center gap-1.5">
+                  <div
+                    className={`flex-1 flex items-center justify-center min-w-0 ${
+                      interfaceTitleBarDockDragHandlers
+                        ? 'cursor-grab active:cursor-grabbing touch-none select-none rounded px-1 py-0.5 ring-1 ring-transparent hover:ring-white/25'
+                        : ''
+                    }`}
+                    title={
+                      interfaceTitleBarDockDragHandlers
+                        ? 'Trascina verso i bordi del flow per spostare il pannello'
+                        : undefined
+                    }
+                    {...interfaceTitleBarDockDragHandlers}
+                  >
+                    <span className="text-xs font-semibold text-white tracking-tight select-none text-center truncate drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]">
+                      Interface · {interfaceFlowTitle}
+                    </span>
+                  </div>
+                  {interfaceShellHeaderExtra != null ? (
+                    <div className="shrink-0 flex items-center justify-end">{interfaceShellHeaderExtra}</div>
+                  ) : null}
                 </header>
                 <div className={`${blocksClass} p-2 pt-3`}>
                   <MappingBlock

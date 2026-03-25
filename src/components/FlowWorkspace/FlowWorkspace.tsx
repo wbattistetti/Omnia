@@ -71,39 +71,41 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
     <div className="flex-1 h-full flex flex-col">
       <FlowTabBar />
       <div className="flex-1 min-h-0 relative flex flex-col">
-        <div className="flex-1 min-h-0">
-          <FlowEditor
-            flowId={activeFlowId}
-            nodes={flow?.nodes || []}
-            edges={flow?.edges || []}
-            setNodes={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: typeof updater === 'function' ? updater(ns) : updater, edges: es }))}
-            setEdges={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: ns, edges: typeof updater === 'function' ? updater(es) : updater }))}
-            currentProject={{ id: projectId, name: 'Project' } as any}
-            setCurrentProject={() => {}}
-            testPanelOpen={false}
-            setTestPanelOpen={() => {}}
-            testNodeId={null}
-            setTestNodeId={() => {}}
-            onPlayNode={() => {}}
-            onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
-              dlog('flow', '[workspace.onCreateTaskFlow]', { newFlowId, title, nodes: nodes.length, edges: edges.length });
-              const derivedTitle = (title && String(title).trim()) || 'Task';
-              upsertFlow({ id: newFlowId, title: derivedTitle, nodes, edges });
-              setTimeout(() => openFlowBackground(newFlowId), 0);
-              if (projectId && String(projectId).trim() !== '') {
-                saveFlow(projectId, newFlowId, nodes, edges).then(
-                  () => markFlowsPersisted([newFlowId]),
-                  (e) => {
-                    try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
-                  }
-                );
-              }
-            }}
-          />
+        <div className="relative flex flex-1 min-h-0 w-full min-w-0 overflow-hidden">
+          <div className="absolute inset-0 z-0 min-h-0 min-w-0">
+            <FlowEditor
+              flowId={activeFlowId}
+              nodes={flow?.nodes || []}
+              edges={flow?.edges || []}
+              setNodes={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: typeof updater === 'function' ? updater(ns) : updater, edges: es }))}
+              setEdges={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: ns, edges: typeof updater === 'function' ? updater(es) : updater }))}
+              currentProject={{ id: projectId, name: 'Project' } as any}
+              setCurrentProject={() => {}}
+              testPanelOpen={false}
+              setTestPanelOpen={() => {}}
+              testNodeId={null}
+              setTestNodeId={() => {}}
+              onPlayNode={() => {}}
+              onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
+                dlog('flow', '[workspace.onCreateTaskFlow]', { newFlowId, title, nodes: nodes.length, edges: edges.length });
+                const derivedTitle = (title && String(title).trim()) || 'Task';
+                upsertFlow({ id: newFlowId, title: derivedTitle, nodes, edges });
+                setTimeout(() => openFlowBackground(newFlowId), 0);
+                if (projectId && String(projectId).trim() !== '') {
+                  saveFlow(projectId, newFlowId, nodes, edges).then(
+                    () => markFlowsPersisted([newFlowId]),
+                    (e) => {
+                      try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
+                    }
+                  );
+                }
+              }}
+            />
+          </div>
+          {isFlowInterfacePanelEnabled(activeFlowId) ? (
+            <FlowInterfaceBottomPanel flowId={activeFlowId} projectId={projectId} />
+          ) : null}
         </div>
-        {isFlowInterfacePanelEnabled(activeFlowId) ? (
-          <FlowInterfaceBottomPanel flowId={activeFlowId} projectId={projectId} />
-        ) : null}
         <FlowVariablesRail flowId={activeFlowId} projectId={projectId} />
       </div>
     </div>

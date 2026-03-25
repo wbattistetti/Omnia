@@ -24,16 +24,24 @@ export function useNodeEditing() {
 
   const editNodeLabel = useCallback((nodeId: string, label: string) => {
     const node = getNode(nodeId);
-    if (!node) return;
-    const updated = updateNodeLabel(node, label);
-    updateNode(nodeId, updated);
+    if (!node) return { success: false as const, error: 'Node not found' };
+    const result = updateNodeLabel(node, label);
+    if (!result.isValid) {
+      return { success: false as const, error: result.error ?? 'Invalid label' };
+    }
+    updateNode(nodeId, result.node);
+    return { success: true as const };
   }, [getNode, updateNode]);
 
   const addNodeSynonym = useCallback((nodeId: string, synonym: string) => {
     const node = getNode(nodeId);
-    if (!node) return;
-    const updated = addSynonym(node, synonym);
-    updateNode(nodeId, updated);
+    if (!node) return { success: false as const, error: 'Node not found' };
+    const result = addSynonym(node, synonym);
+    if (!result.isValid) {
+      return { success: false as const, error: result.error ?? 'Cannot add synonym' };
+    }
+    updateNode(nodeId, result.node);
+    return { success: true as const };
   }, [getNode, updateNode]);
 
   const removeNodeSynonym = useCallback((nodeId: string, synonym: string) => {

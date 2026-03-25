@@ -1,13 +1,10 @@
 /**
- * Dock-drag preview for the Interface panel: same visual language as DockManager’s DockOverlay
- * (semi-transparent blue fill + blue border), sized/positioned where the panel will land.
+ * Dock-drag preview for the Interface panel: same visual language as DockManager’s DockOverlay.
+ * Positioned inside the flow canvas area (absolute, not viewport-fixed).
  */
 
 import React, { useMemo } from 'react';
 import type { FlowInterfaceDockRegion } from './flowInterfaceDockStorage';
-
-/** Matches Tailwind bottom-10 / top-10 used by the real panel chrome */
-const EDGE_INSET_PX = 40;
 
 const PREVIEW_STYLE: React.CSSProperties = {
   background: 'rgba(59, 130, 246, 0.18)',
@@ -31,20 +28,16 @@ export function FlowInterfaceDockPreviewOverlay({
     if (!preview) return null;
     const h = Math.max(panelHeightPx, 1);
     const w = Math.max(panelWidthPx, 1);
-    const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-
-    const verticalSpan = Math.max(vh - 2 * EDGE_INSET_PX, 1);
 
     switch (preview) {
       case 'bottom':
-        return { left: 0, width: vw, height: h, bottom: EDGE_INSET_PX };
+        return { left: 0, right: 0, bottom: 0, height: h };
       case 'top':
-        return { left: 0, width: vw, height: h, top: EDGE_INSET_PX };
+        return { left: 0, right: 0, top: 0, height: h };
       case 'left':
-        return { left: 0, top: EDGE_INSET_PX, width: w, height: verticalSpan };
+        return { left: 0, top: 0, bottom: 0, width: w };
       case 'right':
-        return { right: 0, top: EDGE_INSET_PX, width: w, height: verticalSpan };
+        return { right: 0, top: 0, bottom: 0, width: w };
       default:
         return null;
     }
@@ -53,9 +46,9 @@ export function FlowInterfaceDockPreviewOverlay({
   if (!preview || !rect) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] pointer-events-none" aria-hidden>
+    <div className="absolute inset-0 z-[100] pointer-events-none" aria-hidden>
       <div
-        className="fixed rounded-sm"
+        className="absolute rounded-sm"
         style={{
           ...PREVIEW_STYLE,
           ...rect,

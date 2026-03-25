@@ -135,20 +135,26 @@ Public Module RegexGrammarCompiler
                         End If
 
                     Case "semantic-set"
-                        ' For semantic-set, find which value matched
-                        If Not String.IsNullOrEmpty(groupInfo.SemanticSetId) Then
-                            Dim semanticSet = compiledRegexGrammar.OriginalGrammar.SemanticSets.GetValueOrDefault(groupInfo.SemanticSetId)
-                            If semanticSet IsNot Nothing Then
-                                ' Find which value corresponds to matched text
+                        ' Resolve semantic value from captured text: search every semantic-set bound to this node
+                        ' (pattern may union multiple sets; first matching value wins)
+                        Dim compiledNode = compiledRegexGrammar.OriginalGrammar.Nodes.GetValueOrDefault(groupInfo.NodeId)
+                        If compiledNode IsNot Nothing AndAlso compiledNode.Bindings IsNot Nothing Then
+                            Dim resolvedSet = False
+                            For Each nb In compiledNode.Bindings
+                                If resolvedSet Then Exit For
+                                If Not String.Equals(nb.Type, "semantic-set", StringComparison.Ordinal) Then Continue For
+                                If String.IsNullOrEmpty(nb.SetId) Then Continue For
+                                Dim semanticSet = compiledRegexGrammar.OriginalGrammar.SemanticSets.GetValueOrDefault(nb.SetId)
+                                If semanticSet Is Nothing OrElse semanticSet.Values Is Nothing Then Continue For
                                 For Each value In semanticSet.Values
-                                    If String.Equals(value.Value, group.Value, StringComparison.OrdinalIgnoreCase) OrElse
-                                       value.Synonyms.Any(Function(s) String.Equals(s, group.Value, StringComparison.OrdinalIgnoreCase)) Then
+                                    If SemanticSetCapturedTextMatchesValue(value, group.Value) Then
                                         result.Bindings(semanticSet.Name) = value.Value
                                         result.SemanticValues.Add(value.Id)
+                                        resolvedSet = True
                                         Exit For
                                     End If
                                 Next
-                            End If
+                            Next
                         End If
 
                     Case "linguistic"
@@ -159,6 +165,26 @@ Public Module RegexGrammarCompiler
         Next
 
         Return result
+    End Function
+
+    ''' <summary>
+    ''' True if captured regex text corresponds to this semantic value (canonical, synonym, or value regex).
+    ''' </summary>
+    Private Function SemanticSetCapturedTextMatchesValue(value As SemanticValue, captured As String) As Boolean
+        If value Is Nothing OrElse String.IsNullOrEmpty(captured) Then Return False
+        If String.Equals(value.Value, captured, StringComparison.OrdinalIgnoreCase) Then Return True
+        If value.Synonyms IsNot Nothing AndAlso
+           value.Synonyms.Any(Function(s) String.Equals(s, captured, StringComparison.OrdinalIgnoreCase)) Then
+            Return True
+        End If
+        If Not String.IsNullOrEmpty(value.Regex) Then
+            Try
+                Return Regex.IsMatch(captured, value.Regex, RegexOptions.IgnoreCase)
+            Catch
+                Return False
+            End Try
+        End If
+        Return False
     End Function
 
 End Module
@@ -305,6 +331,68 @@ Friend Class RegexCompilerState
     End Function
 
     ''' <summary>
+    ''' Single alternation of all linguistic forms from every semantic-set binding on the node.
+    ''' Literals (canonical value + synonyms) are escaped; per-value Regex entries are alternated raw.
+    ''' All alternatives sorted by length descending (longest first).
+    ''' </summary>
+    Private Function BuildSemanticSetsUnionPattern(node As CompiledNode) As String
+        Dim literals As New List(Of String)()
+        Dim rawRegexes As New List(Of String)()
+
+        If node.Bindings Is Nothing Then Return String.Empty
+
+        For Each binding In node.Bindings
+            If Not String.Equals(binding.Type, "semantic-set", StringComparison.Ordinal) Then Continue For
+            If String.IsNullOrEmpty(binding.SetId) Then Continue For
+            Dim semanticSet = grammar.SemanticSets.GetValueOrDefault(binding.SetId)
+            If semanticSet Is Nothing OrElse semanticSet.Values Is Nothing Then Continue For
+            For Each sv In semanticSet.Values
+                If Not String.IsNullOrEmpty(sv.Value) Then
+                    literals.Add(sv.Value)
+                End If
+                If sv.Synonyms IsNot Nothing Then
+                    For Each syn In sv.Synonyms
+                        If Not String.IsNullOrEmpty(syn) Then
+                            literals.Add(syn)
+                        End If
+                    Next
+                End If
+                If Not String.IsNullOrEmpty(sv.Regex) Then
+                    rawRegexes.Add(sv.Regex)
+                End If
+            Next
+        Next
+
+        If literals.Count = 0 AndAlso rawRegexes.Count = 0 Then
+            Return String.Empty
+        End If
+
+        Dim distinctLiterals = literals.Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+        Dim distinctRegexes = rawRegexes.Distinct(StringComparer.Ordinal).ToList()
+
+        Dim combined As New List(Of Tuple(Of String, Boolean))()
+        For Each lit In distinctLiterals
+            combined.Add(Tuple.Create(lit, False))
+        Next
+        For Each r In distinctRegexes
+            combined.Add(Tuple.Create(r, True))
+        Next
+
+        combined = combined.OrderByDescending(Function(t) t.Item1.Length).ToList()
+
+        Dim parts As New List(Of String)()
+        For Each t In combined
+            If t.Item2 Then
+                parts.Add(t.Item1)
+            Else
+                parts.Add(Regex.Escape(t.Item1))
+            End If
+        Next
+
+        Return String.Join("|", parts)
+    End Function
+
+    ''' <summary>
     ''' Generate pattern for each node
     ''' </summary>
     Public Sub GenerateNodePatterns()
@@ -329,53 +417,57 @@ Friend Class RegexCompilerState
             ' Use existing regex (already compiled)
             nodePattern = node.CompiledRegex.ToString()
         Else
-            Dim words As New List(Of String)()
+            Dim hasSemanticSetBinding = node.Bindings IsNot Nothing AndAlso
+                                          node.Bindings.Any(Function(b) b.Type = "semantic-set")
 
-            ' Check if node has semantic-value binding
-            Dim hasSemanticValueBinding = node.Bindings IsNot Nothing AndAlso
-                                          node.Bindings.Any(Function(b) b.Type = "semantic-value")
+            If hasSemanticSetBinding Then
+                ' Union of all linguistic forms from all bound semantic sets (value + synonyms + per-value regex)
+                nodePattern = BuildSemanticSetsUnionPattern(node)
+                If String.IsNullOrEmpty(nodePattern) Then
+                    If Not String.IsNullOrEmpty(node.Label) Then
+                        nodePattern = Regex.Escape(node.Label)
+                    Else
+                        nodePattern = ".*?"
+                    End If
+                End If
+            Else
+                Dim words As New List(Of String)()
 
-            If hasSemanticValueBinding Then
-                ' ✅ Caso 1: Nodo con semantic-value binding
-                ' Le linguistiche sono: semanticValue.Synonyms + node.Synonyms (se presenti)
-                ' ❌ NON includere semanticValue.Value (è semantico, non linguistico)
-                Dim svBinding = node.Bindings.FirstOrDefault(Function(b) b.Type = "semantic-value")
-                If svBinding IsNot Nothing AndAlso Not String.IsNullOrEmpty(svBinding.ValueId) Then
-                    Dim semanticValue = grammar.SemanticValues.GetValueOrDefault(svBinding.ValueId)
-                    If semanticValue IsNot Nothing Then
-                        ' Add semantic value synonyms (linguistic forms)
-                        If semanticValue.Synonyms IsNot Nothing AndAlso semanticValue.Synonyms.Count > 0 Then
-                            words.AddRange(semanticValue.Synonyms)
+                Dim hasSemanticValueBinding = node.Bindings IsNot Nothing AndAlso
+                                              node.Bindings.Any(Function(b) b.Type = "semantic-value")
+
+                If hasSemanticValueBinding Then
+                    ' Nodo con semantic-value binding: sinonimi del valore + sinonimi di nodo
+                    Dim svBinding = node.Bindings.FirstOrDefault(Function(b) b.Type = "semantic-value")
+                    If svBinding IsNot Nothing AndAlso Not String.IsNullOrEmpty(svBinding.ValueId) Then
+                        Dim semanticValue = grammar.SemanticValues.GetValueOrDefault(svBinding.ValueId)
+                        If semanticValue IsNot Nothing Then
+                            If semanticValue.Synonyms IsNot Nothing AndAlso semanticValue.Synonyms.Count > 0 Then
+                                words.AddRange(semanticValue.Synonyms)
+                            End If
                         End If
+                    End If
+
+                    If node.Synonyms IsNot Nothing AndAlso node.Synonyms.Count > 0 Then
+                        words.AddRange(node.Synonyms)
+                    End If
+
+                ElseIf node.Synonyms IsNot Nothing AndAlso node.Synonyms.Count > 0 Then
+                    words.AddRange(node.Synonyms)
+
+                Else
+                    If Not String.IsNullOrEmpty(node.Label) Then
+                        words.Add(node.Label)
                     End If
                 End If
 
-                ' Add node synonyms if present (union with semantic value synonyms)
-                If node.Synonyms IsNot Nothing AndAlso node.Synonyms.Count > 0 Then
-                    words.AddRange(node.Synonyms)
+                If words.Count > 0 Then
+                    Dim uniqueWords = words.Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(Function(w) w.Length).ToList()
+                    Dim escapedWords = uniqueWords.Select(Function(w) Regex.Escape(w))
+                    nodePattern = String.Join("|", escapedWords)
+                Else
+                    nodePattern = ".*?"
                 End If
-
-            ElseIf node.Synonyms IsNot Nothing AndAlso node.Synonyms.Count > 0 Then
-                ' ✅ Caso 2: Nodo con solo Synonyms (NO semantic-value)
-                ' Le linguistiche sono: node.Synonyms (NON il label)
-                words.AddRange(node.Synonyms)
-
-            Else
-                ' ✅ Caso 3: Nodo senza semantic-value e senza Synonyms
-                ' Le linguistiche sono: node.Label
-                If Not String.IsNullOrEmpty(node.Label) Then
-                    words.Add(node.Label)
-                End If
-            End If
-
-            ' Remove duplicates, order by length (longest first), escape, and join with pipe
-            If words.Count > 0 Then
-                Dim uniqueWords = words.Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(Function(w) w.Length).ToList()
-                Dim escapedWords = uniqueWords.Select(Function(w) Regex.Escape(w))
-                nodePattern = String.Join("|", escapedWords)
-            Else
-                ' Node without pattern (placeholder)
-                nodePattern = ".*?"
             End If
         End If
 

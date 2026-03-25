@@ -89,6 +89,27 @@ export function parseFlowInterfaceDropFromDataTransfer(dt: DataTransfer): FlowIn
 export const DND_IFACE_REORDER = 'application/x-omnia-iface-reorder';
 
 /**
+ * Hit-test stack (top-first) so Interface zones win over the flow canvas when overlays use pointer-events quirks.
+ */
+export function findInterfaceZoneRootAtPoint(clientX: number, clientY: number, flowCanvasId: string): HTMLElement | null {
+  let list: Element[];
+  try {
+    list = document.elementsFromPoint(clientX, clientY);
+  } catch {
+    return null;
+  }
+  for (const node of list) {
+    if (!(node instanceof HTMLElement)) continue;
+    const root = node.closest('[data-flow-interface-zone][data-flow-canvas-id]');
+    if (root instanceof HTMLElement) {
+      const fid = root.getAttribute('data-flow-canvas-id');
+      if (fid === flowCanvasId) return root;
+    }
+  }
+  return null;
+}
+
+/**
  * Hit-test for pointer-drag preview over the Output Interface tree (row drag from canvas).
  * Only `zone === 'output'` is returned (Input ignores row-acquired drops).
  */
@@ -97,15 +118,27 @@ export function computeInterfacePointerPreview(
   clientY: number,
   flowCanvasId: string
 ): FlowInterfacePointerPreviewDetail | null {
-  const el = document.elementFromPoint(clientX, clientY);
-  if (!el) return null;
-  const zoneRoot = el.closest('[data-flow-interface-zone][data-flow-canvas-id]') as HTMLElement | null;
+  const zoneRoot = findInterfaceZoneRootAtPoint(clientX, clientY, flowCanvasId);
   if (!zoneRoot) return null;
   const fid = zoneRoot.getAttribute('data-flow-canvas-id');
   const zone = zoneRoot.getAttribute('data-flow-interface-zone') as 'input' | 'output' | null;
   if (fid !== flowCanvasId || zone !== 'output') return null;
 
-  const row = el.closest('[data-flow-iface-row]') as HTMLElement | null;
+  let row: HTMLElement | null = null;
+  try {
+    const list = document.elementsFromPoint(clientX, clientY);
+    for (const node of list) {
+      if (!(node instanceof HTMLElement)) continue;
+      if (!zoneRoot.contains(node)) continue;
+      const r = node.closest('[data-flow-iface-row]');
+      if (r instanceof HTMLElement && zoneRoot.contains(r)) {
+        row = r;
+        break;
+      }
+    }
+  } catch {
+    return null;
+  }
   if (row) {
     const pathKey = row.getAttribute('data-path-key') || '';
     const rect = row.getBoundingClientRect();
@@ -115,7 +148,21 @@ export function computeInterfacePointerPreview(
   }
 
   const treeRoot = zoneRoot.querySelector('[data-flow-iface-tree-root]');
-  if (treeRoot && treeRoot.contains(el)) {
+  let pointerInTree = false;
+  if (treeRoot) {
+    try {
+      const stack = document.elementsFromPoint(clientX, clientY);
+      for (const node of stack) {
+        if (node instanceof HTMLElement && treeRoot.contains(node)) {
+          pointerInTree = true;
+          break;
+        }
+      }
+    } catch {
+      pointerInTree = false;
+    }
+  }
+  if (treeRoot && pointerInTree) {
     const rows = [...treeRoot.querySelectorAll('[data-flow-iface-row]')] as HTMLElement[];
     if (rows.length === 0) {
       return { flowId: fid, zone, targetPathKey: null, placement: 'append' };

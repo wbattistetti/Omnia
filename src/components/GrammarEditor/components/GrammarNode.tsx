@@ -13,6 +13,8 @@ import { useGrammarStore } from '../core/state/grammarStore';
 import { isFloatingNode } from '../core/domain/grammar';
 import { NODE_PLACEHOLDER, NODE_FONT, NODE_PADDING_H, NODE_MIN_WIDTH } from '../constants/nodeConstants';
 import { measureText, calculateNodeWidth } from '../utils/nodeGeometry';
+import { getGrammarNodeDisplayCaption } from '../utils/grammarNodeDisplayLabel';
+import { hasSemanticSetOrValueBinding } from '../core/domain/semanticBindingsVsNodeWords';
 import {
   getNodeBackground, getBorderColor, getHighestBinding, getHighestBindingForDisplay, getBindingIconColor,
   nodeBaseStyles, nodeLabelStyles, nodeMetadataStyles,
@@ -41,15 +43,29 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
   const { node } = data;
   const { editNodeLabel } = useNodeEditing();
   const { deleteNode, getSlot, getNode, grammar } = useGrammarStore();
+
+  const visibleCaption = React.useMemo(
+    () => getGrammarNodeDisplayCaption(node, grammar),
+    [node, grammar]
+  );
+
+  const editWordsMenuDisabled =
+    hasSemanticSetOrValueBinding(node) && node.synonyms.length === 0;
+  const editWordsMenuTitle =
+    'Node words are not used when a semantic set or value is bound. Remove the binding to add words.';
+
   const [isHovered, setIsHovered] = React.useState(false);
   const [isWordsEditorOpen, setIsWordsEditorOpen] = React.useState(false);
   const { setDragState } = useDrag();
   const { screenToFlowPosition } = useReactFlow();
 
+  const skipAutoEditForEmptyLabel =
+    node.bindings.some(b => b.type === 'semantic-set') && node.label.trim() === '';
+
   const {
     isEditing, editValue, setEditValue,
     inputRef, startEditing, stopEditing, resetValue,
-  } = useNodeEditingState(node.label);
+  } = useNodeEditingState(node.label, skipAutoEditForEmptyLabel);
 
   const { createNodeAfterFloating } = useNodeCreation();
   const { handleEdgeCreate } = useEdgeInteractions();
@@ -65,13 +81,12 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
       currentLabel: node.label,
     });
 
-    // Always save the current node label if not empty
     if (trimmedValue) {
-      editNodeLabel(node.id, trimmedValue);
-      console.log('[GrammarNode] ✅ Label saved', {
-        nodeId: node.id,
-        newLabel: trimmedValue,
-      });
+      const saved = editNodeLabel(node.id, trimmedValue);
+      if (!saved.success) {
+        window.alert(saved.error ?? 'Cannot save caption.');
+        return;
+      }
     }
 
     stopEditing();
@@ -108,7 +123,7 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
         // Focus is handled deterministically by useLayoutEffect in useNodeEditingState and EditableText
       }
     }
-  }, [node.id, node.label, editNodeLabel, stopEditing, createNodeAfterFloating, handleEdgeCreate, grammar]);
+  }, [node.id, editNodeLabel, stopEditing, createNodeAfterFloating, handleEdgeCreate]);
 
   const handleCancel = React.useCallback(() => {
     resetValue();
@@ -134,15 +149,12 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
 
     // If text is not empty, save (like Enter) - don't cancel
     if (trimmedValue) {
-      console.log('[GrammarNode] 💾 Blur with text, saving...', {
-        nodeId: node.id,
-        trimmedValue,
-        editValue,
-      });
-      // Save immediately - this will update the node label in the store
-      editNodeLabel(node.id, trimmedValue);
+      const saved = editNodeLabel(node.id, trimmedValue);
+      if (!saved.success) {
+        window.alert(saved.error ?? 'Cannot save caption.');
+        return;
+      }
       stopEditing();
-      // Don't create new node on blur - only on Enter
       return;
     }
 
@@ -245,8 +257,11 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
   }, [editValue, iconPadding]);
 
   const labelWidth = React.useMemo(() => {
-    return calculateNodeWidth(node.label) + iconPadding;
-  }, [node.label, iconPadding]);
+    const textForSize = isEditing
+      ? (editValue || NODE_PLACEHOLDER)
+      : (visibleCaption || NODE_PLACEHOLDER);
+    return calculateNodeWidth(textForSize) + iconPadding;
+  }, [isEditing, editValue, visibleCaption, iconPadding]);
 
   // Get icon component for highest binding (including slots - they have highest priority)
   const getBindingIcon = () => {
@@ -325,6 +340,8 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
           onDelete={() => deleteNode(node.id)}
           onEditCaption={startEditing}
           onEditWords={() => setIsWordsEditorOpen(true)}
+          editWordsDisabled={editWordsMenuDisabled}
+          editWordsDisabledTitle={editWordsMenuTitle}
           onSetOptional={() => updateNode(node.id, { optional: !node.optional })}
           onSetRepetitions={() => updateNode(node.id, { repeatable: !node.repeatable })}
         />
@@ -431,7 +448,7 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
           }}
         />
       ) : (
-        <span style={nodeLabelStyles}>{node.label}</span>
+        <span style={nodeLabelStyles}>{visibleCaption}</span>
       )}
 
       {/* REMOVED: Slot name display - slots are not displayed visually in the node */}

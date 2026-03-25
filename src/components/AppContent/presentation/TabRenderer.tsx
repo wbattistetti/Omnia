@@ -103,10 +103,8 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
         };
       }, [tab.id, editorCloseRefsMap]);
 
-      const editorKey = useMemo(() => {
-        const instanceKey = tab.task?.instanceId || tab.task?.id || tab.id;
-        return `response-editor-${instanceKey}`;
-      }, [tab.task?.instanceId, tab.task?.id, tab.id]);
+      /** Stable per tab row: must NOT switch when task.instanceId loads (would remount → flicker). */
+      const editorKey = useMemo(() => `response-editor-${tab.id}`, [tab.id]);
 
       // ✅ FIX: Restituisci un nuovo oggetto stabile solo con i valori necessari
       // Questo evita che cambi riferimento quando tab.task viene ricreato dal padre
@@ -166,43 +164,13 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
         [tab.id, setDockTree]
       );
 
+      /** Ref-only (like conditionEditor): avoids extra setDockTree on mount → dock flash / flicker. */
       const handleRegisterOnClose = useCallback(
         (fn: () => Promise<boolean>) => {
-          if (!tab.id || !setDockTree) return;
-
+          if (!tab.id) return;
           editorCloseRefsMap.current.set(tab.id, fn);
-
-          setDockTree(prev =>
-            mapNode(prev, n => {
-              if (n.kind === 'tabset') {
-                const idx = n.tabs.findIndex(t => t.id === tab.id);
-                if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
-                  const updatedTab = {
-                    ...n.tabs[idx],
-                    onClose: async (tab: DockTabResponseEditor) => {
-                      const fn = editorCloseRefsMap.current.get(tab.id);
-                      if (fn) {
-                        try {
-                          return await fn();
-                        } catch (err) {
-                          console.error('[TabRenderer] ❌ Error in editorCloseRef.current()', err);
-                          return true;
-                        }
-                      }
-                      return true;
-                    },
-                  } as DockTabResponseEditor;
-                  return {
-                    ...n,
-                    tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)],
-                  };
-                }
-              }
-              return n;
-            })
-          );
         },
-        [tab.id, setDockTree, editorCloseRefsMap]
+        [tab.id, editorCloseRefsMap]
       );
 
       return (
@@ -417,45 +385,13 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
         };
       }, [tab.id, editorCloseRefsMap]);
 
+      /** DDT: ref-only; DockManager reads editorCloseRefsMap first (no tab tree patch on mount). */
       const handleRegisterOnClose = useCallback(
         (fn: () => Promise<boolean>) => {
-          if (!isTaskTreeEditor || !tab.id || !setDockTree) {
-            return;
-          }
-
+          if (!isTaskTreeEditor || !tab.id) return;
           editorCloseRefsMap.current.set(tab.id, fn);
-
-          setDockTree(prev =>
-            mapNode(prev, n => {
-              if (n.kind === 'tabset') {
-                const idx = n.tabs.findIndex(t => t.id === tab.id);
-                if (idx !== -1 && n.tabs[idx].type === 'taskEditor') {
-                  const updatedTab = {
-                    ...n.tabs[idx],
-                    onClose: async (tab: DockTabTaskEditor) => {
-                      const fn = editorCloseRefsMap.current.get(tab.id);
-                      if (fn) {
-                        try {
-                          return await fn();
-                        } catch (err) {
-                          console.error('[TabRenderer][taskEditor] ❌ Error in editorCloseRef.current()', err);
-                          return true;
-                        }
-                      }
-                      return true;
-                    },
-                  } as DockTabTaskEditor;
-                  return {
-                    ...n,
-                    tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)],
-                  };
-                }
-              }
-              return n;
-            })
-          );
         },
-        [tab.id, setDockTree, isTaskTreeEditor, editorCloseRefsMap]
+        [tab.id, isTaskTreeEditor, editorCloseRefsMap]
       );
 
       return (

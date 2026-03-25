@@ -29,6 +29,8 @@ interface NodeContextMenuProps {
   nodeId: string;
   onEditCaption?: () => void;
   onEditWords?: () => void;
+  editWordsDisabled?: boolean;
+  editWordsDisabledTitle?: string;
   onAddAllWordsToHints?: () => void;
   onCopy?: () => void;
   onDelete?: () => void;
@@ -52,6 +54,8 @@ export function NodeContextMenu({
   onClose,
   onEditCaption,
   onEditWords,
+  editWordsDisabled,
+  editWordsDisabledTitle,
   onAddAllWordsToHints,
   onCopy,
   onDelete,
@@ -183,7 +187,18 @@ export function NodeContextMenu({
 
       <div style={separatorStyle} />
 
-      <div className="gcm-item" style={itemStyle} onClick={() => handleItem(onEditWords)}>
+      <div
+        className="gcm-item"
+        style={{
+          ...itemStyle,
+          ...(editWordsDisabled ? { opacity: 0.45, cursor: 'not-allowed' } : {}),
+        }}
+        title={editWordsDisabled ? editWordsDisabledTitle : undefined}
+        onClick={() => {
+          if (editWordsDisabled) return;
+          handleItem(onEditWords);
+        }}
+      >
         <MessageSquare size={14} style={iconStyle} />
         <span>Edit Words</span>
         <span style={kbdStyle}>Ctrl+W</span>

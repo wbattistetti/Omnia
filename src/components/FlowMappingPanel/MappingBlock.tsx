@@ -75,7 +75,8 @@ export function MappingBlock({
   const text = labelOverride ?? label;
   const headerBar = headerClassNameOverride ?? headerClass;
   const labelBar =
-    headerLabelClassName ?? 'text-xs font-bold tracking-wide text-slate-950 uppercase select-none';
+    headerLabelClassName ??
+    'text-[10px] font-bold leading-none tracking-wide text-slate-950 uppercase select-none';
   const borderBar = borderClassNameOverride ?? borderClass;
 
   return (
@@ -89,7 +90,7 @@ export function MappingBlock({
         : {})}
     >
       <header
-        className={`shrink-0 px-3 py-2 ${headerBar} border-b border-black/10 flex items-center gap-2 min-h-[2.5rem]`}
+        className={`shrink-0 px-2 py-0.5 h-7 min-h-7 box-border ${headerBar} border-b border-black/10 flex items-center gap-2`}
       >
         <span className={labelBar}>
           {text}

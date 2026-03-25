@@ -10,6 +10,9 @@ interface NodeToolbarProps {
   onDelete: () => void;
   onEditCaption?: () => void;
   onEditWords?: () => void;
+  /** When true, Edit Words is disabled (semantic binding vs node words conflict). */
+  editWordsDisabled?: boolean;
+  editWordsDisabledTitle?: string;
   onAddAllWordsToHints?: () => void;
   onCopy?: () => void;
   onSetRepetitions?: () => void;
@@ -31,6 +34,8 @@ export function NodeToolbar({
   onDelete,
   onEditCaption,
   onEditWords,
+  editWordsDisabled,
+  editWordsDisabledTitle,
   onAddAllWordsToHints,
   onCopy,
   onSetRepetitions,
@@ -102,6 +107,8 @@ export function NodeToolbar({
         nodeId={nodeId}
         onEditCaption={onEditCaption}
         onEditWords={onEditWords}
+        editWordsDisabled={editWordsDisabled}
+        editWordsDisabledTitle={editWordsDisabledTitle}
         onAddAllWordsToHints={onAddAllWordsToHints}
         onCopy={onCopy}
         onDelete={onDelete}

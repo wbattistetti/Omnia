@@ -246,9 +246,8 @@ export function useGrammarCanvasEvents() {
               const result = addBinding(existingNode, binding);
               if (result.isValid) {
                 updateNode(nodeId, result.node);
-              } else {
-                // Show error if binding is invalid (e.g., constraint violation)
-                console.warn('Cannot add binding:', result.error);
+              } else if (result.error) {
+                window.alert(result.error);
               }
               return; // Done, don't create new node
             }
@@ -266,7 +265,9 @@ export function useGrammarCanvasEvents() {
           y: dropPos.y - ESTIMATED_NODE_HEIGHT / 2,
         };
 
-        const newNode = createGrammarNode(data.label || '', centeredPos, [binding]);
+        const initialLabel =
+          binding.type === 'semantic-set' ? '' : (data.label || '');
+        const newNode = createGrammarNode(initialLabel, centeredPos, [binding]);
         addNode(newNode);
         clearSelection(); // ✅ CRITICAL: Prevent React Flow from auto-selecting new node
 

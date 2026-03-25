@@ -458,10 +458,8 @@ function TabSet(props: {
         // });
         if (!activeTab) return null;
 
-        // ✅ Per responseEditor, usa una key stabile basata su instanceId per preservare lo stato
-        const stableKey = activeTab.type === 'responseEditor' && (activeTab as any).act?.instanceId
-          ? `response-editor-${(activeTab as any).act.instanceId}`
-          : activeTab.id;
+        // Key = tab id (unique). Do not use legacy `act` or varying instanceId — that remounts and flickers.
+        const stableKey = activeTab.id;
 
         // ✅ LOG DISABILITATO - troppo rumoroso
         // console.log('[DEBUG_DOCK_KEY] TabSet stableKey calculated', {

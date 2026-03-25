@@ -8,6 +8,7 @@ import {
   FLOW_INTERFACE_POINTER_PREVIEW,
   FLOW_INTERFACE_ROW_POINTER_DROP,
   computeInterfacePointerPreview,
+  findInterfaceZoneRootAtPoint,
   stableInterfacePathForVariable,
   type FlowInterfacePointerPreviewDetail,
   type FlowInterfaceRowPointerDropDetail,
@@ -49,7 +50,8 @@ export function useNodeDragDrop({
     const [isRowDragging, setIsRowDragging] = useState(false);
     const [draggedRowId, setDraggedRowId] = useState<string | null>(null);
     const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
-    const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+    /** Last pointer position during row drag (ref avoids stale closure on mouseup). */
+    const mousePositionRef = useRef({ x: 0, y: 0 });
     const [dragElement, setDragElement] = useState<HTMLElement | null>(null);
     const [draggedRowData, setDraggedRowData] = useState<NodeRowData | null>(null);
     const [targetNodeId, setTargetNodeId] = useState<string | null>(null);
@@ -148,7 +150,8 @@ export function useNodeDragDrop({
         setIsRowDragging(true);
         setDraggedRowId(id);
         setDraggedRowIndex(index);
-        setMousePosition({ x: clientX, y: clientY });
+        const pos = { x: clientX, y: clientY };
+        mousePositionRef.current = pos;
         setDragElement(clone);
         setDraggedRowData(rowData || null);
         setTargetNodeId(null);
@@ -163,7 +166,7 @@ export function useNodeDragDrop({
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isRowDragging || !dragElement) return;
 
-        setMousePosition({ x: e.clientX, y: e.clientY });
+        mousePositionRef.current = { x: e.clientX, y: e.clientY };
         dragElement.style.left = e.clientX + 10 + 'px';
         dragElement.style.top = e.clientY - 10 + 'px';
 
@@ -324,7 +327,7 @@ export function useNodeDragDrop({
                     rowId: draggedRowId,
                     rowData: rowDataToMove, // ✅ Mantiene lo stesso row.id, quindi il task è ancora disponibile
                     originalIndex: draggedRowIndex,
-                    mousePosition: { x: mousePosition.x, y: mousePosition.y }
+                    mousePosition: { x: mousePositionRef.current.x, y: mousePositionRef.current.y }
                 }
             });
 
@@ -363,8 +366,9 @@ export function useNodeDragDrop({
             // Drop on Flow Interface: row-acquired pointer drop is Output-only; Input cancels without canvas spawn.
             let handledFlowInterface = false;
             if (flowCanvasId) {
-                const el = document.elementFromPoint(mousePosition.x, mousePosition.y);
-                const dropRoot = el?.closest('[data-flow-interface-zone][data-flow-canvas-id]') as HTMLElement | null;
+                const mx = mousePositionRef.current.x;
+                const my = mousePositionRef.current.y;
+                const dropRoot = findInterfaceZoneRootAtPoint(mx, my, flowCanvasId);
                 if (dropRoot) {
                     const zone = dropRoot.getAttribute('data-flow-interface-zone') as 'input' | 'output' | null;
                     const fid = dropRoot.getAttribute('data-flow-canvas-id');
@@ -391,7 +395,7 @@ export function useNodeDragDrop({
                                 }
                                 const rowLabel = (rowDataToMove.text ?? '').trim() || 'field';
                                 const internalPath = stableInterfacePathForVariable(variableRefId);
-                                const pv = computeInterfacePointerPreview(mousePosition.x, mousePosition.y, flowCanvasId);
+                                const pv = computeInterfacePointerPreview(mx, my, flowCanvasId);
                                 const insertTargetPathKey = pv?.targetPathKey ?? null;
                                 const insertPlacement = pv?.placement ?? 'append';
                                 const detail: FlowInterfaceRowPointerDropDetail = {
@@ -465,8 +469,8 @@ export function useNodeDragDrop({
 
             // ✅ Posizione schermo del clone (position: fixed)
             // Il clone è posizionato a mousePosition + (10, -10)
-            const cloneScreenX = mousePosition.x + 10;
-            const cloneScreenY = mousePosition.y - 10;
+            const cloneScreenX = mousePositionRef.current.x + 10;
+            const cloneScreenY = mousePositionRef.current.y - 10;
 
             // Dispatch evento per creare un nuovo nodo sul canvas
             const createNodeEvent = new CustomEvent('createNodeFromRow', {
@@ -515,7 +519,7 @@ export function useNodeDragDrop({
 
             let targetIndex = draggedRowIndex;
             for (const r of rects) {
-                if (mousePosition.y < r.top + r.height / 2) {
+                if (mousePositionRef.current.y < r.top + r.height / 2) {
                     targetIndex = r.idx;
                     break;
                 }
@@ -537,7 +541,7 @@ export function useNodeDragDrop({
                 : initialTop;
 
             // Calcola la distanza tra la posizione Y del mouse e la posizione originale della riga
-            const verticalDistance = Math.abs(mousePosition.y - originalRowCenter);
+            const verticalDistance = Math.abs(mousePositionRef.current.y - originalRowCenter);
             const threshold = 30; // Soglia di 30px: se il mouse è entro 30px dalla posizione originale, non spostare
 
             // Execute reordering only if:
@@ -598,7 +602,7 @@ export function useNodeDragDrop({
 
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-    }, [isRowDragging, draggedRowId, draggedRowIndex, mousePosition, nodeRows, setNodeRows, data, dragElement, rowsContainerRef, targetNodeId, nodeId, draggedRowData, getRowComponent, flowCanvasId, flowActions]);
+    }, [isRowDragging, draggedRowId, draggedRowIndex, nodeRows, setNodeRows, data, dragElement, rowsContainerRef, targetNodeId, nodeId, draggedRowData, getRowComponent, flowCanvasId, flowActions]);
 
     // Event listeners
     useEffect(() => {

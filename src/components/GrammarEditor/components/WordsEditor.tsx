@@ -5,6 +5,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { X, Plus } from 'lucide-react';
 import { useNodeEditing } from '../features/node-editing/useNodeEditing';
+import { useGrammarStore } from '../core/state/grammarStore';
+import { hasSemanticSetOrValueBinding } from '../core/domain/semanticBindingsVsNodeWords';
 
 interface WordsEditorProps {
   /** ID of the grammar node whose synonyms are being edited. */
@@ -28,7 +30,11 @@ interface WordsEditorProps {
  */
 export function WordsEditor({ nodeId, synonyms, onClose }: WordsEditorProps) {
   const { addNodeSynonym, removeNodeSynonym } = useNodeEditing();
+  const getNode = useGrammarStore(s => s.getNode);
+  const node = getNode(nodeId);
+  const addSynonymsBlocked = node ? hasSemanticSetOrValueBinding(node) : false;
   const [newWord, setNewWord] = useState('');
+  const [lastError, setLastError] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ x: number; y: number; placeAbove: boolean } | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -101,6 +107,7 @@ export function WordsEditor({ nodeId, synonyms, onClose }: WordsEditorProps) {
 
   // --- Word management ---
   const handleAddWord = () => {
+    if (addSynonymsBlocked) return;
     const trimmed = newWord.trim();
     if (!trimmed) return;
     const isDuplicate = synonyms.some(s => s.toLowerCase() === trimmed.toLowerCase());
@@ -108,7 +115,12 @@ export function WordsEditor({ nodeId, synonyms, onClose }: WordsEditorProps) {
       setNewWord('');
       return;
     }
-    addNodeSynonym(nodeId, trimmed);
+    const result = addNodeSynonym(nodeId, trimmed);
+    if (!result.success) {
+      setLastError(result.error ?? 'Cannot add word');
+      return;
+    }
+    setLastError(null);
     setNewWord('');
     inputRef.current?.focus();
   };
@@ -155,6 +167,16 @@ export function WordsEditor({ nodeId, synonyms, onClose }: WordsEditorProps) {
         </button>
       </div>
 
+      {addSynonymsBlocked && (
+        <div style={blockedBannerStyle}>
+          Cannot add node words while a semantic set or semantic value is bound. Remove the binding
+          first, or delete existing words below if the graph is in an invalid state.
+        </div>
+      )}
+      {lastError && !addSynonymsBlocked && (
+        <div style={errorBannerStyle}>{lastError}</div>
+      )}
+
       {/* Input row — first interactive element */}
       <div style={addRowStyle}>
         <input
@@ -165,11 +187,12 @@ export function WordsEditor({ nodeId, synonyms, onClose }: WordsEditorProps) {
           onKeyDown={handleKeyDown}
           placeholder="Add new word..."
           style={inputStyle}
+          disabled={addSynonymsBlocked}
         />
         <button
           style={iconBtnStyle}
           onClick={handleAddWord}
-          disabled={!newWord.trim()}
+          disabled={addSynonymsBlocked || !newWord.trim()}
           title="Add word (Enter)"
         >
           <Plus size={14} />
@@ -208,6 +231,27 @@ export function WordsEditor({ nodeId, synonyms, onClose }: WordsEditorProps) {
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
+
+const blockedBannerStyle: React.CSSProperties = {
+  fontSize: '11px',
+  color: '#fcd34d',
+  backgroundColor: '#2d2510',
+  border: '1px solid #854d0e',
+  borderRadius: '4px',
+  padding: '6px 8px',
+  marginBottom: '8px',
+  lineHeight: 1.35,
+};
+
+const errorBannerStyle: React.CSSProperties = {
+  fontSize: '11px',
+  color: '#fecaca',
+  backgroundColor: '#450a0a',
+  border: '1px solid #991b1b',
+  borderRadius: '4px',
+  padding: '6px 8px',
+  marginBottom: '8px',
+};
 
 const headerStyle: React.CSSProperties = {
   display: 'flex',

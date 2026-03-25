@@ -1,6 +1,10 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
+/**
+ * Renders hierarchical match details for grammar test phrases (slot / semantic / linguistic).
+ */
+
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, ArrowRight, Pencil, MessageSquare } from 'lucide-react';
 import { TestPhrase, MatchDetail } from './TestPhrases';
@@ -107,6 +111,14 @@ export function TestPhraseDetails({ phrase, grammar }: TestPhraseDetailsProps) {
   );
 }
 
+/** Designer-aligned accent for captured linguistic surface form (cyan / sky family). */
+const LINGUISTIC_DISPLAY_COLOR = '#22d3ee';
+
+function hasLinguisticDescendant(detail: MatchDetail): boolean {
+  if (detail.type === 'linguistic') return true;
+  return (detail.children ?? []).some(hasLinguisticDescendant);
+}
+
 interface MatchDetailNodeProps {
   detail: MatchDetail;
   level: number;
@@ -122,6 +134,9 @@ function MatchDetailNode({
 }: MatchDetailNodeProps) {
   const hasChildren = detail.children && detail.children.length > 0;
   const isExpanded = expandedNodes.has(detail.id);
+  const showSemanticValueSuffix =
+    Boolean(detail.semanticValue) && !hasLinguisticDescendant(detail);
+  const linguisticDisplayText = (detail.linguisticText ?? detail.label).trim();
 
   // Get icon based on type (same as Grammar Editor)
   const getIcon = () => {
@@ -167,11 +182,24 @@ function MatchDetailNode({
           {getIcon()}
         </div>
 
-        {/* Label */}
-        <span style={{ fontSize: '13px', fontWeight: 500 }}>{detail.label}</span>
+        {/* Label: linguistic leaf uses quoted italic cyan to match designer surface-form styling */}
+        {detail.type === 'linguistic' ? (
+          <span
+            style={{
+              fontSize: '13px',
+              fontWeight: 500,
+              color: LINGUISTIC_DISPLAY_COLOR,
+              fontStyle: 'italic',
+            }}
+          >
+            {`"${linguisticDisplayText}"`}
+          </span>
+        ) : (
+          <span style={{ fontSize: '13px', fontWeight: 500 }}>{detail.label}</span>
+        )}
 
-        {/* Semantic value (if present, show in parentheses) */}
-        {detail.semanticValue && (
+        {/* Matched text next to semantic node only when no linguistic row below (avoids duplicate) */}
+        {showSemanticValueSuffix && (
           <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: '8px', fontStyle: 'italic' }}>
             ({detail.semanticValue})
           </span>

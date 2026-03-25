@@ -160,8 +160,10 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
       createCondition={entityCreation.createCondition}
     >
       <div className="relative flex flex-1 min-h-0 w-full h-full flex-col">
-        <div className="flex-1 min-h-0">{flowEditor}</div>
-        {isFlowInterfacePanelEnabled(flowId) ? <FlowInterfaceBottomPanel flowId={flowId} /> : null}
+        <div className="relative flex flex-1 min-h-0 w-full min-w-0 overflow-hidden">
+          <div className="absolute inset-0 z-0 min-h-0 min-w-0">{flowEditor}</div>
+          {isFlowInterfacePanelEnabled(flowId) ? <FlowInterfaceBottomPanel flowId={flowId} /> : null}
+        </div>
         <FlowVariablesRail flowId={flowId} projectId={projectId} />
       </div>
     </FlowActionsProvider>

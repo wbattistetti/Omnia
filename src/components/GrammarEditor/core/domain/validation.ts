@@ -3,6 +3,7 @@
 
 import type { Grammar, GrammarNode, GrammarEdge } from '../../types/grammarTypes';
 import { validateBindings } from './node';
+import { validateSemanticBindingsVsNodeWords } from './semanticBindingsVsNodeWords';
 
 /**
  * Validation error
@@ -37,6 +38,14 @@ export function validateGrammar(grammar: Grammar): ValidationError[] {
       errors.push({
         type: 'error',
         message: `Node "${node.label}": ${validation.error}`,
+        nodeId: node.id,
+      });
+    }
+    const vsWords = validateSemanticBindingsVsNodeWords(node);
+    if (!vsWords.isValid) {
+      errors.push({
+        type: 'error',
+        message: `Node "${node.label}": ${vsWords.error}`,
         nodeId: node.id,
       });
     }

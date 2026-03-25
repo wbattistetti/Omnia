@@ -13,16 +13,31 @@ const MIN_W = 200;
 const DEFAULT_H = 320;
 const DEFAULT_W = 320;
 
-function clampHeight(px: number): number {
+/**
+ * @param containerMaxPx When set (flow canvas size), caps the panel so it cannot exceed that area.
+ */
+function clampHeight(px: number, containerMaxPx?: number): number {
   if (typeof window === 'undefined') return px;
-  const max = Math.max(MIN_H, Math.round(window.innerHeight * 0.88) - 72);
-  return Math.min(max, Math.max(MIN_H, Math.round(px)));
+  const windowMax = Math.max(MIN_H, Math.round(window.innerHeight * 0.88) - 72);
+  const cap =
+    containerMaxPx != null && containerMaxPx > 0
+      ? Math.min(windowMax, Math.floor(containerMaxPx))
+      : windowMax;
+  const lo = Math.min(MIN_H, cap);
+  const hi = cap;
+  return Math.min(hi, Math.max(lo, Math.round(px)));
 }
 
-function clampWidth(px: number): number {
+function clampWidth(px: number, containerMaxPx?: number): number {
   if (typeof window === 'undefined') return px;
-  const max = Math.max(MIN_W, Math.round(window.innerWidth * 0.55));
-  return Math.min(max, Math.max(MIN_W, Math.round(px)));
+  const windowMax = Math.max(MIN_W, Math.round(window.innerWidth * 0.55));
+  const cap =
+    containerMaxPx != null && containerMaxPx > 0
+      ? Math.min(windowMax, Math.floor(containerMaxPx))
+      : windowMax;
+  const lo = Math.min(MIN_W, cap);
+  const hi = cap;
+  return Math.min(hi, Math.max(lo, Math.round(px)));
 }
 
 export function readDockRegion(): FlowInterfaceDockRegion {

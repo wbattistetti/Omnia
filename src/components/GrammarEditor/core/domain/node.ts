@@ -3,6 +3,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import type { GrammarNode, NodeBinding } from '../../types/grammarTypes';
+import { validateSemanticBindingsVsNodeWords } from './semanticBindingsVsNodeWords';
 
 /**
  * Validation result for bindings
@@ -41,15 +42,20 @@ export function createGrammarNode(
 export function addSynonym(
   node: GrammarNode,
   synonym: string
-): GrammarNode {
+): { node: GrammarNode; isValid: boolean; error?: string } {
   if (node.synonyms.includes(synonym)) {
-    return node; // Idempotent
+    return { node, isValid: true }; // Idempotent
   }
-  return {
+  const candidate: GrammarNode = {
     ...node,
     synonyms: [...node.synonyms, synonym],
     updatedAt: Date.now(),
   };
+  const vs = validateSemanticBindingsVsNodeWords(candidate);
+  if (!vs.isValid) {
+    return { node, isValid: false, error: vs.error };
+  }
+  return { node: candidate, isValid: true };
 }
 
 /**
@@ -74,12 +80,17 @@ export function removeSynonym(
 export function updateNodeLabel(
   node: GrammarNode,
   label: string
-): GrammarNode {
-  return {
+): { node: GrammarNode; isValid: boolean; error?: string } {
+  const candidate: GrammarNode = {
     ...node,
     label,
     updatedAt: Date.now(),
   };
+  const vs = validateSemanticBindingsVsNodeWords(candidate);
+  if (!vs.isValid) {
+    return { node, isValid: false, error: vs.error };
+  }
+  return { node: candidate, isValid: true };
 }
 
 /**
@@ -171,12 +182,18 @@ export function addBinding(
     return { node, isValid: false, error: validation.error };
   }
 
+  const candidate: GrammarNode = {
+    ...node,
+    bindings: newBindings,
+    updatedAt: Date.now(),
+  };
+  const vsWords = validateSemanticBindingsVsNodeWords(candidate);
+  if (!vsWords.isValid) {
+    return { node, isValid: false, error: vsWords.error };
+  }
+
   return {
-    node: {
-      ...node,
-      bindings: newBindings,
-      updatedAt: Date.now(),
-    },
+    node: candidate,
     isValid: true,
   };
 }

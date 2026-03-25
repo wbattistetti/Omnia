@@ -328,6 +328,83 @@ Public Module RegexGrammarCompilerTests
     End Function
 
     ''' <summary>
+    ''' Semantic-set node: regex alternation must union all value literals (not .*? placeholder); binding resolved from captured text.
+    ''' </summary>
+    Public Function TestSemanticSetUnionPattern() As Boolean
+        Try
+            Dim setId = "set-nomi-test"
+            Dim vAlf As New SemanticValue() With {.Id = "val-alf", .Value = "alfredo"}
+            Dim vGio As New SemanticValue() With {.Id = "val-gio", .Value = "giovanni"}
+            Dim vWal As New SemanticValue() With {.Id = "val-wal", .Value = "walter"}
+
+            Dim semanticSet As New SemanticSet() With {
+                .Id = setId,
+                .Name = "nomi",
+                .Values = New List(Of SemanticValue) From {vAlf, vGio, vWal}
+            }
+
+            Dim grammar As New Grammar() With {
+                .Id = "test-semantic-set-union",
+                .Name = "Semantic Set Union",
+                .Nodes = New List(Of GrammarNode)(),
+                .Edges = New List(Of GrammarEdge)(),
+                .Slots = New List(Of SemanticSlot)(),
+                .SemanticSets = New List(Of SemanticSet) From {semanticSet},
+                .SemanticValues = New List(Of SemanticValue)()
+            }
+
+            Dim node As New GrammarNode() With {
+                .Id = "node-nomi-only",
+                .Label = "",
+                .Bindings = New List(Of NodeBinding) From {
+                    New NodeBinding() With {.Type = "semantic-set", .SetId = setId}
+                }
+            }
+            grammar.Nodes.Add(node)
+
+            Dim compiledGrammar = GrammarCompiler.Compile(grammar)
+            Dim compiledRegex = RegexGrammarCompiler.CompileToRegex(compiledGrammar)
+
+            Dim rx = compiledRegex.RegexPattern
+            If Not rx.Contains("giovanni", StringComparison.OrdinalIgnoreCase) OrElse
+               Not rx.Contains("alfredo", StringComparison.OrdinalIgnoreCase) OrElse
+               Not rx.Contains("walter", StringComparison.OrdinalIgnoreCase) Then
+                Console.WriteLine($"❌ TestSemanticSetUnionPattern: Pattern missing literals: {rx}")
+                Return False
+            End If
+
+            Dim result = RegexGrammarCompiler.MatchAndExtract(compiledRegex, "walter")
+            If Not result.Success Then
+                Console.WriteLine("❌ TestSemanticSetUnionPattern: Match failed")
+                Return False
+            End If
+
+            If Not result.Bindings.ContainsKey("nomi") Then
+                Console.WriteLine("❌ TestSemanticSetUnionPattern: Missing 'nomi' binding")
+                Return False
+            End If
+
+            If Not String.Equals(CStr(result.Bindings("nomi")), "walter", StringComparison.OrdinalIgnoreCase) Then
+                Console.WriteLine($"❌ TestSemanticSetUnionPattern: Expected binding nomi=walter, got '{result.Bindings("nomi")}'")
+                Return False
+            End If
+
+            If Not result.SemanticValues.Contains("val-wal") Then
+                Console.WriteLine("❌ TestSemanticSetUnionPattern: Expected semantic value id val-wal")
+                Return False
+            End If
+
+            Console.WriteLine("✅ TestSemanticSetUnionPattern: PASSED")
+            Return True
+
+        Catch ex As Exception
+            Console.WriteLine($"❌ TestSemanticSetUnionPattern: Exception - {ex.Message}")
+            Console.WriteLine($"Stack trace: {ex.StackTrace}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
     ''' Test node highlighting (all matched nodes should be tracked)
     ''' </summary>
     Public Function TestNodeHighlighting() As Boolean
@@ -442,6 +519,7 @@ Public Module RegexGrammarCompilerTests
         results.Add(TestAlternativeGrammar())
         results.Add(TestOptionalGrammar())
         results.Add(TestSemanticValueGrammar())
+        results.Add(TestSemanticSetUnionPattern())
         results.Add(TestNodeHighlighting())
 
         Dim passed = results.Count(Function(r) r)

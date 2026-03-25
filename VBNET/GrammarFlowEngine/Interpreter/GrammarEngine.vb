@@ -3,6 +3,8 @@ Option Explicit On
 
 Imports System.Collections.Generic
 Imports System.Linq
+Imports System.Text.RegularExpressions
+Imports GrammarFlowEngine.Models
 ''' <summary>
 ''' Main Grammar Flow Engine
 ''' Front end → Grammar Compiler → Grammar Flow Engine
@@ -189,6 +191,16 @@ Public Class GrammarEngine
                 End If
             End If
 
+            Dim hasSemanticSet = node.Bindings IsNot Nothing AndAlso
+                                 node.Bindings.Any(Function(b) b.Type = "semantic-set" AndAlso Not String.IsNullOrEmpty(b.SetId))
+            Dim semanticSetId As String = Nothing
+            If hasSemanticSet Then
+                Dim ssBinding = node.Bindings.FirstOrDefault(Function(b) b.Type = "semantic-set")
+                If ssBinding IsNot Nothing Then
+                    semanticSetId = ssBinding.SetId
+                End If
+            End If
+
             ' Build hierarchy based on bindings
             If hasSlot AndAlso hasSemanticValue Then
                 ' ✅ Caso 1: Slot + SemanticValue → Slot → SemanticValue → Linguistic
@@ -250,6 +262,79 @@ Public Class GrammarEngine
                     End If
 
                     slotResult.Children.Add(svResult)
+                    matches.Add(slotResult)
+                    processedNodeIds.Add(nodeMatch.NodeId)
+                End If
+
+            ElseIf hasSlot AndAlso hasSemanticSet Then
+                ' Slot + semantic-set on same node: Slot → resolved semantic value → Linguistic
+                Dim resolvedFromSet = ResolveSemanticValueForSet(regexResult, semanticSetId, nodeMatch.MatchedText, compiledRegexGrammar)
+                Dim slot = compiledRegexGrammar.OriginalGrammar.Slots.GetValueOrDefault(slotId)
+                If slot IsNot Nothing Then
+                    Dim slotResult As New MatchResult() With {
+                        .Success = True,
+                        .NodeId = nodeMatch.NodeId,
+                        .NodeLabel = nodeMatch.NodeLabel,
+                        .MatchedText = nodeMatch.MatchedText,
+                        .MatchType = "slot",
+                        .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                        .ConsumedChars = nodeMatch.MatchedText.Length,
+                        .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                        .Children = New List(Of MatchResult)(),
+                        .SlotBinding = New NodeBindingInfo() With {
+                            .Type = "slot",
+                            .Id = slot.Id,
+                            .Name = slot.Name,
+                            .Value = nodeMatch.MatchedText
+                        }
+                    }
+
+                    If resolvedFromSet IsNot Nothing Then
+                        Dim svResult As New MatchResult() With {
+                            .Success = True,
+                            .NodeId = nodeMatch.NodeId,
+                            .NodeLabel = nodeMatch.NodeLabel,
+                            .MatchedText = nodeMatch.MatchedText,
+                            .MatchType = "semantic-value",
+                            .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                            .ConsumedChars = nodeMatch.MatchedText.Length,
+                            .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                            .Children = New List(Of MatchResult)(),
+                            .SemanticValueBinding = New NodeBindingInfo() With {
+                                .Type = "semantic-value",
+                                .Id = resolvedFromSet.Id,
+                                .Name = resolvedFromSet.Value,
+                                .Value = nodeMatch.MatchedText
+                            }
+                        }
+                        If Not String.IsNullOrEmpty(nodeMatch.MatchedText) Then
+                            svResult.Children.Add(New MatchResult() With {
+                                .Success = True,
+                                .NodeId = $"ling-{nodeMatch.NodeId}",
+                                .NodeLabel = nodeMatch.MatchedText,
+                                .MatchedText = nodeMatch.MatchedText,
+                                .MatchType = "linguistic",
+                                .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                                .ConsumedChars = nodeMatch.MatchedText.Length,
+                                .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                                .Children = New List(Of MatchResult)()
+                            })
+                        End If
+                        slotResult.Children.Add(svResult)
+                    ElseIf Not String.IsNullOrEmpty(nodeMatch.MatchedText) Then
+                        slotResult.Children.Add(New MatchResult() With {
+                            .Success = True,
+                            .NodeId = $"ling-{nodeMatch.NodeId}",
+                            .NodeLabel = nodeMatch.MatchedText,
+                            .MatchedText = nodeMatch.MatchedText,
+                            .MatchType = "linguistic",
+                            .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                            .ConsumedChars = nodeMatch.MatchedText.Length,
+                            .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                            .Children = New List(Of MatchResult)()
+                        })
+                    End If
+
                     matches.Add(slotResult)
                     processedNodeIds.Add(nodeMatch.NodeId)
                 End If
@@ -336,6 +421,59 @@ Public Class GrammarEngine
                     processedNodeIds.Add(nodeMatch.NodeId)
                 End If
 
+            ElseIf hasSemanticSet Then
+                ' Semantic-set only: resolved canonical value (from MatchAndExtract bindings) → Linguistic
+                Dim resolvedFromSet = ResolveSemanticValueForSet(regexResult, semanticSetId, nodeMatch.MatchedText, compiledRegexGrammar)
+                If resolvedFromSet IsNot Nothing Then
+                    Dim svResult As New MatchResult() With {
+                        .Success = True,
+                        .NodeId = nodeMatch.NodeId,
+                        .NodeLabel = nodeMatch.NodeLabel,
+                        .MatchedText = nodeMatch.MatchedText,
+                        .MatchType = "semantic-value",
+                        .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                        .ConsumedChars = nodeMatch.MatchedText.Length,
+                        .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                        .Children = New List(Of MatchResult)(),
+                        .SemanticValueBinding = New NodeBindingInfo() With {
+                            .Type = "semantic-value",
+                            .Id = resolvedFromSet.Id,
+                            .Name = resolvedFromSet.Value,
+                            .Value = nodeMatch.MatchedText
+                        }
+                    }
+
+                    If Not String.IsNullOrEmpty(nodeMatch.MatchedText) Then
+                        svResult.Children.Add(New MatchResult() With {
+                            .Success = True,
+                            .NodeId = $"ling-{nodeMatch.NodeId}",
+                            .NodeLabel = nodeMatch.MatchedText,
+                            .MatchedText = nodeMatch.MatchedText,
+                            .MatchType = "linguistic",
+                            .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                            .ConsumedChars = nodeMatch.MatchedText.Length,
+                            .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                            .Children = New List(Of MatchResult)()
+                        })
+                    End If
+
+                    matches.Add(svResult)
+                    processedNodeIds.Add(nodeMatch.NodeId)
+                ElseIf Not String.IsNullOrEmpty(nodeMatch.MatchedText) Then
+                    matches.Add(New MatchResult() With {
+                        .Success = True,
+                        .NodeId = nodeMatch.NodeId,
+                        .NodeLabel = nodeMatch.NodeLabel,
+                        .MatchedText = nodeMatch.MatchedText,
+                        .MatchType = "linguistic",
+                        .ConsumedWords = nodeMatch.MatchedText.Split({" "c}, StringSplitOptions.RemoveEmptyEntries).Length,
+                        .ConsumedChars = nodeMatch.MatchedText.Length,
+                        .Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase),
+                        .Children = New List(Of MatchResult)()
+                    })
+                    processedNodeIds.Add(nodeMatch.NodeId)
+                End If
+
             Else
                 ' ✅ Caso 4: Nessun binding → Solo Linguistic
                 If Not String.IsNullOrEmpty(nodeMatch.MatchedText) Then
@@ -356,6 +494,64 @@ Public Class GrammarEngine
         Next
 
         Return matches
+    End Function
+
+    ''' <summary>
+    ''' Resolves the SemanticValue for a semantic-set node using the same data MatchAndExtract produced:
+    ''' first <see cref="RegexMatchResult.Bindings"/> keyed by semantic set name (canonical value),
+    ''' then ids in <see cref="RegexMatchResult.SemanticValues"/>, then linguistic disambiguation.
+    ''' </summary>
+    Private Function ResolveSemanticValueForSet(
+        regexResult As RegexMatchResult,
+        setId As String,
+        matchedText As String,
+        compiled As CompiledRegexGrammar
+    ) As SemanticValue
+        If String.IsNullOrEmpty(setId) OrElse compiled?.OriginalGrammar Is Nothing Then Return Nothing
+
+        Dim semSet = compiled.OriginalGrammar.SemanticSets.GetValueOrDefault(setId)
+        If semSet Is Nothing OrElse semSet.Values Is Nothing OrElse semSet.Values.Count = 0 Then Return Nothing
+
+        Dim canonical As String = Nothing
+        If regexResult.Bindings IsNot Nothing AndAlso Not String.IsNullOrEmpty(semSet.Name) Then
+            Dim obj As Object = Nothing
+            If regexResult.Bindings.TryGetValue(semSet.Name, obj) AndAlso obj IsNot Nothing Then
+                canonical = obj.ToString()
+            End If
+        End If
+        If Not String.IsNullOrEmpty(canonical) Then
+            Dim byCanon = semSet.Values.FirstOrDefault(Function(v) String.Equals(v.Value, canonical, StringComparison.OrdinalIgnoreCase))
+            If byCanon IsNot Nothing Then Return byCanon
+        End If
+
+        If regexResult.SemanticValues IsNot Nothing Then
+            For Each vid In regexResult.SemanticValues
+                Dim byId = semSet.Values.FirstOrDefault(Function(v) v.Id = vid)
+                If byId IsNot Nothing Then Return byId
+            Next
+        End If
+
+        For Each v In semSet.Values
+            If SemanticValueMatchesLinguisticCapture(v, matchedText) Then Return v
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' Same disambiguation idea as RegexGrammarCompiler semantic-set extraction (linguistic capture → value).
+    ''' </summary>
+    Private Function SemanticValueMatchesLinguisticCapture(v As SemanticValue, captured As String) As Boolean
+        If v Is Nothing OrElse String.IsNullOrEmpty(captured) Then Return False
+        If String.Equals(v.Value, captured, StringComparison.OrdinalIgnoreCase) Then Return True
+        If v.Synonyms IsNot Nothing AndAlso v.Synonyms.Any(Function(s) String.Equals(s, captured, StringComparison.OrdinalIgnoreCase)) Then Return True
+        If Not String.IsNullOrEmpty(v.Regex) Then
+            Try
+                Return Regex.IsMatch(captured, v.Regex, RegexOptions.IgnoreCase)
+            Catch
+                Return False
+            End Try
+        End If
+        Return False
     End Function
 
     ''' <summary>

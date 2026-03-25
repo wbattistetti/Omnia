@@ -59,9 +59,12 @@ export function useNodeKeyboardHandlers({
           );
         }
 
-        // Always save the current node label
         if (trimmedValue) {
-          editNodeLabel(nodeId, trimmedValue);
+          const saved = editNodeLabel(nodeId, trimmedValue);
+          if (!saved.success) {
+            window.alert(saved.error ?? 'Cannot save caption.');
+            return;
+          }
           onSave(trimmedValue);
         }
 

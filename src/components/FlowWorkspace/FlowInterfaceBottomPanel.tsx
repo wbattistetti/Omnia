@@ -1,10 +1,10 @@
 /**
  * Flow Interface panel: Input/Output mapping (meta.flowInterface), dockable on four edges.
- * Thin resize strips + bidirectional cursors; dock position persisted (flowInterfaceDockStorage).
+ * Thin resize strips; dock position persisted. Linguetta (chiuso) solo per aprire; chiusura con X sull’header “Interface · …”.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronUp, GripVertical, Layers } from 'lucide-react';
+import { ChevronUp, Layers, X } from 'lucide-react';
 import { useFlowActions, useFlowWorkspace } from '@flows/FlowStore';
 import { InterfaceMappingEditor } from '../FlowMappingPanel/InterfaceMappingEditor';
 import {
@@ -39,8 +39,6 @@ export interface FlowInterfaceBottomPanelProps {
   projectId?: string;
 }
 
-const EDGE_INSET = '2.5rem'; /* clears Flow tab bar / bottom chrome (bottom-10) */
-
 const shellClass =
   'z-[42] flex pointer-events-none border-violet-700/45 bg-[#0a0c10]/96 backdrop-blur-md shadow-[0_-6px_28px_rgba(0,0,0,0.45)]';
 
@@ -65,6 +63,10 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
   const [panelWidthPx, setPanelWidthPx] = useState(() => readPanelWidth());
   const [resizing, setResizing] = useState(false);
   const resizeStartRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const flowShellRef = useRef<HTMLDivElement | null>(null);
+  /** Flow canvas bounds (same as `absolute inset-0` shell); used to cap panel size. */
+  const layoutSizeRef = useRef({ w: 0, h: 0 });
+  const [flowShellSize, setFlowShellSize] = useState({ w: 0, h: 0 });
 
   const flow = flows[flowId];
   const iface = flow?.meta?.flowInterface ?? { input: [] as MappingEntry[], output: [] as MappingEntry[] };
@@ -128,10 +130,38 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
     return () => window.removeEventListener(FLOW_INTERFACE_ROW_POINTER_DROP, handler as EventListener);
   }, [flowId, projectId, updateFlowMeta]);
 
+  const clampHeightFlow = useCallback((px: number) => {
+    const h = layoutSizeRef.current.h;
+    return clampHeight(px, h > 0 ? h : undefined);
+  }, []);
+
+  const clampWidthFlow = useCallback((px: number) => {
+    const w = layoutSizeRef.current.w;
+    return clampWidth(px, w > 0 ? w : undefined);
+  }, []);
+
+  useEffect(() => {
+    const el = flowShellRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect;
+      if (!cr) return;
+      const w = Math.floor(cr.width);
+      const h = Math.floor(cr.height);
+      layoutSizeRef.current = { w, h };
+      setFlowShellSize({ w, h });
+      setPanelHeightPx((h0) => clampHeight(h0, h > 0 ? h : undefined));
+      setPanelWidthPx((w0) => clampWidth(w0, w > 0 ? w : undefined));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     const onResize = () => {
-      setPanelHeightPx((h) => clampHeight(h));
-      setPanelWidthPx((w) => clampWidth(w));
+      const { h, w } = layoutSizeRef.current;
+      setPanelHeightPx((h0) => clampHeight(h0, h > 0 ? h : undefined));
+      setPanelWidthPx((w0) => clampWidth(w0, w > 0 ? w : undefined));
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -150,7 +180,9 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
     writeDockRegion(r);
   }, []);
 
-  const { dockDragPreview, dockDragHandlers } = useFlowInterfaceDockDrag(commitDockRegion);
+  const getFlowBounds = useCallback(() => flowShellRef.current?.getBoundingClientRect() ?? null, []);
+
+  const { dockDragPreview, dockDragHandlers } = useFlowInterfaceDockDrag(commitDockRegion, getFlowBounds);
 
   const onPointerDownHorizontalBottom = useCallback(
     (e: React.PointerEvent) => {
@@ -170,9 +202,9 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
   const onPointerMoveHorizontalBottom = useCallback((e: React.PointerEvent) => {
     const start = resizeStartRef.current;
     if (!start) return;
-    const next = clampHeight(start.h + (start.y - e.clientY));
+    const next = clampHeightFlow(start.h + (start.y - e.clientY));
     setPanelHeightPx(next);
-  }, []);
+  }, [clampHeightFlow]);
 
   const onPointerDownHorizontalTop = useCallback(
     (e: React.PointerEvent) => {
@@ -192,9 +224,9 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
   const onPointerMoveHorizontalTop = useCallback((e: React.PointerEvent) => {
     const start = resizeStartRef.current;
     if (!start) return;
-    const next = clampHeight(start.h + (e.clientY - start.y));
+    const next = clampHeightFlow(start.h + (e.clientY - start.y));
     setPanelHeightPx(next);
-  }, []);
+  }, [clampHeightFlow]);
 
   const onPointerDownVerticalLeft = useCallback(
     (e: React.PointerEvent) => {
@@ -214,9 +246,9 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
   const onPointerMoveVerticalLeft = useCallback((e: React.PointerEvent) => {
     const start = resizeStartRef.current;
     if (!start) return;
-    const next = clampWidth(start.w + (e.clientX - start.x));
+    const next = clampWidthFlow(start.w + (e.clientX - start.x));
     setPanelWidthPx(next);
-  }, []);
+  }, [clampWidthFlow]);
 
   const onPointerDownVerticalRight = useCallback(
     (e: React.PointerEvent) => {
@@ -236,9 +268,9 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
   const onPointerMoveVerticalRight = useCallback((e: React.PointerEvent) => {
     const start = resizeStartRef.current;
     if (!start) return;
-    const next = clampWidth(start.w + (start.x - e.clientX));
+    const next = clampWidthFlow(start.w + (start.x - e.clientX));
     setPanelWidthPx(next);
-  }, []);
+  }, [clampWidthFlow]);
 
   const onSplitterPointerUp = useCallback(
     (e: React.PointerEvent, kind: 'height' | 'width') => {
@@ -251,19 +283,34 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
       }
       if (kind === 'height') {
         setPanelHeightPx((h) => {
-          const c = clampHeight(h);
+          const bound = layoutSizeRef.current.h;
+          const c = clampHeight(h, bound > 0 ? bound : undefined);
           writePanelHeight(c);
           return c;
         });
       } else {
         setPanelWidthPx((w) => {
-          const c = clampWidth(w);
+          const bound = layoutSizeRef.current.w;
+          const c = clampWidth(w, bound > 0 ? bound : undefined);
           writePanelWidth(c);
           return c;
         });
       }
     },
     []
+  );
+
+  const interfaceShellHeaderClose = (
+    <button
+      type="button"
+      onClick={() => setOpen(false)}
+      onPointerDown={(e) => e.stopPropagation()}
+      className="rounded p-0.5 text-white/90 hover:bg-white/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+      aria-label="Chiudi pannello Interface"
+      title="Chiudi"
+    >
+      <X className="w-3.5 h-3.5" strokeWidth={2.5} aria-hidden />
+    </button>
   );
 
   const editor = (
@@ -293,25 +340,9 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
         innerClassName="pb-2"
         flowDropTarget={{ flowCanvasId: flowId }}
         interfaceTitleBarDockDragHandlers={dockDragHandlers}
+        interfaceShellHeaderExtra={interfaceShellHeaderClose}
       />
     </div>
-  );
-
-  const dockSelect = (
-    <label className="pointer-events-auto flex items-center gap-1.5 text-[10px] text-violet-200/90 shrink-0">
-      <span className="sr-only">Posizione pannello</span>
-      <select
-        value={dockRegion}
-        onChange={onDockChange}
-        className="rounded border border-violet-600/50 bg-slate-900/90 px-1.5 py-0.5 text-[10px] font-medium text-violet-100 cursor-pointer max-w-[7.5rem]"
-        title="Dock pannello Interface"
-      >
-        <option value="bottom">Basso</option>
-        <option value="top">Alto</option>
-        <option value="left">Sinistra</option>
-        <option value="right">Destra</option>
-      </select>
-    </label>
   );
 
   const lostCapture = useCallback(() => {
@@ -327,7 +358,11 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
       aria-orientation="horizontal"
       aria-valuenow={panelHeightPx}
       aria-valuemin={MIN_H}
-      aria-valuemax={typeof window !== 'undefined' ? clampHeight(9999) : 800}
+      aria-valuemax={
+        typeof window !== 'undefined'
+          ? clampHeight(9999, flowShellSize.h > 0 ? flowShellSize.h : undefined)
+          : 800
+      }
       className={thinSplitterHorizontal('top')}
       onPointerDown={onPointerDownHorizontalBottom}
       onPointerMove={onPointerMoveHorizontalBottom}
@@ -340,13 +375,13 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
 
   const bottomPanel = (
     <div
-      className={`fixed left-0 right-0 ${shellClass} flex-col items-stretch border-t ${transitionClass} ${
-        open ? 'bottom-10 translate-y-0' : 'bottom-10 translate-y-full'
+      className={`absolute left-0 right-0 ${shellClass} flex-col items-stretch border-t ${transitionClass} ${
+        open ? 'bottom-0 translate-y-0' : 'bottom-0 translate-y-full'
       }`}
       style={{ height: panelHeightPx }}
       aria-hidden={!open}
     >
-      <div className="flex flex-col h-full min-h-0">
+      <div className="flex flex-col h-full min-h-0 pointer-events-auto">
         {bottomSplitter}
         {editor}
       </div>
@@ -355,17 +390,24 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
 
   const topPanel = (
     <div
-      className={`fixed left-0 right-0 ${shellClass} flex-col items-stretch border-b ${transitionClass} ${
+      className={`absolute left-0 right-0 top-0 ${shellClass} flex-col items-stretch border-b ${transitionClass} ${
         open ? 'translate-y-0' : '-translate-y-full'
       }`}
-      style={{ top: EDGE_INSET, height: panelHeightPx }}
+      style={{ height: panelHeightPx }}
       aria-hidden={!open}
     >
-      <div className="flex flex-col h-full min-h-0">
+      <div className="flex flex-col h-full min-h-0 pointer-events-auto">
         {editor}
         <div
           role="separator"
           aria-orientation="horizontal"
+          aria-valuenow={panelHeightPx}
+          aria-valuemin={MIN_H}
+          aria-valuemax={
+            typeof window !== 'undefined'
+              ? clampHeight(9999, flowShellSize.h > 0 ? flowShellSize.h : undefined)
+              : 800
+          }
           className={thinSplitterHorizontal('bottom')}
           onPointerDown={onPointerDownHorizontalTop}
           onPointerMove={onPointerMoveHorizontalTop}
@@ -380,17 +422,24 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
 
   const leftPanel = (
     <div
-      className={`fixed left-0 ${shellClass} flex-row border-r ${transitionClass} ${
+      className={`absolute left-0 top-0 bottom-0 ${shellClass} flex-row border-r ${transitionClass} ${
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
-      style={{ top: EDGE_INSET, bottom: EDGE_INSET, width: panelWidthPx }}
+      style={{ width: panelWidthPx }}
       aria-hidden={!open}
     >
-      <div className="flex flex-row h-full min-h-0 w-full min-w-0">
+      <div className="flex flex-row h-full min-h-0 w-full min-w-0 pointer-events-auto">
         {editor}
         <div
           role="separator"
           aria-orientation="vertical"
+          aria-valuenow={panelWidthPx}
+          aria-valuemin={MIN_W}
+          aria-valuemax={
+            typeof window !== 'undefined'
+              ? clampWidth(9999, flowShellSize.w > 0 ? flowShellSize.w : undefined)
+              : 1200
+          }
           className={thinSplitterVertical('right')}
           onPointerDown={onPointerDownVerticalLeft}
           onPointerMove={onPointerMoveVerticalLeft}
@@ -405,16 +454,23 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
 
   const rightPanel = (
     <div
-      className={`fixed ${shellClass} flex-row border-l ${transitionClass} ${
+      className={`absolute right-0 top-0 bottom-0 ${shellClass} flex-row border-l ${transitionClass} ${
         open ? 'translate-x-0' : 'translate-x-full'
       }`}
-      style={{ top: EDGE_INSET, bottom: EDGE_INSET, right: 0, width: panelWidthPx }}
+      style={{ width: panelWidthPx }}
       aria-hidden={!open}
     >
-      <div className="flex flex-row h-full min-h-0 w-full min-w-0 pr-12 box-border">
+      <div className="flex flex-row h-full min-h-0 w-full min-w-0 box-border pointer-events-auto">
         <div
           role="separator"
           aria-orientation="vertical"
+          aria-valuenow={panelWidthPx}
+          aria-valuemin={MIN_W}
+          aria-valuemax={
+            typeof window !== 'undefined'
+              ? clampWidth(9999, flowShellSize.w > 0 ? flowShellSize.w : undefined)
+              : 1200
+          }
           className={thinSplitterVertical('left')}
           onPointerDown={onPointerDownVerticalRight}
           onPointerMove={onPointerMoveVerticalRight}
@@ -429,64 +485,50 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
   );
 
   const toggleShellBase =
-    'fixed z-[43] flex items-center gap-1.5 border border-violet-600/55 bg-slate-800/95 hover:bg-slate-700/95 text-violet-100 text-xs font-semibold tracking-wide shadow-lg backdrop-blur-sm transition-colors';
+    'absolute z-[43] flex items-center gap-1.5 border border-violet-600/55 bg-slate-800/95 hover:bg-slate-700/95 text-violet-100 text-xs font-semibold tracking-wide shadow-lg backdrop-blur-sm transition-colors pointer-events-auto';
   const toggleStyle: React.CSSProperties = { WebkitBackdropFilter: 'blur(8px)' };
 
-  const dockDragHandle = (
-    <div
-      {...dockDragHandlers}
-      className="pointer-events-auto shrink-0 cursor-grab active:cursor-grabbing rounded p-1 text-violet-300/90 hover:bg-white/10 touch-none select-none"
-      title="Trascina verso un bordo dello schermo per spostare il pannello"
-      role="presentation"
-    >
-      <GripVertical className="w-4 h-4" strokeWidth={2} aria-hidden />
-    </div>
-  );
-
+  /** Linguetta minimale: solo apertura; posizione dock da trascinamento del pannello (header con pannello aperto). */
   const toggleBottom = (
     <div
       className={`${toggleShellBase} bottom-0 left-1/2 -translate-x-1/2 rounded-t-lg border-b-0 px-2 py-2 min-w-[10rem]`}
       style={toggleStyle}
     >
-      {dockDragHandle}
-      {dockSelect}
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex flex-1 min-w-0 items-center justify-center gap-2 rounded-md bg-transparent border-0 text-inherit cursor-pointer py-1 px-1"
-        aria-expanded={open}
-        aria-label={open ? 'Chiudi Interface' : 'Apri Interface'}
-        title={open ? 'Chiudi Interface' : 'Apri Interface'}
+        onClick={() => setOpen(true)}
+        className="flex w-full min-w-0 items-center justify-center gap-2 rounded-md bg-transparent border-0 text-inherit cursor-pointer py-1 px-1"
+        aria-expanded={false}
+        aria-label="Apri Interface"
+        title="Apri Interface"
       >
         <Layers className="w-4 h-4 text-violet-400/90 shrink-0" strokeWidth={2} />
         <span className="truncate max-w-[8rem]" title={flowId}>
           Interface · {flowTitle}
         </span>
-        <ChevronUp className={`w-4 h-4 shrink-0 opacity-80 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronUp className="w-4 h-4 shrink-0 opacity-80" />
       </button>
     </div>
   );
 
   const toggleTop = (
     <div
-      className={`${toggleShellBase} left-1/2 -translate-x-1/2 rounded-b-lg border-t-0 px-2 py-2 min-w-[10rem]`}
-      style={{ ...toggleStyle, top: EDGE_INSET }}
+      className={`${toggleShellBase} left-1/2 top-0 -translate-x-1/2 rounded-b-lg border-t-0 px-2 py-2 min-w-[10rem]`}
+      style={toggleStyle}
     >
-      {dockDragHandle}
-      {dockSelect}
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex flex-1 min-w-0 items-center justify-center gap-2 rounded-md bg-transparent border-0 text-inherit cursor-pointer py-1 px-1"
-        aria-expanded={open}
-        aria-label={open ? 'Chiudi Interface' : 'Apri Interface'}
-        title={open ? 'Chiudi Interface' : 'Apri Interface'}
+        onClick={() => setOpen(true)}
+        className="flex w-full min-w-0 items-center justify-center gap-2 rounded-md bg-transparent border-0 text-inherit cursor-pointer py-1 px-1"
+        aria-expanded={false}
+        aria-label="Apri Interface"
+        title="Apri Interface"
       >
         <Layers className="w-4 h-4 text-violet-400/90 shrink-0" strokeWidth={2} />
         <span className="truncate max-w-[8rem]" title={flowId}>
           Interface · {flowTitle}
         </span>
-        <ChevronUp className={`w-4 h-4 shrink-0 opacity-80 transition-transform ${open ? '' : 'rotate-180'}`} />
+        <ChevronUp className="w-4 h-4 shrink-0 opacity-80 rotate-180" />
       </button>
     </div>
   );
@@ -496,15 +538,13 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
       className={`${toggleShellBase} left-0 top-1/2 -translate-y-1/2 rounded-r-lg border-l-0 flex-col py-3 px-2 min-w-0 max-w-[9rem]`}
       style={toggleStyle}
     >
-      {dockDragHandle}
-      {dockSelect}
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(true)}
         className="flex flex-col items-center gap-2 rounded-md bg-transparent border-0 text-inherit cursor-pointer py-1 w-full min-w-0"
-        aria-expanded={open}
-        aria-label={open ? 'Chiudi Interface' : 'Apri Interface'}
-        title={open ? 'Chiudi Interface' : 'Apri Interface'}
+        aria-expanded={false}
+        aria-label="Apri Interface"
+        title="Apri Interface"
       >
         <Layers className="w-4 h-4 text-violet-400/90 shrink-0" strokeWidth={2} />
         <span
@@ -521,18 +561,16 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
 
   const toggleRight = (
     <div
-      className={`${toggleShellBase} right-12 top-1/2 -translate-y-1/2 rounded-l-lg border-r-0 flex-col py-3 px-2 min-w-0 max-w-[9rem]`}
+      className={`${toggleShellBase} right-0 top-1/2 -translate-y-1/2 rounded-l-lg border-r-0 flex-col py-3 px-2 min-w-0 max-w-[9rem]`}
       style={toggleStyle}
     >
-      {dockDragHandle}
-      {dockSelect}
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(true)}
         className="flex flex-col items-center gap-2 rounded-md bg-transparent border-0 text-inherit cursor-pointer py-1 w-full min-w-0"
-        aria-expanded={open}
-        aria-label={open ? 'Chiudi Interface' : 'Apri Interface'}
-        title={open ? 'Chiudi Interface' : 'Apri Interface'}
+        aria-expanded={false}
+        aria-label="Apri Interface"
+        title="Apri Interface"
       >
         <Layers className="w-4 h-4 text-violet-400/90 shrink-0" strokeWidth={2} />
         <span
@@ -548,7 +586,7 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
   );
 
   return (
-    <>
+    <div ref={flowShellRef} className="absolute inset-0 z-[38] pointer-events-none">
       {dockDragPreview !== null ? (
         <FlowInterfaceDockPreviewOverlay
           preview={dockDragPreview}
@@ -561,10 +599,10 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
       {dockRegion === 'left' ? leftPanel : null}
       {dockRegion === 'right' ? rightPanel : null}
 
-      {dockRegion === 'bottom' ? toggleBottom : null}
-      {dockRegion === 'top' ? toggleTop : null}
-      {dockRegion === 'left' ? toggleLeft : null}
-      {dockRegion === 'right' ? toggleRight : null}
-    </>
+      {!open && dockRegion === 'bottom' ? toggleBottom : null}
+      {!open && dockRegion === 'top' ? toggleTop : null}
+      {!open && dockRegion === 'left' ? toggleLeft : null}
+      {!open && dockRegion === 'right' ? toggleRight : null}
+    </div>
   );
 }
