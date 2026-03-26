@@ -9,6 +9,42 @@ import { applyEdgeLinkPipeline, type ProjectDataConditionsShape } from "./edgeLi
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { FlowStateBridge } from '../../services/FlowStateBridge';
 
+/** z-index sotto il pannello edge; sopra il canvas React Flow in genere. */
+const EDGE_BACKDROP_Z = 100_000;
+
+/**
+ * Chiude il link-edge con un solo gestore: overlay a schermo intero sotto l’editor.
+ * Evita `mousedown` su `document` + `closest(wrapper)` che si rompe con layout ritardato / portal.
+ */
+function EdgeIntellisenseMount({
+  children,
+  onDismiss,
+}: {
+  children: React.ReactNode;
+  onDismiss: () => void;
+}) {
+  return (
+    <>
+      <div
+        aria-hidden
+        data-intellisense-edge-backdrop
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: EDGE_BACKDROP_Z,
+          background: 'transparent',
+        }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDismiss();
+        }}
+      />
+      {children}
+    </>
+  );
+}
+
 export const IntellisensePopover: React.FC = () => {
     const { state, actions } = useIntellisense();
     const { data: projectData } = useProjectData();
@@ -93,33 +129,10 @@ export const IntellisensePopover: React.FC = () => {
         };
     }, [state.isOpen, state.target, getEl]);
 
-    // ✅ Click fuori → Chiudi e cleanup
-    useEffect(() => {
-        if (!state.isOpen || !state.target?.edgeId) return;
-
-        const handleClickOutside = (e: MouseEvent) => {
-            const target = e.target as Element;
-            // ✅ Ignora click dentro il wrapper Intellisense
-            if (target.closest('.intellisense-standalone-wrapper')) {
-                return;
-            }
-            // ✅ Click fuori → Chiudi e cleanup
-            actions.close();
-
-            // Cleanup: remove temporary node and edge
-            const cleanupTempNodesAndEdges = FlowStateBridge.getCleanupAllTempNodesAndEdges();
-            if (cleanupTempNodesAndEdges) {
-                cleanupTempNodesAndEdges();
-            }
-        };
-
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [state.isOpen, state.target, actions]);
-
     // Handler per chiudere
     const handleClose = () => {
         actions.close();
+        FlowStateBridge.invokePendingEdgeConnectClear();
 
         // Cleanup: if it's an edge, remove temporary node and link
         if (state.target?.edgeId) {
@@ -136,11 +149,15 @@ export const IntellisensePopover: React.FC = () => {
             const edgeId = state.target?.edgeId;
             actions.close();
             if (!edgeId) return;
-            await applyEdgeLinkPipeline(edgeId, choice, {
-                projectData: projectData as ProjectDataConditionsShape,
-                addItem,
-                addCategory,
-            });
+            try {
+                await applyEdgeLinkPipeline(edgeId, choice, {
+                    projectData: projectData as ProjectDataConditionsShape,
+                    addItem,
+                    addCategory,
+                });
+            } finally {
+                FlowStateBridge.invokePendingEdgeConnectClear();
+            }
         },
         [state.target, actions, projectData, addItem, addCategory]
     );
@@ -158,52 +175,48 @@ export const IntellisensePopover: React.FC = () => {
     }
 
     const linkMid = state.target?.linkMidScreen;
-    if (state.target?.edgeId && linkMid) {
+    const edgeId = state.target?.edgeId;
+    const legacyEdgeAnchor =
+        edgeId && rect && !linkMid
+            ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+            : null;
+    const edgeAnchorScreen = linkMid ?? legacyEdgeAnchor;
+
+    if (edgeId && edgeAnchorScreen) {
         return createPortal(
-            <IntellisenseStandalone
-                anchorScreen={linkMid}
-                extraItems={state.catalog}
-                allowedKinds={['condition', 'intent']}
-                onCommit={handleEdgeLinkCommit}
-                onClose={handleClose}
-            />,
+            <EdgeIntellisenseMount onDismiss={handleClose}>
+                <IntellisenseStandalone
+                    anchorScreen={edgeAnchorScreen}
+                    extraItems={state.catalog}
+                    allowedKinds={['condition', 'intent']}
+                    onCommit={handleEdgeLinkCommit}
+                    onClose={handleClose}
+                />
+            </EdgeIntellisenseMount>,
             document.body
         );
+    }
+
+    if (edgeId && !edgeAnchorScreen) {
+        return null;
     }
 
     if (!rect || !referenceElement) {
         return null;
     }
 
-    const legacyEdgeAnchor =
-        state.target?.edgeId && rect
-            ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-            : null;
-
     return createPortal(
-        <>
-            {state.target?.edgeId && legacyEdgeAnchor ? (
-                <IntellisenseStandalone
-                    anchorScreen={legacyEdgeAnchor}
-                    extraItems={state.catalog}
-                    allowedKinds={['condition', 'intent']}
-                    onCommit={handleEdgeLinkCommit}
-                    onClose={handleClose}
-                />
-            ) : (
-                <IntellisenseMenu
-                    isOpen={state.isOpen}
-                    query={state.query}
-                    position={{ x: rect.left, y: rect.bottom + 8 }}
-                    referenceElement={referenceElement}
-                    onSelect={handleMenuItemSelect}
-                    onClose={handleClose}
-                    extraItems={state.catalog}
-                    allowedKinds={state.target?.edgeId ? ['condition', 'intent'] : undefined}
-                    mode="inline"
-                />
-            )}
-        </>,
+        <IntellisenseMenu
+            isOpen={state.isOpen}
+            query={state.query}
+            position={{ x: rect.left, y: rect.bottom + 8 }}
+            referenceElement={referenceElement}
+            onSelect={handleMenuItemSelect}
+            onClose={handleClose}
+            extraItems={state.catalog}
+            allowedKinds={edgeId ? ['condition', 'intent'] : undefined}
+            mode="inline"
+        />,
         document.body
     );
 };

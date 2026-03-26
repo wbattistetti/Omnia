@@ -1,4 +1,7 @@
 import React, { forwardRef, useMemo } from 'react';
+
+/** Fascia invisibile intorno al tratto (~9px per lato) per hover/click più tolleranti. */
+const EDGE_POINTER_HIT_STROKE_PX = 18;
 import { getBezierPath, getSmoothStepPath } from 'reactflow';
 import { LinkStyle } from '../../types/flowTypes';
 import { Highlight } from '../../executionHighlight/executionHighlightConstants';
@@ -231,7 +234,7 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
 
     return (
       <>
-        {/* Path principale */}
+        {/* Path visibile: niente pointer-events (la fascia sotto riceve i puntatori) */}
         <path
           ref={ref}
           id={id}
@@ -244,9 +247,24 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
             strokeWidth,
             opacity: pathOpacity,
             transition: 'stroke 0.15s',
-            cursor: 'default', // Normal cursor, not pointer
+            cursor: 'default',
+            pointerEvents: 'none',
           }}
           markerEnd={markerEnd ? `url(#${getNormalizedMarkerEnd(markerEnd)})` : undefined}
+        />
+
+        {/* Fascia invisibile più larga sullo stesso d — hover anche vicino al segmento */}
+        <path
+          d={edgePath}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={EDGE_POINTER_HIT_STROKE_PX}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            pointerEvents: 'stroke',
+            cursor: 'default',
+          }}
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
           onContextMenu={handleContextMenu}

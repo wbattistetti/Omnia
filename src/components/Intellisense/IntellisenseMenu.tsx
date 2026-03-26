@@ -41,6 +41,8 @@ interface IntellisenseMenuProps {
   extraItems?: IntellisenseItem[];
   allowedKinds?: Array<'condition' | 'intent'>;
   mode?: 'inline' | 'standalone'; // ✅ NUOVA PROP: 'inline' per righe nodo, 'standalone' per edge
+  /** Se true, non registrare mousedown su document (es. host con backdrop a schermo intero). */
+  disableDocumentClickOutside?: boolean;
 }
 
 export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?: boolean; navSignal?: { seq: number; dir: 1 | -1 }; onEnterSelected?: (item: IntellisenseItem | null) => void }> = ({
@@ -63,6 +65,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   navSignal,
   onEnterSelected,
   mode = 'inline', // ✅ Default: inline (caso 1 - righe nodo)
+  disableDocumentClickOutside = false,
 }) => {
   const ErrorBoundary = React.useMemo(() => (
     class EB extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -251,7 +254,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
 
   // Handle click outside
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || disableDocumentClickOutside) return;
 
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -280,7 +283,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen, onClose, referenceElement]);
+  }, [isOpen, onClose, referenceElement, disableDocumentClickOutside]);
 
   // Initialize / refresh fuzzy search when data or activeCats change
   useEffect(() => {

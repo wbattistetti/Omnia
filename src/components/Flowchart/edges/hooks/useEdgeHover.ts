@@ -17,6 +17,9 @@ export interface UseEdgeHoverOptions {
  * Hook for managing edge hover states with stable toolbar transitions
  * Eliminates flickering and timing issues
  */
+/** Ritardo prima di spegnere l’hover sul link: evita flicker passando dal tratto ai pulsanti (matita/cestino). */
+const EDGE_HOVER_LEAVE_MS = 340;
+
 export function useEdgeHover(
   options: UseEdgeHoverOptions = {}
 ): {
@@ -28,13 +31,44 @@ export function useEdgeHover(
 } {
   const { toolbarTransitionDelay = 200, onHoverChange } = options;
 
-  const [hovered, setHovered] = useState(false);
+  const [hovered, setHoveredRaw] = useState(false);
   const [labelHovered, setLabelHoveredState] = useState(false);
   const [trashHovered, setTrashHovered] = useState(false);
 
   const toolbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const edgeHoverLeaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toolbarRef = useRef<HTMLElement | null>(null);
   const labelRef = useRef<HTMLElement | null>(null);
+
+  const cancelEdgeHoverLeave = useCallback(() => {
+    if (edgeHoverLeaveTimeoutRef.current !== null) {
+      clearTimeout(edgeHoverLeaveTimeoutRef.current);
+      edgeHoverLeaveTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleEdgeHoverLeave = useCallback(() => {
+    cancelEdgeHoverLeave();
+    edgeHoverLeaveTimeoutRef.current = setTimeout(() => {
+      setHoveredRaw(false);
+      edgeHoverLeaveTimeoutRef.current = null;
+    }, EDGE_HOVER_LEAVE_MS);
+  }, [cancelEdgeHoverLeave]);
+
+  /**
+   * `true` subito; `false` ritardato così il puntatore può attraversare il vuoto tra il path e i controlli SVG.
+   */
+  const setHovered = useCallback(
+    (value: boolean) => {
+      if (value) {
+        cancelEdgeHoverLeave();
+        setHoveredRaw(true);
+      } else {
+        scheduleEdgeHoverLeave();
+      }
+    },
+    [cancelEdgeHoverLeave, scheduleEdgeHoverLeave]
+  );
 
   const setLabelHovered = useCallback((value: boolean) => {
     if (value) {
@@ -95,8 +129,9 @@ export function useEdgeHover(
       if (toolbarTimeoutRef.current) {
         clearTimeout(toolbarTimeoutRef.current);
       }
+      cancelEdgeHoverLeave();
     };
-  }, []);
+  }, [cancelEdgeHoverLeave]);
 
   return {
     state,

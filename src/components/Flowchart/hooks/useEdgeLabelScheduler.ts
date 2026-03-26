@@ -1,19 +1,33 @@
-import { useRef, useCallback, type MutableRefObject } from 'react';
+import { useRef, useCallback, useEffect, type MutableRefObject } from 'react';
 import type { Edge } from 'reactflow';
 
 const MAX_TICKS = 24;
 
+export type UseEdgeLabelSchedulerOptions = {
+  edgesRef: MutableRefObject<Edge[] | null | undefined>;
+  edges: Edge[] | null | undefined;
+  setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
+  setSelectedEdgeId: (id: string | null) => void;
+  pendingEdgeIdRef?: MutableRefObject<string | null>;
+};
+
 /**
- * Applica label quando l’edge con `id` compare nello stato React Flow.
- * Usa `edgesRef` (sempre aggiornato) per il check di esistenza — non `setEdges.current` (non è un ref).
- * Nessun fallback euristico src/tgt: l’edge si identifica solo per `edgeId`.
+ * Schedula e applica etichette su edge (tick + sync reattivo quando `edges` si aggiorna).
+ * Usa un oggetto opzioni per evitare errori di ordine dei parametri.
  */
-export function useEdgeLabelScheduler(
-  edgesRef: MutableRefObject<Edge[]>,
-  setEdges: (updater: (eds: Edge[]) => Edge[]) => void,
-  setSelectedEdgeId: (id: string | null) => void
-) {
+export function useEdgeLabelScheduler({
+  edgesRef,
+  edges,
+  setEdges,
+  setSelectedEdgeId,
+  pendingEdgeIdRef,
+}: UseEdgeLabelSchedulerOptions) {
   const pendingApplyRef = useRef<null | { id: string; label: string; data?: any; tries: number }>(null);
+
+  const setEdgesRef = useRef(setEdges);
+  const setSelectedEdgeIdRef = useRef(setSelectedEdgeId);
+  setEdgesRef.current = setEdges;
+  setSelectedEdgeIdRef.current = setSelectedEdgeId;
 
   const scheduleApplyLabel = useCallback(
     (edgeId: string, label: string, extraData?: any) => {
@@ -21,19 +35,21 @@ export function useEdgeLabelScheduler(
       const tick = () => {
         const cur = pendingApplyRef.current;
         if (!cur) return;
-        const exists = (edgesRef.current || []).some((e: Edge) => e.id === cur.id);
+        const list = edgesRef.current ?? [];
+        const exists = list.some((e: Edge) => e.id === cur.id);
         if (exists) {
-          setEdges((eds: Edge[]) =>
-            eds.map((e) => {
+          setEdgesRef.current((eds: Edge[]) => {
+            const safe = eds ?? [];
+            return safe.map((e) => {
               if (e.id !== cur.id) return e;
               const mergedData = cur.data ? { ...(e.data || {}), ...cur.data } : e.data;
               if (cur.data?.isElse === true && e.data?.isElse !== true) {
                 console.log('[useEdgeLabelScheduler] Setting isElse to true', { edgeId: e.id });
               }
               return { ...e, label: cur.label, data: mergedData };
-            })
-          );
-          setSelectedEdgeId(cur.id);
+            });
+          });
+          setSelectedEdgeIdRef.current(cur.id);
           pendingApplyRef.current = null;
           return;
         }
@@ -50,8 +66,23 @@ export function useEdgeLabelScheduler(
       };
       tick();
     },
-    [edgesRef, setEdges, setSelectedEdgeId]
+    [edgesRef]
   );
+
+  /** Fast path: quando l’edge compare nello stato React, applica subito la label pendente. */
+  useEffect(() => {
+    const cur = pendingApplyRef.current;
+    if (!cur) return;
+    const edgeList = edges ?? [];
+    if (!edgeList.some((e) => e.id === cur.id)) return;
+    setEdges((eds) => {
+      const safe = eds ?? [];
+      return safe.map((e) => (e.id === cur.id ? { ...e, label: cur.label, data: cur.data } : e));
+    });
+    setSelectedEdgeId(cur.id);
+    pendingApplyRef.current = null;
+    if (pendingEdgeIdRef) pendingEdgeIdRef.current = null;
+  }, [edges, setEdges, setSelectedEdgeId, pendingEdgeIdRef]);
 
   return { scheduleApplyLabel, pendingApplyRef };
 }

@@ -5,6 +5,7 @@ import ReactFlow, {
   Background,
   Edge,
   Node,
+  Connection,
   BackgroundVariant,
   useReactFlow,
   applyNodeChanges,
@@ -44,7 +45,6 @@ import { useEdgeDataManager } from './hooks/useEdgeDataManager';
 import { useFlowEventHandlers } from './hooks/useFlowEventHandlers';
 import { useFlowViewport } from './hooks/useFlowViewport';
 import { useCursorTooltip } from './hooks/useCursorTooltip';
-import { useEdgeLabelManager } from './hooks/useEdgeLabelManager';
 import { useTaskCreationFromSelection } from './hooks/useTaskCreationFromSelection';
 import { CustomEdge } from './edges/CustomEdge';
 import { useIntellisense } from '../../context/IntellisenseContext';
@@ -56,6 +56,7 @@ import { useFlowchartState } from '../../context/FlowchartStateContext';
 import { intellisenseAnchorFlowFromHandles, VHV_COLLINEAR_EPS_PX } from './edges/utils/edgeRouting';
 import { waitForHandleBounds } from './utils/waitForHandleBounds';
 import { diagFlowLink } from './utils/flowTempLinkDiag';
+import { computeLinkMidScreenFromConnection } from './utils/computeLinkMidScreenFromConnection';
 
 // Edge types stabile per evitare warning React Flow
 const edgeTypes = { custom: CustomEdge };
@@ -191,7 +192,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [createOnUpdate]);
 
   // Deferred apply for labels on just-created edges (avoids race with RF state)
-  const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler(edgesRef, setEdges, setSelectedEdgeId);
+  const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler({
+    edgesRef,
+    edges,
+    setEdges,
+    setSelectedEdgeId,
+    pendingEdgeIdRef,
+  });
 
   // Export scheduleApplyLabel, setEdges e setNodes per Intellisense (finalize link → hidden: false sul nodo temp)
   // Nota: usa `setNodes` (non setNodesWithLog) perché questo effect è sopra alla definizione di setNodesWithLog.
@@ -233,20 +240,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       prevStateRef.current = current;
     }
   }, [propExecutionState, propCurrentTask, propIsRunning]);
-
-  // ✅ Use Edge Label Manager hook
-  const { commitEdgeLabel } = useEdgeLabelManager({
-    edges,
-    setEdges,
-    setSelectedEdgeId,
-    pendingEdgeIdRef,
-    edgesRef,
-    connectionMenuRef,
-    scheduleApplyLabel,
-    pendingApplyRef,
-    closeMenu,
-    setNodes,
-  });
 
   // --- Undo/Redo command stack ---
   const { undo, redo } = useUndoRedoManager();
@@ -311,6 +304,34 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   });
   const { deleteNodeWithLog } = nodeActions;
 
+  const { actions: intellisenseActions } = useIntellisense();
+
+  const onAfterConnect = useCallback(
+    (edgeId: string, connection: Connection) => {
+      pendingEdgeIdRef.current = edgeId;
+      const menuPos = connectionMenuRef.current?.position;
+      const lastMouse = FlowStateBridge.getLastMousePosition();
+      const fallback =
+        menuPos && (menuPos.x !== 0 || menuPos.y !== 0)
+          ? { x: menuPos.x, y: menuPos.y }
+          : { x: lastMouse.x || window.innerWidth / 2, y: lastMouse.y || window.innerHeight / 2 };
+
+      const runOpen = () => {
+        const linkMidScreen = computeLinkMidScreenFromConnection(
+          storeApi,
+          reactFlowInstance,
+          connection,
+          fallback
+        );
+        intellisenseActions.openForEdge(edgeId, { linkMidScreen });
+      };
+      requestAnimationFrame(() => {
+        requestAnimationFrame(runOpen);
+      });
+    },
+    [storeApi, reactFlowInstance, intellisenseActions, connectionMenuRef]
+  );
+
   // Sostituisco onConnect (dopo deleteNodeWithLog)
   const { onConnect, onConnectStart } = useFlowConnect(
     reactFlowInstance,
@@ -326,7 +347,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     createBackendCallAdapter,
     createTaskAdapter,
     nodeIdCounterRef,
-    createOnUpdate
+    createOnUpdate,
+    onAfterConnect
   );
 
   // Ottieni tutte le condizioni disponibili dal project data
@@ -563,13 +585,17 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     return () => FlowStateBridge.setCleanupAllTempNodesAndEdges(undefined);
   }, [cleanupAllTempNodesAndEdges]);
 
+  useEffect(() => {
+    FlowStateBridge.setPendingEdgeConnectClearHandler(() => {
+      pendingEdgeIdRef.current = null;
+    });
+    return () => FlowStateBridge.setPendingEdgeConnectClearHandler(undefined);
+  }, []);
+
   // Promuove il nodo/edge temporanei a definitivi e rimuove ogni altro temporaneo residuo
   // ✅ RIMOSSA: function finalizeTempPromotion - non utilizzata
 
   const withNodeLock = useNodeCreationLock();
-
-  // ✅ NUOVO: Hook per aprire intellisense
-  const { state, actions: intellisenseActions } = useIntellisense();
 
   const onConnectEnd = useCallback((event: any) => {
     // Reset connection flag on release

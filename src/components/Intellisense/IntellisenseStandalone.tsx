@@ -6,9 +6,11 @@ import { IntellisenseItem } from '../../types/intellisense';
 import { useDynamicFontSizes } from '../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../utils/fontSizeUtils';
 import { VoiceInput } from '../common/VoiceInput';
-import { diagFlowLink } from '../Flowchart/utils/flowTempLinkDiag';
 import type { EdgeLinkChoice } from './edgeLinkChoice';
 import { edgeLinkChoiceFromInputText, edgeLinkChoiceFromIntellisenseItem } from './edgeLinkChoice';
+
+/** Sopra il backdrop edge (100000) in IntellisensePopover. */
+const STANDALONE_Z = 100_001;
 
 /**
  * Editor compatto per condizione su edge nuovo: solo textbox + azioni a destra,
@@ -39,7 +41,7 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
     const wrapperRef = useRef<HTMLDivElement>(null);
     const measureRef = useRef<HTMLSpanElement>(null);
     const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLDivElement | null>(null);
-    const [layoutReady, setLayoutReady] = useState(false);
+    const [measured, setMeasured] = useState(false);
     const [wrapperPosition, setWrapperPosition] = useState({ x: 0, y: 0 });
     const [inputWidth, setInputWidth] = useState(150);
     const [minInputWidth, setMinInputWidth] = useState(150);
@@ -53,14 +55,36 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
         setMenuAnchorEl(el);
     }, []);
 
-    useLayoutEffect(() => {
-        setLayoutReady(false);
+    useEffect(() => {
+        setMeasured(false);
     }, [anchorScreen.x, anchorScreen.y]);
 
+    useLayoutEffect(() => {
+        const run = () => {
+            const wrap = wrapperRef.current;
+            const chrome = inputChromeRef.current;
+            if (!wrap || !chrome) return;
+            const wrapRect = wrap.getBoundingClientRect();
+            const chromeRect = chrome.getBoundingClientRect();
+            if (chromeRect.width <= 0 || chromeRect.height <= 0) {
+                requestAnimationFrame(run);
+                return;
+            }
+            const offsetX = chromeRect.left - wrapRect.left;
+            const offsetYTop = chromeRect.top - wrapRect.top;
+            setWrapperPosition({
+                x: anchorScreen.x - chromeRect.width / 2 - offsetX,
+                y: anchorScreen.y - chromeRect.height / 2 - offsetYTop,
+            });
+            setMeasured(true);
+        };
+        run();
+    }, [anchorScreen.x, anchorScreen.y, state.query, inputWidth, fontSizes.nodeRow]);
+
     useEffect(() => {
-        if (!layoutReady) return;
+        if (!measured) return;
         inputRef.current?.focus();
-    }, [layoutReady]);
+    }, [measured]);
 
     useEffect(() => {
         const sizes = calculateFontBasedSizes(fontSizes.nodeRow);
@@ -88,60 +112,25 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
         setInputWidth(Math.max(textWidth + padding + border + 20, minTextWidth));
     }, [state.query, fontSizes.nodeRow]);
 
-    /**
-     * Allinea il centro del box input (chromeRect) a anchorScreen. Nessun fallback sulla riga:
-     * finché wrap+chrome non sono montati e chrome ha dimensioni, non imposta layoutReady.
-     */
-    const alignAnchorToInputChrome = useCallback(() => {
-        const wrap = wrapperRef.current;
-        const chrome = inputChromeRef.current;
-        if (!wrap || !chrome) return;
-        const wrapRect = wrap.getBoundingClientRect();
-        const chromeRect = chrome.getBoundingClientRect();
-        if (chromeRect.width <= 0 || chromeRect.height <= 0) return;
-
-        const offsetX = chromeRect.left - wrapRect.left;
-        const offsetYTop = chromeRect.top - wrapRect.top;
-        setWrapperPosition({
-            x: anchorScreen.x - chromeRect.width / 2 - offsetX,
-            y: anchorScreen.y - chromeRect.height / 2 - offsetYTop,
-        });
-        setLayoutReady(true);
-    }, [anchorScreen.x, anchorScreen.y]);
-
-    useEffect(() => {
-        if (!layoutReady) return;
-        const wrap = wrapperRef.current;
-        const chrome = inputChromeRef.current;
-        if (!wrap || !chrome) return;
-        const chromeRect = chrome.getBoundingClientRect();
-        diagFlowLink('intellisenseStandalone:layoutReady', {
-            anchorScreen,
-            wrapperLeft: wrap.getBoundingClientRect().left,
-            wrapperTop: wrap.getBoundingClientRect().top,
-            chromeCenterScreen: {
-                x: chromeRect.left + chromeRect.width / 2,
-                y: chromeRect.top + chromeRect.height / 2,
-            },
-            chromeWidth: chromeRect.width,
-            chromeHeight: chromeRect.height,
-            deltaAnchorToChromeCenterX:
-                anchorScreen.x - (chromeRect.left + chromeRect.width / 2),
-        });
-    }, [layoutReady, anchorScreen.x, anchorScreen.y]);
-
-    useEffect(() => {
-        const id = requestAnimationFrame(() => requestAnimationFrame(alignAnchorToInputChrome));
-        return () => cancelAnimationFrame(id);
-    }, [alignAnchorToInputChrome, state.query, inputWidth]);
-
     useEffect(() => {
         const wrap = wrapperRef.current;
         if (!wrap) return;
-        const ro = new ResizeObserver(() => alignAnchorToInputChrome());
+        const ro = new ResizeObserver(() => {
+            const chrome = inputChromeRef.current;
+            if (!wrap || !chrome) return;
+            const wrapRect = wrap.getBoundingClientRect();
+            const chromeRect = chrome.getBoundingClientRect();
+            if (chromeRect.width <= 0 || chromeRect.height <= 0) return;
+            const offsetX = chromeRect.left - wrapRect.left;
+            const offsetYTop = chromeRect.top - wrapRect.top;
+            setWrapperPosition({
+                x: anchorScreen.x - chromeRect.width / 2 - offsetX,
+                y: anchorScreen.y - chromeRect.height / 2 - offsetYTop,
+            });
+        });
         ro.observe(wrap);
         return () => ro.disconnect();
-    }, [alignAnchorToInputChrome]);
+    }, [anchorScreen.x, anchorScreen.y]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         actions.setQuery(e.target.value);
@@ -198,15 +187,18 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
         e.stopPropagation();
     };
 
+    const preLayoutLeft = anchorScreen.x - 160;
+    const preLayoutTop = anchorScreen.y - 28;
+
     return (
         <div
             ref={wrapperRef}
             className="intellisense-standalone-wrapper"
             style={{
                 position: 'fixed',
-                top: wrapperPosition.y,
-                left: wrapperPosition.x,
-                zIndex: 99999,
+                top: measured ? wrapperPosition.y : preLayoutTop,
+                left: measured ? wrapperPosition.x : preLayoutLeft,
+                zIndex: STANDALONE_Z,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'flex-start',
@@ -215,8 +207,10 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                 boxShadow: 'none',
                 border: 'none',
                 padding: 0,
-                visibility: layoutReady ? 'visible' : 'hidden',
-                pointerEvents: layoutReady ? 'auto' : 'none',
+                minWidth: measured ? undefined : 320,
+                minHeight: measured ? undefined : 56,
+                opacity: measured ? 1 : 0,
+                pointerEvents: 'auto',
             }}
             onClick={stopFlowPropagation}
             onMouseDown={stopFlowPropagation}
@@ -347,7 +341,7 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
             </div>
 
             <IntellisenseMenu
-                isOpen={layoutReady && !!menuAnchorEl}
+                isOpen={measured && !!menuAnchorEl}
                 query={state.query}
                 position={anchorScreen}
                 referenceElement={menuAnchorEl}
@@ -358,6 +352,7 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                 mode="inline"
                 inlineAnchor
                 navSignal={{ seq: navSeq, dir: navDir }}
+                disableDocumentClickOutside
             />
         </div>
     );

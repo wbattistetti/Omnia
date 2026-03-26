@@ -71,6 +71,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
 
   // State for context menu
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  /** Matita su link senza label → textbox inline (EdgeLabel) */
+  const [openEmptyLabelEditor, setOpenEmptyLabelEditor] = useState(false);
 
   // Refs
   const pathRef = useRef<SVGPathElement>(null);
@@ -479,10 +481,9 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     }
   };
 
-  const handleGearClick = (e: React.MouseEvent) => {
+  const handlePencilClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    handleOpenIntellisense(rect.left + window.scrollX, rect.bottom + window.scrollY + 2);
+    setOpenEmptyLabelEditor(true);
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -674,13 +675,13 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       />
 
       <EdgeControls
-        showGear={!label && props.selected}
-        showTrash={props.selected}
+        showPencil={!label && (props.selected || hover.state.hovered)}
+        showTrash={props.selected || hover.state.hovered}
         midPointSvg={positions.midPointSvg}
         sourceX={sourceX}
         sourceY={sourceY}
         sourcePosition={sourcePosition}
-        onGearClick={handleGearClick}
+        onPencilClick={handlePencilClick}
         onTrashClick={(e) => {
           e.stopPropagation();
           handleDelete(id);
@@ -688,6 +689,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         onTrashMouseEnter={() => hover.setTrashHovered(true)}
         onTrashMouseLeave={() => hover.setTrashHovered(false)}
         trashHovered={hover.state.trashHovered}
+        onControlsZoneMouseEnter={() => hover.setHovered(true)}
+        onControlsZoneMouseLeave={() => hover.setHovered(false)}
       />
 
       {/* Control Points */}
@@ -723,6 +726,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
           isDragging={labelDrag.isDragging}
           onMouseDown={labelDrag.onMouseDown}
           edgeId={id} // ✅ Add edgeId prop
+          allowEmptyRender={openEmptyLabelEditor}
+          onEmptyLabelEditFinished={() => setOpenEmptyLabelEditor(false)}
         />
       </EdgeLabelRenderer>
 

@@ -22,6 +22,7 @@ type SetEdgesFunction = (updater: Edge<EdgeData>[] | ((edges: Edge<EdgeData>[]) 
 type CreateOnUpdateFunction = (edgeId: string) => (updates: any) => void;
 type ScheduleApplyLabelFunction = (edgeId: string, label: string) => void;
 type CleanupFunction = () => void;
+type PendingEdgeConnectClearHandler = () => void;
 
 // Type for the window globals (for documentation and type safety)
 interface FlowWindowGlobals {
@@ -69,8 +70,25 @@ declare global {
 class FlowStateBridgeClass {
   private static instance: FlowStateBridgeClass;
 
+  private pendingEdgeConnectClearHandler: PendingEdgeConnectClearHandler | undefined;
+
   private constructor() {
     // Private constructor for singleton
+  }
+
+  /**
+   * FlowEditor registra l’azzeramento di `pendingEdgeIdRef` dopo commit/chiusura Intellisense su link nuovo.
+   */
+  setPendingEdgeConnectClearHandler(fn: PendingEdgeConnectClearHandler | undefined): void {
+    this.pendingEdgeConnectClearHandler = fn;
+  }
+
+  invokePendingEdgeConnectClear(): void {
+    try {
+      this.pendingEdgeConnectClearHandler?.();
+    } catch (e) {
+      console.warn('[FlowStateBridge] invokePendingEdgeConnectClear failed:', e);
+    }
   }
 
   static getInstance(): FlowStateBridgeClass {

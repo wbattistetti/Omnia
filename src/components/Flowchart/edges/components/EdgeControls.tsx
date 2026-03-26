@@ -1,36 +1,42 @@
 import React from 'react';
-import { Settings, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 
 export interface EdgeControlsProps {
-  showGear: boolean;
+  /** Link senza label: mostra matita per scrivere label/condizione (non ingranaggio). */
+  showPencil: boolean;
   showTrash: boolean;
   midPointSvg: { x: number; y: number };
   sourceX: number;
   sourceY: number;
   sourcePosition: string;
-  onGearClick?: (e: React.MouseEvent) => void;
+  onPencilClick?: (e: React.MouseEvent) => void;
   onTrashClick?: (e: React.MouseEvent) => void;
   onTrashMouseEnter?: () => void;
   onTrashMouseLeave?: () => void;
   trashHovered?: boolean;
+  /** Mantiene l’hover sul link mentre il puntatore va dal tratto alla matita/cestino. */
+  onControlsZoneMouseEnter?: () => void;
+  onControlsZoneMouseLeave?: () => void;
 }
 
 /**
- * Edge controls component (gear + trash)
- * Handles precise positioning using SVG coordinates
+ * Controlli sul link (matita per label quando manca, cestino).
+ * Posizionamento in coordinate SVG.
  */
 export const EdgeControls: React.FC<EdgeControlsProps> = ({
-  showGear,
+  showPencil,
   showTrash,
   midPointSvg,
   sourceX,
   sourceY,
   sourcePosition,
-  onGearClick,
+  onPencilClick,
   onTrashClick,
   onTrashMouseEnter,
   onTrashMouseLeave,
   trashHovered = false,
+  onControlsZoneMouseEnter,
+  onControlsZoneMouseLeave,
 }) => {
   // Calculate trash position offset based on source position (SVG coordinates)
   const getTrashOffset = () => {
@@ -54,19 +60,20 @@ export const EdgeControls: React.FC<EdgeControlsProps> = ({
 
   return (
     <>
-      {/* Gear button - shown when no label and edge is selected */}
-      {showGear && (
+      {showPencil && (
         <foreignObject
-          x={midPointSvg.x - 20}
-          y={midPointSvg.y - 20}
-          width={40}
-          height={40}
+          x={midPointSvg.x - 24}
+          y={midPointSvg.y - 24}
+          width={48}
+          height={48}
           style={{ overflow: 'visible', pointerEvents: 'none' }}
         >
           <div
+            onMouseEnter={() => onControlsZoneMouseEnter?.()}
+            onMouseLeave={() => onControlsZoneMouseLeave?.()}
             style={{
-              width: 40,
-              height: 40,
+              width: 48,
+              height: 48,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -74,15 +81,16 @@ export const EdgeControls: React.FC<EdgeControlsProps> = ({
             }}
           >
             <button
-              onClick={onGearClick}
+              type="button"
+              onClick={onPencilClick}
               className="group w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 border border-gray-300 shadow transition-all hover:bg-gray-300 hover:scale-110 hover:shadow-lg focus:outline-none"
-              title="Aggiungi condizione"
+              title="Scrivi label"
               style={{
                 transition: 'all 0.15s cubic-bezier(.4,2,.6,1)',
                 boxShadow: '0 2px 8px rgba(139,92,246,0.10)',
               }}
             >
-              <Settings className="w-3 h-3 text-gray-500 group-hover:text-gray-700 transition-colors" />
+              <Pencil className="w-3 h-3 text-gray-500 group-hover:text-gray-700 transition-colors" aria-hidden />
             </button>
           </div>
         </foreignObject>
@@ -91,24 +99,33 @@ export const EdgeControls: React.FC<EdgeControlsProps> = ({
       {/* Trash button - shown when edge is selected */}
       {showTrash && (
         <foreignObject
-          x={trashX}
-          y={trashY}
-          width={24}
-          height={24}
+          x={trashX - 4}
+          y={trashY - 4}
+          width={32}
+          height={32}
           style={{ overflow: 'visible', pointerEvents: 'none' }}
         >
           <div
             style={{
+              width: 32,
+              height: 32,
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               pointerEvents: 'auto',
               background: 'transparent',
               borderRadius: 6,
               padding: 0,
               boxShadow: 'none',
             }}
-            onMouseEnter={onTrashMouseEnter}
-            onMouseLeave={onTrashMouseLeave}
+            onMouseEnter={() => {
+              onControlsZoneMouseEnter?.();
+              onTrashMouseEnter?.();
+            }}
+            onMouseLeave={() => {
+              onControlsZoneMouseLeave?.();
+              onTrashMouseLeave?.();
+            }}
           >
             <span title="Elimina il link">
               <Trash2

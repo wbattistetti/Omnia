@@ -19,7 +19,9 @@ export function useFlowConnect(
   createBackendCall: () => void,
   createTask: () => void,
   nodeIdCounter: React.MutableRefObject<number>,
-  createOnUpdate: (edgeId: string) => (updates: any) => void
+  createOnUpdate: (edgeId: string) => (updates: any) => void,
+  /** Dopo aver aggiunto l’edge tra nodi esistenti: stesso picker condizioni del drop su pane. */
+  onAfterConnect?: (edgeId: string, connection: Connection) => void
 ) {
   // Gestisce la connessione tra due nodi esistenti
   const onConnect = useCallback((connection: Connection) => {
@@ -29,25 +31,24 @@ export function useFlowConnect(
       return;
     }
 
-    setEdges((eds) => {
-      const id = uuidv4();
-      return [...eds, {
-        id,
-        source,
-        sourceHandle: sourceHandle || undefined,
-        target,
-        targetHandle: targetHandle || undefined,
-        style: { stroke: '#8b5cf6' },
-        type: 'custom',
-        data: {
-          onDeleteEdge,
-          onUpdate: createOnUpdate(id),
-          linkStyle: DEFAULT_LINK_STYLE
-        },
-        markerEnd: 'arrowhead'
-      }];
-    });
-  }, [setEdges, onDeleteEdge, createOnUpdate]);
+    const id = uuidv4();
+    setEdges((eds) => [...eds, {
+      id,
+      source,
+      sourceHandle: sourceHandle || undefined,
+      target,
+      targetHandle: targetHandle || undefined,
+      style: { stroke: '#8b5cf6' },
+      type: 'custom',
+      data: {
+        onDeleteEdge,
+        onUpdate: createOnUpdate(id),
+        linkStyle: DEFAULT_LINK_STYLE
+      },
+      markerEnd: 'arrowhead'
+    }]);
+    onAfterConnect?.(id, connection);
+  }, [setEdges, onDeleteEdge, createOnUpdate, onAfterConnect]);
 
   // Handle connection start
   const onConnectStart = useCallback((event: any, params: any) => {

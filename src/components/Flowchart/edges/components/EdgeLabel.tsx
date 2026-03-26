@@ -26,6 +26,9 @@ export interface EdgeLabelProps {
   isDragging?: boolean;
   onMouseDown?: (e: React.MouseEvent) => void;
   edgeId?: string; // ✅ Add edgeId prop for error detection
+  /** Da matita su link senza label: mostra subito la textbox. */
+  allowEmptyRender?: boolean;
+  onEmptyLabelEditFinished?: () => void;
 }
 
 /**
@@ -49,6 +52,8 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
   isDragging = false,
   onMouseDown,
   edgeId, // ✅ Add edgeId
+  allowEmptyRender = false,
+  onEmptyLabelEditFinished,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingValue, setEditingValue] = useState(label || '');
@@ -95,20 +100,24 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showErrorPopover]);
 
-  // Update editing value when label changes externally
+  // Sincronizza testo: da matita (allowEmptyRender) o quando non si sta editando
   useEffect(() => {
-    if (!isEditing) {
+    if (allowEmptyRender) {
+      setEditingValue(label || '');
+    } else if (!isEditing) {
       setEditingValue(label || '');
     }
-  }, [label, isEditing]);
+  }, [label, isEditing, allowEmptyRender]);
 
-  // Focus input when entering edit mode
+  const showInput = isEditing || !!allowEmptyRender;
+
+  // Focus input when entering edit mode (anche apertura da matita senza label)
   useEffect(() => {
-    if (isEditing && inputRef.current) {
+    if (showInput && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
-  }, [isEditing]);
+  }, [showInput]);
 
   const handleStartEdit = useCallback(() => {
     setEditingValue(label || '');
@@ -120,12 +129,18 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
       onEdit(editingValue);
     }
     setIsEditing(false);
-  }, [editingValue, onEdit]);
+    if (allowEmptyRender) {
+      onEmptyLabelEditFinished?.();
+    }
+  }, [editingValue, onEdit, allowEmptyRender, onEmptyLabelEditFinished]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingValue(label || '');
     setIsEditing(false);
-  }, [label]);
+    if (allowEmptyRender) {
+      onEmptyLabelEditFinished?.();
+    }
+  }, [label, allowEmptyRender, onEmptyLabelEditFinished]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -144,8 +159,8 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
 
   // IMPORTANT: All hooks must be called before any early returns
 
-  // Early return AFTER all hooks
-  if (!label && !isEditing) {
+  // Early return AFTER all hooks (allowEmptyRender = matita su link senza testo)
+  if (!label && !showInput) {
     return null;
   }
 
@@ -153,7 +168,7 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
   // Le coordinate sono già in formato SVG, EdgeLabelRenderer le trasforma
   const displayPosition = isDragging && dragPosition ? dragPosition : position;
 
-  const labelContent = isEditing ? (
+  const labelContent = showInput ? (
     <VoiceInput
       ref={inputRef}
       type="text"
@@ -221,12 +236,12 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
         userSelect: isDragging ? 'none' : 'text',
         whiteSpace: 'pre',
         gap: 4,
-        cursor: !isEditing ? 'move' : 'default',
+        cursor: !showInput ? 'move' : 'default',
         transition: isDragging ? 'none' : 'box-shadow 0.2s ease',
       }}
     >
       {labelContent}
-      {isHovered && !isEditing && (
+      {isHovered && !showInput && (
         <span
           ref={toolbarRef as any}
           data-toolbar="true"
