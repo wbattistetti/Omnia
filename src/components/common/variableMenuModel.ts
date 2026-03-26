@@ -4,6 +4,7 @@ import { variableCreationService } from '../../services/VariableCreationService'
 import type { WorkspaceState } from '../../flows/FlowTypes';
 import type { VariableInstance } from '../../types/variableTypes';
 import type { MappingEntry } from '../FlowMappingPanel/mappingTypes';
+import { loadFlow } from '../../flows/FlowPersistence';
 
 export type VariableMenuItem = {
   varId: string;
@@ -15,6 +16,8 @@ export type VariableMenuItem = {
   isFromActiveFlow: boolean;
   sourceTaskRowLabel?: string;
 };
+
+const interfaceOutputCache = new Map<string, MappingEntry[]>();
 
 function extractRows(node: any): any[] {
   const rows = node?.data?.rows;
@@ -166,6 +169,85 @@ export function buildVariableMenuItems(
         tokenLabel: `${cleanSourceLabel}.${varLabel}`,
         ownerFlowId: child.flowId,
         ownerFlowTitle: String(childFlow.title || child.flowId).trim() || child.flowId,
+        isExposed: true,
+        isFromActiveFlow: false,
+        sourceTaskRowLabel: cleanSourceLabel,
+      });
+    }
+  }
+
+  return items.sort((a, b) => {
+    if (a.isFromActiveFlow !== b.isFromActiveFlow) return a.isFromActiveFlow ? -1 : 1;
+    if ((a.sourceTaskRowLabel || '') !== (b.sourceTaskRowLabel || '')) {
+      return (a.sourceTaskRowLabel || '').localeCompare(b.sourceTaskRowLabel || '');
+    }
+    return a.varLabel.localeCompare(b.varLabel);
+  });
+}
+
+/**
+ * Async variant that also resolves child flow interface outputs
+ * even when the child flow is not currently loaded in workspace snapshot.
+ */
+export async function buildVariableMenuItemsAsync(
+  projectId: string,
+  activeFlowId: string,
+  flows: WorkspaceState['flows']
+): Promise<VariableMenuItem[]> {
+  const baseItems = buildVariableMenuItems(projectId, activeFlowId, flows);
+  const childFlowInfo = collectLevelOneChildFlowInfo(activeFlowId, flows);
+  const allVars = variableCreationService.getAllVariables(projectId) || [];
+  const varsById = new Map<string, VariableInstance>();
+  allVars.forEach((v) => {
+    const id = String((v as VariableInstance)?.varId || '').trim();
+    if (!id) return;
+    varsById.set(id, v as VariableInstance);
+  });
+
+  const items = [...baseItems];
+  const seen = new Set(baseItems.map((i) => `${i.ownerFlowId}::${i.varId}`));
+
+  for (const child of childFlowInfo) {
+    const childFlowId = String(child.flowId || '').trim();
+    if (!childFlowId) continue;
+
+    let output: MappingEntry[] = [];
+    const loaded = flows[childFlowId];
+    if (Array.isArray(loaded?.meta?.flowInterface?.output)) {
+      output = loaded.meta.flowInterface.output || [];
+    } else {
+      const cacheKey = `${projectId}::${childFlowId}`;
+      if (interfaceOutputCache.has(cacheKey)) {
+        output = interfaceOutputCache.get(cacheKey) || [];
+      } else {
+        try {
+          const loadedFlow = await loadFlow(projectId, childFlowId);
+          output = Array.isArray((loadedFlow.meta as any)?.flowInterface?.output)
+            ? (((loadedFlow.meta as any).flowInterface.output as MappingEntry[]) || [])
+            : [];
+          interfaceOutputCache.set(cacheKey, output);
+        } catch {
+          output = [];
+        }
+      }
+    }
+
+    for (const entry of output) {
+      const varId = String(entry?.variableRefId || '').trim();
+      if (!varId) continue;
+      const key = `${childFlowId}::${varId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const varInst = varsById.get(varId);
+      const varLabel = String(varInst?.varName || entry?.externalName || entry?.internalPath || '').trim();
+      if (!varLabel) continue;
+      const cleanSourceLabel = variableCreationService.normalizeTaskLabel(child.rowLabel);
+      items.push({
+        varId,
+        varLabel,
+        tokenLabel: `${cleanSourceLabel}.${varLabel}`,
+        ownerFlowId: childFlowId,
+        ownerFlowTitle: String(loaded?.title || childFlowId).trim() || childFlowId,
         isExposed: true,
         isFromActiveFlow: false,
         sourceTaskRowLabel: cleanSourceLabel,

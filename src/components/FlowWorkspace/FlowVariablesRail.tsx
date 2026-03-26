@@ -1,6 +1,7 @@
 /**
- * Right-edge panel: single source of truth — VariableCreationService rows visible on this flow
- * (project-wide manual + this flow's manual + task-bound from any node).
+ * Right-edge panel: VariableCreationService rows for this flow canvas.
+ * Uses absolute positioning inside the canvas host (not viewport-fixed) so each open flow
+ * pane / tab has its own rail on the right edge of that canvas.
  */
 
 import React, { useCallback, useMemo, useReducer } from 'react';
@@ -256,7 +257,7 @@ export function FlowVariablesRail({ flowId, projectId: projectIdProp }: FlowVari
       </button>
 
       <div
-        className={`fixed right-0 top-0 bottom-0 z-40 flex flex-col
+        className={`absolute right-0 top-0 bottom-0 z-40 flex flex-col
           bg-slate-900/95 border-l border-slate-600/60 backdrop-blur-md shadow-2xl
           transition-transform duration-300 ease-in-out
           ${open ? 'translate-x-0' : 'translate-x-full'}

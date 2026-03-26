@@ -1,5 +1,7 @@
 import React from 'react';
 import { extractBracketTokens } from '../../utils/variableTokenText';
+import { variableCreationService } from '../../services/VariableCreationService';
+import type { VariableInstance } from '../../types/variableTypes';
 
 type Props = {
   text: string;
@@ -7,6 +9,34 @@ type Props = {
 };
 
 export default function VariableTokenText({ text, className }: Props) {
+  const tokenLabelById = React.useMemo(() => {
+    let projectId = '';
+    try {
+      projectId = String(localStorage.getItem('currentProjectId') || '').trim();
+    } catch {
+      projectId = '';
+    }
+    if (!projectId) {
+      return new Map<string, string>();
+    }
+
+    const vars = variableCreationService.getAllVariables(projectId) || [];
+    const out = new Map<string, string>();
+    vars.forEach((v) => {
+      const id = String((v as VariableInstance)?.varId || '').trim();
+      const label = String((v as VariableInstance)?.varName || '').trim();
+      if (!id || !label) return;
+      out.set(id, label);
+    });
+    return out;
+  }, [text]);
+
+  const resolveTokenLabel = React.useCallback((rawValue: string): string => {
+    const value = String(rawValue || '').trim();
+    if (!value) return value;
+    return tokenLabelById.get(value) || value;
+  }, [tokenLabelById]);
+
   const tokens = extractBracketTokens(text);
   if (tokens.length === 0) {
     return <span className={className}>{text}</span>;
@@ -19,8 +49,15 @@ export default function VariableTokenText({ text, className }: Props) {
       parts.push(<span key={`txt-${i}-${cursor}`}>{text.slice(cursor, t.start)}</span>);
     }
     parts.push(
-      <strong key={`tok-${i}-${t.start}`} style={{ fontWeight: 700 }}>
-        {text.slice(t.start, t.end)}
+      <strong
+        key={`tok-${i}-${t.start}`}
+        style={{
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+          display: 'inline-block',
+        }}
+      >
+        [{resolveTokenLabel(t.value)}]
       </strong>
     );
     cursor = t.end;

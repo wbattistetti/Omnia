@@ -70,7 +70,7 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
   return (
     <div className="flex-1 h-full flex flex-col">
       <FlowTabBar />
-      <div className="flex-1 min-h-0 relative flex flex-col">
+      <div className="flex-1 min-h-0 relative flex flex-col min-w-0">
         <div className="relative flex flex-1 min-h-0 w-full min-w-0 overflow-hidden">
           <div className="absolute inset-0 z-0 min-h-0 min-w-0">
             <FlowEditor
@@ -105,8 +105,8 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
           {isFlowInterfacePanelEnabled(activeFlowId) ? (
             <FlowInterfaceBottomPanel flowId={activeFlowId} projectId={projectId} />
           ) : null}
+          <FlowVariablesRail flowId={activeFlowId} projectId={projectId} />
         </div>
-        <FlowVariablesRail flowId={activeFlowId} projectId={projectId} />
       </div>
     </div>
   );

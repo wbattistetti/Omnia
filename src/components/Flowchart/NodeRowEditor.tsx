@@ -5,7 +5,7 @@ import { insertBracketTokenAtCaret } from '../../utils/variableTokenText';
 import { getActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
 import { useFlowActions, useFlowWorkspace } from '../../flows/FlowStore';
 import { useProjectDataUpdate } from '../../context/ProjectDataContext';
-import { buildVariableMenuItems } from '../common/variableMenuModel';
+import { buildVariableMenuItemsAsync, type VariableMenuItem } from '../common/variableMenuModel';
 
 interface NodeRowEditorProps {
   value: string;
@@ -38,10 +38,22 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
   const DEBUG_FOCUS = (() => { try { return localStorage.getItem('debug.focus') === '1'; } catch { return false; } })();
   const log = (...args: any[]) => { if (DEBUG_FOCUS) { try { console.log('[Focus][RowEditor]', ...args); } catch {} } };
   const activeFlowId = getActiveFlowCanvasId();
-  const variableMenuItems = React.useMemo(() => {
+  const [variableMenuItems, setVariableMenuItems] = React.useState<VariableMenuItem[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
     const pid = pdUpdate?.getCurrentProjectId() || '';
-    if (!pid) return [];
-    return buildVariableMenuItems(pid, activeFlowId, flows as any);
+    if (!pid) {
+      setVariableMenuItems([]);
+      return;
+    }
+    void buildVariableMenuItemsAsync(pid, activeFlowId, flows as any).then((items) => {
+      if (!cancelled) setVariableMenuItems(items);
+    }).catch(() => {
+      if (!cancelled) setVariableMenuItems([]);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [pdUpdate, activeFlowId, flows, value]);
 
   // ✅ Calcola e aggiorna la larghezza usando scrollWidth (Regola 1)

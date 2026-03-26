@@ -14,7 +14,8 @@ import {
 } from '../../../../utils/conditionCodeConverter';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import { useFlowActions, useFlowWorkspace } from '../../../../flows/FlowStore';
-import { buildVariableMenuItems, buildVariableMappingsFromMenu } from '../../../common/variableMenuModel';
+import { buildVariableMenuItemsAsync, buildVariableMappingsFromMenu, type VariableMenuItem } from '../../../common/variableMenuModel';
+import { ensureParentVariableAndSubflowOutputBinding } from '../../../common/subflowParentBinding';
 import { useTextTranslationField } from './shared/useTextTranslationField';
 
 export default function TextMessageEditor({ task: taskMeta, onClose }: EditorProps) {
@@ -25,12 +26,24 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
   const [varsMenu, setVarsMenu] = useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
   const { flows } = useFlowWorkspace();
   const { updateFlowMeta } = useFlowActions();
+  const [variableMenuItems, setVariableMenuItems] = useState<VariableMenuItem[]>([]);
 
   const activeFlowId = getActiveFlowCanvasId();
-  const variableMenuItems = React.useMemo(() => {
+  useEffect(() => {
+    let cancelled = false;
     const pid = pdUpdate?.getCurrentProjectId() || '';
-    if (!pid) return [];
-    return buildVariableMenuItems(pid, activeFlowId, flows as any);
+    if (!pid) {
+      setVariableMenuItems([]);
+      return;
+    }
+    void buildVariableMenuItemsAsync(pid, activeFlowId, flows as any).then((items) => {
+      if (!cancelled) setVariableMenuItems(items);
+    }).catch(() => {
+      if (!cancelled) setVariableMenuItems([]);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [pdUpdate, activeFlowId, flows]);
 
   const variableMappings = React.useMemo(() => buildVariableMappingsFromMenu(variableMenuItems), [variableMenuItems]);
@@ -100,6 +113,31 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
         variableItems={variableMenuItems}
         onClose={() => setVarsMenu({ open: false, x: 0, y: 0 })}
         onExposeAndSelect={(item) => {
+          const projectId = pdUpdate?.getCurrentProjectId() || '';
+          if (!projectId) return;
+          if (item.isFromActiveFlow === false) {
+            const bound = ensureParentVariableAndSubflowOutputBinding(
+              projectId,
+              activeFlowId,
+              flows as any,
+              item
+            );
+            const el = textareaRef.current;
+            const caret = {
+              start: el?.selectionStart ?? text.length,
+              end: el?.selectionEnd ?? text.length,
+            };
+            const out = insertBracketTokenAtCaret(text, caret, bound.tokenLabel);
+            setText(out.text);
+            setVarsMenu({ open: false, x: 0, y: 0 });
+            requestAnimationFrame(() => {
+              if (!el) return;
+              el.focus();
+              el.setSelectionRange(out.caret.start, out.caret.end);
+            });
+            return;
+          }
+
           const owner = (flows as any)?.[item.ownerFlowId];
           if (!owner) return;
           const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];

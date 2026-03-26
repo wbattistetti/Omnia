@@ -53,11 +53,61 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     return text;
   }, [isGuidLike]);
 
+  const getRuntimeValueText = useCallback((value: unknown): string => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    if (Array.isArray(value)) {
+      return value.map((v) => getRuntimeValueText(v)).filter(Boolean).join(', ');
+    }
+    if (typeof value === 'object') {
+      const obj = value as Record<string, unknown>;
+      // Common runtime payload shape: { semantic, linguistic, ... }
+      const semantic = getRuntimeValueText(obj.semantic);
+      if (semantic) return semantic;
+      const linguistic = getRuntimeValueText(obj.linguistic);
+      if (linguistic) return linguistic;
+      const val = getRuntimeValueText(obj.value);
+      if (val) return val;
+      return '';
+    }
+    return '';
+  }, []);
+
+  const interpolateGuidPlaceholders = useCallback((text: string, variableStore: Record<string, unknown> | null | undefined): string => {
+    if (!text) return text;
+    if (!variableStore || Object.keys(variableStore).length === 0) return text;
+    return text.replace(/\[\s*([^\[\]]+?)\s*\]/g, (full, token) => {
+      const key = String(token || '').trim();
+      if (!key) return full;
+      // Exact match first (works for both GUID varIds and label-based keys)
+      const raw = (variableStore as Record<string, unknown>)[key];
+      if (raw !== undefined && raw !== null) {
+        const resolved = getRuntimeValueText(raw).trim();
+        if (resolved) return resolved;
+      }
+      // Case-insensitive fallback
+      const lowerKey = key.toLowerCase();
+      for (const [k, v] of Object.entries(variableStore)) {
+        if (k.toLowerCase() === lowerKey) {
+          const resolved = getRuntimeValueText(v).trim();
+          if (resolved) return resolved;
+        }
+      }
+      return full;
+    });
+  }, [getRuntimeValueText]);
+
   // ✅ STATE: UI-reactive state (triggers re-renders)
   const [executionState, setExecutionState] = useState<ExecutionState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [currentTask, setCurrentTask] = useState<CompiledTask | null>(null);
   const isRunningRef = useRef(false);
+
+  // Buffer for messages that arrived before the variableStore was populated.
+  // Each entry holds the original message object; flushed on first stateUpdate.
+  const pendingMessagesRef = useRef<Array<{ text: string; raw: unknown }>>([]);
 
   // ✅ REFS: Stable state that survives remounts
   const engineRef = useRef<{
@@ -68,6 +118,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
   const sessionIdRef = useRef<string | null>(null);
   const prevStateRef = useRef<{ currentNodeId?: string | null; executedCount?: number }>({});
+  const runtimeVariableStoreRef = useRef<Record<string, unknown>>({});
 
   // ✅ CRITICAL: Store options in ref for stable access in callbacks
   // This ref is updated via useEffect when options change, but the engine instance
@@ -134,7 +185,9 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           } catch {
             /* noop */
           }
-          return 'active';
+          // Default to MAIN when no explicit preference is set.
+          // This avoids depending on whichever tab/canvas happened to be focused.
+          return 'main';
         })();
 
       const rootFlowId = orchestratorRoot === 'main' ? 'main' : FlowWorkspaceSnapshot.getActiveFlowId();
@@ -307,11 +360,16 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           translations,
           {
             onMessage: (message) => {
-              // ✅ Always use latest options from ref
               const opts = optionsRef.current;
-              if (opts.onMessage) {
-                opts.onMessage(message);
+              if (!opts.onMessage) return;
+              const store = runtimeVariableStoreRef.current;
+              const rawText = String(message?.text || '');
+              if (Object.keys(store).length === 0) {
+                // stateUpdate hasn't arrived yet — buffer and emit as-is for now
+                pendingMessagesRef.current.push({ text: rawText, raw: message });
               }
+              const interpolatedText = interpolateGuidPlaceholders(rawText, store);
+              opts.onMessage({ ...message, text: interpolatedText });
             },
             onDDTStart: (data) => {
               // ✅ Always use latest options from ref
@@ -322,7 +380,23 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
               }
             },
             onStateUpdate: (state) => {
+              const newStore = (state?.variableStore || {}) as Record<string, unknown>;
+              runtimeVariableStoreRef.current = newStore;
               setExecutionState(state);
+
+              // Flush messages that arrived before the store was populated
+              const pending = pendingMessagesRef.current.splice(0);
+              if (pending.length > 0 && Object.keys(newStore).length > 0) {
+                const opts = optionsRef.current;
+                if (opts.onMessage) {
+                  for (const entry of pending) {
+                    const resolved = interpolateGuidPlaceholders(entry.text, newStore);
+                    if (resolved !== entry.text) {
+                      opts.onMessage({ ...(entry.raw as object), text: resolved } as Parameters<typeof opts.onMessage>[0]);
+                    }
+                  }
+                }
+              }
             },
             onComplete: () => {
               isRunningRef.current = false;
@@ -429,6 +503,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     }
     sessionIdRef.current = null;
     isRunningRef.current = false;
+    pendingMessagesRef.current = [];
+    runtimeVariableStoreRef.current = {};
     setIsRunning(false);
     setCurrentTask(null);
     setExecutionState(null);

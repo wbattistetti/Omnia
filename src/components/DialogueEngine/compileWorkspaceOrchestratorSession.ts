@@ -9,6 +9,7 @@ import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import { enrichRowsWithTaskId } from '../../utils/taskHelpers';
 import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
 import { backendCompileFlowGraph, discoverSubflowCanvasIdsTransitively } from './backendCompileFlowGraph';
+import { loadFlow } from '../../flows/FlowPersistence';
 
 export type CompileWorkspaceOrchestratorParams = {
   rootFlowId: string;
@@ -61,6 +62,7 @@ export async function compileWorkspaceForOrchestratorSession(
 }> {
   const { rootFlowId, projectData, translations, fallback } = params;
   const ctx = { projectData, translations };
+  const projectId = String(localStorage.getItem('currentProjectId') || '').trim();
 
   const snap = FlowWorkspaceSnapshot.getFlowById(rootFlowId);
   let nodes = snap?.nodes;
@@ -94,13 +96,31 @@ export async function compileWorkspaceForOrchestratorSession(
   ];
 
   for (const sfId of subflowIds) {
-    const sfSnap = FlowWorkspaceSnapshot.getFlowById(sfId);
-    if (!sfSnap?.nodes?.length) {
-      console.warn(`[compileWorkspaceForOrchestratorSession] Subflow "${sfId}" missing or empty in snapshot — skipped`);
-      continue;
+    // Primary source: in-memory snapshot (already open/hydrated canvas).
+    let sfNodes = FlowWorkspaceSnapshot.getFlowById(sfId)?.nodes ?? [];
+    let sfEdges = FlowWorkspaceSnapshot.getFlowById(sfId)?.edges ?? [];
+
+    // Clean compile fallback: read subflow directly from persisted project data.
+    // No FlowStore/React state mutation, compile only.
+    if (!sfNodes.length) {
+      if (!projectId) {
+        throw new Error(
+          `Cannot compile subflow "${sfId}": currentProjectId missing for load fallback.`
+        );
+      }
+      const loaded = await loadFlow(projectId, sfId);
+      sfNodes = loaded.nodes || [];
+      sfEdges = loaded.edges || [];
     }
-    const en = enrichFlowNodes(sfSnap.nodes);
-    const art = await backendCompileFlowGraph(en, sfSnap.edges || [], ctx);
+
+    if (!sfNodes.length) {
+      throw new Error(
+        `Cannot compile subflow "${sfId}": missing or empty both in snapshot and persisted flow data.`
+      );
+    }
+
+    const en = enrichFlowNodes(sfNodes);
+    const art = await backendCompileFlowGraph(en, sfEdges || [], ctx);
     subflowCompilations[sfId] = art.compileJson;
     mergeTasksById(mergedTasks, art.allTasksWithTemplates);
     mergedDDTs.push(...art.allDDTs);

@@ -765,13 +765,49 @@ Public Class FlowOrchestrator
 
     ''' <summary>
     ''' Risolve un TextKey (GUID) nel testo tradotto.
+    ''' Poi applica la risoluzione placeholder [token] usando il VariableStore runtime.
     ''' Se non c'è un resolver o la chiave è vuota, restituisce la chiave stessa.
     ''' </summary>
     Private Function ResolveText(textKey As String) As String
         If String.IsNullOrEmpty(textKey) Then Return textKey
         If _resolveTranslation Is Nothing Then Return textKey
-        Dim resolved = _resolveTranslation(textKey)
-        Return If(String.IsNullOrEmpty(resolved), textKey, resolved)
+        Dim translated = _resolveTranslation(textKey)
+        Dim baseText = If(String.IsNullOrEmpty(translated), textKey, translated)
+
+        Return PlaceholderUtils.ProcessPlaceholdersWithResolver(
+            baseText,
+            Function(token As String) ResolveRuntimePlaceholder(token),
+            $"flow session '{If(_sessionId, "unknown")}', textKey '{textKey}'"
+        )
+    End Function
+
+    ''' <summary>
+    ''' Resolves a placeholder token against active flow runtime variables.
+    ''' Supports exact lookup and case-insensitive fallback for robustness.
+    ''' </summary>
+    Private Function ResolveRuntimePlaceholder(token As String) As String
+        Dim normalized = If(token, "").Trim()
+        If String.IsNullOrEmpty(normalized) Then
+            Return Nothing
+        End If
+
+        Dim flow = ActiveFlow()
+        If flow Is Nothing OrElse flow.VariableStore Is Nothing Then
+            Return Nothing
+        End If
+
+        If flow.VariableStore.ContainsKey(normalized) Then
+            Dim raw = flow.VariableStore(normalized)
+            Return If(raw Is Nothing, Nothing, raw.ToString())
+        End If
+
+        For Each kvp In flow.VariableStore
+            If String.Equals(kvp.Key, normalized, StringComparison.OrdinalIgnoreCase) Then
+                Return If(kvp.Value Is Nothing, Nothing, kvp.Value.ToString())
+            End If
+        Next
+
+        Return Nothing
     End Function
 
     ''' <summary>

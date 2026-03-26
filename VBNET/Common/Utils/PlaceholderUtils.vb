@@ -26,25 +26,49 @@ Public Module PlaceholderUtils
             globalContext = New GlobalVariableContext(context)
         End If
 
+        Return ProcessPlaceholdersWithResolver(
+            text,
+            Function(token As String) globalContext.GetValue(token),
+            $"task '{context.Id}'"
+        )
+    End Function
+
+    ''' <summary>
+    ''' Substitutes [token] placeholders in text using a caller-provided resolver.
+    ''' Iterates until no more placeholders remain (supports chained substitutions).
+    ''' Unresolved placeholders are left as-is (no exception is thrown).
+    ''' </summary>
+    Public Function ProcessPlaceholdersWithResolver(
+        text As String,
+        resolveValue As Func(Of String, String),
+        Optional contextLabel As String = "runtime context"
+    ) As String
+        If String.IsNullOrEmpty(text) Then Return text
+        If resolveValue Is Nothing Then
+            Throw New ArgumentNullException(NameOf(resolveValue), "resolveValue delegate cannot be Nothing.")
+        End If
+
         Dim result As String = text
         Dim iterations As Integer = 0
         Const MaxIterations As Integer = 10
 
-        While result.Contains("[") AndAlso iterations < MaxIterations
+        While iterations < MaxIterations
             iterations += 1
             Dim matches As MatchCollection = PlaceholderRegex.Matches(result)
             If matches.Count = 0 Then Exit While
 
+            Dim anyResolved As Boolean = False
             For Each m As Match In matches
-                Dim fullLabel = m.Groups(1).Value.Trim()
-                Dim value = globalContext.GetValue(fullLabel)
-
-                If String.IsNullOrEmpty(value) Then
-                    Throw New InvalidOperationException($"Placeholder '[{fullLabel}]' could not be resolved in task '{context.Id}'. Check that the variable name matches a known FullLabel.")
+                Dim token = m.Groups(1).Value.Trim()
+                Dim value = resolveValue(token)
+                If Not String.IsNullOrEmpty(value) Then
+                    result = result.Replace(m.Value, value)
+                    anyResolved = True
                 End If
-
-                result = result.Replace(m.Value, value)
             Next
+
+            ' No progress this iteration — stop to avoid infinite loop
+            If Not anyResolved Then Exit While
         End While
 
         Return result

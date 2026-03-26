@@ -29,15 +29,25 @@ export type BackendCompileFlowArtifacts = {
 
 function collectSubflowFlowIdsFromEnrichedNodes(nodes: Node<FlowNode>[]): string[] {
   const out = new Set<string>();
+  const resolveSubflowFlowId = (task: any): string => {
+    const direct = typeof task?.flowId === 'string' ? task.flowId.trim() : '';
+    if (direct) return direct;
+    const params = Array.isArray(task?.parameters) ? task.parameters : [];
+    const flowParam = params.find((p: any) => String(p?.parameterId || '').trim() === 'flowId');
+    const fromParam = String(flowParam?.value || '').trim();
+    return fromParam;
+  };
   for (const node of nodes) {
     const rows = node.data?.rows || [];
     for (const row of rows) {
       const taskId = row.id || row.taskId;
       if (!taskId) continue;
       const task = taskRepository.getTask(taskId);
-      if (task?.type === TaskType.Subflow && typeof (task as { flowId?: string }).flowId === 'string') {
-        const fid = String((task as { flowId: string }).flowId).trim();
-        if (fid && fid !== 'main') out.add(fid);
+      if (task?.type === TaskType.Subflow) {
+        const fid = resolveSubflowFlowId(task);
+        if (fid && fid !== 'main') {
+          out.add(fid);
+        }
       }
     }
   }

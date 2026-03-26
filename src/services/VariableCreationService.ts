@@ -5,6 +5,7 @@ import type { Task } from '@types/taskTypes';
 import type { DialogueTask } from '@services/DialogueTaskService';
 import type { EnsureManualVariableOptions, VariableInstance, VariableScope } from '@types/variableTypes';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
+import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
 import {
   isVariableVisibleInFlow,
   normalizeVariableInstance,
@@ -399,7 +400,28 @@ class VariableCreationService {
    */
   getVariablesForFlowScope(projectId: string, flowCanvasId?: string): VariableInstance[] {
     const flowId = flowCanvasId ?? getActiveFlowCanvasId();
-    return (this.store.get(projectId) ?? []).filter(v => isVariableVisibleInFlow(v, flowId));
+    const flow = FlowWorkspaceSnapshot.getFlowById(flowId);
+    const localTaskIds = new Set<string>();
+    for (const node of flow?.nodes || []) {
+      const rows = (node as any)?.data?.rows;
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const taskId = String((row as any)?.id || '').trim();
+        if (taskId) localTaskIds.add(taskId);
+      }
+    }
+
+    return (this.store.get(projectId) ?? []).filter(v => {
+      const taskId = String(v.taskInstanceId || '').trim();
+      if (taskId) {
+        // Strict per-flow ownership: task-bound variables are visible only
+        // when their task row belongs to the current flow canvas.
+        return localTaskIds.has(taskId);
+      }
+      // For flow authoring rail, show only this flow's manual variables.
+      const scope = (v.scope ?? 'project');
+      return scope === 'flow' && String(v.scopeFlowId || '').trim() === String(flowId).trim();
+    });
   }
 
   /**

@@ -202,16 +202,14 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
       createTask={entityCreation.createTask}
       createCondition={entityCreation.createCondition}
     >
-      <div className="relative flex flex-1 min-h-0 w-full h-full flex-col">
-        <div className="relative flex flex-1 min-h-0 w-full min-w-0 overflow-hidden">
-          <div className="absolute inset-0 z-0 min-h-0 min-w-0">{flowEditor}</div>
-          {isLoadingFlow ? (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-[1px] text-sm font-medium text-slate-700">
-              Loading flow...
-            </div>
-          ) : null}
-          {isFlowInterfacePanelEnabled(flowId) ? <FlowInterfaceBottomPanel flowId={flowId} /> : null}
-        </div>
+      <div className="relative flex flex-1 min-h-0 w-full h-full min-w-0 overflow-hidden">
+        <div className="absolute inset-0 z-0 min-h-0 min-w-0">{flowEditor}</div>
+        {isLoadingFlow ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-[1px] text-sm font-medium text-slate-700">
+            Loading flow...
+          </div>
+        ) : null}
+        {isFlowInterfacePanelEnabled(flowId) ? <FlowInterfaceBottomPanel flowId={flowId} /> : null}
         <FlowVariablesRail flowId={flowId} projectId={projectId} />
       </div>
     </FlowActionsProvider>

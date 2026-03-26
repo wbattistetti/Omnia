@@ -54,6 +54,54 @@ Namespace ApiServer.Handlers
                 _logger.LogError(message, ex, data)
             End If
         End Sub
+
+        ''' <summary>
+        ''' Resolves a placeholder token against runtimeData.
+        ''' Supports exact lookup and case-insensitive fallback.
+        ''' </summary>
+        Private Function ResolveRuntimeToken(token As String, runtimeData As IDictionary(Of String, Object)) As String
+            Dim normalized = If(token, "").Trim()
+            If String.IsNullOrEmpty(normalized) Then
+                Return Nothing
+            End If
+            If runtimeData Is Nothing Then
+                Return Nothing
+            End If
+
+            If runtimeData.ContainsKey(normalized) Then
+                Dim raw = runtimeData(normalized)
+                Return If(raw Is Nothing, Nothing, raw.ToString())
+            End If
+
+            For Each kvp In runtimeData
+                If String.Equals(kvp.Key, normalized, StringComparison.OrdinalIgnoreCase) Then
+                    Return If(kvp.Value Is Nothing, Nothing, kvp.Value.ToString())
+                End If
+            Next
+
+            Return Nothing
+        End Function
+
+        ''' <summary>
+        ''' Applies placeholder rendering to an already translated message text.
+        ''' Throws on unresolved placeholders (fail-fast by design).
+        ''' </summary>
+        Private Function RenderRuntimeMessage(
+            baseText As String,
+            textKey As String,
+            runtimeData As IDictionary(Of String, Object),
+            contextLabel As String
+        ) As String
+            If String.IsNullOrEmpty(baseText) Then
+                Return baseText
+            End If
+
+            Return PlaceholderUtils.ProcessPlaceholdersWithResolver(
+                baseText,
+                Function(token As String) ResolveRuntimeToken(token, runtimeData),
+                $"{contextLabel}, textKey '{textKey}'"
+            )
+        End Function
         ''' <summary>
         ''' Reads and parses the request body for task session start
         ''' </summary>
@@ -336,7 +384,13 @@ Namespace ApiServer.Handlers
                     If result.Messages IsNot Nothing AndAlso result.Messages.Count > 0 Then
                         For Each textKey As String In result.Messages
                             ' ✅ Risolvi TextKey prima di emettere
-                            Dim messageText = resolveTranslation(textKey)
+                            Dim translated = resolveTranslation(textKey)
+                            Dim messageText = RenderRuntimeMessage(
+                                translated,
+                                textKey,
+                                session.RuntimeData,
+                                $"task session '{newSessionId}' (start)"
+                            )
                             Dim messageData As Object = New With {
                                 .text = messageText,
                                 .stepType = "start",
@@ -756,7 +810,13 @@ Namespace ApiServer.Handlers
                 If processTurnResult.Messages IsNot Nothing AndAlso processTurnResult.Messages.Count > 0 Then
                     For Each textKey As String In processTurnResult.Messages
                         ' ✅ Risolvi TextKey prima di emettere
-                        Dim messageText = resolveTranslation(textKey)
+                        Dim translated = resolveTranslation(textKey)
+                        Dim messageText = RenderRuntimeMessage(
+                            translated,
+                            textKey,
+                            session.RuntimeData,
+                            $"task session '{sessionId}' (input)"
+                        )
                         Dim messageData As Object = New With {
                             .text = messageText,
                             .stepType = If(processTurnResult.NewState IsNot Nothing, processTurnResult.NewState.TurnState.ToString(), "unknown"),

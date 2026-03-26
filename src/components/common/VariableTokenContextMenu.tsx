@@ -111,6 +111,10 @@ export default function VariableTokenContextMenu({
                 key={`${item.ownerFlowTitle}-${item.varId}-${item.varLabel}`}
                 type="button"
                 onClick={() => {
+                  if (item.isFromActiveFlow === false && onExposeAndSelect) {
+                    onExposeAndSelect(item);
+                    return;
+                  }
                   if (!item.isExposed && onExposeAndSelect) {
                     onExposeAndSelect(item);
                     return;
@@ -192,6 +196,10 @@ export default function VariableTokenContextMenu({
               key={`child-${item.ownerFlowTitle}-${item.varId}-${item.varLabel}`}
               type="button"
               onClick={() => {
+                if (item.isFromActiveFlow === false && onExposeAndSelect) {
+                  onExposeAndSelect(item);
+                  return;
+                }
                 if (!item.isExposed && onExposeAndSelect) {
                   onExposeAndSelect(item);
                   return;

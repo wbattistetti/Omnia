@@ -6,7 +6,8 @@ import { insertBracketTokenAtCaret } from '../../../utils/variableTokenText';
 import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
 import { useFlowActions, useFlowWorkspace } from '../../../flows/FlowStore';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
-import { buildVariableMenuItems } from '../../common/variableMenuModel';
+import { buildVariableMenuItemsAsync, type VariableMenuItem } from '../../common/variableMenuModel';
+import { ensureParentVariableAndSubflowOutputBinding } from '../../common/subflowParentBinding';
 
 interface ActionTextProps {
   text: string;
@@ -24,10 +25,22 @@ const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editVa
   const { updateFlowMeta } = useFlowActions();
   const pdUpdate = useProjectDataUpdate();
   const activeFlowId = getActiveFlowCanvasId();
-  const variableMenuItems = React.useMemo(() => {
+  const [variableMenuItems, setVariableMenuItems] = React.useState<VariableMenuItem[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
     const pid = pdUpdate?.getCurrentProjectId() || '';
-    if (!pid) return [];
-    return buildVariableMenuItems(pid, activeFlowId, flows as any);
+    if (!pid) {
+      setVariableMenuItems([]);
+      return;
+    }
+    void buildVariableMenuItemsAsync(pid, activeFlowId, flows as any).then((items) => {
+      if (!cancelled) setVariableMenuItems(items);
+    }).catch(() => {
+      if (!cancelled) setVariableMenuItems([]);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [pdUpdate, activeFlowId, flows, editing, text]);
 
   if (!editing) {
@@ -79,6 +92,31 @@ const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editVa
         variableItems={variableMenuItems}
         onClose={() => setVarsMenu({ open: false, x: 0, y: 0 })}
         onExposeAndSelect={(item) => {
+          const projectId = pdUpdate?.getCurrentProjectId() || '';
+          if (!projectId) return;
+          if (item.isFromActiveFlow === false) {
+            const bound = ensureParentVariableAndSubflowOutputBinding(
+              projectId,
+              activeFlowId,
+              flows as any,
+              item
+            );
+            const el = inputRef.current;
+            const caret = {
+              start: el?.selectionStart ?? editValue.length,
+              end: el?.selectionEnd ?? editValue.length,
+            };
+            const out = insertBracketTokenAtCaret(editValue, caret, bound.tokenLabel);
+            onChange(out.text);
+            setVarsMenu({ open: false, x: 0, y: 0 });
+            requestAnimationFrame(() => {
+              if (!el) return;
+              el.focus();
+              el.setSelectionRange(out.caret.start, out.caret.end);
+            });
+            return;
+          }
+
           const owner = (flows as any)?.[item.ownerFlowId];
           if (!owner) return;
           const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
