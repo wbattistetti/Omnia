@@ -51,6 +51,10 @@ export function useFlowModeChat(
   const hasStartedRef = React.useRef(false);
   const startInFlightRef = React.useRef<Promise<void> | null>(null);
   const previousNodesKeyRef = React.useRef<string>('');
+  // Ref-based flag: blocks auto-start useEffect while restart protocol is in flight.
+  // Using a ref (not state) ensures the useEffect guard is synchronously visible
+  // without triggering an extra render cycle.
+  const isRestartingRef = React.useRef(false);
 
   // ✅ CRITICAL: Store critical state in ref (survives remount)
   const stateRef = React.useRef<{
@@ -213,9 +217,14 @@ export function useFlowModeChat(
   // ✅ ARCHITECTURAL: Call hook at top level (not inside useMemo)
   // This respects React's Rules of Hooks
   const flowEngine = useDialogueEngine(engineOptions);
+  const flowEngineRef = React.useRef(flowEngine);
+  React.useEffect(() => {
+    flowEngineRef.current = flowEngine;
+  }, [flowEngine]);
 
   const executeStart = React.useCallback(async () => {
-    if (!flowEngine || typeof flowEngine.start !== 'function') {
+    const engine = flowEngineRef.current;
+    if (!engine || typeof engine.start !== 'function') {
       throw new Error('Flow engine is not available.');
     }
     if (hasStartedRef.current) {
@@ -229,7 +238,7 @@ export function useFlowModeChat(
     const startPromise = (async () => {
       hasStartedRef.current = true;
       try {
-        await flowEngine.start();
+        await engine.start();
       } catch (error) {
         hasStartedRef.current = false;
         throw error;
@@ -240,7 +249,7 @@ export function useFlowModeChat(
 
     startInFlightRef.current = startPromise;
     await startPromise;
-  }, [flowEngine]);
+  }, []);
 
   // ✅ ARCHITECTURAL: Start when data is ready
   const translationsKey = React.useMemo(() => {
@@ -249,10 +258,15 @@ export function useFlowModeChat(
   }, [translations]);
 
   React.useEffect(() => {
-    // ✅ Create stable key based on node IDs to detect actual flow changes
+    // Block auto-start while restart protocol is in flight to prevent concurrent sessions.
+    if (isRestartingRef.current) {
+      return;
+    }
+
+    // Create stable key based on node IDs to detect actual flow changes.
     const nodesKey = nodes.map(n => n.id).sort().join(',');
 
-    // ✅ Reset guard when nodes actually change
+    // Reset guard when nodes actually change.
     if (nodesKey !== previousNodesKeyRef.current) {
       hasStartedRef.current = false;
       previousNodesKeyRef.current = nodesKey;
@@ -264,11 +278,10 @@ export function useFlowModeChat(
     }
 
     if (hasStartedRef.current) {
-      return; // Already started
+      return;
     }
 
     if (nodes.length === 0) {
-      console.error('[useFlowModeChat] ❌ Cannot start: no nodes found');
       if (setErrorRef.current) {
         setErrorRef.current('Cannot start flow: no nodes found');
       }
@@ -276,22 +289,14 @@ export function useFlowModeChat(
     }
 
     if (!translations || Object.keys(translations).length === 0) {
-      console.warn('[useFlowModeChat] ❌ No translations found - aborting start');
       return;
     }
 
-    if (!flowEngine) {
-      console.error('[useFlowModeChat] ❌ flowEngine is not available - aborting start');
-      return;
-    }
-
-    if (typeof flowEngine.start !== 'function') {
-      console.error('[useFlowModeChat] ❌ flowEngine.start is not a function - aborting start');
+    if (!flowEngine || typeof flowEngine.start !== 'function') {
       return;
     }
 
     void executeStart().catch((error) => {
-      console.error('[useFlowModeChat] ❌ Failed to start flow orchestrator', error);
       if (setErrorRef.current) {
         setErrorRef.current(error.message || 'Failed to start flow orchestrator');
       }
@@ -301,17 +306,18 @@ export function useFlowModeChat(
 
   // ✅ Handle user input in flow mode
   const handleUserInput = React.useCallback(async (input: string) => {
-    if (!flowEngine) return;
+    const engine = flowEngineRef.current;
+    if (!engine) return;
 
     try {
-      await flowEngine.provideInput(input);
+      await engine.provideInput(input);
     } catch (error) {
       console.error('[useFlowModeChat] Error providing input to flow engine', error);
       if (setErrorRef.current) {
         setErrorRef.current(error instanceof Error ? error.message : 'Error providing input');
       }
     }
-  }, [flowEngine]);
+  }, []);
 
   // ✅ Clear state when needed
   const clearMessages = React.useCallback(() => {
@@ -326,10 +332,21 @@ export function useFlowModeChat(
   }, []);
 
   const restartFlow = React.useCallback(async () => {
-    if (isRestarting) {
+    // Guard against concurrent restarts via both ref (sync) and state (UI).
+    if (isRestartingRef.current) {
       return;
     }
+
+    // Step 1: Raise the restart flag SYNCHRONOUSLY so useEffect auto-start
+    // is blocked for the entire duration of this protocol.
+    isRestartingRef.current = true;
     setIsRestarting(true);
+
+    // Step 2: Clear in-flight start promise so executeStart can run fresh.
+    startInFlightRef.current = null;
+    hasStartedRef.current = false;
+
+    // Step 3: Reset local chat state.
     messageIdCounter.current = 0;
     sentMessageIds.current.clear();
     setCurrentExecutionLabel('');
@@ -340,11 +357,16 @@ export function useFlowModeChat(
     if (setErrorRef.current) {
       setErrorRef.current(null);
     }
-    hasStartedRef.current = false;
+
     try {
-      if (flowEngine && typeof flowEngine.reset === 'function') {
-        await flowEngine.reset();
+      // Step 4: Stop existing engine session (closes SSE, deletes backend session).
+      // Must complete before starting a new one to avoid two live SSE streams.
+      const engine = flowEngineRef.current;
+      if (engine && typeof engine.reset === 'function') {
+        await engine.reset();
       }
+
+      // Step 5: Start new session now that the old one is fully gone.
       await executeStart();
     } catch (error) {
       hasStartedRef.current = false;
@@ -352,9 +374,11 @@ export function useFlowModeChat(
         setErrorRef.current(error instanceof Error ? error.message : 'Failed to restart flow execution');
       }
     } finally {
+      // Step 6: Lower the restart flag so auto-start useEffect can fire normally again.
+      isRestartingRef.current = false;
       setIsRestarting(false);
     }
-  }, [flowEngine, isRestarting, executeStart]);
+  }, [executeStart]);
 
   return {
     isWaitingForInput,

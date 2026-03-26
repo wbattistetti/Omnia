@@ -44,7 +44,7 @@ export function AssistantPanel(props: AssistantPanelProps) {
     >
       <FontProvider>
         <DDEBubbleChat
-          key={`${props.task?.id || 'flow'}-${props.flowNodes?.length || 0}-${props.flowEdges?.length || 0}-${props.executionFlowName || ''}-${props.executionLaunchType || ''}-${props.executionLaunchLabel || ''}`}
+          key={`${props.task?.id || 'flow'}-${props.executionFlowName || ''}-${props.executionLaunchType || ''}-${props.executionLaunchLabel || ''}`}
           task={props.task || null}
           projectId={props.projectId || null}
           translations={props.translations}

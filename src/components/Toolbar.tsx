@@ -16,6 +16,17 @@ const BTN_PRIMARY_SAVE = 'bg-purple-600 hover:bg-purple-700 text-white disabled:
 const BTN_SAVE_AS = 'bg-slate-700 hover:bg-slate-600 text-slate-200 border border-purple-500/50';
 const BTN_DEPLOY = 'bg-blue-600 hover:bg-blue-700 text-white';
 const BTN_RUN = 'bg-green-600 hover:bg-green-700 text-white';
+const GUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
+
+function sanitizeRunFlowTitle(rawTitle: string | null | undefined, flowId: string): string {
+  const title = (rawTitle || '').trim();
+  if (flowId === 'main') return 'MAIN';
+  if (!title) return 'Subflow';
+  const lower = title.toLowerCase();
+  if (lower.startsWith('subflow_')) return 'Subflow';
+  if (GUID_RE.test(title)) return 'Subflow';
+  return title;
+}
 
 export interface SaveAsPayload {
   name: string;
@@ -103,7 +114,7 @@ export function Toolbar({
 
   const activeFlowId = FlowWorkspaceSnapshot.getActiveFlowId();
   const activeFlowSlice = FlowWorkspaceSnapshot.getFlowById(activeFlowId);
-  const activeFlowTitle = (activeFlowSlice?.title || activeFlowId).trim() || activeFlowId;
+  const activeFlowTitle = sanitizeRunFlowTitle(activeFlowSlice?.title || activeFlowId, activeFlowId);
   const isMainCanvasActive = activeFlowId === 'main';
   const runButtonLabel = isMainCanvasActive ? 'Run MAIN' : `Run ${activeFlowTitle}`;
 

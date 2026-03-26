@@ -11,6 +11,18 @@ import { FlowTestProvider } from '../../context/FlowTestContext';
 import { FlowActionsProvider } from '../../context/FlowActionsContext';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 
+function getDefaultFlowTitle(flowId: string): string {
+  return flowId === 'main' ? 'MAIN' : 'Subflow';
+}
+
+function pickFlowTitle(flowId: string, currentTitle: string | undefined): string {
+  const title = (currentTitle || '').trim();
+  if (title.length > 0) {
+    return title;
+  }
+  return getDefaultFlowTitle(flowId);
+}
+
 type Props = {
   /** When undefined (draft project), flow is kept in memory only until first Save. */
   projectId: string | undefined;
@@ -44,7 +56,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
       if (!flows[flowId]) {
         upsertFlow({
           id: flowId,
-          title: flowId === 'main' ? 'Main' : flowId,
+          title: pickFlowTitle(flowId, flows[flowId]?.title),
           nodes: [],
           edges: [],
           hydrated: false,
@@ -64,7 +76,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
           if (cancelled) return;
           upsertFlow({
             id: flowId,
-            title: flowId === 'main' ? 'Main' : flowId,
+            title: pickFlowTitle(flowId, flow?.title),
             nodes: data.nodes,
             edges: data.edges,
             ...(data.meta !== undefined ? { meta: data.meta } : {}),
@@ -76,7 +88,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
           console.error('[FlowCanvasHost] initial loadFlow failed', { projectId, flowId, e });
           upsertFlow({
             id: flowId,
-            title: flowId === 'main' ? 'Main' : flowId,
+            title: pickFlowTitle(flowId, flow?.title),
             nodes: [],
             edges: [],
             hydrated: false,

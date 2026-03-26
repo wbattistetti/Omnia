@@ -257,6 +257,14 @@ export default function DDEBubbleChat({
   const sentTextRef = React.useRef<string>('');
   const sessionStartingRef = React.useRef<boolean>(false);
   const lastSessionKeyRef = React.useRef<string | null>(null);
+  const onFlowModeMessage = React.useCallback((message: Message) => {
+    setMessages(prev => {
+      if (prev.some(m => m.id === message.id)) {
+        return prev;
+      }
+      return [...prev, message];
+    });
+  }, []);
 
   // ✅ ARCHITECTURAL: Detect flow mode explicitly
   const isFlowMode = !task && !taskTree && mode === 'interactive';
@@ -269,36 +277,7 @@ export default function DDEBubbleChat({
     flowEdges || [],
     flowTasks || [],
     translations,
-    (message) => {
-      console.log('[DDEBubbleChat] 📨 Flow mode message received:', {
-        messageId: message.id,
-        text: message.text?.substring(0, 50),
-        sender: message.sender,
-      });
-      // Add flow mode messages to component messages
-      setMessages(prev => {
-        console.log('🔴 [DDEBubbleChat BREAKPOINT] setMessages called');
-        console.log('🔴 [DDEBubbleChat BREAKPOINT] prev messages count:', prev.length);
-        console.log('🔴 [DDEBubbleChat BREAKPOINT] prev messages:', prev.map(m => ({ id: m.id, text: m.text?.substring(0, 30) })));
-        console.log('🔴 [DDEBubbleChat BREAKPOINT] new message:', message);
-        console.log('🔴 [DDEBubbleChat BREAKPOINT] message.id:', message.id);
-        console.log('🔴 [DDEBubbleChat BREAKPOINT] Checking for duplicates...');
-        const isDuplicate = prev.some(m => m.id === message.id);
-        console.log('🔴 [DDEBubbleChat BREAKPOINT] isDuplicate:', isDuplicate);
-
-        // Avoid duplicates
-        if (isDuplicate) {
-          console.log('🔴 [DDEBubbleChat BREAKPOINT] Duplicate found, returning prev');
-          return prev;
-        }
-
-        const newMessages = [...prev, message];
-        console.log('🔴 [DDEBubbleChat BREAKPOINT] New messages array:', newMessages);
-        console.log('🔴 [DDEBubbleChat BREAKPOINT] New messages count:', newMessages.length);
-        console.log('🔴 [DDEBubbleChat BREAKPOINT] New messages details:', newMessages.map(m => ({ id: m.id, text: m.text?.substring(0, 30), sender: m.sender })));
-        return newMessages;
-      });
-    },
+    onFlowModeMessage,
     executionFlowName
   );
   const launchExecutionLabel = React.useMemo(() => {
@@ -331,16 +310,6 @@ export default function DDEBubbleChat({
   // ✅ ARCHITECTURAL: Merge flow mode state with component state
   const effectiveIsWaitingForInput = isFlowMode ? flowModeChat.isWaitingForInput : isWaitingForInput;
   const effectiveError = isFlowMode ? flowModeChat.error : backendError;
-
-  // ✅ DEBUG: Log quando effectiveIsWaitingForInput cambia
-  React.useEffect(() => {
-    console.log('[DDEBubbleChat] ⏳ effectiveIsWaitingForInput changed:', {
-      effectiveIsWaitingForInput,
-      isFlowMode,
-      flowModeChatIsWaiting: isFlowMode ? flowModeChat.isWaitingForInput : undefined,
-      taskModeIsWaiting: !isFlowMode ? isWaitingForInput : undefined,
-    });
-  }, [effectiveIsWaitingForInput, isFlowMode, flowModeChat.isWaitingForInput, isWaitingForInput]);
 
   // Message ID generator
   const messageIdCounter = React.useRef(0);
@@ -424,18 +393,6 @@ export default function DDEBubbleChat({
 
   // ✅ NEW: In preview mode, use previewMessages instead of SSE
   const displayMessages = mode === 'preview' && previewMessages ? previewMessages : messages;
-
-  // ✅ DEBUG: Track messages state changes
-  React.useEffect(() => {
-    console.log('🔴 [DDEBubbleChat BREAKPOINT] messages state changed:', {
-      messagesCount: messages.length,
-      displayMessagesCount: displayMessages.length,
-      isFlowMode,
-      mode,
-      messages: messages.map(m => ({ id: m.id, text: m.text?.substring(0, 30), sender: m.sender })),
-      displayMessages: displayMessages.map(m => ({ id: m.id, text: m.text?.substring(0, 30), sender: m.sender }))
-    });
-  }, [messages, displayMessages, isFlowMode, mode]);
 
   // ✅ ARCHITECTURAL: Separate useEffect for preview mode
   React.useEffect(() => {
@@ -1591,12 +1548,13 @@ export default function DDEBubbleChat({
   };
 
   // Reset function - restart session with same task
-  const handleReset = () => {
-    // ✅ Flow mode: clear messages from hook
+  const handleReset = async () => {
+    // ✅ Flow mode: clear messages FIRST (sync), then restart engine
+    // Order is critical: UI must be clean before new SSE events start arriving
     if (isFlowMode) {
-      void flowModeChat.restartFlow();
       setMessages([]);
       messageIdCounter.current = 0;
+      await flowModeChat.restartFlow();
       return;
     }
 
@@ -1656,7 +1614,7 @@ export default function DDEBubbleChat({
           ) : <div />}
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
-              onClick={handleReset}
+              onClick={() => { void handleReset(); }}
               disabled={isFlowMode ? flowModeChat.isRestarting : false}
               className="p-1.5 rounded bg-slate-900 text-lime-300 hover:bg-slate-800 transition-colors"
               title="Riavvia esecuzione"

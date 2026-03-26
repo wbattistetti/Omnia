@@ -414,18 +414,17 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     setCurrentTask(null);
   }, []);
 
-  // Reset engine state
+  // Reset engine state — atomically closes old SSE session before returning,
+  // so the caller can safely start a new session immediately after await.
   const reset = useCallback(async () => {
-    // Check if using backend orchestrator
+    // Capture current refs before clearing them so the stop call uses the
+    // correct sessionId/control even if a concurrent render replaces them.
     const orchestratorControl = (engineRef.current as any)?.orchestratorControl;
-    if (orchestratorControl && orchestratorControl.stop) {
-      await orchestratorControl.stop();
-    } else if (engineRef.current && typeof engineRef.current.reset === 'function') {
-      await engineRef.current.reset();
-    }
+
+    // Clear refs immediately so no stale SSE callbacks fire after this point.
     if (engineRef.current) {
       engineRef.current.sessionId = undefined;
-      engineRef.current.orchestratorControl = undefined;
+      (engineRef.current as any).orchestratorControl = undefined;
       engineRef.current.waitingForInput = undefined;
     }
     sessionIdRef.current = null;
@@ -433,6 +432,24 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     setIsRunning(false);
     setCurrentTask(null);
     setExecutionState(null);
+
+    // Now close the old session. We do this after clearing refs so that any
+    // SSE event that arrives during stop() finds engineRef already empty and
+    // does not update stale state. A 3 s timeout prevents hang if backend is
+    // unreachable.
+    if (orchestratorControl?.stop) {
+      try {
+        await Promise.race([
+          orchestratorControl.stop(),
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error('reset stop timeout')), 3000)
+          ),
+        ]);
+      } catch {
+        // Timeout or network error during stop — session is gone on our side;
+        // backend will expire it on its own.
+      }
+    }
   }, []);
 
   // Update retrieval state (for DDT)

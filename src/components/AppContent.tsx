@@ -263,9 +263,16 @@ export const AppContent: React.FC<AppContentProps> = ({
               ? String(existingFlowId).trim()
               : `subflow_${taskId}`;
             const tabTitle = (title || '').trim() || 'Subflow';
-            // Do not overwrite an existing flow with empty graph on reopen.
-            // Create an empty slice only for first-time subflow creation.
-            if (!existingFlowId) {
+            // Ensure a human-readable title is always propagated to FlowStore.
+            // For existing subflows, preserve current graph and only refresh the title.
+            const existingSlice = flowsRef.current?.[flowId];
+            if (existingSlice) {
+              upsertFlow({
+                ...existingSlice,
+                id: flowId,
+                title: tabTitle,
+              } as any);
+            } else {
               upsertFlow({
                 id: flowId,
                 title: tabTitle,
