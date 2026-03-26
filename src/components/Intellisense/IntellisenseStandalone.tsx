@@ -7,16 +7,20 @@ import { useDynamicFontSizes } from '../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../utils/fontSizeUtils';
 import { VoiceInput } from '../common/VoiceInput';
 import { diagFlowLink } from '../Flowchart/utils/flowTempLinkDiag';
+import type { EdgeLinkChoice } from './edgeLinkChoice';
+import { edgeLinkChoiceFromInputText, edgeLinkChoiceFromIntellisenseItem } from './edgeLinkChoice';
 
 /**
  * Editor compatto per condizione su edge nuovo: solo textbox + azioni a destra,
  * senza pannello contenitore, ancorato al punto medio del link (coordinate schermo).
+ * Il menu usa `inlineAnchor`: l’host gestisce Enter/Frecce; la scelta è sempre un `EdgeLinkChoice`
+ * immutabile (nessuna dipendenza da state.query dopo close nel parent).
  */
 interface IntellisenseStandaloneProps {
     anchorScreen: { x: number; y: number };
     extraItems: IntellisenseItem[];
     allowedKinds?: Array<'condition' | 'intent'>;
-    onSelect: (item: IntellisenseItem | null) => void;
+    onCommit: (choice: EdgeLinkChoice) => void;
     /** Chiude il contesto; il parent esegue cleanup edge/nodo temporaneo se necessario. */
     onClose: () => void;
 }
@@ -25,7 +29,7 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
     anchorScreen,
     extraItems,
     allowedKinds,
-    onSelect,
+    onCommit,
     onClose,
 }) => {
     const { state, actions } = useIntellisense();
@@ -39,7 +43,11 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
     const [wrapperPosition, setWrapperPosition] = useState({ x: 0, y: 0 });
     const [inputWidth, setInputWidth] = useState(150);
     const [minInputWidth, setMinInputWidth] = useState(150);
+    const [navSeq, setNavSeq] = useState(0);
+    const [navDir, setNavDir] = useState<1 | -1>(1);
     const fontSizes = useDynamicFontSizes();
+    /** Set when menu confirms a row (click o intelli-enter) così Enter non invia anche testo libero. */
+    const menuEnterHandledRef = useRef(false);
 
     const bindRowContainerRef = useCallback((el: HTMLDivElement | null) => {
         setMenuAnchorEl(el);
@@ -139,21 +147,38 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
         actions.setQuery(e.target.value);
     };
 
+    const handleMenuSelect = useCallback(
+        (item: IntellisenseItem | null) => {
+            if (!item) return;
+            menuEnterHandledRef.current = true;
+            onCommit(edgeLinkChoiceFromIntellisenseItem(item));
+        },
+        [onCommit]
+    );
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            e.stopPropagation();
+            const dir = e.key === 'ArrowDown' ? 1 : -1;
+            setNavDir(dir);
+            setNavSeq((s) => s + 1);
+            return;
+        }
         if (e.key === 'Enter') {
             e.preventDefault();
             e.stopPropagation();
-            const text = state.query.trim();
-            if (text.length === 0) {
-                onSelect({
-                    id: '__unlinked__',
-                    label: '',
-                    kind: 'condition',
-                    category: 'special',
-                } as any);
-            } else {
-                onSelect(null);
+            menuEnterHandledRef.current = false;
+            try {
+                document.dispatchEvent(new CustomEvent('intelli-enter'));
+            } catch {
+                /* ignore */
             }
+            if (menuEnterHandledRef.current) {
+                return;
+            }
+            const text = (e.currentTarget as HTMLInputElement).value;
+            onCommit(edgeLinkChoiceFromInputText(text));
         } else if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
@@ -162,21 +187,11 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
     };
 
     const handleElseClick = () => {
-        onSelect({
-            id: '__else__',
-            label: 'Else',
-            kind: 'condition',
-            category: 'special',
-        } as any);
+        onCommit({ kind: 'else' });
     };
 
     const handleUnlinkedClick = () => {
-        onSelect({
-            id: '__unlinked__',
-            label: '',
-            kind: 'condition',
-            category: 'special',
-        } as any);
+        onCommit({ kind: 'unlinked' });
     };
 
     const stopFlowPropagation = (e: React.MouseEvent) => {
@@ -336,11 +351,13 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                 query={state.query}
                 position={anchorScreen}
                 referenceElement={menuAnchorEl}
-                onSelect={(item) => onSelect(item)}
+                onSelect={handleMenuSelect}
                 onClose={onClose}
                 extraItems={extraItems}
                 allowedKinds={allowedKinds}
                 mode="inline"
+                inlineAnchor
+                navSignal={{ seq: navSeq, dir: navDir }}
             />
         </div>
     );

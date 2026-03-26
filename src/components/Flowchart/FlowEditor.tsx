@@ -191,7 +191,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [createOnUpdate]);
 
   // Deferred apply for labels on just-created edges (avoids race with RF state)
-  const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler(setEdges, setSelectedEdgeId, connectionMenuRef);
+  const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler(edgesRef, setEdges, setSelectedEdgeId);
 
   // Export scheduleApplyLabel, setEdges e setNodes per Intellisense (finalize link → hidden: false sul nodo temp)
   // Nota: usa `setNodes` (non setNodesWithLog) perché questo effect è sopra alla definizione di setNodesWithLog.

@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useLayoutEffect } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useIntellisense, IntellisenseItem } from "../../context/IntellisenseContext";
 import { useNodeRegistry } from "../../context/NodeRegistryContext";
 import { IntellisenseMenu } from "./IntellisenseMenu";
 import { IntellisenseStandalone } from "./IntellisenseStandalone";
+import { edgeLinkChoiceFromIntellisenseItem, type EdgeLinkChoice } from "./edgeLinkChoice";
+import { applyEdgeLinkPipeline, type ProjectDataConditionsShape } from "./edgeLinkPipeline";
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { FlowStateBridge } from '../../services/FlowStateBridge';
-import { generateId } from '../../utils/idGenerator';
-import { TaskType } from '../../types/taskTypes';
 
 export const IntellisensePopover: React.FC = () => {
     const { state, actions } = useIntellisense();
@@ -130,147 +130,28 @@ export const IntellisensePopover: React.FC = () => {
         }
     };
 
-    // Handler per selezione
-    const handleSelect = async (item: IntellisenseItem | null) => {
-        // ✅ 1. Chiudi Intellisense
-        actions.close();
+    /** Commit: `EdgeLinkChoice` è l’unica fonte di verità; dopo `close()` non si legge più `state.query`. */
+    const handleEdgeLinkCommit = useCallback(
+        async (choice: EdgeLinkChoice) => {
+            const edgeId = state.target?.edgeId;
+            actions.close();
+            if (!edgeId) return;
+            await applyEdgeLinkPipeline(edgeId, choice, {
+                projectData: projectData as ProjectDataConditionsShape,
+                addItem,
+                addCategory,
+            });
+        },
+        [state.target, actions, projectData, addItem, addCategory]
+    );
 
-        // ✅ 2. Se è un edge, rendi visibile il nodo temporaneo e aggiorna l'edge
-        if (state.target?.edgeId) {
-            const edgeId = state.target.edgeId;
-            const isUnconditional = !!(item && (item as any).id === '__unlinked__');
-            // Resolve temp target node deterministically from bridge state.
-            // Do not derive from setEdges updater (async in React 18).
-            const targetNodeId = FlowStateBridge.getLastTempNodeId();
-            // Consume immediately to avoid reusing stale temp id on subsequent actions.
-            FlowStateBridge.setLastTempNodeId(null);
-
-            // ✅ GESTISCI CASI SPECIALI
-            let label: string | undefined;
-            let isElse = false;
-            let conditionId: string | undefined;
-
-            if (item && (item as any).id === '__else__') {
-                // Caso Else
-                label = 'Else';
-                isElse = true;
-            } else if (item && (item as any).id === '__unlinked__') {
-                // Caso Unlinked (nessuna label)
-                label = undefined;
-            } else if (item) {
-                // Condizione dall'Intellisense
-                label = item.label;
-                conditionId = item.taskId || item.id; // ✅ taskId required
-            } else {
-                // Testo digitato (Enter senza selezione) - CREA CONDIZIONE
-                const customText = (state.query || "Condition").trim();
-                label = customText;
-
-                // Verifica se esiste già
-                const conditions = (projectData as any)?.conditions || [];
-                let found = false;
-                for (const cat of conditions) {
-                    for (const condItem of cat.items || []) {
-                        const condName = String(condItem?.name || condItem?.label || '').trim();
-                        if (condName.toLowerCase() === customText.toLowerCase()) {
-                            conditionId = condItem.id || condItem._id;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found) break;
-                }
-
-                // Se non esiste, creala
-                if (!found) {
-                    try {
-                        let categoryId = conditions.length > 0 ? conditions[0].id : '';
-                        if (!categoryId) {
-                            await addCategory('conditions', 'Default Conditions');
-                            const { ProjectDataService } = await import('../../services/ProjectDataService');
-                            const refreshed = await ProjectDataService.loadProjectData();
-                            categoryId = (refreshed as any)?.conditions?.[0]?.id || '';
-                        }
-
-                        if (categoryId) {
-                            await addItem('conditions', categoryId, customText, '');
-
-                            // Ricarica per ottenere l'ID
-                            const { ProjectDataService } = await import('../../services/ProjectDataService');
-                            const refreshed = await ProjectDataService.loadProjectData();
-                            const created = (refreshed as any)?.conditions?.[0]?.items?.find((i: any) => i.name === customText);
-                            conditionId = created?.id || created?._id;
-
-                            // Forza refresh sidebar
-                            (await import('../../ui/events')).emitSidebarForceRender();
-                            setTimeout(async () => {
-                                try { (await import('../../ui/events')).emitSidebarHighlightItem('conditions', customText); } catch { }
-                            }, 100);
-                        }
-                    } catch (e) {
-                        console.error("Error creating condition:", e);
-                    }
-                }
-            }
-
-            // Update the edge
-            const scheduleApplyLabel = FlowStateBridge.getScheduleApplyLabel();
-            const setEdges = FlowStateBridge.getSetEdges();
-            if (scheduleApplyLabel && label !== undefined) {
-                const extraData: any = {};
-                if (conditionId) extraData.conditionId = conditionId;
-                if (isElse) extraData.isElse = true;
-
-                scheduleApplyLabel(edgeId, label, Object.keys(extraData).length > 0 ? extraData : undefined);
-            } else if (setEdges) {
-                setEdges((eds: any[]) => eds.map(e => {
-                    if (e.id === edgeId) {
-                        return {
-                            ...e,
-                            label,
-                            data: {
-                                ...(e.data || {}),
-                                label,
-                                isElse,
-                                conditionId: conditionId || (e.data as any)?.conditionId
-                            }
-                        };
-                    }
-                    return e;
-                }));
-            }
-
-            const setNodes = FlowStateBridge.getSetNodes();
-            if (setNodes && targetNodeId) {
-                setNodes((nds: any[]) =>
-                    nds.map((n) => {
-                        if (n.id !== targetNodeId) return n;
-                        if (isUnconditional) {
-                            const newRowId = generateId();
-                            return {
-                                ...n,
-                                data: {
-                                    ...n.data,
-                                    hidden: false,
-                                    rows: [
-                                        ...(n.data?.rows || []),
-                                        {
-                                            id: newRowId,
-                                            text: '',
-                                            included: true,
-                                            heuristics: { type: TaskType.Subflow, templateId: null },
-                                        },
-                                    ],
-                                    focusRowId: newRowId,
-                                },
-                            };
-                        }
-                        return { ...n, data: { ...n.data, hidden: false } };
-                    })
-                );
-            }
-        }
-    };
+    /** Selezione da `IntellisenseMenu` (click / Enter): stesso commit con item catalogo o sentinel. */
+    const handleMenuItemSelect = useCallback(
+        (item: IntellisenseItem) => {
+            void handleEdgeLinkCommit(edgeLinkChoiceFromIntellisenseItem(item));
+        },
+        [handleEdgeLinkCommit]
+    );
 
     if (!state.isOpen) {
         return null;
@@ -283,7 +164,7 @@ export const IntellisensePopover: React.FC = () => {
                 anchorScreen={linkMid}
                 extraItems={state.catalog}
                 allowedKinds={['condition', 'intent']}
-                onSelect={handleSelect}
+                onCommit={handleEdgeLinkCommit}
                 onClose={handleClose}
             />,
             document.body
@@ -306,7 +187,7 @@ export const IntellisensePopover: React.FC = () => {
                     anchorScreen={legacyEdgeAnchor}
                     extraItems={state.catalog}
                     allowedKinds={['condition', 'intent']}
-                    onSelect={handleSelect}
+                    onCommit={handleEdgeLinkCommit}
                     onClose={handleClose}
                 />
             ) : (
@@ -315,7 +196,7 @@ export const IntellisensePopover: React.FC = () => {
                     query={state.query}
                     position={{ x: rect.left, y: rect.bottom + 8 }}
                     referenceElement={referenceElement}
-                    onSelect={handleSelect}
+                    onSelect={handleMenuItemSelect}
                     onClose={handleClose}
                     extraItems={state.catalog}
                     allowedKinds={state.target?.edgeId ? ['condition', 'intent'] : undefined}

@@ -1,5 +1,7 @@
 export type IntellisenseItem = {
     id: string;
+    /** Opzionale: id task condizione quando diverso da `id` (catalogo edge). */
+    taskId?: string;
     label: string;
     name?: string;
     value: string;
