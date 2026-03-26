@@ -32,6 +32,9 @@ Public Class OrchestratorSession
     Public Property Locale As String
     ' ✅ HANDSHAKE: Flag per evitare doppio avvio orchestrator (thread-safe via SessionManager lock)
     Public Property IsOrchestratorRunning As Boolean = False
+
+    ''' <summary>flowId → compilazione del subflow (persistita su Redis con la sessione).</summary>
+    Public Property SubflowCompilations As Dictionary(Of String, FlowCompilationResult)
 End Class
 
 ''' <summary>
@@ -341,6 +344,25 @@ Public Class SessionManager
     End Sub
 
     ''' <summary>
+    ''' Chiama <see cref="FlowOrchestrator.RegisterSubflowCompilation"/> per ogni entry (dopo creazione orchestrator).
+    ''' </summary>
+    Private Shared Sub ApplySubflowCompilationsToOrchestrator(
+        orchestrator As FlowOrchestrator,
+        subflowCompilations As Dictionary(Of String, FlowCompilationResult)
+    )
+        If orchestrator Is Nothing OrElse subflowCompilations Is Nothing OrElse subflowCompilations.Count = 0 Then
+            Return
+        End If
+        For Each kvp In subflowCompilations
+            If String.IsNullOrEmpty(kvp.Key) OrElse kvp.Value Is Nothing Then
+                Continue For
+            End If
+            orchestrator.RegisterSubflowCompilation(kvp.Key, kvp.Value)
+            Console.WriteLine($"[SessionManager] ✅ RegisterSubflowCompilation flowId='{kvp.Key}'")
+        Next
+    End Sub
+
+    ''' <summary>
     ''' ✅ ARCHITECTURAL: Crea una nuova sessione (puro, senza side effects)
     '''
     ''' Responsabilità:
@@ -362,7 +384,8 @@ Public Class SessionManager
         tasks As List(Of Object),
         translations As Dictionary(Of String, String),
         Optional projectId As String = Nothing,
-        Optional locale As String = Nothing
+        Optional locale As String = Nothing,
+        Optional subflowCompilations As Dictionary(Of String, FlowCompilationResult) = Nothing
     ) As OrchestratorSession
         SyncLock _lock
             ' ✅ REMOVED: taskEngine (Motore) - FlowOrchestrator no longer requires it
@@ -376,7 +399,8 @@ Public Class SessionManager
                 .EventEmitter = sharedEmitter,
                 .IsWaitingForInput = False,
                 .ProjectId = projectId,
-                .Locale = locale
+                .Locale = locale,
+                .SubflowCompilations = subflowCompilations
             }
 
             ' ✅ SINGLE POINT OF TRUTH: Crea resolveTranslation function per risolvere TextKey
@@ -408,6 +432,8 @@ Public Class SessionManager
                 locale,
                 resolveTranslation
             )
+
+            ApplySubflowCompilationsToOrchestrator(session.Orchestrator, session.SubflowCompilations)
 
             AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
                                                                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
@@ -581,6 +607,8 @@ Public Class SessionManager
                 resolveTranslation
             )
 
+            ApplySubflowCompilationsToOrchestrator(session.Orchestrator, session.SubflowCompilations)
+
             Console.WriteLine($"✅ [SessionManager] GetSession: Orchestrator recreated for {sessionId}")
             Console.WriteLine($"🔵 [SessionManager] GetSession: FlowOrchestrator created with resolveTranslation IsNot Nothing: {resolveTranslation IsNot Nothing}")
             Console.WriteLine($"🔴 [SessionManager] GetSession: Orchestrator instance hash: {session.Orchestrator.GetHashCode()}")
@@ -700,6 +728,17 @@ Public Class SessionManager
             Dim session = _storage.GetOrchestratorSession(sessionId)
             ' ✅ REMOVED: session.Orchestrator.Stop() - method removed, not needed with stateless architecture
             _storage.DeleteOrchestratorSession(sessionId)
+            ' ✅ Cleanup runtime-only artifacts for deterministic restart behavior
+            If _executionStateStorage IsNot Nothing Then
+                Try
+                    _executionStateStorage.DeleteExecutionState(sessionId)
+                Catch
+                    ' Ignore cleanup errors - session deletion already requested
+                End Try
+            End If
+            If _eventEmitters.ContainsKey(sessionId) Then
+                _eventEmitters.Remove(sessionId)
+            End If
         End SyncLock
     End Sub
 
@@ -917,6 +956,10 @@ Public Class SessionManager
     Public Shared Sub DeleteTaskSession(sessionId As String)
         SyncLock _lock
             _storage.DeleteTaskSession(sessionId)
+            ' ✅ Keep behavior deterministic across reset/restart cycles
+            If _eventEmitters.ContainsKey(sessionId) Then
+                _eventEmitters.Remove(sessionId)
+            End If
         End SyncLock
     End Sub
 

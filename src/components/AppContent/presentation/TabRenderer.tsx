@@ -465,6 +465,12 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
           flowEdges={chatTab.flowEdges}
           flowTasks={chatTab.flowTasks}
           useBackendMaterialization={chatTab.useBackendMaterialization || false}
+          executionFlowName={chatTab.executionFlowName}
+          executionLaunchType={chatTab.executionLaunchType}
+          executionLaunchLabel={chatTab.executionLaunchLabel}
+          onClosePanel={() => {
+            setDockTree(prev => closeTab(prev, tab.id));
+          }}
         />
       );
     }

@@ -25,6 +25,7 @@
     <Compile Include="Types\TaskTypes.vb" />
     <Compile Include="Types\Types.vb" />
     <Compile Include="Types\ExtractedVariable.vb" />
+    <Compile Include="Types\SubflowIoBinding.vb" />
 
     <!-- Interfaces -->
     <Compile Include="Interfaces\ITranslationResolver.vb" />
@@ -60,6 +61,7 @@
     <Compile Include="Converters\ITaskConverter.vb" />
 
     <!-- Execution State (shared between Orchestrator and Engine) -->
+    <Compile Include="ExecutionFlow.vb" />
     <Compile Include="ExecutionState.vb" />
     <Compile Include="TaskExecutionResult.vb" />
     <Compile Include="RowTurnResult.vb" />

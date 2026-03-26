@@ -17,6 +17,7 @@ Public Enum TaskTypes
     BackendCall
     ClassifyProblem
     AIAgent
+    Subflow
 End Enum
 
 End Namespace

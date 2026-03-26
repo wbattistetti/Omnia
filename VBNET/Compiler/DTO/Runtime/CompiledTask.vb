@@ -367,3 +367,34 @@ Public Class CompiledAIAgentTask
         LlmEndpoint = ""
     End Sub
 End Class
+
+''' <summary>
+''' Task runtime: salta a un altro flow compilato (gestito dallo stack in FlowOrchestrator).
+''' </summary>
+Public Class CompiledSubflowTask
+    Inherits CompiledTask
+
+    <JsonProperty("flowId")>
+    Public Property FlowId As String
+    Public Property InputBindings As List(Of SubflowIoBinding)
+    Public Property OutputBindings As List(Of SubflowIoBinding)
+
+    Public Overrides ReadOnly Property TaskType As TaskTypes
+        Get
+            Return TaskTypes.Subflow
+        End Get
+    End Property
+
+    Public Overrides ReadOnly Property RequiresInput As Boolean
+        Get
+            Return False
+        End Get
+    End Property
+
+    Public Sub New()
+        MyBase.New()
+        FlowId = ""
+        InputBindings = New List(Of SubflowIoBinding)()
+        OutputBindings = New List(Of SubflowIoBinding)()
+    End Sub
+End Class

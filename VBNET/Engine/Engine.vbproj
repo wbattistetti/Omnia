@@ -77,6 +77,7 @@
     <Compile Include="TaskExecutors\TransferTaskExecutor.vb" />
     <Compile Include="TaskExecutors\ClassifyProblemTaskExecutor.vb" />
     <Compile Include="TaskExecutors\AIAgentTaskExecutor.vb" />
+    <Compile Include="TaskExecutors\SubflowTaskExecutor.vb" />
   </ItemGroup>
 
   <!-- Placeholder files removed - not implemented -->

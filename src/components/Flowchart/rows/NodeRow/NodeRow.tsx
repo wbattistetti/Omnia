@@ -678,7 +678,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               onOpenTaskTree={(() => {
                 const taskType = resolveTaskType(row);
                 // Flow type: open subflow in new tab (no task editor)
-                if (taskType === TaskType.Flow && onOpenSubflowForTask) {
+                if (taskType === TaskType.Subflow && onOpenSubflowForTask) {
                   return () => {
                     const task = taskRepository.getTask(row.id) ?? null;
                     const existingFlowId = task?.parameters?.flowId ?? (task as any)?.flowId;

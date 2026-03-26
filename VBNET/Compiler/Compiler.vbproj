@@ -35,6 +35,7 @@
     <Compile Include="TaskCompiler\UtteranceTaskCompiler.vb" />
     <Compile Include="TaskCompiler\SimpleTaskCompiler.vb" />
     <Compile Include="TaskCompiler\TaskCompilerFactory.vb" />
+    <Compile Include="TaskCompiler\SubflowTaskCompiler.vb" />
 
     <!-- Flow Compiler -->
     <Compile Include="FlowCompiler.vb" />
@@ -55,6 +56,7 @@
     <Compile Include="DTO\IDE\UtteranceTaskDefinition.vb" />
     <Compile Include="DTO\IDE\BackendCallTaskDefinition.vb" />
     <Compile Include="DTO\IDE\AIAgentTaskDefinition.vb" />
+    <Compile Include="DTO\IDE\SubflowTaskDefinition.vb" />
     <Compile Include="DTO\IDE\MockTableDesign.vb" />
     <Compile Include="DTO\IDE\ColumnMapping.vb" />
     <Compile Include="DTO\IDE\ConditionDefinition.vb" />

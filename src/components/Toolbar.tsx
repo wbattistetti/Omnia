@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Home, Save, Settings, Play, Loader2, CheckCircle, AlertCircle, X, Upload, FolderOpen, Copy, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useEffect, useReducer } from 'react';
+import { Home, Save, Settings, Loader2, CheckCircle, AlertCircle, X, Upload, Copy, ChevronDown } from 'lucide-react';
 import { ProjectData } from '../types/project';
 import { useAIProvider, AI_PROVIDERS } from '../context/AIProviderContext';
 import { useFontStore } from '../state/fontStore';
@@ -62,7 +62,7 @@ export function Toolbar({
   currentProject,
   onCloseProject,
   currentProjectId,
-  onOpenProject,
+  onOpenProject: _onOpenProject,
   onSaveAs,
   onSaveAsNewMinor,
   onSaveAsNewMajor,
@@ -97,6 +97,28 @@ export function Toolbar({
 
   // ✅ FLOWCHART STATE: Get nodes state from context
   const { hasNodes: hasFlowchartNodes } = useFlowchartState();
+
+  const [, bumpFlowSnapshot] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => FlowWorkspaceSnapshot.subscribe(() => bumpFlowSnapshot()), []);
+
+  const activeFlowId = FlowWorkspaceSnapshot.getActiveFlowId();
+  const activeFlowSlice = FlowWorkspaceSnapshot.getFlowById(activeFlowId);
+  const activeFlowTitle = (activeFlowSlice?.title || activeFlowId).trim() || activeFlowId;
+  const isMainCanvasActive = activeFlowId === 'main';
+  const runButtonLabel = isMainCanvasActive ? 'Run MAIN' : `Run ${activeFlowTitle}`;
+
+  const runFlowWithRoot = (root: 'main' | 'active') => {
+    try {
+      localStorage.setItem('flow.orchestratorRoot', root);
+    } catch {
+      /* noop */
+    }
+    onRun();
+  };
+
+  const runFlowDefault = () => {
+    runFlowWithRoot(isMainCanvasActive ? 'main' : 'active');
+  };
 
   // Verifica se il progetto è vuoto (non ha contenuti)
   // Check both project data and flowchart nodes/edges
@@ -192,12 +214,10 @@ export function Toolbar({
     );
   };
 
-  const openProject = onOpenProject ?? onHome;
-
   return (
-    <div className="bg-slate-800 border-b border-slate-700 px-4 py-2 flex items-center justify-between gap-4">
-      {/* Sinistra: Home + Header progetto */}
-      <div className="flex items-center gap-3 flex-1 min-w-0">
+    <div className="bg-slate-800 border-b border-slate-700 px-4 py-2 flex items-center gap-3 min-w-0">
+      {/* Sinistra: Home + label progetto + Chiudi + Salva (icona dischetto) */}
+      <div className="flex items-center gap-2 flex-1 min-w-0">
         <button
           onClick={onHome}
           className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors flex-shrink-0"
@@ -205,32 +225,21 @@ export function Toolbar({
         >
           <Home className="w-4 h-4" />
         </button>
-        <div className="text-sm flex-1 min-w-0 truncate">
+        <div className="text-sm min-w-0 truncate flex-shrink">
           {renderProjectInfo()}
         </div>
-      </div>
-
-      {/* Centro: gruppo Progetto (Apri, Chiudi, Salva, Salva come) + Deployment */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <button
-          onClick={openProject}
-          className={`${BTN_BASE} ${BTN_SECONDARY}`}
-          title="Apri un altro progetto"
-        >
-          <FolderOpen className="w-4 h-4" />
-          <span>Apri progetto</span>
-        </button>
         {currentProject && onCloseProject && (
           <button
+            type="button"
             onClick={onCloseProject}
-            className={`${BTN_BASE} ${BTN_SECONDARY}`}
+            className={`${BTN_BASE} ${BTN_SECONDARY} flex-shrink-0`}
             title="Chiudi progetto e torna alla home"
           >
-            <X className="w-4 h-4" />
-            <span>Chiudi progetto</span>
+            <X className="w-4 h-4 flex-shrink-0" />
+            <span>Chiudi</span>
           </button>
         )}
-        <div className="relative" ref={saveMenuRef}>
+        <div className="relative flex-shrink-0" ref={saveMenuRef}>
           <button
             ref={saveButtonRef}
             onClick={() => (currentProject ? setShowSaveMenu((v) => !v) : onSave())}
@@ -238,7 +247,11 @@ export function Toolbar({
             className={`${BTN_BASE} ${BTN_PRIMARY_SAVE} relative`}
             title="Salva"
           >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+            ) : (
+              <Save className="w-4 h-4 flex-shrink-0" strokeWidth={2} aria-hidden />
+            )}
             <span>Salva</span>
             {currentProject && (
               <ChevronDown className={`w-4 h-4 transition-transform ${showSaveMenu ? 'rotate-180' : ''}`} />
@@ -338,21 +351,22 @@ export function Toolbar({
             </div>
           )}
         </div>
-        <div className="w-px h-8 bg-slate-600 mx-1" aria-hidden />
+      </div>
+
+      {/* Destra: separatore, Deployment, Impostazioni, toolbar esecuzione flusso */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="w-px h-8 bg-slate-600 self-center" aria-hidden />
         {currentProjectId && (
           <button
+            type="button"
             onClick={() => setIsDeploymentDialogOpen(true)}
             className={`${BTN_BASE} ${BTN_DEPLOY}`}
             title="Deploy traduzioni su Redis"
           >
-            <Upload className="w-4 h-4" />
+            <Upload className="w-4 h-4 flex-shrink-0" />
             <span>Deployment</span>
           </button>
         )}
-      </div>
-
-      {/* Right side - Settings and Run */}
-      <div className="flex items-center space-x-3 flex-shrink-0 relative">
         <div className="relative">
           <button
             ref={settingsButtonRef}
@@ -439,12 +453,15 @@ export function Toolbar({
 
         {hasFlowchartNodes && onRun && (
           <button
-            onClick={() => { typeof onRun === 'function' && onRun(); }}
-            className={`${BTN_BASE} ${BTN_RUN}`}
-            title="Esegui il flusso"
+            type="button"
+            onClick={() => {
+              if (typeof onRun !== 'function') return;
+              runFlowDefault();
+            }}
+            className={`${BTN_BASE} ${BTN_RUN} flex-shrink-0`}
+            title={isMainCanvasActive ? 'Esegui MAIN' : `Esegui ${activeFlowTitle}`}
           >
-            <Play className="w-4 h-4" />
-            <span>Esegui</span>
+            <span className="max-w-[18rem] truncate">{runButtonLabel}</span>
           </button>
         )}
       </div>

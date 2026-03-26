@@ -20,22 +20,31 @@ export enum TemplateSource {
 }
 
 /**
- * TaskType: Enum numerato per i tipi di task (allineato con VB.NET TaskTypes)
- * ✅ UNIFICATO: Usato ovunque invece di HeuristicType/InternalType/templateId stringhe
- * Determina il comportamento del task e quale editor usare
+ * TaskType: allineato a VB.NET `Common/Types/TaskTypes.vb` (0–7 identici).
+ * 8–9 = solo client (Summarizer/Negotiation non ancora in VB).
  */
 export enum TaskType {
-  UNDEFINED = -1,      // ✅ Task non ancora tipizzato (punto interrogativo)
-  SayMessage = 0,      // TaskTypes.SayMessage
-  CloseSession = 1,    // TaskTypes.CloseSession
-  Transfer = 2,        // TaskTypes.Transfer
-  UtteranceInterpretation = 3,     // TaskTypes.UtteranceInterpretation (interpreta utterance utente per estrarre dati)
-  BackendCall = 4,     // TaskTypes.BackendCall
-  ClassifyProblem = 5, // TaskTypes.ClassifyProblem
-  AIAgent = 6,         // ✅ AI Agent task
-  Summarizer = 7,      // ✅ Summarizer task
-  Negotiation = 8,     // ✅ Negotiation task
-  Flow = 9             // ✅ Flow: opens a subflow in a new tab (no task editor)
+  UNDEFINED = -1,
+  SayMessage = 0,
+  CloseSession = 1,
+  Transfer = 2,
+  UtteranceInterpretation = 3,
+  BackendCall = 4,
+  ClassifyProblem = 5,
+  AIAgent = 6,
+  Subflow = 7,
+  Summarizer = 8,
+  Negotiation = 9
+}
+
+/** Prima dell’allineamento, `Flow` era enum 9 → usare `normalizeLegacyTaskTypeValue` in lettura. */
+export const LEGACY_TASK_TYPE_FLOW_NUM = 9;
+
+/** Normalizza numeri salvati con il vecchio enum (9 = Flow → Subflow). */
+export function normalizeLegacyTaskTypeValue(type: number | undefined | null): TaskType {
+  if (type === undefined || type === null || Number.isNaN(type)) return TaskType.UNDEFINED;
+  if (type === LEGACY_TASK_TYPE_FLOW_NUM) return TaskType.Subflow;
+  return type as TaskType;
 }
 
 /**
@@ -50,9 +59,9 @@ export function taskTypeToTemplateId(type: TaskType): string | null {
     case TaskType.CloseSession: return 'CloseSession';
     case TaskType.Transfer: return 'Transfer';
     case TaskType.AIAgent: return 'AIAgent';
+    case TaskType.Subflow: return 'Subflow';
     case TaskType.Summarizer: return 'Summarizer';
     case TaskType.Negotiation: return 'Negotiation';
-    case TaskType.Flow: return 'Flow';
     case TaskType.UNDEFINED: return 'UNDEFINED';
     default: return null;
   }
@@ -72,9 +81,10 @@ export function templateIdToTaskType(templateId: string | null | undefined): Tas
     case 'closesession': return TaskType.CloseSession;
     case 'transfer': return TaskType.Transfer;
     case 'aiagent': return TaskType.AIAgent;
+    case 'subflow': return TaskType.Subflow;
     case 'summarizer': return TaskType.Summarizer;
     case 'negotiation': return TaskType.Negotiation;
-    case 'flow': return TaskType.Flow;
+    case 'flow': return TaskType.Subflow;
     case 'undefined': return TaskType.UNDEFINED;
     default: return TaskType.UNDEFINED;
   }
@@ -104,7 +114,8 @@ export function taskIdToTaskType(taskId: string): TaskType { // ✅ RINOMINATO: 
     case 'aiagent': return TaskType.AIAgent;
     case 'summarizer': return TaskType.Summarizer;
     case 'negotiation': return TaskType.Negotiation;
-    case 'flow': return TaskType.Flow;
+    case 'subflow': return TaskType.Subflow;
+    case 'flow': return TaskType.Subflow;
     case 'undefined': return TaskType.UNDEFINED;
     default: return TaskType.UNDEFINED;
   }
@@ -147,7 +158,7 @@ export function taskTypeToHeuristicString(type: TaskType): string | null {
  */
 export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'problem' | 'backend' | 'simple' | 'aiagent' | 'summarizer' | 'negotiation' | 'flow' {
   switch (type) {
-    case TaskType.Flow:
+    case TaskType.Subflow:
       return 'flow'; // Opens subflow tab, no task editor
     case TaskType.SayMessage:
     case TaskType.CloseSession:
@@ -265,7 +276,7 @@ export interface TaskHeuristic {
 /**
  * Task: Unified structure for all tasks
  *
- * - type: TaskType enum numerico (0-19) → Determina il comportamento del task
+ * - type: TaskType enum numerico (allineato VB 0–7 + client 8–9) → Determina il comportamento del task
  * - templateId = null → Crea automaticamente un nuovo template (ogni task ha sempre un templateId)
  * - templateId = GUID → Task che referenzia un template (per ereditare struttura/contratti)
  *
@@ -317,7 +328,7 @@ export interface SemanticValue {
 
 export interface Task {
   id: string;                    // ✅ GUID univoco
-  type: TaskType;                 // ✅ Enum numerico (0-19) - Determina il comportamento del task
+  type: TaskType;                 // ✅ Enum numerico (allineato VB) - Determina il comportamento del task
   templateId: string | null;      // ✅ null = crea template automaticamente, GUID = referenzia un template
   templateVersion?: number;       // ✅ Versione del template usata per creare l'istanza (per drift detection)
   source?: TemplateSource;       // ✅ Origin of template: 'Project' (default) or 'Factory'

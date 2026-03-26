@@ -18,4 +18,6 @@ Public Enum TaskTypes
     ''' Task guidato da LLM con stato JSON serializzato in ExecutionState.DialogueContexts
     ''' </summary>
     AIAgent
+    ''' <summary>Invoca un sotto-flow compilato (stack ExecutionFlow).</summary>
+    Subflow
 End Enum

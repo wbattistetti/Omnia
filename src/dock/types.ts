@@ -96,6 +96,9 @@ export type DockTabChat = DockTabBase & {
   flowNodes?: Node<FlowNode>[];
   flowEdges?: any[]; // Edge<EdgeData>[] - using any[] to avoid circular dependency
   flowTasks?: any[];
+  executionFlowName?: string;
+  executionLaunchType?: 'flow' | 'rowTask' | 'node';
+  executionLaunchLabel?: string;
 };
 
 // Error Report Panel tab - for compilation errors display

@@ -57,22 +57,6 @@ export async function loadFlow(projectId: string, flowId: FlowId): Promise<FlowL
     hasMeta: meta !== undefined,
   });
 
-  // ✅ LOG: Traccia cosa viene ricevuto dal backend
-  const edgesWithCondition = simplifiedEdges.filter((e: any) => e.condition || e.conditionId);
-  if (edgesWithCondition.length > 0) {
-    console.log(`[LOAD][loadFlow] 📥 Edges with conditionId from backend`, {
-      projectId,
-      flowId,
-      count: edgesWithCondition.length,
-      edges: edgesWithCondition.map((e: any) => ({
-        id: e.id,
-        label: e.label,
-        condition: e.condition,
-        conditionId: e.conditionId
-      }))
-    });
-  }
-
   // Transform to ReactFlow format: { id, data: { label, rows, ... } }
   const nodes = transformNodesToReactFlow(simplifiedNodes);
   const edges = transformEdgesToReactFlow(simplifiedEdges);
@@ -97,44 +81,9 @@ export async function saveFlow(
   }
   const url = `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`;
 
-  console.log(`[SAVE][saveFlow] 🚀 START saving flow`, {
-    projectId,
-    flowId,
-    nodesCount: nodes.length,
-    edgesCount: edges.length,
-    hasMeta: meta !== undefined,
-  });
-
   // Transform from ReactFlow format to simplified structure
   const simplifiedNodes = transformNodesToSimplified(nodes);
   const simplifiedEdges = transformEdgesToSimplified(edges);
-
-  // ✅ LOG: Traccia cosa viene inviato al backend
-  const edgesWithCondition = simplifiedEdges.filter((e: any) => e.condition || e.conditionId);
-  console.log(`[SAVE][saveFlow] 📤 Sending to backend`, {
-    projectId,
-    flowId,
-    nodesCount: simplifiedNodes.length,
-    edgesCount: simplifiedEdges.length,
-    edgesWithConditionCount: edgesWithCondition.length,
-    edgesWithCondition: edgesWithCondition.map((e: any) => ({
-      id: e.id,
-      label: e.label,
-      condition: e.condition,
-      conditionId: e.conditionId
-    })),
-    nodes: simplifiedNodes.map((n: any) => ({
-      id: n.id,
-      label: n.label,
-      rowsCount: n.rows?.length || 0,
-      rows: n.rows?.map((r: any) => ({
-        id: r.id,
-        text: r.text,
-        hasHeuristics: !!(r.heuristics),
-        heuristicsType: r.heuristics?.type
-      })) || []
-    }))
-  });
 
   const res = await fetch(url, {
     method: 'PUT',
@@ -147,7 +96,6 @@ export async function saveFlow(
   });
   if (!res.ok) throw new Error('saveFlow_failed');
 
-  console.log(`[SAVE][saveFlow] ✅ END saving flow`, { projectId, flowId, ok: res.ok });
 }
 
 

@@ -1635,27 +1635,6 @@ app.get('/api/projects/:pid/flow', async (req, res) => {
     const queryDuration = Date.now() - queryStart;
     const duration = Date.now() - startTime;
 
-    // ✅ LOG: Traccia cosa viene letto dal DB
-    console.log(`[LOAD][backend] 📥 Reading from DB`, {
-      projectId: pid,
-      flowId,
-      nodesCount: nodes?.length || 0,
-      edgesCount: edges?.length || 0,
-      duration: `${duration}ms`,
-      queryDuration: `${queryDuration}ms`,
-      nodes: nodes?.map((n) => ({
-        id: n.id,
-        label: n.label,
-        rowsCount: n.rows?.length || 0,
-        rows: n.rows?.map((r) => ({
-          id: r.id,
-          text: r.text,
-          taskId: r.taskId,
-          hasTaskId: !!r.taskId
-        })) || []
-      })) || []
-    });
-
     logInfo('Flow.get', { projectId: pid, flowId, nodesCount: nodes?.length || 0, edgesCount: edges?.length || 0, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     let meta = null;
     try {
@@ -1681,25 +1660,6 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
   const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
   const edges = Array.isArray(payload.edges) ? payload.edges : [];
   const flowMetaPayload = payload.meta;
-
-  // ✅ LOG: Traccia cosa viene ricevuto dal frontend
-  console.log(`[SAVE][backend] 📥 Received from frontend`, {
-    projectId: pid,
-    flowId,
-    nodesCount: nodes.length,
-    edgesCount: edges.length,
-    nodes: nodes.map((n) => ({
-      id: n.id,
-      label: n.label,
-      rowsCount: n.rows?.length || 0,
-      rows: n.rows?.map((r) => ({
-        id: r.id,
-        text: r.text,
-        hasHeuristics: !!(r.heuristics),
-        heuristicsType: r.heuristics?.type
-      })) || []
-    }))
-  });
 
   try {
     await withMongoClient(async (client) => {

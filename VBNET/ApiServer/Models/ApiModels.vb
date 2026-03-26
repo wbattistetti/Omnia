@@ -62,6 +62,13 @@ Namespace Models
         ''' </summary>
         <JsonProperty("locale")>
         Public Property Locale As String
+
+        ''' <summary>
+        ''' Opzionale: flowId → oggetto FlowCompilationResult (stesso schema di compilationResult principale).
+        ''' Deve contenere ogni <c>flowId</c> (canvas subflow) usato dai task Subflow nel main.
+        ''' </summary>
+        <JsonProperty("subflowCompilations")>
+        Public Property SubflowCompilations As Dictionary(Of String, Object)
     End Class
 
     ''' <summary>

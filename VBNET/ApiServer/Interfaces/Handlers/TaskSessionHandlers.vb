@@ -451,16 +451,9 @@ Namespace ApiServer.Handlers
                 })
                 streamManager.SendBufferedMessages(sessionId)
 
-                ' ✅ STATELESS: Send existing messages first (from Redis) usando SseStreamManager
-                If session.Messages IsNot Nothing AndAlso session.Messages.Count > 0 Then
-                    LogInfo("📨 [SSE Stream] Sending existing session messages", New With {
-                        .sessionId = sessionId,
-                        .messagesCount = session.Messages.Count
-                    })
-                    For Each msg In session.Messages
-                        _sseStreamManager.EmitEvent(sessionId, "message", msg)
-                    Next
-                End If
+                ' Message replay is handled by the shared EventEmitter/SSE buffering path.
+                ' Avoid emitting session.Messages here to prevent duplicate first replies
+                ' after reconnect/restart flows.
 
                 ' Send waitingForInput event if already waiting
                 If session.IsWaitingForInput Then
@@ -816,9 +809,13 @@ Namespace ApiServer.Handlers
         ''' </summary>
         Public Async Function HandleTaskSessionDelete(context As HttpContext, sessionId As String) As Task(Of IResult)
             Try
+                If String.IsNullOrWhiteSpace(sessionId) Then
+                    Return Results.BadRequest(New With {.error = "Session id is required"})
+                End If
                 SessionManager.DeleteTaskSession(sessionId)
                 Return Results.Ok(New With {
                     .success = True,
+                    .sessionId = sessionId,
                     .timestamp = DateTime.UtcNow.ToString("O")
                 })
             Catch ex As Exception

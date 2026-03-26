@@ -1,7 +1,7 @@
 import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot, List, CheckCircle, Workflow } from 'lucide-react';
 import { SIDEBAR_TYPE_COLORS } from '../../Sidebar/sidebarTheme';
 import { taskRepository } from '../../../services/TaskRepository';
-import { TaskType } from '../../../types/taskTypes';
+import { TaskType, normalizeLegacyTaskTypeValue } from '../../../types/taskTypes';
 import { PRESET_CATEGORIES, getCurrentProjectLocale } from '../../../utils/categoryPresets';
 import getIconComponent from '../../TaskEditor/ResponseEditor/icons';
 import { getGlobalResolver } from '@domain/taskContent/TaskContentResolver.config';
@@ -35,7 +35,7 @@ export function resolveTaskType(row: any): TaskType {
   if (row?.type !== undefined && row?.type !== null) {
     // Se è un numero (TaskType enum), restituiscilo direttamente
     if (typeof row.type === 'number') {
-      return row.type as TaskType;
+      return normalizeLegacyTaskTypeValue(row.type);
     }
     // Se è una stringa legacy, convertila (backward compatibility temporanea)
     if (typeof row.type === 'string') {
@@ -47,7 +47,8 @@ export function resolveTaskType(row: any): TaskType {
         'AIAgent': TaskType.AIAgent,
         'Summarizer': TaskType.Summarizer,
         'Negotiation': TaskType.Negotiation,
-        'Flow': TaskType.Flow
+        'Flow': TaskType.Subflow,
+        'Subflow': TaskType.Subflow
       };
       return typeMap[row.type] ?? TaskType.UNDEFINED;
     }
@@ -205,7 +206,7 @@ export function getTaskVisualsByType(type: TaskType, hasTaskTree: boolean) {
       labelColor = green;
       iconColor = hasTaskTree ? green : gray;
       break;
-    case TaskType.Flow:
+    case TaskType.Subflow:
       Icon = Workflow;
       labelColor = '#0ea5e9';
       iconColor = hasTaskTree ? '#0ea5e9' : gray;

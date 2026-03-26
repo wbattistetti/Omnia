@@ -69,6 +69,8 @@ Public Class CompiledTaskConverter
                 task = New CompiledTransferTask()
             Case TaskTypes.AIAgent
                 task = New CompiledAIAgentTask()
+            Case TaskTypes.Subflow
+                task = New CompiledSubflowTask()
             Case Else
                 Throw New JsonException($"Unknown TaskType: {taskType}")
         End Select
@@ -121,6 +123,8 @@ Public Class CompiledTaskConverter
                 Return TaskTypes.ClassifyProblem
             Case "aiagent", "ai_agent"
                 Return TaskTypes.AIAgent
+            Case "subflow"
+                Return TaskTypes.Subflow
             Case Else
                 ' ❌ ERRORE BLOCCANTE: tipo sconosciuto, nessun fallback
                 Throw New JsonException($"Unknown templateId: '{templateId}'. Cannot convert to TaskType. Every templateId must map to a valid TaskType.")

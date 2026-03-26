@@ -27,6 +27,10 @@ Public Class TaskCompilerFactory
                     Console.WriteLine($"✅ [TaskCompilerFactory] Creating SimpleTaskCompiler for taskType={taskType}")
                     System.Diagnostics.Debug.WriteLine($"✅ [TaskCompilerFactory] Creating SimpleTaskCompiler for taskType={taskType}")
                     _compilerCache(taskType) = New SimpleTaskCompiler(taskType)
+                Case TaskTypes.Subflow
+                    Console.WriteLine($"✅ [TaskCompilerFactory] Creating SubflowTaskCompiler for taskType={taskType}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [TaskCompilerFactory] Creating SubflowTaskCompiler for taskType={taskType}")
+                    _compilerCache(taskType) = New SubflowTaskCompiler()
                 Case Else
                     ' ❌ ERRORE BLOCCANTE: tipo task sconosciuto, nessun fallback
                     Throw New InvalidOperationException($"Unknown TaskType {taskType}. The compiler factory cannot create a fallback compiler. Every task must have a valid, known type.")

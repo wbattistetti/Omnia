@@ -324,8 +324,8 @@ export function useNodeRowEventHandlers(
                       ? 'Summarizer'
                       : result.taskType === TaskType.Negotiation
                         ? 'Negotiation'
-                        : result.taskType === TaskType.Flow
-                          ? 'Flow'
+                        : result.taskType === TaskType.Subflow
+                          ? 'Subflow'
                           : isTaskObject && selectedTask
                             ? 'Other'
                             : 'Message';
@@ -384,14 +384,14 @@ export function useNodeRowEventHandlers(
       }
 
       // Flow type: create/update local task only (no factory task)
-      if (selectedTaskType === TaskType.Flow) {
+      if (selectedTaskType === TaskType.Subflow) {
         const typeHandler = new RowTypeHandler({ row, getProjectId });
         const result = await typeHandler.createTaskForNewRow(selectedTaskType, null, label);
         if (result.success) {
           const updateMeta = {
             id: row.id,
-            type: 'Flow',
-            heuristics: { ...((row as any)?.heuristics || {}), type: TaskType.Flow },
+            type: 'Subflow',
+            heuristics: { ...((row as any)?.heuristics || {}), type: TaskType.Subflow },
             isUndefined: false,
           };
           if (onUpdateWithCategory) {

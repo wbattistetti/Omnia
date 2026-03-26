@@ -22,7 +22,7 @@ const MAIN_TYPE_OPTIONS = [
     { value: TaskType.AIAgent, label: 'AI Agent', Icon: Bot, color: '#a855f7' },
     { value: TaskType.Summarizer, label: 'Summarizer', Icon: FileText, color: '#06b6d4' },
     { value: TaskType.Negotiation, label: 'Negotiation', Icon: CheckCircle2, color: '#6366f1' },
-    { value: TaskType.Flow, label: 'Flow', Icon: Workflow, color: '#0ea5e9' }
+    { value: TaskType.Subflow, label: 'Subflow', Icon: Workflow, color: '#0ea5e9' }
 ];
 
 interface RowTypePickerToolbarProps {

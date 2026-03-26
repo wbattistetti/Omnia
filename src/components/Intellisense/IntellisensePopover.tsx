@@ -264,7 +264,7 @@ export const IntellisensePopover: React.FC = () => {
                                             id: newRowId,
                                             text: '',
                                             included: true,
-                                            heuristics: { type: TaskType.Flow, templateId: null },
+                                            heuristics: { type: TaskType.Subflow, templateId: null },
                                         },
                                     ],
                                     focusRowId: newRowId,

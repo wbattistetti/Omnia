@@ -127,12 +127,21 @@ const DockManagerWithFlows: React.FC<{
     [renderTabContent, flowActions.upsertFlow]
   );
 
+  const handleDockActiveTabChanged = React.useCallback((tab: DockTab) => {
+    if (tab.type !== 'flow') return;
+    const flowTab = tab as DockTab & { flowId?: string };
+    const flowId = flowTab.flowId;
+    if (!flowId) return;
+    flowActions.setActiveFlow(flowId);
+  }, [flowActions]);
+
   return (
     <DockManager
       root={root}
       setRoot={adaptedSetRoot}
       renderTabContent={wrappedRenderTabContent}
       editorCloseRefsMap={editorCloseRefsMap}
+      onActiveTabChanged={handleDockActiveTabChanged}
     />
   );
 };
@@ -250,20 +259,26 @@ export const AppContent: React.FC<AppContentProps> = ({
             );
           }}
           onOpenSubflowForTask={(tabId, taskId, existingFlowId, title) => {
-            const flowId = existingFlowId || `subflow_${taskId}_${Date.now()}`;
+            const flowId = (existingFlowId && String(existingFlowId).trim())
+              ? String(existingFlowId).trim()
+              : `subflow_${taskId}`;
             const tabTitle = (title || '').trim() || 'Subflow';
-            upsertFlow({ id: flowId, title: tabTitle, nodes: [], edges: [] });
-            const t = taskRepository.getTask(taskId);
-            const prevParams =
-              t &&
-              typeof (t as { parameters?: unknown }).parameters === 'object' &&
-              (t as { parameters?: object }).parameters !== null &&
-              !Array.isArray((t as { parameters?: unknown }).parameters)
-                ? ((t as { parameters: Record<string, unknown> }).parameters as Record<string, unknown>)
-                : {};
+            // Do not overwrite an existing flow with empty graph on reopen.
+            // Create an empty slice only for first-time subflow creation.
+            if (!existingFlowId) {
+              upsertFlow({
+                id: flowId,
+                title: tabTitle,
+                nodes: [],
+                edges: [],
+                hydrated: false,
+                hasLocalChanges: false,
+              } as any);
+            }
+            // Canonical: flowId in root; parameters = TaskDefinition array (never legacy object map).
             taskRepository.updateTask(taskId, {
-              parameters: { ...prevParams, flowId },
               flowId,
+              parameters: [],
             } as Partial<Task>);
             setDockTree(prev =>
               upsertAddNextTo(prev, tabId, {

@@ -24,6 +24,10 @@ export interface AssistantPanelProps {
   flowEdges?: any[]; // Edge<EdgeData>[] - using any[] to avoid circular dependency
   flowTasks?: any[];
   useBackendMaterialization?: boolean;
+  executionFlowName?: string;
+  executionLaunchType?: 'flow' | 'rowTask' | 'node';
+  executionLaunchLabel?: string;
+  onClosePanel?: () => void;
 }
 
 export function AssistantPanel(props: AssistantPanelProps) {
@@ -40,7 +44,7 @@ export function AssistantPanel(props: AssistantPanelProps) {
     >
       <FontProvider>
         <DDEBubbleChat
-          key={`${props.task?.id || 'flow'}-${props.flowNodes?.length || 0}-${props.flowEdges?.length || 0}`}
+          key={`${props.task?.id || 'flow'}-${props.flowNodes?.length || 0}-${props.flowEdges?.length || 0}-${props.executionFlowName || ''}-${props.executionLaunchType || ''}-${props.executionLaunchLabel || ''}`}
           task={props.task || null}
           projectId={props.projectId || null}
           translations={props.translations}
@@ -54,6 +58,10 @@ export function AssistantPanel(props: AssistantPanelProps) {
           flowEdges={props.flowEdges}
           flowTasks={props.flowTasks}
           useBackendMaterialization={props.useBackendMaterialization || false}
+          executionFlowName={props.executionFlowName}
+          executionLaunchType={props.executionLaunchType}
+          executionLaunchLabel={props.executionLaunchLabel}
+          onClosePanel={props.onClosePanel}
         />
       </FontProvider>
     </div>

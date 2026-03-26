@@ -14,10 +14,30 @@ type SnapshotFlow = {
 class FlowWorkspaceSnapshotStore {
   private flowsById: Record<string, SnapshotFlow> = {};
   private activeFlowId: string = 'main';
+  private readonly listeners = new Set<() => void>();
+
+  /** Re-render subscribers (e.g. app Toolbar) when workspace snapshot changes. */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private emit(): void {
+    this.listeners.forEach((fn) => {
+      try {
+        fn();
+      } catch {
+        /* noop */
+      }
+    });
+  }
 
   setSnapshot(flowsById: Record<string, SnapshotFlow>, activeFlowId: string): void {
     this.flowsById = flowsById || {};
     this.activeFlowId = activeFlowId || 'main';
+    this.emit();
   }
 
   getActiveFlowId(): string {

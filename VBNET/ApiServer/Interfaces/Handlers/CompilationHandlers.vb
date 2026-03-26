@@ -41,13 +41,26 @@ Public Module CompilationHandlers
                     Return JsonConvert.DeserializeObject(Of Compiler.BackendCallTaskDefinition)(jsonString, settings)
                 Case TaskEngine.TaskTypes.AIAgent
                     Return JsonConvert.DeserializeObject(Of Compiler.AIAgentTaskDefinition)(jsonString, settings)
+                Case TaskEngine.TaskTypes.Subflow
+                    ' flowId obbligatorio in radice (allineato a Mongo/IDE).
+                    Dim flowId = taskObj("flowId")?.ToString()
+                    If String.IsNullOrWhiteSpace(flowId) Then
+                        Throw New InvalidOperationException(
+                            "Subflow task requires 'flowId' at task root.")
+                    End If
+                    ' Legacy: parameters come oggetto (es. { flowId }) → normalizza a [] prima del deserialize (TaskDefinition.parameters è lista).
+                    Dim paramsToken = taskObj("parameters")
+                    If paramsToken IsNot Nothing AndAlso paramsToken.Type = Newtonsoft.Json.Linq.JTokenType.Object Then
+                        taskObj("parameters") = New Newtonsoft.Json.Linq.JArray()
+                    End If
+                    Return JsonConvert.DeserializeObject(Of Compiler.SubflowTaskDefinition)(taskObj.ToString(), settings)
                 Case Else
                     ' ✅ Deserialize as base TaskDefinition for other types
                     Return JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(jsonString, settings)
             End Select
         Else
-            ' ✅ Deserialize as base TaskDefinition if type is not recognized
-            Return JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(jsonString, settings)
+            Throw New InvalidOperationException(
+                "Task type is missing or invalid. Every task must provide a valid numeric 'type' aligned with TaskTypes.")
         End If
     End Function
 

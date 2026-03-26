@@ -24,8 +24,22 @@ export function useFlowModeChat(
   edges: any[], // Edge<EdgeData>[] - using any[] to avoid circular dependency
   tasks: any[],
   translations: Record<string, string> | undefined,
-  onMessage?: (message: Message) => void
+  onMessage?: (message: Message) => void,
+  executionFlowName?: string
 ) {
+  const isGuidLike = React.useCallback((value: unknown): boolean => {
+    const text = String(value || '').trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-[a-z0-9_-]+)?$/i.test(text);
+  }, []);
+
+  const toReadableLabel = React.useCallback((value: unknown): string => {
+    const text = String(value || '').trim();
+    if (!text || isGuidLike(text)) {
+      return '';
+    }
+    return text;
+  }, [isGuidLike]);
+
   // ✅ CRITICAL: Store onMessage in ref for stable access
   const onMessageRef = React.useRef(onMessage);
   React.useEffect(() => {
@@ -35,6 +49,7 @@ export function useFlowModeChat(
   const messageIdCounter = React.useRef(0);
   const sentMessageIds = React.useRef<Set<string>>(new Set());
   const hasStartedRef = React.useRef(false);
+  const startInFlightRef = React.useRef<Promise<void> | null>(null);
   const previousNodesKeyRef = React.useRef<string>('');
 
   // ✅ CRITICAL: Store critical state in ref (survives remount)
@@ -50,6 +65,21 @@ export function useFlowModeChat(
   // These are synchronized with stateRef via wrapper functions
   const [isWaitingForInput, setIsWaitingForInputState] = React.useState(false);
   const [error, setErrorState] = React.useState<string | null>(null);
+  const [isRestarting, setIsRestarting] = React.useState(false);
+  const [currentExecutionLabel, setCurrentExecutionLabel] = React.useState<string>('');
+  const [currentExecutionType, setCurrentExecutionType] = React.useState<'flow' | 'rowTask' | 'node'>('flow');
+  const resolveTaskLabel = React.useCallback((taskId?: string) => {
+    if (!taskId) return '';
+    const task = tasks.find((t: any) => t?.id === taskId);
+    return toReadableLabel(task?.label || task?.text || task?.title);
+  }, [tasks, toReadableLabel]);
+
+  const resolveNodeLabel = React.useCallback((nodeId?: string) => {
+    if (!nodeId) return '';
+    const node = nodes.find((n: any) => n?.id === nodeId);
+    return toReadableLabel(node?.data?.label || node?.label || node?.title);
+  }, [nodes, toReadableLabel]);
+
 
   // ✅ STABLE: Wrapper functions that update both ref and state
   // This ensures state survives remounts AND triggers re-renders
@@ -63,11 +93,6 @@ export function useFlowModeChat(
 
     // ✅ Update state (triggers re-render)
     setIsWaitingForInputState(newValue);
-
-    console.log('[useFlowModeChat] ⏳ setIsWaitingForInput called', {
-      newValue,
-      refValue: stateRef.current.isWaitingForInput,
-    });
   }, []);
 
   const setError = React.useCallback((value: string | null) => {
@@ -77,17 +102,6 @@ export function useFlowModeChat(
     // ✅ Update state (triggers re-render)
     setErrorState(value);
   }, []);
-
-  // ✅ DEBUG: Log when isWaitingForInput changes
-  React.useEffect(() => {
-    console.log('[useFlowModeChat] ⏳ isWaitingForInput state changed:', {
-      stateValue: isWaitingForInput,
-      refValue: stateRef.current.isWaitingForInput,
-    });
-    if (!isWaitingForInput) {
-      console.trace('[useFlowModeChat] 🔍 isWaitingForInput reset to false - stack trace:');
-    }
-  }, [isWaitingForInput]);
 
   // ✅ CRITICAL: Store setter refs for use in callbacks
   // These refs are stable and don't change between renders
@@ -128,27 +142,13 @@ export function useFlowModeChat(
     },
     translations: translations || {},
     onMessage: (message) => {
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-      console.log('[useFlowModeChat] 🔵 onMessage callback called');
-      console.log('[useFlowModeChat] 🔵 Message received:', {
-        id: message.id,
-        text: message.text?.substring(0, 50),
-        stepType: message.stepType,
-        timestamp: message.id,
-        taskId: message.taskId
-      });
-      console.log('[useFlowModeChat] 🔵 Message text:', message.text);
-
       const messageId = `msg_${messageIdCounter.current++}`;
-      console.log('[useFlowModeChat] 🔵 Generated messageId:', messageId);
 
       // Avoid duplicates
       if (sentMessageIds.current.has(messageId)) {
-        console.log('[useFlowModeChat] ⚠️ Message already sent, skipping:', messageId);
         return;
       }
       sentMessageIds.current.add(messageId);
-      console.log('[useFlowModeChat] 🔵 MessageId added to sentMessageIds');
 
       const newMessage: Message = {
         id: messageId,
@@ -156,19 +156,14 @@ export function useFlowModeChat(
         type: 'bot',
         timestamp: new Date(),
       };
-      console.log('[useFlowModeChat] 🔵 Created newMessage object:', newMessage);
 
       // ✅ Use ref for stable access
       const currentOnMessage = onMessageRef.current;
-      console.log('[useFlowModeChat] 🔵 onMessage prop exists?', !!currentOnMessage);
       if (currentOnMessage) {
-        console.log('[useFlowModeChat] 🔵 Calling onMessage prop...');
         currentOnMessage(newMessage);
-        console.log('[useFlowModeChat] ✅ onMessage prop completed');
       } else {
         console.warn('[useFlowModeChat] ⚠️ onMessage prop not provided!');
       }
-      console.log('═══════════════════════════════════════════════════════════════════════════');
     },
     onDDTStart: () => {
       // DDT started - no log needed
@@ -177,7 +172,6 @@ export function useFlowModeChat(
       // DDT completed - no log needed
     },
     onComplete: () => {
-      console.log('[useFlowModeChat] ⚠️ onComplete called - resetting isWaitingForInput');
       // ✅ Use ref for stable setter
       if (setIsWaitingForInputRef.current) {
         setIsWaitingForInputRef.current(false);
@@ -193,34 +187,60 @@ export function useFlowModeChat(
         setIsWaitingForInputRef.current(false);
       }
     },
-    onWaitingForInput: (data?: { taskId: string; nodeId?: string }) => {
-      console.log('[useFlowModeChat] ⏳ onWaitingForInput called - setting isWaitingForInput to true', {
-        taskId: data?.taskId,
-        nodeId: data?.nodeId,
-        hasData: !!data,
-        fullData: data,
-        currentRefValue: stateRef.current.isWaitingForInput,
-      });
-
+    onWaitingForInput: (data?: { taskId: string; nodeId?: string; taskLabel?: string; nodeLabel?: string }) => {
       // ✅ CRITICAL: Use ref for stable setter (survives remount)
       if (setIsWaitingForInputRef.current) {
-        setIsWaitingForInputRef.current(prev => {
-          console.log('[useFlowModeChat] 🔍 setIsWaitingForInput called', {
-            prev,
-            settingTo: true,
-            refValueBefore: stateRef.current.isWaitingForInput,
-          });
-          return true;
-        });
+        setIsWaitingForInputRef.current(true);
       } else {
         console.error('[useFlowModeChat] ❌ setIsWaitingForInputRef.current is null!');
       }
+
+      const flowName = (executionFlowName || 'MAIN').trim() || 'MAIN';
+      const taskLabel = toReadableLabel(data?.taskLabel) || resolveTaskLabel(data?.taskId);
+      const nodeLabel = toReadableLabel(data?.nodeLabel) || resolveNodeLabel(data?.nodeId);
+      if (taskLabel) {
+        setCurrentExecutionType('rowTask');
+        setCurrentExecutionLabel(`${flowName}: ${taskLabel}`);
+      } else if (nodeLabel) {
+        setCurrentExecutionType('node');
+        setCurrentExecutionLabel(`${flowName}: Nodo(${nodeLabel})`);
+      } else {
+        // Keep previous launch/runtime label instead of replacing it with generic flow text.
+      }
     },
-  }), [nodes, edges, tasks, translations]); // ✅ No callbacks in deps - use refs
+  }), [nodes, edges, tasks, translations, executionFlowName, resolveTaskLabel, resolveNodeLabel, toReadableLabel]); // ✅ No callbacks in deps - use refs
 
   // ✅ ARCHITECTURAL: Call hook at top level (not inside useMemo)
   // This respects React's Rules of Hooks
   const flowEngine = useDialogueEngine(engineOptions);
+
+  const executeStart = React.useCallback(async () => {
+    if (!flowEngine || typeof flowEngine.start !== 'function') {
+      throw new Error('Flow engine is not available.');
+    }
+    if (hasStartedRef.current) {
+      return;
+    }
+    if (startInFlightRef.current) {
+      await startInFlightRef.current;
+      return;
+    }
+
+    const startPromise = (async () => {
+      hasStartedRef.current = true;
+      try {
+        await flowEngine.start();
+      } catch (error) {
+        hasStartedRef.current = false;
+        throw error;
+      } finally {
+        startInFlightRef.current = null;
+      }
+    })();
+
+    startInFlightRef.current = startPromise;
+    await startPromise;
+  }, [flowEngine]);
 
   // ✅ ARCHITECTURAL: Start when data is ready
   const translationsKey = React.useMemo(() => {
@@ -270,16 +290,14 @@ export function useFlowModeChat(
       return;
     }
 
-    hasStartedRef.current = true;
-    flowEngine.start().catch((error) => {
+    void executeStart().catch((error) => {
       console.error('[useFlowModeChat] ❌ Failed to start flow orchestrator', error);
       if (setErrorRef.current) {
         setErrorRef.current(error.message || 'Failed to start flow orchestrator');
       }
-      hasStartedRef.current = false; // Allow retry on error
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, translationsKey, flowEngine]);
+  }, [nodes, translationsKey, flowEngine, executeStart]);
 
   // ✅ Handle user input in flow mode
   const handleUserInput = React.useCallback(async (input: string) => {
@@ -307,10 +325,45 @@ export function useFlowModeChat(
     }
   }, []);
 
+  const restartFlow = React.useCallback(async () => {
+    if (isRestarting) {
+      return;
+    }
+    setIsRestarting(true);
+    messageIdCounter.current = 0;
+    sentMessageIds.current.clear();
+    setCurrentExecutionLabel('');
+    setCurrentExecutionType('flow');
+    if (setIsWaitingForInputRef.current) {
+      setIsWaitingForInputRef.current(false);
+    }
+    if (setErrorRef.current) {
+      setErrorRef.current(null);
+    }
+    hasStartedRef.current = false;
+    try {
+      if (flowEngine && typeof flowEngine.reset === 'function') {
+        await flowEngine.reset();
+      }
+      await executeStart();
+    } catch (error) {
+      hasStartedRef.current = false;
+      if (setErrorRef.current) {
+        setErrorRef.current(error instanceof Error ? error.message : 'Failed to restart flow execution');
+      }
+    } finally {
+      setIsRestarting(false);
+    }
+  }, [flowEngine, isRestarting, executeStart]);
+
   return {
     isWaitingForInput,
     error,
+    currentExecutionLabel,
+    currentExecutionType,
+    isRestarting,
     handleUserInput,
     clearMessages,
+    restartFlow,
   };
 }

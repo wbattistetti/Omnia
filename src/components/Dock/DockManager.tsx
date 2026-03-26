@@ -23,6 +23,8 @@ type Props = {
   renderTabContent: (tab: DockTab) => React.ReactNode;
   /** Direct map of tabId → close handler. Read synchronously — no state update delay. */
   editorCloseRefsMap?: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
+  /** Optional callback fired whenever a tab becomes active in any tabset. */
+  onActiveTabChanged?: (tab: DockTab) => void;
 };
 
 // Helper to get icon for tab type
@@ -40,7 +42,7 @@ function getTabIcon(tab: DockTab) {
   }
 }
 
-export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent, editorCloseRefsMap }) => {
+export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent, editorCloseRefsMap, onActiveTabChanged }) => {
   const [dragTab, setDragTab] = React.useState<DockTab | null>(null);
   const [activeTabSetId, setActiveTabSetId] = React.useState<string>('ts_main');
   const [hoverTarget, setHoverTarget] = React.useState<{ tabsetId: string; region: DockRegion } | null>(null);
@@ -69,6 +71,7 @@ export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent, 
         onTabClosed={(tab) => {
           // Tab closed - no shelf, just remove it
         }}
+        onActiveTabChanged={onActiveTabChanged}
         rootNode={root}
         editorCloseRefsMap={editorCloseRefsMap}
       />
@@ -89,6 +92,7 @@ function SplitRenderer(props: {
   setRoot: (n: DockNode) => void;
   setActiveTabSetId: (id: string) => void;
   onTabClosed: (tab: DockTab | null) => void;
+  onActiveTabChanged?: (tab: DockTab) => void;
   editorCloseRefsMap?: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
 }) {
   const { node } = props;
@@ -220,6 +224,7 @@ function DockRenderer(props: {
   setRoot: (n: DockNode) => void;
   setActiveTabSetId: (id: string) => void;
   onTabClosed: (tab: DockTab | null) => void;
+  onActiveTabChanged?: (tab: DockTab) => void;
   editorCloseRefsMap?: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
 }) {
   const { node } = props;
@@ -231,7 +236,15 @@ function DockRenderer(props: {
       nodeId={node.id}
       tabs={node.tabs}
       active={node.active}
-      setActive={(idx) => { props.setActiveTabSetId(node.id); props.setRoot(activateTab(props.rootNode, node.tabs[idx].id)); }}
+      onActiveTabChanged={props.onActiveTabChanged}
+      setActive={(idx) => {
+        props.setActiveTabSetId(node.id);
+        const nextTab = node.tabs[idx];
+        if (nextTab) {
+          props.onActiveTabChanged?.(nextTab);
+          props.setRoot(activateTab(props.rootNode, nextTab.id));
+        }
+      }}
       onClose={async (tabId) => {
         let shouldClose = true;
 
@@ -336,6 +349,7 @@ function TabSet(props: {
   nodeId: string;
   tabs: DockTab[];
   active: number;
+  onActiveTabChanged?: (tab: DockTab) => void;
   setActive: (idx: number) => void;
   onClose: (tabId: string) => void | Promise<void>;
   onDragTabStart: (tab: DockTab) => void;
@@ -347,6 +361,14 @@ function TabSet(props: {
 }) {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const [region, setRegion] = React.useState<DockRegion | null>(null);
+  const hideTabStrip = props.tabs.length === 1 && props.tabs[0]?.type === 'chat';
+
+  React.useEffect(() => {
+    const activeTab = props.tabs[props.active];
+    if (activeTab) {
+      props.onActiveTabChanged?.(activeTab);
+    }
+  }, [props.active, props.tabs, props.onActiveTabChanged]);
 
   const computeRegion = (e: React.DragEvent<HTMLDivElement>): DockRegion => {
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
@@ -382,10 +404,12 @@ function TabSet(props: {
         setRegion(null);
       }}
     >
-      <div className="flex items-center gap-1 px-2 border-b flex-shrink-0"
-        style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', height: 40 }}>
-        {props.tabs.map((t, i) => {
+      {!hideTabStrip && (
+        <div className="flex items-center gap-1 px-2 border-b flex-shrink-0"
+          style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', height: 40 }}>
+          {props.tabs.map((t, i) => {
           const isActive = props.active === i;
+          const isFlowTab = t.type === 'flow';
           const isResponseEditor = t.type === 'responseEditor';
           const isTaskEditor = t.type === 'taskEditor'; // ✅ RINOMINATO: isActEditor → isTaskEditor, 'actEditor' → 'taskEditor'
           const responseEditorTab = isResponseEditor ? (t as DockTabResponseEditor) : null;
@@ -401,9 +425,11 @@ function TabSet(props: {
           const showToolbar = isActive && (isResponseEditor || isTaskEditor) && toolbarButtons.length > 0; // ✅ RINOMINATO: isActEditor → isTaskEditor
           const titleSuffixButtons = toolbarButtons.filter(b => b.position === 'title-suffix');
           const rightButtons = toolbarButtons.filter(b => b.position !== 'title-suffix');
+          /** Only flow tabs are caption-sized; editor tabs keep legacy full-width active behavior. */
+          const tabFlexGrow = isFlowTab ? '0 0 auto' : (isActive ? 1 : '0 0 auto');
 
-          return (
-            <div key={t.id}
+            return (
+              <div key={t.id}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.effectAllowed = 'move';
@@ -417,8 +443,9 @@ function TabSet(props: {
               onClick={() => props.setActive(i)}
               className="px-2 py-0.5 text-xs rounded border cursor-grab flex items-center gap-1"
               style={{
-                flex: isActive ? 1 : '0 0 auto',
-                minWidth: isActive ? 0 : 'auto',
+                flex: tabFlexGrow,
+                minWidth: isFlowTab ? 'auto' : (isActive ? 0 : 'auto'),
+                maxWidth: isFlowTab ? 280 : undefined,
                 backgroundColor: isActive
                   ? (tabColor || '#bae6fd')
                   : '#ffffff',
@@ -445,8 +472,8 @@ function TabSet(props: {
                 </div>
               )}
 
-              {/* Spacer: pushes right-aligned toolbar to the end of the tab */}
-              {isActive && <div style={{ flex: 1 }} />}
+              {/* Spacer: pushes right-aligned toolbar to the end of the expanded tab only */}
+              {showToolbar && rightButtons.length > 0 && <div style={{ flex: 1, minWidth: 0 }} />}
 
               {/* Right-aligned toolbar buttons */}
               {showToolbar && rightButtons.length > 0 && (
@@ -456,10 +483,11 @@ function TabSet(props: {
               )}
 
               <button className="ml-1" style={{ color: isActive && tabColor ? '#ffffff' : '#0c4a6e' }} onClick={async (e) => { e.stopPropagation(); await props.onClose(t.id); }}>×</button>
-            </div>
-          );
-        })}
-      </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {/* ✅ Key stabile sul contenuto del tab per preservare lo stato quando si cambia tab */}
       {(() => {
         const activeTab = props.tabs[props.active];

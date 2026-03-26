@@ -464,26 +464,50 @@ Module Program
             System.Diagnostics.Debug.WriteLine($"🔵 [HandleOrchestratorSessionStart] ProjectId: '{If(request.ProjectId, "NULL")}', Locale: '{If(request.Locale, "NULL")}'")
             Console.Out.Flush()
 
-            ' ✅ STEP 3: Deserialize CompilationResult
+            ' ✅ STEP 3: Deserialize CompilationResult (+ subflow compilations con lo stesso schema)
             Dim compilationResult As Compiler.FlowCompilationResult = Nothing
+            Dim serializerSettings As New JsonSerializerSettings() With {
+                .NullValueHandling = NullValueHandling.Ignore,
+                .MissingMemberHandling = MissingMemberHandling.Ignore
+            }
+            serializerSettings.Converters.Add(New Compiler.CompiledTaskListConverter())
+            Dim compilationSerializer = JsonSerializer.Create(serializerSettings)
+
             Try
                 ' Try to deserialize directly if it's already a JObject
                 If TypeOf request.CompilationResult Is JObject Then
                     Dim jObj = CType(request.CompilationResult, JObject)
-                    ' ✅ CRITICAL: Include CompiledTaskListConverter to properly deserialize polymorphic CompiledTask objects
-                    '    CompiledTaskListConverter uses CompiledTaskConverter, which needs ITaskConverter for Escalation.Tasks
-                    Dim serializerSettings As New JsonSerializerSettings() With {
-                        .NullValueHandling = NullValueHandling.Ignore,
-                        .MissingMemberHandling = MissingMemberHandling.Ignore
-                    }
-                    serializerSettings.Converters.Add(New Compiler.CompiledTaskListConverter())
-                    compilationResult = jObj.ToObject(Of Compiler.FlowCompilationResult)(JsonSerializer.Create(serializerSettings))
+                    compilationResult = jObj.ToObject(Of Compiler.FlowCompilationResult)(compilationSerializer)
                 Else
                     Throw New InvalidOperationException("CompilationResult must be a JObject. The session cannot start without a valid CompilationResult.")
                 End If
             Catch deserializeEx As Exception
                 Return ResponseHelpers.CreateErrorResponse($"Failed to deserialize CompilationResult: {deserializeEx.Message}", 400)
             End Try
+
+            Dim subflowCompilations As Dictionary(Of String, Compiler.FlowCompilationResult) = Nothing
+            If request.SubflowCompilations IsNot Nothing AndAlso request.SubflowCompilations.Count > 0 Then
+                subflowCompilations = New Dictionary(Of String, Compiler.FlowCompilationResult)()
+                For Each kvp In request.SubflowCompilations
+                    If String.IsNullOrEmpty(kvp.Key) Then
+                        Continue For
+                    End If
+                    Dim subJ = TryCast(kvp.Value, JObject)
+                    If subJ Is Nothing Then
+                        Console.WriteLine($"[HandleOrchestratorSessionStart] ⚠️ subflowCompilations['{kvp.Key}'] is not a JSON object, skipped")
+                        Continue For
+                    End If
+                    Try
+                        Dim subResult = subJ.ToObject(Of Compiler.FlowCompilationResult)(compilationSerializer)
+                        If subResult IsNot Nothing Then
+                            subflowCompilations(kvp.Key) = subResult
+                        End If
+                    Catch subEx As Exception
+                        Return ResponseHelpers.CreateErrorResponse(
+                            $"Failed to deserialize subflowCompilations['{kvp.Key}']: {subEx.Message}", 400)
+                    End Try
+                Next
+            End If
 
             ' ✅ STEP 4: Generate session ID
             Dim sessionId = Guid.NewGuid().ToString()
@@ -523,13 +547,14 @@ Module Program
             ' CreateSession è puro: non salva nulla, solo crea la sessione
             ' Le translations DEVONO essere già nel TranslationRepository (salvate sopra)
             Try
-                Dim session = SessionManager.CreateSession(
+                SessionManager.CreateSession(
                     sessionId,
                     compilationResult,
                     request.Tasks,
                     request.Translations,
                     request.ProjectId,
-                    request.Locale
+                    request.Locale,
+                    subflowCompilations
                 )
             Catch sessionEx As Exception
                 Return ResponseHelpers.CreateErrorResponse($"Failed to create session: {sessionEx.Message}", 500)
@@ -866,11 +891,15 @@ Module Program
     ''' </summary>
     Private Async Function HandleOrchestratorSessionDelete(context As HttpContext, sessionId As String) As Task(Of IResult)
         Try
-            ' TODO: Implement session deletion using Orchestrator project
-            ' SessionManager.DeleteSession(sessionId)
+            If String.IsNullOrWhiteSpace(sessionId) Then
+                Return Results.BadRequest(New With {.error = "Session id is required"})
+            End If
+
+            SessionManager.DeleteSession(sessionId)
 
             Return Results.Ok(New With {
                 .success = True,
+                .sessionId = sessionId,
                 .timestamp = DateTime.UtcNow.ToString("O")
             })
         Catch ex As Exception

@@ -62,6 +62,27 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
   // Retry counters to prevent infinite loops
   const flowChatRetryRef = useRef(0);
   const singleNodeRetryRef = useRef(0);
+  const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-[a-z0-9_-]+)?$/i;
+
+  const getReadableLabel = useCallback((value: unknown, fallback: string): string => {
+    const text = String(value || '').trim();
+    if (!text || GUID_RE.test(text)) {
+      return fallback;
+    }
+    return text;
+  }, []);
+
+  const getFirstRowLabel = useCallback((nodeRows?: any[]): string | undefined => {
+    if (!Array.isArray(nodeRows) || nodeRows.length === 0) {
+      return undefined;
+    }
+    const candidate = nodeRows.find((r: any) => {
+      const text = String(r?.text || r?.label || r?.title || '').trim();
+      return text.length > 0 && !GUID_RE.test(text);
+    });
+    const resolved = String(candidate?.text || candidate?.label || candidate?.title || '').trim();
+    return resolved || undefined;
+  }, []);
 
   /**
    * Creates a DockTabChat object for chat panel
@@ -72,6 +93,9 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
     nodes: any[];
     edges: any[];
     tasks: any[];
+    executionFlowName?: string;
+    executionLaunchType?: 'flow' | 'rowTask' | 'node';
+    executionLaunchLabel?: string;
   }): DockTabChat => {
     return {
       id: options.tabId,
@@ -85,6 +109,9 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
       flowNodes: options.nodes,
       flowEdges: options.edges,
       flowTasks: options.tasks,
+      executionFlowName: options.executionFlowName,
+      executionLaunchType: options.executionLaunchType,
+      executionLaunchLabel: options.executionLaunchLabel,
     };
   }, [currentPid, translations]);
 
@@ -144,13 +171,29 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
       return;
     }
 
+    const rootPref = (() => {
+      try {
+        return localStorage.getItem('flow.orchestratorRoot');
+      } catch {
+        return null;
+      }
+    })();
+    const activeCanvasId = FlowWorkspaceSnapshot.getActiveFlowId();
+    const runLabel =
+      rootPref === 'main'
+        ? 'MAIN'
+        : (FlowWorkspaceSnapshot.getFlowById(activeCanvasId)?.title || activeCanvasId);
+    const chatTitle = '';
+
     // Create and open chat tab
     const chatTab = createChatTab({
       tabId: 'chat_flow_main',
-      title: 'Flow Chat',
+      title: chatTitle,
       nodes,
       edges,
       tasks,
+      executionFlowName: runLabel,
+      executionLaunchType: 'flow',
     });
 
     console.log('[ChatOrchestrator] Opening flow chat panel');
@@ -219,13 +262,25 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
     }
 
     // Create and open chat tab
-    const nodeLabel = node.data?.label || nodeId;
+    const nodeLabel = getReadableLabel(node.data?.label, 'Nodo');
+    const canvasId = FlowWorkspaceSnapshot.getActiveFlowId();
+    const canvasSnap = FlowWorkspaceSnapshot.getFlowById(canvasId);
+    const canvasTitle = getReadableLabel(canvasSnap?.title || canvasId, canvasId === 'main' ? 'MAIN' : 'Flow');
+    const rowLabel = getFirstRowLabel(nodeRows);
+    const launchType: 'rowTask' | 'node' = Array.isArray(nodeRows) && nodeRows.length === 1 ? 'rowTask' : 'node';
+    const launchLabel =
+      launchType === 'node'
+        ? `${rowLabel || nodeLabel}, ecc.`
+        : (rowLabel || nodeLabel);
     const chatTab = createChatTab({
       tabId: `chat_node_${nodeId}`,
-      title: `Test: ${nodeLabel}`,
+      title: '',
       nodes,
       edges,
       tasks,
+      executionFlowName: canvasTitle,
+      executionLaunchType: launchType,
+      executionLaunchLabel: launchLabel,
     });
 
     console.log('[ChatOrchestrator] Opening single-node chat panel');
@@ -248,7 +303,7 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
       alert(`Failed to open chat panel: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-  }, [setDockTree, translations, translationsReady, translationsLoading, loadAllTranslations, createChatTab]);
+  }, [setDockTree, translations, translationsReady, translationsLoading, loadAllTranslations, createChatTab, getReadableLabel, getFirstRowLabel]);
 
   return {
     openFlowChat,

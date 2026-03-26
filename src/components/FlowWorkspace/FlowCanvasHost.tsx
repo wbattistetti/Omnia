@@ -25,6 +25,7 @@ type Props = {
 export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleNode, onCreateTaskFlow, onOpenTaskFlow, onOpenSubflowForTask }) => {
   const { flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph, applyFlowLoadResult } = useFlowStoreActions();
+  const [isLoadingFlow, setIsLoadingFlow] = React.useState(false);
 
   const entityCreation = useEntityCreation();
 
@@ -38,6 +39,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
   useEffect(() => {
     let cancelled = false;
     if (!projectId || String(projectId).trim() === '') {
+      setIsLoadingFlow(false);
       logFlowSaveDebug('FlowCanvasHost: skip load (no projectId)', { flowId });
       if (!flows[flowId]) {
         upsertFlow({
@@ -54,20 +56,44 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
 
     const flow = flows[flowId];
     if (!flow) {
-      logFlowSaveDebug('FlowCanvasHost: upsert empty flow slice (no slice yet)', { flowId, projectId });
-      upsertFlow({
-        id: flowId,
-        title: flowId === 'main' ? 'Main' : flowId,
-        nodes: [],
-        edges: [],
-        hydrated: false,
-        hasLocalChanges: false,
-      });
+      logFlowSaveDebug('FlowCanvasHost: flow slice missing; direct server load', { flowId, projectId });
+      setIsLoadingFlow(true);
+      (async () => {
+        try {
+          const data = await loadFlow(projectId, flowId);
+          if (cancelled) return;
+          upsertFlow({
+            id: flowId,
+            title: flowId === 'main' ? 'Main' : flowId,
+            nodes: data.nodes,
+            edges: data.edges,
+            ...(data.meta !== undefined ? { meta: data.meta } : {}),
+            hydrated: true,
+            hasLocalChanges: false,
+          } as any);
+        } catch (e) {
+          if (cancelled) return;
+          console.error('[FlowCanvasHost] initial loadFlow failed', { projectId, flowId, e });
+          upsertFlow({
+            id: flowId,
+            title: flowId === 'main' ? 'Main' : flowId,
+            nodes: [],
+            edges: [],
+            hydrated: false,
+            hasLocalChanges: false,
+          });
+        } finally {
+          if (!cancelled) {
+            setIsLoadingFlow(false);
+          }
+        }
+      })();
       return;
     }
 
     const explain = explainShouldLoadFlowFromServer(projectId, flow);
     if (!explain.shouldLoad) {
+      setIsLoadingFlow(false);
       logFlowSaveDebug('FlowCanvasHost: skip server loadFlow', {
         projectId,
         flowId,
@@ -81,12 +107,16 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
       flowId,
       ...explain,
     });
+    setIsLoadingFlow(true);
 
     (async () => {
       let data: Awaited<ReturnType<typeof loadFlow>>;
       try {
         data = await loadFlow(projectId, flowId);
       } catch (e) {
+        if (!cancelled) {
+          setIsLoadingFlow(false);
+        }
         console.error('[FlowCanvasHost] loadFlow failed', { projectId, flowId, e });
         return;
       }
@@ -103,6 +133,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
         edges: data.edges,
         ...(data.meta !== undefined ? { meta: data.meta } : {}),
       });
+      setIsLoadingFlow(false);
     })();
 
     return () => {
@@ -162,6 +193,11 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
       <div className="relative flex flex-1 min-h-0 w-full h-full flex-col">
         <div className="relative flex flex-1 min-h-0 w-full min-w-0 overflow-hidden">
           <div className="absolute inset-0 z-0 min-h-0 min-w-0">{flowEditor}</div>
+          {isLoadingFlow ? (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-[1px] text-sm font-medium text-slate-700">
+              Loading flow...
+            </div>
+          ) : null}
           {isFlowInterfacePanelEnabled(flowId) ? <FlowInterfaceBottomPanel flowId={flowId} /> : null}
         </div>
         <FlowVariablesRail flowId={flowId} projectId={projectId} />

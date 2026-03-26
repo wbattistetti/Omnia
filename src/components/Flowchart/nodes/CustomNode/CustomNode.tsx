@@ -525,7 +525,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               text: valueLabel,
               included: true,
               heuristics: {
-                type: TaskType.Flow,
+                type: TaskType.Subflow,
                 templateId: null,
               },
             },

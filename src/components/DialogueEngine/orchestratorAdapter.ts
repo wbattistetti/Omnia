@@ -22,14 +22,16 @@ export interface OrchestratorCallbacks {
  * @param ddts - DDTs array
  * @param translations - Translations dictionary
  * @param callbacks - Event callbacks
+ * @param subflowCompilations - Optional flowId → FlowCompilationResult JSON (nested subflow canvases)
  */
 export async function executeOrchestratorBackend(
   compilationResultJson: any, // Original JSON from compiler - don't transform it!
   tasks: any[],
   ddts: any[],
   translations: Record<string, string>,
-  callbacks: OrchestratorCallbacks
-): Promise<{ sessionId: string; stop: () => void }> {
+  callbacks: OrchestratorCallbacks,
+  subflowCompilations?: Record<string, unknown>
+): Promise<{ sessionId: string; stop: () => Promise<void> }> {
   const baseUrl = 'http://localhost:5000';
 
   let sessionId: string | null = null;
@@ -58,7 +60,7 @@ export async function executeOrchestratorBackend(
     });
 
     // 1. Create backend session
-    const requestBody = {
+    const requestBody: Record<string, unknown> = {
       compilationResult: compilationResultJson,
       tasks,
       ddts,
@@ -66,6 +68,9 @@ export async function executeOrchestratorBackend(
       projectId, // ✅ SINGLE POINT OF TRUTH: Per risoluzione traduzioni nel backend
       locale     // ✅ SINGLE POINT OF TRUTH: Per risoluzione traduzioni nel backend
     };
+    if (subflowCompilations && Object.keys(subflowCompilations).length > 0) {
+      requestBody.subflowCompilations = subflowCompilations;
+    }
 
     // ✅ DEBUG: Verifica che projectId sia nel JSON
     const requestBodyJson = JSON.stringify(requestBody);
@@ -283,7 +288,7 @@ export async function executeOrchestratorBackend(
 
     return {
       sessionId,
-      stop: () => {
+      stop: async () => {
         console.log('[ORCHESTRATOR] Stopping orchestrator session', { sessionId });
         if (eventSource) {
           eventSource.close();
@@ -292,12 +297,14 @@ export async function executeOrchestratorBackend(
         if (sessionId) {
           // ✅ FIX: Use VB.NET backend (port 5000)
           const baseUrl = 'http://localhost:5000';
-          fetch(`${baseUrl}/api/runtime/orchestrator/session/${sessionId}`, {
-            method: 'DELETE'
-          }).catch(err => {
+          try {
+            await fetch(`${baseUrl}/api/runtime/orchestrator/session/${sessionId}`, {
+              method: 'DELETE'
+            });
+            console.log('[ORCHESTRATOR] ✅ Session deleted', { sessionId });
+          } catch (err) {
             console.error('[ORCHESTRATOR] Error deleting session', err);
-          });
-          console.log('[ORCHESTRATOR] ✅ Session deleted', { sessionId });
+          }
         }
       }
     };

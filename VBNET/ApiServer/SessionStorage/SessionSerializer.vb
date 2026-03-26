@@ -71,6 +71,9 @@ Namespace ApiServer.SessionStorage
             ' ✅ AGGIUNTO: ProjectId e Locale per risoluzione traduzioni
             Public Property ProjectId As String
             Public Property Locale As String
+
+            ''' <summary>Stesso significato di <see cref="OrchestratorSession.SubflowCompilations"/>.</summary>
+            Public Property SubflowCompilations As Dictionary(Of String, FlowCompilationResult)
         End Class
 
         ''' <summary>
@@ -171,7 +174,8 @@ Namespace ApiServer.SessionStorage
                     .IsWaitingForInput = session.IsWaitingForInput,
                     .WaitingForInputData = session.WaitingForInputData,
                     .ProjectId = session.ProjectId,
-                    .Locale = session.Locale
+                    .Locale = session.Locale,
+                    .SubflowCompilations = session.SubflowCompilations
                 }
 
                 Return JsonConvert.SerializeObject(data, New JsonSerializerSettings With {
@@ -226,6 +230,7 @@ Namespace ApiServer.SessionStorage
                     .EventEmitter = Nothing, ' Verrà impostato da SessionManager.GetSession
                     .ProjectId = data.ProjectId,
                     .Locale = data.Locale,
+                    .SubflowCompilations = data.SubflowCompilations,
                     .Orchestrator = Nothing ' ✅ NON creare qui - verrà creato da SessionManager.GetSession
                 }
 

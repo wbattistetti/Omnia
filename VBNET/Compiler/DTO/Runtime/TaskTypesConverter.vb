@@ -63,6 +63,8 @@ Public Class TaskTypesConverter
                 Return TaskTypes.ClassifyProblem
             Case "aiagent", "ai_agent"
                 Return TaskTypes.AIAgent
+            Case "subflow"
+                Return TaskTypes.Subflow
             Case Else
                 ' ❌ ERRORE BLOCCANTE: tipo sconosciuto, nessun fallback
                 Throw New InvalidOperationException($"Unknown templateId string: '{stringValue}'. Cannot convert to TaskType. Every templateId must map to a valid TaskType.")

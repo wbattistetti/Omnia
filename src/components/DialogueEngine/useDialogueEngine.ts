@@ -5,13 +5,6 @@ import type { Node, Edge } from 'reactflow';
 import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import type { CompiledTask, CompilationResult, ExecutionState } from '../FlowCompiler/types';
 // Frontend DialogueEngine removed - backend orchestrator is now default
-import { taskRepository } from '../../services/TaskRepository';
-import { getTemplateId } from '../../utils/taskHelpers';
-import { DialogueTaskService } from '../../services/DialogueTaskService';
-import { taskTemplateService } from '../../services/TaskTemplateService';
-import { templateIdToTaskType, TaskType } from '../../types/taskTypes';
-import { buildMinimalAiAgentCompileTask } from '../TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
-import { readAiAgentRuntimeRulesVariant } from '../TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentRuntimeRulesVariant';
 import { useProjectData } from '../../context/ProjectDataContext';
 
 interface UseDialogueEngineOptions {
@@ -24,8 +17,11 @@ interface UseDialogueEngineOptions {
   onError?: (error: Error) => void;
   onMessage?: (message: { id: string; text: string; stepType?: string; escalationNumber?: number; taskId?: string }) => void;
   onDDTStart?: (data: { ddt: any; taskId: string }) => void;
-  onWaitingForInput?: (data: { taskId: string; nodeId?: string }) => void;
+  onWaitingForInput?: (data: { taskId: string; nodeId?: string; taskLabel?: string; nodeLabel?: string }) => void;
   translations?: Record<string, string>; // Add translations support
+  /** `main` = always compile/run from main + nested subflows; `active` = root = focused canvas + its nested subflows. Override with localStorage `flow.orchestratorRoot`. */
+  orchestratorRoot?: 'main' | 'active';
+  projectId?: string;
 }
 
 /**
@@ -44,14 +40,28 @@ interface UseDialogueEngineOptions {
  * - Options can be updated without recreating the engine
  */
 export function useDialogueEngine(options: UseDialogueEngineOptions) {
+  const isGuidLike = useCallback((value: unknown): boolean => {
+    const text = String(value || '').trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-[a-z0-9_-]+)?$/i.test(text);
+  }, []);
+
+  const toReadableLabel = useCallback((value: unknown): string => {
+    const text = String(value || '').trim();
+    if (!text || isGuidLike(text)) {
+      return '';
+    }
+    return text;
+  }, [isGuidLike]);
+
   // ✅ STATE: UI-reactive state (triggers re-renders)
   const [executionState, setExecutionState] = useState<ExecutionState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [currentTask, setCurrentTask] = useState<CompiledTask | null>(null);
+  const isRunningRef = useRef(false);
 
   // ✅ REFS: Stable state that survives remounts
   const engineRef = useRef<{
-    orchestratorControl?: { sessionId: string; stop: () => void };
+    orchestratorControl?: { sessionId: string; stop: () => Promise<void> };
     sessionId?: string;
     waitingForInput?: { taskId: string; nodeId?: string };
   } | null>(null);
@@ -69,6 +79,10 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     optionsRef.current = options;
   }, [options]);
 
+  useEffect(() => {
+    isRunningRef.current = isRunning;
+  }, [isRunning]);
+
   // ✅ Get projectData for conditions
   const { data: projectData } = useProjectData();
 
@@ -81,756 +95,110 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     // ✅ Always read from ref to get latest options (survives remount)
     const currentOptions = optionsRef.current;
 
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('🚀 [useDialogueEngine] start() CALLED');
-    console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('[useDialogueEngine] 📊 State check:', {
-      isRunning,
-      hasOptions: !!currentOptions,
-      nodesCount: currentOptions?.nodes?.length || 0,
-      edgesCount: currentOptions?.edges?.length || 0,
-      hasTranslations: !!currentOptions?.translations,
-      translationsCount: currentOptions?.translations ? Object.keys(currentOptions.translations).length : 0,
-    });
-
-    if (isRunning) {
-      console.warn('[useDialogueEngine] ⚠️ Already running - aborting');
+    if (isRunningRef.current) {
       return;
     }
 
+    isRunningRef.current = true;
     setIsRunning(true);
 
     try {
       // ✅ Use currentOptions from ref throughout (all compilation logic)
       // Ensure all tasks exist in memory before compilation
       // Enrich all rows with taskId (creates tasks in memory if missing)
-      const { enrichRowsWithTaskId } = await import('../../utils/taskHelpers');
-      const enrichedNodes = currentOptions.nodes.map(node => {
-        if (node.data?.rows) {
-          // Enrich rows and update node.data.rows with enriched version
-          const enrichedRows = enrichRowsWithTaskId(node.data.rows);
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              rows: enrichedRows
-            }
-          };
-        }
-        return node;
-      });
+      // Root canvas + transitive subflow compilations (snapshot); entry graph = rootFlowId compilation
+      const { compileWorkspaceForOrchestratorSession } = await import('./compileWorkspaceOrchestratorSession');
+      const { FlowWorkspaceSnapshot } = await import('../../flows/FlowWorkspaceSnapshot');
+      const { normalizeSeverity } = await import('../../utils/severityUtils');
 
-      // Compile flow HERE, only when Start is clicked
-      // ✅ DEBUG: Log edges passed to compiler
-      const elseEdgesCount = currentOptions.edges.filter(e => e.data?.isElse === true).length;
-      if (elseEdgesCount > 0) {
-        console.log('[useDialogueEngine][start] ✅ Else edges found before compilation', {
-          elseEdgesCount,
-          totalEdgesCount: currentOptions.edges.length,
-          elseEdges: currentOptions.edges.filter(e => e.data?.isElse === true).map(e => ({
-            id: e.id,
-            label: e.label,
-            source: e.source,
-            target: e.target,
-            hasData: !!e.data,
-            isElse: e.data?.isElse,
-            dataKeys: e.data ? Object.keys(e.data) : []
-          }))
-        });
-      }
-
-      // ═══════════════════════════════════════════════════════════════════════════
-      // 🚀 CALL BACKEND COMPILER API
-      // ═══════════════════════════════════════════════════════════════════════════
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-      console.log('🚀 [FRONTEND] Calling backend compiler API...');
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-
-      // ✅ NUOVA LOGICA ARCHITETTURALE: Prendi solo istanze referenziate dalle righe, poi risolvi template ricorsivamente
-      // ✅ PRINCIPIO: row.id === task.id (se esiste nel TaskRepository, è un'istanza referenziata)
-      // ✅ Nessun duplicato possibile: ogni task viene preso da una sola fonte
-
-      // ✅ STEP 1: Raccogli tutti i taskId referenziati dalle righe dei nodi
-      const referencedTaskIds = new Set<string>();
-      enrichedNodes.forEach(node => {
-        const rows = node.data?.rows || [];
-        rows.forEach(row => {
-          const taskId = row.id;
-          if (taskId) {
-            referencedTaskIds.add(taskId);
-          }
-        });
-      });
-
-      console.log('[useDialogueEngine] 🔍 Referenced task IDs from rows:', {
-        referencedCount: referencedTaskIds.size,
-        taskIds: Array.from(referencedTaskIds)
-      });
-
-      // ✅ STEP 2: Prendi solo le istanze referenziate (row.id === task.id)
-      const referencedInstances = Array.from(referencedTaskIds)
-        .map(taskId => {
-          const task = taskRepository.getTask(taskId);
-          if (!task) {
-            console.warn(`[useDialogueEngine] ⚠️ Task ${taskId} not found in TaskRepository`);
-            return null;
-          }
-          if (task.type === undefined || task.type === null) {
-            console.error(`[useDialogueEngine] Task ${task.id} has no type field - skipping.`);
-            return null;
-          }
-          return task;
-        })
-        .filter((task): task is any => task !== null);
-
-      console.log('[useDialogueEngine] ✅ Referenced instances found:', {
-        instancesCount: referencedInstances.length,
-        instanceIds: referencedInstances.map(t => t.id)
-      });
-
-      // ✅ STEP 3: Assicurati che DialogueTaskService sia inizializzato
-      if (!DialogueTaskService.isCacheLoaded()) {
-        console.warn('[useDialogueEngine] ⚠️ DialogueTaskService cache not loaded, loading now...');
-        await DialogueTaskService.loadTemplates();
-      }
-
-      // ✅ STEP 4: Raccogli template referenziati ricorsivamente (solo ID, sincrono)
-      const collectedTemplateIds = new Set<string>();
-
-      const collectTemplateIdsRecursive = (task: any) => {
-        if (!task) return;
-
-        // ✅ Raccogli templateId diretto
-        const templateId = getTemplateId(task);
-        if (templateId && !collectedTemplateIds.has(templateId)) {
-          collectedTemplateIds.add(templateId);
-
-          // ✅ Ricorsivamente raccogli template del template (solo ID, non caricare ancora)
-          // Prova prima in DialogueTaskService (sincrono)
-          let template = DialogueTaskService.getTemplate(templateId);
-          if (!template) {
-            // ✅ Fallback: cerca in getAllTemplates se getTemplate non trova
-            const allTemplates = DialogueTaskService.getAllTemplates();
-            template = allTemplates.find(t => t.id === templateId) || null;
-          }
-          if (template) {
-            // ✅ Template trovato, raccogli ricorsivamente i suoi sub-template
-            collectTemplateIdsRecursive(template);
-          }
-          // ✅ Se non trovato in DialogueTaskService, sarà cercato dopo in factory templates
-        }
-
-        // ✅ Raccogli sub-template (per UtteranceTaskDefinition con subTasksIds)
-        if ((task as any).subTasksIds && Array.isArray((task as any).subTasksIds)) {
-          (task as any).subTasksIds.forEach((subTaskId: string) => {
-            if (subTaskId && !collectedTemplateIds.has(subTaskId)) {
-              collectedTemplateIds.add(subTaskId);
-
-              // ✅ Ricorsivamente raccogli template del sub-template (solo ID)
-              let subTemplate = DialogueTaskService.getTemplate(subTaskId);
-              if (!subTemplate) {
-                const allTemplates = DialogueTaskService.getAllTemplates();
-                subTemplate = allTemplates.find(t => t.id === subTaskId) || null;
-              }
-              if (subTemplate) {
-                collectTemplateIdsRecursive(subTemplate);
-              }
-              // ✅ Se non trovato, sarà cercato dopo in factory templates
-            }
-          });
-        }
-      };
-
-      // ✅ Raccogli template IDs per tutte le istanze referenziate (sincrono)
-      referencedInstances.forEach(instance => {
-        collectTemplateIdsRecursive(instance);
-      });
-
-      console.log('[useDialogueEngine] ✅ Collected template IDs:', {
-        templatesCount: collectedTemplateIds.size,
-        templateIds: Array.from(collectedTemplateIds)
-      });
-
-      // ✅ STEP 5: Carica tutti i template referenziati
-      const referencedTemplates: any[] = [];
-      const loadedTemplateIds = new Set<string>();
-
-      // ✅ Carica template di progetto (sincrono)
-      const allDialogueTaskServiceTemplates = DialogueTaskService.getAllTemplates();
-      Array.from(collectedTemplateIds).forEach(templateId => {
-        // ✅ Prova prima da DialogueTaskService (template di progetto)
-        let template = DialogueTaskService.getTemplate(templateId);
-        if (!template) {
-          // ✅ Fallback: cerca in getAllTemplates
-          template = allDialogueTaskServiceTemplates.find(t => t.id === templateId) || null;
-        }
-        if (template) {
-          // ✅ Filtra solo template di progetto (source !== 'Factory')
-          const source = (template as any).source;
-          if (source !== 'Factory') {
-            referencedTemplates.push(template);
-            loadedTemplateIds.add(templateId);
-          }
-        }
-      });
-
-      // ✅ Carica template di factory (async) - solo quelli non trovati in DialogueTaskService
-      const factoryTemplateIds = Array.from(collectedTemplateIds).filter(id => !loadedTemplateIds.has(id));
-
-      if (factoryTemplateIds.length > 0) {
-        const allFactoryTemplatesRaw = await taskTemplateService.getAllTemplates();
-        factoryTemplateIds.forEach(templateId => {
-          const factoryTemplate = allFactoryTemplatesRaw.find(t => t.id === templateId);
-          if (factoryTemplate) {
-            const factoryTemplateAny = factoryTemplate as any;
-            // ✅ Convert factory template to DialogueTask format
-            referencedTemplates.push({
-              id: factoryTemplate.id,
-              label: factoryTemplate.label,
-              type: factoryTemplate.type,
-              name: factoryTemplateAny.name,
-              // ✅ Map nlpContract → dataContract (factory templates use nlpContract)
-              dataContract: factoryTemplateAny.nlpContract || factoryTemplateAny.dataContract || factoryTemplateAny.semanticContract || null,
-              semanticContract: factoryTemplateAny.semanticContract,
-              // ✅ Include all other fields from factory template
-              ...factoryTemplateAny
-            });
-          }
-        });
-      }
-
-      console.log('[useDialogueEngine] ✅ Referenced templates loaded:', {
-        templatesCount: referencedTemplates.length,
-        templateIds: referencedTemplates.map(t => t.id)
-      });
-
-      // ✅ STEP 6: Combina istanze + template (nessun duplicato possibile)
-      const allTasksWithTemplates = [
-        ...referencedInstances,
-        ...referencedTemplates
-      ];
-
-      /** VB compiler: minimal AI Agent DTO (`rules` + `llmEndpoint`; rules = compact or rich per toolbar). */
-      const aiAgentRulesVariant = readAiAgentRuntimeRulesVariant();
-      const tasksForCompile = allTasksWithTemplates.map((t: any) =>
-        t.type === TaskType.AIAgent
-          ? buildMinimalAiAgentCompileTask(t, { rulesVariant: aiAgentRulesVariant })
-          : t
-      );
-
-      console.log('[useDialogueEngine] 📦 Final task list (instances + templates):', {
-        instancesCount: referencedInstances.length,
-        templatesCount: referencedTemplates.length,
-        totalCount: allTasksWithTemplates.length,
-        allTaskIds: allTasksWithTemplates.map(t => t.id)
-      });
-
-      // ✅ Extract DDTs only from referenced GetData tasks (keep existing logic for DDTs)
-      // DDTs are still extracted only from referenced tasks, as they are flow-specific
-      // ✅ referencedTaskIds è già stato dichiarato sopra (STEP 1), riutilizzalo
-      // Non serve ridichiararlo - è già stato popolato con tutti i taskId dalle righe
-
-      const allDDTs: any[] = [];
-      // ✅ FIX: Use buildTaskTree() instead of task.data to ensure node.id = templateId
-      // This fixes the variableStore key mismatch (backend uses node.id, conditions use templateId)
-      // ✅ Move import OUTSIDE the loop and add better error handling
-      let buildTaskTree: any = null;
-      try {
-        const taskUtilsModule = await import('../../utils/taskUtils');
-        buildTaskTree = taskUtilsModule.buildTaskTree;
-      } catch (importError) {
-        console.error('[useDialogueEngine] ❌ Failed to import buildTaskTree', {
-          error: importError instanceof Error ? importError.message : String(importError),
-          stack: importError instanceof Error ? importError.stack : undefined
-        });
-        // ✅ Fallback: use task.data for all DDTs if import fails
-      Array.from(referencedTaskIds).forEach(taskId => {
-        const task = taskRepository.getTask(taskId);
-          if (task && task.data && Array.isArray(task.data) && task.data.length > 0) {
-          const templateId = getTemplateId(task);
-            if (templateId && templateIdToTaskType(templateId) === TaskType.UtteranceInterpretation) {
-            allDDTs.push({
-              label: task.label,
-              data: task.data,
-              steps: task.steps
-            });
-          }
-        }
-      });
-      }
-
-      if (buildTaskTree) {
-        const projectId = currentOptions.projectId || localStorage.getItem('currentProjectId') || undefined;
-
-        for (const taskId of Array.from(referencedTaskIds)) {
-          const task = taskRepository.getTask(taskId);
-          if (!task) continue;
-
-          const templateId = getTemplateId(task);
-          if (!templateId || templateIdToTaskType(templateId) !== TaskType.UtteranceInterpretation) continue;
-
-          try {
-            // ✅ Build TaskTree from template (nodes have id = templateId, matching steps keys and condition expressions)
-            const taskTree = await buildTaskTree(task, projectId);
-            if (!taskTree || !taskTree.nodes || taskTree.nodes.length === 0) {
-              // ✅ Fallback to legacy task.data if buildTaskTree fails or returns empty
-              if (task.data && Array.isArray(task.data) && task.data.length > 0) {
-                console.warn('[useDialogueEngine] ⚠️ Using legacy task.data as fallback', { taskId });
-                allDDTs.push({
-                  label: task.label,
-                  data: task.data,
-                  steps: task.steps
-                });
-              }
-              continue;
-            }
-
-            // ✅ Merge user data from task.data if exists (preserves nlpProfile.examples, testNotes, etc.)
-            const nodesWithUserData = taskTree.nodes.map((node: any) => {
-              // Find matching user node by templateId or id
-              const userNode = task.data?.find((d: any) =>
-                d.templateId === node.templateId || d.id === node.id || d.templateId === node.id
-              );
-
-              if (userNode) {
-                // ✅ Preserve user modifications (nlpProfile.examples, testNotes, etc.)
-                // but keep node.id = templateId (critical for variableStore)
-                return {
-                  ...node,
-                  ...userNode,
-                  id: node.id,  // ✅ CRITICAL: Keep id = templateId (don't use userNode.id which might be cloned instanceId)
-                  templateId: node.templateId  // ✅ CRITICAL: Keep templateId
-                };
-              }
-              return node;
-            });
-
-            allDDTs.push({
-              label: task.label,
-              data: nodesWithUserData,  // ✅ id = templateId (fixes variableStore) + user data preserved
-              steps: taskTree.steps || task.steps  // ✅ Use steps from taskTree (keyed by templateId)
-            });
-
-            console.log('[useDialogueEngine] ✅ DDT built from TaskTree', {
-              taskId,
-              templateId,
-              nodesCount: nodesWithUserData.length,
-              firstNodeId: nodesWithUserData[0]?.id,
-              firstNodeTemplateId: nodesWithUserData[0]?.templateId,
-              hasUserData: task.data && task.data.length > 0,
-              userDataNodesCount: task.data?.length || 0
-            });
-          } catch (error) {
-            console.error('[useDialogueEngine] ❌ Error building TaskTree, falling back to task.data', {
-              taskId,
-              error: error instanceof Error ? error.message : String(error),
-              stack: error instanceof Error ? error.stack : undefined
-            });
-            // ✅ Fallback to legacy task.data if buildTaskTree throws
-            if (task.data && Array.isArray(task.data) && task.data.length > 0) {
-              allDDTs.push({
-                label: task.label,
-                data: task.data,
-                steps: task.steps
-              });
-            }
-          }
-        }
-      }
-
-      // ✅ DEBUG: Log complete graph payload
-      if (allTasksWithTemplates.length > 0) {
-        console.log('[FRONTEND] Complete graph being sent to backend:');
-        allTasksWithTemplates.slice(0, 5).forEach((task, idx) => {
-          console.log(`  Task[${idx}]:`, {
-            id: task.id,
-            type: task.type,
-            typeName: task.type !== undefined && task.type !== null ? `TaskType[${task.type}]` : 'MISSING',
-            templateId: task.templateId,
-            hasDataContract: !!(task.dataContract),
-            hasSemanticContract: !!(task.semanticContract),
-            hasdata: !!(task.data && task.data.length > 0)
-          });
-        });
-      }
-
-      console.log('[FRONTEND] Preparing compilation request with complete graph:', {
-        nodesCount: enrichedNodes.length,
-        edgesCount: currentOptions.edges.length,
-        totalTasksCount: allTasksWithTemplates.length,
-        referencedInstancesCount: referencedInstances.length,
-        referencedTemplatesCount: referencedTemplates.length,
-        ddtsCount: allDDTs.length
-      });
-
-      const baseUrl = 'http://localhost:5000';
-
-      // Transform nodes from ReactFlow structure (data.rows) to simplified structure (rows directly)
-      // VB.NET backend expects: { id, label, rows: [...] } (no data wrapper)
-      const { transformNodesToSimplified } = await import('../../flows/flowTransformers');
-
-      // 🔍 DEBUG: Log all rows before transformation
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-      console.log('🔍 [FRONTEND] Nodes BEFORE transformation:');
-      enrichedNodes.forEach((node, idx) => {
-        const rows = node.data?.rows || [];
-        console.log(`  Node[${idx}]:`, {
-          nodeId: node.id,
-          label: node.data?.label || '',
-          rowsCount: rows.length,
-          rows: rows.map((r: any) => ({
-            id: r.id,
-            text: r.text,
-            included: r.included,
-            taskId: r.taskId,
-            type: r.type,
-            mode: r.mode
-          }))
-        });
-      });
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-
-      const simplifiedNodes = transformNodesToSimplified(enrichedNodes);
-
-      // ✅ FIX: Ensure all rows have taskId field (backend VB.NET requires it)
-      // task.id === row.id ALWAYS, so we set taskId = row.id
-      const nodesWithTaskId = simplifiedNodes.map(node => ({
-        ...node,
-        rows: (node.rows || []).map((row: any) => ({
-          ...row,
-          // ✅ CRITICAL: Backend VB.NET requires explicit taskId field
-          // task.id === row.id ALWAYS (when task exists)
-          taskId: row.taskId || row.id
-        }))
-      }));
-
-      // 🔍 DEBUG: Log all rows after transformation
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-      console.log('🔍 [FRONTEND] Nodes AFTER transformation:');
-      nodesWithTaskId.forEach((node, idx) => {
-        console.log(`  Node[${idx}]:`, {
-          nodeId: node.id,
-          label: node.label || '',
-          rowsCount: node.rows?.length || 0,
-          rows: node.rows?.map((r: any) => ({
-            id: r.id,
-            text: r.text,
-            included: r.included,
-            taskId: r.taskId,
-            type: r.type,
-            mode: r.mode
-          })) || []
-        });
-      });
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-
-      // ✅ Get translations from currentOptions or global context (already in memory)
       let translations: Record<string, string> = {};
       if (currentOptions.translations && Object.keys(currentOptions.translations).length > 0) {
         translations = currentOptions.translations;
       } else {
-        // Fallback: Try to get from window or context
         try {
-          const globalTranslations = (window as any).__globalTranslations || {};
-          translations = globalTranslations;
-        } catch (e) {
-          console.warn('[useDialogueEngine] ⚠️ Could not load translations for compilation', e);
-        }
-      }
-
-      // ✅ NEW: Extract conditions from projectData (only referenced ones)
-      // ✅ Read conditionId from top-level (not from data)
-      const referencedConditionIds = new Set(
-        (currentOptions.edges || [])
-          .map((e: any) => e.conditionId)
-          .filter(Boolean)
-      );
-
-      console.log('[useDialogueEngine] 🔍 Extracting conditions', {
-        referencedConditionIds: Array.from(referencedConditionIds),
-        edgesCount: (currentOptions.edges || []).length,
-        edgesWithConditionId: (currentOptions.edges || []).filter((e: any) => e.conditionId).map((e: any) => ({
-          id: e.id,
-          label: e.label,
-          conditionId: e.conditionId
-        }))
-      });
-
-      // ✅ DEBUG: Log all project conditions before filtering
-      const allProjectConditions = (projectData as any)?.conditions
-        ? (projectData as any).conditions.flatMap((cat: any) => cat.items || [])
-        : [];
-
-      console.log('[useDialogueEngine] 🔍 DEBUG: All project conditions before filtering', {
-        totalProjectConditions: allProjectConditions.length,
-        allConditionIds: allProjectConditions.map((item: any) => ({
-          id: item.id,
-          _id: item._id,
-          both: item.id || item._id,
-          name: item.name || item.label,
-          hasExpression: !!item.expression?.executableCode,
-          hasCompiledCode: !!item.expression?.compiledCode
-        })),
-        referencedConditionIds: Array.from(referencedConditionIds)
-      });
-
-      const conditions = (projectData as any)?.conditions
-        ? (projectData as any).conditions
-          .flatMap((cat: any) => cat.items || [])
-          .filter((item: any) => {
-            const itemId = item.id || item._id;
-            const isInSet = itemId && referencedConditionIds.has(itemId);
-            if (!isInSet && itemId) {
-              console.log('[useDialogueEngine] ⚠️ Condition not in referenced set', {
-                itemId,
-                itemName: item.name || item.label,
-                referencedConditionIds: Array.from(referencedConditionIds),
-                match: referencedConditionIds.has(itemId)
-              });
-            }
-            return isInSet;
-          })
-          .map((item: any) => ({
-            id: item.id || item._id,
-            name: item.name || item.label,
-            label: item.label || item.name,
-            // ✅ FASE 2: Use expression.* instead of data.*
-            expression: {
-              executableCode: item.expression?.executableCode || '',
-              compiledCode: item.expression?.compiledCode || '',
-              ast: item.expression?.ast || '',
-              format: item.expression?.format || 'dsl'
-            }
-          }))
-        : [];
-
-      console.log('[useDialogueEngine] ✅ Conditions extracted', {
-        conditionsCount: conditions.length,
-        conditionIds: conditions.map((c: any) => c.id),
-        conditionsWithExpression: conditions.filter((c: any) => c.expression?.executableCode).length,
-        matchedConditions: conditions.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          hasExecutableCode: !!c.expression?.executableCode,
-          hasCompiledCode: !!c.expression?.compiledCode
-        }))
-      });
-
-      // ✅ Filter out orphan edges (edges pointing to non-existent or hidden nodes)
-      const validNodeIds = new Set(nodesWithTaskId.map(n => n.id));
-      const filteredEdges = (currentOptions.edges || []).filter((e: any) => {
-        const targetExists = validNodeIds.has(e.target);
-        const sourceExists = validNodeIds.has(e.source);
-
-        if (!targetExists || !sourceExists) {
-          console.warn('[useDialogueEngine] ⚠️ Filtering out orphan edge', {
-            edgeId: e.id,
-            label: e.label,
-            source: e.source,
-            target: e.target,
-            sourceExists,
-            targetExists
-          });
-          return false;
-        }
-
-        // Also filter out edges connected to hidden/temporary nodes
-        const targetNode = nodesWithTaskId.find(n => n.id === e.target);
-        const sourceNode = nodesWithTaskId.find(n => n.id === e.source);
-        const isTargetHidden = targetNode?.data?.hidden === true || targetNode?.data?.isTemporary === true;
-        const isSourceHidden = sourceNode?.data?.hidden === true || sourceNode?.data?.isTemporary === true;
-
-        if (isTargetHidden || isSourceHidden) {
-          console.warn('[useDialogueEngine] ⚠️ Filtering out edge connected to hidden/temporary node', {
-            edgeId: e.id,
-            label: e.label,
-            isTargetHidden,
-            isSourceHidden
-          });
-          return false;
-        }
-
-        return true;
-      });
-
-      // ✅ DEBUG: Log edge filtering
-      if ((currentOptions.edges || []).length !== filteredEdges.length) {
-        console.log('[useDialogueEngine] 🔍 Edge filtering', {
-          originalEdgesCount: (currentOptions.edges || []).length,
-          filteredEdgesCount: filteredEdges.length,
-          removedEdgesCount: (currentOptions.edges || []).length - filteredEdges.length,
-          removedEdges: (currentOptions.edges || []).filter((e: any) => {
-            const targetExists = validNodeIds.has(e.target);
-            const sourceExists = validNodeIds.has(e.source);
-            const targetNode = nodesWithTaskId.find(n => n.id === e.target);
-            const sourceNode = nodesWithTaskId.find(n => n.id === e.source);
-            const isTargetHidden = targetNode?.data?.hidden === true || targetNode?.data?.isTemporary === true;
-            const isSourceHidden = sourceNode?.data?.hidden === true || sourceNode?.data?.isTemporary === true;
-            return !targetExists || !sourceExists || isTargetHidden || isSourceHidden;
-          }).map((e: any) => ({
-            id: e.id,
-            label: e.label,
-            source: e.source,
-            target: e.target
-          }))
-        });
-      }
-
-      // ✅ DEBUG: Log tasks before serialization to verify type field
-      const projectId = localStorage.getItem('currentProjectId') || undefined;
-      const { variableCreationService } = await import('@services/VariableCreationService');
-      const variables = projectId ? variableCreationService.getAllVariables(projectId) : [];
-
-      const requestBody = {
-        nodes: nodesWithTaskId,  // ✅ Use nodes with taskId field (backend VB.NET requires it)
-        edges: filteredEdges,  // ✅ Use filtered edges (no orphans)
-        tasks: tasksForCompile, // ✅ AI Agent: includes `rules` / `llmEndpoint` for VB compiler
-        ddts: allDDTs,
-        projectId: projectId,
-        translations: translations, // ✅ Pass translations table (already in memory) - runtime will do lookup at execution time
-        conditions: conditions, // ✅ NEW: Pass conditions for validation
-        variables: variables // ✅ NEW: Pass variables for compiler to build mapping
-      };
-
-      // ✅ DEBUG: Verifica che tutti i task referenziati nei nodi siano presenti in requestBody.tasks
-      // Nota: referencedTaskIds potrebbe essere già dichiarato sopra, usiamo un nome diverso per evitare conflitti
-      const referencedTaskIdsInRequestBody = new Set<string>();
-      currentOptions.nodes.forEach(node => {
-        node.rows?.forEach((row: any) => {
-          if (row.taskId) {
-            referencedTaskIdsInRequestBody.add(row.taskId);
-          }
-        });
-      });
-
-      const missingReferencedTasks = Array.from(referencedTaskIdsInRequestBody).filter(taskId => {
-        return !requestBody.tasks.find((t: any) => t.id === taskId);
-      });
-
-      if (missingReferencedTasks.length > 0) {
-        console.error('[useDialogueEngine] ❌ MISSING REFERENCED TASKS:', {
-          missingTaskIds: missingReferencedTasks,
-          totalReferencedTasks: referencedTaskIdsInRequestBody.size,
-          totalTasksInRequestBody: requestBody.tasks.length,
-          referencedTaskIds: Array.from(referencedTaskIdsInRequestBody).slice(0, 10),
-          taskIdsInRequestBody: requestBody.tasks.map((t: any) => t.id).slice(0, 10)
-        });
-      } else {
-        console.log('[useDialogueEngine] ✅ All referenced tasks are present in requestBody:', {
-          totalReferencedTasks: referencedTaskIdsInRequestBody.size,
-          totalTasksInRequestBody: requestBody.tasks.length
-        });
-      }
-
-      // Log first few tasks to verify type field is present
-      if (allTasksWithTemplates.length > 0) {
-        console.log('[FRONTEND] Complete graph in request body (before JSON.stringify):');
-        allTasksWithTemplates.slice(0, 3).forEach((task, idx) => {
-          console.log(`  Task[${idx}]:`, {
-            id: task.id,
-            type: task.type,
-            typeName: task.type !== undefined && task.type !== null ? `TaskType[${task.type}]` : 'MISSING',
-            templateId: task.templateId,
-            hasDataContract: !!(task.dataContract),
-            hasdata: !!(task.data && task.data.length > 0)
-          });
-        });
-
-        // ✅ DEBUG: Log conditions in request body before serialization
-        console.log('[FRONTEND] Request body conditions (before JSON.stringify):', {
-          conditionsCount: requestBody.conditions?.length || 0,
-          conditionIds: requestBody.conditions?.map((c: any) => c.id) || [],
-          conditionsPreview: requestBody.conditions?.map((c: any) => ({
-            id: c.id,
-            name: c.name,
-            hasExpression: !!c.expression?.executableCode,
-            hasCompiledCode: !!c.expression?.compiledCode
-          })) || []
-        });
-
-        // Log serialized JSON preview to verify type is in JSON
-        const jsonString = JSON.stringify(requestBody);
-        const jsonPreview = jsonString.substring(0, 2000);
-        console.log('[FRONTEND] Request body JSON preview (first 2000 chars):', jsonPreview);
-
-        // ✅ DEBUG: Verify conditions are in JSON string
-        const conditionsInJson = jsonString.includes('"conditions"');
-        const conditionsArrayInJson = jsonString.includes('"conditions":[');
-        console.log('[FRONTEND] Conditions in JSON string:', {
-          hasConditionsKey: conditionsInJson,
-          hasConditionsArray: conditionsArrayInJson,
-          jsonLength: jsonString.length,
-          conditionsJsonPreview: conditionsInJson ? jsonString.substring(jsonString.indexOf('"conditions"'), Math.min(jsonString.indexOf('"conditions"') + 500, jsonString.length)) : 'NOT FOUND'
-        });
-
-        // Check if type is in JSON string
-        const hasTypeInJson = jsonPreview.includes('"type"');
-        console.log(`[FRONTEND] Does JSON contain "type" field? ${hasTypeInJson}`);
-      }
-
-      // ✅ DEBUG: Verify conditions are in the JSON that will be sent
-      const requestBodyJson = JSON.stringify(requestBody);
-      const conditionsInRequestJson = requestBodyJson.includes('"conditions"');
-      console.log('[FRONTEND] Conditions in request JSON (before fetch):', {
-        hasConditionsKey: conditionsInRequestJson,
-        requestJsonLength: requestBodyJson.length,
-        conditionsJsonPreview: conditionsInRequestJson
-          ? requestBodyJson.substring(
-            requestBodyJson.indexOf('"conditions"'),
-            Math.min(requestBodyJson.indexOf('"conditions"') + 500, requestBodyJson.length)
-          )
-          : 'NOT FOUND',
-        requestBodyKeys: Object.keys(requestBody)
-      });
-
-      // Call backend API (NO FALLBACK - backend only)
-      const compileResponse = await fetch(`${baseUrl}/api/runtime/compile`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: requestBodyJson
-      });
-
-      console.log(`[FRONTEND] Response status: ${compileResponse.status} ${compileResponse.statusText}`);
-      console.log(`[FRONTEND] Response headers:`, Object.fromEntries(compileResponse.headers.entries()));
-
-      if (!compileResponse.ok) {
-        const errorText = await compileResponse.text().catch(() => 'Unable to read error response');
-        console.error(`[FRONTEND] ❌ Backend compilation failed (${compileResponse.status}):`, errorText);
-        let errorData: any = { error: 'Unknown error' };
-        try {
-          errorData = JSON.parse(errorText);
+          Object.assign(
+            translations,
+            (window as unknown as { __globalTranslations?: Record<string, string> }).__globalTranslations || {}
+          );
         } catch {
-          errorData = { error: errorText || 'Unknown error' };
+          /* noop */
         }
-        throw new Error(`Backend compilation failed: ${errorData.message || errorData.error || errorData.detail || compileResponse.statusText}`);
       }
 
-      const responseText = await compileResponse.text();
-      console.log(`[FRONTEND] Response body length: ${responseText.length} characters`);
-      console.log(`[FRONTEND] Response body preview:`, responseText.substring(0, 200));
+      const orchestratorRoot: 'main' | 'active' =
+        currentOptions.orchestratorRoot ??
+        ((): 'main' | 'active' => {
+          try {
+            const v = localStorage.getItem('flow.orchestratorRoot');
+            if (v === 'main' || v === 'active') return v;
+          } catch {
+            /* noop */
+          }
+          return 'active';
+        })();
 
-      if (!responseText || responseText.trim().length === 0) {
-        throw new Error('Backend returned empty response');
-      }
+      const rootFlowId = orchestratorRoot === 'main' ? 'main' : FlowWorkspaceSnapshot.getActiveFlowId();
 
-      let compileData: any;
-      try {
-        compileData = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error(`[FRONTEND] ❌ Failed to parse JSON response:`, parseError);
-        console.error(`[FRONTEND] Response text:`, responseText);
-        throw new Error(`Failed to parse backend response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
-      }
-
-      // Log original JSON from compiler
-      console.log('[FRONTEND] ✅ Compilation data received:', {
-        hasTaskGroups: !!compileData.taskGroups,
-        taskGroupsCount: compileData.taskGroups?.length || 0,
-        entryTaskGroupId: compileData.entryTaskGroupId,
-        tasksCount: compileData.tasks?.length || 0
+      const workspaceResult = await compileWorkspaceForOrchestratorSession({
+        rootFlowId,
+        projectData,
+        translations,
+        fallback: { nodes: currentOptions.nodes, edges: currentOptions.edges },
       });
+
+      const {
+        primaryCompileJson,
+        mergedTasks: allTasksWithTemplates,
+        mergedDDTs: allDDTs,
+        subflowCompilations,
+        allCompileSlices,
+      } = workspaceResult;
+      const taskLabelById = new Map<string, string>();
+      for (const taskItem of allTasksWithTemplates) {
+        const taskId = String(taskItem?.id || '').trim();
+        if (!taskId) continue;
+        const readable = toReadableLabel(taskItem?.label || taskItem?.text || taskItem?.title);
+        if (readable) {
+          taskLabelById.set(taskId, readable);
+        }
+      }
+      const nodeLabelById = new Map<string, string>();
+      for (const node of currentOptions.nodes || []) {
+        const nodeId = String((node as any)?.id || '').trim();
+        if (!nodeId) continue;
+        const readable = toReadableLabel((node as any)?.data?.label || (node as any)?.label || (node as any)?.title);
+        if (readable) {
+          nodeLabelById.set(nodeId, readable);
+        }
+      }
+
+      const multiFlow = allCompileSlices.length > 1;
+      const mergedErrorList: Array<Record<string, unknown>> = [];
+      for (const slice of allCompileSlices) {
+        const errs = slice.errors;
+        if (!errs?.length) continue;
+        for (const err of errs) {
+          if (err && typeof err === 'object') {
+            const o = err as Record<string, unknown>;
+            const baseMsg = String(o.message ?? o.Message ?? 'Compilation issue');
+            mergedErrorList.push({
+              ...o,
+              message: multiFlow ? `[${slice.flowId}] ${baseMsg}` : baseMsg,
+            });
+          } else {
+            mergedErrorList.push({
+              message: multiFlow ? `[${slice.flowId}] ${String(err)}` : String(err),
+              severity: 'Error',
+            });
+          }
+        }
+      }
+
+      const compileData: Record<string, unknown> = { ...primaryCompileJson };
+      if (mergedErrorList.length > 0) {
+        compileData.errors = mergedErrorList;
+        compileData.hasErrors = mergedErrorList.some((e) => normalizeSeverity(e.severity) === 'error');
+      }
 
       // Convert taskMap from object back to Map (for frontend use only)
       const taskMap = new Map<string, CompiledTask>();
@@ -842,7 +210,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
       // Create CompilationResult for frontend use (if needed)
       const compilationResult: CompilationResult = {
-        tasks: compileData.tasks || [],
+        tasks: (compileData.tasks as CompilationResult['tasks']) || [],
         entryTaskId: compileData.entryTaskId || compileData.entryTaskGroupId || null, // Support both entryTaskId and entryTaskGroupId
         taskMap,
         // Preserve VB.NET backend fields
@@ -896,6 +264,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           }
 
           // Don't start orchestrator
+          isRunningRef.current = false;
           setIsRunning(false);
           setCurrentTask(null);
           opts.onError?.(new Error(`Compilation has ${blockingErrors.length} blocking errors. Fix errors before execution.`));
@@ -916,23 +285,6 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         }
       }
 
-      // ═══════════════════════════════════════════════════════════════════════════
-      // 🚀 FLOW ORCHESTRATOR - EXECUTION LOCATION TRACKING
-      // ═══════════════════════════════════════════════════════════════════════════
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-      console.log('🚀 [FLOW ORCHESTRATOR] Starting Execution');
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-      console.log('');
-      console.log('📊 [ARCHITECTURE SUMMARY]');
-      console.log('');
-      console.log('✅ [COMPILATION] Location: VB.NET ApiServer');
-      console.log('   └─ Endpoint: POST /api/runtime/compile');
-      console.log('   └─ Status: COMPLETED');
-      console.log('   └─ CompiledBy:', compileData.compiledBy || 'VB.NET');
-      console.log('   └─ TaskGroups:', compileData.taskGroups?.length || 0);
-      console.log('   └─ EntryTaskGroupId:', compileData.entryTaskGroupId);
-      console.log('');
-
       // Check if we should use backend orchestrator
       const useBackendOrchestrator = (() => {
         try {
@@ -945,63 +297,18 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       })();
 
       if (useBackendOrchestrator) {
-        console.log('✅ [ORCHESTRATOR] Location: VB.NET ApiServer');
-        console.log('   └─ Endpoint: POST /api/runtime/orchestrator/session/start');
-        console.log('   └─ Communication: SSE (Server-Sent Events)');
-        console.log('   └─ Status: USING BACKEND ✅');
-        console.log('');
-        console.log('✅ [DDT ENGINE] Location: VB.NET ApiServer');
-        console.log('   └─ Endpoint: POST /api/runtime/ddt/session/start');
-        console.log('   └─ Called: When GetData task executes');
-        console.log('');
-        console.log('📝 [CURRENT STATE]');
-        console.log('   • Compilation: VB.NET ✅');
-        console.log('   • Orchestrator: VB.NET ✅');
-        console.log('   • DDT Engine: VB.NET ✅');
-        console.log('═══════════════════════════════════════════════════════════════════════════');
-
-        // Use backend orchestrator via SSE
+        // Use backend orchestrator via SSE (translations already resolved for compile)
         const { executeOrchestratorBackend } = await import('./orchestratorAdapter');
 
-        // Get translations - prefer from currentOptions, fallback to global context
-        let translations: Record<string, string> = {};
-
-        // 1. Try from currentOptions (most reliable, passed from useNewFlowOrchestrator)
-        if (currentOptions.translations && Object.keys(currentOptions.translations).length > 0) {
-          translations = currentOptions.translations;
-          console.log('[useDialogueEngine] ✅ Using translations from options', {
-            translationsCount: Object.keys(translations).length,
-            sampleKeys: Object.keys(translations).slice(0, 5)
-          });
-        } else {
-          // 2. Fallback: Try to get from window or context
-          try {
-            const globalTranslations = (window as any).__globalTranslations || {};
-            Object.assign(translations, globalTranslations);
-            console.log('[useDialogueEngine] ⚠️ Using translations from window (fallback)', {
-              translationsCount: Object.keys(translations).length
-            });
-          } catch (e) {
-            console.warn('[useDialogueEngine] ⚠️ Could not load translations from any source', e);
-          }
-        }
-
-        // Pass original JSON from compiler directly to orchestrator (no transformation!)
         const orchestratorControl = await executeOrchestratorBackend(
-          compileData, // ✅ Pass original JSON - preserves taskGroups, entryTaskGroupId, etc.
-          allTasksWithTemplates, // ✅ Full tasks for session metadata; compiled graph is in compileData
+          compileData,
+          allTasksWithTemplates,
           allDDTs,
           translations,
           {
             onMessage: (message) => {
               // ✅ Always use latest options from ref
               const opts = optionsRef.current;
-              console.log('[useDialogueEngine] Message from backend orchestrator', {
-                messageId: message.id,
-                text: message.text?.substring(0, 50),
-                stepType: message.stepType,
-                taskId: message.taskId
-              });
               if (opts.onMessage) {
                 opts.onMessage(message);
               }
@@ -1010,11 +317,6 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
               // ✅ Always use latest options from ref
               const opts = optionsRef.current;
               const ddt = data.ddt || data;
-              console.log('[useDialogueEngine] DDT start from backend orchestrator', {
-                ddtId: ddt?.id,
-                ddtLabel: ddt?.label,
-                taskId: data.taskId
-              });
               if (opts.onDDTStart && ddt) {
                 opts.onDDTStart({ ddt, taskId: data.taskId });
               }
@@ -1023,12 +325,14 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
               setExecutionState(state);
             },
             onComplete: () => {
+              isRunningRef.current = false;
               setIsRunning(false);
               setCurrentTask(null);
               const opts = optionsRef.current;
               opts.onComplete?.();
             },
             onError: (error) => {
+              isRunningRef.current = false;
               setIsRunning(false);
               setCurrentTask(null);
               const opts = optionsRef.current;
@@ -1039,27 +343,27 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
               if (!engineRef.current) {
                 engineRef.current = {};
               }
-              engineRef.current.waitingForInput = data;
+              const enrichedWaiting = {
+                ...data,
+                taskLabel: taskLabelById.get(data.taskId || '') || undefined,
+                nodeLabel: data.nodeId ? nodeLabelById.get(data.nodeId) || undefined : undefined,
+              };
+              engineRef.current.waitingForInput = enrichedWaiting;
 
               // Update sessionId in ref
               if (orchestratorControl && orchestratorControl.sessionId) {
                 sessionIdRef.current = orchestratorControl.sessionId;
                 engineRef.current.sessionId = orchestratorControl.sessionId;
-                console.log('[useDialogueEngine] ✅ Refreshed sessionId in onWaitingForInput', {
-                  sessionId: orchestratorControl.sessionId
-                });
               }
 
               // ✅ Forward using currentOptions from ref (always latest)
               const opts = optionsRef.current;
               if (opts.onWaitingForInput) {
-                console.log('[useDialogueEngine] Forwarding onWaitingForInput to options callback');
-                opts.onWaitingForInput(data);
-              } else {
-                console.warn('[useDialogueEngine] ⚠️ options.onWaitingForInput not provided!');
+                opts.onWaitingForInput(enrichedWaiting);
               }
             }
-          }
+          },
+          subflowCompilations
         );
 
         // Store orchestrator control for stop/cleanup
@@ -1069,11 +373,6 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         (engineRef.current as any).orchestratorControl = orchestratorControl;
         (engineRef.current as any).sessionId = orchestratorControl.sessionId;
         sessionIdRef.current = orchestratorControl.sessionId; // Store in ref for real-time access
-        console.log('[useDialogueEngine] ✅ Backend orchestrator session ID stored', {
-          sessionId: orchestratorControl.sessionId,
-          hasOrchestratorControl: !!(engineRef.current as any).orchestratorControl,
-          engineRefKeys: Object.keys(engineRef.current || {})
-        });
 
         return; // Backend orchestrator handles execution
       } else {
@@ -1081,41 +380,56 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         // To use frontend, restore from git history
         console.error('❌ [ORCHESTRATOR] Frontend DialogueEngine has been removed. Backend orchestrator is now default.');
         console.error('   Set localStorage.setItem("orchestrator.useBackend", "false") is no longer supported.');
+        isRunningRef.current = false;
         setIsRunning(false);
         setCurrentTask(null);
         const opts = optionsRef.current;
         opts.onError?.(new Error('Frontend DialogueEngine has been removed. Backend orchestrator is required.'));
       }
     } catch (error) {
+      isRunningRef.current = false;
       setIsRunning(false);
       setCurrentTask(null);
       const opts = optionsRef.current;
       opts.onError?.(error as Error);
     }
-  }, [isRunning]); // ✅ Only isRunning in deps - options come da ref
+  }, [toReadableLabel]); // ✅ Only stable deps; options come from ref
 
   // Stop execution
-  const stop = useCallback(() => {
+  const stop = useCallback(async () => {
     // Check if using backend orchestrator
     const orchestratorControl = (engineRef.current as any)?.orchestratorControl;
     if (orchestratorControl && orchestratorControl.stop) {
-      orchestratorControl.stop();
+      await orchestratorControl.stop();
     } else if (engineRef.current && typeof engineRef.current.stop === 'function') {
-      engineRef.current.stop();
+      await engineRef.current.stop();
     }
+    if (engineRef.current) {
+      engineRef.current.sessionId = undefined;
+      engineRef.current.orchestratorControl = undefined;
+    }
+    sessionIdRef.current = null;
+    isRunningRef.current = false;
     setIsRunning(false);
     setCurrentTask(null);
   }, []);
 
   // Reset engine state
-  const reset = useCallback(() => {
+  const reset = useCallback(async () => {
     // Check if using backend orchestrator
     const orchestratorControl = (engineRef.current as any)?.orchestratorControl;
     if (orchestratorControl && orchestratorControl.stop) {
-      orchestratorControl.stop();
+      await orchestratorControl.stop();
     } else if (engineRef.current && typeof engineRef.current.reset === 'function') {
-      engineRef.current.reset();
+      await engineRef.current.reset();
     }
+    if (engineRef.current) {
+      engineRef.current.sessionId = undefined;
+      engineRef.current.orchestratorControl = undefined;
+      engineRef.current.waitingForInput = undefined;
+    }
+    sessionIdRef.current = null;
+    isRunningRef.current = false;
     setIsRunning(false);
     setCurrentTask(null);
     setExecutionState(null);

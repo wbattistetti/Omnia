@@ -22,6 +22,8 @@ interface UseNewFlowOrchestratorProps {
   onMessage?: (message: PlayedMessage) => void;
   onDDTStart?: (ddt: AssembledTaskTree) => void;
   onDDTComplete?: () => void;
+  /** `main` = compile from main + nested subflows; `active` = root = current canvas (default). */
+  orchestratorRoot?: 'main' | 'active';
 }
 
 // Safe hook to use ProjectTranslations if available, otherwise return empty translations
@@ -52,7 +54,8 @@ export function useNewFlowOrchestrator({
   edges,
   onMessage,
   onDDTStart,
-  onDDTComplete
+  onDDTComplete,
+  orchestratorRoot,
 }: UseNewFlowOrchestratorProps) {
   // Get task from repository
   const getTask = useCallback((taskId: string) => {
@@ -230,6 +233,7 @@ export function useNewFlowOrchestrator({
   const engine = useDialogueEngine({
     nodes,
     edges,
+    orchestratorRoot,
     getTask,
     getDDT,
     onTaskExecute: handleTaskExecuteWithDDT,

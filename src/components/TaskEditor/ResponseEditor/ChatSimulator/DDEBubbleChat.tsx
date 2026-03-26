@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Task, TaskTree } from '@types/taskTypes';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Workflow, CircleDot, Equal, RotateCcw, ChevronRight, X } from 'lucide-react';
 import UserMessage, { type Message } from '@components/ChatSimulator/UserMessage';
 import BotMessage from '@responseEditor/ChatSimulator/BotMessage';
 import { getStepColor } from '@responseEditor/ChatSimulator/chatSimulatorUtils';
@@ -221,6 +221,10 @@ export default function DDEBubbleChat({
   flowTasks,
   // ✅ NEW: Backend materialization flag
   useBackendMaterialization = false,
+  executionFlowName,
+  executionLaunchType,
+  executionLaunchLabel,
+  onClosePanel,
 }: {
   task: Task | null;
   projectId: string | null;
@@ -238,6 +242,10 @@ export default function DDEBubbleChat({
   flowTasks?: any[];
   // ✅ NEW: Backend materialization flag
   useBackendMaterialization?: boolean;
+  executionFlowName?: string;
+  executionLaunchType?: 'flow' | 'rowTask' | 'node';
+  executionLaunchLabel?: string;
+  onClosePanel?: () => void;
 }) {
   const { combinedClass, fontSize } = useFontContext();
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -290,8 +298,35 @@ export default function DDEBubbleChat({
         console.log('🔴 [DDEBubbleChat BREAKPOINT] New messages details:', newMessages.map(m => ({ id: m.id, text: m.text?.substring(0, 30), sender: m.sender })));
         return newMessages;
       });
-    }
+    },
+    executionFlowName
   );
+  const launchExecutionLabel = React.useMemo(() => {
+    const flowName = (executionFlowName || 'MAIN').trim() || 'MAIN';
+    const launchLabel = (executionLaunchLabel || '').trim();
+    if (executionLaunchType === 'rowTask' && launchLabel) {
+      return `${flowName}: ${launchLabel}`;
+    }
+    if (executionLaunchType === 'node' && launchLabel) {
+      return `${flowName}: ${launchLabel}`;
+    }
+    return `${flowName}: Esecuzione flusso`;
+  }, [executionFlowName, executionLaunchType, executionLaunchLabel]);
+  const executionLabel = isFlowMode
+    ? (flowModeChat.currentExecutionLabel || launchExecutionLabel)
+    : '';
+  const executionType = isFlowMode
+    ? (flowModeChat.currentExecutionLabel ? flowModeChat.currentExecutionType : (executionLaunchType || 'flow'))
+    : 'flow';
+  const executionParts = React.useMemo(() => {
+    const raw = executionLabel || launchExecutionLabel;
+    const idx = raw.indexOf(':');
+    const flowName = idx >= 0 ? raw.slice(0, idx).trim() : ((executionFlowName || 'MAIN').trim() || 'MAIN');
+    const target = idx >= 0 ? raw.slice(idx + 1).trim() : '';
+    const normalizedTarget = target.replace(/^Nodo\((.*)\)$/i, '$1').trim();
+    return { flowName, target: normalizedTarget };
+  }, [executionLabel, launchExecutionLabel, executionFlowName]);
+
 
   // ✅ ARCHITECTURAL: Merge flow mode state with component state
   const effectiveIsWaitingForInput = isFlowMode ? flowModeChat.isWaitingForInput : isWaitingForInput;
@@ -1559,7 +1594,7 @@ export default function DDEBubbleChat({
   const handleReset = () => {
     // ✅ Flow mode: clear messages from hook
     if (isFlowMode) {
-      flowModeChat.clearMessages();
+      void flowModeChat.restartFlow();
       setMessages([]);
       messageIdCounter.current = 0;
       return;
@@ -1600,18 +1635,51 @@ export default function DDEBubbleChat({
 
   return (
     <div className={`h-full flex flex-col bg-white ${combinedClass}`}>
-      <div className="border-b p-3 bg-gray-50 flex items-center gap-2">
-        <button
-          onClick={handleReset}
-          className={`px-2 py-1 rounded border bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200 ${combinedClass}`}
-          title="Reset the chat session"
-        >
-          Reset
-        </button>
+      <div className="border-b border-lime-800/60 px-3 py-2 bg-lime-400/95 text-slate-900">
+        <div className="flex items-start justify-between gap-3">
+          {isFlowMode ? (
+            <div className="min-w-0 flex-1 flex items-start gap-2 text-sm font-semibold leading-5">
+            <Workflow size={15} className="text-sky-800 flex-shrink-0" />
+            <span className="break-words whitespace-normal">{executionParts.flowName}</span>
+            {executionType !== 'flow' && executionParts.target && (
+              <>
+                <ChevronRight size={14} className="text-slate-400 flex-shrink-0" />
+                {executionType === 'rowTask' ? (
+                  <Equal size={15} className="text-amber-700 flex-shrink-0" />
+                ) : (
+                  <CircleDot size={15} className="text-indigo-700 flex-shrink-0" />
+                )}
+                <span className="break-words whitespace-normal" title={executionParts.target}>{executionParts.target}</span>
+              </>
+            )}
+            </div>
+          ) : <div />}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={handleReset}
+              disabled={isFlowMode ? flowModeChat.isRestarting : false}
+              className="p-1.5 rounded bg-slate-900 text-lime-300 hover:bg-slate-800 transition-colors"
+              title="Riavvia esecuzione"
+              aria-label="Riavvia esecuzione"
+            >
+              <RotateCcw size={16} />
+            </button>
+            {onClosePanel && (
+              <button
+                onClick={onClosePanel}
+                className="p-1.5 rounded bg-slate-900 text-lime-300 hover:bg-slate-800 transition-colors"
+                title="Chiudi pannello"
+                aria-label="Chiudi pannello"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+        </div>
         {effectiveError && (
-          <div className="flex items-center gap-2 text-red-600 text-sm">
-            <AlertTriangle size={16} />
-            <span>{effectiveError}</span>
+          <div className="mt-1 flex items-center gap-2 text-red-900 text-xs min-w-0">
+            <AlertTriangle size={14} className="flex-shrink-0" />
+            <span className="break-words whitespace-normal">{effectiveError}</span>
           </div>
         )}
       </div>

@@ -6,6 +6,7 @@ Imports TaskEngine
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports System.Linq
+Imports System.Collections.Generic
 Imports Common
 
 ''' <summary>
@@ -47,6 +48,9 @@ Public Class FlowOrchestrator
     Private ReadOnly _resolveTranslation As Func(Of String, String)
     Private ReadOnly _variables As List(Of CompiledVariable) ' ✅ NEW: Variables with values for runtime
 
+    ''' <summary>FlowId (es. "main") → risultato compilazione. Estendibile con subflow senza cambiare il main.</summary>
+    Private ReadOnly _compilationByFlowId As Dictionary(Of String, FlowCompilationResult)
+
     ' ── Stato runtime caricato da Redis ──────────────────────────────────────
     Private ReadOnly _state As ExecutionState
 
@@ -82,6 +86,7 @@ Public Class FlowOrchestrator
         _locale = Nothing
         _resolveTranslation = Nothing
         _variables = New List(Of CompiledVariable)() ' ✅ Empty variables list for legacy constructor
+        _compilationByFlowId = Nothing
         _state = New ExecutionState()
     End Sub
 
@@ -129,6 +134,8 @@ Public Class FlowOrchestrator
 
         ' Carica ExecutionState da Redis (o crea nuovo se non esiste)
         _state = LoadOrCreateState()
+        _state.EnsureFlowStackMigrated()
+        _compilationByFlowId = New Dictionary(Of String, FlowCompilationResult) From {{"main", _compilationResult}}
     End Sub
 
     ' ─────────────────────────────────────────────────────────────────────────
@@ -139,6 +146,23 @@ Public Class FlowOrchestrator
     ''' Avvia l'esecuzione del flow. Delega a RunUntilInput.
     ''' Mantenuto per compatibilità con SessionManager.
     ''' </summary>
+    ''' <summary>
+    ''' Associa un FlowCompilationResult a un flowId (uguale a <see cref="CompiledSubflowTask.FlowId"/>).
+    ''' Il ConditionLoader globale resta quello del main; per subflow con condizioni proprie servirà estensione futura.
+    ''' </summary>
+    Public Sub RegisterSubflowCompilation(flowId As String, result As FlowCompilationResult)
+        If String.IsNullOrEmpty(flowId) Then
+            Throw New ArgumentException("flowId is required.", NameOf(flowId))
+        End If
+        If result Is Nothing Then
+            Throw New ArgumentNullException(NameOf(result))
+        End If
+        If _compilationByFlowId Is Nothing Then
+            Throw New InvalidOperationException("RegisterSubflowCompilation is only valid when the orchestrator was constructed with a main FlowCompilationResult.")
+        End If
+        _compilationByFlowId(flowId) = result
+    End Sub
+
     Public Async Function ExecuteDialogueAsync() As System.Threading.Tasks.Task
         Console.WriteLine($"[FlowOrchestrator] ExecuteDialogueAsync → delegating to RunUntilInput")
         Try
@@ -164,21 +188,26 @@ Public Class FlowOrchestrator
     ''' </summary>
     Public Async Function RunUntilInput() As System.Threading.Tasks.Task
         Console.WriteLine($"[FlowOrchestrator] RunUntilInput START")
-        _state.RequiresInput = False
+        _state.EnsureFlowStackMigrated()
+        Dim navInit = ActiveFlow()
+        navInit.RequiresInput = False
 
         ' ✅ NEW: Initialize VariableStore with all variables (including manual ones)
         ' Manual variables (empty nodeId/taskInstanceId) need to be in VariableStore
         ' even if they haven't been extracted yet (they might be written by BackendCall)
+        If navInit.VariableStore Is Nothing Then
+            navInit.VariableStore = New Dictionary(Of String, Object)()
+        End If
         If _state.VariableStore Is Nothing Then
-            _state.VariableStore = New Dictionary(Of String, Object)()
+            _state.VariableStore = navInit.VariableStore
         End If
 
         ' ✅ Initialize all variables in VariableStore (set to Nothing if not yet extracted)
         ' This ensures manual variables are available for BackendCall inputs/outputs
         For Each var In _variables
-            If Not _state.VariableStore.ContainsKey(var.VarId) Then
+            If Not navInit.VariableStore.ContainsKey(var.VarId) Then
                 ' ✅ Initialize with Nothing (will be set when extracted or written by BackendCall)
-                _state.VariableStore(var.VarId) = Nothing
+                navInit.VariableStore(var.VarId) = Nothing
                 Dim isManual = String.IsNullOrEmpty(var.NodeId)
                 Console.WriteLine($"[FlowOrchestrator] ✅ Initialized variable in VariableStore: varId={var.VarId}, isManual={isManual}")
             End If
@@ -193,6 +222,23 @@ Public Class FlowOrchestrator
                 Throw New InvalidOperationException(
                     $"[FlowOrchestrator] Max iterations ({MaxIterations}) exceeded — possible infinite loop")
             End If
+
+            _state.EnsureFlowStackMigrated()
+            ' Subflow completato: nessun altro TaskGroup nel flow attivo → pop
+            While _state.FlowStack IsNot Nothing AndAlso _state.FlowStack.Count > 1 AndAlso Not _state.FlowCompleted
+                Dim flowPop = ActiveFlow()
+                If flowPop.RequiresInput Then Exit While
+                Dim compPop = ActiveCompilation()
+                Dim condPop = ConditionStateForFlow(flowPop)
+                Dim nextTgPop = GetNextTaskGroupFor(flowPop, compPop, condPop)
+                If nextTgPop Is Nothing Then
+                    PopFlow()
+                    SaveState()
+                    RaiseEvent StateUpdated(Me, _state)
+                Else
+                    Exit While
+                End If
+            End While
 
             ' ── L1: Trova TaskGroup eseguibile ───────────────────────────────
             Dim taskGroup = GetNextTaskGroup()
@@ -211,10 +257,11 @@ Public Class FlowOrchestrator
             If rowTask Is Nothing Then
                 ' Gruppo completato: tutte le righe eseguite o skippate
                 Console.WriteLine($"[FlowOrchestrator] ✅ TaskGroup {taskGroup.NodeId} completed (all rows done)")
-                _state.ExecutedTaskGroupIds.Add(taskGroup.NodeId)
-                _state.LastCompletedNodeId = taskGroup.NodeId ' ✅ NEW: Traccia ultimo completato
-                _state.CurrentNodeId = Nothing
-                _state.CurrentRowIndex = 0
+                Dim navDone = ActiveFlow()
+                navDone.ExecutedTaskGroupIds.Add(taskGroup.NodeId)
+                navDone.LastCompletedNodeId = taskGroup.NodeId ' ✅ NEW: Traccia ultimo completato
+                navDone.CurrentNodeId = Nothing
+                navDone.CurrentRowIndex = 0
                 SaveState()
                 RaiseEvent StateUpdated(Me, _state)
                 ' ✅ GetNextTaskGroup() nella prossima iterazione valuterà gli edge uscenti
@@ -235,14 +282,16 @@ Public Class FlowOrchestrator
             Select Case result.Status
 
                 Case TurnStatus.WaitingForInput ' ✅ Enum
-                    _state.RequiresInput = True
-                    _state.WaitingTaskId = result.WaitingTaskId
+                    Dim navWait = ActiveFlow()
+                    navWait.RequiresInput = True
+                    navWait.WaitingTaskId = result.WaitingTaskId
                     Console.WriteLine($"[FlowOrchestrator] ⏸️ WaitingForInput task={result.WaitingTaskId}")
 
                 Case TurnStatus.Completed ' ✅ Enum
-                    _state.CurrentRowIndex += 1
-                    _state.WaitingTaskId = Nothing
-                    Console.WriteLine($"[FlowOrchestrator] ✅ Row completed, CurrentRowIndex → {_state.CurrentRowIndex}")
+                    Dim navComp = ActiveFlow()
+                    navComp.CurrentRowIndex += 1
+                    navComp.WaitingTaskId = Nothing
+                    Console.WriteLine($"[FlowOrchestrator] ✅ Row completed, CurrentRowIndex → {navComp.CurrentRowIndex}")
 
                 Case TurnStatus.AutoAdvance ' ✅ Enum
                     ' Stessa riga, prossima iterazione con PendingUtterance = ""
@@ -253,15 +302,16 @@ Public Class FlowOrchestrator
             ' Un solo SaveState per iterazione
             SaveState()
 
-        Loop Until _state.RequiresInput
+        Loop Until ActiveFlow().RequiresInput
 
-        If _state.RequiresInput Then
-            If String.IsNullOrEmpty(_state.WaitingTaskId) Then
+        Dim navFinal = ActiveFlow()
+        If navFinal.RequiresInput Then
+            If String.IsNullOrEmpty(navFinal.WaitingTaskId) Then
                 Throw New InvalidOperationException(
                     "[FlowOrchestrator] RequiresInput=True but WaitingTaskId is empty")
             End If
-            RaiseEvent WaitingForInput(Me, _state.WaitingTaskId)
-            Console.WriteLine($"[FlowOrchestrator] ⏸️ WaitingForInput event raised for task {_state.WaitingTaskId}")
+            RaiseEvent WaitingForInput(Me, navFinal.WaitingTaskId)
+            Console.WriteLine($"[FlowOrchestrator] ⏸️ WaitingForInput event raised for task {navFinal.WaitingTaskId}")
         End If
     End Function
 
@@ -274,18 +324,20 @@ Public Class FlowOrchestrator
         Optional resolveTranslation As Func(Of String, String) = Nothing
     ) As System.Threading.Tasks.Task(Of Boolean)
 
+        _state.EnsureFlowStackMigrated()
+        Dim nav = ActiveFlow()
         ' Verifica che il task atteso sia quello giusto
-        If _state.WaitingTaskId <> taskId Then
-            Console.WriteLine($"⚠️ [FlowOrchestrator] Task {taskId} is not waiting (current: {_state.WaitingTaskId})")
+        If nav.WaitingTaskId <> taskId Then
+            Console.WriteLine($"⚠️ [FlowOrchestrator] Task {taskId} is not waiting (current: {nav.WaitingTaskId})")
             Return False
         End If
 
         Console.WriteLine($"[FlowOrchestrator] ProvideUserInput task={taskId} input='{userInput}'")
 
         ' Imposta input e sblocca il loop
-        _state.PendingUtterance = userInput
-        _state.RequiresInput = False
-        _state.WaitingTaskId = Nothing
+        nav.PendingUtterance = userInput
+        nav.RequiresInput = False
+        nav.WaitingTaskId = Nothing
         SaveState()
 
         ' Riprende il loop
@@ -308,7 +360,21 @@ Public Class FlowOrchestrator
     '''   4. Prima esecuzione: entra nell'entry TaskGroup (solo se non già eseguito)
     ''' </summary>
     Private Function GetNextTaskGroup() As TaskGroup
-        If _compilationResult Is Nothing OrElse _compilationResult.TaskGroups Is Nothing Then
+        _state.EnsureFlowStackMigrated()
+        If _state.FlowCompleted Then
+            Return Nothing
+        End If
+        Dim flow = ActiveFlow()
+        Dim comp = ActiveCompilation()
+        Dim condState = ConditionStateForFlow(flow)
+        Return GetNextTaskGroupFor(flow, comp, condState)
+    End Function
+
+    ''' <summary>
+    ''' L1: prossimo TaskGroup per il flow e la compilazione indicati (senza cambiare la logica del main flow a profondità 1).
+    ''' </summary>
+    Private Function GetNextTaskGroupFor(flow As ExecutionFlow, comp As FlowCompilationResult, conditionState As ExecutionState) As TaskGroup
+        If comp Is Nothing OrElse comp.TaskGroups Is Nothing Then
             Return Nothing
         End If
 
@@ -318,19 +384,19 @@ Public Class FlowOrchestrator
         End If
 
         ' ✅ FIX: Riprendi gruppo sospeso (RequiresInput precedente) - SOLO se non già eseguito
-        If Not String.IsNullOrEmpty(_state.CurrentNodeId) Then
+        If Not String.IsNullOrEmpty(flow.CurrentNodeId) Then
             ' ✅ FIX: Verifica PRIMA se è già eseguito
-            If _state.ExecutedTaskGroupIds.Contains(_state.CurrentNodeId) Then
-                Console.WriteLine($"[FlowOrchestrator] ⚠️ Suspended TaskGroup {_state.CurrentNodeId} already executed, resetting")
-                _state.CurrentNodeId = Nothing
-                _state.CurrentRowIndex = 0
+            If flow.ExecutedTaskGroupIds.Contains(flow.CurrentNodeId) Then
+                Console.WriteLine($"[FlowOrchestrator] ⚠️ Suspended TaskGroup {flow.CurrentNodeId} already executed, resetting")
+                flow.CurrentNodeId = Nothing
+                flow.CurrentRowIndex = 0
             Else
-                Dim suspended = _compilationResult.TaskGroups.FirstOrDefault(
-                    Function(tg) tg.NodeId = _state.CurrentNodeId)
+                Dim suspended = comp.TaskGroups.FirstOrDefault(
+                    Function(tg) tg.NodeId = flow.CurrentNodeId)
 
                 If suspended IsNot Nothing Then
                     ' ✅ FIX: EvaluateTaskGroupExecCondition controlla già se è eseguito
-                    Dim canResume = ConditionEvaluator.EvaluateTaskGroupExecCondition(suspended.ExecCondition, _state, suspended.NodeId)
+                    Dim canResume = ConditionEvaluator.EvaluateTaskGroupExecCondition(suspended.ExecCondition, conditionState, suspended.NodeId)
                     If canResume Then
                         Console.WriteLine($"[FlowOrchestrator] ▶️ Resuming suspended TaskGroup {suspended.NodeId}")
                         Return suspended
@@ -338,53 +404,54 @@ Public Class FlowOrchestrator
                 End If
 
                 ' Gruppo sospeso non più eseguibile: resetta
-                _state.CurrentNodeId = Nothing
-                _state.CurrentRowIndex = 0
+                flow.CurrentNodeId = Nothing
+                flow.CurrentRowIndex = 0
             End If
         End If
 
         ' ✅ FIX: Se c'è un nodo appena completato, valuta tutte le ExecCondition
         ' La ExecCondition di ogni TaskGroup è già l'OR delle condizioni degli edge entranti
-        If Not String.IsNullOrEmpty(_state.LastCompletedNodeId) Then
-            Console.WriteLine($"[FlowOrchestrator] 🔍 Evaluating ExecConditions after node {_state.LastCompletedNodeId} completed")
+        If Not String.IsNullOrEmpty(flow.LastCompletedNodeId) Then
+            Console.WriteLine($"[FlowOrchestrator] 🔍 Evaluating ExecConditions after node {flow.LastCompletedNodeId} completed")
 
-            For Each tg In _compilationResult.TaskGroups
+            For Each tg In comp.TaskGroups
                 ' ✅ FIX: Skip taskgroup già eseguiti
-                If _state.ExecutedTaskGroupIds.Contains(tg.NodeId) Then
+                If flow.ExecutedTaskGroupIds.Contains(tg.NodeId) Then
                     Console.WriteLine($"[FlowOrchestrator] ⏭️ Skipping TaskGroup {tg.NodeId} (already executed)")
                     Continue For
                 End If
 
                 ' ✅ FIX: Valuta ExecCondition (include controllo se già eseguito per entry nodes)
-                Dim canEnter = ConditionEvaluator.EvaluateTaskGroupExecCondition(tg.ExecCondition, _state, tg.NodeId)
+                Dim canEnter = ConditionEvaluator.EvaluateTaskGroupExecCondition(tg.ExecCondition, conditionState, tg.NodeId)
 
                 If canEnter Then
-                    Console.WriteLine($"[FlowOrchestrator] ▶️ Entering TaskGroup {tg.NodeId} after node {_state.LastCompletedNodeId} completed")
-                    _state.CurrentNodeId = tg.NodeId
-                    _state.CurrentRowIndex = 0
-                    _state.LastCompletedNodeId = Nothing ' Reset dopo uso
+                    Console.WriteLine($"[FlowOrchestrator] ▶️ Entering TaskGroup {tg.NodeId} after node {flow.LastCompletedNodeId} completed")
+                    flow.CurrentNodeId = tg.NodeId
+                    flow.CurrentRowIndex = 0
+                    flow.LastCompletedNodeId = Nothing ' Reset dopo uso
                     Return tg
                 End If
             Next
 
-            _state.LastCompletedNodeId = Nothing ' Reset anche se non trovato
+            flow.LastCompletedNodeId = Nothing ' Reset anche se non trovato
             Console.WriteLine($"[FlowOrchestrator] ⚠️ No TaskGroup executable after node completion")
         End If
 
         ' ✅ FIX: Prima esecuzione: entra nell'entry TaskGroup (solo se non già eseguito)
-        If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
+        Dim entryId = comp.EntryTaskGroupId
+        If Not String.IsNullOrEmpty(entryId) Then
             ' ✅ FIX: Verifica PRIMA se è già eseguito
-            If _state.ExecutedTaskGroupIds.Contains(_entryTaskGroupId) Then
-                Console.WriteLine($"[FlowOrchestrator] ⚠️ Entry TaskGroup {_entryTaskGroupId} already executed")
+            If flow.ExecutedTaskGroupIds.Contains(entryId) Then
+                Console.WriteLine($"[FlowOrchestrator] ⚠️ Entry TaskGroup {entryId} already executed")
             Else
-                Dim entry = _compilationResult.TaskGroups.FirstOrDefault(
-                    Function(tg) tg.NodeId = _entryTaskGroupId)
+                Dim entry = comp.TaskGroups.FirstOrDefault(
+                    Function(tg) tg.NodeId = entryId)
                 If entry IsNot Nothing Then
                     ' ✅ FIX: EvaluateTaskGroupExecCondition controlla già se è eseguito per entry nodes
-                    Dim canEnter = ConditionEvaluator.EvaluateTaskGroupExecCondition(entry.ExecCondition, _state, entry.NodeId)
+                    Dim canEnter = ConditionEvaluator.EvaluateTaskGroupExecCondition(entry.ExecCondition, conditionState, entry.NodeId)
                     If canEnter Then
-                        _state.CurrentNodeId = entry.NodeId
-                        _state.CurrentRowIndex = 0
+                        flow.CurrentNodeId = entry.NodeId
+                        flow.CurrentRowIndex = 0
                         Console.WriteLine($"[FlowOrchestrator] ▶️ Entering entry TaskGroup {entry.NodeId}")
                         Return entry
                     End If
@@ -408,20 +475,27 @@ Public Class FlowOrchestrator
     ''' Restituisce Nothing se tutte le righe sono state eseguite o skippate.
     ''' </summary>
     Private Function GetNextRowTask(taskGroup As TaskGroup) As CompiledTask
-        Dim i As Integer = _state.CurrentRowIndex
+        _state.EnsureFlowStackMigrated()
+        Dim flow = ActiveFlow()
+        Dim conditionState = ConditionStateForFlow(flow)
+        Return GetNextRowTaskFor(flow, taskGroup, conditionState)
+    End Function
+
+    Private Function GetNextRowTaskFor(flow As ExecutionFlow, taskGroup As TaskGroup, conditionState As ExecutionState) As CompiledTask
+        Dim i As Integer = flow.CurrentRowIndex
         While i < taskGroup.Tasks.Count
             Dim rowTask = taskGroup.Tasks(i)
 
             If rowTask.Condition IsNot Nothing Then
-                If Not ConditionEvaluator.EvaluateCondition(rowTask.Condition, _state) Then
+                If Not ConditionEvaluator.EvaluateCondition(rowTask.Condition, conditionState) Then
                     Console.WriteLine($"[FlowOrchestrator] ⏭️ Skipping row {i} (condition false)")
                     i += 1
-                    _state.CurrentRowIndex = i
+                    flow.CurrentRowIndex = i
                     Continue While
                 End If
             End If
 
-            _state.CurrentRowIndex = i
+            flow.CurrentRowIndex = i
             Return rowTask
         End While
 
@@ -458,6 +532,9 @@ Public Class FlowOrchestrator
             Case TaskTypes.CloseSession
                 Return ProcessCloseSessionTurn()
 
+            Case TaskTypes.Subflow
+                Return ProcessSubflowTurn(DirectCast(rowTask, CompiledSubflowTask))
+
             Case Else
                 Console.WriteLine($"[FlowOrchestrator] ⚠️ Unknown task type {rowTask.TaskType} — skipping")
                 Return RowTurnResult.Completed()
@@ -471,12 +548,17 @@ Public Class FlowOrchestrator
     ''' Il loop RunUntilInput gestisce le iterazioni successive.
     ''' </summary>
     Private Function ProcessUtteranceTurn(rowTask As CompiledUtteranceTask) As RowTurnResult
+        Dim nav = ActiveFlow()
+        If nav.DialogueContexts Is Nothing Then
+            nav.DialogueContexts = New Dictionary(Of String, String)()
+        End If
+
         ' Carica o crea DialogueState per questa riga
         Dim ds = LoadDialogueState(rowTask)
 
         ' Consuma PendingUtterance (input utente o stringa vuota per auto-advance)
-        Dim utterance As String = _state.PendingUtterance
-        _state.PendingUtterance = ""
+        Dim utterance As String = nav.PendingUtterance
+        nav.PendingUtterance = ""
 
         Console.WriteLine($"[FlowOrchestrator] ProcessUtteranceTurn task={rowTask.Id} utterance='{utterance}'")
 
@@ -489,15 +571,15 @@ Public Class FlowOrchestrator
         Dim updatedCtx = JsonConvert.SerializeObject(
             New With {.TaskId = rowTask.Id, .DialogueState = result.NewState},
             _dialogueStateSettings)
-        _state.DialogueContexts(rowTask.Id) = updatedCtx
+        nav.DialogueContexts(rowTask.Id) = updatedCtx
 
         ' Mappa DialogueTurnResult → RowTurnResult
         If result.NewState.IsCompleted Then
             ' ✅ NEW: Usa ExtractedVariables (triple esplicite) invece di Memory
             '    Le triple contengono (taskInstanceId, nodeId, value) - nessuna assunzione necessaria.
             If result.NewState.ExtractedVariables IsNot Nothing AndAlso result.NewState.ExtractedVariables.Count > 0 Then
-                If _state.VariableStore Is Nothing Then
-                    _state.VariableStore = New Dictionary(Of String, Object)()
+                If nav.VariableStore Is Nothing Then
+                    nav.VariableStore = New Dictionary(Of String, Object)()
                 End If
 
                 For Each extractedVar In result.NewState.ExtractedVariables
@@ -513,7 +595,7 @@ Public Class FlowOrchestrator
 
                         ' ✅ Aggiorna VariableStore per DSLInterpreter (valore corrente)
                         '    DSLInterpreter usa varId come chiave (non nodeId)
-                        _state.VariableStore(var.VarId) = extractedVar.Value
+                        nav.VariableStore(var.VarId) = extractedVar.Value
                         Console.WriteLine($"[FlowOrchestrator] ✅ Updated: varId={var.VarId}, taskInstanceId={extractedVar.TaskInstanceId}, nodeId={extractedVar.NodeId}, value={extractedVar.Value}, historyCount={var.Values.Count}")
                     Else
                         ' ✅ Fail fast: variabile non trovata
@@ -523,7 +605,7 @@ Public Class FlowOrchestrator
                     End If
                 Next
             End If
-            _state.DialogueContexts.Remove(rowTask.Id)
+            nav.DialogueContexts.Remove(rowTask.Id)
             Return RowTurnResult.Completed(result.Messages)
         End If
 
@@ -541,27 +623,28 @@ Public Class FlowOrchestrator
     ''' Handler per AI Agent: un passo LLM, stato JSON in DialogueContexts (come UtteranceInterpretation).
     ''' </summary>
     Private Async Function ProcessAIAgentTurn(rowTask As CompiledAIAgentTask) As System.Threading.Tasks.Task(Of RowTurnResult)
+        Dim nav = ActiveFlow()
         Dim stateJson = ""
-        If _state.DialogueContexts IsNot Nothing AndAlso _state.DialogueContexts.ContainsKey(rowTask.Id) Then
-            stateJson = _state.DialogueContexts(rowTask.Id)
+        If nav.DialogueContexts IsNot Nothing AndAlso nav.DialogueContexts.ContainsKey(rowTask.Id) Then
+            stateJson = nav.DialogueContexts(rowTask.Id)
         End If
 
-        Dim utterance = _state.PendingUtterance
-        _state.PendingUtterance = ""
+        Dim utterance = nav.PendingUtterance
+        nav.PendingUtterance = ""
 
         Dim endpoint = AIAgentTaskExecutor.ResolveLlmEndpoint(rowTask.LlmEndpoint)
         Dim stepResult = Await AIAgentTaskExecutor.ExecuteStepAsync(
             stateJson, utterance, rowTask.Rules, endpoint).ConfigureAwait(False)
 
-        If _state.DialogueContexts Is Nothing Then
-            _state.DialogueContexts = New Dictionary(Of String, String)()
+        If nav.DialogueContexts Is Nothing Then
+            nav.DialogueContexts = New Dictionary(Of String, String)()
         End If
         If stepResult.IsCompleted Then
-            If _state.DialogueContexts.ContainsKey(rowTask.Id) Then
-                _state.DialogueContexts.Remove(rowTask.Id)
+            If nav.DialogueContexts.ContainsKey(rowTask.Id) Then
+                nav.DialogueContexts.Remove(rowTask.Id)
             End If
         Else
-            _state.DialogueContexts(rowTask.Id) = stepResult.NewStateJson
+            nav.DialogueContexts(rowTask.Id) = stepResult.NewStateJson
         End If
 
         Dim messages As New List(Of String)()
@@ -604,7 +687,7 @@ Public Class FlowOrchestrator
         '       - Scrive output nel VariableStore
         Dim result = Await TaskExecutor.ExecuteTask(
             rowTask,
-            _state,
+            RuntimeStateForActiveFlow(),
             Sub(text, stepType, escalationNumber)
                 ' Callback per messaggi (BackendCall non emette messaggi, ma callback richiesto)
                 Console.WriteLine($"[FlowOrchestrator] BackendCall message: {text}")
@@ -642,13 +725,17 @@ Public Class FlowOrchestrator
     ''' oppure crea un nuovo stato iniziale per la prima esecuzione del task.
     ''' </summary>
     Private Function LoadDialogueState(task As CompiledUtteranceTask) As DialogueState
-        If _state.DialogueContexts.ContainsKey(task.Id) Then
+        Dim nav = ActiveFlow()
+        If nav.DialogueContexts Is Nothing Then
+            nav.DialogueContexts = New Dictionary(Of String, String)()
+        End If
+        If nav.DialogueContexts.ContainsKey(task.Id) Then
             Try
                 ' ✅ Deserializza con TypeNameHandling.Auto + ITaskConverter per ripristinare
                 '    CurrentTask/RootTask come CompiledUtteranceTask (sono Object in DialogueState).
                 '    Senza TypeNameHandling.Auto, CurrentTask sarebbe sempre Nothing dopo il
                 '    roundtrip Redis, con conseguente reset errato al task radice.
-                Dim obj = JsonConvert.DeserializeObject(Of JObject)(_state.DialogueContexts(task.Id))
+                Dim obj = JsonConvert.DeserializeObject(Of JObject)(nav.DialogueContexts(task.Id))
                 If obj?("DialogueState") IsNot Nothing Then
                     Dim ds = obj("DialogueState").ToObject(Of DialogueState)(
                         JsonSerializer.CreateDefault(_dialogueStateSettings))
@@ -712,6 +799,9 @@ Public Class FlowOrchestrator
     ''' Persiste ExecutionState su Redis.
     ''' </summary>
     Private Sub SaveState()
+        _state.EnsureFlowStackMigrated()
+        _state.SyncRootNavigationFromMainFlow()
+        _state.SyncRootOverlayFromActiveFlow()
         If _executionStateStorage IsNot Nothing AndAlso Not String.IsNullOrEmpty(_sessionId) Then
             Try
                 Dim method = _executionStateStorage.GetType().GetMethod("SaveExecutionState")
@@ -723,5 +813,121 @@ Public Class FlowOrchestrator
             End Try
         End If
     End Sub
+
+    ''' <summary>Flow in cima allo stack (main o subflow attivo).</summary>
+    Private Function ActiveFlow() As ExecutionFlow
+        _state.EnsureFlowStackMigrated()
+        If _state.FlowStack Is Nothing OrElse _state.FlowStack.Count = 0 Then
+            Throw New InvalidOperationException("FlowStack is empty after EnsureFlowStackMigrated.")
+        End If
+        Return _state.FlowStack(_state.FlowStack.Count - 1)
+    End Function
+
+    ''' <summary>Compilazione del flow attivo (main o subflow registrato).</summary>
+    Private Function ActiveCompilation() As FlowCompilationResult
+        If _compilationResult Is Nothing Then
+            Return Nothing
+        End If
+        If _compilationByFlowId Is Nothing Then
+            Return _compilationResult
+        End If
+        Dim flow = ActiveFlow()
+        Dim id = If(String.IsNullOrEmpty(flow.FlowId), "main", flow.FlowId)
+        If _compilationByFlowId.ContainsKey(id) Then
+            Return _compilationByFlowId(id)
+        End If
+        If id = "main" Then
+            Return _compilationResult
+        End If
+        Throw New InvalidOperationException($"No compilation registered for flow '{id}'.")
+    End Function
+
+    Private Function ConditionStateForFlow(flow As ExecutionFlow) As ExecutionState
+        Dim s As New ExecutionState()
+        s.ExecutedTaskGroupIds = flow.ExecutedTaskGroupIds
+        s.ExecutedTaskIds = flow.ExecutedTaskIds
+        s.VariableStore = flow.VariableStore
+        s.FlowCompleted = _state.FlowCompleted
+        Return s
+    End Function
+
+    ''' <summary>Stato sessione con riferimenti al flow attivo (per TaskExecutor / condizioni di riga).</summary>
+    Private Function RuntimeStateForActiveFlow() As ExecutionState
+        _state.EnsureFlowStackMigrated()
+        Dim f = ActiveFlow()
+        Dim s As New ExecutionState()
+        s.VariableStore = f.VariableStore
+        s.DialogueContexts = f.DialogueContexts
+        s.RetrievalState = f.RetrievalState
+        s.ExecutedTaskIds = f.ExecutedTaskIds
+        s.ExecutedTaskGroupIds = f.ExecutedTaskGroupIds
+        s.FlowCompleted = _state.FlowCompleted
+        s.RequiresInput = f.RequiresInput
+        s.PendingUtterance = f.PendingUtterance
+        s.WaitingTaskId = f.WaitingTaskId
+        s.CurrentNodeId = f.CurrentNodeId
+        s.CurrentRowIndex = f.CurrentRowIndex
+        s.LastCompletedNodeId = f.LastCompletedNodeId
+        Return s
+    End Function
+
+    Private Sub PushFlow(task As CompiledSubflowTask)
+        _state.EnsureFlowStackMigrated()
+        Dim parent = ActiveFlow()
+        Dim child As New ExecutionFlow With {
+            .FlowId = task.FlowId,
+            .CurrentNodeId = Nothing,
+            .CurrentRowIndex = 0,
+            .LastCompletedNodeId = Nothing,
+            .ExecutedTaskGroupIds = New HashSet(Of String)(),
+            .ExecutedTaskIds = New HashSet(Of String)(),
+            .VariableStore = New Dictionary(Of String, Object)(),
+            .RetrievalState = "empty",
+            .DialogueContexts = New Dictionary(Of String, String)(),
+            .RequiresInput = False,
+            .PendingUtterance = "",
+            .WaitingTaskId = Nothing,
+            .SubflowOutputBindings = If(task.OutputBindings, New List(Of SubflowIoBinding)())
+        }
+        SubflowTaskExecutor.ApplyInputMapping(parent.VariableStore, child.VariableStore, task.InputBindings)
+        If _compilationByFlowId IsNot Nothing AndAlso _compilationByFlowId.ContainsKey(task.FlowId) Then
+            Dim subComp = _compilationByFlowId(task.FlowId)
+            If subComp.Variables IsNot Nothing Then
+                For Each v In subComp.Variables
+                    If Not child.VariableStore.ContainsKey(v.VarId) Then
+                        child.VariableStore(v.VarId) = Nothing
+                    End If
+                Next
+            End If
+        End If
+        _state.FlowStack.Add(child)
+    End Sub
+
+    Private Sub PopFlow()
+        If _state.FlowStack Is Nothing OrElse _state.FlowStack.Count < 2 Then
+            Return
+        End If
+        Dim child = _state.FlowStack(_state.FlowStack.Count - 1)
+        Dim parent = _state.FlowStack(_state.FlowStack.Count - 2)
+        If child.SubflowOutputBindings IsNot Nothing AndAlso child.SubflowOutputBindings.Count > 0 Then
+            SubflowTaskExecutor.ApplyOutputMapping(child.VariableStore, parent.VariableStore, child.SubflowOutputBindings)
+        End If
+        _state.FlowStack.RemoveAt(_state.FlowStack.Count - 1)
+        ' La riga Subflow sul parent resta "in corso" fino al pop: ora avanza alla riga successiva.
+        parent.CurrentRowIndex += 1
+    End Sub
+
+    ''' <summary>Un turno: PushFlow; AutoAdvance così la riga parent non viene incrementata finché il subflow non termina (PopFlow).</summary>
+    Private Function ProcessSubflowTurn(rowTask As CompiledSubflowTask) As RowTurnResult
+        If String.IsNullOrEmpty(rowTask.FlowId) Then
+            Throw New InvalidOperationException("CompiledSubflowTask.FlowId is required.")
+        End If
+        If _compilationByFlowId Is Nothing OrElse Not _compilationByFlowId.ContainsKey(rowTask.FlowId) Then
+            Throw New InvalidOperationException(
+                $"Subflow compilation not registered for flowId '{rowTask.FlowId}'.")
+        End If
+        PushFlow(rowTask)
+        Return RowTurnResult.AutoAdvance()
+    End Function
 
 End Class
