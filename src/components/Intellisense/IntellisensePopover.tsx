@@ -139,6 +139,11 @@ export const IntellisensePopover: React.FC = () => {
         if (state.target?.edgeId) {
             const edgeId = state.target.edgeId;
             const isUnconditional = !!(item && (item as any).id === '__unlinked__');
+            // Resolve temp target node deterministically from bridge state.
+            // Do not derive from setEdges updater (async in React 18).
+            const targetNodeId = FlowStateBridge.getLastTempNodeId();
+            // Consume immediately to avoid reusing stale temp id on subsequent actions.
+            FlowStateBridge.setLastTempNodeId(null);
 
             // ✅ GESTISCI CASI SPECIALI
             let label: string | undefined;
@@ -211,8 +216,6 @@ export const IntellisensePopover: React.FC = () => {
             // Update the edge
             const scheduleApplyLabel = FlowStateBridge.getScheduleApplyLabel();
             const setEdges = FlowStateBridge.getSetEdges();
-
-            let targetNodeId: string | null = null;
             if (scheduleApplyLabel && label !== undefined) {
                 const extraData: any = {};
                 if (conditionId) extraData.conditionId = conditionId;
@@ -222,7 +225,6 @@ export const IntellisensePopover: React.FC = () => {
             } else if (setEdges) {
                 setEdges((eds: any[]) => eds.map(e => {
                     if (e.id === edgeId) {
-                        targetNodeId = e.target || null;
                         return {
                             ...e,
                             label,
@@ -239,14 +241,6 @@ export const IntellisensePopover: React.FC = () => {
             }
 
             const setNodes = FlowStateBridge.getSetNodes();
-            if (!targetNodeId && setEdges) {
-                setEdges((eds: any[]) =>
-                    eds.map((e) => {
-                        if (e.id === edgeId) targetNodeId = e.target || null;
-                        return e;
-                    })
-                );
-            }
             if (setNodes && targetNodeId) {
                 setNodes((nds: any[]) =>
                     nds.map((n) => {

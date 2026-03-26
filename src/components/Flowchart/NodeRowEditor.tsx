@@ -1,5 +1,11 @@
 import React, { useEffect, useLayoutEffect, useCallback } from 'react';
 import { VoiceTextbox } from '../common/VoiceTextbox';
+import VariableTokenContextMenu from '../common/VariableTokenContextMenu';
+import { insertBracketTokenAtCaret } from '../../utils/variableTokenText';
+import { getActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
+import { useFlowActions, useFlowWorkspace } from '../../flows/FlowStore';
+import { useProjectDataUpdate } from '../../context/ProjectDataContext';
+import { buildVariableMenuItems } from '../common/variableMenuModel';
 
 interface NodeRowEditorProps {
   value: string;
@@ -25,8 +31,18 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
   fontStyles,
   onWidthChange
 }) => {
+  const [varsMenu, setVarsMenu] = React.useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
+  const { flows } = useFlowWorkspace();
+  const { updateFlowMeta } = useFlowActions();
+  const pdUpdate = useProjectDataUpdate();
   const DEBUG_FOCUS = (() => { try { return localStorage.getItem('debug.focus') === '1'; } catch { return false; } })();
   const log = (...args: any[]) => { if (DEBUG_FOCUS) { try { console.log('[Focus][RowEditor]', ...args); } catch {} } };
+  const activeFlowId = getActiveFlowCanvasId();
+  const variableMenuItems = React.useMemo(() => {
+    const pid = pdUpdate?.getCurrentProjectId() || '';
+    if (!pid) return [];
+    return buildVariableMenuItems(pid, activeFlowId, flows as any);
+  }, [pdUpdate, activeFlowId, flows, value]);
 
   // ✅ Calcola e aggiorna la larghezza usando scrollWidth (Regola 1)
   const updateWidth = useCallback(() => {
@@ -108,6 +124,7 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
   }, [onChange, updateWidth]);
 
   return (
+    <>
     <VoiceTextbox
       ref={inputRef}
       value={value}
@@ -163,6 +180,11 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
       onPointerDown={(e) => { log('onPointerDown stop'); e.stopPropagation(); }}
       onMouseDown={(e) => { log('onMouseDown stop'); e.stopPropagation(); }}
       onClick={(e) => { log('onClick stop'); e.stopPropagation(); }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setVarsMenu({ open: true, x: e.clientX, y: e.clientY });
+      }}
       autoFocus
       rows={1}
       className="w-full bg-slate-600 text-white px-1.5 py-1 rounded-md border border-slate-500 focus:outline-none focus:ring-0 nodrag node-row-input"
@@ -183,5 +205,61 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
       }}
       placeholder={placeholder}
     />
+    <VariableTokenContextMenu
+      isOpen={varsMenu.open}
+      x={varsMenu.x}
+      y={varsMenu.y}
+      variables={variableMenuItems.map((i) => i.varLabel)}
+      variableItems={variableMenuItems}
+      onClose={() => setVarsMenu({ open: false, x: 0, y: 0 })}
+      onExposeAndSelect={(item) => {
+        const owner = (flows as any)?.[item.ownerFlowId];
+        if (!owner) return;
+        const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
+        const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.varId);
+        const nextVars = existing
+          ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.varId ? { ...v, visibility: 'output' } : v))
+          : [...prevVars, { id: item.varId, label: item.varLabel, type: 'string', visibility: 'output' }];
+        updateFlowMeta(item.ownerFlowId, { variables: nextVars });
+
+        const el = inputRef.current;
+        const caret = {
+          start: el?.selectionStart ?? value.length,
+          end: el?.selectionEnd ?? value.length,
+        };
+        const out = insertBracketTokenAtCaret(value, caret, item.tokenLabel || item.varLabel);
+        const nextValue = out.text;
+        onChange({
+          target: { value: nextValue },
+          currentTarget: { value: nextValue },
+        } as React.ChangeEvent<HTMLTextAreaElement>);
+        setVarsMenu({ open: false, x: 0, y: 0 });
+        requestAnimationFrame(() => {
+          if (!el) return;
+          el.focus();
+          el.setSelectionRange(out.caret.start, out.caret.end);
+        });
+      }}
+      onSelect={(label) => {
+        const el = inputRef.current;
+        const caret = {
+          start: el?.selectionStart ?? value.length,
+          end: el?.selectionEnd ?? value.length,
+        };
+        const out = insertBracketTokenAtCaret(value, caret, label);
+        const nextValue = out.text;
+        onChange({
+          target: { value: nextValue },
+          currentTarget: { value: nextValue },
+        } as React.ChangeEvent<HTMLTextAreaElement>);
+        setVarsMenu({ open: false, x: 0, y: 0 });
+        requestAnimationFrame(() => {
+          if (!el) return;
+          el.focus();
+          el.setSelectionRange(out.caret.start, out.caret.end);
+        });
+      }}
+    />
+    </>
   );
 };

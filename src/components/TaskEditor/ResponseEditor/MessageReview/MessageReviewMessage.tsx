@@ -6,6 +6,7 @@ import { getTaskIconNode, getTaskMeta } from '@responseEditor/taskMeta';
 import { ensureHexColor, tailwindToHex } from '@responseEditor/utils/color';
 import ActionText from '@responseEditor/ActionText';
 import { useFontContext } from '@context/FontContext';
+import VariableTokenText from '@components/common/VariableTokenText';
 
 type Props = {
     item: ReviewItem;
@@ -238,7 +239,7 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                             minHeight: '40px',
                         }}
                     >
-                        {item.text || <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>No text</span>}
+                        {item.text ? <VariableTokenText text={item.text} /> : <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>No text</span>}
                     </div>
                 )}
             </div>

@@ -8,6 +8,7 @@ import { FlowStateBridge } from '../../../services/FlowStateBridge';
 import { diagFlowLink } from '../utils/flowTempLinkDiag';
 import { getSourceHandleCenterInFlow } from '../utils/sourceHandleCenterInFlow';
 import type { ReactFlowStoreLike } from '../utils/waitForHandleBounds';
+import { getEmptyCustomNodeMinWidthFromNodeRowCss } from '../utils/emptyCustomNodeMinWidth';
 
 export function useTemporaryNodes(
       setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>,
@@ -172,6 +173,9 @@ export function useTemporaryNodes(
         (connectionMenuRef.current as any).flowPosition = posFlow;
         connectionMenuRef.current.tempNodeId = tempNodeId;
         connectionMenuRef.current.tempEdgeId = tempEdgeId;
+        // Expose deterministic temp node id for edge-intellisense finalization path.
+        // This avoids relying on async edge-state reads when promoting temp nodes.
+        FlowStateBridge.setLastTempNodeId(tempNodeId);
       } catch (error) {
         // Silent fail
       }

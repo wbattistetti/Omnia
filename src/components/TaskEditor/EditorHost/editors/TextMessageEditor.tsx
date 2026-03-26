@@ -7,6 +7,15 @@ import { useProjectTranslations } from '../../../../context/ProjectTranslationsC
 import { TaskType } from '../../../../types/taskTypes';
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
 import { v4 as uuidv4 } from 'uuid';
+import VariableTokenContextMenu from '../../../common/VariableTokenContextMenu';
+import { insertBracketTokenAtCaret } from '../../../../utils/variableTokenText';
+import {
+  convertDSLLabelsToGUIDs,
+  convertDSLGUIDsToLabels,
+} from '../../../../utils/conditionCodeConverter';
+import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
+import { useFlowActions, useFlowWorkspace } from '../../../../flows/FlowStore';
+import { buildVariableMenuItems, buildVariableMappingsFromMenu } from '../../../common/variableMenuModel';
 
 export default function TextMessageEditor({ task: taskMeta, onClose }: EditorProps) {
   const instanceId = taskMeta.instanceId || taskMeta.id;
@@ -14,6 +23,28 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
   const { translations, addTranslation, getTranslation } = useProjectTranslations();
   const isUserTypingRef = useRef(false); // Track if user is actively typing
   const lastLoadedTranslationRef = useRef<string | null>(null); // Track last loaded translation
+  const latestTextRef = useRef<string>(''); // Last text snapshot for unmount-safe persistence
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [varsMenu, setVarsMenu] = useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
+  const { flows } = useFlowWorkspace();
+  const { updateFlowMeta } = useFlowActions();
+
+  const activeFlowId = getActiveFlowCanvasId();
+  const variableMenuItems = React.useMemo(() => {
+    const pid = pdUpdate?.getCurrentProjectId() || '';
+    if (!pid) return [];
+    return buildVariableMenuItems(pid, activeFlowId, flows as any);
+  }, [pdUpdate, activeFlowId, flows]);
+
+  const variableMappings = React.useMemo(() => buildVariableMappingsFromMenu(variableMenuItems), [variableMenuItems]);
+
+  const labelsToGuids = useCallback((value: string): string => {
+    return convertDSLLabelsToGUIDs(value, variableMappings);
+  }, [variableMappings]);
+
+  const guidsToLabels = useCallback((value: string): string => {
+    return convertDSLGUIDsToLabels(value, variableMappings);
+  }, [variableMappings]);
 
   // ✅ Get or create textKey from task parameters (GUID) - same pattern as TaskUtterance
   const getTextKey = useCallback((): string | null => {
@@ -75,6 +106,10 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     return '';
   });
 
+  useEffect(() => {
+    latestTextRef.current = text;
+  }, [text]);
+
   // ✅ Reload text when translations change or instanceId changes (NOT when text changes - avoid loop)
   useEffect(() => {
     if (!instanceId) return;
@@ -90,12 +125,12 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
 
       // Only update if translation actually changed (not just because text changed)
       if (translation !== lastLoadedTranslationRef.current) {
-        setText(translation);
+        setText(guidsToLabels(translation));
         lastLoadedTranslationRef.current = translation;
         console.log('[TextMessageEditor] ✅ Loaded translation', { textKey, hasTranslation: !!translation });
       }
     }
-  }, [instanceId, translations, getTextKey, getTranslation]); // ✅ Removed 'text' from dependencies to avoid loop
+  }, [instanceId, translations, getTextKey, getTranslation, guidsToLabels]); // ✅ Removed 'text' from dependencies to avoid loop
 
   // ✅ Save text to translations when user types (debounced) - same pattern as TaskUtterance
   useEffect(() => {
@@ -110,8 +145,9 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     // Debounce: save after 500ms of no typing
     const timeoutId = setTimeout(() => {
       if (text.trim()) {
-        addTranslation(textKey, text);
-        lastLoadedTranslationRef.current = text; // Update last loaded to match what we just saved
+        const persistedText = labelsToGuids(text);
+        addTranslation(textKey, persistedText);
+        lastLoadedTranslationRef.current = persistedText; // Update last loaded to match what we just saved
         console.log('[TextMessageEditor] 💾 Saved translation', { textKey, textPreview: text.substring(0, 50) });
       }
       // Reset typing flag after debounce completes
@@ -123,14 +159,27 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
       // Reset typing flag if component unmounts or effect re-runs
       isUserTypingRef.current = false;
     };
-  }, [text, instanceId, getTextKey, addTranslation]);
+  }, [text, instanceId, getTextKey, addTranslation, labelsToGuids]);
+
+  // Safety net: persist current text on unmount (e.g. panel closed before debounce fires).
+  useEffect(() => {
+    return () => {
+      if (!instanceId) return;
+      const textKey = getTextKey();
+      const current = latestTextRef.current;
+      if (!textKey || !current.trim()) return;
+      const persistedText = labelsToGuids(current);
+      addTranslation(textKey, persistedText);
+      lastLoadedTranslationRef.current = persistedText;
+    };
+  }, [instanceId, getTextKey, addTranslation, labelsToGuids]);
 
   // ✅ Save on close (backup - in case debounce didn't fire)
   const handleClose = async () => {
     if (instanceId) {
       const textKey = getTextKey();
       if (textKey && text.trim()) {
-        addTranslation(textKey, text);
+        addTranslation(textKey, labelsToGuids(text));
         console.log('[TextMessageEditor] 💾 Saved translation on close', { textKey, textPreview: text.substring(0, 50) });
       }
 
@@ -171,15 +220,70 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
       {/* ✅ ARCHITECTURE: No local header - icon/title are injected into main header */}
       <div className="p-4 flex-1 min-h-0 flex">
         <textarea
+          ref={textareaRef}
           className="w-full h-full rounded-xl border p-3 text-sm"
           value={text}
           onChange={e => {
             isUserTypingRef.current = true; // Mark that user is typing
             setText(e.target.value);
           }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setVarsMenu({ open: true, x: e.clientX, y: e.clientY });
+          }}
           placeholder="Scrivi il messaggio..."
         />
       </div>
+      <VariableTokenContextMenu
+        isOpen={varsMenu.open}
+        x={varsMenu.x}
+        y={varsMenu.y}
+        variables={variableMenuItems.map((i) => i.varLabel)}
+        variableItems={variableMenuItems}
+        onClose={() => setVarsMenu({ open: false, x: 0, y: 0 })}
+        onExposeAndSelect={(item) => {
+          const owner = (flows as any)?.[item.ownerFlowId];
+          if (!owner) return;
+          const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
+          const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.varId);
+          const nextVars = existing
+            ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.varId ? { ...v, visibility: 'output' } : v))
+            : [...prevVars, { id: item.varId, label: item.varLabel, type: 'string', visibility: 'output' }];
+          updateFlowMeta(item.ownerFlowId, { variables: nextVars });
+
+          const el = textareaRef.current;
+          const caret = {
+            start: el?.selectionStart ?? text.length,
+            end: el?.selectionEnd ?? text.length,
+          };
+          const out = insertBracketTokenAtCaret(text, caret, item.tokenLabel || item.varLabel);
+          isUserTypingRef.current = true;
+          setText(out.text);
+          setVarsMenu({ open: false, x: 0, y: 0 });
+          requestAnimationFrame(() => {
+            if (!el) return;
+            el.focus();
+            el.setSelectionRange(out.caret.start, out.caret.end);
+          });
+        }}
+        onSelect={(label) => {
+          const el = textareaRef.current;
+          const caret = {
+            start: el?.selectionStart ?? text.length,
+            end: el?.selectionEnd ?? text.length,
+          };
+          const out = insertBracketTokenAtCaret(text, caret, label);
+          isUserTypingRef.current = true;
+          setText(out.text);
+          setVarsMenu({ open: false, x: 0, y: 0 });
+          requestAnimationFrame(() => {
+            if (!el) return;
+            el.focus();
+            el.setSelectionRange(out.caret.start, out.caret.end);
+          });
+        }}
+      />
     </div>
   );
 }
