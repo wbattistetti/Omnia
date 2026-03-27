@@ -280,6 +280,11 @@ interface NodeRowLabelProps {
   errorIconRef?: React.RefObject<HTMLButtonElement>;
   showErrorPopover?: boolean;
   onCloseErrorPopover?: () => void;
+  /** Keep popover open while moving pointer from the warning icon onto the card. */
+  onErrorIconMouseEnter?: () => void;
+  onErrorIconMouseLeave?: () => void;
+  onErrorPopoverMouseEnter?: () => void;
+  onErrorPopoverMouseLeave?: () => void;
   onErrorFix?: (error: import('../../../../FlowCompiler/types').CompilationError) => void;
   onOpenSemanticValuesEditor?: () => void;
   hasSemanticValues?: boolean;
@@ -334,6 +339,10 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   errorIconRef,
   showErrorPopover,
   onCloseErrorPopover,
+  onErrorIconMouseEnter,
+  onErrorIconMouseLeave,
+  onErrorPopoverMouseEnter,
+  onErrorPopoverMouseLeave,
   onErrorFix,
   onOpenSemanticValuesEditor,
   hasSemanticValues,
@@ -505,6 +514,10 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           errorIconRef={errorIconRef}
           showErrorPopover={showErrorPopover}
           onCloseErrorPopover={onCloseErrorPopover}
+          onErrorIconMouseEnter={onErrorIconMouseEnter}
+          onErrorIconMouseLeave={onErrorIconMouseLeave}
+          onErrorPopoverMouseEnter={onErrorPopoverMouseEnter}
+          onErrorPopoverMouseLeave={onErrorPopoverMouseLeave}
           onErrorFix={onErrorFix}
           onWrenchClick={async () => {
             try {
@@ -568,12 +581,6 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           included={included}
           setIncluded={setIncluded}
           onTestTask={taskInstance ? handleTestTask : undefined}
-          rowErrors={rowErrors}
-          onErrorClick={onErrorClick}
-          errorIconRef={errorIconRef}
-          showErrorPopover={showErrorPopover}
-          onCloseErrorPopover={onCloseErrorPopover}
-          onErrorFix={onErrorFix}
           onOpenSemanticValuesEditor={onOpenSemanticValuesEditor}
           hasSemanticValues={hasSemanticValues}
           semanticValuesAnchorRef={semanticValuesAnchorRef}

@@ -12,14 +12,32 @@ interface ErrorTooltipProps {
   onClose?: () => void; // ✅ NEW: Close handler
 }
 
+/** Italian copy for TaskNotFound in row/edge error mini-cards (tests import this). */
+export const ERROR_TOOLTIP_TASK_NOT_FOUND_COPY = {
+  title: 'Task non progettato',
+  body: 'Il comportamento di questo task non è definito.',
+} as const;
+
+function isTaskNotFoundCategory(category?: string): boolean {
+  const c = (category ?? '').trim();
+  return c === 'TaskNotFound' || c === 'Task not found' || c.toLowerCase() === 'tasknotfound';
+}
+
+/** User-visible category line in the popover header (replaces raw compiler categories where needed). */
+export function userFacingErrorCategoryHeadline(category: string | undefined, isError: boolean): string {
+  if (isTaskNotFoundCategory(category)) return ERROR_TOOLTIP_TASK_NOT_FOUND_COPY.title;
+  const trimmed = category?.trim();
+  if (trimmed) return trimmed;
+  return isError ? 'Error' : 'Warning';
+}
+
 /**
  * Formats error message by removing technical IDs (UUIDs, taskId, nodeId)
  * and showing only a descriptive summary
  */
 function formatErrorMessage(message: string, category?: string): string {
-  // Special handling for TaskNotFound: return simple message
-  if (category === 'TaskNotFound' || category === 'Task not found') {
-    return 'Task Not found';
+  if (isTaskNotFoundCategory(category)) {
+    return ERROR_TOOLTIP_TASK_NOT_FOUND_COPY.body;
   }
 
   // Remove UUIDs (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
@@ -75,14 +93,9 @@ export function ErrorTooltip({ errors, onFix, onClose }: ErrorTooltipProps) {
   // ✅ Format message to remove technical IDs
   const formattedMessage = formatErrorMessage(primaryError.message, primaryError.category);
 
-  // ✅ Determine category display - use category if available, otherwise use severity
-  const categoryDisplay = primaryError.category || (isError ? 'Error' : 'Warning');
+  const categoryDisplay = userFacingErrorCategoryHeadline(primaryError.category, isError);
 
-  // ✅ Don't show "Error" subtitle if category is already descriptive (e.g., "TaskNotFound")
-  const showSeveritySubtitle = !primaryError.category ||
-    (primaryError.category !== 'TaskNotFound' &&
-     primaryError.category !== 'Task not found' &&
-     primaryError.category.toLowerCase() !== 'tasknotfound');
+  const showSeveritySubtitle = !primaryError.category || !isTaskNotFoundCategory(primaryError.category);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg shadow-xl p-4 min-w-[280px] max-w-[400px] text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">

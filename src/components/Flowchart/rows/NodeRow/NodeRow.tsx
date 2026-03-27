@@ -552,24 +552,57 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const taskId = getTaskIdFromRow(row);
   const rowErrors = useRowErrors(row.id, taskId || undefined, compilationErrors);
 
-  // ✅ Handle error icon click - open error popover
+  // ✅ Error popover: open on hover/click; delayed close so pointer can move onto the card (Fix button).
   const [showErrorPopover, setShowErrorPopover] = React.useState(false);
   const errorIconRef = React.useRef<HTMLButtonElement>(null);
+  const errorPopoverCloseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ERROR_POPOVER_HOVER_CLOSE_MS = 220;
+
+  const cancelErrorPopoverClose = React.useCallback(() => {
+    if (errorPopoverCloseTimerRef.current) {
+      clearTimeout(errorPopoverCloseTimerRef.current);
+      errorPopoverCloseTimerRef.current = null;
+    }
+  }, []);
+
+  const closeErrorPopoverNow = React.useCallback(() => {
+    cancelErrorPopoverClose();
+    setShowErrorPopover(false);
+  }, [cancelErrorPopoverClose]);
+
+  const openErrorPopover = React.useCallback(() => {
+    cancelErrorPopoverClose();
+    setShowErrorPopover(true);
+  }, [cancelErrorPopoverClose]);
+
+  const scheduleErrorPopoverClose = React.useCallback(() => {
+    cancelErrorPopoverClose();
+    errorPopoverCloseTimerRef.current = setTimeout(() => {
+      setShowErrorPopover(false);
+      errorPopoverCloseTimerRef.current = null;
+    }, ERROR_POPOVER_HOVER_CLOSE_MS);
+  }, [cancelErrorPopoverClose]);
+
+  React.useEffect(
+    () => () => {
+      if (errorPopoverCloseTimerRef.current) clearTimeout(errorPopoverCloseTimerRef.current);
+    },
+    []
+  );
 
   const handleErrorClick = React.useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setShowErrorPopover(true);
-  }, []);
+    openErrorPopover();
+  }, [openErrorPopover]);
 
   const handleErrorFix = React.useCallback(async (error: import('../../../../FlowCompiler/types').CompilationError) => {
-    // Close popover
-    setShowErrorPopover(false);
+    closeErrorPopoverNow();
 
     // ✅ Use central error fix handler
     const { handleErrorFix: handleErrorFixCentral } = await import('../../../../utils/handleErrorFix');
     await handleErrorFixCentral(error);
-  }, []);
+  }, [closeErrorPopoverNow]);
 
   // FASE 4: Listen for instance updates to force re-render and update icon color
   // Note: TaskRepository doesn't emit events yet, but InstanceRepository still does
@@ -818,7 +851,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               onErrorClick={handleErrorClick}
               errorIconRef={errorIconRef}
               showErrorPopover={showErrorPopover}
-              onCloseErrorPopover={() => setShowErrorPopover(false)}
+              onCloseErrorPopover={closeErrorPopoverNow}
+              onErrorIconMouseEnter={openErrorPopover}
+              onErrorIconMouseLeave={scheduleErrorPopoverClose}
+              onErrorPopoverMouseEnter={cancelErrorPopoverClose}
+              onErrorPopoverMouseLeave={scheduleErrorPopoverClose}
               onErrorFix={handleErrorFix}
               onOpenSemanticValuesEditor={
                 isDataRequestRow ? handleToggleSemanticValuesEditor : undefined

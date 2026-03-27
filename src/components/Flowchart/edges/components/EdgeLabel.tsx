@@ -73,35 +73,62 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
     ? edgeErrors.strokeColor
     : '#8b5cf6'; // Default purple
 
-  // ✅ Error popover state
+  const ERROR_POPOVER_HOVER_CLOSE_MS = 220;
+
+  // ✅ Error popover state (hover/click + delayed close so pointer can reach the card)
   const [showErrorPopover, setShowErrorPopover] = useState(false);
   const errorIconRef = useRef<HTMLButtonElement>(null);
+  const errorPopoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ✅ Handle error icon click
-  const handleErrorClick = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setShowErrorPopover(true);
+  const cancelErrorPopoverClose = useCallback(() => {
+    if (errorPopoverCloseTimerRef.current) {
+      clearTimeout(errorPopoverCloseTimerRef.current);
+      errorPopoverCloseTimerRef.current = null;
+    }
   }, []);
 
-  // ✅ Handle error fix
-  const handleErrorFix = useCallback(async (error: CompilationError) => {
+  const closeErrorPopoverNow = useCallback(() => {
+    cancelErrorPopoverClose();
     setShowErrorPopover(false);
-    const { handleErrorFix: handleErrorFixCentral } = await import('../../../../utils/handleErrorFix');
-    await handleErrorFixCentral(error);
-  }, []);
+  }, [cancelErrorPopoverClose]);
 
-  // ✅ Close popover on outside click
-  useEffect(() => {
-    if (!showErrorPopover) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (errorIconRef.current && !errorIconRef.current.contains(e.target as Node)) {
-        setShowErrorPopover(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showErrorPopover]);
+  const openErrorPopover = useCallback(() => {
+    cancelErrorPopoverClose();
+    setShowErrorPopover(true);
+  }, [cancelErrorPopoverClose]);
+
+  const scheduleErrorPopoverClose = useCallback(() => {
+    cancelErrorPopoverClose();
+    errorPopoverCloseTimerRef.current = setTimeout(() => {
+      setShowErrorPopover(false);
+      errorPopoverCloseTimerRef.current = null;
+    }, ERROR_POPOVER_HOVER_CLOSE_MS);
+  }, [cancelErrorPopoverClose]);
+
+  useEffect(
+    () => () => {
+      if (errorPopoverCloseTimerRef.current) clearTimeout(errorPopoverCloseTimerRef.current);
+    },
+    []
+  );
+
+  const handleErrorClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openErrorPopover();
+    },
+    [openErrorPopover]
+  );
+
+  const handleErrorFix = useCallback(
+    async (error: CompilationError) => {
+      closeErrorPopoverNow();
+      const { handleErrorFix: handleErrorFixCentral } = await import('../../../../utils/handleErrorFix');
+      await handleErrorFixCentral(error);
+    },
+    [closeErrorPopoverNow]
+  );
 
   // Sincronizza testo: da matita (allowEmptyRender) o quando non si sta editando
   useEffect(() => {
@@ -379,6 +406,8 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
                   transition: 'opacity 120ms linear, transform 120ms ease'
                 }}
                 title={edgeErrors.hasError ? 'Errori di compilazione' : 'Avvisi di compilazione'}
+                onMouseEnter={openErrorPopover}
+                onMouseLeave={scheduleErrorPopoverClose}
               >
                 <AlertTriangle
                   size={sizes.iconSize}
@@ -392,8 +421,10 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
                 <ErrorPopoverPortal
                   errors={edgeErrors.errors}
                   anchorRef={errorIconRef}
-                  onClose={() => setShowErrorPopover(false)}
+                  onClose={closeErrorPopoverNow}
                   onFix={handleErrorFix}
+                  onPopoverMouseEnter={cancelErrorPopoverClose}
+                  onPopoverMouseLeave={scheduleErrorPopoverClose}
                 />
               )}
             </div>
@@ -410,9 +441,18 @@ interface ErrorPopoverPortalProps {
   anchorRef: React.RefObject<HTMLElement>;
   onClose: () => void;
   onFix?: (error: CompilationError) => void;
+  onPopoverMouseEnter?: () => void;
+  onPopoverMouseLeave?: () => void;
 }
 
-const ErrorPopoverPortal: React.FC<ErrorPopoverPortalProps> = ({ errors, anchorRef, onClose, onFix }) => {
+const ErrorPopoverPortal: React.FC<ErrorPopoverPortalProps> = ({
+  errors,
+  anchorRef,
+  onClose,
+  onFix,
+  onPopoverMouseEnter,
+  onPopoverMouseLeave,
+}) => {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
 
@@ -467,6 +507,8 @@ const ErrorPopoverPortal: React.FC<ErrorPopoverPortalProps> = ({ errors, anchorR
         pointerEvents: 'auto'
       }}
       onClick={(e) => e.stopPropagation()}
+      onMouseEnter={onPopoverMouseEnter}
+      onMouseLeave={onPopoverMouseLeave}
     >
       <ErrorTooltip errors={errors} onFix={onFix} onClose={onClose} />
     </div>,

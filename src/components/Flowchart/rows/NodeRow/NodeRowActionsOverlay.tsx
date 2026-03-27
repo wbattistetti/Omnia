@@ -51,6 +51,10 @@ interface NodeRowActionsOverlayProps {
   errorIconRef?: React.RefObject<HTMLButtonElement>;
   showErrorPopover?: boolean;
   onCloseErrorPopover?: () => void;
+  onErrorIconMouseEnter?: () => void;
+  onErrorIconMouseLeave?: () => void;
+  onErrorPopoverMouseEnter?: () => void;
+  onErrorPopoverMouseLeave?: () => void;
   onErrorFix?: (error: CompilationError) => void;
   onOpenSemanticValuesEditor?: () => void;
   hasSemanticValues?: boolean;
@@ -97,6 +101,10 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   errorIconRef,
   showErrorPopover,
   onCloseErrorPopover,
+  onErrorIconMouseEnter,
+  onErrorIconMouseLeave,
+  onErrorPopoverMouseEnter,
+  onErrorPopoverMouseLeave,
   onErrorFix,
   onOpenSemanticValuesEditor,
   hasSemanticValues,
@@ -548,7 +556,11 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
               opacity: 0.9,
               transition: 'opacity 120ms linear, transform 120ms ease'
             }}
-            onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
+            onMouseEnter={() => {
+              onRequestClosePicker?.();
+              onErrorIconMouseEnter?.();
+            }}
+            onMouseLeave={() => onErrorIconMouseLeave?.()}
           >
             <AlertTriangle
               style={{
@@ -558,13 +570,15 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
               }}
             />
           </button>
-          {/* Error Popover - shown when icon is clicked */}
+          {/* Error popover: hover or click on icon; pointer can move into the card before close */}
           {showErrorPopover && errorIconRef.current && rowErrors.errors.length > 0 && (
             <ErrorPopover
               errors={rowErrors.errors}
               anchorRef={errorIconRef}
               onClose={onCloseErrorPopover}
               onFix={onErrorFix}
+              onPopoverMouseEnter={onErrorPopoverMouseEnter}
+              onPopoverMouseLeave={onErrorPopoverMouseLeave}
             />
           )}
         </div>
@@ -579,9 +593,18 @@ interface ErrorPopoverProps {
   anchorRef: React.RefObject<HTMLElement>;
   onClose: () => void;
   onFix?: (error: CompilationError) => void;
+  onPopoverMouseEnter?: () => void;
+  onPopoverMouseLeave?: () => void;
 }
 
-const ErrorPopover: React.FC<ErrorPopoverProps> = ({ errors, anchorRef, onClose, onFix }) => {
+const ErrorPopover: React.FC<ErrorPopoverProps> = ({
+  errors,
+  anchorRef,
+  onClose,
+  onFix,
+  onPopoverMouseEnter,
+  onPopoverMouseLeave,
+}) => {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
 
@@ -636,6 +659,8 @@ const ErrorPopover: React.FC<ErrorPopoverProps> = ({ errors, anchorRef, onClose,
         pointerEvents: 'auto'
       }}
       onClick={(e) => e.stopPropagation()}
+      onMouseEnter={onPopoverMouseEnter}
+      onMouseLeave={onPopoverMouseLeave}
     >
       <ErrorTooltip errors={errors} onFix={onFix} onClose={onClose} />
     </div>
