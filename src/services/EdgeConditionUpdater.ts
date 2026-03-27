@@ -8,6 +8,7 @@
 
 import { FlowStateBridge } from './FlowStateBridge';
 import type { Edge, EdgeData } from '../components/Flowchart/types/flowTypes';
+import { mergeEdgePatch } from '../components/Flowchart/utils/mergeEdgePatch';
 
 /**
  * Updates an edge with a conditionId synchronously
@@ -36,7 +37,7 @@ export function updateEdgeWithConditionId(edgeId: string, conditionId: string): 
       if (!hasEdge) return currentEdges as any;
       updated = true;
       return currentEdges.map((edge: Edge<EdgeData>) =>
-        edge.id === edgeId ? { ...edge, conditionId } : edge
+        edge.id === edgeId ? mergeEdgePatch(edge, { conditionId }) : edge
       ) as any;
     });
 

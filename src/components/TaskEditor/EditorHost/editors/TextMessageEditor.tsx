@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { EditorProps } from '../../EditorHost/types';
 import { getTaskVisualsByType } from '../../../Flowchart/utils/taskVisuals';
 import { taskRepository } from '../../../../services/TaskRepository';
@@ -14,9 +14,16 @@ import {
 } from '../../../../utils/conditionCodeConverter';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import { useFlowActions, useFlowWorkspace } from '../../../../flows/FlowStore';
-import { buildVariableMenuItemsAsync, buildVariableMappingsFromMenu, type VariableMenuItem } from '../../../common/variableMenuModel';
+import {
+  buildSubflowCompositeKeySet,
+  buildVariableMenuItemsAsync,
+  buildVariableMappingsFromMenu,
+  type VariableMenuItem,
+} from '../../../common/variableMenuModel';
+import { variableCreationService } from '../../../../services/VariableCreationService';
 import { ensureParentVariableAndSubflowOutputBinding } from '../../../common/subflowParentBinding';
 import { useTextTranslationField } from './shared/useTextTranslationField';
+import { fingerprintVariableMapping } from './shared/variableMappingFingerprint';
 
 export default function TextMessageEditor({ task: taskMeta, onClose }: EditorProps) {
   const instanceId = taskMeta.instanceId || taskMeta.id;
@@ -48,23 +55,54 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
 
   const variableMappings = React.useMemo(() => buildVariableMappingsFromMenu(variableMenuItems), [variableMenuItems]);
 
-  const labelsToGuids = useCallback((value: string): string => {
-    return convertDSLLabelsToGUIDs(value, variableMappings);
-  }, [variableMappings]);
+  const variableMappingFingerprint = useMemo(
+    () => fingerprintVariableMapping(variableMappings),
+    [variableMappings]
+  );
 
-  const guidsToLabels = useCallback((value: string): string => {
-    return convertDSLGUIDsToLabels(value, variableMappings);
-  }, [variableMappings]);
+  const getCurrentProjectId = useCallback(
+    () => pdUpdate?.getCurrentProjectId() || undefined,
+    [pdUpdate]
+  );
+
+  const subflowCompositeKeys = React.useMemo(
+    () => buildSubflowCompositeKeySet(variableMenuItems),
+    [variableMenuItems]
+  );
+
+  const labelsToGuids = useCallback(
+    (value: string): string => {
+      return convertDSLLabelsToGUIDs(value, variableMappings, { preferKeysForEncode: subflowCompositeKeys });
+    },
+    [variableMappings, subflowCompositeKeys]
+  );
+
+  const guidsToLabels = useCallback(
+    (value: string): string => {
+      const projectId = pdUpdate?.getCurrentProjectId() || '';
+      return convertDSLGUIDsToLabels(value, variableMappings, {
+        resolveUnknownGuidToLabel: (guid) =>
+          projectId ? variableCreationService.getVarNameByVarId(projectId, guid) : null,
+      });
+    },
+    [variableMappings, pdUpdate]
+  );
+
+  const getTranslationForField = useCallback(
+    (k: string) => getTranslation(k) ?? '',
+    [getTranslation]
+  );
 
   const { text, setText } = useTextTranslationField({
     instanceId,
     fallbackTaskType: taskMeta.type ?? TaskType.SayMessage,
-    getCurrentProjectId: () => pdUpdate?.getCurrentProjectId() || undefined,
-    getTranslation: (k) => getTranslation(k) || '',
+    getCurrentProjectId,
+    getTranslation: getTranslationForField,
     addTranslation,
     encode: labelsToGuids,
     decode: guidsToLabels,
     reloadToken: translations,
+    decodeContextKey: variableMappingFingerprint,
     debounceMs: 500,
   });
 

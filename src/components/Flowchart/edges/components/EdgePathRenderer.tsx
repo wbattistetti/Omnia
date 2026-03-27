@@ -6,7 +6,12 @@ import { getBezierPath, getSmoothStepPath } from 'reactflow';
 import { LinkStyle } from '../../types/flowTypes';
 import { Highlight } from '../../executionHighlight/executionHighlightConstants';
 import { buildPathFromVertices, PathSegment } from '../utils/pathUtils';
-import { getAutoOrthoPath, getVHVPath, getHVHPath } from '../utils/edgeRouting';
+import {
+  getRoundedAutoOrthoPath,
+  getRoundedVHVPath,
+  getRoundedHVHPath,
+  ORTHO_CORNER_RADIUS_PX,
+} from '../utils/edgeRouting';
 
 export interface EdgePathRendererProps {
   id: string;
@@ -92,15 +97,15 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
       // Otherwise, use link style
       switch (linkStyle) {
       case LinkStyle.AutoOrtho:
-        edgePath = getAutoOrthoPath(sourceX, sourceY, targetX, targetY);
+        edgePath = getRoundedAutoOrthoPath(sourceX, sourceY, targetX, targetY, ORTHO_CORNER_RADIUS_PX);
         break;
 
       case LinkStyle.VHV:
-        edgePath = getVHVPath(sourceX, sourceY, targetX, targetY);
+        edgePath = getRoundedVHVPath(sourceX, sourceY, targetX, targetY, ORTHO_CORNER_RADIUS_PX);
         break;
 
       case LinkStyle.HVH:
-        edgePath = getHVHPath(sourceX, sourceY, targetX, targetY);
+        edgePath = getRoundedHVHPath(sourceX, sourceY, targetX, targetY, ORTHO_CORNER_RADIUS_PX);
         break;
 
       case LinkStyle.Bezier:
@@ -115,13 +120,11 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
         break;
 
       case LinkStyle.Step: {
-        // Orthogonal with single elbow (auto HV or VH); allinea a getVHVPath per colonna quasi verticale
         const preferHV = Math.abs(sourceX - targetX) > Math.abs(sourceY - targetY);
         if (preferHV) {
-          const midX = (sourceX + targetX) / 2;
-          edgePath = `M ${sourceX},${sourceY} L ${midX},${sourceY} L ${midX},${targetY} L ${targetX},${targetY}`;
+          edgePath = getRoundedHVHPath(sourceX, sourceY, targetX, targetY, ORTHO_CORNER_RADIUS_PX);
         } else {
-          edgePath = getVHVPath(sourceX, sourceY, targetX, targetY);
+          edgePath = getRoundedVHVPath(sourceX, sourceY, targetX, targetY, ORTHO_CORNER_RADIUS_PX);
         }
         break;
       }

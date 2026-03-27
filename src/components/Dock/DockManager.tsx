@@ -472,8 +472,10 @@ function TabSet(props: {
                 </div>
               )}
 
-              {/* Spacer: pushes right-aligned toolbar to the end of the expanded tab only */}
-              {showToolbar && rightButtons.length > 0 && <div style={{ flex: 1, minWidth: 0 }} />}
+              {/* Spacer: pushes close (×) and right toolbar to the tab end for expanded editor tabs */}
+              {isActive && (isResponseEditor || isTaskEditor) && (
+                <div style={{ flex: 1, minWidth: 0 }} aria-hidden />
+              )}
 
               {/* Right-aligned toolbar buttons */}
               {showToolbar && rightButtons.length > 0 && (

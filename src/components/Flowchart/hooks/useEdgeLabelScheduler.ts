@@ -1,5 +1,15 @@
 import { useRef, useCallback, useEffect, type MutableRefObject } from 'react';
 import type { Edge } from 'reactflow';
+import type { EdgeData } from '../types/flowTypes';
+import { mergeEdgePatch } from '../utils/mergeEdgePatch';
+
+function pendingApplyToPatch(cur: { label: string; data?: any }): Record<string, any> {
+  const patch: Record<string, any> = { label: cur.label };
+  if (cur.data && typeof cur.data === 'object') {
+    Object.assign(patch, cur.data);
+  }
+  return patch;
+}
 
 const MAX_TICKS = 24;
 
@@ -42,11 +52,7 @@ export function useEdgeLabelScheduler({
             const safe = eds ?? [];
             return safe.map((e) => {
               if (e.id !== cur.id) return e;
-              const mergedData = cur.data ? { ...(e.data || {}), ...cur.data } : e.data;
-              if (cur.data?.isElse === true && e.data?.isElse !== true) {
-                console.log('[useEdgeLabelScheduler] Setting isElse to true', { edgeId: e.id });
-              }
-              return { ...e, label: cur.label, data: mergedData };
+              return mergeEdgePatch(e as Edge<EdgeData>, pendingApplyToPatch(cur));
             });
           });
           setSelectedEdgeIdRef.current(cur.id);
@@ -77,7 +83,9 @@ export function useEdgeLabelScheduler({
     if (!edgeList.some((e) => e.id === cur.id)) return;
     setEdges((eds) => {
       const safe = eds ?? [];
-      return safe.map((e) => (e.id === cur.id ? { ...e, label: cur.label, data: cur.data } : e));
+      return safe.map((e) =>
+        e.id === cur.id ? mergeEdgePatch(e as Edge<EdgeData>, pendingApplyToPatch(cur)) : e
+      );
     });
     setSelectedEdgeId(cur.id);
     pendingApplyRef.current = null;

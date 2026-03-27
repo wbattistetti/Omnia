@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useMemo, useRef } from 'react';
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
+import { mergeEdgePatch } from '../components/Flowchart/utils/mergeEdgePatch';
 import type { TaskType } from '../types/taskTypes';
 
 /**
@@ -122,39 +123,9 @@ export const FlowActionsProvider: React.FC<FlowActionsProviderProps> = ({
 
     updateEdge: (edgeId: string, updates: Partial<EdgeData>) => {
       if (setEdgesRef.current) {
-        // ✅ Separate persistent fields from data-only fields
-        // ⚠️ CRITICAL: ReactFlow does NOT pass top-level custom fields to edge components
-        // Only standard ReactFlow props (id, source, target, sourceX/Y, targetX/Y, data, style, etc.) are passed
-        // Custom fields MUST be in data to be accessible via props.data.fieldName
-        const persistentFields = [
-          'conditionId',
-          'isElse',
-          'linkStyle',
-          'controlPoints',
-          // ❌ REMOVED: 'labelPositionRelative' — ReactFlow doesn't pass top-level custom fields to components
-          // Must be in data to be readable via props.data.labelPositionRelative
-        ];
-
-        const persistentUpdates: any = {};
-        const dataOnlyUpdates: any = {};
-
-        Object.keys(updates).forEach(key => {
-          if (persistentFields.includes(key)) {
-            persistentUpdates[key] = (updates as any)[key];
-          } else {
-            dataOnlyUpdates[key] = (updates as any)[key];
-          }
-        });
-
         setEdgesRef.current((eds) =>
           eds.map((edge) =>
-            edge.id === edgeId
-              ? {
-                  ...edge,
-                  ...persistentUpdates,  // ✅ Top-level (only fields ReactFlow passes as props)
-                  data: { ...(edge.data || {}), ...dataOnlyUpdates }  // ✅ Custom fields (accessible via props.data)
-                }
-              : edge
+            edge.id === edgeId ? mergeEdgePatch(edge, updates as Record<string, any>) : edge
           )
         );
       }

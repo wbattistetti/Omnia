@@ -5,6 +5,9 @@
 
 import type { EdgeLinkChoice } from './edgeLinkChoice';
 import { FlowStateBridge } from '../../services/FlowStateBridge';
+import { mergeEdgePatch } from '../Flowchart/utils/mergeEdgePatch';
+import type { EdgeData } from '../Flowchart/types/flowTypes';
+import type { Edge } from 'reactflow';
 import { generateId } from '../../utils/idGenerator';
 import { TaskType } from '../../types/taskTypes';
 
@@ -21,7 +24,10 @@ export type ApplyEdgeLinkPipelineDeps = {
 function buildExtraData(conditionId: string | undefined, isElse: boolean): Record<string, unknown> | undefined {
   const extra: Record<string, unknown> = {};
   if (conditionId) extra.conditionId = conditionId;
-  if (isElse) extra.isElse = true;
+  if (isElse) {
+    extra.isElse = true;
+    extra.conditionId = undefined;
+  }
   return Object.keys(extra).length > 0 ? extra : undefined;
 }
 
@@ -62,10 +68,8 @@ function patchEdgeConditionId(edgeId: string, conditionId: string): void {
   const setEdges = FlowStateBridge.getSetEdges();
   if (!setEdges) return;
   setEdges((eds: any[]) =>
-    eds.map((e) =>
-      e.id === edgeId
-        ? { ...e, data: { ...(e.data || {}), conditionId } }
-        : e
+    eds.map((e: Edge<EdgeData>) =>
+      e.id === edgeId ? mergeEdgePatch(e, { conditionId }) : e
     )
   );
 }

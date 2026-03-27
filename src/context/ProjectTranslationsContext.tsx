@@ -83,7 +83,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
 
   // Add translation to global table (in memory only)
   const addTranslation = useCallback((guid: string, text: string, templateId?: string) => {
-    if (!guid || !text) return;
+    if (!guid) return;
 
     // Use provided templateId or current templateId
     const activeTemplateId = templateId || currentTemplateId;
@@ -120,7 +120,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       let hasChanges = false;
       const updated = { ...prev };
       Object.entries(newTranslations).forEach(([guid, text]) => {
-        if (guid && text && updated[guid] !== text) {
+        if (guid && updated[guid] !== text) {
           updated[guid] = text;
           hasChanges = true;
         }
@@ -138,8 +138,10 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
   }, [currentTemplateId]);
 
-  // Get translation by GUID
+  // Get translation by GUID (prefer live ref so readers see values written in the same tick as addTranslation)
   const getTranslation = useCallback((guid: string): string | undefined => {
+    const live = translationsLiveRef.current[guid];
+    if (live !== undefined) return live;
     return translations[guid];
   }, [translations]);
 

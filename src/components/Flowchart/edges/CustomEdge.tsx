@@ -27,6 +27,12 @@ import { useFlowCanvasId } from '../context/FlowCanvasContext';
 import { useFlowActions } from '../../../context/FlowActionsContext';
 import { getPathSegments, PathSegment } from './utils/pathUtils';
 import { computeAbsoluteFromRelative } from './utils/labelPositionUtils';
+import {
+  resolveEdgeCaption,
+  edgeHasConditionBinding,
+  edgeCaptionRequiresMutedStyle,
+  buildClearEdgeConditionUpdates,
+} from '../utils/edgeConditionState';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -86,7 +92,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const updateEdgeData = useCallback((updates: any) => {
     // Priority 1: Use context if available
     if (flowActions?.updateEdge) {
-      flowActions.updateEdge(id, updates.data || updates);
+      flowActions.updateEdge(id, updates);
       return true;
     }
     // Priority 2: Use onUpdateRef (legacy)
@@ -107,23 +113,27 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
 
   // ✅ Get persistent fields from top-level (NOT from data)
   const linkStyle = (props as any).linkStyle ?? (data as any)?.linkStyle ?? DEFAULT_LINK_STYLE;
-  const label = props.label || props.data?.label;
+
+  const edgeConditionId = (props as any).conditionId;
+  const edgeIsElse = (props as any).isElse;
+
+  const edgeLike = useMemo(
+    () => ({
+      label: props.label,
+      conditionId: edgeConditionId,
+      isElse: edgeIsElse,
+      data: data as any,
+    }),
+    [props.label, edgeConditionId, edgeIsElse, data]
+  );
+
+  const label = resolveEdgeCaption(edgeLike);
+  const captionMuted = edgeCaptionRequiresMutedStyle(edgeLike);
+  const hasConditionBinding = edgeHasConditionBinding(edgeLike);
 
   // ✅ ARCHITECTURE PRINCIPLE #1: Single source of truth - ONLY labelPositionRelative is persisted
   // labelPositionAbsolute is ALWAYS computed by useLabelPosition (never saved)
   const labelPositionRelative = ((props as any).labelPositionRelative ?? (data as any)?.labelPositionRelative) || null;
-
-  // ✅ Debug: Log when labelPositionRelative changes in props
-  useEffect(() => {
-    console.log('[CustomEdge] 🔄 labelPositionRelative changed in props:', {
-      edgeId: id,
-      labelPositionRelative,
-      fromProps: (props as any).labelPositionRelative,
-      fromData: (data as any)?.labelPositionRelative,
-      propsKeys: Object.keys(props),
-      dataKeys: data ? Object.keys(data) : [],
-    });
-  }, [id, labelPositionRelative, props, data]);
 
   // ✅ ZERO-LAG ARCHITECTURE: Calculate directly during render, no hooks, no effects
   // This eliminates all lag because calculation happens in same render cycle as path update
@@ -359,11 +369,16 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   };
 
   const handleUncondition = () => {
-    updateEdgeData({ label: undefined });
+    updateEdgeData(buildClearEdgeConditionUpdates());
   };
 
   const handleEditLabel = (newLabel: string) => {
-    updateEdgeData({ label: newLabel });
+    const trimmed = newLabel.trim();
+    if (trimmed === '') {
+      updateEdgeData(buildClearEdgeConditionUpdates());
+    } else {
+      updateEdgeData({ label: trimmed });
+    }
   };
 
   /**
@@ -648,10 +663,11 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         controlPoints={controlPointsAbsolute}
         style={{
           ...style,
-          // ✅ Priority: Error stroke > Execution highlight > Default
+          // ✅ Priority: Error stroke > Execution highlight > Orphan caption (gray) > Default
           stroke: edgeErrors.strokeColor !== 'transparent'
             ? edgeErrors.strokeColor
-            : edgeHighlight.stroke || (style as any)?.stroke,
+            : edgeHighlight.stroke
+              || (captionMuted ? '#94a3b8' : (style as any)?.stroke),
           strokeWidth: edgeErrors.strokeWidth !== 2
             ? edgeErrors.strokeWidth
             : edgeHighlight.strokeWidth || (style as any)?.strokeWidth || 2,
@@ -716,7 +732,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
           onEdit={handleEditLabel}
           onUncondition={handleUncondition}
           onOpenConditionEditor={handleOpenConditionEditor}
-          hasConditionScript={!!((props as any).conditionId || (props.data as any)?.hasConditionScript)}
+          hasConditionScript={hasConditionBinding}
+          captionMuted={captionMuted}
           isElse={(props as any).isElse ?? (props.data as any)?.isElse}
           onMouseEnter={() => hover.setLabelHovered(true)}
           onMouseLeave={() => hover.setLabelHovered(false)}
@@ -744,7 +761,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
           >
             <IntellisenseMenu
               isOpen={showConditionIntellisense}
-              query={typeof props.label === 'string' ? props.label : ''}
+              query={label ?? ''}
               position={{ x: 0, y: 0 }}
               referenceElement={null}
               onSelect={handleIntellisenseSelect}
@@ -765,7 +782,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             onSelectElse={() => {
               updateEdgeData({
                 label: 'Else',
-                isElse: true  // ✅ Top-level
+                isElse: true,
+                conditionId: undefined,
               });
               setShowConditionSelector(false);
             }}

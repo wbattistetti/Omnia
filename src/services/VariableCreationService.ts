@@ -425,6 +425,19 @@ class VariableCreationService {
   }
 
   /**
+   * Exact varName match within variables visible for the flow canvas (collision checks for bindings).
+   */
+  findVariableInFlowScopeByExactName(
+    projectId: string,
+    flowCanvasId: string,
+    varName: string
+  ): VariableInstance | undefined {
+    const trimmed = String(varName || '').trim();
+    if (!trimmed) return undefined;
+    return this.getVariablesForFlowScope(projectId, flowCanvasId).find((v) => v.varName === trimmed);
+  }
+
+  /**
    * Return the varName (human-readable label) for a given varId.
    * Used by condition editor to display stored GUIDs as labels.
    */

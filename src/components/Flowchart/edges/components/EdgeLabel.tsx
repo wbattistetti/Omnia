@@ -29,6 +29,8 @@ export interface EdgeLabelProps {
   /** Da matita su link senza label: mostra subito la textbox. */
   allowEmptyRender?: boolean;
   onEmptyLabelEditFinished?: () => void;
+  /** Caption presente ma senza condizione collegata → stile attenuato (grigio). */
+  captionMuted?: boolean;
 }
 
 /**
@@ -54,6 +56,7 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
   edgeId, // ✅ Add edgeId
   allowEmptyRender = false,
   onEmptyLabelEditFinished,
+  captionMuted = false,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingValue, setEditingValue] = useState(label || '');
@@ -226,8 +229,12 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
         pointerEvents: isDragging ? 'none' : 'auto', // ✅ CRITICAL FIX: durante drag, lascia passare eventi SVG alle hit-area
         zIndex: isDragging ? 1000 : 10,
         boxShadow: isDragging
-          ? '0 4px 12px rgba(139,92,246,0.30)'
-          : '0 2px 8px rgba(139,92,246,0.10)',
+          ? captionMuted
+            ? '0 4px 12px rgba(100,116,139,0.22)'
+            : '0 4px 12px rgba(139,92,246,0.30)'
+          : captionMuted
+            ? '0 2px 8px rgba(100,116,139,0.12)'
+            : '0 2px 8px rgba(139,92,246,0.10)',
         minWidth: 30,
         minHeight: 18,
         display: 'inline-flex',

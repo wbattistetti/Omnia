@@ -5,6 +5,19 @@ import { ASTNode } from '../components/conditions/dsl/parser/AST';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 
+/** Options for label ↔ stored-id bracket conversion (message DSL, conditions). */
+export type BracketVariableMappingOptions = {
+  /**
+   * When several map keys share the same label (e.g. Subflow composite UUID + parent var id),
+   * prefer this key on encode so storage stays canonical.
+   */
+  preferKeysForEncode?: Set<string>;
+  /**
+   * When [guid] is missing from the map (stale id), resolve a display label (e.g. from VariableCreationService).
+   */
+  resolveUnknownGuidToLabel?: (guid: string) => string | null;
+};
+
 /**
  * ✅ FASE 2: Converts DSL with labels to DSL with GUIDs
  * readableCode: [dataNascita.giorno] == 15
@@ -12,7 +25,8 @@ import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
  */
 export function convertDSLLabelsToGUIDs(
   readableCode: string,
-  variableMappings: Map<string, string> // Map<guid, label>
+  variableMappings: Map<string, string>, // Map<guid, label>
+  options?: BracketVariableMappingOptions
 ): string {
   if (!readableCode || typeof readableCode !== 'string') {
     return readableCode;
@@ -22,17 +36,21 @@ export function convertDSLLabelsToGUIDs(
   // Pattern matches [label] or [label.subpath] including Unicode characters (à, è, ì, etc.)
   // ✅ FIX: Use [^\[\]]+? to match any content except brackets (supports Unicode)
   return readableCode.replace(/\[\s*([^\[\]]+?)\s*\]/g, (match, label) => {
-    // Find guid by label (reverse lookup)
-    const guid = Array.from(variableMappings.entries()).find(
-      ([g, l]) => l === label.trim()
-    )?.[0];
+    const trimmed = String(label).trim();
+    const matches = Array.from(variableMappings.entries()).filter(([, l]) => l === trimmed);
 
-    if (!guid) {
+    if (matches.length === 0) {
       console.warn(`[ConditionCodeConverter] Variable [${label}] not found in mappings`);
-      return match; // Keep original if not found
+      return match;
     }
 
-    return `[${guid}]`;
+    let chosen = matches[0]!;
+    if (matches.length > 1 && options?.preferKeysForEncode?.size) {
+      const preferred = matches.find(([g]) => options.preferKeysForEncode!.has(g));
+      if (preferred) chosen = preferred;
+    }
+
+    return `[${chosen[0]}]`;
   });
 }
 
@@ -44,7 +62,8 @@ export function convertDSLLabelsToGUIDs(
  */
 export function convertDSLGUIDsToLabels(
   executableCode: string,
-  variableMappings: Map<string, string> // Map<guid, label>
+  variableMappings: Map<string, string>, // Map<guid, label>
+  options?: BracketVariableMappingOptions
 ): string {
   if (!executableCode || typeof executableCode !== 'string') {
     return executableCode;
@@ -59,14 +78,16 @@ export function convertDSLGUIDsToLabels(
 
     // Check if content is a GUID
     if (GUID_PATTERN.test(trimmed)) {
-      const label = variableMappings.get(trimmed);
+      let label = variableMappings.get(trimmed);
+      if (!label && options?.resolveUnknownGuidToLabel) {
+        label = options.resolveUnknownGuidToLabel(trimmed) ?? undefined;
+      }
 
       if (label) {
         return `[${label}]`;
-      } else {
-        console.warn(`[ConditionCodeConverter] GUID [${trimmed}] not found in mappings`);
-        return match; // Keep original if not found
       }
+      console.warn(`[ConditionCodeConverter] GUID [${trimmed}] not found in mappings`);
+      return match;
     }
 
     // Not a GUID, keep as is (might be a literal or other content)

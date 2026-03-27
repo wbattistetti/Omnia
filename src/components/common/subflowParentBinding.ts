@@ -8,6 +8,7 @@ type VariableMenuLikeItem = {
   ownerFlowId?: string;
   isFromActiveFlow?: boolean;
   sourceTaskRowLabel?: string;
+  subflowTaskId?: string;
 };
 
 type WorkspaceFlows = Record<string, { nodes?: Array<{ data?: { rows?: Array<{ id?: string; text?: string }> } }> }>;
@@ -96,18 +97,10 @@ export function ensureParentVariableAndSubflowOutputBinding(
     throw new Error('Cannot create parent binding: child flow id or child variable id is missing.');
   }
 
-  const tokenLabel = buildParentVariableLabel(item.sourceTaskRowLabel || 'Subflow', item.varLabel);
-  const parentVar = variableCreationService.createManualVariable(projectId, tokenLabel, {
-    scope: 'flow',
-    scopeFlowId: activeFlowId,
-  });
+  const subflowTaskId = String(item.subflowTaskId || '').trim()
+    ? String(item.subflowTaskId).trim()
+    : findBestSubflowTaskId(activeFlowId, childFlowId, item.sourceTaskRowLabel || '', flows);
 
-  const subflowTaskId = findBestSubflowTaskId(
-    activeFlowId,
-    childFlowId,
-    item.sourceTaskRowLabel || '',
-    flows
-  );
   const subflowTask = taskRepository.getTask(subflowTaskId);
   if (!subflowTask) {
     throw new Error(`Subflow task '${subflowTaskId}' not found while updating output bindings.`);
@@ -116,6 +109,37 @@ export function ensureParentVariableAndSubflowOutputBinding(
   const prevBindings = Array.isArray((subflowTask as any).outputBindings)
     ? ((subflowTask as any).outputBindings as SubflowIoBinding[])
     : [];
+
+  const existingForChild = prevBindings.find((b) => String(b?.fromVariable || '') === childVarId);
+  if (existingForChild) {
+    const toId = String(existingForChild.toVariable || '').trim();
+    const name = variableCreationService.getVarNameByVarId(projectId, toId);
+    if (!name) {
+      throw new Error(
+        `Subflow output binding references missing parent variable '${toId}'. Fix outputBindings on this Subflow task.`
+      );
+    }
+    return { tokenLabel: name, parentVarId: toId };
+  }
+
+  const tokenLabel = buildParentVariableLabel(item.sourceTaskRowLabel || 'Subflow', item.varLabel);
+
+  const collision = variableCreationService.findVariableInFlowScopeByExactName(
+    projectId,
+    activeFlowId,
+    tokenLabel
+  );
+  if (collision) {
+    throw new Error(
+      `A variable named "${tokenLabel}" already exists in this flow. Rename the other variable or the Subflow row label, then try again.`
+    );
+  }
+
+  const parentVar = variableCreationService.createManualVariable(projectId, tokenLabel, {
+    scope: 'flow',
+    scopeFlowId: activeFlowId,
+  });
+
   const alreadyBound = prevBindings.some(
     (b) => String(b?.fromVariable || '') === childVarId && String(b?.toVariable || '') === parentVar.varId
   );

@@ -13,6 +13,10 @@ import { FactoryTaskCreator } from '../application/FactoryTaskCreator';
 import { IntellisenseSelectionHandler } from '../application/IntellisenseSelectionHandler';
 import { taskTypeToTemplateId } from '@types/taskTypes';
 import type { Row } from '@types/NodeRowTypes';
+import { taskRepository } from '@services/TaskRepository';
+import { useFlowWorkspace } from '@flows/FlowStore';
+import { getActiveFlowCanvasId } from '@flows/activeFlowCanvas';
+import { findDuplicateNormalizedSubflowRowLabel } from '@components/Flowchart/utils/subflowRowLabelValidation';
 
 export interface UseNodeRowEventHandlersProps {
   row: Row;
@@ -99,6 +103,9 @@ export function useNodeRowEventHandlers(
     toolbarSM,
   } = props;
 
+  const { flows } = useFlowWorkspace();
+  const activeFlowId = getActiveFlowCanvasId();
+
   const enterEditing = useCallback(() => {
     setIsEditing(true);
     setShowCreatePicker(false);
@@ -142,7 +149,19 @@ export function useNodeRowEventHandlers(
     if (typeof onEditingEnd === 'function') {
       onEditingEnd();
     }
-  }, [currentText, row, onUpdate, onUpdateWithCategory, setIsEditing, setShowIntellisense, setIntellisenseQuery, getProjectId, onEditingEnd]);
+  }, [
+    currentText,
+    row,
+    onUpdate,
+    onUpdateWithCategory,
+    setIsEditing,
+    setShowIntellisense,
+    setIntellisenseQuery,
+    getProjectId,
+    onEditingEnd,
+    activeFlowId,
+    flows,
+  ]);
 
   const handleCancel = useCallback(() => {
     if (currentText.trim() === '') {
