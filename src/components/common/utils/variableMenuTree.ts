@@ -52,18 +52,22 @@ function insertPath<T>(root: Map<string, TrieNode<T>>, segments: string[], item:
   }
 }
 
-function lastSegmentFromLabel(tokenLabel: string): string {
-  const segs = splitTokenLabelSegments(tokenLabel);
-  return segs.length > 0 ? segs[segs.length - 1]! : String(tokenLabel || '').trim();
-}
-
+/**
+ * Under nested Sub / headers, show only the path suffix so parent segments are not repeated
+ * (e.g. submenu "dati personali" → leaves "nome", "telefono" not "dati personali.nome").
+ */
 function displayLabelForLeaf<T extends { tokenLabel?: string; varLabel: string }>(
   item: T,
   depth: number
 ): string {
   const full = String(item.tokenLabel || item.varLabel || '').trim();
-  if (depth === 0) return full;
-  return lastSegmentFromLabel(full);
+  const segments = splitTokenLabelSegments(full);
+  if (depth <= 0 || segments.length <= depth) {
+    return full;
+  }
+  const suffix = segments.slice(depth);
+  if (suffix.length === 0) return full;
+  return suffix.join('.');
 }
 
 function collectAllItemsInSubtree<T>(node: TrieNode<T>): T[] {

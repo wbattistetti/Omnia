@@ -39,12 +39,23 @@ Public Class MessageTask
         End If
 
         Dim text As String = ResolveTranslation(context)
-        ' ✅ Cast to TaskUtterance for ProcessPlaceholders (Engine-specific)
-        Dim taskUtterance = TryCast(context, TaskUtterance)
-        If taskUtterance Is Nothing Then
-            Throw New InvalidOperationException("ITaskContext must be TaskUtterance for MessageTask placeholder processing.")
+        Dim processed As String
+        Dim store = context.VariableStore
+        If store IsNot Nothing Then
+            ' Unified with FlowOrchestrator: [token] must be varId (GUID) keys in VariableStore
+            processed = PlaceholderUtils.ProcessPlaceholdersWithResolver(
+                text,
+                Function(t) PlaceholderUtils.ResolveTokenFromVariableStore(t, store),
+                $"MessageTask TextKey '{TextKey}'"
+            )
+        Else
+            ' Legacy: FullLabel lookup on TaskUtterance tree (set VariableStore on context for GUID-only resolution)
+            Dim taskUtterance = TryCast(context, TaskUtterance)
+            If taskUtterance Is Nothing Then
+                Throw New InvalidOperationException("ITaskContext must be TaskUtterance for MessageTask when VariableStore is not set.")
+            End If
+            processed = PlaceholderUtils.ProcessPlaceholders(text, taskUtterance)
         End If
-        Dim processed As String = PlaceholderUtils.ProcessPlaceholders(text, taskUtterance)
 
         If String.IsNullOrEmpty(processed) Then
             Throw New InvalidOperationException($"Processed text for key '{TextKey}' is empty after placeholder resolution.")

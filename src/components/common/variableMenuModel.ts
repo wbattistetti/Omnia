@@ -1,6 +1,6 @@
 /**
- * Builds variable picker items for the active flow: local scope variables and unbound
- * Subflow interface outputs (one row per Subflow instance; bound outputs are omitted).
+ * Builds variable picker items for the active flow: local scope variables and Subflow
+ * interface outputs (unbound child outputs + parent variables when outputBindings exist).
  */
 import { TaskType } from '../../types/taskTypes';
 import { taskRepository } from '../../services/TaskRepository';
@@ -9,6 +9,11 @@ import type { WorkspaceState } from '../../flows/FlowTypes';
 import type { VariableInstance } from '../../types/variableTypes';
 import type { MappingEntry } from '../FlowMappingPanel/mappingTypes';
 import { loadFlow } from '../../flows/FlowPersistence';
+import {
+  fetchChildFlowInterfaceOutputs,
+  invalidateChildFlowInterfaceCache,
+} from '../../services/childFlowInterfaceService';
+import { logVariableMenuDebug } from '../../utils/variableMenuDebug';
 import { subflowInterfaceOutputMappingKey } from './subflowVariableMappingKey';
 
 export type VariableMenuItem = {
@@ -22,11 +27,21 @@ export type VariableMenuItem = {
   sourceTaskRowLabel?: string;
   /** Subflow task row id in the parent flow (interface outputs only). */
   subflowTaskId?: string;
+  /** Present when this item is a parent var resolved from a bound subflow output (still tagged with `subflowTaskId` for per-row menus). */
+  resolvedFromSubflowOutputBinding?: boolean;
   /** True when this row is an interface output not yet in outputBindings for this instance. */
   isInterfaceUnbound?: boolean;
+  /**
+   * Interface row has no child variable GUID yet (`variableRefId` absent).
+   * Shown in the picker; inserting a token requires wiring the interface first.
+   */
+  missingChildVariableRef?: boolean;
 };
 
-const interfaceOutputCache = new Map<string, MappingEntry[]>();
+/** Delegates to shared child-flow interface cache (see childFlowInterfaceService). */
+export function invalidateInterfaceOutputCache(projectId?: string, childFlowId?: string): void {
+  invalidateChildFlowInterfaceCache(projectId, childFlowId);
+}
 
 function extractRows(node: any): any[] {
   const rows = node?.data?.rows;
@@ -38,6 +53,17 @@ function collectTaskIdsForFlow(flowId: string, flows: WorkspaceState['flows']): 
   const flow = flows[flowId];
   if (!flow) return out;
   for (const node of flow.nodes || []) {
+    for (const row of extractRows(node)) {
+      const taskId = String(row?.id || '').trim();
+      if (taskId) out.add(taskId);
+    }
+  }
+  return out;
+}
+
+function collectTaskIdsFromNodes(nodes: any[]): Set<string> {
+  const out = new Set<string>();
+  for (const node of nodes || []) {
     for (const row of extractRows(node)) {
       const taskId = String(row?.id || '').trim();
       if (taskId) out.add(taskId);
@@ -94,7 +120,59 @@ export function collectLevelOneSubflowInstances(
       if (!task || task.type !== TaskType.Subflow) continue;
       const childFlowId = resolveSubflowId(task);
       if (!childFlowId) continue;
-      const rawRowLabel = String(row?.text || task?.name || '').trim() || 'Subflow';
+      const rawRowLabel = String(row?.text || task?.label || task?.name || '').trim() || 'Subflow';
+      const rowLabel = variableCreationService.normalizeTaskLabel(rawRowLabel);
+      out.push({ subflowTaskId: taskId, flowId: childFlowId, rowLabel });
+    }
+  }
+  return out;
+}
+
+function safeJsonForFingerprint(x: unknown): string {
+  try {
+    return JSON.stringify(x ?? null);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Stable content key for React effect deps: updates when canvas/meta relevant to the variable picker
+ * changes, not when the Redux `flows` map is replaced with the same data.
+ */
+export function getVariableMenuRebuildFingerprint(
+  flows: WorkspaceState['flows'],
+  menuFlowId: string
+): string {
+  const root = flows[menuFlowId];
+  if (!root) {
+    return `missing:${menuFlowId}`;
+  }
+  const parts: string[] = [
+    menuFlowId,
+    safeJsonForFingerprint(root.nodes),
+    safeJsonForFingerprint(root.meta),
+  ];
+  const instances = collectLevelOneSubflowInstances(menuFlowId, flows);
+  for (const inst of instances) {
+    const cf = flows[inst.flowId];
+    parts.push(inst.flowId);
+    parts.push(safeJsonForFingerprint(cf?.meta));
+  }
+  return parts.join('\x1e');
+}
+
+function collectLevelOneSubflowInstancesFromNodes(nodes: any[]): SubflowInstanceInfo[] {
+  const out: SubflowInstanceInfo[] = [];
+  for (const node of nodes || []) {
+    for (const row of extractRows(node)) {
+      const taskId = String(row?.id || '').trim();
+      if (!taskId) continue;
+      const task = taskRepository.getTask(taskId);
+      if (!task || task.type !== TaskType.Subflow) continue;
+      const childFlowId = resolveSubflowId(task);
+      if (!childFlowId) continue;
+      const rawRowLabel = String(row?.text || task?.label || task?.name || '').trim() || 'Subflow';
       const rowLabel = variableCreationService.normalizeTaskLabel(rawRowLabel);
       out.push({ subflowTaskId: taskId, flowId: childFlowId, rowLabel });
     }
@@ -112,6 +190,48 @@ function getBoundChildOutputVariableIds(subflowTask: any): Set<string> {
   return out;
 }
 
+/** Parent variable GUID for a child output when `outputBindings` maps `fromVariable` → `toVariable`. */
+function findParentVariableIdForChildOutput(subflowTask: any, childVarId: string): string | null {
+  const bindings = Array.isArray(subflowTask?.outputBindings) ? subflowTask.outputBindings : [];
+  const b = bindings.find((x: any) => String(x?.fromVariable || '').trim() === childVarId);
+  const to = b ? String(b?.toVariable || '').trim() : '';
+  return to || null;
+}
+
+/** Stable id for a MappingEntry row when `variableRefId` is missing. */
+function stableInterfaceEntryKey(entry: MappingEntry): string {
+  const id = String(entry?.id || '').trim();
+  if (id) return id;
+  const path = String(entry?.internalPath || '').trim();
+  if (path) return path;
+  return 'unknown';
+}
+
+/** Label for the picker: child var name when wired, else interface fields. */
+function resolveInterfaceOutputEntryLabel(
+  entry: MappingEntry,
+  varsById: Map<string, VariableInstance>,
+  variableRefId: string | undefined
+): string {
+  const vid = variableRefId?.trim();
+  if (vid) {
+    const varInst = varsById.get(vid);
+    const name = String(varInst?.varName || '').trim();
+    if (name) return name;
+  }
+  return (
+    String(entry?.externalName || '').trim() ||
+    String(entry?.internalPath || '').trim() ||
+    String(entry?.linkedVariable || '').trim() ||
+    ''
+  );
+}
+
+/** Synthetic varId for menu/maps when the interface row has no `variableRefId` yet. */
+function syntheticInterfaceVarId(entryKey: string): string {
+  return `iface:${String(entryKey || '').trim()}`;
+}
+
 function isExposedInFlow(flow: any, varId: string): boolean {
   const vars = Array.isArray(flow?.meta?.variables) ? flow.meta.variables : [];
   const v = vars.find((x: any) => String(x?.id || '').trim() === varId);
@@ -121,13 +241,133 @@ function isExposedInFlow(flow: any, varId: string): boolean {
   return [...ifaceIn, ...ifaceOut].some((e: any) => String(e?.variableRefId || '').trim() === varId);
 }
 
+export type SubflowInterfaceAppendStats = {
+  subflowItemsAdded: number;
+  dbgSubflowSkipBound: number;
+  dbgSubflowSkipNoVarLabel: number;
+  dbgSubflowInterfaceWithoutRefAdded: number;
+  dbgSubflowBoundResolvedItems: number;
+};
+
+/**
+ * Appends Subflow interface rows: unbound child outputs, or parent variables when bindings exist.
+ */
+function appendSubflowInterfaceOutputItems(
+  projectId: string,
+  activeFlowId: string,
+  activeFlowForExpose: any,
+  output: MappingEntry[],
+  subflowTask: any,
+  inst: SubflowInstanceInfo,
+  childFlowId: string,
+  ownerTitle: string,
+  items: VariableMenuItem[],
+  seen: Set<string>,
+  stats: SubflowInterfaceAppendStats,
+  varsById: Map<string, VariableInstance>
+): void {
+  const bound = getBoundChildOutputVariableIds(subflowTask);
+  const cleanSourceLabel = variableCreationService.normalizeTaskLabel(inst.rowLabel);
+
+  for (const entry of output) {
+    const refId = String(entry?.variableRefId || '').trim();
+    const entryKey = stableInterfaceEntryKey(entry);
+    const missingRef = !refId;
+
+    if (refId && bound.has(refId)) {
+      const toId = findParentVariableIdForChildOutput(subflowTask, refId);
+      if (!toId) {
+        stats.dbgSubflowSkipBound += 1;
+        continue;
+      }
+      const dedupeKey = `${inst.subflowTaskId}::bound::${refId}`;
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+      const parentName =
+        variableCreationService.getVarNameByVarId(projectId, toId)?.trim() ||
+        String(varsById.get(toId)?.varName || '').trim() ||
+        '';
+      if (!parentName) {
+        stats.dbgSubflowSkipNoVarLabel += 1;
+        continue;
+      }
+      stats.subflowItemsAdded += 1;
+      stats.dbgSubflowBoundResolvedItems += 1;
+      const mergeIdx = items.findIndex(
+        (it) =>
+          it.varId === toId &&
+          it.isFromActiveFlow === true &&
+          !it.subflowTaskId &&
+          !it.resolvedFromSubflowOutputBinding
+      );
+      if (mergeIdx >= 0) {
+        const cur = items[mergeIdx]!;
+        items[mergeIdx] = {
+          ...cur,
+          sourceTaskRowLabel: cleanSourceLabel,
+          subflowTaskId: inst.subflowTaskId,
+          resolvedFromSubflowOutputBinding: true,
+        };
+        continue;
+      }
+      items.push({
+        varId: toId,
+        varLabel: parentName,
+        tokenLabel: parentName,
+        ownerFlowId: activeFlowId,
+        ownerFlowTitle: String(activeFlowForExpose?.title || activeFlowId).trim() || activeFlowId,
+        isExposed: isExposedInFlow(activeFlowForExpose, toId),
+        isFromActiveFlow: true,
+        sourceTaskRowLabel: cleanSourceLabel,
+        subflowTaskId: inst.subflowTaskId,
+        resolvedFromSubflowOutputBinding: true,
+      });
+      continue;
+    }
+
+    const dedupeKey = `${inst.subflowTaskId}::${refId || syntheticInterfaceVarId(entryKey)}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    const varLabel = resolveInterfaceOutputEntryLabel(entry, varsById, refId || undefined);
+    if (!varLabel) {
+      stats.dbgSubflowSkipNoVarLabel += 1;
+      continue;
+    }
+
+    const varId = missingRef ? syntheticInterfaceVarId(entryKey) : refId;
+
+    stats.subflowItemsAdded += 1;
+    if (missingRef) stats.dbgSubflowInterfaceWithoutRefAdded += 1;
+    items.push({
+      varId,
+      varLabel,
+      tokenLabel: `${cleanSourceLabel}.${varLabel}`,
+      ownerFlowId: childFlowId,
+      ownerFlowTitle: ownerTitle,
+      isExposed: true,
+      isFromActiveFlow: false,
+      sourceTaskRowLabel: cleanSourceLabel,
+      subflowTaskId: inst.subflowTaskId,
+      isInterfaceUnbound: true,
+      ...(missingRef ? { missingChildVariableRef: true } : {}),
+    });
+  }
+}
+
 function pushInterfaceItemsForInstance(
+  projectId: string,
+  activeFlowId: string,
+  activeFlowForExpose: any,
   flows: WorkspaceState['flows'],
   relevantFlowIds: Set<string>,
-  varsById: Map<string, VariableInstance>,
   inst: SubflowInstanceInfo,
   items: VariableMenuItem[],
-  seen: Set<string>
+  seen: Set<string>,
+  stats: SubflowInterfaceAppendStats,
+  varsById: Map<string, VariableInstance>
 ): void {
   if (!relevantFlowIds.has(inst.flowId)) return;
   const childFlow = flows[inst.flowId];
@@ -135,40 +375,26 @@ function pushInterfaceItemsForInstance(
 
   const subflowTask = taskRepository.getTask(inst.subflowTaskId);
   if (!subflowTask) return;
-  const bound = getBoundChildOutputVariableIds(subflowTask);
 
   const output: MappingEntry[] = Array.isArray(childFlow.meta?.flowInterface?.output)
     ? childFlow.meta?.flowInterface?.output || []
     : [];
 
-  const cleanSourceLabel = variableCreationService.normalizeTaskLabel(inst.rowLabel);
-
-  for (const entry of output) {
-    const varId = String(entry?.variableRefId || '').trim();
-    if (!varId) continue;
-    if (bound.has(varId)) continue;
-
-    const key = `${inst.subflowTaskId}::${varId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const varInst = varsById.get(varId);
-    const varLabel = String(varInst?.varName || entry?.externalName || entry?.internalPath || '').trim();
-    if (!varLabel) continue;
-
-    items.push({
-      varId,
-      varLabel,
-      tokenLabel: `${cleanSourceLabel}.${varLabel}`,
-      ownerFlowId: inst.flowId,
-      ownerFlowTitle: String(childFlow.title || inst.flowId).trim() || inst.flowId,
-      isExposed: true,
-      isFromActiveFlow: false,
-      sourceTaskRowLabel: cleanSourceLabel,
-      subflowTaskId: inst.subflowTaskId,
-      isInterfaceUnbound: true,
-    });
-  }
+  const ownerTitle = String(childFlow.title || inst.flowId).trim() || inst.flowId;
+  appendSubflowInterfaceOutputItems(
+    projectId,
+    activeFlowId,
+    activeFlowForExpose,
+    output,
+    subflowTask,
+    inst,
+    inst.flowId,
+    ownerTitle,
+    items,
+    seen,
+    stats,
+    varsById
+  );
 }
 
 export function buildVariableMenuItems(
@@ -221,8 +447,25 @@ export function buildVariableMenuItems(
     });
   }
 
+  const subflowStats: SubflowInterfaceAppendStats = {
+    subflowItemsAdded: 0,
+    dbgSubflowSkipBound: 0,
+    dbgSubflowSkipNoVarLabel: 0,
+    dbgSubflowInterfaceWithoutRefAdded: 0,
+    dbgSubflowBoundResolvedItems: 0,
+  };
   for (const inst of instances) {
-    pushInterfaceItemsForInstance(flows, relevantFlowIds, varsById, inst, items, seen);
+    pushInterfaceItemsForInstance(
+      projectId,
+      activeFlowId,
+      activeFlow,
+      flows,
+      relevantFlowIds,
+      inst,
+      items,
+      seen,
+      subflowStats
+    );
   }
 
   return items.sort((a, b) => {
@@ -241,10 +484,7 @@ export async function buildVariableMenuItemsAsync(
   activeFlowId: string,
   flows: WorkspaceState['flows']
 ): Promise<VariableMenuItem[]> {
-  const relevantFlowIds = collectLevelOneFlowIds(activeFlowId, flows);
-  const instances = collectLevelOneSubflowInstances(activeFlowId, flows);
   const allVars = variableCreationService.getAllVariables(projectId) || [];
-  const activeTaskIds = collectTaskIdsForFlow(activeFlowId, flows);
   const varsById = new Map<string, VariableInstance>();
   allVars.forEach((v) => {
     const id = String((v as VariableInstance)?.varId || '').trim();
@@ -252,7 +492,41 @@ export async function buildVariableMenuItemsAsync(
     varsById.set(id, v as VariableInstance);
   });
 
+  let activeFlow = flows[activeFlowId] as any;
+  let loadedActiveMeta: any = null;
+  let loadedActiveTitle = '';
+  let activeNodes = Array.isArray(activeFlow?.nodes) ? activeFlow.nodes : [];
+  let loadedActiveFlowFromApi = false;
+  if (activeNodes.length === 0 && projectId) {
+    try {
+      const loadedActive = await loadFlow(projectId, activeFlowId);
+      activeNodes = Array.isArray(loadedActive?.nodes) ? loadedActive.nodes : [];
+      loadedActiveMeta = loadedActive?.meta || null;
+      loadedActiveTitle = String((loadedActive as any)?.title || '').trim();
+      loadedActiveFlowFromApi = true;
+    } catch {
+      // Ignore: caller gets best-effort menu with available in-memory data.
+    }
+  }
+
+  const activeTaskIds = activeNodes.length > 0
+    ? collectTaskIdsFromNodes(activeNodes)
+    : collectTaskIdsForFlow(activeFlowId, flows);
+
+  const instances = activeNodes.length > 0
+    ? collectLevelOneSubflowInstancesFromNodes(activeNodes)
+    : collectLevelOneSubflowInstances(activeFlowId, flows);
+  const relevantFlowIds = new Set<string>([activeFlowId, ...instances.map((i) => i.flowId)]);
+  const activeFlowForExpose = activeFlow || { meta: loadedActiveMeta, title: loadedActiveTitle };
+
   const items: VariableMenuItem[] = [];
+  type SubflowBuildDiag = {
+    childFlowId: string;
+    outputSource: 'store' | 'cache' | 'loadFlow' | 'empty';
+    outputEntryCount: number;
+    taskOk: boolean;
+  };
+  const subflowBuildDiag: SubflowBuildDiag[] = [];
   const seen = new Set<string>();
   const localVars = allVars.filter((v) => {
     const taskId = String((v as VariableInstance).taskInstanceId || '').trim();
@@ -273,18 +547,26 @@ export async function buildVariableMenuItemsAsync(
     const key = `${activeFlowId}::${varId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const activeFlow = flows[activeFlowId];
     items.push({
       varId,
       varLabel,
       tokenLabel: varLabel,
       ownerFlowId: activeFlowId,
-      ownerFlowTitle: String(activeFlow?.title || activeFlowId).trim() || activeFlowId,
-      isExposed: isExposedInFlow(activeFlow, varId),
+      ownerFlowTitle: String(activeFlowForExpose?.title || activeFlowId).trim() || activeFlowId,
+      isExposed: isExposedInFlow(activeFlowForExpose, varId),
       isFromActiveFlow: true,
       sourceTaskRowLabel: undefined,
     });
   }
+
+  let dbgSubflowSkipNoTask = 0;
+  const subflowAppendStats: SubflowInterfaceAppendStats = {
+    subflowItemsAdded: 0,
+    dbgSubflowSkipBound: 0,
+    dbgSubflowSkipNoVarLabel: 0,
+    dbgSubflowInterfaceWithoutRefAdded: 0,
+    dbgSubflowBoundResolvedItems: 0,
+  };
 
   for (const inst of instances) {
     if (!relevantFlowIds.has(inst.flowId)) continue;
@@ -292,59 +574,77 @@ export async function buildVariableMenuItemsAsync(
     if (!childFlowId) continue;
 
     let output: MappingEntry[] = [];
-    const loaded = flows[childFlowId];
-    if (Array.isArray(loaded?.meta?.flowInterface?.output)) {
-      output = loaded.meta.flowInterface.output || [];
-    } else {
-      const cacheKey = `${projectId}::${childFlowId}`;
-      if (interfaceOutputCache.has(cacheKey)) {
-        output = interfaceOutputCache.get(cacheKey) || [];
-      } else {
-        try {
-          const loadedFlow = await loadFlow(projectId, childFlowId);
-          output = Array.isArray((loadedFlow.meta as any)?.flowInterface?.output)
-            ? (((loadedFlow.meta as any).flowInterface.output as MappingEntry[]) || [])
-            : [];
-          interfaceOutputCache.set(cacheKey, output);
-        } catch {
-          output = [];
-        }
-      }
+    let outputSource: 'store' | 'cache' | 'api' | 'empty' = 'empty';
+    let resolvedChildTitle = '';
+    try {
+      const resolved = await fetchChildFlowInterfaceOutputs(projectId, childFlowId, flows);
+      output = resolved.outputs;
+      resolvedChildTitle = resolved.title;
+      outputSource = resolved.outputs.length === 0 ? 'empty' : resolved.source;
+    } catch {
+      output = [];
+      outputSource = 'empty';
     }
 
     const subflowTask = taskRepository.getTask(inst.subflowTaskId);
-    if (!subflowTask) continue;
-    const bound = getBoundChildOutputVariableIds(subflowTask);
-    const cleanSourceLabel = variableCreationService.normalizeTaskLabel(inst.rowLabel);
-    const ownerTitle = String(loaded?.title || childFlowId).trim() || childFlowId;
-
-    for (const entry of output) {
-      const varId = String(entry?.variableRefId || '').trim();
-      if (!varId) continue;
-      if (bound.has(varId)) continue;
-
-      const key = `${inst.subflowTaskId}::${varId}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      const varInst = varsById.get(varId);
-      const varLabel = String(varInst?.varName || entry?.externalName || entry?.internalPath || '').trim();
-      if (!varLabel) continue;
-
-      items.push({
-        varId,
-        varLabel,
-        tokenLabel: `${cleanSourceLabel}.${varLabel}`,
-        ownerFlowId: childFlowId,
-        ownerFlowTitle: ownerTitle,
-        isExposed: true,
-        isFromActiveFlow: false,
-        sourceTaskRowLabel: cleanSourceLabel,
-        subflowTaskId: inst.subflowTaskId,
-        isInterfaceUnbound: true,
+    if (!subflowTask) {
+      dbgSubflowSkipNoTask += 1;
+      subflowBuildDiag.push({
+        childFlowId: String(childFlowId).slice(0, 24),
+        outputSource,
+        outputEntryCount: output.length,
+        taskOk: false,
       });
+      continue;
     }
+    subflowBuildDiag.push({
+      childFlowId: String(childFlowId).slice(0, 24),
+      outputSource,
+      outputEntryCount: output.length,
+      taskOk: true,
+    });
+    const slice = flows[childFlowId] as { title?: string } | undefined;
+    const ownerTitle =
+      String(resolvedChildTitle || slice?.title || childFlowId).trim() || childFlowId;
+
+    appendSubflowInterfaceOutputItems(
+      projectId,
+      activeFlowId,
+      activeFlowForExpose,
+      output,
+      subflowTask,
+      inst,
+      childFlowId,
+      ownerTitle,
+      items,
+      seen,
+      subflowAppendStats,
+      varsById
+    );
   }
+
+  const localItemsCount = items.length - subflowAppendStats.subflowItemsAdded;
+  logVariableMenuDebug('variableMenu:build', {
+    menuFlowId: activeFlowId,
+    activeNodes: activeNodes.length,
+    loadedMenuFlowFromApi: loadedActiveFlowFromApi,
+    instancesCount: instances.length,
+    instances: instances.slice(0, 12).map((i) => ({
+      rowLabel: i.rowLabel,
+      childFlowId: String(i.flowId || '').slice(0, 20),
+    })),
+    subflows: subflowBuildDiag,
+    localScopeItems: localItemsCount,
+    subflowItemsAdded: subflowAppendStats.subflowItemsAdded,
+    boundResolvedItems: subflowAppendStats.dbgSubflowBoundResolvedItems,
+    interfaceOutputsWithoutVariableRef: subflowAppendStats.dbgSubflowInterfaceWithoutRefAdded,
+    totalItems: items.length,
+    skips: {
+      noSubflowTask: dbgSubflowSkipNoTask,
+      boundOrphanOrMissingParentName: subflowAppendStats.dbgSubflowSkipBound,
+      noVarLabel: subflowAppendStats.dbgSubflowSkipNoVarLabel,
+    },
+  });
 
   return items.sort((a, b) => {
     const ta = String(a.tokenLabel || a.varLabel);

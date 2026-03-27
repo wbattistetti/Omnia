@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useProjectData } from '@context/ProjectDataContext';
 import { useTaskTreeManager } from '@context/DDTManagerContext';
 import { useTaskTreeContext } from '@context/DDTContext';
@@ -44,10 +44,22 @@ import { IntellisenseSelectionHandler } from './application/IntellisenseSelectio
 import { RowTypeHandler } from './application/RowTypeHandler';
 import { FactoryTaskCreator } from './application/FactoryTaskCreator';
 import SemanticValuesEditorPanel from './SemanticValuesEditorPanel';
+import { useFlowWorkspace } from '@flows/FlowStore';
+import { useFlowCanvasId } from '../../context/FlowCanvasContext';
+import { fetchChildFlowInterfaceOutputs } from '@services/childFlowInterfaceService';
+
+function resolveChildFlowId(task: any): string | null {
+  const direct = String(task?.flowId || '').trim();
+  if (direct) return direct;
+  const params = Array.isArray(task?.parameters) ? task.parameters : [];
+  const fromParam = params.find((p: any) => String(p?.parameterId || '').trim() === 'flowId');
+  return String(fromParam?.value || '').trim() || null;
+}
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
     row,
+    nodeId,
     nodeTitle,
     nodeCanvasPosition,
     onUpdate,
@@ -105,6 +117,75 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     iconPos, setIconPos,
     typeToolbarRef, inputRef, nodeContainerRef, labelRef, overlayRef, mousePosRef, buttonCloseTimeoutRef
   } = rowState;
+
+  const flowCanvasId = useFlowCanvasId();
+  const { flows } = useFlowWorkspace();
+
+  /** Subflow row + child flow id; null if this row is not a Subflow task. */
+  const subflowMeta = useMemo(() => {
+    const task = taskRepository.getTask(row.id);
+    if (!task || task.type !== TaskType.Subflow) return null;
+    const cf = resolveChildFlowId(task);
+    if (!cf) return { childFlowId: '' as const };
+    return { childFlowId: cf };
+  }, [row.id]);
+
+  const [subflowIfaceToolbarState, setSubflowIfaceToolbarState] = useState<{
+    hasOutputs: boolean;
+    loading: boolean;
+  }>({ hasOutputs: false, loading: false });
+
+  useEffect(() => {
+    if (!subflowMeta) {
+      setSubflowIfaceToolbarState({ hasOutputs: false, loading: false });
+      return;
+    }
+    const cf = subflowMeta.childFlowId;
+    if (!cf) {
+      setSubflowIfaceToolbarState({ hasOutputs: false, loading: false });
+      return;
+    }
+    const slice = flows[cf] as { meta?: { flowInterface?: { output?: unknown[] } } } | undefined;
+    const syncOut = slice?.meta?.flowInterface?.output;
+    const syncHas = Array.isArray(syncOut) && syncOut.length > 0;
+    const pid = String(getProjectId?.() ?? '').trim();
+
+    if (syncHas) {
+      setSubflowIfaceToolbarState({ hasOutputs: true, loading: false });
+      return;
+    }
+    if (!pid) {
+      setSubflowIfaceToolbarState({ hasOutputs: false, loading: false });
+      return;
+    }
+
+    setSubflowIfaceToolbarState({ hasOutputs: false, loading: true });
+    let cancelled = false;
+    fetchChildFlowInterfaceOutputs(pid, cf, flows)
+      .then((res) => {
+        if (cancelled) return;
+        setSubflowIfaceToolbarState({
+          hasOutputs: res.outputs.length > 0,
+          loading: false,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSubflowIfaceToolbarState({ hasOutputs: false, loading: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [subflowMeta, flows, getProjectId]);
+
+  const subflowInterfaceToolbar = useMemo(() => {
+    if (!subflowMeta) return null;
+    return {
+      hasOutputs: subflowIfaceToolbarState.hasOutputs,
+      childFlowId: subflowMeta.childFlowId,
+      loading: subflowIfaceToolbarState.loading,
+    };
+  }, [subflowMeta, subflowIfaceToolbarState]);
 
   // Measure label width and font styles when not editing to prevent shrinking and maintain font consistency
   const [labelWidth, setLabelWidth] = useState<number | null>(null);
@@ -744,6 +825,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               }
               hasSemanticValues={isDataRequestRow && semanticValuesCount > 0}
               semanticValuesAnchorRef={semanticValuesAnchorRef}
+              activeFlowId={flowCanvasId}
+              flows={flows}
+              nodeId={nodeId}
+              subflowInterfaceToolbar={subflowInterfaceToolbar}
             />
           )}
         </div>

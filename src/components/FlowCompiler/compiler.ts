@@ -95,7 +95,8 @@ export function compileFlow(
           rowText: row.text,
           allTasksInMemory: taskRepository.getAllTasks().map(t => ({ id: t.id, templateId: getTemplateId(t) }))
         });
-        throw new Error(`[Compiler] Task not found: ${taskId} in node ${node.id}, row ${row.id}. Task must exist in memory.`);
+        const rowLabel = (row.text ?? '').trim() || 'Unnamed row';
+        throw new Error(`[Compiler] Task not found for row "${rowLabel}". Task must exist in memory.`);
       }
 
       // ✅ MIGRATION: Use getTemplateId() helper instead of direct task.action access

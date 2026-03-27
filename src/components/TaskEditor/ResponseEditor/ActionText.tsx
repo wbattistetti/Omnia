@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { VoiceTextbox } from '../../common/VoiceTextbox';
 import VariableTokenText from '../../common/VariableTokenText';
 import VariableTokenContextMenu from '../../common/VariableTokenContextMenu';
@@ -6,7 +6,11 @@ import { insertBracketTokenAtCaret } from '../../../utils/variableTokenText';
 import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
 import { useFlowActions, useFlowWorkspace } from '../../../flows/FlowStore';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
-import { buildVariableMenuItemsAsync, type VariableMenuItem } from '../../common/variableMenuModel';
+import {
+  buildVariableMenuItemsAsync,
+  getVariableMenuRebuildFingerprint,
+  type VariableMenuItem,
+} from '../../common/variableMenuModel';
 import { ensureParentVariableAndSubflowOutputBinding } from '../../common/subflowParentBinding';
 
 interface ActionTextProps {
@@ -26,14 +30,22 @@ const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editVa
   const pdUpdate = useProjectDataUpdate();
   const activeFlowId = getActiveFlowCanvasId();
   const [variableMenuItems, setVariableMenuItems] = React.useState<VariableMenuItem[]>([]);
+  const variableMenuFingerprint = useMemo(
+    () => getVariableMenuRebuildFingerprint(flows as any, activeFlowId),
+    [flows, activeFlowId]
+  );
+  const projectIdForMenu = pdUpdate?.getCurrentProjectId() || '';
   React.useEffect(() => {
     let cancelled = false;
-    const pid = pdUpdate?.getCurrentProjectId() || '';
-    if (!pid) {
+    if (!editing) {
       setVariableMenuItems([]);
       return;
     }
-    void buildVariableMenuItemsAsync(pid, activeFlowId, flows as any).then((items) => {
+    if (!projectIdForMenu) {
+      setVariableMenuItems([]);
+      return;
+    }
+    void buildVariableMenuItemsAsync(projectIdForMenu, activeFlowId, flows as any).then((items) => {
       if (!cancelled) setVariableMenuItems(items);
     }).catch(() => {
       if (!cancelled) setVariableMenuItems([]);
@@ -41,7 +53,7 @@ const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editVa
     return () => {
       cancelled = true;
     };
-  }, [pdUpdate, activeFlowId, flows, editing, text]);
+  }, [editing, projectIdForMenu, activeFlowId, variableMenuFingerprint]);
 
   if (!editing) {
     return text ? (

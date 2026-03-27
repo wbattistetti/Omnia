@@ -1,27 +1,8 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
+import { normalizeSemanticTaskLabel } from '../../src/domain/variableProxyNaming';
 import type { WizardTaskTreeNode } from '../types';
-
-/**
- * Normalize task label (remove common prefixes)
- */
-function normalizeTaskLabel(taskLabel: string): string {
-  let normalized = taskLabel.trim();
-
-  // Remove common Italian prefixes
-  normalized = normalized.replace(/^(chiedi|richiedi|inserisci|fornisci|inserire|fornire)\s+/i, '');
-
-  // Remove common English prefixes
-  normalized = normalized.replace(/^(ask for|request|enter|provide|insert)\s+/i, '');
-
-  // If empty after normalization, use original text
-  if (!normalized || normalized.trim() === '') {
-    normalized = taskLabel.trim();
-  }
-
-  return normalized;
-}
 
 /**
  * Generate readable name for a node
@@ -107,7 +88,7 @@ export function generateVariableNames(
   existingVariables?: string[]
 ): Map<string, { readableName: string; dottedName: string }> {
   const result = new Map<string, { readableName: string; dottedName: string }>();
-  const normalizedTaskLabel = normalizeTaskLabel(taskLabel);
+  const normalizedTaskLabel = normalizeSemanticTaskLabel(taskLabel);
   const hasMultiple = hasMultipleMains(structure);
 
   // Track used names to avoid duplicates

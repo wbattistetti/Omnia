@@ -480,7 +480,7 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
       return (
         <ErrorReportPanel
           onClose={() => {
-            // Handle close if needed (e.g., remove tab from dock)
+            setDockTree(prev => closeTab(prev, tab.id));
           }}
         />
       );

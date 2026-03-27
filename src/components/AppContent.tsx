@@ -57,6 +57,8 @@ import { useTaskTreeContext } from '../context/DDTContext';
 import ResponseEditor from './TaskEditor/ResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import NonInteractiveResponseEditor from './TaskEditor/ResponseEditor/NonInteractiveResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import { taskRepository } from '../services/TaskRepository';
+import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
+import { provisionParentVariablesForSubflowTaskAsync } from '../services/subflowOutputProvisioning';
 import { getTemplateId } from '../utils/taskHelpers';
 import { getNextMinor, getNextMajor, getLatestVersion, compareVersions } from '../utils/versionUtils';
 import { TaskType } from '../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, le fonti emettono direttamente TaskType enum
@@ -287,6 +289,15 @@ export const AppContent: React.FC<AppContentProps> = ({
               flowId,
               parameters: [],
             } as Partial<Task>);
+            const pid = currentPid || '';
+            if (pid) {
+              void provisionParentVariablesForSubflowTaskAsync(
+                pid,
+                getActiveFlowCanvasId(),
+                taskId,
+                flowsRef.current as Record<string, unknown>
+              );
+            }
             setDockTree(prev =>
               upsertAddNextTo(prev, tabId, {
                 id: `tab_${flowId}`,

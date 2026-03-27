@@ -11,6 +11,7 @@ import {
   normalizeVariableInstance,
   sameVariableScopeBucket,
 } from '@utils/variableScopeUtils';
+import { normalizeSemanticTaskLabel } from '../domain/variableProxyNaming';
 
 interface CreateVariablesOptions {
   taskInstance: Task;
@@ -36,22 +37,10 @@ class VariableCreationService {
 
   /**
    * Remove conversational verbs and articles from a task label to get
-   * the semantic variable name.
-   * e.g. "chiedi la data di nascita" → "data di nascita"
+   * the semantic variable name. Delegates to {@link normalizeSemanticTaskLabel}.
    */
   normalizeTaskLabel(label: string): string {
-    let normalized = label.trim();
-
-    // Remove common Italian conversational verbs
-    normalized = normalized.replace(/^(chiedi|richiedi|inserisci|fornisci|inserire|fornire)\s+/i, '');
-
-    // Remove common English conversational verbs
-    normalized = normalized.replace(/^(ask for|request|enter|provide|insert)\s+/i, '');
-
-    // Remove Italian and English articles
-    normalized = normalized.replace(/^(la|il|lo|le|gli|un|una|uno|the|a|an)\s+/i, '');
-
-    return normalized.trim() || label.trim();
+    return normalizeSemanticTaskLabel(label);
   }
 
   /**

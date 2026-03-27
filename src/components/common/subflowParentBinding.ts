@@ -1,3 +1,8 @@
+import {
+  buildProxyVariableName,
+  disambiguateProxyVarName,
+  normalizeSemanticTaskLabel,
+} from '../../domain/variableProxyNaming';
 import { taskRepository } from '../../services/TaskRepository';
 import { variableCreationService } from '../../services/VariableCreationService';
 import { TaskType } from '../../types/taskTypes';
@@ -26,19 +31,6 @@ function resolveSubflowFlowId(task: any): string {
   return String(fromParam?.value || '').trim();
 }
 
-function normalizeSegment(value: string): string {
-  return variableCreationService.normalizeTaskLabel(String(value || '').trim());
-}
-
-function buildParentVariableLabel(sourceTaskRowLabel: string, childVarLabel: string): string {
-  const source = normalizeSegment(sourceTaskRowLabel || 'Subflow');
-  const child = normalizeSegment(childVarLabel || 'value');
-  if (!source || !child) {
-    throw new Error('Cannot build parent variable label: empty source or child segment.');
-  }
-  return `${source}.${child}`;
-}
-
 function findBestSubflowTaskId(
   activeFlowId: string,
   childFlowId: string,
@@ -59,7 +51,7 @@ function findBestSubflowTaskId(
       if (!task || task.type !== TaskType.Subflow) continue;
       const fid = resolveSubflowFlowId(task);
       if (!fid || fid !== childFlowId) continue;
-      candidates.push({ taskId, rowText: normalizeSegment(String(row?.text || '')) });
+      candidates.push({ taskId, rowText: normalizeSemanticTaskLabel(String(row?.text || '')) });
     }
   }
 
@@ -69,7 +61,7 @@ function findBestSubflowTaskId(
     );
   }
 
-  const wanted = normalizeSegment(sourceTaskRowLabel || '');
+  const wanted = normalizeSemanticTaskLabel(sourceTaskRowLabel || '');
   if (wanted) {
     const exact = candidates.find((c) => c.rowText === wanted);
     if (exact) return exact.taskId;
@@ -95,6 +87,11 @@ export function ensureParentVariableAndSubflowOutputBinding(
   const childVarId = String(item.varId || '').trim();
   if (!childFlowId || !childVarId) {
     throw new Error('Cannot create parent binding: child flow id or child variable id is missing.');
+  }
+  if (childVarId.startsWith('iface:')) {
+    throw new Error(
+      'Interface output is not wired to a child variable yet. Wire it in the child flow interface, then bind again.'
+    );
   }
 
   const subflowTaskId = String(item.subflowTaskId || '').trim()
@@ -122,18 +119,10 @@ export function ensureParentVariableAndSubflowOutputBinding(
     return { tokenLabel: name, parentVarId: toId };
   }
 
-  const tokenLabel = buildParentVariableLabel(item.sourceTaskRowLabel || 'Subflow', item.varLabel);
-
-  const collision = variableCreationService.findVariableInFlowScopeByExactName(
-    projectId,
-    activeFlowId,
-    tokenLabel
+  const baseLabel = buildProxyVariableName(item.sourceTaskRowLabel || 'Subflow', item.varLabel);
+  const tokenLabel = disambiguateProxyVarName(baseLabel, (name) =>
+    !!variableCreationService.findVariableInFlowScopeByExactName(projectId, activeFlowId, name)
   );
-  if (collision) {
-    throw new Error(
-      `A variable named "${tokenLabel}" already exists in this flow. Rename the other variable or the Subflow row label, then try again.`
-    );
-  }
 
   const parentVar = variableCreationService.createManualVariable(projectId, tokenLabel, {
     scope: 'flow',

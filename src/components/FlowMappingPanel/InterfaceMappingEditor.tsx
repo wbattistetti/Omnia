@@ -307,6 +307,8 @@ export function InterfaceMappingEditor({
                 listIdPrefix={sendPrefix}
                 enableBackendParamDrop
                 showApiFields={showApiFields}
+                projectId={projectId}
+                flowCanvasId={flowDropTarget?.flowCanvasId}
               />
             </MappingBlock>
             <MappingBlock accent="receive" rootClassName={mappingBlockRootClass} headerExtra={<BackendParameterDragChip />}>
@@ -319,6 +321,8 @@ export function InterfaceMappingEditor({
                 listIdPrefix={recvPrefix}
                 enableBackendParamDrop
                 showApiFields={showApiFields}
+                projectId={projectId}
+                flowCanvasId={flowDropTarget?.flowCanvasId}
               />
             </MappingBlock>
           </div>

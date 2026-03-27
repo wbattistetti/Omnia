@@ -10,6 +10,19 @@ import type { TaskEditorOpenEvent } from '../components/AppContent/domain/editor
  */
 export async function handleErrorFix(error: CompilationError): Promise<void> {
   if (!error.fixTarget) {
+    const nodeAmbiguityCategories = new Set([
+      'AmbiguousOutgoingLinks',
+      'AmbiguousDuplicateEdgeLabels',
+      'AmbiguousDuplicateConditionScript',
+    ]);
+    if (error.nodeId && error.category && nodeAmbiguityCategories.has(error.category)) {
+      const ev = new CustomEvent('flowchart:selectNode', {
+        detail: { nodeId: error.nodeId },
+        bubbles: true,
+      });
+      document.dispatchEvent(ev);
+      return;
+    }
     console.warn('[handleErrorFix] Error has no fixTarget:', error);
     return;
   }

@@ -31,12 +31,23 @@ import {
   type FlowInterfaceDropPayload,
   type FlowInterfacePointerPreviewDetail,
 } from './flowInterfaceDragTypes';
-import { getInterfaceLeafDisplayName } from './interfaceMappingLabels';
+import {
+  computeInterfaceEntryLabels,
+  ensureFlowVariableBindingForInterfaceRow,
+  getInterfaceLeafDisplayName,
+} from './interfaceMappingLabels';
 
 const DND_TYPE = 'application/x-omnia-varlabel';
 
 function hasNewParamDrag(e: React.DragEvent): boolean {
   return [...e.dataTransfer.types].includes(DND_NEW_BACKEND_PARAM);
+}
+
+function hasFlowRowVarDrag(e: React.DragEvent): boolean {
+  const types = e.dataTransfer?.types ? [...e.dataTransfer.types] : [];
+  if (types.includes(DND_FLOWROW_VAR)) return true;
+  const lower = DND_FLOWROW_VAR.toLowerCase();
+  return types.some((t) => t.toLowerCase() === lower);
 }
 
 function hasIfaceReorderDrag(e: React.DragEvent): boolean {
@@ -130,6 +141,8 @@ interface RowProps {
   onConsumeLabelEditIntent: () => void;
   onInsertBackendParam: (pos: ParamDropPosition) => void;
   onAbandonEphemeralEntry: (entryId: string) => void;
+  /** Backend: drop variabile da flow (DND_FLOWROW_VAR) con inserimento a posizione. */
+  onBackendFlowVariableDrop?: (e: React.DragEvent, pos: ParamDropPosition) => void;
   projectId?: string;
   flowCanvasId?: string;
   ifacePointerPreview: FlowInterfacePointerPreviewDetail | null;
@@ -157,6 +170,7 @@ function MappingTreeRow({
   onConsumeLabelEditIntent,
   onInsertBackendParam,
   onAbandonEphemeralEntry,
+  onBackendFlowVariableDrop,
   projectId,
   flowCanvasId,
   ifacePointerPreview,
@@ -209,6 +223,17 @@ function MappingTreeRow({
   const onRowDragOver = useCallback(
     (e: React.DragEvent) => {
       if (!enableBackendParamDrop || variant !== 'backend') return;
+      if (hasFlowRowVarDrag(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+        const el = rowRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const p = placementFromY(e.clientY, rect, hasChildren);
+        onBackendParamDragOver(node.pathKey, p);
+        return;
+      }
       if (!hasNewParamDrag(e)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -225,6 +250,14 @@ function MappingTreeRow({
   const onRowDrop = useCallback(
     (e: React.DragEvent) => {
       if (!enableBackendParamDrop || variant !== 'backend') return;
+      if (hasFlowRowVarDrag(e) && onBackendFlowVariableDrop) {
+        const el = rowRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const placement = placementFromY(e.clientY, rect, hasChildren);
+        onBackendFlowVariableDrop(e, { targetPathKey: node.pathKey, placement });
+        return;
+      }
       if (!hasNewParamDrag(e)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -234,7 +267,7 @@ function MappingTreeRow({
       const placement = placementFromY(e.clientY, rect, hasChildren);
       onInsertBackendParam({ targetPathKey: node.pathKey, placement });
     },
-    [enableBackendParamDrop, variant, hasChildren, node.pathKey, onInsertBackendParam]
+    [enableBackendParamDrop, variant, hasChildren, node.pathKey, onInsertBackendParam, onBackendFlowVariableDrop]
   );
 
   const handleIfaceReorderDragOver = useCallback(
@@ -457,6 +490,7 @@ function MappingTreeRow({
               onConsumeLabelEditIntent={onConsumeLabelEditIntent}
               onInsertBackendParam={onInsertBackendParam}
               onAbandonEphemeralEntry={onAbandonEphemeralEntry}
+              onBackendFlowVariableDrop={onBackendFlowVariableDrop}
               projectId={projectId}
               flowCanvasId={flowCanvasId}
               ifacePointerPreview={ifacePointerPreview}
@@ -579,6 +613,39 @@ export function FlowMappingTree({
     [entries, onEntriesChange]
   );
 
+  /** Backend: variabile da riga flow / menù subflow (DND_FLOWROW_VAR). */
+  const commitBackendFlowVariableDrop = useCallback(
+    (e: React.DragEvent, pos: ParamDropPosition) => {
+      const payload = parseFlowInterfaceDropFromDataTransfer(e.dataTransfer);
+      if (!payload?.variableRefId?.trim()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const { next, newEntry } = insertNewBackendParameter(entries, pos);
+      const path = newEntry.internalPath;
+      const rowText = (payload.rowLabel ?? '').trim();
+      if (projectId && flowCanvasId) {
+        ensureFlowVariableBindingForInterfaceRow(projectId, flowCanvasId, payload.variableRefId, rowText, path);
+      }
+      const { externalName, linkedVariable } = computeInterfaceEntryLabels(
+        projectId,
+        payload.variableRefId,
+        rowText,
+        path
+      );
+      const merged = next.map((entry) =>
+        entry.id === newEntry.id
+          ? { ...entry, variableRefId: payload.variableRefId, linkedVariable, externalName }
+          : entry
+      );
+      onEntriesChange(merged);
+      setCollapsed((prev) => expandAncestorsOfPath(prev, newEntry.internalPath));
+      setDropIndicator(null);
+      setRootEdgeDrop(null);
+      setPendingLabelEditId(null);
+    },
+    [entries, onEntriesChange, projectId, flowCanvasId]
+  );
+
   const onAbandonEphemeralEntry = useCallback(
     (entryId: string) => {
       setPendingLabelEditId((p) => (p === entryId ? null : p));
@@ -614,6 +681,12 @@ export function FlowMappingTree({
   const onEmptyBackendDragOver = useCallback(
     (e: React.DragEvent) => {
       if (!enableBackendParamDrop || variant !== 'backend' || tree.length > 0) return;
+      if (hasFlowRowVarDrag(e)) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setDropIndicator({ targetPathKey: '', placement: 'after' });
+        return;
+      }
       if (!hasNewParamDrag(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
@@ -625,16 +698,25 @@ export function FlowMappingTree({
   const onEmptyBackendDrop = useCallback(
     (e: React.DragEvent) => {
       if (!enableBackendParamDrop || variant !== 'backend' || tree.length > 0) return;
+      if (hasFlowRowVarDrag(e)) {
+        commitBackendFlowVariableDrop(e, { targetPathKey: '', placement: 'after' });
+        return;
+      }
       if (!hasNewParamDrag(e)) return;
       e.preventDefault();
       onInsertBackendParam({ targetPathKey: '', placement: 'after' });
     },
-    [enableBackendParamDrop, variant, tree.length, onInsertBackendParam]
+    [enableBackendParamDrop, variant, tree.length, onInsertBackendParam, commitBackendFlowVariableDrop]
   );
 
   const rootDragOver = useCallback(
     (e: React.DragEvent) => {
       if (showDropZone) onDragOver(e);
+      if (enableBackendParamDrop && variant === 'backend' && tree.length > 0 && hasFlowRowVarDrag(e)) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        return;
+      }
       if (enableBackendParamDrop && variant === 'backend' && tree.length > 0 && hasNewParamDrag(e)) {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
@@ -687,7 +769,8 @@ export function FlowMappingTree({
         >
           {dropIndicator?.targetPathKey === '' && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
           <p className="text-[10px] text-teal-300/75">
-            Trascina <span className="font-semibold text-teal-200/90">Parameter</span> dall&apos;header per aggiungere un parametro.
+            Trascina <span className="font-semibold text-teal-200/90">Parameter</span> dall&apos;header, oppure una{' '}
+            <span className="font-semibold text-teal-200/90">variabile</span> dal menù subflow (icona Interface sulla riga).
           </p>
         </div>
       )}
@@ -696,7 +779,7 @@ export function FlowMappingTree({
         <div
           className="h-2.5 -mx-0.5 rounded-sm shrink-0"
           onDragOver={(e) => {
-            if (!hasNewParamDrag(e)) return;
+            if (!hasNewParamDrag(e) && !hasFlowRowVarDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
             e.dataTransfer.dropEffect = 'copy';
@@ -707,6 +790,10 @@ export function FlowMappingTree({
             if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootEdgeDrop(null);
           }}
           onDrop={(e) => {
+            if (hasFlowRowVarDrag(e)) {
+              commitBackendFlowVariableDrop(e, { targetPathKey: tree[0].pathKey, placement: 'before' });
+              return;
+            }
             if (!hasNewParamDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
@@ -741,6 +828,9 @@ export function FlowMappingTree({
           onConsumeLabelEditIntent={onConsumeLabelEditIntent}
           onInsertBackendParam={onInsertBackendParam}
           onAbandonEphemeralEntry={onAbandonEphemeralEntry}
+          onBackendFlowVariableDrop={
+            enableBackendParamDrop && variant === 'backend' ? commitBackendFlowVariableDrop : undefined
+          }
           projectId={projectId}
           flowCanvasId={flowCanvasId}
           ifacePointerPreview={ifacePointerPreview}
@@ -761,7 +851,7 @@ export function FlowMappingTree({
         <div
           className="h-2.5 -mx-0.5 rounded-sm shrink-0 mt-0.5"
           onDragOver={(e) => {
-            if (!hasNewParamDrag(e)) return;
+            if (!hasNewParamDrag(e) && !hasFlowRowVarDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
             e.dataTransfer.dropEffect = 'copy';
@@ -772,6 +862,11 @@ export function FlowMappingTree({
             if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootEdgeDrop(null);
           }}
           onDrop={(e) => {
+            if (hasFlowRowVarDrag(e)) {
+              const last = tree[tree.length - 1];
+              commitBackendFlowVariableDrop(e, { targetPathKey: last.pathKey, placement: 'after' });
+              return;
+            }
             if (!hasNewParamDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();

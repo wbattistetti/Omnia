@@ -1,5 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Trash2, Edit3, Settings, Wrench, Check, Play, AlertTriangle, Info } from 'lucide-react';
+import {
+  Trash2,
+  Edit3,
+  Settings,
+  Wrench,
+  Check,
+  Play,
+  AlertTriangle,
+  Info,
+  Layers,
+  Loader2,
+} from 'lucide-react';
 import SmartTooltip from '../../../SmartTooltip';
 import { ErrorTooltip } from '../../components/ErrorTooltip';
 import type { RowErrorsResult } from '../../hooks/useRowErrors';
@@ -44,6 +55,14 @@ interface NodeRowActionsOverlayProps {
   onOpenSemanticValuesEditor?: () => void;
   hasSemanticValues?: boolean;
   semanticValuesAnchorRef?: React.RefObject<HTMLButtonElement | null>;
+  /** Subflow row: Interface outputs picker (before trash). */
+  subflowInterface?: {
+    show: boolean;
+    hasOutputs: boolean;
+    /** Resolving child flow meta from API (child not in workspace snapshot). */
+    loading?: boolean;
+    onOpenMenu: (anchor: DOMRect) => void;
+  };
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -81,7 +100,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   onErrorFix,
   onOpenSemanticValuesEditor,
   hasSemanticValues,
-  semanticValuesAnchorRef
+  semanticValuesAnchorRef,
+  subflowInterface
 }) => {
   // ✅ Toolbar appears only on hover (showIcons), error icon is added at the end if errors exist
   if (!showIcons || !iconPos) return null;
@@ -405,6 +425,72 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           </button>
         </SmartTooltip>
       )}
+      {/* Subflow: output interface variables (before delete) */}
+      {subflowInterface?.show && (() => {
+        const loading = Boolean(subflowInterface.loading);
+        const ready = subflowInterface.hasOutputs && !loading;
+        const tooltipText = loading
+          ? 'Caricamento interfaccia…'
+          : subflowInterface.hasOutputs
+            ? 'Output del subflow: trascina verso Interface'
+            : 'Nessun output definito nel subflow';
+        return (
+        <SmartTooltip
+          text={tooltipText}
+          tutorId="subflow_interface_outputs_help"
+          placement="bottom"
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (!ready) return;
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              subflowInterface.onOpenMenu(r);
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            disabled={!ready}
+            className={`transition-colors nodrag ${
+              loading
+                ? 'text-violet-300 cursor-wait'
+                : ready
+                  ? 'hover:opacity-100 hover:scale-110 text-violet-400 hover:text-violet-300'
+                  : 'text-slate-500 cursor-not-allowed'
+            }`}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 2,
+              cursor: ready ? 'pointer' : loading ? 'wait' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: size,
+              height: size,
+              opacity: loading || ready ? 0.95 : 0.65,
+              transition: 'opacity 120ms linear, transform 120ms ease',
+            }}
+            onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
+            aria-label="Subflow interface outputs"
+            aria-busy={loading}
+          >
+            {loading ? (
+              <Loader2
+                className="animate-spin"
+                style={{ width: size, height: size }}
+                aria-hidden
+              />
+            ) : (
+              <Layers style={{ width: size, height: size }} />
+            )}
+          </button>
+        </SmartTooltip>
+        );
+      })()}
       {/* Cestino (delete) */}
       {canDelete && (
         <SmartTooltip text="Delete row" tutorId="delete_row_help" placement="bottom">

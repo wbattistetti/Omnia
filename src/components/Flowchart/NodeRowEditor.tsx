@@ -1,11 +1,15 @@
-import React, { useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { VoiceTextbox } from '../common/VoiceTextbox';
 import VariableTokenContextMenu from '../common/VariableTokenContextMenu';
 import { insertBracketTokenAtCaret } from '../../utils/variableTokenText';
 import { getActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
 import { useFlowActions, useFlowWorkspace } from '../../flows/FlowStore';
 import { useProjectDataUpdate } from '../../context/ProjectDataContext';
-import { buildVariableMenuItemsAsync, type VariableMenuItem } from '../common/variableMenuModel';
+import {
+  buildVariableMenuItemsAsync,
+  getVariableMenuRebuildFingerprint,
+  type VariableMenuItem,
+} from '../common/variableMenuModel';
 
 interface NodeRowEditorProps {
   value: string;
@@ -39,14 +43,18 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
   const log = (...args: any[]) => { if (DEBUG_FOCUS) { try { console.log('[Focus][RowEditor]', ...args); } catch {} } };
   const activeFlowId = getActiveFlowCanvasId();
   const [variableMenuItems, setVariableMenuItems] = React.useState<VariableMenuItem[]>([]);
+  const variableMenuFingerprint = useMemo(
+    () => getVariableMenuRebuildFingerprint(flows as any, activeFlowId),
+    [flows, activeFlowId]
+  );
+  const projectIdForMenu = pdUpdate?.getCurrentProjectId() || '';
   React.useEffect(() => {
     let cancelled = false;
-    const pid = pdUpdate?.getCurrentProjectId() || '';
-    if (!pid) {
+    if (!projectIdForMenu) {
       setVariableMenuItems([]);
       return;
     }
-    void buildVariableMenuItemsAsync(pid, activeFlowId, flows as any).then((items) => {
+    void buildVariableMenuItemsAsync(projectIdForMenu, activeFlowId, flows as any).then((items) => {
       if (!cancelled) setVariableMenuItems(items);
     }).catch(() => {
       if (!cancelled) setVariableMenuItems([]);
@@ -54,7 +62,7 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [pdUpdate, activeFlowId, flows, value]);
+  }, [projectIdForMenu, activeFlowId, variableMenuFingerprint]);
 
   // ✅ Calcola e aggiorna la larghezza usando scrollWidth (Regola 1)
   const updateWidth = useCallback(() => {

@@ -8,6 +8,11 @@ import { taskRepository } from '@services/TaskRepository';
 import { useGlobalTestPanel } from '@context/GlobalTestPanelContext';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { buildTaskTreeFromRepository } from '@utils/taskUtils';
+import type { WorkspaceState } from '@flows/FlowTypes';
+import { buildVariableMenuItemsAsync } from '@components/common/variableMenuModel';
+import VariableTokenContextMenu, {
+  type VariableMenuRowItem,
+} from '@components/common/VariableTokenContextMenu';
 
 // Component to render checkbox with dynamic size based on font
 const CheckboxButton: React.FC<{
@@ -281,6 +286,17 @@ interface NodeRowLabelProps {
   semanticValuesAnchorRef?: React.RefObject<HTMLButtonElement | null>;
   /** Nodo nascosto: non montare overlay/toolbar nel body (evita icone flottanti). */
   suppressFloatingChrome?: boolean;
+  /** Flow canvas id + workspace flows (Subflow interface toolbar). */
+  activeFlowId?: string;
+  flows?: WorkspaceState['flows'];
+  nodeId?: string;
+  /** null = not a Subflow row */
+  subflowInterfaceToolbar?: {
+    hasOutputs: boolean;
+    childFlowId: string;
+    /** True while resolving outputs from API when child flow is not in workspace snapshot. */
+    loading?: boolean;
+  } | null;
 }
 
 export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
@@ -323,6 +339,10 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   hasSemanticValues,
   semanticValuesAnchorRef,
   suppressFloatingChrome = false,
+  activeFlowId,
+  flows,
+  nodeId,
+  subflowInterfaceToolbar,
 }) => {
   // ✅ ARCHITECTURAL: Use GlobalTestPanel context for testing
   const { openWithTask } = useGlobalTestPanel();
@@ -335,6 +355,40 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   }, [row?.id]);
 
   // ✅ Handle test task - opens GlobalTestPanel with task instance
+  const [subflowIfaceMenu, setSubflowIfaceMenu] = useState<{
+    x: number;
+    y: number;
+    items: VariableMenuRowItem[];
+  } | null>(null);
+
+  const openSubflowInterfaceMenu = useCallback(
+    async (anchor: DOMRect) => {
+      const pid = getProjectId?.();
+      if (!pid?.trim() || !activeFlowId?.trim() || !flows) return;
+      try {
+        const all = await buildVariableMenuItemsAsync(pid, activeFlowId, flows);
+        const filtered = all.filter((i) => i.subflowTaskId === row.id);
+        const items: VariableMenuRowItem[] = filtered.map((i) => ({
+          varId: i.varId,
+          varLabel: i.varLabel,
+          tokenLabel: i.tokenLabel,
+          ownerFlowId: i.ownerFlowId,
+          ownerFlowTitle: i.ownerFlowTitle,
+          isExposed: i.isExposed,
+          isFromActiveFlow: i.isFromActiveFlow,
+          sourceTaskRowLabel: i.sourceTaskRowLabel,
+          subflowTaskId: i.subflowTaskId,
+          isInterfaceUnbound: i.isInterfaceUnbound,
+          missingChildVariableRef: i.missingChildVariableRef,
+        }));
+        setSubflowIfaceMenu({ x: anchor.left, y: anchor.bottom, items });
+      } catch (e) {
+        console.error('[NodeRowLabel] Subflow interface menu', e);
+      }
+    },
+    [getProjectId, activeFlowId, flows, row.id]
+  );
+
   const handleTestTask = useCallback(async () => {
     if (!taskInstance) {
       console.warn('[NodeRowLabel] Cannot test: task instance not found for row', row?.id);
@@ -523,10 +577,36 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           onOpenSemanticValuesEditor={onOpenSemanticValuesEditor}
           hasSemanticValues={hasSemanticValues}
           semanticValuesAnchorRef={semanticValuesAnchorRef}
+          subflowInterface={
+            subflowInterfaceToolbar != null
+              ? {
+                  show: true,
+                  hasOutputs: subflowInterfaceToolbar.hasOutputs,
+                  loading: Boolean(subflowInterfaceToolbar.loading),
+                  onOpenMenu: openSubflowInterfaceMenu,
+                }
+              : undefined
+          }
         />,
         document.body
       )}
     </span>
+    {!suppressFloatingChrome &&
+      subflowIfaceMenu &&
+      typeof document !== 'undefined' &&
+      createPortal(
+        <VariableTokenContextMenu
+          isOpen
+          x={subflowIfaceMenu.x}
+          y={subflowIfaceMenu.y}
+          variables={[]}
+          variableItems={subflowIfaceMenu.items}
+          onSelect={() => {}}
+          onClose={() => setSubflowIfaceMenu(null)}
+          dragFlowRowPayload={{ nodeId: String(nodeId || '') }}
+        />,
+        document.body
+      )}
   </>
   );
 };

@@ -5,6 +5,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronUp, Layers, X } from 'lucide-react';
+import { useInMemoryConditions } from '../../context/InMemoryConditionsContext';
+import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
 import { useFlowActions, useFlowWorkspace } from '@flows/FlowStore';
 import { InterfaceMappingEditor } from '../FlowMappingPanel/InterfaceMappingEditor';
 import {
@@ -33,6 +35,12 @@ import {
 } from './flowInterfaceDockStorage';
 import { FlowInterfaceDockPreviewOverlay } from './FlowInterfaceDockPreviewOverlay';
 import { useFlowInterfaceDockDrag } from './useFlowInterfaceDockDrag';
+import { syncSubflowChildInterfaceToAllParents } from '../../services/subflowProjectSync';
+import { invalidateChildFlowInterfaceCache } from '../../services/childFlowInterfaceService';
+import {
+  validateRemovalOfInterfaceOutputRow,
+  type ReferenceLocation,
+} from '../../services/subflowVariableReferenceScan';
 
 export interface FlowInterfaceBottomPanelProps {
   flowId: string;
@@ -54,10 +62,13 @@ const thinSplitterVertical = (edge: 'left' | 'right'): string => {
 
 export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBottomPanelProps) {
   const { flows } = useFlowWorkspace();
+  const { translations } = useProjectTranslations();
+  const { conditions } = useInMemoryConditions();
   const flowsRef = useRef(flows);
   flowsRef.current = flows;
   const { updateFlowMeta } = useFlowActions();
   const [open, setOpen] = useState(false);
+  const [removalBlockRefs, setRemovalBlockRefs] = useState<ReferenceLocation[] | null>(null);
   const [dockRegion, setDockRegion] = useState<FlowInterfaceDockRegion>(() => readDockRegion());
   const [panelHeightPx, setPanelHeightPx] = useState(() => readPanelHeight());
   const [panelWidthPx, setPanelWidthPx] = useState(() => readPanelWidth());
@@ -74,6 +85,16 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
 
   const listIdPrefix = useMemo(() => `flow-iface-${flowId.replace(/[^a-zA-Z0-9_-]/g, '_')}`, [flowId]);
 
+  const conditionPayloads = useMemo(
+    () =>
+      conditions.map((c) => ({
+        id: c.id,
+        label: c.label || c.name || c.id,
+        text: JSON.stringify(c),
+      })),
+    [conditions]
+  );
+
   const setInput = useCallback(
     (next: MappingEntry[]) => {
       const out = flows[flowId]?.meta?.flowInterface?.output ?? [];
@@ -84,10 +105,48 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
 
   const setOutput = useCallback(
     (next: MappingEntry[]) => {
-      const inn = flows[flowId]?.meta?.flowInterface?.input ?? [];
+      const pid = String(projectId || '').trim();
+      const prevOut = flowsRef.current[flowId]?.meta?.flowInterface?.output ?? [];
+      if (pid) {
+        for (const p of prevOut) {
+          const pvid = String(p.variableRefId || '').trim();
+          if (!pvid) continue;
+          const stillExists = next.some((n) => String(n.variableRefId || '').trim() === pvid);
+          if (!stillExists) {
+            const v = validateRemovalOfInterfaceOutputRow(
+              pid,
+              flowId,
+              pvid,
+              flowsRef.current as any,
+              translations,
+              conditionPayloads
+            );
+            if (!v.ok) {
+              setRemovalBlockRefs(v.references);
+              return;
+            }
+          }
+        }
+      }
+      const inn = flowsRef.current[flowId]?.meta?.flowInterface?.input ?? [];
       updateFlowMeta(flowId, { flowInterface: { input: inn, output: next } });
+      const curr = flowsRef.current[flowId];
+      const merged = {
+        ...flowsRef.current,
+        [flowId]: {
+          ...curr,
+          meta: {
+            ...(typeof curr?.meta === 'object' && curr?.meta ? curr.meta : {}),
+            flowInterface: { input: inn, output: next },
+          },
+        },
+      } as typeof flowsRef.current;
+      if (pid) {
+        invalidateChildFlowInterfaceCache(pid, flowId);
+        void syncSubflowChildInterfaceToAllParents(pid, flowId, merged as any);
+      }
     },
-    [flowId, flows, updateFlowMeta]
+    [flowId, projectId, translations, conditionPayloads, updateFlowMeta]
   );
 
   useEffect(() => {
@@ -125,6 +184,22 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
       updateFlowMeta(flowId, {
         flowInterface: { input: iface.input, output: nextOut },
       });
+      const pid = String(projectId || '').trim();
+      if (pid) {
+        const shell = flowsRef.current[flowId];
+        const merged = {
+          ...flowsRef.current,
+          [flowId]: {
+            ...shell,
+            meta: {
+              ...(typeof shell?.meta === 'object' && shell?.meta ? shell.meta : {}),
+              flowInterface: { input: iface.input, output: nextOut },
+            },
+          },
+        } as typeof flowsRef.current;
+        invalidateChildFlowInterfaceCache(pid, flowId);
+        void syncSubflowChildInterfaceToAllParents(pid, flowId, merged as any);
+      }
     };
     window.addEventListener(FLOW_INTERFACE_ROW_POINTER_DROP, handler as EventListener);
     return () => window.removeEventListener(FLOW_INTERFACE_ROW_POINTER_DROP, handler as EventListener);
@@ -587,6 +662,39 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
 
   return (
     <div ref={flowShellRef} className="absolute inset-0 z-[38] pointer-events-none">
+      {removalBlockRefs !== null ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4 pointer-events-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="iface-removal-block-title"
+        >
+          <div className="max-w-md w-full rounded-lg border border-violet-500/35 bg-[#0f1218] p-4 shadow-xl text-slate-100">
+            <h3 id="iface-removal-block-title" className="text-sm font-semibold mb-2">
+              Impossibile rimuovere questo output
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              La variabile proxy nel flow parent è ancora referenziata con token [GUID] nei punti seguenti.
+              Rimuovi quei riferimenti, poi riprova.
+            </p>
+            <ul className="text-xs max-h-52 overflow-y-auto space-y-1.5 border border-slate-700/80 rounded-md p-2 mb-4 bg-black/20">
+              {removalBlockRefs.map((r) => (
+                <li key={`${r.kind}:${r.id}`} className="flex flex-col gap-0.5">
+                  <span className="text-[10px] uppercase tracking-wide text-slate-500">{r.kind}</span>
+                  <span className="font-mono text-violet-200/95 break-all">{r.label}</span>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="rounded-md bg-violet-600/90 hover:bg-violet-500 px-3 py-1.5 text-xs font-medium text-white"
+              onClick={() => setRemovalBlockRefs(null)}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
       {dockDragPreview !== null ? (
         <FlowInterfaceDockPreviewOverlay
           preview={dockDragPreview}

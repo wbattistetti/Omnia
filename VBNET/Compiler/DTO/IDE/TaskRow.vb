@@ -19,6 +19,12 @@ Public Class TaskRow
     ''' </summary>
     <JsonProperty("taskId")>
     Public Property TaskId As String
+
+    ''' <summary>
+    ''' Row label shown in the flowchart (NodeRow.text); used for user-facing compiler messages.
+    ''' </summary>
+    <JsonProperty("text")>
+    Public Property Text As String
 End Class
 
 

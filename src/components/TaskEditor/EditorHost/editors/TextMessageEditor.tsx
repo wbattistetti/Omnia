@@ -18,12 +18,14 @@ import {
   buildSubflowCompositeKeySet,
   buildVariableMenuItemsAsync,
   buildVariableMappingsFromMenu,
+  getVariableMenuRebuildFingerprint,
   type VariableMenuItem,
 } from '../../../common/variableMenuModel';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { ensureParentVariableAndSubflowOutputBinding } from '../../../common/subflowParentBinding';
 import { useTextTranslationField } from './shared/useTextTranslationField';
 import { fingerprintVariableMapping } from './shared/variableMappingFingerprint';
+import { logVariableMenuDebug } from '../../../../utils/variableMenuDebug';
 
 export default function TextMessageEditor({ task: taskMeta, onClose }: EditorProps) {
   const instanceId = taskMeta.instanceId || taskMeta.id;
@@ -36,22 +38,49 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
   const [variableMenuItems, setVariableMenuItems] = useState<VariableMenuItem[]>([]);
 
   const activeFlowId = getActiveFlowCanvasId();
+  const menuFlowId = useMemo(() => {
+    const targetTaskId = String(instanceId || taskMeta.id || '').trim();
+    if (!targetTaskId) return activeFlowId;
+    for (const [flowId, flow] of Object.entries(flows as Record<string, any>)) {
+      for (const node of (flow?.nodes || [])) {
+        for (const row of (node?.data?.rows || [])) {
+          if (String(row?.id || '').trim() === targetTaskId) {
+            return String(flowId || '').trim() || activeFlowId;
+          }
+        }
+      }
+    }
+    return activeFlowId;
+  }, [flows, instanceId, taskMeta.id, activeFlowId]);
+
+  const variableMenuFingerprint = useMemo(
+    () => getVariableMenuRebuildFingerprint(flows as any, menuFlowId),
+    [flows, menuFlowId]
+  );
+
+  const projectIdForMenu = pdUpdate?.getCurrentProjectId() || '';
+
   useEffect(() => {
     let cancelled = false;
-    const pid = pdUpdate?.getCurrentProjectId() || '';
-    if (!pid) {
+    if (!projectIdForMenu) {
       setVariableMenuItems([]);
       return;
     }
-    void buildVariableMenuItemsAsync(pid, activeFlowId, flows as any).then((items) => {
-      if (!cancelled) setVariableMenuItems(items);
-    }).catch(() => {
-      if (!cancelled) setVariableMenuItems([]);
-    });
+    void buildVariableMenuItemsAsync(projectIdForMenu, menuFlowId, flows as any)
+      .then((items) => {
+        if (!cancelled) setVariableMenuItems(items);
+      })
+      .catch((err) => {
+        logVariableMenuDebug('variableMenu:buildFailed', {
+          menuFlowId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        if (!cancelled) setVariableMenuItems([]);
+      });
     return () => {
       cancelled = true;
     };
-  }, [pdUpdate, activeFlowId, flows]);
+  }, [projectIdForMenu, menuFlowId, variableMenuFingerprint]);
 
   const variableMappings = React.useMemo(() => buildVariableMappingsFromMenu(variableMenuItems), [variableMenuItems]);
 
@@ -93,7 +122,7 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     [getTranslation]
   );
 
-  const { text, setText } = useTextTranslationField({
+  const { text, setText, flushNow } = useTextTranslationField({
     instanceId,
     fallbackTaskType: taskMeta.type ?? TaskType.SayMessage,
     getCurrentProjectId,
@@ -135,6 +164,9 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
           onChange={e => {
             setText(e.target.value);
           }}
+          onBlur={() => {
+            flushNow();
+          }}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -154,6 +186,12 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
           const projectId = pdUpdate?.getCurrentProjectId() || '';
           if (!projectId) return;
           if (item.isFromActiveFlow === false) {
+            if (item.missingChildVariableRef === true) {
+              window.alert(
+                'Questo parametro di interfaccia non è ancora collegato a una variabile nel sotto-flusso. Apri il flow figlio, collega l’uscita dell’interfaccia a una variabile, poi riprova.'
+              );
+              return;
+            }
             const bound = ensureParentVariableAndSubflowOutputBinding(
               projectId,
               activeFlowId,

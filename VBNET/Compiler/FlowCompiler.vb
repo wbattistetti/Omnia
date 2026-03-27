@@ -66,6 +66,118 @@ Public Class FlowCompiler
     End Sub
 
     ''' <summary>
+    ''' User-visible row title for compiler errors (NodeRow.text); avoids exposing raw ids in messages.
+    ''' </summary>
+    Private Shared Function FormatRowUserLabel(row As TaskRow) As String
+        If row Is Nothing Then Return "Unnamed row"
+        If Not String.IsNullOrWhiteSpace(row.Text) Then Return row.Text.Trim()
+        Return "Unnamed row"
+    End Function
+
+    ''' <summary>
+    ''' Label for compiler messages: node title, else last non-empty row text, else generic.
+    ''' </summary>
+    Private Shared Function GetNodeUserDisplayLabel(node As FlowNode) As String
+        If node Is Nothing Then Return "Nodo"
+        If Not String.IsNullOrWhiteSpace(node.Label) Then Return node.Label.Trim()
+        Dim rows = If(node.Rows, New List(Of TaskRow)())
+        For i = rows.Count - 1 To 0 Step -1
+            Dim r = rows(i)
+            If r IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(r.Text) Then Return r.Text.Trim()
+        Next
+        Return "Nodo"
+    End Function
+
+    ''' <summary>
+    ''' Validates one edge (condition / label rules) and returns True if the edge has a routing discriminator (Else or valid compiled condition).
+    ''' </summary>
+    Private Function ValidateSingleEdgeRouting(edge As FlowEdge, flow As Flow, errors As List(Of CompilationError)) As Boolean
+        Dim hasLabel As Boolean = Not String.IsNullOrWhiteSpace(edge.Label)
+        Dim conditionId = If(edge.ConditionId, "").Trim()
+        Dim isElseEdge = edge.IsElse.HasValue AndAlso edge.IsElse.Value
+        Dim hasCondition As Boolean = Not String.IsNullOrWhiteSpace(conditionId) OrElse isElseEdge
+
+        If Not String.IsNullOrWhiteSpace(conditionId) AndAlso Not isElseEdge Then
+            Console.WriteLine($"🔍 [COMPILER][FlowCompiler] Searching for condition '{conditionId}' in flow.Conditions")
+            Console.WriteLine($"   Edge ID: {edge.Id}, Edge Label: '{edge.Label}'")
+            Console.WriteLine($"   Edge conditionId (raw): '{If(edge.ConditionId, "NULL")}'")
+            Console.WriteLine($"   Edge conditionId (trimmed): '{conditionId}' (length: {conditionId.Length})")
+            Console.WriteLine($"   Flow.Conditions count: {If(flow.Conditions IsNot Nothing, flow.Conditions.Count, 0)}")
+            If flow.Conditions IsNot Nothing AndAlso flow.Conditions.Count > 0 Then
+                Console.WriteLine($"   Available condition IDs:")
+                For Each c In flow.Conditions
+                    Dim matchResult = (c.Id = conditionId)
+                    Console.WriteLine($"     - Condition ID: '{c.Id}' (length: {If(c.Id IsNot Nothing, c.Id.Length, 0)}), Name: '{c.Name}', Match: {matchResult}")
+                Next
+            Else
+                Console.WriteLine($"   ⚠️ Flow.Conditions is Nothing or empty!")
+            End If
+
+            Dim condition = If(flow.Conditions IsNot Nothing, flow.Conditions.FirstOrDefault(Function(c) c.Id = conditionId), Nothing)
+
+            If condition Is Nothing Then
+                Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition not found in projectData")
+                System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition not found")
+                errors.Add(New CompilationError() With {
+                        .TaskId = "SYSTEM",
+                        .NodeId = edge.Source,
+                        .RowId = Nothing,
+                        .EdgeId = edge.Id,
+                        .Message = $"Edge '{edge.Label}' references condition '{conditionId}' but condition not found in projectData.",
+                        .Severity = ErrorSeverity.Error,
+                        .Category = "ConditionNotFound"
+                    })
+                hasCondition = False
+            ElseIf condition.Expression IsNot Nothing Then
+                Dim hasScript = Not String.IsNullOrWhiteSpace(condition.Expression.CompiledCode)
+                If Not hasScript Then
+                    Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition has no script")
+                    System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition has no script")
+                    errors.Add(New CompilationError() With {
+                            .TaskId = "SYSTEM",
+                            .NodeId = edge.Source,
+                            .RowId = Nothing,
+                            .EdgeId = edge.Id,
+                            .Message = $"Edge '{edge.Label}' references condition '{conditionId}' but condition has no script (DSL or JavaScript).",
+                            .Severity = ErrorSeverity.Error,
+                            .Category = "ConditionHasNoScript"
+                        })
+                    hasCondition = False
+                End If
+            Else
+                Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition has no expression block")
+                System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} condition has no expression")
+                errors.Add(New CompilationError() With {
+                        .TaskId = "SYSTEM",
+                        .NodeId = edge.Source,
+                        .RowId = Nothing,
+                        .EdgeId = edge.Id,
+                        .Message = $"Edge '{edge.Label}' references condition '{conditionId}' but condition has no expression (DSL or JavaScript).",
+                        .Severity = ErrorSeverity.Error,
+                        .Category = "ConditionHasNoScript"
+                    })
+                hasCondition = False
+            End If
+        End If
+
+        If hasLabel AndAlso Not hasCondition Then
+            Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} has label '{edge.Label}' but no condition")
+            System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} has label '{edge.Label}' but no condition")
+            errors.Add(New CompilationError() With {
+                .TaskId = "SYSTEM",
+                .NodeId = edge.Source,
+                .RowId = Nothing,
+                .EdgeId = edge.Id,
+                .Message = $"Edge '{edge.Label}' has a label but no condition. Add a condition or remove the label.",
+                .Severity = ErrorSeverity.Error,
+                .Category = "EdgeLabelWithoutCondition"
+            })
+        End If
+
+        Return hasCondition
+    End Function
+
+    ''' <summary>
     ''' Compiles flowchart into TaskGroups (uno per nodo)
     ''' Trasforma IDE.* → Runtime.*
     ''' </summary>
@@ -177,7 +289,7 @@ Public Class FlowCompiler
                         .TaskId = taskId,
                         .NodeId = node.Id,
                         .RowId = row.Id,
-                        .Message = $"Row '{row.Id}' has no TaskId. Using row.Id as fallback. TaskId is mandatory.",
+                        .Message = $"Row ""{FormatRowUserLabel(row)}"" has no TaskId. Using row.Id as fallback. TaskId is mandatory.",
                         .Severity = ErrorSeverity.Error,
                         .Category = "MissingTaskId"
                     })
@@ -210,7 +322,7 @@ Public Class FlowCompiler
                         .TaskId = taskId,
                         .NodeId = node.Id,
                         .RowId = row.Id,
-                        .Message = $"Task not found: {taskId} in node {node.Id}, row {row.Id}. Task must exist.",
+                        .Message = $"Task not found for row ""{FormatRowUserLabel(row)}"". Task must exist.",
                         .Severity = ErrorSeverity.Error,
                         .Category = "TaskNotFound"
                     })
@@ -296,94 +408,107 @@ Public Class FlowCompiler
         System.Diagnostics.Debug.WriteLine($"   Total TaskGroups created: {taskGroups.Count}")
         System.Diagnostics.Debug.WriteLine($"   Total Tasks created: {allTasks.Count}")
 
-        ' ✅ VALIDATE EDGES: Check for edges with label but no condition
+        ' ✅ VALIDATE EDGES: conditions, labels; track routing discriminators for ambiguity check
         Console.WriteLine($"   Validating {If(flow.Edges IsNot Nothing, flow.Edges.Count, 0)} edges...")
         System.Diagnostics.Debug.WriteLine($"   Validating {If(flow.Edges IsNot Nothing, flow.Edges.Count, 0)} edges...")
+        Dim edgeDiscriminators As New List(Of Boolean)()
         If flow.Edges IsNot Nothing Then
             For Each edge In flow.Edges
-                ' Check if edge has a label (non-empty)
-                Dim hasLabel As Boolean = Not String.IsNullOrWhiteSpace(edge.Label)
+                edgeDiscriminators.Add(ValidateSingleEdgeRouting(edge, flow, errors))
+            Next
 
-                ' Check if edge has a condition or is an Else edge
-                ' ✅ Read conditionId from top-level (not from data)
-                Dim conditionId = If(edge.ConditionId, "").Trim()
-                Dim isElseEdge = edge.IsElse.HasValue AndAlso edge.IsElse.Value
+            ' ✅ Outgoing ambiguity: unconditioned branch with other exits; duplicate labels; duplicate condition/script
+            If flow.Nodes IsNot Nothing Then
+                Dim edgesList = flow.Edges.ToList()
+                For Each node In flow.Nodes
+                    Dim outgoingIdx As New List(Of Integer)()
+                    For ei = 0 To edgesList.Count - 1
+                        If edgesList(ei).Source = node.Id Then outgoingIdx.Add(ei)
+                    Next
+                    If outgoingIdx.Count < 2 Then Continue For
 
-                ' Edge has condition if ConditionId is not empty, OR if it's an Else edge
-                Dim hasCondition As Boolean = Not String.IsNullOrWhiteSpace(conditionId) OrElse isElseEdge
+                    Dim labelSafe = GetNodeUserDisplayLabel(node)
+                    Dim unconditioned = outgoingIdx.Where(Function(ei) Not edgeDiscriminators(ei)).Count()
 
-                ' ✅ NEW: If conditionId exists (and is not Else), verify it exists and has valid script
-                If Not String.IsNullOrWhiteSpace(conditionId) AndAlso Not isElseEdge Then
-                    ' ✅ DEBUG: Log condition search
-                    Console.WriteLine($"🔍 [COMPILER][FlowCompiler] Searching for condition '{conditionId}' in flow.Conditions")
-                    Console.WriteLine($"   Edge ID: {edge.Id}, Edge Label: '{edge.Label}'")
-                    Console.WriteLine($"   Edge conditionId (raw): '{If(edge.ConditionId, "NULL")}'")
-                    Console.WriteLine($"   Edge conditionId (trimmed): '{conditionId}' (length: {conditionId.Length})")
-                    Console.WriteLine($"   Flow.Conditions count: {If(flow.Conditions IsNot Nothing, flow.Conditions.Count, 0)}")
-                    If flow.Conditions IsNot Nothing AndAlso flow.Conditions.Count > 0 Then
-                        Console.WriteLine($"   Available condition IDs:")
-                        For Each c In flow.Conditions
-                            Dim matchResult = (c.Id = conditionId)
-                            Console.WriteLine($"     - Condition ID: '{c.Id}' (length: {If(c.Id IsNot Nothing, c.Id.Length, 0)}), Name: '{c.Name}', Match: {matchResult}")
-                        Next
-                    Else
-                        Console.WriteLine($"   ⚠️ Flow.Conditions is Nothing or empty!")
+                    ' >1 outgoing link and at least one without routing discriminator (Else / valid condition)
+                    If unconditioned >= 1 Then
+                        Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Ambiguous outgoing links from node '{labelSafe}' ({unconditioned} unconditioned of {outgoingIdx.Count})")
+                        System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Ambiguous outgoing links from node '{labelSafe}'")
+                        errors.Add(New CompilationError() With {
+                            .TaskId = "SYSTEM",
+                            .NodeId = node.Id,
+                            .RowId = Nothing,
+                            .EdgeId = Nothing,
+                            .Message = $"Ambiguous outgoing links from node '{labelSafe}': at least one unconditioned path with multiple exits.",
+                            .Severity = ErrorSeverity.Error,
+                            .Category = "AmbiguousOutgoingLinks"
+                        })
                     End If
 
-                    ' Find condition in flow.Conditions
-                    Dim condition = If(flow.Conditions IsNot Nothing, flow.Conditions.FirstOrDefault(Function(c) c.Id = conditionId), Nothing)
-
-                    If condition Is Nothing Then
-                        ' Condition not found in projectData
-                        Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition not found in projectData")
-                        System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition not found")
+                    ' Two or more outgoing edges with the same non-empty label (case-insensitive)
+                    Dim labelGroups = outgoingIdx.
+                        Select(Function(ei) edgesList(ei)).
+                        Where(Function(e) Not String.IsNullOrWhiteSpace(If(e.Label, "").Trim())).
+                        GroupBy(Function(e) If(e.Label, "").Trim().ToLowerInvariant()).
+                        Where(Function(g) g.Count() >= 2)
+                    If labelGroups.Any() Then
+                        Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Duplicate edge labels from node '{labelSafe}'")
                         errors.Add(New CompilationError() With {
-                                .TaskId = "SYSTEM",
-                                .NodeId = edge.Source,
-                                .RowId = Nothing,
-                                .EdgeId = edge.Id,
-                                .Message = $"Edge '{edge.Label}' references condition '{conditionId}' but condition not found in projectData.",
-                                .Severity = ErrorSeverity.Error,
-                                .Category = "ConditionNotFound"
-                            })
-                        hasCondition = False
-                        ' ✅ FASE 2: Use expression.* instead of data.*
-                    ElseIf condition.Expression IsNot Nothing Then
-                        ' ✅ FASE 2: Check if condition has valid compiledCode (readableCode not stored)
-                        Dim hasScript = Not String.IsNullOrWhiteSpace(condition.Expression.CompiledCode)
-                        If Not hasScript Then
-                            ' Condition exists but has no script
-                            Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition has no script")
-                            System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} references condition '{conditionId}' but condition has no script")
+                            .TaskId = "SYSTEM",
+                            .NodeId = node.Id,
+                            .RowId = Nothing,
+                            .EdgeId = Nothing,
+                            .Message = $"Duplicate outgoing edge labels from node '{labelSafe}'.",
+                            .Severity = ErrorSeverity.Error,
+                            .Category = "AmbiguousDuplicateEdgeLabels"
+                        })
+                    End If
+
+                    ' Two or more edges referencing the same condition id, or the same compiled script (different ids)
+                    Dim outEdges = outgoingIdx.Select(Function(ei) edgesList(ei)).ToList()
+                    Dim cidGroups = outEdges.
+                        Where(Function(e) Not String.IsNullOrWhiteSpace(If(e.ConditionId, "").Trim())).
+                        GroupBy(Function(e) If(e.ConditionId, "").Trim()).
+                        Where(Function(g) g.Count() >= 2)
+                    If cidGroups.Any() Then
+                        Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Duplicate condition references from node '{labelSafe}'")
+                        errors.Add(New CompilationError() With {
+                            .TaskId = "SYSTEM",
+                            .NodeId = node.Id,
+                            .RowId = Nothing,
+                            .EdgeId = Nothing,
+                            .Message = $"Duplicate condition on multiple outgoing links from node '{labelSafe}'.",
+                            .Severity = ErrorSeverity.Error,
+                            .Category = "AmbiguousDuplicateConditionScript"
+                        })
+                    Else
+                        Dim scriptToEdgeIds As New Dictionary(Of String, List(Of String))()
+                        For Each e In outEdges
+                            Dim cid = If(e.ConditionId, "").Trim()
+                            If String.IsNullOrWhiteSpace(cid) Then Continue For
+                            Dim cond = If(flow.Conditions IsNot Nothing, flow.Conditions.FirstOrDefault(Function(c) c.Id = cid), Nothing)
+                            Dim code = If(cond IsNot Nothing AndAlso cond.Expression IsNot Nothing, If(cond.Expression.CompiledCode, "").Trim(), "")
+                            If String.IsNullOrWhiteSpace(code) Then Continue For
+                            If Not scriptToEdgeIds.ContainsKey(code) Then
+                                scriptToEdgeIds(code) = New List(Of String)()
+                            End If
+                            scriptToEdgeIds(code).Add(If(e.Id, ""))
+                        Next
+                        If scriptToEdgeIds.Values.Any(Function(lst) lst.Count >= 2) Then
+                            Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Same compiled script on different outgoing links from node '{labelSafe}'")
                             errors.Add(New CompilationError() With {
-                                    .TaskId = "SYSTEM",
-                                    .NodeId = edge.Source,
-                                    .RowId = Nothing,
-                                    .EdgeId = edge.Id,
-                                    .Message = $"Edge '{edge.Label}' references condition '{conditionId}' but condition has no script (DSL or JavaScript).",
-                                    .Severity = ErrorSeverity.Error,
-                                    .Category = "ConditionHasNoScript"
-                                })
-                            hasCondition = False
+                                .TaskId = "SYSTEM",
+                                .NodeId = node.Id,
+                                .RowId = Nothing,
+                                .EdgeId = Nothing,
+                                .Message = $"Identical condition script on multiple outgoing links from node '{labelSafe}'.",
+                                .Severity = ErrorSeverity.Error,
+                                .Category = "AmbiguousDuplicateConditionScript"
+                            })
                         End If
                     End If
-                End If
-
-                ' ✅ ERROR: Edge has label but no condition (and is not Else)
-                If hasLabel AndAlso Not hasCondition Then
-                    Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} has label '{edge.Label}' but no condition")
-                    System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Edge {edge.Id} has label '{edge.Label}' but no condition")
-                    errors.Add(New CompilationError() With {
-                        .TaskId = "SYSTEM", ' Edge errors don't have a taskId
-                        .NodeId = edge.Source, ' Source node
-                        .RowId = Nothing,
-                        .EdgeId = edge.Id,
-                        .Message = $"Edge '{edge.Label}' has a label but no condition. Add a condition or remove the label.",
-                        .Severity = ErrorSeverity.Error,
-                        .Category = "EdgeLabelWithoutCondition"
-                    })
-                End If
-            Next
+                Next
+            End If
         End If
 
         ' Trova entry TaskGroup (primo nodo entry)

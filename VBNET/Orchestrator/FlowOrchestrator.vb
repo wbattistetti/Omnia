@@ -786,28 +786,11 @@ Public Class FlowOrchestrator
     ''' Supports exact lookup and case-insensitive fallback for robustness.
     ''' </summary>
     Private Function ResolveRuntimePlaceholder(token As String) As String
-        Dim normalized = If(token, "").Trim()
-        If String.IsNullOrEmpty(normalized) Then
-            Return Nothing
-        End If
-
         Dim flow = ActiveFlow()
         If flow Is Nothing OrElse flow.VariableStore Is Nothing Then
             Return Nothing
         End If
-
-        If flow.VariableStore.ContainsKey(normalized) Then
-            Dim raw = flow.VariableStore(normalized)
-            Return If(raw Is Nothing, Nothing, raw.ToString())
-        End If
-
-        For Each kvp In flow.VariableStore
-            If String.Equals(kvp.Key, normalized, StringComparison.OrdinalIgnoreCase) Then
-                Return If(kvp.Value Is Nothing, Nothing, kvp.Value.ToString())
-            End If
-        Next
-
-        Return Nothing
+        Return PlaceholderUtils.ResolveTokenFromVariableStore(token, flow.VariableStore)
     End Function
 
     ''' <summary>

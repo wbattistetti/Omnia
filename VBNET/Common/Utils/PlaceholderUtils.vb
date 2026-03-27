@@ -73,4 +73,31 @@ Public Module PlaceholderUtils
 
         Return result
     End Function
+
+    ''' <summary>
+    ''' Resolves a bracket token against a VariableStore keyed by varId (GUID).
+    ''' Same semantics as FlowOrchestrator placeholder resolution: exact key, then case-insensitive match.
+    ''' Returns Nothing if the key is missing or the stored value is Nothing (caller may leave [token] unchanged).
+    ''' </summary>
+    Public Function ResolveTokenFromVariableStore(
+        token As String,
+        store As Dictionary(Of String, Object)
+    ) As String
+        If store Is Nothing Then Return Nothing
+        Dim normalized = If(token, "").Trim()
+        If String.IsNullOrEmpty(normalized) Then Return Nothing
+
+        If store.ContainsKey(normalized) Then
+            Dim raw = store(normalized)
+            Return If(raw Is Nothing, Nothing, raw.ToString())
+        End If
+
+        For Each kvp In store
+            If String.Equals(kvp.Key, normalized, StringComparison.OrdinalIgnoreCase) Then
+                Return If(kvp.Value Is Nothing, Nothing, kvp.Value.ToString())
+            End If
+        Next
+
+        Return Nothing
+    End Function
 End Module

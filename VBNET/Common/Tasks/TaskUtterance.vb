@@ -49,6 +49,7 @@ Partial Public Class TaskUtterance
     Private _projectId As String
     Private _locale As String
     Private _translationResolver As Object
+    Private _variableStore As Dictionary(Of String, Object)
 
     ''' <summary>
     ''' Project ID for translation resolution
@@ -78,6 +79,15 @@ Partial Public Class TaskUtterance
     End Property
 
     ''' <summary>
+    ''' Runtime variable values keyed by varId (GUID) for unified [guid] placeholder resolution.
+    ''' </summary>
+    Public ReadOnly Property VariableStore As Dictionary(Of String, Object) Implements ITaskContext.VariableStore
+        Get
+            Return _variableStore
+        End Get
+    End Property
+
+    ''' <summary>
     ''' Sets the ProjectId (internal setter for initialization)
     ''' </summary>
     Public Sub SetProjectId(value As String)
@@ -96,6 +106,13 @@ Partial Public Class TaskUtterance
     ''' </summary>
     Public Sub SetTranslationResolver(value As Object)
         _translationResolver = value
+    End Sub
+
+    ''' <summary>
+    ''' Attaches the flow runtime VariableStore so MessageTask placeholders resolve by GUID (same as FlowOrchestrator).
+    ''' </summary>
+    Public Sub SetVariableStore(store As Dictionary(Of String, Object))
+        _variableStore = store
     End Sub
 
     Public Sub New()

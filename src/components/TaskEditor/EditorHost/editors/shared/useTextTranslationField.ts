@@ -30,8 +30,9 @@ type Result = {
  * Text field backed by ProjectTranslations + task.parameters text key.
  *
  * Model:
- * - **Storage** (`translations[key]`): canonical encoded string (e.g. bracket tokens with GUIDs).
- * - **Display** (textarea): decoded string for humans; always `decode(storage)` when in sync.
+ * - **Storage** (`translations[key]`): canonical encoded string (bracket tokens with variable GUIDs).
+ * - **Display** (textarea): human-readable while editing; `flushNow` does not rewrite the textarea — only
+ *   persists the encoded form. Reload / mapping change still applies `decode(storage)` when not dirty.
  * - **Dirty**: user is editing; we never overwrite from storage until flush saves.
  *
  * `flushNow` identity is stable (does not depend on decodeContextKey) so debounce timers are not
@@ -87,7 +88,7 @@ export function useTextTranslationField({
     return newKey;
   }, [instanceId, fallbackTaskType, getCurrentProjectId]);
 
-  /** Persists draft and snaps UI to decode(encode(draft)) so labels stay visible. */
+  /** Persists encoded (GUID) form to translations; leaves the visible textarea content unchanged. */
   const flushNow = useCallback(() => {
     const textKey = getTextKey();
     if (!textKey) return;
@@ -97,9 +98,6 @@ export function useTextTranslationField({
     lastSyncedRawRef.current = encoded;
     lastSyncedDecodeContextRef.current = digest;
     dirtyRef.current = false;
-    const decoded = decodeRef.current(encoded);
-    textRef.current = decoded;
-    setTextState(decoded);
   }, [getTextKey, addTranslation]);
 
   const setText = useCallback((v: string) => {
