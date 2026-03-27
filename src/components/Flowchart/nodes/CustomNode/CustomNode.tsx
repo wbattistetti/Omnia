@@ -500,7 +500,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     let cursorX = stripStartX;
     for (let i = 0; i < uniqueValues.length; i += 1) {
       const valueLabel = uniqueValues[i];
-      const conditionId = await createConditionForValue(categoryId, slotGuid, row.text || 'slot', valueLabel);
+      const conditionId = await createConditionForValue(categoryId, variableRefId, row.text || 'slot', valueLabel);
       if (!conditionId) {
         skipped.push(valueLabel);
         continue;
