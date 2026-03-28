@@ -1,67 +1,82 @@
 import { useState, useCallback, useRef } from 'react';
+import type { SelectPathOptions } from '@responseEditor/features/node-editing/selectPathTypes';
 
 /**
  * Hook for managing node selection state in ResponseEditor.
- * Handles main data, sub-data, and root/aggregate selection.
+ * Selection is stored as a stable path of indices; legacy main/sub indices are derived for compatibility.
  *
  * @param initialMainIndex - Initial main data index (default: 0)
- * @returns Selection state and handlers
  */
 export function useNodeSelection(initialMainIndex = 0) {
-  const [selectedMainIndex, setSelectedMainIndex] = useState(initialMainIndex);
-  const [selectedSubIndex, setSelectedSubIndex] = useState<number | undefined>(undefined);
+  const [selectedPath, setSelectedPath] = useState<number[]>([initialMainIndex]);
   const [selectedRoot, setSelectedRoot] = useState<boolean>(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
+  const selectedMainIndex = selectedRoot ? 0 : (selectedPath[0] ?? 0);
+  const selectedSubIndex = selectedRoot
+    ? undefined
+    : (selectedPath.length > 1 ? selectedPath[1] : undefined);
+
   const handleSelectMain = useCallback((idx: number) => {
-    setSelectedMainIndex(idx);
-    setSelectedSubIndex(undefined);
     setSelectedRoot(false);
+    setSelectedPath([idx]);
     setTimeout(() => { sidebarRef.current?.focus(); }, 0);
-  }, [selectedMainIndex]);
+  }, []);
 
   const handleSelectSub = useCallback((subIdx: number | undefined, mainIdx?: number) => {
-    // subIdx is relative to the main (either provided mainIdx or currently selected main)
     setSelectedRoot(false);
-    if (mainIdx !== undefined && mainIdx !== selectedMainIndex) {
-      // If mainIdx is provided and different from current, select both atomically
-      setSelectedMainIndex(mainIdx);
-      setSelectedSubIndex(subIdx);
-    } else {
-      // Otherwise, just update sub index (main is already correct)
-      setSelectedSubIndex(subIdx);
-    }
+    setSelectedPath((prev) => {
+      const main = mainIdx !== undefined ? mainIdx : (prev[0] ?? 0);
+      if (subIdx === undefined) {
+        return [main];
+      }
+      return [main, subIdx];
+    });
     setTimeout(() => { sidebarRef.current?.focus(); }, 0);
-  }, [selectedMainIndex, selectedSubIndex]);
+  }, []);
+
+  const handleSelectByPath = useCallback((path: number[], options?: SelectPathOptions) => {
+    setSelectedRoot(false);
+    setSelectedPath(path.length ? path : [0]);
+    const focusSidebar = options?.focusSidebar !== false;
+    if (focusSidebar) {
+      setTimeout(() => {
+        sidebarRef.current?.focus();
+      }, 0);
+    }
+  }, []);
 
   const handleSelectAggregator = useCallback(() => {
     setSelectedRoot(true);
-    setSelectedMainIndex(0);
-    setSelectedSubIndex(undefined);
+    setSelectedPath([0]);
     setTimeout(() => { sidebarRef.current?.focus(); }, 0);
   }, []);
 
   const resetSelection = useCallback(() => {
-    setSelectedMainIndex(0);
-    setSelectedSubIndex(undefined);
     setSelectedRoot(false);
+    setSelectedPath([0]);
     setTimeout(() => { sidebarRef.current?.focus(); }, 0);
   }, []);
 
   return {
+    selectedPath,
     selectedMainIndex,
     selectedSubIndex,
     selectedRoot,
     sidebarRef,
-    // Setters (keep for backward compatibility)
-    setSelectedMainIndex,
-    setSelectedSubIndex,
+    setSelectedPath,
+    setSelectedMainIndex: (idx: number) => setSelectedPath([idx]),
+    setSelectedSubIndex: (sub: number | undefined) => {
+      setSelectedPath((prev) => {
+        const m = prev[0] ?? 0;
+        return sub === undefined ? [m] : [m, sub];
+      });
+    },
     setSelectedRoot,
-    // Handlers
     handleSelectMain,
     handleSelectSub,
+    handleSelectByPath,
     handleSelectAggregator,
     resetSelection,
   };
 }
-

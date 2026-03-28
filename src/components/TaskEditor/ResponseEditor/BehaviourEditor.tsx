@@ -14,6 +14,8 @@ interface BehaviourEditorProps {
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   selectedRoot?: boolean;
   selectedSubIndex?: number | null;
+  /** When set, depth > 1 behaves like sub selection for step UI. */
+  selectedPath?: number[];
   // ✅ NEW: Props per gestire StepsStrip esternamente
   hideStepsStrip?: boolean; // Se true, non mostra StepsStrip (gestito dal container)
   selectedStepKey?: string; // Step selezionato (se gestito esternamente)
@@ -26,6 +28,7 @@ export default function BehaviourEditor({
   updateSelectedNode,
   selectedRoot,
   selectedSubIndex,
+  selectedPath,
   hideStepsStrip = false,
   selectedStepKey: externalSelectedStepKey,
   onStepChange: externalOnStepChange,
@@ -49,7 +52,7 @@ export default function BehaviourEditor({
     let result: string[];
     if (selectedRoot) {
       result = stepKeys;
-    } else if (selectedSubIndex != null) {
+    } else if ((selectedPath && selectedPath.length > 1) || selectedSubIndex != null) {
       result = stepKeys;
     } else if (!stepKeys.includes('notConfirmed')) {
       result = [...stepKeys, 'notConfirmed'];
@@ -57,7 +60,7 @@ export default function BehaviourEditor({
       result = stepKeys;
     }
     return result;
-  }, [stepKeys, selectedSubIndex, selectedRoot]);
+  }, [stepKeys, selectedSubIndex, selectedPath, selectedRoot]);
 
   // ✅ NEW: Get navigation context for programmatic step changes
   const navigation = useResponseEditorNavigation();

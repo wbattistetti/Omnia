@@ -5,6 +5,7 @@ import { useCallback } from 'react';
 import { saveTaskToRepository, saveTaskOnEditorClose } from '@responseEditor/core/persistence/ResponseEditorPersistence';
 import { getMainNodes } from '@responseEditor/core/domain';
 import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
+import { replaceNodeAtPath } from '@responseEditor/core/taskTree';
 import DialogueTaskService from '@services/DialogueTaskService';
 import { closeTab } from '@dock/ops';
 import { useTaskTreeStore, useTaskTreeFromStore } from '@responseEditor/core/state';
@@ -31,8 +32,7 @@ export interface UseResponseEditorCloseParams {
   // Node selection
   selectedNode: any;
   selectedNodePath: {
-    mainIndex: number;
-    subIndex?: number;
+    path: number[];
   } | null;
   selectedRoot: boolean;
 
@@ -119,75 +119,37 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     }
 
     // ✅ FASE 2.3: Salva selectedNode corrente nello store prima di chiudere (se non già salvato)
-    if (selectedNode && selectedNodePath) {
-      // ✅ FASE 3: Usa store invece di taskTreeRef
+    if (selectedNode && taskTreeFromStore) {
       const currentTaskTree = taskTreeFromStore;
-      const mains = getMainNodes(currentTaskTree);
-      const { mainIndex, subIndex } = selectedNodePath;
       const isRoot = selectedRoot || false;
 
-      if (mainIndex < mains.length) {
-        const main = mains[mainIndex];
-
-        if (isRoot) {
-          // ✅ NO FALLBACKS: Steps must be dictionary format
-          // Handle both array and dictionary formats (for compatibility during migration)
-          let introStepData: any = null;
-          if (selectedNode?.steps) {
-            if (Array.isArray(selectedNode.steps)) {
-              introStepData = selectedNode.steps.find((s: any) => s.type === 'introduction');
-            } else if (typeof selectedNode.steps === 'object' && selectedNode.steps.introduction) {
-              introStepData = selectedNode.steps.introduction;
-            }
-          }
-          const hasTasks = introStepData?.escalations?.some((esc: any) =>
-            esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
-          );
-          if (hasTasks) {
-            // ✅ FASE 2.3: Aggiorna store invece di taskTreeRef
-            // ✅ NO FALLBACKS: currentTaskTree must exist after validation
-            if (!currentTaskTree) {
-              console.error('[useResponseEditorClose] currentTaskTree is null/undefined. This should not happen after validation.');
-              return false;
-            }
-            const updatedTaskTree = currentTaskTree;
-            updatedTaskTree.introduction = {
-              type: 'introduction',
-              escalations: introStepData?.escalations ?? []
-            };
-            setTaskTree(updatedTaskTree);
-          } else {
-            // ✅ FASE 2.3: Rimuovi introduction dallo store
-            if (currentTaskTree) {
-              const updatedTaskTree = { ...currentTaskTree };
-              delete updatedTaskTree.introduction;
-              setTaskTree(updatedTaskTree);
-            }
-          }
-        } else if (subIndex === undefined) {
-          mains[mainIndex] = selectedNode;
-          // ✅ FASE 2.3: Aggiorna store invece di taskTreeRef
-          const updatedTaskTree = { ...currentTaskTree, nodes: mains };
-          setTaskTree(updatedTaskTree);
-        } else {
-          // After validation strict, main.subNodes MUST exist (not subTasks)
-          const subList = getSubNodesStrict(main);
-          const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
-          if (subIdx >= 0) {
-            subList[subIdx] = selectedNode;
-            main.subNodes = subList;
-            mains[mainIndex] = main;
-            // ✅ FASE 2.3: Aggiorna store invece di taskTreeRef
-            // ✅ NO FALLBACKS: currentTaskTree must exist after validation
-            if (!currentTaskTree) {
-              console.error('[useResponseEditorClose] currentTaskTree is null/undefined. This should not happen after validation.');
-              return false;
-            }
-            const updatedTaskTree = { ...currentTaskTree, nodes: mains };
-            updatedTaskTree.nodes = mains;
-            setTaskTree(updatedTaskTree);
+      if (isRoot) {
+        let introStepData: any = null;
+        if (selectedNode?.steps) {
+          if (Array.isArray(selectedNode.steps)) {
+            introStepData = selectedNode.steps.find((s: any) => s.type === 'introduction');
+          } else if (typeof selectedNode.steps === 'object' && selectedNode.steps.introduction) {
+            introStepData = selectedNode.steps.introduction;
           }
         }
+        const hasTasks = introStepData?.escalations?.some((esc: any) =>
+          esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
+        );
+        if (hasTasks) {
+          const updatedTaskTree = { ...currentTaskTree };
+          updatedTaskTree.introduction = {
+            type: 'introduction',
+            escalations: introStepData?.escalations ?? []
+          };
+          setTaskTree(updatedTaskTree);
+        } else {
+          const updatedTaskTree = { ...currentTaskTree };
+          delete updatedTaskTree.introduction;
+          setTaskTree(updatedTaskTree);
+        }
+      } else if (selectedNodePath?.path?.length) {
+        const updatedTaskTree = replaceNodeAtPath(currentTaskTree, selectedNodePath.path, selectedNode);
+        setTaskTree(updatedTaskTree);
       }
     }
 

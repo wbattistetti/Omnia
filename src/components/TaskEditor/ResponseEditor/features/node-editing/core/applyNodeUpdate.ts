@@ -8,14 +8,14 @@ import { saveTaskToRepository } from '@responseEditor/core/persistence/ResponseE
 import { mapNode } from '@dock/ops';
 import { validateNodeStructure } from '@responseEditor/core/domain/validators';
 import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
+import { replaceNodeAtPath } from '@responseEditor/core/taskTree';
 import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface ApplyNodeUpdateParams {
   prevNode: any;
   updatedNode: any;
   selectedNodePath: {
-    mainIndex: number;
-    subIndex?: number;
+    path: number[];
   } | null;
   selectedRoot: boolean;
   currentTaskTree: TaskTree | null | undefined;
@@ -68,7 +68,7 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
     tabId,
   } = params;
 
-  if (!prevNode || !selectedNodePath) {
+  if (!prevNode) {
     return {
       updatedNode: prevNode,
       updatedTaskTree: currentTaskTree || { nodes: [] },
@@ -78,108 +78,68 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
     };
   }
 
-  const { mainIndex, subIndex } = selectedNodePath;
   const isRoot = selectedRoot || false;
 
   // STEP 1: Build complete updated TaskTree
-  const updatedTaskTree = { ...currentTaskTree };
-  // ✅ NO FALLBACKS: currentTaskTree.nodes must exist after validation
-  if (!currentTaskTree?.nodes) {
-    throw new Error('[applyNodeUpdate] currentTaskTree.nodes is missing. This should have been caught by validateTaskTreeStructure.');
-  }
-  const mains = [...currentTaskTree.nodes];
+  let updatedTaskTree: TaskTree = { ...(currentTaskTree || { nodes: [], steps: {} }) };
 
-  if (mainIndex < mains.length) {
-    const main = { ...mains[mainIndex] };
-
-    if (isRoot) {
-      // Root node (introduction)
-      const newIntroStep = updatedNode?.steps?.find((s: any) => s.type === 'introduction');
-      if (newIntroStep?.escalations?.some((esc: any) => esc?.tasks?.length > 0)) {
-        updatedTaskTree.introduction = {
-          type: 'introduction',
-          escalations: newIntroStep.escalations ?? []
-        };
-      } else {
-        delete updatedTaskTree.introduction;
-      }
-    } else if (subIndex === undefined) {
-      // Main node
-      mains[mainIndex] = updatedNode;
-      updatedTaskTree.nodes = mains;
-
-      // LOG: Verify nlpProfile.examples is present after update
-      const savedNlpProfileExamples = mains[mainIndex]?.nlpProfile?.examples;
-      if (savedNlpProfileExamples) {
-        console.log('[EXAMPLES] UPDATE - Saved to taskTreeRef.data', {
-          nodeId: updatedNode.id,
-          mainIndex,
-          hasNlpProfile: !!mains[mainIndex]?.nlpProfile,
-          hasNlpProfileExamples: !!savedNlpProfileExamples,
-          nlpProfileExamplesCount: savedNlpProfileExamples.length,
-          nlpProfileExamples: savedNlpProfileExamples.slice(0, 3)
-        });
-      }
-
-      // CRITICAL: Save updated.steps as dictionary
-      // After validation strict, updatedNode.steps MUST be dictionary format
-      const nodeTemplateId = getNodeIdStrict(updatedNode);
-      if (nodeTemplateId && updatedNode.steps && task) {
-        // Initialize task.steps as dictionary if it doesn't exist
-        if (!task.steps || typeof task.steps !== 'object' || Array.isArray(task.steps)) {
-          task.steps = {};
-        }
-
-        // Steps MUST be dictionary format (validated by validateNodeStructure)
-        if (Array.isArray(updatedNode.steps)) {
-          throw new Error(
-            `[applyNodeUpdate] updatedNode.steps is array. Expected dictionary format. ` +
-            `Node id: ${nodeTemplateId}. This should have been caught by validateNodeStructure.`
-          );
-        }
-
-        // Save in dictionary using nodeTemplateId as key
-        task.steps[nodeTemplateId] = updatedNode.steps;
-      }
+  if (isRoot) {
+    // Root / introduction (aggregate)
+    const newIntroStep = updatedNode?.steps?.find((s: any) => s.type === 'introduction');
+    if (newIntroStep?.escalations?.some((esc: any) => esc?.tasks?.length > 0)) {
+      updatedTaskTree.introduction = {
+        type: 'introduction',
+        escalations: newIntroStep.escalations ?? []
+      };
     } else {
-      // Sub node
-      // After validation strict, main.subNodes MUST exist (not subTasks)
-      if (!main.subNodes || !Array.isArray(main.subNodes)) {
+      delete updatedTaskTree.introduction;
+    }
+  } else {
+    if (!selectedNodePath?.path?.length) {
+      return {
+        updatedNode: prevNode,
+        updatedTaskTree: currentTaskTree || { nodes: [] },
+        validationFailed: false,
+        shouldUpdateDockTree: false,
+        shouldSave: false,
+      };
+    }
+
+    if (!currentTaskTree?.nodes) {
+      throw new Error('[applyNodeUpdate] currentTaskTree.nodes is missing. This should have been caught by validateTaskTreeStructure.');
+    }
+
+    updatedTaskTree = replaceNodeAtPath(currentTaskTree, selectedNodePath.path, updatedNode);
+
+    const path = selectedNodePath.path;
+    const mainIndex = path[0];
+    const savedNlpProfileExamples = updatedTaskTree.nodes?.[mainIndex]?.nlpProfile?.examples;
+    if (savedNlpProfileExamples) {
+      console.log('[EXAMPLES] UPDATE - Saved to taskTreeRef.data', {
+        nodeId: updatedNode.id,
+        mainIndex,
+        path,
+        hasNlpProfile: !!updatedTaskTree.nodes?.[mainIndex]?.nlpProfile,
+        hasNlpProfileExamples: !!savedNlpProfileExamples,
+        nlpProfileExamplesCount: savedNlpProfileExamples.length,
+        nlpProfileExamples: savedNlpProfileExamples.slice(0, 3)
+      });
+    }
+
+    const nodeTemplateId = getNodeIdStrict(updatedNode);
+    if (nodeTemplateId && updatedNode.steps && task) {
+      if (!task.steps || typeof task.steps !== 'object' || Array.isArray(task.steps)) {
+        task.steps = {};
+      }
+
+      if (Array.isArray(updatedNode.steps)) {
         throw new Error(
-          `[applyNodeUpdate] Main node missing subNodes array. ` +
-          `Main id: ${main.id || main.templateId}. This should have been caught by validateNodeStructure.`
+          `[applyNodeUpdate] updatedNode.steps is array. Expected dictionary format. ` +
+          `Node id: ${nodeTemplateId}. This should have been caught by validateNodeStructure.`
         );
       }
 
-      const subList = [...main.subNodes];
-      const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
-      if (subIdx >= 0) {
-        subList[subIdx] = updatedNode;
-        main.subNodes = subList;
-        mains[mainIndex] = main;
-        updatedTaskTree.nodes = mains;
-
-        // CRITICAL: Save updated.steps as dictionary
-        // After validation strict, updatedNode.steps MUST be dictionary format
-        const nodeTemplateId = getNodeIdStrict(updatedNode);
-        if (nodeTemplateId && updatedNode.steps && task) {
-          // Initialize task.steps as dictionary if it doesn't exist
-          if (!task.steps || typeof task.steps !== 'object' || Array.isArray(task.steps)) {
-            task.steps = {};
-          }
-
-          // Steps MUST be dictionary format (validated by validateNodeStructure)
-          if (Array.isArray(updatedNode.steps)) {
-            throw new Error(
-              `[applyNodeUpdate] updatedNode.steps is array. Expected dictionary format. ` +
-              `Node id: ${nodeTemplateId}. This should have been caught by validateNodeStructure.`
-            );
-          }
-
-          // Save in dictionary using nodeTemplateId as key
-          task.steps[nodeTemplateId] = updatedNode.steps;
-        }
-      }
+      task.steps[nodeTemplateId] = updatedNode.steps;
     }
   }
 

@@ -56,6 +56,8 @@ export interface MainContentAreaProps {
   selectedNode: any;
   selectedRoot: boolean;
   selectedSubIndex: number | null | undefined;
+  /** Path to selected node; depth > 1 drives Behaviour step UI like sub selection. */
+  selectedPath?: number[];
 
   // Translations
   localTranslations: Record<string, string>;
@@ -108,6 +110,7 @@ export function MainContentArea({
   selectedNode,
   selectedRoot,
   selectedSubIndex,
+  selectedPath,
   localTranslations,
   // ✅ REMOVED: task, taskType - now from Context
   mainList,
@@ -268,8 +271,8 @@ export function MainContentArea({
               >
                 <p style={{ marginBottom: 12 }}>Nessuna struttura ancora disponibile.</p>
                 <p style={{ fontSize: 13, lineHeight: 1.5 }}>
-                  Usa <strong>Wizard</strong> nella barra in alto per generare il task con l&apos;AI,
-                  oppure resta in <strong>Manuale</strong> e continua quando sei pronto.
+                  In <strong>Manuale</strong>, usa <strong>Aggiungi dato radice</strong> nella barra a sinistra per creare il primo campo.
+                  In alternativa, <strong>Wizard</strong> nella barra in alto genera il task con l&apos;AI.
                 </p>
               </div>
             </div>
@@ -300,6 +303,7 @@ export function MainContentArea({
             updateSelectedNode={updateSelectedNode}
             selectedRoot={selectedRoot}
             selectedSubIndex={selectedSubIndex}
+            selectedPath={selectedPath}
             tasksPanelMode={tasksPanelMode ?? 'none'}
             tasksPanelWidth={tasksPanelWidth ?? 360}
             setTasksPanelWidth={setTasksPanelWidth ?? (() => {})}

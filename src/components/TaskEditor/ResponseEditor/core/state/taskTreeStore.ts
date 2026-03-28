@@ -20,6 +20,7 @@
 
 import { create } from 'zustand';
 import type { TaskTree } from '@types/taskTypes';
+import { ensureTaskTreeNodeIds } from '@responseEditor/core/taskTree';
 
 interface TaskTreeStore {
   // State
@@ -50,12 +51,13 @@ export const useTaskTreeStore = create<TaskTreeStore>((set, get) => ({
   // Actions
   setTaskTree: (taskTree) => {
     set((state) => {
+      const normalized = taskTree ? ensureTaskTreeNodeIds(taskTree) : null;
       // ✅ CRITICAL: Only increment version if taskTree actually changed
       // This prevents infinite loops when same taskTree is set multiple times
-      const taskTreeChanged = state.taskTree !== taskTree;
+      const taskTreeChanged = state.taskTree !== normalized;
       return {
         ...state,
-        taskTree,
+        taskTree: normalized,
         taskTreeVersion: taskTreeChanged ? state.taskTreeVersion + 1 : state.taskTreeVersion
       };
     });

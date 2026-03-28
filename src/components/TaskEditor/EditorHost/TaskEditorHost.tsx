@@ -42,7 +42,15 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
     <div className="w-full bg-slate-900 flex flex-col flex-1 min-h-0 h-full">
       <div className="min-h-0 flex-1 h-full">
         {/* @ts-expect-error registry type */}
-        <Comp task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} registerOnClose={registerOnClose} setDockTree={setDockTree} />
+        <Comp
+          key={task?.id ?? 'unknown'}
+          task={task}
+          onClose={onClose}
+          onToolbarUpdate={onToolbarUpdate}
+          hideHeader={hideHeader}
+          registerOnClose={registerOnClose}
+          setDockTree={setDockTree}
+        />
       </div>
     </div>
   ) : (
@@ -58,7 +66,15 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
           </div>
         }>
           {/* @ts-expect-error lazy component */}
-          <Comp task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} registerOnClose={registerOnClose} setDockTree={setDockTree} />
+          <Comp
+            key={task?.id ?? 'unknown'}
+            task={task}
+            onClose={onClose}
+            onToolbarUpdate={onToolbarUpdate}
+            hideHeader={hideHeader}
+            registerOnClose={registerOnClose}
+            setDockTree={setDockTree}
+          />
         </Suspense>
       </div>
     </div>

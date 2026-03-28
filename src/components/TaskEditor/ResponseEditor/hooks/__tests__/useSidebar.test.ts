@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useSidebar } from '@responseEditor/hooks/useSidebar';
+import { useTaskTreeStore } from '@responseEditor/core/state';
 import type { TaskTree } from '@types/taskTypes';
 
 /**
@@ -60,6 +61,11 @@ describe('useSidebar - Composite Hook', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {});
+
+    const storeReset = renderHook(() => useTaskTreeStore());
+    act(() => {
+      storeReset.result.current.reset();
+    });
 
     mockTaskTree = {
       label: 'Test TaskTree',
@@ -219,13 +225,13 @@ describe('useSidebar - Composite Hook', () => {
 
       rerender({ isDragging: true });
 
-      // Simulate mouse move that would result in width < MIN_WIDTH (160)
+      // Simulate mouse move that would result in width < MIN_WIDTH (220)
       const mouseMoveEvent = new MouseEvent('mousemove', {
-        clientX: 50, // deltaX = -50, new width = 150, but MIN is 160
+        clientX: 50, // deltaX = -50, new width = 150, clamped to MIN 220
       });
       window.dispatchEvent(mouseMoveEvent);
 
-      expect(mockSetSidebarManualWidth).toHaveBeenCalledWith(160);
+      expect(mockSetSidebarManualWidth).toHaveBeenCalledWith(220);
     });
 
     it('should enforce MAX_WIDTH constraint', () => {

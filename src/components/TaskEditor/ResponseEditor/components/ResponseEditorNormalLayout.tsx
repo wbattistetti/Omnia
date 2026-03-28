@@ -14,6 +14,8 @@ import { PanelContainer } from '@responseEditor/components/PanelContainer';
 import { MainViewMode } from '@responseEditor/types/mainViewMode';
 import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import type { Task, TaskTree } from '@types/taskTypes';
+import type { SelectPathHandler } from '@responseEditor/features/node-editing/selectPathTypes';
+import { SIDEBAR_CONTENT_MIN_WIDTH_PX } from '@responseEditor/Sidebar/sidebarLayoutConstants';
 import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 import type { WizardTaskTreeNode, WizardStep, WizardModuleTemplate } from '../../../../../TaskBuilderAIWizard/types';
 
@@ -29,6 +31,8 @@ export interface ResponseEditorNormalLayoutProps {
   // Node selection
   selectedMainIndex: number;
   selectedSubIndex: number | null | undefined;
+  selectedPath: number[];
+  handleSelectByPath: SelectPathHandler;
   selectedRoot: boolean;
   selectedNode: any;
   handleSelectMain: (idx: number) => void;
@@ -39,12 +43,19 @@ export interface ResponseEditorNormalLayoutProps {
   // Sidebar handlers
   onChangeSubRequired: (mIdx: number, sIdx: number, required: boolean) => void;
   onReorderSub: (mIdx: number, fromIdx: number, toIdx: number) => void;
+  onReorderMain: (fromIdx: number, toIdx: number) => void;
   onAddMain: (label: string) => void;
   onRenameMain: (mIdx: number, label: string) => void;
   onDeleteMain: (mIdx: number) => void;
   onAddSub: (mIdx: number, label: string) => void;
   onRenameSub: (mIdx: number, sIdx: number, label: string) => void;
   onDeleteSub: (mIdx: number, sIdx: number) => void;
+  onAddChildAtPath: (parentPath: number[] | null, label: string) => void;
+  onReorderAtPath?: (parentPath: number[] | null, fromIdx: number, toIdx: number) => void;
+  onRenameAtPath?: (path: number[], label: string) => void;
+  onDeleteAtPath?: (path: number[]) => void;
+  onChangeRequiredAtPath?: (path: number[], required: boolean) => void;
+  selectedRoot?: boolean;
   handleParserCreate: (nodeId: string, node: any) => void;
   handleParserModify: (nodeId: string, node: any) => void;
   handleEngineChipClick: (nodeId: string, node: any, editorType: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
@@ -136,6 +147,8 @@ export function ResponseEditorNormalLayout({
   escalationTasks,
   selectedMainIndex,
   selectedSubIndex,
+  selectedPath,
+  handleSelectByPath,
   selectedRoot,
   selectedNode,
   handleSelectMain,
@@ -144,12 +157,18 @@ export function ResponseEditorNormalLayout({
   sidebarRef,
   onChangeSubRequired,
   onReorderSub,
+  onReorderMain,
   onAddMain,
   onRenameMain,
   onDeleteMain,
   onAddSub,
   onRenameSub,
   onDeleteSub,
+  onAddChildAtPath,
+  onReorderAtPath,
+  onRenameAtPath,
+  onDeleteAtPath,
+  onChangeRequiredAtPath,
   handleParserCreate,
   handleParserModify,
   handleEngineChipClick,
@@ -226,11 +245,26 @@ export function ResponseEditorNormalLayout({
         onSelectMain={handleSelectMain}
         selectedSubIndex={selectedSubIndex}
         onSelectSub={handleSelectSub}
+        selectedPath={selectedPath}
+        onSelectPath={handleSelectByPath}
         aggregated={isAggregatedAtomic}
         rootLabel={effectiveRootLabel}
-        style={sidebarManualWidth ? { width: sidebarManualWidth, flexShrink: 0 } : { flexShrink: 0 }}
+        style={{
+          minWidth: 0,
+          maxWidth: '100%',
+          alignSelf: 'stretch',
+          overflow: 'hidden',
+          boxSizing: 'border-box',
+        }}
         onChangeSubRequired={onChangeSubRequired}
         onReorderSub={onReorderSub}
+        onReorderMain={onReorderMain}
+        onAddChildAtPath={onAddChildAtPath}
+        onReorderAtPath={onReorderAtPath}
+        onRenameAtPath={onRenameAtPath}
+        onDeleteAtPath={onDeleteAtPath}
+        onChangeRequiredAtPath={onChangeRequiredAtPath}
+        selectedRoot={selectedRoot}
         onAddMain={onAddMain}
         onRenameMain={onRenameMain}
         onDeleteMain={onDeleteMain}
@@ -252,9 +286,14 @@ export function ResponseEditorNormalLayout({
     );
   }
 
+  /** Default column width: same as SIDEBAR_CONTENT_MIN_WIDTH_PX (no jump vs inner sidebar measure). */
+  const defaultSidebarTrackPx = SIDEBAR_CONTENT_MIN_WIDTH_PX;
+  const sidebarTrackPx = sidebarManualWidth ?? defaultSidebarTrackPx;
+  const resizerWidthPx = 10;
+
   // ✅ Calcola gridTemplateColumns in base alle condizioni
   const gridTemplateColumns = hasSidebar
-    ? 'auto 8px 1fr'  // Sidebar + Resizer + Content
+    ? `${sidebarTrackPx}px ${resizerWidthPx}px minmax(0, 1fr)` // Sidebar + Resizer + Content
     : hasIntentEditor
       ? 'auto 1fr'     // IntentEditor + Content
       : '1fr';         // Solo Content
@@ -302,11 +341,26 @@ export function ResponseEditorNormalLayout({
             onSelectMain={handleSelectMain}
             selectedSubIndex={selectedSubIndex}
             onSelectSub={handleSelectSub}
+            selectedPath={selectedPath}
+            onSelectPath={handleSelectByPath}
             aggregated={isAggregatedAtomic}
             rootLabel={effectiveRootLabel}
-            style={sidebarManualWidth ? { width: sidebarManualWidth, flexShrink: 0 } : { flexShrink: 0 }}
+            style={{
+          minWidth: 0,
+          maxWidth: '100%',
+          alignSelf: 'stretch',
+          overflow: 'hidden',
+          boxSizing: 'border-box',
+        }}
             onChangeSubRequired={onChangeSubRequired}
             onReorderSub={onReorderSub}
+            onReorderMain={onReorderMain}
+            onAddChildAtPath={onAddChildAtPath}
+            onReorderAtPath={onReorderAtPath}
+            onRenameAtPath={onRenameAtPath}
+            onDeleteAtPath={onDeleteAtPath}
+            onChangeRequiredAtPath={onChangeRequiredAtPath}
+            selectedRoot={selectedRoot}
             onAddMain={onAddMain}
             onRenameMain={onRenameMain}
             onDeleteMain={onDeleteMain}
@@ -325,20 +379,25 @@ export function ResponseEditorNormalLayout({
             onStructureReject={wizardProps?.onStructureReject}
             structureConfirmed={wizardProps?.structureConfirmed}
           />
-          {/* Resizer verticale tra Sidebar e contenuto principale */}
+          {/* Resizer: wide hit-target + visible groove (not a 1px hairline on the button). */}
           <div
             onMouseDown={handleSidebarResizeStart}
             style={{
-              width: 8,
+              width: resizerWidthPx,
               cursor: 'col-resize',
-              background: isDraggingSidebar ? '#fb923c' : '#fb923c22',
-              transition: 'background 0.15s ease',
               flexShrink: 0,
               position: 'relative',
               zIndex: isDraggingSidebar ? 100 : 10,
               userSelect: 'none',
               WebkitUserSelect: 'none',
               touchAction: 'none',
+              pointerEvents: 'auto',
+              boxSizing: 'border-box',
+              background: isDraggingSidebar
+                ? 'linear-gradient(90deg, rgba(251,146,60,0.35) 0%, rgba(251,146,60,0.55) 50%, rgba(251,146,60,0.25) 100%)'
+                : 'linear-gradient(90deg, rgba(37,42,62,0.95) 0%, rgba(251,146,60,0.14) 45%, rgba(251,146,60,0.14) 55%, rgba(37,42,62,0.5) 100%)',
+              boxShadow: 'inset 0 0 0 1px rgba(251,146,60,0.35)',
+              transition: 'background 0.15s ease',
             }}
             aria-label="Resize sidebar"
             role="separator"
@@ -353,6 +412,7 @@ export function ResponseEditorNormalLayout({
           mainViewMode={mainViewMode}
           selectedNode={selectedNode}
           selectedRoot={selectedRoot}
+          selectedPath={selectedPath}
           selectedSubIndex={selectedSubIndex}
           localTranslations={localTranslations}
           task={task}

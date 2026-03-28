@@ -3,7 +3,10 @@ import { Download } from 'lucide-react';
 
 type ImportDropdownProps = {
   onImport: (values: string[]) => void;
+  /** Shown next to icon; omit or use with iconOnly for tooltip-only */
   buttonLabel?: string;
+  /** Only the download icon, no text on the trigger */
+  iconOnly?: boolean;
   acceptFileType?: string;
   successMessage?: (count: number) => string;
   errorMessage?: {
@@ -24,6 +27,7 @@ const parseValues = (text: string): string[] => {
 export function ImportDropdown({
   onImport,
   buttonLabel = 'Import Values',
+  iconOnly = false,
   acceptFileType = '.txt,text/plain',
   successMessage = (count) => `Importati ${count} valori`,
   errorMessage = {
@@ -90,12 +94,18 @@ export function ImportDropdown({
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => setShowMenu(!showMenu)}
-        className="px-2 py-1 rounded border bg-white hover:bg-amber-100 flex items-center gap-1"
+        className={
+          iconOnly
+            ? 'p-1.5 rounded border bg-white hover:bg-amber-100 flex items-center justify-center'
+            : 'px-2 py-1 rounded border bg-white hover:bg-amber-100 flex items-center gap-1'
+        }
         title={buttonLabel}
+        aria-label={buttonLabel}
       >
         <Download size={14} />
-        {buttonLabel}
+        {!iconOnly ? buttonLabel : null}
       </button>
       {showMenu && (
         <>

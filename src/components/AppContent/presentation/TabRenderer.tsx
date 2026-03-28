@@ -97,14 +97,18 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
 
     // Response Editor tab
     if (tab.type === 'responseEditor') {
+      const responseEditorTab = tab as DockTabResponseEditor;
       useEffect(() => {
         return () => {
           editorCloseRefsMap.current.delete(tab.id);
         };
       }, [tab.id, editorCloseRefsMap]);
 
-      /** Stable per tab row: must NOT switch when task.instanceId loads (would remount → flicker). */
-      const editorKey = useMemo(() => `response-editor-${tab.id}`, [tab.id]);
+      /** Remount when tab or task identity changes so editor state cannot leak across tasks. */
+      const editorKey = useMemo(
+        () => `response-editor-${responseEditorTab.id}-${responseEditorTab.task?.id ?? 'no-task'}`,
+        [responseEditorTab.id, responseEditorTab.task?.id]
+      );
 
       // ✅ FIX: Restituisci un nuovo oggetto stabile solo con i valori necessari
       // Questo evita che cambi riferimento quando tab.task viene ricreato dal padre

@@ -1,4 +1,4 @@
-import React, { useState, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useImperativeHandle, forwardRef, useRef, useCallback, useLayoutEffect } from 'react';
 import { getModelStatus, trainIntent, TrainingPhrase } from './services/trainingService';
 import { useIntentStore } from './state/intentStore';
 // ✅ RIPRISTINO LAYOUT: Import dei componenti del layout completo
@@ -7,6 +7,12 @@ import { CenterPane } from './ui/CenterPane';
 import { TestConsole } from './ui/RightTest';
 // ✅ FIX DOPPIO HEADER: Import per Train Model button
 import { Brain, Loader2 } from 'lucide-react';
+import {
+  clampIntentSidebarWidth,
+  computeIntentSidebarWidth,
+  persistIntentSidebarWidth,
+  readStoredIntentSidebarWidth,
+} from './intentSidebarWidth';
 
 interface EmbeddingEditorShellProps {
   inlineMode?: boolean;
@@ -68,6 +74,60 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
 
     // Get all intents from store for training
     const intents = useIntentStore(s => s.intents || []);
+
+    const threeColumnRowRef = useRef<HTMLDivElement>(null);
+    const maxLeftPxRef = useRef(720);
+    const [intentsColumnWidth, setIntentsColumnWidth] = useState(() => {
+      const stored = readStoredIntentSidebarWidth();
+      if (stored != null) return stored;
+      return computeIntentSidebarWidth(intents);
+    });
+
+    useLayoutEffect(() => {
+      if (readStoredIntentSidebarWidth() != null) return;
+      setIntentsColumnWidth(computeIntentSidebarWidth(intents));
+    }, [intents]);
+
+    useLayoutEffect(() => {
+      const el = threeColumnRowRef.current;
+      if (!el) return;
+      const updateMax = () => {
+        maxLeftPxRef.current = Math.max(220, Math.floor(el.clientWidth * 0.72));
+        setIntentsColumnWidth(w => clampIntentSidebarWidth(w, 220, maxLeftPxRef.current));
+      };
+      updateMax();
+      const ro = new ResizeObserver(updateMax);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }, []);
+
+    const onIntentsSplitterPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      const startX = e.clientX;
+      const startW = intentsColumnWidth;
+      let lastW = startW;
+
+      const onMove = (ev: PointerEvent) => {
+        const dx = ev.clientX - startX;
+        lastW = clampIntentSidebarWidth(startW + dx, 220, maxLeftPxRef.current);
+        setIntentsColumnWidth(lastW);
+      };
+      const onUp = (ev: PointerEvent) => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        try {
+          (ev.target as HTMLElement).releasePointerCapture(ev.pointerId);
+        } catch {
+          /* ignore */
+        }
+        persistIntentSidebarWidth(lastW);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    }, [intentsColumnWidth]);
 
     // ✅ FIX: Calcola canTrain localmente basandosi sugli intenti disponibili
     // Verifica anche che ci siano frasi di training (matching o not-matching)
@@ -493,13 +553,31 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
 
         {/* Tre colonne anche in inlineMode (overlay Recognition): senza questo resta solo la riga parametri e un vuoto flex-1 */}
         <div
-          className="flex-1 min-h-0 flex gap-2 px-2 pb-2"
+          ref={threeColumnRowRef}
+          className="flex-1 min-h-0 flex gap-0 px-2 pb-2"
           style={{ overflow: 'hidden', display: 'flex', flexDirection: 'row', alignItems: 'stretch' }}
         >
-          <div className="w-64 flex-shrink-0 flex flex-col min-h-0" style={{ height: '100%' }}>
+          <div
+            className="flex-shrink-0 flex flex-col min-h-0 min-w-0"
+            style={{ width: intentsColumnWidth, height: '100%' }}
+          >
             <LeftGrid />
           </div>
-          <div className="flex-1 min-w-0 flex flex-col min-h-0" style={{ height: '100%' }}>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Ridimensiona colonna intenti"
+            tabIndex={0}
+            onPointerDown={onIntentsSplitterPointerDown}
+            className="w-2 shrink-0 cursor-col-resize flex flex-col justify-center items-center group select-none touch-none"
+            style={{ height: '100%' }}
+          >
+            <span
+              className="w-px h-[min(100%,420px)] rounded-full bg-slate-300 group-hover:bg-blue-400 group-active:bg-blue-500"
+              aria-hidden
+            />
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col min-h-0 pl-1" style={{ height: '100%' }}>
             <CenterPane intentId={selectedIntentId} />
           </div>
           <div className="w-80 flex-shrink-0 flex flex-col min-h-0" style={{ height: '100%' }}>

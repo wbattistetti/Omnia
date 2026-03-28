@@ -91,6 +91,8 @@ export type ProblemIntentPhrase = { id: string; text: string; lang: Lang };
 export type ProblemIntent = {
   id: string;
   name: string;
+  /** Business description for AI-generated training phrases. */
+  description?: string;
   threshold?: number;
   phrases: {
     matching: ProblemIntentPhrase[];
@@ -111,6 +113,8 @@ export type ProblemPayload = {
   /** Labels + optional embedding training; persisted on Task.semanticValues. */
   semanticValues?: SemanticValue[];
   editor?: ProblemEditorState;
+  /** Client-only: set when persisting to localStorage; merge vs Task.updatedAt. */
+  persistedAt?: number;
 };
 
 export interface ProjectInfo {

@@ -87,5 +87,8 @@ export const useIntellisense = (): Ctx => {
     return ctx;
 };
 
+/** Same context without throwing (e.g. IntellisenseMenu in a row portal when provider is unreachable). */
+export const useOptionalIntellisense = (): Ctx | null => useContext(IntellisenseContext);
+
 // Re-export types for convenience
 export type { IntellisenseItem, IntellisenseTarget } from "../types/intellisense";

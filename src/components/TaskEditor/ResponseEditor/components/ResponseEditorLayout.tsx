@@ -39,6 +39,7 @@ import { TaskType, TemplateSource } from '@types/taskTypes';
 import { useWizardStore } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 import { shallow } from 'zustand/shallow';
 import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
+import type { SelectPathHandler } from '@responseEditor/features/node-editing/selectPathTypes';
 
 /** Orange header theme (matches EditorHeader THEMES.orange) for Wizard/Manual chunk on the left. */
 const ORANGE_HEADER_FG = '#ffffff';
@@ -173,9 +174,11 @@ export interface ResponseEditorLayoutProps {
   // Node selection
   selectedMainIndex: number;
   selectedSubIndex: number | null | undefined;
+  selectedPath: number[];
+  handleSelectByPath: SelectPathHandler;
   selectedRoot: boolean;
   selectedNode: any;
-  selectedNodePath: { mainIndex: number; subIndex?: number } | null;
+  selectedNodePath: { path: number[] } | null;
   handleSelectMain: (idx: number) => void;
   handleSelectSub: (idx: number | undefined, mainIdx?: number) => void;
   handleSelectAggregator: () => void;
@@ -311,6 +314,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     escalationTasks,
     selectedMainIndex,
     selectedSubIndex,
+    selectedPath,
+    handleSelectByPath,
     selectedRoot,
     selectedNode,
     selectedNodePath,
@@ -1081,9 +1086,17 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
     // ✅ Wizard mode: ALWAYS wrap handlers to update wizardDataSchema
     // Even if wizardDataSchema is empty, we must update it (not mainList)
+    // Strip path-based APIs so the sidebar keeps flat wizard behaviour (no taskTree mutation).
+    const {
+      onReorderAtPath: _or,
+      onRenameAtPath: _rn,
+      onDeleteAtPath: _del,
+      onChangeRequiredAtPath: _req,
+      ...sidebarWizardBase
+    } = sidebar;
 
     return {
-      ...sidebar,
+      ...sidebarWizardBase,
       onAddMain: (label: string) => {
         setDataSchema((prev) => {
           const newNode: WizardTaskTreeNode = {
@@ -1181,6 +1194,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         escalationTasks={escalationTasks}
         selectedMainIndex={selectedMainIndex}
         selectedSubIndex={selectedSubIndex}
+        selectedPath={selectedPath}
+        handleSelectByPath={handleSelectByPath}
         selectedRoot={selectedRoot}
         selectedNode={selectedNode}
         selectedNodePath={selectedNodePath}
@@ -1190,6 +1205,12 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         sidebarRef={sidebarRef}
         onChangeSubRequired={wrappedSidebarHandlers.onChangeSubRequired}
         onReorderSub={wrappedSidebarHandlers.onReorderSub}
+        onReorderMain={wrappedSidebarHandlers.onReorderMain}
+        onAddChildAtPath={wrappedSidebarHandlers.onAddChildAtPath}
+        onReorderAtPath={wrappedSidebarHandlers.onReorderAtPath}
+        onRenameAtPath={wrappedSidebarHandlers.onRenameAtPath}
+        onDeleteAtPath={wrappedSidebarHandlers.onDeleteAtPath}
+        onChangeRequiredAtPath={wrappedSidebarHandlers.onChangeRequiredAtPath}
         onAddMain={wrappedSidebarHandlers.onAddMain}
         onRenameMain={wrappedSidebarHandlers.onRenameMain}
         onDeleteMain={wrappedSidebarHandlers.onDeleteMain}
@@ -1247,6 +1268,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     escalationTasks,
     selectedMainIndex,
     selectedSubIndex,
+    selectedPath,
+    handleSelectByPath,
     selectedRoot,
     selectedNode,
     selectedNodePath,

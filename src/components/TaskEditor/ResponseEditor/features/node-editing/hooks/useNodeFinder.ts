@@ -2,63 +2,31 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { getMainNodes, getSubNodes } from '@responseEditor/core/domain';
+import { findPathById } from '@responseEditor/core/taskTree';
 import { useTaskTreeFromStore } from '@responseEditor/core/state';
-import type { TaskTree } from '@types/taskTypes';
-import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
+import type { SelectPathHandler } from '@responseEditor/features/node-editing/selectPathTypes';
 
 export interface UseNodeFinderParams {
-  // ✅ FASE 3: Parametri opzionali rimossi - store è single source of truth
-  handleSelectMain: (idx: number) => void;
-  handleSelectSub: (idx: number | undefined, mainIdx?: number) => void;
+  handleSelectByPath: SelectPathHandler;
 }
 
 /**
- * Hook that provides findAndSelectNodeById function for finding and selecting nodes by ID.
- *
- * ✅ FASE 3: Completamente migrato a Zustand store (single source of truth)
- * - Usa taskTreeFromStore come unica fonte
- * - Rimossi completamente taskTreeRef e taskTree prop
+ * Finds a node by id in the TaskTree (store) and updates selection to its path.
  */
 export function useNodeFinder(params: UseNodeFinderParams) {
-  const { handleSelectMain, handleSelectSub } = params;
-
-  // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
+  const { handleSelectByPath } = params;
   const taskTreeFromStore = useTaskTreeFromStore();
 
   const findAndSelectNodeById = useCallback((nodeId: string) => {
-    // ✅ FASE 3: Usa solo store - no fallback chain
     const currentTaskTree = taskTreeFromStore;
-    const mains = getMainNodes(currentTaskTree);
-    for (let mIdx = 0; mIdx < mains.length; mIdx++) {
-      const main = mains[mIdx];
-      // After validation strict, main.id is always present
-      // Also check templateId (optional) in case nodeId is a templateId
-      const mainNodeId = getNodeIdStrict(main);
-      const mainTemplateId = main.templateId;
-
-      if (mainNodeId === nodeId || (mainTemplateId && mainTemplateId === nodeId)) {
-        handleSelectMain(mIdx);
-        handleSelectSub(undefined);
-        return;
-      }
-      // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
-      const subs = getSubNodes(main);
-      for (let sIdx = 0; sIdx < subs.length; sIdx++) {
-        const sub = subs[sIdx];
-        // After validation strict, sub.id is always present
-        // Also check templateId (optional) in case nodeId is a templateId
-        const subNodeId = getNodeIdStrict(sub);
-        const subTemplateId = sub.templateId;
-
-        if (subNodeId === nodeId || (subTemplateId && subTemplateId === nodeId)) {
-          handleSelectMain(mIdx);
-          handleSelectSub(sIdx, mIdx);
-          return;
-        }
-      }
+    if (!currentTaskTree) {
+      return;
     }
-  }, [taskTreeFromStore, handleSelectMain, handleSelectSub]);
+    const path = findPathById(currentTaskTree, nodeId);
+    if (path && path.length) {
+      handleSelectByPath(path);
+    }
+  }, [taskTreeFromStore, handleSelectByPath]);
 
   return findAndSelectNodeById;
 }

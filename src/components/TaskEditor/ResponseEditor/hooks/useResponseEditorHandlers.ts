@@ -24,6 +24,7 @@ export interface UseResponseEditorHandlersParams {
   taskTree?: TaskTree | null;
   task?: TaskMeta | Task;
   currentProjectId: string | null;
+  isTaskTreeLoading?: boolean;
 
   // State
   state: any;
@@ -64,6 +65,7 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     taskTree,
     task,
     currentProjectId,
+    isTaskTreeLoading,
     state,
     refs,
     nodeSelection,
@@ -218,6 +220,7 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     onToolbarUpdate,
     toolbarButtons,
     taskWizardMode: state.taskWizardMode,
+    isTaskTreeLoading,
   });
 
   return {

@@ -31,6 +31,7 @@ import { useIntentMessagesHandler } from '@responseEditor/hooks/useIntentMessage
 import { useGeneralizabilityCheck } from '@responseEditor/hooks/useGeneralizabilityCheck';
 import { getTaskMeta, isTaskMeta } from '@responseEditor/utils/responseEditorUtils';
 import { getStepsForNode, getStepsAsArray } from '@responseEditor/core/domain';
+import { useManualEmptyTaskTreeSeed } from '@responseEditor/hooks/useManualEmptyTaskTreeSeed';
 import type { TaskMeta, Task } from '@types/taskTypes';
 import type { TaskTree } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
@@ -331,6 +332,7 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
   // Node selection
   const nodeSelection = useNodeSelection(0);
   const {
+    selectedPath,
     selectedMainIndex,
     selectedSubIndex,
     selectedRoot,
@@ -340,13 +342,13 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     setSelectedRoot,
     handleSelectMain,
     handleSelectSub,
+    handleSelectByPath,
     handleSelectAggregator,
   } = nodeSelection;
 
   // Node finder
   const findAndSelectNodeById = useNodeFinder({
-    handleSelectMain,
-    handleSelectSub,
+    handleSelectByPath,
   });
 
   // Parser handlers
@@ -376,6 +378,18 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     leftPanelMode,
     taskMeta: task, // ✅ Pass original task (TaskMeta | Task) per wizard mode quando taskMeta è null
     testPanelMode,
+  });
+
+  useManualEmptyTaskTreeSeed({
+    taskWizardMode,
+    taskId: task?.id,
+    isTaskTreeLoading,
+    needsTaskBuilder,
+    taskLabel,
+    headerTitle,
+    replaceSelectedTaskTree,
+    handleSelectByPath,
+    setSelectedRoot,
   });
 
   // ✅ View mode state for Behaviour (tabs or tree)
@@ -454,8 +468,7 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
 
   // Node loading
   useNodeLoading({
-    selectedMainIndex,
-    selectedSubIndex,
+    selectedPath,
     selectedRoot,
     introduction,
     task,

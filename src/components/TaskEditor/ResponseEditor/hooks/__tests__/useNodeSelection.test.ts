@@ -432,4 +432,42 @@ describe('useNodeSelection', () => {
       expect(result.current.selectedRoot).toBe(false);
     });
   });
+
+  describe('handleSelectByPath', () => {
+    it('should update path and focus sidebar by default', () => {
+      const { result } = renderHook(() => useNodeSelection(0));
+      const mockElement = document.createElement('div');
+      const focusSpy = vi.spyOn(mockElement, 'focus');
+
+      act(() => {
+        result.current.sidebarRef.current = mockElement;
+        result.current.handleSelectByPath([1, 2]);
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+
+      expect(result.current.selectedPath).toEqual([1, 2]);
+      expect(focusSpy).toHaveBeenCalled();
+    });
+
+    it('should not focus sidebar when focusSidebar is false', () => {
+      const { result } = renderHook(() => useNodeSelection(0));
+      const mockElement = document.createElement('div');
+      const focusSpy = vi.spyOn(mockElement, 'focus');
+
+      act(() => {
+        result.current.sidebarRef.current = mockElement;
+        result.current.handleSelectByPath([0], { focusSidebar: false });
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+
+      expect(result.current.selectedPath).toEqual([0]);
+      expect(focusSpy).not.toHaveBeenCalled();
+    });
+  });
 });

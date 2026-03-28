@@ -16,6 +16,7 @@ import { useResponseEditorHandlers } from '@responseEditor/hooks/useResponseEdit
 import type { TaskMeta, Task } from '@types/taskTypes';
 import type { TaskTree } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
+import type { SelectPathHandler } from '@responseEditor/features/node-editing/selectPathTypes';
 
 export interface UseResponseEditorParams {
   taskTree?: TaskTree | null;
@@ -86,7 +87,9 @@ export interface UseResponseEditorResult {
   handleSelectSub: (idx: number | undefined, mainIdx?: number) => void;
   handleSelectAggregator: () => void;
   selectedNode: any;
-  selectedNodePath: { mainIndex: number; subIndex?: number } | null;
+  selectedNodePath: { path: number[] } | null;
+  selectedPath: number[];
+  handleSelectByPath: SelectPathHandler;
   showContractWizard: boolean;
   toolbarButtons: any[];
   rightWidth: number;
@@ -181,6 +184,7 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     taskTree,
     task,
     currentProjectId,
+    isTaskTreeLoading,
     state: core.state,
     refs: core.refs,
     nodeSelection: core.nodeSelection,
@@ -232,12 +236,14 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
   } = handlers;
 
   const {
+    selectedPath,
     selectedMainIndex,
     selectedSubIndex,
     selectedRoot,
     sidebarRef,
     handleSelectMain,
     handleSelectSub,
+    handleSelectByPath,
     handleSelectAggregator,
   } = nodeSelection;
 
@@ -400,6 +406,8 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     handleSelectMain,
     handleSelectSub,
     handleSelectAggregator,
+    selectedPath,
+    handleSelectByPath,
     selectedNode,
     selectedNodePath,
     showContractWizard,

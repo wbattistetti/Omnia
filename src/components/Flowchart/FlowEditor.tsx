@@ -37,7 +37,6 @@ import { useUndoRedoManager } from './hooks/useUndoRedoManager';
 import { useEdgeLabelScheduler } from './hooks/useEdgeLabelScheduler';
 import { useTempEdgeFlags } from './hooks/useTempEdgeFlags';
 import { NodeRegistryProvider } from '../../context/NodeRegistryContext';
-import { IntellisenseProvider } from '../../context/IntellisenseContext';
 import { IntellisensePopover } from '../Intellisense/IntellisensePopover';
 import { SelectionMenu } from './components/SelectionMenu';
 import { useConditionCreation } from './hooks/useConditionCreation';
@@ -968,27 +967,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
   console.debug('[FlowEditor] Component mounted');
 
-  const { data: projectData } = useProjectData();
-
-  // Providers for IntellisenseService
-  const intellisenseProviders = useMemo(
-    () => ({
-      getProjectData: () => projectData,
-      getFlowNodes: () => props.nodes,
-      getFlowEdges: () => props.edges,
-    }),
-    [projectData, props.nodes, props.edges]
-  );
-
-  // ReactFlowProvider deve avvolgere il canvas; IntellisenseProvider sta *sotto* così
-  // useIntellisense e useReactFlow condividono lo stesso sottoalbero (evita ctx null in dev/HMR).
+  // IntellisenseProvider lives in FlowCanvasHost so it wraps FlowActionsProvider + canvas (stable context for node portals).
   return (
     <NodeRegistryProvider>
       <ReactFlowProvider>
-        <IntellisenseProvider providers={intellisenseProviders}>
-          <FlowEditorContent {...props} />
-          <IntellisensePopover />
-        </IntellisenseProvider>
+        <FlowEditorContent {...props} />
+        <IntellisensePopover />
       </ReactFlowProvider>
     </NodeRegistryProvider>
   );

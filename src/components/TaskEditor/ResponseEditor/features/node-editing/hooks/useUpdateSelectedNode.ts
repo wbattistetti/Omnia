@@ -9,8 +9,7 @@ import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface UseUpdateSelectedNodeParams {
   selectedNodePath: {
-    mainIndex: number;
-    subIndex?: number;
+    path: number[];
   } | null;
   selectedRoot: boolean;
   // ✅ FASE 3: Parametri opzionali rimossi - store è single source of truth
@@ -54,7 +53,7 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
     }
 
     setSelectedNode((prev: any) => {
-      if (!prev || !selectedNodePath) {
+      if (!prev || (!selectedNodePath && !selectedRoot)) {
         return prev;
       }
 
@@ -133,12 +132,15 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
       });
 
       // LOG: Verify nlpProfile.examples is present in updated TaskTree after update
-      const { mainIndex } = selectedNodePath;
-      const taskTreeRefNlpProfileExamples = result.updatedTaskTree?.nodes?.[mainIndex]?.nlpProfile?.examples;
+      const mainIndex = selectedNodePath?.path?.[0];
+      const taskTreeRefNlpProfileExamples = mainIndex !== undefined
+        ? result.updatedTaskTree?.nodes?.[mainIndex]?.nlpProfile?.examples
+        : undefined;
       if (taskTreeRefNlpProfileExamples) {
         console.log('[EXAMPLES] UPDATE - Verified in updated TaskTree', {
           nodeId: updated.id,
           mainIndex,
+          path: selectedNodePath?.path,
           hasNlpProfile: !!result.updatedTaskTree?.nodes?.[mainIndex]?.nlpProfile,
           hasNlpProfileExamples: !!taskTreeRefNlpProfileExamples,
           nlpProfileExamplesCount: taskTreeRefNlpProfileExamples.length,

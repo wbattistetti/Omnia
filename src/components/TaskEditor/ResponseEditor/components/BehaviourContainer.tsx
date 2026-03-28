@@ -15,6 +15,7 @@ interface BehaviourContainerProps {
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   selectedRoot?: boolean;
   selectedSubIndex?: number | null;
+  selectedPath?: number[];
 
   // TaskPanel props
   tasksPanelMode: RightPanelMode;
@@ -43,6 +44,7 @@ export default function BehaviourContainer({
   updateSelectedNode,
   selectedRoot,
   selectedSubIndex,
+  selectedPath,
   tasksPanelMode,
   tasksPanelWidth,
   setTasksPanelWidth,
@@ -75,7 +77,7 @@ export default function BehaviourContainer({
     let result: string[];
     if (selectedRoot) {
       result = stepKeys;
-    } else if (selectedSubIndex != null) {
+    } else if ((selectedPath && selectedPath.length > 1) || selectedSubIndex != null) {
       result = stepKeys;
     } else if (!stepKeys.includes('notConfirmed')) {
       result = [...stepKeys, 'notConfirmed'];
@@ -83,7 +85,7 @@ export default function BehaviourContainer({
       result = stepKeys;
     }
     return result;
-  }, [stepKeys, selectedSubIndex, selectedRoot]);
+  }, [stepKeys, selectedSubIndex, selectedPath, selectedRoot]);
 
   // ✅ Stato per step selezionato (sincronizzato con BehaviourEditor)
   const [selectedStepKey, setSelectedStepKey] = React.useState<string>(() => {
@@ -204,6 +206,7 @@ export default function BehaviourContainer({
               updateSelectedNode={updateSelectedNode}
               selectedRoot={selectedRoot}
               selectedSubIndex={selectedSubIndex}
+              selectedPath={selectedPath}
               hideStepsStrip={showStepsStrip} // ✅ Nascondi StepsStrip in BehaviourEditor (mostrato sopra)
               selectedStepKey={selectedStepKey} // ✅ Passa step selezionato
               onStepChange={handleStepChange} // ✅ Callback per cambio step

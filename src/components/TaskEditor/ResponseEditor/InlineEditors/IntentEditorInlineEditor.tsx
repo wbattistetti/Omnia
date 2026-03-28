@@ -1,22 +1,20 @@
 /**
- * Inline embedding editor: Task.semanticValues (with embedding) ↔ useIntentStore.
- * Bootstrap: if task has no semantic values, seed from row closed-domain values (see getSemanticValuesForRow).
+ * Inline embedding editor: Task.semanticValues ↔ useIntentStore.
+ * Uses unified problem classification persistence (localStorage + TaskRepository) like IntentHostAdapter.
+ * When the task has no semantic values, seeds from row closed-domain values (getSemanticValuesForRow).
  */
 
-import React, { useEffect } from 'react';
+import React, { useCallback } from 'react';
 import EmbeddingEditorShell from '@features/intent-editor/EmbeddingEditorShell';
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
-import { useIntentStore } from '@features/intent-editor/state/intentStore';
+import { useProblemClassificationPersistence } from '@features/intent-editor/hooks/useProblemClassificationPersistence';
 import { FlowWorkspaceSnapshot } from '../../../../flows/FlowWorkspaceSnapshot';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import { getSemanticValuesForRow } from '@utils/semanticValuesRowState';
-import {
-  problemIntentsToSemanticValues,
-  semanticValuesToProblemIntents,
-} from '@utils/semanticValueClassificationBridge';
-import type { NodeRowData, ProblemIntent } from '@types/project';
+import { normalizeProblemPayload } from '@utils/semanticValueClassificationBridge';
+import type { NodeRowData, ProblemPayload } from '@types/project';
 import type { SemanticValue } from '@types/taskTypes';
 
 interface IntentEditorInlineEditorProps {
@@ -28,29 +26,12 @@ interface IntentEditorInlineEditorProps {
   act?: { id: string; type: string; label?: string; instanceId?: string };
 }
 
-function toEditorState(intents: ProblemIntent[] = []) {
-  return intents.map((pi: ProblemIntent) => ({
-    id: pi.id,
-    name: pi.name,
-    langs: ['it'],
-    threshold: pi.threshold ?? 0.6,
-    status: 'draft' as const,
-    enabled: true,
-    variants: {
-      curated: (pi.phrases?.matching || []).map(p => ({ id: p.id, text: p.text, lang: (p.lang as any) || 'it' })),
-      staging: [],
-      hardNeg: (pi.phrases?.notMatching || []).map(p => ({ id: p.id, text: p.text, lang: (p.lang as any) || 'it' })),
-    },
-    signals: { keywords: (pi.phrases?.keywords || []), synonymSets: [], patterns: [] },
-  }));
-}
-
-function resolveCurrentProjectId(): string | null {
-  if (typeof window === 'undefined') return null;
+function resolveCurrentProjectId(): string {
+  if (typeof window === 'undefined') return '';
   const fromRuntime = (window as unknown as { __omniaRuntime?: { getCurrentProjectId?: () => string } })
     .__omniaRuntime?.getCurrentProjectId?.();
   if (typeof fromRuntime === 'string' && fromRuntime) return fromRuntime;
-  return localStorage.getItem('currentProjectId');
+  return localStorage.getItem('currentProjectId') || '';
 }
 
 function findRowForTaskId(taskId: string): NodeRowData | null {
@@ -93,94 +74,56 @@ export default function IntentEditorInlineEditor({
   intentSelected,
   act,
 }: IntentEditorInlineEditorProps) {
-  useEffect(() => {
-    if (!act) return;
+  const instanceId = (act as { instanceId?: string } | undefined)?.instanceId ?? act?.id ?? '';
+  const projectId = resolveCurrentProjectId();
 
-    const instanceId = (act as any)?.instanceId ?? act.id ?? 'unknown';
-    if (instanceId === 'unknown') return;
+  const bootstrapPayload = useCallback(
+    (merged: ProblemPayload): ProblemPayload => {
+      if (merged.semanticValues?.length) return merged;
 
-    const task = taskRepository.getTask(instanceId);
-    const sv = task?.semanticValues;
-    const stored = semanticValuesToProblemIntents(Array.isArray(sv) ? sv : null);
+      const row = findRowForTaskId(instanceId);
+      if (!row) return merged;
 
-    if (stored.length > 0) {
-      useIntentStore.setState({ intents: toEditorState(stored) });
-      return;
-    }
+      const { items, isOpenDomain } = getSemanticValuesForRow(row);
+      if (isOpenDomain || items.length === 0) return merged;
 
-    const row = findRowForTaskId(instanceId);
-    if (!row) {
-      useIntentStore.setState({ intents: [] });
-      return;
-    }
+      const boot = bootstrapSemanticValuesFromItems(items);
+      if (boot.length === 0) return merged;
 
-    const { items, isOpenDomain } = getSemanticValuesForRow(row);
-    if (isOpenDomain || items.length === 0) {
-      useIntentStore.setState({ intents: [] });
-      return;
-    }
+      const task = taskRepository.getTask(instanceId);
+      const pid = resolveCurrentProjectId();
+      const variableRefId = row.meta?.variableRefId;
+      if (pid && variableRefId) {
+        const rawLabel = (task as { label?: string } | undefined)?.label ?? row.text ?? '';
+        const flowForSlot =
+          String((task as { parameters?: { flowId?: string } })?.parameters?.flowId ?? (task as { flowId?: string })?.flowId ?? '').trim() ||
+          getActiveFlowCanvasId();
+        variableCreationService.ensureManualVariableWithId(
+          pid,
+          variableRefId,
+          variableCreationService.normalizeTaskLabel(rawLabel),
+          { scope: 'flow', scopeFlowId: flowForSlot },
+        );
+      }
 
-    const boot = bootstrapSemanticValuesFromItems(items);
-    if (boot.length === 0) {
-      useIntentStore.setState({ intents: [] });
-      return;
-    }
+      taskRepository.updateTask(instanceId, { semanticValues: boot });
+      return normalizeProblemPayload({
+        version: 1,
+        semanticValues: boot,
+        editor: merged.editor,
+      });
+    },
+    [instanceId],
+  );
 
-    const projectId = resolveCurrentProjectId();
-    const variableRefId = row.meta?.variableRefId;
-    if (projectId && variableRefId) {
-      const rawLabel = (task as { label?: string } | undefined)?.label ?? row.text ?? '';
-      const flowForSlot =
-        String((task as any)?.parameters?.flowId ?? (task as any)?.flowId ?? '').trim() ||
-        getActiveFlowCanvasId();
-      variableCreationService.ensureManualVariableWithId(
-        projectId,
-        variableRefId,
-        variableCreationService.normalizeTaskLabel(rawLabel),
-        { scope: 'flow', scopeFlowId: flowForSlot }
-      );
-    }
-
-    taskRepository.updateTask(instanceId, { semanticValues: boot });
-    useIntentStore.setState({ intents: toEditorState(semanticValuesToProblemIntents(boot)) });
-  }, [act?.id, act?.instanceId]);
-
-  useEffect(() => {
-    if (!act) return;
-
-    const instanceId = (act as any)?.instanceId ?? act.id ?? 'unknown';
-    let t: ReturnType<typeof setTimeout>;
-
-    const unsubscribe = useIntentStore.subscribe(() => {
-      clearTimeout(t);
-      t = setTimeout(() => {
-        try {
-          const intents = useIntentStore.getState().intents;
-          const problemIntents: ProblemIntent[] = intents.map(it => ({
-            id: it.id,
-            name: it.name,
-            threshold: it.threshold,
-            phrases: {
-              matching: (it.variants?.curated || []).map(v => ({ id: v.id, text: v.text, lang: v.lang as any })),
-              notMatching: (it.variants?.hardNeg || []).map(v => ({ id: v.id, text: v.text, lang: v.lang as any })),
-              keywords: (it.signals?.keywords || []),
-            }
-          }));
-
-          const prev = taskRepository.getTask(instanceId)?.semanticValues;
-          const semanticValues = problemIntentsToSemanticValues(problemIntents, prev ?? null);
-          taskRepository.updateTask(instanceId, { semanticValues });
-        } catch (err) {
-          console.error('[IntentEditorInlineEditor][SYNC_TO_TASK][ERROR]', err);
-        }
-      }, 300);
-    });
-
-    return () => {
-      clearTimeout(t);
-      unsubscribe();
-    };
-  }, [act?.id, act?.instanceId]);
+  useProblemClassificationPersistence({
+    instanceId,
+    projectId,
+    templateTaskId: act?.id,
+    debounceMs: 300,
+    bootstrapPayload,
+    enabled: Boolean(act && instanceId && instanceId !== 'unknown'),
+  });
 
   return (
     <div
@@ -199,7 +142,7 @@ export default function IntentEditorInlineEditor({
             inlineHeaderTitle="Intent Classifier (Embeddings)"
             onInlineClose={onClose}
             intentSelected={intentSelected}
-            instanceId={(act as any)?.instanceId ?? act.id ?? 'unknown'}
+            instanceId={instanceId || 'unknown'}
           />
         ) : (
           <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>

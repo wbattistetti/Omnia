@@ -309,6 +309,8 @@ export interface MaterializedStep {
 export interface SemanticValueEmbedding {
   threshold?: number;
   enabled?: boolean;
+  /** Business description used for LLM-assisted phrase generation (intent editor). */
+  description?: string;
   phrases?: {
     matching: Array<{ id: string; text: string; lang?: string }>;
     notMatching: Array<{ id: string; text: string; lang?: string }>;

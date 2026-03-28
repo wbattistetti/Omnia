@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '@flows/FlowStore';
 import { loadFlow } from '../../flows/FlowPersistence';
 import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
@@ -10,6 +10,8 @@ import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
 import { FlowTestProvider } from '../../context/FlowTestContext';
 import { FlowActionsProvider } from '../../context/FlowActionsContext';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
+import { useProjectData } from '../../context/ProjectDataContext';
+import { IntellisenseProvider } from '../../context/IntellisenseContext';
 
 function getDefaultFlowTitle(flowId: string): string {
   return flowId === 'main' ? 'MAIN' : 'Subflow';
@@ -35,6 +37,7 @@ type Props = {
 };
 
 export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleNode, onCreateTaskFlow, onOpenTaskFlow, onOpenSubflowForTask }) => {
+  const { data: projectData } = useProjectData();
   const { flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph, applyFlowLoadResult } = useFlowStoreActions();
   const [isLoadingFlow, setIsLoadingFlow] = React.useState(false);
@@ -155,6 +158,15 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
 
   const flow = flows[flowId];
 
+  const intellisenseProviders = useMemo(
+    () => ({
+      getProjectData: () => projectData,
+      getFlowNodes: () => flow?.nodes ?? [],
+      getFlowEdges: () => flow?.edges ?? [],
+    }),
+    [projectData, flow?.nodes, flow?.edges],
+  );
+
   // Stable setNodes function for FlowActionsProvider
   const setNodes = useCallback(
     (updater: any) => updateFlowGraph(flowId, (ns, es) => ({
@@ -175,22 +187,24 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
 
   // Wrap FlowEditor with providers + right Variables rail (per flowId)
   const flowEditor = (
-    <FlowEditor
-      flowId={flowId}
-      nodes={flow?.nodes || []}
-      edges={flow?.edges || []}
-      setNodes={setNodes}
-      setEdges={setEdges}
-      currentProject={{ id: projectId, name: 'Project' } as any}
-      setCurrentProject={() => { }}
-      testPanelOpen={false}
-      setTestPanelOpen={() => { }}
-      testNodeId={null}
-      setTestNodeId={() => { }}
-      onCreateTaskFlow={onCreateTaskFlow}
-      onOpenTaskFlow={onOpenTaskFlow}
-      onOpenSubflowForTask={onOpenSubflowForTask}
-    />
+    <IntellisenseProvider providers={intellisenseProviders}>
+      <FlowEditor
+        flowId={flowId}
+        nodes={flow?.nodes || []}
+        edges={flow?.edges || []}
+        setNodes={setNodes}
+        setEdges={setEdges}
+        currentProject={{ id: projectId, name: 'Project' } as any}
+        setCurrentProject={() => { }}
+        testPanelOpen={false}
+        setTestPanelOpen={() => { }}
+        testNodeId={null}
+        setTestNodeId={() => { }}
+        onCreateTaskFlow={onCreateTaskFlow}
+        onOpenTaskFlow={onOpenTaskFlow}
+        onOpenSubflowForTask={onOpenSubflowForTask}
+      />
+    </IntellisenseProvider>
   );
 
   const withFlowActions = (

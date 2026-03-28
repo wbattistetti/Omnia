@@ -70,6 +70,12 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     initializedRef.current = false;
   }, [taskId]);
 
+  // ✅ Invalidate global store immediately when switching task so UI never shows the previous task's TaskTree
+  React.useEffect(() => {
+    setTaskTreeInStore(null);
+    setTaskTreeLoading(true);
+  }, [taskId, setTaskTreeInStore]);
+
   // Load TaskTree async using buildTaskTree
   React.useEffect(() => {
     const loadTaskTree = async () => {

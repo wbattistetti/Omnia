@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import * as ReactDOM from 'react-dom/client';
 import { Check, Plus, Pencil, Trash2 } from 'lucide-react';
@@ -11,6 +11,16 @@ import ParserStatusRow from '@responseEditor/Sidebar/ParserStatusRow';
 import type { EngineType } from '@types/semanticContract';
 import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
+import { getNodeByPath } from '@responseEditor/core/taskTree';
+import { SidebarNestedList } from '@responseEditor/Sidebar/SidebarNestedList';
+import { dropPlacementFromEvent, useSidebarDropIndicator } from '@responseEditor/Sidebar/useSidebarDropIndicator';
+import type { SelectPathHandler } from '@responseEditor/features/node-editing/selectPathTypes';
+import { SIDEBAR_ROW_LABEL_INPUT_STYLE } from '@responseEditor/Sidebar/sidebarRowLabelInputStyle';
+import { SIDEBAR_CONTENT_MIN_WIDTH_PX } from '@responseEditor/Sidebar/sidebarLayoutConstants';
+
+function pathKey(path: number[]): string {
+  return path.join(':');
+}
 
 interface SidebarProps {
   mainList: any[];
@@ -43,6 +53,22 @@ interface SidebarProps {
   onStructureConfirm?: () => void;
   onStructureReject?: () => void;
   structureConfirmed?: boolean;
+  /** Full selection path (optional; falls back to main/sub indices). */
+  selectedPath?: number[];
+  onSelectPath?: SelectPathHandler;
+  onReorderMain?: (fromIdx: number, toIdx: number) => void;
+  onAddChildAtPath?: (parentPath: number[] | null, label: string) => void;
+  /** When set, nested sub-trees use path-based reorder/rename/delete (manual task tree). */
+  onReorderAtPath?: (parentPath: number[] | null, fromIdx: number, toIdx: number) => void;
+  onRenameAtPath?: (path: number[], label: string) => void;
+  onDeleteAtPath?: (path: number[]) => void;
+  onChangeRequiredAtPath?: (path: number[], required: boolean) => void;
+  /** Aggregator/root row selected — disables nested "Add child" when true. */
+  selectedRoot?: boolean;
+}
+
+function pathsEqual(a: number[], b: number[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
 function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivElement>) {
@@ -75,6 +101,17 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
   const onStructureConfirm = props.onStructureConfirm;
   const onStructureReject = props.onStructureReject;
   const structureConfirmed = props.structureConfirmed ?? false;
+  const selectedPathProp = props.selectedPath;
+  const onSelectPath = props.onSelectPath;
+  const onReorderMain = props.onReorderMain;
+  const onAddChildAtPath = props.onAddChildAtPath;
+  const onReorderAtPath = props.onReorderAtPath;
+  const onRenameAtPath = props.onRenameAtPath;
+  const onDeleteAtPath = props.onDeleteAtPath;
+  const onChangeRequiredAtPath = props.onChangeRequiredAtPath;
+  const selectedRoot = props.selectedRoot;
+
+  const useNestedTree = Boolean(onReorderAtPath && onRenameAtPath && onDeleteAtPath && onChangeRequiredAtPath);
 
   const { combinedClass } = useFontContext();
   const { translations } = useProjectTranslations(); // ✅ Get translations for node labels
@@ -97,6 +134,37 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
   // Expanded state for accordion collapse/expand
   const [expandedMainIndex, setExpandedMainIndex] = React.useState<number | null>(selectedMainIndex);
 
+  /** Path-keyed expansion for nested manual tree (depth > 2). */
+  const [expandedPathKeys, setExpandedPathKeys] = React.useState<Set<string>>(() => new Set());
+  const { mainDrop, setMainDrop, nestedDrop, setNestedDrop } = useSidebarDropIndicator();
+  const nestedDragRef = React.useRef<{ parentKey: string | null; fromIdx: number | null }>({
+    parentKey: null,
+    fromIdx: null,
+  });
+  const [editingPath, setEditingPath] = React.useState<number[] | null>(null);
+  const hoverPathRefNested = React.useRef<string | null>(null);
+
+  const togglePathExpanded = React.useCallback((path: number[]) => {
+    const k = pathKey(path);
+    setExpandedPathKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!useNestedTree || !selectedPathProp?.length) return;
+    setExpandedPathKeys((prev) => {
+      const next = new Set(prev);
+      for (let len = 1; len < selectedPathProp.length; len++) {
+        next.add(pathKey(selectedPathProp.slice(0, len)));
+      }
+      return next;
+    });
+  }, [selectedPathProp, useNestedTree]);
+
   // Sync expanded state when external selection changes
   React.useEffect(() => {
     if (selectedMainIndex !== expandedMainIndex) {
@@ -105,6 +173,19 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
   }, [selectedMainIndex]);
 
   const safeSelectedSubIndex = typeof selectedSubIndex === 'number' && !isNaN(selectedSubIndex) ? selectedSubIndex : undefined;
+
+  const isMainExpanded = (idx: number) =>
+    useNestedTree ? expandedPathKeys.has(pathKey([idx])) : expandedMainIndex === idx;
+
+  const isMainRowActive = (idx: number) =>
+    selectedPathProp && selectedPathProp.length > 0
+      ? pathsEqual(selectedPathProp, [idx])
+      : selectedMainIndex === idx && safeSelectedSubIndex === undefined;
+
+  const isSubRowActive = (mIdx: number, sIdx: number) =>
+    selectedPathProp && selectedPathProp.length >= 2
+      ? pathsEqual(selectedPathProp, [mIdx, sIdx])
+      : selectedMainIndex === mIdx && safeSelectedSubIndex === sIdx;
 
   // Keyboard navigation between mains and subs
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -176,12 +257,23 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
 
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const dragStateRef = React.useRef<{ mainIdx: number | null; fromIdx: number | null }>({ mainIdx: null, fromIdx: null });
-  const forwarded = ref as any;
-  React.useEffect(() => { if (forwarded) forwarded.current = containerRef.current; }, [forwarded]);
+  const mainDragRef = React.useRef<{ fromIdx: number | null }>({ fromIdx: null });
+
+  const assignContainerRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      containerRef.current = node;
+      if (typeof ref === 'function') {
+        ref(node);
+      } else if (ref) {
+        (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+      }
+    },
+    [ref]
+  );
   // ✅ FIX: Calcola larghezza iniziale PRECISA in modo sincrono - deve essere identica al ghost
   // Questo elimina completamente il flash perché la larghezza è già corretta al primo render
   const calculateInitialWidth = React.useMemo(() => {
-    if (!Array.isArray(mainList) || mainList.length === 0) return 280;
+    if (!Array.isArray(mainList) || mainList.length === 0) return SIDEBAR_CONTENT_MIN_WIDTH_PX;
 
     // ✅ Usa canvas per misurare il testo in modo preciso (sincrono)
     // IMPORTANTE: Usa gli stessi parametri che userà il ghost container
@@ -247,7 +339,10 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
 
     // ✅ Aggiungi padding del container + gutter + padding extra (IDENTICO al ghost)
     const totalWidth = maxWidth + CONTAINER_PADDING + GUTTER + EXTRA_PADDING;
-    const clamped = Math.min(Math.max(Math.ceil(totalWidth), 200), 640);
+    const clamped = Math.min(
+      Math.max(Math.ceil(totalWidth), SIDEBAR_CONTENT_MIN_WIDTH_PX),
+      640
+    );
 
     return clamped;
   }, [mainList, translations, aggregated, rootLabel]);
@@ -256,21 +351,40 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
   const [hoverRoot, setHoverRoot] = React.useState<boolean>(false);
   const [hoverMainIdx, setHoverMainIdx] = React.useState<number | null>(null);
   const [hoverSub, setHoverSub] = React.useState<{ mainIdx: number; subIdx: number } | null>(null);
-  const [addingMain, setAddingMain] = React.useState<boolean>(false);
-  const [addingSubFor, setAddingSubFor] = React.useState<number | null>(null);
-  const [draftLabel, setDraftLabel] = React.useState<string>('');
+  const [pendingEditNewMain, setPendingEditNewMain] = React.useState(false);
   const [editingMainIdx, setEditingMainIdx] = React.useState<number | null>(null);
   const [editingSub, setEditingSub] = React.useState<{ mainIdx: number; subIdx: number } | null>(null);
   const [editDraft, setEditDraft] = React.useState<string>('');
-  const [overlay, setOverlay] = React.useState<null | { type: 'root' | 'main' | 'sub'; mainIdx?: number; subIdx?: number; top: number; left: number }>(null);
+  const [overlay, setOverlay] = React.useState<
+    | null
+    | { type: 'root' | 'main' | 'sub'; mainIdx?: number; subIdx?: number; top: number; left: number }
+    | { type: 'nested'; path: number[]; top: number; left: number }
+  >(null);
   const hideTimerRef = React.useRef<number | null>(null);
   const overlayHoverRef = React.useRef<boolean>(false);
   const hoverRootRef = React.useRef<boolean>(false);
   const hoverMainIdxRef = React.useRef<number | null>(null);
   const hoverSubRef = React.useRef<{ mainIdx: number; subIdx: number } | null>(null);
+  /** After Enter/Escape commits, blur still fires — skip duplicate rename/delete. */
+  const skipLabelBlurCommitRef = React.useRef(false);
   React.useEffect(() => { hoverRootRef.current = hoverRoot; }, [hoverRoot]);
   React.useEffect(() => { hoverMainIdxRef.current = hoverMainIdx; }, [hoverMainIdx]);
   React.useEffect(() => { hoverSubRef.current = hoverSub; }, [hoverSub]);
+
+  /**
+   * After adding a root with an empty label, open inline rename on the new row.
+   * useLayoutEffect + focusSidebar: false keeps focus on the input (handleSelectByPath
+   * otherwise focuses the sidebar container and kills autoFocus).
+   */
+  useLayoutEffect(() => {
+    if (!pendingEditNewMain || mainList.length === 0) return;
+    const idx = mainList.length - 1;
+    setEditingMainIdx(idx);
+    setEditDraft(getNodeLabel(mainList[idx], translations) ?? '');
+    onSelectPath?.([idx], { focusSidebar: false });
+    setPendingEditNewMain(false);
+  }, [pendingEditNewMain, mainList, onSelectPath, translations]);
+
   const maybeHideOverlay = (delay: number = 320) => {
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = window.setTimeout(() => {
@@ -278,12 +392,21 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
       if (!overlayHoverRef.current && !stillHoveringItem) setOverlay(null);
     }, delay);
   };
-  // ✅ FIX: Leggi manualWidth da style prop (se presente)
+  /**
+   * Pixel width from style only when explicitly set (e.g. 280 or "280px").
+   * Must ignore "100%" — parseFloat("100%") === 100 and was shrinking the sidebar to 100px
+   * while the grid column stayed ~280px (button overlapped the splitter).
+   */
   const manualWidth = React.useMemo(() => {
-    if (!style?.width) return null;
-    const w = typeof style.width === 'number' ? style.width : parseFloat(String(style.width));
-    const result = Number.isFinite(w) && w > 0 ? w : null;
-    return result;
+    if (style?.width == null) return null;
+    const raw = style.width;
+    if (typeof raw === 'number') {
+      return Number.isFinite(raw) && raw > 0 ? raw : null;
+    }
+    const s = String(raw).trim();
+    if (s.includes('%')) return null;
+    const w = parseFloat(s);
+    return Number.isFinite(w) && w > 0 ? w : null;
   }, [style?.width]);
 
   // ✅ GHOST METHOD: Ref per il container ghost
@@ -300,7 +423,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
     const el = containerRef.current;
     if (!el) return;
     if (!Array.isArray(mainList) || mainList.length === 0) {
-      setMeasuredW(280); // Fallback
+      setMeasuredW(SIDEBAR_CONTENT_MIN_WIDTH_PX); // Match default grid column (toolbar-only)
       return;
     }
 
@@ -440,7 +563,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
         if (containerRect.width > 0) {
           maxWidth = containerRect.width;
         } else {
-          setMeasuredW(280); // Fallback
+          setMeasuredW(SIDEBAR_CONTENT_MIN_WIDTH_PX); // Fallback
           return;
         }
       }
@@ -455,7 +578,10 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
       const EXTRA_PADDING = 10; // ✅ PADDING EXTRA CONFIGURABILE (ridotto per precisione)
 
       const totalWidth = maxWidth + containerPadding + GUTTER + EXTRA_PADDING;
-      const clamped = Math.min(Math.max(Math.ceil(totalWidth), 200), 640);
+      const clamped = Math.min(
+        Math.max(Math.ceil(totalWidth), SIDEBAR_CONTENT_MIN_WIDTH_PX),
+        640
+      );
 
       // ✅ LOGICA: Il calcolo iniziale è già preciso, quindi NON aggiornare se la differenza è minima
       // Questo elimina completamente il flash perché la larghezza è già corretta
@@ -573,11 +699,11 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
 
   // ✅ DEBUG: Log quando finalWidth cambia
   // ✅ IMPORTANTE: Se measuredW è null, usa un fallback invece di 'auto' per evitare sidebar troppo larga
-  const finalWidth = manualWidth ?? measuredW ?? 280; // Fallback a 280 invece di 'auto'
+  const finalWidth = manualWidth ?? measuredW ?? SIDEBAR_CONTENT_MIN_WIDTH_PX;
   const hasFlex = !manualWidth && measuredW === null; // ✅ CRITICO: Solo flex se non c'è manualWidth E measuredW è null
 
-  // ✅ Early return check moved here (after all hooks) to comply with React Hooks rules
-  if (!Array.isArray(mainList) || mainList.length === 0) {
+  // ✅ Empty mainList: still render sidebar so manual mode can show "Add root data" (otherwise users see no way to start).
+  if (!Array.isArray(mainList)) {
     return null;
   }
 
@@ -586,7 +712,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
 
   return (
     <div
-      ref={containerRef}
+      ref={assignContainerRef}
       tabIndex={0}
       onKeyDown={handleKeyDown}
       className={combinedClass}
@@ -600,7 +726,6 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
         ...(hasFlex ? { flex: 1 } : {}),
         minHeight: 0,
         gap: 8,
-        borderRight: '1px solid #252a3e',
         outline: 'none',
         position: 'relative',
         flexShrink: 0,
@@ -685,6 +810,38 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
         </div>
       )}
 
+      {onAddMain && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            title="Add top-level data field"
+            onClick={() => {
+              onAddMain('');
+              setPendingEditNewMain(true);
+            }}
+            style={{
+              flex: 1,
+              minWidth: 120,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: `1px solid ${borderColor}`,
+              background: bgBase,
+              color: textBase,
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            <Plus size={14} />
+            Add root data
+          </button>
+        </div>
+      )}
+
       {aggregated && (
         <button
           onClick={(e) => { (onSelectAggregator ? onSelectAggregator() : undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
@@ -704,32 +861,72 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
           <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{rootLabel || 'Data'}</span>
         </button>
       )}
-      {addingMain && (
-        <div style={{ marginTop: 6 }}>
-          <input
-            autoFocus
-            value={draftLabel}
-            onChange={(e) => setDraftLabel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && draftLabel.trim()) { onAddMain && onAddMain(draftLabel.trim()); setAddingMain(false); setDraftLabel(''); }
-              if (e.key === 'Escape') { setAddingMain(false); setDraftLabel(''); }
-            }}
-            placeholder="New main data label…"
-            style={{ width: '90%', background: '#0f172a', color: '#e5e7eb', border: '1px solid #334155', borderRadius: 8, padding: '6px 8px', marginLeft: aggregated ? 18 : 0 }}
-          />
-        </div>
-      )}
       {mainList.map((main, idx) => {
-        const activeMain = selectedMainIndex === idx;
+        const activeMain = isMainRowActive(idx);
         const disabledMain = !isMainIncluded(idx);
         const Icon = getIconComponent(main?.icon || 'FileText');
         // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
         const subs = getSubNodes(main);
         return (
           <div key={idx}>
+            {mainDrop && mainDrop.targetIndex === idx && mainDrop.placement === 'before' && (
+              <div
+                style={{
+                  height: 2,
+                  marginBottom: -4,
+                  borderRadius: 1,
+                  background: '#3b82f6',
+                  boxShadow: '0 0 6px rgba(59,130,246,0.6)',
+                }}
+              />
+            )}
             <button
-              onClick={(e) => { onSelectMain(idx); onSelectSub && onSelectSub(undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
-              style={{ ...itemStyle(activeMain, false, disabledMain), ...(aggregated ? { marginLeft: 18 } : {}) }}
+              draggable={Boolean(onReorderMain)}
+              onDragStart={(e) => {
+                mainDragRef.current = { fromIdx: idx };
+                try { e.dataTransfer?.setData('text/plain', `main:${idx}`); e.dataTransfer.dropEffect = 'move'; e.dataTransfer.effectAllowed = 'move'; } catch { }
+              }}
+              onDragEnter={(e) => {
+                if (mainDragRef.current.fromIdx !== null) e.preventDefault();
+              }}
+              onDragOver={(e) => {
+                if (mainDragRef.current.fromIdx !== null) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  const el = e.currentTarget as HTMLElement;
+                  setMainDrop({ targetIndex: idx, placement: dropPlacementFromEvent(e, el) });
+                }
+              }}
+              onDragLeave={(e) => {
+                const el = e.currentTarget as HTMLElement;
+                if (!el.contains(e.relatedTarget as Node)) {
+                  setMainDrop(null);
+                }
+              }}
+              onDrop={(e) => {
+                const st = mainDragRef.current;
+                if (st.fromIdx !== null && typeof onReorderMain === 'function' && st.fromIdx !== idx) {
+                  onReorderMain(st.fromIdx, idx);
+                }
+                mainDragRef.current = { fromIdx: null };
+                setMainDrop(null);
+                try { e.preventDefault(); } catch { }
+              }}
+              onDragEnd={() => {
+                mainDragRef.current = { fromIdx: null };
+                setMainDrop(null);
+              }}
+              onClick={(e) => {
+                if (onSelectPath) {
+                  onSelectPath([idx]);
+                } else {
+                  onSelectMain(idx);
+                  onSelectSub && onSelectSub(undefined);
+                }
+                (e.currentTarget as HTMLButtonElement).blur();
+                ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus();
+              }}
+              style={{ ...itemStyle(activeMain, false, disabledMain), ...(aggregated ? { marginLeft: 18 } : {}), ...(onReorderMain ? { cursor: 'grab' as const } : {}) }}
               className={`sb-item ${activeMain ? styles.sidebarSelected : ''}`}
               onMouseEnter={(ev) => {
                 setHoverMainIdx(idx);
@@ -765,56 +962,72 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                   value={editDraft}
                   onChange={(e) => setEditDraft(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (editDraft || '').trim()) {
+                    if (e.key === 'Enter') {
                       e.preventDefault(); // ✅ CRITICAL: Prevent default to avoid form submission
                       e.stopPropagation(); // ✅ CRITICAL: Stop propagation to prevent button click
-                      onRenameMain && onRenameMain(idx, (editDraft || '').trim());
+                      skipLabelBlurCommitRef.current = true;
+                      const t = (editDraft || '').trim();
+                      if (!t) {
+                        onDeleteMain && onDeleteMain(idx);
+                      } else {
+                        onRenameMain && onRenameMain(idx, t);
+                      }
                       setEditingMainIdx(null);
                       setEditDraft('');
                     }
                     if (e.key === 'Escape') {
                       e.preventDefault();
                       e.stopPropagation();
+                      skipLabelBlurCommitRef.current = true;
+                      const t = (editDraft || '').trim();
+                      if (!t) {
+                        onDeleteMain && onDeleteMain(idx);
+                      }
                       setEditingMainIdx(null);
                       setEditDraft('');
                     }
                   }}
                   onBlur={() => {
-                    if ((editDraft || '').trim()) {
-                      onRenameMain && onRenameMain(idx, (editDraft || '').trim());
+                    if (skipLabelBlurCommitRef.current) {
+                      skipLabelBlurCommitRef.current = false;
+                      return;
+                    }
+                    const t = (editDraft || '').trim();
+                    if (!t) {
+                      onDeleteMain && onDeleteMain(idx);
+                    } else {
+                      onRenameMain && onRenameMain(idx, t);
                     }
                     setEditingMainIdx(null);
                     setEditDraft('');
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  style={{
-                    flex: 1,
-                    background: '#0f172a',
-                    color: '#e5e7eb',
-                    border: '1px solid #334155',
-                    borderRadius: 4,
-                    padding: '2px 6px',
-                    outline: 'none',
-                    fontSize: 'inherit',
-                    fontFamily: 'inherit',
-                    margin: 0
-                  }}
+                  style={SIDEBAR_ROW_LABEL_INPUT_STYLE}
                 />
               ) : (
-                <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getNodeLabel(main, translations)}</span>
+                <span style={{ whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{getNodeLabel(main, translations)}</span>
               )}
               {(subs.length > 0) && (
                 <span
                   role="button"
                   tabIndex={0}
-                  title={(expandedMainIndex === idx) ? 'Collapse' : 'Expand'}
+                  title={isMainExpanded(idx) ? 'Collapse' : 'Expand'}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (expandedMainIndex === idx) {
-                      // Accordion già espanso → collassa (chiudi)
+                    if (useNestedTree) {
+                      if (isMainExpanded(idx)) {
+                        togglePathExpanded([idx]);
+                      } else {
+                        togglePathExpanded([idx]);
+                        if (onSelectPath) onSelectPath([idx]);
+                        else {
+                          onSelectMain(idx);
+                          onSelectSub && onSelectSub(undefined);
+                        }
+                      }
+                    } else if (expandedMainIndex === idx) {
                       setExpandedMainIndex(null);
                     } else {
-                      // Accordion chiuso → espandi e seleziona
                       setExpandedMainIndex(idx);
                       onSelectMain(idx);
                       onSelectSub && onSelectSub(undefined);
@@ -824,7 +1037,14 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (expandedMainIndex === idx) {
+                      if (useNestedTree) {
+                        togglePathExpanded([idx]);
+                        if (!isMainExpanded(idx) && onSelectPath) onSelectPath([idx]);
+                        else if (!isMainExpanded(idx)) {
+                          onSelectMain(idx);
+                          onSelectSub && onSelectSub(undefined);
+                        }
+                      } else if (expandedMainIndex === idx) {
                         setExpandedMainIndex(null);
                       } else {
                         setExpandedMainIndex(idx);
@@ -835,7 +1055,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                   }}
                   style={{ marginLeft: 6, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0, display: 'inline-flex' }}
                 >
-                  <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: `rotate(${(expandedMainIndex === idx) ? 90 : 0}deg)`, transition: 'transform 0.15s' }} aria-hidden>
+                  <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: `rotate(${isMainExpanded(idx) ? 90 : 0}deg)`, transition: 'transform 0.15s' }} aria-hidden>
                     <polyline points="2,1 8,5 2,9" fill="none" stroke={borderColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </span>
@@ -870,11 +1090,58 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 }}
               />
             </button>
-            {(expandedMainIndex === idx && subs.length > 0) && (
+            {mainDrop && mainDrop.targetIndex === idx && mainDrop.placement === 'after' && (
+              <div
+                style={{
+                  height: 2,
+                  marginTop: -4,
+                  marginBottom: 2,
+                  borderRadius: 1,
+                  background: '#3b82f6',
+                  boxShadow: '0 0 6px rgba(59,130,246,0.6)',
+                }}
+              />
+            )}
+            {(isMainExpanded(idx) && subs.length > 0) && useNestedTree && onReorderAtPath && onRenameAtPath && onDeleteAtPath && onChangeRequiredAtPath && (
+              <SidebarNestedList
+                nodes={subs}
+                siblingParentPath={[idx]}
+                depth={1}
+                translations={translations}
+                selectedPathProp={selectedPathProp}
+                onSelectPath={onSelectPath}
+                expandedKeys={expandedPathKeys}
+                toggleExpanded={togglePathExpanded}
+                onReorderAtPath={onReorderAtPath}
+                onRenameAtPath={onRenameAtPath}
+                onDeleteAtPath={onDeleteAtPath}
+                onChangeRequiredAtPath={onChangeRequiredAtPath}
+                nestedDragRef={nestedDragRef}
+                nestedDrop={nestedDrop}
+                setNestedDrop={setNestedDrop}
+                itemStyle={itemStyle}
+                borderColor={borderColor}
+                bgGroup={bgGroup}
+                sidebarSelectedClass={styles.sidebarSelected}
+                indentStep={36}
+                baseMarginLeft={36}
+                editingPath={editingPath}
+                editDraft={editDraft}
+                setEditingPath={setEditingPath}
+                setEditDraft={setEditDraft}
+                setOverlay={(o) => setOverlay(o)}
+                maybeHideOverlay={maybeHideOverlay}
+                hoverPathRef={hoverPathRefNested}
+                onParserCreate={onParserCreate}
+                onParserModify={onParserModify}
+                onEngineChipClick={onEngineChipClick}
+              />
+            )}
+            {(isMainExpanded(idx) && subs.length > 0) && !useNestedTree && (
               <div style={{ marginLeft: 36, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {subs.map((sub: any, sidx: number) => {
                   const reqEffective = sub?.required !== false;
-                  const activeSub = selectedMainIndex === idx && safeSelectedSubIndex === sidx;
+                  const activeSub = isSubRowActive(idx, sidx);
                   // Grayscale when main is unchecked OR when this sub is unchecked (required=false)
                   const disabledSub = (!isMainIncluded(idx)) || (!reqEffective);
                   const SubIcon = getIconComponent(sub?.icon || 'FileText');
@@ -913,8 +1180,11 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                         onDragEnd={() => { dragStateRef.current = { mainIdx: null, fromIdx: null }; }}
                         onClick={(e) => {
                           e.stopPropagation(); // ✅ Prevent event bubbling
-                          // ✅ Select both main and sub atomically to prevent race condition
-                          onSelectSub && onSelectSub(sidx, idx);
+                          if (onSelectPath) {
+                            onSelectPath([idx, sidx]);
+                          } else {
+                            onSelectSub && onSelectSub(sidx, idx);
+                          }
                           (e.currentTarget as HTMLButtonElement).blur();
                           ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus();
                         }}
@@ -952,43 +1222,50 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                             value={editDraft}
                             onChange={(e) => setEditDraft(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter' && (editDraft || '').trim()) {
+                              if (e.key === 'Enter') {
                                 e.preventDefault(); // ✅ CRITICAL: Prevent default to avoid form submission
                                 e.stopPropagation(); // ✅ CRITICAL: Stop propagation to prevent button click
-                                onRenameSub && onRenameSub(editingSub.mainIdx, editingSub.subIdx, (editDraft || '').trim());
+                                skipLabelBlurCommitRef.current = true;
+                                const t = (editDraft || '').trim();
+                                if (!t) {
+                                  onDeleteSub && onDeleteSub(editingSub.mainIdx, editingSub.subIdx);
+                                } else {
+                                  onRenameSub && onRenameSub(editingSub.mainIdx, editingSub.subIdx, t);
+                                }
                                 setEditingSub(null);
                                 setEditDraft('');
                               }
                               if (e.key === 'Escape') {
                                 e.preventDefault();
                                 e.stopPropagation();
+                                skipLabelBlurCommitRef.current = true;
+                                const t = (editDraft || '').trim();
+                                if (!t) {
+                                  onDeleteSub && onDeleteSub(editingSub.mainIdx, editingSub.subIdx);
+                                }
                                 setEditingSub(null);
                                 setEditDraft('');
                               }
                             }}
                             onBlur={() => {
-                              if ((editDraft || '').trim()) {
-                                onRenameSub && onRenameSub(editingSub.mainIdx, editingSub.subIdx, (editDraft || '').trim());
+                              if (skipLabelBlurCommitRef.current) {
+                                skipLabelBlurCommitRef.current = false;
+                                return;
+                              }
+                              const t = (editDraft || '').trim();
+                              if (!t) {
+                                onDeleteSub && onDeleteSub(editingSub.mainIdx, editingSub.subIdx);
+                              } else {
+                                onRenameSub && onRenameSub(editingSub.mainIdx, editingSub.subIdx, t);
                               }
                               setEditingSub(null);
                               setEditDraft('');
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            style={{
-                              flex: 1,
-                              background: '#0f172a',
-                              color: '#e5e7eb',
-                              border: '1px solid #334155',
-                              borderRadius: 4,
-                              padding: '2px 6px',
-                              outline: 'none',
-                              fontSize: 'inherit',
-                              fontFamily: 'inherit',
-                              margin: 0
-                            }}
+                            style={SIDEBAR_ROW_LABEL_INPUT_STYLE}
                           />
                         ) : (
-                          <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getNodeLabel(sub, translations)}</span>
+                          <span style={{ whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{getNodeLabel(sub, translations)}</span>
                         )}
                         {/* ✅ Parser icon inline in button (right side) */}
                         <ParserStatusRow
@@ -1023,21 +1300,6 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                     </React.Fragment>
                   );
                 })}
-                {addingSubFor === idx && (
-                  <div>
-                    <input
-                      autoFocus
-                      value={draftLabel}
-                      onChange={(e) => setDraftLabel(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && draftLabel.trim()) { onAddSub && onAddSub(idx, draftLabel.trim()); setAddingSubFor(null); setDraftLabel(''); }
-                        if (e.key === 'Escape') { setAddingSubFor(null); setDraftLabel(''); }
-                      }}
-                      placeholder="New sub-data label…"
-                      style={{ width: '80%', background: '#0f172a', color: '#e5e7eb', border: '1px solid #334155', borderRadius: 8, padding: '6px 8px' }}
-                    />
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -1051,14 +1313,19 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
           onMouseLeave={() => { overlayHoverRef.current = false; maybeHideOverlay(200); }}
           style={{ position: 'fixed', top: overlay.top, left: overlay.left, transform: 'translateY(-50%)', zIndex: 9999, background: 'transparent', display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
-          {overlay.type === 'root' && (
-            <button title="Add main data" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { setAddingMain(true); setDraftLabel(''); setOverlay(null); }}>
-              <Plus size={14} color="#e5e7eb" />
-            </button>
-          )}
           {overlay.type === 'main' && (
             <>
-              <button title="Add sub-data" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setAddingSubFor(overlay.mainIdx); setDraftLabel(''); setOverlay(null); } }}>
+              <button
+                type="button"
+                title="Add nested field under this row"
+                style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+                onClick={() => {
+                  if (typeof overlay.mainIdx === 'number' && onAddChildAtPath) {
+                    onAddChildAtPath([overlay.mainIdx], '');
+                    setOverlay(null);
+                  }
+                }}
+              >
                 <Plus size={14} color="#e5e7eb" />
               </button>
               <button title="Rename" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setEditingMainIdx(overlay.mainIdx); setEditDraft(getNodeLabel(mainList[overlay.mainIdx], translations)); setOverlay(null); } }}>
@@ -1071,10 +1338,68 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
           )}
           {overlay.type === 'sub' && (
             <>
+              <button
+                type="button"
+                title="Add nested field under this row"
+                style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+                onClick={() => {
+                  if (
+                    typeof overlay.mainIdx === 'number' &&
+                    typeof overlay.subIdx === 'number' &&
+                    onAddChildAtPath
+                  ) {
+                    onAddChildAtPath([overlay.mainIdx, overlay.subIdx], '');
+                    setOverlay(null);
+                  }
+                }}
+              >
+                <Plus size={12} color="#e5e7eb" />
+              </button>
               <button title="Rename sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number') { setEditingSub({ mainIdx: overlay.mainIdx, subIdx: overlay.subIdx }); const sub = getSubNodes(mainList[overlay.mainIdx])[overlay.subIdx]; setEditDraft(getNodeLabel(sub, translations)); setOverlay(null); } }}>
                 <Pencil size={12} color="#e5e7eb" />
               </button>
               <button title="Delete sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number' && onDeleteSub) { onDeleteSub(overlay.mainIdx, overlay.subIdx); setOverlay(null); } }}>
+                <Trash2 size={12} color="#e5e7eb" />
+              </button>
+            </>
+          )}
+          {overlay.type === 'nested' && onRenameAtPath && onDeleteAtPath && (
+            <>
+              {onAddChildAtPath && (
+                <button
+                  type="button"
+                  title="Add nested field under this row"
+                  style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+                  onClick={() => {
+                    onAddChildAtPath(overlay.path, '');
+                    setOverlay(null);
+                  }}
+                >
+                  <Plus size={12} color="#e5e7eb" />
+                </button>
+              )}
+              <button
+                title="Rename"
+                style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+                onClick={() => {
+                  const node = getNodeByPath(mainList, overlay.path);
+                  if (node) {
+                    setEditingPath(overlay.path);
+                    setEditDraft(getNodeLabel(node, translations));
+                  }
+                  setOverlay(null);
+                }}
+              >
+                <Pencil size={12} color="#e5e7eb" />
+              </button>
+              <button
+                title="Delete"
+                style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+                onClick={() => {
+                  onDeleteAtPath(overlay.path);
+                  setOverlay(null);
+                }}
+              >
                 <Trash2 size={12} color="#e5e7eb" />
               </button>
             </>

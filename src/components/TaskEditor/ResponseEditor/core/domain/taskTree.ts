@@ -9,6 +9,7 @@
  */
 
 import { validateTaskTreeStructure } from './validators';
+import { getNodeByPath } from '@responseEditor/core/taskTree';
 import type { TaskTree } from '@types/taskTypes';
 
 /**
@@ -74,18 +75,21 @@ export function findNodeByIndices(
   const safeMainIdx = Number.isFinite(mainIndex) && mainIndex >= 0 && mainIndex < mains.length
     ? mainIndex
     : 0;
+
+  if (subIndex == null) {
+    return getNodeByPath(mains, [safeMainIdx]) ?? mains[safeMainIdx];
+  }
+
+  const path = [safeMainIdx, subIndex];
+  const resolved = getNodeByPath(mains, path);
+  if (resolved) return resolved;
+
   const main = mains[safeMainIdx];
-
-  if (subIndex == null) return main;
-
   const subs = getSubNodes(main);
   if (subs.length === 0) return main;
 
-  // If subIndex is out of bounds, return main node
   const isValidSubIndex = Number.isFinite(subIndex) && subIndex >= 0 && subIndex < subs.length;
   if (!isValidSubIndex) return main;
 
-  // ✅ NO FALLBACKS: subs[subIndex] must exist if isValidSubIndex is true
-  // If subIndex is valid but subs[subIndex] is falsy, return main as safe fallback
   return subs[subIndex] ?? main;
 }

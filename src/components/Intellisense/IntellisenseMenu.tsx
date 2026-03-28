@@ -10,7 +10,7 @@ import { IntellisenseItem, IntellisenseResult, IntellisenseLayoutConfig } from '
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { prepareIntellisenseData } from '../../services/ProjectDataService';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
-import { useIntellisense } from "../../context/IntellisenseContext"; // ✅ AGGIUNGI IMPORT
+import { useOptionalIntellisense } from "../../context/IntellisenseContext";
 import { useDynamicFontSizes } from '../../hooks/useDynamicFontSizes';
 import { VoiceInput } from '../common/VoiceInput';
 
@@ -94,8 +94,16 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   const [activeCats, setActiveCats] = useState<string[]>(filterCategoryTypes && filterCategoryTypes.length ? filterCategoryTypes : defaultCats);
   const loggedThisOpenRef = useRef(false);
 
-  // ✅ Ottieni actions dal contesto Intellisense
-  const { actions } = useIntellisense();
+  // Standalone mode syncs query to global context; inline row menus use the `query` prop only.
+  const intellisenseCtx = useOptionalIntellisense();
+  const actions = intellisenseCtx?.actions ?? {
+    setQuery: (_q: string) => {
+      /* no-op when menu renders outside IntellisenseProvider (e.g. portal edge cases) */
+    },
+    close: () => {},
+    moveHighlight: (_d: number) => {},
+    openForEdge: (_edgeId: string, _opts?: { linkMidScreen?: { x: number; y: number } }) => {},
+  };
 
   // ✅ Aggiungi un ref per la textbox
   const inputRef = useRef<HTMLInputElement>(null);

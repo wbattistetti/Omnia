@@ -30,6 +30,7 @@ import { useProjectSave } from './useProjectSave';
 import { useEditorCloseRegistration } from './useEditorCloseRegistration';
 import { useSplitterDrag } from './useSplitterDrag';
 import { useToolbarSync } from './useToolbarSync';
+import { useTaskTreeStoreTaskScope } from './useTaskTreeStoreTaskScope';
 import type { Task, TaskTree } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
@@ -98,6 +99,7 @@ interface UseResponseEditorSideEffectsProps {
   onToolbarUpdate?: (toolbar: any[], color: string) => void;
   toolbarButtons: any[];
   taskWizardMode?: TaskWizardMode;
+  isTaskTreeLoading?: boolean;
 }
 
 export function useResponseEditorSideEffects(props: UseResponseEditorSideEffectsProps) {
@@ -137,7 +139,15 @@ export function useResponseEditorSideEffects(props: UseResponseEditorSideEffects
     onToolbarUpdate,
     toolbarButtons,
     taskWizardMode,
+    isTaskTreeLoading,
   } = props;
+
+  useTaskTreeStoreTaskScope({
+    task,
+    taskTree,
+    isTaskTreeLoading,
+    taskWizardMode,
+  });
 
   // Delegate to thematic hooks
   useServiceEvents({ setServiceUnavailable });

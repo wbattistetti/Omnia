@@ -69,12 +69,10 @@ export interface ResponseEditorState {
   selectedNode: any;
   setSelectedNode: React.Dispatch<React.SetStateAction<any>>;
   selectedNodePath: {
-    mainIndex: number;
-    subIndex?: number;
+    path: number[];
   } | null;
   setSelectedNodePath: React.Dispatch<React.SetStateAction<{
-    mainIndex: number;
-    subIndex?: number;
+    path: number[];
   } | null>>;
 
   // TaskTree version (for forcing re-renders)
@@ -157,8 +155,7 @@ export function useResponseEditorState(): ResponseEditorState {
   // Selected node
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [selectedNodePath, setSelectedNodePath] = useState<{
-    mainIndex: number;
-    subIndex?: number;
+    path: number[];
   } | null>(null);
 
   // TaskTree version (for forcing re-renders)

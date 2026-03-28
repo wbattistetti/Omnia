@@ -4,54 +4,53 @@
 /**
  * useSidebar - Composite Hook
  *
- * Orchestrates all sidebar-related functionality:
- * - Drag handling (useSidebarDrag)
- * - Resize handling (useSidebarResize)
- * - Cleanup (useSidebarCleanup)
- * - Business logic handlers (useSidebarHandlers)
- *
- * ✅ FASE 2.1: Consolidated from 4 separate hooks into 1 composite hook
- * This reduces complexity and improves maintainability.
+ * Sidebar resize + TaskTree mutations via path-based utilities (immutable tree updates).
+ * Persists to Zustand store and replaceSelectedTaskTree for dock / manager sync.
  */
 
 import { useEffect, useCallback } from 'react';
-import { getMainNodes, getSubNodes } from '@responseEditor/core/domain';
-import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
+import { useTaskTreeStore } from '@responseEditor/core/state';
+import {
+  createManualTaskTreeNode,
+  ensureTaskTreeNodeIds,
+  getChildrenOfParent,
+  insertChildAt,
+  removeNodeByPath,
+  reorderSiblings,
+  updateNodeByPath,
+} from '@responseEditor/core/taskTree';
+import type { NodePath } from '@responseEditor/core/taskTree';
 import type { TaskTree } from '@types/taskTypes';
 
 export interface UseSidebarParams {
-  // Drag/Resize state
   isDraggingSidebar: boolean;
   setIsDraggingSidebar: React.Dispatch<React.SetStateAction<boolean>>;
   sidebarStartWidthRef: React.MutableRefObject<number>;
   sidebarStartXRef: React.MutableRefObject<number>;
   setSidebarManualWidth: React.Dispatch<React.SetStateAction<number | null>>;
   sidebarRef: React.RefObject<HTMLDivElement>;
-
-  // Business logic
   taskTree: TaskTree | null | undefined;
   replaceSelectedTaskTree: (taskTree: TaskTree) => void;
 }
 
 export interface UseSidebarResult {
-  // Resize handler
   handleSidebarResizeStart: (e: React.MouseEvent) => void;
-
-  // Business logic handlers
   onChangeSubRequired: (mIdx: number, sIdx: number, required: boolean) => void;
   onReorderSub: (mIdx: number, fromIdx: number, toIdx: number) => void;
+  onReorderMain: (fromIdx: number, toIdx: number) => void;
   onAddMain: (label: string) => void;
   onRenameMain: (mIdx: number, label: string) => void;
   onDeleteMain: (mIdx: number) => void;
   onAddSub: (mIdx: number, label: string) => void;
   onRenameSub: (mIdx: number, sIdx: number, label: string) => void;
   onDeleteSub: (mIdx: number, sIdx: number) => void;
+  onAddChildAtPath: (parentPath: NodePath | null, label: string) => void;
+  onRenameAtPath: (path: NodePath, label: string) => void;
+  onDeleteAtPath: (path: NodePath) => void;
+  onChangeRequiredAtPath: (path: NodePath, required: boolean) => void;
+  onReorderAtPath: (parentPath: NodePath | null, from: number, to: number) => void;
 }
 
-/**
- * Composite hook that orchestrates all sidebar functionality.
- * Consolidates useSidebarDrag, useSidebarResize, useSidebarCleanup, and useSidebarHandlers.
- */
 export function useSidebar(params: UseSidebarParams): UseSidebarResult {
   const {
     isDraggingSidebar,
@@ -64,18 +63,38 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
     replaceSelectedTaskTree,
   } = params;
 
-  // ============================================
-  // Cleanup (from useSidebarCleanup)
-  // ============================================
+  const setTaskTree = useTaskTreeStore((s) => s.setTaskTree);
+
+  const getTree = useCallback((): TaskTree | null => {
+    return useTaskTreeStore.getState().taskTree ?? taskTree ?? null;
+  }, [taskTree]);
+
+  const commit = useCallback(
+    (next: TaskTree) => {
+      const ensured = ensureTaskTreeNodeIds(next);
+      const prev = getTree();
+      if (prev) {
+        const prevEnsured = ensureTaskTreeNodeIds(prev);
+        if (JSON.stringify(prevEnsured) === JSON.stringify(ensured)) {
+          return;
+        }
+      }
+      setTaskTree(ensured);
+      try {
+        replaceSelectedTaskTree(ensured);
+      } catch {
+        /* ignore */
+      }
+    },
+    [getTree, setTaskTree, replaceSelectedTaskTree]
+  );
+
   useEffect(() => {
     try {
       localStorage.removeItem('responseEditor.sidebarWidth');
     } catch { }
   }, []);
 
-  // ============================================
-  // Drag handling (from useSidebarDrag)
-  // ============================================
   useEffect(() => {
     if (!isDraggingSidebar) {
       return;
@@ -83,7 +102,8 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
 
     const handleMove = (e: MouseEvent) => {
       const deltaX = e.clientX - sidebarStartXRef.current;
-      const MIN_WIDTH = 160;
+      /** Keep room for the manual "Add root data" toolbar (narrower columns break layout). */
+      const MIN_WIDTH = 220;
       const MAX_WIDTH = 1000;
       const calculatedWidth = sidebarStartWidthRef.current + deltaX;
       const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, calculatedWidth));
@@ -104,159 +124,168 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
     };
   }, [isDraggingSidebar, sidebarStartWidthRef, sidebarStartXRef, setSidebarManualWidth, setIsDraggingSidebar]);
 
-  // ============================================
-  // Resize handler (from useSidebarResize)
-  // ============================================
-  const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation(); // CRITICAL: prevent other handlers from interfering
+  const handleSidebarResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-    const sidebarEl = sidebarRef?.current;
-    if (!sidebarEl) {
-      return;
-    }
-
-    const rect = sidebarEl.getBoundingClientRect();
-    sidebarStartWidthRef.current = rect.width;
-    sidebarStartXRef.current = e.clientX;
-
-    setIsDraggingSidebar(true);
-  }, [sidebarRef, sidebarStartWidthRef, sidebarStartXRef, setIsDraggingSidebar]);
-
-  // ============================================
-  // Business logic handlers (from useSidebarHandlers)
-  // ============================================
-  const onChangeSubRequired = useCallback((mIdx: number, sIdx: number, required: boolean) => {
-    if (!taskTree) return;
-    const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getMainNodes(next);
-    const main = mains[mIdx];
-    if (!main) return;
-    // After validation strict, use subNodes (not subTasks)
-    const subList = [...getSubNodesStrict(main)];
-    if (sIdx < 0 || sIdx >= subList.length) return;
-    subList[sIdx] = { ...subList[sIdx], required };
-    main.subNodes = subList;
-    mains[mIdx] = main;
-    next.nodes = mains;
-    try {
-      // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
-      const subs = getSubNodes(main);
-      const target = subs[sIdx];
-      if (localStorage.getItem('debug.responseEditor') === '1') {
-        console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
+      const sidebarEl = sidebarRef?.current;
+      if (!sidebarEl) {
+        return;
       }
-    } catch { }
-    try { replaceSelectedTaskTree(next); } catch { }
-  }, [taskTree, replaceSelectedTaskTree]);
 
-  const onReorderSub = useCallback((mIdx: number, fromIdx: number, toIdx: number) => {
-    if (!taskTree) return;
-    const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getMainNodes(next);
-    const main = mains[mIdx];
-    if (!main) return;
-    // After validation strict, use subNodes (not subTasks)
-    const subList = [...getSubNodesStrict(main)];
-    if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return;
-    const [moved] = subList.splice(fromIdx, 1);
-    subList.splice(toIdx, 0, moved);
-    main.subNodes = subList;
-    mains[mIdx] = main;
-    next.nodes = mains;
-    try {
-      if (localStorage.getItem('debug.responseEditor') === '1') {
-        console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx });
+      const rect = sidebarEl.getBoundingClientRect();
+      sidebarStartWidthRef.current = rect.width;
+      sidebarStartXRef.current = e.clientX;
+
+      setIsDraggingSidebar(true);
+    },
+    [sidebarRef, sidebarStartWidthRef, sidebarStartXRef, setIsDraggingSidebar]
+  );
+
+  const onRenameAtPath = useCallback(
+    (path: NodePath, label: string) => {
+      const base = getTree();
+      if (!base) return;
+      const next = updateNodeByPath(base, path, (node) => ({ ...node, label }));
+      commit(next);
+    },
+    [getTree, commit]
+  );
+
+  const onDeleteAtPath = useCallback(
+    (path: NodePath) => {
+      const base = getTree();
+      if (!base) return;
+      const next = removeNodeByPath(base, path);
+      commit(next);
+    },
+    [getTree, commit]
+  );
+
+  const onChangeRequiredAtPath = useCallback(
+    (path: NodePath, required: boolean) => {
+      const base = getTree();
+      if (!base) return;
+      const next = updateNodeByPath(base, path, (node) => ({ ...node, required }));
+      commit(next);
+    },
+    [getTree, commit]
+  );
+
+  const onReorderAtPath = useCallback(
+    (parentPath: NodePath | null, from: number, to: number) => {
+      const base = getTree();
+      if (!base) return;
+      const next = reorderSiblings(base, parentPath, from, to);
+      commit(next);
+    },
+    [getTree, commit]
+  );
+
+  const onAddChildAtPath = useCallback(
+    (parentPath: NodePath | null, label: string) => {
+      const base = getTree();
+      if (!base) return;
+      const child = createManualTaskTreeNode(label, { required: true });
+      const siblings = getChildrenOfParent(base, parentPath);
+      const next = insertChildAt(base, parentPath, siblings.length, child);
+      commit(next);
+    },
+    [getTree, commit]
+  );
+
+  const onChangeSubRequired = useCallback(
+    (mIdx: number, sIdx: number, required: boolean) => {
+      onChangeRequiredAtPath([mIdx, sIdx], required);
+    },
+    [onChangeRequiredAtPath]
+  );
+
+  const onReorderSub = useCallback(
+    (mIdx: number, fromIdx: number, toIdx: number) => {
+      onReorderAtPath([mIdx], fromIdx, toIdx);
+    },
+    [onReorderAtPath]
+  );
+
+  const onReorderMain = useCallback(
+    (fromIdx: number, toIdx: number) => {
+      onReorderAtPath(null, fromIdx, toIdx);
+    },
+    [onReorderAtPath]
+  );
+
+  const onAddMain = useCallback(
+    (label: string) => {
+      const node = createManualTaskTreeNode(label, { required: true });
+      const base = getTree();
+      if (!base) {
+        const tree: TaskTree = {
+          labelKey: 'manual.root',
+          nodes: [node],
+          steps: {},
+        };
+        commit(ensureTaskTreeNodeIds(tree));
+        return;
       }
-    } catch { }
-    try { replaceSelectedTaskTree(next); } catch { }
-  }, [taskTree, replaceSelectedTaskTree]);
+      const roots = base.nodes?.length ?? 0;
+      const next = insertChildAt(base, null, roots, node);
+      commit(next);
+    },
+    [getTree, commit]
+  );
 
-  const onAddMain = useCallback((label: string) => {
-    if (!taskTree) return;
-    const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getMainNodes(next);
-    mains.push({ label, subNodes: [] });
-    next.nodes = mains;
-    try { replaceSelectedTaskTree(next); } catch { }
-  }, [taskTree, replaceSelectedTaskTree]);
+  const onRenameMain = useCallback(
+    (mIdx: number, label: string) => {
+      onRenameAtPath([mIdx], label);
+    },
+    [onRenameAtPath]
+  );
 
-  const onRenameMain = useCallback((mIdx: number, label: string) => {
-    if (!taskTree) return;
-    const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getMainNodes(next);
-    if (!mains[mIdx]) return;
-    mains[mIdx].label = label;
-    next.nodes = mains;
-    try { replaceSelectedTaskTree(next); } catch { }
-  }, [taskTree, replaceSelectedTaskTree]);
+  const onDeleteMain = useCallback(
+    (mIdx: number) => {
+      onDeleteAtPath([mIdx]);
+    },
+    [onDeleteAtPath]
+  );
 
-  const onDeleteMain = useCallback((mIdx: number) => {
-    if (!taskTree) return;
-    const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getMainNodes(next);
-    if (mIdx < 0 || mIdx >= mains.length) return;
-    mains.splice(mIdx, 1);
-    next.nodes = mains;
-    try { replaceSelectedTaskTree(next); } catch { }
-  }, [taskTree, replaceSelectedTaskTree]);
+  const onAddSub = useCallback(
+    (mIdx: number, label: string) => {
+      onAddChildAtPath([mIdx], label);
+    },
+    [onAddChildAtPath]
+  );
 
-  const onAddSub = useCallback((mIdx: number, label: string) => {
-    if (!taskTree) return;
-    const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getMainNodes(next);
-    const main = mains[mIdx];
-    if (!main) return;
-    // After validation strict, use subNodes (not subTasks)
-    const list = [...getSubNodesStrict(main)];
-    list.push({ label, required: true });
-    main.subNodes = list;
-    mains[mIdx] = main;
-    next.nodes = mains;
-    try { replaceSelectedTaskTree(next); } catch { }
-  }, [taskTree, replaceSelectedTaskTree]);
+  const onRenameSub = useCallback(
+    (mIdx: number, sIdx: number, label: string) => {
+      onRenameAtPath([mIdx, sIdx], label);
+    },
+    [onRenameAtPath]
+  );
 
-  const onRenameSub = useCallback((mIdx: number, sIdx: number, label: string) => {
-    if (!taskTree) return;
-    const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getMainNodes(next);
-    const main = mains[mIdx];
-    if (!main) return;
-    // After validation strict, use subNodes (not subTasks)
-    const list = [...getSubNodesStrict(main)];
-    if (sIdx < 0 || sIdx >= list.length) return;
-    list[sIdx] = { ...(list[sIdx] || {}), label };
-    main.subNodes = list;
-    mains[mIdx] = main;
-    next.nodes = mains;
-    try { replaceSelectedTaskTree(next); } catch { }
-  }, [taskTree, replaceSelectedTaskTree]);
-
-  const onDeleteSub = useCallback((mIdx: number, sIdx: number) => {
-    if (!taskTree) return;
-    const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getMainNodes(next);
-    const main = mains[mIdx];
-    if (!main) return;
-    // After validation strict, use subNodes (not subTasks)
-    const list = [...getSubNodesStrict(main)];
-    if (sIdx < 0 || sIdx >= list.length) return;
-    list.splice(sIdx, 1);
-    main.subNodes = list;
-    mains[mIdx] = main;
-    next.nodes = mains;
-    try { replaceSelectedTaskTree(next); } catch { }
-  }, [taskTree, replaceSelectedTaskTree]);
+  const onDeleteSub = useCallback(
+    (mIdx: number, sIdx: number) => {
+      onDeleteAtPath([mIdx, sIdx]);
+    },
+    [onDeleteAtPath]
+  );
 
   return {
     handleSidebarResizeStart,
     onChangeSubRequired,
     onReorderSub,
+    onReorderMain,
     onAddMain,
     onRenameMain,
     onDeleteMain,
     onAddSub,
     onRenameSub,
     onDeleteSub,
+    onAddChildAtPath,
+    onRenameAtPath,
+    onDeleteAtPath,
+    onChangeRequiredAtPath,
+    onReorderAtPath,
   };
 }

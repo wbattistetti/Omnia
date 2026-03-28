@@ -26,6 +26,10 @@ export type ListGridProps = {
   // ✅ Nuove props per checkbox enabled/disabled
   itemEnabled?: (item: ListItem) => boolean;
   onToggleEnabled?: (id: string) => void;
+  /** When false, intent labels wrap and show in full (embeddings left column). Default true for compact lists. */
+  truncateLabels?: boolean;
+  /** Renders below the main row (e.g. intent description). Clicks should call stopPropagation where needed. */
+  rowFooter?: (item: ListItem) => React.ReactNode;
 };
 
 const defaultNormalize = (s: string) =>
@@ -54,6 +58,8 @@ export default function ListGrid({
   highlightedId,
   itemEnabled, // ✅ Nuova prop
   onToggleEnabled, // ✅ Nuova prop
+  truncateLabels = true,
+  rowFooter,
 }: ListGridProps) {
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -142,7 +148,11 @@ export default function ListGrid({
         )}
       </div>
       {/* ✅ LISTA SCROLLABILE - solo questa parte scrolla */}
-      <div className="overflow-y-auto overflow-x-hidden min-h-0 flex-1 px-3 pb-3">
+      <div
+        className={`overflow-y-auto min-h-0 flex-1 px-3 pb-3 ${
+          truncateLabels ? 'overflow-x-hidden' : 'overflow-x-auto'
+        }`}
+      >
         <div className="divide-y border rounded-xl">
           {list.map(it => {
             const selected = it.id === selectedId;
@@ -163,73 +173,93 @@ export default function ListGrid({
                 key={it.id}
                 data-item-id={it.id}
                 ref={el => (rowRefs.current[it.id] = el)}
-                className={`px-3 py-2 cursor-pointer flex items-center gap-2 ${cls} ${highlightCls} ${disabledCls} group transition-all duration-300`}
-                onClick={() => onSelect(it.id)}
-                title={it.label}
+                className={`${cls} ${highlightCls} ${disabledCls} group transition-all duration-300`}
               >
-                {/* ✅ Checkbox per enable/disable */}
-                {onToggleEnabled && (
-                  <input
-                    type="checkbox"
-                    checked={enabled}
-                    onChange={(e) => {
-                      e.stopPropagation(); // ✅ Previene il click sulla riga
-                      onToggleEnabled(it.id);
-                    }}
-                    onClick={(e) => e.stopPropagation()} // ✅ Doppia sicurezza
-                    className="cursor-pointer shrink-0"
-                    title={enabled ? 'Disattiva intento' : 'Attiva intento'}
-                  />
-                )}
-
-                {LeftIcon ? <LeftIcon size={14} /> : null}
-                <div className="flex-1 truncate flex items-center gap-2 min-w-0">
-                  {editingId === it.id ? (
+                <div
+                  className={`px-3 py-2 cursor-pointer flex gap-2 ${
+                    truncateLabels ? 'items-center' : 'items-start'
+                  }`}
+                  onClick={() => onSelect(it.id)}
+                  title={it.label}
+                >
+                  {/* ✅ Checkbox per enable/disable */}
+                  {onToggleEnabled && (
                     <input
-                      autoFocus
-                      value={editValue}
-                      onChange={e=> setEditValue(e.target.value)}
-                      onKeyDown={(e)=>{
-                        if (e.key === 'Enter') commitEdit(it.id, it.label);
-                        if (e.key === 'Escape') cancelEdit();
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={(e) => {
+                        e.stopPropagation(); // ✅ Previene il click sulla riga
+                        onToggleEnabled(it.id);
                       }}
-                      onBlur={()=> commitEdit(it.id, it.label)}
-                      className="w-full bg-transparent outline-none border-b border-amber-300"
+                      onClick={(e) => e.stopPropagation()} // ✅ Doppia sicurezza
+                      className="cursor-pointer shrink-0"
+                      title={enabled ? 'Disattiva intento' : 'Attiva intento'}
                     />
-                  ) : (
-                    <>
-                      <span className="truncate">
-                        {labelRenderer ? labelRenderer(it) : it.label}
-                      </span>
-                      {labelAddon && (
-                        <span className="shrink-0">{labelAddon(it)}</span>
-                      )}
-                    </>
                   )}
-                </div>
-                {rightSlot ? rightSlot(it) : null}
-                {(onEditItem || onDeleteItem) && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {onEditItem && (
-                      <button
-                        className="p-1 rounded hover:bg-amber-100"
-                        title="Edit"
-                        onClick={(e)=>{ e.stopPropagation(); beginEdit(it.id, it.label); }}
-                      >
-                        <Pencil size={14} />
-                      </button>
-                    )}
-                    {onDeleteItem && (
-                      <button
-                        className="p-1 rounded hover:bg-rose-100"
-                        title="Delete"
-                        onClick={(e)=>{ e.stopPropagation(); onDeleteItem(it.id); }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+
+                  {LeftIcon ? (
+                    <LeftIcon size={14} className={truncateLabels ? '' : 'shrink-0 mt-0.5'} />
+                  ) : null}
+                  <div
+                    className={`flex-1 flex gap-2 min-w-0 ${
+                      truncateLabels ? 'truncate items-center' : 'items-start flex-wrap'
+                    }`}
+                  >
+                    {editingId === it.id ? (
+                      <input
+                        autoFocus
+                        value={editValue}
+                        onChange={e=> setEditValue(e.target.value)}
+                        onKeyDown={(e)=>{
+                          if (e.key === 'Enter') commitEdit(it.id, it.label);
+                          if (e.key === 'Escape') cancelEdit();
+                        }}
+                        onBlur={()=> commitEdit(it.id, it.label)}
+                        className="w-full bg-transparent outline-none border-b border-amber-300"
+                      />
+                    ) : (
+                      <>
+                        <span className={truncateLabels ? 'truncate' : 'whitespace-normal break-words'}>
+                          {labelRenderer ? labelRenderer(it) : it.label}
+                        </span>
+                        {labelAddon && (
+                          <span className="shrink-0">{labelAddon(it)}</span>
+                        )}
+                      </>
                     )}
                   </div>
-                )}
+                  {rightSlot ? rightSlot(it) : null}
+                  {(onEditItem || onDeleteItem) && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {onEditItem && (
+                        <button
+                          className="p-1 rounded hover:bg-amber-100"
+                          title="Edit"
+                          onClick={(e)=>{ e.stopPropagation(); beginEdit(it.id, it.label); }}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      {onDeleteItem && (
+                        <button
+                          className="p-1 rounded hover:bg-rose-100"
+                          title="Delete"
+                          onClick={(e)=>{ e.stopPropagation(); onDeleteItem(it.id); }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {rowFooter ? (
+                  <div
+                    className="px-3 pb-2 pl-[52px] border-t border-transparent"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {rowFooter(it)}
+                  </div>
+                ) : null}
               </div>
             );
           })}

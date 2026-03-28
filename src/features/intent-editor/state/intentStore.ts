@@ -18,6 +18,8 @@ type IntentState = {
   findByName: (name: string) => string | undefined;
   addOrFocusIntent: (name: string, langs?: Lang[]) => string;
   addCurated: (id: string, text: string, lang?: Lang) => void;
+  addCuratedMany: (id: string, texts: string[], lang?: Lang) => void;
+  setIntentDescription: (id: string, description: string) => void;
   addKeyword: (id: string, term: string, weight?: number) => void;
   clearCurated: (id: string) => void;
   clearHardNeg: (id: string) => void;
@@ -85,6 +87,27 @@ export const useIntentStore = create<IntentState>((set, get) => ({
       ...it,
       variants: { ...it.variants, curated: [ { id: (crypto as any).randomUUID?.() || Math.random().toString(36).slice(2), text, lang }, ...it.variants.curated ] }
     } : it)
+  })),
+  addCuratedMany: (id, texts, lang = 'it') => set(s => ({
+    intents: s.intents.map(it => {
+      if (it.id !== id) return it;
+      const additions = texts
+        .map(t => t.trim())
+        .filter(Boolean)
+        .map(text => ({
+          id: (crypto as any).randomUUID?.() || Math.random().toString(36).slice(2),
+          text,
+          lang,
+        }));
+      if (additions.length === 0) return it;
+      return {
+        ...it,
+        variants: { ...it.variants, curated: [...additions, ...it.variants.curated] },
+      };
+    }),
+  })),
+  setIntentDescription: (id, description) => set(s => ({
+    intents: s.intents.map(it => (it.id === id ? { ...it, description: description.trim() } : it)),
   })),
   addKeyword: (id, term, weight = 1) => set(s => ({
     intents: s.intents.map(it => it.id === id ? {

@@ -414,6 +414,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       escalationTasks={editor.escalationTasks}
       selectedMainIndex={editor.selectedMainIndex}
       selectedSubIndex={editor.selectedSubIndex}
+      selectedPath={editor.selectedPath}
+      handleSelectByPath={editor.handleSelectByPath}
       selectedRoot={editor.selectedRoot}
       selectedNode={editor.selectedNode}
       selectedNodePath={editor.selectedNodePath}

@@ -6232,6 +6232,62 @@ app.post('/api/ai-reset-rate-limits', (req, res) => {
   res.json({ message: 'All rate limits reset' });
 });
 
+/**
+ * Generate matching training phrases for one intent from its business description (LLM).
+ * Body: { intentName, description, lang?, count?, provider? }
+ */
+app.post('/api/intents/generate-training-phrases', async (req, res) => {
+  const { intentName, description, lang = 'it', count = 8 } = req.body || {};
+  if (!description || typeof description !== 'string' || !description.trim()) {
+    return res.status(400).json({ error: 'description_required' });
+  }
+  if (!intentName || typeof intentName !== 'string') {
+    return res.status(400).json({ error: 'intentName_required' });
+  }
+  const n = Math.min(24, Math.max(1, parseInt(String(count), 10) || 8));
+  const available = aiProviderService.getAvailableProviders();
+  let provider = req.body?.provider;
+  if (!provider || !available.includes(provider)) {
+    provider = available.includes('groq') ? 'groq' : available.includes('openai') ? 'openai' : available[0];
+  }
+  if (!provider) {
+    return res.status(503).json({ error: 'no_ai_provider_configured' });
+  }
+  const system =
+    'You respond with valid JSON only. No markdown, no commentary.';
+  const user = [
+    `Intent label: "${intentName.replace(/"/g, '\\"')}"`,
+    'Business description (authoritative):',
+    description.trim(),
+    '',
+    `Generate exactly ${n} short, realistic user utterances in language "${lang}" that should be classified as this intent.`,
+    'Vary wording, formality, and length. No numbering or bullets in strings.',
+    'Return strictly: {"phrases":["..."]}',
+  ].join('\n');
+  const messages = [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ];
+  try {
+    const raw = await aiProviderService.callAI(provider, messages, {
+      maxTokens: 3000,
+      temperature: 0.72,
+    });
+    const content = raw?.choices?.[0]?.message?.content;
+    if (!content || typeof content !== 'string') {
+      throw new Error('empty_ai_content');
+    }
+    const parsed = JSON.parse(content);
+    const phrases = Array.isArray(parsed.phrases)
+      ? parsed.phrases.filter((s) => typeof s === 'string' && s.trim())
+      : [];
+    return res.json({ phrases, provider });
+  } catch (err) {
+    console.error('[api/intents/generate-training-phrases]', err?.message || err);
+    return res.status(500).json({ error: err?.message || 'generation_failed' });
+  }
+});
+
 // --- Extractor endpoints (centralized contracts) ---
 app.get('/api/extractors/bindings', async (req, res) => {
   try {

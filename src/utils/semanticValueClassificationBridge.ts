@@ -13,6 +13,7 @@ export function semanticValuesToProblemIntents(
   return values.map((sv) => ({
     id: sv.id,
     name: sv.label,
+    description: sv.embedding?.description,
     threshold: sv.embedding?.threshold ?? 0.6,
     phrases: {
       matching: sv.embedding?.phrases?.matching ?? [],
@@ -40,6 +41,7 @@ export function problemIntentsToSemanticValues(
       embedding: {
         threshold: pi.threshold,
         enabled: prev?.embedding?.enabled ?? true,
+        description: pi.description ?? prev?.embedding?.description,
         phrases,
       },
     };
@@ -99,20 +101,45 @@ export function migrateLegacyIntentsOnTask(task: Task): void {
   delete (task as any).intents;
 }
 
+/** True when persisted JSON can be treated as schema version 1. */
+function isProblemPayloadVersion1(r: Record<string, unknown>): boolean {
+  const v = r.version;
+  return v === 1 || v === '1' || v === undefined;
+}
+
 /** Normalize persisted problem blob (localStorage / task.problem) after removing intents from model. */
 export function normalizeProblemPayload(raw: unknown): ProblemPayload {
   if (!raw || typeof raw !== 'object') {
     return { version: 1, semanticValues: [], editor: undefined };
   }
   const r = raw as Record<string, unknown>;
-  if (r.version !== 1) {
-    return { version: 1, semanticValues: [], editor: r.editor as ProblemPayload['editor'] };
+  const persistedAt = typeof r.persistedAt === 'number' && Number.isFinite(r.persistedAt) ? r.persistedAt : undefined;
+
+  if (!isProblemPayloadVersion1(r)) {
+    if (Array.isArray(r.semanticValues)) {
+      return {
+        version: 1,
+        semanticValues: r.semanticValues as SemanticValue[],
+        editor: r.editor as ProblemPayload['editor'],
+        ...(persistedAt !== undefined ? { persistedAt } : {}),
+      };
+    }
+    if (Array.isArray(r.intents)) {
+      return {
+        version: 1,
+        semanticValues: problemIntentsToSemanticValues(r.intents as ProblemIntent[], []),
+        editor: r.editor as ProblemPayload['editor'],
+        ...(persistedAt !== undefined ? { persistedAt } : {}),
+      };
+    }
+    return { version: 1, semanticValues: [], editor: r.editor as ProblemPayload['editor'], ...(persistedAt !== undefined ? { persistedAt } : {}) };
   }
   if (Array.isArray(r.semanticValues)) {
     return {
       version: 1,
       semanticValues: r.semanticValues as SemanticValue[],
       editor: r.editor as ProblemPayload['editor'],
+      ...(persistedAt !== undefined ? { persistedAt } : {}),
     };
   }
   if (Array.isArray(r.intents)) {
@@ -120,7 +147,8 @@ export function normalizeProblemPayload(raw: unknown): ProblemPayload {
       version: 1,
       semanticValues: problemIntentsToSemanticValues(r.intents as ProblemIntent[], []),
       editor: r.editor as ProblemPayload['editor'],
+      ...(persistedAt !== undefined ? { persistedAt } : {}),
     };
   }
-  return { version: 1, semanticValues: [], editor: r.editor as ProblemPayload['editor'] };
+  return { version: 1, semanticValues: [], editor: r.editor as ProblemPayload['editor'], ...(persistedAt !== undefined ? { persistedAt } : {}) };
 }

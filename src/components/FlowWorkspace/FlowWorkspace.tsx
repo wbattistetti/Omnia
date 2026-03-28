@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { FlowWorkspaceProvider, useFlowWorkspace, useFlowActions } from '@flows/FlowStore';
 import { setActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
 import { FlowTabBar } from './FlowTabBar';
@@ -9,9 +9,12 @@ import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
 import { FlowInterfaceBottomPanel } from './FlowInterfaceBottomPanel';
 import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
+import { useProjectData } from '../../context/ProjectDataContext';
+import { IntellisenseProvider } from '../../context/IntellisenseContext';
 
 // Adapter: renderizza l'attuale FlowEditor per activeFlowId con nodes/edges del workspace
 const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
+  const { data: projectData } = useProjectData();
   const { activeFlowId, flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph, openFlow, openFlowBackground, applyFlowLoadResult, markFlowsPersisted } = useFlowActions();
 
@@ -67,40 +70,52 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
   }, [activeFlowId, projectId, flowPresent, hydrated, hasLocalChanges, nodeCount, edgeCount, upsertFlow, applyFlowLoadResult]);
 
   const flow = flows[activeFlowId];
+
+  const intellisenseProviders = useMemo(
+    () => ({
+      getProjectData: () => projectData,
+      getFlowNodes: () => flow?.nodes ?? [],
+      getFlowEdges: () => flow?.edges ?? [],
+    }),
+    [projectData, flow?.nodes, flow?.edges],
+  );
+
   return (
     <div className="flex-1 h-full flex flex-col">
       <FlowTabBar />
       <div className="flex-1 min-h-0 relative flex flex-col min-w-0">
         <div className="relative flex flex-1 min-h-0 w-full min-w-0 overflow-hidden">
           <div className="absolute inset-0 z-0 min-h-0 min-w-0">
-            <FlowEditor
-              flowId={activeFlowId}
-              nodes={flow?.nodes || []}
-              edges={flow?.edges || []}
-              setNodes={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: typeof updater === 'function' ? updater(ns) : updater, edges: es }))}
-              setEdges={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: ns, edges: typeof updater === 'function' ? updater(es) : updater }))}
-              currentProject={{ id: projectId, name: 'Project' } as any}
-              setCurrentProject={() => {}}
-              testPanelOpen={false}
-              setTestPanelOpen={() => {}}
-              testNodeId={null}
-              setTestNodeId={() => {}}
-              onPlayNode={() => {}}
-              onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
-                dlog('flow', '[workspace.onCreateTaskFlow]', { newFlowId, title, nodes: nodes.length, edges: edges.length });
-                const derivedTitle = (title && String(title).trim()) || 'Task';
-                upsertFlow({ id: newFlowId, title: derivedTitle, nodes, edges });
-                setTimeout(() => openFlowBackground(newFlowId), 0);
-                if (projectId && String(projectId).trim() !== '') {
-                  saveFlow(projectId, newFlowId, nodes, edges).then(
-                    () => markFlowsPersisted([newFlowId]),
-                    (e) => {
-                      try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
-                    }
-                  );
-                }
-              }}
-            />
+            <IntellisenseProvider providers={intellisenseProviders}>
+              <FlowEditor
+                flowId={activeFlowId}
+                nodes={flow?.nodes || []}
+                edges={flow?.edges || []}
+                setNodes={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: typeof updater === 'function' ? updater(ns) : updater, edges: es }))}
+                setEdges={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: ns, edges: typeof updater === 'function' ? updater(es) : updater }))}
+                currentProject={{ id: projectId, name: 'Project' } as any}
+                setCurrentProject={() => {}}
+                testPanelOpen={false}
+                setTestPanelOpen={() => {}}
+                testNodeId={null}
+                setTestNodeId={() => {}}
+                onPlayNode={() => {}}
+                onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
+                  dlog('flow', '[workspace.onCreateTaskFlow]', { newFlowId, title, nodes: nodes.length, edges: edges.length });
+                  const derivedTitle = (title && String(title).trim()) || 'Task';
+                  upsertFlow({ id: newFlowId, title: derivedTitle, nodes, edges });
+                  setTimeout(() => openFlowBackground(newFlowId), 0);
+                  if (projectId && String(projectId).trim() !== '') {
+                    saveFlow(projectId, newFlowId, nodes, edges).then(
+                      () => markFlowsPersisted([newFlowId]),
+                      (e) => {
+                        try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
+                      }
+                    );
+                  }
+                }}
+              />
+            </IntellisenseProvider>
           </div>
           {isFlowInterfacePanelEnabled(activeFlowId) ? (
             <FlowInterfaceBottomPanel flowId={activeFlowId} projectId={projectId} />
