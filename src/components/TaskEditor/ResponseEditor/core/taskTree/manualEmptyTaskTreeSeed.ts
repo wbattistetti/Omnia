@@ -4,7 +4,8 @@
  */
 
 import type { TaskTree } from '@types/taskTypes';
-import { createManualTaskTreeNode, ensureTaskTreeNodeIds } from './taskTreeUtils';
+import { createManualTaskTreeNodeWithDefaultBehaviour } from './manualDefaultBehaviourSteps';
+import { ensureTaskTreeNodeIds } from './taskTreeUtils';
 
 /** True when there is nothing to show in the sidebar / Behaviour. */
 export function isTaskTreeStructurallyEmpty(tree: TaskTree | null | undefined): boolean {
@@ -67,11 +68,11 @@ export function resolveGeneralizeLabelLanguage(): GeneralizeLabelLang {
 export function buildInitialManualTaskTree(displayTitle: string): TaskTree {
   const trimmed = displayTitle.trim() || 'Data';
   const slug = slugifyManualDataKeySegment(trimmed);
-  const node = createManualTaskTreeNode(trimmed, { required: true });
+  const { node, treePatch } = createManualTaskTreeNodeWithDefaultBehaviour(trimmed, { required: true });
   const tree: TaskTree = {
     labelKey: `manual.${slug}`,
     nodes: [node],
     steps: {},
   };
-  return ensureTaskTreeNodeIds(tree);
+  return ensureTaskTreeNodeIds(treePatch(tree));
 }

@@ -274,7 +274,13 @@ export function EscalationTasksList({
   return (
     <CanvasDropWrapper onDropTask={handleAppend} isEmpty={tasks.length === 0}>
       {tasks.length === 0 ? (
-        <PanelEmptyDropZone color={color} onDropTask={handleAppend} />
+        <PanelEmptyDropZone
+          color={color}
+          onDropTask={handleAppend}
+          compact
+          idleLabel="Nessuna azione in questa escalation ancora. Apri la scheda Tasks nella barra in alto, poi trascina un task qui (o dal catalogo)."
+          overLabel="Rilascia per aggiungere il task"
+        />
       ) : (
         tasks.map((task: any, j: number) => {
           // ✅ NO FALLBACKS: templateId must exist, use 'sayMessage' only as explicit default for logging

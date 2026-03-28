@@ -11,7 +11,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useTaskTreeStore } from '@responseEditor/core/state';
 import {
-  createManualTaskTreeNode,
+  createManualTaskTreeNodeWithDefaultBehaviour,
   ensureTaskTreeNodeIds,
   getChildrenOfParent,
   insertChildAt,
@@ -196,10 +196,12 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
     (parentPath: NodePath | null, label: string) => {
       const base = getTree();
       if (!base) return;
-      const child = createManualTaskTreeNode(label, { required: true });
+      const { node: child, treePatch } = createManualTaskTreeNodeWithDefaultBehaviour(label, {
+        required: true,
+      });
       const siblings = getChildrenOfParent(base, parentPath);
       const next = insertChildAt(base, parentPath, siblings.length, child);
-      commit(next);
+      commit(ensureTaskTreeNodeIds(treePatch(next)));
     },
     [getTree, commit]
   );
@@ -227,7 +229,7 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
 
   const onAddMain = useCallback(
     (label: string) => {
-      const node = createManualTaskTreeNode(label, { required: true });
+      const { node, treePatch } = createManualTaskTreeNodeWithDefaultBehaviour(label, { required: true });
       const base = getTree();
       if (!base) {
         const tree: TaskTree = {
@@ -235,12 +237,12 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
           nodes: [node],
           steps: {},
         };
-        commit(ensureTaskTreeNodeIds(tree));
+        commit(ensureTaskTreeNodeIds(treePatch(tree)));
         return;
       }
       const roots = base.nodes?.length ?? 0;
       const next = insertChildAt(base, null, roots, node);
-      commit(next);
+      commit(ensureTaskTreeNodeIds(treePatch(next)));
     },
     [getTree, commit]
   );

@@ -79,6 +79,9 @@ export default function BehaviourContainer({
       result = stepKeys;
     } else if ((selectedPath && selectedPath.length > 1) || selectedSubIndex != null) {
       result = stepKeys;
+    } else if (stepKeys.length === 0) {
+      // Manual (or legacy) node with no steps yet — do not show only notConfirmed.
+      result = stepKeys;
     } else if (!stepKeys.includes('notConfirmed')) {
       result = [...stepKeys, 'notConfirmed'];
     } else {

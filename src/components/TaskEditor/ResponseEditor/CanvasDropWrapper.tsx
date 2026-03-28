@@ -36,7 +36,7 @@ const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropTask, onDro
       display: 'flex',
       flexDirection: 'column',
       flex: 'none',
-      minHeight: isEmpty ? '120px' : 'auto',
+      minHeight: isEmpty ? '72px' : 'auto',
       width: '100%'
     }}>
       {children}

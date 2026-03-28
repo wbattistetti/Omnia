@@ -15,3 +15,9 @@ export {
   reorderSiblings,
   findPathById,
 } from './taskTreeUtils';
+export {
+  createDefaultManualStepDictionary,
+  createManualTaskTreeNodeWithDefaultBehaviour,
+  mergeTaskTreeStepsForTemplate,
+  withDefaultManualBehaviourSteps,
+} from './manualDefaultBehaviourSteps';
