@@ -6,6 +6,10 @@
  */
 
 import React from 'react';
+import { generalizeLabel } from '@TaskBuilderAIWizard/services/TemplateCreationService';
+import { getMainNodes } from '@responseEditor/core/domain';
+import { resolveGeneralizeLabelLanguage } from '@responseEditor/core/taskTree/manualEmptyTaskTreeSeed';
+import { useTaskTreeStore } from '@responseEditor/core/state';
 import Sidebar from '@responseEditor/Sidebar';
 import { RightPanelMode } from '@responseEditor/RightPanel';
 import IntentListEditorWrapper from '@responseEditor/components/IntentListEditorWrapper';
@@ -99,7 +103,7 @@ export interface ResponseEditorNormalLayoutProps {
   tasksStartXRef: React.MutableRefObject<number>;
 
   // Tree operations
-  replaceSelectedTaskTree: (taskTree: TaskTree) => void;
+  replaceSelectedTaskTree: (tree: TaskTree) => void;
 
   // ✅ NEW: Optional flag to render only sidebar (for STATO 2 - adaptation mode)
   sidebarOnly?: boolean;
@@ -214,22 +218,94 @@ export function ResponseEditorNormalLayout({
   // ❌ RIMOSSO: Early return quando taskWizardMode === 'full'
   // Ora il wizard viene gestito tramite mainViewMode nel MainContentArea
 
-  // ✅ FIX: Use generalizedLabel for rootLabel when wizard structure is proposed
+  // Aggregate row title: persisted aggregateLabel (rename / seed) wins over wizard copy, then tree label, then default.
   const effectiveRootLabel = React.useMemo(() => {
-    // If wizard is active and structure is proposed, use generalizedLabel
+    const agg =
+      typeof taskTree?.aggregateLabel === 'string' && taskTree.aggregateLabel.trim()
+        ? taskTree.aggregateLabel.trim()
+        : '';
+    if (agg) {
+      return agg;
+    }
     if (taskWizardMode === 'full' && wizardProps) {
       const generalizedLabel = wizardProps.generalizedLabel;
       if (generalizedLabel) {
         return generalizedLabel;
       }
-      // Fallback to dataSchema[0].label (should already be generalized)
       const dataSchemaLabel = wizardProps.dataSchema?.[0]?.label;
       if (dataSchemaLabel) {
         return dataSchemaLabel;
       }
     }
     return taskTree?.label ?? 'Data';
-  }, [taskWizardMode, wizardProps?.generalizedLabel, wizardProps?.dataSchema, taskTree?.label]);
+  }, [taskWizardMode, wizardProps?.generalizedLabel, wizardProps?.dataSchema, taskTree?.aggregateLabel, taskTree?.label]);
+
+  /** Row/task title used to seed aggregate group label via generalizeLabel (strip discursive part). */
+  const rowTitleForAggregateGeneralize = React.useMemo(() => {
+    const t = task as { taskLabel?: string; label?: string } | null | undefined;
+    const fromMeta =
+      typeof t?.taskLabel === 'string' && t.taskLabel.trim() ? t.taskLabel.trim() : '';
+    const fromTask = typeof t?.label === 'string' && t.label.trim() ? t.label.trim() : '';
+    const fromTree = typeof taskTree?.label === 'string' && taskTree.label.trim() ? taskTree.label.trim() : '';
+    return fromMeta || fromTask || fromTree;
+  }, [task, taskTree?.label]);
+
+  /**
+   * Zustand is the source of truth for ResponseEditorContext.taskTree; TaskTreeManager only
+   * mirrors persistence. Updates must touch both or the UI (and seed) never see aggregateLabel.
+   */
+  const applyTaskTreeToStoreAndManager = React.useCallback(
+    (next: TaskTree) => {
+      useTaskTreeStore.getState().setTaskTree(next);
+      replaceSelectedTaskTree(next);
+    },
+    [replaceSelectedTaskTree]
+  );
+
+  React.useEffect(() => {
+    if (!isAggregatedAtomic || !rowTitleForAggregateGeneralize) return;
+    if (taskWizardMode === 'full' && wizardProps?.generalizedLabel) return;
+    const snap = useTaskTreeStore.getState().taskTree;
+    if (!snap || snap.aggregateLabel) return;
+    if (getMainNodes(snap).length < 2) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const lang = resolveGeneralizeLabelLanguage();
+        const generalized = await generalizeLabel(rowTitleForAggregateGeneralize, lang);
+        if (cancelled) return;
+        const trimmed = generalized?.trim();
+        if (!trimmed) return;
+        const latest = useTaskTreeStore.getState().taskTree;
+        if (!latest || latest.aggregateLabel) return;
+        if (getMainNodes(latest).length < 2) return;
+        applyTaskTreeToStoreAndManager({ ...latest, aggregateLabel: trimmed });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isAggregatedAtomic,
+    mainList.length,
+    rowTitleForAggregateGeneralize,
+    taskWizardMode,
+    wizardProps?.generalizedLabel,
+    applyTaskTreeToStoreAndManager,
+  ]);
+
+  const handleRenameAggregateLabel = React.useCallback(
+    (newLabel: string) => {
+      const latest = useTaskTreeStore.getState().taskTree;
+      if (!latest) return;
+      const v = newLabel.trim();
+      applyTaskTreeToStoreAndManager({ ...latest, aggregateLabel: v || undefined });
+    },
+    [applyTaskTreeToStoreAndManager]
+  );
 
   // ✅ Determina la struttura del grid in base alle condizioni
   const hasIntentEditor = mainList[0]?.kind === 'intent' && task;
@@ -249,6 +325,7 @@ export function ResponseEditorNormalLayout({
         onSelectPath={handleSelectByPath}
         aggregated={isAggregatedAtomic}
         rootLabel={effectiveRootLabel}
+        onRenameAggregateLabel={isAggregatedAtomic ? handleRenameAggregateLabel : undefined}
         style={{
           minWidth: 0,
           maxWidth: '100%',
@@ -345,6 +422,7 @@ export function ResponseEditorNormalLayout({
             onSelectPath={handleSelectByPath}
             aggregated={isAggregatedAtomic}
             rootLabel={effectiveRootLabel}
+            onRenameAggregateLabel={isAggregatedAtomic ? handleRenameAggregateLabel : undefined}
             style={{
           minWidth: 0,
           maxWidth: '100%',

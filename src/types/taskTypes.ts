@@ -429,6 +429,13 @@ export interface TaskTree {
   constraints?: any[];           // ✅ Dal template (sempre)
   dataContract?: any;            // ✅ Dal template (sempre)
   introduction?: any;             // ✅ Opzionale (da instance se override)
+  /** Display title of the task in the editor (distinct from labelKey). */
+  label?: string;
+  /**
+   * When multiple main nodes exist, sidebar shows an aggregate row; this is its title (e.g. "Dati personali").
+   * Not a TaskTreeNode — presentation only. Do not use for taskTree.introduction (flow escalations).
+   */
+  aggregateLabel?: string;
 }
 
 /**

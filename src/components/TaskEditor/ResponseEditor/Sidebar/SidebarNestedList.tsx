@@ -12,6 +12,8 @@ import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
 import type { NestedDropIndicator } from './useSidebarDropIndicator';
 import { dropPlacementFromEvent } from './useSidebarDropIndicator';
 import type { SelectPathHandler } from '@responseEditor/features/node-editing/selectPathTypes';
+import { SidebarInlineEditInput } from '@responseEditor/Sidebar/SidebarInlineEditInput';
+import { sidebarLabelWidthMode, sidebarPathEditKey } from '@responseEditor/Sidebar/sidebarLabelEditWidth';
 import { SIDEBAR_ROW_LABEL_INPUT_STYLE } from '@responseEditor/Sidebar/sidebarRowLabelInputStyle';
 
 function pathsEqual(a: number[], b: number[]): boolean {
@@ -47,6 +49,8 @@ export interface SidebarNestedListProps {
   baseMarginLeft: number;
   editingPath: number[] | null;
   editDraft: string;
+  /** Matches sidebar fill key for new-node full-width label (`p:...`). */
+  fillLabelPathKey: string | null;
   setEditingPath: (path: number[] | null) => void;
   setEditDraft: (s: string) => void;
   setOverlay: (
@@ -92,6 +96,7 @@ export function SidebarNestedList(props: SidebarNestedListProps) {
     baseMarginLeft,
     editingPath,
     editDraft,
+    fillLabelPathKey,
     setEditingPath,
     setEditDraft,
     setOverlay,
@@ -246,8 +251,9 @@ export function SidebarNestedList(props: SidebarNestedListProps) {
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
                 {editingPath && pathsEqual(editingPath, path) ? (
-                  <input
-                    autoFocus
+                  <SidebarInlineEditInput
+                    active={Boolean(editingPath && pathsEqual(editingPath, path))}
+                    widthMode={sidebarLabelWidthMode(fillLabelPathKey, sidebarPathEditKey(path), editDraft)}
                     value={editDraft}
                     onChange={(e) => setEditDraft(e.target.value)}
                     onKeyDown={(e) => {
@@ -396,6 +402,7 @@ export function SidebarNestedList(props: SidebarNestedListProps) {
                 baseMarginLeft={baseMarginLeft}
                 editingPath={editingPath}
                 editDraft={editDraft}
+                fillLabelPathKey={fillLabelPathKey}
                 setEditingPath={setEditingPath}
                 setEditDraft={setEditDraft}
                 setOverlay={setOverlay}

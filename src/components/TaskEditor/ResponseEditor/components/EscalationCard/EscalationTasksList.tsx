@@ -37,17 +37,30 @@ export function EscalationTasksList({
   stepKey
 }: EscalationTasksListProps) {
   const { handleEditingChange, isEditing: isEditingRow } = useTaskEditing();
-  // ✅ FASE 2: Get addTranslation from context for updating translations
-  let addTranslation: ((guid: string, text: string) => void) | undefined;
-  let isReady = true; // Default to true if context not available
-  try {
-    const { addTranslation: addTranslationFromContext, isReady: translationsReady } = useProjectTranslations();
-    addTranslation = addTranslationFromContext;
-    isReady = translationsReady;
-  } catch {
-    // Context not available, will log warning in handleEdit
-    addTranslation = undefined;
-  }
+  const {
+    translations: contextTranslations,
+    addTranslation,
+    isReady,
+  } = useProjectTranslations();
+
+  /** Prop is often step-scoped; project GUIDs live in context — merge so lookups work. */
+  const effectiveTranslations = React.useMemo(
+    () => ({ ...contextTranslations, ...(translations ?? {}) }),
+    [contextTranslations, translations]
+  );
+
+  const loggedEmptyWhileReadyRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!isReady || loggedEmptyWhileReadyRef.current) return;
+    if (Object.keys(effectiveTranslations).length > 0) return;
+    loggedEmptyWhileReadyRef.current = true;
+    if (import.meta.env.DEV) {
+      console.warn('[EscalationTasksList] Translations ready but context + props have no entries', {
+        escalationIdx,
+        stepKey,
+      });
+    }
+  }, [isReady, effectiveTranslations, escalationIdx, stepKey]);
 
   // ✅ CRITICAL: If translations are not ready, show loading instead of GUIDs
   if (!isReady) {
@@ -56,16 +69,6 @@ export function EscalationTasksList({
         <span className="text-sm text-gray-500">Loading translations...</span>
       </div>
     );
-  }
-
-  // ✅ NO FALLBACK: Translations must be provided correctly by the caller
-  // If translations are empty but ready, this is a structural error that must be fixed
-  if (isReady && (!translations || Object.keys(translations).length === 0)) {
-    console.error('[EscalationTasksList] ❌ ERROR: Translations ready but empty - this is a structural error', {
-      escalationIdx,
-      stepKey,
-      translationsCount: translations ? Object.keys(translations).length : 0
-    });
   }
   // ✅ NO FALLBACKS: escalation.tasks can be undefined (legitimate default)
   const tasks = escalation.tasks ?? [];
@@ -295,7 +298,7 @@ export function EscalationTasksList({
                   : (task.iconName
                       ? getIconComponent(task.iconName, ensureHexColor(task.color))
                       : getTaskIconNode(templateId, ensureHexColor(task.color)))}
-                text={getTaskText(task, translations)}
+                text={getTaskText(task, effectiveTranslations)}
                 color={color}
                 draggable
                 selected={false}

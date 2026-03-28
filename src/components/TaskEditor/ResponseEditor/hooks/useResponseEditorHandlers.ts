@@ -144,6 +144,7 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     sidebarStartWidthRef,
     sidebarStartXRef,
     setSidebarManualWidth,
+    sidebarManualWidth,
     sidebarRef: sidebarRefFromSelection,
     taskTree,
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,

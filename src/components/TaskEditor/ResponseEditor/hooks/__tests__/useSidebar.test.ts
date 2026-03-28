@@ -1,9 +1,11 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
+import React from 'react';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useSidebar } from '@responseEditor/hooks/useSidebar';
+import { SIDEBAR_CONTENT_MIN_WIDTH_PX } from '@responseEditor/Sidebar/sidebarLayoutConstants';
 import { useTaskTreeStore } from '@responseEditor/core/state';
 import type { TaskTree } from '@types/taskTypes';
 
@@ -114,6 +116,7 @@ describe('useSidebar - Composite Hook', () => {
           sidebarStartWidthRef,
           sidebarStartXRef,
           setSidebarManualWidth: mockSetSidebarManualWidth,
+          sidebarManualWidth: null,
           sidebarRef,
           taskTree: mockTaskTree,
           replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -138,6 +141,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -148,140 +152,167 @@ describe('useSidebar - Composite Hook', () => {
   });
 
   describe('Drag Handling', () => {
+    function mockSidebarElement(width: number) {
+      const el = document.createElement('div');
+      el.getBoundingClientRect = vi.fn(() => ({
+        width,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: width,
+        x: 0,
+        y: 0,
+        toJSON: vi.fn(),
+      }));
+      return el;
+    }
+
     it('should set up mouse event listeners when dragging starts', () => {
       const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
-      const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
 
-      const { rerender } = renderHook(
-        ({ isDragging }) =>
-          useSidebar({
-            isDraggingSidebar: isDragging,
-            setIsDraggingSidebar: mockSetIsDraggingSidebar,
-            sidebarStartWidthRef,
-            sidebarStartXRef,
-            setSidebarManualWidth: mockSetSidebarManualWidth,
-            sidebarRef,
-            taskTree: mockTaskTree,
-            replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
-          }),
-        { initialProps: { isDragging: false } }
+      const { result } = renderHook(() =>
+        useSidebar({
+          isDraggingSidebar: false,
+          setIsDraggingSidebar: mockSetIsDraggingSidebar,
+          sidebarStartWidthRef,
+          sidebarStartXRef,
+          setSidebarManualWidth: mockSetSidebarManualWidth,
+          sidebarManualWidth: null,
+          sidebarRef: { current: mockSidebarElement(280) },
+          taskTree: mockTaskTree,
+          replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
+        })
       );
 
-      // Start dragging
-      rerender({ isDragging: true });
+      act(() => {
+        result.current.handleSidebarResizeStart({
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+          clientX: 100,
+        } as unknown as React.MouseEvent);
+      });
 
-      expect(addEventListenerSpy).toHaveBeenCalledWith(
-        'mousemove',
-        expect.any(Function)
-      );
-      expect(addEventListenerSpy).toHaveBeenCalledWith(
-        'mouseup',
-        expect.any(Function)
-      );
+      expect(addEventListenerSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(addEventListenerSpy).toHaveBeenCalledWith('mouseup', expect.any(Function));
     });
 
     it('should calculate width correctly during drag (MIN/MAX constraints)', () => {
-      const { rerender } = renderHook(
-        ({ isDragging }) =>
-          useSidebar({
-            isDraggingSidebar: isDragging,
-            setIsDraggingSidebar: mockSetIsDraggingSidebar,
-            sidebarStartWidthRef: { current: 200 },
-            sidebarStartXRef: { current: 100 },
-            setSidebarManualWidth: mockSetSidebarManualWidth,
-            sidebarRef,
-            taskTree: mockTaskTree,
-            replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
-          }),
-        { initialProps: { isDragging: false } }
+      const { result } = renderHook(() =>
+        useSidebar({
+          isDraggingSidebar: false,
+          setIsDraggingSidebar: mockSetIsDraggingSidebar,
+          sidebarStartWidthRef: { current: 0 },
+          sidebarStartXRef: { current: 0 },
+          setSidebarManualWidth: mockSetSidebarManualWidth,
+          sidebarManualWidth: null,
+          sidebarRef: { current: mockSidebarElement(200) },
+          taskTree: mockTaskTree,
+          replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
+        })
       );
 
-      rerender({ isDragging: true });
-
-      // Simulate mouse move
-      const mouseMoveEvent = new MouseEvent('mousemove', {
-        clientX: 250, // deltaX = 150, new width = 350
+      act(() => {
+        result.current.handleSidebarResizeStart({
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+          clientX: 100,
+        } as unknown as React.MouseEvent);
       });
-      window.dispatchEvent(mouseMoveEvent);
+
+      act(() => {
+        window.dispatchEvent(new MouseEvent('mousemove', { clientX: 250 }));
+      });
 
       expect(mockSetSidebarManualWidth).toHaveBeenCalledWith(350);
     });
 
     it('should enforce MIN_WIDTH constraint', () => {
-      const { rerender } = renderHook(
-        ({ isDragging }) =>
-          useSidebar({
-            isDraggingSidebar: isDragging,
-            setIsDraggingSidebar: mockSetIsDraggingSidebar,
-            sidebarStartWidthRef: { current: 200 },
-            sidebarStartXRef: { current: 100 },
-            setSidebarManualWidth: mockSetSidebarManualWidth,
-            sidebarRef,
-            taskTree: mockTaskTree,
-            replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
-          }),
-        { initialProps: { isDragging: false } }
+      const { result } = renderHook(() =>
+        useSidebar({
+          isDraggingSidebar: false,
+          setIsDraggingSidebar: mockSetIsDraggingSidebar,
+          sidebarStartWidthRef: { current: 0 },
+          sidebarStartXRef: { current: 0 },
+          setSidebarManualWidth: mockSetSidebarManualWidth,
+          sidebarManualWidth: null,
+          sidebarRef: { current: mockSidebarElement(200) },
+          taskTree: mockTaskTree,
+          replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
+        })
       );
 
-      rerender({ isDragging: true });
-
-      // Simulate mouse move that would result in width < MIN_WIDTH (220)
-      const mouseMoveEvent = new MouseEvent('mousemove', {
-        clientX: 50, // deltaX = -50, new width = 150, clamped to MIN 220
+      act(() => {
+        result.current.handleSidebarResizeStart({
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+          clientX: 100,
+        } as unknown as React.MouseEvent);
       });
-      window.dispatchEvent(mouseMoveEvent);
+
+      act(() => {
+        window.dispatchEvent(new MouseEvent('mousemove', { clientX: 50 }));
+      });
 
       expect(mockSetSidebarManualWidth).toHaveBeenCalledWith(220);
     });
 
     it('should enforce MAX_WIDTH constraint', () => {
-      const { rerender } = renderHook(
-        ({ isDragging }) =>
-          useSidebar({
-            isDraggingSidebar: isDragging,
-            setIsDraggingSidebar: mockSetIsDraggingSidebar,
-            sidebarStartWidthRef: { current: 200 },
-            sidebarStartXRef: { current: 100 },
-            setSidebarManualWidth: mockSetSidebarManualWidth,
-            sidebarRef,
-            taskTree: mockTaskTree,
-            replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
-          }),
-        { initialProps: { isDragging: false } }
+      const { result } = renderHook(() =>
+        useSidebar({
+          isDraggingSidebar: false,
+          setIsDraggingSidebar: mockSetIsDraggingSidebar,
+          sidebarStartWidthRef: { current: 0 },
+          sidebarStartXRef: { current: 0 },
+          setSidebarManualWidth: mockSetSidebarManualWidth,
+          sidebarManualWidth: null,
+          sidebarRef: { current: mockSidebarElement(200) },
+          taskTree: mockTaskTree,
+          replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
+        })
       );
 
-      rerender({ isDragging: true });
-
-      // Simulate mouse move that would result in width > MAX_WIDTH (1000)
-      const mouseMoveEvent = new MouseEvent('mousemove', {
-        clientX: 1000, // deltaX = 900, new width = 1100, but MAX is 1000
+      act(() => {
+        result.current.handleSidebarResizeStart({
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+          clientX: 100,
+        } as unknown as React.MouseEvent);
       });
-      window.dispatchEvent(mouseMoveEvent);
+
+      act(() => {
+        window.dispatchEvent(new MouseEvent('mousemove', { clientX: 1000 }));
+      });
 
       expect(mockSetSidebarManualWidth).toHaveBeenCalledWith(1000);
     });
 
     it('should stop dragging on mouseup', () => {
-      const { rerender } = renderHook(
-        ({ isDragging }) =>
-          useSidebar({
-            isDraggingSidebar: isDragging,
-            setIsDraggingSidebar: mockSetIsDraggingSidebar,
-            sidebarStartWidthRef,
-            sidebarStartXRef,
-            setSidebarManualWidth: mockSetSidebarManualWidth,
-            sidebarRef,
-            taskTree: mockTaskTree,
-            replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
-          }),
-        { initialProps: { isDragging: false } }
+      const { result } = renderHook(() =>
+        useSidebar({
+          isDraggingSidebar: false,
+          setIsDraggingSidebar: mockSetIsDraggingSidebar,
+          sidebarStartWidthRef,
+          sidebarStartXRef,
+          setSidebarManualWidth: mockSetSidebarManualWidth,
+          sidebarManualWidth: null,
+          sidebarRef: { current: mockSidebarElement(280) },
+          taskTree: mockTaskTree,
+          replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
+        })
       );
 
-      rerender({ isDragging: true });
+      act(() => {
+        result.current.handleSidebarResizeStart({
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+          clientX: 100,
+        } as unknown as React.MouseEvent);
+      });
 
-      // Simulate mouseup
-      const mouseUpEvent = new MouseEvent('mouseup');
-      window.dispatchEvent(mouseUpEvent);
+      act(() => {
+        window.dispatchEvent(new MouseEvent('mouseup'));
+      });
 
       expect(mockSetIsDraggingSidebar).toHaveBeenCalledWith(false);
     });
@@ -289,32 +320,32 @@ describe('useSidebar - Composite Hook', () => {
     it('should clean up event listeners on unmount', () => {
       const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
 
-      const { rerender, unmount } = renderHook(
-        ({ isDragging }) =>
-          useSidebar({
-            isDraggingSidebar: isDragging,
-            setIsDraggingSidebar: mockSetIsDraggingSidebar,
-            sidebarStartWidthRef,
-            sidebarStartXRef,
-            setSidebarManualWidth: mockSetSidebarManualWidth,
-            sidebarRef,
-            taskTree: mockTaskTree,
-            replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
-          }),
-        { initialProps: { isDragging: false } }
+      const { result, unmount } = renderHook(() =>
+        useSidebar({
+          isDraggingSidebar: false,
+          setIsDraggingSidebar: mockSetIsDraggingSidebar,
+          sidebarStartWidthRef,
+          sidebarStartXRef,
+          setSidebarManualWidth: mockSetSidebarManualWidth,
+          sidebarManualWidth: null,
+          sidebarRef: { current: mockSidebarElement(280) },
+          taskTree: mockTaskTree,
+          replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
+        })
       );
 
-      rerender({ isDragging: true });
+      act(() => {
+        result.current.handleSidebarResizeStart({
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+          clientX: 100,
+        } as unknown as React.MouseEvent);
+      });
+
       unmount();
 
-      expect(removeEventListenerSpy).toHaveBeenCalledWith(
-        'mousemove',
-        expect.any(Function)
-      );
-      expect(removeEventListenerSpy).toHaveBeenCalledWith(
-        'mouseup',
-        expect.any(Function)
-      );
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('mouseup', expect.any(Function));
     });
   });
 
@@ -344,6 +375,7 @@ describe('useSidebar - Composite Hook', () => {
           sidebarStartWidthRef: mockStartWidthRef,
           sidebarStartXRef: mockStartXRef,
           setSidebarManualWidth: mockSetSidebarManualWidth,
+          sidebarManualWidth: null,
           sidebarRef: mockSidebarRef,
           taskTree: mockTaskTree,
           replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -367,16 +399,19 @@ describe('useSidebar - Composite Hook', () => {
       expect(mockSetIsDraggingSidebar).toHaveBeenCalledWith(true);
     });
 
-    it('should handle missing sidebarRef gracefully', () => {
+    it('starts resize when sidebarRef is missing using layout default width', () => {
       const mockSidebarRef = { current: null };
+      const startWidthRef = { current: 0 };
+      const startXRef = { current: 0 };
 
       const { result } = renderHook(() =>
         useSidebar({
           isDraggingSidebar: false,
           setIsDraggingSidebar: mockSetIsDraggingSidebar,
-          sidebarStartWidthRef,
-          sidebarStartXRef,
+          sidebarStartWidthRef: startWidthRef,
+          sidebarStartXRef: startXRef,
           setSidebarManualWidth: mockSetSidebarManualWidth,
+          sidebarManualWidth: null,
           sidebarRef: mockSidebarRef,
           taskTree: mockTaskTree,
           replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -389,14 +424,45 @@ describe('useSidebar - Composite Hook', () => {
         clientX: 150,
       } as unknown as React.MouseEvent;
 
-      expect(() => {
-        act(() => {
-          result.current.handleSidebarResizeStart(mockEvent);
-        });
-      }).not.toThrow();
+      act(() => {
+        result.current.handleSidebarResizeStart(mockEvent);
+      });
 
-      // Should not set dragging state
-      expect(mockSetIsDraggingSidebar).not.toHaveBeenCalled();
+      expect(startWidthRef.current).toBe(SIDEBAR_CONTENT_MIN_WIDTH_PX);
+      expect(startXRef.current).toBe(150);
+      expect(mockSetIsDraggingSidebar).toHaveBeenCalledWith(true);
+    });
+
+    it('starts resize when sidebarRef is missing using sidebarManualWidth', () => {
+      const mockSidebarRef = { current: null };
+      const startWidthRef = { current: 0 };
+
+      const { result } = renderHook(() =>
+        useSidebar({
+          isDraggingSidebar: false,
+          setIsDraggingSidebar: mockSetIsDraggingSidebar,
+          sidebarStartWidthRef: startWidthRef,
+          sidebarStartXRef,
+          setSidebarManualWidth: mockSetSidebarManualWidth,
+          sidebarManualWidth: 320,
+          sidebarRef: mockSidebarRef,
+          taskTree: mockTaskTree,
+          replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
+        })
+      );
+
+      const mockEvent = {
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+        clientX: 200,
+      } as unknown as React.MouseEvent;
+
+      act(() => {
+        result.current.handleSidebarResizeStart(mockEvent);
+      });
+
+      expect(startWidthRef.current).toBe(320);
+      expect(mockSetIsDraggingSidebar).toHaveBeenCalledWith(true);
     });
   });
 
@@ -410,6 +476,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -434,6 +501,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -458,6 +526,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: null,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -481,6 +550,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -512,6 +582,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -536,6 +607,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -561,6 +633,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -588,6 +661,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -611,6 +685,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -636,6 +711,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -660,6 +736,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -685,6 +762,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -712,6 +790,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,
@@ -737,6 +816,7 @@ describe('useSidebar - Composite Hook', () => {
             sidebarStartWidthRef,
             sidebarStartXRef,
             setSidebarManualWidth: mockSetSidebarManualWidth,
+            sidebarManualWidth: null,
             sidebarRef,
             taskTree: mockTaskTree,
             replaceSelectedTaskTree: mockReplaceSelectedTaskTree,

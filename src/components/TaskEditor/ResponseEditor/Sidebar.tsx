@@ -1,8 +1,8 @@
 import React, { forwardRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import * as ReactDOM from 'react-dom/client';
 import { Check, Plus, Pencil, Trash2 } from 'lucide-react';
-import { getNodeLabel, getSubNodes } from '@responseEditor/core/domain';
+import { getMainNodes, getNodeLabel, getSubNodes } from '@responseEditor/core/domain';
+import { useTaskTreeStore, useTaskTreeVersion } from '@responseEditor/core/state';
 import getIconComponent from '@responseEditor/icons';
 import styles from '@responseEditor/ResponseEditor.module.css';
 import { useFontContext } from '@context/FontContext';
@@ -15,11 +15,24 @@ import { getNodeByPath } from '@responseEditor/core/taskTree';
 import { SidebarNestedList } from '@responseEditor/Sidebar/SidebarNestedList';
 import { dropPlacementFromEvent, useSidebarDropIndicator } from '@responseEditor/Sidebar/useSidebarDropIndicator';
 import type { SelectPathHandler } from '@responseEditor/features/node-editing/selectPathTypes';
+import { SidebarInlineEditInput } from '@responseEditor/Sidebar/SidebarInlineEditInput';
+import {
+  sidebarLabelWidthMode,
+  sidebarMainEditKey,
+  sidebarPathEditKey,
+  sidebarSubEditKey,
+} from '@responseEditor/Sidebar/sidebarLabelEditWidth';
 import { SIDEBAR_ROW_LABEL_INPUT_STYLE } from '@responseEditor/Sidebar/sidebarRowLabelInputStyle';
 import { SIDEBAR_CONTENT_MIN_WIDTH_PX } from '@responseEditor/Sidebar/sidebarLayoutConstants';
 
 function pathKey(path: number[]): string {
   return path.join(':');
+}
+
+/** Same roots as useTaskTreeDerived/mainList, read synchronously from the store (no prop lag). */
+function getMainListFromTaskTreeStore(): any[] {
+  const tree = useTaskTreeStore.getState().taskTree;
+  return getMainNodes(tree);
 }
 
 interface SidebarProps {
@@ -30,6 +43,8 @@ interface SidebarProps {
   onSelectSub?: (idx: number | undefined, mainIdx?: number) => void;
   aggregated?: boolean;
   rootLabel?: string;
+  /** Persisted as TaskTree.aggregateLabel — multiple roots only. */
+  onRenameAggregateLabel?: (label: string) => void;
   onSelectAggregator?: () => void;
   onChangeSubRequired?: (mainIdx: number, subIdx: number, required: boolean) => void;
   onReorderSub?: (mainIdx: number, fromIdx: number, toIdx: number) => void; // reorder only within same main
@@ -80,6 +95,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
   const onSelectSub = props.onSelectSub;
   const aggregated = props.aggregated;
   const rootLabel = props.rootLabel || 'Data';
+  const onRenameAggregateLabel = props.onRenameAggregateLabel;
   const onSelectAggregator = props.onSelectAggregator;
   const onChangeSubRequired = props.onChangeSubRequired;
   const onReorderSub = props.onReorderSub;
@@ -115,6 +131,11 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
 
   const { combinedClass } = useFontContext();
   const { translations } = useProjectTranslations(); // ✅ Get translations for node labels
+  // Keep a stable ref so useMemo/useLayoutEffect don't re-run when the context
+  // returns a new object reference with the same content.
+  const translationsRef = React.useRef(translations);
+  translationsRef.current = translations;
+  const taskTreeVersion = useTaskTreeVersion();
   const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch { } };
 
   // ✅ IMPORTANT: All hooks must be called before any early returns
@@ -235,25 +256,28 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
     }
   };
 
-  const itemStyle = (active: boolean, isSub: boolean, disabled?: boolean): React.CSSProperties => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    width: '100%',
-    whiteSpace: 'nowrap',
-    background: disabled ? 'rgba(75,85,99,0.25)' : (active ? bgActive : bgBase),
-    color: disabled ? '#9ca3af' : textBase,
-    border: `1px solid ${borderColor}`,
-    borderRadius: 10,
-    padding: '8px 10px',
-    cursor: 'pointer',
-    textAlign: 'left' as const,
-    outline: 'none',
-    outlineOffset: 0,
-    boxShadow: 'none',
-    fontWeight: active ? 700 : 400,
-    transition: 'border 0.15s',
-  });
+  const itemStyle = React.useCallback(
+    (active: boolean, _isSub: boolean, disabled?: boolean): React.CSSProperties => ({
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      width: '100%',
+      whiteSpace: 'nowrap',
+      background: disabled ? 'rgba(75,85,99,0.25)' : (active ? bgActive : bgBase),
+      color: disabled ? '#9ca3af' : textBase,
+      border: `1px solid ${borderColor}`,
+      borderRadius: 10,
+      padding: '8px 10px',
+      cursor: 'pointer',
+      textAlign: 'left' as const,
+      outline: 'none',
+      outlineOffset: 0,
+      boxShadow: 'none',
+      fontWeight: active ? 700 : 400,
+      transition: 'border 0.15s',
+    }),
+    [bgActive, bgBase, textBase, borderColor]
+  );
 
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const dragStateRef = React.useRef<{ mainIdx: number | null; fromIdx: number | null }>({ mainIdx: null, fromIdx: null });
@@ -300,11 +324,12 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
     const GUTTER = 10;
     const EXTRA_PADDING = 10;
 
+    const t = translationsRef.current;
     let maxWidth = 0;
 
     // ✅ Calcola per tutti i main items e sub-items (IDENTICO al ghost container)
     mainList.forEach((main) => {
-      const label = getNodeLabel(main, translations);
+      const label = getNodeLabel(main, t);
       // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
       const subs = getSubNodes(main);
       const hasSubs = subs.length > 0;
@@ -320,7 +345,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
 
       // ✅ Sub items (sempre considerati, anche se collassati - IDENTICO al ghost)
       subs.forEach((sub: any) => {
-        const subLabel = getNodeLabel(sub, translations);
+        const subLabel = getNodeLabel(sub, t);
         const subLabelWidth = measureTextWidth(subLabel, 400);
         let subWidth = SUB_INDENT + ICON_WIDTH + GAP + subLabelWidth;
         subWidth += CHECKBOX_WIDTH;
@@ -345,16 +370,22 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
     );
 
     return clamped;
-  }, [mainList, translations, aggregated, rootLabel]);
+  }, [mainList, aggregated, rootLabel]);
 
   const [measuredW, setMeasuredW] = React.useState<number | null>(calculateInitialWidth);
   const [hoverRoot, setHoverRoot] = React.useState<boolean>(false);
   const [hoverMainIdx, setHoverMainIdx] = React.useState<number | null>(null);
   const [hoverSub, setHoverSub] = React.useState<{ mainIdx: number; subIdx: number } | null>(null);
   const [pendingEditNewMain, setPendingEditNewMain] = React.useState(false);
+  /** After toolbar "+" under a main row: open inline edit on the new sub row (flat list). */
+  const [pendingEditNewSub, setPendingEditNewSub] = React.useState<{ mainIdx: number; subIdx: number } | null>(null);
+  /** After toolbar "+" under a nested row: open inline edit on the new node (path-based tree). */
+  const [pendingEditNewPath, setPendingEditNewPath] = React.useState<number[] | null>(null);
   const [editingMainIdx, setEditingMainIdx] = React.useState<number | null>(null);
   const [editingSub, setEditingSub] = React.useState<{ mainIdx: number; subIdx: number } | null>(null);
   const [editDraft, setEditDraft] = React.useState<string>('');
+  /** Set when inline edit opens from "+" pending flow; used with empty draft for full-width label. */
+  const [inlineLabelFillRowKey, setInlineLabelFillRowKey] = React.useState<string | null>(null);
   const [overlay, setOverlay] = React.useState<
     | null
     | { type: 'root' | 'main' | 'sub'; mainIdx?: number; subIdx?: number; top: number; left: number }
@@ -367,23 +398,71 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
   const hoverSubRef = React.useRef<{ mainIdx: number; subIdx: number } | null>(null);
   /** After Enter/Escape commits, blur still fires — skip duplicate rename/delete. */
   const skipLabelBlurCommitRef = React.useRef(false);
+  /** Aggregate group title inline edit (separate from main/sub editDraft). */
+  const [editingAggregateRow, setEditingAggregateRow] = React.useState(false);
+  const [aggregateEditDraft, setAggregateEditDraft] = React.useState('');
+  const skipAggregateBlurRef = React.useRef(false);
+  const aggregateEditRowKey = 'agg';
   React.useEffect(() => { hoverRootRef.current = hoverRoot; }, [hoverRoot]);
   React.useEffect(() => { hoverMainIdxRef.current = hoverMainIdx; }, [hoverMainIdx]);
   React.useEffect(() => { hoverSubRef.current = hoverSub; }, [hoverSub]);
 
+  React.useEffect(() => {
+    if (editingMainIdx === null && editingSub === null && editingPath === null) {
+      setInlineLabelFillRowKey(null);
+    }
+  }, [editingMainIdx, editingSub, editingPath]);
+
+  React.useEffect(() => {
+    if (!aggregated) {
+      setEditingAggregateRow(false);
+    }
+  }, [aggregated]);
+
   /**
-   * After adding a root with an empty label, open inline rename on the new row.
-   * useLayoutEffect + focusSidebar: false keeps focus on the input (handleSelectByPath
-   * otherwise focuses the sidebar container and kills autoFocus).
+   * After toolbar "+" adds a node: set editing state when the store already contains
+   * the new node. We depend on taskTreeVersion (mutation signal) and read roots via
+   * getMainListFromTaskTreeStore() so we do not wait for mainList props to catch up.
+   * Focus stays in SidebarInlineEditInput on the row (useLayoutEffect).
    */
   useLayoutEffect(() => {
-    if (!pendingEditNewMain || mainList.length === 0) return;
-    const idx = mainList.length - 1;
+    if (!pendingEditNewMain) return;
+    const roots = getMainListFromTaskTreeStore();
+    if (roots.length === 0) return;
+    const idx = roots.length - 1;
     setEditingMainIdx(idx);
-    setEditDraft(getNodeLabel(mainList[idx], translations) ?? '');
-    onSelectPath?.([idx], { focusSidebar: false });
+    setEditDraft(getNodeLabel(roots[idx], translationsRef.current) ?? '');
+    setInlineLabelFillRowKey(sidebarMainEditKey(idx));
     setPendingEditNewMain(false);
-  }, [pendingEditNewMain, mainList, onSelectPath, translations]);
+  }, [pendingEditNewMain, taskTreeVersion]);
+
+  useLayoutEffect(() => {
+    if (!pendingEditNewSub) return;
+    const { mainIdx, subIdx } = pendingEditNewSub;
+    const roots = getMainListFromTaskTreeStore();
+    const main = roots[mainIdx];
+    if (!main) {
+      setPendingEditNewSub(null);
+      return;
+    }
+    const subs = getSubNodes(main);
+    if (subs.length <= subIdx) return;
+    setEditingSub({ mainIdx, subIdx });
+    setEditDraft(getNodeLabel(subs[subIdx], translationsRef.current) ?? '');
+    setInlineLabelFillRowKey(sidebarSubEditKey(mainIdx, subIdx));
+    setPendingEditNewSub(null);
+  }, [pendingEditNewSub, taskTreeVersion]);
+
+  useLayoutEffect(() => {
+    if (!pendingEditNewPath || pendingEditNewPath.length === 0) return;
+    const roots = getMainListFromTaskTreeStore();
+    const node = getNodeByPath(roots, pendingEditNewPath);
+    if (!node) return;
+    setEditingPath(pendingEditNewPath);
+    setEditDraft(getNodeLabel(node, translationsRef.current) ?? '');
+    setInlineLabelFillRowKey(sidebarPathEditKey(pendingEditNewPath));
+    setPendingEditNewPath(null);
+  }, [pendingEditNewPath, taskTreeVersion]);
 
   const maybeHideOverlay = (delay: number = 320) => {
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
@@ -409,293 +488,14 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
     return Number.isFinite(w) && w > 0 ? w : null;
   }, [style?.width]);
 
-  // ✅ GHOST METHOD: Ref per il container ghost
-  const ghostContainerRef = React.useRef<HTMLDivElement | null>(null);
-  const ghostRootRef = React.useRef<ReturnType<typeof ReactDOM.createRoot> | null>(null);
-
-  // ✅ GHOST METHOD: useLayoutEffect per calcolare larghezza usando ghost container
-  React.useLayoutEffect(() => {
-    // Se c'è una larghezza manuale, NON calcolare autosize
-    if (manualWidth !== null && manualWidth > 0) {
-      return;
-    }
-
-    const el = containerRef.current;
-    if (!el) return;
-    if (!Array.isArray(mainList) || mainList.length === 0) {
-      setMeasuredW(SIDEBAR_CONTENT_MIN_WIDTH_PX); // Match default grid column (toolbar-only)
-      return;
-    }
-
-    // ✅ IMPORTANTE: Mantieni la larghezza iniziale approssimativa già calcolata
-    // Il ghost container la raffinera' dopo, ma almeno partiamo con una larghezza ragionevole
-    // Questo evita il flash iniziale
-
-    // ✅ Crea ghost container se non esiste
-    if (!ghostContainerRef.current) {
-      const ghostContainer = document.createElement('div');
-      ghostContainer.style.cssText = `
-        position: absolute;
-        visibility: hidden;
-        top: -9999px;
-        left: -9999px;
-        width: auto;
-        height: auto;
-        padding: 16px 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        font-family: ${window.getComputedStyle(el).fontFamily};
-        font-size: ${window.getComputedStyle(el).fontSize};
-        white-space: nowrap;
-        background: #121621;
-      `;
-      document.body.appendChild(ghostContainer);
-      ghostContainerRef.current = ghostContainer;
-
-      // ✅ Crea React root per il ghost container
-      if (typeof ReactDOM !== 'undefined' && ReactDOM.createRoot) {
-        ghostRootRef.current = ReactDOM.createRoot(ghostContainer);
-      }
-    }
-
-    const ghostContainer = ghostContainerRef.current;
-    if (!ghostContainer) return;
-
-    // ✅ Renderizza ghost content con React (tutti i nodi espansi)
-    const renderGhostContent = () => {
-      if (!ghostRootRef.current) {
-        // Se React root non disponibile, crealo
-        ghostRootRef.current = ReactDOM.createRoot(ghostContainer);
-      }
-
-      // ✅ Usa React per renderizzare (più preciso, mantiene stili esatti)
-      const GhostContent = () => (
-        <div className={combinedClass} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {aggregated && rootLabel && (
-            <button style={itemStyle(false, false)}>
-              <span style={{ marginRight: 6 }}>{getIconComponent('Folder')}</span>
-              <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{rootLabel || 'Data'}</span>
-            </button>
-          )}
-          {mainList.map((main, idx) => {
-            // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
-            const subs = getSubNodes(main);
-            const hasSubs = subs.length > 0;
-            const MainIcon = getIconComponent(main?.icon || 'FileText');
-            return (
-              <React.Fragment key={idx}>
-                <button style={{ ...itemStyle(false, false), ...(aggregated ? { marginLeft: 18 } : {}) }}>
-                  {aggregated && (
-                    <span style={{ width: 14, height: 14, marginRight: 6, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />
-                  )}
-                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>{MainIcon}</span>
-                  <span style={{ whiteSpace: 'nowrap' }}>{getNodeLabel(main, translations)}</span>
-                  {hasSubs && (
-                    <span style={{ marginLeft: 6, width: 10, height: 10, display: 'inline-block' }}>▼</span>
-                  )}
-                </button>
-                {/* Sub items sempre renderizzati (anche se collassati nella UI reale) */}
-                {subs.map((sub: any, sidx: number) => {
-                  const SubIcon = getIconComponent(sub?.icon || 'FileText');
-                  return (
-                    <button key={sidx} style={{ ...itemStyle(false, true), marginLeft: 36 }}>
-                      <span style={{ width: 14, height: 14, marginRight: 6, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />
-                      <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
-                      <span style={{ whiteSpace: 'nowrap' }}>{getNodeLabel(sub, translations)}</span>
-                    </button>
-                  );
-                })}
-              </React.Fragment>
-            );
-          })}
-        </div>
-      );
-
-      ghostRootRef.current.render(<GhostContent />);
-    };
-
-    // ✅ Renderizza ghost content
-    renderGhostContent();
-
-    // ✅ Funzione di misurazione
-    const measure = () => {
-      if (!ghostContainerRef.current) {
-        return;
-      }
-
-      // ✅ Trova l'elemento più largo (cerca ricorsivamente tutti i button)
-      const findAllButtons = (element: HTMLElement): HTMLElement[] => {
-        const buttons: HTMLElement[] = [];
-        if (element.tagName === 'BUTTON') {
-          buttons.push(element);
-        }
-        for (let i = 0; i < element.children.length; i++) {
-          buttons.push(...findAllButtons(element.children[i] as HTMLElement));
-        }
-        return buttons;
-      };
-
-      const allButtons = findAllButtons(ghostContainerRef.current);
-
-      if (allButtons.length === 0) {
-        // Riprova dopo un breve delay
-        setTimeout(() => {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(measure);
-          });
-        }, 50);
-        return;
-      }
-
-      let maxWidth = 0;
-
-      for (const button of allButtons) {
-        const rect = button.getBoundingClientRect();
-        if (rect.width > 0 && rect.width > maxWidth) {
-          maxWidth = rect.width;
-        }
-      }
-
-      // ✅ Se non trovato, prova a misurare il container stesso
-      if (maxWidth === 0) {
-        const containerRect = ghostContainerRef.current.getBoundingClientRect();
-        if (containerRect.width > 0) {
-          maxWidth = containerRect.width;
-        } else {
-          setMeasuredW(SIDEBAR_CONTENT_MIN_WIDTH_PX); // Fallback
-          return;
-        }
-      }
-
-      // ✅ IMPORTANTE: maxWidth è la larghezza del button (che include il suo padding interno)
-      // Dobbiamo aggiungere solo:
-      // - padding del container (14px left + 14px right)
-      // - gutter per sicurezza
-      // - padding extra configurabile
-      const containerPadding = 14 + 14; // paddingLeft + paddingRight del container
-      const GUTTER = 10; // Spazio extra per sicurezza
-      const EXTRA_PADDING = 10; // ✅ PADDING EXTRA CONFIGURABILE (ridotto per precisione)
-
-      const totalWidth = maxWidth + containerPadding + GUTTER + EXTRA_PADDING;
-      const clamped = Math.min(
-        Math.max(Math.ceil(totalWidth), SIDEBAR_CONTENT_MIN_WIDTH_PX),
-        640
-      );
-
-      // ✅ LOGICA: Il calcolo iniziale è già preciso, quindi NON aggiornare se la differenza è minima
-      // Questo elimina completamente il flash perché la larghezza è già corretta
-      const currentWidth = measuredW || calculateInitialWidth;
-      const difference = Math.abs(clamped - currentWidth);
-
-      // ✅ Aggiorna SOLO se la differenza è significativa (> 3px)
-      // Se il calcolo iniziale è corretto (differenza < 3px), NON aggiornare = ZERO flash
-      if (difference > 3) {
-        setMeasuredW(clamped);
-      } else {
-        // ✅ Calcolo iniziale era già corretto, nessun aggiornamento necessario
-        // Questo elimina il flash perché non c'è cambio di stato
-      }
-
-      // ✅ Calcolo completato (log rimosso per pulizia console)
-    };
-
-    // ✅ Usa MutationObserver per aspettare che React abbia renderizzato
-    let observer: MutationObserver | null = null;
-    let measureTimeout: number | null = null;
-
-    const startMeasurement = () => {
-      // ✅ Pulisci timeout precedente
-      if (measureTimeout) {
-        clearTimeout(measureTimeout);
-      }
-
-      // ✅ Verifica se ci sono elementi
-      if (ghostContainerRef.current && ghostContainerRef.current.children.length > 0) {
-        // ✅ Disconnetti observer se presente
-        if (observer) {
-          observer.disconnect();
-          observer = null;
-        }
-        // ✅ Misura dopo che il layout è completo
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setTimeout(measure, 10);
-          });
-        });
-      } else {
-        // ✅ Aspetta che gli elementi vengano aggiunti
-        if (!observer && ghostContainerRef.current) {
-          observer = new MutationObserver(() => {
-            if (ghostContainerRef.current && ghostContainerRef.current.children.length > 0) {
-              observer?.disconnect();
-              observer = null;
-              requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  setTimeout(measure, 10);
-                });
-              });
-            }
-          });
-          observer.observe(ghostContainerRef.current, {
-            childList: true,
-            subtree: true
-          });
-        }
-      }
-    };
-
-    // ✅ Avvia la misurazione
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        startMeasurement();
-        // ✅ Fallback: misura dopo 100ms anche se MutationObserver non ha funzionato
-        measureTimeout = window.setTimeout(() => {
-          if (ghostContainerRef.current && ghostContainerRef.current.children.length > 0) {
-            measure();
-          }
-        }, 100);
-      });
-    });
-
-    // ✅ Cleanup
-    return () => {
-      if (observer) {
-        observer.disconnect();
-      }
-      if (measureTimeout) {
-        clearTimeout(measureTimeout);
-      }
-    };
-  }, [mainList, aggregated, rootLabel, translations, manualWidth, combinedClass, bgBase, textBase, borderColor, itemStyle]);
-
-  // ✅ Cleanup: rimuovi ghost container quando il componente si smonta
+  // Updates measuredW when mainList content or labels change.
+  // Uses the same canvas measurement as calculateInitialWidth — no ghost React root needed.
+  // Regular useEffect (passive, after paint) avoids the nested-commit loop that
+  // useLayoutEffect + ReactDOM.createRoot caused.
   React.useEffect(() => {
-    return () => {
-      if (ghostRootRef.current) {
-        try {
-          // ✅ Use setTimeout to avoid unmounting during render
-          setTimeout(() => {
-            if (ghostRootRef.current) {
-              ghostRootRef.current.unmount();
-              ghostRootRef.current = null;
-            }
-          }, 0);
-        } catch { }
-      }
-      if (ghostContainerRef.current) {
-        try {
-          // ✅ Use setTimeout to avoid removing DOM during render
-          setTimeout(() => {
-            if (ghostContainerRef.current && document.body.contains(ghostContainerRef.current)) {
-              document.body.removeChild(ghostContainerRef.current);
-              ghostContainerRef.current = null;
-            }
-          }, 0);
-        } catch { }
-      }
-    };
-  }, []);
+    if (manualWidth !== null && manualWidth > 0) return;
+    setMeasuredW((prev) => (prev === calculateInitialWidth ? prev : calculateInitialWidth));
+  }, [calculateInitialWidth, manualWidth]);
 
   // ✅ DEBUG: Log quando finalWidth cambia
   // ✅ IMPORTANTE: Se measuredW è null, usa un fallback invece di 'auto' per evitare sidebar troppo larga
@@ -843,23 +643,124 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
       )}
 
       {aggregated && (
-        <button
-          onClick={(e) => { (onSelectAggregator ? onSelectAggregator() : undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
-          style={itemStyle(safeSelectedSubIndex === undefined, false)}
-          className={`sb-item ${safeSelectedSubIndex === undefined ? styles.sidebarSelected : ''}`}
-          onMouseEnter={(ev) => {
-            setHoverRoot(true);
-            const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-            setOverlay({ type: 'root', left: rect.right + 6, top: rect.top + rect.height / 2 });
-          }}
-          onMouseLeave={() => {
-            setHoverRoot(false);
-            maybeHideOverlay(320);
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'stretch',
+            gap: 6,
+            width: '100%',
+            marginBottom: 6,
+            boxSizing: 'border-box',
           }}
         >
-          <span style={{ marginRight: 6 }}>{getIconComponent('Folder')}</span>
-          <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{rootLabel || 'Data'}</span>
-        </button>
+          {editingAggregateRow ? (
+            <div
+              style={{ ...itemStyle(safeSelectedSubIndex === undefined, false), flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+              className={`sb-item ${safeSelectedSubIndex === undefined ? styles.sidebarSelected : ''}`}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center' }}>{getIconComponent('Folder')}</span>
+              <SidebarInlineEditInput
+                active={editingAggregateRow}
+                widthMode={sidebarLabelWidthMode(aggregateEditRowKey, aggregateEditRowKey, aggregateEditDraft)}
+                value={aggregateEditDraft}
+                onChange={(e) => setAggregateEditDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    skipAggregateBlurRef.current = true;
+                    onRenameAggregateLabel?.(aggregateEditDraft.trim());
+                    setEditingAggregateRow(false);
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    skipAggregateBlurRef.current = true;
+                    setAggregateEditDraft(rootLabel || 'Data');
+                    setEditingAggregateRow(false);
+                  }
+                }}
+                onBlur={() => {
+                  if (skipAggregateBlurRef.current) {
+                    skipAggregateBlurRef.current = false;
+                    return;
+                  }
+                  onRenameAggregateLabel?.(aggregateEditDraft.trim());
+                  setEditingAggregateRow(false);
+                }}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => { (onSelectAggregator ? onSelectAggregator() : undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
+              style={{ ...itemStyle(safeSelectedSubIndex === undefined, false), flex: 1, minWidth: 0 }}
+              className={`sb-item ${safeSelectedSubIndex === undefined ? styles.sidebarSelected : ''}`}
+              onMouseEnter={(ev) => {
+                setHoverRoot(true);
+                const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                setOverlay({ type: 'root', left: rect.right + 6, top: rect.top + rect.height / 2 });
+              }}
+              onMouseLeave={() => {
+                setHoverRoot(false);
+                maybeHideOverlay(320);
+              }}
+            >
+              <span style={{ marginRight: 6 }}>{getIconComponent('Folder')}</span>
+              <span style={{ fontWeight: 700, whiteSpace: 'nowrap', flex: 1, minWidth: 0, textAlign: 'left' }}>{rootLabel || 'Data'}</span>
+            </button>
+          )}
+          {onRenameAggregateLabel && !editingAggregateRow && (
+            <button
+              type="button"
+              title="Rename group"
+              onClick={(e) => {
+                e.stopPropagation();
+                setAggregateEditDraft(rootLabel || 'Data');
+                setEditingAggregateRow(true);
+              }}
+              style={{
+                flex: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '8px 10px',
+                borderRadius: 10,
+                border: `1px solid ${borderColor}`,
+                background: bgBase,
+                color: textBase,
+                cursor: 'pointer',
+                alignSelf: 'stretch',
+              }}
+            >
+              <Pencil size={14} color="#e5e7eb" />
+            </button>
+          )}
+          {onAddMain && (
+            <button
+              type="button"
+              title="Add top-level data field"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddMain('');
+                setPendingEditNewMain(true);
+              }}
+              style={{
+                flex: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '8px 10px',
+                borderRadius: 10,
+                border: `1px solid ${borderColor}`,
+                background: bgBase,
+                color: textBase,
+                cursor: 'pointer',
+                alignSelf: 'stretch',
+              }}
+            >
+              <Plus size={14} color="#e5e7eb" />
+            </button>
+          )}
+        </div>
       )}
       {mainList.map((main, idx) => {
         const activeMain = isMainRowActive(idx);
@@ -957,8 +858,9 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
               )}
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
               {editingMainIdx === idx ? (
-                <input
-                  autoFocus
+                <SidebarInlineEditInput
+                  active={editingMainIdx === idx}
+                  widthMode={sidebarLabelWidthMode(inlineLabelFillRowKey, sidebarMainEditKey(idx), editDraft)}
                   value={editDraft}
                   onChange={(e) => setEditDraft(e.target.value)}
                   onKeyDown={(e) => {
@@ -1127,6 +1029,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 baseMarginLeft={36}
                 editingPath={editingPath}
                 editDraft={editDraft}
+                fillLabelPathKey={inlineLabelFillRowKey}
                 setEditingPath={setEditingPath}
                 setEditDraft={setEditDraft}
                 setOverlay={(o) => setOverlay(o)}
@@ -1217,8 +1120,13 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                         </span>
                         <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
                         {editingSub && editingSub.mainIdx === idx && editingSub.subIdx === sidx ? (
-                          <input
-                            autoFocus
+                          <SidebarInlineEditInput
+                            active
+                            widthMode={sidebarLabelWidthMode(
+                              inlineLabelFillRowKey,
+                              sidebarSubEditKey(idx, sidx),
+                              editDraft
+                            )}
                             value={editDraft}
                             onChange={(e) => setEditDraft(e.target.value)}
                             onKeyDown={(e) => {
@@ -1320,15 +1228,29 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 title="Add nested field under this row"
                 style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
                 onClick={() => {
-                  if (typeof overlay.mainIdx === 'number' && onAddChildAtPath) {
-                    onAddChildAtPath([overlay.mainIdx], '');
-                    setOverlay(null);
+                  if (typeof overlay.mainIdx !== 'number' || !onAddChildAtPath) return;
+                  const mainIdx = overlay.mainIdx;
+                  const newSubIdx = getSubNodes(mainList[mainIdx]).length;
+                  if (useNestedTree) {
+                    setExpandedPathKeys((prev) => {
+                      const next = new Set(prev);
+                      next.add(pathKey([mainIdx]));
+                      return next;
+                    });
+                    onAddChildAtPath([mainIdx], '');
+                    /** Nested rows use editingPath, not editingSub (flat list only). */
+                    setPendingEditNewPath([mainIdx, newSubIdx]);
+                  } else {
+                    setExpandedMainIndex(mainIdx);
+                    onAddChildAtPath([mainIdx], '');
+                    setPendingEditNewSub({ mainIdx, subIdx: newSubIdx });
                   }
+                  setOverlay(null);
                 }}
               >
                 <Plus size={14} color="#e5e7eb" />
               </button>
-              <button title="Rename" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setEditingMainIdx(overlay.mainIdx); setEditDraft(getNodeLabel(mainList[overlay.mainIdx], translations)); setOverlay(null); } }}>
+              <button title="Rename" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setInlineLabelFillRowKey(null); setEditingMainIdx(overlay.mainIdx); setEditDraft(getNodeLabel(mainList[overlay.mainIdx], translations)); setOverlay(null); } }}>
                 <Pencil size={14} color="#e5e7eb" />
               </button>
               <button title="Delete" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && onDeleteMain) { onDeleteMain(overlay.mainIdx); setOverlay(null); } }}>
@@ -1344,18 +1266,34 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
                 onClick={() => {
                   if (
-                    typeof overlay.mainIdx === 'number' &&
-                    typeof overlay.subIdx === 'number' &&
-                    onAddChildAtPath
+                    typeof overlay.mainIdx !== 'number' ||
+                    typeof overlay.subIdx !== 'number' ||
+                    !onAddChildAtPath
                   ) {
-                    onAddChildAtPath([overlay.mainIdx, overlay.subIdx], '');
-                    setOverlay(null);
+                    return;
                   }
+                  const m = overlay.mainIdx;
+                  const s = overlay.subIdx;
+                  const parentRow = getSubNodes(mainList[m])[s];
+                  const newIdx = getSubNodes(parentRow).length;
+                  if (useNestedTree) {
+                    setExpandedPathKeys((prev) => {
+                      const next = new Set(prev);
+                      next.add(pathKey([m]));
+                      next.add(pathKey([m, s]));
+                      return next;
+                    });
+                    onAddChildAtPath([m, s], '');
+                    setPendingEditNewPath([m, s, newIdx]);
+                  } else {
+                    onAddChildAtPath([m, s], '');
+                  }
+                  setOverlay(null);
                 }}
               >
                 <Plus size={12} color="#e5e7eb" />
               </button>
-              <button title="Rename sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number') { setEditingSub({ mainIdx: overlay.mainIdx, subIdx: overlay.subIdx }); const sub = getSubNodes(mainList[overlay.mainIdx])[overlay.subIdx]; setEditDraft(getNodeLabel(sub, translations)); setOverlay(null); } }}>
+              <button title="Rename sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number') { setInlineLabelFillRowKey(null); setEditingSub({ mainIdx: overlay.mainIdx, subIdx: overlay.subIdx }); const sub = getSubNodes(mainList[overlay.mainIdx])[overlay.subIdx]; setEditDraft(getNodeLabel(sub, translations)); setOverlay(null); } }}>
                 <Pencil size={12} color="#e5e7eb" />
               </button>
               <button title="Delete sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number' && onDeleteSub) { onDeleteSub(overlay.mainIdx, overlay.subIdx); setOverlay(null); } }}>
@@ -1371,7 +1309,18 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                   title="Add nested field under this row"
                   style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
                   onClick={() => {
-                    onAddChildAtPath(overlay.path, '');
+                    const parentPath = overlay.path;
+                    const parent = getNodeByPath(mainList, parentPath);
+                    const newIdx = parent ? getSubNodes(parent).length : 0;
+                    setExpandedPathKeys((prev) => {
+                      const next = new Set(prev);
+                      for (let len = 1; len <= parentPath.length; len++) {
+                        next.add(pathKey(parentPath.slice(0, len)));
+                      }
+                      return next;
+                    });
+                    onAddChildAtPath(parentPath, '');
+                    setPendingEditNewPath([...parentPath, newIdx]);
                     setOverlay(null);
                   }}
                 >
@@ -1384,6 +1333,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 onClick={() => {
                   const node = getNodeByPath(mainList, overlay.path);
                   if (node) {
+                    setInlineLabelFillRowKey(null);
                     setEditingPath(overlay.path);
                     setEditDraft(getNodeLabel(node, translations));
                   }

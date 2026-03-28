@@ -8,7 +8,7 @@
  * Persists to Zustand store and replaceSelectedTaskTree for dock / manager sync.
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useTaskTreeStore } from '@responseEditor/core/state';
 import {
   createManualTaskTreeNode,
@@ -21,6 +21,7 @@ import {
 } from '@responseEditor/core/taskTree';
 import type { NodePath } from '@responseEditor/core/taskTree';
 import type { TaskTree } from '@types/taskTypes';
+import { getSidebarResizeStartWidthPx } from '@responseEditor/hooks/sidebarResizeStartWidth';
 
 export interface UseSidebarParams {
   isDraggingSidebar: boolean;
@@ -28,6 +29,8 @@ export interface UseSidebarParams {
   sidebarStartWidthRef: React.MutableRefObject<number>;
   sidebarStartXRef: React.MutableRefObject<number>;
   setSidebarManualWidth: React.Dispatch<React.SetStateAction<number | null>>;
+  /** User-resized width; used when ref is missing so drag still starts (aligned with grid column). */
+  sidebarManualWidth: number | null;
   sidebarRef: React.RefObject<HTMLDivElement>;
   taskTree: TaskTree | null | undefined;
   replaceSelectedTaskTree: (taskTree: TaskTree) => void;
@@ -53,11 +56,11 @@ export interface UseSidebarResult {
 
 export function useSidebar(params: UseSidebarParams): UseSidebarResult {
   const {
-    isDraggingSidebar,
     setIsDraggingSidebar,
     sidebarStartWidthRef,
     sidebarStartXRef,
     setSidebarManualWidth,
+    sidebarManualWidth,
     sidebarRef,
     taskTree,
     replaceSelectedTaskTree,
@@ -95,52 +98,58 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
     } catch { }
   }, []);
 
+  /** Removes window listeners if drag ends or component unmounts during drag. */
+  const sidebarDragCleanupRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
-    if (!isDraggingSidebar) {
-      return;
-    }
-
-    const handleMove = (e: MouseEvent) => {
-      const deltaX = e.clientX - sidebarStartXRef.current;
-      /** Keep room for the manual "Add root data" toolbar (narrower columns break layout). */
-      const MIN_WIDTH = 220;
-      const MAX_WIDTH = 1000;
-      const calculatedWidth = sidebarStartWidthRef.current + deltaX;
-      const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, calculatedWidth));
-
-      setSidebarManualWidth(newWidth);
-    };
-
-    const handleUp = () => {
-      setIsDraggingSidebar(false);
-    };
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-
     return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
+      sidebarDragCleanupRef.current?.();
+      sidebarDragCleanupRef.current = null;
     };
-  }, [isDraggingSidebar, sidebarStartWidthRef, sidebarStartXRef, setSidebarManualWidth, setIsDraggingSidebar]);
+  }, []);
 
   const handleSidebarResizeStart = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
 
-      const sidebarEl = sidebarRef?.current;
-      if (!sidebarEl) {
-        return;
-      }
+      sidebarDragCleanupRef.current?.();
+      sidebarDragCleanupRef.current = null;
 
-      const rect = sidebarEl.getBoundingClientRect();
-      sidebarStartWidthRef.current = rect.width;
+      sidebarStartWidthRef.current = getSidebarResizeStartWidthPx({
+        sidebarManualWidth,
+        sidebarElement: sidebarRef?.current ?? undefined,
+      });
       sidebarStartXRef.current = e.clientX;
 
+      const onMove = (ev: MouseEvent) => {
+        const deltaX = ev.clientX - sidebarStartXRef.current;
+        /** Keep room for the manual "Add root data" toolbar (narrower columns break layout). */
+        const MIN_WIDTH = 220;
+        const MAX_WIDTH = 1000;
+        const calculatedWidth = sidebarStartWidthRef.current + deltaX;
+        const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, calculatedWidth));
+        setSidebarManualWidth(newWidth);
+      };
+
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        sidebarDragCleanupRef.current = null;
+        setIsDraggingSidebar(false);
+      };
+
+      sidebarDragCleanupRef.current = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        setIsDraggingSidebar(false);
+      };
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
       setIsDraggingSidebar(true);
     },
-    [sidebarRef, sidebarStartWidthRef, sidebarStartXRef, setIsDraggingSidebar]
+    [sidebarManualWidth, sidebarRef, sidebarStartWidthRef, sidebarStartXRef, setIsDraggingSidebar, setSidebarManualWidth]
   );
 
   const onRenameAtPath = useCallback(

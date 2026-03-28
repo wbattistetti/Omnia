@@ -135,48 +135,82 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     loading: boolean;
   }>({ hasOutputs: false, loading: false });
 
-  useEffect(() => {
-    if (!subflowMeta) {
-      setSubflowIfaceToolbarState({ hasOutputs: false, loading: false });
-      return;
-    }
+  /** Stable snapshot for this row's child flow interface (effect must not depend on whole `flows` object). */
+  const subflowInterfaceSyncKey = useMemo(() => {
+    if (!subflowMeta?.childFlowId) return '';
     const cf = subflowMeta.childFlowId;
-    if (!cf) {
-      setSubflowIfaceToolbarState({ hasOutputs: false, loading: false });
-      return;
-    }
     const slice = flows[cf] as { meta?: { flowInterface?: { output?: unknown[] } } } | undefined;
     const syncOut = slice?.meta?.flowInterface?.output;
+    const n = Array.isArray(syncOut) ? syncOut.length : 0;
+    return `${cf}:${n}`;
+  }, [subflowMeta, flows]);
+
+  const flowsRef = useRef(flows);
+  flowsRef.current = flows;
+  const getProjectIdRef = useRef(getProjectId);
+  getProjectIdRef.current = getProjectId;
+
+  /** Reset toolbar when this row stops being a Subflow row (avoid setState on every render for normal rows). */
+  const hadSubflowMetaRef = useRef(false);
+
+  useEffect(() => {
+    const flowsNow = flowsRef.current;
+    const pid = String(getProjectIdRef.current?.() ?? '').trim();
+
+    const setToolbar = (next: { hasOutputs: boolean; loading: boolean }) => {
+      setSubflowIfaceToolbarState((prev) =>
+        prev.hasOutputs === next.hasOutputs && prev.loading === next.loading ? prev : next
+      );
+    };
+
+    if (!subflowMeta) {
+      if (hadSubflowMetaRef.current) {
+        setToolbar({ hasOutputs: false, loading: false });
+      }
+      hadSubflowMetaRef.current = false;
+      return;
+    }
+    hadSubflowMetaRef.current = true;
+
+    const cf = subflowMeta.childFlowId;
+    if (!cf) {
+      setToolbar({ hasOutputs: false, loading: false });
+      return;
+    }
+    const slice = flowsNow[cf] as { meta?: { flowInterface?: { output?: unknown[] } } } | undefined;
+    const syncOut = slice?.meta?.flowInterface?.output;
     const syncHas = Array.isArray(syncOut) && syncOut.length > 0;
-    const pid = String(getProjectId?.() ?? '').trim();
 
     if (syncHas) {
-      setSubflowIfaceToolbarState({ hasOutputs: true, loading: false });
+      setToolbar({ hasOutputs: true, loading: false });
       return;
     }
     if (!pid) {
-      setSubflowIfaceToolbarState({ hasOutputs: false, loading: false });
+      setToolbar({ hasOutputs: false, loading: false });
       return;
     }
 
-    setSubflowIfaceToolbarState({ hasOutputs: false, loading: true });
+    setToolbar({ hasOutputs: false, loading: true });
     let cancelled = false;
-    fetchChildFlowInterfaceOutputs(pid, cf, flows)
+    fetchChildFlowInterfaceOutputs(pid, cf, flowsNow)
       .then((res) => {
         if (cancelled) return;
-        setSubflowIfaceToolbarState({
-          hasOutputs: res.outputs.length > 0,
-          loading: false,
+        setSubflowIfaceToolbarState((prev) => {
+          const next = {
+            hasOutputs: res.outputs.length > 0,
+            loading: false,
+          };
+          return prev.hasOutputs === next.hasOutputs && prev.loading === next.loading ? prev : next;
         });
       })
       .catch(() => {
         if (cancelled) return;
-        setSubflowIfaceToolbarState({ hasOutputs: false, loading: false });
+        setToolbar({ hasOutputs: false, loading: false });
       });
     return () => {
       cancelled = true;
     };
-  }, [subflowMeta, flows, getProjectId]);
+  }, [subflowMeta, subflowInterfaceSyncKey]);
 
   const subflowInterfaceToolbar = useMemo(() => {
     if (!subflowMeta) return null;
@@ -212,12 +246,20 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         const nodeContainer = labelRef.current.closest('.react-flow__node') as HTMLElement;
         const nodeWidth = nodeContainer?.getBoundingClientRect().width;
 
-        setLabelWidth(width);
-        setLabelFontStyles({
-          fontSize: computedStyle.fontSize,
-          fontFamily: computedStyle.fontFamily,
-          fontWeight: computedStyle.fontWeight,
-          lineHeight: computedStyle.lineHeight
+        setLabelWidth((prev) => (prev === width ? prev : width));
+        setLabelFontStyles((prev) => {
+          if (
+            prev?.fontSize === computedStyle.fontSize &&
+            prev?.fontFamily === computedStyle.fontFamily &&
+            prev?.fontWeight === computedStyle.fontWeight &&
+            prev?.lineHeight === computedStyle.lineHeight
+          ) return prev;
+          return {
+            fontSize: computedStyle.fontSize,
+            fontFamily: computedStyle.fontFamily,
+            fontWeight: computedStyle.fontWeight,
+            lineHeight: computedStyle.lineHeight,
+          };
         });
 
         // Width and font styles measured (debug disabled)
@@ -660,7 +702,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     if (next) {
       updateNodeRows((rows) => rows.map((r) => (r.id === row.id ? next : r)));
     }
-  }, [row, updateNodeRows]);
+  }, [row.id, updateNodeRows]);
 
   React.useEffect(() => {
     if (!isDataRequestRow) {

@@ -1350,8 +1350,11 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         pointerEvents: 'auto', // ✅ Assicura che blocchi gli eventi mouse
       }}
       onMouseMove={(e) => {
-        // ✅ Blocca la propagazione degli eventi mouse al flowchart sottostante
-        e.stopPropagation();
+        // Let mousemove reach `window` while dragging sidebar or right-panel splitters
+        // (those hooks use window listeners; stopPropagation here blocks bubbling to window).
+        if (!isDraggingSidebar && draggingPanel == null) {
+          e.stopPropagation();
+        }
       }}
       onMouseEnter={(e) => {
         // ✅ Blocca la propagazione quando il mouse entra nel ResponseEditor

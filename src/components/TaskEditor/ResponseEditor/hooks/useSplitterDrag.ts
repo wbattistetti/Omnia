@@ -1,7 +1,8 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { useEffect } from 'react';
+import { useCallback } from 'react';
+import { useWindowMouseDrag } from '@responseEditor/hooks/useWindowMouseDrag';
 
 export interface UseSplitterDragParams {
   draggingPanel: 'left' | 'test' | 'tasks' | 'shared' | null;
@@ -37,10 +38,12 @@ export function useSplitterDrag(params: UseSplitterDragParams) {
     tasksStartXRef,
   } = params;
 
-  useEffect(() => {
-    if (!draggingPanel) return;
+  const onSplitterMove = useCallback(
+    (e: MouseEvent) => {
+      if (!draggingPanel) {
+        return;
+      }
 
-    const onMove = (e: MouseEvent) => {
       const total = window.innerWidth;
       const minWidth = 160;
       const leftMin = 320;
@@ -75,16 +78,25 @@ export function useSplitterDrag(params: UseSplitterDragParams) {
           setTasksPanelWidth(clampedWidth);
         }
       }
-    };
+    },
+    [
+      draggingPanel,
+      rightWidth,
+      setRightWidth,
+      setTestPanelWidth,
+      tasksPanelWidth,
+      tasksPanelMode,
+      testPanelMode,
+      testPanelWidth,
+      tasksStartWidthRef,
+      tasksStartXRef,
+      setTasksPanelWidth,
+    ]
+  );
 
-    const onUp = () => setDraggingPanel(null);
+  const onSplitterEnd = useCallback(() => {
+    setDraggingPanel(null);
+  }, [setDraggingPanel]);
 
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [draggingPanel, setRightWidth, setTestPanelWidth, setTasksPanelWidth, rightWidth, tasksPanelWidth, tasksPanelMode, testPanelMode, testPanelWidth, tasksStartWidthRef, tasksStartXRef, setDraggingPanel]);
+  useWindowMouseDrag(draggingPanel != null, onSplitterMove, onSplitterEnd);
 }
