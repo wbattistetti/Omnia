@@ -4,8 +4,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTaskTreeStore, taskTreeSelectors } from '@responseEditor/core/state/taskTreeStore';
-import { ensureTaskTreeNodeIds } from '@responseEditor/core/taskTree';
+import { ensureTaskTreeNodeIds, ensureTaskTreeStepSlicesForAllNodes } from '@responseEditor/core/taskTree';
 import type { TaskTree } from '@types/taskTypes';
+
+/** Matches store output: ids + per-node step slices. */
+function normalizedStoreTree(tree: TaskTree): TaskTree {
+  return ensureTaskTreeStepSlicesForAllNodes(ensureTaskTreeNodeIds(tree));
+}
 
 describe('Domain: TaskTree Store (Zustand)', () => {
   beforeEach(() => {
@@ -51,7 +56,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
         result.current.setTaskTree(taskTree);
       });
 
-      expect(result.current.taskTree).toEqual(ensureTaskTreeNodeIds(taskTree));
+      expect(result.current.taskTree).toEqual(normalizedStoreTree(taskTree));
       expect(result.current.taskTreeVersion).toBe(1);
     });
 
@@ -192,7 +197,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
         result.current.incrementVersion();
       });
 
-      expect(result.current.taskTree).toEqual(ensureTaskTreeNodeIds(taskTree));
+      expect(result.current.taskTree).toEqual(normalizedStoreTree(taskTree));
       expect(result.current.taskTreeVersion).toBeGreaterThan(0);
 
       act(() => {
@@ -425,14 +430,14 @@ describe('Domain: TaskTree Store (Zustand)', () => {
       act(() => {
         result.current.setTaskTree(taskTree1);
       });
-      expect(result.current.taskTree).toEqual(ensureTaskTreeNodeIds(taskTree1));
+      expect(result.current.taskTree).toEqual(normalizedStoreTree(taskTree1));
       expect(result.current.taskTreeVersion).toBe(1);
 
       // Update
       act(() => {
         result.current.updateTaskTree(() => taskTree2);
       });
-      expect(result.current.taskTree).toEqual(taskTree2);
+      expect(result.current.taskTree).toEqual(normalizedStoreTree(taskTree2));
       expect(result.current.taskTreeVersion).toBe(2);
 
       // Reset
@@ -463,7 +468,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
       const mainNodesSelector = renderHook(() => useTaskTreeStore(taskTreeSelectors.mainNodes));
       const nodeCountSelector = renderHook(() => useTaskTreeStore(taskTreeSelectors.nodeCount));
 
-      expect(taskTreeSelector.result.current).toEqual(ensureTaskTreeNodeIds(taskTree));
+      expect(taskTreeSelector.result.current).toEqual(normalizedStoreTree(taskTree));
       expect(hasTaskTreeSelector.result.current).toBe(true);
       expect(mainNodesSelector.result.current).toHaveLength(2);
       expect(nodeCountSelector.result.current).toBe(2);

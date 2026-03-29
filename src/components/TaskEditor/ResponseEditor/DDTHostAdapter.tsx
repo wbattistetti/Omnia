@@ -5,6 +5,7 @@ import { taskRepository } from '@services/TaskRepository';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { getTemplateId } from '@utils/taskHelpers';
 import { materializeTaskFromRepository } from '@utils/MaterializationOrchestrator';
+import { ensureTaskExists } from '@utils/ensureTaskExists';
 import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '@types/taskTypes';
 import type { Task, TaskTree } from '@types/taskTypes';
 import { useTaskTreeStore, useTaskTreeVersion } from '@responseEditor/core/state';
@@ -64,16 +65,22 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
   // ✅ FIX: Carica task in modo sincrono nel render iniziale (getTask è sincrono)
   // Non usare useTaskInstance che introduce delay inutile con useEffect
   const fullTask = React.useMemo(() => {
-    if (!taskId) return null;
+    if (!taskId || taskId === 'unknown') return null;
     try {
-      const loaded = taskRepository.getTask(taskId);
-
-      return loaded;
+      const t =
+        taskMeta.type !== undefined && taskMeta.type !== null
+          ? taskMeta.type
+          : TaskType.UtteranceInterpretation;
+      return ensureTaskExists(taskId, {
+        taskType: t,
+        projectId: currentProjectId || undefined,
+        label: typeof taskMeta.label === 'string' ? taskMeta.label : undefined,
+      });
     } catch (error) {
       console.error('[TaskTreeHostAdapter] Error loading task:', error);
       return null;
     }
-  }, [taskId]);
+  }, [taskId, taskMeta.type, taskMeta.label, currentProjectId]);
 
   // ✅ FASE 3: Store è single source of truth
   const { setTaskTree: setTaskTreeInStore } = useTaskTreeStore();
@@ -100,24 +107,8 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
   // Load TaskTree async using buildTaskTree
   React.useEffect(() => {
     const loadTaskTree = async () => {
-      // Skip buildTaskTree if needsTaskBuilder is true AND no task exists yet
-      if ((taskMeta as any).needsTaskBuilder === true && !fullTask) {
-        setTaskTreeInStore(null);
-        setTaskTreeLoading(false);
-        initializedRef.current = true;
-        return;
-      }
-
       if (!fullTask) {
         setTaskTreeLoading(false);
-        return;
-      }
-
-      // Skip buildTaskTree if needsTaskBuilder is true (wizard will create TaskTree)
-      if ((taskMeta as any).needsTaskBuilder === true) {
-        setTaskTreeInStore(null);
-        setTaskTreeLoading(false);
-        initializedRef.current = true;
         return;
       }
 

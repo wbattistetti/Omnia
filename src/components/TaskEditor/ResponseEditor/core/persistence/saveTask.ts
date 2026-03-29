@@ -25,13 +25,14 @@ export interface SaveTaskOptions {
 /**
  * Unified save function for task data.
  *
- * ARCHITECTURAL PRINCIPLE:
- * - Steps are NEVER taken from taskTree (working copy) - they may be stale
- * - Steps are ONLY read from repository (single source of truth)
- * - Steps are modified directly by handleToggleDisabled, handleDeleteStep, handleRestoreStep
+ * ARCHITECTURAL PRINCIPLE (template / direct-repo steps):
+ * - For template-backed flows, steps are often modified via handlers that write the repository.
+ *
+ * Standalone manual tasks: `TaskTree.steps` is the authoritative dictionary keyed by node templateId.
+ * When we persist `instanceNodes`, we also persist `taskTree.steps` so reload matches editor state.
  *
  * @param taskId - Task ID
- * @param taskTree - TaskTree (used only for labelKey, NOT for steps)
+ * @param taskTree - TaskTree (labelKey; for standalone snapshot also steps)
  * @param task - Original task (for type info)
  * @param options - Save options
  */
@@ -83,6 +84,11 @@ export async function saveTask(
   if (shouldPersistStandaloneInstanceSnapshot(taskInstance, taskTree)) {
     updates.kind = 'standalone';
     updates.instanceNodes = cloneMainNodesForInstancePersistence(taskTree);
+    const dict =
+      taskTree.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
+        ? (taskTree.steps as Record<string, unknown>)
+        : {};
+    updates.steps = { ...dict } as Task['steps'];
   }
 
   // Only update if there are changes

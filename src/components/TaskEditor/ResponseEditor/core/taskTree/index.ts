@@ -21,3 +21,4 @@ export {
   mergeTaskTreeStepsForTemplate,
   withDefaultManualBehaviourSteps,
 } from './manualDefaultBehaviourSteps';
+export { ensureTaskTreeStepSlicesForAllNodes } from './ensureTaskTreeStepSlicesForAllNodes';

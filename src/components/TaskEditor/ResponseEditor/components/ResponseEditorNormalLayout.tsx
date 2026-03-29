@@ -257,7 +257,10 @@ export function ResponseEditorNormalLayout({
   const applyTaskTreeToStoreAndManager = React.useCallback(
     (next: TaskTree) => {
       useTaskTreeStore.getState().setTaskTree(next);
-      replaceSelectedTaskTree(next);
+      const normalized = useTaskTreeStore.getState().taskTree;
+      if (normalized) {
+        replaceSelectedTaskTree(normalized);
+      }
     },
     [replaceSelectedTaskTree]
   );

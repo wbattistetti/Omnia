@@ -43,7 +43,10 @@ export function useTemplateSync(params: UseTemplateSyncParams) {
         const syncedTaskTree = { ...currentTaskTree };
         // ✅ FASE 2.3: Update only store (single source of truth)
         setTaskTree(syncedTaskTree);
-        replaceSelectedTaskTree(syncedTaskTree);
+        const normalized = useTaskTreeStore.getState().taskTree;
+        if (normalized) {
+          replaceSelectedTaskTree(normalized);
+        }
       }
     };
 

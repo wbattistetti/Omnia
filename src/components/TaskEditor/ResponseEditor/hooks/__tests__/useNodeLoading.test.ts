@@ -9,6 +9,7 @@ import type { Task, TaskTree } from '@types/taskTypes';
 describe('useNodeLoading', () => {
   const mockSetSelectedNode = vi.fn();
   const mockSetSelectedNodePath = vi.fn();
+  const mockSetSelectedRoot = vi.fn();
   const mockGetStepsForNode = vi.fn();
   const mockGetStepsAsArray = vi.fn();
 
@@ -17,6 +18,7 @@ describe('useNodeLoading', () => {
     task: null as Task | null,
     setSelectedNode: mockSetSelectedNode,
     setSelectedNodePath: mockSetSelectedNodePath,
+    setSelectedRoot: mockSetSelectedRoot,
     getStepsForNode: mockGetStepsForNode,
     getStepsAsArray: mockGetStepsAsArray,
   };
@@ -33,7 +35,7 @@ describe('useNodeLoading', () => {
   });
 
   describe('empty TaskTree', () => {
-    it('should not load node when TaskTree has no main nodes', () => {
+    it('clears selection when TaskTree has no main nodes', () => {
       renderHook(() =>
         useNodeLoading({
           ...base,
@@ -42,8 +44,9 @@ describe('useNodeLoading', () => {
         })
       );
 
-      expect(mockSetSelectedNode).not.toHaveBeenCalled();
-      expect(mockSetSelectedNodePath).not.toHaveBeenCalled();
+      expect(mockSetSelectedNode).toHaveBeenCalledWith(null);
+      expect(mockSetSelectedNodePath).toHaveBeenCalledWith(null);
+      expect(mockSetSelectedRoot).toHaveBeenCalledWith(false);
     });
   });
 
@@ -170,6 +173,7 @@ describe('useNodeLoading', () => {
       act(() => {
         storeResult.current.setTaskTree(taskTree);
       });
+      const stepsInStore = storeResult.current.taskTree?.steps;
 
       renderHook(() =>
         useNodeLoading({
@@ -179,7 +183,7 @@ describe('useNodeLoading', () => {
         })
       );
 
-      expect(mockGetStepsForNode).toHaveBeenCalledWith(taskTree.steps, 'node-1');
+      expect(mockGetStepsForNode).toHaveBeenCalledWith(stepsInStore, 'node-1');
     });
   });
 
@@ -281,6 +285,7 @@ describe('useNodeLoading', () => {
       act(() => {
         storeResult.current.setTaskTree(taskTree);
       });
+      const stepsInStore = storeResult.current.taskTree?.steps;
 
       renderHook(() =>
         useNodeLoading({
@@ -290,8 +295,45 @@ describe('useNodeLoading', () => {
         })
       );
 
-      expect(mockGetStepsForNode).toHaveBeenCalledWith(taskTree.steps, 'template-1');
+      expect(mockGetStepsForNode).toHaveBeenCalledWith(stepsInStore, 'template-1');
       expect(mockGetStepsAsArray).toHaveBeenCalled();
+    });
+
+    it('passes a shallow copy of the node to setSelectedNode so React re-renders Behaviour', () => {
+      const taskTree: TaskTree = {
+        id: 't',
+        nodes: [{ id: 'node-1', label: 'L', templateId: 'template-1', subNodes: [] }],
+        steps: {
+          'template-1': {
+            start: { escalations: [] },
+          },
+        },
+      };
+
+      mockGetStepsForNode.mockReturnValue({
+        start: { escalations: [] },
+      });
+      mockGetStepsAsArray.mockReturnValue([{ type: 'start', escalations: [] }]);
+
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+      const treeNode = storeResult.current.taskTree?.nodes?.[0];
+
+      renderHook(() =>
+        useNodeLoading({
+          ...base,
+          selectedPath: [0],
+          selectedRoot: false,
+        })
+      );
+
+      expect(treeNode).toBeDefined();
+      expect(mockSetSelectedNode).toHaveBeenCalled();
+      const arg = mockSetSelectedNode.mock.calls[0][0];
+      expect(arg).not.toBe(treeNode);
+      expect(arg.steps).toEqual(mockGetStepsForNode.mock.results[0].value);
     });
 
     it('should use empty steps when node step types are empty', () => {
@@ -310,6 +352,7 @@ describe('useNodeLoading', () => {
       act(() => {
         storeResult.current.setTaskTree(taskTree);
       });
+      const stepsInStore = storeResult.current.taskTree?.steps;
 
       renderHook(() =>
         useNodeLoading({
@@ -319,7 +362,7 @@ describe('useNodeLoading', () => {
         })
       );
 
-      expect(mockGetStepsForNode).toHaveBeenCalledWith(taskTree.steps, 'template-1');
+      expect(mockGetStepsForNode).toHaveBeenCalledWith(stepsInStore, 'template-1');
     });
   });
 
@@ -356,7 +399,8 @@ describe('useNodeLoading', () => {
         })
       );
 
-      expect(mockSetSelectedNode).not.toHaveBeenCalled();
+      expect(mockSetSelectedNode).toHaveBeenCalledWith(null);
+      expect(mockSetSelectedNodePath).toHaveBeenCalledWith(null);
     });
   });
 });

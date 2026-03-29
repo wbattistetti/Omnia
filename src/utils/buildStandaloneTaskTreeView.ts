@@ -33,8 +33,80 @@ function applyContractsToTree(
 }
 
 /**
+ * True when steps is a non-empty dictionary (not MaterializedStep[]).
+ */
+function isNonEmptyStepDictionary(steps: unknown): steps is Record<string, unknown> {
+  return (
+    !!steps &&
+    typeof steps === 'object' &&
+    !Array.isArray(steps) &&
+    Object.keys(steps as Record<string, unknown>).length > 0
+  );
+}
+
+function treeStepSlotIsEmpty(steps: Record<string, unknown>, templateId: string): boolean {
+  const slot = steps[templateId];
+  if (slot == null) return true;
+  if (typeof slot !== 'object' || Array.isArray(slot)) return true;
+  return Object.keys(slot as Record<string, unknown>).length === 0;
+}
+
+/**
+ * After reload, `task.steps` is often {} while each node still carries `node.steps` (saved in instanceNodes).
+ * Behaviour reads steps from TaskTree.steps[templateId]; without this merge, useNodeLoading overwrites node.steps with {}.
+ */
+function mergeInstanceNodeStepsIntoTreeSteps(
+  nodes: TaskTreeNode[],
+  stepsRoot: Record<string, unknown>
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...stepsRoot };
+  const walk = (node: TaskTreeNode) => {
+    const tidRaw = node.templateId ?? node.id;
+    const tid = typeof tidRaw === 'string' ? tidRaw.trim() : String(tidRaw ?? '').trim();
+    if (!tid) {
+      return;
+    }
+    if (treeStepSlotIsEmpty(out, tid) && isNonEmptyStepDictionary(node.steps)) {
+      out[tid] = { ...(node.steps as Record<string, unknown>) };
+    }
+    const subs = node.subNodes;
+    if (Array.isArray(subs) && subs.length > 0) {
+      subs.forEach(walk);
+    }
+  };
+  nodes.forEach(walk);
+  return out;
+}
+
+/**
+ * Minimal editable TaskTree for standalone rows with no instanceNodes yet (empty shell).
+ */
+export function buildMinimalStandaloneTaskTree(task: Task | null | undefined): TaskTree {
+  const steps =
+    task?.steps && typeof task.steps === 'object' && !Array.isArray(task.steps)
+      ? { ...task.steps }
+      : {};
+  const labelText =
+    typeof task?.labelKey === 'string'
+      ? task.labelKey
+      : typeof task?.label === 'string'
+        ? task.label
+        : '';
+
+  return {
+    labelKey: labelText || 'task',
+    label: typeof task?.label === 'string' ? task.label : undefined,
+    nodes: [],
+    steps,
+    constraints: undefined,
+    dataContract: undefined,
+    introduction: task?.introduction,
+  };
+}
+
+/**
  * Build a TaskTree for editor preview from persisted standalone fields.
- * Returns null if the task has no instance tree to show.
+ * Returns null if the task has no instance tree to show (use buildMinimalStandaloneTaskTree for empty shells).
  */
 export function buildStandaloneTaskTreeView(task: Task | null | undefined): TaskTree | null {
   if (!task) return null;
@@ -44,16 +116,18 @@ export function buildStandaloneTaskTreeView(task: Task | null | undefined): Task
   }
 
   const nodes = applyContractsToTree(rawNodes as TaskTreeNode[], task.instanceSchemaContracts);
-  const steps = task.steps && typeof task.steps === 'object' && !Array.isArray(task.steps)
-    ? task.steps
-    : {};
+  const stepsBase: Record<string, unknown> =
+    task.steps && typeof task.steps === 'object' && !Array.isArray(task.steps)
+      ? { ...task.steps }
+      : {};
+  const steps = mergeInstanceNodeStepsIntoTreeSteps(nodes, stepsBase);
 
   const labelKey = task.labelKey ?? task.label ?? 'standalone_task';
 
   return {
     labelKey: typeof labelKey === 'string' ? labelKey : 'standalone_task',
     nodes,
-    steps,
+    steps: steps as TaskTree['steps'],
     constraints: undefined,
     dataContract: undefined,
     introduction: task.introduction,

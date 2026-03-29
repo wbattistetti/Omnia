@@ -14,7 +14,7 @@ export class EngineEscalationService {
    */
   static async save(nodeId: string, escalation: EngineEscalation): Promise<void> {
     try {
-      const template = await DialogueTaskService.getTemplate(nodeId);
+      const template = DialogueTaskService.findTemplateInCache(nodeId);
       if (!template) {
         throw new Error(`Template not found: ${nodeId}`);
       }
@@ -53,9 +53,8 @@ export class EngineEscalationService {
    */
   static async load(nodeId: string): Promise<EngineEscalation | null> {
     try {
-      const template = await DialogueTaskService.getTemplate(nodeId);
+      const template = DialogueTaskService.findTemplateInCache(nodeId);
       if (!template) {
-        console.warn('[EngineEscalationService] Template not found:', nodeId);
         return null;
       }
 
@@ -75,6 +74,31 @@ export class EngineEscalationService {
       return escalation;
     } catch (error) {
       console.error('[EngineEscalationService] Error loading escalation:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Load escalation for a TaskTree node: catalogue row is `catalogueTemplateId`,
+   * per-node escalation is keyed by instance `instanceNodeId`.
+   * Does not treat instance UUIDs as catalogue template ids.
+   */
+  static async loadEscalationForTreeNode(
+    catalogueTemplateId: string,
+    instanceNodeId: string
+  ): Promise<EngineEscalation | null> {
+    try {
+      const template = DialogueTaskService.findTemplateInCache(catalogueTemplateId);
+      if (!template?.engineEscalations || !Array.isArray(template.engineEscalations)) {
+        return null;
+      }
+      return (
+        template.engineEscalations.find(
+          (e: EngineEscalation) => e.nodeId === instanceNodeId
+        ) ?? null
+      );
+    } catch (error) {
+      console.error('[EngineEscalationService] Error loading escalation for tree node:', error);
       return null;
     }
   }

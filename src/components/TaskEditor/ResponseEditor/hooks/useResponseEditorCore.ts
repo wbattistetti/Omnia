@@ -474,6 +474,7 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     task,
     setSelectedNode,
     setSelectedNodePath,
+    setSelectedRoot,
     getStepsForNode,
     getStepsAsArray,
   });

@@ -22,4 +22,19 @@ describe('materializeTask', () => {
   it('returns null for null task', async () => {
     expect(await materializeTask(null)).toBeNull();
   });
+
+  it('materializes empty standalone shell as minimal tree', async () => {
+    const task: Task = {
+      id: 't-empty',
+      type: TaskType.UtteranceInterpretation,
+      templateId: null,
+      kind: 'standalone',
+      instanceNodes: [],
+      steps: {},
+    };
+
+    const tree = await materializeTask(task, {});
+    expect(tree).not.toBeNull();
+    expect(tree!.nodes).toEqual([]);
+  });
 });

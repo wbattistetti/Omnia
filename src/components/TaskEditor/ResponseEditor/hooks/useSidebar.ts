@@ -84,7 +84,10 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
       }
       setTaskTree(ensured);
       try {
-        replaceSelectedTaskTree(ensured);
+        const normalized = useTaskTreeStore.getState().taskTree;
+        if (normalized) {
+          replaceSelectedTaskTree(normalized);
+        }
       } catch {
         /* ignore */
       }

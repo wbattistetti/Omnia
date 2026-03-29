@@ -32,7 +32,7 @@ describe('buildTaskTree standalone branch', () => {
     expect(tree!.nodes[0].id).toBe('node-a');
   });
 
-  it('returns null when standalone has no persisted nodes', async () => {
+  it('returns minimal tree when standalone has no persisted nodes', async () => {
     const instance: Task = {
       id: 'task-2',
       type: TaskType.UtteranceInterpretation,
@@ -43,7 +43,8 @@ describe('buildTaskTree standalone branch', () => {
     } as Task;
 
     const tree = await buildTaskTree(instance, 'project-1');
-    expect(tree).toBeNull();
+    expect(tree).not.toBeNull();
+    expect(tree!.nodes).toEqual([]);
   });
 });
 

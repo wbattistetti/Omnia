@@ -3,8 +3,8 @@ import { DialogueTaskService } from '../services/DialogueTaskService';
 import { TaskType, templateIdToTaskType } from '../types/taskTypes';
 import { StepType } from '../types/stepTypes';
 import { v4 as uuidv4 } from 'uuid';
-import { buildStandaloneTaskTreeView } from './buildStandaloneTaskTreeView';
-import { inferTaskKind } from './taskKind';
+import { buildMinimalStandaloneTaskTree, buildStandaloneTaskTreeView } from './buildStandaloneTaskTreeView';
+import { hasValidTemplateIdRef } from './taskKind';
 
 /**
  * ============================================================================
@@ -1099,14 +1099,13 @@ export async function buildTaskTreeFromRepository(
 }
 
 /**
- * ✅ PURE FUNCTION: Build TaskTree from Task instance
- * This function is pure - it does not read from repository.
- * Use buildTaskTreeFromRepository() if you need to ensure fresh instance from repository.
+ * Build TaskTree from Task instance (single materialization path).
+ * May read/update TaskRepository for fresh instance, orphan templateId reset, or cloned steps.
+ * Use buildTaskTreeFromRepository() to load by id from the repository first.
  *
- * @param instance - Task instance (must be fresh from repository if you need latest _disabled flags)
- * @param projectId - Optional project ID
- * @returns TaskTree or null if instance is null. Standalone rows (inferTaskKind === standalone) use
- *   buildStandaloneTaskTreeView only; no ensureTemplateExists.
+ * @param instance - Task instance
+ * @param projectId - Optional project ID (template load from project, orphan reset)
+ * @returns TaskTree or null if instance is null. No templateId → standalone view or minimal empty tree.
  */
 export async function buildTaskTree(
   instance: Task | null,
@@ -1114,80 +1113,45 @@ export async function buildTaskTree(
 ): Promise<TaskTree | null> {
   if (!instance) return null;
 
-  if (inferTaskKind(instance) === 'standalone') {
-    const fromLocal = buildStandaloneTaskTreeView(instance);
-    if (fromLocal) {
-      return fromLocal;
+  const { taskRepository } = await import('../services/TaskRepository');
+  let working = taskRepository.getTask(instance.id) ?? instance;
+
+  if (!hasValidTemplateIdRef(working)) {
+    const fromLocal = buildStandaloneTaskTreeView(working);
+    if (fromLocal) return fromLocal;
+    return buildMinimalStandaloneTaskTree(working);
+  }
+
+  if (!DialogueTaskService.isCacheLoaded()) {
+    await DialogueTaskService.loadTemplates();
+  }
+
+  const templateIdStr = String(working.templateId).trim();
+  let template = DialogueTaskService.findTemplateInCache(templateIdStr);
+
+  if (!template && projectId) {
+    const fromProject = await loadTemplateFromProject(templateIdStr, projectId);
+    if (fromProject) {
+      DialogueTaskService.registerExternalTemplates([fromProject as any]);
+      template = DialogueTaskService.findTemplateInCache(templateIdStr);
     }
-    return null;
   }
 
-  // ✅ CRITICAL: Ogni task DEVE avere templateId
-  if (!instance.templateId || instance.templateId === 'UNDEFINED') {
-    if (!projectId) {
-      throw new Error('[buildTaskTree] Cannot create template: projectId is required');
-    }
-
-    // ✅ Crea template automaticamente nel progetto
-    const autoTemplate = await ensureTemplateExists(instance, undefined, projectId);
-    instance.templateId = autoTemplate.id;
-  }
-
-  // ✅ ARCHITECTURE: Template must exist by construction
-  // First check in-memory cache (DialogueTaskService)
-  // ✅ Log rimosso: troppo verboso
-
-  let template = DialogueTaskService.getTemplate(instance.templateId);
-
-  // ✅ DEBUG: Log all templates in cache if template not found
   if (!template) {
-    const allTemplates = DialogueTaskService.getAllTemplates();
-    const allTemplateIds = allTemplates.map(t => ({
-      id: t.id,
-      _id: t._id ? (typeof t._id === 'object' ? t._id.toString() : String(t._id)) : null,
-      label: t.label,
-      name: t.name
-    }));
-    // ✅ Mantenuto solo per errori critici
-    console.warn('[buildTaskTree] ⚠️ Template not found in cache - showing all templates', {
-      searchedTemplateId: instance.templateId,
-      searchedTemplateIdType: typeof instance.templateId,
-      cacheSize: allTemplates.length,
-      allTemplateIds,
-      // ✅ DEBUG: Check if there's a case mismatch or similar ID
-      similarIds: allTemplateIds.filter(t =>
-        t.id && String(t.id).toLowerCase() === String(instance.templateId).toLowerCase()
-      )
+    console.warn('[buildTaskTree] Orphan templateId; resetting task to standalone', {
+      taskId: working.id,
+      templateId: working.templateId,
     });
-  }
-  // ✅ Log rimosso: troppo verboso (template found)
-
-  // ✅ NO FALLBACK: Template must be in memory cache
-  // If not in cache, it doesn't exist (or was deleted) - throw error
-  if (!template) {
-    const cacheSize = DialogueTaskService.getTemplateCount();
-    const cacheLoaded = (DialogueTaskService as any).cacheLoaded;
-    const allTemplates = DialogueTaskService.getAllTemplates();
-    const allTemplateIds = allTemplates.map(t => ({
-      id: t.id,
-      _id: t._id ? (typeof t._id === 'object' ? t._id.toString() : String(t._id)) : null,
-      label: t.label,
-      name: t.name
-    }));
-
-    const errorMessage = `Template ${instance.templateId} not found in memory cache. The template does not exist or was deleted. Templates must be in memory - no fallback to database.`;
-    console.error('[buildTaskTree] ❌ Template not found in cache - NO FALLBACK:', {
-      templateId: instance.templateId,
-      templateIdType: typeof instance.templateId,
-      taskId: instance.id,
-      taskLabel: instance.label,
-      cacheSize,
-      cacheLoaded,
-      allTemplateIds,
-      hint: 'The template was deleted or never existed. Check if the template was properly created and added to DialogueTaskService cache.'
-    });
-    // ✅ NO FALLBACK: Throw error - template must exist in memory
-    throw new Error(errorMessage);
+    taskRepository.updateTask(
+      working.id,
+      { templateId: null, kind: 'standalone' },
+      projectId,
+      { allowClearTemplateId: true }
+    );
+    const cleared = taskRepository.getTask(working.id) ?? working;
+    const fromLocal = buildStandaloneTaskTreeView(cleared);
+    if (fromLocal) return fromLocal;
+    return buildMinimalStandaloneTaskTree(cleared);
   }
 
   // ✅ Usa buildTaskTreeNodes() per costruire direttamente TaskTreeNode[] con subNodes[]
@@ -1198,26 +1162,26 @@ export async function buildTaskTree(
   let finalSteps: Record<string, Record<string, any>>;
   let stepsWereCloned = false;
 
-  // ✅ CRITICAL: Se instance.steps ESISTE (anche se vuoto {}), NON clonare
-  // Clona SOLO se instance.steps è undefined o null (prima creazione)
+  // ✅ CRITICAL: Se working.steps ESISTE (anche se vuoto {}), NON clonare
+  // Clona SOLO se working.steps è undefined o null (prima creazione)
   // {} = "l'utente ha cancellato tutti gli step" → NON clonare
   // undefined = "istanza nuova" → clonare
   const hasInstanceSteps =
-    instance.steps &&
-    typeof instance.steps === 'object' &&
-    !Array.isArray(instance.steps);
+    working.steps &&
+    typeof working.steps === 'object' &&
+    !Array.isArray(working.steps);
 
   if (hasInstanceSteps) {
-    // instance.steps exists - use it as is (even if empty)
+    // working.steps exists - use it as is (even if empty)
     // {} means "user deleted all steps" - do NOT clone from template
-    finalSteps = instance.steps;
+    finalSteps = working.steps;
 
     // Convert legacy array format to dictionary if needed
     if (Array.isArray(finalSteps)) {
       finalSteps = {};
     }
   } else {
-    // ✅ Prima creazione: instance.steps è undefined/null → clona dal template
+    // ✅ Prima creazione: working.steps è undefined/null → clona dal template
     const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(template, nodes);
     finalSteps = clonedSteps;
     stepsWereCloned = true;
@@ -1231,8 +1195,8 @@ export async function buildTaskTree(
     const firstTask = firstEscalation?.tasks?.[0];
     const firstTaskTextKey = firstTask?.parameters?.find((p: any) => p.parameterId === 'text')?.value;
     console.log('[buildTaskTree] 🔍 DEBUG Steps cloned', {
-      taskId: instance.id,
-      templateId: instance.templateId,
+      taskId: working.id,
+      templateId: working.templateId,
       clonedStepsKeys: Object.keys(finalSteps),
       firstNodeId,
       firstStepKey,
@@ -1246,11 +1210,11 @@ export async function buildTaskTree(
     if (guidMapping && guidMapping.size > 0) {
       try {
         const { copyTranslationsForClonedSteps } = await import('./taskTreeMergeUtils');
-        await copyTranslationsForClonedSteps(instance, instance.templateId, guidMapping);
+        await copyTranslationsForClonedSteps(working, working.templateId, guidMapping);
         console.log('[buildTaskTree] ✅ Traduzioni copiate per istanza', {
-          taskId: instance.id,
+          taskId: working.id,
           guidMappingSize: guidMapping.size,
-          templateId: instance.templateId
+          templateId: working.templateId
         });
       } catch (err) {
         console.error('[buildTaskTree] ❌ Errore copiando traduzioni:', err);
@@ -1258,7 +1222,7 @@ export async function buildTaskTree(
       }
     } else {
       console.warn('[buildTaskTree] ⚠️ Nessun GUID mapping disponibile per copiare traduzioni', {
-        taskId: instance.id,
+        taskId: working.id,
         hasGuidMapping: !!guidMapping,
         guidMappingSize: guidMapping?.size || 0
       });
@@ -1268,26 +1232,19 @@ export async function buildTaskTree(
   // ✅ NUOVO MODELLO: Salva gli step clonati nell'istanza in memoria immediatamente
   // Questo assicura che l'istanza sia sempre completa e sia la fonte di verità
   if (stepsWereCloned) {
-    // ✅ Aggiorna l'istanza in memoria con gli step clonati
-    // Importa TaskRepository solo quando necessario (evita circular dependencies)
-    const { taskRepository } = await import('../services/TaskRepository');
-    const existingTask = taskRepository.getTask(instance.id);
+    const existingTask = taskRepository.getTask(working.id);
     if (existingTask) {
-      // ✅ Aggiorna solo gli step, mantenendo tutti gli altri campi
-      taskRepository.updateTask(instance.id, { steps: finalSteps }, projectId);
+      taskRepository.updateTask(working.id, { steps: finalSteps }, projectId);
     }
   }
 
-  // ✅ Carica templateVersion dal template (per drift detection)
-  const templateVersion = template.version || 1;
-
   const result = {
-    labelKey: instance.labelKey ?? template.labelKey ?? template.label,  // ✅ Usa labelKey (fallback a label per retrocompatibilità)
+    labelKey: working.labelKey ?? template.labelKey ?? template.label,  // ✅ Usa labelKey (fallback a label per retrocompatibilità)
     nodes,  // ✅ Già TaskTreeNode[] con subNodes[]
     steps: finalSteps,  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
     constraints: template.constraints ?? undefined,
     dataContract: template.dataContract ?? undefined,
-    introduction: template.introduction ?? instance.introduction
+    introduction: template.introduction ?? working.introduction
   };
 
   return result;
@@ -1605,7 +1562,7 @@ export async function extractTaskOverrides(
     return {};
   }
 
-  if (inferTaskKind(instance) === 'standalone') {
+  if (!hasValidTemplateIdRef(instance)) {
     if (templateExpanded) {
       updateEditedFlags(workingCopy, templateExpanded);
     }
@@ -1624,17 +1581,6 @@ export async function extractTaskOverrides(
       kind: 'standalone',
       instanceNodes: nodesClone,
     };
-  }
-
-  // ✅ CRITICAL: Ogni task DEVE avere templateId
-  if (!instance.templateId || instance.templateId === 'UNDEFINED') {
-    if (!projectId) {
-      throw new Error('[extractTaskOverrides] Cannot create template: projectId is required');
-    }
-
-    // ✅ Crea template automaticamente nel progetto
-    const autoTemplate = await ensureTemplateExists(instance, workingCopy, projectId);
-    instance.templateId = autoTemplate.id;
   }
 
   // ✅ Se templateExpanded è fornito, aggiorna flag edited confrontando workingCopy vs templateExpanded

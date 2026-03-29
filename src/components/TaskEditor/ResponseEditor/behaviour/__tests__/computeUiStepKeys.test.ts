@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeUiStepKeys, orderStepKeysForUi } from '../computeUiStepKeys';
+import { computeUiStepKeys, describeComputeUiStepKeys, orderStepKeysForUi } from '../computeUiStepKeys';
 
 describe('orderStepKeysForUi', () => {
   it('orders known keys and sorts custom keys', () => {
@@ -90,5 +90,39 @@ describe('computeUiStepKeys', () => {
         selectedSubIndex: 1,
       })
     ).toEqual(['start']);
+  });
+
+  it('returns no keys when node has empty step dictionary (manual: no strip until structure exists)', () => {
+    expect(
+      computeUiStepKeys({
+        node: { id: 'n1', steps: {} },
+        selectedRoot: false,
+        selectedPath: [0],
+        selectedSubIndex: null,
+      })
+    ).toEqual([]);
+  });
+});
+
+describe('describeComputeUiStepKeys', () => {
+  it('flags hideStripBecauseEmptyOnMainNode when main node has no step keys', () => {
+    const d = describeComputeUiStepKeys({
+      node: { id: 'n1', steps: {} },
+      selectedRoot: false,
+      selectedPath: [0],
+      selectedSubIndex: null,
+    });
+    expect(d.hideStripBecauseEmptyOnMainNode).toBe(true);
+    expect(d.finalKeys).toEqual([]);
+  });
+
+  it('does not flag hide when sub-node path has depth > 1 even if extract is empty', () => {
+    const d = describeComputeUiStepKeys({
+      node: { id: 'n1', steps: {} },
+      selectedRoot: false,
+      selectedPath: [0, 0],
+      selectedSubIndex: null,
+    });
+    expect(d.hideStripBecauseEmptyOnMainNode).toBe(false);
   });
 });

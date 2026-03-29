@@ -49,10 +49,16 @@ export function mergeWizardPipelineIntoNodes(
 
 /**
  * Copy constraints/dataContract from in-memory templates onto wizard nodes (generation uses template cache).
+ * Does not call getTemplate(node.id): manual nodes use instance UUIDs that are not catalogue templates.
  */
 export function enrichWizardNodesFromTemplates(roots: WizardTaskTreeNode[]): WizardTaskTreeNode[] {
   const walk = (node: WizardTaskTreeNode): WizardTaskTreeNode => {
-    const template = DialogueTaskService.getTemplate(node.id);
+    let template = DialogueTaskService.findTemplateInCache(node.id);
+    const idStr = node.id != null ? String(node.id) : '';
+    const tidStr = node.templateId != null ? String(node.templateId) : '';
+    if (!template && tidStr && tidStr !== idStr) {
+      template = DialogueTaskService.findTemplateInCache(node.templateId);
+    }
     const next: WizardTaskTreeNode = {
       ...node,
       ...(template?.constraints ? { constraints: template.constraints } : {}),

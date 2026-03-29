@@ -86,8 +86,46 @@ export function computeUiStepKeys({
   if ((selectedPath && selectedPath.length > 1) || selectedSubIndex != null) {
     return stepKeys;
   }
+  // No synthetic step tabs until the node has real step keys (e.g. sidebar "Aggiungi dato"
+  // adds start/noMatch). Empty steps used to become only ['notConfirmed'] and showed the strip
+  // before any field existed.
+  if (stepKeys.length === 0) {
+    return [];
+  }
   if (!stepKeys.includes('notConfirmed')) {
     return [...stepKeys, 'notConfirmed'];
   }
   return stepKeys;
+}
+
+/**
+ * Debug helper (see stepsStripDebug.ts): explains empty strip vs keys from node.steps.
+ * Does not log; safe to call from useEffect only when debug is on.
+ */
+export function describeComputeUiStepKeys(input: ComputeUiStepKeysInput): {
+  extractedOrdered: string[];
+  finalKeys: string[];
+  hideStripBecauseEmptyOnMainNode: boolean;
+  pathDepth: number;
+} {
+  const { selectedRoot, node, selectedPath, selectedSubIndex } = input;
+  const extractedOrdered = selectedRoot
+    ? ['introduction']
+    : node
+      ? extractStepKeysFromNode(node)
+      : [];
+  const finalKeys = computeUiStepKeys(input);
+  const pathDepth = selectedPath?.length ?? 0;
+  const hideStripBecauseEmptyOnMainNode =
+    !selectedRoot &&
+    !!node &&
+    pathDepth <= 1 &&
+    selectedSubIndex == null &&
+    extractedOrdered.length === 0;
+  return {
+    extractedOrdered,
+    finalKeys,
+    hideStripBecauseEmptyOnMainNode,
+    pathDepth,
+  };
 }

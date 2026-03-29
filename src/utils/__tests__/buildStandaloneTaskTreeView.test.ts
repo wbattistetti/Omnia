@@ -49,4 +49,34 @@ describe('buildStandaloneTaskTreeView', () => {
     expect(tree!.nodes[0].dataContract).toEqual({ templateId: 'n1', parsers: [] });
     expect(tree!.nodes[0].constraints).toEqual([{ type: 'required' }]);
   });
+
+  it('promotes node.steps into tree.steps when task.steps is empty (reload without persisted step dict)', () => {
+    const task: Task = {
+      id: 'task-id',
+      type: TaskType.UtteranceInterpretation,
+      templateId: null,
+      labelKey: 'ask_test',
+      instanceNodes: [
+        {
+          id: 'n1',
+          templateId: 'n1',
+          label: 'Field',
+          subNodes: [],
+          steps: {
+            start: { type: 'start', escalations: [{ tasks: [] }] },
+            noMatch: { type: 'noMatch', escalations: [{ tasks: [] }] },
+          },
+        },
+      ],
+      steps: {},
+    };
+
+    const tree = buildStandaloneTaskTreeView(task);
+    expect(tree).not.toBeNull();
+    expect(tree!.steps && typeof tree!.steps === 'object' && !Array.isArray(tree!.steps)).toBe(true);
+    const steps = tree!.steps as Record<string, unknown>;
+    expect(steps.n1).toBeDefined();
+    expect((steps.n1 as Record<string, unknown>).start).toBeDefined();
+    expect((steps.n1 as Record<string, unknown>).noMatch).toBeDefined();
+  });
 });

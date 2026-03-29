@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { getAllDialogueTemplates, getIDETranslations } from '../services/ProjectDataService';
+import {
+  ensureTaskTreeNodeIds,
+  ensureTaskTreeStepSlicesForAllNodes,
+} from '../components/TaskEditor/ResponseEditor/core/taskTree';
+import { logStepsStrip } from '../components/TaskEditor/ResponseEditor/behaviour/stepsStripDebug';
 
 interface TaskTreeManagerContextType {
   taskTreeList: any[];
@@ -132,9 +137,19 @@ export const TaskTreeManagerProvider: React.FC<TaskTreeManagerProviderProps> = (
 
   const replaceSelectedTaskTree = (next: any) => {
     if (!next) return;
-    try { console.log('[KindPersist][TaskTreeManager][replaceSelectedTaskTree]', { label: next?.label, nodes: (next?.nodes || next?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
-    setSelectedTaskTree(next);
-    setTaskTreeList(list => list.map(d => (d.id === next.id || d._id === next._id ? next : d)));
+    const normalized = ensureTaskTreeStepSlicesForAllNodes(ensureTaskTreeNodeIds(next));
+    try { console.log('[KindPersist][TaskTreeManager][replaceSelectedTaskTree]', { label: normalized?.label, nodes: (normalized?.nodes || normalized?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
+    const st = normalized?.steps;
+    const stepTop =
+      st && typeof st === 'object' && !Array.isArray(st) ? Object.keys(st as Record<string, unknown>) : [];
+    logStepsStrip('replaceSelectedTaskTree', {
+      label: normalized?.label,
+      mainNodes: (normalized?.nodes || []).length,
+      stepsTopLevelKeyCount: stepTop.length,
+      stepsTopLevelKeys: stepTop,
+    });
+    setSelectedTaskTree(normalized);
+    setTaskTreeList(list => list.map(d => (d.id === normalized.id || d._id === normalized._id ? normalized : d)));
   };
 
   // DEBUG: Track every selectedTaskTree change

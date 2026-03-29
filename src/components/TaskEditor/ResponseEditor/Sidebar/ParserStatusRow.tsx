@@ -3,10 +3,12 @@
 
 import React from 'react';
 import { Code, Code2 } from 'lucide-react';
-import type { TaskTreeNode } from '@types/taskTypes';
+import type { Task, TaskTreeNode } from '@types/taskTypes';
 import { SemanticContractService } from '@services/SemanticContractService';
 import { EngineEscalationService } from '@services/EngineEscalationService';
+import { taskRepository } from '@services/TaskRepository';
 import type { EngineType } from '@types/semanticContract';
+import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { useWizardContext } from '@responseEditor/context/WizardContext';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 
@@ -63,6 +65,8 @@ export default function ParserStatusRow({
   const [parserState, setParserState] = React.useState<ParserState | null>(null);
   const [loading, setLoading] = React.useState(true);
 
+  const { taskId } = useResponseEditorContext();
+
   // ✅ FIX 4: Check if wizard is active (templates don't exist during generation)
   const wizardContext = useWizardContext();
   const isWizardActive = wizardContext !== null && wizardContext.wizardMode !== WizardMode.COMPLETED;
@@ -89,15 +93,28 @@ export default function ParserStatusRow({
       }
 
       try {
-        // After validation strict, node.id is always present
-        // templateId is optional (preferred for lookup, but id works as fallback)
-        const nodeId = node.templateId ?? node.id;
+        const repoTask: Task | undefined = taskId ? taskRepository.getTask(taskId) : undefined;
 
-        // Check if contract exists
-        const hasContract = await SemanticContractService.exists(nodeId);
+        if (SemanticContractService.shouldSkipCatalogueParserLookups(node, repoTask)) {
+          if (!cancelled) {
+            setParserState({
+              status: 'missing',
+              engines: [],
+              escalation: null,
+            });
+            setLoading(false);
+          }
+          return;
+        }
 
-        // Check if escalation exists and get engines
-        const escalation = await EngineEscalationService.load(nodeId);
+        const catalogueTemplateId = node.templateId as string;
+
+        const hasContract = await SemanticContractService.contractExistsForTreeNode(node, repoTask);
+
+        const escalation = await EngineEscalationService.loadEscalationForTreeNode(
+          catalogueTemplateId,
+          node.id
+        );
         const enabledEngines = escalation?.engines
           .filter(e => e.enabled)
           .map(e => e.type) || [];
@@ -140,15 +157,37 @@ export default function ParserStatusRow({
     return () => {
       cancelled = true;
     };
-  }, [node.id, node.templateId, isWizardActive]);
+  }, [node.id, node.templateId, isWizardActive, taskId]);
 
   // Refresh state when node changes
   const refreshState = React.useCallback(async () => {
-    // After validation strict, node.id is always present
-    // templateId is optional (preferred for lookup, but id works as fallback)
-    const nodeId = node.templateId ?? node.id;
-    const hasContract = await SemanticContractService.exists(nodeId);
-    const escalation = await EngineEscalationService.load(nodeId);
+    if (isWizardActive) {
+      setParserState({
+        status: 'missing',
+        engines: [],
+        escalation: null,
+      });
+      return;
+    }
+
+    const repoTask: Task | undefined = taskId ? taskRepository.getTask(taskId) : undefined;
+
+    if (SemanticContractService.shouldSkipCatalogueParserLookups(node, repoTask)) {
+      setParserState({
+        status: 'missing',
+        engines: [],
+        escalation: null,
+      });
+      return;
+    }
+
+    const catalogueTemplateId = node.templateId as string;
+
+    const hasContract = await SemanticContractService.contractExistsForTreeNode(node, repoTask);
+    const escalation = await EngineEscalationService.loadEscalationForTreeNode(
+      catalogueTemplateId,
+      node.id
+    );
     const enabledEngines = escalation?.engines
       .filter(e => e.enabled)
       .map(e => e.type) || [];
@@ -167,7 +206,7 @@ export default function ParserStatusRow({
       engines: enabledEngines,
       escalation,
     });
-  }, [node.id, node.templateId]);
+  }, [node.id, node.templateId, isWizardActive, taskId]);
 
   // Expose refresh function via callback ref (parent can call it)
   React.useEffect(() => {

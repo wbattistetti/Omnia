@@ -48,6 +48,16 @@ export function inferTaskKind(task: Task | null | undefined): TaskKind {
   return 'instance';
 }
 
+/**
+ * True when the task references a persisted template row (non-sentinel id).
+ * Used for materialization and save paths; null / UNDEFINED / empty → standalone shell.
+ */
+export function hasValidTemplateIdRef(task: Task | null | undefined): boolean {
+  if (!task) return false;
+  const tid = task.templateId;
+  return tid != null && tid !== 'UNDEFINED' && String(tid).trim() !== '';
+}
+
 /** True when the task row represents a standalone instance (local schema). */
 export function isStandalone(task: Task | null | undefined): boolean {
   return inferTaskKind(task) === 'standalone';

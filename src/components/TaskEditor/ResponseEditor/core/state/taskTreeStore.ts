@@ -20,7 +20,40 @@
 
 import { create } from 'zustand';
 import type { TaskTree } from '@types/taskTypes';
-import { ensureTaskTreeNodeIds } from '@responseEditor/core/taskTree';
+import {
+  ensureTaskTreeNodeIds,
+  ensureTaskTreeStepSlicesForAllNodes,
+} from '@responseEditor/core/taskTree';
+import { logStepsStrip } from '@responseEditor/behaviour/stepsStripDebug';
+
+/** Single write-boundary normalization: stable ids + per-node step slices in taskTree.steps. */
+function normalizeTaskTreeForStore(taskTree: TaskTree | null): TaskTree | null {
+  if (!taskTree) {
+    return null;
+  }
+  const normalized = ensureTaskTreeStepSlicesForAllNodes(ensureTaskTreeNodeIds(taskTree));
+  const steps = normalized.steps && typeof normalized.steps === 'object' && !Array.isArray(normalized.steps)
+    ? (normalized.steps as Record<string, Record<string, unknown>>)
+    : null;
+  const firstMain = Array.isArray(normalized.nodes) && normalized.nodes[0];
+  const firstKey =
+    firstMain && typeof firstMain === 'object' && 'templateId' in firstMain && (firstMain as { templateId?: string }).templateId
+      ? String((firstMain as { templateId: string }).templateId)
+      : firstMain && typeof firstMain === 'object' && 'id' in firstMain && (firstMain as { id?: string }).id
+        ? String((firstMain as { id: string }).id)
+        : null;
+  const firstSliceKeys =
+    firstKey && steps && steps[firstKey] && typeof steps[firstKey] === 'object'
+      ? Object.keys(steps[firstKey])
+      : [];
+  logStepsStrip('normalizeTaskTreeForStore', {
+    mainNodeCount: normalized.nodes?.length ?? 0,
+    stepsTopLevelKeys: steps ? Object.keys(steps) : [],
+    firstMainLookupKey: firstKey,
+    firstMainStepKeysAfterNormalize: firstSliceKeys,
+  });
+  return normalized;
+}
 
 interface TaskTreeStore {
   // State
@@ -51,7 +84,7 @@ export const useTaskTreeStore = create<TaskTreeStore>((set, get) => ({
   // Actions
   setTaskTree: (taskTree) => {
     set((state) => {
-      const normalized = taskTree ? ensureTaskTreeNodeIds(taskTree) : null;
+      const normalized = normalizeTaskTreeForStore(taskTree);
       // ✅ CRITICAL: Only increment version if taskTree actually changed
       // This prevents infinite loops when same taskTree is set multiple times
       const taskTreeChanged = state.taskTree !== normalized;
@@ -66,9 +99,16 @@ export const useTaskTreeStore = create<TaskTreeStore>((set, get) => ({
   updateTaskTree: (updater) => {
     set((state) => {
       const updated = updater(state.taskTree);
+      if (updated === null) {
+        return {
+          ...state,
+          taskTree: null,
+          taskTreeVersion: state.taskTreeVersion + 1,
+        };
+      }
       return {
         ...state,
-        taskTree: updated,
+        taskTree: normalizeTaskTreeForStore(updated),
         taskTreeVersion: state.taskTreeVersion + 1,
       };
     });

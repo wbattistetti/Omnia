@@ -11,8 +11,9 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { computeUiStepKeys } from './computeUiStepKeys';
+import { computeUiStepKeys, describeComputeUiStepKeys } from './computeUiStepKeys';
 import { logBehaviourSteps, summarizeStepsShape } from './behaviourStepsDebug';
+import { logStepsStrip } from './stepsStripDebug';
 import { useResponseEditorNavigation } from '@responseEditor/context/ResponseEditorNavigationContext';
 
 export type BehaviourFocusTarget = {
@@ -62,7 +63,7 @@ export function BehaviourUiProvider({
   );
 
   useEffect(() => {
-    const n = node as { id?: string; steps?: unknown } | null | undefined;
+    const n = node as { id?: string; templateId?: string; steps?: unknown } | null | undefined;
     logBehaviourSteps('BehaviourUiProvider:uiStepKeys', {
       uiStepKeys,
       uiStepKeysCount: uiStepKeys.length,
@@ -71,6 +72,19 @@ export function BehaviourUiProvider({
       selectedSubIndex,
       nodeId: n?.id,
       nodeSteps: summarizeStepsShape(n?.steps),
+    });
+    const diag = describeComputeUiStepKeys({
+      node,
+      selectedRoot,
+      selectedPath,
+      selectedSubIndex,
+    });
+    logStepsStrip('BehaviourUiProvider:pipeline', {
+      uiStepKeys,
+      nodeId: n?.id,
+      templateId: n?.templateId,
+      nodeSteps: summarizeStepsShape(n?.steps),
+      ...diag,
     });
   }, [uiStepKeys, node, selectedRoot, selectedPath, selectedSubIndex]);
 

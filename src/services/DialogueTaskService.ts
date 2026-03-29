@@ -180,6 +180,36 @@ export class DialogueTaskService {
   }
 
   /**
+   * Resolve a catalogue template in cache without logging when missing.
+   * Manual TaskTree node IDs are instance UUIDs and must use this for optional lookups.
+   */
+  static findTemplateInCache(id: string | null | undefined): DialogueTask | null {
+    if (!id || !this.cacheLoaded) {
+      return null;
+    }
+    const normalizedId = String(id).trim();
+    const normalizedIdLower = normalizedId.toLowerCase();
+
+    const found = this.cache.find(t => {
+      if (t._id) {
+        const tIdStr = typeof t._id === 'object' && t._id.toString ? t._id.toString() : String(t._id);
+        const tId = tIdStr.trim();
+        if (tId === normalizedId) return true;
+        if (tId.length === 24 && normalizedId.length === 24 && /^[0-9a-fA-F]{24}$/.test(tId) && /^[0-9a-fA-F]{24}$/.test(normalizedId)) {
+          if (tId.toLowerCase() === normalizedIdLower) return true;
+        }
+      }
+      if (t.id) {
+        const tIdStr = String(t.id).trim();
+        if (tIdStr === normalizedId) return true;
+        if (tIdStr.toLowerCase() === normalizedIdLower) return true;
+      }
+      return false;
+    });
+    return found ?? null;
+  }
+
+  /**
    * Ottiene un Task per ID (dalla cache)
    * Supporta ObjectId MongoDB (come stringa o oggetto) e confronto per _id, id, name, label
    * CASE-INSENSITIVE per name e label
@@ -190,35 +220,10 @@ export class DialogueTaskService {
       return null;
     }
 
-    // Normalizza l'ID cercato (potrebbe essere ObjectId come stringa)
     const normalizedId = String(id).trim();
     const normalizedIdLower = normalizedId.toLowerCase();
 
-    // ✅ REMOVED: Log rumoroso di ricerca template - verrà ripristinato se necessario durante refactoring
-
-    // Cerca nella cache
-    const found = this.cache.find(t => {
-      // ✅ Confronta _id (supporta ObjectId come oggetto o stringa)
-      if (t._id) {
-        // Se _id è un oggetto (MongoDB ObjectId), confronta con toString()
-        const tIdStr = typeof t._id === 'object' && t._id.toString ? t._id.toString() : String(t._id);
-        const tId = tIdStr.trim();
-        if (tId === normalizedId) return true;
-        // Se entrambi sono ObjectId-like (24 caratteri hex), confronta senza case
-        if (tId.length === 24 && normalizedId.length === 24 && /^[0-9a-fA-F]{24}$/.test(tId) && /^[0-9a-fA-F]{24}$/.test(normalizedId)) {
-          if (tId.toLowerCase() === normalizedIdLower) return true;
-        }
-      }
-      // ✅ CRITICAL: Confronta t.id (primary field) - case-insensitive
-      if (t.id) {
-        const tIdStr = String(t.id).trim();
-        if (tIdStr === normalizedId) return true; // Exact match first
-        if (tIdStr.toLowerCase() === normalizedIdLower) return true; // Case-insensitive match
-      }
-      // ⚠️ NOTE: name e label sono usati solo come fallback, non dovrebbero essere usati per template lookup
-      // Rimossi per evitare falsi positivi
-      return false;
-    });
+    const found = this.findTemplateInCache(id);
 
     if (!found) {
       // Log dettagliato solo la prima volta per evitare spam

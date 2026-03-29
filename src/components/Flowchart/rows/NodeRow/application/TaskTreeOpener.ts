@@ -8,6 +8,8 @@ import { resolveTaskType } from '../../../utils/taskVisuals';
 import type { Row } from '@types/NodeRowTypes';
 import type { NodeRowData } from '@types/project';
 import { flushSemanticDraftToTaskOnTaskCreated } from '@utils/semanticValuesRowState';
+import { ensureTaskExists } from '@utils/ensureTaskExists';
+import { hasValidTemplateIdRef } from '@utils/taskKind';
 
 export interface TaskTreeOpenerDependencies {
   taskEditorCtx: {
@@ -37,21 +39,19 @@ export class TaskTreeOpener {
   constructor(private deps: TaskTreeOpenerDependencies) {}
 
   /**
-   * ✅ Helper: Verifica se un task è vuoto (senza templateId e senza steps)
-   * Un task vuoto deve aprire il wizard full, non l'editor normale
+   * True when the task is still a fresh standalone shell (no structure/steps yet).
+   * Used to offer wizard adaptation when row heuristics reference a template.
    */
-  private isEmptyTask(task: any): boolean {
-    const hasTemplate = !!task.templateId && task.templateId !== 'UNDEFINED';
-    const hasSteps = !!task.steps && Object.keys(task.steps).length > 0;
-    return !hasTemplate && !hasSteps;
+  private isPristineStandaloneTask(task: Task): boolean {
+    const noTemplate = !task.templateId || task.templateId === 'UNDEFINED';
+    const noSteps = !task.steps || Object.keys(task.steps).length === 0;
+    const noNodes = !task.instanceNodes || task.instanceNodes.length === 0;
+    return (task.kind === 'standalone' || noTemplate) && noSteps && noNodes;
   }
 
   /**
    * Opens the TaskTree editor based on the current state of the row.
-   * Determines taskWizardMode automatically:
-   * - 'none': Task exists
-   * - 'adaptation': Template found, no task
-   * - 'full': No template, no task
+   * Task is always ensured in the repository first; wizard full is UI-only (never a missing-task fallback).
    */
   async open(): Promise<TaskTreeOpenerResult> {
     try {
@@ -183,40 +183,12 @@ export class TaskTreeOpener {
         return this.handleNonDataRequestTask();
       }
 
-      // Check if task already exists - ALWAYS use row.id (task.id === row.id)
-      let taskForType = taskRepository.getTask(row.id);
-
-      console.log('[🔍 TaskTreeOpener] 📊 DEBUG: Verifica stato task', {
-        rowId: row.id,
-        rowText: row.text,
-        taskExists: !!taskForType,
-        taskId: taskForType?.id,
-        taskTemplateId: taskForType?.templateId,
-        taskPromptsAdapted: taskForType?.metadata?.promptsAdapted
+      const taskForType = ensureTaskExists(row.id, {
+        taskType: TaskType.UtteranceInterpretation,
+        projectId,
+        label: row.text || '',
       });
 
-      // STATE 1: Task exists → check if empty or complete
-      if (taskForType) {
-        // ✅ FIX: Check if task is empty → open wizard full instead of editor normal
-        if (this.isEmptyTask(taskForType) && taskType === TaskType.UtteranceInterpretation) {
-          console.log('[🔍 TaskTreeOpener] ✅ STATE 1 (EMPTY): Task esiste ma è vuoto → taskWizardMode = "full"', {
-            taskId: taskForType.id,
-            taskTemplateId: taskForType.templateId,
-            hasSteps: false
-          });
-          return await this.handleNoTemplate(projectId);
-        }
-
-        console.log('[🔍 TaskTreeOpener] ✅ STATE 1: Task esiste e completo → taskWizardMode = "none"', {
-          taskId: taskForType.id,
-          taskTemplateId: taskForType.templateId,
-          hasSteps: !!taskForType.steps && Object.keys(taskForType.steps).length > 0,
-          promptsAdapted: taskForType.metadata?.promptsAdapted
-        });
-        return await this.handleExistingTask(taskForType);
-      }
-
-      // STATE 2/3: Task doesn't exist → determine taskWizardMode based on templateId
       const rowHeuristics = (row as any)?.heuristics;
       const metaTaskType =
         rowHeuristics?.type !== undefined && rowHeuristics?.type !== null
@@ -224,60 +196,29 @@ export class TaskTreeOpener {
           : TaskType.UNDEFINED;
       const metaTemplateId = rowHeuristics?.templateId || null;
 
-      console.log('[🔍 TaskTreeOpener] 📊 DEBUG: Euristica trovata', {
+      console.log('[🔍 TaskTreeOpener] 📊 OPEN: task ensured + heuristics', {
         rowId: row.id,
-        rowText: row.text,
         metaTaskType,
         metaTemplateId,
-        hasHeuristics: !!rowHeuristics,
-        heuristicsKeys: rowHeuristics ? Object.keys(rowHeuristics) : []
+        pristine: this.isPristineStandaloneTask(taskForType),
       });
 
-      // STATE 2: Template found, no task → taskWizardMode = 'adaptation'
-      if (metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation) {
-        console.log('[🔍 TaskTreeOpener] ✅ STATE 2: Template trovato, task NON esiste → taskWizardMode = "adaptation"', {
-          rowId: row.id,
-          rowText: row.text,
-          metaTemplateId,
-          metaTaskType
-        });
+      if (
+        metaTemplateId &&
+        metaTaskType === TaskType.UtteranceInterpretation &&
+        this.isPristineStandaloneTask(taskForType)
+      ) {
         return await this.handleTemplateFound(metaTemplateId, metaTaskType, projectId);
       }
 
-      // STATE 3: No template, no task → taskWizardMode = 'full'
-      // ✅ FIX: Use taskType (from resolveTaskType) in addition to metaTaskType
-      const shouldOpenWizardFull =
-        !metaTemplateId &&
-        (taskType === TaskType.UtteranceInterpretation ||
-         metaTaskType === TaskType.UtteranceInterpretation) &&
-        row.text?.trim().length >= 3;
-
-      if (shouldOpenWizardFull) {
-        console.log('[🔍 TaskTreeOpener] ✅ STATE 3: Nessun template, nessun task → taskWizardMode = "full"', {
-          rowId: row.id,
-          rowText: row.text,
-          taskType: TaskType[taskType],
-          metaTaskType: TaskType[metaTaskType]
-        });
-        return await this.handleNoTemplate(projectId);
-      }
-
-      // ✅ FIX: If task type is UNDEFINED, don't open wizard - require manual type selection
       if (metaTaskType === TaskType.UNDEFINED) {
-        console.log('[🔍 TaskTreeOpener] ⚠️ STATE 2 (UNDEFINED): Tipo non definito → richiedere selezione manuale', {
-          rowId: row.id,
-          rowText: row.text,
-          metaTaskType: TaskType[metaTaskType]
-        });
-
         return {
           success: false,
           error: new Error('Tipo non definito. Seleziona manualmente il tipo prima di aprire l\'editor.')
         };
       }
 
-      // Fallback: Create base task without preview (legacy behavior)
-      return await this.handleFallback(metaTaskType, metaTemplateId, projectId, rowHeuristics);
+      return await this.handleExistingTask(taskForType);
     } catch (error) {
       console.error('[TaskTreeOpener] Error opening editor:', error);
       return {
@@ -298,23 +239,23 @@ export class TaskTreeOpener {
       taskWizardMode: 'none',
     });
 
-    // Build TaskTree if necessary
     let taskTree: any = null;
-    if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-      const DialogueTaskService = (await import('@services/DialogueTaskService'))
-        .default;
-      const template = DialogueTaskService.getTemplate(taskForType.templateId);
-      if (template) {
-        const { RowHeuristicsService } = await import('@services/RowHeuristicsService');
-        const templateType = RowHeuristicsService.getTemplateType(template);
-        if (templateType === TaskType.UtteranceInterpretation) {
-          const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
-          const projectId = getProjectId?.() || undefined;
-          // ✅ CRITICAL: Usa buildTaskTreeFromRepository per garantire istanza fresca dal repository
-          const result = await buildTaskTreeFromRepository(row.id, projectId);
-          if (result) {
-            taskTree = result.taskTree;
-          }
+    const DialogueTaskService = (await import('@services/DialogueTaskService')).default;
+
+    const resolvedTemplate =
+      hasValidTemplateIdRef(taskForType) && taskForType.kind !== 'standalone'
+        ? DialogueTaskService.findTemplateInCache(String(taskForType.templateId).trim())
+        : null;
+
+    if (resolvedTemplate) {
+      const { RowHeuristicsService } = await import('@services/RowHeuristicsService');
+      const templateType = RowHeuristicsService.getTemplateType(resolvedTemplate);
+      if (templateType === TaskType.UtteranceInterpretation) {
+        const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
+        const projectId = getProjectId?.() || undefined;
+        const result = await buildTaskTreeFromRepository(row.id, projectId);
+        if (result) {
+          taskTree = result.taskTree;
         }
       }
     }
@@ -324,7 +265,7 @@ export class TaskTreeOpener {
       type: finalTaskType,
       label: row.text,
       taskTree,
-      templateId: taskForType?.templateId || undefined,
+      templateId: resolvedTemplate ? taskForType.templateId : undefined,
       taskWizardMode: 'none',
     });
 
@@ -368,7 +309,16 @@ export class TaskTreeOpener {
         await DialogueTaskService.loadTemplates();
       }
 
-      const template = DialogueTaskService.getTemplate(metaTemplateId);
+      let template = DialogueTaskService.getTemplate(metaTemplateId);
+
+      if (!template && projectId) {
+        const { loadTemplateFromProject } = await import('@utils/taskUtils');
+        const fromProject = await loadTemplateFromProject(metaTemplateId, projectId);
+        if (fromProject) {
+          DialogueTaskService.registerExternalTemplates([fromProject as any]);
+          template = DialogueTaskService.getTemplate(metaTemplateId);
+        }
+      }
 
       console.log('[🔍 TaskTreeOpener] 🔍 DEBUG: Template lookup result', {
         metaTemplateId,
@@ -379,7 +329,7 @@ export class TaskTreeOpener {
       });
 
       if (template) {
-        console.log('[🔍 TaskTreeOpener] ✅ Template trovato, aprendo ResponseEditor in adaptation mode (wizard creerà task e clonerà step)', {
+        console.log('[🔍 TaskTreeOpener] ✅ Template trovato, aprendo ResponseEditor in adaptation mode', {
           templateId: metaTemplateId,
           templateLabel: template.label || template.name,
           rowId: row.id,
@@ -412,292 +362,21 @@ export class TaskTreeOpener {
         });
 
         return { success: true };
-      } else {
-        console.error('[🔍 TaskTreeOpener] ❌ Template not found in cache', {
-          metaTemplateId,
-          cacheLoaded: DialogueTaskService.isCacheLoaded(),
-          allTemplateIds: DialogueTaskService.getAllTemplates().map(t => t.id)
-        });
       }
+      console.error('[🔍 TaskTreeOpener] ❌ Template not found after cache and project load', {
+        metaTemplateId,
+        projectId,
+        cacheLoaded: DialogueTaskService.isCacheLoaded(),
+      });
     } catch (err) {
       console.error('[🔍 TaskTreeOpener] ❌ Errore caricamento template:', err);
-      // Fallback: continue with wizard
     }
 
+    const existing = taskRepository.getTask(row.id);
+    if (existing) {
+      return this.handleExistingTask(existing);
+    }
     return { success: false };
-  }
-
-  private async handleNoTemplate(
-    projectId: string | undefined
-  ): Promise<TaskTreeOpenerResult> {
-    const { row, taskEditorCtx } = this.deps;
-
-    console.log(
-      '[🔍 TaskTreeOpener] ✅ STATO 3: Nessun template, nessun task, aprendo ResponseEditor in modalità wizard full',
-      {
-        label: row.text,
-        labelLength: row.text.trim().length,
-        rowId: row.id,
-      }
-    );
-
-    // ✅ CRITICAL: Reset wizard state BEFORE opening editor
-    const { useWizardStore } = await import('../../../../../../TaskBuilderAIWizard/store/wizardStore');
-    const wizard = useWizardStore.getState();
-
-    // 1. Reset completo
-    wizard.reset();
-
-    // 2. Initialize from task instance (if exists) - currently does nothing, available for future use
-    const task = taskRepository.getTask(row.id);
-    if (task) {
-      wizard.initializeFromInstance(task);
-    }
-
-    // 3. Now open the editor
-    taskEditorCtx.open({
-      id: row.id,  // ALWAYS equals task.id (wizard will create task with this ID)
-      type: TaskType.UtteranceInterpretation,
-      label: row.text || '',
-      taskWizardMode: 'full', // ✅ Flag only - orchestrator controls actual wizard start
-      taskLabel: row.text || '',
-    });
-
-    console.log(
-      '[🔍 TaskTreeOpener][STATO 3] Emettendo evento taskEditor:open con taskWizardMode = "full"',
-      {
-        rowId: row.id,
-        taskWizardMode: 'full',
-      }
-    );
-
-    this.dispatchTaskEditorOpenEvent({
-      id: row.id,  // ALWAYS equals task.id (wizard will create task with this ID)
-      type: TaskType.UtteranceInterpretation,
-      label: row.text || '',
-      taskWizardMode: 'full',
-      taskLabel: row.text || '',
-    });
-
-    return { success: true };
-  }
-
-  private async handleFallback(
-    metaTaskType: TaskType,
-    metaTemplateId: string | null,
-    projectId: string | undefined,
-    rowHeuristics: any
-  ): Promise<TaskTreeOpenerResult> {
-    const { row, taskEditorCtx, getProjectId } = this.deps;
-
-    const inferredCategory = rowHeuristics?.inferredCategory || null;
-
-    console.log('🆕 [TaskTreeOpener][LAZY] Creando task usando metadati riga', {
-      rowId: row.id,
-      metaTaskType,
-      metaTaskTypeName: TaskType[metaTaskType],
-      metaTemplateId,
-      inferredCategory: inferredCategory || null,
-    });
-
-    let initialTaskData: any = { label: row.text || '' };
-
-    // CASE 1: If there's inferredCategory (problem-classification, choice, confirmation)
-    if (inferredCategory && metaTaskType === TaskType.UtteranceInterpretation) {
-      const { v4: uuidv4 } = await import('uuid');
-      const {
-        getdataLabelForCategory,
-        getDefaultValuesForCategory,
-        getCurrentProjectLocale,
-      } = await import('@utils/categoryPresets');
-
-      initialTaskData.category = inferredCategory;
-      initialTaskData.templateId = null;
-
-      const projectLocale = getCurrentProjectLocale();
-      const categorydataLabel = getdataLabelForCategory(inferredCategory, projectLocale);
-
-      if (categorydataLabel) {
-        const defaultValues = getDefaultValuesForCategory(inferredCategory, projectLocale);
-
-        initialTaskData.data = [
-          {
-            id: uuidv4(),
-            label: categorydataLabel,
-            kind: 'generic',
-            ...(defaultValues ? { values: defaultValues } : {}),
-            subData: [],
-            steps: {
-              start: {
-                escalations: [
-                  {
-                    tasks: [],
-                  },
-                ],
-              },
-            },
-          },
-        ];
-
-        console.log('✅ [TaskTreeOpener][LAZY] TaskTree creato automaticamente da inferredCategory', {
-          category: inferredCategory,
-          dataLabel: categorydataLabel,
-          hasDefaultValues: !!defaultValues,
-        });
-      }
-    }
-    // CASE 2: If there's no category but there's templateId → use template
-    else if (metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation) {
-      initialTaskData.templateId = metaTemplateId;
-      console.log('✅ [TaskTreeOpener][LAZY] Task creato con templateId, data sarà caricato dal template', {
-        templateId: metaTemplateId,
-      });
-    }
-    // CASE 3: If there's neither category nor template → open external wizard (don't create task)
-    else {
-      console.log('✅ [TaskTreeOpener][EXTERNAL_WIZARD] Aprendo wizard esterno (nessun template/categoria)', {
-        rowId: row.id,
-        rowText: row.text,
-      });
-
-      const wizardEvent = new CustomEvent('taskTreeWizard:open', {
-        detail: {
-          taskLabel: row.text || '',
-          taskType:
-            metaTaskType === TaskType.UNDEFINED
-              ? TaskType.UtteranceInterpretation
-              : metaTaskType,
-          initialTaskTree: undefined,
-          startOnStructure: false,
-          rowId: row.id,  // ALWAYS equals task.id
-        },
-        bubbles: true,
-      });
-      document.dispatchEvent(wizardEvent);
-      return { success: true };
-    }
-
-    // Create base task (with TaskTree if inferredCategory present) - only if there's category or template
-    const newTask = taskRepository.createTask(
-      metaTaskType,
-      metaTemplateId,
-      initialTaskData,
-      row.id,
-      projectId
-    );
-
-    flushSemanticDraftToTaskOnTaskCreated(row as unknown as NodeRowData, row.id);
-
-    let taskForType = newTask;
-
-    // If there's templateId, use centralized function to clone and adapt
-    if (metaTemplateId) {
-      console.log('[🔍 TaskTreeOpener][LAZY] Clonando struttura dal template', {
-        rowId: row.id,
-        taskId: row.id,
-        templateId: metaTemplateId,
-        taskLabel: taskForType?.label,
-      });
-
-      try {
-        const { loadAndAdaptTaskTreeForExistingTask } = await import(
-          '@utils/taskTreeManager'
-        );
-
-        const { taskTree, adapted } = await loadAndAdaptTaskTreeForExistingTask(
-          taskForType,
-          projectId
-        );
-
-        console.log(
-          '[🔍 TaskTreeOpener][LAZY] TaskTree ricevuto da loadAndAdaptTaskTreeForExistingTask',
-          {
-            rowId: row.id,
-            taskId: row.id,
-            taskTreeStepsKeys: Object.keys(taskTree.steps || {}),
-            taskTreeStepsCount: Object.keys(taskTree.steps || {}).length,
-            mainNodesTemplateIds:
-              taskTree.nodes?.map((n: any) => ({
-                id: n.id,
-                templateId: n.templateId,
-                label: n.label,
-              })) || [],
-            adapted,
-          }
-        );
-
-        taskRepository.updateTask(
-          row.id,
-          {
-            steps: taskTree.steps,
-            metadata: {
-              promptsAdapted: adapted || taskForType?.metadata?.promptsAdapted === true,
-            },
-          },
-          projectId
-        );
-
-        console.log('[🔍 TaskTreeOpener][LAZY] ✅ Task salvato con steps', {
-          rowId: row.id,
-          taskId: row.id,
-          stepsCount: Object.keys(taskTree.steps || {}).length,
-          stepsKeys: Object.keys(taskTree.steps || {}),
-          promptsAdapted: adapted || taskForType?.metadata?.promptsAdapted === true,
-        });
-      } catch (err) {
-        console.error('[🔍 TaskTreeOpener][LAZY] ❌ Errore durante clonazione/adattamento', err);
-      }
-    }
-
-    const finalTaskType = taskForType
-      ? (taskForType.type as TaskType)
-      : ((row as any)?.heuristics?.type || TaskType.UtteranceInterpretation);
-
-    taskEditorCtx.open({
-      id: row.id,  // ALWAYS equals task.id
-      type: finalTaskType,
-      label: row.text,
-    });
-
-    // Build TaskTree only for DataRequest
-    let taskTree: any = null;
-
-    if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-      const DialogueTaskService = (await import('@services/DialogueTaskService'))
-        .default;
-      const template = DialogueTaskService.getTemplate(taskForType.templateId);
-
-      if (template) {
-        const { RowHeuristicsService } = await import('@services/RowHeuristicsService');
-        const templateType = RowHeuristicsService.getTemplateType(template);
-
-        if (templateType === TaskType.UtteranceInterpretation) {
-          const { buildTaskTree } = await import('@utils/taskUtils');
-          const projectId = getProjectId?.() || undefined;
-          taskTree = await buildTaskTree(taskForType, projectId);
-          if (!taskTree) {
-            taskTree = {
-              label: taskForType.label || row.text || 'New Task',
-              nodes: [],
-            };
-          }
-        } else {
-          taskTree = null;
-        }
-      } else {
-        taskTree = null;
-      }
-    }
-
-    this.dispatchTaskEditorOpenEvent({
-      id: row.id,  // ALWAYS equals task.id
-      type: finalTaskType,
-      label: row.text,
-      taskTree,
-      templateId: taskForType?.templateId || undefined,
-    });
-
-    return { success: true };
   }
 
   private async handleNonDataRequestTask(): Promise<TaskTreeOpenerResult> {

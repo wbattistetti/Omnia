@@ -1,3 +1,7 @@
+/**
+ * Horizontal Behaviour step tabs. Visibility merges TaskRepository mirrors with editor TaskTree
+ * (`node.steps`) so tabs appear before `task.steps[nodeId]` is populated in memory.
+ */
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { stepMeta } from './ddtUtils';
@@ -7,6 +11,7 @@ import { useResponseEditorContext } from '@responseEditor/context/ResponseEditor
 import { taskRepository } from '@services/TaskRepository';
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { StepType, STEP_ORDER, getStepOrder } from '@types/stepTypes';
+import { computeVisibleBehaviourStepKeys } from '@responseEditor/behaviour/computeVisibleBehaviourStepKeys';
 
 interface StepsStripProps {
   stepKeys: string[];
@@ -206,7 +211,6 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
     });
   }, [effectiveTaskId, node, taskVersion]); // ✅ Aggiungi taskVersion come dipendenza
 
-  // Filter stepKeys to show only steps that are enabled (not disabled)
   const visibleStepKeys = React.useMemo(() => {
     if (!effectiveTaskId || !node) return stepKeys;
 
@@ -217,12 +221,12 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
     if (!taskInstance) return stepKeys;
 
     const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
+    const nodeDict =
+      node?.steps && typeof node.steps === 'object' && !Array.isArray(node.steps)
+        ? (node.steps as Record<string, unknown>)
+        : undefined;
 
-    // Show only steps that exist in instance AND are not disabled
-    return stepKeys.filter(stepKey => {
-      const stepData = instanceSteps[stepKey];
-      return stepData && stepData._disabled !== true;
-    });
+    return computeVisibleBehaviourStepKeys(stepKeys, instanceSteps, nodeDict);
   }, [stepKeys, effectiveTaskId, node, taskVersion]);
 
   // Handler per ripristinare step (imposta _disabled: false)

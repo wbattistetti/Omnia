@@ -141,10 +141,19 @@ export function MainContentArea({
     if (mainViewMode !== MainViewMode.BEHAVIOUR) {
       return;
     }
+    const hasNodes = !!(taskTree?.nodes && taskTree.nodes.length > 0);
+    const hasStepDictionary =
+      !!(
+        taskTree?.steps &&
+        typeof taskTree.steps === 'object' &&
+        !Array.isArray(taskTree.steps) &&
+        Object.keys(taskTree.steps).length > 0
+      );
+    const isManualLike =
+      taskWizardMode == null || taskWizardMode === 'none';
     const isDDTReady = !!(
       taskTree &&
-      ((taskTree.steps && Object.keys(taskTree.steps).length > 0) ||
-        (taskTree.nodes && taskTree.nodes.length > 0))
+      (isManualLike ? hasNodes : hasStepDictionary || hasNodes)
     );
     logBehaviourSteps('MainContentArea:structureGate', {
       mainViewMode,
@@ -156,7 +165,7 @@ export function MainContentArea({
           : [],
       selectedNodeSteps: summarizeStepsShape(selectedNode?.steps),
     });
-  }, [mainViewMode, selectedNode, taskTree]);
+  }, [mainViewMode, selectedNode, taskTree, taskWizardMode]);
 
   // ✅ NEW: Get wizard context (may be null if wizard not active)
   let wizardContext: ReturnType<typeof useWizardContext> | null = null;
@@ -258,18 +267,26 @@ export function MainContentArea({
     case MainViewMode.BEHAVIOUR:
     default:
       // ✅ Default: BehaviourEditor (StepsStrip + StepEditor)
-      // ✅ FIX: Don't render if DDT is not ready (during wizard or loading)
-      // Check if taskTree exists and has structure
-      const isDDTReady = taskTree && (
-        (taskTree.steps && Object.keys(taskTree.steps).length > 0) ||
-        (taskTree.nodes && taskTree.nodes.length > 0)
-      );
+      // Manual mode: require at least one tree node from the sidebar — not taskTree.steps alone
+      // (e.g. escalation tasks attached before any field exists must not unlock Behaviour).
+      const hasStructureNodes = !!(taskTree?.nodes && taskTree.nodes.length > 0);
+      const hasStepDictionary =
+        !!(
+          taskTree?.steps &&
+          typeof taskTree.steps === 'object' &&
+          !Array.isArray(taskTree.steps) &&
+          Object.keys(taskTree.steps).length > 0
+        );
+      const isManualLike =
+        taskWizardMode == null || taskWizardMode === 'none';
+      const isDDTReady =
+        !!taskTree &&
+        (isManualLike
+          ? hasStructureNodes
+          : hasStepDictionary || hasStructureNodes);
 
       const isManualEmptyStructure =
-        taskWizardMode === 'none' &&
-        (!taskTree ||
-          ((!taskTree.nodes || taskTree.nodes.length === 0) &&
-            (!taskTree.steps || Object.keys(taskTree.steps).length === 0)));
+        isManualLike && (!taskTree || !hasStructureNodes);
 
       if (!selectedNode || !isDDTReady) {
         if (isManualEmptyStructure) {
