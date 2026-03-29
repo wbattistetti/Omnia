@@ -199,10 +199,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
 
         const finalRow = updatedRows.find(r => r.id === rowId);
 
-        // Migration: row.text is the task name/label (not the message content)
-        // task.text contains the actual message content (saved in instance)
-        // When row.text is updated, it's updating the task name, not the message content
-        // The message content is updated separately when editing the task in ResponseEditor
+        // row.text is the label shown on the flow row; SayMessage body lives in
+        // task.parameters (text GUID) + project translations (see sayMessageTaskSync).
 
         // setIsEmpty viene aggiornato solo quando esci dall'editing (ESC, click fuori, blur esterno)
         normalizedData.onUpdate?.({ rows: updatedRows, isTemporary: normalizedData.isTemporary });

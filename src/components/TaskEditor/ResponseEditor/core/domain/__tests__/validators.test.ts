@@ -21,7 +21,7 @@ describe('Validators - Strict Mode', () => {
     it('should throw error if node uses subSlots', () => {
       const node = { id: 'test', label: 'Test', subSlots: [] };
       expect(() => validateNodeStructure(node)).toThrow(DataStructureError);
-      expect(() => validateNodeStructure(node)).toThrow('legacy \'subSlots\'');
+      expect(() => validateNodeStructure(node)).toThrow('subData\' or \'subSlots');
     });
 
     it('should throw error if steps is array', () => {

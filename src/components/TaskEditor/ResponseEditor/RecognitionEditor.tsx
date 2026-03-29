@@ -191,7 +191,7 @@ export default function RecognitionEditor({
       // ✅ DEBUG: Log dettagliato del contract caricato
       console.log('[RecognitionEditor] 🔍 Contract loaded from node', {
         nodeId: node.id,
-        templateId: node.templateId,
+        nodeTemplateId: node.templateId,
         hasContract: !!loadedContract,
         contractType: loadedContract ? typeof loadedContract : 'null',
         enginesArray: engines,
@@ -199,7 +199,7 @@ export default function RecognitionEditor({
         enginesTypes: engines.map((c: any) => c.type),
         contractKeys: loadedContract ? Object.keys(loadedContract) : [],
         templateName: loadedContract?.templateName,
-        templateId: loadedContract?.templateId
+        contractTemplateId: loadedContract?.templateId,
       });
 
       // ✅ SALVA ORIGINALE (deep copy) per poterlo ripristinare se l'utente sceglie "Scarta"

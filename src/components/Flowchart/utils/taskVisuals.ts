@@ -1,6 +1,7 @@
 import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot, List, CheckCircle, Workflow } from 'lucide-react';
 import { SIDEBAR_TYPE_COLORS } from '../../Sidebar/sidebarTheme';
 import { taskRepository } from '../../../services/TaskRepository';
+import { getSayMessageSyncedBody } from '../../../utils/sayMessageTaskSync';
 import { TaskType, normalizeLegacyTaskTypeValue } from '../../../types/taskTypes';
 import { PRESET_CATEGORIES, getCurrentProjectLocale } from '../../../utils/categoryPresets';
 import getIconComponent from '../../TaskEditor/ResponseEditor/icons';
@@ -127,8 +128,7 @@ function hasTaskTreeLegacy(row: any): boolean {
 
     // Per Message: controlla se c'è un messaggio
     if (taskType === TaskType.SayMessage) {
-      const hasMessage = Boolean(task?.text && task.text.trim().length > 0);
-      return hasMessage;
+      return getSayMessageSyncedBody(task).trim().length > 0;
     }
 
     // Per DataRequest/ProblemClassification: controlla se c'è templateId o data
@@ -147,7 +147,10 @@ function hasTaskTreeLegacy(row: any): boolean {
     }
 
     // Per altri tipi: controlla se c'è contenuto rilevante
-    return Boolean(task?.text || task?.endpoint || (Array.isArray(task?.semanticValues) && task.semanticValues.length > 0));
+    return Boolean(
+      task?.endpoint ||
+        (Array.isArray(task?.semanticValues) && task.semanticValues.length > 0)
+    );
   } catch (err) {
     return false;
   }

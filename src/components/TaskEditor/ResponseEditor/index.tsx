@@ -20,6 +20,7 @@ import { useWizardModeTransition } from '@responseEditor/hooks/useWizardModeTran
 import { useTaskTreeFromStore, useTaskTreeVersion } from '@responseEditor/core/state';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 import { closeTab } from '@dock/ops';
+import { flushWizardToManualPipeline } from '@utils/wizard/flushWizardToManual';
 
 import type { TaskMeta } from '@taskEditor/EditorHost/types';
 import type { Task, TaskTree } from '@types/taskTypes';
@@ -156,6 +157,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     projectId: projectIdForWizard,
     locale: localeForWizard,
     onTaskBuilderComplete: onWizardComplete,
+    replaceSelectedTaskTree: editor.replaceSelectedTaskTree,
     mode: wizardMode,
     templateId: templateIdForWizard,
   });
@@ -339,9 +341,30 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   }, [editor.setTaskWizardMode]);
 
   const handleSwitchToManual = React.useCallback(() => {
-    wizardResult?.resetOrchestrator?.();
-    editor.setTaskWizardMode('none');
-  }, [wizardResult?.resetOrchestrator, editor.setTaskWizardMode]);
+    void (async () => {
+      try {
+        if (task?.id) {
+          await flushWizardToManualPipeline({
+            taskId: task.id,
+            projectId: currentProjectId,
+            task: task as Task | TaskMeta,
+            replaceSelectedTaskTree: editor.replaceSelectedTaskTree,
+          });
+        }
+      } catch (err) {
+        console.error('[ResponseEditor] PR3 flushWizardToManualPipeline failed:', err);
+      } finally {
+        wizardResult?.resetOrchestrator?.();
+        editor.setTaskWizardMode('none');
+      }
+    })();
+  }, [
+    task,
+    currentProjectId,
+    editor.replaceSelectedTaskTree,
+    editor.setTaskWizardMode,
+    wizardResult?.resetOrchestrator,
+  ]);
 
   // Trigger startFull() once wizard mode and result are both available.
   React.useEffect(() => {

@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTaskTreeStore, taskTreeSelectors } from '@responseEditor/core/state/taskTreeStore';
+import { ensureTaskTreeNodeIds } from '@responseEditor/core/taskTree';
 import type { TaskTree } from '@types/taskTypes';
 
 describe('Domain: TaskTree Store (Zustand)', () => {
@@ -50,7 +51,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
         result.current.setTaskTree(taskTree);
       });
 
-      expect(result.current.taskTree).toEqual(taskTree);
+      expect(result.current.taskTree).toEqual(ensureTaskTreeNodeIds(taskTree));
       expect(result.current.taskTreeVersion).toBe(1);
     });
 
@@ -77,7 +78,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
       act(() => {
         result.current.setTaskTree(taskTree);
       });
-      expect(result.current.taskTree).toEqual(taskTree);
+      expect(result.current.taskTree).toEqual(ensureTaskTreeNodeIds(taskTree));
 
       act(() => {
         result.current.setTaskTree(null);
@@ -191,7 +192,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
         result.current.incrementVersion();
       });
 
-      expect(result.current.taskTree).toEqual(taskTree);
+      expect(result.current.taskTree).toEqual(ensureTaskTreeNodeIds(taskTree));
       expect(result.current.taskTreeVersion).toBeGreaterThan(0);
 
       act(() => {
@@ -218,7 +219,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
       });
 
       // Verify taskTree is set
-      expect(result.current.taskTree).toEqual(taskTree);
+      expect(result.current.taskTree).toEqual(ensureTaskTreeNodeIds(taskTree));
       // Verify hasTaskTree function exists
       expect(typeof result.current.hasTaskTree).toBe('function');
       // Call and verify result - empty nodes array should return false
@@ -291,7 +292,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
         result.current.setTaskTree(taskTree);
       });
 
-      expect(result.current.getMainNodes()).toEqual(nodes);
+      expect(result.current.getMainNodes()).toEqual(ensureTaskTreeNodeIds({ id: 'test-1', nodes: nodes as any }).nodes);
     });
   });
 
@@ -341,7 +342,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
       const { result: selectorResult } = renderHook(() =>
         useTaskTreeStore(taskTreeSelectors.taskTree)
       );
-      expect(selectorResult.current).toEqual(taskTree);
+      expect(selectorResult.current).toEqual(ensureTaskTreeNodeIds(taskTree));
     });
 
     it('taskTreeVersion selector should return current version', () => {
@@ -386,7 +387,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
       const { result: selectorResult } = renderHook(() =>
         useTaskTreeStore(taskTreeSelectors.mainNodes)
       );
-      expect(selectorResult.current).toEqual(nodes);
+      expect(selectorResult.current).toEqual(ensureTaskTreeNodeIds({ id: 'test-1', nodes: nodes as any }).nodes);
     });
 
     it('nodeCount selector should return count', () => {
@@ -424,7 +425,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
       act(() => {
         result.current.setTaskTree(taskTree1);
       });
-      expect(result.current.taskTree).toEqual(taskTree1);
+      expect(result.current.taskTree).toEqual(ensureTaskTreeNodeIds(taskTree1));
       expect(result.current.taskTreeVersion).toBe(1);
 
       // Update
@@ -462,7 +463,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
       const mainNodesSelector = renderHook(() => useTaskTreeStore(taskTreeSelectors.mainNodes));
       const nodeCountSelector = renderHook(() => useTaskTreeStore(taskTreeSelectors.nodeCount));
 
-      expect(taskTreeSelector.result.current).toEqual(taskTree);
+      expect(taskTreeSelector.result.current).toEqual(ensureTaskTreeNodeIds(taskTree));
       expect(hasTaskTreeSelector.result.current).toBe(true);
       expect(mainNodesSelector.result.current).toHaveLength(2);
       expect(nodeCountSelector.result.current).toBe(2);

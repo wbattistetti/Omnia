@@ -1,21 +1,16 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   getMainNodes,
   getSubNodes,
   hasMultipleMainNodes,
   findNodeByIndices,
 } from '@responseEditor/core/domain/taskTree';
-import * as migrationHelpers from '@utils/taskTreeMigrationHelpers';
 import type { TaskTree } from '@types/taskTypes';
 
 describe('Domain: TaskTree Operations', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   describe('getMainNodes', () => {
     it('should return empty array for null taskTree', () => {
       const result = getMainNodes(null);
@@ -27,35 +22,14 @@ describe('Domain: TaskTree Operations', () => {
       expect(result).toEqual([]);
     });
 
-    it('should use getNodesWithFallback helper', () => {
-      const getNodesWithFallbackSpy = vi.spyOn(migrationHelpers, 'getNodesWithFallback');
-      const mockNodes = [{ id: 'node-1', label: 'Node 1' }];
-      getNodesWithFallbackSpy.mockReturnValue(mockNodes);
-
-      const taskTree: TaskTree = {
-        id: 'test-1',
-        nodes: mockNodes as any,
-      };
-
-      const result = getMainNodes(taskTree);
-
-      expect(getNodesWithFallbackSpy).toHaveBeenCalledWith(taskTree, 'getdataList');
-      expect(result).toEqual(mockNodes);
-      expect(result).toHaveLength(1);
-
-      getNodesWithFallbackSpy.mockRestore();
-    });
-
     it('should return nodes when available', () => {
       const mockNodes = [
-        { id: 'node-1', label: 'Node 1' },
-        { id: 'node-2', label: 'Node 2' },
+        { id: 'node-1', label: 'Node 1', subNodes: [] },
+        { id: 'node-2', label: 'Node 2', subNodes: [] },
       ];
-      vi.spyOn(migrationHelpers, 'getNodesWithFallback').mockReturnValue(mockNodes);
-
       const taskTree: TaskTree = {
         id: 'test-2',
-        nodes: mockNodes as any,
+        nodes: mockNodes,
       };
 
       const result = getMainNodes(taskTree);
@@ -66,8 +40,6 @@ describe('Domain: TaskTree Operations', () => {
     });
 
     it('should return empty array when no nodes', () => {
-      vi.spyOn(migrationHelpers, 'getNodesWithFallback').mockReturnValue([]);
-
       const taskTree: TaskTree = {
         id: 'test-3',
         nodes: [],
@@ -150,51 +122,41 @@ describe('Domain: TaskTree Operations', () => {
     });
 
     it('should return false for 0 nodes', () => {
-      vi.spyOn(migrationHelpers, 'getNodesWithFallback').mockReturnValue([]);
       const taskTree: TaskTree = { id: 'test', nodes: [] };
       const result = hasMultipleMainNodes(taskTree);
       expect(result).toBe(false);
     });
 
     it('should return false for 1 node', () => {
-      const mockNodes = [{ id: 'node-1', label: 'Node 1' }];
-      vi.spyOn(migrationHelpers, 'getNodesWithFallback').mockReturnValue(mockNodes);
-      const taskTree: TaskTree = { id: 'test', nodes: mockNodes as any };
+      const mockNodes = [{ id: 'node-1', label: 'Node 1', subNodes: [] }];
+      const taskTree: TaskTree = { id: 'test', nodes: mockNodes };
       const result = hasMultipleMainNodes(taskTree);
       expect(result).toBe(false);
     });
 
     it('should return true for 2 nodes', () => {
       const mockNodes = [
-        { id: 'node-1', label: 'Node 1' },
-        { id: 'node-2', label: 'Node 2' },
+        { id: 'node-1', label: 'Node 1', subNodes: [] },
+        { id: 'node-2', label: 'Node 2', subNodes: [] },
       ];
-      vi.spyOn(migrationHelpers, 'getNodesWithFallback').mockReturnValue(mockNodes);
-      const taskTree: TaskTree = { id: 'test', nodes: mockNodes as any };
+      const taskTree: TaskTree = { id: 'test', nodes: mockNodes };
       const result = hasMultipleMainNodes(taskTree);
       expect(result).toBe(true);
     });
 
     it('should return true for 3+ nodes', () => {
       const mockNodes = [
-        { id: 'node-1', label: 'Node 1' },
-        { id: 'node-2', label: 'Node 2' },
-        { id: 'node-3', label: 'Node 3' },
+        { id: 'node-1', label: 'Node 1', subNodes: [] },
+        { id: 'node-2', label: 'Node 2', subNodes: [] },
+        { id: 'node-3', label: 'Node 3', subNodes: [] },
       ];
-      vi.spyOn(migrationHelpers, 'getNodesWithFallback').mockReturnValue(mockNodes);
-      const taskTree: TaskTree = { id: 'test', nodes: mockNodes as any };
+      const taskTree: TaskTree = { id: 'test', nodes: mockNodes };
       const result = hasMultipleMainNodes(taskTree);
       expect(result).toBe(true);
     });
   });
 
   describe('findNodeByIndices', () => {
-    beforeEach(() => {
-      vi.spyOn(migrationHelpers, 'getNodesWithFallback').mockImplementation((taskTree: any) => {
-        return taskTree?.nodes || [];
-      });
-    });
-
     it('should return null for null taskTree', () => {
       const result = findNodeByIndices(null, 0, null);
       expect(result).toBeNull();

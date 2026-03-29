@@ -40,6 +40,14 @@ export function isTaskAllowedInContext(
     return false; // Default: not allowed if not specified for other contexts
   }
 
+  // Full palette (no step filter): allow templates scoped to any escalation step
+  if (context === TaskContext.ESCALATION && stepType === undefined) {
+    if (task.allowedContexts.includes(TaskContext.ESCALATION)) return true;
+    if (task.allowedContexts.some((c) => String(c).startsWith(`${TaskContext.ESCALATION}:`))) {
+      return true;
+    }
+  }
+
   // Check for generic context (e.g., 'escalation' allows all escalation steps)
   if (task.allowedContexts.includes(context)) {
     return true;

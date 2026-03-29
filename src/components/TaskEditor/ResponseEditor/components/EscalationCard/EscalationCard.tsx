@@ -13,11 +13,9 @@ type EscalationCardProps = {
   updateEscalation: (updater: (esc: any) => any) => void;
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   onDeleteEscalation?: () => void;
-  autoEditTarget: { escIdx: number; taskIdx: number } | null;
-  onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
   stepKey: string;
-  hideHeader?: boolean; // Nasconde l'header nella vista ad albero
-  isHovered?: boolean; // ✅ Hover gestito dal container esterno
+  hideHeader?: boolean;
+  isHovered?: boolean;
 };
 
 export function EscalationCard({
@@ -30,26 +28,19 @@ export function EscalationCard({
   updateEscalation,
   updateSelectedNode,
   onDeleteEscalation,
-  autoEditTarget,
-  onAutoEditTargetChange,
   stepKey,
   hideHeader = false,
-  isHovered = false // ✅ Ricevuto come prop dal container esterno
+  isHovered = false,
 }: EscalationCardProps) {
   const showCard = hasEscalationCard(stepKey);
 
-  // ✅ Calcola isEmpty PRIMA di useState
   const tasks = escalation?.tasks ?? [];
   const isEmpty = tasks.length === 0;
 
-  // ✅ Inizializza sempre true (accordion parte sempre aperto)
-  // Se hideHeader è true, forza sempre espanso (vista ad albero)
   const [isExpanded, setIsExpanded] = useState(true);
 
-  // Se hideHeader è true, forza sempre espanso
   const effectiveIsExpanded = hideHeader ? true : isExpanded;
 
-  // Per step senza escalation card (start, success), renderizza solo la lista task
   if (!showCard) {
     return (
       <EscalationTasksList
@@ -60,21 +51,17 @@ export function EscalationCard({
         allowedActions={allowedActions}
         updateEscalation={updateEscalation}
         updateSelectedNode={updateSelectedNode}
-        autoEditTarget={autoEditTarget}
-        onAutoEditTargetChange={onAutoEditTargetChange}
         stepKey={stepKey}
       />
     );
   }
 
-  // Per step con escalation card (noMatch, noInput, confirmation, ecc.), renderizza la card completa
   return (
     <div
-      data-escalation-index={escalationIdx} // ✅ NEW: Add data attribute for scroll targeting
+      data-escalation-index={escalationIdx}
       style={{
-        // ✅ Rimosso border, borderRadius - ora gestiti dal container esterno (EscalationFascia)
         padding: '0.5rem',
-        backgroundColor: 'transparent', // ✅ Trasparente - il background è sul container esterno
+        backgroundColor: 'transparent',
         transition: 'all 0.2s',
         display: 'flex',
         flexDirection: 'column',
@@ -82,7 +69,6 @@ export function EscalationCard({
         minHeight: 'auto',
         overflow: 'visible',
       }}
-      // ✅ Rimosso onMouseEnter/onMouseLeave - ora gestiti dal container esterno (EscalationFascia)
     >
       {!hideHeader && (
         <EscalationHeader
@@ -95,13 +81,15 @@ export function EscalationCard({
         />
       )}
       {effectiveIsExpanded && (
-        <div style={{
-          flex: 'none',
-          minHeight: isEmpty ? '120px' : 'auto',
-          overflow: 'visible',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
+        <div
+          style={{
+            flex: 'none',
+            minHeight: isEmpty ? '120px' : 'auto',
+            overflow: 'visible',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           <EscalationTasksList
             escalation={escalation}
             escalationIdx={escalationIdx}
@@ -110,8 +98,6 @@ export function EscalationCard({
             allowedActions={allowedActions}
             updateEscalation={updateEscalation}
             updateSelectedNode={updateSelectedNode}
-            autoEditTarget={autoEditTarget}
-            onAutoEditTargetChange={onAutoEditTargetChange}
             stepKey={stepKey}
           />
         </div>

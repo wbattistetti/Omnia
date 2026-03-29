@@ -166,3 +166,6 @@ export const TaskTreeManagerProvider: React.FC<TaskTreeManagerProviderProps> = (
     </TaskTreeManagerContext.Provider>
   );
 };
+
+/** @deprecated Prefer TaskTreeManagerProvider — alias kept for existing imports/tests. */
+export const DDTManagerProvider = TaskTreeManagerProvider;

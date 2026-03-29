@@ -10,6 +10,7 @@
 
 import { createWithEqualityFn } from 'zustand/traditional';
 import type { WizardTaskTreeNode, WizardStepMessages, WizardConstraint } from '../types';
+import type { TaskPipelineStatus } from '../types/WizardTaskTreeNode';
 import { WizardMode } from '../types/WizardMode';
 import type { WizardStep } from '../types/WizardStep';
 
@@ -41,7 +42,10 @@ interface WizardStore {
   // ✅ RINOMINATO: wizardMode → wizardState per chiarezza (è lo stato, non la modalità)
   wizardState: WizardMode;
   currentStep: WizardStep;
+  /** @deprecated PR2: Always []; structure lives in TaskTree (ResponseEditor Zustand). */
   dataSchema: WizardTaskTreeNode[];
+  /** PR2: Per-node wizard pipeline UI only (constraints/parser/messages phase ticks). */
+  nodePipelineUiById: Record<string, TaskPipelineStatus>;
   constraints: WizardConstraint[];
   setConstraints: (constraints: WizardConstraint[]) => void;
   messages: Map<string, WizardStepMessages>;
@@ -161,6 +165,7 @@ export const useWizardStore = createWithEqualityFn<WizardStore>((set, get) => ({
   wizardState: WizardMode.START, // ✅ RINOMINATO: wizardMode → wizardState
   currentStep: 'idle',
   dataSchema: [],
+  nodePipelineUiById: {},
   constraints: [],
   messages: new Map(),
   messagesGeneralized: new Map(),
@@ -197,6 +202,7 @@ export const useWizardStore = createWithEqualityFn<WizardStore>((set, get) => ({
     wizardState: WizardMode.START, // ✅ RINOMINATO: wizardMode → wizardState
     currentStep: 'idle',
     dataSchema: [],
+    nodePipelineUiById: {},
   constraints: [],
   messages: new Map(),
     messagesGeneralized: new Map(),
@@ -261,9 +267,8 @@ export const useWizardStore = createWithEqualityFn<WizardStore>((set, get) => ({
 
   setCurrentStep: (step) => set({ currentStep: step }),
 
-  setDataSchema: (schema) => set((state) => ({
-    dataSchema: typeof schema === 'function' ? schema(state.dataSchema) : schema
-  })),
+  // PR2: Structural schema is TaskTree-only; setter kept for API compatibility (no-op).
+  setDataSchema: () => {},
 
   setConstraints: (constraints) => set((state) => ({
     constraints: typeof constraints === 'function' ? constraints(state.constraints) : constraints
@@ -392,56 +397,39 @@ export const useWizardStore = createWithEqualityFn<WizardStore>((set, get) => ({
   },
 
   updateTaskPipelineStatus: (taskId, phase, status) => set((state) => {
-    const updateNode = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
-      return nodes.map(node => {
-        if (node.id === taskId) {
-          return {
-            ...node,
-            pipelineStatus: {
-              ...node.pipelineStatus,
-              constraints: phase === 'constraints' ? status : (node.pipelineStatus?.constraints || 'pending'),
-              parser: phase === 'parser' ? status : (node.pipelineStatus?.parser || 'pending'),
-              messages: phase === 'messages' ? status : (node.pipelineStatus?.messages || 'pending'),
-              constraintsProgress: node.pipelineStatus?.constraintsProgress,
-              parserProgress: node.pipelineStatus?.parserProgress,
-              messagesProgress: node.pipelineStatus?.messagesProgress
-            }
-          };
-        }
-        if (node.subNodes && node.subNodes.length > 0) {
-          return { ...node, subNodes: updateNode(node.subNodes) };
-        }
-        return node;
-      });
+    const prev = state.nodePipelineUiById[taskId] ?? {
+      constraints: 'pending' as const,
+      parser: 'pending' as const,
+      messages: 'pending' as const,
     };
-    return { dataSchema: updateNode(state.dataSchema) };
+    const nextRow: TaskPipelineStatus = {
+      ...prev,
+      ...(phase === 'constraints' ? { constraints: status } : {}),
+      ...(phase === 'parser' ? { parser: status } : {}),
+      ...(phase === 'messages' ? { messages: status } : {}),
+    };
+    return {
+      nodePipelineUiById: { ...state.nodePipelineUiById, [taskId]: nextRow },
+    };
   }),
 
   updateTaskProgress: (taskId, phase, progress) => set((state) => {
-    const updateNode = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
-      return nodes.map(node => {
-        if (node.id === taskId) {
-          const progressField = phase === 'constraints' ? 'constraintsProgress'
-                           : phase === 'parser' ? 'parserProgress'
-                           : 'messagesProgress';
-          return {
-            ...node,
-            pipelineStatus: {
-              ...node.pipelineStatus,
-              constraints: node.pipelineStatus?.constraints || 'pending',
-              parser: node.pipelineStatus?.parser || 'pending',
-              messages: node.pipelineStatus?.messages || 'pending',
-              [progressField]: progress
-            }
-          };
-        }
-        if (node.subNodes && node.subNodes.length > 0) {
-          return { ...node, subNodes: updateNode(node.subNodes) };
-        }
-        return node;
-      });
+    const prev = state.nodePipelineUiById[taskId] ?? {
+      constraints: 'pending' as const,
+      parser: 'pending' as const,
+      messages: 'pending' as const,
     };
-    return { dataSchema: updateNode(state.dataSchema) };
+    const progressField =
+      phase === 'constraints' ? 'constraintsProgress'
+        : phase === 'parser' ? 'parserProgress'
+          : 'messagesProgress';
+    const nextRow: TaskPipelineStatus = {
+      ...prev,
+      [progressField]: progress,
+    };
+    return {
+      nodePipelineUiById: { ...state.nodePipelineUiById, [taskId]: nextRow },
+    };
   }),
 
   setStructureConfirmed: (confirmed) => set({ structureConfirmed: confirmed }),

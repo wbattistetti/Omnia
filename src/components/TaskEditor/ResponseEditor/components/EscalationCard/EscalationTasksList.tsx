@@ -6,10 +6,38 @@ import getIconComponent from '@responseEditor/icons';
 import { ensureHexColor } from '@responseEditor/utils/color';
 import CanvasDropWrapper from '@responseEditor/CanvasDropWrapper';
 import PanelEmptyDropZone from '@responseEditor/PanelEmptyDropZone';
-import { getTaskText, normalizeTaskForEscalation, generateGuid } from '@responseEditor/utils/escalationHelpers';
+import {
+  normalizeTaskForEscalation,
+  generateGuid,
+  isMessageLikeEscalationTask,
+  isMessageSemanticTemplateId,
+} from '@responseEditor/utils/escalationHelpers';
+import { TaskType, templateIdToTaskType } from '@types/taskTypes';
 import { useTaskEditing } from '@responseEditor/hooks/useTaskEditing';
 import { updateStepEscalations } from '@responseEditor/utils/stepHelpers';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
+import { useBehaviourUi } from '@responseEditor/behaviour/BehaviourUiContext';
+import { TaskRowHeader } from '@responseEditor/tasks/TaskRowHeader';
+import { TaskRowBody } from '@responseEditor/tasks/TaskRowBody';
+import { ParameterFieldHost } from '@responseEditor/tasks/parameterEditors';
+import { resolveTranslationKey } from '@responseEditor/utils/taskUiText';
+
+function matchesAllowedTemplateId(templateId: string | null | undefined, allowed: string[]): boolean {
+  const t = String(templateId ?? '').toLowerCase();
+  return allowed.some((a) => String(a).toLowerCase() === t);
+}
+
+/** First translated field to auto-open after drop/append (extensible). */
+function firstFocusParameterId(task: unknown): string | null {
+  if (isMessageLikeEscalationTask(task as Parameters<typeof isMessageLikeEscalationTask>[0])) {
+    return 'text';
+  }
+  const params = (task as { parameters?: { parameterId?: string }[] })?.parameters;
+  if (Array.isArray(params) && params.some((p) => p?.parameterId === 'smsText')) {
+    return 'smsText';
+  }
+  return null;
+}
 
 type EscalationTasksListProps = {
   escalation: any;
@@ -19,8 +47,6 @@ type EscalationTasksListProps = {
   allowedActions?: string[];
   updateEscalation: (updater: (esc: any) => any) => void;
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
-  autoEditTarget: { escIdx: number; taskIdx: number } | null;
-  onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
   stepKey: string;
 };
 
@@ -32,18 +58,16 @@ export function EscalationTasksList({
   allowedActions,
   updateEscalation,
   updateSelectedNode,
-  autoEditTarget,
-  onAutoEditTargetChange,
-  stepKey
+  stepKey,
 }: EscalationTasksListProps) {
   const { handleEditingChange, isEditing: isEditingRow } = useTaskEditing();
+  const { requestFocusParameter } = useBehaviourUi();
   const {
     translations: contextTranslations,
     addTranslation,
     isReady,
   } = useProjectTranslations();
 
-  /** Prop is often step-scoped; project GUIDs live in context — merge so lookups work. */
   const effectiveTranslations = React.useMemo(
     () => ({ ...contextTranslations, ...(translations ?? {}) }),
     [contextTranslations, translations]
@@ -62,7 +86,6 @@ export function EscalationTasksList({
     }
   }, [isReady, effectiveTranslations, escalationIdx, stepKey]);
 
-  // ✅ CRITICAL: If translations are not ready, show loading instead of GUIDs
   if (!isReady) {
     return (
       <div className="flex items-center justify-center p-4">
@@ -70,206 +93,189 @@ export function EscalationTasksList({
       </div>
     );
   }
-  // ✅ NO FALLBACKS: escalation.tasks can be undefined (legitimate default)
+
   const tasks = escalation.tasks ?? [];
 
-  // Handler per aggiungere task (drop su zona vuota)
-  const handleAppend = React.useCallback((task: any) => {
-    if (allowedActions && allowedActions.length > 0) {
-      // After validation strict, task.id is always present
-      // templateId is optional (preferred for lookup, but id works as fallback)
-      const templateId = task?.templateId ?? task?.id ?? '';
-      if (!allowedActions.includes(templateId)) {
+  const handleParameterCommit = React.useCallback(
+    (taskIdx: number, parameterId: string, newValue: string) => {
+      const task = tasks[taskIdx];
+      if (!task) return;
+
+      const tKey = resolveTranslationKey(task, parameterId);
+      if (tKey) {
+        if (addTranslation && typeof addTranslation === 'function') {
+          addTranslation(tKey, newValue);
+        }
         return;
       }
-    }
 
-    const taskRef = normalizeTaskForEscalation(task);
-    updateEscalation((esc) => {
-      const newTasks = [...(esc.tasks ?? []), taskRef];
-      const newTaskIdx = newTasks.length - 1;
-      setTimeout(() => {
-        onAutoEditTargetChange({ escIdx: escalationIdx, taskIdx: newTaskIdx });
-      }, 0);
-      return { ...esc, tasks: newTasks };
-    });
-  }, [updateEscalation, escalationIdx, allowedActions, onAutoEditTargetChange]);
+      updateEscalation((esc) => {
+        const next = [...(esc.tasks ?? [])];
+        const t = { ...next[taskIdx] };
+        t.parameters = (t.parameters ?? []).map((p: { parameterId?: string; value?: unknown }) =>
+          p.parameterId === parameterId ? { ...p, value: newValue } : p
+        );
+        next[taskIdx] = t;
+        return { ...esc, tasks: next };
+      });
+    },
+    [tasks, addTranslation, updateEscalation]
+  );
 
-  // ✅ FASE 2: Handler per modificare task - aggiorna traduzione invece di task.text
-  const handleEdit = React.useCallback((taskIdx: number, newText: string) => {
-    const task = tasks[taskIdx];
-    if (!task) return;
-
-    // ✅ STEP 1: Estrai textKey dal task
-    const textParam = task.parameters?.find((p: any) => p?.parameterId === 'text');
-    const textKey = textParam?.value;
-
-    if (!textKey) {
-      console.warn('[EscalationTasksList] ⚠️ Task has no textKey, cannot update translation', { taskIdx, task });
-      return;
-    }
-
-    // ✅ STEP 2: Valida che textKey sia un GUID
-    const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey);
-    if (!isGuid) {
-      console.warn('[EscalationTasksList] ⚠️ textKey is not a GUID, cannot update translation', { textKey, taskIdx, task });
-      return;
-    }
-
-    // ✅ STEP 3: Aggiorna traduzione (NON task.text)
-    if (addTranslation && typeof addTranslation === 'function') {
-      addTranslation(textKey, newText);
-    } else {
-      // Fallback: use window context if available
-      if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
-        const ctx = (window as any).__projectTranslationsContext;
-        if (ctx.addTranslation) {
-          ctx.addTranslation(textKey, newText);
-        } else if (ctx.addTranslations) {
-          ctx.addTranslations({ [textKey]: newText });
-        } else {
-          console.warn('[EscalationTasksList] ⚠️ No translation context available, translation not saved', { textKey, newText: newText.substring(0, 50) });
+  const handleAppend = React.useCallback(
+    (task: any) => {
+      if (allowedActions && allowedActions.length > 0) {
+        const tid = task?.templateId ?? task?.id ?? '';
+        if (!matchesAllowedTemplateId(tid, allowedActions)) {
+          return;
         }
-      } else {
-        console.warn('[EscalationTasksList] ⚠️ No translation context available, translation not saved', { textKey, newText: newText.substring(0, 50) });
       }
-    }
 
-    // ❌ NON modificare task.text - il task deve restare con la chiave GUID
+      let taskRef: ReturnType<typeof normalizeTaskForEscalation>;
+      try {
+        taskRef = normalizeTaskForEscalation(task);
+      } catch (e) {
+        console.error('[EscalationTasksList] normalizeTaskForEscalation failed on append', e, { task });
+        return;
+      }
+      updateEscalation((esc) => {
+        const newTasks = [...(esc.tasks ?? []), taskRef];
+        const newTaskIdx = newTasks.length - 1;
+        const pid = firstFocusParameterId(taskRef);
+        if (pid) {
+          setTimeout(() => {
+            requestFocusParameter({
+              kind: 'parameter',
+              escalationIdx,
+              taskIdx: newTaskIdx,
+              parameterId: pid,
+            });
+          }, 0);
+        }
+        return { ...esc, tasks: newTasks };
+      });
+    },
+    [updateEscalation, escalationIdx, allowedActions, requestFocusParameter]
+  );
 
-    if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.taskIdx === taskIdx) {
-      onAutoEditTargetChange(null);
-    }
-  }, [updateEscalation, escalationIdx, autoEditTarget, onAutoEditTargetChange, tasks, addTranslation]);
+  const handleDelete = React.useCallback(
+    (taskIdx: number) => {
+      updateEscalation((esc) => {
+        const next = (esc.tasks ?? []).filter((_: unknown, j: number) => j !== taskIdx);
+        return { ...esc, tasks: next };
+      });
+    },
+    [updateEscalation]
+  );
 
-  // Handler per eliminare task
-  const handleDelete = React.useCallback((taskIdx: number) => {
-    updateEscalation((esc) => {
-      const tasks = (esc.tasks ?? []).filter((_: any, j: number) => j !== taskIdx);
-      return { ...esc, tasks };
-    });
+  const handleDropFromViewer = React.useCallback(
+    (
+      incoming: any,
+      to: { escalationIdx: number; taskIdx: number },
+      position: 'before' | 'after'
+    ) => {
+      if (to.escalationIdx !== escalationIdx) {
+        return;
+      }
 
-    if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.taskIdx === taskIdx) {
-      onAutoEditTargetChange(null);
-    }
-  }, [updateEscalation, escalationIdx, autoEditTarget, onAutoEditTargetChange]);
+      const task = incoming?.task || incoming;
 
-  // Handler per drop di task dal viewer
-  const handleDropFromViewer = React.useCallback((
-    incoming: any,
-    to: { escalationIdx: number; taskIdx: number },
-    position: 'before' | 'after'
-  ) => {
-    // Se il drop è per un'altra escalation, non gestirlo qui
-    if (to.escalationIdx !== escalationIdx) {
-      return;
-    }
+      const templateId =
+        task?.templateId !== undefined ? task.templateId : (task?.id ?? null);
 
-    // ✅ Estrai il task dall'item (può essere in incoming.task o direttamente incoming)
-    const task = incoming?.task || incoming;
+      let taskType: number | null =
+        task?.type !== undefined && task?.type !== null ? task.type : null;
+      if (taskType === null && templateId != null) {
+        const inferred = templateIdToTaskType(String(templateId));
+        if (inferred !== TaskType.UNDEFINED) {
+          taskType = inferred;
+        }
+      }
+      if (taskType === undefined || taskType === null) {
+        console.error('[handleDropFromViewer] Task is missing required field "type"', { incoming, task });
+        return;
+      }
 
-    // ✅ Estrai templateId: se il task ha templateId, usalo; altrimenti usa id come templateId (per task dal pannello Tasks)
-    // I task dal pannello Tasks hanno id che è l'id del template, quindi usalo come templateId
-    // ✅ IMPORTANTE: templateId può essere null per task standalone, ma deve essere esplicitamente presente (non undefined)
-    // After validation strict, task.id is always present
-    // templateId is optional (preferred, but id works as fallback)
-    const templateId = task?.templateId !== undefined
-      ? task.templateId
-      : (task?.id ?? null); // ✅ Usa id come templateId se templateId non è presente (per task dal pannello Tasks)
-
-    // ✅ Estrai type: deve essere presente (TaskType enum)
-    // Il type può essere in task.type (TaskType enum) o in incoming.type (ma questo è "TASK_VIEWER", non il TaskType)
-    const taskType = task?.type !== undefined && task?.type !== null
-      ? task.type
-      : null;
-
-    // ✅ Verifica che type sia presente (richiesto)
-    if (taskType === undefined || taskType === null) {
-      console.error('[handleDropFromViewer] Task is missing required field "type"', { incoming, task });
-      return;
-    }
-
-    // ✅ Costruisci il task normalizzato con type e templateId espliciti
-    // ✅ IMPORTANTE: templateId deve essere esplicitamente presente (può essere null, ma non undefined)
-    // ✅ IMPORTANTE: type e templateId devono essere impostati DOPO lo spread per evitare sovrascritture
-    const taskToNormalize = {
-      ...task,
-      type: taskType, // ✅ Imposta type esplicitamente (sovrascrive qualsiasi type da task)
-      templateId: templateId // ✅ Imposta templateId esplicitamente (sovrascrive qualsiasi templateId da task, o aggiunge se mancante)
-    };
-
-    // 🔍 DEBUG: Verifica che taskToNormalize abbia type e templateId corretti
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.drop') === '1') {
-      console.log('[handleDropFromViewer] Task normalized', {
-        taskType,
+      const taskToNormalize = {
+        ...task,
+        type: taskType,
         templateId,
-        taskToNormalize: {
-          type: taskToNormalize.type,
-          templateId: taskToNormalize.templateId,
-          id: taskToNormalize.id
-        }
-      });
-    }
+      };
 
-    if (allowedActions && allowedActions.length > 0) {
-      if (!allowedActions.includes(templateId)) {
+      if (allowedActions && allowedActions.length > 0) {
+        if (!matchesAllowedTemplateId(templateId, allowedActions)) {
+          return;
+        }
+      }
+
+      let normalized: ReturnType<typeof normalizeTaskForEscalation>;
+      try {
+        normalized = normalizeTaskForEscalation(taskToNormalize, generateGuid);
+      } catch (e) {
+        console.error('[EscalationTasksList] normalizeTaskForEscalation failed on drop', e, { taskToNormalize });
         return;
       }
-    }
 
-    const normalized = normalizeTaskForEscalation(taskToNormalize, generateGuid);
+      const insertIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
 
-    const insertIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
-
-    updateEscalation((esc) => {
-      const tasks = [...(esc.tasks ?? [])];
-      tasks.splice(insertIdx, 0, normalized);
-      return { ...esc, tasks };
-    });
-
-    const targetIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
-    if (templateId === 'sayMessage') {
-      onAutoEditTargetChange({ escIdx: escalationIdx, taskIdx: targetIdx });
-    }
-  }, [updateEscalation, escalationIdx, allowedActions, onAutoEditTargetChange]);
-
-  // Handler per spostare task tra escalations diverse
-  const handleMoveTask = React.useCallback((
-    fromEscIdx: number,
-    fromTaskIdx: number,
-    toEscIdx: number,
-    toTaskIdx: number,
-    position: 'before' | 'after'
-  ) => {
-    updateSelectedNode((node) => {
-      return updateStepEscalations(node, stepKey, (escalations) => {
-        const updated = [...escalations];
-
-        // Sposta task
-        const fromEsc = updated[fromEscIdx];
-        if (!fromEsc) return escalations;
-
-        const tasks = [...(fromEsc.tasks ?? [])];
-        const task = tasks[fromTaskIdx];
-        if (!task) return escalations;
-
-        // Rimuovi dalla posizione originale
-        tasks.splice(fromTaskIdx, 1);
-        updated[fromEscIdx] = { ...fromEsc, tasks };
-
-        // Aggiungi alla nuova posizione
-        if (!updated[toEscIdx]) {
-          updated[toEscIdx] = { tasks: [] };
-        }
-        const toTasks = [...(updated[toEscIdx].tasks ?? [])];
-        const insertIdx = position === 'after' ? toTaskIdx + 1 : toTaskIdx;
-        toTasks.splice(insertIdx, 0, task);
-        updated[toEscIdx] = { ...updated[toEscIdx], tasks: toTasks };
-
-        return updated;
+      updateEscalation((esc) => {
+        const next = [...(esc.tasks ?? [])];
+        next.splice(insertIdx, 0, normalized);
+        return { ...esc, tasks: next };
       });
-    });
-  }, [updateSelectedNode, stepKey]);
+
+      const targetIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
+      const pid = firstFocusParameterId(normalized);
+      if (pid) {
+        setTimeout(() => {
+          requestFocusParameter({
+            kind: 'parameter',
+            escalationIdx,
+            taskIdx: targetIdx,
+            parameterId: pid,
+          });
+        }, 0);
+      }
+    },
+    [updateEscalation, escalationIdx, allowedActions, requestFocusParameter]
+  );
+
+  const handleMoveTask = React.useCallback(
+    (
+      fromEscIdx: number,
+      fromTaskIdx: number,
+      toEscIdx: number,
+      toTaskIdx: number,
+      position: 'before' | 'after'
+    ) => {
+      updateSelectedNode((node) => {
+        return updateStepEscalations(node, stepKey, (escalations) => {
+          const updated = [...escalations];
+
+          const fromEsc = updated[fromEscIdx];
+          if (!fromEsc) return escalations;
+
+          const escTasks = [...(fromEsc.tasks ?? [])];
+          const moved = escTasks[fromTaskIdx];
+          if (!moved) return escalations;
+
+          escTasks.splice(fromTaskIdx, 1);
+          updated[fromEscIdx] = { ...fromEsc, tasks: escTasks };
+
+          if (!updated[toEscIdx]) {
+            updated[toEscIdx] = { tasks: [] };
+          }
+          const toTasks = [...(updated[toEscIdx].tasks ?? [])];
+          const insertIdx = position === 'after' ? toTaskIdx + 1 : toTaskIdx;
+          toTasks.splice(insertIdx, 0, moved);
+          updated[toEscIdx] = { ...updated[toEscIdx], tasks: toTasks };
+
+          return updated;
+        });
+      });
+    },
+    [updateSelectedNode, stepKey]
+  );
 
   return (
     <CanvasDropWrapper onDropTask={handleAppend} isEmpty={tasks.length === 0}>
@@ -283,42 +289,88 @@ export function EscalationTasksList({
         />
       ) : (
         tasks.map((task: any, j: number) => {
-          // ✅ NO FALLBACKS: templateId must exist, use 'sayMessage' only as explicit default for logging
-          const templateId = task.templateId ?? 'sayMessage';
+          const templateId = task.templateId ?? task.id ?? 'sayMessage';
+          const isMessageRow = isMessageLikeEscalationTask(task);
           const isEditing = isEditingRow(j);
+          const params = Array.isArray(task.parameters) ? task.parameters : [];
+
+          const header = (
+            <TaskRowHeader
+              icon={
+                isMessageRow
+                  ? undefined
+                  : task.iconName
+                    ? getIconComponent(task.iconName, ensureHexColor(task.color))
+                    : getTaskIconNode(templateId, ensureHexColor(task.color))
+              }
+              showMessageIcon={isMessageRow}
+              label={isMessageRow ? undefined : task.label ?? getTaskLabel(templateId)}
+              color={color}
+            />
+          );
+
+          const openPrimary = () => {
+            if (isMessageRow) {
+              requestFocusParameter({
+                kind: 'parameter',
+                escalationIdx,
+                taskIdx: j,
+                parameterId: 'text',
+              });
+            } else {
+              const pid = firstFocusParameterId(task);
+              if (pid) {
+                requestFocusParameter({
+                  kind: 'parameter',
+                  escalationIdx,
+                  taskIdx: j,
+                  parameterId: pid,
+                });
+              }
+            }
+          };
+
+          const body = (
+            <TaskRowBody>
+              {params.length === 0 ? (
+                <span style={{ color: '#64748b', fontSize: 13 }}>—</span>
+              ) : (
+                params.map((param: { parameterId: string; value: unknown }) => (
+                  <ParameterFieldHost
+                    key={param.parameterId}
+                    task={task}
+                    param={param}
+                    translations={effectiveTranslations}
+                    escalationIdx={escalationIdx}
+                    taskIdx={j}
+                    onCommit={(v) => handleParameterCommit(j, param.parameterId, v)}
+                    onEditingActivity={(active) => handleEditingChange(j)(active)}
+                  />
+                ))
+              )}
+            </TaskRowBody>
+          );
 
           return (
             <TaskRowDnDWrapper
-                key={`${escalationIdx}-${j}-${task.id ?? j}`}
+              key={`${escalationIdx}-${j}-${task.id ?? j}`}
               escalationIdx={escalationIdx}
               taskIdx={j}
               task={task}
               onMoveTask={handleMoveTask}
-              onDropNewTask={(task, to, pos) => handleDropFromViewer(task, to, pos)}
+              onDropNewTask={(t, to, pos) => handleDropFromViewer(t, to, pos)}
               allowViewerDrop={true}
               isEditing={isEditing}
             >
               <TaskRow
-                icon={templateId === 'sayMessage'
-                  ? undefined // ✅ sayMessage: no icona (si capisce dal testo)
-                  : (task.iconName
-                      ? getIconComponent(task.iconName, ensureHexColor(task.color))
-                      : getTaskIconNode(templateId, ensureHexColor(task.color)))}
-                text={getTaskText(task, effectiveTranslations)}
+                header={header}
+                body={body}
                 color={color}
                 draggable
                 selected={false}
-                taskId={templateId}
-                label={task.label ?? getTaskLabel(templateId)}
-                onEdit={templateId === 'sayMessage' ? (newText) => handleEdit(j, newText) : undefined}
                 onDelete={() => handleDelete(j)}
-                autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.taskIdx === j)}
-                onEditingChange={(isEditing) => {
-                  handleEditingChange(j)(isEditing);
-                  if (!isEditing && autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.taskIdx === j) {
-                    onAutoEditTargetChange(null);
-                  }
-                }}
+                onEditPrimary={params.length > 0 ? openPrimary : undefined}
+                rowEditorActive={isEditing}
               />
             </TaskRowDnDWrapper>
           );

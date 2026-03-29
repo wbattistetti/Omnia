@@ -104,7 +104,7 @@ class TaskRepository {
     taskId: string,
     updates: Partial<Task>,
     projectId?: string,
-    options?: { merge?: boolean }
+    options?: { merge?: boolean; allowClearTemplateId?: boolean }
   ): boolean {
     // Check internal storage first
     const existingTask = this.tasks.get(taskId);
@@ -135,10 +135,13 @@ class TaskRepository {
 
     // ✅ CRITICAL: Protect templateId from accidental overwrite
     // ✅ Se updates.templateId === null E existingTask.templateId !== null, preservare quello esistente
-    // ✅ Altrimenti, usare quello passato negli updates (anche se null, se è un cambio esplicito)
-    const finalTemplateId = (templateId === null && existingTask.templateId !== null)
-      ? existingTask.templateId  // ✅ Preserva templateId esistente se viene passato null per errore
-      : (templateId !== undefined ? templateId : existingTask.templateId);  // ✅ Usa quello passato o preserva
+    // ✅ allowClearTemplateId: explicit migration (e.g. wizard instance-first) may set templateId to null
+    const finalTemplateId =
+      templateId === undefined
+        ? existingTask.templateId
+        : templateId === null && existingTask.templateId !== null && !options?.allowClearTemplateId
+          ? existingTask.templateId
+          : templateId;
 
 
     // ✅ CRITICAL: Validate steps structure before merging

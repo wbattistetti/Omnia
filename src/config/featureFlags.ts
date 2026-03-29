@@ -13,6 +13,12 @@ export interface FeatureFlags {
   DISABLE_MERGE_PROFONDO: boolean;
   // Development: enable verbose logging
   LOG_VERBOSE: boolean;
+  /**
+   * Wizard completion rewrites the row as standalone (instanceNodes + kind) and clears templateId.
+   * In dev, defaults to true (standalone row after wizard). Override with localStorage
+ * featureFlag_WIZARD_INSTANCE_FIRST = "false" to disable. Prod defaults to false.
+   */
+  WIZARD_INSTANCE_FIRST: boolean;
 }
 
 /**
@@ -49,6 +55,14 @@ export function setFeatureFlag(
   localStorage.setItem(`featureFlag_${key}`, value ? 'true' : 'false');
 }
 
+/** Default for wizard instance-first: on in Vite dev (no localStorage), off in prod until explicitly enabled. */
+function defaultWizardInstanceFirst(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return import.meta.env.DEV;
+}
+
 /**
  * Get all feature flags
  */
@@ -56,6 +70,7 @@ export function getFeatureFlags(): FeatureFlags {
   return {
     DISABLE_MERGE_PROFONDO: getFeatureFlag('DISABLE_MERGE_PROFONDO', false),
     LOG_VERBOSE: getFeatureFlag('LOG_VERBOSE', false),
+    WIZARD_INSTANCE_FIRST: getFeatureFlag('WIZARD_INSTANCE_FIRST', defaultWizardInstanceFirst()),
   };
 }
 
@@ -63,3 +78,10 @@ export function getFeatureFlags(): FeatureFlags {
  * Feature flags singleton
  */
 export const FEATURE_FLAGS = getFeatureFlags();
+
+/**
+ * Reads localStorage on each call (not the FEATURE_FLAGS snapshot).
+ */
+export function isWizardInstanceFirstEnabled(): boolean {
+  return getFeatureFlag('WIZARD_INSTANCE_FIRST', defaultWizardInstanceFirst());
+}

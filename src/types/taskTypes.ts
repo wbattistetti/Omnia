@@ -75,6 +75,7 @@ export function templateIdToTaskType(templateId: string | null | undefined): Tas
   const normalized = templateId.toLowerCase().trim();
   switch (normalized) {
     case 'saymessage': return TaskType.SayMessage;
+    case 'message': return TaskType.SayMessage;
     case 'utteranceinterpretation': return TaskType.UtteranceInterpretation;
     case 'classifyproblem': return TaskType.ClassifyProblem;
     case 'backendcall': return TaskType.BackendCall;
@@ -328,6 +329,60 @@ export interface SemanticValue {
   embedding?: SemanticValueEmbedding;
 }
 
+/**
+ * Row role for task model migration (see docs/task-model-migration-step1-spec.md).
+ * Optional on legacy rows; use inferTaskKind() when absent.
+ */
+export type TaskKind = 'standalone' | 'instance' | 'projectTemplate' | 'factoryTemplate';
+
+/**
+ * TaskTreeNode: Nodo dell'albero TaskTree (vista runtime)
+ * NON è un'entità persistita, è solo una vista costruita da Template + Instance
+ */
+export interface TaskTreeNode {
+  id: string;                    // ✅ ID del nodo
+  templateId: string;            // ✅ ID del template referenziato (fondamentale per il grafo)
+  label: string;                  // ✅ Label del nodo
+  type?: string;                  // ✅ Tipo del dato (es. 'date', 'email', 'text')
+  icon?: string;                  // ✅ Icona per UI
+  constraints?: any[];            // ✅ Dal template (sempre, non dall'istanza)
+  dataContract?: any;             // ✅ Dal template (sempre, non dall'istanza)
+  subNodes?: TaskTreeNode[];     // ✅ Nodi figli (ricorsivo)
+  subTaskKey?: string;            // ✅ Chiave tecnica stabile per named groups regex (derivata da labelKey/label/name/id)
+  /** Wizard variable naming (structure proposal); optional, editor-only hints */
+  readableName?: string;
+  dottedName?: string;
+}
+
+/**
+ * TaskTree: Vista runtime costruita da Template + Instance
+ * NON è un'entità persistita, NON è un DDT rinominato
+ * È solo una vista in memoria per l'editor, costruita dinamicamente
+ *
+ * Costruzione:
+ * - Template fornisce: struttura (nodes), constraints, dataContract
+ * - Instance fornisce: steps override, label override, introduction override
+ *
+ * Uso:
+ * - ResponseEditor usa TaskTree per mostrare la struttura nella sidebar
+ * - TaskTree viene costruito ogni volta che si apre l'editor (non viene salvato)
+ */
+export interface TaskTree {
+  labelKey: string;              // ✅ Translation key (es. "ask_patient_birthdate") - NON testo diretto
+  nodes: TaskTreeNode[];         // ✅ Nodi principali (costruiti da template.subTasksIds)
+  steps: Record<string, Record<string, any>>;  // ✅ Steps come dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
+  constraints?: any[];           // ✅ Dal template (sempre)
+  dataContract?: any;            // ✅ Dal template (sempre)
+  introduction?: any;             // ✅ Opzionale (da instance se override)
+  /** Display title of the task in the editor (distinct from labelKey). */
+  label?: string;
+  /**
+   * When multiple main nodes exist, sidebar shows an aggregate row; this is its title (e.g. "Dati personali").
+   * Not a TaskTreeNode — presentation only. Do not use for taskTree.introduction (flow escalations).
+   */
+  aggregateLabel?: string;
+}
+
 export interface Task {
   id: string;                    // ✅ GUID univoco
   type: TaskType;                 // ✅ Enum numerico (allineato VB) - Determina il comportamento del task
@@ -383,6 +438,21 @@ export interface Task {
   /** JSON array: use cases tree + dialogue (design-time). */
   agentUseCasesJson?: string;
 
+  /**
+   * Migration: explicit row role. When omitted, inferTaskKind() derives from templateId/source/subTasksIds.
+   */
+  kind?: TaskKind;
+
+  /**
+   * Migration: persisted tree for standalone instances only (same shape as TaskTree.nodes).
+   */
+  instanceNodes?: TaskTreeNode[];
+
+  /**
+   * Migration: optional per-node contracts/constraints for standalone (keyed by node id).
+   */
+  instanceSchemaContracts?: Record<string, unknown>;
+
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
   // category?: string;              // ID categoria (preset o custom)
   // categoryCustom?: CustomCategory; // Se custom, dettagli completi
@@ -391,51 +461,6 @@ export interface Task {
   [key: string]: any;           // Allow additional fields
   createdAt?: Date;
   updatedAt?: Date;
-}
-
-/**
- * TaskTreeNode: Nodo dell'albero TaskTree (vista runtime)
- * NON è un'entità persistita, è solo una vista costruita da Template + Instance
- */
-export interface TaskTreeNode {
-  id: string;                    // ✅ ID del nodo
-  templateId: string;            // ✅ ID del template referenziato (fondamentale per il grafo)
-  label: string;                  // ✅ Label del nodo
-  type?: string;                  // ✅ Tipo del dato (es. 'date', 'email', 'text')
-  icon?: string;                  // ✅ Icona per UI
-  constraints?: any[];            // ✅ Dal template (sempre, non dall'istanza)
-  dataContract?: any;             // ✅ Dal template (sempre, non dall'istanza)
-  subNodes?: TaskTreeNode[];     // ✅ Nodi figli (ricorsivo)
-  subTaskKey?: string;            // ✅ Chiave tecnica stabile per named groups regex (derivata da labelKey/label/name/id)
-}
-
-/**
- * TaskTree: Vista runtime costruita da Template + Instance
- * NON è un'entità persistita, NON è un DDT rinominato
- * È solo una vista in memoria per l'editor, costruita dinamicamente
- *
- * Costruzione:
- * - Template fornisce: struttura (nodes), constraints, dataContract
- * - Instance fornisce: steps override, label override, introduction override
- *
- * Uso:
- * - ResponseEditor usa TaskTree per mostrare la struttura nella sidebar
- * - TaskTree viene costruito ogni volta che si apre l'editor (non viene salvato)
- */
-export interface TaskTree {
-  labelKey: string;              // ✅ Translation key (es. "ask_patient_birthdate") - NON testo diretto
-  nodes: TaskTreeNode[];         // ✅ Nodi principali (costruiti da template.subTasksIds)
-  steps: Record<string, Record<string, any>>;  // ✅ Steps come dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
-  constraints?: any[];           // ✅ Dal template (sempre)
-  dataContract?: any;            // ✅ Dal template (sempre)
-  introduction?: any;             // ✅ Opzionale (da instance se override)
-  /** Display title of the task in the editor (distinct from labelKey). */
-  label?: string;
-  /**
-   * When multiple main nodes exist, sidebar shows an aggregate row; this is its title (e.g. "Dati personali").
-   * Not a TaskTreeNode — presentation only. Do not use for taskTree.introduction (flow escalations).
-   */
-  aggregateLabel?: string;
 }
 
 /**

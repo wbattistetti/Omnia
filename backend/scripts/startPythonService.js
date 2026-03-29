@@ -1,9 +1,10 @@
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
 
-const PYTHON_SERVICE_URL = 'http://localhost:8000';
+const PYTHON_PORT = 8000;
+const PYTHON_SERVICE_URL = `http://localhost:${PYTHON_PORT}`;
 const HEALTH_CHECK_ENDPOINT = '/api/ping';
 const MAX_RETRIES = 30;
 const RETRY_DELAY = 1000;
@@ -97,8 +98,8 @@ async function waitForService(maxRetries = MAX_RETRIES, delay = RETRY_DELAY) {
         console.error(`[Python Service] Last error: ${err.message || 'Unknown error'}`);
         console.error(`[Python Service] 💡 Troubleshooting:`);
         console.error(`[Python Service]   1. Check if uvicorn is installed: pip install uvicorn[standard]`);
-        console.error(`[Python Service]   2. Check if the service is actually running on port 8000`);
-        console.error(`[Python Service]   3. Try accessing http://localhost:8000/api/ping manually`);
+        console.error(`[Python Service]   2. Check if the service is actually running on port ${PYTHON_PORT}`);
+        console.error(`[Python Service]   3. Try accessing http://localhost:${PYTHON_PORT}/api/ping manually`);
         console.error(`[Python Service]   4. Check Python/FastAPI logs for errors`);
         return false;
       }
@@ -108,12 +109,12 @@ async function waitForService(maxRetries = MAX_RETRIES, delay = RETRY_DELAY) {
 }
 
 /**
- * Verifica se la porta 8000 è già in uso
+ * Verifica se la porta Python è già in uso
  */
 async function checkPortInUse() {
   return new Promise((resolve) => {
     const server = http.createServer();
-    server.listen(8000, '127.0.0.1', () => {
+    server.listen(PYTHON_PORT, '127.0.0.1', () => {
       server.close(() => resolve(false)); // Porta libera
     });
     server.on('error', (err) => {
@@ -127,27 +128,117 @@ async function checkPortInUse() {
 }
 
 /**
+ * PIDs with TCP LISTENING on the given port (Windows: netstat; Unix: lsof).
+ */
+function getListeningPids(port) {
+  const isWindows = process.platform === 'win32';
+  const pids = new Set();
+
+  if (isWindows) {
+    try {
+      const out = execSync('netstat -ano', { encoding: 'utf8', maxBuffer: 1024 * 1024 });
+      const portToken = `:${port}`;
+      for (const line of out.split(/\r?\n/)) {
+        if (!line.includes(portToken) || !/LISTENING/i.test(line)) continue;
+        const m = line.trim().match(/LISTENING\s+(\d+)\s*$/i);
+        if (m) pids.add(m[1]);
+      }
+    } catch {
+      /* ignore */
+    }
+    return [...pids];
+  }
+
+  try {
+    const out = execSync(`lsof -i :${port} -t -sTCP:LISTEN`, { encoding: 'utf8' });
+    for (const line of out.split(/\r?\n/)) {
+      const t = line.trim();
+      if (/^\d+$/.test(t)) pids.add(t);
+    }
+  } catch {
+    /* ignore */
+  }
+  return [...pids];
+}
+
+/**
+ * Kill processes listening on port (e.g. stale uvicorn). Skips current PID.
+ * @returns {number} number of kill attempts made
+ */
+function killListenersOnPort(port) {
+  const raw = getListeningPids(port).filter((p) => String(p) !== String(process.pid));
+  let attempts = 0;
+  const isWindows = process.platform === 'win32';
+
+  for (const pid of raw) {
+    attempts += 1;
+    try {
+      if (isWindows) {
+        execSync(`taskkill /PID ${pid} /F`, { stdio: 'inherit' });
+      } else {
+        process.kill(parseInt(pid, 10), 'SIGKILL');
+      }
+      console.log(`[Python Service] 🔪 Sent kill to PID ${pid}`);
+    } catch (err) {
+      console.warn(`[Python Service] ⚠️ Could not kill PID ${pid}: ${err.message || err}`);
+    }
+  }
+  return attempts;
+}
+
+/**
  * Avvia il servizio Python
  */
 async function startPythonService() {
   console.log('[Python Service] 🚀 Starting Python FastAPI service...');
-  console.log('[Python Service] Command: uvicorn newBackend.app:app --host 127.0.0.1 --port 8000 --reload');
+  console.log(
+    `[Python Service] Command: uvicorn newBackend.app:app --host 127.0.0.1 --port ${PYTHON_PORT} --reload`
+  );
 
   // Verifica se la porta è già in uso
-  const portInUse = await checkPortInUse();
+  let portInUse = await checkPortInUse();
   if (portInUse) {
-    console.log('[Python Service] ⚠️  Port 8000 is already in use');
+    console.log(`[Python Service] ⚠️  Port ${PYTHON_PORT} is already in use`);
     console.log('[Python Service] 🔍 Checking if existing service is healthy...');
 
     const isHealthy = await checkServiceHealth().catch(() => false);
     if (isHealthy) {
       console.log('[Python Service] ✅ Service is already running and healthy');
       return true;
-    } else {
-      console.error('[Python Service] ❌ Port 8000 is in use but service is not responding');
-      console.error('[Python Service] 💡 Please stop the existing service or use a different port');
+    }
+
+    if (process.env.PYTHON_SERVICE_NO_KILL === '1') {
+      console.error(`[Python Service] ❌ Port ${PYTHON_PORT} is in use but service is not responding`);
+      console.error(
+        '[Python Service] 💡 Stop the process manually or unset PYTHON_SERVICE_NO_KILL to allow auto-kill'
+      );
       process.exit(1);
     }
+
+    console.warn(
+      `[Python Service] ⚠️ Stale listener on port ${PYTHON_PORT} (no healthy /api/ping). Trying to free the port...`
+    );
+    const killed = killListenersOnPort(PYTHON_PORT);
+    if (killed === 0) {
+      console.error(`[Python Service] ❌ Could not find a LISTENING PID for port ${PYTHON_PORT}`);
+      console.error(
+        `[Python Service] 💡 Run as admin or stop the process manually (e.g. netstat -ano | findstr :${PYTHON_PORT})`
+      );
+      process.exit(1);
+    }
+
+    await new Promise((r) => setTimeout(r, 1500));
+    portInUse = await checkPortInUse();
+    if (portInUse) {
+      const healthyAfter = await checkServiceHealth().catch(() => false);
+      if (healthyAfter) {
+        console.log('[Python Service] ✅ Service is now healthy after freeing the port');
+        return true;
+      }
+      console.error(`[Python Service] ❌ Port ${PYTHON_PORT} still in use after kill attempt`);
+      process.exit(1);
+    }
+    console.log(`[Python Service] ✅ Port ${PYTHON_PORT} is free; starting uvicorn...`);
   }
 
   // Determina se siamo su Windows o Unix
@@ -168,7 +259,7 @@ async function startPythonService() {
       '-m', 'uvicorn',
       'newBackend.app:app',
       '--host', '127.0.0.1',
-      '--port', '8000',
+      '--port', String(PYTHON_PORT),
       '--reload'
     ];
   } else {
@@ -178,7 +269,7 @@ async function startPythonService() {
     pythonArgs = [
       'newBackend.app:app',
       '--host', '127.0.0.1',
-      '--port', '8000',
+      '--port', String(PYTHON_PORT),
       '--reload'
     ];
   }

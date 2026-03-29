@@ -19,12 +19,6 @@ export interface TaskContentResolverConfig {
    * Permits dependency injection for tests
    */
   getTask: (taskId: string) => Task | null;
-
-  /**
-   * Flag to enable backward compatibility with task.text
-   * Default: true (for gradual migration)
-   */
-  enableLegacyTextFallback?: boolean;
 }
 
 /**
@@ -38,5 +32,5 @@ export interface TaskContentResult {
   /** Whether the task has content */
   hasContent: boolean;
   /** Source of the content */
-  source: 'translation' | 'legacy' | 'none';
+  source: 'translation' | 'none';
 }

@@ -6,6 +6,7 @@ import { getIsTesting } from '@responseEditor/testingState';
 import { applyNodeUpdate, updateDockTreeWithTaskTree, saveTaskAsync } from '@responseEditor/features/node-editing/core/applyNodeUpdate';
 import { useTaskTreeStore } from '@responseEditor/core/state';
 import type { Task, TaskTree } from '@types/taskTypes';
+import { logBehaviourSteps, summarizeStepsShape } from '@responseEditor/behaviour/behaviourStepsDebug';
 
 export interface UseUpdateSelectedNodeParams {
   selectedNodePath: {
@@ -87,6 +88,12 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
             updatedRef: updated
           });
         }
+        logBehaviourSteps('updateSelectedNode:guardSkippedNoCriticalChange', {
+          nodeId: prev?.id,
+          prevSteps: summarizeStepsShape(prev?.steps),
+          updatedSteps: summarizeStepsShape(updated?.steps),
+          sameStepsRef: prev.steps === updated.steps,
+        });
         return prev; // Non aggiornare nulla
       }
 
@@ -118,9 +125,25 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
 
       // If validation failed, return previous node
       if (result.validationFailed) {
+        logBehaviourSteps('updateSelectedNode:applyNodeUpdateValidationFailed', {
+          validationError: result.validationError,
+          updatedSteps: summarizeStepsShape(updated?.steps),
+          nodeId: updated?.id,
+        });
         alert(`Invalid structure: ${result.validationError}`);
         return prev;
       }
+
+      logBehaviourSteps('updateSelectedNode:applyNodeUpdateOk', {
+        nodeId: updated?.id,
+        returnedNodeSteps: summarizeStepsShape(result.updatedNode?.steps),
+        taskTreeStepsTopKeys:
+          result.updatedTaskTree?.steps &&
+          typeof result.updatedTaskTree.steps === 'object' &&
+          !Array.isArray(result.updatedTaskTree.steps)
+            ? Object.keys(result.updatedTaskTree.steps as Record<string, unknown>)
+            : [],
+      });
 
       // ✅ FASE 2.3: Update only store (single source of truth)
       // ✅ FIX: Postpone setTaskTree and incrementVersion to avoid "Cannot update component during render" warning
@@ -166,31 +189,9 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
         );
       }
 
-      // ✅ FASE 2.3: Update steps in store only
-      // This is needed because applyNodeUpdate mutates task.steps
-      if (task && result.updatedTaskTree) {
-        // After validation strict, updated.id is always present
-        // templateId is optional (preferred for lookup, but id works as fallback)
-        const nodeTemplateId = updated.templateId ?? updated.id;
-        if (nodeTemplateId && updated.steps) {
-          // Get the steps dict from task.steps (already updated by applyNodeUpdate)
-          const nodeStepsDict = task.steps?.[nodeTemplateId];
-          if (nodeStepsDict) {
-            // ✅ FASE 2.3: Update store with steps
-            const updatedTaskTreeWithSteps = {
-              ...result.updatedTaskTree,
-              steps: {
-                ...(result.updatedTaskTree.steps ?? {}),
-                [nodeTemplateId]: nodeStepsDict
-              }
-            };
-            // ✅ FIX: Postpone setTaskTree to avoid "Cannot update component during render" warning
-            queueMicrotask(() => {
-              setTaskTree(updatedTaskTreeWithSteps);
-            });
-          }
-        }
-      }
+      // ✅ FASE 2.3: taskTree.steps is now kept in sync inside applyNodeUpdate itself.
+      // The redundant second setTaskTree patch has been removed to avoid the timing race
+      // where useNodeLoading ran between the two queueMicrotask calls and read stale steps.
 
       // ✅ FASE 2.3: incrementVersion is now called inside queueMicrotask (above)
       // Keep setTaskTreeVersion for backward compatibility (if provided)

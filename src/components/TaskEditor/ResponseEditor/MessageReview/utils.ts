@@ -1,5 +1,5 @@
 import { ReviewItem, StepGroup, RecoveryGroup } from '@responseEditor/MessageReview/types';
-import { getTaskText } from '@responseEditor/utils/escalationHelpers';
+import { getEscalationTaskPreviewText } from '@responseEditor/utils/taskUiText';
 import { STEP_ORDER, getStepOrder } from '@types/stepTypes';
 
 export function orderOf(k: string): number {
@@ -171,8 +171,7 @@ export function collectNodeMessages(
                     if (shouldInclude) {
                         if (key) collectedTextKeys.add(key);
 
-                        // ✅ USA getTaskText per applicare la stessa logica di fallback (traduzione → label template → task.label)
-                        const text = getTaskText(task, translations);
+                        const text = getEscalationTaskPreviewText(task, translations);
 
                         out.push({
                             id: `${pathLabel}|${stepKey}|${escIdx}|${taskIdx}`,

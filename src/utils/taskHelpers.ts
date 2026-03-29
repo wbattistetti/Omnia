@@ -1,9 +1,15 @@
 import type { NodeRowData } from '../types/project';
 import type { Task, TaskInstance } from '../types/taskTypes';
-import { TaskType, taskIdToTaskType } from '../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
+import { TaskType } from '../types/taskTypes';
 import { taskRepository } from '../services/TaskRepository';
 // FASE 4: InstanceRepository import removed - TaskRepository handles synchronization internally
 import { generateId } from './idGenerator';
+import { v4 as uuidv4 } from 'uuid';
+import {
+  getSayMessageSyncedBody,
+  trySeedSayMessageTranslation,
+  applySayMessagePlainTextToTask,
+} from './sayMessageTaskSync';
 
 /**
  * Helper functions for Task/Instance migration
@@ -153,21 +159,33 @@ export function createRowWithTask(
   if (taskRepository.hasTask(finalRowId)) {
     const existingTask = taskRepository.getTask(finalRowId);
     if (existingTask) {
+      const rowText =
+        initialText ||
+        (existingTask.type === TaskType.SayMessage ? getSayMessageSyncedBody(existingTask) : '');
       return {
         id: finalRowId,  // ALWAYS equals task.id
-        text: initialText || existingTask.text || '',
+        text: rowText,
         included: true,
         mode: 'Message' as const
       };
     }
   }
 
+  const sayMessageFields =
+    taskType === TaskType.SayMessage
+      ? (() => {
+          const textKey = uuidv4();
+          trySeedSayMessageTranslation(textKey, initialText || '');
+          return { parameters: [{ parameterId: 'text', value: textKey }] };
+        })()
+      : undefined;
+
   // ✅ Create Task in TaskRepository with type (enum) and templateId (null = standalone)
   // ✅ CRITICAL: task.id === row.id ALWAYS
-  const task = taskRepository.createTask(
+  taskRepository.createTask(
     taskType,                    // ✅ type: TaskType enum (obbligatorio)
     null,                        // ✅ templateId: null (standalone, non deriva da altri Task)
-    taskType === TaskType.SayMessage ? { text: initialText } : undefined,  // Campi diretti
+    sayMessageFields,
     finalRowId, // ✅ CRITICAL: Use row.id as task.id (task.id === row.id ALWAYS)
     projectId
   );
@@ -231,8 +249,10 @@ export function getRowData(row: NodeRowData): {
   const task = taskRepository.getTask(taskId);
 
   if (task) {
+    const messageText =
+      task.type === TaskType.SayMessage ? getSayMessageSyncedBody(task) : '';
     return {
-      message: task.text ? { text: task.text } : undefined,
+      message: messageText ? { text: messageText } : undefined,
       ddt: (task.data && task.data.length > 0) ? {
         label: task.label,
         data: task.data,
@@ -275,7 +295,7 @@ export function updateRowData(
   // ✅ Update task con campi direttamente (niente wrapper value)
   const taskUpdates: Record<string, any> = {};
   if (data.message?.text !== undefined) {
-    taskUpdates.text = data.message.text;
+    applySayMessagePlainTextToTask(taskId, data.message.text, projectId);
   }
   if (data.ddt !== undefined) {
     // ✅ Solo label override (data, steps, constraints, examples vengono dal template)

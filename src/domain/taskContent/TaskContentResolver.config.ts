@@ -12,9 +12,7 @@ import type { TaskContentResolverConfig } from './TaskContentResolver.types';
 export function createProductionResolver(): TaskContentResolver {
   const config: TaskContentResolverConfig = {
     getTranslations: () => {
-      // Deterministic access to translations
-      // Uses window.__projectTranslationsContext as temporary fallback
-      // During migration, this will be replaced by a centralized service
+      // Reads live translations map from the React-mounted project context
       if (typeof window !== 'undefined') {
         const context = (window as any).__projectTranslationsContext;
         if (context && context.translations) {
@@ -24,16 +22,12 @@ export function createProductionResolver(): TaskContentResolver {
       return {};
     },
     getTask: (taskId: string) => taskRepository.getTask(taskId),
-    enableLegacyTextFallback: true // Enabled during migration
   };
 
   return TaskContentResolver.create(config);
 }
 
-/**
- * Singleton for global use (to be used during migration)
- * TODO: Remove after complete migration
- */
+/** Singleton for global use (e.g. flowchart hasTaskTree checks). */
 let globalResolver: TaskContentResolver | null = null;
 
 export function getGlobalResolver(): TaskContentResolver {

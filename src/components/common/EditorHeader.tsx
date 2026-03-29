@@ -28,6 +28,8 @@ type EditorHeaderProps = {
   icon?: React.ReactNode;
   title: string;
   subtitle?: string;
+  /** Shown inline immediately after the title (e.g. migration task-kind badge). */
+  titleBadge?: React.ReactNode;
   titleActions?: React.ReactNode; // Actions to show right after title (before spacer)
   toolbarButtons?: ToolbarButton[];
   dynamicToolbarSlot?: React.ReactNode; // ✅ NEW: Dynamic toolbar slot for inline editors
@@ -198,7 +200,7 @@ function ToolbarDropdownButton({
   );
 }
 
-export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButtons = [], dynamicToolbarSlot, rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
+export function EditorHeader({ icon, title, subtitle, titleBadge, titleActions, toolbarButtons = [], dynamicToolbarSlot, rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
   const theme = THEMES[color] || THEMES.orange;
   let combinedClass = '';
   try {
@@ -226,8 +228,31 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
       {/* Left: Icon + Title + TitleActions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         {icon ? <div style={{ width: 18, height: 18, flexShrink: 0 }}>{icon}</div> : null}
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <div style={{ fontWeight: 600, lineHeight: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: '1 1 auto' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              minWidth: 0,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span
+              style={{
+                fontWeight: 600,
+                lineHeight: '16px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                minWidth: 0,
+                flex: '1 1 auto',
+              }}
+            >
+              {title}
+            </span>
+            {titleBadge ? <span style={{ flexShrink: 0 }}>{titleBadge}</span> : null}
+          </div>
           {subtitle ? <div style={{ opacity: 0.8 }}>{subtitle}</div> : null}
         </div>
         {titleActions && (

@@ -1,5 +1,4 @@
-// Please write clean, production-grade TypeScript code.
-// Avoid non-ASCII characters, Chinese symbols, or multilingual output.
+// Tests for useNodeLoading: loads editor node from Zustand TaskTree + selectedPath / selectedRoot.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
@@ -7,34 +6,15 @@ import { useNodeLoading } from '@responseEditor/features/node-editing/hooks/useN
 import { useTaskTreeStore } from '@responseEditor/core/state';
 import type { Task, TaskTree } from '@types/taskTypes';
 
-/**
- * Tests for useNodeLoading
- *
- * This hook loads the selected node from taskTreeRef when selection changes.
- * It handles root nodes, main nodes, and sub-nodes, setting selectedNode and selectedNodePath.
- */
-
-// Mock dependencies
-vi.mock('../../ddtSelectors', () => ({
-  getdataList: vi.fn(),
-  getSubDataList: vi.fn(),
-}));
-
-import { getdataList, getSubDataList } from '../../ddtSelectors';
-
 describe('useNodeLoading', () => {
   const mockSetSelectedNode = vi.fn();
   const mockSetSelectedNodePath = vi.fn();
   const mockGetStepsForNode = vi.fn();
   const mockGetStepsAsArray = vi.fn();
 
-  const defaultParams = {
-    selectedMainIndex: 0,
-    selectedSubIndex: null,
-    selectedRoot: false,
-    introduction: null,
-    task: null,
-    // ✅ FASE 3: taskTree e taskTreeRef rimossi - store è single source of truth
+  const base = {
+    introduction: null as unknown,
+    task: null as Task | null,
     setSelectedNode: mockSetSelectedNode,
     setSelectedNodePath: mockSetSelectedNodePath,
     getStepsForNode: mockGetStepsForNode,
@@ -43,12 +23,9 @@ describe('useNodeLoading', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (getdataList as any).mockReturnValue([]);
-    (getSubDataList as any).mockReturnValue([]);
-    (mockGetStepsForNode as any).mockReturnValue({});
-    (mockGetStepsAsArray as any).mockReturnValue([]);
+    mockGetStepsForNode.mockReturnValue({});
+    mockGetStepsAsArray.mockReturnValue([]);
 
-    // ✅ FASE 3: Reset store before each test
     const { result } = renderHook(() => useTaskTreeStore());
     act(() => {
       result.current.reset();
@@ -56,10 +33,14 @@ describe('useNodeLoading', () => {
   });
 
   describe('empty TaskTree', () => {
-    it('should not load node when TaskTree is empty', () => {
-      (getdataList as any).mockReturnValue([]);
-
-      renderHook(() => useNodeLoading(defaultParams));
+    it('should not load node when TaskTree has no main nodes', () => {
+      renderHook(() =>
+        useNodeLoading({
+          ...base,
+          selectedPath: [0],
+          selectedRoot: false,
+        })
+      );
 
       expect(mockSetSelectedNode).not.toHaveBeenCalled();
       expect(mockSetSelectedNodePath).not.toHaveBeenCalled();
@@ -69,20 +50,14 @@ describe('useNodeLoading', () => {
   describe('root node loading', () => {
     it('should load root node with introduction when selectedRoot is true', () => {
       const taskTree: TaskTree = {
-        nodes: [{ id: 'node-1' }],
+        id: 't',
+        nodes: [{ id: 'node-1', label: 'L', templateId: 'node-1', subNodes: [] }],
         introduction: {
           type: 'introduction',
-          escalations: [
-            {
-              tasks: [{ id: 'task-1', type: 1 }],
-            },
-          ],
+          escalations: [{ tasks: [{ id: 'task-1', type: 1 }] }],
         },
       };
 
-      (getdataList as any).mockReturnValue([{ id: 'node-1' }]);
-
-      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
       const { result: storeResult } = renderHook(() => useTaskTreeStore());
       act(() => {
         storeResult.current.setTaskTree(taskTree);
@@ -90,7 +65,8 @@ describe('useNodeLoading', () => {
 
       renderHook(() =>
         useNodeLoading({
-          ...defaultParams,
+          ...base,
+          selectedPath: [],
           selectedRoot: true,
         })
       );
@@ -110,12 +86,10 @@ describe('useNodeLoading', () => {
 
     it('should load root node with empty introduction when introduction is missing', () => {
       const taskTree: TaskTree = {
-        nodes: [{ id: 'node-1' }],
+        id: 't',
+        nodes: [{ id: 'node-1', label: 'L', templateId: 'node-1', subNodes: [] }],
       };
 
-      (getdataList as any).mockReturnValue([{ id: 'node-1' }]);
-
-      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
       const { result: storeResult } = renderHook(() => useTaskTreeStore());
       act(() => {
         storeResult.current.setTaskTree(taskTree);
@@ -123,7 +97,8 @@ describe('useNodeLoading', () => {
 
       renderHook(() =>
         useNodeLoading({
-          ...defaultParams,
+          ...base,
+          selectedPath: [],
           selectedRoot: true,
         })
       );
@@ -142,14 +117,10 @@ describe('useNodeLoading', () => {
   });
 
   describe('main node loading', () => {
-    it('should load main node when selectedSubIndex is null', () => {
+    it('should load main node when selectedPath is [0]', () => {
       const taskTree: TaskTree = {
-        nodes: [{ id: 'node-1', templateId: 'template-1' }],
-      };
-
-      const task: Task = {
-        id: 'task-1',
-        type: 1,
+        id: 't',
+        nodes: [{ id: 'node-1', label: 'L', templateId: 'template-1', subNodes: [] }],
         steps: {
           'template-1': {
             start: { escalations: [] },
@@ -157,15 +128,11 @@ describe('useNodeLoading', () => {
         },
       };
 
-      (getdataList as any).mockReturnValue([{ id: 'node-1', templateId: 'template-1' }]);
-      (mockGetStepsForNode as any).mockReturnValue({
+      mockGetStepsForNode.mockReturnValue({
         start: { escalations: [] },
       });
-      (mockGetStepsAsArray as any).mockReturnValue([
-        { type: 'start', escalations: [] },
-      ]);
+      mockGetStepsAsArray.mockReturnValue([{ type: 'start', escalations: [] }]);
 
-      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
       const { result: storeResult } = renderHook(() => useTaskTreeStore());
       act(() => {
         storeResult.current.setTaskTree(taskTree);
@@ -173,25 +140,20 @@ describe('useNodeLoading', () => {
 
       renderHook(() =>
         useNodeLoading({
-          ...defaultParams,
-          selectedMainIndex: 0,
-          selectedSubIndex: null,
-          task,
+          ...base,
+          selectedPath: [0],
+          selectedRoot: false,
         })
       );
 
       expect(mockSetSelectedNode).toHaveBeenCalled();
-      expect(mockSetSelectedNodePath).toHaveBeenCalledWith({ mainIndex: 0, subIndex: null });
+      expect(mockSetSelectedNodePath).toHaveBeenCalledWith({ path: [0] });
     });
 
     it('should use node.id as fallback when templateId is missing', () => {
       const taskTree: TaskTree = {
-        nodes: [{ id: 'node-1' }],
-      };
-
-      const task: Task = {
-        id: 'task-1',
-        type: 1,
+        id: 't',
+        nodes: [{ id: 'node-1', label: 'L', subNodes: [] }],
         steps: {
           'node-1': {
             start: { escalations: [] },
@@ -199,15 +161,11 @@ describe('useNodeLoading', () => {
         },
       };
 
-      (getdataList as any).mockReturnValue([{ id: 'node-1' }]);
-      (mockGetStepsForNode as any).mockReturnValue({
+      mockGetStepsForNode.mockReturnValue({
         start: { escalations: [] },
       });
-      (mockGetStepsAsArray as any).mockReturnValue([
-        { type: 'start', escalations: [] },
-      ]);
+      mockGetStepsAsArray.mockReturnValue([{ type: 'start', escalations: [] }]);
 
-      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
       const { result: storeResult } = renderHook(() => useTaskTreeStore());
       act(() => {
         storeResult.current.setTaskTree(taskTree);
@@ -215,34 +173,28 @@ describe('useNodeLoading', () => {
 
       renderHook(() =>
         useNodeLoading({
-          ...defaultParams,
-          selectedMainIndex: 0,
-          selectedSubIndex: null,
-          task,
+          ...base,
+          selectedPath: [0],
+          selectedRoot: false,
         })
       );
 
-      expect(mockGetStepsForNode).toHaveBeenCalledWith(task.steps, 'node-1');
+      expect(mockGetStepsForNode).toHaveBeenCalledWith(taskTree.steps, 'node-1');
     });
   });
 
   describe('sub-node loading', () => {
-    it('should load sub-node when selectedSubIndex is provided', () => {
+    it('should load sub-node when selectedPath is [0, 0]', () => {
       const taskTree: TaskTree = {
+        id: 't',
         nodes: [
           {
             id: 'main-1',
+            label: 'M',
             templateId: 'main-template-1',
-            subData: [
-              { id: 'sub-1', templateId: 'sub-template-1' },
-            ],
+            subNodes: [{ id: 'sub-1', label: 'S', templateId: 'sub-template-1', subNodes: [] }],
           },
         ],
-      };
-
-      const task: Task = {
-        id: 'task-1',
-        type: 1,
         steps: {
           'sub-template-1': {
             start: { escalations: [] },
@@ -250,24 +202,11 @@ describe('useNodeLoading', () => {
         },
       };
 
-      (getdataList as any).mockReturnValue([
-        {
-          id: 'main-1',
-          templateId: 'main-template-1',
-          subData: [{ id: 'sub-1', templateId: 'sub-template-1' }],
-        },
-      ]);
-      (getSubDataList as any).mockReturnValue([
-        { id: 'sub-1', templateId: 'sub-template-1' },
-      ]);
-      (mockGetStepsForNode as any).mockReturnValue({
+      mockGetStepsForNode.mockReturnValue({
         start: { escalations: [] },
       });
-      (mockGetStepsAsArray as any).mockReturnValue([
-        { type: 'start', escalations: [] },
-      ]);
+      mockGetStepsAsArray.mockReturnValue([{ type: 'start', escalations: [] }]);
 
-      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
       const { result: storeResult } = renderHook(() => useTaskTreeStore());
       act(() => {
         storeResult.current.setTaskTree(taskTree);
@@ -275,33 +214,30 @@ describe('useNodeLoading', () => {
 
       renderHook(() =>
         useNodeLoading({
-          ...defaultParams,
-          selectedMainIndex: 0,
-          selectedSubIndex: 0,
-          task,
+          ...base,
+          selectedPath: [0, 0],
+          selectedRoot: false,
         })
       );
 
       expect(mockSetSelectedNode).toHaveBeenCalled();
-      expect(mockSetSelectedNodePath).toHaveBeenCalledWith({ mainIndex: 0, subIndex: 0 });
+      expect(mockSetSelectedNodePath).toHaveBeenCalledWith({ path: [0, 0] });
     });
 
-    it('should not load when sub-node is not found', () => {
+    it('should not load when sub-node path is invalid', () => {
       const taskTree: TaskTree = {
+        id: 't',
         nodes: [
           {
             id: 'main-1',
+            label: 'M',
             templateId: 'main-template-1',
+            subNodes: [],
           },
         ],
+        steps: {},
       };
 
-      (getdataList as any).mockReturnValue([
-        { id: 'main-1', templateId: 'main-template-1' },
-      ]);
-      (getSubDataList as any).mockReturnValue([]);
-
-      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
       const { result: storeResult } = renderHook(() => useTaskTreeStore());
       act(() => {
         storeResult.current.setTaskTree(taskTree);
@@ -309,9 +245,9 @@ describe('useNodeLoading', () => {
 
       renderHook(() =>
         useNodeLoading({
-          ...defaultParams,
-          selectedMainIndex: 0,
-          selectedSubIndex: 0,
+          ...base,
+          selectedPath: [0, 0],
+          selectedRoot: false,
         })
       );
 
@@ -320,14 +256,10 @@ describe('useNodeLoading', () => {
   });
 
   describe('steps integration', () => {
-    it('should attach steps from task.steps to loaded node', () => {
+    it('should attach steps from taskTree.steps to loaded node', () => {
       const taskTree: TaskTree = {
-        nodes: [{ id: 'node-1', templateId: 'template-1' }],
-      };
-
-      const task: Task = {
-        id: 'task-1',
-        type: 1,
+        id: 't',
+        nodes: [{ id: 'node-1', label: 'L', templateId: 'template-1', subNodes: [] }],
         steps: {
           'template-1': {
             start: { escalations: [] },
@@ -336,17 +268,15 @@ describe('useNodeLoading', () => {
         },
       };
 
-      (getdataList as any).mockReturnValue([{ id: 'node-1', templateId: 'template-1' }]);
-      (mockGetStepsForNode as any).mockReturnValue({
+      mockGetStepsForNode.mockReturnValue({
         start: { escalations: [] },
         noMatch: { escalations: [] },
       });
-      (mockGetStepsAsArray as any).mockReturnValue([
+      mockGetStepsAsArray.mockReturnValue([
         { type: 'start', escalations: [] },
         { type: 'noMatch', escalations: [] },
       ]);
 
-      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
       const { result: storeResult } = renderHook(() => useTaskTreeStore());
       act(() => {
         storeResult.current.setTaskTree(taskTree);
@@ -354,26 +284,28 @@ describe('useNodeLoading', () => {
 
       renderHook(() =>
         useNodeLoading({
-          ...defaultParams,
-          selectedMainIndex: 0,
-          task,
+          ...base,
+          selectedPath: [0],
+          selectedRoot: false,
         })
       );
 
-      expect(mockGetStepsForNode).toHaveBeenCalledWith(task.steps, 'template-1');
+      expect(mockGetStepsForNode).toHaveBeenCalledWith(taskTree.steps, 'template-1');
       expect(mockGetStepsAsArray).toHaveBeenCalled();
     });
 
-    it('should use empty steps when task.steps is missing', () => {
+    it('should use empty steps when node step types are empty', () => {
       const taskTree: TaskTree = {
-        nodes: [{ id: 'node-1', templateId: 'template-1' }],
+        id: 't',
+        nodes: [{ id: 'node-1', label: 'L', templateId: 'template-1', subNodes: [] }],
+        steps: {
+          'template-1': {},
+        },
       };
 
-      (getdataList as any).mockReturnValue([{ id: 'node-1', templateId: 'template-1' }]);
-      (mockGetStepsForNode as any).mockReturnValue({});
-      (mockGetStepsAsArray as any).mockReturnValue([]);
+      mockGetStepsForNode.mockReturnValue({});
+      mockGetStepsAsArray.mockReturnValue([]);
 
-      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
       const { result: storeResult } = renderHook(() => useTaskTreeStore());
       act(() => {
         storeResult.current.setTaskTree(taskTree);
@@ -381,25 +313,24 @@ describe('useNodeLoading', () => {
 
       renderHook(() =>
         useNodeLoading({
-          ...defaultParams,
-          selectedMainIndex: 0,
-          task: null,
+          ...base,
+          selectedPath: [0],
+          selectedRoot: false,
         })
       );
 
-      expect(mockGetStepsForNode).toHaveBeenCalledWith(undefined, 'template-1');
+      expect(mockGetStepsForNode).toHaveBeenCalledWith(taskTree.steps, 'template-1');
     });
   });
 
   describe('edge cases', () => {
-    it('should handle out-of-bounds mainIndex gracefully', () => {
+    it('should not set node when main path index is out of range', () => {
       const taskTree: TaskTree = {
-        nodes: [{ id: 'node-1' }],
+        id: 't',
+        nodes: [{ id: 'node-1', label: 'L', templateId: 'n1', subNodes: [] }],
+        steps: { n1: { start: { escalations: [] } } },
       };
 
-      (getdataList as any).mockReturnValue([{ id: 'node-1' }]);
-
-      // ✅ FASE 3: Set taskTree in store instead of using taskTreeRef
       const { result: storeResult } = renderHook(() => useTaskTreeStore());
       act(() => {
         storeResult.current.setTaskTree(taskTree);
@@ -407,22 +338,21 @@ describe('useNodeLoading', () => {
 
       renderHook(() =>
         useNodeLoading({
-          ...defaultParams,
-          selectedMainIndex: 999,
+          ...base,
+          selectedPath: [999],
+          selectedRoot: false,
         })
       );
 
-      // Should not crash, but may not set node if index is invalid
-      // Behavior depends on getdataList implementation
+      expect(mockSetSelectedNode).not.toHaveBeenCalled();
     });
 
     it('should handle store taskTree being null', () => {
-      (getdataList as any).mockReturnValue([]);
-
-      // ✅ FASE 3: Store is already null (reset in beforeEach)
       renderHook(() =>
         useNodeLoading({
-          ...defaultParams,
+          ...base,
+          selectedPath: [0],
+          selectedRoot: false,
         })
       );
 

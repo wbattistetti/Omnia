@@ -6,6 +6,7 @@ import { getMainNodes, getSubNodes } from '@responseEditor/core/domain';
 import { getNodeByPath } from '@responseEditor/core/taskTree';
 import { useTaskTreeFromStore, useTaskTreeVersion } from '@responseEditor/core/state';
 import type { Task, TaskTree } from '@types/taskTypes';
+import { logBehaviourSteps, summarizeStepsShape } from '@responseEditor/behaviour/behaviourStepsDebug';
 
 export interface UseNodeLoadingParams {
   selectedPath: number[];
@@ -67,11 +68,21 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
         }
         const stepsSource = currentTaskTree.steps;
         const nodeStepsDict = getStepsForNode(stepsSource, nodeTemplateId);
-        const nodeStepTypes = Object.keys(nodeStepsDict);
+        // Always replace node.steps with the task-tree dictionary so Behaviour never sees
+        // a stale MaterializedStep[] left on the tree node reference (would break getNodeStepKeys).
+        node.steps = nodeStepsDict;
 
-        if (nodeStepTypes.length > 0) {
-          node.steps = nodeStepsDict;
-        }
+        logBehaviourSteps('useNodeLoading', {
+          pathKey,
+          taskTreeVersion,
+          nodeId: node.id,
+          nodeTemplateId,
+          stepsSourceTopKeys:
+            stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
+              ? Object.keys(stepsSource as Record<string, unknown>)
+              : ['(not a dict)'],
+          attachedNodeSteps: summarizeStepsShape(nodeStepsDict),
+        });
 
         const steps = getStepsAsArray(node?.steps);
         const startStepTasksCount = steps.find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;

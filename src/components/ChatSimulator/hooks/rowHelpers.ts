@@ -2,7 +2,8 @@
 // These functions centralize the logic for determining interactivity and retrieving DDTs
 
 import { taskRepository } from '../../../services/TaskRepository';
-import { getTemplateId } from '../../../utils/taskHelpers';
+import { TaskType } from '../../../types/taskTypes';
+import { getSayMessageSyncedBody } from '../../../utils/sayMessageTaskSync';
 import type { AssembledTaskTree } from '../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 
 /**
@@ -16,12 +17,9 @@ function getInstanceFromTask(taskId: string): { message?: { text?: string }; ddt
   // Convert Task to Instance format
   const instance: { message?: { text?: string }; ddt?: any } = {};
 
-  // ✅ MIGRATION: Use getTemplateId() helper
-  // ✅ Map task.text → instance.message.text (for Message actions)
-  const templateId = getTemplateId(task);
-  if (templateId === 'Message' || templateId === 'SayMessage') {
+  if (task.type === TaskType.SayMessage) {
     instance.message = {
-      text: task.text || ''
+      text: getSayMessageSyncedBody(task),
     };
   }
 

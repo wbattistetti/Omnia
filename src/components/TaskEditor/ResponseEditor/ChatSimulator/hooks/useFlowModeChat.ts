@@ -75,7 +75,7 @@ export function useFlowModeChat(
   const resolveTaskLabel = React.useCallback((taskId?: string) => {
     if (!taskId) return '';
     const task = tasks.find((t: any) => t?.id === taskId);
-    return toReadableLabel(task?.label || task?.text || task?.title);
+    return toReadableLabel(task?.label || task?.title);
   }, [tasks, toReadableLabel]);
 
   const resolveNodeLabel = React.useCallback((nodeId?: string) => {

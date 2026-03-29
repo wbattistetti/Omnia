@@ -8,6 +8,7 @@ import {
   useTaskTreeVersion,
 } from '../useTaskTreeSync';
 import { useTaskTreeStore } from '../taskTreeStore';
+import { ensureTaskTreeNodeIds } from '@responseEditor/core/taskTree';
 import type { TaskTree } from '@types/taskTypes';
 
 describe('TaskTree Store Hooks', () => {
@@ -37,7 +38,7 @@ describe('TaskTree Store Hooks', () => {
       });
 
       const { result } = renderHook(() => useTaskTreeFromStore());
-      expect(result.current).toEqual(taskTree);
+      expect(result.current).toEqual(ensureTaskTreeNodeIds(taskTree));
     });
 
     it('should update when store changes', () => {
@@ -50,12 +51,12 @@ describe('TaskTree Store Hooks', () => {
       act(() => {
         storeResult.result.current.setTaskTree(taskTree1);
       });
-      expect(result.current).toEqual(taskTree1);
+      expect(result.current).toEqual(ensureTaskTreeNodeIds(taskTree1));
 
       act(() => {
         storeResult.result.current.setTaskTree(taskTree2);
       });
-      expect(result.current).toEqual(taskTree2);
+      expect(result.current).toEqual(ensureTaskTreeNodeIds(taskTree2));
     });
   });
 

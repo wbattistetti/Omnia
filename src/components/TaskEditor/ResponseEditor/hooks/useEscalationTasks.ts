@@ -2,6 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useEffect } from 'react';
+import { TaskType } from '@types/taskTypes';
 
 export interface UseEscalationTasksParams {
   setEscalationTasks: React.Dispatch<React.SetStateAction<any[]>>;
@@ -25,7 +26,37 @@ function normalizeApiTemplate(template: any): { id: string; label: string; [key:
     console.warn(`[normalizeApiTemplate] Template missing label, using id as fallback: ${id}`);
   }
 
-  // Return normalized structure
+  const rawType = template.type;
+  let type: number;
+  if (typeof rawType === 'number' && !Number.isNaN(rawType)) {
+    type = rawType;
+  } else if (rawType !== undefined && rawType !== null && rawType !== '') {
+    const n = Number(rawType);
+    if (Number.isFinite(n)) {
+      type = n;
+    } else {
+      type = NaN;
+    }
+  } else {
+    type = NaN;
+  }
+  if (Number.isNaN(type)) {
+    const idLower = String(id).toLowerCase().replace(/-/g, '');
+    const nameLower = String(template.name || '').toLowerCase();
+    if (
+      idLower === 'saymessage' ||
+      idLower === 'message' ||
+      nameLower === 'message' ||
+      nameLower === 'saymessage'
+    ) {
+      type = TaskType.SayMessage;
+    } else {
+      throw new Error(
+        `[normalizeApiTemplate] Template missing numeric type: id=${id} rawType=${String(rawType)}`
+      );
+    }
+  }
+
   return {
     id,
     label: label || id,
@@ -33,8 +64,8 @@ function normalizeApiTemplate(template: any): { id: string; label: string; [key:
     icon: template.icon || 'Circle',
     color: template.color || 'text-gray-500',
     params: template.structure || template.params || {},
-    type: template.type,
-    allowedContexts: template.allowedContexts || []
+    type,
+    allowedContexts: Array.isArray(template.allowedContexts) ? template.allowedContexts : [],
   };
 }
 
@@ -62,7 +93,7 @@ export function useEscalationTasks(params: UseEscalationTasksParams) {
         }
 
         // Normalize all templates - filter out invalid ones
-        const tasks = templates
+        let tasks = templates
           .map((template: any) => {
             try {
               return normalizeApiTemplate(template);
@@ -72,6 +103,23 @@ export function useEscalationTasks(params: UseEscalationTasksParams) {
             }
           })
           .filter((task): task is NonNullable<typeof task> => task !== null);
+
+        const hasSayMessage = tasks.some((t) => t.type === TaskType.SayMessage);
+        if (!hasSayMessage) {
+          tasks = [
+            {
+              id: 'sayMessage',
+              label: 'Message',
+              description: 'Utterance / prompt (translation-backed)',
+              icon: 'MessageCircle',
+              color: 'text-sky-500',
+              params: {},
+              type: TaskType.SayMessage,
+              allowedContexts: ['escalation'],
+            },
+            ...tasks,
+          ];
+        }
 
         setEscalationTasks(tasks);
       })

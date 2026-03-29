@@ -10,8 +10,6 @@ interface StepCardProps {
   allowedActions?: string[];
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   onDeleteEscalation: (escalationIdx: number) => void;
-  autoEditTarget: { escIdx: number; taskIdx: number } | null;
-  onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
 }
 
 /**
@@ -27,17 +25,14 @@ export function StepCard({
   allowedActions,
   updateSelectedNode,
   onDeleteEscalation,
-  autoEditTarget,
-  onAutoEditTargetChange
 }: StepCardProps) {
   return (
     <div
       style={{
-        marginLeft: isRoot ? '0' : '50px', // Indentazione livello 1 per step non-root
-        marginBottom: '0.25rem'
+        marginLeft: isRoot ? '0' : '50px',
+        marginBottom: '0.25rem',
       }}
     >
-      {/* Contenuto: ogni escalation ha la sua fascia con indentazione progressiva */}
       <StepContent
         stepKey={stepKey}
         escalations={escalations}
@@ -46,8 +41,6 @@ export function StepCard({
         allowedActions={allowedActions}
         updateSelectedNode={updateSelectedNode}
         onDeleteEscalation={onDeleteEscalation}
-        autoEditTarget={autoEditTarget}
-        onAutoEditTargetChange={onAutoEditTargetChange}
       />
     </div>
   );

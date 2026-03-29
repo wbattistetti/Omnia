@@ -82,16 +82,6 @@ export class TaskContentResolver {
       };
     }
 
-    // Priority 2: Legacy fallback (only if enabled)
-    if (this.config.enableLegacyTextFallback && (task as any).text) {
-      return {
-        text: (task as any).text,
-        textKey: null,
-        hasContent: (task as any).text.trim().length > 0,
-        source: 'legacy'
-      };
-    }
-
     // No content found
     return {
       text: null,

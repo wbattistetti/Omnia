@@ -3,6 +3,8 @@ import { DialogueTaskService } from '../services/DialogueTaskService';
 import { TaskType, templateIdToTaskType } from '../types/taskTypes';
 import { StepType } from '../types/stepTypes';
 import { v4 as uuidv4 } from 'uuid';
+import { buildStandaloneTaskTreeView } from './buildStandaloneTaskTreeView';
+import { inferTaskKind } from './taskKind';
 
 /**
  * ============================================================================
@@ -1092,21 +1094,8 @@ export async function buildTaskTreeFromRepository(
   taskId: string,
   projectId?: string
 ): Promise<{ taskTree: TaskTree; instance: Task } | null> {
-  // Always read fresh instance from repository (single source of truth in memory)
-  const { taskRepository } = await import('../services/TaskRepository');
-  const freshInstance = taskRepository.getTask(taskId);
-  if (!freshInstance) {
-    console.warn(`[buildTaskTreeFromRepository] Task ${taskId} not found in repository`);
-    return null;
-  }
-
-  // Delegate to pure buildTaskTree with fresh instance
-  const taskTree = await buildTaskTree(freshInstance, projectId);
-  if (!taskTree) {
-    return null; // ✅ Important: return null if buildTaskTree fails
-  }
-
-  return { taskTree, instance: freshInstance };
+  const { materializeTaskFromRepository } = await import('./MaterializationOrchestrator');
+  return materializeTaskFromRepository(taskId, projectId);
 }
 
 /**
@@ -1116,13 +1105,22 @@ export async function buildTaskTreeFromRepository(
  *
  * @param instance - Task instance (must be fresh from repository if you need latest _disabled flags)
  * @param projectId - Optional project ID
- * @returns TaskTree or null if instance is null
+ * @returns TaskTree or null if instance is null. Standalone rows (inferTaskKind === standalone) use
+ *   buildStandaloneTaskTreeView only; no ensureTemplateExists.
  */
 export async function buildTaskTree(
   instance: Task | null,
   projectId?: string
 ): Promise<TaskTree | null> {
   if (!instance) return null;
+
+  if (inferTaskKind(instance) === 'standalone') {
+    const fromLocal = buildStandaloneTaskTreeView(instance);
+    if (fromLocal) {
+      return fromLocal;
+    }
+    return null;
+  }
 
   // ✅ CRITICAL: Ogni task DEVE avere templateId
   if (!instance.templateId || instance.templateId === 'UNDEFINED') {
@@ -1594,7 +1592,8 @@ function updateEditedFlags(workingCopy: TaskTree, templateExpanded: TaskTree): v
  * @param workingCopy - TaskTree working copy (vista runtime modificata dall'utente)
  * @param templateExpanded - TaskTree template espanso (baseline per confronti)
  * @param projectId - Project ID (obbligatorio per creare template se necessario)
- * @returns Tutta la working copy da salvare nell'istanza
+ * @returns Tutta la working copy da salvare nell'istanza. Standalone: no ensureTemplateExists;
+ *   returns kind, instanceNodes, steps from workingCopy.
  */
 export async function extractTaskOverrides(
   instance: Task | null,
@@ -1604,6 +1603,27 @@ export async function extractTaskOverrides(
 ): Promise<Partial<Task>> {
   if (!instance || !workingCopy) {
     return {};
+  }
+
+  if (inferTaskKind(instance) === 'standalone') {
+    if (templateExpanded) {
+      updateEditedFlags(workingCopy, templateExpanded);
+    }
+    const workingSteps = workingCopy.steps;
+    const stepsDict: Record<string, Record<string, any>> =
+      (workingSteps && typeof workingSteps === 'object' && !Array.isArray(workingSteps))
+        ? workingSteps
+        : {};
+    const nodesClone: TaskTreeNode[] = Array.isArray(workingCopy.nodes)
+      ? (JSON.parse(JSON.stringify(workingCopy.nodes.filter(Boolean))) as TaskTreeNode[])
+      : [];
+    return {
+      labelKey: workingCopy.labelKey || workingCopy.label,
+      steps: stepsDict,
+      templateVersion: instance.templateVersion ?? 1,
+      kind: 'standalone',
+      instanceNodes: nodesClone,
+    };
   }
 
   // ✅ CRITICAL: Ogni task DEVE avere templateId

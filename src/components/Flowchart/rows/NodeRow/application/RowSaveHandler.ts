@@ -4,6 +4,7 @@
 import { TaskType } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
 import { createRowWithTask, getTaskIdFromRow } from '@utils/taskHelpers';
+import { applySayMessagePlainTextToTask, getSayMessageSyncedBody } from '@utils/sayMessageTaskSync';
 import type { Row } from '@types/NodeRowTypes';
 
 export interface RowSaveHandlerDependencies {
@@ -86,7 +87,7 @@ export class RowSaveHandler {
             });
           } else {
             // Row already has Task, update it
-            taskRepository.updateTask(this.row.id, { text: label }, projectId); // ✅ row.id === task.id ALWAYS
+            applySayMessagePlainTextToTask(this.row.id, label, projectId);
             console.log('[RowSaveHandler][SAVE][UPDATED_EXISTING]', {
               instanceId,
               taskId: this.row.id, // ✅ row.id === task.id ALWAYS
@@ -97,14 +98,13 @@ export class RowSaveHandler {
           // Update existing task
           console.log('[RowSaveHandler][SAVE][UPDATE_IN_MEMORY]', {
             instanceId,
-            oldText: task.text?.substring(0, 50) || 'N/A',
+            oldText: getSayMessageSyncedBody(task).substring(0, 50) || 'N/A',
             newText: label.substring(0, 50),
           });
 
-          // Update Task (TaskRepository internally updates InstanceRepository)
           const taskId = getTaskIdFromRow(this.row);
           if (taskId) {
-            taskRepository.updateTask(taskId, { text: label }, projectId);
+            applySayMessagePlainTextToTask(taskId, label, projectId);
           }
         }
 
@@ -113,7 +113,7 @@ export class RowSaveHandler {
         console.log('[RowSaveHandler][SAVE][MEMORY_AFTER_UPDATE]', {
           instanceId,
           taskExists: !!taskAfter,
-          messageText: taskAfter?.value?.text?.substring(0, 50) || 'N/A',
+          messageText: taskAfter ? getSayMessageSyncedBody(taskAfter).substring(0, 50) || 'N/A' : 'N/A',
         });
 
         return {

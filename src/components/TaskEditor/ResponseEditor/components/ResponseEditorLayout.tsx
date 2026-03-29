@@ -18,6 +18,7 @@ import { ResponseEditorContent } from '@responseEditor/components/ResponseEditor
 import { ResponseEditorNormalLayout } from '@responseEditor/components/ResponseEditorNormalLayout';
 import { ServiceUnavailableModal } from '@responseEditor/components/ServiceUnavailableModal';
 import { GeneralizabilityBanner } from '@responseEditor/components/GeneralizabilityBanner';
+import { WizardInstanceFirstBanner } from '@responseEditor/components/WizardInstanceFirstBanner';
 import { ContractUpdateDialog } from '@responseEditor/ContractUpdateDialog';
 import { SaveLocationDialog } from '@responseEditor/components/SaveLocationDialog';
 import { MainViewMode } from '@responseEditor/types/mainViewMode';
@@ -32,14 +33,20 @@ import { DialogueTaskService } from '@services/DialogueTaskService';
 import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { ResponseEditorNavigationProvider } from '@responseEditor/context/ResponseEditorNavigationContext';
 import { HeaderToolbarProvider, useHeaderToolbarContext } from '@responseEditor/context/HeaderToolbarContext';
-import { useTaskTreeFromStore } from '@responseEditor/core/state';
+import { useTaskTreeFromStore, useTaskTreeStore } from '@responseEditor/core/state';
 import { generalizeLabel } from '../../../../../TaskBuilderAIWizard/services/TemplateCreationService';
 import { TranslationType } from '@types/translationTypes';
 import { TaskType, TemplateSource } from '@types/taskTypes';
-import { useWizardStore } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
-import { shallow } from 'zustand/shallow';
-import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
 import type { SelectPathHandler } from '@responseEditor/features/node-editing/selectPathTypes';
+import { TaskKindBadge } from '@responseEditor/components/TaskKindBadge';
+import { PromoteStandaloneToTemplateButton } from '@responseEditor/components/PromoteStandaloneToTemplateButton';
+import { taskRepository } from '@services/TaskRepository';
+import { inferTaskKind, taskKindLabel } from '@utils/taskKind';
+import {
+  canPromoteStandaloneToProjectTemplateMvp,
+  promoteStandaloneToProjectTemplate,
+} from '@utils/promoteStandaloneToProjectTemplate';
+import type { ToolbarButton } from '@dock/types';
 
 /** Orange header theme (matches EditorHeader THEMES.orange) for Wizard/Manual chunk on the left. */
 const ORANGE_HEADER_FG = '#ffffff';
@@ -99,6 +106,7 @@ function HeaderWithDynamicToolbar({
   icon: defaultIcon,
   title: defaultTitle,
   toolbarButtons,
+  titleBadge,
   titleActions,
   onClose,
   color,
@@ -106,6 +114,7 @@ function HeaderWithDynamicToolbar({
   icon: React.ReactNode;
   title: string;
   toolbarButtons: any[];
+  titleBadge?: React.ReactNode;
   titleActions?: React.ReactNode;
   onClose: () => void;
   color: 'slate' | 'orange' | 'purple';
@@ -121,6 +130,7 @@ function HeaderWithDynamicToolbar({
     <EditorHeader
       icon={icon}
       title={title}
+      titleBadge={titleBadge}
       titleActions={titleActions}
       toolbarButtons={toolbarButtons}
       dynamicToolbarSlot={dynamicToolbar}
@@ -1005,6 +1015,102 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     [wizardToggleButtons]
   );
 
+  const [dockPromoteBusy, setDockPromoteBusy] = React.useState(false);
+
+  const handlePromoteAfterStandalone = React.useCallback(async () => {
+    const id = taskMeta?.id;
+    if (!id || !currentProjectId) {
+      return;
+    }
+    const { materializeTaskFromRepository } = await import('@utils/MaterializationOrchestrator');
+    const built = await materializeTaskFromRepository(id, currentProjectId);
+    if (built?.taskTree) {
+      useTaskTreeStore.getState().setTaskTree(built.taskTree);
+    } else {
+      useTaskTreeStore.getState().incrementVersion();
+    }
+    window.alert('Promoted to project template. This row is now an instance.');
+  }, [taskMeta?.id, currentProjectId]);
+
+  const taskKindTitleBadge = React.useMemo(
+    () => (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <TaskKindBadge taskId={taskMeta?.id} refreshToken={taskTreeFromStore} />
+        {taskWizardMode === 'none' ? (
+          <PromoteStandaloneToTemplateButton
+            taskId={taskMeta?.id}
+            projectId={currentProjectId}
+            refreshToken={taskTreeFromStore}
+            onPromoted={handlePromoteAfterStandalone}
+          />
+        ) : null}
+      </span>
+    ),
+    [taskMeta?.id, taskTreeFromStore, taskWizardMode, currentProjectId, handlePromoteAfterStandalone]
+  );
+
+  /** Dock tab strip: show task kind next to tab title when hideHeader (no inner EditorHeader). */
+  const taskKindDockToolbarItem = React.useMemo((): ToolbarButton | null => {
+    const id = taskMeta?.id;
+    if (!id) return null;
+    const task = taskRepository.getTask(id);
+    return {
+      label: taskKindLabel(inferTaskKind(task)),
+      disabled: true,
+      position: 'title-suffix',
+      title:
+        'Task row role (inferred for legacy rows). See docs/task-model-migration-step1-spec.md',
+    };
+  }, [taskMeta?.id, taskTreeFromStore]);
+
+  /** Dock tab strip: Promote to template when header is hidden (same rules as PromoteStandaloneToTemplateButton). */
+  const promoteDockToolbarItem = React.useMemo((): ToolbarButton | null => {
+    if (!hideHeader) {
+      return null;
+    }
+    if (taskWizardMode !== 'none') {
+      return null;
+    }
+    const id = taskMeta?.id;
+    if (!id || !currentProjectId) {
+      return null;
+    }
+    if (!canPromoteStandaloneToProjectTemplateMvp(taskRepository.getTask(id))) {
+      return null;
+    }
+    return {
+      label: dockPromoteBusy ? '…' : 'Promote',
+      title:
+        'Save structure as project template; this row becomes an instance. Requires GUID ids on every node.',
+      position: 'title-suffix',
+      disabled: dockPromoteBusy,
+      onClick: () => {
+        void (async () => {
+          if (!id || !currentProjectId || dockPromoteBusy) {
+            return;
+          }
+          setDockPromoteBusy(true);
+          try {
+            await promoteStandaloneToProjectTemplate(id, currentProjectId);
+            await handlePromoteAfterStandalone();
+          } catch (e) {
+            window.alert(e instanceof Error ? e.message : String(e));
+          } finally {
+            setDockPromoteBusy(false);
+          }
+        })();
+      },
+    };
+  }, [
+    hideHeader,
+    taskWizardMode,
+    taskMeta?.id,
+    currentProjectId,
+    taskTreeFromStore,
+    handlePromoteAfterStandalone,
+    dockPromoteBusy,
+  ]);
+
   // ✅ NEW: Prepara wizardProps per CenterPanel e Sidebar (con useMemo per evitare ricostruzioni)
   const wizardProps = React.useMemo(() => {
     if (!wizardIntegrationProp) {
@@ -1061,116 +1167,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     wizardIntegrationProp?.handleCorrectionSubmit,
   ]);
 
-  // ✅ 1. Usa shallow compare per rilevare cambiamenti nell'array
-  const wizardDataSchema = useWizardStore((state) => state.dataSchema, shallow);
-
-  // ✅ 2. Usa il setter direttamente invece di getState()
-  const setDataSchema = useWizardStore((state) => state.setDataSchema);
-
-  // ✅ 3. ARCHITECTURE: When wizard is active, ALWAYS use wizardDataSchema (even if empty)
-  // This ensures sidebar is cleared immediately when opening a new task
-  // mainList should NEVER be used as fallback when wizard is active, as it contains stale data
-  const effectiveMainList = (taskWizardMode === 'full' || taskWizardMode === 'adaptation')
-    ? (wizardDataSchema || [])  // ✅ Always use wizardDataSchema when wizard is active
-    : mainList;  // ✅ Only use mainList when wizard is not active
-
-  // ✅ NEW: Wrapper handlers that update ONLY dataSchema when wizard is active
-  // ✅ Usa setter direttamente con updater function (reattivo, React capisce)
-  // ✅ ARCHITECTURE: When wizard is active, handlers MUST update wizardDataSchema
-  // This ensures edits are saved to wizard store, not to stale mainList
-  const wrappedSidebarHandlers = React.useMemo(() => {
-    if (taskWizardMode !== 'full' && taskWizardMode !== 'adaptation') {
-      // Normal mode: use handlers as-is (they update taskTree/mainList)
-      return sidebar;
-    }
-
-    // ✅ Wizard mode: ALWAYS wrap handlers to update wizardDataSchema
-    // Even if wizardDataSchema is empty, we must update it (not mainList)
-    // Strip path-based APIs so the sidebar keeps flat wizard behaviour (no taskTree mutation).
-    const {
-      onReorderAtPath: _or,
-      onRenameAtPath: _rn,
-      onDeleteAtPath: _del,
-      onChangeRequiredAtPath: _req,
-      ...sidebarWizardBase
-    } = sidebar;
-
-    return {
-      ...sidebarWizardBase,
-      onAddMain: (label: string) => {
-        setDataSchema((prev) => {
-          const newNode: WizardTaskTreeNode = {
-            id: `node_${Date.now()}_${Math.random()}`,
-            templateId: `node_${Date.now()}_${Math.random()}`,
-            label,
-            type: 'string',
-            icon: 'FileText',
-            subNodes: [],
-          };
-          return [...prev, newNode];
-        });
-      },
-      onRenameMain: (mIdx: number, label: string) => {
-        setDataSchema((prev) => {
-          const updated = [...prev];
-          if (updated[mIdx]) {
-            updated[mIdx] = { ...updated[mIdx], label };
-          }
-          return updated;
-        });
-      },
-      onDeleteMain: (mIdx: number) => {
-        setDataSchema((prev) => {
-          const updated = [...prev];
-          updated.splice(mIdx, 1);
-          return updated;
-        });
-      },
-      onAddSub: (mIdx: number, label: string) => {
-        setDataSchema((prev) => {
-          const updated = [...prev];
-          if (updated[mIdx]) {
-            const newSubNode: WizardTaskTreeNode = {
-              id: `sub_${Date.now()}_${Math.random()}`,
-              templateId: `sub_${Date.now()}_${Math.random()}`,
-              label,
-              type: 'string',
-              icon: 'FileText',
-            };
-            updated[mIdx] = {
-              ...updated[mIdx],
-              subNodes: [...(updated[mIdx].subNodes || []), newSubNode],
-            };
-          }
-          return updated;
-        });
-      },
-      onRenameSub: (mIdx: number, sIdx: number, label: string) => {
-        setDataSchema((prev) => {
-          const updated = [...prev];
-          if (updated[mIdx] && updated[mIdx].subNodes) {
-            const subNodes = [...updated[mIdx].subNodes!];
-            if (subNodes[sIdx]) {
-              subNodes[sIdx] = { ...subNodes[sIdx], label };
-            }
-            updated[mIdx] = { ...updated[mIdx], subNodes };
-          }
-          return updated;
-        });
-      },
-      onDeleteSub: (mIdx: number, sIdx: number) => {
-        setDataSchema((prev) => {
-          const updated = [...prev];
-          if (updated[mIdx] && updated[mIdx].subNodes) {
-            const subNodes = [...updated[mIdx].subNodes!];
-            subNodes.splice(sIdx, 1);
-            updated[mIdx] = { ...updated[mIdx], subNodes };
-          }
-          return updated;
-        });
-      },
-    };
-  }, [taskWizardMode, wizardDataSchema, sidebar, setDataSchema]);
+  // PR1: sidebar usa sempre la pipeline manuale (TaskTree Zustand).
+  // wizardDataSchema non contiene più struttura.
 
   // ✅ ARCHITECTURE: sidebarElement — deprecated, always undefined
   // The full layout (including wizard) is now rendered via normalEditorLayoutElement for ALL modes.
@@ -1188,7 +1186,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
     return (
       <ResponseEditorNormalLayout
-        mainList={effectiveMainList}
+        mainList={mainList}
         // ✅ REMOVED: taskTree, task, currentProjectId - now from Context
         localTranslations={localTranslations}
         escalationTasks={escalationTasks}
@@ -1203,20 +1201,20 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         handleSelectSub={handleSelectSub}
         handleSelectAggregator={handleSelectAggregator}
         sidebarRef={sidebarRef}
-        onChangeSubRequired={wrappedSidebarHandlers.onChangeSubRequired}
-        onReorderSub={wrappedSidebarHandlers.onReorderSub}
-        onReorderMain={wrappedSidebarHandlers.onReorderMain}
-        onAddChildAtPath={wrappedSidebarHandlers.onAddChildAtPath}
-        onReorderAtPath={wrappedSidebarHandlers.onReorderAtPath}
-        onRenameAtPath={wrappedSidebarHandlers.onRenameAtPath}
-        onDeleteAtPath={wrappedSidebarHandlers.onDeleteAtPath}
-        onChangeRequiredAtPath={wrappedSidebarHandlers.onChangeRequiredAtPath}
-        onAddMain={wrappedSidebarHandlers.onAddMain}
-        onRenameMain={wrappedSidebarHandlers.onRenameMain}
-        onDeleteMain={wrappedSidebarHandlers.onDeleteMain}
-        onAddSub={wrappedSidebarHandlers.onAddSub}
-        onRenameSub={wrappedSidebarHandlers.onRenameSub}
-        onDeleteSub={wrappedSidebarHandlers.onDeleteSub}
+        onChangeSubRequired={sidebar.onChangeSubRequired}
+        onReorderSub={sidebar.onReorderSub}
+        onReorderMain={sidebar.onReorderMain}
+        onAddChildAtPath={sidebar.onAddChildAtPath}
+        onReorderAtPath={sidebar.onReorderAtPath}
+        onRenameAtPath={sidebar.onRenameAtPath}
+        onDeleteAtPath={sidebar.onDeleteAtPath}
+        onChangeRequiredAtPath={sidebar.onChangeRequiredAtPath}
+        onAddMain={sidebar.onAddMain}
+        onRenameMain={sidebar.onRenameMain}
+        onDeleteMain={sidebar.onDeleteMain}
+        onAddSub={sidebar.onAddSub}
+        onRenameSub={sidebar.onRenameSub}
+        onDeleteSub={sidebar.onDeleteSub}
         handleParserCreate={handleParserCreate}
         handleParserModify={handleParserModify}
         handleEngineChipClick={handleEngineChipClick}
@@ -1260,7 +1258,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     taskWizardMode,
     mainViewMode,
     wizardProps,
-    effectiveMainList,
+    mainList,
     taskTree,
     taskMeta,
     currentProjectId,
@@ -1315,12 +1313,23 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ FIX: Usa il ref passato come prop (creato in ResponseEditorInner)
   const saveToLibraryButtonRef = saveToLibraryButtonRefProp || React.useRef<HTMLButtonElement>(null);
 
-  // Dock tab (hideHeader): Wizard/Manual first (after tab title), then main toolbar.
+  // Dock tab (hideHeader): task kind + Wizard/Manual (after tab title), then main toolbar.
   React.useEffect(() => {
     if (hideHeader && onToolbarUpdate) {
-      onToolbarUpdate([...wizardToggleButtons, ...toolbarButtons], 'orange');
+      const prefix = [taskKindDockToolbarItem, promoteDockToolbarItem].filter(
+        (b): b is ToolbarButton => b != null
+      );
+      onToolbarUpdate([...prefix, ...wizardToggleButtons, ...toolbarButtons], 'orange');
     }
-  }, [hideHeader, onToolbarUpdate, toolbarButtons, wizardToggleButtons, taskWizardMode]);
+  }, [
+    hideHeader,
+    onToolbarUpdate,
+    toolbarButtons,
+    wizardToggleButtons,
+    taskWizardMode,
+    taskKindDockToolbarItem,
+    promoteDockToolbarItem,
+  ]);
 
   // ✅ LOG: Verification log for debugging (moved to useEffect to keep render pure)
   // ✅ FIX: Use only primitive dependencies to prevent loop
@@ -1366,12 +1375,15 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         <HeaderWithDynamicToolbar
           icon={<Icon size={18} style={{ color: iconColor }} />}
           title={headerTitle}
+          titleBadge={taskKindTitleBadge}
           titleActions={wizardTitleActions}
           toolbarButtons={toolbarButtons}
           onClose={handleEditorCloseWithTutor}
           color="orange"
         />
       )}
+
+      <WizardInstanceFirstBanner />
 
       {/* Generalizability Banner: visibile solo quando taskWizardMode === 'none' (STATO 1) */}
       {/* ✅ CRITICAL: Quando taskWizardMode === 'full', banner deve essere nascosto */}

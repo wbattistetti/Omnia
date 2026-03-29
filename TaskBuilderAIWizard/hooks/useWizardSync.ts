@@ -2,36 +2,34 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback, useMemo } from 'react';
+import type { TaskTree } from '@types/taskTypes';
 import type { WizardTaskTreeNode } from '../types';
+import { convertTaskTreeToWizardTaskTree } from '@components/TaskTreeBuilder/TaskBuilderAIWizardAdapter';
 import { generateVariableNames, applyVariableNamesToStructure } from '../services/VariableNameGeneratorService';
 import { syncTranslationsWithStructure } from '../services/TranslationSyncService';
 import { variableCreationService } from '@services/VariableCreationService';
+import { commitWizardStructureToEditor } from '@utils/wizard/wizardStructureFromTaskTree';
 
 type UseWizardSyncProps = {
-  dataSchema: WizardTaskTreeNode[];
-  setDataSchema: (schema: WizardTaskTreeNode[] | ((prev: WizardTaskTreeNode[]) => WizardTaskTreeNode[])) => void;
+  taskTree?: TaskTree | null | undefined;
+  /** Deprecated local wizard state (useWizardState); used when TaskTree is empty */
+  legacyWizardRoots?: WizardTaskTreeNode[];
+  replaceSelectedTaskTree?: (taskTree: TaskTree) => void;
   taskLabel: string;
-  rowId?: string; // ALWAYS equals row.id (which equals task.id when task exists)
+  rowId?: string;
   projectId?: string;
   locale: string;
 };
 
 /**
- * Hook that manages variable name synchronisation during the wizard structure
- * proposal phase.
- *
- * Responsibilities:
- * 1. Generate readableName / dottedName for each node in the dataSchema.
- * 2. Apply those names back onto the schema so the wizard sidebar shows them.
- * 3. Sync translation keys for the new variable names.
- *
- * Variable creation (varId, DB persistence) is handled later by
- * TemplateCloningService when the user confirms the structure.
+ * Variable name synchronisation during the wizard structure proposal phase.
+ * PR2: Writes through the same TaskTree pipeline as manual (Zustand + replaceSelectedTaskTree).
  */
 export function useWizardSync(props: UseWizardSyncProps) {
   const {
-    dataSchema,
-    setDataSchema,
+    taskTree,
+    legacyWizardRoots,
+    replaceSelectedTaskTree,
     taskLabel,
     rowId,
     projectId,
@@ -39,35 +37,33 @@ export function useWizardSync(props: UseWizardSyncProps) {
   } = props;
 
   const syncVariables = useCallback(async () => {
-    if (!dataSchema || dataSchema.length === 0 || !rowId) {
+    const wizardNodes = taskTree?.nodes?.length
+      ? convertTaskTreeToWizardTaskTree(taskTree)
+      : (legacyWizardRoots && legacyWizardRoots.length > 0 ? legacyWizardRoots : []);
+
+    if (!wizardNodes.length || !rowId) {
       return;
     }
 
     try {
-      // 1. Collect already-known variable names to avoid collisions
       const existingVariables = projectId
         ? variableCreationService.getAllVarNames(projectId)
         : [];
+      const variableNames = generateVariableNames(wizardNodes, taskLabel.trim(), existingVariables);
+      applyVariableNamesToStructure(wizardNodes, variableNames, rowId);
 
-      // 2. Generate readable / dotted names for the proposed structure
-      const variableNames = generateVariableNames(dataSchema, taskLabel.trim(), existingVariables);
-
-      // 3. Apply names onto the schema nodes
-      const schemaWithNames = [...dataSchema];
-      applyVariableNamesToStructure(schemaWithNames, variableNames, rowId);
-
-      // 4. Sync translation keys for the new variable names
       if (projectId) {
-        await syncTranslationsWithStructure(schemaWithNames, projectId, locale);
+        await syncTranslationsWithStructure(wizardNodes, projectId, locale);
       }
 
-      // 5. Commit updated schema
-      setDataSchema(schemaWithNames);
+      commitWizardStructureToEditor(wizardNodes, {
+        taskLabel,
+        replaceSelectedTaskTree,
+      });
     } catch (error) {
       console.error('[useWizardSync] Error during variable name synchronisation:', error);
     }
-  }, [dataSchema, taskLabel, rowId, projectId, locale, setDataSchema]);
+  }, [taskTree, legacyWizardRoots, taskLabel, rowId, projectId, locale, replaceSelectedTaskTree]);
 
-  // Stable reference: prevents spurious re-runs of effects that depend on this hook.
   return useMemo(() => ({ syncVariables }), [syncVariables]);
 }

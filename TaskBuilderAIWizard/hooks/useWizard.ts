@@ -21,6 +21,13 @@ import { useWizardStore } from '../store/wizardStore';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { WizardMode } from '../types/WizardMode';
 import type { WizardTaskTreeNode } from '../types';
+import type { TaskTree } from '@types/taskTypes';
+import { useTaskTreeStore } from '@responseEditor/core/state';
+import {
+  buildWizardStructureView,
+  commitWizardStructureToEditor,
+  getWizardStructureSnapshot,
+} from '@utils/wizard/wizardStructureFromTaskTree';
 
 export interface UseWizardOptions {
   taskLabel?: string;
@@ -28,6 +35,7 @@ export interface UseWizardOptions {
   projectId?: string;
   locale?: string;
   onTaskBuilderComplete?: (taskTree: any) => void;
+  replaceSelectedTaskTree?: (taskTree: TaskTree) => void;
   mode?: 'full' | 'adaptation';
   templateId?: string;
 }
@@ -100,6 +108,7 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
     projectId,
     locale = 'it',
     onTaskBuilderComplete,
+    replaceSelectedTaskTree,
     mode,
     templateId
   } = options;
@@ -120,17 +129,23 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
     projectId,
     locale,
     onTaskBuilderComplete,
+    replaceSelectedTaskTree,
     addTranslation,
     templateId,
   });
 
-  // Get store for variable sync
   const store = useWizardStore();
+  const taskTree = useTaskTreeStore((s) => s.taskTree);
+  const { nodePipelineUiById } = store;
 
-  // Sync variables
+  const dataSchema = useMemo(
+    () => buildWizardStructureView(taskTree, nodePipelineUiById),
+    [taskTree, nodePipelineUiById]
+  );
+
   const wizardSync = useWizardSync({
-    dataSchema: store.dataSchema, // ✅ FIX: Use store.dataSchema instead of orchestrator.dataSchema
-    setDataSchema: store.setDataSchema,
+    taskTree,
+    replaceSelectedTaskTree,
     taskLabel: taskLabel || '',
     rowId,
     projectId,
@@ -158,7 +173,7 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
     }
 
     const feedback = store.correctionInput.trim();
-    const previousStructure = store.dataSchema; // ✅ FIX: Use store.dataSchema instead of orchestrator.dataSchema
+    const previousStructure = getWizardStructureSnapshot();
 
     if (previousStructure.length === 0) {
       return;
@@ -193,7 +208,10 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
       if (result.success && result.structure) {
         const { convertApiStructureToWizardTaskTree } = await import('../utils/convertApiStructureToWizardTaskTree');
         const newDataSchema = convertApiStructureToWizardTaskTree(result.structure, rowId || '');
-        store.setDataSchema(newDataSchema);
+        commitWizardStructureToEditor(newDataSchema, {
+          taskLabel,
+          replaceSelectedTaskTree,
+        });
         store.updatePipelineStep('structure', 'running', 'Confermami la struttura che vedi sulla sinistra...');
       } else {
         store.updatePipelineStep('structure', 'failed', result.error || 'Errore durante la rigenerazione');
@@ -201,7 +219,7 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
     } catch (error) {
       store.updatePipelineStep('structure', 'failed', error instanceof Error ? error.message : 'Errore sconosciuto');
     }
-  }, [taskLabel, store.correctionInput, store.dataSchema, store, rowId]); // ✅ FIX: Use store values instead of orchestrator
+  }, [taskLabel, store.correctionInput, store, rowId, replaceSelectedTaskTree]);
 
   // Auto-start for ADAPTATION MODE only.
   // Full mode is started explicitly via the toolbar Wizard button (startFull is exposed below).
@@ -243,7 +261,7 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
     runMode: store.runMode || 'none',
     currentStep: store.currentStep,
     pipelineSteps: store.pipelineSteps,
-    dataSchema: store.dataSchema,
+    dataSchema,
     phaseCounters: store.phaseCounters,
 
     // ── UI state ──────────────────────────────────────────────────────────
@@ -270,9 +288,9 @@ export function useWizard(options: UseWizardOptions): UseWizardResult | null {
     messagesGeneralized: store.messagesGeneralized,
     messagesContextualized: store.messagesContextualized,
     shouldBeGeneral: store.shouldBeGeneral,
-    generalizedLabel: store.dataSchema?.[0]?.generalizedLabel || null,
-    generalizationReason: store.dataSchema?.[0]?.generalizationReason || null,
-    generalizedMessages: store.dataSchema?.[0]?.generalizedMessages || null,
+    generalizedLabel: dataSchema?.[0]?.generalizedLabel || null,
+    generalizationReason: dataSchema?.[0]?.generalizationReason || null,
+    generalizedMessages: dataSchema?.[0]?.generalizedMessages || null,
     constraints: store.constraints,
     nlpContract: null,
 

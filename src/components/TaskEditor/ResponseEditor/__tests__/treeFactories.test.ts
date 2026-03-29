@@ -38,13 +38,13 @@ describe('treeFactories', () => {
             escalations: [
               {
                 escalationId: 'esc1',
-                actions: [
-                  { actionInstanceId: 'action1', parameters: [{ value: 'key1' }] }
-                ]
-              }
-            ]
-          }
-        ]
+                tasks: [
+                  { id: 'action1', parameters: [{ parameterId: 'text', value: 'key1' }] },
+                ],
+              },
+            ],
+          },
+        ],
       };
       const translations = { key1: 'Ho capito!' };
       const result = estraiNodiDaDDT(ddt, translations, 'it');
@@ -76,13 +76,13 @@ describe('treeFactories', () => {
             escalations: [
               {
                 escalationId: 'esc1',
-                actions: [
-                  { actionInstanceId: 'action1', parameters: [{ value: 'key1' }] }
-                ]
-              }
-            ]
-          }
-        ]
+                tasks: [
+                  { id: 'action1', parameters: [{ parameterId: 'text', value: 'key1' }] },
+                ],
+              },
+            ],
+          },
+        ],
       };
       const translations = { key1: 'Dato acquisito con successo!' };
       const result = estraiNodiDaDDT(ddt, translations, 'it');
@@ -152,13 +152,13 @@ describe('treeFactories', () => {
             escalations: [
               {
                 escalationId: 'esc1',
-                actions: [
-                  { actionInstanceId: 'action1', parameters: [{ value: 'key1' }] }
-                ]
-              }
-            ]
-          }
-        ]
+                tasks: [
+                  { id: 'action1', parameters: [{ parameterId: 'text', value: 'key1' }] },
+                ],
+              },
+            ],
+          },
+        ],
       };
       const translations = {};
       const result = estraiNodiDaDDT(ddt, translations, 'it');

@@ -66,13 +66,6 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
   // ✅ FIX #3: Stable ref callback — prevents React from calling old(null)+new(el)
   // on every render (which would briefly set forwardedRef.current = null and lose focus).
   const setTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
-    if (el) {
-      console.log('[VoiceTextbox] ✅ textarea ref SET', {
-        hasForwardedRef: !!forwardedRef,
-        forwardedRefType: typeof forwardedRef,
-        element: el,
-      });
-    }
     if (typeof forwardedRef === 'function') {
       forwardedRef(el);
     } else if (forwardedRef && 'current' in forwardedRef) {

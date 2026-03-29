@@ -32,6 +32,9 @@ describe('manualEmptyTaskTreeSeed', () => {
     expect(tree.nodes).toHaveLength(1);
     expect(tree.nodes[0].label).toBe('chiedi nome');
     expect(tree.nodes[0].id).toBeTruthy();
-    expect(tree.steps).toEqual({});
+    const rootKey = tree.nodes[0].templateId ?? tree.nodes[0].id;
+    expect(rootKey).toBeTruthy();
+    expect(tree.steps && typeof tree.steps === 'object' && !Array.isArray(tree.steps)).toBe(true);
+    expect((tree.steps as Record<string, unknown>)?.[rootKey as string]).toBeDefined();
   });
 });

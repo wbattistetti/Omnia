@@ -159,6 +159,11 @@ export function useWizardIntegrationNew(
           store.dataSchema
         );
 
+        if (taskTree) {
+          const { persistWizardInstanceFirstRow } = await import('@utils/wizard/persistWizardInstanceFirstRow');
+          await persistWizardInstanceFirstRow(rowId, projectId, taskTree);
+        }
+
         if (taskTree && onTaskBuilderComplete) {
           console.log('[useWizardIntegrationNew] ✅ TaskTree built successfully, calling onTaskBuilderComplete', {
             taskTreeNodesCount: taskTree.nodes?.length || 0,

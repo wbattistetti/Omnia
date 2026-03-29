@@ -50,6 +50,8 @@ function convertWizardNodeToTaskNode(wizardNode: WizardTaskTreeNode): TaskTreeNo
     icon: wizardNode.icon,
     constraints: wizardNode.constraints,
     dataContract: wizardNode.dataContract,
+    readableName: wizardNode.readableName,
+    dottedName: wizardNode.dottedName,
   };
 
   // Recursively convert subNodes
@@ -133,6 +135,8 @@ function convertTaskNodeToWizardNode(node: TaskTreeNode): WizardTaskTreeNode {
     icon: node.icon,
     constraints: node.constraints,
     dataContract: node.dataContract,
+    readableName: node.readableName,
+    dottedName: node.dottedName,
     pipelineStatus: {
       constraints: node.constraints ? 'completed' : 'pending',
       parser: node.dataContract ? 'completed' : 'pending',

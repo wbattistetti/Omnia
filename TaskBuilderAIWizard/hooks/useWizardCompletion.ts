@@ -214,6 +214,11 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
       try {
         const taskTree = await buildTaskTreeWithContractsAndEngines(taskInstance, projectId, dataSchema);
 
+        if (taskTree) {
+          const { persistWizardInstanceFirstRow } = await import('@utils/wizard/persistWizardInstanceFirstRow');
+          await persistWizardInstanceFirstRow(rowId, projectId, taskTree);
+        }
+
         if (taskTree && onTaskBuilderComplete) {
           console.log('[useWizardCompletion] ✅ TaskTree built successfully, calling onTaskBuilderComplete', {
             taskTreeNodesCount: taskTree.nodes?.length || 0,

@@ -25,6 +25,14 @@ import {
   buildTaskTreeWithContractsAndEngines,
   collectNodeData
 } from '../services/WizardCompletionService';
+import { persistWizardInstanceFirstRow } from '@utils/wizard/persistWizardInstanceFirstRow';
+import {
+  buildWizardStructureView,
+  commitWizardStructureToEditor,
+  getWizardStructureSnapshot,
+} from '@utils/wizard/wizardStructureFromTaskTree';
+import type { TaskTree } from '@types/taskTypes';
+import { useTaskTreeStore } from '@responseEditor/core/state';
 import type { SemanticContract } from '@types/semanticContract';
 import { flattenTaskTree } from '../utils/wizardHelpers';
 import type { WizardTaskTreeNode } from '../types';
@@ -36,6 +44,8 @@ export interface WizardOrchestratorConfig {
   projectId?: string;
   locale?: string;
   onTaskBuilderComplete?: (taskTree: any) => void;
+  /** PR2: Same as manual sidebar — sync DDT row when wizard commits structure */
+  replaceSelectedTaskTree?: (taskTree: TaskTree) => void;
   addTranslation?: (guid: string, text: string) => void;
   /**
    * @deprecated Use store.runMode instead. This property is ignored.
@@ -80,6 +90,13 @@ export class WizardOrchestrator {
     return this.getStore().runMode;
   }
 
+  private getStructureCommitOptions() {
+    return {
+      replaceSelectedTaskTree: this.config.replaceSelectedTaskTree,
+      taskLabelForTree: this.config.taskLabel,
+    };
+  }
+
   /**
    * Start wizard in FULL mode (complete construction)
    * Replaces old start() method
@@ -112,7 +129,8 @@ export class WizardOrchestrator {
         store,
         this.config.taskLabel.trim(),
         this.config.rowId,
-        this.config.locale || 'it'
+        this.config.locale || 'it',
+        this.getStructureCommitOptions()
       );
     } catch (error) {
       console.error('[WizardOrchestrator] ❌ Error in structure generation:', error);
@@ -156,12 +174,13 @@ export class WizardOrchestrator {
       throw new Error(`[WizardOrchestrator] Template not found: ${templateId}`);
     }
 
-    // ✅ Convert template to dataSchema format
     const { buildDataSchemaFromTemplate } = await import('../utils/templateToDataSchema');
-    const dataSchema = await buildDataSchemaFromTemplate(template, this.config.projectId);
+    const templateRoots = await buildDataSchemaFromTemplate(template, this.config.projectId);
 
-    // ✅ Set dataSchema in store (read-only, for display)
-    store.setDataSchema(dataSchema);
+    commitWizardStructureToEditor(templateRoots, {
+      taskLabel: this.config.taskLabel,
+      replaceSelectedTaskTree: this.config.replaceSelectedTaskTree,
+    });
 
     // ✅ Mark structure as "proposed" (user must confirm)
     store.updatePipelineStep('structure', 'running', 'Struttura dati del template caricata. Conferma per procedere con l\'adattamento...');
@@ -261,7 +280,7 @@ export class WizardOrchestrator {
       projectId: this.config.projectId,
       taskLabel: this.config.taskLabel || 'Task',
       locale: this.config.locale || 'it',
-      dataSchema: store.dataSchema
+      dataSchema: getWizardStructureSnapshot()
     });
 
     // ✅ Store taskInstance for adaptation phase
@@ -297,14 +316,16 @@ export class WizardOrchestrator {
     payloads: { constraints: string; parsers: string; messages: string };
     parsersPayloadPromise: Promise<string>;
   }> {
-    const allTasks = store.dataSchema ? flattenTaskTree(store.dataSchema) : [];
+    const structureRoots = getWizardStructureSnapshot();
+    const allTasks = flattenTaskTree(structureRoots);
     const constraintsPayload = `Sto generando i constraints per: ${allTasks.map(n => n.label).join(', ')}…`;
 
     // Get parsers payload (async, but we start it immediately)
     let parsersPayload = 'Sto generando tutti i parser necessari per estrarre i dati, nell\'ordine di escalation appropriato: …';
     const parsersPayloadPromise = (async () => {
       try {
-        const rootNode = store.dataSchema[0];
+        const roots = getWizardStructureSnapshot();
+        const rootNode = roots[0];
         if (rootNode) {
           const { buildContractFromNode } = await import('../api/wizardApi');
           const contract = buildContractFromNode(rootNode);
@@ -384,7 +405,8 @@ export class WizardOrchestrator {
     templates: Map<string, any>;
     nodeStructures: Map<string, any>;
   }> {
-    const allTasks = store.dataSchema ? flattenTaskTree(store.dataSchema) : [];
+    const structureRoots = getWizardStructureSnapshot();
+    const allTasks = flattenTaskTree(structureRoots);
 
     // FASE 1: Crea struttura deterministica per tutti i nodi
     const { createTemplateStructure } = await import('../services/TemplateCreationService');
@@ -398,14 +420,14 @@ export class WizardOrchestrator {
     const { createTemplatesFromStructures } = await import('../services/TemplateCreationService');
     const { DialogueTaskService } = await import('@services/DialogueTaskService');
     const templates = await createTemplatesFromStructures(
-      store.dataSchema,
+      structureRoots,
       nodeStructures,
       store.shouldBeGeneral
     );
 
     // ✅ FASE 2.5: Build dataContract base with subDataMapping (deterministic)
     // This must happen BEFORE AI generation to ensure subDataMapping is always present
-    const { constraintsMap, dataContractsMap } = collectNodeData(store.dataSchema);
+    const { dataContractsMap } = collectNodeData(structureRoots);
 
     // Assign dataContract to templates (with subDataMapping)
     templates.forEach((template, nodeId) => {
@@ -439,12 +461,13 @@ export class WizardOrchestrator {
 
     // ✅ Start parallel generation (constraints, contracts, messages)
     // ✅ NEW: AIGenerateContracts now returns Map<string, SemanticContract> instead of void
+    const rootsForParallel = getWizardStructureSnapshot();
     const parallelGenerationPromise = Promise.all([
-      AIGenerateConstraints(store.dataSchema, this.config.locale || 'it'),
-      AIGenerateContracts(templates, store.dataSchema).then((semanticContracts) => {
+      AIGenerateConstraints(rootsForParallel, this.config.locale || 'it'),
+      AIGenerateContracts(templates, rootsForParallel).then((semanticContracts) => {
         semanticContractsMap = semanticContracts;
       }),
-      AIGenerateTemplateMessages(nodeStructures, store.dataSchema, this.config.locale || 'it'),
+      AIGenerateTemplateMessages(nodeStructures, rootsForParallel, this.config.locale || 'it'),
     ]);
 
     // ✅ Start legacy runParallelGeneration ONLY for parsers (no template creation)
@@ -508,10 +531,10 @@ export class WizardOrchestrator {
       return;
     }
 
-    // Get root template ID from dataSchema
-    const rootNode = store.dataSchema[0];
+    const roots = getWizardStructureSnapshot();
+    const rootNode = roots[0];
     if (!rootNode) {
-      console.error('[WizardOrchestrator] ❌ Root node not found in dataSchema');
+      console.error('[WizardOrchestrator] ❌ Root node not found in TaskTree-derived structure');
       return;
     }
 
@@ -528,7 +551,7 @@ export class WizardOrchestrator {
       projectId: this.config.projectId,
       taskLabel: this.config.taskLabel || 'Task',
       locale: this.config.locale || 'it',
-      dataSchema: store.dataSchema
+      dataSchema: getWizardStructureSnapshot()
     });
 
     // ✅ Store taskInstance for adaptation phase
@@ -560,8 +583,11 @@ export class WizardOrchestrator {
       const finalTaskTree = await buildTaskTreeWithContractsAndEngines(
         this.taskInstance,
         this.config.projectId,
-        store.dataSchema
+        getWizardStructureSnapshot()
       );
+      if (finalTaskTree && this.config.rowId) {
+        await persistWizardInstanceFirstRow(this.config.rowId, this.config.projectId, finalTaskTree);
+      }
       store.setWizardState(WizardMode.COMPLETED);
       if (finalTaskTree && this.config.onTaskBuilderComplete) {
         this.config.onTaskBuilderComplete(finalTaskTree);
@@ -671,7 +697,8 @@ export class WizardOrchestrator {
         store,
         this.config.taskLabel.trim(),
         this.config.rowId,
-        this.config.locale || 'it'
+        this.config.locale || 'it',
+        this.getStructureCommitOptions()
       );
 
       // ✅ ORCHESTRATOR updates pipeline AFTER generation
@@ -701,7 +728,8 @@ export class WizardOrchestrator {
       store,
       this.config.taskLabel.trim(),
       this.config.rowId,
-      this.config.locale || 'it'
+      this.config.locale || 'it',
+      this.getStructureCommitOptions()
     );
 
     // ✅ ORCHESTRATOR updates pipeline AFTER generation
@@ -715,21 +743,35 @@ export class WizardOrchestrator {
  */
 export function useWizardOrchestrator(config: WizardOrchestratorConfig) {
   const store = useWizardStore();
+  const taskTree = useTaskTreeStore((s) => s.taskTree);
+  const replaceRef = React.useRef(config.replaceSelectedTaskTree);
+  replaceRef.current = config.replaceSelectedTaskTree;
+
   const orchestratorRef = React.useRef<WizardOrchestrator | null>(null);
 
   // ✅ Create orchestrator instance only once
   if (!orchestratorRef.current) {
-    orchestratorRef.current = new WizardOrchestrator(config);
+    orchestratorRef.current = new WizardOrchestrator({
+      ...config,
+      replaceSelectedTaskTree: (tt) => {
+        replaceRef.current?.(tt);
+      },
+    });
   }
 
   const orchestrator = orchestratorRef.current;
+
+  const dataSchema = React.useMemo(
+    () => buildWizardStructureView(taskTree, store.nodePipelineUiById),
+    [taskTree, store.nodePipelineUiById]
+  );
 
     return {
     // State (read-only)
     wizardMode: store.wizardState, // ✅ RINOMINATO: wizardMode → wizardState (per backward compatibility, esponiamo ancora come wizardMode)
     currentStep: store.currentStep,
     pipelineSteps: store.pipelineSteps,
-    dataSchema: store.dataSchema,
+    dataSchema,
     showStructureConfirmation: store.showStructureConfirmation(),
     structureConfirmed: useWizardStore.getState().structureConfirmed, // ✅ Direct field access
     showCorrectionMode: store.showCorrectionMode(),

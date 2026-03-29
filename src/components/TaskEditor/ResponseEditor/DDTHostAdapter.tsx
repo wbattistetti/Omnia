@@ -4,10 +4,31 @@ import ResponseEditor from '@responseEditor/index';
 import { taskRepository } from '@services/TaskRepository';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { getTemplateId } from '@utils/taskHelpers';
-import { buildTaskTreeFromRepository } from '@utils/taskUtils';
+import { materializeTaskFromRepository } from '@utils/MaterializationOrchestrator';
 import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '@types/taskTypes';
-import type { TaskTree } from '@types/taskTypes';
+import type { Task, TaskTree } from '@types/taskTypes';
 import { useTaskTreeStore, useTaskTreeVersion } from '@responseEditor/core/state';
+
+/**
+ * When materializeTaskFromRepository returns null or throws, still show an editable shell
+ * so Behaviour can sync from taskTree.steps / repository (empty nodes until user adds root).
+ */
+function buildMinimalTaskTreeFromTask(task: Task): TaskTree {
+  const steps =
+    task.steps && typeof task.steps === 'object' && !Array.isArray(task.steps) ? { ...task.steps } : {};
+  const labelText =
+    typeof task.labelKey === 'string'
+      ? task.labelKey
+      : typeof task.label === 'string'
+        ? task.label
+        : '';
+  return {
+    labelKey: labelText || 'task',
+    label: typeof task.label === 'string' ? task.label : undefined,
+    nodes: [],
+    steps,
+  };
+}
 
 export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose, setDockTree }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per TaskTree
@@ -103,8 +124,8 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       try {
         setTaskTreeLoading(true);
 
-        // Build TaskTree from repository (ensures fresh instance with _disabled flags)
-        const result = await buildTaskTreeFromRepository(taskId, currentProjectId || undefined);
+        // Build TaskTree via MaterializationOrchestrator (standalone + instance+template)
+        const result = await materializeTaskFromRepository(taskId, currentProjectId || undefined);
 
         // ✅ TaskTree caricato
         if (result) {
@@ -115,16 +136,22 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
           // Log rimosso: non essenziale per flusso motore
         } else {
-          // ✅ FASE 3: Store è single source of truth
-          setTaskTreeInStore(null);
+          const fresh = taskRepository.getTask(taskId);
+          if (fresh) {
+            setTaskTreeInStore(buildMinimalTaskTreeFromTask(fresh));
+          } else {
+            setTaskTreeInStore(null);
+          }
           initializedRef.current = true;
         }
       } catch (error) {
         console.error('[TaskTreeHostAdapter] Error loading TaskTree:', error);
-        // ✅ ARCHITECTURE: No fallback - template must exist by construction
-        // If template is missing, it's a critical error that must be fixed
-        // ✅ FASE 3: Store è single source of truth
-        setTaskTreeInStore(null);
+        const fresh = taskRepository.getTask(taskId);
+        if (fresh) {
+          setTaskTreeInStore(buildMinimalTaskTreeFromTask(fresh));
+        } else {
+          setTaskTreeInStore(null);
+        }
         initializedRef.current = true;
       } finally {
         setTaskTreeLoading(false);

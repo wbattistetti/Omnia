@@ -8,7 +8,9 @@ import { useWizardFlow } from '../../../../../TaskBuilderAIWizard/hooks/useWizar
 // ✅ NEW: Use WizardOrchestrator hook
 import { useWizardOrchestrator } from '../../../../../TaskBuilderAIWizard/hooks/useWizardOrchestrator';
 import { useWizardSync } from '../../../../../TaskBuilderAIWizard/hooks/useWizardSync';
+import { useTaskTreeStore } from '@responseEditor/core/state';
 import { useWizardCompletion } from '../../../../../TaskBuilderAIWizard/hooks/useWizardCompletion';
+import { commitWizardStructureToEditor } from '@utils/wizard/wizardStructureFromTaskTree';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
 
@@ -61,23 +63,23 @@ export function useWizardIntegration(
     onFirstStepComplete: handleFirstStepComplete, // ✅ NEW: Callback per segnalare completamento primo step
   });
 
+  const taskTreeFromStore = useTaskTreeStore((s) => s.taskTree);
+
   const wizardSync = useWizardSync({
-    dataSchema: wizardState.dataSchema,
-    setDataSchema: wizardState.setDataSchema,
+    taskTree: taskTreeFromStore,
+    legacyWizardRoots: wizardState.dataSchema,
     taskLabel: taskLabel || '',
-    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
+    rowId,
     projectId,
     locale,
   });
 
-  // ✅ NEW: Use WizardOrchestrator instead of useWizardGeneration
   const wizardOrchestrator = useWizardOrchestrator({
     taskLabel: taskLabel || '',
     rowId,
     projectId,
     locale,
     onTaskBuilderComplete,
-    // addTranslation can be added if needed
   });
 
   // ============================================
@@ -258,9 +260,9 @@ export function useWizardIntegration(
         });
 
         console.log('[handleCorrectionSubmit] 📝 STEP 9: Updating dataSchema...');
-        // ✅ STEP 6: Aggiorna dataSchema (mostra nuova struttura nella sidebar)
         wizardState.setDataSchema(newDataSchema);
-        console.log('[handleCorrectionSubmit] ✅ STEP 9: dataSchema updated');
+        commitWizardStructureToEditor(newDataSchema, { taskLabel: taskLabel || 'Task' });
+        console.log('[handleCorrectionSubmit] ✅ STEP 9: dataSchema + TaskTree updated');
 
         console.log('[handleCorrectionSubmit] 📝 STEP 10: Updating step message...');
         // ✅ STEP 7: Aggiorna step a 'running' con messaggio "Confermami..." (come in WizardOrchestrator.start())

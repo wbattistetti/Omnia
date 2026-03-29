@@ -2,7 +2,7 @@
 // Handles taskEditor:open events and prepares DockTab
 
 import type { DockTab, DockTabTaskEditor } from '@dock/types';
-import type { TaskType, TaskTree } from '@types/taskTypes';
+import type { Task, TaskType, TaskTree } from '@types/taskTypes';
 import type { TaskMeta, TaskWizardMode } from '@taskEditor/EditorHost/types';
 import { resolveEditorKind } from '@taskEditor/EditorHost/resolveKind';
 import { taskRepository } from '@services/TaskRepository';
@@ -86,8 +86,22 @@ export class TaskEditorEventHandler {
       ? (tree: any, tabId: string) => {
           // Save TaskTree to taskRepository when tab already exists
           let task = taskRepository.getTask(instanceId);
-          if (!task && event.templateId) {
-            task = taskRepository.createTask(taskMeta.type, event.templateId, undefined, instanceId);
+          if (!task) {
+            task = taskRepository.createTask(
+              taskMeta.type,
+              event.templateId ?? null,
+              {
+                label: event.label || event.name || 'New Task',
+                steps:
+                  preparedTaskTree.steps &&
+                  typeof preparedTaskTree.steps === 'object' &&
+                  !Array.isArray(preparedTaskTree.steps)
+                    ? preparedTaskTree.steps
+                    : {},
+              },
+              instanceId,
+              this.params.pdUpdate?.getCurrentProjectId() || this.params.currentProjectId || undefined
+            );
           }
           if (task) {
             const { steps: _, ...preparedTaskTreeWithoutSteps } = preparedTaskTree;
@@ -190,11 +204,25 @@ export class TaskEditorEventHandler {
     // Use TaskTree from event if present
     let taskTree = event.taskTree;
 
+    const projectIdForTask =
+      this.params.pdUpdate?.getCurrentProjectId() || this.params.currentProjectId || undefined;
+
     if (taskTree) {
       // Save overrides to taskRepository
       let task = taskRepository.getTask(instanceId);
-      if (!task && event.templateId) {
-        task = taskRepository.createTask(taskMeta.type, event.templateId, undefined, instanceId);
+      if (!task) {
+        task = taskRepository.createTask(
+          taskMeta.type,
+          event.templateId ?? null,
+          {
+            label: event.label || event.name || 'New Task',
+            steps: taskTree.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
+              ? taskTree.steps
+              : {},
+          },
+          instanceId,
+          projectIdForTask
+        );
       }
       if (task) {
         // ✅ SIMPLIFIED: Save directly from taskTree (no extractTaskOverrides needed)
@@ -208,36 +236,50 @@ export class TaskEditorEventHandler {
       return taskTree;
     }
 
-    // Load TaskTree from task
+    // Load TaskTree from task — always register instance in repository (lazy row → real task)
     let task = taskRepository.getTask(instanceId);
-    if (!task && event.templateId) {
-      task = taskRepository.createTask(taskMeta.type, event.templateId, {
-        label: event.label || 'New Task',
-      }, instanceId);
+    if (!task) {
+      task = taskRepository.createTask(
+        taskMeta.type,
+        event.templateId ?? null,
+        {
+          label: event.label || event.name || 'New Task',
+          steps: {},
+        },
+        instanceId,
+        projectIdForTask
+      );
     }
 
-            if (task && task.templateId) {
-              try {
-                const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
-                const projectId = this.params.currentProjectId || undefined;
-                // ✅ CRITICAL: Build TaskTree from repository (guarantees fresh instance with latest _disabled flags)
-                const result = await buildTaskTreeFromRepository(instanceId, projectId);
-                if (result) {
-                  taskTree = result.taskTree;
-                  // ✅ Use instance from result instead of reloading (eliminates duplicate repository access)
-                  task = result.instance;
-                }
-              } catch (err) {
-                console.error('[TaskEditorEventHandler] Error loading TaskTree from template:', err);
-              }
-            }
+    if (task && task.templateId) {
+      try {
+        const { buildTaskTreeFromRepository } = await import('@utils/taskUtils');
+        const projectId = this.params.currentProjectId || undefined;
+        const result = await buildTaskTreeFromRepository(instanceId, projectId);
+        if (result) {
+          taskTree = result.taskTree;
+          task = result.instance;
+        }
+      } catch (err) {
+        console.error('[TaskEditorEventHandler] Error loading TaskTree from template:', err);
+      }
+    }
 
-    // Create empty TaskTree if task exists but no TaskTree loaded
+    // Create minimal TaskTree if task exists but no TaskTree loaded (wizard full, no template, materialize failed)
     if (task && !taskTree) {
-      taskTree = { label: event.label || 'New Task', nodes: [] };
-      taskRepository.updateTask(instanceId, {
-        label: taskTree.label,
-      }, this.params.pdUpdate?.getCurrentProjectId());
+      const stepsFromTask =
+        task.steps && typeof task.steps === 'object' && !Array.isArray(task.steps) ? task.steps : {};
+      taskTree = {
+        label: event.label || event.name || 'New Task',
+        nodes: [],
+        steps: stepsFromTask,
+      };
+      taskRepository.updateTask(
+        instanceId,
+        { label: taskTree.label },
+        this.params.pdUpdate?.getCurrentProjectId(),
+        { merge: true }
+      );
     }
 
     return task ? taskTree : null;

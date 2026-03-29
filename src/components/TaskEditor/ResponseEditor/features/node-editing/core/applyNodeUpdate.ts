@@ -8,6 +8,11 @@ import { saveTaskToRepository } from '@responseEditor/core/persistence/ResponseE
 import { mapNode } from '@dock/ops';
 import { validateNodeStructure } from '@responseEditor/core/domain/validators';
 import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
+import {
+  isBehaviourStepsDebug,
+  logBehaviourSteps,
+  summarizeStepsShape,
+} from '@responseEditor/behaviour/behaviourStepsDebug';
 import { replaceNodeAtPath } from '@responseEditor/core/taskTree';
 import type { Task, TaskTree } from '@types/taskTypes';
 
@@ -140,6 +145,39 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
       }
 
       task.steps[nodeTemplateId] = updatedNode.steps;
+
+      // Persist steps on the repository task (editor may hold a spread copy; mutations must land in Map).
+      const taskPersistId = task.id ?? (task as { instanceId?: string }).instanceId;
+      if (taskPersistId) {
+        taskRepository.updateTask(taskPersistId, { steps: task.steps }, currentProjectId ?? undefined, {
+          merge: true,
+        });
+      }
+
+      // Keep taskTree.steps in sync so the store update is atomic (one setTaskTree call).
+      // Without this, useNodeLoading re-runs between the two queueMicrotask calls and
+      // reads stale steps, leaving selectedNode.steps as {} after the first microtask.
+      updatedTaskTree = {
+        ...updatedTaskTree,
+        steps: {
+          ...(updatedTaskTree.steps ?? {}),
+          [nodeTemplateId]: updatedNode.steps,
+        },
+      };
+
+      logBehaviourSteps('applyNodeUpdate:syncedTaskTreeSteps', {
+        nodeTemplateId,
+        updatedNodeSteps: summarizeStepsShape(updatedNode.steps),
+        taskTreeStepsTopKeys: Object.keys((updatedTaskTree.steps ?? {}) as Record<string, unknown>),
+      });
+    } else if (isBehaviourStepsDebug()) {
+      const tid = updatedNode?.templateId ?? updatedNode?.id;
+      logBehaviourSteps('applyNodeUpdate:skippedTaskTreeStepsSync', {
+        nodeTemplateId: tid,
+        hasUpdatedSteps: !!updatedNode.steps,
+        hasTask: !!task,
+        updatedNodeSteps: summarizeStepsShape(updatedNode.steps),
+      });
     }
   }
 
@@ -165,9 +203,16 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
   // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
   const shouldSave = !!(taskToSave?.id ?? (taskToSave as any)?.instanceId);
   const saveKey = shouldSave ? ((taskToSave as any)?.instanceId ?? taskToSave?.id) as string : undefined;
-  const hasTaskTree = updatedTaskTree && (
-    (updatedTaskTree.nodes && updatedTaskTree.nodes.length > 0) ||
-    (updatedTaskTree.steps && Array.isArray(updatedTaskTree.steps) && updatedTaskTree.steps.length > 0)
+  const hasTaskTree = !!(
+    updatedTaskTree &&
+    ((updatedTaskTree.nodes && updatedTaskTree.nodes.length > 0) ||
+      (updatedTaskTree.steps &&
+        Array.isArray(updatedTaskTree.steps) &&
+        updatedTaskTree.steps.length > 0) ||
+      (updatedTaskTree.steps &&
+        typeof updatedTaskTree.steps === 'object' &&
+        !Array.isArray(updatedTaskTree.steps) &&
+        Object.keys(updatedTaskTree.steps).length > 0))
   );
 
   let taskInstance: Task | null | undefined = undefined;
@@ -175,6 +220,12 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
 
   if (shouldSave && hasTaskTree && saveKey) {
     taskInstance = taskRepository.getTask(saveKey);
+    if (!taskInstance && taskToSave) {
+      const propId = taskToSave.id ?? (taskToSave as { instanceId?: string }).instanceId;
+      if (propId === saveKey) {
+        taskInstance = taskToSave as Task;
+      }
+    }
     currentTemplateId = getTemplateId(taskInstance);
   }
 

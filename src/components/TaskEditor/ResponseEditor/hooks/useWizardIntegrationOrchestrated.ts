@@ -17,6 +17,12 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useWizardOrchestrator } from '../../../../../TaskBuilderAIWizard/core/WizardOrchestrator';
 import { useWizardSync } from '../../../../../TaskBuilderAIWizard/hooks/useWizardSync';
 import { useWizardStore } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
+import { useTaskTreeStore } from '@responseEditor/core/state';
+import type { TaskTree } from '@types/taskTypes';
+import {
+  commitWizardStructureToEditor,
+  getWizardStructureSnapshot,
+} from '@utils/wizard/wizardStructureFromTaskTree';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
@@ -31,7 +37,8 @@ export function useWizardIntegrationOrchestrated(
   locale: string = 'it',
   onTaskBuilderComplete?: (taskTree: any) => void,
   mode?: 'full' | 'adaptation',
-  templateId?: string
+  templateId?: string,
+  replaceSelectedTaskTree?: (taskTree: TaskTree) => void
 ) {
   let addTranslation: ((guid: string, text: string) => void) | undefined;
   try {
@@ -88,7 +95,7 @@ export function useWizardIntegrationOrchestrated(
     }
 
     const feedback = orchestrator.correctionInput.trim();
-    const previousStructure = orchestrator.dataSchema;
+    const previousStructure = getWizardStructureSnapshot();
 
     if (previousStructure.length === 0) {
       console.warn('[handleCorrectionSubmit] ❌ No previous structure to regenerate');
@@ -100,7 +107,7 @@ export function useWizardIntegrationOrchestrated(
     try {
       console.log('[handleCorrectionSubmit] 📝 STEP 1: Closing correction form...');
       // ✅ STEP 1: Chiudi form (esci da DATA_STRUCTURE_CORRECTION → DATA_STRUCTURE_PROPOSED)
-      store.setWizardMode(WizardMode.DATA_STRUCTURE_PROPOSED);
+      store.setWizardState(WizardMode.DATA_STRUCTURE_PROPOSED);
       console.log('[handleCorrectionSubmit] ✅ STEP 1: Form closed');
 
       console.log('[handleCorrectionSubmit] 📝 STEP 2: Clearing input...');
@@ -169,9 +176,12 @@ export function useWizardIntegrationOrchestrated(
           firstNodeId: newDataSchema[0]?.id
         });
 
-        console.log('[handleCorrectionSubmit] 📝 STEP 9: Updating dataSchema...');
-        store.setDataSchema(newDataSchema);
-        console.log('[handleCorrectionSubmit] ✅ STEP 9: dataSchema updated');
+        console.log('[handleCorrectionSubmit] 📝 STEP 9: Updating TaskTree...');
+        commitWizardStructureToEditor(newDataSchema, {
+          taskLabel,
+          replaceSelectedTaskTree,
+        });
+        console.log('[handleCorrectionSubmit] ✅ STEP 9: TaskTree updated');
 
         console.log('[handleCorrectionSubmit] 📝 STEP 10: Updating step message...');
         // ✅ STEP 7: Aggiorna step a 'running' con messaggio "Confermami..." (come in WizardOrchestrator.start())
@@ -194,7 +204,7 @@ export function useWizardIntegrationOrchestrated(
   }, [
     taskLabel,
     orchestrator.correctionInput,
-    orchestrator.dataSchema,
+    replaceSelectedTaskTree,
     store
   ]);
 

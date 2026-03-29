@@ -1,5 +1,6 @@
 import { TreeNodeProps } from './types';
 import { getTranslationText } from './responseEditorHelpers';
+import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
 
 // Estrae i nodi dall'oggetto DDT e translations
 export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): TreeNodeProps[] => {

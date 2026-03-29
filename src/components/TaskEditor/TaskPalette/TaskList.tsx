@@ -102,10 +102,12 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, stepKey }) => {
           // Estrai label, description, primaryValue, parameters come stringhe
           const label = typeof task.label === 'object' ? task.label[lang] || task.label.en || task.id : task.label;
           const description = typeof task.description === 'object' ? task.description[lang] || task.description.en || '' : task.description;
-          // Esempio: primaryValue = task.text[lang] o task.text
           let primaryValue = '';
-          if (task.text) {
-            primaryValue = typeof task.text === 'object' ? task.text[lang] || task.text.en || '' : task.text;
+          if (task.description) {
+            primaryValue =
+              typeof task.description === 'object'
+                ? task.description[lang] || task.description.en || ''
+                : task.description;
           }
           // Parametri figli: estrai solo quelli che sono oggetti lingua o stringhe
           let parameters = [];

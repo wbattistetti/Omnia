@@ -1,6 +1,17 @@
 import type { Task } from '@types/taskTypes';
-import { TaskType, templateIdToTaskType } from '@types/taskTypes';
 import { v4 as uuidv4 } from 'uuid';
+
+/** Factory palette entries use id as template reference when templateId is omitted */
+function resolveTemplateIdFromCatalogTask(task: any): string | null {
+  if (task?.templateId !== undefined && task?.templateId !== null) {
+    return task.templateId;
+  }
+  const rawId = task?.id;
+  if (rawId !== undefined && rawId !== null && String(rawId).trim() !== '') {
+    return String(rawId);
+  }
+  return null;
+}
 
 /**
  * Create a Task from viewer/catalog item to unified Task format.
@@ -15,9 +26,7 @@ export const createTask = (item: any): Task => {
   // Handle task objects from catalog entries
   const task = item?.task ?? item;
 
-  // Extract templateId: if task has templateId, it's derived from template
-  // Otherwise, it's a standalone task (templateId must be explicitly null)
-  const templateId = task?.templateId ?? null;  // ✅ Can be null, but must be explicitly set
+  const templateId = resolveTemplateIdFromCatalogTask(task);
 
   // ✅ CRITICAL: NO FALLBACK - type MUST be present
   if (task?.type === undefined || task?.type === null) {
@@ -50,12 +59,11 @@ export const createTask = (item: any): Task => {
     Object.assign(params, task.params);
   }
 
-  // Return complete Task object
+  // Return complete Task object (no task.text — body via parameters + translations for SayMessage)
   return {
     id,
     type,  // ✅ CRITICAL: type always present (required by compiler)
     templateId, // null = standalone, GUID = derived from template
-    text,
     label,
     color,
     params,

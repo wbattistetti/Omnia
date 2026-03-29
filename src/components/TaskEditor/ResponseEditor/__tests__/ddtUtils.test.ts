@@ -124,13 +124,15 @@ describe('ddtUtils', () => {
         id: 'test',
         label: 'Test',
         steps: {
-          start: [
-            {
-              type: 'escalation',
-              id: 'esc1',
-              actions: ['action1'],
-            },
-          ],
+          start: {
+            escalations: [
+              {
+                type: 'escalation',
+                id: 'esc1',
+                actions: ['action1'],
+              },
+            ],
+          },
         },
       });
     });
@@ -160,7 +162,7 @@ describe('ddtUtils', () => {
       expect(result).toEqual({
         id: 'test',
         steps: {
-          start: [],
+          start: { escalations: [] },
         },
       });
     });
@@ -168,8 +170,17 @@ describe('ddtUtils', () => {
 
   describe('stepMeta', () => {
     it('should have all required step types', () => {
-      const expectedSteps = ['start', 'noMatch', 'noInput', 'confirmation', 'success', 'notAcquired'];
-      expectedSteps.forEach(step => {
+      const expectedSteps = [
+        'start',
+        'introduction',
+        'noMatch',
+        'noInput',
+        'confirmation',
+        'notConfirmed',
+        'invalid',
+        'success',
+      ];
+      expectedSteps.forEach((step) => {
         expect(stepMeta[step]).toBeDefined();
         expect(stepMeta[step].icon).toBeDefined();
         expect(stepMeta[step].label).toBeDefined();
@@ -182,11 +193,13 @@ describe('ddtUtils', () => {
 
     it('should have correct labels', () => {
       expect(stepMeta.start.label).toBe('Chiedo il dato');
+      expect(stepMeta.introduction.label).toBe('Introduzione');
       expect(stepMeta.noMatch.label).toBe('Non capisco');
       expect(stepMeta.noInput.label).toBe('Non sento');
       expect(stepMeta.confirmation.label).toBe('Devo confermare');
+      expect(stepMeta.notConfirmed.label).toBe('Non Confermato');
+      expect(stepMeta.invalid.label).toBe('Non valido');
       expect(stepMeta.success.label).toBe('Ho capito!');
-      expect(stepMeta.notAcquired.label).toBe('Dato non acquisito');
     });
   });
 }); 

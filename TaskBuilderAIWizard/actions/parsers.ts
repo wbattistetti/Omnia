@@ -199,8 +199,10 @@ export async function runParsersGeneration(
       // Initialize dataContract if it doesn't exist
       if (!template.dataContract) {
         // ✅ CRITICAL: Build subDataMapping from subNodes (structural mapping only)
-        // Get subNodes from store.dataSchema (read-only, for structure only)
-        const nodeFromStore = store.dataSchema.find(n => n.id === nodeId);
+        const { getWizardStructureSnapshot } = await import('@utils/wizard/wizardStructureFromTaskTree');
+        const { flattenTaskTree } = await import('../utils/wizardHelpers');
+        const flat = flattenTaskTree(getWizardStructureSnapshot());
+        const nodeFromStore = flat.find(n => n.id === nodeId);
         const subDataMapping: Record<string, { groupName: string }> = {};
 
         if (nodeFromStore?.subNodes && nodeFromStore.subNodes.length > 0) {

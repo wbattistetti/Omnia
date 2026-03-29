@@ -5,6 +5,7 @@ import type { DockTab } from '@dock/types';
 import type { NonInteractiveEditorOpenEvent } from '../../domain/editorEvents';
 import { validateNonInteractiveEditorEvent } from '../../domain/editorEvents';
 import { taskRepository } from '@services/TaskRepository';
+import { getSayMessageSyncedBody } from '@utils/sayMessageTaskSync';
 
 export class NonInteractiveEditorEventHandler {
   /**
@@ -25,7 +26,7 @@ export class NonInteractiveEditorEventHandler {
       throw new Error(`Task not found: ${event.instanceId}`);
     }
 
-    const template = task.text || '';
+    const template = getSayMessageSyncedBody(task);
     const tabId = `ni_${event.instanceId}`;
 
     const dockTab: DockTab = {

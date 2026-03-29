@@ -11,6 +11,11 @@
 import type { WizardStore } from '../store/wizardStore';
 import { useWizardStore } from '../store/wizardStore';
 import type { WizardTaskTreeNode, WizardStepMessages } from '../types';
+import type { TaskTree } from '@types/taskTypes';
+import {
+  commitWizardStructureToEditor,
+  getWizardStructureSnapshot,
+} from '@utils/wizard/wizardStructureFromTaskTree';
 import { generateStructure } from '../api/wizardApi';
 import { WizardMode } from '../types/WizardMode';
 import { flattenTaskTree } from '../utils/wizardHelpers';
@@ -25,7 +30,11 @@ export async function runStructureGeneration(
   store: WizardStore,
   taskLabel: string,
   rowId: string | undefined,
-  locale: string
+  locale: string,
+  structureCommit?: {
+    replaceSelectedTaskTree?: (taskTree: TaskTree) => void;
+    taskLabelForTree?: string;
+  }
 ): Promise<void> {
   // ✅ POINT OF NO RETURN: If structure is already confirmed, don't regenerate
   const state = useWizardStore.getState();
@@ -36,35 +45,33 @@ export async function runStructureGeneration(
     return;
   }
 
-  // ✅ ONLY: Generate structure and update dataSchema (orchestrator controls pipeline updates)
-
   store.setCurrentStep('generazione_struttura');
 
   const { schema, shouldBeGeneral, generalizedLabel, generalizationReason, generalizedMessages } =
     await generateStructure(taskLabel, rowId, locale);
 
-  // ✅ CRITICAL: dataSchema MUST be in store (UI state, not database)
-  // This is needed for UI display and wizard logic
-  store.setDataSchema(schema);
+  let roots: WizardTaskTreeNode[] = [...schema];
   store.setShouldBeGeneral(shouldBeGeneral);
 
-  if (shouldBeGeneral && schema.length > 0) {
-    store.setDataSchema(prev => {
-      const updated = [...prev];
-      if (updated[0]) {
-        updated[0] = {
-          ...updated[0],
-          generalizedLabel: generalizedLabel || null,
-          generalizationReason: generalizationReason || null,
-          generalizedMessages: generalizedMessages || null
-        };
-      }
-      return updated;
-    });
+  if (shouldBeGeneral && roots.length > 0 && roots[0]) {
+    roots = roots.map((n, i) =>
+      i === 0
+        ? {
+            ...n,
+            generalizedLabel: generalizedLabel || null,
+            generalizationReason: generalizationReason || null,
+            generalizedMessages: generalizedMessages || null,
+          }
+        : n
+    );
   }
 
-  console.log(`[wizardActions] ✅ Structure generated: ${schema.length} nodes`);
-  console.log(`[wizardActions] ℹ️ Structure saved to store (UI state) and will be saved to templates in memory`);
+  commitWizardStructureToEditor(roots, {
+    taskLabel: structureCommit?.taskLabelForTree ?? taskLabel,
+    replaceSelectedTaskTree: structureCommit?.replaceSelectedTaskTree,
+  });
+
+  console.log(`[wizardActions] ✅ Structure generated: ${roots.length} nodes (TaskTree Zustand)`);
 }
 
 /**
@@ -75,8 +82,8 @@ export async function runParallelGeneration(
   locale: string,
   onPhaseComplete?: (phase: 'constraints' | 'parser' | 'messages', taskId: string, payloads?: { constraints: string; parsers: string; messages: string }) => void
 ): Promise<void> {
-  const taskTree = store.dataSchema;
-  const allTasks = flattenTaskTree(taskTree);
+  const structureRoots = getWizardStructureSnapshot();
+  const allTasks = flattenTaskTree(structureRoots);
 
   // Validate invariants
   const nodesWithMismatch = allTasks.filter(t => t.id !== t.templateId);
@@ -242,7 +249,7 @@ export function checkCompletion(): {
 } {
   // ✅ FIX: Get fresh state from store using getState() static method
   const currentState = useWizardStore.getState();
-  const allNodes = flattenTaskTree(currentState.dataSchema);
+  const allNodes = flattenTaskTree(getWizardStructureSnapshot());
   const messagesToUse = currentState.getMessagesToUse();
 
   const nodesWithMessages = allNodes.filter(node => messagesToUse.has(node.id));

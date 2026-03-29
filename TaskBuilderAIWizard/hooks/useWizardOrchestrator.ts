@@ -12,6 +12,7 @@
 import { useRef, useCallback, useMemo } from 'react';
 import { WizardOrchestrator } from '../core/WizardOrchestrator';
 import type { WizardTaskTreeNode } from '../types';
+import type { TaskTree } from '@types/taskTypes';
 
 export interface UseWizardOrchestratorProps {
   taskLabel?: string;
@@ -19,6 +20,7 @@ export interface UseWizardOrchestratorProps {
   projectId?: string;
   locale?: string;
   onTaskBuilderComplete?: (taskTree: any) => void;
+  replaceSelectedTaskTree?: (taskTree: TaskTree) => void;
   addTranslation?: (guid: string, text: string) => void;
   templateId?: string;
 }
@@ -31,6 +33,8 @@ export interface UseWizardOrchestratorProps {
  */
 export function useWizardOrchestrator(props: UseWizardOrchestratorProps) {
   const orchestratorRef = useRef<WizardOrchestrator | null>(null);
+  const replaceRef = useRef(props.replaceSelectedTaskTree);
+  replaceRef.current = props.replaceSelectedTaskTree;
 
   // Track the key used to create the current orchestrator.
   // Re-create only when the task identity actually changes.
@@ -46,6 +50,9 @@ export function useWizardOrchestrator(props: UseWizardOrchestratorProps) {
       projectId: props.projectId,
       locale: props.locale || 'it',
       onTaskBuilderComplete: props.onTaskBuilderComplete,
+      replaceSelectedTaskTree: (tt) => {
+        replaceRef.current?.(tt);
+      },
       addTranslation: props.addTranslation,
       templateId: props.templateId,
     });

@@ -1,23 +1,21 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import BehaviourEditor from '@responseEditor/BehaviourEditor';
 import StepsStrip from '@responseEditor/StepsStrip';
 import { StepTreeView } from '@responseEditor/features/step-management/tree-view/StepTreeView';
 import RightPanel, { RightPanelMode } from '@responseEditor/RightPanel';
 import type { TaskTree, Task } from '@types/taskTypes';
-import { getNodeStepKeys } from '@responseEditor/core/domain';
 import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { useResponseEditorNavigation } from '@responseEditor/context/ResponseEditorNavigationContext';
+import { BehaviourUiProvider, useBehaviourUi } from '@responseEditor/behaviour/BehaviourUiContext';
+import { logBehaviourSteps, summarizeStepsShape } from '@responseEditor/behaviour/behaviourStepsDebug';
 
 interface BehaviourContainerProps {
-  // BehaviourEditor props
   node: any;
   translations: Record<string, string>;
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   selectedRoot?: boolean;
   selectedSubIndex?: number | null;
   selectedPath?: number[];
-
-  // TaskPanel props
   tasksPanelMode: RightPanelMode;
   tasksPanelWidth: number;
   setTasksPanelWidth: (width: number) => void;
@@ -26,25 +24,33 @@ interface BehaviourContainerProps {
   projectId: string | null;
   selectedNode: any;
   onUpdateDDT?: (updater: (tree: TaskTree) => TaskTree) => void;
-  escalationTasks?: any[]; // ✅ Tasks da mostrare nel TaskPanel
-
-  // ✅ NEW: View mode (tabs o tree)
+  escalationTasks?: any[];
   viewMode?: 'tabs' | 'tree';
   onViewModeChange?: (mode: 'tabs' | 'tree') => void;
 }
 
 /**
- * Container per BehaviourEditor con split container orizzontale:
- * - StepsStrip in alto (tutta la larghezza)
- * - Split container sotto: StepEditor (sx) | TaskPanel (dx, se visibile)
+ * Wraps Behaviour UI with BehaviourUiProvider (step tabs + parameter focus).
+ * StepsStrip is mounted only here in tabs mode.
  */
-export default function BehaviourContainer({
+export default function BehaviourContainer(props: BehaviourContainerProps) {
+  const { node, selectedRoot, selectedSubIndex, selectedPath } = props;
+  return (
+    <BehaviourUiProvider
+      node={node}
+      selectedRoot={selectedRoot}
+      selectedSubIndex={selectedSubIndex}
+      selectedPath={selectedPath}
+    >
+      <BehaviourContainerInner {...props} />
+    </BehaviourUiProvider>
+  );
+}
+
+function BehaviourContainerInner({
   node,
   translations,
   updateSelectedNode,
-  selectedRoot,
-  selectedSubIndex,
-  selectedPath,
   tasksPanelMode,
   tasksPanelWidth,
   setTasksPanelWidth,
@@ -55,88 +61,60 @@ export default function BehaviourContainer({
   onUpdateDDT,
   escalationTasks = [],
   viewMode: externalViewMode,
-  onViewModeChange
+  onViewModeChange: _onViewModeChange,
 }: BehaviourContainerProps) {
-  // ✅ View mode: usa esterno se fornito, altrimenti stato interno
-  const [internalViewMode, setInternalViewMode] = useState<'tabs' | 'tree'>('tabs');
+  const [internalViewMode] = useState<'tabs' | 'tree'>('tabs');
+  void _onViewModeChange;
   const viewMode = externalViewMode ?? internalViewMode;
-  const setViewMode = onViewModeChange ?? setInternalViewMode;
   const { taskId } = useResponseEditorContext();
-
-  // ✅ Calcola step keys per StepsStrip
-  const stepKeys = React.useMemo(() => {
-    if (selectedRoot) {
-      return ['introduction'];
-    }
-    const steps = node ? getNodeStepKeys(node) : [];
-    return steps;
-  }, [node, selectedRoot, selectedSubIndex]);
-
-  // ✅ Append V2 notConfirmed for main node if present
-  const uiStepKeys = React.useMemo(() => {
-    let result: string[];
-    if (selectedRoot) {
-      result = stepKeys;
-    } else if ((selectedPath && selectedPath.length > 1) || selectedSubIndex != null) {
-      result = stepKeys;
-    } else if (stepKeys.length === 0) {
-      // Manual (or legacy) node with no steps yet — do not show only notConfirmed.
-      result = stepKeys;
-    } else if (!stepKeys.includes('notConfirmed')) {
-      result = [...stepKeys, 'notConfirmed'];
-    } else {
-      result = stepKeys;
-    }
-    return result;
-  }, [stepKeys, selectedSubIndex, selectedPath, selectedRoot]);
-
-  // ✅ Stato per step selezionato (sincronizzato con BehaviourEditor)
-  const [selectedStepKey, setSelectedStepKey] = React.useState<string>(() => {
-    if (uiStepKeys.length > 0) {
-      return uiStepKeys[0];
-    }
-    return 'start';
-  });
-
-  const handleStepChange = React.useCallback((newStepKey: string) => {
-    setSelectedStepKey(newStepKey);
-  }, []);
-
-  // ── Programmatic navigation from navigateToStep() ──────────────────────
-  // BehaviourEditor only pushes (writes) to the context, never reads back.
-  // BehaviourContainer is the owner of selectedStepKey, so it is the only
-  // component that should apply external navigation requests.
   const navigation = useResponseEditorNavigation();
-  React.useEffect(() => {
-    if (
-      navigation.currentStepKey &&
-      navigation.currentStepKey !== selectedStepKey &&
-      uiStepKeys.includes(navigation.currentStepKey)
-    ) {
-      setSelectedStepKey(navigation.currentStepKey);
-    }
-  // selectedStepKey intentionally omitted: we only want to react when the
-  // navigation context changes (programmatic navigation), not on every local update.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigation.currentStepKey, uiStepKeys]);
+  const { uiStepKeys, selectedStepKey, setSelectedStepKey, requestFocusParameter } = useBehaviourUi();
+
+  useEffect(() => {
+    logBehaviourSteps('BehaviourContainer:stripVisibility', {
+      viewMode,
+      showStepsStrip: viewMode === 'tabs',
+      uiStepKeysCount: uiStepKeys.length,
+      willRenderStepsStrip: viewMode === 'tabs' && uiStepKeys.length > 0,
+      nodeSteps: summarizeStepsShape(node?.steps),
+    });
+  }, [viewMode, uiStepKeys.length, node]);
+
+  /** Map navigation auto-edit to BehaviourUi parameter focus (tabs + tree). */
+  useEffect(() => {
+    const t = navigation.autoEditTarget;
+    if (!t) return;
+    requestFocusParameter({
+      kind: 'parameter',
+      escalationIdx: t.escIdx,
+      taskIdx: t.taskIdx,
+      parameterId: 'text',
+    });
+    navigation.setAutoEditTarget(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- narrow deps; full navigation object unstable when context uses no-op fallback
+  }, [navigation.autoEditTarget, navigation.setAutoEditTarget, requestFocusParameter]);
+
   const [isResizing, setIsResizing] = useState(false);
   const tasksStartWidthRef = useRef<number>(tasksPanelWidth);
   const tasksStartXRef = useRef<number>(0);
 
-  // TaskPanel è visibile solo se tasksPanelMode === 'actions'
   const hasTasksPanel = tasksPanelMode === 'actions' && tasksPanelWidth > 1;
+  const showStepsStrip = viewMode === 'tabs';
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsResizing(true);
-    tasksStartWidthRef.current = tasksPanelWidth;
-    tasksStartXRef.current = e.clientX;
-  }, [tasksPanelWidth]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsResizing(true);
+      tasksStartWidthRef.current = tasksPanelWidth;
+      tasksStartXRef.current = e.clientX;
+    },
+    [tasksPanelWidth]
+  );
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing) return;
-    const deltaX = tasksStartXRef.current - e.clientX; // Invertito: drag a sx aumenta width
+    const deltaX = tasksStartXRef.current - e.clientX;
     const newWidth = Math.max(200, Math.min(600, tasksStartWidthRef.current + deltaX));
     setTasksPanelWidth(newWidth);
   }, [isResizing, setTasksPanelWidth]);
@@ -156,77 +134,69 @@ export default function BehaviourContainer({
     }
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
-  // ✅ StepsStrip visibile solo in vista tabs
-  const showStepsStrip = viewMode === 'tabs';
-
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      flex: 1,
-      minHeight: 0,
-      overflow: 'hidden'
-    }}>
-      {/* StepsStrip in alto (tutta la larghezza) - solo per vista tabs */}
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
       {showStepsStrip && uiStepKeys.length > 0 && (
-        <div style={{
-          borderBottom: '1px solid #1f2340',
-          background: '#0f1422',
-          flexShrink: 0
-        }}>
+        <div
+          style={{
+            borderBottom: '1px solid #1f2340',
+            background: '#0f1422',
+            flexShrink: 0,
+          }}
+        >
           <StepsStrip
             stepKeys={uiStepKeys}
             selectedStepKey={selectedStepKey}
-            onSelectStep={handleStepChange}
+            onSelectStep={setSelectedStepKey}
             node={node}
             taskId={taskId}
           />
         </div>
       )}
 
-      {/* Split container: StepEditor | TaskPanel */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'row',
-        flex: 1,
-        minHeight: 0,
-        overflow: 'hidden'
-      }}>
-        {/* Vista Tab o Albero (sinistra) */}
-        <div style={{
-          flex: hasTasksPanel ? `0 0 calc(100% - ${tasksPanelWidth}px - 4px)` : '1 1 0%',
-          minWidth: 0,
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          flex: 1,
           minHeight: 0,
           overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
+        }}
+      >
+        <div
+          style={{
+            flex: hasTasksPanel ? `0 0 calc(100% - ${tasksPanelWidth}px - 4px)` : '1 1 0%',
+            minWidth: 0,
+            minHeight: 0,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           {viewMode === 'tabs' ? (
-            // ✅ Vista Tab: BehaviourEditor (con StepEditor interno)
             <BehaviourEditor
               node={node}
               translations={translations}
               updateSelectedNode={updateSelectedNode}
-              selectedRoot={selectedRoot}
-              selectedSubIndex={selectedSubIndex}
-              selectedPath={selectedPath}
-              hideStepsStrip={showStepsStrip} // ✅ Nascondi StepsStrip in BehaviourEditor (mostrato sopra)
-              selectedStepKey={selectedStepKey} // ✅ Passa step selezionato
-              onStepChange={handleStepChange} // ✅ Callback per cambio step
             />
           ) : (
-            // ✅ Vista Albero: StepTreeView (senza StepsStrip)
             <StepTreeView
               stepKeys={uiStepKeys}
               node={node}
               translations={translations}
               updateSelectedNode={updateSelectedNode}
-              taskId={taskId}
             />
           )}
         </div>
 
-        {/* Splitter (solo se TaskPanel è visibile) */}
         {hasTasksPanel && (
           <div
             onMouseDown={handleMouseDown}
@@ -237,7 +207,7 @@ export default function BehaviourContainer({
               flexShrink: 0,
               position: 'relative',
               zIndex: 10,
-              transition: isResizing ? 'none' : 'background-color 0.2s'
+              transition: isResizing ? 'none' : 'background-color 0.2s',
             }}
             onMouseEnter={(e) => {
               if (!isResizing) {
@@ -254,16 +224,17 @@ export default function BehaviourContainer({
           />
         )}
 
-        {/* TaskPanel (destra, se visibile) */}
         {hasTasksPanel && (
-          <div style={{
-            width: `${tasksPanelWidth}px`,
-            flexShrink: 0,
-            minHeight: 0,
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
+          <div
+            style={{
+              width: `${tasksPanelWidth}px`,
+              flexShrink: 0,
+              minHeight: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
             <RightPanel
               mode="actions"
               width={tasksPanelWidth}
@@ -277,7 +248,7 @@ export default function BehaviourContainer({
               selectedNode={selectedNode}
               onUpdateDDT={onUpdateDDT}
               hideSplitter={true}
-              tasks={escalationTasks} // ✅ Tasks da mostrare nel pannello
+              tasks={escalationTasks}
             />
           </div>
         )}

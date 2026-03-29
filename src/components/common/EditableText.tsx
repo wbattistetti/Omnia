@@ -110,13 +110,17 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
   const [validationResult, setValidationResult] = useState<{ isValid: boolean; errors?: string[]; warnings?: string[] } | null>(null);
   const lastEnterTimeRef = useRef<number>(0);
   const ENTER_DOUBLE_CLICK_THRESHOLD = 300; // ms between two Enters to consider it a double Enter
+  const prevEditingRef = useRef(false);
 
-  // When entering editing mode, capture the initial value
+  // Seed draft only when entering edit mode; do not reset on every parent `value` update while editing (avoids flicker).
   useEffect(() => {
     if (editing) {
-      setInitialValue(value);
-      setEditValue(value);
+      if (!prevEditingRef.current) {
+        setInitialValue(value);
+        setEditValue(value);
+      }
     }
+    prevEditingRef.current = editing;
   }, [editing, value]);
 
   // Sync editValue when value changes externally (but not while editing)
@@ -126,20 +130,6 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
       setInitialValue(value);
     }
   }, [value, editing]);
-
-  // ✅ LOG: Track when EditableText renders in editing mode
-  React.useEffect(() => {
-    if (editing) {
-      console.log('[EditableText] 🔍 RENDER editing mode', {
-        editing,
-        hasForwardedRef: !!forwardedRef,
-        hasExternalRef: !!externalInputRef,
-        hasInternalRef: !!internalInputRef,
-        hasInputRef: !!inputRef.current,
-        inputRefType: inputRef?.constructor?.name,
-      });
-    }
-  }, [editing, forwardedRef, externalInputRef, internalInputRef]);
 
   // Check if value has changed from initial
   const hasChanged = editing && editValue.trim() !== initialValue.trim();
@@ -308,17 +298,6 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
   // Editing mode
   const hasErrors = validationResult && validationResult.errors && validationResult.errors.length > 0;
   const hasWarnings = validationResult && validationResult.warnings && validationResult.warnings.length > 0;
-
-  // ✅ LOG: Track ref before passing to VoiceTextbox/textarea
-  if (editing) {
-    console.log('[EditableText] 🔍 BEFORE render VoiceTextbox/textarea', {
-      enableVoice,
-      hasInputRef: !!inputRef.current,
-      inputRefValue: inputRef.current,
-      forwardedRefType: forwardedRef?.constructor?.name,
-      externalInputRefType: externalInputRef?.constructor?.name,
-    });
-  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>

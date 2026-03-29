@@ -4,15 +4,14 @@
  * Component that renders the main content area of the ResponseEditor:
  * - MessageReview (Personality tab)
  * - DataExtractionEditor (Recognition tab)
- * - BehaviourEditor (Behaviour tab - default)
+ * - BehaviourContainer (Behaviour tab - default)
  * - CenterPanel (Wizard - when taskWizardMode === 'full')
  *
  * Extracted from ResponseEditorNormalLayout to reduce nesting and improve maintainability.
  * ✅ REFACTORED: Usa enum MainViewMode invece di booleani multipli.
  */
 
-import React from 'react';
-import BehaviourEditor from '@responseEditor/BehaviourEditor';
+import React, { useEffect } from 'react';
 import BehaviourContainer from '@responseEditor/components/BehaviourContainer';
 import MessageReviewView from '@responseEditor/MessageReview/MessageReviewView';
 import DataExtractionEditor from '@responseEditor/DataExtractionEditor';
@@ -27,6 +26,7 @@ import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/store/wiza
 import type { WizardTaskTreeNode, WizardStep, WizardModuleTemplate } from '../../../../../TaskBuilderAIWizard/types';
 import { RightPanelMode } from '@responseEditor/RightPanel';
 import type { TaskTree } from '@types/taskTypes';
+import { logBehaviourSteps, summarizeStepsShape } from '@responseEditor/behaviour/behaviourStepsDebug';
 
 // ✅ Container styles estratti in costanti esterne (per pulizia)
 const BASE_CONTAINER_STYLE: React.CSSProperties = {
@@ -136,6 +136,27 @@ export function MainContentArea({
   const { taskMeta: task, taskType, taskTree: taskTreeFromContext, taskWizardMode } = useResponseEditorContext();
   // ✅ Usa taskTree da props se disponibile, altrimenti da context
   const taskTree = taskTreeProp ?? taskTreeFromContext;
+
+  useEffect(() => {
+    if (mainViewMode !== MainViewMode.BEHAVIOUR) {
+      return;
+    }
+    const isDDTReady = !!(
+      taskTree &&
+      ((taskTree.steps && Object.keys(taskTree.steps).length > 0) ||
+        (taskTree.nodes && taskTree.nodes.length > 0))
+    );
+    logBehaviourSteps('MainContentArea:structureGate', {
+      mainViewMode,
+      hasSelectedNode: !!selectedNode,
+      isDDTReady,
+      taskTreeStepTemplateKeys:
+        taskTree?.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
+          ? Object.keys(taskTree.steps as Record<string, unknown>)
+          : [],
+      selectedNodeSteps: summarizeStepsShape(selectedNode?.steps),
+    });
+  }, [mainViewMode, selectedNode, taskTree]);
 
   // ✅ NEW: Get wizard context (may be null if wizard not active)
   let wizardContext: ReturnType<typeof useWizardContext> | null = null;

@@ -6,9 +6,9 @@ import type { DataContract } from '@components/DialogueDataEngine/contracts/cont
  * Ogni task attraversa queste fasi in parallelo con gli altri task
  */
 export type TaskPipelineStatus = {
-  constraints: 'pending' | 'running' | 'completed';
-  parser: 'pending' | 'running' | 'completed';
-  messages: 'pending' | 'running' | 'completed';
+  constraints: 'pending' | 'running' | 'completed' | 'failed';
+  parser: 'pending' | 'running' | 'completed' | 'failed';
+  messages: 'pending' | 'running' | 'completed' | 'failed';
   constraintsProgress?: number;
   parserProgress?: number;
   messagesProgress?: number;

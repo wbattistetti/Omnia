@@ -7,6 +7,10 @@ import { TaskType, isUtteranceInterpretationTemplateId } from '@types/taskTypes'
 import type { Task, TaskTree } from '@types/taskTypes';
 import { getMainNodes } from '@responseEditor/core/domain';
 import { info } from '@utils/logger';
+import {
+  cloneMainNodesForInstancePersistence,
+  shouldPersistStandaloneInstanceSnapshot,
+} from '@responseEditor/core/persistence/standaloneInstanceSnapshot';
 
 /**
  * Save task options
@@ -74,6 +78,11 @@ export async function saveTask(
   // Preserve templateId if it exists
   if (currentTemplateId && includeStepsForPersistence) {
     updates.templateId = currentTemplateId;
+  }
+
+  if (shouldPersistStandaloneInstanceSnapshot(taskInstance, taskTree)) {
+    updates.kind = 'standalone';
+    updates.instanceNodes = cloneMainNodesForInstancePersistence(taskTree);
   }
 
   // Only update if there are changes

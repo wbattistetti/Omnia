@@ -3,6 +3,33 @@ import {
   Calendar, Mail, MapPin, FileText,
   PlayCircle, HelpCircle, MicOff, CheckCircle2, CheckSquare, AlertCircle, Wine, Shield
 } from 'lucide-react';
+import { findNodeByIndices } from '@responseEditor/core/domain';
+import type { TaskTree } from '@types/taskTypes';
+
+function isTaskTreeShape(tree: unknown): tree is TaskTree {
+  return (
+    tree != null &&
+    typeof tree === 'object' &&
+    Array.isArray((tree as TaskTree).nodes)
+  );
+}
+
+/**
+ * Legacy DDT rows used `subData[]` at the root; TaskTree uses `nodes[]` + domain navigation.
+ */
+function legacyGetNodeByIndex(taskTree: unknown, mainIndex: number | null | undefined): unknown {
+  if (mainIndex == null) {
+    return taskTree;
+  }
+  const subData = (taskTree as { subData?: unknown[] })?.subData;
+  if (!Array.isArray(subData)) {
+    return taskTree;
+  }
+  if (mainIndex < 0 || mainIndex >= subData.length) {
+    return taskTree;
+  }
+  return subData[mainIndex];
+}
 
 export function getDDTIcon(type: string): JSX.Element {
   if (!type) return <FileText className="w-5 h-5 text-fuchsia-100 mr-2" />;
@@ -13,12 +40,20 @@ export function getDDTIcon(type: string): JSX.Element {
   return <FileText className="w-5 h-5 text-fuchsia-100 mr-2" />;
 }
 
-// ✅ NUOVO MODELLO: Usa subNodes[] invece di subData[]
-// ✅ Uses domain layer function (backward compatible)
-// @deprecated Use findNodeByIndices from core/domain instead
-export function getNodeByIndex(taskTree: any, mainIndex: number | null, subIndex: number | null) {
-  const { findNodeByIndices } = require('@responseEditor/core/domain');
-  return findNodeByIndices(taskTree, mainIndex ?? 0, subIndex ?? null);
+// TaskTree: domain navigation. Legacy root objects with `subData[]`: index into subData only.
+export function getNodeByIndex(
+  taskTree: unknown,
+  mainIndex: number | null | undefined,
+  subIndex: number | null | undefined = null
+) {
+  const sub = subIndex === undefined ? null : subIndex;
+  if (isTaskTreeShape(taskTree)) {
+    if (mainIndex == null && sub == null) {
+      return taskTree;
+    }
+    return findNodeByIndices(taskTree, mainIndex ?? 0, sub);
+  }
+  return legacyGetNodeByIndex(taskTree, mainIndex);
 }
 
 export function ordinalIt(n: number): string {

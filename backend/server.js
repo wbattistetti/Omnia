@@ -3173,12 +3173,16 @@ app.get('/api/factory/tasks', async (req, res) => {
     // Action types sono enum 6-19 (SendSMS=6, SendEmail=7, EscalateToHuman=8, ecc.)
     if (taskType === 'Action') {
       try {
-        // ✅ Query per Action tasks (type enum 6-19)
+        // Escalation palette: "Action" types 6–19, SayMessage (0), and any template allowed in escalation steps
         const actionTasks = await db.collection('tasks').find({
-          type: { $gte: 6, $lte: 19 }  // ✅ Action types: enum 6-19
+          $or: [
+            { type: { $gte: 6, $lte: 19 } },
+            { type: 0 },
+            { allowedContexts: { $in: ['escalation'] } },
+            { allowedContexts: /^escalation($|:)/ },
+          ],
         }).toArray();
 
-        // Convert to old format for backward compatibility
         const formattedActions = actionTasks.map(action => ({
           id: action.id?.replace('-template', '') || action._id?.replace('-template', ''),
           label: action.label || '',
@@ -3186,7 +3190,8 @@ app.get('/api/factory/tasks', async (req, res) => {
           icon: action.icon || 'Circle',
           color: action.color || 'text-gray-500',
           params: action.structure || action.params || {},
-          type: action.type
+          type: action.type,
+          allowedContexts: Array.isArray(action.allowedContexts) ? action.allowedContexts : [],
         }));
 
         console.log(`[FactoryTasks] Found ${formattedActions.length} Action tasks`);

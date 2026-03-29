@@ -16,8 +16,6 @@ interface EscalationCardWrapperProps {
   allowedActions?: string[];
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   onDeleteEscalation: (escalationIdx: number) => void;
-  autoEditTarget: { escIdx: number; taskIdx: number } | null;
-  onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
   isCollapsed: boolean;
   showChevron: boolean;
   onToggleCollapse: (e: React.MouseEvent) => void;
@@ -26,11 +24,6 @@ interface EscalationCardWrapperProps {
   isHovered: boolean;
 }
 
-/**
- * Wrapper per EscalationCard che gestisce il hook useEscalationUpdate
- * Wrappato con EscalationFascia per la vista ad albero
- * Gestisce collasso: mostra solo primo task se collassata
- */
 function EscalationCardWrapper({
   escalation,
   escalationIdx,
@@ -41,19 +34,16 @@ function EscalationCardWrapper({
   allowedActions,
   updateSelectedNode,
   onDeleteEscalation,
-  autoEditTarget,
-  onAutoEditTargetChange,
   isCollapsed,
   showChevron,
   onToggleCollapse,
   onMouseEnter,
   onMouseLeave,
-  isHovered
+  isHovered,
 }: EscalationCardWrapperProps) {
   const { updateEscalation } = useEscalationUpdate(updateSelectedNode, stepKey, escalationIdx);
   const escalationName = getEscalationName(stepLabel, escalationIdx);
 
-  // Se collassata, mostra solo primo task
   const tasks = escalation?.tasks ?? [];
   const displayTasks = isCollapsed ? tasks.slice(0, 1) : tasks;
   const modifiedEscalation = { ...escalation, tasks: displayTasks };
@@ -79,11 +69,9 @@ function EscalationCardWrapper({
         updateEscalation={updateEscalation}
         updateSelectedNode={updateSelectedNode}
         onDeleteEscalation={() => onDeleteEscalation(escalationIdx)}
-        autoEditTarget={autoEditTarget}
-        onAutoEditTargetChange={onAutoEditTargetChange}
         stepKey={stepKey}
-        hideHeader={true} // Nasconde etichette nella vista ad albero
-        isHovered={isHovered} // ✅ Passa hover state alla card
+        hideHeader={true}
+        isHovered={isHovered}
       />
     </EscalationFascia>
   );
@@ -97,14 +85,11 @@ interface StepContentProps {
   allowedActions?: string[];
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   onDeleteEscalation: (escalationIdx: number) => void;
-  autoEditTarget: { escIdx: number; taskIdx: number } | null;
-  onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
 }
 
 /**
  * Contenuto step: renderizza escalation
  * Riutilizza EscalationCard esistente
- * Gestisce collasso normale e collasso con Ctrl
  */
 export function StepContent({
   stepKey,
@@ -114,11 +99,9 @@ export function StepContent({
   allowedActions,
   updateSelectedNode,
   onDeleteEscalation,
-  autoEditTarget,
-  onAutoEditTargetChange
 }: StepContentProps) {
   const stepLabel = stepMeta[stepKey]?.label || 'Escalation';
-  const { collapsedEscalations, hideOtherEscalations, toggleCollapse, isCollapsed } = useEscalationCollapse();
+  const { hideOtherEscalations, toggleCollapse, isCollapsed } = useEscalationCollapse();
   const [hoveredEscalation, setHoveredEscalation] = useState<number | null>(null);
 
   return (
@@ -127,11 +110,10 @@ export function StepContent({
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        gap: '0.25rem'
+        gap: '0.25rem',
       }}
     >
       {escalations.map((escalation, idx) => {
-        // Nascondi escalation se hideOtherEscalations è true e non è la prima
         if (hideOtherEscalations && idx !== 0) {
           return null;
         }
@@ -151,10 +133,8 @@ export function StepContent({
             allowedActions={allowedActions}
             updateSelectedNode={updateSelectedNode}
             onDeleteEscalation={onDeleteEscalation}
-            autoEditTarget={autoEditTarget}
-            onAutoEditTargetChange={onAutoEditTargetChange}
             isCollapsed={collapsed}
-            showChevron={idx === 0} // Solo prima escalation ha chevron
+            showChevron={idx === 0}
             onToggleCollapse={(e) => toggleCollapse(idx, e.ctrlKey)}
             onMouseEnter={() => setHoveredEscalation(idx)}
             onMouseLeave={() => setHoveredEscalation(null)}

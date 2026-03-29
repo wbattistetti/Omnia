@@ -58,12 +58,10 @@ export function extractTranslationKeysFromSteps(
       for (const escalation of step.escalations) {
         if (escalation.tasks && Array.isArray(escalation.tasks)) {
           for (const task of escalation.tasks) {
-            // Estrai la chiave di traduzione dal campo text (può essere una chiave o un GUID)
-            if (task.text && typeof task.text === 'string') {
-              // Se inizia con 'template.' è una chiave di traduzione, altrimenti è un GUID
-              if (task.text.startsWith('template.')) {
-                keys.push(task.text);
-              }
+            const textParam = task.parameters?.find((p: any) => p?.parameterId === 'text');
+            const fromParam = typeof textParam?.value === 'string' ? textParam.value : '';
+            if (fromParam.startsWith('template.')) {
+              keys.push(fromParam);
             }
           }
         }
