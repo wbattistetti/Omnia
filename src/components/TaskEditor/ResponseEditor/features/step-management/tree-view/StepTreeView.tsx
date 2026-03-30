@@ -21,7 +21,7 @@ export function StepTreeView({
 }: StepTreeViewProps) {
   const normalizedKeys = normalizeStepKeys(stepKeys);
   const stepTree = buildStepTree(node, normalizedKeys);
-  const { deleteEscalation } = useStepActions({
+  const { deleteEscalation, addEscalation } = useStepActions({
     node,
     stepKeys: normalizedKeys,
     updateSelectedNode,
@@ -53,6 +53,7 @@ export function StepTreeView({
               allowedActions={allowedActions}
               updateSelectedNode={updateSelectedNode}
               onDeleteEscalation={(idx) => deleteEscalation(item.stepKey, idx)}
+              onAddEscalation={addEscalation}
             />
           </React.Fragment>
         );

@@ -44,6 +44,9 @@ export function EscalationCard({
 
   const effectiveIsExpanded = hideHeader ? true : isExpanded;
 
+  /** Tree view (fascia): stretch content column to match strip height so empty DnD fills the row. */
+  const stretchInFascia = Boolean(hideHeader && showCard);
+
   const list = (
     <EscalationTasksList
       escalation={escalation}
@@ -77,6 +80,8 @@ export function EscalationCard({
     return list;
   }
 
+  const stretchOuter = fillAvailableHeight || stretchInFascia;
+
   return (
     <div
       data-escalation-index={escalationIdx}
@@ -86,10 +91,11 @@ export function EscalationCard({
         transition: 'all 0.2s',
         display: 'flex',
         flexDirection: 'column',
-        flex: fillAvailableHeight ? 1 : '0 0 auto',
-        minHeight: fillAvailableHeight ? 0 : 'auto',
+        flex: stretchOuter ? 1 : '0 0 auto',
+        minHeight: stretchOuter ? 0 : 'auto',
         overflow: 'visible',
-        alignSelf: fillAvailableHeight ? 'stretch' : undefined,
+        alignSelf: stretchOuter ? 'stretch' : undefined,
+        width: stretchInFascia ? '100%' : undefined,
       }}
     >
       {!hideHeader && (
@@ -105,8 +111,15 @@ export function EscalationCard({
       {effectiveIsExpanded && (
         <div
           style={{
-            flex: fillAvailableHeight ? 1 : 'none',
-            minHeight: fillAvailableHeight ? 0 : isEmpty ? '120px' : 'auto',
+            flex: fillAvailableHeight || (stretchInFascia && isEmpty) ? 1 : 'none',
+            minHeight:
+              fillAvailableHeight
+                ? 0
+                : stretchInFascia && isEmpty
+                  ? '120px'
+                  : isEmpty
+                    ? '120px'
+                    : 'auto',
             overflow: 'visible',
             display: 'flex',
             flexDirection: 'column',

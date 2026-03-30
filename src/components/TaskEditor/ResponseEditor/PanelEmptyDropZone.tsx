@@ -60,11 +60,20 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({
         alignSelf: 'stretch',
         maxWidth: '100%',
       }
-    : {
-        minHeight: compact ? '56px' : '72px',
-        maxWidth: compact ? '100%' : 560,
-        margin: '0 auto',
-      };
+    : compact
+      ? {
+          flex: 1,
+          minHeight: '56px',
+          alignSelf: 'stretch',
+          maxWidth: '100%',
+          width: '100%',
+          margin: 0,
+        }
+      : {
+          minHeight: '72px',
+          maxWidth: 560,
+          margin: '0 auto',
+        };
 
   return (
     <div

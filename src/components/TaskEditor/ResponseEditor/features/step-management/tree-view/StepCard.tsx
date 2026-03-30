@@ -10,6 +10,7 @@ interface StepCardProps {
   allowedActions?: string[];
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   onDeleteEscalation: (escalationIdx: number) => void;
+  onAddEscalation?: (stepKey: string) => void;
 }
 
 /**
@@ -25,6 +26,7 @@ export function StepCard({
   allowedActions,
   updateSelectedNode,
   onDeleteEscalation,
+  onAddEscalation,
 }: StepCardProps) {
   return (
     <div
@@ -41,6 +43,7 @@ export function StepCard({
         allowedActions={allowedActions}
         updateSelectedNode={updateSelectedNode}
         onDeleteEscalation={onDeleteEscalation}
+        onAddEscalation={onAddEscalation}
       />
     </div>
   );

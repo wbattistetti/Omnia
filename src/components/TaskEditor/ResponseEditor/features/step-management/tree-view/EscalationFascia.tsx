@@ -1,6 +1,6 @@
 import React from 'react';
 import { stepMeta } from '@responseEditor/ddtUtils';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 
 interface EscalationFasciaProps {
   stepKey: string;
@@ -12,6 +12,15 @@ interface EscalationFasciaProps {
   onMouseLeave: () => void;
   onClick: (e: React.MouseEvent) => void;
   children: React.ReactNode;
+  /** Show + at bottom of colored strip (tree view: append escalation for this step). */
+  showAddEscalationButton?: boolean;
+  onAddEscalation?: () => void;
+  /** Native tooltip on the + button (e.g. Italian UX copy). */
+  addEscalationTooltip?: string;
+  /** Tree view: remove this escalation lane (only when more than one lane exists). */
+  showDeleteEscalationButton?: boolean;
+  onDeleteEscalation?: () => void;
+  deleteEscalationTooltip?: string;
 }
 
 /**
@@ -27,7 +36,13 @@ export function EscalationFascia({
   onMouseEnter,
   onMouseLeave,
   onClick,
-  children
+  children,
+  showAddEscalationButton = false,
+  onAddEscalation,
+  addEscalationTooltip,
+  showDeleteEscalationButton = false,
+  onDeleteEscalation,
+  deleteEscalationTooltip,
 }: EscalationFasciaProps) {
   const meta = stepMeta[stepKey] || {
     icon: null,
@@ -45,6 +60,8 @@ export function EscalationFascia({
 
   return (
     <div
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{
         display: 'flex',
         flexDirection: 'row',
@@ -59,30 +76,64 @@ export function EscalationFascia({
         backgroundColor: `${color}08` // Background unificato per tutta la card
       }}
     >
-      {/* Fascia verticale */}
+      {/* Fascia verticale: icona al centro, + in basso (aggiungi escalation) */}
       <div
         onClick={onClick}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
         title={showChevron ? "Click per collassare/espandere. Ctrl+Click per nascondere/mostrare altre escalation." : undefined}
         style={{
           width: '50px',
           alignSelf: 'stretch',
-          // ✅ Gradiente: più saturo a destra (come intestazione colorata)
           background: `linear-gradient(to right, ${bgColor}, ${isHovered ? `${color}50` : `${color}40`})`,
-          // ✅ Rimosso borderLeft - il bordo è ora sul container esterno
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center', // ✅ Center/center: icona centrata
+          justifyContent: 'flex-start',
           cursor: 'pointer',
           transition: 'background-color 0.2s',
           position: 'relative',
           padding: '4px 0',
-          minHeight: '40px'
+          minHeight: '40px',
         }}
       >
-        {/* Chevron solo sulla prima escalation e solo su hover */}
+        {showDeleteEscalationButton && onDeleteEscalation && (
+          <button
+            type="button"
+            title={deleteEscalationTooltip}
+            aria-label={deleteEscalationTooltip}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onDeleteEscalation();
+            }}
+            style={{
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28,
+              height: 28,
+              marginTop: 2,
+              marginBottom: 2,
+              border: 'none',
+              borderRadius: 6,
+              background: `${color}25`,
+              color: '#ef4444',
+              cursor: 'pointer',
+              transition: 'background 0.15s, opacity 0.15s',
+              opacity: isHovered ? 1 : 0,
+              pointerEvents: isHovered ? 'auto' : 'none',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#ef444420';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = `${color}25`;
+            }}
+          >
+            <Trash2 size={15} strokeWidth={2.25} />
+          </button>
+        )}
+
         {showChevron && isHovered && (
           <div
             style={{
@@ -94,7 +145,7 @@ export function EscalationFascia({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'opacity 0.2s'
+              transition: 'opacity 0.2s',
             }}
           >
             {isCollapsed ? (
@@ -105,23 +156,67 @@ export function EscalationFascia({
           </div>
         )}
 
-        {/* Icona centrata */}
         <div
           style={{
+            flex: 1,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: `${color}90` // Icona leggermente smorzata
+            minHeight: 0,
+            width: '100%',
+            color: `${color}90`,
           }}
         >
           {icon}
         </div>
+
+        {showAddEscalationButton && onAddEscalation && (
+          <button
+            type="button"
+            title={addEscalationTooltip}
+            aria-label={addEscalationTooltip}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onAddEscalation();
+            }}
+            style={{
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28,
+              height: 28,
+              marginBottom: 4,
+              border: 'none',
+              borderRadius: 6,
+              background: `${color}30`,
+              color: '#fbbf24',
+              cursor: 'pointer',
+              transition: 'background 0.15s, transform 0.1s, opacity 0.15s',
+              opacity: isHovered ? 1 : 0,
+              pointerEvents: isHovered ? 'auto' : 'none',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = `${color}55`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = `${color}30`;
+            }}
+          >
+            <Plus size={16} strokeWidth={2.5} />
+          </button>
+        )}
       </div>
 
       {/* Contenuto escalation - EscalationCard senza bordo esterno (gestito dal container) */}
       <div
         style={{
-          flex: 1
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignSelf: 'stretch',
         }}
       >
         {children}

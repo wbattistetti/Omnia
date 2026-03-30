@@ -38,6 +38,9 @@ const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({
     collect: () => ({}) // No visual feedback - completely invisible
   }), [handleDrop]);
 
+  /** When empty in a fixed-height card (e.g. tree view), grow so the whole slot is a drop target. */
+  const fillEmptySlot = isEmpty && !fillAvailable;
+
   return (
     <div
       ref={drop}
@@ -45,10 +48,10 @@ const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
-        flex: fillAvailable ? 1 : 'none',
-        minHeight: fillAvailable ? 0 : isEmpty ? '72px' : 'auto',
+        flex: fillAvailable ? 1 : fillEmptySlot ? 1 : 'none',
+        minHeight: fillAvailable ? 0 : fillEmptySlot ? 0 : isEmpty ? '72px' : 'auto',
         width: '100%',
-        alignSelf: fillAvailable ? 'stretch' : undefined,
+        alignSelf: fillAvailable || fillEmptySlot ? 'stretch' : undefined,
       }}
     >
       {children}
