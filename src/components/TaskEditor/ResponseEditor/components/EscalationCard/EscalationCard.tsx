@@ -16,6 +16,8 @@ type EscalationCardProps = {
   stepKey: string;
   hideHeader?: boolean;
   isHovered?: boolean;
+  /** Single-escalation StepEditor layout: fill height so DnD covers the card / panel. */
+  fillAvailableHeight?: boolean;
 };
 
 export function EscalationCard({
@@ -31,6 +33,7 @@ export function EscalationCard({
   stepKey,
   hideHeader = false,
   isHovered = false,
+  fillAvailableHeight = false,
 }: EscalationCardProps) {
   const showCard = hasEscalationCard(stepKey);
 
@@ -41,19 +44,37 @@ export function EscalationCard({
 
   const effectiveIsExpanded = hideHeader ? true : isExpanded;
 
+  const list = (
+    <EscalationTasksList
+      escalation={escalation}
+      escalationIdx={escalationIdx}
+      color={color}
+      translations={translations}
+      allowedActions={allowedActions}
+      updateEscalation={updateEscalation}
+      updateSelectedNode={updateSelectedNode}
+      stepKey={stepKey}
+      fillAvailableHeight={fillAvailableHeight}
+    />
+  );
+
   if (!showCard) {
-    return (
-      <EscalationTasksList
-        escalation={escalation}
-        escalationIdx={escalationIdx}
-        color={color}
-        translations={translations}
-        allowedActions={allowedActions}
-        updateEscalation={updateEscalation}
-        updateSelectedNode={updateSelectedNode}
-        stepKey={stepKey}
-      />
-    );
+    if (fillAvailableHeight) {
+      return (
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignSelf: 'stretch',
+          }}
+        >
+          {list}
+        </div>
+      );
+    }
+    return list;
   }
 
   return (
@@ -65,9 +86,10 @@ export function EscalationCard({
         transition: 'all 0.2s',
         display: 'flex',
         flexDirection: 'column',
-        flex: '0 0 auto',
-        minHeight: 'auto',
+        flex: fillAvailableHeight ? 1 : '0 0 auto',
+        minHeight: fillAvailableHeight ? 0 : 'auto',
         overflow: 'visible',
+        alignSelf: fillAvailableHeight ? 'stretch' : undefined,
       }}
     >
       {!hideHeader && (
@@ -83,23 +105,14 @@ export function EscalationCard({
       {effectiveIsExpanded && (
         <div
           style={{
-            flex: 'none',
-            minHeight: isEmpty ? '120px' : 'auto',
+            flex: fillAvailableHeight ? 1 : 'none',
+            minHeight: fillAvailableHeight ? 0 : isEmpty ? '120px' : 'auto',
             overflow: 'visible',
             display: 'flex',
             flexDirection: 'column',
           }}
         >
-          <EscalationTasksList
-            escalation={escalation}
-            escalationIdx={escalationIdx}
-            color={color}
-            translations={translations}
-            allowedActions={allowedActions}
-            updateEscalation={updateEscalation}
-            updateSelectedNode={updateSelectedNode}
-            stepKey={stepKey}
-          />
+          {list}
         </div>
       )}
     </div>

@@ -25,6 +25,7 @@ function EscalationCardWrapper({
   updateSelectedNode,
   stepKey,
   onDeleteEscalation,
+  fillAvailableHeight,
 }: {
   escalation: any;
   escalationIdx: number;
@@ -35,6 +36,8 @@ function EscalationCardWrapper({
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   stepKey: string;
   onDeleteEscalation?: (escalationIdx: number) => void;
+  /** Single-escalation (tabs mode): stretch DnD area to panel bottom. */
+  fillAvailableHeight?: boolean;
 }) {
   const { updateEscalation } = useEscalationUpdate(updateSelectedNode, stepKey, escalationIdx);
   const escalationName = getEscalationName(stepLabel, escalationIdx);
@@ -51,6 +54,7 @@ function EscalationCardWrapper({
       updateSelectedNode={updateSelectedNode}
       onDeleteEscalation={onDeleteEscalation ? () => onDeleteEscalation(escalationIdx) : undefined}
       stepKey={stepKey}
+      fillAvailableHeight={fillAvailableHeight}
     />
   );
 }
@@ -126,6 +130,7 @@ export default function StepEditor({
             updateSelectedNode={updateSelectedNode}
             stepKey={stepKey}
             onDeleteEscalation={handleDeleteEscalation}
+            fillAvailableHeight
           />
         ) : (
           <div

@@ -48,6 +48,8 @@ type EscalationTasksListProps = {
   updateEscalation: (updater: (esc: any) => any) => void;
   updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   stepKey: string;
+  /** Expand DnD target to fill Behaviour panel (single escalation). */
+  fillAvailableHeight?: boolean;
 };
 
 export function EscalationTasksList({
@@ -59,6 +61,7 @@ export function EscalationTasksList({
   updateEscalation,
   updateSelectedNode,
   stepKey,
+  fillAvailableHeight = false,
 }: EscalationTasksListProps) {
   const { handleEditingChange, isEditing: isEditingRow } = useTaskEditing();
   const { requestFocusParameter } = useBehaviourUi();
@@ -278,12 +281,17 @@ export function EscalationTasksList({
   );
 
   return (
-    <CanvasDropWrapper onDropTask={handleAppend} isEmpty={tasks.length === 0}>
+    <CanvasDropWrapper
+      onDropTask={handleAppend}
+      isEmpty={tasks.length === 0}
+      fillAvailable={fillAvailableHeight}
+    >
       {tasks.length === 0 ? (
         <PanelEmptyDropZone
           color={color}
           onDropTask={handleAppend}
-          compact
+          compact={!fillAvailableHeight}
+          fillAvailable={fillAvailableHeight}
           idleLabel="Nessuna azione in questa escalation ancora. Apri la scheda Tasks nella barra in alto, poi trascina un task qui (o dal catalogo)."
           overLabel="Rilascia per aggiungere il task"
         />

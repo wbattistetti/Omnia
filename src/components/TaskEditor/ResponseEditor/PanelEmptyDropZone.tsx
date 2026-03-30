@@ -13,6 +13,8 @@ interface PanelEmptyDropZoneProps {
   overLabel?: string;
   /** Tighter layout for nested empty states (e.g. escalation row). */
   compact?: boolean;
+  /** Fill parent height (single escalation): full-panel drop target. */
+  fillAvailable?: boolean;
   // Legacy prop for backward compatibility
   onDropAction?: (task: TaskReference) => void; // @deprecated Use onDropTask instead
 }
@@ -24,6 +26,7 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({
   idleLabel,
   overLabel,
   compact = false,
+  fillAvailable = false,
 }) => {
   const handleDrop = onDropTask ?? onDropAction;
   const [isOver, setIsOver] = useState(false);
@@ -50,14 +53,25 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({
     'Nessun task in questa lista. Apri la scheda Tasks nella barra in alto e trascina un task qui, oppure usa il catalogo.';
   const over = overLabel ?? 'Rilascia per aggiungere';
 
+  const fillStyle: React.CSSProperties = fillAvailable
+    ? {
+        flex: 1,
+        minHeight: 0,
+        alignSelf: 'stretch',
+        maxWidth: '100%',
+      }
+    : {
+        minHeight: compact ? '56px' : '72px',
+        maxWidth: compact ? '100%' : 560,
+        margin: '0 auto',
+      };
+
   return (
     <div
       ref={drop}
       style={{
-        minHeight: compact ? '56px' : '72px',
+        ...fillStyle,
         width: '100%',
-        maxWidth: compact ? '100%' : 560,
-        margin: '0 auto',
         border: isOver ? `2px dashed ${color}` : `1px dashed ${color}40`,
         background: isOver ? `${color}10` : 'transparent',
         padding: compact ? '0.75rem 1rem' : '1rem 1.25rem',
@@ -71,6 +85,7 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({
         lineHeight: 1.45,
         textAlign: 'center',
         cursor: 'pointer',
+        boxSizing: 'border-box',
       }}
     >
       {isOver ? over : idle}

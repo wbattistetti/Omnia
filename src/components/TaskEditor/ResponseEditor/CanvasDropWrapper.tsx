@@ -9,11 +9,19 @@ interface CanvasDropWrapperProps {
   color?: string;
   children: React.ReactNode;
   isEmpty?: boolean; // ✅ NEW: Indicates if escalation is empty (for flex fix)
+  /** Grow with parent so the whole area accepts drops (single-escalation Behaviour). */
+  fillAvailable?: boolean;
   // Legacy prop for backward compatibility
   onDropAction?: (task: TaskReference) => void; // @deprecated Use onDropTask instead
 }
 
-const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropTask, onDropAction, children, isEmpty = false }) => {
+const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({
+  onDropTask,
+  onDropAction,
+  children,
+  isEmpty = false,
+  fillAvailable = false,
+}) => {
   const handleDrop = onDropTask ?? onDropAction;
 
   const [, drop] = useDrop(() => ({
@@ -31,14 +39,18 @@ const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropTask, onDro
   }), [handleDrop]);
 
   return (
-    <div ref={drop} style={{
-      position: 'relative',
-      display: 'flex',
-      flexDirection: 'column',
-      flex: 'none',
-      minHeight: isEmpty ? '72px' : 'auto',
-      width: '100%'
-    }}>
+    <div
+      ref={drop}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        flex: fillAvailable ? 1 : 'none',
+        minHeight: fillAvailable ? 0 : isEmpty ? '72px' : 'auto',
+        width: '100%',
+        alignSelf: fillAvailable ? 'stretch' : undefined,
+      }}
+    >
       {children}
     </div>
   );
