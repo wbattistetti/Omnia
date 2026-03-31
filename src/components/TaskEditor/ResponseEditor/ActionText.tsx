@@ -1,17 +1,7 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { VoiceTextbox } from '../../common/VoiceTextbox';
 import VariableTokenText from '../../common/VariableTokenText';
-import VariableTokenContextMenu from '../../common/VariableTokenContextMenu';
-import { insertBracketTokenAtCaret } from '../../../utils/variableTokenText';
-import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
-import { useFlowActions, useFlowWorkspace } from '../../../flows/FlowStore';
-import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
-import {
-  buildVariableMenuItemsAsync,
-  getVariableMenuRebuildFingerprint,
-  type VariableMenuItem,
-} from '../../common/variableMenuModel';
-import { ensureParentVariableAndSubflowOutputBinding } from '../../common/subflowParentBinding';
+import { useVariablePickerForFlow } from './hooks/useVariablePickerForFlow';
 
 interface ActionTextProps {
   text: string;
@@ -24,36 +14,13 @@ interface ActionTextProps {
 }
 
 const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editValue, onChange, onKeyDown, onBlur }) => {
-  const [varsMenu, setVarsMenu] = React.useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
-  const { flows } = useFlowWorkspace();
-  const { updateFlowMeta } = useFlowActions();
-  const pdUpdate = useProjectDataUpdate();
-  const activeFlowId = getActiveFlowCanvasId();
-  const [variableMenuItems, setVariableMenuItems] = React.useState<VariableMenuItem[]>([]);
-  const variableMenuFingerprint = useMemo(
-    () => getVariableMenuRebuildFingerprint(flows as any, activeFlowId),
-    [flows, activeFlowId]
-  );
-  const projectIdForMenu = pdUpdate?.getCurrentProjectId() || '';
-  React.useEffect(() => {
-    let cancelled = false;
-    if (!editing) {
-      setVariableMenuItems([]);
-      return;
-    }
-    if (!projectIdForMenu) {
-      setVariableMenuItems([]);
-      return;
-    }
-    void buildVariableMenuItemsAsync(projectIdForMenu, activeFlowId, flows as any).then((items) => {
-      if (!cancelled) setVariableMenuItems(items);
-    }).catch(() => {
-      if (!cancelled) setVariableMenuItems([]);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [editing, projectIdForMenu, activeFlowId, variableMenuFingerprint]);
+  const variablePicker = useVariablePickerForFlow({
+    enabled: true,
+    editing,
+    draftValue: editValue,
+    setDraftValue: onChange,
+    inputRef,
+  });
 
   if (!editing) {
     return text ? (
@@ -72,11 +39,7 @@ const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editVa
         onChange={e => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         onBlur={onBlur}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setVarsMenu({ open: true, x: e.clientX, y: e.clientY });
-        }}
+        onContextMenu={variablePicker.onContextMenu}
         rows={1}
         style={{
           fontWeight: 500,
@@ -96,78 +59,7 @@ const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editVa
           overflowX: 'hidden',
         }}
       />
-      <VariableTokenContextMenu
-        isOpen={varsMenu.open}
-        x={varsMenu.x}
-        y={varsMenu.y}
-        variables={variableMenuItems.map((i) => i.varLabel)}
-        variableItems={variableMenuItems}
-        onClose={() => setVarsMenu({ open: false, x: 0, y: 0 })}
-        onExposeAndSelect={(item) => {
-          const projectId = pdUpdate?.getCurrentProjectId() || '';
-          if (!projectId) return;
-          if (item.isFromActiveFlow === false) {
-            const bound = ensureParentVariableAndSubflowOutputBinding(
-              projectId,
-              activeFlowId,
-              flows as any,
-              item
-            );
-            const el = inputRef.current;
-            const caret = {
-              start: el?.selectionStart ?? editValue.length,
-              end: el?.selectionEnd ?? editValue.length,
-            };
-            const out = insertBracketTokenAtCaret(editValue, caret, bound.tokenLabel);
-            onChange(out.text);
-            setVarsMenu({ open: false, x: 0, y: 0 });
-            requestAnimationFrame(() => {
-              if (!el) return;
-              el.focus();
-              el.setSelectionRange(out.caret.start, out.caret.end);
-            });
-            return;
-          }
-
-          const owner = (flows as any)?.[item.ownerFlowId];
-          if (!owner) return;
-          const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
-          const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.varId);
-          const nextVars = existing
-            ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.varId ? { ...v, visibility: 'output' } : v))
-            : [...prevVars, { id: item.varId, label: item.varLabel, type: 'string', visibility: 'output' }];
-          updateFlowMeta(item.ownerFlowId, { variables: nextVars });
-
-          const el = inputRef.current;
-          const caret = {
-            start: el?.selectionStart ?? editValue.length,
-            end: el?.selectionEnd ?? editValue.length,
-          };
-          const out = insertBracketTokenAtCaret(editValue, caret, item.tokenLabel || item.varLabel);
-          onChange(out.text);
-          setVarsMenu({ open: false, x: 0, y: 0 });
-          requestAnimationFrame(() => {
-            if (!el) return;
-            el.focus();
-            el.setSelectionRange(out.caret.start, out.caret.end);
-          });
-        }}
-        onSelect={(label) => {
-          const el = inputRef.current;
-          const caret = {
-            start: el?.selectionStart ?? editValue.length,
-            end: el?.selectionEnd ?? editValue.length,
-          };
-          const out = insertBracketTokenAtCaret(editValue, caret, label);
-          onChange(out.text);
-          setVarsMenu({ open: false, x: 0, y: 0 });
-          requestAnimationFrame(() => {
-            if (!el) return;
-            el.focus();
-            el.setSelectionRange(out.caret.start, out.caret.end);
-          });
-        }}
-      />
+      {variablePicker.variableMenu}
     </>
   );
 };

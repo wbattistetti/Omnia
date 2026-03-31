@@ -20,8 +20,10 @@ import {
   updateNodeByPath,
 } from '@responseEditor/core/taskTree';
 import type { NodePath } from '@responseEditor/core/taskTree';
-import type { TaskTree } from '@types/taskTypes';
+import type { Task, TaskMeta, TaskTree } from '@types/taskTypes';
+import { isUtteranceInterpretationTask } from '@types/taskTypes';
 import { getSidebarResizeStartWidthPx } from '@responseEditor/hooks/sidebarResizeStartWidth';
+import { variableCreationService } from '@services/VariableCreationService';
 
 export interface UseSidebarParams {
   isDraggingSidebar: boolean;
@@ -34,6 +36,13 @@ export interface UseSidebarParams {
   sidebarRef: React.RefObject<HTMLDivElement>;
   taskTree: TaskTree | null | undefined;
   replaceSelectedTaskTree: (taskTree: TaskTree) => void;
+  /** Sync project variables from TaskTree after each sidebar mutation (UtteranceInterpretation only). */
+  utteranceVariableSync?: {
+    projectId: string | null | undefined;
+    taskId: string | undefined;
+    taskLabel: string;
+    task: Task | TaskMeta | null | undefined;
+  };
 }
 
 export interface UseSidebarResult {
@@ -64,6 +73,7 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
     sidebarRef,
     taskTree,
     replaceSelectedTaskTree,
+    utteranceVariableSync,
   } = params;
 
   const setTaskTree = useTaskTreeStore((s) => s.setTaskTree);
@@ -91,8 +101,20 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
       } catch {
         /* ignore */
       }
+
+      const sync = utteranceVariableSync;
+      const pid = sync?.projectId != null ? String(sync.projectId).trim() : '';
+      const tid = sync?.taskId != null ? String(sync.taskId).trim() : '';
+      if (pid && tid && sync?.task && isUtteranceInterpretationTask(sync.task)) {
+        variableCreationService.syncUtteranceTaskTreeVariables(
+          pid,
+          tid,
+          sync.taskLabel || '',
+          ensured.nodes
+        );
+      }
     },
-    [getTree, setTaskTree, replaceSelectedTaskTree]
+    [getTree, setTaskTree, replaceSelectedTaskTree, utteranceVariableSync]
   );
 
   useEffect(() => {

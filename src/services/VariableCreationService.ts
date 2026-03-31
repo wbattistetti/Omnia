@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import type { Task } from '@types/taskTypes';
+import type { Task, TaskTreeNode } from '@types/taskTypes';
 import type { DialogueTask } from '@services/DialogueTaskService';
 import type { EnsureManualVariableOptions, VariableInstance, VariableScope } from '@types/variableTypes';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
@@ -12,6 +12,7 @@ import {
   sameVariableScopeBucket,
 } from '@utils/variableScopeUtils';
 import { normalizeSemanticTaskLabel } from '../domain/variableProxyNaming';
+import { flattenUtteranceTaskTreeVariableRows } from '@utils/utteranceTaskVariableSync';
 
 interface CreateVariablesOptions {
   taskInstance: Task;
@@ -166,6 +167,45 @@ class VariableCreationService {
     });
 
     return variables;
+  }
+
+  /**
+   * Sync in-memory variables for an UtteranceInterpretation task from the sidebar TaskTree.
+   * Preserves varId per nodeId when possible so bracket tokens referencing GUIDs stay stable.
+   */
+  syncUtteranceTaskTreeVariables(
+    projectId: string,
+    taskInstanceId: string,
+    taskRowLabel: string,
+    roots: TaskTreeNode[] | null | undefined
+  ): void {
+    const pid = String(projectId || '').trim();
+    const tid = String(taskInstanceId || '').trim();
+    if (!pid || !tid) {
+      return;
+    }
+
+    const rows = flattenUtteranceTaskTreeVariableRows(taskRowLabel, roots);
+    const all = this.store.get(pid) ?? [];
+    const byNodeId = new Map(
+      all.filter((v) => String(v.taskInstanceId || '').trim() === tid).map((v) => [v.nodeId, v])
+    );
+    const nextForTask: VariableInstance[] = [];
+
+    for (const r of rows) {
+      const prev = byNodeId.get(r.nodeId);
+      nextForTask.push({
+        varId: prev?.varId ?? this.generateGuid(),
+        varName: r.varName,
+        taskInstanceId: tid,
+        nodeId: r.nodeId,
+        ddtPath: r.ddtPath,
+        scope: 'project',
+      });
+    }
+
+    const others = all.filter((v) => String(v.taskInstanceId || '').trim() !== tid);
+    this.store.set(pid, [...others, ...nextForTask]);
   }
 
   /**

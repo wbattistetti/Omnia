@@ -138,6 +138,18 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
   } = initialization;
 
   // ✅ FASE 2.1: Sidebar consolidated into single composito hook
+  const taskAny = task as Record<string, unknown> | undefined;
+  const resolvedTaskId =
+    taskAny?.id != null && String(taskAny.id).trim() !== ''
+      ? String(taskAny.id)
+      : taskAny?._id != null && String(taskAny._id).trim() !== ''
+        ? String(taskAny._id)
+        : undefined;
+  const resolvedTaskLabel =
+    taskAny?.label != null && String(taskAny.label).trim() !== ''
+      ? String(taskAny.label)
+      : '';
+
   const sidebar = useSidebar({
     isDraggingSidebar,
     setIsDraggingSidebar,
@@ -148,6 +160,12 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     sidebarRef: sidebarRefFromSelection,
     taskTree,
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
+    utteranceVariableSync: {
+      projectId: currentProjectId,
+      taskId: resolvedTaskId,
+      taskLabel: resolvedTaskLabel,
+      task: task ?? undefined,
+    },
   });
 
   // Editor close

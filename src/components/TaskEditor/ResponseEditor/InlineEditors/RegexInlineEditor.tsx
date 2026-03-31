@@ -312,49 +312,51 @@ export default function RegexInlineEditor({
   // Save to template
   // -----------------------------------------------------------------------
   const saveToTemplate = useCallback((displayValue: string) => {
-    const catalogueId = node ? catalogueLookupTemplateId(node as TaskTreeNode) : '';
-    if (!displayValue || !displayValue.trim() || !catalogueId) {
+    if (!displayValue || !displayValue.trim()) {
       return;
     }
 
-    // ✅ Normalize: convert label regex → GUID regex
     let techValue: string;
     try {
       techValue = normalizeRegexFromEditor(displayValue, subDataMappingRef.current);
     } catch (normError) {
-      // The user has typed an unrecognized group name — do NOT corrupt the contract.
       console.error('[RegexEditor] Cannot save: normalization failed.', (normError as Error).message);
       return;
     }
 
-    const template = DialogueTaskService.getTemplate(catalogueId);
-    if (!template) {
-      console.warn('[RegexEditor] Template not found:', catalogueId);
-      return;
+    const catalogueId = node ? catalogueLookupTemplateId(node as TaskTreeNode) : '';
+
+    if (catalogueId) {
+      const template = DialogueTaskService.getTemplate(catalogueId);
+      if (template) {
+        if (!template.dataContract) {
+          template.dataContract = {
+            templateId: catalogueId,
+            templateName: template.label || catalogueId,
+            subDataMapping: {},
+            engines: [],
+            outputCanonical: { format: 'value' },
+          };
+        }
+
+        const engines = template.dataContract.engines || [];
+        const regexEngine = engines.find((c: any) => c.type === 'regex');
+        if (regexEngine) {
+          regexEngine.patterns = [techValue];
+        } else {
+          engines.push({ type: 'regex', enabled: true, patterns: [techValue], examples: [] });
+          template.dataContract.engines = engines;
+        }
+
+        DialogueTaskService.markTemplateAsModified(catalogueId);
+      } else {
+        console.warn(
+          '[RegexEditor] Template not in catalogue cache; persisting regex via instance contract only',
+          { catalogueId }
+        );
+      }
     }
 
-    if (!template.dataContract) {
-      template.dataContract = {
-        templateId: catalogueId,
-        templateName: template.label || catalogueId,
-        subDataMapping: {},
-        engines: [],
-        outputCanonical: { format: 'value' }
-      };
-    }
-
-    const engines = template.dataContract.engines || [];
-    const regexEngine = engines.find((c: any) => c.type === 'regex');
-    if (regexEngine) {
-      regexEngine.patterns = [techValue];
-    } else {
-      engines.push({ type: 'regex', enabled: true, patterns: [techValue], examples: [] });
-      template.dataContract.engines = engines;
-    }
-
-    DialogueTaskService.markTemplateAsModified(catalogueId);
-
-    // Also notify the parent component to update contract
     const currentOnSave = onRegexSaveRef.current;
     if (currentOnSave) {
       try {
@@ -363,7 +365,7 @@ export default function RegexInlineEditor({
         console.error('[RegexEditor] Error in onRegexSave callback:', cbError);
       }
     }
-  }, [node?.templateId, node?.catalogTemplateId]);
+  }, [node]);
 
   // ✅ Helper: Save regex if valid and changed
   const saveIfValid = useCallback(() => {

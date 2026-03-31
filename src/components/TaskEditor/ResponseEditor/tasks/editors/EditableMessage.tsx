@@ -1,10 +1,11 @@
 /**
  * Leaf editor for translation-backed message text (parameterId "text", "smsText", etc.).
- * No translation or task logic — parent supplies value and persistence.
+ * Composes EditableText with flow variable picker (domain stays here, not in common/).
  */
 
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { EditableText } from '@components/common/EditableText';
+import { useVariablePickerForFlow } from '@responseEditor/hooks/useVariablePickerForFlow';
 
 export type EditableMessageProps = {
   value: string;
@@ -25,6 +26,26 @@ export function EditableMessage({
   placeholder = 'Scrivi un testo qui...',
 }: EditableMessageProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [draft, setDraft] = useState(value);
+  const prevEditingForDraftRef = useRef(false);
+
+  /** Keep draft aligned with persisted value when not editing, and seed when entering edit. */
+  useEffect(() => {
+    if (!editing) {
+      setDraft(value);
+    } else if (!prevEditingForDraftRef.current) {
+      setDraft(value);
+    }
+    prevEditingForDraftRef.current = editing;
+  }, [editing, value]);
+
+  const variablePicker = useVariablePickerForFlow({
+    enabled: true,
+    editing,
+    draftValue: draft,
+    setDraftValue: setDraft,
+    inputRef,
+  });
 
   const wasEditingRef = useRef(false);
   /** Programmatic open (BehaviourUi focus) does not run handleEdit — focus DOM once when entering edit. */
@@ -57,6 +78,10 @@ export function EditableMessage({
 
   const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     if (!editing) return;
+    /** Opening the variable menu moves focus — do not treat as leaving the field. */
+    if (variablePicker.suppressBlurWhileMenuRef.current) {
+      return;
+    }
     const clickedOnButton = e.relatedTarget && (e.relatedTarget as HTMLElement).tagName === 'BUTTON';
     if (clickedOnButton) return;
 
@@ -89,6 +114,10 @@ export function EditableMessage({
       showLanguageWarning
       enableVoice
       multiline
+      controlledDraft={draft}
+      onControlledDraftChange={setDraft}
+      onContextMenu={variablePicker.onContextMenu}
+      appendAfter={variablePicker.variableMenu}
       style={{ marginRight: 10 }}
     />
   );

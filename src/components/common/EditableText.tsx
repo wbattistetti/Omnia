@@ -65,21 +65,28 @@ export interface EditableTextProps {
   // Callbacks
   onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  /** Optional context menu (e.g. variable picker composed by parent). */
+  onContextMenu?: (e: React.MouseEvent<HTMLTextAreaElement>) => void;
 
   // Ref forwarding
   inputRef?: React.RefObject<HTMLTextAreaElement>;
+
+  /**
+   * Optional controlled editing buffer (both must be set together).
+   * Use when the parent must observe or mutate the draft (e.g. variable insertion).
+   */
+  controlledDraft?: string;
+  onControlledDraftChange?: (next: string) => void;
+
+  /** Renders after the main editor block (e.g. portals / context menus from parent). */
+  appendAfter?: React.ReactNode;
 }
 
 /**
  * Universal text editing component with voice input, validation, and language checking.
  *
- * Features:
- * - Voice input enabled by default (long press to dictate)
- * - Check/X buttons for save/cancel
- * - ESC key to cancel
- * - Language detection and warning
- * - Validation support
- * - Works in both editing and display modes
+ * Domain-specific behaviour (variable pickers, etc.) belongs in parent wrappers — pass
+ * onContextMenu / appendAfter / controlled draft when needed.
  */
 export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextProps>(({
   value,
@@ -101,7 +108,11 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
   validation,
   onBlur,
   onKeyDown,
+  onContextMenu,
   inputRef: externalInputRef,
+  controlledDraft,
+  onControlledDraftChange,
+  appendAfter,
 }, forwardedRef) => {
   const internalInputRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = (forwardedRef as React.RefObject<HTMLTextAreaElement>) || externalInputRef || internalInputRef;
@@ -113,32 +124,38 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
   const ENTER_DOUBLE_CLICK_THRESHOLD = 300; // ms between two Enters to consider it a double Enter
   const prevEditingRef = useRef(false);
 
+  const isControlled =
+    controlledDraft !== undefined && onControlledDraftChange !== undefined;
+  const buffer = isControlled ? (controlledDraft ?? '') : editValue;
+
   // Seed draft only when entering edit mode; do not reset on every parent `value` update while editing (avoids flicker).
   useEffect(() => {
     if (editing) {
       if (!prevEditingRef.current) {
         setInitialValue(value);
-        setEditValue(value);
+        if (!isControlled) {
+          setEditValue(value);
+        }
       }
     }
     prevEditingRef.current = editing;
-  }, [editing, value]);
+  }, [editing, value, isControlled]);
 
-  // Sync editValue when value changes externally (but not while editing)
+  // Sync internal buffer when value changes externally (but not while editing); skip when parent controls draft.
   useEffect(() => {
-    if (!editing) {
+    if (!editing && !isControlled) {
       setEditValue(value);
       setInitialValue(value);
     }
-  }, [value, editing]);
+  }, [value, editing, isControlled]);
 
   // Check if value has changed from initial
-  const hasChanged = editing && editValue.trim() !== initialValue.trim();
+  const hasChanged = editing && buffer.trim() !== initialValue.trim();
 
   // Language detection
   useEffect(() => {
-    if (editing && showLanguageWarning && editValue.trim().length > 0) {
-      const detected = detectLanguage(editValue);
+    if (editing && showLanguageWarning && buffer.trim().length > 0) {
+      const detected = detectLanguage(buffer);
       if (detected !== expectedLanguage) {
         const langNames: Record<string, string> = {
           'it': 'Italiano',
@@ -154,25 +171,30 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
     } else {
       setLanguageWarning(null);
     }
-  }, [editValue, editing, expectedLanguage, showLanguageWarning]);
+  }, [buffer, editing, expectedLanguage, showLanguageWarning]);
 
   // Validation
   useEffect(() => {
-    if (editing && validation && editValue.trim().length > 0) {
-      const result = validation(editValue.trim());
+    if (editing && validation && buffer.trim().length > 0) {
+      const result = validation(buffer.trim());
       setValidationResult(result);
     } else {
       setValidationResult(null);
     }
-  }, [editValue, editing, validation]);
+  }, [buffer, editing, validation]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setEditValue(e.target.value);
-  }, []);
+    const next = e.target.value;
+    if (isControlled && onControlledDraftChange) {
+      onControlledDraftChange(next);
+    } else {
+      setEditValue(next);
+    }
+  }, [isControlled, onControlledDraftChange]);
 
   // Helper: Save value if changed and optionally close editing
   const saveAndClose = useCallback((shouldClose: boolean = true) => {
-    const trimmed = editValue.trim();
+    const trimmed = buffer.trim();
     const trimmedInitial = initialValue.trim();
 
     // Only save if changed
@@ -189,23 +211,27 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
 
     // Always close if requested (even if unchanged or validation failed)
     if (shouldClose) {
-      onCancel(editValue.trim());
+      onCancel(buffer.trim());
     }
-  }, [editValue, initialValue, validation, onSave, onCancel]);
+  }, [buffer, initialValue, validation, onSave, onCancel]);
 
   // Helper: Insert newline at cursor position
   const insertNewline = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const textarea = e.currentTarget;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const newValue = editValue.substring(0, start) + '\n' + editValue.substring(end);
-    setEditValue(newValue);
+    const newValue = buffer.substring(0, start) + '\n' + buffer.substring(end);
+    if (isControlled && onControlledDraftChange) {
+      onControlledDraftChange(newValue);
+    } else {
+      setEditValue(newValue);
+    }
 
     // Reposition cursor after newline
     setTimeout(() => {
       textarea.selectionStart = textarea.selectionEnd = start + 1;
     }, 0);
-  }, [editValue]);
+  }, [buffer, isControlled, onControlledDraftChange]);
 
   // Helper: Handle multiline Enter (single = newline, double = close)
   const handleMultilineEnter = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -249,9 +275,9 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
-      onCancel(editValue.trim());
+      onCancel(buffer.trim());
     }
-  }, [onKeyDown, multiline, saveAndClose, handleMultilineEnter, onCancel, editValue]);
+  }, [onKeyDown, multiline, saveAndClose, handleMultilineEnter, onCancel, buffer]);
 
   const handleSave = useCallback(() => {
     // Check button: ALWAYS close editing (even if unchanged)
@@ -259,8 +285,8 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
   }, [saveAndClose]);
 
   const handleCancel = useCallback(() => {
-    onCancel(editValue.trim());
-  }, [onCancel, editValue]);
+    onCancel(buffer.trim());
+  }, [onCancel, buffer]);
 
   const handleBlur = useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
     // Don't blur if clicking on action buttons
@@ -301,162 +327,167 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
   const hasWarnings = validationResult && validationResult.warnings && validationResult.warnings.length > 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          {enableVoice ? (
-            <VoiceTextbox
-              ref={inputRef}
-              value={editValue}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              onBlur={handleBlur}
-              placeholder={placeholder}
-              rows={multiline ? undefined : 1}
-              className={className}
-              micSize={micSize}
-              micBackground={micBackground}
-              style={{
-                fontWeight: 500,
-                padding: '6px 10px',
-                border: hasErrors ? '1px solid #ef4444' : '0.5px solid #bbb',
-                borderRadius: 6,
-                outline: 'none',
-                boxShadow: 'none',
-                minWidth: 80,
-                width: '100%',
-                boxSizing: 'border-box',
-                background: '#fff',
-                color: '#111',
-                resize: multiline ? 'vertical' : 'none',
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                ...style,
-              }}
-            />
-          ) : (
-            <textarea
-              ref={inputRef}
-              value={editValue}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              onBlur={handleBlur}
-              placeholder={placeholder}
-              rows={multiline ? undefined : 1}
-              className={className}
-              style={{
-                fontWeight: 500,
-                padding: '6px 10px',
-                border: hasErrors ? '1px solid #ef4444' : '0.5px solid #bbb',
-                borderRadius: 6,
-                outline: 'none',
-                boxShadow: 'none',
-                minWidth: 80,
-                width: '100%',
-                boxSizing: 'border-box',
-                background: '#fff',
-                color: '#111',
-                resize: multiline ? 'vertical' : 'none',
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                ...style,
-              }}
-            />
-          )}
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            {enableVoice ? (
+              <VoiceTextbox
+                ref={inputRef}
+                value={buffer}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                onBlur={handleBlur}
+                onContextMenu={onContextMenu}
+                placeholder={placeholder}
+                rows={multiline ? undefined : 1}
+                className={className}
+                micSize={micSize}
+                micBackground={micBackground}
+                style={{
+                  fontWeight: 500,
+                  padding: '6px 10px',
+                  border: hasErrors ? '1px solid #ef4444' : '0.5px solid #bbb',
+                  borderRadius: 6,
+                  outline: 'none',
+                  boxShadow: 'none',
+                  minWidth: 80,
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: '#fff',
+                  color: '#111',
+                  resize: multiline ? 'vertical' : 'none',
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  ...style,
+                }}
+              />
+            ) : (
+              <textarea
+                ref={inputRef}
+                value={buffer}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                onBlur={handleBlur}
+                onContextMenu={onContextMenu}
+                placeholder={placeholder}
+                rows={multiline ? undefined : 1}
+                className={className}
+                style={{
+                  fontWeight: 500,
+                  padding: '6px 10px',
+                  border: hasErrors ? '1px solid #ef4444' : '0.5px solid #bbb',
+                  borderRadius: 6,
+                  outline: 'none',
+                  boxShadow: 'none',
+                  minWidth: 80,
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: '#fff',
+                  color: '#111',
+                  resize: multiline ? 'vertical' : 'none',
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  ...style,
+                }}
+              />
+            )}
 
-          {/* Language warning */}
-          {languageWarning && (
-            <div style={{
-              position: 'absolute',
-              bottom: '-20px',
-              left: 0,
-              fontSize: '11px',
-              color: '#f59e0b',
-              backgroundColor: '#fef3c7',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              zIndex: 1000,
-              whiteSpace: 'nowrap',
-            }}>
-              {languageWarning}
+            {/* Language warning */}
+            {languageWarning && (
+              <div style={{
+                position: 'absolute',
+                bottom: '-20px',
+                left: 0,
+                fontSize: '11px',
+                color: '#f59e0b',
+                backgroundColor: '#fef3c7',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                zIndex: 1000,
+                whiteSpace: 'nowrap',
+              }}>
+                {languageWarning}
+              </div>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          {showActionButtons && (
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
+              {/* Show Check button only if value has changed */}
+              {hasChanged && (
+                <button
+                  onClick={handleSave}
+                  disabled={hasErrors}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: hasErrors ? '#9ca3af' : '#22c55e',
+                    cursor: hasErrors ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '4px',
+                    opacity: hasErrors ? 0.5 : 1,
+                  }}
+                  title="Conferma (Enter)"
+                  aria-label="Conferma modifica"
+                >
+                  <Check size={18} />
+                </button>
+              )}
+              <button
+                onClick={handleCancel}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#ef4444',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '4px',
+                }}
+                title="Annulla (ESC)"
+                aria-label="Annulla modifica"
+              >
+                <X size={18} />
+              </button>
             </div>
           )}
         </div>
 
-        {/* Action buttons */}
-        {showActionButtons && (
-          <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
-            {/* Show Check button only if value has changed */}
-            {hasChanged && (
-              <button
-                onClick={handleSave}
-                disabled={hasErrors}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: hasErrors ? '#9ca3af' : '#22c55e',
-                  cursor: hasErrors ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '4px',
-                  opacity: hasErrors ? 0.5 : 1,
-                }}
-                title="Conferma (Enter)"
-                aria-label="Conferma modifica"
-              >
-                <Check size={18} />
-              </button>
-            )}
-            <button
-              onClick={handleCancel}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#ef4444',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                padding: '4px',
-              }}
-              title="Annulla (ESC)"
-              aria-label="Annulla modifica"
-            >
-              <X size={18} />
-            </button>
+        {/* Validation errors */}
+        {hasErrors && (
+          <div style={{
+            fontSize: '12px',
+            color: '#ef4444',
+            padding: '4px 8px',
+            backgroundColor: '#fee2e2',
+            borderRadius: '4px',
+          }}>
+            {validationResult.errors?.map((error, idx) => (
+              <div key={idx}>{error}</div>
+            ))}
+          </div>
+        )}
+
+        {/* Validation warnings */}
+        {hasWarnings && !hasErrors && (
+          <div style={{
+            fontSize: '12px',
+            color: '#f59e0b',
+            padding: '4px 8px',
+            backgroundColor: '#fef3c7',
+            borderRadius: '4px',
+          }}>
+            {validationResult.warnings?.map((warning, idx) => (
+              <div key={idx}>{warning}</div>
+            ))}
           </div>
         )}
       </div>
-
-      {/* Validation errors */}
-      {hasErrors && (
-        <div style={{
-          fontSize: '12px',
-          color: '#ef4444',
-          padding: '4px 8px',
-          backgroundColor: '#fee2e2',
-          borderRadius: '4px',
-        }}>
-          {validationResult.errors?.map((error, idx) => (
-            <div key={idx}>{error}</div>
-          ))}
-        </div>
-      )}
-
-      {/* Validation warnings */}
-      {hasWarnings && !hasErrors && (
-        <div style={{
-          fontSize: '12px',
-          color: '#f59e0b',
-          padding: '4px 8px',
-          backgroundColor: '#fef3c7',
-          borderRadius: '4px',
-        }}>
-          {validationResult.warnings?.map((warning, idx) => (
-            <div key={idx}>{warning}</div>
-          ))}
-        </div>
-      )}
-    </div>
+      {appendAfter}
+    </>
   );
 });
 
