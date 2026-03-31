@@ -83,9 +83,6 @@ export class SemanticContractService {
     node: TaskTreeNode,
     repoTask: Task | null | undefined
   ): boolean {
-    if (repoTask?.kind === 'standalone') {
-      return true;
-    }
     if (repoTask != null && !hasValidTemplateIdRef(repoTask)) {
       return true;
     }

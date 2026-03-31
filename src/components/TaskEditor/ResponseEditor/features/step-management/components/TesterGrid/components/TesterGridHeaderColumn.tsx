@@ -12,6 +12,8 @@ import {
 interface TesterGridHeaderColumnProps {
   type: 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings' | 'grammarflow';
   contractType: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings' | 'grammarflow'; // ✅ Original contract type from DataContract
+  /** Last engine column expands to fill remaining table width */
+  isLastEngineColumn?: boolean;
   mainLabel: string;
   techLabel: string;
   tooltip: string;
@@ -35,6 +37,7 @@ interface TesterGridHeaderColumnProps {
 export default function TesterGridHeaderColumn({
   type,
   contractType, // ✅ Original contract type
+  isLastEngineColumn = false,
   mainLabel,
   techLabel,
   tooltip,
@@ -102,6 +105,8 @@ export default function TesterGridHeaderColumn({
     }
   }, [isDropdownOpen, onAddContract]);
 
+  const contractTypeTitle = getContractMethodLabel(contractType as ContractMethod);
+
   return (
     <th
       ref={thRef}
@@ -113,13 +118,16 @@ export default function TesterGridHeaderColumn({
         visibility: shouldHide ? 'hidden' : 'visible',
         position: 'relative',
         boxSizing: 'border-box',
-        minWidth: columnWidth ? `${Math.max(100, Math.min(columnWidth, 200))}px` : '120px',
-        width: 'auto',
+        minWidth: columnWidth
+          ? `${Math.max(isLastEngineColumn ? 180 : 100, isLastEngineColumn ? columnWidth : Math.min(columnWidth, 200))}px`
+          : '120px',
+        width: isLastEngineColumn ? '100%' : 'auto',
         maxWidth: 'none',
         overflow: 'visible',
       }}
       title={tooltip}
     >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
       <div
         style={{
           display: 'flex',
@@ -284,6 +292,20 @@ export default function TesterGridHeaderColumn({
             </button>
           )}
         </div>
+      </div>
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          color: enabled ? '#475569' : '#94a3af',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+        title={contractTypeTitle}
+      >
+        Tipo contratto: {contractTypeTitle}
+      </div>
       </div>
       {isDropdownOpen &&
         availableMethods.length > 0 &&

@@ -4,6 +4,8 @@ import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
 import { type TestResult } from '@responseEditor/InlineEditors/shared/TestValuesColumn';
 import { useEditorMode } from '@responseEditor/hooks/useEditorMode';
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import { applyNerEntityTypesToContract } from '@responseEditor/InlineEditors/contractEngineMerge';
 
 interface NERInlineEditorProps {
   onClose: () => void;
@@ -12,6 +14,15 @@ interface NERInlineEditorProps {
   testPhrases?: string[]; // ✅ Test phrases passed directly from useProfileState
   setTestPhrases?: (phrases: string[]) => void; // ✅ Setter passed directly from useProfileState
   onProfileUpdate?: (profile: NLPProfile) => void;
+  contract?: DataContract | null;
+  onContractChange?: (next: DataContract) => void;
+}
+
+function initialEntityTypes(contract: DataContract | null | undefined): string[] {
+  const ner = contract?.engines?.find((e: any) => e.type === 'ner') as
+    | { entityTypes?: string[] }
+    | undefined;
+  return Array.isArray(ner?.entityTypes) ? ner.entityTypes : [];
 }
 
 /**
@@ -25,7 +36,10 @@ export default function NERInlineEditor({
   testPhrases: testPhrasesProp,
   setTestPhrases: setTestPhrasesProp,
   onProfileUpdate,
+  contract,
+  onContractChange,
 }: NERInlineEditorProps) {
+  const [entityTypes] = React.useState<string[]>(() => initialEntityTypes(contract));
   const [nerConfig, setNerConfig] = React.useState<string>('{}'); // JSON config placeholder
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
   const [generating, setGenerating] = React.useState<boolean>(false);
@@ -132,7 +146,7 @@ export default function NERInlineEditor({
         isGenerating={generating}
         shouldShowButton={shouldShowButton}
         onButtonClick={handleButtonClick}
-        onClose={onClose}
+        onClose={handleClose}
       />
 
       {/* NER Config Editor (placeholder - to be replaced with proper editor) */}

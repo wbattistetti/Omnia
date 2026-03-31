@@ -1,11 +1,16 @@
 /**
  * Ensures a flow-row task exists in TaskRepository before materialization, wizard, or manual edit.
- * Missing tasks are created as pure standalone shells (templateId null, empty steps/subTasks).
+ * Missing tasks are created as embedded shells (templateId null, empty steps/subTasks).
  */
 
 import type { Task } from '@types/taskTypes';
 import { TaskType } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
+
+/** Legacy DB rows may still carry `kind: 'standalone'`; used only to fix inconsistent templateId. */
+function legacyKindIsEmbeddedShell(task: Task): boolean {
+  return (task as { kind?: string }).kind === 'standalone';
+}
 
 export type EnsureTaskExistsOptions = {
   taskType?: TaskType;
@@ -20,7 +25,7 @@ export function ensureTaskExists(rowId: string, options?: EnsureTaskExistsOption
   const existing = taskRepository.getTask(rowId);
   if (existing) {
     if (
-      existing.kind === 'standalone' &&
+      legacyKindIsEmbeddedShell(existing) &&
       existing.templateId != null &&
       existing.templateId !== 'UNDEFINED'
     ) {
@@ -44,7 +49,6 @@ export function ensureTaskExists(rowId: string, options?: EnsureTaskExistsOption
     {
       steps: {},
       subTasks: [],
-      kind: 'standalone',
       ...(options?.label ? { label: options.label } : {}),
     },
     rowId,

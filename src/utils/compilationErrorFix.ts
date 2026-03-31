@@ -1,0 +1,275 @@
+/**
+ * Single entry point for “Fix” on compilation errors: same programmatic actions as clicking
+ * the flow (wrench on edge → Condition Editor with edgeId/target/flowId; gear on row → Task Editor).
+ * Exported helpers support deduplicating the error panel when message + fix target match.
+ */
+
+import type { CompilationError, FixTarget } from '@components/FlowCompiler/types';
+import type { TaskEditorOpenEvent } from '@components/AppContent/domain/editorEvents';
+import { splitFlowPrefixedMessage } from '@components/ChatPanel/errorReportDisplay';
+import { FlowStateBridge } from '@services/FlowStateBridge';
+import { resolveEdgeCaption } from '@components/Flowchart/utils/edgeConditionState';
+import { getActiveFlowCanvasId } from '@flows/activeFlowCanvas';
+
+/** Flow id from optional `[flowId] message` on merged compile errors; default `main`. */
+export function compilationErrorFlowId(error: CompilationError): string {
+  const { flowTag } = splitFlowPrefixedMessage(error.message);
+  const id = flowTag?.trim();
+  return id || 'main';
+}
+
+/**
+ * Stable key: same key ⇒ same Fix behavior (open same editor at same target).
+ * Used to dedupe identical human lines in the error report.
+ */
+export function compilationErrorFixKey(error: CompilationError): string {
+  const ft = error.fixTarget;
+  if (!ft) {
+    return `noTarget:${error.category ?? ''}:${error.nodeId ?? ''}:${error.edgeId ?? ''}:${error.taskId}`;
+  }
+  switch (ft.type) {
+    case 'edge':
+      return `edge:${ft.edgeId}`;
+    case 'node':
+      return `node:${ft.nodeId}`;
+    case 'condition':
+      return `condition:${ft.conditionId}`;
+    case 'taskRow':
+      return `taskRow:${ft.taskId}:${ft.rowId}`;
+    case 'taskStep':
+      return `taskStep:${ft.taskId}:${ft.stepKey}`;
+    case 'taskEscalation':
+      return `taskEsc:${ft.taskId}:${ft.stepKey}:${ft.escalationIndex ?? 0}`;
+    case 'task':
+      return `task:${ft.taskId}`;
+    default:
+      return `task:${error.taskId}`;
+  }
+}
+
+/**
+ * Runs the same navigation as the flowchart affordances (wrench / gear / node select).
+ */
+export async function runCompilationErrorFix(error: CompilationError): Promise<void> {
+  if (!error.fixTarget) {
+    const nodeAmbiguityCategories = new Set([
+      'AmbiguousLink',
+      'AmbiguousOutgoingLinks',
+      'AmbiguousDuplicateEdgeLabels',
+      'AmbiguousDuplicateConditionScript',
+    ]);
+    if (error.nodeId && error.category && nodeAmbiguityCategories.has(error.category)) {
+      document.dispatchEvent(
+        new CustomEvent('flowchart:selectNode', {
+          detail: { nodeId: error.nodeId },
+          bubbles: true,
+        })
+      );
+      return;
+    }
+    console.warn('[compilationErrorFix] Error has no fixTarget:', error);
+    return;
+  }
+
+  const { type } = error.fixTarget;
+
+  if (type === 'task' || type === 'taskRow' || type === 'taskStep' || type === 'taskEscalation') {
+    await openTaskEditorForCompilationError(error);
+  } else if (type === 'edge') {
+    await openConditionEditorForEdgeCompilationError(error);
+  } else if (type === 'condition') {
+    await openConditionEditorForConditionCompilationError(error);
+  } else if (type === 'node') {
+    await openNodeSelectionForCompilationError(error);
+  }
+}
+
+async function openTaskEditorForCompilationError(error: CompilationError): Promise<void> {
+  const fixTarget = error.fixTarget as Extract<
+    FixTarget,
+    { type: 'task' | 'taskRow' | 'taskStep' | 'taskEscalation' }
+  >;
+  const category = error.category || '';
+
+  const navigation: TaskEditorOpenEvent['navigation'] = {
+    openBehaviorPanel: true,
+  };
+
+  switch (category) {
+    case 'MissingOrInvalidTask':
+    case 'TaskNotFound':
+    case 'MissingTaskType':
+    case 'InvalidTaskType':
+    case 'TaskTypeInvalidOrMissing':
+    case 'TaskCompilationFailed':
+    case 'MissingParameter':
+    case 'EmptyParameter':
+    case 'DuplicateParameter':
+    case 'MissingTextKey':
+      if (fixTarget.type === 'taskStep') {
+        navigation.stepKey = fixTarget.stepKey;
+      }
+      break;
+
+    case 'MissingPrompt':
+      if (fixTarget.type === 'taskStep') {
+        navigation.stepKey = fixTarget.stepKey;
+        navigation.autoEditTarget = { escIdx: 0, taskIdx: 0 };
+      }
+      break;
+
+    case 'EmptyPrompt':
+      if (fixTarget.type === 'taskStep') {
+        navigation.stepKey = fixTarget.stepKey;
+        navigation.autoEditTarget = { escIdx: 0, taskIdx: 0 };
+      }
+      break;
+
+    case 'MissingEscalation':
+    case 'EmptyEscalation':
+      if (fixTarget.type === 'taskEscalation') {
+        navigation.stepKey = fixTarget.stepKey;
+        navigation.openTasksPanel = true;
+        if (fixTarget.escalationIndex !== undefined) {
+          navigation.escalationIndex = fixTarget.escalationIndex;
+        }
+      } else if (fixTarget.type === 'taskStep') {
+        navigation.stepKey = fixTarget.stepKey;
+      }
+      break;
+
+    case 'MissingFinalEscalation':
+      if (fixTarget.type === 'taskStep' || fixTarget.type === 'taskEscalation') {
+        navigation.stepKey = fixTarget.stepKey;
+        navigation.openTasksPanel = true;
+        if (fixTarget.type === 'taskEscalation' && fixTarget.escalationIndex !== undefined) {
+          navigation.escalationIndex = fixTarget.escalationIndex;
+        }
+      }
+      break;
+
+    case 'NotConfirmedWithoutConfirm':
+      if (fixTarget.type === 'taskStep') {
+        navigation.stepKey = fixTarget.stepKey;
+      }
+      break;
+
+    default:
+      if (fixTarget.type === 'taskStep') {
+        navigation.stepKey = fixTarget.stepKey;
+      }
+      break;
+  }
+
+  const event = new CustomEvent<TaskEditorOpenEvent>('taskEditor:open', {
+    detail: {
+      id: fixTarget.taskId,
+      type: 1,
+      navigation,
+    },
+    bubbles: true,
+  });
+  document.dispatchEvent(event);
+
+  setTimeout(() => {
+    document.dispatchEvent(
+      new CustomEvent('taskEditor:navigate', {
+        detail: navigation,
+        bubbles: true,
+      })
+    );
+  }, 100);
+}
+
+/**
+ * Opens Condition Editor with the same payload shape as CustomEdge (wrench): edgeId, target nodeId,
+ * conditionId when present, flow scope, caption as label.
+ */
+async function openConditionEditorForEdgeCompilationError(error: CompilationError): Promise<void> {
+  const fixTarget = error.fixTarget as Extract<FixTarget, { type: 'edge' }>;
+  const flowId = compilationErrorFlowId(error);
+  const edge = FlowStateBridge.findEdge(fixTarget.edgeId);
+
+  let label = 'Condition';
+  let nodeId: string | undefined = error.nodeId;
+  let conditionId: string | undefined = error.conditionId?.trim() || undefined;
+
+  if (edge) {
+    const e = edge as {
+      label?: string;
+      target?: string;
+      conditionId?: string;
+      isElse?: boolean;
+      data?: Record<string, unknown>;
+    };
+    const cap = resolveEdgeCaption({
+      label: e.label,
+      conditionId: e.conditionId,
+      isElse: e.isElse,
+      data: e.data ?? undefined,
+    });
+    if (cap?.trim()) {
+      label = cap.trim();
+    }
+    const tgt = typeof e.target === 'string' ? e.target.trim() : '';
+    if (tgt) {
+      nodeId = tgt;
+    }
+    const edgeCid = e.conditionId;
+    if (edgeCid != null && String(edgeCid).trim()) {
+      conditionId = String(edgeCid).trim();
+    }
+  }
+
+  if (nodeId) {
+    document.dispatchEvent(
+      new CustomEvent('flowchart:selectNode', {
+        detail: { nodeId },
+        bubbles: true,
+      })
+    );
+  }
+
+  const resolvedFlowId = flowId || getActiveFlowCanvasId();
+
+  document.dispatchEvent(
+    new CustomEvent('conditionEditor:open', {
+      detail: {
+        label,
+        name: label,
+        nodeId,
+        edgeId: fixTarget.edgeId,
+        conditionId,
+        readableCode: '',
+        flowId: resolvedFlowId,
+      },
+      bubbles: true,
+    })
+  );
+}
+
+async function openConditionEditorForConditionCompilationError(error: CompilationError): Promise<void> {
+  const fixTarget = error.fixTarget as Extract<FixTarget, { type: 'condition' }>;
+  const flowId = compilationErrorFlowId(error) || getActiveFlowCanvasId();
+  document.dispatchEvent(
+    new CustomEvent('conditionEditor:open', {
+      detail: {
+        label: 'Condition',
+        name: 'Condition',
+        conditionId: fixTarget.conditionId,
+        flowId,
+      },
+      bubbles: true,
+    })
+  );
+}
+
+async function openNodeSelectionForCompilationError(error: CompilationError): Promise<void> {
+  const fixTarget = error.fixTarget as Extract<FixTarget, { type: 'node' }>;
+  document.dispatchEvent(
+    new CustomEvent('flowchart:selectNode', {
+      detail: { nodeId: fixTarget.nodeId },
+      bubbles: true,
+    })
+  );
+}

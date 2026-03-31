@@ -4,6 +4,7 @@
  */
 
 import type { Task, TaskTree, TaskTreeNode } from '@types/taskTypes';
+import { inferTaskKind } from '@utils/taskKind';
 import { logContractPersist, summarizeSubTasksForDebug } from '@utils/contractPersistDebug';
 import { mergeInstanceNodeStepsIntoTreeSteps } from '@utils/instanceNodeStepsFlatten';
 
@@ -55,7 +56,7 @@ export function buildStandaloneTaskTreeView(task: Task | null | undefined): Task
 
   logContractPersist('materialize', 'buildStandaloneTaskTreeView (subTasks for editor)', {
     taskId: task.id,
-    kind: task.kind ?? '(unset)',
+    inferredKind: inferTaskKind(task),
     templateId: task.templateId ?? null,
     ...summarizeSubTasksForDebug(nodes),
   });

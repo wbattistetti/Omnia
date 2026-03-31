@@ -2,13 +2,14 @@
 
 import React from 'react';
 import { useCompilationErrors } from '@context/CompilationErrorsContext';
-import { handleErrorFix } from '@utils/handleErrorFix';
+import { runCompilationErrorFix } from '@utils/compilationErrorFix';
 import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useFlowWorkspace } from '@flows/FlowStore';
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode } from '@components/Flowchart/types/flowTypes';
 import { normalizeSeverity } from '@utils/severityUtils';
 import { buildErrorReportTree, errorMessageWithoutFlowPrefix } from './errorReportTreeModel';
+import { compilationErrorFixKey } from '@utils/compilationErrorFix';
 
 function formatErrorWarningCounts(errors: number, warnings: number): string {
   const parts: string[] = [];
@@ -63,10 +64,10 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
     });
   }, []);
 
-  const onFix = React.useCallback(async (e: React.MouseEvent, err: Parameters<typeof handleErrorFix>[0]) => {
+  const onFix = React.useCallback(async (e: React.MouseEvent, err: Parameters<typeof runCompilationErrorFix>[0]) => {
     e.stopPropagation();
     try {
-      await handleErrorFix(err);
+      await runCompilationErrorFix(err);
     } catch (errx) {
       console.error('[ErrorReportPanel] FIX failed:', errx);
     }
@@ -163,9 +164,9 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
                           {rowOpen && (
                             <div className="border-t border-gray-100 dark:border-gray-800/80">
                               <ul className="px-2 pb-1 pt-0 space-y-2">
-                                {rowGroup.issues.map((issue, idx) => (
+                                {rowGroup.issues.map((issue) => (
                                   <li
-                                    key={`${rowKey}-${idx}-${issue.message.slice(0, 40)}`}
+                                    key={`${rowKey}-${compilationErrorFixKey(issue.error)}`}
                                     className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 pl-6 pr-1 pt-2"
                                   >
                                     <span className="text-xs text-gray-700 dark:text-gray-300 leading-snug flex-1">

@@ -16,11 +16,18 @@ import { generateGroupName } from '@responseEditor/utils/regexGroupUtils';
 import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
 import type { TaskTreeNode } from '@types/taskTypes';
 import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import { applyRegexPatternToContract } from '@responseEditor/InlineEditors/contractEngineMerge';
+import { syncRegexPatternToTemplateCache } from '@responseEditor/InlineEditors/contractTemplateSync';
 
 interface RegexInlineEditorProps {
   regex: string; // contract.regex.value (GUID-based, stored form)
   onClose: () => void;
-  onRegexSave?: (regex: string) => void; // Called on close with the GUID-based regex
+  /** Prefer with {@link onContractChange} — same pattern as LLM / GrammarFlow. */
+  contract?: DataContract | null;
+  onContractChange?: (next: DataContract) => void;
+  /** Legacy / TesterGrid: used when `onContractChange` is not provided. */
+  onRegexSave?: (regex: string) => void;
   node?: any;
   kind?: string;
   examplesList?: string[];
@@ -127,6 +134,8 @@ function ensureSubDataMapping(
 export default function RegexInlineEditor({
   regex,
   onClose,
+  contract,
+  onContractChange,
   onRegexSave,
   node,
   kind,
@@ -171,6 +180,8 @@ export default function RegexInlineEditor({
   // ✅ CRITICAL: Use ref to preserve value during cleanup
   const textboxTextRef = useRef<string>(initialDisplay);
   const onRegexSaveRef = useRef<((regex: string) => void) | undefined>(onRegexSave);
+  const onContractChangeRef = useRef<typeof onContractChange>(onContractChange);
+  const contractRef = useRef<DataContract | null | undefined>(contract);
   // ✅ CRITICAL: Separate ref that NEVER gets reset (preserves AI-generated value)
   const preservedValueRef = useRef<string>(initialDisplay);
   // ✅ Track previous GUID regex prop to avoid unnecessary updates
@@ -189,6 +200,14 @@ export default function RegexInlineEditor({
   useEffect(() => {
     onRegexSaveRef.current = onRegexSave;
   }, [onRegexSave]);
+
+  useEffect(() => {
+    onContractChangeRef.current = onContractChange;
+  }, [onContractChange]);
+
+  useEffect(() => {
+    contractRef.current = contract;
+  }, [contract]);
 
   // ✅ Sync when the GUID regex prop changes (e.g. different node selected or editor reopened)
   useEffect(() => {
@@ -325,42 +344,24 @@ export default function RegexInlineEditor({
     }
 
     const catalogueId = node ? catalogueLookupTemplateId(node as TaskTreeNode) : '';
-
     if (catalogueId) {
-      const template = DialogueTaskService.getTemplate(catalogueId);
-      if (template) {
-        if (!template.dataContract) {
-          template.dataContract = {
-            templateId: catalogueId,
-            templateName: template.label || catalogueId,
-            subDataMapping: {},
-            engines: [],
-            outputCanonical: { format: 'value' },
-          };
-        }
-
-        const engines = template.dataContract.engines || [];
-        const regexEngine = engines.find((c: any) => c.type === 'regex');
-        if (regexEngine) {
-          regexEngine.patterns = [techValue];
-        } else {
-          engines.push({ type: 'regex', enabled: true, patterns: [techValue], examples: [] });
-          template.dataContract.engines = engines;
-        }
-
-        DialogueTaskService.markTemplateAsModified(catalogueId);
-      } else {
-        console.warn(
-          '[RegexEditor] Template not in catalogue cache; persisting regex via instance contract only',
-          { catalogueId }
-        );
-      }
+      syncRegexPatternToTemplateCache(catalogueId, techValue);
     }
 
-    const currentOnSave = onRegexSaveRef.current;
-    if (currentOnSave) {
+    const persistContract = onContractChangeRef.current;
+    if (persistContract) {
       try {
-        currentOnSave(techValue);
+        persistContract(applyRegexPatternToContract(contractRef.current, techValue));
+      } catch (cbError) {
+        console.error('[RegexEditor] Error in onContractChange:', cbError);
+      }
+      return;
+    }
+
+    const legacySave = onRegexSaveRef.current;
+    if (legacySave) {
+      try {
+        legacySave(techValue);
       } catch (cbError) {
         console.error('[RegexEditor] Error in onRegexSave callback:', cbError);
       }

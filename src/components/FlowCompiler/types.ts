@@ -116,6 +116,10 @@ export interface CompilationError {
   conflictsWith?: string[];
   entryNodeIds?: string[];
   siblingEdgeIds?: string[];
+  /** Utterance step key (e.g. noMatch) when category is step/escalation scoped. */
+  stepKey?: string;
+  /** Zero-based escalation index within the step (EmptyEscalation). */
+  escalationIndex?: number;
 }
 
 /**

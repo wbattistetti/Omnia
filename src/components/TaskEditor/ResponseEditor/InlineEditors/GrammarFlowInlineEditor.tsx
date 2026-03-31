@@ -6,8 +6,11 @@ import { GrammarEditor } from '@components/GrammarEditor';
 import type { Grammar } from '@components/GrammarEditor/types/grammarTypes';
 import { useGrammarStore } from '@components/GrammarEditor/core/state/grammarStore';
 import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
-import DialogueTaskService from '@services/DialogueTaskService';
 import { taskRepository } from '@services/TaskRepository';
+import {
+  syncGrammarFlowToTemplateCache,
+  syncTestPhrasesToTemplateCache,
+} from '@responseEditor/InlineEditors/contractTemplateSync';
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 import type { TaskTreeNode } from '@types/taskTypes';
 import { hasValidTemplateIdRef, taskRowUsesSubTasksContract } from '@utils/taskKind';
@@ -87,50 +90,11 @@ export default function GrammarFlowInlineEditor({
         return;
       }
 
-      if (!effectiveTemplateLookupId) {
-        return;
+      const merged = mergeGrammarFlowIntoContract(contract, exportedGrammar, testPhrases);
+      if (effectiveTemplateLookupId) {
+        syncGrammarFlowToTemplateCache(effectiveTemplateLookupId, exportedGrammar, testPhrases);
       }
-
-      const template = DialogueTaskService.getTemplate(effectiveTemplateLookupId);
-      if (!template) {
-        return;
-      }
-
-      if (!template.dataContract) {
-        template.dataContract = {
-          templateId: effectiveTemplateLookupId,
-          templateName: template.label || effectiveTemplateLookupId,
-          subDataMapping: {},
-          engines: [],
-          outputCanonical: { format: 'value' },
-        };
-      }
-
-      const engines = template.dataContract.engines || [];
-      const grammarFlowEngine = engines.find((e: any) => e.type === 'grammarflow');
-
-      if (grammarFlowEngine) {
-        grammarFlowEngine.grammarFlow = exportedGrammar;
-      } else {
-        engines.push({
-          type: 'grammarflow',
-          enabled: true,
-          grammarFlow: exportedGrammar,
-        });
-        template.dataContract.engines = engines;
-      }
-
-      template.dataContract.testPhrases = testPhrases;
-
-      DialogueTaskService.markTemplateAsModified(effectiveTemplateLookupId);
-
-      if (contract && onContractChange) {
-        onContractChange({
-          ...contract,
-          engines: template.dataContract.engines,
-          testPhrases: template.dataContract.testPhrases,
-        });
-      }
+      onContractChange(merged);
     },
     [
       effectiveTemplateLookupId,
@@ -154,13 +118,13 @@ export default function GrammarFlowInlineEditor({
     if (currentGrammar) {
       if (useNodeContractOnlyRef.current) {
         persistStandaloneRef.current(currentGrammar, testPhrasesRef.current);
-      } else if (effectiveTemplateLookupId) {
+      } else {
         handleGrammarSaveRef.current(currentGrammar);
       }
     }
     closedExplicitlyRef.current = true;
     onClose();
-  }, [effectiveTemplateLookupId, onClose]);
+  }, [onClose]);
 
   useEffect(() => {
     if (useNodeContractOnly || !effectiveTemplateLookupId) {
@@ -223,32 +187,24 @@ export default function GrammarFlowInlineEditor({
         return;
       }
 
-      if (!effectiveTemplateLookupId) {
-        return;
+      if (effectiveTemplateLookupId) {
+        syncTestPhrasesToTemplateCache(effectiveTemplateLookupId, phrases);
       }
 
-      const template = DialogueTaskService.getTemplate(effectiveTemplateLookupId);
-      if (!template) {
-        return;
-      }
-
-      if (!template.dataContract) {
-        template.dataContract = {
-          templateId: effectiveTemplateLookupId,
-          templateName: template.label || effectiveTemplateLookupId,
-          subDataMapping: {},
-          engines: [],
-          outputCanonical: { format: 'value' },
-        };
-      }
-      template.dataContract.testPhrases = phrases;
-      DialogueTaskService.markTemplateAsModified(effectiveTemplateLookupId);
-
-      if (contract && onContractChange) {
-        onContractChange({
-          ...contract,
-          testPhrases: phrases,
-        });
+      const g = grammar ?? getGrammarFlowFromContract(contract);
+      if (g) {
+        onContractChange(mergeGrammarFlowIntoContract(contract, g, phrases));
+      } else {
+        const base: DataContract =
+          contract && typeof contract === 'object'
+            ? { ...contract }
+            : {
+                subDataMapping: {},
+                engines: [],
+                outputCanonical: { format: 'value' },
+              };
+        base.testPhrases = phrases.length ? phrases : undefined;
+        onContractChange(base);
       }
     },
     [

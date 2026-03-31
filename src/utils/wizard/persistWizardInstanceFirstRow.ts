@@ -1,6 +1,6 @@
 /**
  * After the AI wizard builds a full TaskTree, optionally rewrites the task row to
- * standalone storage (kind + subTasks, templateId cleared) for instance-first testing.
+ * embedded storage (subTasks on row, templateId cleared) for instance-first testing.
  */
 
 import { taskRepository } from '@services/TaskRepository';
@@ -33,7 +33,6 @@ export async function persistWizardInstanceFirstRow(
   const ok = taskRepository.updateTask(
     taskId,
     {
-      kind: 'standalone',
       templateId: null,
       subTasks: nodes,
       steps: current.steps ?? {},

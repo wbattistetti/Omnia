@@ -330,10 +330,9 @@ export interface SemanticValue {
 }
 
 /**
- * Row role for task model migration (see docs/task-model-migration-step1-spec.md).
- * Optional on legacy rows; use inferTaskKind() when absent.
+ * Inferred UI label for a task row (no persisted flag). "embedded" = no templateId + local subTasks graph.
  */
-export type TaskKind = 'standalone' | 'instance' | 'projectTemplate' | 'factoryTemplate';
+export type TaskKind = 'embedded' | 'instance' | 'projectTemplate' | 'factoryTemplate';
 
 /**
  * TaskTreeNode: nodo dell'albero (sidebar) e persistenza `Task.subTasks` (UtteranceInterpretation).
@@ -449,11 +448,6 @@ export interface Task {
   agentLogicalStepsJson?: string;
   /** JSON array: use cases tree + dialogue (design-time). */
   agentUseCasesJson?: string;
-
-  /**
-   * Optional row role (legacy inference). Prefer resolving behaviour from templateId + subTasks.
-   */
-  kind?: TaskKind;
 
   /**
    * Persisted sub-task tree for UtteranceInterpretation (structure + refs; steps/contracts on each Task row).

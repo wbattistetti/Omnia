@@ -9,6 +9,7 @@ interface EditorOverlayProps {
   editorProps?: {
     regex?: string;
     setRegex?: (value: string) => void;
+    onRegexSave?: (value: string) => void;
     node?: any;
     kind?: string;
     profile?: any;

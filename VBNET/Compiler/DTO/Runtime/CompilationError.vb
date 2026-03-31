@@ -80,6 +80,14 @@ Public Class CompilationError
     <JsonProperty("siblingEdgeIds")>
     Public Property SiblingEdgeIds As List(Of String)
 
+    ''' <summary>Utterance step key matching frontend steps object (e.g. noMatch, start).</summary>
+    <JsonProperty("stepKey")>
+    Public Property StepKey As String
+
+    ''' <summary>Zero-based index of escalation within the step (EmptyEscalation).</summary>
+    <JsonProperty("escalationIndex")>
+    Public Property EscalationIndex As Integer?
+
     Public Sub New()
         TaskId = String.Empty
         NodeId = String.Empty
@@ -95,5 +103,6 @@ Public Class CompilationError
         DetailCode = String.Empty
         TechnicalDetail = String.Empty
         Reason = String.Empty
+        StepKey = String.Empty
     End Sub
 End Class

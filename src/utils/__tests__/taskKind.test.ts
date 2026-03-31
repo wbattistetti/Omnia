@@ -27,9 +27,9 @@ describe('inferTaskKind', () => {
     expect(inferTaskKind(t)).toBe('instance');
   });
 
-  it('returns explicit kind when set', () => {
-    const t = baseTask({ kind: 'standalone', templateId: null });
-    expect(inferTaskKind(t)).toBe('standalone');
+  it('does not use persisted kind; infers from templateId and structure', () => {
+    const t = baseTask({ kind: 'standalone' as any, templateId: null });
+    expect(inferTaskKind(t)).toBe('projectTemplate');
   });
 
   it('returns factoryTemplate when source is Factory and no instance templateId', () => {
@@ -45,7 +45,7 @@ describe('inferTaskKind', () => {
     expect(inferTaskKind(t)).toBe('projectTemplate');
   });
 
-  it('returns standalone when subTasks present without explicit kind', () => {
+  it('returns embedded when subTasks present without explicit kind', () => {
     const t = baseTask({
       templateId: null,
       subTasks: [
@@ -56,7 +56,7 @@ describe('inferTaskKind', () => {
         },
       ],
     });
-    expect(inferTaskKind(t)).toBe('standalone');
+    expect(inferTaskKind(t)).toBe('embedded');
   });
 
   it('returns projectTemplate for legacy template row without subTasksIds or subTasks', () => {
@@ -66,8 +66,15 @@ describe('inferTaskKind', () => {
 });
 
 describe('isStandaloneMaterializedTaskRow', () => {
-  it('is true only when kind is standalone', () => {
-    expect(isStandaloneMaterializedTaskRow(baseTask({ kind: 'standalone' }))).toBe(true);
+  it('is true when no template ref and subTasks define structure', () => {
+    expect(
+      isStandaloneMaterializedTaskRow(
+        baseTask({
+          templateId: null,
+          subTasks: [{ id: 'a', templateId: 'a', label: 'L' }],
+        })
+      )
+    ).toBe(true);
     expect(
       isStandaloneMaterializedTaskRow(
         baseTask({ templateId: '11111111-2222-3333-4444-555555555555' })
@@ -78,8 +85,8 @@ describe('isStandaloneMaterializedTaskRow', () => {
 });
 
 describe('taskRowUsesSubTasksContract', () => {
-  it('is true when kind is standalone', () => {
-    expect(taskRowUsesSubTasksContract(baseTask({ kind: 'standalone' }))).toBe(true);
+  it('is true when there is no catalogue templateId on the row', () => {
+    expect(taskRowUsesSubTasksContract(baseTask({ templateId: null }))).toBe(true);
   });
 
   it('is true when templateId is null even if kind not yet persisted (new row)', () => {
@@ -100,8 +107,15 @@ describe('taskRowUsesSubTasksContract', () => {
 });
 
 describe('isStandalone / hasLocalSchema', () => {
-  it('isStandalone true when kind standalone', () => {
-    expect(isStandalone(baseTask({ kind: 'standalone' }))).toBe(true);
+  it('isStandalone true when embedded (no templateId, has subTasks)', () => {
+    expect(
+      isStandalone(
+        baseTask({
+          templateId: null,
+          subTasks: [{ id: 'a', templateId: 'a', label: 'L' }],
+        })
+      )
+    ).toBe(true);
   });
 
   it('hasLocalSchema when subTasks non-empty', () => {
@@ -117,7 +131,7 @@ describe('isStandalone / hasLocalSchema', () => {
 
 describe('taskKindLabel', () => {
   it('returns labels for all kinds', () => {
-    expect(taskKindLabel('standalone')).toBe('Standalone');
+    expect(taskKindLabel('embedded')).toBe('Embedded');
     expect(taskKindLabel('instance')).toBe('Instance');
     expect(taskKindLabel('projectTemplate')).toBe('Project template');
     expect(taskKindLabel('factoryTemplate')).toBe('Factory template');

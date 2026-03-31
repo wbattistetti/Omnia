@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import type { DataContract, DataContractItem } from '@components/DialogueDataEngine/parsers/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 import type { ContractMethod } from '@responseEditor/ContractSelector/ContractSelector';
 import RegexInlineEditor from '@responseEditor/InlineEditors/RegexInlineEditor';
 import ExtractorInlineEditor from '@responseEditor/InlineEditors/ExtractorInlineEditor';
@@ -83,18 +83,8 @@ export default function ContractEditorWrapper({
       return (
         <RegexInlineEditor
           regex={(methodData as any).patterns?.[0] || ''}
-          onRegexSave={(value: string) => {
-            if (!contract) return;
-            const engines = contract.engines || [];
-            const updatedEngines = engines.map(c =>
-              c.type === 'regex' ? { ...c, patterns: [value] } : c
-            );
-            const updatedContract: DataContract = {
-              ...contract,
-              engines: updatedEngines,
-            };
-            onContractChange(updatedContract);
-          }}
+          contract={contract}
+          onContractChange={onContractChange}
           kind={kind}
           {...commonProps}
         />
@@ -103,6 +93,8 @@ export default function ContractEditorWrapper({
     case 'rules':
       return (
         <ExtractorInlineEditor
+          contract={contract}
+          onContractChange={onContractChange}
           {...commonProps}
         />
       );
@@ -110,6 +102,8 @@ export default function ContractEditorWrapper({
     case 'ner':
       return (
         <NERInlineEditor
+          contract={contract}
+          onContractChange={onContractChange}
           {...commonProps}
         />
       );

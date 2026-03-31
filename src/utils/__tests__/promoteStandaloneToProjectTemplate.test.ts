@@ -6,6 +6,7 @@ import {
   canPromoteStandaloneToProjectTemplateMvp,
   promoteStandaloneToProjectTemplate,
 } from '../promoteStandaloneToProjectTemplate';
+import { inferTaskKind } from '../taskKind';
 
 const GUID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const GUID_CHILD = 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22';
@@ -16,7 +17,6 @@ describe('canPromoteStandaloneToProjectTemplateMvp', () => {
       id: 'row-1',
       type: TaskType.UtteranceInterpretation,
       templateId: null,
-      kind: 'standalone',
       subTasks: [{ id: GUID, templateId: GUID, label: 'R', subNodes: [] } as any],
       steps: { [GUID]: {} },
     } as Task;
@@ -28,7 +28,6 @@ describe('canPromoteStandaloneToProjectTemplateMvp', () => {
       id: 'row-1',
       type: TaskType.UtteranceInterpretation,
       templateId: null,
-      kind: 'standalone',
       subTasks: [
         { id: GUID, templateId: GUID, subNodes: [] } as any,
         { id: GUID + 'b', templateId: GUID + 'b', subNodes: [] } as any,
@@ -43,7 +42,6 @@ describe('canPromoteStandaloneToProjectTemplateMvp', () => {
       id: 'row-1',
       type: TaskType.UtteranceInterpretation,
       templateId: null,
-      kind: 'standalone',
       subTasks: [
         {
           id: GUID,
@@ -61,7 +59,6 @@ describe('canPromoteStandaloneToProjectTemplateMvp', () => {
       id: 'row-1',
       type: TaskType.UtteranceInterpretation,
       templateId: null,
-      kind: 'standalone',
       subTasks: [
         {
           id: GUID,
@@ -91,7 +88,6 @@ describe('promoteStandaloneToProjectTemplate', () => {
       TaskType.UtteranceInterpretation,
       null,
       {
-        kind: 'standalone',
         subTasks: [{ id: GUID, templateId: GUID, label: 'R', subNodes: [] } as any],
         steps: { [GUID]: { start: [] } },
         labelKey: 'lbl',
@@ -104,7 +100,7 @@ describe('promoteStandaloneToProjectTemplate', () => {
     expect(result.rootTemplateId).toBe(GUID);
 
     const updated = taskRepository.getTask(tid);
-    expect(updated?.kind).toBe('instance');
+    expect(updated && inferTaskKind(updated)).toBe('instance');
     expect(updated?.templateId).toBe(GUID);
     expect(global.fetch).toHaveBeenCalled();
   });
@@ -115,7 +111,6 @@ describe('promoteStandaloneToProjectTemplate', () => {
       TaskType.UtteranceInterpretation,
       null,
       {
-        kind: 'standalone',
         subTasks: [
           {
             id: GUID,

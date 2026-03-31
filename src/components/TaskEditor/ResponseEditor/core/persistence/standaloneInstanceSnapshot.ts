@@ -1,6 +1,6 @@
 /**
  * Decides when the editor should persist TaskTree main nodes into Task.subTasks
- * with kind "standalone", so MaterializationOrchestrator can reload without template materialization.
+ * (embedded row, no catalogue templateId), so MaterializationOrchestrator can reload without template materialization.
  */
 
 import type { Task, TaskTree, TaskTreeNode } from '@types/taskTypes';
@@ -46,13 +46,9 @@ export function shouldPersistStandaloneInstanceSnapshot(task: Task, taskTree: Ta
     return false;
   }
 
-  if (task.kind === 'standalone') {
-    return true;
-  }
-
   const inferred = inferTaskKind(task);
 
-  if (inferred === 'standalone') {
+  if (inferred === 'embedded') {
     return true;
   }
 

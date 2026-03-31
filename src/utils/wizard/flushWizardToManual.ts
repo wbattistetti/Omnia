@@ -95,7 +95,6 @@ export async function flushWizardToManualPipeline(
   }
 
   if (shouldPersistStandaloneInstanceSnapshot(taskInstance, next)) {
-    updates.kind = 'standalone';
     updates.subTasks = cloneMainNodesForInstancePersistence(next);
   }
 

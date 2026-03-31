@@ -35,22 +35,22 @@ describe('isProjectTemplateDefinitionRowForTemplateEndpointOnly', () => {
     expect(isProjectTemplateDefinitionRowForTemplateEndpointOnly(task)).toBe(false);
   });
 
-  it('is false for standalone materialized rows', () => {
-    const task = {
-      id: 'd',
-      type: TaskType.UtteranceInterpretation,
-      templateId: null,
-      kind: 'standalone' as const,
-    } as Task;
-    expect(isProjectTemplateDefinitionRowForTemplateEndpointOnly(task)).toBe(false);
-  });
-
-  it('is false when subTasks graph is on the row', () => {
+  it('is false when subTasks graph is on the row (embedded materialized)', () => {
     const task = {
       id: 'e',
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       subTasks: [{ id: 'n1' } as any],
+    } as Task;
+    expect(isProjectTemplateDefinitionRowForTemplateEndpointOnly(task)).toBe(false);
+  });
+
+  it('is false for SayMessage flow row (null templateId) — must be saved via tasks/bulk, not template-only path', () => {
+    const task = {
+      id: 'msg-row',
+      type: TaskType.SayMessage,
+      templateId: null,
+      parameters: [{ parameterId: 'text', value: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' }],
     } as Task;
     expect(isProjectTemplateDefinitionRowForTemplateEndpointOnly(task)).toBe(false);
   });

@@ -17,6 +17,8 @@ interface ExtractionResultCellProps {
   rowIdx: number; // ✅ Kept for backward compatibility, but phrase is preferred
   phrase: string; // ✅ NEW: Phrase text for stable key generation
   col: 'regex' | 'det' | 'ner' | 'llm';
+  /** Human-readable contract engine label (matches header "Tipo contratto") */
+  contractTypeLabel?: string;
   kind: string;
   expectedKeysForKind: (k?: string) => string[];
   enabled: boolean;
@@ -44,6 +46,7 @@ function ExtractionResultCellComponent({
   rowIdx,
   phrase, // ✅ NEW: Phrase text for stable key
   col,
+  contractTypeLabel,
   kind,
   expectedKeysForKind,
   enabled,
@@ -116,6 +119,14 @@ function ExtractionResultCellComponent({
     }
   }
 
+  const isErrorSummary = !!(summary && (summary.includes('❌') || summary.includes('ERROR')));
+  const isNoMatch =
+    enabled &&
+    !isRunning &&
+    !isErrorSummary &&
+    typeof processingTime === 'number' &&
+    processingTime > 0 &&
+    (summary === '—' || fullValue === '—' || fullValue === '-');
 
   const ms = (v?: number) => (typeof v === 'number' ? ` (${v} ms)` : '');
 
@@ -125,6 +136,19 @@ function ExtractionResultCellComponent({
         <div style={{ flex: 1 }}>
           {enabled ? (
             <>
+              {contractTypeLabel ? (
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: '#64748b',
+                    marginBottom: 4,
+                    letterSpacing: 0.02,
+                  }}
+                >
+                  Tipo contratto: {contractTypeLabel}
+                </div>
+              ) : null}
               {isRunning && (
                 <span
                   title={col === 'regex' ? 'Regex' : col === 'det' ? 'Deterministic' : col === 'ner' ? 'NER' : 'LLM'}
@@ -141,18 +165,13 @@ function ExtractionResultCellComponent({
                 />
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                <span>{fullValue}{ms(processingTime)}</span>
+                <span style={{ color: isNoMatch ? '#dc2626' : undefined }}>
+                  {fullValue}
+                  {ms(processingTime)}
+                </span>
                 {/* ✅ Icona nota a destra del valore */}
                 {(() => {
                   const shouldShowNoteButton = enabled && summary && summary !== '—';
-                  console.log('[NOTE] ExtractionResultCell NoteButton render check', {
-                    rowIdx,
-                    col,
-                    enabled,
-                    summary,
-                    'summary !== "—"': summary !== '—',
-                    shouldShowNoteButton
-                  });
                   return shouldShowNoteButton ? (
                     <NoteButton
                     hasNote={hasNote}
@@ -260,6 +279,7 @@ const ExtractionResultCell = React.memo(ExtractionResultCellComponent, (prev, ne
 
   // ✅ Critical props that trigger re-render
   if (prev.summary !== next.summary) return false; // Re-render if summary changed
+  if (prev.contractTypeLabel !== next.contractTypeLabel) return false;
   if (prev.isRunning !== next.isRunning) return false; // Re-render if loading state changed
   if (prev.processingTime !== next.processingTime) return false; // Re-render if timing changed
   if (prev.enabled !== next.enabled) return false; // Re-render if enabled state changed

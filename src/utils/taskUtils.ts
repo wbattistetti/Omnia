@@ -1144,7 +1144,7 @@ export async function buildTaskTree(
     });
     taskRepository.updateTask(
       working.id,
-      { templateId: null, kind: 'standalone' },
+      { templateId: null },
       projectId,
       { allowClearTemplateId: true }
     );
@@ -1578,7 +1578,6 @@ export async function extractTaskOverrides(
       labelKey: workingCopy.labelKey || workingCopy.label,
       steps: stepsDict,
       templateVersion: instance.templateVersion ?? 1,
-      kind: 'standalone',
       subTasks: nodesClone,
     };
   }

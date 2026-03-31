@@ -4,6 +4,7 @@
 import { useCallback, useRef } from 'react';
 import { DockNode, DockTabChat } from '../dock/types';
 import { openLateralChatPanel } from '../components/AppContent/infrastructure/docking/DockingHelpers';
+import { scheduleDockLayoutRefresh } from '../utils/scheduleDockLayoutRefresh';
 import { createSingleNodeFlow } from '../utils/flowTestHelpers';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
 
@@ -202,6 +203,7 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
       newTab: chatTab,
       position: 'right',
     }));
+    scheduleDockLayoutRefresh();
 
   }, [setDockTree, translations, translationsReady, translationsLoading, loadAllTranslations, createChatTab]);
 
@@ -297,6 +299,7 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
         newTab: chatTab,
         position: 'right',
       }));
+      scheduleDockLayoutRefresh();
       console.log('[ChatOrchestrator] Chat panel opened successfully');
     } catch (error) {
       console.error('[ChatOrchestrator] Error opening chat panel:', error);

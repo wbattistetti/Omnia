@@ -12,7 +12,6 @@ describe('ensureTaskExists', () => {
     const t = ensureTaskExists(id, { taskType: TaskType.UtteranceInterpretation });
     expect(t.id).toBe(id);
     expect(t.templateId).toBeNull();
-    expect(t.kind).toBe('standalone');
     expect(t.steps).toEqual({});
     expect(t.subTasks).toEqual([]);
   });

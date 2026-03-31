@@ -46,7 +46,7 @@ export class TaskTreeOpener {
     const noTemplate = !task.templateId || task.templateId === 'UNDEFINED';
     const noSteps = !task.steps || Object.keys(task.steps).length === 0;
     const noNodes = !task.subTasks || task.subTasks.length === 0;
-    return (task.kind === 'standalone' || noTemplate) && noSteps && noNodes;
+    return noTemplate && noSteps && noNodes;
   }
 
   /**
@@ -235,10 +235,9 @@ export class TaskTreeOpener {
     let taskTree: any = null;
     const DialogueTaskService = (await import('@services/DialogueTaskService')).default;
 
-    const resolvedTemplate =
-      hasValidTemplateIdRef(taskForType) && taskForType.kind !== 'standalone'
-        ? DialogueTaskService.findTemplateInCache(String(taskForType.templateId).trim())
-        : null;
+    const resolvedTemplate = hasValidTemplateIdRef(taskForType)
+      ? DialogueTaskService.findTemplateInCache(String(taskForType.templateId).trim())
+      : null;
 
     if (resolvedTemplate) {
       const { RowHeuristicsService } = await import('@services/RowHeuristicsService');

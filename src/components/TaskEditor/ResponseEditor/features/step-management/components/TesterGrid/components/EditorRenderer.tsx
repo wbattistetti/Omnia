@@ -14,6 +14,8 @@ interface EditorRendererProps {
   editorProps?: {
     regex?: string;
     setRegex?: (value: string) => void;
+    /** Optional; falls back to setRegex for legacy TesterGrid wiring. */
+    onRegexSave?: (value: string) => void;
     node?: any;
     kind?: string;
     profile?: any;
@@ -66,7 +68,15 @@ export function EditorRenderer({
       return (
         <RegexInlineEditor
           regex={editorProps.regex || ''}
-          onRegexSave={editorProps.setRegex}
+          contract={contract ?? null}
+          onContractChange={
+            onContractChange
+              ? (c) => {
+                  onContractChange(c);
+                }
+              : undefined
+          }
+          onRegexSave={editorProps.onRegexSave ?? editorProps.setRegex}
           kind={editorProps.kind}
           examplesList={editorProps.examplesList}
           rowResults={editorProps.rowResults}
@@ -75,9 +85,33 @@ export function EditorRenderer({
         />
       );
     case 'extractor':
-      return <ExtractorInlineEditor {...commonProps} />;
+      return (
+        <ExtractorInlineEditor
+          {...commonProps}
+          contract={contract ?? null}
+          onContractChange={
+            onContractChange
+              ? (c) => {
+                  onContractChange(c);
+                }
+              : undefined
+          }
+        />
+      );
     case 'ner':
-      return <NERInlineEditor {...commonProps} />;
+      return (
+        <NERInlineEditor
+          {...commonProps}
+          contract={contract ?? null}
+          onContractChange={
+            onContractChange
+              ? (c) => {
+                  onContractChange(c);
+                }
+              : undefined
+          }
+        />
+      );
     case 'llm':
       return (
         <LLMInlineEditor

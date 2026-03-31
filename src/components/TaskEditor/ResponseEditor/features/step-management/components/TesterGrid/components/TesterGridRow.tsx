@@ -7,7 +7,8 @@ import NoteEditor from '@responseEditor/CellNote/NoteEditor';
 import NoteDisplay from '@responseEditor/CellNote/NoteDisplay';
 import NoteSeparator from '@responseEditor/CellNote/NoteSeparator';
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
-import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { ContractType, DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import { getContractMethodLabel, type ContractMethod } from '@responseEditor/ContractSelector/ContractSelector';
 import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/features/step-management/stores/notesStore';
 
 interface TesterGridRowProps {
@@ -146,7 +147,9 @@ function TesterGridRowComponent({
         // ✅ CRITICAL: Show ALL engines (enabled and disabled) to match header columns
         // Filtering for enabled engines happens during escalation execution, not in UI
         return engines
-          .map((engineItem) => {
+          .map((engineItem, engineIndex) => {
+          const isLastEngine = engineIndex === engines.length - 1;
+          const contractTypeLabel = getContractMethodLabel(engineItem.type as ContractMethod);
           const componentType = engineItem.type === 'rules' ? 'deterministic' : engineItem.type;
           const color = {
             regex: '#93c5fd',
@@ -201,6 +204,7 @@ function TesterGridRowComponent({
                   position: 'relative',
                   verticalAlign: 'top',
                   opacity: 1,
+                  width: isLastEngine ? '100%' : undefined,
                   visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm', 'embeddings', 'grammarflow'].includes(activeEditor) && activeEditor !== componentType ? 'hidden' : 'visible'
                 }}
                 onMouseEnter={() => {
@@ -214,6 +218,9 @@ function TesterGridRowComponent({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                   <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>
+                      Tipo contratto: {contractTypeLabel}
+                    </div>
                     {/* Placeholder: GrammarFlow engine active (interpreter not yet implemented) */}
                     {result || '—'}
                   </div>
@@ -264,13 +271,23 @@ function TesterGridRowComponent({
                   position: 'relative',
                   verticalAlign: 'top',
                   opacity: 1,
+                  width: isLastEngine ? '100%' : undefined,
                   visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm', 'embeddings', 'grammarflow'].includes(activeEditor) && activeEditor !== componentType ? 'hidden' : 'visible'
                 }}
-                onMouseEnter={() => setHovered(rowIndex, 'embeddings')}
-                onMouseLeave={() => setHovered(null, null)}
+                onMouseEnter={() => {
+                  const { setHovered } = useNotesStore.getState();
+                  setHovered(getCellKeyFromPhrase(phrase, 'embeddings'));
+                }}
+                onMouseLeave={() => {
+                  const { setHovered } = useNotesStore.getState();
+                  setHovered(null);
+                }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                   <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>
+                      Tipo contratto: {contractTypeLabel}
+                    </div>
                     {/* TODO: Show classification results here in Fase 9 */}
                     {'—'}
                   </div>
@@ -320,6 +337,7 @@ function TesterGridRowComponent({
                 position: 'relative',
                 verticalAlign: 'top',
                 opacity: enabled ? 1 : 0.6,
+                width: isLastEngine ? '100%' : undefined,
                   visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm', 'embeddings', 'grammarflow'].includes(activeEditor) && activeEditor !== componentType ? 'hidden' : 'visible'
               }}
               onMouseEnter={() => {
@@ -338,6 +356,7 @@ function TesterGridRowComponent({
                 rowIdx={rowIndex}
                 phrase={phrase}
                 col={componentType as any}
+                contractTypeLabel={contractTypeLabel}
                 kind={kind}
                 expectedKeysForKind={expectedKeysForKind}
                 enabled={enabled}

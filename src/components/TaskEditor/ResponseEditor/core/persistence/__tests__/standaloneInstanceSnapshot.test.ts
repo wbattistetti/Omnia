@@ -57,16 +57,6 @@ describe('shouldPersistStandaloneInstanceSnapshot', () => {
     expect(shouldPersistStandaloneInstanceSnapshot(task, treeWithOneMainNode())).toBe(true);
   });
 
-  it('returns true when kind is explicitly standalone', () => {
-    const task: Task = {
-      id: '1',
-      type: TaskType.UtteranceInterpretation,
-      templateId: 'UtteranceInterpretation',
-      kind: 'standalone',
-    } as Task;
-    expect(shouldPersistStandaloneInstanceSnapshot(task, treeWithOneMainNode())).toBe(true);
-  });
-
   it('returns true for UtteranceInterpretation with null templateId and no subTasksIds (migration row)', () => {
     const task: Task = {
       id: '1',

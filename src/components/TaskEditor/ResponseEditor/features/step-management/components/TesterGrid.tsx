@@ -7,6 +7,7 @@ import { useColumnResize } from '@responseEditor/features/step-management/compon
 import { useEditorOverlay } from '@responseEditor/features/step-management/components/TesterGrid/hooks/useEditorOverlay';
 import { RowResult } from '@responseEditor/features/step-management/hooks/useExtractionTesting';
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import { calculateEngineColumnWidth } from '@responseEditor/features/step-management/components/TesterGrid/helpers/columnLayout';
 
 // Helper: Get engines from contract
 function getEngines(contract: DataContract | null): any[] {
@@ -93,6 +94,7 @@ interface TesterGridProps {
   editorProps?: {
     regex?: string;
     setRegex?: (value: string) => void;
+    onRegexSave?: (value: string) => void;
     node?: any;
     kind?: string;
     profile?: any;
@@ -271,6 +273,9 @@ function TesterGridComponent({
     }
   }, [activeEditor]);
 
+  const engines = getEngines(contract);
+  const engineColWidth = calculateEngineColumnWidth(engines.length);
+
   const getTextColor = React.useCallback((bgColor: string) => {
     // Colori chiari che richiedono testo scuro
     const lightColors = [EXTRACTOR_COLORS.regex, EXTRACTOR_COLORS.deterministic, EXTRACTOR_COLORS.ner, EXTRACTOR_COLORS.llm];
@@ -325,9 +330,26 @@ function TesterGridComponent({
           <table ref={tableRef} style={{
             width: '100%',
             borderCollapse: 'collapse',
-            tableLayout: 'fixed' as any,
-            minWidth: 'max-content',
+            tableLayout: 'fixed' as const,
           }}>
+            <colgroup>
+              <col style={{ width: phraseColumnWidth }} />
+              <col style={{ width: 46 }} />
+              {engines.length === 0 ? (
+                <col style={{ width: 200 }} />
+              ) : (
+                engines.map((_, i) => (
+                  <col
+                    key={`engine-col-${i}`}
+                    style={
+                      i === engines.length - 1
+                        ? { width: 'auto', minWidth: 240 }
+                        : { width: engineColWidth }
+                    }
+                  />
+                ))
+              )}
+            </colgroup>
             <TesterGridHeader
               contract={contract}
               onContractChange={onContractChange}

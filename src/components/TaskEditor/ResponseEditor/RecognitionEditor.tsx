@@ -719,45 +719,6 @@ export default function RecognitionEditor({
     };
   }, [hasUnsavedContractChanges, modifiedContract, editorProps?.node]);
 
-  // ✅ CRITICAL: Create stable handleRegexSave callback that doesn't depend on activeEditor
-  // This ensures onRegexSave is always available even when editor is closing
-  const handleRegexSave = useCallback((newRegex: string) => {
-    const dbg = isRecognitionContractDebug();
-    if (dbg) {
-      console.log('[RecognitionEditor] handleRegexSave', { newRegex, hasContract: !!contract });
-    }
-    if (!contract) {
-      if (dbg) {
-        console.warn('[RecognitionEditor] No contract available, cannot save regex');
-      }
-      return;
-    }
-    const currentEngines = getEngines(contract);
-    const regexEngine = currentEngines.find((c: any) => c.type === 'regex');
-    if (regexEngine) {
-      const updatedEngines = currentEngines.map((c: any) =>
-        c.type === 'regex' ? { ...c, patterns: [newRegex] } : c
-      );
-      const updatedContract = { ...contract, engines: updatedEngines };
-      if (dbg) {
-        console.log('[RecognitionEditor] Updated regex engine', { updatedContract });
-      }
-      handleContractChange(updatedContract, false);
-    } else {
-      const newEngines = [...currentEngines, {
-        type: 'regex',
-        enabled: true,
-        patterns: [newRegex],
-        examples: []
-      }];
-      const updatedContract = { ...contract, engines: newEngines };
-      if (dbg) {
-        console.log('[RecognitionEditor] Creating new regex engine', { updatedContract });
-      }
-      handleContractChange(updatedContract, false);
-    }
-  }, [contract, handleContractChange]); // ✅ Stable: depends only on contract and handleContractChange, NOT on activeEditor
-
   // Build dynamic editorProps based on activeEditor and contract
   // IMPORTANT: Include contract in dependencies to update when contract changes
   const dynamicEditorProps = useMemo(() => {
@@ -791,9 +752,6 @@ export default function RecognitionEditor({
       // ✅ NEW: Feedback from test notes
       examplesList,
       rowResults,
-      // ✅ REMOVED: getNote prop - now managed via Zustand store
-      // ✅ CRITICAL: Always pass onRegexSave so it's available even when editor is closing
-      onRegexSave: handleRegexSave,
     };
 
     switch (activeEditor) {
@@ -801,42 +759,14 @@ export default function RecognitionEditor({
         return {
           ...baseProps,
           regex: officialRegexValue,
-          // ✅ onRegexSave already in baseProps, no need to duplicate
         };
       case 'extractor':
-        // ExtractorInlineEditor gestisce extractorCode internamente, ma potremmo sincronizzarlo
         return {
           ...baseProps,
-          extractorCode: contractItemForEditor?.extractorCode ?? '',
-          setExtractorCode: (value: string) => {
-            if (contractItemForEditor && contract) {
-              const contractType = contractItemForEditor.type; // Should be 'rules'
-              const currentEngines = getEngines(contract);
-              const updatedEngines = currentEngines.map((c: any) =>
-                c.type === contractType ? { ...c, extractorCode: value } : c
-              );
-              const updatedContract = { ...contract, engines: updatedEngines };
-              // ✅ Rimuovi parsers se presente (migrazione)
-              handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
-            }
-          },
         };
       case 'ner':
         return {
           ...baseProps,
-          entityTypes: contractItemForEditor?.entityTypes ?? [],
-          setEntityTypes: (value: string[]) => {
-            if (contractItemForEditor && contract) {
-              const contractType = contractItemForEditor.type;
-              const currentEngines = getEngines(contract);
-              const updatedEngines = currentEngines.map((c: any) =>
-                c.type === contractType ? { ...c, entityTypes: value } : c
-              );
-              const updatedContract = { ...contract, engines: updatedEngines };
-              // ✅ Rimuovi parsers se presente (migrazione)
-              handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
-            }
-          },
         };
       case 'llm':
         return {
@@ -860,7 +790,7 @@ export default function RecognitionEditor({
     }
     // Include contract in dependencies to update when contract changes
     // handleContractChange creates a new object, so this won't cause infinite loops
-  }, [activeEditor, contract, handleRegexSave, officialRegexValue, editorProps, examplesList, rowResults]);
+  }, [activeEditor, contract, officialRegexValue, editorProps, examplesList, rowResults, handleContractChange]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>

@@ -11,10 +11,9 @@ Imports TaskEngine
 ''' Gestisce la logica complessa di caricamento e compilazione DDT
 '''
 ''' LOGICA CONCETTUALE DEI DATI:
-''' - Template: contiene struttura condivisa (constraints, examples, nlpContract)
-''' - Istanza (template-bound): contiene steps; contract da template via templateId + allTemplates
-''' - Istanza standalone (kind/subTasks o dataContract senza templateId): grafo già materializzato → BuildTaskTreeExpandedFromStandaloneInstance (stesso output di TaskTreeExpanded del merge)
-''' - Con templateId non vuoto: sempre merge da template (anche se kind=standalone, il template vince)
+''' - templateId non vuoto: merge da template (contratti/struttura da allTemplates) + steps dall'istanza
+''' - templateId vuoto: tutto incorporato sulla riga task (subTasks JSON e/o dataContract root) + steps sul task
+''' - Nessun flag "kind": la sola discriminante è templateId null vs non null.
 ''' - NO fallback: se template non trovato → errore esplicito (non maschera problemi)
 '''
 ''' VANTAGGI:
@@ -60,17 +59,13 @@ Public Class UtteranceTaskCompiler
                 Console.WriteLine($"[COMPILER] ERROR: Failed to build TaskTreeExpanded from template {utteranceTask.TemplateId}: {ex.Message}")
                 Throw New InvalidOperationException($"Failed to build TaskTreeExpanded from template {utteranceTask.TemplateId}: {ex.Message}", ex)
             End Try
-        ElseIf IsStandaloneUtterancePayload(utteranceTask) Then
+        Else
             Try
-                taskTreeExpanded = BuildTaskTreeExpandedFromStandaloneInstance(utteranceTask, taskId)
+                taskTreeExpanded = BuildTaskTreeExpandedFromEmbeddedPayload(utteranceTask, taskId)
             Catch ex As Exception
-                Console.WriteLine($"[COMPILER] ERROR: standalone task {taskId}: {ex.Message}")
+                Console.WriteLine($"[COMPILER] ERROR: embedded task payload {taskId}: {ex.Message}")
                 Throw New InvalidOperationException(ex.Message, ex)
             End Try
-        Else
-            Throw New InvalidOperationException(
-                $"Task '{taskId}' must either reference a template (templateId) or be a standalone Utterance task " &
-                "with kind 'standalone' and non-empty subTasks, or root-level dataContract. Legacy task.Data is not supported.")
         End If
 
         If taskTreeExpanded IsNot Nothing Then
@@ -102,31 +97,9 @@ Public Class UtteranceTaskCompiler
     End Function
 
     ''' <summary>
-    ''' True se il task non ha templateId e porta un payload già materializzato (standalone).
+    ''' Costruisce TaskTreeExpanded dal task senza templateId: subTasks (JSON) e/o dataContract root incorporati sulla riga.
     ''' </summary>
-    Private Shared Function IsStandaloneUtterancePayload(ut As UtteranceTaskDefinition) As Boolean
-        If ut Is Nothing Then
-            Return False
-        End If
-        If Not String.IsNullOrEmpty(ut.TemplateId) Then
-            Return False
-        End If
-        If String.Equals(ut.Kind, "standalone", StringComparison.OrdinalIgnoreCase) Then
-            Return True
-        End If
-        If ut.PersistedSubTasks IsNot Nothing AndAlso ut.PersistedSubTasks.Count > 0 Then
-            Return True
-        End If
-        If ut.DataContract IsNot Nothing Then
-            Return True
-        End If
-        Return False
-    End Function
-
-    ''' <summary>
-    ''' Costruisce TaskTreeExpanded da un'istanza standalone già materializzata (stesso ruolo del merge template+istanza).
-    ''' </summary>
-    Private Function BuildTaskTreeExpandedFromStandaloneInstance(
+    Private Function BuildTaskTreeExpandedFromEmbeddedPayload(
         instance As UtteranceTaskDefinition,
         taskId As String
     ) As TaskTreeExpanded
@@ -161,11 +134,11 @@ Public Class UtteranceTaskCompiler
             nodes.Add(root)
         Else
             Throw New InvalidOperationException(
-                "Standalone task must include subTasks or root-level dataContract.")
+                "Utterance task without templateId must include subTasks or root-level dataContract.")
         End If
 
         If nodes.Count = 0 Then
-            Throw New InvalidOperationException("Standalone task produced no task nodes.")
+            Throw New InvalidOperationException("Embedded task payload produced no task nodes.")
         End If
 
         ValidateStandaloneNodesHaveContracts(nodes)

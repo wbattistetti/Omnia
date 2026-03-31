@@ -25,8 +25,18 @@ export function splitWithTab(tree: DockNode, targetId: string, region: DockRegio
       if (region === 'center') return { ...n, tabs: [...n.tabs, tab], active: n.tabs.length };
       const orient: 'row' | 'col' = (region === 'left' || region === 'right') ? 'row' : 'col';
       const children = (region === 'left' || region === 'top') ? [newTabSet, n] : [n, newTabSet];
-      // Use provided sizes or default proportions
-      const finalSizes = sizes || (region === 'bottom' ? [0.67, 0.33] : region === 'top' ? [0.33, 0.67] : undefined);
+      // Use provided sizes or defaults (never undefined — avoids 50/50 first paint then effect jump)
+      const finalSizes =
+        sizes ??
+        (region === 'bottom'
+          ? [0.67, 0.33]
+          : region === 'top'
+            ? [0.33, 0.67]
+            : region === 'right'
+              ? [0.75, 0.25]
+              : region === 'left'
+                ? [0.25, 0.75]
+                : [0.5, 0.5]);
       return { kind: 'split', id: newId(), orientation: orient, children, sizes: finalSizes };
     }
     return n;

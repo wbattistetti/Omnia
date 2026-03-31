@@ -16,6 +16,12 @@ function str(v: unknown): string {
   return String(v).trim();
 }
 
+function num(v: unknown): number | undefined {
+  if (v == null) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : undefined;
+}
+
 /**
  * Builds fixTarget from category and ids (backend does not emit fixTarget).
  */
@@ -24,9 +30,20 @@ export function buildFixTargetForCompilationError(
   taskId: string,
   rowId: string | undefined,
   nodeId: string | undefined,
-  edgeId: string | undefined
+  edgeId: string | undefined,
+  stepKey?: string,
+  escalationIndex?: number
 ): FixTarget {
   const cat = category.trim();
+  if (
+    cat === 'EmptyEscalation' &&
+    taskId &&
+    taskId !== 'SYSTEM' &&
+    stepKey
+  ) {
+    const idx = escalationIndex !== undefined ? escalationIndex : 0;
+    return { type: 'taskEscalation', taskId, stepKey, escalationIndex: idx };
+  }
   if (edgeId) {
     return { type: 'edge', edgeId };
   }
@@ -59,7 +76,18 @@ export function enrichCompilationError(raw: Record<string, unknown>): Compilatio
   const severity: CompilationError['severity'] =
     sev === 'warning' ? 'warning' : sev === 'hint' ? 'hint' : 'error';
 
-  const fixTarget = buildFixTargetForCompilationError(category, taskId, rowId, nodeId, edgeId);
+  const stepKeyRaw = str(pick(raw, 'stepKey')) || undefined;
+  const escalationIndex = num(pick(raw, 'escalationIndex'));
+
+  const fixTarget = buildFixTargetForCompilationError(
+    category,
+    taskId,
+    rowId,
+    nodeId,
+    edgeId,
+    stepKeyRaw,
+    escalationIndex
+  );
 
   return {
     taskId,
@@ -88,6 +116,8 @@ export function enrichCompilationError(raw: Record<string, unknown>): Compilatio
     siblingEdgeIds: Array.isArray(pick(raw, 'siblingEdgeIds'))
       ? (pick(raw, 'siblingEdgeIds') as unknown[]).map((x) => String(x))
       : undefined,
+    stepKey: stepKeyRaw,
+    escalationIndex,
   };
 }
 

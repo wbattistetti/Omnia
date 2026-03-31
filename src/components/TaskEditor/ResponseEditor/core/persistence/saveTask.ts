@@ -84,7 +84,6 @@ export async function saveTask(
   }
 
   if (shouldPersistStandaloneInstanceSnapshot(taskInstance, taskTree)) {
-    updates.kind = 'standalone';
     updates.subTasks = cloneMainNodesForInstancePersistence(taskTree);
     const stepsBase: Record<string, unknown> =
       taskTree.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
@@ -94,7 +93,7 @@ export async function saveTask(
       updates.subTasks as TaskTreeNode[],
       stepsBase
     ) as Task['steps'];
-    logContractPersist('editorSave', 'standalone snapshot (kind + subTasks + steps)', {
+    logContractPersist('editorSave', 'embedded snapshot (subTasks + steps)', {
       taskId: key,
       templateId: currentTemplateId ?? null,
       ...summarizeSubTasksForDebug(updates.subTasks),

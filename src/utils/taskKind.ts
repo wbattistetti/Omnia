@@ -1,6 +1,6 @@
 /**
- * Task row role inference for gradual migration (read-only helpers).
- * See docs/task-model-migration-step1-spec.md.
+ * Task row inference: behaviour is driven only by templateId (null vs set) and structure
+ * (subTasks, subTasksIds, source). No persisted "kind" flag.
  */
 
 import type { Task, TaskKind } from '@types/taskTypes';
@@ -13,15 +13,11 @@ function isGuid(value: string | null | undefined): boolean {
 }
 
 /**
- * Infers TaskKind from persisted fields. Does not mutate. Safe for legacy rows without `kind`.
+ * Infers a display role from persisted fields only (templateId + graph). Does not read legacy `kind`.
  */
 export function inferTaskKind(task: Task | null | undefined): TaskKind {
   if (!task) {
     return 'instance';
-  }
-
-  if (task.kind) {
-    return task.kind;
   }
 
   const tid = task.templateId;
@@ -38,9 +34,9 @@ export function inferTaskKind(task: Task | null | undefined): TaskKind {
     return 'projectTemplate';
   }
 
-  if (tid === null || tid === undefined) {
+  if (tid === null || tid === undefined || String(tid).trim() === '') {
     if (task.subTasks && task.subTasks.length > 0) {
-      return 'standalone';
+      return 'embedded';
     }
     return 'projectTemplate';
   }
@@ -50,7 +46,6 @@ export function inferTaskKind(task: Task | null | undefined): TaskKind {
 
 /**
  * True when the task references a persisted template row (non-sentinel id).
- * Used for materialization and save paths; null / UNDEFINED / empty → standalone shell.
  */
 export function hasValidTemplateIdRef(task: Task | null | undefined): boolean {
   if (!task) return false;
@@ -58,30 +53,30 @@ export function hasValidTemplateIdRef(task: Task | null | undefined): boolean {
   return tid != null && tid !== 'UNDEFINED' && String(tid).trim() !== '';
 }
 
-/** True when the task row represents a standalone instance (local schema). */
+/** @deprecated Use inferTaskKind === 'embedded' */
 export function isStandalone(task: Task | null | undefined): boolean {
-  return inferTaskKind(task) === 'standalone';
+  return inferTaskKind(task) === 'embedded';
 }
 
 /**
- * True when the persisted row is standalone materialization (full graph on the task document).
- * Matches backend `isStandaloneMaterializedInstance`: only `kind === 'standalone'`.
+ * True when the row holds a full Utterance graph on the task document (no catalogue templateId).
  */
 export function isStandaloneMaterializedTaskRow(task: Task | null | undefined): boolean {
-  return task?.kind === 'standalone';
+  return !hasValidTemplateIdRef(task) && hasLocalSchema(task);
 }
 
 /**
- * True when behaviour/contract edits should persist on the `subTasks` tree (node `dataContract` / `steps`)
- * on task rows rather than assuming a catalogue template row for the task document.
+ * True when contract/steps for the row should resolve from embedded subTasks / node dataContract
+ * rather than from the task row's templateId catalogue entry.
  */
 export function taskRowUsesSubTasksContract(task: Task | null | undefined): boolean {
-  if (!task) return false;
-  if (isStandaloneMaterializedTaskRow(task)) return true;
+  if (!task) {
+    return false;
+  }
   return !hasValidTemplateIdRef(task);
 }
 
-/** True when standalone fields that define structure are present. */
+/** True when persisted subTasks defines structure. */
 export function hasLocalSchema(task: Task | null | undefined): boolean {
   if (!task) return false;
   const nodes = task.subTasks;
@@ -91,8 +86,8 @@ export function hasLocalSchema(task: Task | null | undefined): boolean {
 /** Short English label for header/tooltips (UI). */
 export function taskKindLabel(kind: TaskKind): string {
   switch (kind) {
-    case 'standalone':
-      return 'Standalone';
+    case 'embedded':
+      return 'Embedded';
     case 'instance':
       return 'Instance';
     case 'projectTemplate':

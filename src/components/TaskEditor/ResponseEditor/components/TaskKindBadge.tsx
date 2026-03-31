@@ -28,10 +28,10 @@ export function TaskKindBadge({ taskId, refreshToken }: TaskKindBadgeProps) {
     const base =
       'Task row role (inferred for legacy rows if kind is unset). See docs/task-model-migration-step1-spec.md';
     const promoteHint =
-      kind === 'standalone'
+      kind === 'embedded'
         ? ' Promote to template: available when MVP rules match (GUID nodes).'
         : kind === 'instance'
-          ? ' Promote to template applies only to Standalone rows, not Instance.'
+          ? ' Promote to template applies only to Embedded rows, not Instance.'
           : '';
     return {
       label: taskKindLabel(kind),

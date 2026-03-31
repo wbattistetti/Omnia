@@ -14,7 +14,7 @@ function task(over: Partial<Task>): Task {
 
 describe('resolveNodeDataContract', () => {
   it('standalone materialized: returns node.dataContract and ignores node.templateId', () => {
-    const t = task({ kind: 'standalone', templateId: null });
+    const t = task({ templateId: null });
     const node = {
       id: 'node-1',
       templateId: 'local-slot-id-not-in-cache',
@@ -29,7 +29,7 @@ describe('resolveNodeDataContract', () => {
   });
 
   it('standalone materialized: returns null when no node contract on tree node', () => {
-    const t = task({ kind: 'standalone', templateId: null });
+    const t = task({ templateId: null });
     const node = {
       id: 'node-1',
       templateId: '27ba6d4a-1111-2222-3333-444444444444',
@@ -50,7 +50,6 @@ describe('resolveNodeDataContract', () => {
 
   it('template-backed row: prefers node.dataContract over task.templateId cache', () => {
     const t = task({
-      kind: 'instance',
       templateId: '11111111-2222-3333-4444-555555555555',
     });
     const node = {

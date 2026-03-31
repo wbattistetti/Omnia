@@ -13,6 +13,14 @@ const {
   regenerateTurn,
 } = require('./services/AIAgentUseCaseService');
 const { TemplateIntelligenceOrchestrator } = require('./services/ddt-intelligence');
+const {
+  buildInstanceTaskDocument,
+  getAllowedInstanceFieldKeysForTaskType,
+  AI_AGENT_INSTANCE_FIELD_KEYS,
+  TaskType: TaskTypeEnum,
+} = require('./taskInstanceBulkSerialize');
+/** @see TaskType.AIAgent in src/types/taskTypes.ts */
+const TASK_TYPE_AI_AGENT = TaskTypeEnum.AIAgent;
 
 // ✅ ENTERPRISE MIDDLEWARE
 const CircuitBreakerManager = require('./middleware/CircuitBreakerManager');
@@ -2122,40 +2130,6 @@ function removeFactoryFields(doc) {
   return cleaned;
 }
 
-/** @see TaskType.AIAgent in src/types/taskTypes.ts */
-const TASK_TYPE_AI_AGENT = 6;
-
-/**
- * Design-time + persisted runtime fields for AI Agent tasks.
- * Instance bulk save used to $set only core instance fields; without these, reload lost all agent data.
- */
-const AI_AGENT_INSTANCE_FIELD_KEYS = [
-  'agentDesignDescription',
-  'agentPrompt',
-  'agentStructuredSectionsJson',
-  'outputVariableMappings',
-  'agentProposedFields',
-  'agentSampleDialogue',
-  'agentPreviewByStyle',
-  'agentPreviewStyleId',
-  'agentInitialStateTemplateJson',
-  'agentRuntimeCompactJson',
-  'agentDesignFrozen',
-  'agentDesignHasGeneration',
-  'agentLogicalStepsJson',
-  'agentUseCasesJson',
-];
-
-function pickAiAgentInstanceFields(item) {
-  const out = {};
-  for (const key of AI_AGENT_INSTANCE_FIELD_KEYS) {
-    if (Object.prototype.hasOwnProperty.call(item, key)) {
-      out[key] = item[key];
-    }
-  }
-  return out;
-}
-
 // POST /api/projects/:pid/templates - Save a project-scoped template as-is (no field stripping)
 // Used by DialogueTaskService for templates with source: 'Project'
 app.post('/api/projects/:pid/templates', async (req, res) => {
@@ -2401,21 +2375,7 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
         updatedAt: now
       };
     } else if (isInstance(payload)) {
-      // Instance: required fields + closed semantic domain / embedding config
-      task = {
-        projectId,
-        id: payload.id,
-        type: type,
-        templateId: templateId,
-        templateVersion: payload.templateVersion || 1,
-        labelKey: payload.labelKey,
-        steps: payload.steps,
-        semanticValues: payload.semanticValues,
-        updatedAt: now
-      };
-      if (type === TASK_TYPE_AI_AGENT) {
-        Object.assign(task, pickAiAgentInstanceFields(payload));
-      }
+      task = buildInstanceTaskDocument(payload, { projectId, now });
     } else if (isLocalTemplate(payload)) {
       // Local template (templateId === null): save all fields as-is, strip only Factory metadata
       const { _id, createdAt, updatedAt: _updatedAt, ...rest } = payload;
@@ -2637,11 +2597,7 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
 
     // ✅ Se è Instance (e non standalone materializzato), filtra solo campi permessi
     if (isInstance(mergedDoc) && !isStandaloneMaterializedInstance(mergedDoc)) {
-      // Mantieni solo campi permessi per istanze (incluso type che è necessario per il caricamento)
-      const allowedFields = ['type', 'templateId', 'templateVersion', 'labelKey', 'steps', 'semanticValues', 'updatedAt'];
-      if (mergedDoc.type === TASK_TYPE_AI_AGENT) {
-        allowedFields.push(...AI_AGENT_INSTANCE_FIELD_KEYS);
-      }
+      const allowedFields = getAllowedInstanceFieldKeysForTaskType(mergedDoc.type);
       const filteredUpdate = {};
       for (const key of allowedFields) {
         if (update[key] !== undefined) {
@@ -2764,21 +2720,7 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
               updatedAt: now
             };
           } else if (isInstance(item)) {
-            // Instance: required instance fields + semantic domain / embedding config
-            task = {
-              projectId,
-              id: item.id,
-              type: item.type,
-              templateId: item.templateId,
-              templateVersion: item.templateVersion || 1,
-              labelKey: item.labelKey,
-              steps: item.steps,
-              semanticValues: item.semanticValues,
-              updatedAt: now
-            };
-            if (item.type === TASK_TYPE_AI_AGENT) {
-              Object.assign(task, pickAiAgentInstanceFields(item));
-            }
+            task = buildInstanceTaskDocument(item, { projectId, now });
           } else if (isLocalTemplate(item)) {
             // Local template (templateId === null): save all fields as-is, strip only Factory metadata
             const { _id, createdAt, updatedAt: _updatedAt, ...rest } = item;

@@ -7,7 +7,7 @@ import { getTemplateId } from '../utils/taskHelpers';
 import { v4 as uuidv4 } from 'uuid';
 import { FEATURE_FLAGS } from '../config/featureFlags';
 import { isAiAgentDebugEnabled, summarizeAgentTaskFields } from '../components/TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDebug';
-import { isStandaloneMaterializedTaskRow } from '@utils/taskKind';
+import { inferTaskKind, isStandaloneMaterializedTaskRow } from '@utils/taskKind';
 import { logContractPersist, summarizeSubTasksForDebug } from '@utils/contractPersistDebug';
 import {
   resolveTaskInEditorScope as resolveTaskInEditorScopeFromUtil,
@@ -477,10 +477,10 @@ class TaskRepository {
         migrateLegacyIntentsOnTask(task);
         this.tasks.set(task.id, task);
 
-        if (task.kind === 'standalone' || (task.subTasks && task.subTasks.length > 0)) {
+        if (inferTaskKind(task) === 'embedded' || (task.subTasks && task.subTasks.length > 0)) {
           logContractPersist('repoLoad', 'task hydrated from project DB into TaskRepository', {
             taskId: task.id,
-            kind: task.kind ?? '(unset)',
+            inferredKind: inferTaskKind(task),
             templateId: task.templateId ?? null,
             ...summarizeSubTasksForDebug(task.subTasks),
           });
@@ -680,7 +680,7 @@ class TaskRepository {
       }).filter(item => item !== null);
 
       for (const row of items) {
-        if (row.kind === 'standalone') {
+        if (inferTaskKind(row as Task) === 'embedded') {
           logContractPersist('bulkSave', 'row in bulk payload (POST /tasks/bulk)', {
             taskId: row.id,
             templateId: row.templateId ?? null,

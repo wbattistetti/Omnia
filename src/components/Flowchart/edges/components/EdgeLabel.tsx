@@ -324,14 +324,14 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
           >
             <Pencil size={sizes.iconSize} />
           </button>
-          {!hasConditionScript && (
+          {!isElse && (
             <button
               style={{
                 background: 'none',
                 border: 'none',
                 padding: 0,
                 cursor: 'pointer',
-                color: '#0ea5e9',
+                color: hasConditionScript ? '#22c55e' : '#0ea5e9',
                 width: `${sizes.iconButtonSize}px`,
                 height: `${sizes.iconButtonSize}px`,
                 display: 'flex',
@@ -340,9 +340,9 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
                 minWidth: `${sizes.iconButtonSize}px`,
                 minHeight: `${sizes.iconButtonSize}px`,
               }}
-              title="Apri Condition Editor"
+              title={hasConditionScript ? 'Modifica condizione' : 'Apri Condition Editor'}
               onMouseDown={(e) => {
-                // ✅ FIX: Prevent drag when clicking this button (tenaglia)
+                // ✅ FIX: Prevent drag when clicking this button (chiave inglese)
                 e.stopPropagation();
               }}
               onClick={(e) => {

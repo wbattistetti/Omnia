@@ -5,6 +5,7 @@ import TesterGridHeaderColumn from './TesterGridHeaderColumn';
 import AddContractDropdown from './AddContractDropdown';
 import { CONTRACT_METHOD_DISPLAY_ORDER } from '@responseEditor/ContractSelector/ContractSelector';
 import type { DataContract, ContractType } from '@components/DialogueDataEngine/contracts/contractLoader';
+import { calculateEngineColumnWidth } from '@responseEditor/features/step-management/components/TesterGrid/helpers/columnLayout';
 
 // Helper: Get engines from contract
 function getEngines(contract: DataContract | null): any[] {
@@ -236,21 +237,6 @@ export default function TesterGridHeader({
     onContractChange(updatedContract);
   };
 
-  // ✅ FIX: Calculate column width for dynamic columns
-  // Assume: phraseColumnWidth (280px) + Actions (80px) + Buttons (80px) = 440px fixed
-  // Remaining width is distributed among dynamic columns
-  const calculateColumnWidth = (totalColumns: number): number => {
-    if (totalColumns === 0) return 200; // Default width if no columns
-    // Estimate: 100% - 440px fixed = available width
-    // Distribute evenly among dynamic columns (min 220px per column per contenere label + icone)
-    const minColumnWidth = 220; // Increased from 150 to 220 to prevent text clipping
-    const estimatedTotalWidth = 1200; // Approximate table width
-    const fixedWidth = 440; // phraseColumnWidth (280) + Actions (80) + Buttons (80)
-    const availableWidth = estimatedTotalWidth - fixedWidth;
-    const calculatedWidth = Math.max(minColumnWidth, Math.floor(availableWidth / totalColumns));
-    return calculatedWidth;
-  };
-
   // Render dynamic columns based on engines array
   const renderDynamicColumns = () => {
     if (!engines || engines.length === 0) {
@@ -265,7 +251,7 @@ export default function TesterGridHeader({
       );
     }
 
-    const columnWidth = calculateColumnWidth(engines.length);
+    const columnWidth = calculateEngineColumnWidth(engines.length);
 
     return engines.map((engineItem, index) => {
       const componentType = mapContractTypeToComponentType(engineItem.type);
@@ -286,6 +272,7 @@ export default function TesterGridHeader({
           key={engineItem.type}
           type={componentType}
           contractType={engineItem.type}
+          isLastEngineColumn={index === engines.length - 1}
           mainLabel={labels.main}
           techLabel={labels.tech}
           tooltip={labels.tooltip}

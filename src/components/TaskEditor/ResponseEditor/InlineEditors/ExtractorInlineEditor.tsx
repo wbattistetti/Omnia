@@ -5,6 +5,8 @@ import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
 import { type TestResult } from '@responseEditor/InlineEditors/shared/TestValuesColumn';
 import { useEditorMode } from '@responseEditor/hooks/useEditorMode';
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import { applyRulesExtractorCodeToContract } from '@responseEditor/InlineEditors/contractEngineMerge';
 
 interface ExtractorInlineEditorProps {
   onClose: () => void;
@@ -13,6 +15,9 @@ interface ExtractorInlineEditorProps {
   testPhrases?: string[]; // ✅ Test phrases passed directly from useProfileState
   setTestPhrases?: (phrases: string[]) => void; // ✅ Setter passed directly from useProfileState
   onProfileUpdate?: (profile: NLPProfile) => void;
+  /** When set, deterministic extractor code is merged into the contract on close (unified with LLM / GrammarFlow). */
+  contract?: DataContract | null;
+  onContractChange?: (next: DataContract) => void;
 }
 
 const TEMPLATE_CODE = `// Estrazione non configurata
@@ -41,6 +46,14 @@ export const customExtractor: DataExtractor<string> = {
  * Uses Monaco Editor for TypeScript code editing
  * Unified with other extractors: Create/Refine button, TestValuesColumn
  */
+function initialExtractorCodeFromContract(contract: DataContract | null | undefined): string {
+  const rules = contract?.engines?.find((e: any) => e.type === 'rules') as
+    | { extractorCode?: string }
+    | undefined;
+  const code = rules?.extractorCode;
+  return typeof code === 'string' && code.trim().length > 0 ? code : TEMPLATE_CODE;
+}
+
 export default function ExtractorInlineEditor({
   onClose,
   node,
@@ -48,8 +61,12 @@ export default function ExtractorInlineEditor({
   testPhrases: testPhrasesProp,
   setTestPhrases: setTestPhrasesProp,
   onProfileUpdate,
+  contract,
+  onContractChange,
 }: ExtractorInlineEditorProps) {
-  const [extractorCode, setExtractorCode] = React.useState<string>(TEMPLATE_CODE);
+  const [extractorCode, setExtractorCode] = React.useState<string>(() =>
+    initialExtractorCodeFromContract(contract)
+  );
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
   const [generating, setGenerating] = React.useState<boolean>(false);
 
@@ -196,9 +213,10 @@ export default function ExtractorInlineEditor({
   const hasUnmatchedTests = testPhrases.some(tp => !testExtractor(tp).matched);
   const shouldShowButton = !generating && (hasUserEdited || hasUnmatchedTests);
 
-  // Close handler - validate if needed
   const handleClose = () => {
-    // Close anyway behavior - always allow closing
+    if (onContractChange) {
+      onContractChange(applyRulesExtractorCodeToContract(contract, extractorCode));
+    }
     onClose();
   };
 

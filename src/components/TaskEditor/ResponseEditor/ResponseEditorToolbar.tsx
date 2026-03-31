@@ -6,6 +6,7 @@ import { useGlobalTestPanel } from '@context/GlobalTestPanelContext';
 import { useResponseEditorContextSafe } from '@hooks/useResponseEditorContextSafe';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { openLateralChatPanel } from '@components/AppContent/infrastructure/docking/DockingHelpers';
+import { scheduleDockLayoutRefresh } from '@utils/scheduleDockLayoutRefresh';
 import type { DockTabChat } from '@dock/types';
 
 interface ResponseEditorToolbarProps {
@@ -401,6 +402,7 @@ export function useResponseEditorToolbar({
         newTab: chatTab,
         position: 'right',
       }));
+      scheduleDockLayoutRefresh();
     } else {
       // Fallback to global test panel (for backward compatibility)
       if (isGlobalTestPanelOpen) {

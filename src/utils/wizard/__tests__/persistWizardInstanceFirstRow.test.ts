@@ -13,7 +13,7 @@ describe('persistWizardInstanceFirstRow', () => {
     vi.restoreAllMocks();
   });
 
-  it('writes standalone row and clears templateId when flag is on', async () => {
+  it('writes embedded row and clears templateId when flag is on', async () => {
     const tid = 'wizard-if-test-1';
     const guid = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
     taskRepository.createTask(
@@ -35,7 +35,6 @@ describe('persistWizardInstanceFirstRow', () => {
     expect(ok).toBe(true);
     const t = taskRepository.getTask(tid);
     expect(t?.templateId).toBeNull();
-    expect(t?.kind).toBe('standalone');
     expect(t?.subTasks?.length).toBe(1);
   });
 

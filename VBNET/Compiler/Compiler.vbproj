@@ -39,6 +39,7 @@
 
     <!-- Flow Compiler -->
     <Compile Include="FlowCompiler.vb" />
+    <Compile Include="UtteranceEscalationValidation.vb" />
     <Compile Include="ConditionBuilder.vb" />
     <Compile Include="Flow.vb" />
     <Compile Include="FlowUtils.vb" />

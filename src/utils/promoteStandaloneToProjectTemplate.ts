@@ -48,7 +48,7 @@ export function canPromoteStandaloneToProjectTemplateMvp(task: Task | null | und
   if (!task) {
     return false;
   }
-  if (inferTaskKind(task) !== 'standalone') {
+  if (inferTaskKind(task) !== 'embedded') {
     return false;
   }
   const nodes = task.subTasks;
@@ -79,7 +79,7 @@ function stepsSliceForNode(
 
 /**
  * Creates project template task rows (POST in post-order), registers in DialogueTaskService,
- * then sets the instance row to kind `instance` with templateId = root id.
+ * then sets the instance row `templateId` to the root template id (embedded graph cleared from the row).
  */
 export async function promoteStandaloneToProjectTemplate(
   taskId: string,
@@ -110,7 +110,6 @@ export async function promoteStandaloneToProjectTemplate(
       id: nodeId,
       type: task.type ?? TaskType.UtteranceInterpretation,
       templateId: null,
-      kind: 'projectTemplate',
       label: (node.label || task.labelKey || task.label || nodeId) as string,
       icon: node.icon || 'FileText',
       steps: stepsSliceForNode(fullSteps, nodeId),
@@ -149,7 +148,6 @@ export async function promoteStandaloneToProjectTemplate(
   const ok = taskRepository.updateTask(
     taskId,
     {
-      kind: 'instance',
       templateId: rootTemplateId,
       subTasks: [],
       steps: task.steps ?? {},

@@ -18,6 +18,7 @@ vi.mock('@components/Flowchart/utils/taskVisuals', () => ({
 
 import {
   buildErrorReportTree,
+  dedupeHumanIssuesByFixKey,
   errorFlowId,
   humanIssuesForError,
 } from '../errorReportTreeModel';
@@ -49,27 +50,52 @@ describe('errorReportTreeModel', () => {
     expect(lines[0].error).toBe(e);
   });
 
-  it('humanIssuesForError uses distinct lines for link/condition categories', () => {
-    const linkMissing = humanIssuesForError(
-      err({ taskId: 't', message: 'x', severity: 'error', category: 'LinkMissingCondition' }),
-      'Row',
-      null
-    );
-    expect(linkMissing[0].message).toContain('etichetta');
+  it('humanIssuesForError uses one Italian line for link/condition edge issues', () => {
+    const unified = 'Devi definire una condizione per questo link.';
+    for (const category of [
+      'LinkMissingCondition',
+      'ConditionNotFound',
+      'ConditionMissingScript',
+    ] as const) {
+      const lines = humanIssuesForError(
+        err({ taskId: 't', message: 'x', severity: 'error', category }),
+        'Row',
+        null
+      );
+      expect(lines[0].message).toBe(unified);
+    }
+  });
 
-    const condMissing = humanIssuesForError(
-      err({ taskId: 't', message: 'x', severity: 'error', category: 'ConditionNotFound' }),
-      'Row',
-      null
-    );
-    expect(condMissing[0].message).toContain('condizione');
+  it('dedupeHumanIssuesByFixKey keeps one line when message and fix target match', () => {
+    const edgeErr = err({
+      taskId: 'SYSTEM',
+      message: 'm1',
+      severity: 'error',
+      category: 'LinkMissingCondition',
+      edgeId: 'e1',
+      nodeId: 'n1',
+      fixTarget: { type: 'edge', edgeId: 'e1' },
+    });
+    const duplicateCompilerRow = { ...edgeErr, message: 'm2' } as CompilationError;
+    const unified = 'Devi definire una condizione per questo link.';
+    const deduped = dedupeHumanIssuesByFixKey([
+      { message: unified, error: edgeErr },
+      { message: unified, error: duplicateCompilerRow },
+    ]);
+    expect(deduped.length).toBe(1);
+  });
 
-    const script = humanIssuesForError(
-      err({ taskId: 't', message: 'x', severity: 'error', category: 'ConditionMissingScript' }),
-      'Row',
-      null
-    );
-    expect(script[0].message).toContain('regola');
+  it('humanIssuesForError returns Italian copy for EmptyEscalation', () => {
+    const e = err({
+      taskId: 't1',
+      message: 'Dialogue escalation has no actions.',
+      severity: 'error',
+      category: 'EmptyEscalation',
+      fixTarget: { type: 'taskEscalation', taskId: 't1', stepKey: 'noMatch', escalationIndex: 0 },
+    });
+    const lines = humanIssuesForError(e, 'Row', null);
+    expect(lines.length).toBe(1);
+    expect(lines[0].message).toContain('escalation');
   });
 
   it('humanIssuesForError uses fixed Italian copy for CompilationException / TaskCompilationFailed', () => {

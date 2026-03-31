@@ -7,7 +7,7 @@
  */
 
 import type { Task } from '@types/taskTypes';
-import { TemplateSource } from '@types/taskTypes';
+import { TemplateSource, TaskType } from '@types/taskTypes';
 import { isStandaloneMaterializedTaskRow } from '@utils/taskKind';
 
 /**
@@ -26,6 +26,11 @@ export function isProjectTemplateDefinitionRowForTemplateEndpointOnly(task: Task
     return false;
   }
   if (task.subTasks && task.subTasks.length > 0) {
+    return false;
+  }
+  // Only UtteranceInterpretation catalogue template rows are persisted via POST /templates (full cache).
+  // SayMessage, BackendCall, AIAgent, etc. with templateId null are normal flow-row tasks and MUST go through POST /tasks/bulk (otherwise message text / parameters never persist).
+  if (task.type !== TaskType.UtteranceInterpretation) {
     return false;
   }
   return true;

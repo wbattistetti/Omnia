@@ -4,12 +4,11 @@ import { TaskType } from '@types/taskTypes';
 import { materializeTask } from '../MaterializationOrchestrator';
 
 describe('materializeTask', () => {
-  it('uses standalone path for kind standalone with nodes', async () => {
+  it('uses embedded path when templateId null and subTasks present', async () => {
     const task: Task = {
       id: 't1',
       type: TaskType.UtteranceInterpretation,
       templateId: null,
-      kind: 'standalone',
       subTasks: [{ id: 'n1', templateId: 'n1', label: 'X' }],
       steps: { n1: {} },
     };
@@ -23,12 +22,11 @@ describe('materializeTask', () => {
     expect(await materializeTask(null)).toBeNull();
   });
 
-  it('materializes empty standalone shell as minimal tree', async () => {
+  it('materializes empty embedded shell as minimal tree', async () => {
     const task: Task = {
       id: 't-empty',
       type: TaskType.UtteranceInterpretation,
       templateId: null,
-      kind: 'standalone',
       subTasks: [],
       steps: {},
     };

@@ -43,6 +43,15 @@ Public Class FlowCompiler
 
             Console.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
             System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
+
+            Dim utteranceResult = TryCast(result, CompiledUtteranceTask)
+            If utteranceResult IsNot Nothing Then
+                Dim escalationErrors = UtteranceEscalationValidation.AppendEmptyEscalationErrors(utteranceResult, taskId, node, row, errors)
+                If escalationErrors > 0 Then
+                    Return Nothing
+                End If
+            End If
+
             Return result
 
         Catch ex As Exception

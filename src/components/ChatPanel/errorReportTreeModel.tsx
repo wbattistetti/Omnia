@@ -24,6 +24,7 @@ import {
   findEdgeLabelInWorkspace,
   stripNodeRowReferences,
 } from './errorReportDisplay';
+import { compilationErrorFixKey } from '@utils/compilationErrorFix';
 
 export type FlowVisualMeta = {
   Icon: ComponentType<{ className?: string; style?: CSSProperties; size?: number }>;
@@ -236,16 +237,12 @@ export function humanIssuesForError(
         'Questo task non può essere eseguito. Aprilo e controlla la configurazione.',
       ]);
     case 'ConditionNotFound':
-      return bind(['Questo collegamento usa una condizione che non esiste più.']);
     case 'ConditionMissingScript':
     case 'ConditionHasNoScript':
-      return bind(['Devi specificare la regola per attivare questo collegamento.']);
     case 'LinkMissingCondition':
     case 'EdgeLabelWithoutCondition':
     case 'EdgeWithoutCondition':
-      return bind([
-        'Questo collegamento ha un’etichetta, ma non una regola che spiega quando usarlo.',
-      ]);
+      return bind(['Devi definire una condizione per questo link.']);
     case 'AmbiguousLink': {
       const r = ((error as { reason?: string }).reason || '').trim();
       if (r === 'sameLabel') {
@@ -263,9 +260,7 @@ export function humanIssuesForError(
           'Due o più collegamenti usano la stessa regola: i rami non sono distinguibili.',
         ]);
       }
-      return bind([
-        'Questo collegamento è indistinguibile dagli altri. Aggiungi una regola chiara per scegliere questo ramo.',
-      ]);
+      return bind(['Devi definire una condizione per questo link.']);
     }
     case 'AmbiguousOutgoingLinks':
       return bind([
@@ -278,6 +273,10 @@ export function humanIssuesForError(
     case 'AmbiguousDuplicateConditionScript':
       return bind([
         'Due o più collegamenti condividono la stessa condizione o lo stesso script: i rami non sono distinguibili.',
+      ]);
+    case 'EmptyEscalation':
+      return bind([
+        'In un passo del task manca un’azione in un’escalation: apri il task, scheda Tasks, e aggiungi un prompt o un task in quell’escalation.',
       ]);
     default: {
       const { body } = splitFlowPrefixedMessage(error.message);
@@ -299,6 +298,21 @@ export function errorFlowId(error: CompilationError): string {
 export function errorMessageWithoutFlowPrefix(error: CompilationError): string {
   const { body } = splitFlowPrefixedMessage(error.message);
   return body.trim();
+}
+
+/**
+ * Collapses duplicate human lines when message and Fix target are identical (e.g. same link, same copy).
+ */
+export function dedupeHumanIssuesByFixKey(issues: HumanIssueItem[]): HumanIssueItem[] {
+  const seen = new Set<string>();
+  const out: HumanIssueItem[] = [];
+  for (const item of issues) {
+    const key = `${item.message}\0${compilationErrorFixKey(item.error)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
 }
 
 export type RowLookup = {
@@ -442,13 +456,14 @@ export function buildErrorReportTree(
       }
       const hasBlockingError = ec > 0;
 
-      const issues: HumanIssueItem[] = [];
+      const issuesRaw: HumanIssueItem[] = [];
       for (const er of errList) {
         const hit = findRowInWorkspace(flows, flowId, er);
         const rtText = (hit.row?.text ?? '').trim() ? hit.row!.text!.trim() : null;
         const el = findEdgeLabelInWorkspace(flows, er.edgeId);
-        issues.push(...humanIssuesForError(er, rtText, el));
+        issuesRaw.push(...humanIssuesForError(er, rtText, el));
       }
+      const issues = dedupeHumanIssuesByFixKey(issuesRaw);
 
       rows.push({
         rowKey: rowGroupKey(primary),

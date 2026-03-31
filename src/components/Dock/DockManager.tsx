@@ -49,8 +49,16 @@ export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent, 
 
   const onDropTo = (tabsetId: string, region: DockRegion) => {
     if (!dragTab) return;
-    // Preserve sizes when moving (use default if not specified)
-    const sizes = region === 'bottom' ? [0.67, 0.33] : region === 'top' ? [0.33, 0.67] : undefined;
+    const sizes =
+      region === 'bottom'
+        ? [0.67, 0.33]
+        : region === 'top'
+          ? [0.33, 0.67]
+          : region === 'right'
+            ? [0.75, 0.25]
+            : region === 'left'
+              ? [0.25, 0.75]
+              : undefined;
     setRoot(moveTab(root, dragTab.id, tabsetId, region, sizes));
     setDragTab(null);
     setHoverTarget(null);
@@ -99,16 +107,22 @@ function SplitRenderer(props: {
   // ✅ FIX: Removed h-full - flex: 1 in style handles height correctly
   const cls = node.orientation === 'row' ? 'flex flex-row w-full' : 'flex flex-col w-full';
   const [isResizing, setIsResizing] = React.useState(false);
-  // Initialize sizes from node.sizes or default to equal distribution
-  const defaultSizes = React.useMemo(() => node.children.map(() => 1 / node.children.length), [node.children.length]);
-  const [sizes, setSizes] = React.useState<number[]>(() => node.sizes || defaultSizes);
+  // Defaults: row + 2 panes = flow/chat lateral layout (matches openLateralChatPanel [0.75, 0.25]); else equal split
+  const defaultSizes = React.useMemo(() => {
+    const n = node.children.length;
+    if (n === 0) return [];
+    if (node.orientation === 'row' && n === 2) {
+      return [0.75, 0.25];
+    }
+    return node.children.map(() => 1 / n);
+  }, [node.children.length, node.orientation]);
+  const [sizes, setSizes] = React.useState<number[]>(() => node.sizes ?? defaultSizes);
   const sizesRef = React.useRef<number[]>(sizes);
 
-  // Update sizes only when node.sizes changes externally (not during resize)
-  React.useEffect(() => {
+  // Sync from tree before paint — useEffect caused one frame at wrong flex % (panel looked wide then narrow).
+  React.useLayoutEffect(() => {
     if (!isResizing) {
-      const newSizes = node.sizes || defaultSizes;
-      // Only update if actually different to avoid unnecessary re-renders
+      const newSizes = node.sizes ?? defaultSizes;
       if (JSON.stringify(newSizes) !== JSON.stringify(sizesRef.current)) {
         setSizes(newSizes);
         sizesRef.current = newSizes;
