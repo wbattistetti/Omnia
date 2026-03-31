@@ -185,10 +185,11 @@ export class ProjectSaveOrchestrator {
   }
 
   /**
-   * Executes save request by calling all backend endpoints
+   * Executes save request by calling all backend endpoints.
    *
-   * M5: This method orchestrates the actual save operations.
-   * All operations run in parallel for better performance.
+   * Deterministic persistence: project template definitions are saved via DialogueTaskService
+   * (POST /templates) before task bulk, so the same Mongo `id` is never overwritten by a
+   * competing bulk payload. Catalog/flow/translations/variables/conditions still run in parallel.
    *
    * @param request - Save request prepared by prepareSave()
    * @param uiState - Additional UI state needed for save (translations context, flow state, etc.)
@@ -228,8 +229,8 @@ export class ProjectSaveOrchestrator {
 
     console.log('[Save][Orchestrator] 🚀 START executeSave', { projectId });
 
-    // Execute all save operations in parallel
-    const savePromises = await Promise.allSettled([
+    // Phase 1: parallel — everything except tasks bulk and template save (see phase 2/3).
+    const phase1Promises = await Promise.allSettled([
       // 1. Catalog timestamp update
       (async () => {
         try {
@@ -383,43 +384,6 @@ export class ProjectSaveOrchestrator {
         }
       })(),
 
-      // 4. Tasks
-      (async () => {
-        try {
-          if (!uiState.taskRepository) {
-            throw new Error('TaskRepository not provided');
-          }
-
-          const saved = await uiState.taskRepository.saveAllTasksToDatabase(
-            projectId,
-            request.tasks.items
-          );
-
-          if (saved) {
-            results.tasks = {
-              success: true,
-              saved: request.tasks.items.length,
-              failed: 0,
-            };
-            console.log('[Save][Orchestrator][4-tasks] ✅ DONE', {
-              saved: request.tasks.items.length,
-            });
-          } else {
-            throw new Error('Task save returned false');
-          }
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          errors.push(`Tasks: ${errorMsg}`);
-          results.tasks = {
-            success: false,
-            saved: 0,
-            failed: request.tasks.items.length,
-            error: errorMsg,
-          };
-          console.error('[Save][Orchestrator][4-tasks] ❌ ERROR', { error: errorMsg });
-        }
-      })(),
-
       // 5. Variables
       (async () => {
         try {
@@ -449,56 +413,6 @@ export class ProjectSaveOrchestrator {
             error: errorMsg,
           };
           console.error('[Save][Orchestrator][5-variables] ❌ ERROR', { error: errorMsg });
-        }
-      })(),
-
-      // 6. Templates
-      (async () => {
-        try {
-          if (!uiState.dialogueTaskService) {
-            throw new Error('DialogueTaskService not provided');
-          }
-
-          // Save grammarFlow from store first
-          await uiState.dialogueTaskService.saveAllGrammarFlowFromStore();
-
-          // Mark all templates as modified
-          request.templates.forEach((t) => {
-            if (t.templateId) {
-              uiState.dialogueTaskService.markTemplateAsModified(t.templateId);
-            }
-          });
-
-          // Save all marked templates
-          const result = await uiState.dialogueTaskService.saveModifiedTemplates(projectId);
-
-          results.templates = {
-            success: result.failed === 0,
-            saved: result.saved,
-            failed: result.failed,
-            ...(result.failed > 0 ? { error: `${result.failed} templates failed to save` } : {}),
-          };
-
-          if (result.failed === 0) {
-            console.log('[Save][Orchestrator][6-templates] ✅ DONE', {
-              saved: result.saved,
-            });
-          } else {
-            console.warn('[Save][Orchestrator][6-templates] ⚠️ PARTIAL', {
-              saved: result.saved,
-              failed: result.failed,
-            });
-          }
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          errors.push(`Templates: ${errorMsg}`);
-          results.templates = {
-            success: false,
-            saved: 0,
-            failed: request.templates.length,
-            error: errorMsg,
-          };
-          console.error('[Save][Orchestrator][6-templates] ❌ ERROR', { error: errorMsg });
         }
       })(),
 
@@ -541,6 +455,86 @@ export class ProjectSaveOrchestrator {
         }
       })(),
     ]);
+
+    // Phase 2: project templates (full dataContract from DialogueTaskService) — before task bulk.
+    try {
+      if (!uiState.dialogueTaskService) {
+        throw new Error('DialogueTaskService not provided');
+      }
+
+      await uiState.dialogueTaskService.saveAllGrammarFlowFromStore();
+
+      request.templates.forEach((t) => {
+        if (t.templateId) {
+          uiState.dialogueTaskService.markTemplateAsModified(t.templateId);
+        }
+      });
+
+      const templateResult = await uiState.dialogueTaskService.saveModifiedTemplates(projectId);
+
+      results.templates = {
+        success: templateResult.failed === 0,
+        saved: templateResult.saved,
+        failed: templateResult.failed,
+        ...(templateResult.failed > 0 ? { error: `${templateResult.failed} templates failed to save` } : {}),
+      };
+
+      if (templateResult.failed === 0) {
+        console.log('[Save][Orchestrator][6-templates] ✅ DONE', {
+          saved: templateResult.saved,
+        });
+      } else {
+        console.warn('[Save][Orchestrator][6-templates] ⚠️ PARTIAL', {
+          saved: templateResult.saved,
+          failed: templateResult.failed,
+        });
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      errors.push(`Templates: ${errorMsg}`);
+      results.templates = {
+        success: false,
+        saved: 0,
+        failed: request.templates.length,
+        error: errorMsg,
+      };
+      console.error('[Save][Orchestrator][6-templates] ❌ ERROR', { error: errorMsg });
+    }
+
+    // Phase 3: task bulk (instances + standalone; project template definitions excluded in TaskRepository).
+    try {
+      if (!uiState.taskRepository) {
+        throw new Error('TaskRepository not provided');
+      }
+
+      const saved = await uiState.taskRepository.saveAllTasksToDatabase(
+        projectId,
+        request.tasks.items
+      );
+
+      if (saved) {
+        results.tasks = {
+          success: true,
+          saved: request.tasks.items.length,
+          failed: 0,
+        };
+        console.log('[Save][Orchestrator][4-tasks] ✅ DONE', {
+          saved: request.tasks.items.length,
+        });
+      } else {
+        throw new Error('Task save returned false');
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      errors.push(`Tasks: ${errorMsg}`);
+      results.tasks = {
+        success: false,
+        saved: 0,
+        failed: request.tasks.items.length,
+        error: errorMsg,
+      };
+      console.error('[Save][Orchestrator][4-tasks] ❌ ERROR', { error: errorMsg });
+    }
 
     const endTime = performance.now();
     const duration = Math.round(endTime - startTime);

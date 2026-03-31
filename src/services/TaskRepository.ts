@@ -1,7 +1,6 @@
 import type { Task, TaskInstance, MaterializedStep } from '../types/taskTypes';
 import { migrateLegacyIntentsOnTask, problemIntentsToSemanticValues } from '../utils/semanticValueClassificationBridge';
 import { TaskType, TemplateSource } from '../types/taskTypes';
-import DialogueTaskService from './DialogueTaskService';
 import { StepType } from '../types/stepTypes';
 import { generateId } from '../utils/idGenerator';
 import { getTemplateId } from '../utils/taskHelpers';
@@ -14,32 +13,7 @@ import {
   resolveTaskInEditorScope as resolveTaskInEditorScopeFromUtil,
   resolveTemplateDefinitionTask as resolveTemplateDefinitionTaskFromUtil,
 } from '@utils/taskScopedLookup';
-
-/**
- * Project template rows in TaskRepository often omit `dataContract`; GrammarFlow and recognition
- * persist the full contract on DialogueTaskService.cache. Bulk POST /tasks must not overwrite MongoDB
- * with a stripped row (race with POST /templates would still lose grammarFlow if bulk runs last).
- */
-function mergeProjectTemplateDataContractFromDialogueCache(
-  item: Record<string, unknown>,
-  task: Task
-): void {
-  const tid = task.templateId;
-  if (tid !== null && tid !== undefined) {
-    return;
-  }
-  if ((task as { source?: string }).source === TemplateSource.Factory) {
-    return;
-  }
-  const taskId = task.id;
-  if (!taskId) {
-    return;
-  }
-  const tmpl = DialogueTaskService.getTemplate(taskId);
-  if (tmpl?.dataContract) {
-    item.dataContract = JSON.parse(JSON.stringify(tmpl.dataContract));
-  }
-}
+import { isProjectTemplateDefinitionRowForTemplateEndpointOnly } from './project-save/projectBulkTaskRules';
 
 /**
  * TaskRepository: Primary repository for Task data
@@ -620,12 +594,9 @@ class TaskRepository {
       // ✅ CRITICAL: Filter out templates with source: 'Factory' (they are saved in Factory database, not project)
       // Only templates with source: 'Project' or no source (backward compatibility) should be saved to project
       allTasks = allTasks.filter(task => {
-        // If task is an instance (has templateId), always save it (it references a template)
         if (task.templateId) {
           return true;
         }
-        // If task is a template (templateId === null), check source
-        // Only save templates with source: 'Project' or no source (backward compatibility)
         if (task.templateId === null) {
           const source = (task as any).source;
           if (source === TemplateSource.Factory) {
@@ -635,7 +606,12 @@ class TaskRepository {
             });
             return false;
           }
-          // Save if source is 'Project' or undefined (backward compatibility)
+          if (isProjectTemplateDefinitionRowForTemplateEndpointOnly(task)) {
+            console.log('[TaskRepository] ⏭️ SKIPPING BULK: project template definition (POST /templates only)', {
+              taskId: task.id,
+            });
+            return false;
+          }
           return true;
         }
         return true;
@@ -699,8 +675,6 @@ class TaskRepository {
             itemToSave.templateId = null;
           }
         }
-
-        mergeProjectTemplateDataContractFromDialogueCache(itemToSave, task);
 
         return itemToSave;
       }).filter(item => item !== null);

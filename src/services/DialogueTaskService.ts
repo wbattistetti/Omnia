@@ -4,6 +4,7 @@
 import type { SemanticContract, EngineConfig, EngineEscalation } from '../types/semanticContract';
 import { TaskType } from '../types/taskTypes';
 import { AI_AGENT_PERSIST_FIELD_KEYS } from '../types/aiAgentPersistFieldKeys';
+import { syncProjectTemplateRowFromDialogueTask } from './project-save/projectTemplateRepositorySync';
 
 export interface DialogueTask {
   _id?: string;
@@ -298,6 +299,8 @@ export class DialogueTaskService {
     }
 
     this.modifiedTemplates.add(templateId);
+
+    syncProjectTemplateRowFromDialogueTask(templateId, this.getTemplate(templateId));
 
     // ✅ Log dettagliato per debugging
     const templateInfo = template ? {

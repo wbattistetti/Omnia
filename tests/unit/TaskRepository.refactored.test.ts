@@ -155,9 +155,10 @@ describe('TaskRepository - Refactored', () => {
         json: async () => ({ success: true })
       });
 
+      // Instance row (templateId set) — project template definitions are excluded from bulk
       taskRepository.createTask(
         TaskType.UtteranceInterpretation,
-        null,
+        '00000000-0000-4000-8000-000000000001',
         undefined,
         'task1',
         'project1'
