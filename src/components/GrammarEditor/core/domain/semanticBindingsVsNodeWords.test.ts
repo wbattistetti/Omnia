@@ -32,9 +32,9 @@ describe('validateSemanticBindingsVsNodeWords', () => {
     expect(validateSemanticBindingsVsNodeWords(n).isValid).toBe(false);
   });
 
-  it('rejects non-empty label with semantic-set', () => {
+  it('allows non-empty label with semantic-set (caption independent of matching)', () => {
     const n = nodeWithBindings('city', [], [{ type: 'semantic-set', setId: 's1' }]);
-    expect(validateSemanticBindingsVsNodeWords(n).isValid).toBe(false);
+    expect(validateSemanticBindingsVsNodeWords(n).isValid).toBe(true);
   });
 
   it('allows empty label with semantic-set and no synonyms', () => {
@@ -50,10 +50,10 @@ describe('addBinding respects semantic vs node words', () => {
     expect(result.isValid).toBe(false);
   });
 
-  it('rejects semantic-set when label is non-empty', () => {
+  it('allows semantic-set when label is non-empty', () => {
     const node = nodeWithBindings('hello', [], []);
     const result = addBinding(node, { type: 'semantic-set', setId: 's1' });
-    expect(result.isValid).toBe(false);
+    expect(result.isValid).toBe(true);
   });
 });
 
@@ -64,10 +64,10 @@ describe('addSynonym and updateNodeLabel', () => {
     expect(r.isValid).toBe(false);
   });
 
-  it('rejects updateNodeLabel when semantic-set would get a non-empty label', () => {
+  it('allows updateNodeLabel when semantic-set is bound', () => {
     const node = nodeWithBindings('', [], [{ type: 'semantic-set', setId: 's1' }]);
     const r = updateNodeLabel(node, 'text');
-    expect(r.isValid).toBe(false);
+    expect(r.isValid).toBe(true);
   });
 
   it('allows updateNodeLabel for semantic-value node', () => {

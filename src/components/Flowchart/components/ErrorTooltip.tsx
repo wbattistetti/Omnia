@@ -20,7 +20,12 @@ export const ERROR_TOOLTIP_TASK_NOT_FOUND_COPY = {
 
 function isTaskNotFoundCategory(category?: string): boolean {
   const c = (category ?? '').trim();
-  return c === 'TaskNotFound' || c === 'Task not found' || c.toLowerCase() === 'tasknotfound';
+  return (
+    c === 'MissingOrInvalidTask' ||
+    c === 'TaskNotFound' ||
+    c === 'Task not found' ||
+    c.toLowerCase() === 'tasknotfound'
+  );
 }
 
 /** User-visible category line in the popover header (replaces raw compiler categories where needed). */

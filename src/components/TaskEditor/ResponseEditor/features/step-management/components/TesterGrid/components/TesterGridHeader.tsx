@@ -3,12 +3,22 @@ import TesterGridInput from './TesterGridInput';
 import TesterGridActionsColumn from './TesterGridActionsColumn';
 import TesterGridHeaderColumn from './TesterGridHeaderColumn';
 import AddContractDropdown from './AddContractDropdown';
+import { CONTRACT_METHOD_DISPLAY_ORDER } from '@responseEditor/ContractSelector/ContractSelector';
 import type { DataContract, ContractType } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 // Helper: Get engines from contract
 function getEngines(contract: DataContract | null): any[] {
   if (!contract) return [];
   return contract.engines || [];
+}
+
+function isTesterGridHeaderDebug(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem('debug.testerGridHeader') === '1';
+  } catch {
+    return false;
+  }
 }
 
 // 🎨 Colori centralizzati per extractors
@@ -24,8 +34,8 @@ const EXTRACTOR_COLORS = {
 // 📊 Etichette colonne con tooltip
 const COLUMN_LABELS = {
   regex: {
-    main: "Regex",
-    tech: "Regex",
+    main: "RegExp.Execute",
+    tech: "RegExp.Execute",
     tooltip: "Riconosce il dato solo se è scritto in modo molto preciso e prevedibile. Funziona per risposte standard. Se la risposta è espressa in modo diverso, passa al motore successivo."
   },
   deterministic: {
@@ -49,8 +59,8 @@ const COLUMN_LABELS = {
     tooltip: "Capisce sinonimi, parafrasi e modi molto diversi di dire la stessa cosa. Serve quando il dato richiesto appartiene a una lista di valori possibili. Trova il valore più simile anche se l'utente usa parole diverse."
   },
   grammarflow: {
-    main: "GrammarFlow",
-    tech: "GrammarFlow",
+    main: "Grammar flow",
+    tech: "Grammar flow",
     tooltip: "Motore basato su grammatica visuale (flowchart). Permette di definire pattern complessi tramite un grafo di nodi e archi. Utile per riconoscere strutture linguistiche articolate."
   }
 };
@@ -107,30 +117,17 @@ export default function TesterGridHeader({
 
   // Leggi engines dal dataContract - ordine implicito (ordine array = ordine escalation)
   const engines = useMemo(() => {
-    // ✅ DEBUG: Log dettagliato per capire perché le colonne non vengono mostrate
     const enginesArray = getEngines(contract);
-    console.log('[TesterGridHeader] 🔍 Reading engines from DataContract', {
-      hasContract: !!contract,
-      contractType: contract ? typeof contract : 'null',
-      hasEnginesArray: enginesArray.length > 0,
-      enginesIsArray: Array.isArray(enginesArray),
-      enginesRaw: enginesArray,
-      enginesCount: enginesArray.length,
-      enginesTypes: enginesArray.map((c: any) => c?.type) || [],
-      contractKeys: contract ? Object.keys(contract) : []
-    });
+    if (isTesterGridHeaderDebug()) {
+      console.log('[TesterGridHeader] engines', {
+        count: enginesArray.length,
+        types: enginesArray.map((c: any) => c?.type),
+      });
+    }
 
     if (!enginesArray || enginesArray.length === 0) {
-      console.log('[TesterGridHeader] ⚠️ No engines array found, returning empty array');
       return [];
     }
-    // ✅ CRITICAL: Show ALL engines (enabled and disabled) so user can toggle checkbox
-    // Filtering for enabled engines happens during escalation execution, not in UI
-    console.log('[TesterGridHeader] ✅ Engines loaded (all engines shown)', {
-      totalEngines: enginesArray.length,
-      enginesTypes: enginesArray.map(c => c.type),
-      enabledCount: enginesArray.filter(c => c.enabled !== false).length
-    });
     return enginesArray;
   }, [contract]);
 
@@ -142,7 +139,7 @@ export default function TesterGridHeader({
 
   // Get available methods (excluding already added ones)
   const getAvailableMethods = (): ContractType[] => {
-    const allMethods: ContractType[] = ['regex', 'rules', 'ner', 'llm', 'embeddings', 'grammarflow'];
+    const allMethods: ContractType[] = [...CONTRACT_METHOD_DISPLAY_ORDER];
     if (!engines || engines.length === 0) return allMethods;
     const usedTypes = engines.map(c => c.type);
     return allMethods.filter(m => !usedTypes.includes(m));
@@ -256,17 +253,7 @@ export default function TesterGridHeader({
 
   // Render dynamic columns based on engines array
   const renderDynamicColumns = () => {
-    // ✅ DEBUG: Log per capire perché le colonne non vengono renderizzate
-    console.log('[TesterGridHeader] 🔍 renderDynamicColumns called', {
-      enginesCount: engines?.length || 0,
-      enginesTypes: engines?.map(c => c.type) || [],
-      willShowAddContract: !engines || engines.length === 0,
-      willShowColumns: engines && engines.length > 0
-    });
-
     if (!engines || engines.length === 0) {
-      // Show "Add contract" dropdown when no engine
-      console.log('[TesterGridHeader] ⚠️ No engines found, showing "Add contract" dropdown');
       return (
         <th colSpan={1} style={{ padding: 8, background: '#f9fafb', textAlign: 'center', width: '200px' }}>
           <AddContractDropdown
@@ -277,11 +264,6 @@ export default function TesterGridHeader({
         </th>
       );
     }
-
-    console.log('[TesterGridHeader] ✅ Rendering columns for engines', {
-      enginesCount: engines.length,
-      enginesTypes: engines.map(c => c.type)
-    });
 
     const columnWidth = calculateColumnWidth(engines.length);
 

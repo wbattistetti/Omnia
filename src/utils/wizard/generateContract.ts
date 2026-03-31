@@ -2,6 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import type { TaskTreeNode, TaskTree } from '../../types/taskTypes';
+import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
 import type { SemanticContract } from '../../types/semanticContract';
 import { buildSemanticContract } from '../contract/buildEntity';
 import { SemanticContractService } from '../../services/SemanticContractService';
@@ -107,7 +108,8 @@ export async function generateContractsForAllNodes(
   // This prevents errors when trying to save contracts for nodes without templates
   const nodesWithTemplates = allNodes.filter(node => {
     const nodeId = node.id || node.templateId;
-    const template = DialogueTaskService.getTemplate(nodeId);
+    const cacheLookupId = catalogueLookupTemplateId(node);
+    const template = cacheLookupId ? DialogueTaskService.getTemplate(cacheLookupId) : null;
     if (!template) {
       console.warn(`[generateContractsForAllNodes] ⚠️ Skipping node ${nodeId} - template not in cache`, {
         nodeLabel: node.label,

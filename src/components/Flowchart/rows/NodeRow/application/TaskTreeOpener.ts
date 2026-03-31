@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { TaskType, type Task } from '@types/taskTypes';
+import { TaskType, type Task, getEditorFromTaskType } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
 import { createDefaultAIAgentTaskPayload } from '../../../../TaskEditor/EditorHost/editors/aiAgentEditor/createDefaultAIAgentTaskPayload';
 import { resolveTaskType } from '../../../utils/taskVisuals';
@@ -17,7 +17,7 @@ export interface TaskTreeOpenerDependencies {
       id: string;  // ALWAYS equals row.id (which equals task.id when task exists)
       type: TaskType;
       label: string;
-      taskWizardMode?: 'none' | 'adaptation' | 'full';
+      taskWizardMode?: 'none' | 'adaptation' | 'full' | 'pending';
       contextualizationTemplateId?: string;
       taskLabel?: string;
     }) => void;
@@ -45,7 +45,7 @@ export class TaskTreeOpener {
   private isPristineStandaloneTask(task: Task): boolean {
     const noTemplate = !task.templateId || task.templateId === 'UNDEFINED';
     const noSteps = !task.steps || Object.keys(task.steps).length === 0;
-    const noNodes = !task.instanceNodes || task.instanceNodes.length === 0;
+    const noNodes = !task.subTasks || task.subTasks.length === 0;
     return (task.kind === 'standalone' || noTemplate) && noSteps && noNodes;
   }
 
@@ -232,13 +232,6 @@ export class TaskTreeOpener {
     const { row, taskEditorCtx, getProjectId } = this.deps;
     const finalTaskType = taskForType.type as TaskType;
 
-    taskEditorCtx.open({
-      id: row.id,  // ALWAYS equals task.id
-      type: finalTaskType,
-      label: row.text,
-      taskWizardMode: 'none',
-    });
-
     let taskTree: any = null;
     const DialogueTaskService = (await import('@services/DialogueTaskService')).default;
 
@@ -260,13 +253,28 @@ export class TaskTreeOpener {
       }
     }
 
+    const editorKind = getEditorFromTaskType(finalTaskType);
+    const hasStructureNodes = !!(taskTree?.nodes && taskTree.nodes.length > 0);
+    const usePendingChoice =
+      editorKind === 'ddt' &&
+      !hasStructureNodes &&
+      this.isPristineStandaloneTask(taskForType as Task);
+    const taskWizardModeForOpen = usePendingChoice ? 'pending' : 'none';
+
+    taskEditorCtx.open({
+      id: row.id,  // ALWAYS equals task.id
+      type: finalTaskType,
+      label: row.text,
+      taskWizardMode: taskWizardModeForOpen,
+    });
+
     this.dispatchTaskEditorOpenEvent({
       id: row.id,  // ALWAYS equals task.id
       type: finalTaskType,
       label: row.text,
       taskTree,
       templateId: resolvedTemplate ? taskForType.templateId : undefined,
-      taskWizardMode: 'none',
+      taskWizardMode: taskWizardModeForOpen,
     });
 
     return { success: true };
@@ -500,7 +508,7 @@ export class TaskTreeOpener {
     label: string;
     taskTree?: any;
     templateId?: string;
-    taskWizardMode?: 'none' | 'adaptation' | 'full';
+    taskWizardMode?: 'none' | 'adaptation' | 'full' | 'pending';
     contextualizationTemplateId?: string;
     taskLabel?: string;
   }): void {

@@ -1550,7 +1550,7 @@ function updateEditedFlags(workingCopy: TaskTree, templateExpanded: TaskTree): v
  * @param templateExpanded - TaskTree template espanso (baseline per confronti)
  * @param projectId - Project ID (obbligatorio per creare template se necessario)
  * @returns Tutta la working copy da salvare nell'istanza. Standalone: no ensureTemplateExists;
- *   returns kind, instanceNodes, steps from workingCopy.
+ *   returns kind, subTasks, steps from workingCopy.
  */
 export async function extractTaskOverrides(
   instance: Task | null,
@@ -1579,7 +1579,7 @@ export async function extractTaskOverrides(
       steps: stepsDict,
       templateVersion: instance.templateVersion ?? 1,
       kind: 'standalone',
-      instanceNodes: nodesClone,
+      subTasks: nodesClone,
     };
   }
 

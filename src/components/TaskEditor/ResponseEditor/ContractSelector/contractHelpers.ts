@@ -4,113 +4,57 @@
  */
 
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
-import DialogueTaskService from '@services/DialogueTaskService';
+import type { Task, TaskTreeNode } from '@types/taskTypes';
+import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
+import { logContractPersist } from '@utils/contractPersistDebug';
+import { resolveNodeDataContract } from '@utils/taskNodeContractResolver';
+import { loadDataContractFromTemplateCache } from './contractTemplateLoad';
 
 /**
- * Load contract from node
- * Priority:
- * 1. template.dataContract (dal template usando node.templateId)
- * 2. template.semanticContract → crea DataContract vuoto coerente
- * 3. template.patterns → convertito in dataContract (legacy)
+ * Load contract from node.
+ * When `task` is provided, resolution follows task row rules (standalone vs template catalogue id).
+ * When omitted, legacy behavior: node.dataContract, then template cache by node.templateId.
  *
- * ❌ RIMOSSO: node.dataContract (override) - i parsers sono sempre nel template
- *
- * ARCHITECTURAL RULE:
- * - Se semanticContract esiste ma dataContract è vuoto, crea DataContract vuoto
- * - Questo permette al Recognition Editor di mostrare le colonne (vuote)
- * - L'utente può poi aggiungere contratti manualmente
+ * Priority (legacy, no task):
+ * 1. node.dataContract — persisted on the TaskTree node
+ * 2. template.dataContract (DialogueTaskService template for node.templateId)
+ * 3. template.semanticContract → crea DataContract coerente
  */
-export function loadContractFromNode(node: any): DataContract | null {
+export function loadContractFromNode(node: any, taskRow?: Task | null): DataContract | null {
   if (!node) return null;
 
-  // ✅ Carica dal template usando templateId
-  const templateId = node.templateId;
-  if (templateId) {
-    const template = DialogueTaskService.getTemplate(templateId);
-    if (!template) return null;
+  if (taskRow != null) {
+    return resolveNodeDataContract(taskRow, node);
+  }
 
-    // ✅ PRIORITY 1: Se esiste dataContract, unificalo con semanticContract se presente
-    if (template?.dataContract) {
-      let contract = template.dataContract as DataContract;
-
-      // ✅ Unifica semanticContract in dataContract se presente
-      if (template?.semanticContract && !contract.entity) {
-        contract = {
-          ...contract,
-          entity: template.semanticContract.entity,
-          subentities: template.semanticContract.subentities,
-          constraints: template.semanticContract.constraints,
-          normalization: template.semanticContract.normalization,
-          redefinitionPolicy: template.semanticContract.redefinitionPolicy,
-          outputCanonical: template.semanticContract.outputCanonical,
-          canonicalExamples: template.semanticContract.canonicalExamples
-        };
-      }
-
-      const regexPattern = contract?.engines?.find((c: any) => c.type === 'regex')?.patterns?.[0];
-      console.log('[CONTRACT] LOAD - From template.dataContract', {
+  if (node.dataContract && typeof node.dataContract === 'object') {
+    try {
+      const c = JSON.parse(JSON.stringify(node.dataContract)) as DataContract;
+      logContractPersist('loadContract', 'using node.dataContract (persisted on tree node)', {
         nodeId: node.id,
-        templateId,
-        regexPattern: regexPattern || '(none)',
-        enginesCount: contract.engines?.length || 0
+        templateId: node.templateId,
+        enginesCount: Array.isArray(c.engines) ? c.engines.length : 0,
       });
-      return contract;
-    }
-
-    // ✅ PRIORITY 2: Se esiste semanticContract ma non dataContract, crea DataContract unificato
-    if (template?.semanticContract) {
-      console.log('[CONTRACT] LOAD - Creating DataContract from SemanticContract', {
+      return c;
+    } catch {
+      logContractPersist('loadContract', 'using node.dataContract (clone failed, raw ref)', {
         nodeId: node.id,
-        templateId,
-        hasSemanticContract: true,
-        entityLabel: template.semanticContract.entity?.label
       });
-
-      // ✅ Crea DataContract unificato con semanticContract
-      const unifiedDataContract: DataContract = {
-        templateName: template.label || templateId,
-        templateId: templateId,
-        subDataMapping: {},
-        engines: [], // Array vuoto = nessun engine configurato, ma le colonne possono essere mostrate
-        // ✅ Unifica semanticContract
-        entity: template.semanticContract.entity,
-        subentities: template.semanticContract.subentities,
-        constraints: template.semanticContract.constraints,
-        normalization: template.semanticContract.normalization,
-        redefinitionPolicy: template.semanticContract.redefinitionPolicy,
-        outputCanonical: template.semanticContract.outputCanonical,
-        canonicalExamples: template.semanticContract.canonicalExamples
-      };
-
-      // ✅ DEBUG: Log dettagliato del DataContract creato
-      console.log('[CONTRACT] LOAD - Unified DataContract created', {
-        nodeId: node.id,
-        templateId,
-        templateName: unifiedDataContract.templateName,
-        enginesCount: unifiedDataContract.engines.length,
-        hasEntity: !!unifiedDataContract.entity,
-        subentitiesCount: unifiedDataContract.subentities?.length || 0
-      });
-
-      // Salva il DataContract unificato nel template per evitare di ricrearlo ogni volta
-      template.dataContract = unifiedDataContract;
-      DialogueTaskService.markTemplateAsModified(templateId);
-
-      console.log('[CONTRACT] LOAD - Unified DataContract created and saved', {
-        nodeId: node.id,
-        templateId,
-        savedToTemplate: !!template.dataContract,
-        savedEnginesCount: template.dataContract?.engines?.length || 0
-      });
-
-      return unifiedDataContract;
+      return node.dataContract as DataContract;
     }
   }
 
-  console.log('[CONTRACT] LOAD - No contract found', { nodeId: node.id });
+  const lookupId = catalogueLookupTemplateId(node as TaskTreeNode);
+  if (lookupId) {
+    return loadDataContractFromTemplateCache(lookupId, node);
+  }
+
+  logContractPersist('loadContract', 'no contract (no node.dataContract, no template data)', {
+    nodeId: node.id,
+    nodeTemplateId: node.templateId,
+  });
   return null;
 }
-
 
 /**
  * @deprecated Contracts non sono più override - devono essere aggiornati nel template

@@ -1,6 +1,34 @@
 // Executive summary: Maps action names to Lucide icon components for use in the response tree.
 import React from 'react';
-import { MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Tag, Clock, ServerCog, User, MapPin, Calendar, Type as TypeIcon, Phone, Hash, Globe, Home, Building, FileText } from 'lucide-react';
+import {
+  MessageCircle,
+  HelpCircle,
+  Headphones,
+  Shield,
+  PhoneOff,
+  Database,
+  Mail,
+  MessageSquare,
+  FunctionSquare as Function,
+  Music,
+  Eraser,
+  ArrowRight,
+  Tag,
+  Clock,
+  ServerCog,
+  User,
+  MapPin,
+  Calendar,
+  Type as TypeIcon,
+  Phone,
+  Hash,
+  Globe,
+  Home,
+  Building,
+  FileText,
+  Package,
+  Folder,
+} from 'lucide-react';
 
 const tailwindToHex = (tw?: string): string | undefined => {
   if (!tw) return undefined;
@@ -55,6 +83,9 @@ const getIconComponent = (iconName: string, color?: string) => {
     Tag: <Tag size={16} color={hexColor} />,
     Clock: <Clock size={16} color={hexColor} />,
     ServerCog: <ServerCog size={16} color={hexColor} />,
+    /** Group / aggregation (multiple fields or nested children) */
+    Package: <Package size={16} color={hexColor} />,
+    Folder: <Folder size={16} color={hexColor} />,
     // Alias personalizzati
     'Mensagem': <MessageCircle size={16} color={hexColor} />,
     'Pergunta': <HelpCircle size={16} color={hexColor} />,

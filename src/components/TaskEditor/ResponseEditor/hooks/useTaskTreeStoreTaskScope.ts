@@ -9,6 +9,18 @@ import { useTaskTreeStore } from '@responseEditor/core/state';
 import type { Task, TaskTree } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
+/**
+ * Only invalidate the global task tree store when the **task id actually changes**,
+ * not on every remount of the editor (e.g. layout reflow / panel drag). Clearing on
+ * each mount wiped in-memory edits and re-triggered pending wizard state.
+ */
+let lastTaskTreeScopeTaskId: string | undefined;
+
+/** Test helper: module-level scope must reset between Vitest cases. */
+export function __resetLastTaskTreeScopeTaskIdForTests(): void {
+  lastTaskTreeScopeTaskId = undefined;
+}
+
 export interface UseTaskTreeStoreTaskScopeParams {
   task?: Task | null;
   taskTree?: TaskTree | null;
@@ -25,6 +37,10 @@ export function useTaskTreeStoreTaskScope(params: UseTaskTreeStoreTaskScopeParam
     if (!id) {
       return;
     }
+    if (lastTaskTreeScopeTaskId === id) {
+      return;
+    }
+    lastTaskTreeScopeTaskId = id;
     setTaskTree(null);
   }, [task?.id, setTaskTree]);
 

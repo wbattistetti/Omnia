@@ -36,7 +36,7 @@ describe('persistWizardInstanceFirstRow', () => {
     const t = taskRepository.getTask(tid);
     expect(t?.templateId).toBeNull();
     expect(t?.kind).toBe('standalone');
-    expect(t?.instanceNodes?.length).toBe(1);
+    expect(t?.subTasks?.length).toBe(1);
   });
 
   it('returns false when flag is off', async () => {

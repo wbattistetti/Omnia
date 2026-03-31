@@ -1,14 +1,28 @@
 Option Strict On
 Option Explicit On
 Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Linq
 Imports TaskEngine
 
 ''' <summary>
 ''' Task definition specifica per UtteranceInterpretation (richiesta dati ricorsiva)
-''' Eredita da TaskDefinition e aggiunge campi specifici per DDT/NLP
+''' Eredita da TaskDefinition e aggiunge campi specifici per DDT/NLP.
+''' Campi kind/subTasks: istanza standalone già materializzata (nessun merge da template in compilazione).
 ''' </summary>
 Public Class UtteranceTaskDefinition
     Inherits TaskDefinition
+
+    ''' <summary>
+    ''' Ruolo riga IDE: "standalone" = grafo completo su questa istanza (subTasks / dataContract root).
+    ''' </summary>
+    <JsonProperty("kind")>
+    Public Property Kind As String
+
+    ''' <summary>
+    ''' Albero persistito per Utterance (stessa forma dei nodi TaskTree lato TS). subNodes è accettato in lettura.
+    ''' </summary>
+    <JsonProperty("subTasks")>
+    Public Property PersistedSubTasks As JArray
 
     ''' <summary>
     ''' ✅ NUOVO: SubTasksIds - Array di templateId che referenziano altri template

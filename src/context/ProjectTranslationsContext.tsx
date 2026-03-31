@@ -18,9 +18,12 @@ export interface ProjectTranslationsContextType {
   saveAllTranslations: () => Promise<void>;
   // Check if translations are dirty (have unsaved changes)
   isDirty: boolean;
-  // ✅ NEW: Loading state - indicates if translations are currently being loaded
+  /** True while a load from persistence is in flight. */
   isLoading: boolean;
-  // ✅ NEW: Ready state - indicates if translations have been loaded and are ready to use
+  /**
+   * True once the initial load for the current project has settled (success or failure).
+   * Missing keys for new tasks are normal — this does not mean “every string exists in DB”.
+   */
   isReady: boolean;
   // ✅ NEW: Set current template ID for translation tracking
   setCurrentTemplateId: (templateId: string | null) => void;
@@ -210,9 +213,10 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       });
     } catch (err) {
       console.error('[ProjectTranslations] ❌ ERROR loadAllTranslations:', err);
-      setIsReady(false);
-      setLoadingCompleted(false);
       setLoadedTranslations(null);
+      // Fail-open: initial load attempt finished (with error). Empty/partial in-memory map is valid;
+      // UI must not wait forever (e.g. new tasks have no DB keys yet).
+      setLoadingCompleted(true);
     } finally {
       setIsLoading(false);
     }

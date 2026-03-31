@@ -123,7 +123,7 @@ export default function DataExtractionEditor({
     testPhrases,
     setTestPhrases,
     profile,
-  } = useProfileState(node, locale, onChange);
+  } = useProfileState(node, locale, onChange, task);
 
   // ✅ FASE 1 - OPTIMIZATION: Memoize examplesList to prevent unnecessary re-renders
   // This ensures TesterGrid only re-renders when the actual content changes, not when the array reference changes
@@ -239,6 +239,7 @@ export default function DataExtractionEditor({
     formatText,
     profile,
     node,
+    taskId: task?.id ?? task?.instanceId,
     onStatsUpdate: (stats) => {
       setLastStats(stats);
       if (!baselineStats) setBaselineStats(stats);

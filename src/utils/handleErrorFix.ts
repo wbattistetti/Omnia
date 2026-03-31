@@ -11,6 +11,7 @@ import type { TaskEditorOpenEvent } from '../components/AppContent/domain/editor
 export async function handleErrorFix(error: CompilationError): Promise<void> {
   if (!error.fixTarget) {
     const nodeAmbiguityCategories = new Set([
+      'AmbiguousLink',
       'AmbiguousOutgoingLinks',
       'AmbiguousDuplicateEdgeLabels',
       'AmbiguousDuplicateConditionScript',
@@ -55,9 +56,12 @@ async function handleTaskErrorFix(error: CompilationError): Promise<void> {
 
   // Map error categories to specific navigation actions
   switch (category) {
+    case 'MissingOrInvalidTask':
     case 'TaskNotFound':
     case 'MissingTaskType':
     case 'InvalidTaskType':
+    case 'TaskTypeInvalidOrMissing':
+    case 'TaskCompilationFailed':
     case 'MissingParameter':
     case 'EmptyParameter':
     case 'DuplicateParameter':

@@ -5,13 +5,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { stepMeta } from './ddtUtils';
-import { Shield, Check, Trash2, X, Plus, ChevronDown } from 'lucide-react';
+import { Shield, Check, X, Plus, ChevronDown } from 'lucide-react';
 import { useFontContext } from '@context/FontContext';
 import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { taskRepository } from '@services/TaskRepository';
-import { DialogueTaskService } from '@services/DialogueTaskService';
-import { StepType, STEP_ORDER, getStepOrder } from '@types/stepTypes';
 import { computeVisibleBehaviourStepKeys } from '@responseEditor/behaviour/computeVisibleBehaviourStepKeys';
+import {
+  buildUnifiedBehaviourAddMenuItems,
+  type UnifiedAddMenuItem,
+} from '@responseEditor/behaviour/computeAddableBehaviourStepKeys';
+import { createEmptyBehaviourStepEntry } from '@responseEditor/core/taskTree/manualDefaultBehaviourSteps';
 
 interface StepsStripProps {
   stepKeys: string[];
@@ -19,9 +22,23 @@ interface StepsStripProps {
   onSelectStep: (stepKey: string) => void;
   node?: any; // optional, used to label constraint steps with AI-provided titles
   taskId?: string; // optional, used for toolbar functionality
+  updateSelectedNode?: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
+  selectedRoot?: boolean;
+  selectedPath?: number[];
+  selectedSubIndex?: number | null;
 }
 
-export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, node, taskId }: StepsStripProps) {
+export default function StepsStrip({
+  stepKeys,
+  selectedStepKey,
+  onSelectStep,
+  node,
+  taskId,
+  updateSelectedNode,
+  selectedRoot = false,
+  selectedPath,
+  selectedSubIndex,
+}: StepsStripProps) {
   const { combinedClass } = useFontContext();
   const { taskId: contextTaskId } = useResponseEditorContext();
   const effectiveTaskId = taskId || contextTaskId;
@@ -31,11 +48,10 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
   const [toolbarPositions, setToolbarPositions] = useState<Record<string, { top: number; left: number }>>({});
   const buttonRefs = useRef<Record<string, HTMLButtonElement>>({});
 
-  // State per restore dropdown
-  const [showRestoreDropdown, setShowRestoreDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const restoreButtonRef = useRef<HTMLButtonElement>(null);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const [showAddDropdown, setShowAddDropdown] = useState(false);
+  const addDropdownRef = useRef<HTMLDivElement>(null);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const [addDropdownPosition, setAddDropdownPosition] = useState<{ top: number; left: number } | null>(null);
 
   // ✅ State per forzare ri-render quando taskInstance.steps cambia
   const [taskVersion, setTaskVersion] = useState(0);
@@ -179,38 +195,6 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
   const mandatorySteps = ['start'];
   const isStepMandatory = (stepKey: string) => mandatorySteps.includes(stepKey);
 
-  // ✅ Calcola step disabilitati che possono essere ripristinati
-  const restorableSteps = React.useMemo(() => {
-    if (!effectiveTaskId || !node) return [];
-
-    const nodeTemplateId = node?.templateId || node?.id;
-    if (!nodeTemplateId) return [];
-
-    const taskInstance = taskRepository.getTask(effectiveTaskId);
-    if (!taskInstance) return [];
-
-    const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
-
-    // ✅ Step da ripristinare: presenti nell'istanza ma disabilitati (_disabled === true)
-    const disabled: Array<{ stepKey: string; stepData: any }> = [];
-
-    Object.keys(instanceSteps).forEach(stepKey => {
-      const stepData = instanceSteps[stepKey];
-      if (stepData && stepData._disabled === true) {
-        // ✅ Step disabilitato = può essere ripristinato
-        disabled.push({
-          stepKey,
-          stepData
-        });
-      }
-    });
-
-    // ✅ Ordina per STEP_ORDER (per UX)
-    return disabled.sort((a, b) => {
-      return getStepOrder(a.stepKey) - getStepOrder(b.stepKey);
-    });
-  }, [effectiveTaskId, node, taskVersion]); // ✅ Aggiungi taskVersion come dipendenza
-
   const visibleStepKeys = React.useMemo(() => {
     if (!effectiveTaskId || !node) return stepKeys;
 
@@ -228,6 +212,37 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
 
     return computeVisibleBehaviourStepKeys(stepKeys, instanceSteps, nodeDict);
   }, [stepKeys, effectiveTaskId, node, taskVersion]);
+
+  const unifiedAddMenuItems = React.useMemo(() => {
+    if (!node || !effectiveTaskId) return [];
+
+    const nodeTemplateId = node?.templateId || node?.id;
+    if (!nodeTemplateId) return [];
+
+    const taskInstance = taskRepository.getTask(effectiveTaskId);
+    if (!taskInstance) return [];
+
+    const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
+    const nodeDict =
+      node?.steps && typeof node.steps === 'object' && !Array.isArray(node.steps)
+        ? (node.steps as Record<string, unknown>)
+        : undefined;
+
+    return buildUnifiedBehaviourAddMenuItems(
+      selectedRoot,
+      selectedPath,
+      selectedSubIndex,
+      instanceSteps,
+      nodeDict
+    );
+  }, [node, selectedRoot, selectedPath, selectedSubIndex, effectiveTaskId, taskVersion]);
+
+  const visibleUnifiedAddMenuItems = React.useMemo((): UnifiedAddMenuItem[] => {
+    if (!updateSelectedNode) {
+      return unifiedAddMenuItems.filter((i) => i.mode === 'restore');
+    }
+    return unifiedAddMenuItems;
+  }, [unifiedAddMenuItems, updateSelectedNode]);
 
   // Handler per ripristinare step (imposta _disabled: false)
   const handleRestoreStep = (stepKey: string, stepData: any) => {
@@ -256,93 +271,99 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
         }
       });
 
+      // Keep TaskTree node.steps in sync so uiStepKeys / strip match the live store
+      if (updateSelectedNode) {
+        const stepForNode = { ...updatedStepData } as Record<string, unknown>;
+        delete stepForNode._disabled;
+        updateSelectedNode((n: any) => {
+          const prevSteps =
+            n.steps && typeof n.steps === 'object' && !Array.isArray(n.steps) ? n.steps : {};
+          return {
+            ...n,
+            steps: {
+              ...prevSteps,
+              [stepKey]: stepForNode,
+            },
+          };
+        });
+      }
+
       // ✅ Forza ri-render aggiornando taskVersion
       setTaskVersion(prev => prev + 1);
     }
 
-    setShowRestoreDropdown(false);
+    setShowAddDropdown(false);
+  };
+
+  const handleAddStep = (stepKey: string) => {
+    if (!updateSelectedNode || !node) return;
+
+    const emptyShell = createEmptyBehaviourStepEntry(stepKey);
+    updateSelectedNode((n: any) => {
+      const prevSteps =
+        n.steps && typeof n.steps === 'object' && !Array.isArray(n.steps) ? n.steps : {};
+      return {
+        ...n,
+        steps: {
+          ...prevSteps,
+          [stepKey]: emptyShell,
+        },
+      };
+    });
+
+    setShowAddDropdown(false);
+    setAddDropdownPosition(null);
+    onSelectStep(stepKey);
+    setTaskVersion((prev) => prev + 1);
+  };
+
+  const handleUnifiedAddItem = (item: UnifiedAddMenuItem) => {
+    if (item.mode === 'create') {
+      handleAddStep(item.stepKey);
+      return;
+    }
+    handleRestoreStep(item.stepKey, item.stepData);
   };
 
   // Handler per cancellazione definitiva (rimuove lo step dalla struttura)
-  const handlePermanentDelete = (stepKey: string) => {
-    if (!effectiveTaskId || !node) return;
-    const nodeTemplateId = node?.templateId || node?.id;
-    const task = taskRepository.getTask(effectiveTaskId);
-    if (!task) return;
-
-    const currentSteps = task.steps || {};
-    const currentNodeSteps = currentSteps[nodeTemplateId] || {};
-    const updatedNodeSteps = { ...currentNodeSteps };
-    delete updatedNodeSteps[stepKey];
-
-    // ✅ CRITICAL: Quando cancelliamo uno step, passiamo updatedNodeSteps (che può essere {} se tutti gli step sono stati cancellati)
-    // Il merge di taskRepository.updateTask ora gestisce correttamente {} come "cancellazione esplicita di tutti gli step"
-    taskRepository.updateTask(effectiveTaskId, {
-      steps: {
-        ...currentSteps,
-        [nodeTemplateId]: updatedNodeSteps  // ✅ Se {} (vuoto), indica cancellazione esplicita di tutti gli step
-      }
-    });
-
-    // ✅ Forza ri-render aggiornando taskVersion
-    setTaskVersion(prev => prev + 1);
-
-    // ✅ Se lo step cancellato era selezionato, seleziona il primo step disponibile
-    setTimeout(() => {
-      const taskInstance = taskRepository.getTask(effectiveTaskId);
-      if (!taskInstance) return;
-      const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
-      const remainingSteps = stepKeys.filter(key => {
-        const stepData = instanceSteps[key];
-        return stepData && stepData._disabled !== true;
-      });
-      if (selectedStepKey === stepKey && remainingSteps.length > 0) {
-        onSelectStep(remainingSteps[0]);
-      }
-    }, 0);
-  };
-
-  // ✅ Funzione per calcolare la posizione del dropdown
-  const updateDropdownPosition = () => {
-    if (!restoreButtonRef.current) return;
-    const rect = restoreButtonRef.current.getBoundingClientRect();
-    setDropdownPosition({
-      top: rect.bottom + 4, // 4px di margine
-      left: rect.right - 200, // Allinea a destra (200px = minWidth del dropdown)
+  const updateAddDropdownPosition = () => {
+    if (!addButtonRef.current) return;
+    const rect = addButtonRef.current.getBoundingClientRect();
+    setAddDropdownPosition({
+      top: rect.bottom + 4,
+      left: rect.right - 200,
     });
   };
 
-  // ✅ Aggiorna posizione quando il dropdown si apre o quando scroll/resize
   useEffect(() => {
-    if (showRestoreDropdown) {
-      updateDropdownPosition();
-      window.addEventListener('scroll', updateDropdownPosition, true);
-      window.addEventListener('resize', updateDropdownPosition);
+    if (showAddDropdown) {
+      updateAddDropdownPosition();
+      window.addEventListener('scroll', updateAddDropdownPosition, true);
+      window.addEventListener('resize', updateAddDropdownPosition);
       return () => {
-        window.removeEventListener('scroll', updateDropdownPosition, true);
-        window.removeEventListener('resize', updateDropdownPosition);
+        window.removeEventListener('scroll', updateAddDropdownPosition, true);
+        window.removeEventListener('resize', updateAddDropdownPosition);
       };
     } else {
-      setDropdownPosition(null);
+      setAddDropdownPosition(null);
     }
-  }, [showRestoreDropdown]);
+  }, [showAddDropdown]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
-          restoreButtonRef.current && !restoreButtonRef.current.contains(event.target as Node)) {
-        setShowRestoreDropdown(false);
+    const handleClickOutsideAdd = (event: MouseEvent) => {
+      if (addDropdownRef.current && !addDropdownRef.current.contains(event.target as Node) &&
+          addButtonRef.current && !addButtonRef.current.contains(event.target as Node)) {
+        setShowAddDropdown(false);
       }
     };
 
-    if (showRestoreDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
+    if (showAddDropdown) {
+      document.addEventListener('mousedown', handleClickOutsideAdd);
       return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('mousedown', handleClickOutsideAdd);
       };
     }
-  }, [showRestoreDropdown]);
+  }, [showAddDropdown]);
 
   return (
     <>
@@ -468,15 +489,14 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
         );
       })}
 
-      {/* Restore button - always visible when there are restorable steps */}
-      {restorableSteps.length > 0 && (
+      {visibleUnifiedAddMenuItems.length > 0 && (
         <div style={{ display: 'inline-block', marginLeft: 8 }}>
           <button
-            ref={restoreButtonRef}
+            ref={addButtonRef}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setShowRestoreDropdown(!showRestoreDropdown);
+              setShowAddDropdown(!showAddDropdown);
             }}
             style={{
               display: 'inline-flex',
@@ -484,126 +504,83 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
               gap: 6,
               padding: '5px 10px',
               background: 'transparent',
-              border: '1px solid #6b7280',
+              border: '1px solid #f59e0b',
               borderRadius: 10,
-              color: '#6b7280',
+              color: '#fbbf24',
               cursor: 'pointer',
               transition: 'all 0.2s',
               fontWeight: 500,
             }}
-            title="Restore deleted steps"
+            title="Add or restore behaviour steps"
+            type="button"
           >
             <Plus size={16} />
-            <span>Restore steps</span>
-            <ChevronDown size={14} style={{ transform: showRestoreDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+            <span>ADD</span>
+            <ChevronDown
+              size={14}
+              style={{
+                transform: showAddDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s',
+              }}
+            />
           </button>
         </div>
       )}
 
-      {/* Dropdown portal - renderizzato fuori dal container */}
-      {showRestoreDropdown && dropdownPosition && typeof document !== 'undefined' && (
+      {showAddDropdown && addDropdownPosition && typeof document !== 'undefined' && (
         createPortal(
           <div
-            ref={dropdownRef}
+            ref={addDropdownRef}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
-              top: `${dropdownPosition.top}px`,
-              left: `${dropdownPosition.left}px`,
+              top: `${addDropdownPosition.top}px`,
+              left: `${addDropdownPosition.left}px`,
               background: '#fff',
               border: '1px solid #e5e7eb',
               borderRadius: 8,
               boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
               zIndex: 10001,
-              minWidth: 200,
-              maxHeight: 300,
+              minWidth: 220,
+              maxHeight: 320,
               overflowY: 'auto',
             }}
           >
-            {restorableSteps.map(({ stepKey, stepData }) => {
+            {visibleUnifiedAddMenuItems.map((item) => {
+              const stepKey = item.stepKey;
               const color = colorForStep(stepKey);
               const icon = iconForStep(stepKey);
               const label = getFriendlyLabel(stepKey);
 
               return (
-                <div
-                  key={stepKey}
+                <button
+                  key={`${item.mode}-${stepKey}`}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleUnifiedAddItem(item);
+                  }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    padding: '8px 12px',
+                    padding: '10px 12px',
                     width: '100%',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid #f3f4f6',
+                    color: color,
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    textAlign: 'left',
                   }}
                 >
-                  {/* Voce step (cliccabile per ripristinare) */}
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleRestoreStep(stepKey, stepData);
-                    }}
-                    style={{
-                      flex: 1,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '6px 10px',
-                      background: 'transparent',
-                      border: `1px solid ${color}`,
-                      borderRadius: 10,
-                      color: color,
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      fontWeight: 500,
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.border = `2px solid ${color}`;
-                      e.currentTarget.style.background = `${color}10`;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.border = `1px solid ${color}`;
-                      e.currentTarget.style.background = 'transparent';
-                    }}
-                  >
-                    <span>{icon}</span>
-                    <span>{label}</span>
-                  </button>
-
-                  {/* Cestino per cancellazione definitiva */}
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handlePermanentDelete(stepKey);
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 28,
-                      height: 28,
-                      padding: 0,
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#ef4444',
-                      cursor: 'pointer',
-                      borderRadius: 4,
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#fee2e2';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                    }}
-                    title="Delete permanently (cannot be restored)"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+                  <span>{icon}</span>
+                  <span>{label}</span>
+                </button>
               );
             })}
           </div>,

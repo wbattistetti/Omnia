@@ -5,7 +5,7 @@ import type { EditorProps } from './types';
 import { HeaderToolbarProvider } from '../ResponseEditor/context/HeaderToolbarContext';
 // ✅ RIMOSSO: getAgentActVisualsByType - non più usato in questo file
 
-export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHeader, registerOnClose, setDockTree }: EditorProps) {
+export default function TaskEditorHost({ task, dockTabId, onClose, onToolbarUpdate, hideHeader, registerOnClose, setDockTree }: EditorProps) {
   const kind = resolveEditorKind(task);
 
   // ✅ LOG DISABILITATO - troppo rumoroso (si attiva ad ogni render)
@@ -36,6 +36,9 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
   // Gli altri editori (problem, simple, aiagent, summarizer, negotiation) usano lazy loading, quindi hanno bisogno di Suspense
   const isLazy = kind !== 'ddt' && kind !== 'intent' && kind !== 'message' && kind !== 'backend' && kind !== 'problem' && kind !== 'aiagent' && kind !== 'summarizer' && kind !== 'negotiation';
 
+  // Prefer dock tab id when docked: avoids remount + key collision when task is briefly empty during dock layout updates.
+  const editorInstanceKey = dockTabId ?? task?.id ?? 'unknown';
+
   // ✅ ARCHITECTURE: Wrap with HeaderToolbarProvider to support header injection from editors
   const editorContent = !isLazy ? (
     // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
@@ -43,8 +46,9 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
       <div className="min-h-0 flex-1 h-full">
         {/* @ts-expect-error registry type */}
         <Comp
-          key={task?.id ?? 'unknown'}
+          key={editorInstanceKey}
           task={task}
+          dockTabId={dockTabId}
           onClose={onClose}
           onToolbarUpdate={onToolbarUpdate}
           hideHeader={hideHeader}
@@ -67,8 +71,9 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
         }>
           {/* @ts-expect-error lazy component */}
           <Comp
-            key={task?.id ?? 'unknown'}
+            key={editorInstanceKey}
             task={task}
+            dockTabId={dockTabId}
             onClose={onClose}
             onToolbarUpdate={onToolbarUpdate}
             hideHeader={hideHeader}

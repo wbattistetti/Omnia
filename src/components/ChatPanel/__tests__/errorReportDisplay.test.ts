@@ -75,12 +75,12 @@ describe('errorReportDisplay', () => {
     const e = err({
       taskId: 't1',
       rowId: 't1',
-      message: 'Task not found: t1 in node n1, row t1. Task must exist.',
+      message: 'Referenced task does not exist.',
       severity: 'error',
       category: 'TaskNotFound',
     });
     expect(formatErrorMessageForReportPanel(e, 'My row label', null)).toBe(
-      'Task not found for row "My row label". Task must exist.'
+      'Non hai specificato cosa deve fare «My row label».'
     );
   });
 
@@ -91,7 +91,9 @@ describe('errorReportDisplay', () => {
       severity: 'error',
       category: 'TaskNotFound',
     });
-    expect(formatErrorMessageForReportPanel(e, 'R1', null)).toBe('[sub] Task not found for row "R1". Task must exist.');
+    expect(formatErrorMessageForReportPanel(e, 'R1', null)).toBe(
+      '[sub] Non hai specificato cosa deve fare «R1».'
+    );
   });
 
   it('formatErrorLocationTitle prefers row text and avoids node ids', () => {

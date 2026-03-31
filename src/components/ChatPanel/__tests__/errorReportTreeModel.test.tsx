@@ -45,25 +45,44 @@ describe('errorReportTreeModel', () => {
     const e = err({ taskId: 't', message: 'x', severity: 'error', category: 'TaskNotFound' });
     const lines = humanIssuesForError(e, 'Row', null);
     expect(lines.length).toBe(1);
-    expect(lines[0].message).toContain('comportamento');
+    expect(lines[0].message).toContain('specificato');
     expect(lines[0].error).toBe(e);
   });
 
-  const edgeConditionMessage =
-    "Devi definire una condizione per questo collegamento oppure rimuovere l'etichetta.";
+  it('humanIssuesForError uses distinct lines for link/condition categories', () => {
+    const linkMissing = humanIssuesForError(
+      err({ taskId: 't', message: 'x', severity: 'error', category: 'LinkMissingCondition' }),
+      'Row',
+      null
+    );
+    expect(linkMissing[0].message).toContain('etichetta');
 
-  it('humanIssuesForError uses one line for edge/condition categories (no redundant copy)', () => {
-    for (const category of [
-      'EdgeLabelWithoutCondition',
-      'EdgeWithoutCondition',
-      'ConditionNotFound',
-      'ConditionHasNoScript',
-    ] as const) {
-      const e = err({ taskId: 't', message: 'x', severity: 'error', category });
-      const lines = humanIssuesForError(e, 'Row', null);
-      expect(lines.length).toBe(1);
-      expect(lines[0].message).toBe(edgeConditionMessage);
-    }
+    const condMissing = humanIssuesForError(
+      err({ taskId: 't', message: 'x', severity: 'error', category: 'ConditionNotFound' }),
+      'Row',
+      null
+    );
+    expect(condMissing[0].message).toContain('condizione');
+
+    const script = humanIssuesForError(
+      err({ taskId: 't', message: 'x', severity: 'error', category: 'ConditionMissingScript' }),
+      'Row',
+      null
+    );
+    expect(script[0].message).toContain('regola');
+  });
+
+  it('humanIssuesForError uses fixed Italian copy for CompilationException / TaskCompilationFailed', () => {
+    const e = err({
+      taskId: 't1',
+      message: '[main] NullReference in template X.',
+      severity: 'error',
+      category: 'CompilationException',
+    });
+    const lines = humanIssuesForError(e, 'Row', null);
+    expect(lines.length).toBe(1);
+    expect(lines[0].message).toContain('Aprilo');
+    expect(lines[0].message).not.toContain('NullReference');
   });
 
   it('buildErrorReportTree always includes main and groups by flow', () => {
@@ -97,5 +116,6 @@ describe('errorReportTreeModel', () => {
     expect(tree[1].rows.length).toBe(1);
     expect(tree[1].rows[0].rowTitle).toBe('chiedi indirizzo');
     expect(tree[1].rows[0].issues.length).toBeGreaterThan(0);
+    expect(tree[1].rows[0].sourceErrors.length).toBe(1);
   });
 });

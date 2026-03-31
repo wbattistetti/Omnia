@@ -17,4 +17,10 @@ describe('ErrorTooltip user-facing copy', () => {
       ERROR_TOOLTIP_TASK_NOT_FOUND_COPY.title
     );
   });
+
+  it('maps MissingOrInvalidTask to the same headline as TaskNotFound', () => {
+    expect(userFacingErrorCategoryHeadline('MissingOrInvalidTask', true)).toBe(
+      ERROR_TOOLTIP_TASK_NOT_FOUND_COPY.title
+    );
+  });
 });

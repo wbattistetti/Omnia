@@ -2098,6 +2098,17 @@ function isLocalTemplate(doc) {
 }
 
 /**
+ * Standalone materialized task row: full graph + contracts live on this task document
+ * (`subTasks` tree, per-node dataContract, kind). Persisted even when templateId is a GUID.
+ */
+function isStandaloneMaterializedInstance(doc) {
+  if (!doc) return false;
+  if (doc.kind === 'standalone') return true;
+  if (Array.isArray(doc.subTasks) && doc.subTasks.length > 0) return true;
+  return false;
+}
+
+/**
  * Removes Factory-specific metadata fields from a document
  * Used when saving Local Templates to ensure they don't have Factory metadata
  * Project templates can have the same structure (dataContract, constraints, subTasksIds)
@@ -2381,7 +2392,15 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
 
     // Route by document type
     let task;
-    if (isInstance(payload)) {
+    if (isStandaloneMaterializedInstance(payload)) {
+      const { _id, createdAt, updatedAt: _updatedAt, ...rest } = payload;
+      const cleanedFields = removeFactoryFields(rest);
+      task = {
+        projectId,
+        ...cleanedFields,
+        updatedAt: now
+      };
+    } else if (isInstance(payload)) {
       // Instance: required fields + closed semantic domain / embedding config
       task = {
         projectId,
@@ -2616,8 +2635,8 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
       Object.assign(update, cleanedUpdate);
     }
 
-    // ✅ Se è Instance, filtra solo campi permessi
-    if (isInstance(mergedDoc)) {
+    // ✅ Se è Instance (e non standalone materializzato), filtra solo campi permessi
+    if (isInstance(mergedDoc) && !isStandaloneMaterializedInstance(mergedDoc)) {
       // Mantieni solo campi permessi per istanze (incluso type che è necessario per il caricamento)
       const allowedFields = ['type', 'templateId', 'templateVersion', 'labelKey', 'steps', 'semanticValues', 'updatedAt'];
       if (mergedDoc.type === TASK_TYPE_AI_AGENT) {
@@ -2736,7 +2755,15 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
         .map(item => {
           // Route by document type
           let task;
-          if (isInstance(item)) {
+          if (isStandaloneMaterializedInstance(item)) {
+            const { _id, createdAt, updatedAt: _updatedAt, ...rest } = item;
+            const cleanedFields = removeFactoryFields(rest);
+            task = {
+              projectId,
+              ...cleanedFields,
+              updatedAt: now
+            };
+          } else if (isInstance(item)) {
             // Instance: required instance fields + semantic domain / embedding config
             task = {
               projectId,

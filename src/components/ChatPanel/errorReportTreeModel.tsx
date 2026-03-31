@@ -52,6 +52,8 @@ export type RowIssueGroup = {
   warningCount: number;
   hasBlockingError: boolean;
   issues: HumanIssueItem[];
+  /** Raw compiler errors for this row group (for detail panel). */
+  sourceErrors: CompilationError[];
 };
 
 export type FlowIssueRoot = {
@@ -197,10 +199,6 @@ export function getFlowRootVisuals(_flowId: string): FlowVisualMeta {
   };
 }
 
-/** Single copy for any link whose condition is missing, invalid, or not executable (avoid redundant multi-line UX). */
-const EDGE_CONDITION_FIX_MESSAGE =
-  "Devi definire una condizione per questo collegamento oppure rimuovere l'etichetta.";
-
 export function humanIssuesForError(
   error: CompilationError,
   rowText: string | null,
@@ -211,24 +209,64 @@ export function humanIssuesForError(
     messages.map((message) => ({ message, error }));
 
   switch (cat) {
+    case 'NoEntryNodes':
+      return bind(['Il flusso non ha un nodo di start definito.']);
+    case 'MultipleEntryNodes':
+      return bind([
+        'Il flusso ha più nodi di start. Lascia solo quello da cui vuoi iniziare.',
+      ]);
+    case 'MissingOrInvalidTask':
     case 'TaskNotFound':
     case 'Task not found':
-      // Single user-facing message: the row exists on canvas; "missing task node" is misleading.
-      return bind(['Il comportamento di questo task non è definito.']);
-    case 'MissingTaskId':
-      return bind([
-        `La riga "${rowText?.trim() || 'senza nome'}" non ha un TaskId valido.`,
-        'Collega o crea il task corrispondente a questa riga.',
-      ]);
+    case 'MissingTaskId': {
+      const label =
+        (error as { rowLabel?: string }).rowLabel?.trim() || rowText?.trim() || 'questa riga';
+      return bind([`Non hai specificato cosa deve fare «${label}».`]);
+    }
+    case 'TaskTypeInvalidOrMissing':
     case 'MissingTaskType':
-      return bind(['Il tipo di task non è impostato.', 'Scegli il tipo di task per questa riga.']);
-    case 'InvalidTaskType':
-      return bind(['Il tipo di task non è valido.', 'Verifica la configurazione del task.']);
+    case 'InvalidTaskType': {
+      const label =
+        (error as { rowLabel?: string }).rowLabel?.trim() || rowText?.trim() || 'questa riga';
+      return bind([`Scegli il tipo di task per «${label}».`]);
+    }
+    case 'TaskCompilationFailed':
+    case 'CompilationException':
+      return bind([
+        'Questo task non può essere eseguito. Aprilo e controlla la configurazione.',
+      ]);
+    case 'ConditionNotFound':
+      return bind(['Questo collegamento usa una condizione che non esiste più.']);
+    case 'ConditionMissingScript':
+    case 'ConditionHasNoScript':
+      return bind(['Devi specificare la regola per attivare questo collegamento.']);
+    case 'LinkMissingCondition':
     case 'EdgeLabelWithoutCondition':
     case 'EdgeWithoutCondition':
-    case 'ConditionNotFound':
-    case 'ConditionHasNoScript':
-      return bind([EDGE_CONDITION_FIX_MESSAGE]);
+      return bind([
+        'Questo collegamento ha un’etichetta, ma non una regola che spiega quando usarlo.',
+      ]);
+    case 'AmbiguousLink': {
+      const r = ((error as { reason?: string }).reason || '').trim();
+      if (r === 'sameLabel') {
+        return bind([
+          'Due o più collegamenti in uscita hanno la stessa etichetta: il ramo non è distinguibile.',
+        ]);
+      }
+      if (r === 'sameCondition') {
+        return bind([
+          'Due o più collegamenti usano la stessa condizione: i rami non sono distinguibili.',
+        ]);
+      }
+      if (r === 'overlappingConditions') {
+        return bind([
+          'Due o più collegamenti usano la stessa regola: i rami non sono distinguibili.',
+        ]);
+      }
+      return bind([
+        'Questo collegamento è indistinguibile dagli altri. Aggiungi una regola chiara per scegliere questo ramo.',
+      ]);
+    }
     case 'AmbiguousOutgoingLinks':
       return bind([
         "I link di uscita da questo nodo non sono mutuamente esclusivi: c'è più di un collegamento in uscita e almeno uno non ha una condizione valida. Aggiungi condizioni distinte o un ramo Else.",
@@ -241,13 +279,6 @@ export function humanIssuesForError(
       return bind([
         'Due o più collegamenti condividono la stessa condizione o lo stesso script: i rami non sono distinguibili.',
       ]);
-    case 'MultipleEntryNodes':
-      return bind([
-        'È stato rilevato più di un punto di ingresso nel flow.',
-        'Imposta un solo nodo come avvio del dialogo.',
-      ]);
-    case 'CompilationException':
-      return bind(['Si è verificato un errore durante la compilazione del task.', 'Apri il task e verifica la configurazione.']);
     default: {
       const { body } = splitFlowPrefixedMessage(error.message);
       const cleaned = stripNodeRowReferences(body);
@@ -314,6 +345,10 @@ function rowGroupKey(error: CompilationError): string {
   if (error.edgeId) return `edge:${error.edgeId}`;
   const nid = error.nodeId?.trim();
   if (nid) {
+    if (error.category === 'AmbiguousLink') {
+      const r = ((error as { reason?: string }).reason || '').trim() || 'gen';
+      return `node:${nid}:amb:${r}`;
+    }
     if (error.category === 'AmbiguousOutgoingLinks') return `node:${nid}:uncond`;
     if (error.category === 'AmbiguousDuplicateEdgeLabels') return `node:${nid}:dupLbl`;
     if (error.category === 'AmbiguousDuplicateConditionScript') return `node:${nid}:dupScr`;
@@ -331,7 +366,8 @@ function rowTitleForError(
   flowId: string
 ): string {
   if (
-    (error.category === 'AmbiguousOutgoingLinks' ||
+    (error.category === 'AmbiguousLink' ||
+      error.category === 'AmbiguousOutgoingLinks' ||
       error.category === 'AmbiguousDuplicateEdgeLabels' ||
       error.category === 'AmbiguousDuplicateConditionScript') &&
     error.nodeId
@@ -392,6 +428,7 @@ export function buildErrorReportTree(
       const rowTitle = rowTitleForError(primary, lookup.row, edgeLabel, flows, flowId);
       const isEdge = Boolean(primary.edgeId);
       const isNodeAmbiguity =
+        primary.category === 'AmbiguousLink' ||
         primary.category === 'AmbiguousOutgoingLinks' ||
         primary.category === 'AmbiguousDuplicateEdgeLabels' ||
         primary.category === 'AmbiguousDuplicateConditionScript';
@@ -424,6 +461,7 @@ export function buildErrorReportTree(
         warningCount: wc,
         hasBlockingError,
         issues,
+        sourceErrors: errList,
       });
     }
 

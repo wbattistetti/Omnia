@@ -39,6 +39,8 @@ interface ContractEditorWrapperProps {
   setTestCases?: (cases: string[]) => void;
   onProfileUpdate?: (profile: any) => void;
   onClose?: () => void;
+  /** Owning task id for GrammarFlow standalone vs template cache resolution. */
+  taskId?: string;
 }
 
 export default function ContractEditorWrapper({
@@ -52,6 +54,7 @@ export default function ContractEditorWrapper({
   setTestCases,
   onProfileUpdate,
   onClose,
+  taskId,
 }: ContractEditorWrapperProps) {
   // Get method data from contract.engines array
   const methodData = React.useMemo(() => {
@@ -135,6 +138,7 @@ export default function ContractEditorWrapper({
         <GrammarFlowInlineEditor
           contract={contract}
           onContractChange={onContractChange}
+          taskId={taskId}
           {...commonProps}
         />
       );

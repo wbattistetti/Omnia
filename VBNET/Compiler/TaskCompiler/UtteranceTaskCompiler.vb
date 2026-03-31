@@ -4,6 +4,7 @@ Imports System.Linq
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports Compiler.DTO.IDE
+Imports TaskEngine
 
 ''' <summary>
 ''' Compiler per task di tipo UtteranceInterpretation
@@ -11,8 +12,9 @@ Imports Compiler.DTO.IDE
 '''
 ''' LOGICA CONCETTUALE DEI DATI:
 ''' - Template: contiene struttura condivisa (constraints, examples, nlpContract)
-''' - Istanza: contiene SOLO steps clonati (con nuovi GUID), NO constraints/examples
-''' - Risoluzione: constraints/examples/nlpContract sono SEMPRE presi dal template usando templateId
+''' - Istanza (template-bound): contiene steps; contract da template via templateId + allTemplates
+''' - Istanza standalone (kind/subTasks o dataContract senza templateId): grafo già materializzato → BuildTaskTreeExpandedFromStandaloneInstance (stesso output di TaskTreeExpanded del merge)
+''' - Con templateId non vuoto: sempre merge da template (anche se kind=standalone, il template vince)
 ''' - NO fallback: se template non trovato → errore esplicito (non maschera problemi)
 '''
 ''' VANTAGGI:
@@ -36,9 +38,9 @@ Public Class UtteranceTaskCompiler
         ' ✅ NUOVO MODELLO: Costruisci TaskTreeExpanded dal template usando task.templateId e subTasksIds
         ' LOGICA:
         ' 1. Se task.templateId esiste → carica template e costruisci struttura da subTasksIds
-        ' 2. Applica task.steps come override
+        ' 2. Se istanza standalone (kind / subTasks / dataContract senza templateId) → TaskTreeExpanded da sola istanza
+        ' 3. Applica task.steps come override (entrambi i rami)
         Dim taskTreeExpanded As TaskTreeExpanded = Nothing
-        Dim template As UtteranceTaskDefinition = Nothing
 
         If Not String.IsNullOrEmpty(utteranceTask.TemplateId) Then
             Dim matchingTemplates = allTemplates.Where(Function(t As TaskDefinition) t.Id = utteranceTask.TemplateId).ToList()
@@ -48,7 +50,7 @@ Public Class UtteranceTaskCompiler
                 Throw New InvalidOperationException($"Template with ID '{utteranceTask.TemplateId}' appears {matchingTemplates.Count} times in allTemplates. Each template ID must be unique.")
             End If
             Dim templateBase = matchingTemplates.Single()
-            template = TryCast(templateBase, UtteranceTaskDefinition)
+            Dim template = TryCast(templateBase, UtteranceTaskDefinition)
             If template Is Nothing Then
                 Throw New InvalidOperationException($"Template '{templateBase.Id}' must be of type UtteranceTaskDefinition. Found type: {templateBase.GetType().Name}")
             End If
@@ -58,9 +60,17 @@ Public Class UtteranceTaskCompiler
                 Console.WriteLine($"[COMPILER] ERROR: Failed to build TaskTreeExpanded from template {utteranceTask.TemplateId}: {ex.Message}")
                 Throw New InvalidOperationException($"Failed to build TaskTreeExpanded from template {utteranceTask.TemplateId}: {ex.Message}", ex)
             End Try
+        ElseIf IsStandaloneUtterancePayload(utteranceTask) Then
+            Try
+                taskTreeExpanded = BuildTaskTreeExpandedFromStandaloneInstance(utteranceTask, taskId)
+            Catch ex As Exception
+                Console.WriteLine($"[COMPILER] ERROR: standalone task {taskId}: {ex.Message}")
+                Throw New InvalidOperationException(ex.Message, ex)
+            End Try
         Else
-            Console.WriteLine($"[COMPILER] ERROR: Task {taskId} has no templateId")
-            Throw New InvalidOperationException($"Task {taskId} must have a templateId. Legacy task.Data is not supported.")
+            Throw New InvalidOperationException(
+                $"Task '{taskId}' must either reference a template (templateId) or be a standalone Utterance task " &
+                "with kind 'standalone' and non-empty subTasks, or root-level dataContract. Legacy task.Data is not supported.")
         End If
 
         If taskTreeExpanded IsNot Nothing Then
@@ -89,6 +99,185 @@ Public Class UtteranceTaskCompiler
         PopulateCommonFields(compiledTask, taskId)
 
         Return compiledTask
+    End Function
+
+    ''' <summary>
+    ''' True se il task non ha templateId e porta un payload già materializzato (standalone).
+    ''' </summary>
+    Private Shared Function IsStandaloneUtterancePayload(ut As UtteranceTaskDefinition) As Boolean
+        If ut Is Nothing Then
+            Return False
+        End If
+        If Not String.IsNullOrEmpty(ut.TemplateId) Then
+            Return False
+        End If
+        If String.Equals(ut.Kind, "standalone", StringComparison.OrdinalIgnoreCase) Then
+            Return True
+        End If
+        If ut.PersistedSubTasks IsNot Nothing AndAlso ut.PersistedSubTasks.Count > 0 Then
+            Return True
+        End If
+        If ut.DataContract IsNot Nothing Then
+            Return True
+        End If
+        Return False
+    End Function
+
+    ''' <summary>
+    ''' Costruisce TaskTreeExpanded da un'istanza standalone già materializzata (stesso ruolo del merge template+istanza).
+    ''' </summary>
+    Private Function BuildTaskTreeExpandedFromStandaloneInstance(
+        instance As UtteranceTaskDefinition,
+        taskId As String
+    ) As TaskTreeExpanded
+        If instance Is Nothing Then
+            Throw New ArgumentNullException(NameOf(instance))
+        End If
+
+        Dim nodes As New List(Of TaskNode)()
+
+        If instance.PersistedSubTasks IsNot Nothing AndAlso instance.PersistedSubTasks.Count > 0 Then
+            For Each item In instance.PersistedSubTasks
+                If item.Type = JTokenType.Object Then
+                    Dim tn = TaskNodeFromJObject(CType(item, JObject))
+                    If tn IsNot Nothing Then
+                        nodes.Add(tn)
+                    End If
+                End If
+            Next
+        ElseIf instance.DataContract IsNot Nothing Then
+            Dim rootId = If(String.IsNullOrEmpty(instance.Id), taskId, instance.Id)
+            Dim root As New TaskNode() With {
+                .Id = rootId,
+                .TemplateId = rootId,
+                .DataContract = instance.DataContract,
+                .Constraints = If(instance.Constraints IsNot Nothing AndAlso instance.Constraints.Count > 0,
+                    instance.Constraints,
+                    New List(Of Object)()),
+                .Condition = instance.Condition,
+                .Steps = New List(Of DialogueStep)(),
+                .SubTasks = New List(Of TaskNode)()
+            }
+            nodes.Add(root)
+        Else
+            Throw New InvalidOperationException(
+                "Standalone task must include subTasks or root-level dataContract.")
+        End If
+
+        If nodes.Count = 0 Then
+            Throw New InvalidOperationException("Standalone task produced no task nodes.")
+        End If
+
+        ValidateStandaloneNodesHaveContracts(nodes)
+
+        Dim expanded As New TaskTreeExpanded() With {
+            .TaskInstanceId = If(String.IsNullOrEmpty(instance.Id), taskId, instance.Id),
+            .Label = instance.Label,
+            .Translations = New Dictionary(Of String, String)(),
+            .Nodes = nodes
+        }
+
+        If instance.Steps IsNot Nothing AndAlso instance.Steps.Count > 0 Then
+            If nodes.Count = 1 Then
+                Dim rootNode = nodes(0)
+                Dim key = If(Not String.IsNullOrEmpty(rootNode.TemplateId), rootNode.TemplateId, rootNode.Id)
+                If instance.Steps.ContainsKey(key) Then
+                    ApplyStepsToNode(rootNode, instance.Steps(key))
+                ElseIf instance.Steps.ContainsKey(rootNode.Id) Then
+                    ApplyStepsToNode(rootNode, instance.Steps(rootNode.Id))
+                End If
+                If rootNode.SubTasks IsNot Nothing AndAlso rootNode.SubTasks.Count > 0 Then
+                    ApplyStepsOverrides(rootNode.SubTasks, instance.Steps)
+                End If
+            Else
+                ApplyStepsOverrides(nodes, instance.Steps)
+            End If
+        End If
+
+        Return expanded
+    End Function
+
+    ''' <summary>
+    ''' Ogni nodo foglia del grafo standalone deve avere dataContract (come dopo merge da template).
+    ''' </summary>
+    Private Shared Sub ValidateStandaloneNodesHaveContracts(nodes As List(Of TaskNode))
+        If nodes Is Nothing Then
+            Return
+        End If
+        For Each n In nodes
+            If n Is Nothing Then
+                Continue For
+            End If
+            Dim hasChildren = n.SubTasks IsNot Nothing AndAlso n.SubTasks.Count > 0
+            If Not hasChildren AndAlso n.DataContract Is Nothing Then
+                Throw New InvalidOperationException("Missing data contract (leaf node).")
+            End If
+            If hasChildren Then
+                ValidateStandaloneNodesHaveContracts(n.SubTasks)
+            End If
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' Deserializza un nodo TaskTree TS (subNodes o subTasks) in TaskNode IDE.
+    ''' </summary>
+    Private Shared Function TaskNodeFromJObject(jo As JObject) As TaskNode
+        If jo Is Nothing Then
+            Return Nothing
+        End If
+        Dim node As New TaskNode()
+        If jo("id") IsNot Nothing AndAlso jo("id").Type <> JTokenType.Null Then
+            node.Id = jo("id").ToString()
+        End If
+        If jo("label") IsNot Nothing AndAlso jo("label").Type <> JTokenType.Null Then
+            node.Label = jo("label").ToString()
+        End If
+        If jo("name") IsNot Nothing AndAlso jo("name").Type <> JTokenType.Null Then
+            node.Name = jo("name").ToString()
+        End If
+        If jo("type") IsNot Nothing AndAlso jo("type").Type <> JTokenType.Null Then
+            node.Type = jo("type").ToString()
+        End If
+        If jo("templateId") IsNot Nothing AndAlso jo("templateId").Type <> JTokenType.Null Then
+            node.TemplateId = jo("templateId").ToString()
+        End If
+        If jo("condition") IsNot Nothing AndAlso jo("condition").Type <> JTokenType.Null Then
+            node.Condition = jo("condition").ToString()
+        End If
+        If jo("required") IsNot Nothing AndAlso jo("required").Type = JTokenType.Boolean Then
+            node.Required = CBool(jo("required"))
+        End If
+        If jo("dataContract") IsNot Nothing AndAlso jo("dataContract").Type <> JTokenType.Null Then
+            node.DataContract = jo("dataContract").ToObject(Of NLPContract)()
+        End If
+        If jo("constraints") IsNot Nothing AndAlso jo("constraints").Type = JTokenType.Array Then
+            node.Constraints = jo("constraints").ToObject(Of List(Of Object))()
+        Else
+            node.Constraints = New List(Of Object)()
+        End If
+        If jo("steps") IsNot Nothing AndAlso jo("steps").Type <> JTokenType.Null Then
+            Dim settings As New JsonSerializerSettings()
+            settings.Converters.Add(New DialogueStepListConverter())
+            Dim stepsJson = jo("steps").ToString()
+            node.Steps = JsonConvert.DeserializeObject(Of List(Of DialogueStep))(stepsJson, settings)
+        End If
+        If node.Steps Is Nothing Then
+            node.Steps = New List(Of DialogueStep)()
+        End If
+
+        Dim children As JToken = jo("subNodes")
+        If children Is Nothing OrElse children.Type = JTokenType.Null Then
+            children = jo("subTasks")
+        End If
+        If children IsNot Nothing AndAlso children.Type = JTokenType.Array Then
+            For Each ch In CType(children, JArray)
+                If ch.Type = JTokenType.Object Then
+                    node.SubTasks.Add(TaskNodeFromJObject(CType(ch, JObject)))
+                End If
+            Next
+        End If
+
+        Return node
     End Function
 
     ''' <summary>

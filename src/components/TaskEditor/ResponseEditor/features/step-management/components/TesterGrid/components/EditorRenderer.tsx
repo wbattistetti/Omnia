@@ -123,6 +123,7 @@ export function EditorRenderer({
           setTestCases={editorProps.setTestCases}
           onProfileUpdate={editorProps.onProfileUpdate}
           onClose={onCloseEditor || (() => toggleEditor('grammarflow'))}
+          taskId={editorProps.task?.id ?? editorProps.task?.instanceId}
         />
       );
     default:

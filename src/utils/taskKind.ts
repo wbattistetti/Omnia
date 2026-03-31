@@ -39,7 +39,7 @@ export function inferTaskKind(task: Task | null | undefined): TaskKind {
   }
 
   if (tid === null || tid === undefined) {
-    if (task.instanceNodes && task.instanceNodes.length > 0) {
+    if (task.subTasks && task.subTasks.length > 0) {
       return 'standalone';
     }
     return 'projectTemplate';
@@ -63,10 +63,28 @@ export function isStandalone(task: Task | null | undefined): boolean {
   return inferTaskKind(task) === 'standalone';
 }
 
+/**
+ * True when the persisted row is standalone materialization (full graph on the task document).
+ * Matches backend `isStandaloneMaterializedInstance`: only `kind === 'standalone'`.
+ */
+export function isStandaloneMaterializedTaskRow(task: Task | null | undefined): boolean {
+  return task?.kind === 'standalone';
+}
+
+/**
+ * True when behaviour/contract edits should persist on the `subTasks` tree (node `dataContract` / `steps`)
+ * on task rows rather than assuming a catalogue template row for the task document.
+ */
+export function taskRowUsesSubTasksContract(task: Task | null | undefined): boolean {
+  if (!task) return false;
+  if (isStandaloneMaterializedTaskRow(task)) return true;
+  return !hasValidTemplateIdRef(task);
+}
+
 /** True when standalone fields that define structure are present. */
 export function hasLocalSchema(task: Task | null | undefined): boolean {
   if (!task) return false;
-  const nodes = task.instanceNodes;
+  const nodes = task.subTasks;
   return Array.isArray(nodes) && nodes.length > 0;
 }
 

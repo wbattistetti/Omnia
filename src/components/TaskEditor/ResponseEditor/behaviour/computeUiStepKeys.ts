@@ -92,9 +92,8 @@ export function computeUiStepKeys({
   if (stepKeys.length === 0) {
     return [];
   }
-  if (!stepKeys.includes('notConfirmed')) {
-    return [...stepKeys, 'notConfirmed'];
-  }
+  // Do not append notConfirmed here: manual/default fields only materialize start + noMatch.
+  // "Non Confermato" appears only when the node actually has a notConfirmed step in steps.
   return stepKeys;
 }
 

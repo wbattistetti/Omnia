@@ -7,6 +7,10 @@ import TesterGrid from '@responseEditor/features/step-management/components/Test
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 import { loadContractFromNode } from '@responseEditor/ContractSelector/contractHelpers';
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import {
+  contractPatchIncludesTestPhrases,
+  testPhrasesArrayFromContract,
+} from '@responseEditor/domain/testPhrasesContractGridSync';
 
 // Helper: Get engines from contract
 function getEngines(contract: DataContract | null): any[] {
@@ -18,6 +22,36 @@ import { useProjectData } from '@context/ProjectDataContext';
 import { useNotesStore } from '@responseEditor/features/step-management/stores/notesStore';
 import { taskRepository } from '@services/TaskRepository';
 import { ExamplesPersistenceService } from '@responseEditor/services/examplesPersistenceService';
+import { taskRowUsesSubTasksContract } from '@utils/taskKind';
+import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
+import type { TaskTreeNode } from '@types/taskTypes';
+
+function isRecognitionContractDebug(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem('debug.recognitionContract') === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Opt-in: localStorage.setItem('debug.recognitionNotes', '1') */
+function isRecognitionNotesDebug(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem('debug.recognitionNotes') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function stableContractJson(c: DataContract | null | undefined): string {
+  try {
+    return JSON.stringify(c ?? null);
+  } catch {
+    return '';
+  }
+}
 
 interface RecognitionEditorProps {
   // Config props (Kind, Confidence, Waiting Messages)
@@ -146,12 +180,16 @@ export default function RecognitionEditor({
 
   const { currentProjectId } = useProjectData();
   const task = editorProps?.task;
+  const taskIdForContract = task?.id ?? task?.instanceId;
+  const repoTaskForContract = taskIdForContract
+    ? taskRepository.getTask(taskIdForContract)
+    : undefined;
 
   // Load contract from node
   const [localContract, setLocalContract] = useState<DataContract | null>(() => {
     const node = editorProps?.node;
     if (!node) return null;
-    const contract = loadContractFromNode(node);
+    const contract = loadContractFromNode(node, repoTaskForContract);
     return contract;
   });
 
@@ -183,24 +221,21 @@ export default function RecognitionEditor({
         return;
       }
 
+      const row = taskIdForContract ? taskRepository.getTask(taskIdForContract) : undefined;
       // ✅ Carica dal template UNA VOLTA quando apri l'editor
-      const loadedContract = loadContractFromNode(node);
+      const loadedContract = loadContractFromNode(node, row);
       const engines = loadedContract?.engines || [];
       const regexPattern = engines.find((c: any) => c.type === 'regex')?.patterns?.[0];
 
-      // ✅ DEBUG: Log dettagliato del contract caricato
-      console.log('[RecognitionEditor] 🔍 Contract loaded from node', {
-        nodeId: node.id,
-        nodeTemplateId: node.templateId,
-        hasContract: !!loadedContract,
-        contractType: loadedContract ? typeof loadedContract : 'null',
-        enginesArray: engines,
-        enginesCount: engines.length,
-        enginesTypes: engines.map((c: any) => c.type),
-        contractKeys: loadedContract ? Object.keys(loadedContract) : [],
-        templateName: loadedContract?.templateName,
-        contractTemplateId: loadedContract?.templateId,
-      });
+      if (isRecognitionContractDebug()) {
+        console.log('[RecognitionEditor] Contract loaded from node', {
+          nodeId: node.id,
+          nodeTemplateId: node.templateId,
+          hasContract: !!loadedContract,
+          enginesCount: engines.length,
+          enginesTypes: engines.map((c: any) => c.type),
+        });
+      }
 
       // ✅ SALVA ORIGINALE (deep copy) per poterlo ripristinare se l'utente sceglie "Scarta"
       originalContractRef.current = loadedContract
@@ -244,12 +279,14 @@ export default function RecognitionEditor({
       // ✅ Load notes into store
       notesStore.loadNotes(migratedNotes);
 
-      console.log('[NOTES] INIT - Loaded notes from node', {
-        nodeId: node.id,
-        notesCount: Object.keys(migratedNotes).length,
-        hasOldFormat: Object.keys(testNotes).some(k => /^\d+-/.test(k)),
-        migratedCount: Object.keys(migratedNotes).length - Object.keys(testNotes).length
-      });
+      if (isRecognitionNotesDebug()) {
+        console.log('[NOTES] INIT - Loaded notes from node', {
+          nodeId: node.id,
+          notesCount: Object.keys(migratedNotes).length,
+          hasOldFormat: Object.keys(testNotes).some(k => /^\d+-/.test(k)),
+          migratedCount: Object.keys(migratedNotes).length - Object.keys(testNotes).length
+        });
+      }
     }
   }, [editorProps?.node?.id, updateSelectedNode, examplesList]);
 
@@ -286,12 +323,14 @@ export default function RecognitionEditor({
       // ✅ Load notes into store
       notesStore.loadNotes(migratedNotes);
 
-      console.log('[NOTES] Loaded notes from node', {
-        nodeId: node.id,
-        notesCount: Object.keys(migratedNotes).length,
-        examplesListCount: examplesList.length,
-        sampleNotes: Object.keys(migratedNotes).slice(0, 3)
-      });
+      if (isRecognitionNotesDebug()) {
+        console.log('[NOTES] Loaded notes from node', {
+          nodeId: node.id,
+          notesCount: Object.keys(migratedNotes).length,
+          examplesListCount: examplesList.length,
+          sampleNotes: Object.keys(migratedNotes).slice(0, 3)
+        });
+      }
     } else {
       // No notes in node, reset store (solo se nodeId è cambiato)
       if (nodeIdChanged) {
@@ -328,11 +367,13 @@ export default function RecognitionEditor({
           const currentTask = taskRepository.getTask(taskId);
           // ✅ NUOVO MODELLO: Task non ha più .data[], usa TaskTree.nodes[] costruito runtime
           // Non serve più aggiornare cache con .data[] - il TaskTree viene ricostruito da template + instance
-          console.log('[NOTES] Updated TaskRepository cache', {
-            taskId,
-            nodeIndex,
-            notesCount: Object.keys(notes).length
-          });
+          if (isRecognitionNotesDebug()) {
+            console.log('[NOTES] Updated TaskRepository cache', {
+              taskId,
+              nodeId: node.id,
+              notesCount: Object.keys(notes).length
+            });
+          }
         } catch (error) {
           console.error('[NOTES] Error updating TaskRepository cache', error);
         }
@@ -354,30 +395,39 @@ export default function RecognitionEditor({
     // Use centralized service - single point of synchronization
     ExamplesPersistenceService.setExamplesForNode(
       node.id,
-      node.templateId,
+      catalogueLookupTemplateId(node as TaskTreeNode) || undefined,
       taskId,
       examplesList,
-      updateSelectedNode
+      updateSelectedNode,
+      Array.isArray(localContract?.testPhrases)
+        ? localContract.testPhrases
+        : undefined,
+      node
     );
-  }, [examplesList, editorProps?.node?.id, editorProps?.node?.templateId, updateSelectedNode, editorProps?.task?.id, editorProps?.task?.instanceId]);
+  }, [
+    examplesList,
+    localContract?.testPhrases,
+    editorProps?.node?.id,
+    editorProps?.node?.templateId,
+    editorProps?.node?.catalogTemplateId,
+    updateSelectedNode,
+    editorProps?.task?.id,
+    editorProps?.task?.instanceId,
+  ]);
 
   // ✅ Usa direttamente localContract come contract (non serve creare nuovo oggetto)
   const contract = localContract;
 
-  // ✅ DEBUG: Log contract quando cambia (per vedere cosa viene passato a TesterGrid)
+  // Opt-in only: localStorage.setItem('debug.recognitionContract','1')
   React.useEffect(() => {
+    if (typeof window === 'undefined' || localStorage.getItem('debug.recognitionContract') !== '1') {
+      return;
+    }
     const engines = getEngines(contract);
-    console.log('[RecognitionEditor] 🔍 Contract state changed', {
+    console.log('[RecognitionEditor] Contract state changed', {
       hasContract: !!contract,
-      contractType: contract ? typeof contract : 'null',
-      enginesArray: engines,
       enginesCount: engines.length,
-      enginesTypes: engines.map((c: any) => c?.type),
-      contractKeys: contract ? Object.keys(contract) : [],
-      templateName: contract?.templateName,
-      templateId: contract?.templateId,
       nodeId: editorProps?.node?.id,
-      nodeTemplateId: editorProps?.node?.templateId
     });
   }, [contract, editorProps?.node?.id, editorProps?.node?.templateId]);
 
@@ -399,24 +449,32 @@ export default function RecognitionEditor({
   const prevActiveEditorRef = React.useRef<string | null>(activeEditor);
   React.useEffect(() => {
     // Only reload when regex editor is opened (was closed, now opened)
-    if (activeEditor === 'regex' && prevActiveEditorRef.current !== 'regex' && editorProps?.node?.templateId) {
-      console.log('[RecognitionEditor] 🔄 Regex editor opened, reloading pattern', {
-        templateId: editorProps.node.templateId,
-        previousEditor: prevActiveEditorRef.current,
-        currentEditor: activeEditor
-      });
+    const regexLookupId = editorProps?.node
+      ? catalogueLookupTemplateId(editorProps.node as TaskTreeNode)
+      : '';
+    if (activeEditor === 'regex' && prevActiveEditorRef.current !== 'regex' && regexLookupId) {
+      const regDbg = isRecognitionContractDebug();
+      if (regDbg) {
+        console.log('[RecognitionEditor] Regex editor opened, reloading pattern', {
+          templateId: regexLookupId,
+          previousEditor: prevActiveEditorRef.current,
+          currentEditor: activeEditor
+        });
+      }
 
-      const template = DialogueTaskService.getTemplate(editorProps.node.templateId);
+      const template = DialogueTaskService.getTemplate(regexLookupId);
       if (template?.dataContract) {
         const templateEngines = getEngines(template.dataContract);
         const regexEngine = templateEngines.find((c: any) => c.type === 'regex');
         const regexPattern = regexEngine?.patterns?.[0] || '';
 
-        console.log('[RecognitionEditor] 📝 Found regex pattern in template', {
-          hasEngine: !!regexEngine,
-          pattern: regexPattern || '(empty)',
-          enginesCount: templateEngines.length
-        });
+        if (regDbg) {
+          console.log('[RecognitionEditor] Found regex pattern in template', {
+            hasEngine: !!regexEngine,
+            pattern: regexPattern || '(empty)',
+            enginesCount: templateEngines.length
+          });
+        }
 
         // ✅ CRITICAL: Update local contract AND trigger prop update for RegexInlineEditor
         // The RegexInlineEditor receives regex via props, so we need to ensure it gets the latest value
@@ -436,17 +494,18 @@ export default function RecognitionEditor({
           const updatedContract = { ...contract, engines: updatedEngines };
           setLocalContract(updatedContract);
 
-          console.log('[RecognitionEditor] ✅ Updated local contract with regex pattern', {
-            templateId: editorProps.node.templateId,
-            regexPattern: regexPattern || '(empty)',
-            wasEmpty: !regexPattern,
-            contractUpdated: true
-          });
-        } else {
-          console.warn('[RecognitionEditor] ⚠️ Contract is null, cannot update regex pattern');
+          if (regDbg) {
+            console.log('[RecognitionEditor] Updated local contract with regex pattern', {
+              templateId: editorProps.node.templateId,
+              regexPattern: regexPattern || '(empty)',
+              wasEmpty: !regexPattern,
+            });
+          }
+        } else if (regDbg) {
+          console.warn('[RecognitionEditor] Contract is null, cannot update regex pattern');
         }
-      } else {
-        console.warn('[RecognitionEditor] ⚠️ Template or dataContract not found', {
+      } else if (regDbg) {
+        console.warn('[RecognitionEditor] Template or dataContract not found', {
           templateId: editorProps.node.templateId,
           hasTemplate: !!template,
           hasDataContract: !!template?.dataContract
@@ -454,7 +513,7 @@ export default function RecognitionEditor({
       }
     }
     prevActiveEditorRef.current = activeEditor;
-  }, [activeEditor, editorProps?.node?.templateId, contract]);
+  }, [activeEditor, editorProps?.node?.templateId, editorProps?.node?.catalogTemplateId, contract]);
 
   // Helper: confronta contract con template
   const hasContractChanged = useCallback((nodeTemplateId: string, modifiedContract: DataContract | null): boolean => {
@@ -477,66 +536,116 @@ export default function RecognitionEditor({
 
   // Handle contract changes - traccia modifiche ma NON mostra dialog subito
   const handleContractChange = useCallback((updatedContract: DataContract | null, skipAutoSave: boolean = false) => {
-    console.log('[RecognitionEditor][handleContractChange] 🚀 START', {
-      hasNode: !!editorProps?.node,
-      nodeTemplateId: editorProps?.node?.templateId,
-      skipAutoSave,
-      updatedContractRegex: getEngines(updatedContract).find((c: any) => c.type === 'regex')?.patterns?.[0],
-    });
+    const dbg = isRecognitionContractDebug();
+    if (dbg) {
+      console.log('[RecognitionEditor][handleContractChange] START', {
+        nodeTemplateId: editorProps?.node?.templateId,
+        skipAutoSave,
+      });
+    }
 
     const node = editorProps?.node;
-    if (!node || !node.templateId) {
-      console.warn('[RecognitionEditor][handleContractChange] ❌ No node or templateId available');
+    if (!node) {
+      if (dbg) {
+        console.warn('[RecognitionEditor][handleContractChange] No node');
+      }
       return;
     }
 
-    const nodeTemplateId = node.templateId;
+    const taskId = editorProps?.task?.id ?? editorProps?.task?.instanceId;
+    const taskRow = taskId ? taskRepository.getTask(taskId) : null;
+    const instanceNodeContract =
+      taskRow != null && taskRowUsesSubTasksContract(taskRow);
+
+    const catalogueLookupId = catalogueLookupTemplateId(node as TaskTreeNode);
+
+    // Catalogue-backed task row: need a catalogue key (templateId or catalogTemplateId). Instance-only document:
+    // persist contract on node (node.id); graph ids may not resolve in DialogueTaskService.
+    if (!instanceNodeContract && !catalogueLookupId) {
+      if (dbg) {
+        console.warn('[RecognitionEditor][handleContractChange] No templateId on template-backed node');
+      }
+      return;
+    }
+
     const updatedEngines = getEngines(updatedContract);
     const regexPattern = updatedEngines.find((c: any) => c.type === 'regex')?.patterns?.[0];
-    console.log('[RecognitionEditor][handleContractChange] 📊 Regex pattern extracted:', regexPattern);
 
-    // ✅ Confronta con template
-    const changed = hasContractChanged(nodeTemplateId, updatedContract);
-    console.log('[RecognitionEditor][handleContractChange] 📊 Contract changed:', changed);
+    const changed = catalogueLookupId ? hasContractChanged(catalogueLookupId, updatedContract) : false;
+    const templateSnapshot = catalogueLookupId ? DialogueTaskService.getTemplate(catalogueLookupId) : null;
+    /** True when node.templateId is a local graph id — not a catalogue row in DialogueTaskService. */
+    const noTemplateInCache = templateSnapshot == null;
+    const templateEngineCount = getEngines(templateSnapshot?.dataContract ?? null).length;
+    const updatedEngineCount = updatedEngines.length;
+    // Only compare engine counts when a real template row exists — standalone slot ids are not in the cache (0 vs N was always "different").
+    const engineCountDiffers =
+      Boolean(templateSnapshot) && updatedEngineCount !== templateEngineCount;
+    const standaloneContentChanged =
+      (instanceNodeContract || noTemplateInCache) &&
+      stableContractJson(updatedContract) !== stableContractJson(node?.dataContract);
+    // Catalogue rows: GrammarFlow (and similar) may mutate template.dataContract before
+    // onContractChange, so hasContractChanged(template vs update) is false even though the
+    // task-tree node still has an older snapshot. Without persisting to the node, reopen
+    // loses testPhrases because resolveNodeDataContract prefers node.dataContract.
+    const nodeDiffersFromUpdate =
+      stableContractJson(updatedContract) !== stableContractJson(node?.dataContract);
+    const shouldApply =
+      changed || engineCountDiffers || standaloneContentChanged || nodeDiffersFromUpdate;
 
-    if (changed) {
-      // ✅ AGGIORNA TEMPLATE IN MEMORIA (così quando riapri vedi le modifiche)
-      const template = DialogueTaskService.getTemplate(nodeTemplateId);
-      console.log('[RecognitionEditor][handleContractChange] 📝 Template found:', !!template);
-      if (template) {
+    if (dbg) {
+      console.log('[RecognitionEditor][handleContractChange]', {
+        changed,
+        shouldApply,
+        instanceNodeContract,
+        noTemplateInCache,
+        templateEngineCount,
+        updatedEngineCount,
+        regexPattern,
+        nodeDiffersFromUpdate,
+      });
+    }
+
+    if (shouldApply) {
+      const template = templateSnapshot;
+      if (template && catalogueLookupId) {
         template.dataContract = updatedContract
           ? JSON.parse(JSON.stringify(updatedContract))
           : null;
-        console.log('[RecognitionEditor][handleContractChange] ✅ Template dataContract updated:', {
-          hasContract: !!template.dataContract,
-          regexInContract: getEngines(template.dataContract).find((c: any) => c.type === 'regex')?.patterns?.[0],
-        });
-        // ✅ Marca template come modificato per salvataggio futuro
-        DialogueTaskService.markTemplateAsModified(nodeTemplateId);
-        console.log('[RecognitionEditor][handleContractChange] ✅ Template marked as modified');
+        DialogueTaskService.markTemplateAsModified(catalogueLookupId);
       }
 
       // ✅ Contract modificato: traccia ma NON mostra dialog
       setHasUnsavedContractChanges(true);
       setModifiedContract(updatedContract);
       setLocalContract(updatedContract); // ✅ Aggiorna UI immediatamente
+      if (updatedContract && contractPatchIncludesTestPhrases(updatedContract)) {
+        setExamplesList(testPhrasesArrayFromContract(updatedContract));
+      }
 
-      // ✅ CRITICAL FIX: Sincronizza contract.regex → node.nlpProfile.regex
-      // Questo assicura che useProfileState legga la regex corretta per il tester
-      if (updateSelectedNode && regexPattern !== undefined) {
+      // Persist dataContract on the TaskTree node (required for standalone: subTasks snapshot).
+      // Template cache alone is not written to the task row on close.
+      if (updateSelectedNode) {
         updateSelectedNode((prev: any) => {
           if (!prev) return prev;
           const updated = { ...prev };
+          updated.dataContract = updatedContract
+            ? JSON.parse(JSON.stringify(updatedContract))
+            : null;
           if (!updated.nlpProfile) {
             updated.nlpProfile = {};
           }
-          // ✅ Sincronizza regex dal contract al node.nlpProfile
-          updated.nlpProfile = {
-            ...updated.nlpProfile,
-            regex: regexPattern ?? undefined
-          };
+          const regexEngine = updatedEngines.find((c: any) => c.type === 'regex');
+          if (regexEngine) {
+            updated.nlpProfile = {
+              ...updated.nlpProfile,
+              regex: regexEngine.patterns?.[0] ?? undefined,
+            };
+          } else {
+            const { regex: _omitRegex, ...nlpRest } = updated.nlpProfile;
+            updated.nlpProfile = nlpRest;
+          }
           return updated;
-        }, { skipAutoSave }); // ✅ Pass skipAutoSave to control persistence
+        }, { skipAutoSave });
       }
 
       // ✅ Aggiorna immediatamente il ref (non aspetta useImperativeHandle)
@@ -545,30 +654,54 @@ export default function RecognitionEditor({
           hasUnsavedChanges: true,
           modifiedContract: updatedContract,
           originalContract: originalContractRef.current, // ✅ Passa originale per poterlo ripristinare
-          nodeTemplateId: node.templateId,
+          nodeTemplateId: catalogueLookupId || undefined,
           nodeLabel: node.label
         };
       }
     } else {
-      // ✅ Nessun cambiamento: usa template
-      const template = DialogueTaskService.getTemplate(nodeTemplateId);
-      // ✅ NO FALLBACKS: template.dataContract can be null/undefined (legitimate)
-      setLocalContract(template?.dataContract ?? null);
+      if (instanceNodeContract || noTemplateInCache) {
+        const reloadedContract = loadContractFromNode(node, taskRow);
+        setLocalContract(reloadedContract);
+        setExamplesList(testPhrasesArrayFromContract(reloadedContract));
+        setHasUnsavedContractChanges(false);
+        setModifiedContract(null);
+        if (contractChangeRef) {
+          contractChangeRef.current = {
+            hasUnsavedChanges: false,
+            modifiedContract: null,
+            originalContract: originalContractRef.current,
+            nodeTemplateId: catalogueLookupId || undefined,
+            nodeLabel: node.label,
+          };
+        }
+        return;
+      }
+
+      // Catalogue template exists for node.templateId — reset UI to template.dataContract
+      const templateContract = templateSnapshot?.dataContract ?? null;
+      setLocalContract(templateContract);
+      setExamplesList(testPhrasesArrayFromContract(templateContract));
       setHasUnsavedContractChanges(false);
       setModifiedContract(null);
 
-      // ✅ Reset ref
       if (contractChangeRef) {
         contractChangeRef.current = {
           hasUnsavedChanges: false,
           modifiedContract: null,
           originalContract: originalContractRef.current,
-          nodeTemplateId: node.templateId,
-          nodeLabel: node.label
+          nodeTemplateId: catalogueLookupId || undefined,
+          nodeLabel: node.label,
         };
       }
     }
-  }, [editorProps?.node, hasContractChanged, contractChangeRef, updateSelectedNode]);
+  }, [
+    editorProps?.node,
+    editorProps?.task,
+    hasContractChanged,
+    contractChangeRef,
+    updateSelectedNode,
+    setExamplesList,
+  ]);
 
   // ✅ FASE 3: Rimuoviamo handleSaveRegex - non serve più
   // ✅ L'editor non salva più direttamente, solo commit alla chiusura
@@ -579,7 +712,9 @@ export default function RecognitionEditor({
       hasUnsavedChanges: hasUnsavedContractChanges,
       modifiedContract,
       originalContract: originalContractRef.current, // ✅ Esponi originale per poterlo ripristinare
-      nodeTemplateId: editorProps?.node?.templateId,
+      nodeTemplateId: editorProps?.node
+        ? catalogueLookupTemplateId(editorProps.node as TaskTreeNode)
+        : undefined,
       nodeLabel: editorProps?.node?.label
     };
   }, [hasUnsavedContractChanges, modifiedContract, editorProps?.node]);
@@ -587,24 +722,28 @@ export default function RecognitionEditor({
   // ✅ CRITICAL: Create stable handleRegexSave callback that doesn't depend on activeEditor
   // This ensures onRegexSave is always available even when editor is closing
   const handleRegexSave = useCallback((newRegex: string) => {
-    console.log('[RecognitionEditor] 💾 handleRegexSave called with regex:', newRegex);
-    console.log('[RecognitionEditor] Current contract:', contract);
+    const dbg = isRecognitionContractDebug();
+    if (dbg) {
+      console.log('[RecognitionEditor] handleRegexSave', { newRegex, hasContract: !!contract });
+    }
     if (!contract) {
-      console.warn('[RecognitionEditor] ⚠️ No contract available, cannot save regex');
+      if (dbg) {
+        console.warn('[RecognitionEditor] No contract available, cannot save regex');
+      }
       return;
     }
     const currentEngines = getEngines(contract);
     const regexEngine = currentEngines.find((c: any) => c.type === 'regex');
     if (regexEngine) {
-      console.log('[RecognitionEditor] 📝 Updating existing regex engine');
       const updatedEngines = currentEngines.map((c: any) =>
         c.type === 'regex' ? { ...c, patterns: [newRegex] } : c
       );
       const updatedContract = { ...contract, engines: updatedEngines };
-      console.log('[RecognitionEditor] 📝 Updated contract:', updatedContract);
+      if (dbg) {
+        console.log('[RecognitionEditor] Updated regex engine', { updatedContract });
+      }
       handleContractChange(updatedContract, false);
     } else {
-      console.log('[RecognitionEditor] 📝 Creating new regex engine');
       const newEngines = [...currentEngines, {
         type: 'regex',
         enabled: true,
@@ -612,10 +751,11 @@ export default function RecognitionEditor({
         examples: []
       }];
       const updatedContract = { ...contract, engines: newEngines };
-      console.log('[RecognitionEditor] 📝 New contract:', updatedContract);
+      if (dbg) {
+        console.log('[RecognitionEditor] Creating new regex engine', { updatedContract });
+      }
       handleContractChange(updatedContract, false);
     }
-    console.log('[RecognitionEditor] ✅ handleContractChange called');
   }, [contract, handleContractChange]); // ✅ Stable: depends only on contract and handleContractChange, NOT on activeEditor
 
   // Build dynamic editorProps based on activeEditor and contract

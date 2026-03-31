@@ -410,6 +410,7 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
           }}
         >
           <TaskEditorHost
+            dockTabId={tab.id}
             task={tab.task || { id: '', type: TaskType.SayMessage, label: '' }}
             onClose={() => {
               // Closure is handled by tab.onClose (only for TaskTree editor)

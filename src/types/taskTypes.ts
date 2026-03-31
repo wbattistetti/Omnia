@@ -336,17 +336,29 @@ export interface SemanticValue {
 export type TaskKind = 'standalone' | 'instance' | 'projectTemplate' | 'factoryTemplate';
 
 /**
- * TaskTreeNode: Nodo dell'albero TaskTree (vista runtime)
- * NON è un'entità persistita, è solo una vista costruita da Template + Instance
+ * TaskTreeNode: nodo dell'albero (sidebar) e persistenza `Task.subTasks` (UtteranceInterpretation).
+ *
+ * - `id` e opzionale `taskId` puntano alla riga Task nel repository (stesso valore quando materializzato).
+ * - `templateId` su nodo: se valorizzato, contract di definizione si risolvono da quel task id nel repository;
+ *   se null, contract incorporati sul task puntato da `taskId`/`id`.
+ * - Struttura gerarchica: `subNodes` (UI) = stesso concetto di sub-task annidati persistiti.
  */
 export interface TaskTreeNode {
-  id: string;                    // ✅ ID del nodo
-  templateId: string;            // ✅ ID del template referenziato (fondamentale per il grafo)
+  /** Identità nel grafo / sidebar; di solito uguale alla riga Task (`taskId`). */
+  id: string;
+  /** Opzionale: id riga Task nel repository per questo nodo (se omesso si usa `id`). */
+  taskId?: string;
+  /** Id task di definizione per i contract (repository); null/undefined = contract incorporati sul task del nodo. */
+  templateId?: string | null;
+  /** Opzionale: id riga template di catalogo quando `templateId` è solo id di grafo. */
+  catalogTemplateId?: string;
   label: string;                  // ✅ Label del nodo
   type?: string;                  // ✅ Tipo del dato (es. 'date', 'email', 'text')
   icon?: string;                  // ✅ Icona per UI
-  constraints?: any[];            // ✅ Dal template (sempre, non dall'istanza)
-  dataContract?: any;             // ✅ Dal template (sempre, non dall'istanza)
+  constraints?: any[];            // ✅ Default da template; override possibili su istanza
+  dataContract?: any;             // Override/incorporato sul task del nodo quando templateId assente
+  /** Behaviour steps (dizionario per chiave logica); fonte di verità per istanza sul nodo. */
+  steps?: Record<string, Record<string, any>>;
   subNodes?: TaskTreeNode[];     // ✅ Nodi figli (ricorsivo)
   subTaskKey?: string;            // ✅ Chiave tecnica stabile per named groups regex (derivata da labelKey/label/name/id)
   /** Wizard variable naming (structure proposal); optional, editor-only hints */
@@ -439,19 +451,15 @@ export interface Task {
   agentUseCasesJson?: string;
 
   /**
-   * Migration: explicit row role. When omitted, inferTaskKind() derives from templateId/source/subTasksIds.
+   * Optional row role (legacy inference). Prefer resolving behaviour from templateId + subTasks.
    */
   kind?: TaskKind;
 
   /**
-   * Migration: persisted tree for standalone instances only (same shape as TaskTree.nodes).
+   * Persisted sub-task tree for UtteranceInterpretation (structure + refs; steps/contracts on each Task row).
+   * Same shape as `TaskTree.nodes` / sidebar.
    */
-  instanceNodes?: TaskTreeNode[];
-
-  /**
-   * Migration: optional per-node contracts/constraints for standalone (keyed by node id).
-   */
-  instanceSchemaContracts?: Record<string, unknown>;
+  subTasks?: TaskTreeNode[];
 
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
   // category?: string;              // ID categoria (preset o custom)

@@ -3,6 +3,8 @@
 
 import React, { useEffect } from 'react';
 import { useGrammarStore } from './core/state/grammarStore';
+import { isGrammarEditorDebugEnabled, storeLooksAheadOfInitialProp } from './grammarEditorLoadPolicy';
+import { grammarStructuralFingerprint } from './grammarStructureFingerprint';
 import { GrammarCanvas } from './components/GrammarCanvas';
 import { SemanticPanel } from './components/SemanticPanel';
 import { GrammarToolbar } from './components/GrammarToolbar';
@@ -124,115 +126,100 @@ export function GrammarEditor({
   // Track last loaded grammar ID to detect changes
   const lastGrammarIdRef = React.useRef<string | null>(null);
 
-  // CRITICAL: Load grammar immediately on mount if initialGrammar is available
-  // This ensures grammar is in store before canvas renders
+  const dbg = isGrammarEditorDebugEnabled();
+
+  // Mount: ensure store has grammar before first paint
   React.useEffect(() => {
     if (initialGrammar && (!currentGrammar || currentGrammar.id !== initialGrammar.id)) {
-      console.log('[GrammarEditor] 🚀 IMMEDIATE: Loading grammar on mount', {
-        grammarId: initialGrammar.id,
-        nodesCount: initialGrammar.nodes?.length || 0,
-        edgesCount: initialGrammar.edges?.length || 0,
-        slotsCount: initialGrammar.slots?.length || 0,
-        semanticSetsCount: initialGrammar.semanticSets?.length || 0,
-        currentGrammarId: currentGrammar?.id,
-      });
+      if (dbg) {
+        console.log('[GrammarEditor] mount load', { grammarId: initialGrammar.id });
+      }
       loadGrammar(initialGrammar);
       lastGrammarIdRef.current = initialGrammar.id;
     } else if (!initialGrammar && !currentGrammar) {
-      console.log('[GrammarEditor] 🚀 IMMEDIATE: No initialGrammar, creating new grammar');
+      if (dbg) {
+        console.log('[GrammarEditor] mount create empty');
+      }
       createGrammar('New Grammar');
       lastGrammarIdRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only on mount
+  }, []);
 
-  // Watch for changes to initialGrammar (only reload when initialGrammar prop changes, not when currentGrammar changes)
+  // Prop-driven reload: initialGrammar identity changes from parent (e.g. contract sync)
   useEffect(() => {
-    console.log('[GrammarEditor] 🔍 useEffect triggered', {
-      hasInitialGrammar: !!initialGrammar,
-      initialGrammarId: initialGrammar?.id,
-      currentGrammarId: currentGrammar?.id,
-      lastLoadedId: lastGrammarIdRef.current,
-    });
-
     if (initialGrammar) {
-      // Always load if grammar is null or ID changed
-      if (!currentGrammar || lastGrammarIdRef.current !== initialGrammar.id) {
-        console.log('[GrammarEditor] 🔄 Loading grammar (new or changed)', {
-          grammarId: initialGrammar.id,
-          nodesCount: initialGrammar.nodes?.length || 0,
-          edgesCount: initialGrammar.edges?.length || 0,
-          slotsCount: initialGrammar.slots?.length || 0,
-          semanticSetsCount: initialGrammar.semanticSets?.length || 0,
-          previousGrammarId: lastGrammarIdRef.current,
-          currentGrammarId: currentGrammar?.id,
-          nodes: initialGrammar.nodes?.map(n => ({ id: n.id, label: n.label })).slice(0, 3),
-          slots: initialGrammar.slots?.map(s => ({ id: s.id, name: s.name })).slice(0, 3),
-        });
+      if (!currentGrammar) {
+        if (dbg) {
+          console.log('[GrammarEditor] load (no store)', { grammarId: initialGrammar.id });
+        }
         loadGrammar(initialGrammar);
         lastGrammarIdRef.current = initialGrammar.id;
-      } else {
-        // Same grammar ID - check if initialGrammar structure changed (not currentGrammar)
-        // Only reload if initialGrammar prop actually changed, not when user edits currentGrammar
-        const initialStructureChanged =
-          (currentGrammar?.nodes?.length || 0) !== (initialGrammar.nodes?.length || 0) ||
-          (currentGrammar?.edges?.length || 0) !== (initialGrammar.edges?.length || 0) ||
-          (currentGrammar?.slots?.length || 0) !== (initialGrammar.slots?.length || 0) ||
-          (currentGrammar?.semanticSets?.length || 0) !== (initialGrammar.semanticSets?.length || 0);
+        return;
+      }
 
-        // Only reload if initialGrammar prop has more items (external update), not if currentGrammar has more (user edit)
-        const shouldReload =
-          (initialGrammar.nodes?.length || 0) > (currentGrammar?.nodes?.length || 0) ||
-          (initialGrammar.edges?.length || 0) > (currentGrammar?.edges?.length || 0) ||
-          (initialGrammar.slots?.length || 0) > (currentGrammar?.slots?.length || 0) ||
-          (initialGrammar.semanticSets?.length || 0) > (currentGrammar?.semanticSets?.length || 0);
-
-        if (shouldReload) {
-          console.log('[GrammarEditor] 🔄 Grammar updated externally (initialGrammar prop changed), reloading', {
+      if (lastGrammarIdRef.current !== initialGrammar.id) {
+        if (storeLooksAheadOfInitialProp(initialGrammar, currentGrammar)) {
+          if (dbg) {
+            console.log('[GrammarEditor] skip stale initial (store ahead of prop)', {
+              initialId: initialGrammar.id,
+              storeId: currentGrammar.id,
+            });
+          }
+          lastGrammarIdRef.current = currentGrammar.id;
+          return;
+        }
+        if (
+          grammarStructuralFingerprint(initialGrammar) === grammarStructuralFingerprint(currentGrammar)
+        ) {
+          if (dbg) {
+            console.log('[GrammarEditor] skip load (same structure, id-only churn)', {
+              propId: initialGrammar.id,
+              storeId: currentGrammar.id,
+            });
+          }
+          lastGrammarIdRef.current = currentGrammar.id;
+          return;
+        }
+        if (dbg) {
+          console.log('[GrammarEditor] load (id changed)', {
             grammarId: initialGrammar.id,
-            oldNodesCount: currentGrammar?.nodes?.length || 0,
-            newNodesCount: initialGrammar.nodes?.length || 0,
-            oldEdgesCount: currentGrammar?.edges?.length || 0,
-            newEdgesCount: initialGrammar.edges?.length || 0,
-            oldSlotsCount: currentGrammar?.slots?.length || 0,
-            newSlotsCount: initialGrammar.slots?.length || 0,
-            oldSemanticSetsCount: currentGrammar?.semanticSets?.length || 0,
-            newSemanticSetsCount: initialGrammar.semanticSets?.length || 0,
-          });
-          loadGrammar(initialGrammar);
-        } else {
-          console.log('[GrammarEditor] ✅ Grammar already loaded and up-to-date (user edits preserved)', {
-            grammarId: initialGrammar.id,
-            nodesCount: currentGrammar?.nodes?.length || 0,
-            slotsCount: currentGrammar?.slots?.length || 0,
+            prevRef: lastGrammarIdRef.current,
           });
         }
+        loadGrammar(initialGrammar);
+        lastGrammarIdRef.current = initialGrammar.id;
+        return;
       }
-    } else {
-      // No initialGrammar - create new grammar if we don't have one
-      if (!currentGrammar) {
-        console.log('[GrammarEditor] ➕ No initialGrammar and no currentGrammar, creating new grammar');
-        createGrammar('New Grammar');
-        lastGrammarIdRef.current = null;
-      } else if (lastGrammarIdRef.current !== null) {
-        console.log('[GrammarEditor] ⚠️ No initialGrammar but have currentGrammar, clearing ref');
-        lastGrammarIdRef.current = null;
+
+      const shouldReload =
+        (initialGrammar.nodes?.length || 0) > (currentGrammar?.nodes?.length || 0) ||
+        (initialGrammar.edges?.length || 0) > (currentGrammar?.edges?.length || 0) ||
+        (initialGrammar.slots?.length || 0) > (currentGrammar?.slots?.length || 0) ||
+        (initialGrammar.semanticSets?.length || 0) > (currentGrammar?.semanticSets?.length || 0);
+
+      if (shouldReload) {
+        if (dbg) {
+          console.log('[GrammarEditor] reload (external grew)', { grammarId: initialGrammar.id });
+        }
+        loadGrammar(initialGrammar);
       }
+    } else if (!currentGrammar) {
+      createGrammar('New Grammar');
+      lastGrammarIdRef.current = null;
+    } else if (lastGrammarIdRef.current !== null) {
+      lastGrammarIdRef.current = null;
     }
-    // ✅ FIX: Remove currentGrammar from dependencies - only react to initialGrammar prop changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialGrammar, loadGrammar, createGrammar]);
 
-  // Debug: Log grammar state before render
   React.useEffect(() => {
-    console.log('[GrammarEditor] 🎨 Render state', {
-      hasInitialGrammar: !!initialGrammar,
+    if (!dbg) return;
+    console.log('[GrammarEditor] grammar ids', {
       initialGrammarId: initialGrammar?.id,
-      hasCurrentGrammar: !!currentGrammar,
       currentGrammarId: currentGrammar?.id,
-      grammarMatch: initialGrammar?.id === currentGrammar?.id,
     });
-  });
+  }, [dbg, initialGrammar?.id, currentGrammar?.id]);
 
   const containerBackground = editorMode === 'graph' ? '#121621' : 'transparent';
   const canvasBackground = editorMode === 'graph' ? '#1a1f2e' : '#ffffff';

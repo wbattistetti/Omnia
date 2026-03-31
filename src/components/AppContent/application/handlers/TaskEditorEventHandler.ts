@@ -130,7 +130,13 @@ export class TaskEditorEventHandler {
 
     // Determine taskWizardMode
     let taskWizardMode: TaskWizardMode | undefined;
-    if (event.taskWizardMode && (event.taskWizardMode === 'none' || event.taskWizardMode === 'adaptation' || event.taskWizardMode === 'full')) {
+    if (
+      event.taskWizardMode &&
+      (event.taskWizardMode === 'none' ||
+        event.taskWizardMode === 'adaptation' ||
+        event.taskWizardMode === 'full' ||
+        event.taskWizardMode === 'pending')
+    ) {
       taskWizardMode = event.taskWizardMode;
       console.log('[TaskEditorEventHandler] ✅ taskWizardMode esplicito dall\'evento', {
         eventId: event.id,

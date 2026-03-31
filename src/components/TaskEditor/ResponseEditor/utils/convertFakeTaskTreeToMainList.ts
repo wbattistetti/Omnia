@@ -28,7 +28,7 @@ export function convertFakeTaskTreeToMainList(fakeTree: FakeTaskTreeNode[]): any
   const converted = fakeTree.map((node, idx) => {
     const mainNode: any = {
       label: node.label || 'Unnamed',
-      icon: node.type === 'object' ? 'Folder' : node.type === 'number' ? 'Hash' : 'FileText',
+      icon: node.type === 'object' ? 'Package' : node.type === 'number' ? 'Hash' : 'FileText',
       id: node.id,
       templateId: node.templateId || node.id,
       kind: node.type === 'object' ? 'object' : node.type === 'number' ? 'number' : 'string',

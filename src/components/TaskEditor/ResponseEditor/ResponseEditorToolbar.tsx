@@ -147,15 +147,11 @@ export function useResponseEditorToolbar({
   // ✅ Handler mutualmente esclusivi per i primi 3 pulsanti (Behaviour, Personality, Recognition)
   // ✅ Usano leftPanelMode invece di rightMode per non interferire con Test
   const handleBehaviourClick = () => {
-    // Se già attivo, deseleziona chiudendo tutto
-    if (leftPanelMode === 'actions') {
-      onLeftPanelModeChange('none'); // Chiudi Behaviour
-      if (showSynonyms) onToggleSynonyms();
-      if (showMessageReview) onToggleMessageReview();
-    } else {
-      // Altrimenti seleziona Behaviour e chiudi gli altri due (ma non Test)
-      if (showSynonyms) onToggleSynonyms();
-      if (showMessageReview) onToggleMessageReview();
+    // Open-only behavior: clicking "Dialogue Steps" must always open Behaviour
+    // and preserve the current view mode (tabs/tree) already chosen by the user.
+    if (showSynonyms) onToggleSynonyms();
+    if (showMessageReview) onToggleMessageReview();
+    if (leftPanelMode !== 'actions') {
       onLeftPanelModeChange('actions'); // Usa leftPanelMode invece di rightMode
     }
   };
@@ -526,7 +522,6 @@ export function useResponseEditorToolbar({
   // ✅ Componente per pulsante composto
   const DialogueStepsCompoundButtonContent = React.useMemo(() => (
     <div
-      onClick={(e) => e.stopPropagation()}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -534,7 +529,24 @@ export function useResponseEditorToolbar({
         height: '100%'
       }}
     >
-      <span style={{ fontSize: '13px', fontWeight: 500 }}>Dialogue Steps</span>
+      <span
+        style={{ fontSize: '13px', fontWeight: 500 }}
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleBehaviourClick();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.stopPropagation();
+            handleBehaviourClick();
+          }
+        }}
+      >
+        Dialogue Steps
+      </span>
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -652,7 +664,13 @@ export function useResponseEditorToolbar({
     label: undefined, // Icon contiene tutto
     onClick: handleBehaviourClick, // Click principale apre Behaviour
     title: "Define the agent's response flow: prompts, confirmations, error handling, and escalation logic.",
-    active: leftPanelMode === 'actions'
+    // Keep highlight exclusive: if another top-level tab is active, Dialogue Steps
+    // must visually lose focus even if Behaviour state is still mounted.
+    active:
+      leftPanelMode === 'actions' &&
+      !showSynonyms &&
+      !showMessageReview &&
+      testPanelMode !== 'chat'
   };
 
   return [

@@ -5,9 +5,12 @@ import nlpTypesConfig from '@config/nlp-types.json';
 import { mapLabelToStandardKey } from '@responseEditor/hooks/useRegexValidation';
 import * as testingState from '@responseEditor/testingState';
 import { loadContractFromNode } from '@responseEditor/ContractSelector/contractHelpers';
+import { taskRepository } from '@services/TaskRepository';
 import { TestExtractionService } from '@services/TestExtractionService';
 import { useCellOverridesStore } from '@responseEditor/features/step-management/stores/cellOverridesStore';
 import DialogueTaskService from '@services/DialogueTaskService';
+import type { TaskTreeNode } from '@types/taskTypes';
+import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
 
 export interface RowResult {
   regex?: string;
@@ -39,6 +42,8 @@ interface UseExtractionTestingProps {
   profile: { regex?: string };
   onStatsUpdate?: (stats: { matched: number; falseAccept: number; totalGt: number }) => void;
   node?: any; // Node with subData/subSlots for group mapping
+  /** Owning task id — used with TaskRepository so contract load matches standalone vs template rows. */
+  taskId?: string;
 }
 
 // Helper functions
@@ -136,6 +141,7 @@ export function useExtractionTesting({
   profile,
   onStatsUpdate,
   node,
+  taskId,
 }: UseExtractionTestingProps) {
   // ✅ Local state management (simpler approach)
   const [testing, setTesting] = useState<boolean>(false);
@@ -278,7 +284,8 @@ export function useExtractionTesting({
     // ✅ Fallback: Try to load from contract
     if (node) {
       try {
-        const contract = loadContractFromNode(node);
+        const taskRow = taskId ? taskRepository.getTask(taskId) : undefined;
+        const contract = loadContractFromNode(node, taskRow);
         const regexPattern = contract?.engines?.find((c: any) => c.type === 'regex')?.patterns?.[0];
         if (regexPattern) {
           console.log('[TEST] 🔄 Fallback: Using regex from contract', {
@@ -302,7 +309,7 @@ export function useExtractionTesting({
     }
 
     return undefined;
-  }, [profile.regex, node]);
+  }, [profile.regex, node, taskId]);
 
   // Extract regex only
   const extractRegexOnly = useCallback((text: string) => {
@@ -467,8 +474,9 @@ export function useExtractionTesting({
       return;
     }
 
+    const taskRow = taskId ? taskRepository.getTask(taskId) : undefined;
     // ✅ Load contract to see which engines are enabled
-    const contract = loadContractFromNode(node);
+    const contract = loadContractFromNode(node, taskRow);
     const engines = contract?.engines || [];
     if (!engines || engines.length === 0) {
       console.warn('[TEST] No engines found in contract, falling back to local extraction');
@@ -511,14 +519,17 @@ export function useExtractionTesting({
           return next;
         });
 
-        // ✅ Get dataContract from template for VB.NET regex engine
-        const templateId = node.templateId;
+        // ✅ Serialized contract for VB.NET regex engine (standalone: from resolved node contract)
         let contractJson: string | undefined;
-        if (templateId) {
-          const template = DialogueTaskService.getTemplate(templateId);
-          // ✅ Use dataContract (unified) instead of semanticContract
-          if (template?.dataContract) {
-            contractJson = JSON.stringify(template.dataContract);
+        if (contract) {
+          contractJson = JSON.stringify(contract);
+        } else {
+          const catalogueId = node ? catalogueLookupTemplateId(node as TaskTreeNode) : '';
+          if (catalogueId) {
+            const template = DialogueTaskService.getTemplate(catalogueId);
+            if (template?.dataContract) {
+              contractJson = JSON.stringify(template.dataContract);
+            }
           }
         }
 
@@ -777,7 +788,7 @@ export function useExtractionTesting({
       setTesting(false);
       testingState.stopTesting();
     }
-  }, [examplesList, enabledMethods, extractRegexOnly, mapKindToField, node, getEffectiveRegex, summarizeVars]);
+  }, [examplesList, enabledMethods, extractRegexOnly, mapKindToField, node, getEffectiveRegex, summarizeVars, taskId]);
 
   // Compute stats from results (can accept results directly or use state)
   const computeStatsFromResults = useCallback((results?: RowResult[]) => {

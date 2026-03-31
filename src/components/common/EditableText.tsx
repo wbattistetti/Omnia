@@ -32,7 +32,8 @@ export interface EditableTextProps {
   value: string;
   editing: boolean;
   onSave: (value: string) => void;
-  onCancel: () => void;
+  /** Called with trimmed draft when canceling (ESC, X, or close without save). */
+  onCancel: (draftTrimmed?: string) => void;
   onStartEditing?: () => void;
 
   // Display mode
@@ -188,7 +189,7 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
 
     // Always close if requested (even if unchanged or validation failed)
     if (shouldClose) {
-      onCancel();
+      onCancel(editValue.trim());
     }
   }, [editValue, initialValue, validation, onSave, onCancel]);
 
@@ -248,9 +249,9 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
-      onCancel();
+      onCancel(editValue.trim());
     }
-  }, [onKeyDown, multiline, saveAndClose, handleMultilineEnter, onCancel]);
+  }, [onKeyDown, multiline, saveAndClose, handleMultilineEnter, onCancel, editValue]);
 
   const handleSave = useCallback(() => {
     // Check button: ALWAYS close editing (even if unchanged)
@@ -258,8 +259,8 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
   }, [saveAndClose]);
 
   const handleCancel = useCallback(() => {
-    onCancel();
-  }, [onCancel]);
+    onCancel(editValue.trim());
+  }, [onCancel, editValue]);
 
   const handleBlur = useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
     // Don't blur if clicking on action buttons

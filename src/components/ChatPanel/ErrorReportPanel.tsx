@@ -8,7 +8,7 @@ import { useFlowWorkspace } from '@flows/FlowStore';
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode } from '@components/Flowchart/types/flowTypes';
 import { normalizeSeverity } from '@utils/severityUtils';
-import { buildErrorReportTree } from './errorReportTreeModel';
+import { buildErrorReportTree, errorMessageWithoutFlowPrefix } from './errorReportTreeModel';
 
 function formatErrorWarningCounts(errors: number, warnings: number): string {
   const parts: string[] = [];
@@ -34,6 +34,7 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
 
   const [collapsedFlows, setCollapsedFlows] = React.useState<Set<string>>(() => new Set());
   const [collapsedRows, setCollapsedRows] = React.useState<Set<string>>(() => new Set());
+  const [detailRows, setDetailRows] = React.useState<Set<string>>(() => new Set());
 
   const toggleFlow = React.useCallback((flowId: string) => {
     setCollapsedFlows((prev) => {
@@ -46,6 +47,15 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
 
   const toggleRow = React.useCallback((key: string) => {
     setCollapsedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const toggleRowDetail = React.useCallback((key: string) => {
+    setDetailRows((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -151,25 +161,60 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
                           </button>
 
                           {rowOpen && (
-                            <ul className="px-2 pb-2 pt-0 space-y-2 border-t border-gray-100 dark:border-gray-800/80">
-                              {rowGroup.issues.map((issue, idx) => (
-                                <li
-                                  key={`${rowKey}-${idx}-${issue.message.slice(0, 24)}`}
-                                  className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 pl-6 pr-1 pt-2"
-                                >
-                                  <span className="text-xs text-gray-700 dark:text-gray-300 leading-snug flex-1">
-                                    {issue.message}
-                                  </span>
+                            <div className="border-t border-gray-100 dark:border-gray-800/80">
+                              <ul className="px-2 pb-1 pt-0 space-y-2">
+                                {rowGroup.issues.map((issue, idx) => (
+                                  <li
+                                    key={`${rowKey}-${idx}-${issue.message.slice(0, 40)}`}
+                                    className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 pl-6 pr-1 pt-2"
+                                  >
+                                    <span className="text-xs text-gray-700 dark:text-gray-300 leading-snug flex-1">
+                                      {issue.message}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(ev) => onFix(ev, issue.error)}
+                                      className="flex-shrink-0 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-md bg-gray-900 text-white hover:bg-gray-800 dark:bg-sky-600 dark:hover:bg-sky-500"
+                                    >
+                                      Fix
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                              {rowGroup.sourceErrors.length > 0 && (
+                                <div className="px-2 pb-2 pl-8">
                                   <button
                                     type="button"
-                                    onClick={(ev) => onFix(ev, issue.error)}
-                                    className="flex-shrink-0 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-md bg-gray-900 text-white hover:bg-gray-800 dark:bg-sky-600 dark:hover:bg-sky-500"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleRowDetail(rowKey);
+                                    }}
+                                    className="text-[11px] text-sky-600 dark:text-sky-400 hover:underline font-medium"
                                   >
-                                    Fix
+                                    {detailRows.has(rowKey)
+                                      ? 'Nascondi dettagli tecnici'
+                                      : `Mostra dettagli tecnici (${rowGroup.sourceErrors.length})`}
                                   </button>
-                                </li>
-                              ))}
-                            </ul>
+                                  {detailRows.has(rowKey) && (
+                                    <ul className="mt-2 space-y-1.5 rounded-md bg-gray-100 dark:bg-gray-900/90 px-2.5 py-2 text-[11px] leading-relaxed text-gray-800 dark:text-gray-200 border border-gray-200/80 dark:border-gray-700">
+                                      {rowGroup.sourceErrors.map((src, i) => (
+                                        <li key={`${rowKey}-src-${i}`} className="break-words">
+                                          {src.category && (
+                                            <span className="font-semibold text-gray-600 dark:text-gray-400 mr-1">
+                                              [{src.category}]
+                                            </span>
+                                          )}
+                                          <span className="font-mono text-[10px] sm:text-[11px]">
+                                            {(src as { technicalDetail?: string }).technicalDetail?.trim() ||
+                                              errorMessageWithoutFlowPrefix(src)}
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
                       );

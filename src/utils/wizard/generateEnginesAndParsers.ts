@@ -2,6 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import type { TaskTreeNode } from '../../types/taskTypes';
+import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
 import type { SemanticContract, EngineType } from '../../types/semanticContract';
 import type { DataContract, DataContractItem } from '../../components/DialogueDataEngine/parsers/contractLoader';
 import { EngineEscalationService } from '../../services/EngineEscalationService';
@@ -23,7 +24,8 @@ export function decideEnginesForNode(
   contract: SemanticContract
 ): EngineType[] {
   const nodeId = node.id || node.templateId;
-  const template = DialogueTaskService.getTemplate(nodeId);
+  const cacheLookupId = catalogueLookupTemplateId(node);
+  const template = cacheLookupId ? DialogueTaskService.getTemplate(cacheLookupId) : null;
 
   // ✅ PRIORITY 1: Use engines from existing parsers in template (respects AI plan)
   if (template?.dataContract?.parsers && template.dataContract.parsers.length > 0) {
@@ -282,7 +284,8 @@ export async function generateEnginesAndParsersForAllNodes(
   const nodesToProcess = allNodes.filter(node => {
     const nodeId = node.id || node.templateId;
     const contract = allContracts.get(nodeId);
-    const template = DialogueTaskService.getTemplate(nodeId);
+    const cacheLookupId = catalogueLookupTemplateId(node);
+    const template = cacheLookupId ? DialogueTaskService.getTemplate(cacheLookupId) : null;
     return contract && template;
   });
 
@@ -297,7 +300,8 @@ export async function generateEnginesAndParsersForAllNodes(
   for (const node of nodesToProcess) {
     const nodeId = node.id || node.templateId;
     const contract = allContracts.get(nodeId);
-    const template = DialogueTaskService.getTemplate(nodeId);
+    const cacheLookupId = catalogueLookupTemplateId(node);
+    const template = cacheLookupId ? DialogueTaskService.getTemplate(cacheLookupId) : null;
 
     if (!contract || !template) {
       console.warn(`[generateEnginesAndParsersForAllNodes] ⚠️ Skipping node ${nodeId} - missing contract or template`);

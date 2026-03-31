@@ -3,7 +3,7 @@
  * No translation or task logic — parent supplies value and persistence.
  */
 
-import React, { useRef } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { EditableText } from '@components/common/EditableText';
 
 export type EditableMessageProps = {
@@ -11,7 +11,8 @@ export type EditableMessageProps = {
   editing: boolean;
   onEditingChange: (editing: boolean) => void;
   onCommit: (value: string) => void;
-  onAbort: () => void;
+  /** Trimmed draft at cancel time; parent may remove the task if draft and persisted text are both empty. */
+  onAbort: (draftTrimmed: string) => void;
   placeholder?: string;
 };
 
@@ -24,6 +25,15 @@ export function EditableMessage({
   placeholder = 'Scrivi un testo qui...',
 }: EditableMessageProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const wasEditingRef = useRef(false);
+  /** Programmatic open (BehaviourUi focus) does not run handleEdit — focus DOM once when entering edit. */
+  useLayoutEffect(() => {
+    if (editing && !wasEditingRef.current) {
+      inputRef.current?.focus({ preventScroll: true });
+    }
+    wasEditingRef.current = editing;
+  }, [editing]);
 
   const handleSave = (newValue: string) => {
     onEditingChange(false);
@@ -54,6 +64,7 @@ export function EditableMessage({
     const trimmedText = value?.trim() || '';
     if (trimmedText.length === 0 && trimmedValue.length === 0) {
       onEditingChange(false);
+      onAbort('');
       return;
     }
     onEditingChange(false);

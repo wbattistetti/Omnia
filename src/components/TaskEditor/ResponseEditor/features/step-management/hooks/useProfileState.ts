@@ -3,6 +3,11 @@ import { NLPProfile } from '@responseEditor/DataExtractionEditor';
 import { getIsTesting } from '@responseEditor/testingState';
 import { getNodeIdStrict, getNodeLabelStrict, getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 import DialogueTaskService from '@services/DialogueTaskService';
+import { taskRepository } from '@services/TaskRepository';
+import { resolveNodeDataContract } from '@utils/taskNodeContractResolver';
+import type { TaskTreeNode } from '@types/taskTypes';
+import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
+import type { TaskMeta } from '@taskEditor/EditorHost/types';
 
 // Helper functions
 function toCommaList(list?: string[] | null): string {
@@ -45,21 +50,30 @@ function inferKindFromNode(n: any): string {
 export function useProfileState(
   node: any,
   locale: string,
-  onChange?: (profile: NLPProfile) => void
+  onChange?: (profile: NLPProfile) => void,
+  task?: TaskMeta
 ) {
   // Compute initial profile from node
   const initial: NLPProfile = useMemo(() => {
     const p = (node && (node as any).nlpProfile) || {};
 
-    // ✅ PRIORITY: Carica testPhrases da template.dataContract.testPhrases (fonte di verità)
     let testPhrasesFromContract: string[] | undefined;
-    const templateId = node?.templateId;
-    if (templateId) {
-      const template = DialogueTaskService.getTemplate(templateId);
-      if (template?.dataContract?.testPhrases) {
-        testPhrasesFromContract = Array.isArray(template.dataContract.testPhrases)
-          ? template.dataContract.testPhrases
-          : undefined;
+    const tid = task?.id ?? task?.instanceId;
+    const taskRow = tid ? taskRepository.getTask(tid) : undefined;
+    if (taskRow) {
+      const resolved = resolveNodeDataContract(taskRow, node);
+      if (resolved?.testPhrases && Array.isArray(resolved.testPhrases)) {
+        testPhrasesFromContract = resolved.testPhrases;
+      }
+    } else {
+      const catalogueId = node ? catalogueLookupTemplateId(node as TaskTreeNode) : '';
+      if (catalogueId) {
+        const template = DialogueTaskService.getTemplate(catalogueId);
+        if (template?.dataContract?.testPhrases) {
+          testPhrasesFromContract = Array.isArray(template.dataContract.testPhrases)
+            ? template.dataContract.testPhrases
+            : undefined;
+        }
       }
     }
 
@@ -67,7 +81,7 @@ export function useProfileState(
     if (testPhrasesFromContract || p.testPhrases) {
       console.log('[useProfileState] Computing initial profile from node', {
         nodeId: node?.id,
-        templateId,
+        templateId: node ? catalogueLookupTemplateId(node as TaskTreeNode) : undefined,
         hasNlpProfile: !!(node as any)?.nlpProfile,
         nlpProfileKeys: (node as any)?.nlpProfile ? Object.keys((node as any).nlpProfile) : [],
         hasTestPhrasesFromContract: !!testPhrasesFromContract,
@@ -105,7 +119,15 @@ export function useProfileState(
     };
 
     return result;
-  }, [node, locale, (node as any)?.nlpProfile?.regex, node?.templateId]); // ✅ Aggiunto templateId per reagire alle modifiche di testPhrases nel contract
+  }, [
+    node,
+    locale,
+    (node as any)?.nlpProfile?.regex,
+    node?.templateId,
+    node?.catalogTemplateId,
+    task?.id,
+    task?.instanceId,
+  ]);
 
   const inferredKind = useMemo(() => inferKindFromNode(node), [node]);
 

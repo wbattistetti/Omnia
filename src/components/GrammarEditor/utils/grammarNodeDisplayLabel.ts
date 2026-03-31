@@ -4,8 +4,8 @@
 import type { GrammarNode, Grammar } from '../types/grammarTypes';
 
 /**
- * Caption shown on the canvas when `node.label` is empty but a semantic-set
- * binding exists (stored label must stay empty so matching uses the set only).
+ * Caption on the canvas: uses `node.label` when set; otherwise falls back to the
+ * bound semantic set name when the label is empty.
  */
 export function getGrammarNodeDisplayCaption(node: GrammarNode, grammar: Grammar | null): string {
   const trimmed = node.label.trim();

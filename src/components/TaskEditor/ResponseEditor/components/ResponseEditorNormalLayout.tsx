@@ -22,6 +22,7 @@ import type { SelectPathHandler } from '@responseEditor/features/node-editing/se
 import { SIDEBAR_CONTENT_MIN_WIDTH_PX } from '@responseEditor/Sidebar/sidebarLayoutConstants';
 import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 import type { WizardTaskTreeNode, WizardStep, WizardModuleTemplate } from '../../../../../TaskBuilderAIWizard/types';
+import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 export interface ResponseEditorNormalLayoutProps {
   // Data
@@ -118,6 +119,9 @@ export interface ResponseEditorNormalLayoutProps {
   viewMode?: 'tabs' | 'tree';
   onViewModeChange?: (mode: 'tabs' | 'tree') => void;
 
+  /** Starts full wizard (empty-task choice panel). */
+  onStartWizard?: () => void;
+
   // ✅ NEW: Props per Wizard (quando mainViewMode === 'wizard')
   wizardProps?: {
     showStructureConfirmation?: boolean;
@@ -212,6 +216,7 @@ export function ResponseEditorNormalLayout({
   // ✅ NEW: View mode for Behaviour
   viewMode,
   onViewModeChange,
+  onStartWizard,
 }: ResponseEditorNormalLayoutProps) {
   // ✅ NEW: Get data from Context
   const { taskTree, taskMeta: task, currentProjectId } = useResponseEditorContext();
@@ -313,6 +318,8 @@ export function ResponseEditorNormalLayout({
   // ✅ Determina la struttura del grid in base alle condizioni
   const hasIntentEditor = mainList[0]?.kind === 'intent' && task;
   const hasSidebar = mainList[0]?.kind !== 'intent';
+  /** Empty DDT: user picks manual vs wizard in the center first; sidebar stays hidden until manual. */
+  const showSidebarForLayout = hasSidebar && taskWizardMode !== 'pending';
 
   // ✅ Se sidebarOnly è true, renderizza solo la sidebar (per STATO 2 - adaptation mode)
   if (sidebarOnly && hasSidebar) {
@@ -372,7 +379,7 @@ export function ResponseEditorNormalLayout({
   const resizerWidthPx = 10;
 
   // ✅ Calcola gridTemplateColumns in base alle condizioni
-  const gridTemplateColumns = hasSidebar
+  const gridTemplateColumns = showSidebarForLayout
     ? `${sidebarTrackPx}px ${resizerWidthPx}px minmax(0, 1fr)` // Sidebar + Resizer + Content
     : hasIntentEditor
       ? 'auto 1fr'     // IntentEditor + Content
@@ -396,7 +403,7 @@ export function ResponseEditorNormalLayout({
     minHeight: 0,
     height: '100%',
     overflow: 'hidden', // ✅ Changed to hidden - children scroll internally
-    gridColumn: hasSidebar ? '3' : hasIntentEditor ? '2' : '1',
+    gridColumn: showSidebarForLayout ? '3' : hasIntentEditor ? '2' : '1',
   };
 
   return (
@@ -411,8 +418,8 @@ export function ResponseEditorNormalLayout({
         />
       )}
 
-      {/* Sidebar quando kind !== "intent" */}
-      {hasSidebar && (
+      {/* Sidebar quando kind !== "intent" (nascosta in pending: scelta centro schermo) */}
+      {showSidebarForLayout && (
         <>
           <Sidebar
             ref={sidebarRef}
@@ -512,11 +519,10 @@ export function ResponseEditorNormalLayout({
           projectId={currentProjectId}
           onUpdateDDT={replaceSelectedTaskTree}
           escalationTasks={escalationTasks} // ✅ Passa escalationTasks per TaskPanel
-          // ✅ NEW: Passa wizardProps quando mainViewMode === 'wizard'
-          wizardProps={mainViewMode === MainViewMode.WIZARD ? wizardProps : undefined}
           // ✅ NEW: Passa viewMode per Behaviour
           viewMode={viewMode}
           onViewModeChange={onViewModeChange}
+          onStartWizard={onStartWizard}
         />
         <PanelContainer
           leftPanelMode={leftPanelMode}

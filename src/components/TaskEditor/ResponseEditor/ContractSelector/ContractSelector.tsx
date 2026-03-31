@@ -19,15 +19,36 @@ export interface ContractMethodInfo {
 }
 
 const ALL_CONTRACTS: ContractMethodInfo[] = [
-  { id: 'regex', label: 'Regex', shortLabel: 'Regex', color: '#93c5fd' },
-  { id: 'rules', label: 'Rules', shortLabel: 'Rules', color: '#e5e7eb' },
+  { id: 'grammarflow', label: 'Grammar flow', shortLabel: 'Grammar flow', color: '#c084fc' },
+  { id: 'regex', label: 'RegExp.Execute', shortLabel: 'RegExp.Execute', color: '#93c5fd' },
+  { id: 'embeddings', label: 'Embeddings', shortLabel: 'Embeddings', color: '#e0e7ff' },
   { id: 'ner', label: 'NER', shortLabel: 'NER', color: '#fef3c7' },
   { id: 'llm', label: 'LLM', shortLabel: 'LLM', color: '#fed7aa' },
-  { id: 'embeddings', label: 'Embeddings', shortLabel: 'Embeddings', color: '#e0e7ff' },
-  { id: 'grammarflow', label: 'GrammarFlow', shortLabel: 'GrammarFlow', color: '#c084fc' },
+  { id: 'rules', label: 'Rules', shortLabel: 'Rules', color: '#e5e7eb' },
 ];
 
-const SUGGESTED_ORDER: ContractMethod[] = ['regex', 'rules', 'ner', 'llm', 'embeddings', 'grammarflow'];
+/**
+ * Canonical UI order for "Aggiungi contract" and method pickers.
+ */
+export const CONTRACT_METHOD_DISPLAY_ORDER: ContractMethod[] = [
+  'grammarflow',
+  'regex',
+  'embeddings',
+  'ner',
+  'llm',
+  'rules',
+];
+
+export function sortContractMethodsByDisplayOrder(methods: ContractMethod[]): ContractMethod[] {
+  const order = CONTRACT_METHOD_DISPLAY_ORDER;
+  return [...methods].sort((a, b) => {
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+}
+
+const SUGGESTED_ORDER: ContractMethod[] = CONTRACT_METHOD_DISPLAY_ORDER;
 
 // Helper function to get contract method label
 export function getContractMethodLabel(method: ContractMethod): string {
@@ -57,10 +78,13 @@ export default function ContractSelector({
     return enabledContracts.map(c => c.type);
   }, [enabledContracts]);
 
-  // Get available methods (not yet added)
+  // Get available methods (not yet added), ordered for display
   const availableMethods = React.useMemo(() => {
-    return ALL_CONTRACTS.filter(
-      contractInfo => !enabledMethods.includes(contractInfo.id)
+    const filtered = ALL_CONTRACTS.filter(
+      (contractInfo) => !enabledMethods.includes(contractInfo.id)
+    );
+    return sortContractMethodsByDisplayOrder(filtered.map((c) => c.id)).map(
+      (id) => filtered.find((c) => c.id === id)!
     );
   }, [enabledMethods]);
 
@@ -249,6 +273,8 @@ export default function ContractSelector({
                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                 zIndex: 1000,
                 minWidth: 200,
+                maxHeight: 300,
+                overflowY: 'auto',
               }}
             >
               {availableMethods.map(method => (

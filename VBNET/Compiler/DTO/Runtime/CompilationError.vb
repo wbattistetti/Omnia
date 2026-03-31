@@ -3,51 +3,82 @@ Option Explicit On
 Imports Newtonsoft.Json
 
 ''' <summary>
-''' Compilation error with task/node/row context
-''' Every error must have a taskId for traceability
+''' Compilation error with task/node/row/edge context and optional structured fields for UI and tooling.
+''' category = stable code (e.g. MissingOrInvalidTask, AmbiguousLink); message = short diagnostic (English).
+''' Human-facing copy is resolved on the frontend from category + these fields.
 ''' </summary>
 Public Class CompilationError
-    ''' <summary>
-    ''' Task ID (obligatory) - use row.Id as fallback if row.TaskId is missing
-    ''' </summary>
     <JsonProperty("taskId")>
     Public Property TaskId As String
 
-    ''' <summary>
-    ''' Node ID (optional) - for node-level errors
-    ''' </summary>
     <JsonProperty("nodeId")>
     Public Property NodeId As String
 
-    ''' <summary>
-    ''' Row ID (optional) - for row-level errors
-    ''' </summary>
     <JsonProperty("rowId")>
     Public Property RowId As String
 
-    ''' <summary>
-    ''' Edge ID (optional) - for edge-level errors (e.g., label without condition)
-    ''' </summary>
     <JsonProperty("edgeId")>
     Public Property EdgeId As String
 
-    ''' <summary>
-    ''' Error message (user-friendly)
-    ''' </summary>
     <JsonProperty("message")>
     Public Property Message As String
 
-    ''' <summary>
-    ''' Error severity (Error, Warning, Hint)
-    ''' </summary>
     <JsonProperty("severity")>
     Public Property Severity As ErrorSeverity
 
     ''' <summary>
-    ''' Error category (e.g., "TaskNotFound", "MissingTaskId", "NoEntryNodes")
+    ''' Stable error kind: NoEntryNodes, MissingOrInvalidTask, AmbiguousLink, TaskCompilationFailed, etc.
     ''' </summary>
     <JsonProperty("category")>
     Public Property Category As String
+
+    ''' <summary>Display label for the row (user text), when row-scoped.</summary>
+    <JsonProperty("rowLabel")>
+    Public Property RowLabel As String
+
+    ''' <summary>Task reference stored on the row (may be empty).</summary>
+    <JsonProperty("rowTaskRef")>
+    Public Property RowTaskRef As String
+
+    ''' <summary>Resolved task id from flow.Tasks when found.</summary>
+    <JsonProperty("resolvedTaskId")>
+    Public Property ResolvedTaskId As String
+
+    ''' <summary>True when row had no TaskId (reference missing).</summary>
+    <JsonProperty("missingTaskRef")>
+    Public Property MissingTaskRef As Boolean?
+
+    ''' <summary>Invalid task type enum value when applicable.</summary>
+    <JsonProperty("invalidType")>
+    Public Property InvalidType As Integer?
+
+    ''' <summary>Condition id for link/condition errors.</summary>
+    <JsonProperty("conditionId")>
+    Public Property ConditionId As String
+
+    ''' <summary>Fine-grained code for TaskCompilationFailed (TemplateNotFound, InvalidContract, …).</summary>
+    <JsonProperty("detailCode")>
+    Public Property DetailCode As String
+
+    ''' <summary>Technical detail for support/debug (not for end-user copy).</summary>
+    <JsonProperty("technicalDetail")>
+    Public Property TechnicalDetail As String
+
+    ''' <summary>AmbiguousLink: sameLabel, sameCondition, overlappingConditions, missingConditionInMultiExit.</summary>
+    <JsonProperty("reason")>
+    Public Property Reason As String
+
+    ''' <summary>Other edge ids involved in an ambiguity.</summary>
+    <JsonProperty("conflictsWith")>
+    Public Property ConflictsWith As List(Of String)
+
+    ''' <summary>MultipleEntryNodes: ids of candidate entry nodes.</summary>
+    <JsonProperty("entryNodeIds")>
+    Public Property EntryNodeIds As List(Of String)
+
+    ''' <summary>LinkMissingCondition: other outgoing edges from the same node.</summary>
+    <JsonProperty("siblingEdgeIds")>
+    Public Property SiblingEdgeIds As List(Of String)
 
     Public Sub New()
         TaskId = String.Empty
@@ -57,5 +88,12 @@ Public Class CompilationError
         Message = String.Empty
         Severity = ErrorSeverity.Error
         Category = String.Empty
+        RowLabel = String.Empty
+        RowTaskRef = String.Empty
+        ResolvedTaskId = String.Empty
+        ConditionId = String.Empty
+        DetailCode = String.Empty
+        TechnicalDetail = String.Empty
+        Reason = String.Empty
     End Sub
 End Class

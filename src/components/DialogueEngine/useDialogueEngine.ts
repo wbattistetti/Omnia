@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
-import type { CompiledTask, CompilationResult, ExecutionState } from '../FlowCompiler/types';
+import type { CompiledTask, CompilationError, CompilationResult, ExecutionState } from '../FlowCompiler/types';
 // Frontend DialogueEngine removed - backend orchestrator is now default
 import { useProjectData } from '../../context/ProjectDataContext';
 
@@ -226,7 +226,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       }
 
       const multiFlow = allCompileSlices.length > 1;
-      const mergedErrorList: Array<Record<string, unknown>> = [];
+      const { enrichCompilationError } = await import('../../utils/enrichCompilationError');
+      const mergedErrorList: CompilationError[] = [];
       for (const slice of allCompileSlices) {
         const errs = slice.errors;
         if (!errs?.length) continue;
@@ -234,15 +235,21 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           if (err && typeof err === 'object') {
             const o = err as Record<string, unknown>;
             const baseMsg = String(o.message ?? o.Message ?? 'Compilation issue');
-            mergedErrorList.push({
-              ...o,
-              message: multiFlow ? `[${slice.flowId}] ${baseMsg}` : baseMsg,
-            });
+            mergedErrorList.push(
+              enrichCompilationError({
+                ...o,
+                message: multiFlow ? `[${slice.flowId}] ${baseMsg}` : baseMsg,
+              })
+            );
           } else {
-            mergedErrorList.push({
-              message: multiFlow ? `[${slice.flowId}] ${String(err)}` : String(err),
-              severity: 'Error',
-            });
+            mergedErrorList.push(
+              enrichCompilationError({
+                taskId: 'SYSTEM',
+                category: 'Unknown',
+                message: multiFlow ? `[${slice.flowId}] ${String(err)}` : String(err),
+                severity: 'Error',
+              })
+            );
           }
         }
       }

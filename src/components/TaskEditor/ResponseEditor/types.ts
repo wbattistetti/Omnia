@@ -25,7 +25,7 @@ export interface TreeNodeProps {
 export const ICON_KEYS = [
   'MessageCircle', 'HelpCircle', 'Headphones', 'Shield', 'PhoneOff', 'Database', 'Mail', 'MessageSquare',
   'Function', 'Music', 'Eraser', 'ArrowRight', 'Tag', 'Clock', 'ServerCog', 'User', 'MapPin', 'Calendar',
-  'Type', 'Phone', 'Hash', 'Globe', 'Home', 'Building', 'FileText'
+  'Type', 'Phone', 'Hash', 'Globe', 'Home', 'Building', 'FileText', 'Package', 'Folder',
 ] as const;
 
 export type IconKey = typeof ICON_KEYS[number] | string;

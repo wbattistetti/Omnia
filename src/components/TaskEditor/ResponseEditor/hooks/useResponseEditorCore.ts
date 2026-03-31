@@ -32,6 +32,7 @@ import { useGeneralizabilityCheck } from '@responseEditor/hooks/useGeneralizabil
 import { getTaskMeta, isTaskMeta } from '@responseEditor/utils/responseEditorUtils';
 import { getStepsForNode, getStepsAsArray } from '@responseEditor/core/domain';
 import { useManualEmptyTaskTreeSeed } from '@responseEditor/hooks/useManualEmptyTaskTreeSeed';
+import { taskRepository } from '@services/TaskRepository';
 import type { TaskMeta, Task } from '@types/taskTypes';
 import type { TaskTree } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
@@ -246,15 +247,29 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     }
 
     // ✅ Inizializza SOLO per nuovo task.id
-    const taskMeta = isTaskMeta(task) ? task : getTaskMeta(task);
+    const taskMetaRaw = isTaskMeta(task) ? task : getTaskMeta(task);
+    const repoTask = taskRepository.getTask(currentTaskId);
+    const taskMeta: TaskMeta =
+      repoTask != null &&
+      (repoTask as { taskWizardMode?: TaskWizardMode }).taskWizardMode !== undefined &&
+      (repoTask as { taskWizardMode?: TaskWizardMode }).taskWizardMode !== null
+        ? { ...taskMetaRaw, taskWizardMode: (repoTask as { taskWizardMode: TaskWizardMode }).taskWizardMode }
+        : taskMetaRaw;
 
       // Wizard mode: adaptation auto-starts when a template is assigned;
       // full mode is no longer auto-started — the user triggers it via the toolbar button.
+      // pending: empty DDT — user must pick manual vs wizard (center card).
       let wizardMode: TaskWizardMode = 'none';
       if (taskMeta.taskWizardMode === 'adaptation') {
         wizardMode = 'adaptation';
       } else if ((taskMeta as any).needsTaskContextualization === true) {
         wizardMode = 'adaptation';
+      } else if (taskMeta.taskWizardMode === 'pending') {
+        wizardMode = 'pending';
+      } else if (taskMeta.taskWizardMode === 'full') {
+        wizardMode = 'full';
+      } else if (taskMeta.taskWizardMode === 'none') {
+        wizardMode = 'none';
       }
 
       const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;

@@ -8,6 +8,7 @@ import { TestPhraseList } from './TestPhraseList';
 import { TestPhraseDetails } from './TestPhraseDetails';
 import { TestPhraseStats } from './TestPhraseStats';
 import { useTestPhrases } from '../../hooks/useTestPhrases';
+import { normalizePhraseForDedup } from './testPhraseText';
 
 export interface TestPhrase {
   id: string;
@@ -60,6 +61,8 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
   const [newPhrase, setNewPhrase] = useState('');
   const [selectedPhraseId, setSelectedPhraseId] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [editingPhraseId, setEditingPhraseId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
 
   const { testPhrase, testAllPhrases } = useTestPhrases();
   const resizeStartRef = useRef<{ y: number; height: number } | null>(null);
@@ -84,78 +87,106 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
     }
   }, []);
 
-  // Track last synced initialPhrases to avoid unnecessary updates
-  const lastSyncedInitialPhrasesRef = useRef<string[]>([]);
+  const onPhrasesChangeRef = useRef(onPhrasesChange);
+  onPhrasesChangeRef.current = onPhrasesChange;
 
-  // Sync phrases with initialPhrases prop when it changes (bidirectional sync)
+  const prevInitialPhrasesJsonRef = useRef<string | null>(null);
+
   useEffect(() => {
-    // Get current texts from phrases state
-    const currentTexts = phrases.map(p => p.text);
-    const initialTexts = initialPhrases || [];
-
-    // Check if initialPhrases actually changed (compare with last synced)
-    const initialPhrasesChanged =
-      lastSyncedInitialPhrasesRef.current.length !== initialTexts.length ||
-      lastSyncedInitialPhrasesRef.current.some((text, idx) => text !== initialTexts[idx]);
-
-    // Compare current phrases with initialPhrases to detect if sync is needed
-    const needsSync =
-      currentTexts.length !== initialTexts.length ||
-      currentTexts.some((text, idx) => text !== initialTexts[idx]);
-
-    // Only sync if initialPhrases changed AND current phrases are different
-    if (initialPhrasesChanged && needsSync) {
-      // Update phrases when initialPhrases changes (sync from test grid)
-      const newPhrases = initialTexts.map((text, idx) => ({
-        id: phrases[idx]?.id || `phrase-${idx}-${Date.now()}`,
+    const j = JSON.stringify(initialPhrases ?? []);
+    if (prevInitialPhrasesJsonRef.current === null) {
+      prevInitialPhrasesJsonRef.current = j;
+      return;
+    }
+    if (j === prevInitialPhrasesJsonRef.current) return;
+    prevInitialPhrasesJsonRef.current = j;
+    const texts = initialPhrases ?? [];
+    setPhrases(prev => {
+      if (JSON.stringify(prev.map(p => p.text)) === j) return prev;
+      return texts.map((text, idx) => ({
+        id: prev[idx]?.id ?? `phrase-${idx}-${Date.now()}`,
         text,
       }));
-      setPhrases(newPhrases);
-      lastSyncedInitialPhrasesRef.current = [...initialTexts];
-      console.log('[TestPhrases] 🔄 Synced phrases from initialPhrases', {
-        prevCount: currentTexts.length,
-        newCount: initialTexts.length,
-        prevTexts: currentTexts.slice(0, 3),
-        newTexts: initialTexts.slice(0, 3),
-      });
-    } else if (initialPhrasesChanged) {
-      // Update ref even if no sync needed (to track changes)
-      lastSyncedInitialPhrasesRef.current = [...initialTexts];
-    }
-  }, [initialPhrases]); // eslint-disable-line react-hooks/exhaustive-deps
+    });
+  }, [initialPhrases]);
 
-  // Notify parent when phrases change (but avoid loop by checking if different from last synced)
   useEffect(() => {
-    if (onPhrasesChange) {
-      const phraseTexts = phrases.map(p => p.text);
-      const lastSynced = lastSyncedInitialPhrasesRef.current;
-
-      // Only notify if phrases actually changed from last synced initialPhrases
-      const hasChanged =
-        phraseTexts.length !== lastSynced.length ||
-        phraseTexts.some((text, idx) => text !== lastSynced[idx]);
-
-      if (hasChanged) {
-        onPhrasesChange(phraseTexts);
-        // Update ref to prevent loop
-        lastSyncedInitialPhrasesRef.current = [...phraseTexts];
-      }
-    }
-  }, [phrases, onPhrasesChange]);
+    const phraseTexts = phrases.map(p => p.text);
+    onPhrasesChangeRef.current?.(phraseTexts);
+  }, [phrases]);
 
   const selectedPhrase = phrases.find(p => p.id === selectedPhraseId);
 
   const handleAddPhrase = useCallback(() => {
-    if (!newPhrase.trim()) return;
+    const trimmed = newPhrase.trim();
+    if (!trimmed) return;
 
-    const phrase: TestPhrase = {
-      id: `phrase-${Date.now()}`,
-      text: newPhrase.trim(),
-    };
-
-    setPhrases(prev => [...prev, phrase]);
+    const key = normalizePhraseForDedup(trimmed);
+    setPhrases(prev => {
+      if (prev.some(p => normalizePhraseForDedup(p.text) === key)) {
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          id: `phrase-${Date.now()}`,
+          text: trimmed,
+        },
+      ];
+    });
     setNewPhrase('');
   }, [newPhrase]);
+
+  const handleBeginEdit = useCallback((id: string) => {
+    const p = phrases.find(x => x.id === id);
+    if (!p) return;
+    setEditingPhraseId(id);
+    setEditDraft(p.text);
+  }, [phrases]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingPhraseId(null);
+    setEditDraft('');
+  }, []);
+
+  const handleCommitEdit = useCallback((id: string) => {
+    const trimmed = editDraft.trim();
+
+    if (!trimmed) {
+      setPhrases(prev => prev.filter(p => p.id !== id));
+      setEditingPhraseId(null);
+      setEditDraft('');
+      return;
+    }
+
+    let duplicate = false;
+    setPhrases(prev => {
+      if (
+        prev.some(
+          p => p.id !== id && normalizePhraseForDedup(p.text) === normalizePhraseForDedup(trimmed)
+        )
+      ) {
+        duplicate = true;
+        return prev;
+      }
+      return prev.map(p => (p.id === id ? { ...p, text: trimmed } : p));
+    });
+
+    if (duplicate) {
+      setEditingPhraseId(null);
+      setEditDraft('');
+      return;
+    }
+
+    setEditingPhraseId(null);
+    setEditDraft('');
+  }, [editDraft]);
+
+  const handleRemovePhrase = useCallback((id: string) => {
+    setPhrases(prev => prev.filter(p => p.id !== id));
+    setSelectedPhraseId(prev => (prev === id ? null : prev));
+    setEditingPhraseId(prev => (prev === id ? null : prev));
+  }, []);
 
   const handleTestAll = useCallback(async () => {
     if (!grammar || phrases.length === 0) return;
@@ -208,11 +239,17 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
     return { total: phrases.length, matched, noMatch, ambiguous };
   }, [phrases]);
 
+  const addWouldDuplicate = React.useMemo(() => {
+    const t = newPhrase.trim();
+    if (!t) return false;
+    const key = normalizePhraseForDedup(t);
+    return phrases.some(p => normalizePhraseForDedup(p.text) === key);
+  }, [newPhrase, phrases]);
+
   // Handle horizontal splitter drag (altezza pannello)
   const handleSplitterMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('[TestPhrases] 🎯 Splitter mouse down', { clientY: e.clientY, panelHeight });
     setIsResizing(true);
     resizeStartRef.current = {
       y: e.clientY,
@@ -224,7 +261,6 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
   const handleVerticalSplitterMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('[TestPhrases] 🎯 Vertical splitter mouse down', { clientX: e.clientX, rightPanelWidth });
     setIsResizingVertical(true);
     if (containerRef.current) {
       resizeVerticalStartRef.current = {
@@ -253,14 +289,6 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
 
       const delta = resizeStartRef.current.y - e.clientY; // Inverted: dragging up increases height
       const newHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, resizeStartRef.current.height + delta));
-
-      console.log('[TestPhrases] 🔄 Resizing', {
-        delta,
-        oldHeight: resizeStartRef.current.height,
-        newHeight,
-        clientY: e.clientY,
-        startY: resizeStartRef.current.y
-      });
 
       setPanelHeight(newHeight);
       localStorage.setItem('grammar-test-phrases-height', newHeight.toString());
@@ -309,15 +337,6 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
       const deltaPercent = (delta / resizeVerticalStartRef.current.containerWidth) * 100;
 
       const newWidth = Math.max(20, Math.min(60, resizeVerticalStartRef.current.width + deltaPercent));
-
-      console.log('[TestPhrases] 🔄 Vertical resizing', {
-        delta,
-        deltaPercent,
-        oldWidth: resizeVerticalStartRef.current.width,
-        newWidth,
-        clientX: e.clientX,
-        startX: resizeVerticalStartRef.current.x
-      });
 
       setRightPanelWidth(newWidth);
       localStorage.setItem('grammar-test-phrases-right-width', newWidth.toString());
@@ -405,7 +424,7 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
           height: '6px', // ✅ Increased from 4px to 6px for easier capture
           backgroundColor: isResizing ? '#3b82f6' : 'rgba(59, 130, 246, 0.3)', // ✅ Always visible, not transparent
           cursor: 'row-resize',
-          zIndex: 1000, // ✅ Increased from 100 to 1000 to be above everything
+          zIndex: 50,
           transition: isResizing ? 'none' : 'background-color 0.2s',
           userSelect: 'none',
           WebkitUserSelect: 'none',
@@ -451,6 +470,7 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
           <span style={{ fontWeight: 600, fontSize: '14px' }}>Test Phrases</span>
           <div style={{ flex: 1 }} />
           <button
+            type="button"
             onClick={handleTestAll}
             disabled={!grammar || phrases.length === 0 || isTesting}
             style={{
@@ -471,6 +491,7 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
           </button>
           <TestPhraseStats stats={stats} />
           <button
+            type="button"
             onClick={() => setIsOpen(false)}
             style={{
               padding: '4px 8px',
@@ -514,15 +535,17 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
             }}
           />
           <button
+            type="button"
             onClick={handleAddPhrase}
-            disabled={!newPhrase.trim()}
+            disabled={!newPhrase.trim() || addWouldDuplicate}
+            title={addWouldDuplicate ? 'This phrase is already in the list' : undefined}
             style={{
               padding: '6px 12px',
               border: '1px solid #d1d5db',
               borderRadius: '4px',
               backgroundColor: '#fff',
-              cursor: newPhrase.trim() ? 'pointer' : 'not-allowed',
-              opacity: newPhrase.trim() ? 1 : 0.5,
+              cursor: newPhrase.trim() && !addWouldDuplicate ? 'pointer' : 'not-allowed',
+              opacity: newPhrase.trim() && !addWouldDuplicate ? 1 : 0.5,
             }}
           >
             <Plus size={16} />
@@ -547,8 +570,15 @@ export function TestPhrases({ initialPhrases = [], onPhrasesChange }: TestPhrase
             <TestPhraseList
               phrases={phrases}
               selectedPhraseId={selectedPhraseId}
+              editingPhraseId={editingPhraseId}
+              editDraft={editDraft}
               onSelectPhrase={setSelectedPhraseId}
               onTestPhrase={handleTestSingle}
+              onBeginEdit={handleBeginEdit}
+              onEditDraftChange={setEditDraft}
+              onCommitEdit={handleCommitEdit}
+              onCancelEdit={handleCancelEdit}
+              onRemovePhrase={handleRemovePhrase}
             />
           </div>
 

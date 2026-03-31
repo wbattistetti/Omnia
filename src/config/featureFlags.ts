@@ -14,7 +14,7 @@ export interface FeatureFlags {
   // Development: enable verbose logging
   LOG_VERBOSE: boolean;
   /**
-   * Wizard completion rewrites the row as standalone (instanceNodes + kind) and clears templateId.
+   * Wizard completion rewrites the row as standalone (subTasks + kind) and clears templateId.
    * In dev, defaults to true (standalone row after wizard). Override with localStorage
  * featureFlag_WIZARD_INSTANCE_FIRST = "false" to disable. Prod defaults to false.
    */

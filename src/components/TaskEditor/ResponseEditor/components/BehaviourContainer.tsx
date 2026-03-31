@@ -51,6 +51,9 @@ function BehaviourContainerInner({
   node,
   translations,
   updateSelectedNode,
+  selectedRoot,
+  selectedPath,
+  selectedSubIndex,
   tasksPanelMode,
   tasksPanelWidth,
   setTasksPanelWidth,
@@ -158,6 +161,10 @@ function BehaviourContainerInner({
             onSelectStep={setSelectedStepKey}
             node={node}
             taskId={taskId}
+            updateSelectedNode={updateSelectedNode}
+            selectedRoot={selectedRoot}
+            selectedPath={selectedPath}
+            selectedSubIndex={selectedSubIndex}
           />
         </div>
       )}

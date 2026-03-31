@@ -27,6 +27,9 @@ import type { WizardTaskTreeNode, WizardStep, WizardModuleTemplate } from '../..
 import { RightPanelMode } from '@responseEditor/RightPanel';
 import type { TaskTree } from '@types/taskTypes';
 import { logBehaviourSteps, summarizeStepsShape } from '@responseEditor/behaviour/behaviourStepsDebug';
+import { TaskCreationChoicePanel } from '@responseEditor/components/TaskCreationChoicePanel';
+import { taskRepository } from '@services/TaskRepository';
+import { useTaskTreeStore } from '@responseEditor/core/state';
 
 // ✅ Container styles estratti in costanti esterne (per pulizia)
 const BASE_CONTAINER_STYLE: React.CSSProperties = {
@@ -97,6 +100,9 @@ export interface MainContentAreaProps {
   viewMode?: 'tabs' | 'tree';
   onViewModeChange?: (mode: 'tabs' | 'tree') => void;
 
+  /** Launches full wizard (ResponseEditor); used when user picks wizard from empty-task choice panel. */
+  onStartWizard?: () => void;
+
   // ✅ REMOVED: wizardProps - now from WizardContext
   // wizardProps?: { ... };
 }
@@ -130,10 +136,17 @@ export function MainContentArea({
   // ✅ NEW: View mode for Behaviour
   viewMode,
   onViewModeChange,
+  onStartWizard,
   // ✅ REMOVED: wizardProps - now from Context
 }: MainContentAreaProps) {
   // ✅ NEW: Get data from Context
-  const { taskMeta: task, taskType, taskTree: taskTreeFromContext, taskWizardMode } = useResponseEditorContext();
+  const {
+    taskMeta: task,
+    taskType,
+    taskTree: taskTreeFromContext,
+    taskWizardMode,
+    setTaskWizardMode,
+  } = useResponseEditorContext();
   // ✅ Usa taskTree da props se disponibile, altrimenti da context
   const taskTree = taskTreeProp ?? taskTreeFromContext;
 
@@ -266,6 +279,24 @@ export function MainContentArea({
 
     case MainViewMode.BEHAVIOUR:
     default:
+      if (taskWizardMode === 'pending') {
+        return (
+          <div style={DEFAULT_CONTAINER_STYLE}>
+            <TaskCreationChoicePanel
+              onChooseManual={() => {
+                const id = task?.id;
+                if (id) {
+                  taskRepository.updateTask(id, { taskWizardMode: 'none' } as Partial<Task>);
+                }
+                useTaskTreeStore.getState().incrementVersion();
+                setTaskWizardMode('none');
+              }}
+              onChooseWizard={() => onStartWizard?.()}
+            />
+          </div>
+        );
+      }
+
       // ✅ Default: BehaviourEditor (StepsStrip + StepEditor)
       // Manual mode: require at least one tree node from the sidebar — not taskTree.steps alone
       // (e.g. escalation tasks attached before any field exists must not unlock Behaviour).
@@ -309,8 +340,7 @@ export function MainContentArea({
               >
                 <p style={{ marginBottom: 12 }}>Nessuna struttura ancora disponibile.</p>
                 <p style={{ fontSize: 13, lineHeight: 1.5 }}>
-                  In <strong>Manuale</strong>, usa <strong>Aggiungi dato radice</strong> nella barra a sinistra per creare il primo campo.
-                  In alternativa, <strong>Wizard</strong> nella barra in alto genera il task con l&apos;AI.
+                  Usa <strong>Aggiungi dato radice</strong> nella barra a sinistra per creare il primo campo.
                 </p>
               </div>
             </div>

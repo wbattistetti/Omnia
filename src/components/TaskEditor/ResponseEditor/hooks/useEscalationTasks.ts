@@ -3,6 +3,8 @@
 
 import { useEffect } from 'react';
 import { TaskType } from '@types/taskTypes';
+import { TaskContext } from '@types/taskContext';
+import { isTaskAllowedInContext } from '@utils/taskContextHelpers';
 
 export interface UseEscalationTasksParams {
   setEscalationTasks: React.Dispatch<React.SetStateAction<any[]>>;
@@ -104,8 +106,12 @@ export function useEscalationTasks(params: UseEscalationTasksParams) {
           })
           .filter((task): task is NonNullable<typeof task> => task !== null);
 
-        const hasSayMessage = tasks.some((t) => t.type === TaskType.SayMessage);
-        if (!hasSayMessage) {
+        // API may return SayMessage with wrong allowedContexts (e.g. condition-only); TaskList then
+        // filters it out — inject a palette-safe Message when none survives for escalation.
+        const hasSayMessageForEscalation = tasks.some(
+          (t) => t.type === TaskType.SayMessage && isTaskAllowedInContext(t, TaskContext.ESCALATION)
+        );
+        if (!hasSayMessageForEscalation) {
           tasks = [
             {
               id: 'sayMessage',

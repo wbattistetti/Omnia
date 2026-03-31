@@ -4,7 +4,7 @@ import { TaskType } from '@types/taskTypes';
 import { buildStandaloneTaskTreeView } from '../buildStandaloneTaskTreeView';
 
 describe('buildStandaloneTaskTreeView', () => {
-  it('returns null without instanceNodes', () => {
+  it('returns null without subTasks', () => {
     expect(
       buildStandaloneTaskTreeView({
         id: 'a',
@@ -14,29 +14,25 @@ describe('buildStandaloneTaskTreeView', () => {
     ).toBeNull();
   });
 
-  it('builds TaskTree with one node, steps, and contract from instanceSchemaContracts', () => {
+  it('builds TaskTree with one node, steps, and contract on the node', () => {
     const task: Task = {
       id: 'task-id',
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       labelKey: 'ask_test',
-      instanceNodes: [
+      subTasks: [
         {
           id: 'n1',
           templateId: 'n1',
           label: 'Field',
           icon: 'FileText',
+          dataContract: { templateId: 'n1', parsers: [] },
+          constraints: [{ type: 'required' }],
         },
       ],
       steps: {
         n1: {
           start: { type: 'start', escalations: [] },
-        },
-      },
-      instanceSchemaContracts: {
-        n1: {
-          dataContract: { templateId: 'n1', parsers: [] },
-          constraints: [{ type: 'required' }],
         },
       },
     };
@@ -56,7 +52,7 @@ describe('buildStandaloneTaskTreeView', () => {
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       labelKey: 'ask_test',
-      instanceNodes: [
+      subTasks: [
         {
           id: 'n1',
           templateId: 'n1',

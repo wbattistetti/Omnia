@@ -4,10 +4,9 @@
 import type { GrammarNode } from '../../types/grammarTypes';
 
 /**
- * Mutual exclusion between semantic-set / semantic-value bindings and node-level
- * linguistic alternatives used as generic regex branches (synonyms; label when
- * a semantic-set binding is present — the runtime uses label as a word when
- * there are no node synonyms).
+ * Constraints between semantic-set / semantic-value bindings and node-level
+ * linguistic alternatives (node synonyms). Label/caption may coexist with
+ * semantic-set bindings for display; matching is driven by the bound sets.
  */
 
 export function hasSemanticSetOrValueBinding(node: GrammarNode): boolean {
@@ -35,14 +34,6 @@ export function validateSemanticBindingsVsNodeWords(node: GrammarNode): {
       isValid: false,
       error:
         'Remove node synonyms before using a semantic set or semantic value on this node (matching must come from semantics only).',
-    };
-  }
-
-  if (hasSet && node.label.trim().length > 0) {
-    return {
-      isValid: false,
-      error:
-        'Clear the node caption when a semantic set is bound (matching uses the set; free text would conflict).',
     };
   }
 

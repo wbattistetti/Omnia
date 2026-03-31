@@ -4,9 +4,11 @@
 import { taskRepository } from '@services/TaskRepository';
 import { getTemplateId } from '@utils/taskHelpers';
 import { TaskType, isUtteranceInterpretationTemplateId } from '@types/taskTypes';
-import type { Task, TaskTree } from '@types/taskTypes';
+import type { Task, TaskTree, TaskTreeNode } from '@types/taskTypes';
+import { mergeInstanceNodeStepsIntoTreeSteps } from '@utils/instanceNodeStepsFlatten';
 import { getMainNodes } from '@responseEditor/core/domain';
 import { info } from '@utils/logger';
+import { logContractPersist, summarizeSubTasksForDebug } from '@utils/contractPersistDebug';
 import {
   cloneMainNodesForInstancePersistence,
   shouldPersistStandaloneInstanceSnapshot,
@@ -28,8 +30,8 @@ export interface SaveTaskOptions {
  * ARCHITECTURAL PRINCIPLE (template / direct-repo steps):
  * - For template-backed flows, steps are often modified via handlers that write the repository.
  *
- * Standalone manual tasks: `TaskTree.steps` is the authoritative dictionary keyed by node templateId.
- * When we persist `instanceNodes`, we also persist `taskTree.steps` so reload matches editor state.
+ * Standalone snapshot: behaviour steps live on `subTasks[].steps`; `task.steps` is the same flat
+ * index as `buildStandaloneTaskTreeView` (merge of taskTree.steps + node steps where slots are empty).
  *
  * @param taskId - Task ID
  * @param taskTree - TaskTree (labelKey; for standalone snapshot also steps)
@@ -83,27 +85,37 @@ export async function saveTask(
 
   if (shouldPersistStandaloneInstanceSnapshot(taskInstance, taskTree)) {
     updates.kind = 'standalone';
-    updates.instanceNodes = cloneMainNodesForInstancePersistence(taskTree);
-    const dict =
+    updates.subTasks = cloneMainNodesForInstancePersistence(taskTree);
+    const stepsBase: Record<string, unknown> =
       taskTree.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
-        ? (taskTree.steps as Record<string, unknown>)
+        ? { ...(taskTree.steps as Record<string, unknown>) }
         : {};
-    updates.steps = { ...dict } as Task['steps'];
+    updates.steps = mergeInstanceNodeStepsIntoTreeSteps(
+      updates.subTasks as TaskTreeNode[],
+      stepsBase
+    ) as Task['steps'];
+    logContractPersist('editorSave', 'standalone snapshot (kind + subTasks + steps)', {
+      taskId: key,
+      templateId: currentTemplateId ?? null,
+      ...summarizeSubTasksForDebug(updates.subTasks),
+      stepsTopKeys:
+        updates.steps && typeof updates.steps === 'object' && !Array.isArray(updates.steps)
+          ? Object.keys(updates.steps as Record<string, unknown>)
+          : [],
+    });
   }
 
   // Only update if there are changes
   if (Object.keys(updates).length > 0) {
     await taskRepository.updateTask(key, updates, projectId || undefined);
+    const savedTask = taskRepository.getTask(key);
+    info('RESPONSE_EDITOR', 'Task saved', {
+      taskId: key,
+      includeSteps: includeStepsForPersistence,
+      hasSteps: !!savedTask?.steps,
+      stepsKeys: savedTask?.steps ? Object.keys(savedTask.steps) : [],
+    });
   }
-
-  // Log result
-  const savedTask = taskRepository.getTask(key);
-  info('RESPONSE_EDITOR', 'Task saved', {
-    taskId: key,
-    includeSteps: includeStepsForPersistence,
-    hasSteps: !!savedTask?.steps,
-    stepsKeys: savedTask?.steps ? Object.keys(savedTask.steps) : []
-  });
 }
 
 /**

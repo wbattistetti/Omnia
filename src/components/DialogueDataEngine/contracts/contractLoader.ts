@@ -4,6 +4,8 @@
  */
 
 import type { DDTNode } from '../model/ddt.v2.types';
+import type { TaskTreeNode } from '@types/taskTypes';
+import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
 
 // Base contract types
 export type ContractType = 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings' | 'grammarflow';
@@ -150,20 +152,16 @@ export function loadContract(node: DDTNode): DataContract | null {
         return nodeContract as DataContract;
     }
 
-    // ✅ PRIORITY 2: Carica dal template usando templateId
-    const templateId = (node as any).templateId;
-    if (templateId) {
+    // ✅ PRIORITY 2: Carica dal template (catalogue id: catalogTemplateId ?? templateId)
+    const lookupId = catalogueLookupTemplateId(node as TaskTreeNode);
+    if (lookupId) {
         try {
-            // Dynamic import per evitare circular dependency
             const DialogueTaskService = require('../../services/DialogueTaskService').default;
-            const template = DialogueTaskService.getTemplate(templateId);
+            const template = DialogueTaskService.getTemplate(lookupId);
 
             if (template && template.dataContract) {
                 return template.dataContract as DataContract;
             }
-
-            // ✅ Dopo migrazione, tutti i template hanno dataContract
-            // Se non c'è, significa che il template non ha contratti
         } catch (error) {
             console.warn('[Contract] Error loading from template:', error);
         }

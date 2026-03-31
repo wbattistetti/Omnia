@@ -5,6 +5,7 @@ import React, { useMemo } from 'react';
 import type { Node, Edge } from 'reactflow';
 import { MarkerType } from 'reactflow';
 import { useGrammarStore } from '../core/state/grammarStore';
+import { isGrammarEditorDebugEnabled } from '../grammarEditorLoadPolicy';
 
 /**
  * Hook for transforming Zustand grammar state to ReactFlow format.
@@ -12,11 +13,11 @@ import { useGrammarStore } from '../core/state/grammarStore';
  */
 export function useReactFlowAdapter() {
   const { grammar } = useGrammarStore();
+  const dbg = isGrammarEditorDebugEnabled();
 
   const nodes: Node[] = useMemo(
     () => {
       if (!grammar) {
-        console.log('[useReactFlowAdapter] ⚠️ No grammar, returning empty nodes');
         return [];
       }
 
@@ -27,17 +28,16 @@ export function useReactFlowAdapter() {
         data: { node: n },
       }));
 
-      console.log('[useReactFlowAdapter] ✅ Mapped nodes', {
-        grammarId: grammar.id,
-        grammarNodesCount: grammar.nodes.length,
-        reactFlowNodesCount: result.length,
-        nodeIds: result.map(n => n.id).slice(0, 3),
-      });
+      if (dbg) {
+        console.log('[useReactFlowAdapter] Mapped nodes', {
+          grammarId: grammar.id,
+          count: result.length,
+        });
+      }
 
       return result;
     },
-    // ✅ CRITICAL: Include grammar and nodes array reference to detect changes
-    [grammar, grammar?.nodes]
+    [grammar, grammar?.nodes, dbg]
   );
 
   const edges: Edge[] = useMemo(
@@ -63,22 +63,16 @@ export function useReactFlowAdapter() {
     [grammar, grammar?.edges?.length]
   );
 
-  // Debug log when grammar changes
   React.useEffect(() => {
+    if (!dbg) return;
     if (grammar) {
-      console.log('[useReactFlowAdapter] 🔄 Grammar loaded in adapter', {
+      console.log('[useReactFlowAdapter] grammar in adapter', {
         grammarId: grammar.id,
         nodesCount: grammar.nodes.length,
         edgesCount: grammar.edges.length,
-        slotsCount: grammar.slots.length,
-        semanticSetsCount: grammar.semanticSets.length,
-        reactFlowNodesCount: nodes.length,
-        reactFlowEdgesCount: edges.length,
       });
-    } else {
-      console.warn('[useReactFlowAdapter] ⚠️ Grammar is null');
     }
-  }, [grammar?.id, grammar?.nodes.length, grammar?.edges.length, nodes.length, edges.length]);
+  }, [dbg, grammar?.id, grammar?.nodes.length, grammar?.edges.length, nodes.length, edges.length]);
 
   return { nodes, edges, hasGrammar: grammar !== null };
 }

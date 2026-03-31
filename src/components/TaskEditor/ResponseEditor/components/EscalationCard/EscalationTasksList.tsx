@@ -21,6 +21,8 @@ import { TaskRowHeader } from '@responseEditor/tasks/TaskRowHeader';
 import { TaskRowBody } from '@responseEditor/tasks/TaskRowBody';
 import { ParameterFieldHost } from '@responseEditor/tasks/parameterEditors';
 import { resolveTranslationKey } from '@responseEditor/utils/taskUiText';
+import type { BehaviourFocusTarget } from '@responseEditor/behaviour/BehaviourUiContext';
+import { useResponseEditorNavigation } from '@responseEditor/context/ResponseEditorNavigationContext';
 
 function matchesAllowedTemplateId(templateId: string | null | undefined, allowed: string[]): boolean {
   const t = String(templateId ?? '').toLowerCase();
@@ -65,6 +67,7 @@ export function EscalationTasksList({
 }: EscalationTasksListProps) {
   const { handleEditingChange, isEditing: isEditingRow } = useTaskEditing();
   const { requestFocusParameter } = useBehaviourUi();
+  const { openTasksPanel } = useResponseEditorNavigation();
   const {
     translations: contextTranslations,
     addTranslation,
@@ -75,6 +78,15 @@ export function EscalationTasksList({
     () => ({ ...contextTranslations, ...(translations ?? {}) }),
     [contextTranslations, translations]
   );
+
+  const tasks = escalation.tasks ?? [];
+
+  /** Empty escalation: open Tasks panel so the user can drag without hunting the toolbar tab. */
+  React.useEffect(() => {
+    if (!isReady) return;
+    if (tasks.length > 0) return;
+    openTasksPanel();
+  }, [isReady, tasks.length, openTasksPanel, stepKey, escalationIdx]);
 
   const loggedEmptyWhileReadyRef = React.useRef(false);
   React.useEffect(() => {
@@ -89,15 +101,17 @@ export function EscalationTasksList({
     }
   }, [isReady, effectiveTranslations, escalationIdx, stepKey]);
 
-  if (!isReady) {
-    return (
-      <div className="flex items-center justify-center p-4">
-        <span className="text-sm text-gray-500">Loading translations...</span>
-      </div>
-    );
-  }
+  const pendingFocusRef = React.useRef<BehaviourFocusTarget | null>(null);
 
-  const tasks = escalation.tasks ?? [];
+  React.useLayoutEffect(() => {
+    if (!isReady) return;
+    const p = pendingFocusRef.current;
+    if (!p) return;
+    if (p.escalationIdx !== escalationIdx) return;
+    if (p.taskIdx < 0 || p.taskIdx >= tasks.length) return;
+    requestFocusParameter(p);
+    pendingFocusRef.current = null;
+  }, [tasks, escalationIdx, requestFocusParameter, isReady]);
 
   const handleParameterCommit = React.useCallback(
     (taskIdx: number, parameterId: string, newValue: string) => {
@@ -146,19 +160,17 @@ export function EscalationTasksList({
         const newTaskIdx = newTasks.length - 1;
         const pid = firstFocusParameterId(taskRef);
         if (pid) {
-          setTimeout(() => {
-            requestFocusParameter({
-              kind: 'parameter',
-              escalationIdx,
-              taskIdx: newTaskIdx,
-              parameterId: pid,
-            });
-          }, 0);
+          pendingFocusRef.current = {
+            kind: 'parameter',
+            escalationIdx,
+            taskIdx: newTaskIdx,
+            parameterId: pid,
+          };
         }
         return { ...esc, tasks: newTasks };
       });
     },
-    [updateEscalation, escalationIdx, allowedActions, requestFocusParameter]
+    [updateEscalation, escalationIdx, allowedActions]
   );
 
   const handleDelete = React.useCallback(
@@ -230,17 +242,15 @@ export function EscalationTasksList({
       const targetIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
       const pid = firstFocusParameterId(normalized);
       if (pid) {
-        setTimeout(() => {
-          requestFocusParameter({
-            kind: 'parameter',
-            escalationIdx,
-            taskIdx: targetIdx,
-            parameterId: pid,
-          });
-        }, 0);
+        pendingFocusRef.current = {
+          kind: 'parameter',
+          escalationIdx,
+          taskIdx: targetIdx,
+          parameterId: pid,
+        };
       }
     },
-    [updateEscalation, escalationIdx, allowedActions, requestFocusParameter]
+    [updateEscalation, escalationIdx, allowedActions]
   );
 
   const handleMoveTask = React.useCallback(
@@ -292,7 +302,7 @@ export function EscalationTasksList({
           onDropTask={handleAppend}
           compact={!fillAvailableHeight}
           fillAvailable={fillAvailableHeight}
-          idleLabel="Nessuna azione in questa escalation ancora. Apri la scheda Tasks nella barra in alto, poi trascina un task qui (o dal catalogo)."
+          idleLabel="Nessuna azione in questa escalation ancora. La scheda Tasks si apre da sola: trascina un task qui o dal catalogo."
           overLabel="Rilascia per aggiungere il task"
         />
       ) : (
@@ -353,6 +363,7 @@ export function EscalationTasksList({
                     taskIdx={j}
                     onCommit={(v) => handleParameterCommit(j, param.parameterId, v)}
                     onEditingActivity={(active) => handleEditingChange(j)(active)}
+                    onDeleteTaskIfEmpty={() => handleDelete(j)}
                   />
                 ))
               )}

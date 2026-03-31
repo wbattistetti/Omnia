@@ -41,7 +41,7 @@ function collectNodeTemplateIds(nodes: TaskTreeNode[] | undefined): string[] {
 
 /**
  * Ensures default behaviour step shells exist per template id, commits Zustand + dock,
- * merges task.steps in the repository (and instanceNodes when standalone).
+ * merges task.steps in the repository (and subTasks when standalone).
  */
 export async function flushWizardToManualPipeline(
   options: FlushWizardToManualOptions
@@ -96,7 +96,7 @@ export async function flushWizardToManualPipeline(
 
   if (shouldPersistStandaloneInstanceSnapshot(taskInstance, next)) {
     updates.kind = 'standalone';
-    updates.instanceNodes = cloneMainNodesForInstancePersistence(next);
+    updates.subTasks = cloneMainNodesForInstancePersistence(next);
   }
 
   if (Object.keys(updates).length > 0) {

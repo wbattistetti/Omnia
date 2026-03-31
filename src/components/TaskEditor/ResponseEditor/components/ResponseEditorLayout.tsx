@@ -11,7 +11,6 @@
  */
 
 import React from 'react';
-import { Wand2, PenLine } from 'lucide-react';
 import EditorHeader from '@components/common/EditorHeader';
 import TaskDragLayer from '@responseEditor/TaskDragLayer';
 import { ResponseEditorContent } from '@responseEditor/components/ResponseEditorContent';
@@ -47,56 +46,6 @@ import {
   promoteStandaloneToProjectTemplate,
 } from '@utils/promoteStandaloneToProjectTemplate';
 import type { ToolbarButton } from '@dock/types';
-
-/** Orange header theme (matches EditorHeader THEMES.orange) for Wizard/Manual chunk on the left. */
-const ORANGE_HEADER_FG = '#ffffff';
-const ORANGE_HEADER_BG = '#9a4f00';
-
-type WizardToolbarButtonItem = {
-  icon: React.ReactNode;
-  label?: string;
-  title?: string;
-  active?: boolean;
-  disabled?: boolean;
-  visible?: boolean;
-  onClick?: () => void;
-};
-
-/**
- * Wizard / Manual controls placed after the title (EditorHeader titleActions), left side.
- */
-function WizardToolbarTitleActions({ buttons }: { buttons: WizardToolbarButtonItem[] }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-      {buttons.map((btn, i) => (
-        <button
-          key={i}
-          type="button"
-          title={btn.title}
-          onClick={btn.onClick}
-          disabled={btn.disabled}
-          style={{
-            display: btn.visible === false ? 'none' : 'flex',
-            alignItems: 'center',
-            gap: 6,
-            background: btn.active ? '#fff' : 'transparent',
-            color: btn.active ? ORANGE_HEADER_BG : ORANGE_HEADER_FG,
-            border: '1px solid rgba(255,255,255,0.3)',
-            borderRadius: 8,
-            padding: btn.label ? '8px 14px' : '6px 10px',
-            cursor: btn.disabled ? 'not-allowed' : 'pointer',
-            opacity: btn.disabled ? 0.5 : 1,
-            fontWeight: 400,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {btn.icon}
-          {btn.label ? <span>{btn.label}</span> : null}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /**
  * Internal component that wraps EditorHeader with dynamic injection support
@@ -987,34 +936,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     return MainViewMode.BEHAVIOUR;
   }, [taskWizardMode, wizardIntegrationProp?.wizardMode, showMessageReview, showSynonyms]);
 
-  // ── Wizard / Manual toolbar toggle ───────────────────────────────────────
-  // "Manual" resets the orchestrator and returns to the normal editor.
-  // "Wizard" delegates to onStartWizard (sets mode + triggers startFull in index.tsx).
-  const wizardToggleButtons = React.useMemo(() => [
-    {
-      icon: <PenLine size={14} />,
-      label: 'Manuale',
-      title: 'Modalità manuale',
-      active: taskWizardMode === 'none',
-      position: 'title-suffix' as const,
-      onClick: onSwitchToManual ?? (() => setTaskWizardMode('none')),
-    },
-    {
-      icon: <Wand2 size={14} />,
-      label: 'Wizard',
-      title: 'Costruisci con il wizard AI',
-      active: taskWizardMode !== 'none',
-      disabled: taskWizardMode !== 'none',
-      position: 'title-suffix' as const,
-      onClick: onStartWizard ?? (() => {}),
-    },
-  ], [taskWizardMode, onSwitchToManual, onStartWizard, setTaskWizardMode]);
-
-  const wizardTitleActions = React.useMemo(
-    () => <WizardToolbarTitleActions buttons={wizardToggleButtons} />,
-    [wizardToggleButtons]
-  );
-
   const [dockPromoteBusy, setDockPromoteBusy] = React.useState(false);
 
   const handlePromoteAfterStandalone = React.useCallback(async () => {
@@ -1252,12 +1173,14 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         // ✅ NEW: Passa viewMode per Behaviour
         viewMode={viewModeProp}
         onViewModeChange={onViewModeChangeProp}
+        onStartWizard={onStartWizard}
       />
     );
   }, [
     taskWizardMode,
     mainViewMode,
     wizardProps,
+    onStartWizard,
     mainList,
     taskTree,
     taskMeta,
@@ -1313,20 +1236,18 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ FIX: Usa il ref passato come prop (creato in ResponseEditorInner)
   const saveToLibraryButtonRef = saveToLibraryButtonRefProp || React.useRef<HTMLButtonElement>(null);
 
-  // Dock tab (hideHeader): task kind + Wizard/Manual (after tab title), then main toolbar.
+  // Dock tab (hideHeader): task kind + promote, then main toolbar (Manuale/Wizard live in banner + center card).
   React.useEffect(() => {
     if (hideHeader && onToolbarUpdate) {
       const prefix = [taskKindDockToolbarItem, promoteDockToolbarItem].filter(
         (b): b is ToolbarButton => b != null
       );
-      onToolbarUpdate([...prefix, ...wizardToggleButtons, ...toolbarButtons], 'orange');
+      onToolbarUpdate([...prefix, ...toolbarButtons], 'orange');
     }
   }, [
     hideHeader,
     onToolbarUpdate,
     toolbarButtons,
-    wizardToggleButtons,
-    taskWizardMode,
     taskKindDockToolbarItem,
     promoteDockToolbarItem,
   ]);
@@ -1370,13 +1291,11 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         e.stopPropagation();
       }}
     >
-      {/* Header is always visible so the Wizard / Manual toggle stays accessible */}
       {!hideHeader && (
         <HeaderWithDynamicToolbar
           icon={<Icon size={18} style={{ color: iconColor }} />}
           title={headerTitle}
           titleBadge={taskKindTitleBadge}
-          titleActions={wizardTitleActions}
           toolbarButtons={toolbarButtons}
           onClose={handleEditorCloseWithTutor}
           color="orange"

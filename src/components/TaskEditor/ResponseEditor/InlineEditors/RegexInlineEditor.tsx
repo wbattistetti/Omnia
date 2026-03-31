@@ -14,6 +14,8 @@ import {
 } from '@responseEditor/utils/regexGroupTransform';
 import { generateGroupName } from '@responseEditor/utils/regexGroupUtils';
 import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
+import type { TaskTreeNode } from '@types/taskTypes';
+import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
 
 interface RegexInlineEditorProps {
   regex: string; // contract.regex.value (GUID-based, stored form)
@@ -310,7 +312,8 @@ export default function RegexInlineEditor({
   // Save to template
   // -----------------------------------------------------------------------
   const saveToTemplate = useCallback((displayValue: string) => {
-    if (!displayValue || !displayValue.trim() || !node?.templateId) {
+    const catalogueId = node ? catalogueLookupTemplateId(node as TaskTreeNode) : '';
+    if (!displayValue || !displayValue.trim() || !catalogueId) {
       return;
     }
 
@@ -324,16 +327,16 @@ export default function RegexInlineEditor({
       return;
     }
 
-    const template = DialogueTaskService.getTemplate(node.templateId);
+    const template = DialogueTaskService.getTemplate(catalogueId);
     if (!template) {
-      console.warn('[RegexEditor] Template not found:', node.templateId);
+      console.warn('[RegexEditor] Template not found:', catalogueId);
       return;
     }
 
     if (!template.dataContract) {
       template.dataContract = {
-        templateId: node.templateId,
-        templateName: template.label || node.templateId,
+        templateId: catalogueId,
+        templateName: template.label || catalogueId,
         subDataMapping: {},
         engines: [],
         outputCanonical: { format: 'value' }
@@ -349,7 +352,7 @@ export default function RegexInlineEditor({
       template.dataContract.engines = engines;
     }
 
-    DialogueTaskService.markTemplateAsModified(node.templateId);
+    DialogueTaskService.markTemplateAsModified(catalogueId);
 
     // Also notify the parent component to update contract
     const currentOnSave = onRegexSaveRef.current;
@@ -360,7 +363,7 @@ export default function RegexInlineEditor({
         console.error('[RegexEditor] Error in onRegexSave callback:', cbError);
       }
     }
-  }, [node?.templateId]);
+  }, [node?.templateId, node?.catalogTemplateId]);
 
   // ✅ Helper: Save regex if valid and changed
   const saveIfValid = useCallback(() => {

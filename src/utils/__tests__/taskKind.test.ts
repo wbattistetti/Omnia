@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import type { Task } from '@types/taskTypes';
 import { TaskType, TemplateSource } from '@types/taskTypes';
-import { inferTaskKind, isStandalone, hasLocalSchema, taskKindLabel } from '../taskKind';
+import {
+  inferTaskKind,
+  isStandalone,
+  hasLocalSchema,
+  isStandaloneMaterializedTaskRow,
+  taskKindLabel,
+  taskRowUsesSubTasksContract,
+} from '../taskKind';
 
 function baseTask(over: Partial<Task>): Task {
   return {
@@ -38,10 +45,10 @@ describe('inferTaskKind', () => {
     expect(inferTaskKind(t)).toBe('projectTemplate');
   });
 
-  it('returns standalone when instanceNodes present without explicit kind', () => {
+  it('returns standalone when subTasks present without explicit kind', () => {
     const t = baseTask({
       templateId: null,
-      instanceNodes: [
+      subTasks: [
         {
           id: 'node-1',
           templateId: 'node-1',
@@ -52,9 +59,43 @@ describe('inferTaskKind', () => {
     expect(inferTaskKind(t)).toBe('standalone');
   });
 
-  it('returns projectTemplate for legacy template row without subTasksIds or instanceNodes', () => {
+  it('returns projectTemplate for legacy template row without subTasksIds or subTasks', () => {
     const t = baseTask({ templateId: null });
     expect(inferTaskKind(t)).toBe('projectTemplate');
+  });
+});
+
+describe('isStandaloneMaterializedTaskRow', () => {
+  it('is true only when kind is standalone', () => {
+    expect(isStandaloneMaterializedTaskRow(baseTask({ kind: 'standalone' }))).toBe(true);
+    expect(
+      isStandaloneMaterializedTaskRow(
+        baseTask({ templateId: '11111111-2222-3333-4444-555555555555' })
+      )
+    ).toBe(false);
+    expect(isStandaloneMaterializedTaskRow(null)).toBe(false);
+  });
+});
+
+describe('taskRowUsesSubTasksContract', () => {
+  it('is true when kind is standalone', () => {
+    expect(taskRowUsesSubTasksContract(baseTask({ kind: 'standalone' }))).toBe(true);
+  });
+
+  it('is true when templateId is null even if kind not yet persisted (new row)', () => {
+    expect(taskRowUsesSubTasksContract(baseTask({ templateId: null }))).toBe(true);
+  });
+
+  it('is false when task references a catalogue template GUID', () => {
+    expect(
+      taskRowUsesSubTasksContract(
+        baseTask({ templateId: '11111111-2222-3333-4444-555555555555' })
+      )
+    ).toBe(false);
+  });
+
+  it('is false for null task', () => {
+    expect(taskRowUsesSubTasksContract(null)).toBe(false);
   });
 });
 
@@ -63,11 +104,11 @@ describe('isStandalone / hasLocalSchema', () => {
     expect(isStandalone(baseTask({ kind: 'standalone' }))).toBe(true);
   });
 
-  it('hasLocalSchema when instanceNodes non-empty', () => {
+  it('hasLocalSchema when subTasks non-empty', () => {
     expect(
       hasLocalSchema(
         baseTask({
-          instanceNodes: [{ id: 'a', templateId: 'a', label: 'L' }],
+          subTasks: [{ id: 'a', templateId: 'a', label: 'L' }],
         })
       )
     ).toBe(true);

@@ -128,7 +128,8 @@ export function SidebarNestedList(props: SidebarNestedListProps) {
         const active = isRowActive(path);
         const reqEffective = node?.required !== false;
         const disabledSub = !reqEffective;
-        const SubIcon = getIconComponent(node?.icon || 'FileText');
+        const defaultNodeIcon = hasSubs ? 'Package' : 'FileText';
+        const SubIcon = getIconComponent(node?.icon || defaultNodeIcon);
 
         const showLineBefore =
           nestedDrop &&

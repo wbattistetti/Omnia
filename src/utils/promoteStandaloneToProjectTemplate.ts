@@ -41,7 +41,7 @@ function allNodesHaveGuid(root: TaskTreeNode): boolean {
 }
 
 /**
- * Standalone with exactly one root in instanceNodes; every node id must be a GUID.
+ * Standalone with exactly one root in subTasks; every node id must be a GUID.
  * Sub-nodes allowed (composite) when all GUIDs are valid.
  */
 export function canPromoteStandaloneToProjectTemplateMvp(task: Task | null | undefined): boolean {
@@ -51,7 +51,7 @@ export function canPromoteStandaloneToProjectTemplateMvp(task: Task | null | und
   if (inferTaskKind(task) !== 'standalone') {
     return false;
   }
-  const nodes = task.instanceNodes;
+  const nodes = task.subTasks;
   if (!Array.isArray(nodes) || nodes.length !== 1) {
     return false;
   }
@@ -95,7 +95,7 @@ export async function promoteStandaloneToProjectTemplate(
     );
   }
 
-  const root = task.instanceNodes![0];
+  const root = task.subTasks![0];
   const rootTemplateId = nodeKey(root);
   const fullSteps =
     task.steps && typeof task.steps === 'object' && !Array.isArray(task.steps)
@@ -151,7 +151,7 @@ export async function promoteStandaloneToProjectTemplate(
     {
       kind: 'instance',
       templateId: rootTemplateId,
-      instanceNodes: [],
+      subTasks: [],
       steps: task.steps ?? {},
     },
     projectId

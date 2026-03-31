@@ -1,6 +1,6 @@
 /**
  * Ensures a flow-row task exists in TaskRepository before materialization, wizard, or manual edit.
- * Missing tasks are created as pure standalone shells (templateId null, empty steps/instanceNodes).
+ * Missing tasks are created as pure standalone shells (templateId null, empty steps/subTasks).
  */
 
 import type { Task } from '@types/taskTypes';
@@ -43,7 +43,7 @@ export function ensureTaskExists(rowId: string, options?: EnsureTaskExistsOption
     null,
     {
       steps: {},
-      instanceNodes: [],
+      subTasks: [],
       kind: 'standalone',
       ...(options?.label ? { label: options.label } : {}),
     },

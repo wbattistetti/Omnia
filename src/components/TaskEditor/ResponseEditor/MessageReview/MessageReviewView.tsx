@@ -9,6 +9,8 @@ import { taskRepository } from '@services/TaskRepository';
 import DialogueTaskService from '@services/DialogueTaskService';
 import { Plus, ChevronDown } from 'lucide-react';
 import { stepMeta } from '@responseEditor/ddtUtils';
+import type { TaskTreeNode } from '@types/taskTypes';
+import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
 
 type Props = {
     node: any;
@@ -18,14 +20,6 @@ type Props = {
 
 export default function MessageReviewView({ node, translations, updateSelectedNode }: Props) {
     const { taskId } = useResponseEditorContext();
-
-    // Debug: Log quando MessageReviewView viene renderizzato
-    console.log('[MessageReviewView] RENDER:', {
-        hasNode: !!node,
-        nodeId: node?.id,
-        taskId,
-        translationsCount: Object.keys(translations || {}).length
-    });
 
     const items = React.useMemo(() => collectAllMessages(node, translations), [node, translations]);
 
@@ -37,23 +31,26 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
 
     const groups = React.useMemo(() => groupMessagesByStep(items), [items]);
 
-    // Get node templateId
-    const nodeTemplateId = node?.templateId || node?.id;
+    /** Key for `task.steps[nodeKey]` / instance step slices (graph slot id). */
+    const stepSlotKey = (node?.templateId || node?.id || '').trim();
+    const catalogueTemplateIdForCache = node ? catalogueLookupTemplateId(node as TaskTreeNode) : '';
 
-    // Get task instance and template
+    // Get task instance and template (cache lookup uses catalogue id when split from graph id)
     const taskInstance = taskId ? taskRepository.getTask(taskId) : null;
-    const template = nodeTemplateId ? DialogueTaskService.getTemplate(nodeTemplateId) : null;
+    const template = catalogueTemplateIdForCache
+        ? DialogueTaskService.getTemplate(catalogueTemplateIdForCache)
+        : null;
 
     // Find deleted steps that can be restored from template
     // ✅ Calcola step cancellati che possono essere ripristinati (approccio diretto)
     const restorableSteps = React.useMemo(() => {
-        if (!taskInstance || !template || !nodeTemplateId) return [];
+        if (!taskInstance || !template || !stepSlotKey) return [];
 
-        // ✅ Leggi tutti gli step del template per questo nodeTemplateId
-        const templateSteps = template.steps?.[nodeTemplateId] || template.steps || {};
+        // ✅ Leggi tutti gli step del template per questo slot key
+        const templateSteps = template.steps?.[stepSlotKey] || template.steps || {};
 
-        // ✅ Leggi tutti gli step dell'istanza per questo nodeTemplateId
-        const instanceSteps = taskInstance.steps?.[nodeTemplateId] || {};
+        // ✅ Leggi tutti gli step dell'istanza per questo slot key
+        const instanceSteps = taskInstance.steps?.[stepSlotKey] || {};
 
         // ✅ Step da ripristinare: presenti nel template ma NON nell'istanza
         const deleted: Array<{ stepKey: string; stepData: any }> = [];
@@ -72,11 +69,11 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
         return deleted.sort((a, b) => {
             return getStepOrder(a.stepKey) - getStepOrder(b.stepKey);
         });
-    }, [taskInstance, template, nodeTemplateId]);
+    }, [taskInstance, template, stepSlotKey]);
 
     // Handle restore step
     const handleRestoreStep = (stepKey: string, stepData: any) => {
-        if (!taskId || !nodeTemplateId) return;
+        if (!taskId || !stepSlotKey) return;
 
         const task = taskRepository.getTask(taskId);
         if (!task) return;
@@ -84,7 +81,7 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
         // For now, restore step as-is (GUIDs will be handled by buildTaskTree if needed)
         // TODO: Consider cloning GUIDs if step was previously deleted and needs new translations
         const currentSteps = task.steps || {};
-        const currentNodeSteps = currentSteps[nodeTemplateId] || {};
+        const currentNodeSteps = currentSteps[stepSlotKey] || {};
 
         // Create new steps object with restored step in correct position
         const updatedNodeSteps: Record<string, any> = {};
@@ -118,7 +115,7 @@ export default function MessageReviewView({ node, translations, updateSelectedNo
         taskRepository.updateTask(taskId, {
             steps: {
                 ...currentSteps,
-                [nodeTemplateId]: updatedNodeSteps
+                [stepSlotKey]: updatedNodeSteps
             }
         });
 

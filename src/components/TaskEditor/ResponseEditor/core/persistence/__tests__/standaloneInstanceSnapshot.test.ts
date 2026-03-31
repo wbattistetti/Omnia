@@ -29,13 +29,13 @@ describe('shouldPersistStandaloneInstanceSnapshot', () => {
     expect(shouldPersistStandaloneInstanceSnapshot(task, tree)).toBe(false);
   });
 
-  it('returns false when templateId is a project GUID (instance-bound)', () => {
+  it('returns true for UtteranceInterpretation with catalogue UUID templateId (persist main nodes)', () => {
     const task: Task = {
       id: '1',
       type: TaskType.UtteranceInterpretation,
       templateId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
     } as Task;
-    expect(shouldPersistStandaloneInstanceSnapshot(task, treeWithOneMainNode())).toBe(false);
+    expect(shouldPersistStandaloneInstanceSnapshot(task, treeWithOneMainNode())).toBe(true);
   });
 
   it('returns false for factory template source', () => {
@@ -48,13 +48,13 @@ describe('shouldPersistStandaloneInstanceSnapshot', () => {
     expect(shouldPersistStandaloneInstanceSnapshot(task, treeWithOneMainNode())).toBe(false);
   });
 
-  it('returns false when inferred kind is instance (semantic template id)', () => {
+  it('returns true for UtteranceInterpretation even when inferTaskKind would be instance (semantic template id)', () => {
     const task: Task = {
       id: '1',
       type: TaskType.UtteranceInterpretation,
       templateId: 'UtteranceInterpretation',
     } as Task;
-    expect(shouldPersistStandaloneInstanceSnapshot(task, treeWithOneMainNode())).toBe(false);
+    expect(shouldPersistStandaloneInstanceSnapshot(task, treeWithOneMainNode())).toBe(true);
   });
 
   it('returns true when kind is explicitly standalone', () => {

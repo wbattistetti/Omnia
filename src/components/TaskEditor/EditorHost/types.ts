@@ -8,8 +8,9 @@ export type EditorKind = 'message' | 'ddt' | 'intent' | 'backend' | 'problem' | 
  * - 'none': Task esiste già → layout classico (STATO 1)
  * - 'adaptation': Template trovato, nessuna istanza → wizard adattamento messaggi (STATO 2)
  * - 'full': Nessun template, nessuna istanza → wizard completo (STATO 3)
+ * - 'pending': DDT vuoto — l’utente deve scegliere tra manuale o wizard (nessuna sidebar finché non sceglie)
  */
-export type TaskWizardMode = 'none' | 'adaptation' | 'full';
+export type TaskWizardMode = 'none' | 'adaptation' | 'full' | 'pending';
 
 // ✅ RINOMINATO: ActMeta → TaskMeta
 // ✅ CAMBIATO: type: string → type: TaskType (enum)
@@ -29,6 +30,8 @@ export type TaskMeta = {
 
 export type EditorProps = {
   task: TaskMeta; // ✅ RINOMINATO: act → task
+  /** Stable dock tab id — use for React keys so layout drag does not remount when task ref flickers. */
+  dockTabId?: string;
   onClose?: () => void;
   onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void;
   hideHeader?: boolean;

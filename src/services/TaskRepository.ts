@@ -1,12 +1,45 @@
 import type { Task, TaskInstance, MaterializedStep } from '../types/taskTypes';
 import { migrateLegacyIntentsOnTask, problemIntentsToSemanticValues } from '../utils/semanticValueClassificationBridge';
-import { TaskType } from '../types/taskTypes';
+import { TaskType, TemplateSource } from '../types/taskTypes';
+import DialogueTaskService from './DialogueTaskService';
 import { StepType } from '../types/stepTypes';
 import { generateId } from '../utils/idGenerator';
 import { getTemplateId } from '../utils/taskHelpers';
 import { v4 as uuidv4 } from 'uuid';
 import { FEATURE_FLAGS } from '../config/featureFlags';
 import { isAiAgentDebugEnabled, summarizeAgentTaskFields } from '../components/TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDebug';
+import { isStandaloneMaterializedTaskRow } from '@utils/taskKind';
+import { logContractPersist, summarizeSubTasksForDebug } from '@utils/contractPersistDebug';
+import {
+  resolveTaskInEditorScope as resolveTaskInEditorScopeFromUtil,
+  resolveTemplateDefinitionTask as resolveTemplateDefinitionTaskFromUtil,
+} from '@utils/taskScopedLookup';
+
+/**
+ * Project template rows in TaskRepository often omit `dataContract`; GrammarFlow and recognition
+ * persist the full contract on DialogueTaskService.cache. Bulk POST /tasks must not overwrite MongoDB
+ * with a stripped row (race with POST /templates would still lose grammarFlow if bulk runs last).
+ */
+function mergeProjectTemplateDataContractFromDialogueCache(
+  item: Record<string, unknown>,
+  task: Task
+): void {
+  const tid = task.templateId;
+  if (tid !== null && tid !== undefined) {
+    return;
+  }
+  if ((task as { source?: string }).source === TemplateSource.Factory) {
+    return;
+  }
+  const taskId = task.id;
+  if (!taskId) {
+    return;
+  }
+  const tmpl = DialogueTaskService.getTemplate(taskId);
+  if (tmpl?.dataContract) {
+    item.dataContract = JSON.parse(JSON.stringify(tmpl.dataContract));
+  }
+}
 
 /**
  * TaskRepository: Primary repository for Task data
@@ -51,6 +84,20 @@ class TaskRepository {
       return cachedTask;
     }
     return null;
+  }
+
+  /**
+   * Resolve the Task row for the Response Editor: root tab task or a subtask validated under `root.subTasks`.
+   */
+  resolveTaskInEditorScope(rootTaskId: string, nodeTaskId: string | null): Task | null {
+    return resolveTaskInEditorScopeFromUtil(rootTaskId, nodeTaskId, (id) => this.getTask(id));
+  }
+
+  /**
+   * Load the template-definition task by id (contracts) from the same project task store.
+   */
+  resolveTemplateDefinitionTask(templateId: string | null): Task | null {
+    return resolveTemplateDefinitionTaskFromUtil(templateId, (id) => this.getTask(id));
   }
 
   /**
@@ -455,6 +502,15 @@ class TaskRepository {
 
         migrateLegacyIntentsOnTask(task);
         this.tasks.set(task.id, task);
+
+        if (task.kind === 'standalone' || (task.subTasks && task.subTasks.length > 0)) {
+          logContractPersist('repoLoad', 'task hydrated from project DB into TaskRepository', {
+            taskId: task.id,
+            kind: task.kind ?? '(unset)',
+            templateId: task.templateId ?? null,
+            ...summarizeSubTasksForDebug(task.subTasks),
+          });
+        }
       }
 
       // ✅ LOG: LOAD TASKS FROM DATABASE TRACE
@@ -563,7 +619,6 @@ class TaskRepository {
 
       // ✅ CRITICAL: Filter out templates with source: 'Factory' (they are saved in Factory database, not project)
       // Only templates with source: 'Project' or no source (backward compatibility) should be saved to project
-      const { TemplateSource } = await import('@types/taskTypes');
       allTasks = allTasks.filter(task => {
         // If task is an instance (has templateId), always save it (it references a template)
         if (task.templateId) {
@@ -627,6 +682,13 @@ class TaskRepository {
         const finalTemplateId = templateId === null || templateId === undefined ? null : templateId;
 
         // ✅ Check if templateId is a semantic string (should be null or GUID)
+        const itemToSave: Record<string, unknown> = {
+          id: task.id,
+          type: task.type,
+          templateId: finalTemplateId,
+          ...fields,
+        };
+
         if (finalTemplateId !== null && typeof finalTemplateId === 'string') {
           const isSemanticString = ['SayMessage', 'Message', 'DataRequest', 'GetData', 'BackendCall', 'UNDEFINED'].includes(finalTemplateId);
           if (isSemanticString) {
@@ -634,24 +696,25 @@ class TaskRepository {
               taskId: task.id,
               semanticTemplateId: finalTemplateId,
             });
-            return {
-              id: task.id,
-              type: task.type,
-              templateId: null,  // ✅ Convert semantic string to null
-              ...fields
-            };
+            itemToSave.templateId = null;
           }
         }
 
-        const itemToSave = {
-          id: task.id,
-          type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
-          templateId: finalTemplateId,
-          ...fields  // ✅ Save fields directly
-        };
+        mergeProjectTemplateDataContractFromDialogueCache(itemToSave, task);
 
         return itemToSave;
       }).filter(item => item !== null);
+
+      for (const row of items) {
+        if (row.kind === 'standalone') {
+          logContractPersist('bulkSave', 'row in bulk payload (POST /tasks/bulk)', {
+            taskId: row.id,
+            templateId: row.templateId ?? null,
+            ...summarizeSubTasksForDebug(row.subTasks),
+            payloadFieldKeys: Object.keys(row as Record<string, unknown>).filter(k => k !== 'steps'),
+          });
+        }
+      }
 
       // ✅ LOG: Items prepared for save
       console.log('[TaskRepository] 🔍 ITEMS PREPARED FOR SAVE', {
@@ -853,29 +916,27 @@ class TaskRepository {
       // ✅ Extract all fields except id, _id (MongoDB immutable), templateId, createdAt, updatedAt
       const { id, _id, templateId, createdAt, updatedAt, ...fields } = task;
 
-      // ✅ Se è un'istanza (templateId !== null), filtra solo campi permessi
-      // ✅ Campi permessi per istanze: id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt
-      // ❌ NON salvare: type, nodes, subNodes, icon, constraints, dataContract, examples, nlpProfile, patterns, valueSchema, allowedContexts, introduction
-      const isInstance = task.templateId !== null && task.templateId !== undefined;
+      const isNarrowInstance =
+        task.templateId !== null &&
+        task.templateId !== undefined &&
+        !isStandaloneMaterializedTaskRow(task);
 
       let payload;
-      if (isInstance) {
-        // ✅ ISTANZA: Salva SOLO campi permessi
+      if (isNarrowInstance) {
         payload = {
           id: task.id,
-          templateId: task.templateId,  // ✅ OBBLIGATORIO per istanze
-          templateVersion: task.templateVersion || 1,  // ✅ Versione del template
-          labelKey: task.labelKey,  // ✅ Chiave di traduzione
-          steps: task.steps,  // ✅ Array MaterializedStep[]
-          // createdAt e updatedAt vengono gestiti dal backend
+          type: task.type,
+          templateId: task.templateId,
+          templateVersion: task.templateVersion || 1,
+          labelKey: task.labelKey,
+          steps: task.steps,
         };
       } else {
-        // ✅ TEMPLATE: Salva tutti i campi (struttura completa)
         payload = {
           id: task.id,
-          type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
-          templateId: null,        // ✅ Template ha sempre templateId = null
-          ...fields  // ✅ Save all fields directly (no value wrapper, excluding _id)
+          type: task.type,
+          templateId: task.templateId ?? null,
+          ...fields,
         };
       }
 

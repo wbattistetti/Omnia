@@ -18,6 +18,17 @@ export function createDefaultManualStepDictionary(): Record<
   };
 }
 
+/** Single optional step entry (same shape as dictionary values above). */
+export function createEmptyBehaviourStepEntry(stepKey: string): {
+  type: string;
+  escalations: Array<{ tasks: unknown[] }>;
+} {
+  return {
+    type: stepKey,
+    escalations: [{ tasks: [] }],
+  };
+}
+
 /**
  * Returns a copy of the node with default steps if it has no step dictionary yet.
  */

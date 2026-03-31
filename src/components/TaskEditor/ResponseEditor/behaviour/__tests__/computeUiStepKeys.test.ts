@@ -36,7 +36,7 @@ describe('computeUiStepKeys', () => {
         selectedPath: [0],
         selectedSubIndex: null,
       })
-    ).toEqual(['start', 'noMatch', 'notConfirmed']);
+    ).toEqual(['start', 'noMatch']);
   });
 
   it('reads array-shaped steps (MaterializedStep-like) without throwing', () => {
@@ -53,7 +53,7 @@ describe('computeUiStepKeys', () => {
         selectedPath: [0],
         selectedSubIndex: null,
       })
-    ).toEqual(['start', 'noMatch', 'notConfirmed']);
+    ).toEqual(['start', 'noMatch']);
   });
 
   it('uses templateStepId when type is missing', () => {
@@ -67,7 +67,7 @@ describe('computeUiStepKeys', () => {
         selectedPath: [0],
         selectedSubIndex: null,
       })
-    ).toEqual(['confirmation', 'notConfirmed']);
+    ).toEqual(['confirmation']);
   });
 
   it('does not append notConfirmed for sub-node path', () => {

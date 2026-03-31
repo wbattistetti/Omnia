@@ -658,7 +658,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
               style={{ ...itemStyle(safeSelectedSubIndex === undefined, false), flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}
               className={`sb-item ${safeSelectedSubIndex === undefined ? styles.sidebarSelected : ''}`}
             >
-              <span style={{ display: 'inline-flex', alignItems: 'center' }}>{getIconComponent('Folder')}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center' }}>{getIconComponent('Package')}</span>
               <SidebarInlineEditInput
                 active={editingAggregateRow}
                 widthMode={sidebarLabelWidthMode(aggregateEditRowKey, aggregateEditRowKey, aggregateEditDraft)}
@@ -704,7 +704,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 maybeHideOverlay(320);
               }}
             >
-              <span style={{ marginRight: 6 }}>{getIconComponent('Folder')}</span>
+              <span style={{ marginRight: 6 }}>{getIconComponent('Package')}</span>
               <span style={{ fontWeight: 700, whiteSpace: 'nowrap', flex: 1, minWidth: 0, textAlign: 'left' }}>{rootLabel || 'Data'}</span>
             </button>
           )}
@@ -765,9 +765,11 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
       {mainList.map((main, idx) => {
         const activeMain = isMainRowActive(idx);
         const disabledMain = !isMainIncluded(idx);
-        const Icon = getIconComponent(main?.icon || 'FileText');
         // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
         const subs = getSubNodes(main);
+        const defaultMainIcon =
+          aggregated && subs.length > 0 ? 'Package' : 'FileText';
+        const Icon = getIconComponent(main?.icon || defaultMainIcon);
         return (
           <div key={idx}>
             {mainDrop && mainDrop.targetIndex === idx && mainDrop.placement === 'before' && (
@@ -818,6 +820,13 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 setMainDrop(null);
               }}
               onClick={(e) => {
+                if (useNestedTree && subs.length > 0 && !isMainExpanded(idx)) {
+                  setExpandedPathKeys((prev) => {
+                    const next = new Set(prev);
+                    next.add(pathKey([idx]));
+                    return next;
+                  });
+                }
                 if (onSelectPath) {
                   onSelectPath([idx]);
                 } else {

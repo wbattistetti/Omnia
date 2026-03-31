@@ -10,7 +10,7 @@ describe('materializeTask', () => {
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       kind: 'standalone',
-      instanceNodes: [{ id: 'n1', templateId: 'n1', label: 'X' }],
+      subTasks: [{ id: 'n1', templateId: 'n1', label: 'X' }],
       steps: { n1: {} },
     };
 
@@ -29,7 +29,7 @@ describe('materializeTask', () => {
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       kind: 'standalone',
-      instanceNodes: [],
+      subTasks: [],
       steps: {},
     };
 

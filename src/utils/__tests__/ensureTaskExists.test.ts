@@ -14,7 +14,7 @@ describe('ensureTaskExists', () => {
     expect(t.templateId).toBeNull();
     expect(t.kind).toBe('standalone');
     expect(t.steps).toEqual({});
-    expect(t.instanceNodes).toEqual([]);
+    expect(t.subTasks).toEqual([]);
   });
 
   it('returns existing task without duplicating', () => {

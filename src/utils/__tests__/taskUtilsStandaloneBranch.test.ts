@@ -16,13 +16,13 @@ const minimalInstanceNode = {
 } as any;
 
 describe('buildTaskTree standalone branch', () => {
-  it('returns view from instanceNodes without requiring templateId', async () => {
+  it('returns view from subTasks without requiring templateId', async () => {
     const instance: Task = {
       id: 'task-1',
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       kind: 'standalone',
-      instanceNodes: [minimalInstanceNode],
+      subTasks: [minimalInstanceNode],
       steps: {},
     } as Task;
 
@@ -38,7 +38,7 @@ describe('buildTaskTree standalone branch', () => {
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       kind: 'standalone',
-      instanceNodes: [],
+      subTasks: [],
       steps: {},
     } as Task;
 
@@ -49,13 +49,13 @@ describe('buildTaskTree standalone branch', () => {
 });
 
 describe('extractTaskOverrides standalone branch', () => {
-  it('returns kind, instanceNodes and steps without projectId', async () => {
+  it('returns kind, subTasks and steps without projectId', async () => {
     const instance: Task = {
       id: 'task-1',
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       kind: 'standalone',
-      instanceNodes: [minimalInstanceNode],
+      subTasks: [minimalInstanceNode],
       steps: { 'node-a': { start: [] } },
     } as Task;
 
@@ -67,8 +67,8 @@ describe('extractTaskOverrides standalone branch', () => {
 
     const overrides = await extractTaskOverrides(instance, workingCopy);
     expect(overrides.kind).toBe('standalone');
-    expect(overrides.instanceNodes).toHaveLength(1);
-    expect(overrides.instanceNodes![0].id).toBe('node-a');
+    expect(overrides.subTasks).toHaveLength(1);
+    expect(overrides.subTasks![0].id).toBe('node-a');
     expect(overrides.steps).toEqual(workingCopy.steps);
     expect(overrides.labelKey).toBe('my-label');
   });

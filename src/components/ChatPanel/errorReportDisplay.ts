@@ -105,24 +105,40 @@ export function formatErrorMessageForReportPanel(
 ): string {
   const { flowTag, body } = splitFlowPrefixedMessage(error.message);
   const cat = error.category ?? '';
+  const rowLabel = (error as { rowLabel?: string }).rowLabel?.trim();
 
-  if (cat === 'TaskNotFound') {
-    // Backend may already emit a user-safe message (e.g. VB FlowCompiler with row text).
-    if (/Task not found for row\s+"/i.test(body)) {
-      return withFlowPrefix(flowTag, body.trim());
-    }
-    const label = rowText?.trim() || 'Unnamed row';
+  if (cat === 'MissingOrInvalidTask' || cat === 'TaskNotFound' || cat === 'MissingTaskId') {
+    const label = rowLabel || rowText?.trim() || 'questa riga';
     return withFlowPrefix(
       flowTag,
-      `Task not found for row "${truncateDisplayLabel(label, 200)}". Task must exist.`
+      `Non hai specificato cosa deve fare «${truncateDisplayLabel(label, 200)}».`
+    );
+  }
+
+  if (cat === 'TaskTypeInvalidOrMissing' || cat === 'MissingTaskType' || cat === 'InvalidTaskType') {
+    const label = rowLabel || rowText?.trim() || 'questa riga';
+    return withFlowPrefix(flowTag, `Scegli il tipo di task per «${truncateDisplayLabel(label, 200)}».`);
+  }
+
+  if (cat === 'TaskCompilationFailed' || cat === 'CompilationException') {
+    return withFlowPrefix(
+      flowTag,
+      'Questo task non può essere eseguito. Aprilo e controlla la configurazione.'
+    );
+  }
+
+  if (cat === 'NoEntryNodes') {
+    return withFlowPrefix(flowTag, 'Il flusso non ha un nodo di start definito.');
+  }
+
+  if (cat === 'MultipleEntryNodes') {
+    return withFlowPrefix(
+      flowTag,
+      'Il flusso ha più nodi di start. Lascia solo quello da cui vuoi iniziare.'
     );
   }
 
   let out = body;
-  if (cat === 'MissingTaskId' && rowText) {
-    out = `Row "${truncateDisplayLabel(rowText, 200)}" has no TaskId. Using row id as fallback. TaskId is mandatory.`;
-    return withFlowPrefix(flowTag, out);
-  }
 
   out = stripNodeRowReferences(out);
   if (!out || out.length < 4) {

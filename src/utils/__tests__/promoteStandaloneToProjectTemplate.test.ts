@@ -17,7 +17,7 @@ describe('canPromoteStandaloneToProjectTemplateMvp', () => {
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       kind: 'standalone',
-      instanceNodes: [{ id: GUID, templateId: GUID, label: 'R', subNodes: [] } as any],
+      subTasks: [{ id: GUID, templateId: GUID, label: 'R', subNodes: [] } as any],
       steps: { [GUID]: {} },
     } as Task;
     expect(canPromoteStandaloneToProjectTemplateMvp(task)).toBe(true);
@@ -29,7 +29,7 @@ describe('canPromoteStandaloneToProjectTemplateMvp', () => {
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       kind: 'standalone',
-      instanceNodes: [
+      subTasks: [
         { id: GUID, templateId: GUID, subNodes: [] } as any,
         { id: GUID + 'b', templateId: GUID + 'b', subNodes: [] } as any,
       ],
@@ -44,7 +44,7 @@ describe('canPromoteStandaloneToProjectTemplateMvp', () => {
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       kind: 'standalone',
-      instanceNodes: [
+      subTasks: [
         {
           id: GUID,
           templateId: GUID,
@@ -62,7 +62,7 @@ describe('canPromoteStandaloneToProjectTemplateMvp', () => {
       type: TaskType.UtteranceInterpretation,
       templateId: null,
       kind: 'standalone',
-      instanceNodes: [
+      subTasks: [
         {
           id: GUID,
           templateId: GUID,
@@ -92,7 +92,7 @@ describe('promoteStandaloneToProjectTemplate', () => {
       null,
       {
         kind: 'standalone',
-        instanceNodes: [{ id: GUID, templateId: GUID, label: 'R', subNodes: [] } as any],
+        subTasks: [{ id: GUID, templateId: GUID, label: 'R', subNodes: [] } as any],
         steps: { [GUID]: { start: [] } },
         labelKey: 'lbl',
       },
@@ -116,7 +116,7 @@ describe('promoteStandaloneToProjectTemplate', () => {
       null,
       {
         kind: 'standalone',
-        instanceNodes: [
+        subTasks: [
           {
             id: GUID,
             templateId: GUID,

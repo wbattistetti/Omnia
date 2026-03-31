@@ -5,7 +5,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTaskTreeStore } from '@responseEditor/core/state';
-import { useTaskTreeStoreTaskScope } from '../useTaskTreeStoreTaskScope';
+import {
+  useTaskTreeStoreTaskScope,
+  __resetLastTaskTreeScopeTaskIdForTests,
+} from '../useTaskTreeStoreTaskScope';
 import type { TaskTree } from '@types/taskTypes';
 import type { Task } from '@types/taskTypes';
 
@@ -31,6 +34,7 @@ function resetStore() {
 describe('useTaskTreeStoreTaskScope', () => {
   beforeEach(() => {
     resetStore();
+    __resetLastTaskTreeScopeTaskIdForTests();
   });
 
   it('clears the store when task id changes (no re-hydration if prop taskTree is absent)', () => {
@@ -152,6 +156,34 @@ describe('useTaskTreeStoreTaskScope', () => {
     act(() => {
       rerender({ taskTree: treeB });
     });
+
+    expect(storeResult.current.taskTree?.labelKey).toBe('a');
+  });
+
+  it('does not clear the store when the hook remounts with the same task id', () => {
+    const { result: storeResult } = renderHook(() => useTaskTreeStore());
+
+    const { unmount } = renderHook(() =>
+      useTaskTreeStoreTaskScope({
+        task: { id: 'task-1', type: 5 } as Task,
+        taskTree: treeA,
+        isTaskTreeLoading: false,
+        taskWizardMode: 'none',
+      })
+    );
+
+    expect(storeResult.current.taskTree?.labelKey).toBe('a');
+
+    unmount();
+
+    renderHook(() =>
+      useTaskTreeStoreTaskScope({
+        task: { id: 'task-1', type: 5 } as Task,
+        taskTree: treeA,
+        isTaskTreeLoading: false,
+        taskWizardMode: 'none',
+      })
+    );
 
     expect(storeResult.current.taskTree?.labelKey).toBe('a');
   });

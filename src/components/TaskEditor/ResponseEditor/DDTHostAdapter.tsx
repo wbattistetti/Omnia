@@ -11,6 +11,24 @@ import type { Task, TaskTree } from '@types/taskTypes';
 import { useTaskTreeStore, useTaskTreeVersion } from '@responseEditor/core/state';
 
 /**
+ * Avoid clearing the task tree store on every remount of this host (same task id).
+ * Panel resize / layout can remount children; clearing here wiped sidebar edits.
+ */
+let lastDdtHostInvalidateTaskId: string | undefined;
+
+/**
+ * Skip re-materializing from repository on remount when the same task is already in Zustand.
+ * Dock drag remounts the adapter; reloading from disk overwrote unsaved sidebar structure.
+ */
+let lastDdtHostMaterializedTaskId: string | undefined;
+
+/** Test helper: reset module-level guards between Vitest cases. */
+export function __resetDdtHostModuleStateForTests(): void {
+  lastDdtHostInvalidateTaskId = undefined;
+  lastDdtHostMaterializedTaskId = undefined;
+}
+
+/**
  * When materializeTaskFromRepository returns null or throws, still show an editable shell
  * so Behaviour can sync from taskTree.steps / repository (empty nodes until user adds root).
  */
@@ -31,7 +49,15 @@ function buildMinimalTaskTreeFromTask(task: Task): TaskTree {
   };
 }
 
-export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose, setDockTree }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
+export default function TaskTreeHostAdapter({
+  task: taskMeta,
+  onClose,
+  hideHeader,
+  onToolbarUpdate,
+  registerOnClose,
+  setDockTree,
+  dockTabId,
+}: EditorProps) {
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per TaskTree
   // Se il task è di tipo Message, questo componente NON dovrebbe essere montato
   if (taskMeta?.type !== undefined && taskMeta.type !== null) {
@@ -98,16 +124,36 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     initializedRef.current = false;
   }, [taskId]);
 
-  // ✅ Invalidate global store immediately when switching task so UI never shows the previous task's TaskTree
+  // Invalidate global store when switching to a different task id (not on remount with same id)
   React.useEffect(() => {
+    if (!taskId || taskId === 'unknown') {
+      return;
+    }
+    if (lastDdtHostInvalidateTaskId === taskId) {
+      return;
+    }
+    lastDdtHostInvalidateTaskId = taskId;
     setTaskTreeInStore(null);
     setTaskTreeLoading(true);
   }, [taskId, setTaskTreeInStore]);
 
-  // Load TaskTree async using buildTaskTree
+  // Load TaskTree async — skip if dock remounted same task and Zustand already holds the tree
   React.useEffect(() => {
     const loadTaskTree = async () => {
       if (!fullTask) {
+        setTaskTreeLoading(false);
+        return;
+      }
+
+      if (!taskId || taskId === 'unknown') {
+        setTaskTreeLoading(false);
+        return;
+      }
+
+      if (
+        lastDdtHostMaterializedTaskId === taskId &&
+        useTaskTreeStore.getState().taskTree != null
+      ) {
         setTaskTreeLoading(false);
         return;
       }
@@ -123,6 +169,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
           const { taskTree: tree, instance: updatedTask } = result;
           // ✅ FASE 3: Store è single source of truth - aggiorna solo lo store
           setTaskTreeInStore(tree);
+          lastDdtHostMaterializedTaskId = taskId;
           initializedRef.current = true;
 
           // Log rimosso: non essenziale per flusso motore
@@ -133,6 +180,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
           } else {
             setTaskTreeInStore(null);
           }
+          lastDdtHostMaterializedTaskId = taskId;
           initializedRef.current = true;
         }
       } catch (error) {
@@ -143,6 +191,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         } else {
           setTaskTreeInStore(null);
         }
+        lastDdtHostMaterializedTaskId = taskId;
         initializedRef.current = true;
       } finally {
         setTaskTreeLoading(false);
@@ -363,11 +412,10 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     loading
   ]); // ✅ Dipendenze stabili (ID, lunghezza nodes, numero di steps)
 
-  // ✅ Stable key per impedire re-mount durante l'editing
+  // Stable key: dock tab id avoids remount when task prop flickers during dock drag
   const editorKey = React.useMemo(() => {
-    // ✅ CRITICAL: taskMeta.id ALWAYS equals row.id (which equals task.id when task exists)
-    return `response-editor-${taskId}`;
-  }, [taskId]);
+    return `response-editor-${dockTabId ?? taskId}`;
+  }, [dockTabId, taskId]);
 
   // ✅ ARCHITETTURA ESPERTO: Passa Task completo invece di TaskMeta
   // ✅ CRITICAL: Ricarica task dal repository per avere gli step aggiornati dopo buildTaskTree
@@ -409,11 +457,14 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     const baseTask = updatedFullTask || fullTask || taskMeta;
     if (!baseTask) return null;
 
-    // ✅ CRITICAL: Preserve wizard properties from taskMeta
-    // They're not in repository Task, only in TaskMeta passed as prop
+    // Repository wins for taskWizardMode once persisted (e.g. user chose manual); dock taskMeta can stay "pending".
     return {
       ...baseTask,
-      taskWizardMode: (taskMeta as any).taskWizardMode ?? (baseTask as any).taskWizardMode,
+      taskWizardMode:
+        (updatedFullTask as any)?.taskWizardMode ??
+        (fullTask as any)?.taskWizardMode ??
+        (taskMeta as any).taskWizardMode ??
+        (baseTask as any).taskWizardMode,
       contextualizationTemplateId: (taskMeta as any).contextualizationTemplateId ?? (baseTask as any).contextualizationTemplateId,
       taskLabel: (taskMeta as any).taskLabel ?? (baseTask as any).taskLabel,
       needsTaskContextualization: (taskMeta as any).needsTaskContextualization ?? (baseTask as any).needsTaskContextualization,

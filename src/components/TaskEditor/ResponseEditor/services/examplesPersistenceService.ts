@@ -2,53 +2,91 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import DialogueTaskService from '@services/DialogueTaskService';
+import { taskRepository } from '@services/TaskRepository';
+import type { TaskTreeNode } from '@types/taskTypes';
+import { taskRowUsesSubTasksContract } from '@utils/taskKind';
+import { resolveNodeDataContract } from '@utils/taskNodeContractResolver';
+import { catalogueLookupTemplateId } from '@utils/taskTreeNodeCatalogueLookup';
+import { derivePersistableTestPhrases } from '@responseEditor/domain/testPhrasesContractGridSync';
 
 /**
- * Centralized service for persisting testPhrases (frasi di test) to template.dataContract.testPhrases
+ * Centralized service for persisting testPhrases (test phrases) on the data contract.
  *
- * This service ensures that testPhrases are saved in the correct location:
- * - template.dataContract.testPhrases (fonte di verità)
+ * - Template-backed rows: template.dataContract.testPhrases in DialogueTaskService cache.
+ * - Standalone materialized rows: node.dataContract.testPhrases via updateSelectedNode.
  *
- * The database is updated ONLY on explicit save (handleEditorClose).
- *
- * Architecture:
- * - Single source of truth: template.dataContract.testPhrases
- * - Test phrases are part of the contract, not the node profile
- * - Database: updated only on explicit save
+ * The database is updated ONLY on explicit save (handleEditorClose) for templates; standalone
+ * updates the task tree node in memory through updateSelectedNode.
  */
 export class ExamplesPersistenceService {
   /**
-   * Set testPhrases for a node and save to template.dataContract.testPhrases
+   * Set testPhrases for a node and persist to the correct store for the task row kind.
    *
-   * This method:
-   * 1. Saves testPhrases to template.dataContract.testPhrases (fonte di verità)
-   * 2. Marks template as modified for future save
-   *
-   * The database is NOT updated here - it's updated only on explicit save.
-   *
-   * @param nodeId - The node ID (for logging)
-   * @param nodeTemplateId - The node template ID (required - used to find template)
-   * @param taskId - The task ID (for logging, not used for persistence)
-   * @param examplesList - The new test phrases list (frasi di test)
-   * @param updateSelectedNode - Callback (not used anymore, kept for compatibility)
-   * @returns void (updates are applied directly to template)
+   * @param contractTestPhrases - Same turn as RecognitionEditor localContract (avoids wiping template when grid lags).
+   * @param node - Required for resolveNodeDataContract merge when examplesList is stale.
    */
   static setExamplesForNode(
     nodeId: string,
     nodeTemplateId: string | undefined,
     taskId: string | undefined,
     examplesList: string[],
-    updateSelectedNode: (updater: (node: any) => any) => void
+    updateSelectedNode: (updater: (node: any) => any) => void,
+    contractTestPhrases: string[] | undefined,
+    node: any
   ): void {
+    const row =
+      taskId && taskId !== 'unknown' ? taskRepository.getTask(taskId) : null;
+
+    const resolvedList = row && node
+      ? resolveNodeDataContract(row, node)?.testPhrases
+      : undefined;
+    const resolved = Array.isArray(resolvedList) ? resolvedList : undefined;
+
+    const effective = derivePersistableTestPhrases({
+      examplesList,
+      contractTestPhrases,
+      resolvedTestPhrases: resolved,
+    });
+    const newTestPhrases = effective;
+
+    if (row && taskRowUsesSubTasksContract(row)) {
+      updateSelectedNode((prev: any) => {
+        if (!prev) return prev;
+        const prevPhrases = prev.dataContract?.testPhrases as string[] | undefined;
+        const sameLength = (prevPhrases?.length ?? 0) === (newTestPhrases?.length ?? 0);
+        const sameContent =
+          sameLength &&
+          (newTestPhrases == null || newTestPhrases.length === 0
+            ? !prevPhrases || prevPhrases.length === 0
+            : newTestPhrases.every((ex, idx) => ex === prevPhrases?.[idx]));
+        if (sameContent) {
+          return prev;
+        }
+
+        const base =
+          prev.dataContract && typeof prev.dataContract === 'object'
+            ? { ...prev.dataContract }
+            : {
+                subDataMapping: {},
+                engines: [],
+                outputCanonical: { format: 'value' as const },
+              };
+        if (newTestPhrases) {
+          base.testPhrases = newTestPhrases;
+        } else {
+          delete base.testPhrases;
+        }
+        return { ...prev, dataContract: base };
+      });
+
+      return;
+    }
+
     if (!nodeTemplateId) {
       console.warn('[ExamplesPersistence] No nodeTemplateId provided, cannot save testPhrases to template');
       return;
     }
 
-    // Normalize testPhrases (empty array becomes undefined)
-    const newTestPhrases = examplesList.length > 0 ? [...examplesList] : undefined;
-
-    // ✅ CORRETTO: Salva testPhrases nel template.dataContract.testPhrases
     const template = DialogueTaskService.getTemplate(nodeTemplateId);
 
     if (!template) {
@@ -56,18 +94,16 @@ export class ExamplesPersistenceService {
       return;
     }
 
-    // Assicurati che dataContract esista
     if (!template.dataContract) {
       template.dataContract = {
         templateId: nodeTemplateId,
         templateName: template.label || nodeTemplateId,
         subDataMapping: {},
         engines: [],
-        outputCanonical: { format: 'value' }
+        outputCanonical: { format: 'value' },
       };
     }
 
-    // Salva testPhrases nel dataContract
     const prevTestPhrases = template.dataContract.testPhrases;
     const hasChanged =
       (prevTestPhrases?.length || 0) !== (newTestPhrases?.length || 0) ||
@@ -76,29 +112,29 @@ export class ExamplesPersistenceService {
     if (hasChanged) {
       template.dataContract.testPhrases = newTestPhrases;
       DialogueTaskService.markTemplateAsModified(nodeTemplateId);
-
-      console.log('[ExamplesPersistence] ✅ Saved testPhrases to template.dataContract.testPhrases', {
-        templateId: nodeTemplateId,
-        nodeId,
-        prevCount: prevTestPhrases?.length || 0,
-        newCount: newTestPhrases?.length || 0,
-        testPhrases: newTestPhrases?.slice(0, 3)
-      });
     }
   }
 
   /**
-   * Get testPhrases for a node from template.dataContract.testPhrases
-   *
-   * @param node - The node object (must have templateId)
-   * @returns The testPhrases list (or empty array if not set)
+   * Read testPhrases from the effective contract for this node (standalone vs template cache).
    */
-  static getExamplesForNode(node: any): string[] {
-    if (!node?.templateId) {
+  static getExamplesForNode(node: any, taskId?: string): string[] {
+    const row =
+      taskId && taskId !== 'unknown' ? taskRepository.getTask(taskId) : null;
+    if (row) {
+      const contract = resolveNodeDataContract(row, node);
+      if (contract?.testPhrases && Array.isArray(contract.testPhrases)) {
+        return contract.testPhrases;
+      }
       return [];
     }
 
-    const template = DialogueTaskService.getTemplate(node.templateId);
+    const lookup = node ? catalogueLookupTemplateId(node as TaskTreeNode) : '';
+    if (!lookup) {
+      return [];
+    }
+
+    const template = DialogueTaskService.getTemplate(lookup);
     if (!template?.dataContract?.testPhrases) {
       return [];
     }

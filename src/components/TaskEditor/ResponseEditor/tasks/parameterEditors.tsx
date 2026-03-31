@@ -2,7 +2,7 @@
  * Registry: parameterId -> editor component. Add new parameters by extending the registry only.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useState } from 'react';
 import { EditableMessage } from '@responseEditor/tasks/editors/EditableMessage';
 import {
   getScalarParameterValue,
@@ -18,7 +18,7 @@ export type ParameterEditorProps = {
   editing: boolean;
   onEditingChange: (editing: boolean) => void;
   onCommit: (value: string) => void;
-  onAbort: () => void;
+  onAbort: (draftTrimmed: string) => void;
 };
 
 function GenericParameterFallback({ param }: Pick<ParameterEditorProps, 'param'>) {
@@ -97,6 +97,8 @@ export type ParameterFieldHostProps = {
   onCommit: (value: string) => void;
   /** Notifies parent when inline editing toggles (row chrome, DnD). */
   onEditingActivity?: (active: boolean) => void;
+  /** When abort leaves no draft and no persisted text, remove the task (e.g. cancel new message). */
+  onDeleteTaskIfEmpty?: () => void;
 };
 
 /**
@@ -112,6 +114,7 @@ function FocusAwareTranslatedField({
   taskIdx,
   onCommit,
   onEditingActivity,
+  onDeleteTaskIfEmpty,
 }: ParameterFieldHostProps) {
   const { focusedParameter, consumeFocusParameter } = useBehaviourUi();
   const [editing, setEditing] = useState(false);
@@ -124,13 +127,24 @@ function FocusAwareTranslatedField({
     [onEditingActivity]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!focusedParameter) return;
     if (!matchesFocus(focusedParameter, escalationIdx, taskIdx, param.parameterId)) return;
     setEditing(true);
     onEditingActivity?.(true);
     consumeFocusParameter(focusedParameter);
   }, [focusedParameter, escalationIdx, taskIdx, param.parameterId, consumeFocusParameter, onEditingActivity]);
+
+  const handleAbort = useCallback(
+    (draftTrimmed: string) => {
+      setEditingTracked(false);
+      const persisted = getTranslatedParameterText(task, param.parameterId, translations).trim();
+      if (draftTrimmed === '' && persisted === '' && onDeleteTaskIfEmpty) {
+        onDeleteTaskIfEmpty();
+      }
+    },
+    [setEditingTracked, task, param.parameterId, translations, onDeleteTaskIfEmpty]
+  );
 
   return (
     <ParameterEditor
@@ -143,7 +157,7 @@ function FocusAwareTranslatedField({
         onCommit(v);
         setEditingTracked(false);
       }}
-      onAbort={() => setEditingTracked(false)}
+      onAbort={handleAbort}
     />
   );
 }

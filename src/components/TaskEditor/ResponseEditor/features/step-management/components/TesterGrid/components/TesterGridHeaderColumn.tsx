@@ -1,8 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useLayoutEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Wand2, TypeIcon, Plus, X } from 'lucide-react';
 import SmartTooltip from '@components/SmartTooltip';
 import { getEditorTypeFromContractType } from '@responseEditor/features/step-management/components/TesterGrid/helpers/contractTypeMapper';
-import { getContractMethodLabel } from '@responseEditor/ContractSelector/ContractSelector';
+import {
+  getContractMethodLabel,
+  sortContractMethodsByDisplayOrder,
+  type ContractMethod,
+} from '@responseEditor/ContractSelector/ContractSelector';
 
 interface TesterGridHeaderColumnProps {
   type: 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings' | 'grammarflow';
@@ -54,52 +59,78 @@ export default function TesterGridHeaderColumn({
   // Note: grammarflow doesn't have an inline editor (uses separate Grammar Editor), so it's never "active"
   const isEditorActive = activeEditor === editorType || (contractType === 'rules' && activeEditor === 'post');
   const shouldHide = activeEditor && ['regex', 'extractor', 'ner', 'llm', 'grammarflow'].includes(activeEditor) && !isEditorActive;
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const thRef = useRef<HTMLTableCellElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuBox, setMenuBox] = useState<{ top: number; right: number; minWidth: number; maxHeight: number } | null>(null);
 
-  // ✅ Close dropdown when clicking outside
-  useEffect(() => {
-    if (!isDropdownOpen) return;
+  const updateMenuPosition = useCallback(() => {
+    if (!thRef.current) return;
+    const rect = thRef.current.getBoundingClientRect();
+    const margin = 8;
+    const maxH = Math.max(120, Math.min(320, window.innerHeight - rect.bottom - margin));
+    setMenuBox({
+      top: rect.bottom + 4,
+      right: window.innerWidth - rect.right,
+      minWidth: Math.max(rect.width, 200),
+      maxHeight: maxH,
+    });
+  }, []);
 
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        // Find the "+" button that opened the dropdown
-        const plusButton = (event.target as HTMLElement)?.closest('button');
-        if (plusButton && plusButton.querySelector('svg')) {
-          // If clicking the "+" button, toggle the dropdown
-          onAddContract?.();
-        } else {
-          // If clicking outside, close the dropdown
-          onAddContract?.();
-        }
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
+  useLayoutEffect(() => {
+    if (!isDropdownOpen) {
+      setMenuBox(null);
+      return;
+    }
+    updateMenuPosition();
+    window.addEventListener('scroll', updateMenuPosition, true);
+    window.addEventListener('resize', updateMenuPosition);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+      window.removeEventListener('resize', updateMenuPosition);
     };
+  }, [isDropdownOpen, updateMenuPosition]);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const t = event.target as Node;
+      if (thRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      if (isDropdownOpen) onAddContract?.();
+    };
+    if (isDropdownOpen) {
+      document.addEventListener('pointerdown', handlePointerDown);
+      return () => document.removeEventListener('pointerdown', handlePointerDown);
+    }
   }, [isDropdownOpen, onAddContract]);
 
   return (
     <th
+      ref={thRef}
       style={{
         textAlign: 'left',
         padding: 8,
         background: backgroundColor,
         opacity: enabled ? 1 : 0.4,
         visibility: shouldHide ? 'hidden' : 'visible',
-        position: 'relative', // ✅ STEP 8: Per posizionare dropdown
-        width: columnWidth ? `${columnWidth}px` : 'auto', // ✅ FIX: Explicit width to prevent overlapping
-        minWidth: columnWidth ? `${columnWidth}px` : '200px', // ✅ FIX: Minimum width aumentato per evitare tagli
-        maxWidth: columnWidth ? `${columnWidth}px` : 'none', // ✅ FIX: Maximum width
-        wordWrap: 'break-word', // ✅ FIX: Permette wrapping del testo
-        overflowWrap: 'break-word', // ✅ FIX: Wrapping moderno
-        whiteSpace: 'normal', // ✅ FIX: Permette wrapping invece di ellipsis
+        position: 'relative',
+        boxSizing: 'border-box',
+        minWidth: columnWidth ? `${Math.max(100, Math.min(columnWidth, 200))}px` : '120px',
+        width: 'auto',
+        maxWidth: 'none',
+        overflow: 'visible',
       }}
       title={tooltip}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          flexWrap: 'nowrap',
+          minWidth: 0,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden' }}>
           <input
             type="checkbox"
             checked={enabled}
@@ -107,12 +138,20 @@ export default function TesterGridHeaderColumn({
             style={{ cursor: 'pointer', flexShrink: 0 }}
             disabled={type === 'embeddings'}
           />
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <span style={{ fontWeight: 600, color: enabled ? '#0b0f17' : '#9ca3af', wordBreak: 'break-word' }}>{mainLabel}</span>
-            <span style={{ opacity: 0.7, marginLeft: 4, color: enabled ? '#0b0f17' : '#9ca3af', wordBreak: 'break-word' }}>({techLabel})</span>
+          <div
+            style={{
+              minWidth: 0,
+              flex: 1,
+              overflow: 'hidden',
+              whiteSpace: 'nowrap',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            <span style={{ fontWeight: 600, color: enabled ? '#0b0f17' : '#9ca3af' }}>{mainLabel}</span>
+            <span style={{ opacity: 0.7, marginLeft: 4, color: enabled ? '#0b0f17' : '#9ca3af' }}>({techLabel})</span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
           {/* ✅ FIX: Matita sempre visibile per tutte le colonne */}
           {type === 'deterministic' && showPostProcess ? (
             <>
@@ -246,40 +285,41 @@ export default function TesterGridHeaderColumn({
           )}
         </div>
       </div>
-      {/* ✅ STEP 8: Dropdown per aggiungere contract a destra - mostra direttamente il menu senza pulsante */}
-      {isDropdownOpen && availableMethods.length > 0 && onSelectMethod && (
-        <div
-          ref={dropdownRef}
-          style={{
-            position: 'absolute',
-            top: '100%',
-            right: 0,
-            zIndex: 1000,
-            marginTop: 4,
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 6,
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-            minWidth: 200,
-            maxHeight: 300,
-            overflowY: 'auto',
-          }}
-        >
-          {availableMethods.map((method) => {
-            return (
+      {isDropdownOpen &&
+        availableMethods.length > 0 &&
+        onSelectMethod &&
+        menuBox &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: menuBox.top,
+              right: menuBox.right,
+              minWidth: menuBox.minWidth,
+              maxHeight: menuBox.maxHeight,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              background: '#fff',
+              border: '1px solid #e5e7eb',
+              borderRadius: 6,
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+              zIndex: 10050,
+              scrollbarGutter: 'stable',
+            }}
+          >
+            {sortContractMethodsByDisplayOrder(availableMethods as ContractMethod[]).map((method) => (
               <button
                 key={method}
+                type="button"
+                role="menuitem"
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
-                  console.log('[TesterGridHeaderColumn] Selected method:', method, {
-                    hasOnSelectMethod: !!onSelectMethod,
-                  });
-                  if (onSelectMethod) {
-                    onSelectMethod(method);
-                  } else {
-                    console.warn('[TesterGridHeaderColumn] onSelectMethod is not defined');
-                  }
+                  onSelectMethod(method);
                 }}
                 style={{
                   display: 'block',
@@ -302,10 +342,10 @@ export default function TesterGridHeaderColumn({
               >
                 {getContractMethodLabel(method)}
               </button>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>,
+          document.body
+        )}
     </th>
   );
 }
