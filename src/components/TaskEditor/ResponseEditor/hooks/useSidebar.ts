@@ -24,6 +24,7 @@ import type { Task, TaskMeta, TaskTree } from '@types/taskTypes';
 import { TaskType, isUtteranceInterpretationTask } from '@types/taskTypes';
 import { getSidebarResizeStartWidthPx } from '@responseEditor/hooks/sidebarResizeStartWidth';
 import { variableCreationService } from '@services/VariableCreationService';
+import { logVariableScope } from '@utils/debugVariableScope';
 
 export interface UseSidebarParams {
   isDraggingSidebar: boolean;
@@ -115,6 +116,15 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
           sync.taskLabel || '',
           ensured.nodes
         );
+        const after = variableCreationService.getVariablesByTaskInstanceId(pid, tid);
+        logVariableScope('useSidebar.commit', {
+          projectId: pid,
+          taskId: tid,
+          taskLabel: sync.taskLabel || '',
+          nodesCount: ensured.nodes?.length ?? 0,
+          varRows: after.length,
+          varNames: after.map((v) => v.varName),
+        });
         try {
           document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
         } catch {

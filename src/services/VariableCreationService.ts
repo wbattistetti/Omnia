@@ -13,6 +13,7 @@ import {
 } from '@utils/variableScopeUtils';
 import { normalizeSemanticTaskLabel } from '../domain/variableProxyNaming';
 import { flattenUtteranceTaskTreeVariableRows } from '@utils/utteranceTaskVariableSync';
+import { logVariableScope } from '@utils/debugVariableScope';
 
 interface CreateVariablesOptions {
   taskInstance: Task;
@@ -489,7 +490,8 @@ class VariableCreationService {
       }
     }
 
-    return (this.store.get(projectId) ?? []).filter(v => {
+    const all = this.store.get(projectId) ?? [];
+    const filtered = all.filter(v => {
       const taskId = String(v.taskInstanceId || '').trim();
       if (taskId) {
         // Strict per-flow ownership: task-bound variables are visible only
@@ -500,6 +502,19 @@ class VariableCreationService {
       const scope = (v.scope ?? 'project');
       return scope === 'flow' && String(v.scopeFlowId || '').trim() === String(flowId).trim();
     });
+
+    logVariableScope('getVariablesForFlowScope', {
+      projectId,
+      flowId,
+      snapshotHasFlow: !!flow,
+      snapshotNodeCount: flow?.nodes?.length ?? 0,
+      taskRowIdsOnCanvas: [...localTaskIds],
+      storeRowCount: all.length,
+      visibleRowCount: filtered.length,
+      visibleVarNames: filtered.map((v) => v.varName),
+    });
+
+    return filtered;
   }
 
   /**

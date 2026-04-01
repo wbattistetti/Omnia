@@ -4,6 +4,7 @@
  */
 
 import { variableCreationService } from '@services/VariableCreationService';
+import { logVariableScope } from '@utils/debugVariableScope';
 
 export function mergeConditionEditorVariablesWithLiveFlowchart(
   projectId: string | null | undefined,
@@ -21,6 +22,13 @@ export function mergeConditionEditorVariablesWithLiveFlowchart(
   }
   try {
     const names = variableCreationService.getAllVarNames(pid, fid);
+    logVariableScope('conditionEditor.merge', {
+      projectId: pid,
+      flowCanvasId: fid,
+      nameCount: names.length,
+      names,
+      tabKeys: Object.keys(base).length,
+    });
     for (const n of names) {
       base[n] = '';
     }

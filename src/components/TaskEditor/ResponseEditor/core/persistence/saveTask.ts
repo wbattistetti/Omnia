@@ -14,6 +14,7 @@ import {
   shouldPersistStandaloneInstanceSnapshot,
 } from '@responseEditor/core/persistence/standaloneInstanceSnapshot';
 import { persistReferenceScanInternalTextForTaskId } from '@domain/taskSubflowMove/persistReferenceScanInternalText';
+import { logVariableScope } from '@utils/debugVariableScope';
 import { variableCreationService } from '@services/VariableCreationService';
 import { isUtteranceInterpretationTask } from '@types/taskTypes';
 import { getMainNodes } from '@responseEditor/core/domain';
@@ -147,6 +148,15 @@ export async function saveTask(
             ''
         ).trim();
         variableCreationService.syncUtteranceTaskTreeVariables(pid, key, taskRowLabel, roots);
+        const after = variableCreationService.getVariablesByTaskInstanceId(pid, key);
+        logVariableScope('saveTask.syncUtterance', {
+          projectId: pid,
+          taskId: key,
+          taskRowLabel,
+          rootsCount: roots.length,
+          varRows: after.length,
+          varNames: after.map((v) => v.varName),
+        });
         try {
           document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
         } catch {
