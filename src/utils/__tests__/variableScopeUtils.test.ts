@@ -1,25 +1,53 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   isVariableVisibleInFlow,
+  getTaskInstanceIdsOnFlowCanvas,
   normalizeVariableInstance,
   sameVariableScopeBucket,
 } from '../variableScopeUtils';
+import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
 
 describe('variableScopeUtils', () => {
-  it('treats task-bound variables as visible in every flow', () => {
+  beforeEach(() => {
+    FlowWorkspaceSnapshot.setSnapshot(
+      {
+        main: {
+          nodes: [{ id: 'n1', data: { rows: [{ id: 'task-1', text: 'T' }] } } as any],
+          edges: [],
+        },
+        other: { nodes: [{ id: 'n2', data: { rows: [{ id: 'task-2', text: 'U' }] } } as any], edges: [] },
+        subflow_x: { nodes: [], edges: [] },
+        subflow_1: { nodes: [], edges: [] },
+      },
+      'main'
+    );
+  });
+
+  afterEach(() => {
+    FlowWorkspaceSnapshot.setSnapshot({}, 'main');
+  });
+
+  it('getTaskInstanceIdsOnFlowCanvas collects row ids', () => {
+    expect([...getTaskInstanceIdsOnFlowCanvas('main')]).toEqual(['task-1']);
+    expect([...getTaskInstanceIdsOnFlowCanvas('other')]).toEqual(['task-2']);
+    expect(getTaskInstanceIdsOnFlowCanvas('subflow_x').size).toBe(0);
+  });
+
+  it('task-bound variables are visible only on flows that contain that task row', () => {
     const v = normalizeVariableInstance({
       varId: 'a',
       varName: 'x',
       taskInstanceId: 'task-1',
       nodeId: 'n',
       ddtPath: 'd',
-      scope: 'flow',
-      scopeFlowId: 'main',
+      scope: 'project',
     });
-    expect(isVariableVisibleInFlow(v, 'other')).toBe(true);
+    expect(isVariableVisibleInFlow(v, 'main')).toBe(true);
+    expect(isVariableVisibleInFlow(v, 'other')).toBe(false);
+    expect(isVariableVisibleInFlow(v, 'subflow_x')).toBe(false);
   });
 
-  it('shows project-scoped manual variables in all flows', () => {
+  it('project-scoped manual variables (no task) are not visible on per-flow authoring surfaces', () => {
     const v = normalizeVariableInstance({
       varId: 'b',
       varName: 'y',
@@ -28,8 +56,8 @@ describe('variableScopeUtils', () => {
       ddtPath: '',
       scope: 'project',
     });
-    expect(isVariableVisibleInFlow(v, 'main')).toBe(true);
-    expect(isVariableVisibleInFlow(v, 'subflow_x')).toBe(true);
+    expect(isVariableVisibleInFlow(v, 'main')).toBe(false);
+    expect(isVariableVisibleInFlow(v, 'subflow_x')).toBe(false);
   });
 
   it('shows flow-scoped variables only on matching canvas', () => {

@@ -466,14 +466,11 @@ class VariableCreationService {
   }
 
   /**
-   * Return all variable names for use in condition editor autocomplete.
+   * Return all variable names visible on the given flow canvas (same rules as {@link getVariablesForFlowScope}).
    */
   getAllVarNames(projectId: string, flowCanvasId?: string): string[] {
-    const flowId = flowCanvasId ?? getActiveFlowCanvasId();
-    const vars = (this.store.get(projectId) ?? []).filter(v =>
-      isVariableVisibleInFlow(v, flowId)
-    );
-    return [...new Set(vars.map(v => v.varName))].sort();
+    const instances = this.getVariablesForFlowScope(projectId, flowCanvasId);
+    return [...new Set(instances.map((v) => v.varName).filter(Boolean))].sort();
   }
 
   /**

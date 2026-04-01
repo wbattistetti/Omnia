@@ -1,9 +1,12 @@
 /**
- * Helpers for variable visibility: project-wide vs flow-scoped (manual/slot variables).
- * Task-bound variables (non-empty taskInstanceId) are always visible in every flow.
+ * Per-flow variable visibility for authoring (conditions, pickers, flow rail).
+ * Task-bound rows are visible only on flow canvases that contain that task as a row.
+ * Flow-scoped manual rows only on matching canvas. Project-scoped manual rows (no task)
+ * are not part of a single flow namespace and are hidden from per-flow surfaces.
  */
 
 import type { VariableInstance, VariableScope } from '@types/variableTypes';
+import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
 
 /**
  * Normalizes a VariableInstance from API or legacy rows (missing scope defaults to project).
@@ -35,18 +38,42 @@ export function normalizeVariableInstance(
 }
 
 /**
- * Returns true if this variable row should appear when authoring conditions on the given flow canvas.
+ * Collects task instance ids (flow row ids) present on the given flow canvas graph.
+ */
+export function getTaskInstanceIdsOnFlowCanvas(flowCanvasId: string): Set<string> {
+  const flow = FlowWorkspaceSnapshot.getFlowById(flowCanvasId);
+  const ids = new Set<string>();
+  if (!flow) {
+    return ids;
+  }
+  for (const node of flow.nodes || []) {
+    const rows = (node as { data?: { rows?: unknown[] } })?.data?.rows;
+    if (!Array.isArray(rows)) {
+      continue;
+    }
+    for (const row of rows) {
+      const taskId = String((row as { id?: string })?.id || '').trim();
+      if (taskId) {
+        ids.add(taskId);
+      }
+    }
+  }
+  return ids;
+}
+
+/**
+ * Returns true if this variable row should appear when authoring on the given flow canvas.
  */
 export function isVariableVisibleInFlow(v: VariableInstance, flowCanvasId: string): boolean {
   const taskId = String(v.taskInstanceId ?? '').trim();
   if (taskId.length > 0) {
-    return true;
+    return getTaskInstanceIdsOnFlowCanvas(flowCanvasId).has(taskId);
   }
   const scope: VariableScope = v.scope ?? 'project';
-  if (scope === 'project') {
-    return true;
+  if (scope === 'flow') {
+    return String(v.scopeFlowId ?? '').trim() === String(flowCanvasId ?? '').trim();
   }
-  return String(v.scopeFlowId ?? '').trim() === String(flowCanvasId ?? '').trim();
+  return false;
 }
 
 /**

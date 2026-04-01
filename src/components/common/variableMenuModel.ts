@@ -1,9 +1,7 @@
 /**
- * Builds variable picker items for the active flow: local scope variables and Subflow
- * interface outputs (unbound child outputs + parent variables when outputBindings exist).
- *
- * Child flow authoring: task-bound rows use local names; parent canvas shows flow-scoped
- * proxy vars (FQ) when a subflow output is bound (`resolvedFromSubflowOutputBinding`).
+ * Builds variable picker items for the active flow: task rows on this canvas, flow-scoped
+ * manual rows for this canvas, and Subflow interface outputs (bindings + unbound).
+ * Project-scoped manual rows (no task) are not listed here — they are not part of a flow namespace.
  */
 import { TaskType } from '../../types/taskTypes';
 import { taskRepository } from '../../services/TaskRepository';
@@ -427,7 +425,7 @@ export function buildVariableMenuItems(
     if (scope === 'flow') {
       return String((v as VariableInstance).scopeFlowId || '').trim() === String(activeFlowId).trim();
     }
-    return true;
+    return false;
   });
 
   for (const v of localVars) {
@@ -540,7 +538,7 @@ export async function buildVariableMenuItemsAsync(
     if (scope === 'flow') {
       return String((v as VariableInstance).scopeFlowId || '').trim() === String(activeFlowId).trim();
     }
-    return true;
+    return false;
   });
 
   for (const v of localVars) {
