@@ -221,6 +221,31 @@ class VariableCreationService {
   }
 
   /**
+   * Removes specific variable rows for a task instance by varId.
+   * Used when task→subflow move drops unreferenced slots from the in-memory store (optional).
+   * Task tree / resync may recreate rows when the editor opens if needed.
+   */
+  removeTaskVariableRowsForVarIds(projectId: string, taskInstanceId: string, varIds: string[]): number {
+    const tid = String(taskInstanceId || '').trim();
+    if (!tid || !varIds.length) return 0;
+    const remove = new Set(varIds.map((id) => String(id || '').trim()).filter(Boolean));
+    if (remove.size === 0) return 0;
+    const existing = this.store.get(projectId) ?? [];
+    let removed = 0;
+    const next = existing.filter((v) => {
+      if (String(v.taskInstanceId || '').trim() !== tid) return true;
+      const vid = String(v.varId || '').trim();
+      if (!remove.has(vid)) return true;
+      removed += 1;
+      return false;
+    });
+    if (removed > 0) {
+      this.store.set(projectId, next);
+    }
+    return removed;
+  }
+
+  /**
    * Create a manual variable with empty instanceId and nodeId.
    * Used when user creates a variable from BackendCallEditor output fields.
    * The variable is added to the same in-memory store and will be persisted on project save.
@@ -283,6 +308,33 @@ class VariableCreationService {
     this.store.set(
       projectId,
       existing.filter(x => x.varId !== varId)
+    );
+    return true;
+  }
+
+  /**
+   * Renames any variable row by varId (manual or task-bound). Preserves varId.
+   *
+   * Task-bound (child slot) rows must keep **local** semantic names only (e.g. `colore`).
+   * Do not set parent fully-qualified proxy names here — those belong on separate manual rows
+   * (`scope: 'flow'`, `outputBindings` from child varId → parent varId). Use
+   * `subflowVariableProxyRestore` helpers to strip legacy FQ contamination on child rows.
+   */
+  renameVariableRowByVarId(projectId: string, varId: string, newVarName: string): boolean {
+    const trimmed = newVarName.trim();
+    if (!trimmed) return false;
+    const existing = this.store.get(projectId) ?? [];
+    const target = existing.find((x) => x.varId === varId);
+    if (!target) return false;
+    const sameTask = (a: VariableInstance, b: VariableInstance) =>
+      String(a.taskInstanceId ?? '').trim() === String(b.taskInstanceId ?? '').trim();
+    const dup = existing.some(
+      (x) => x.varId !== varId && x.varName === trimmed && sameTask(x, target)
+    );
+    if (dup) return false;
+    this.store.set(
+      projectId,
+      existing.map((x) => (x.varId === varId ? { ...x, varName: trimmed } : x))
     );
     return true;
   }

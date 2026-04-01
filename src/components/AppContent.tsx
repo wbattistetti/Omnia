@@ -57,6 +57,11 @@ import { useTaskTreeContext } from '../context/DDTContext';
 import ResponseEditor from './TaskEditor/ResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import NonInteractiveResponseEditor from './TaskEditor/ResponseEditor/NonInteractiveResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import { taskRepository } from '../services/TaskRepository';
+import {
+  setSubflowSyncFlows,
+  setSubflowSyncTranslations,
+  setSubflowSyncUpsertFlowSlice,
+} from '../domain/taskSubflowMove/subflowSyncFlowsRef';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 import { provisionParentVariablesForSubflowTaskAsync } from '../services/subflowOutputProvisioning';
 import { getTemplateId } from '../utils/taskHelpers';
@@ -90,8 +95,11 @@ const DockManagerWithFlows: React.FC<{
   editorCloseRefsMap: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
   markFlowsPersistedRef: React.MutableRefObject<((flowIds: string[]) => void) | null>;
 }> = ({ root, setRoot, renderTabContent, flowsRef, editorCloseRefsMap, markFlowsPersistedRef }) => {
+  const projectDataCtx = useProjectData();
   const flowWorkspace = useFlowWorkspace<Node<FlowNode>, Edge<EdgeData>>();
   const flowActions = useFlowActions<Node<FlowNode>, Edge<EdgeData>>();
+  const projectIdForMigration = projectDataCtx?.data?.id != null ? String(projectDataCtx.data.id).trim() : '';
+  const subflowProxyMigrateKeyRef = React.useRef<string>('');
 
   // ✅ CRITICAL: Update flowsRef immediately (not just in useEffect)
   // This ensures flowsRef is always up-to-date when handleSaveProject is called
@@ -113,6 +121,48 @@ const DockManagerWithFlows: React.FC<{
       markFlowsPersistedRef.current = null;
     };
   }, [flowActions.markFlowsPersisted]);
+
+  React.useEffect(() => {
+    setSubflowSyncFlows(flowWorkspace.flows);
+  }, [flowWorkspace.flows]);
+
+  /**
+   * Legacy projects: child task variables may carry parent FQ names; parent proxies may be missing
+   * or misaligned. Reconcile once per (project, flow-id-set) snapshot.
+   */
+  React.useEffect(() => {
+    const pid = projectIdForMigration;
+    if (!pid) return;
+    const flows = flowWorkspace.flows;
+    if (!flows || Object.keys(flows).length === 0) return;
+    const flowKeys = Object.keys(flows).sort().join('\x1e');
+    const key = `${pid}\x1e${flowKeys}`;
+    if (subflowProxyMigrateKeyRef.current === key) return;
+
+    let cancelled = false;
+    void import('../domain/taskSubflowMove/subflowVariableProxyRestore').then(
+      ({ migrateSubflowVariableProxyModel }) => {
+        if (cancelled) return;
+        try {
+          const r = migrateSubflowVariableProxyModel(pid, flows as any);
+          if (r.childRenames.length > 0 || r.syncCalls > 0) {
+            console.log('[SubflowVariableProxyMigration]', { projectId: pid, ...r });
+          }
+          subflowProxyMigrateKeyRef.current = key;
+        } catch (e) {
+          console.warn('[SubflowVariableProxyMigration] failed', e);
+        }
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [projectIdForMigration, flowWorkspace.flows]);
+
+  React.useEffect(() => {
+    setSubflowSyncUpsertFlowSlice((f) => flowActions.upsertFlow(f as any));
+    return () => setSubflowSyncUpsertFlowSlice(null);
+  }, [flowActions.upsertFlow]);
 
   // ✅ Adapt setRoot to match DockManager's expected signature
   const adaptedSetRoot = React.useCallback((n: DockNode | ((prev: DockNode) => DockNode)) => {
@@ -205,6 +255,10 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // ✅ Get translations for chat panel (needed for ChatOrchestrator)
   const { translations: globalTranslations, isReady: translationsReady, isLoading: translationsLoading, loadAllTranslations } = useProjectTranslations();
+
+  React.useEffect(() => {
+    setSubflowSyncTranslations(globalTranslations || {});
+  }, [globalTranslations]);
 
   const chatOrchestrator = useChatOrchestrator({
     setDockTree,
@@ -564,6 +618,9 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   const handleRunFlow = React.useCallback(() => {
     console.log('[AppContent] handleRunFlow -> delegating to ChatOrchestrator');
+    void import('../context/CompilationErrorsContext').then(({ clearCompilationErrorsGlobal }) => {
+      clearCompilationErrorsGlobal();
+    });
     chatOrchestrator.openFlowChat();
   }, [chatOrchestrator]);
 

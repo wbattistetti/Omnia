@@ -1,6 +1,9 @@
 /**
  * Builds variable picker items for the active flow: local scope variables and Subflow
  * interface outputs (unbound child outputs + parent variables when outputBindings exist).
+ *
+ * Child flow authoring: task-bound rows use local names; parent canvas shows flow-scoped
+ * proxy vars (FQ) when a subflow output is bound (`resolvedFromSubflowOutputBinding`).
  */
 import { TaskType } from '../../types/taskTypes';
 import { taskRepository } from '../../services/TaskRepository';
