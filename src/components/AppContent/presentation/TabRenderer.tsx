@@ -1,7 +1,7 @@
 // Presentation layer: TabRenderer component
 // Renders different tab types (flow, responseEditor, conditionEditor, taskEditor, nonInteractive)
 
-import React, { useMemo, useCallback, useEffect } from 'react';
+import React, { useMemo, useCallback, useEffect, useState } from 'react';
 import type { DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabConditionEditor, DockTabChat, DockTabErrorReport, DockTabFlowMapping, ToolbarButton } from '@dock/types';
 import type { DockNode } from '@dock/types';
 import { TaskType } from '@types/taskTypes';
@@ -12,6 +12,7 @@ import { FlowCanvasHost } from '../../FlowWorkspace/FlowCanvasHost';
 import ResponseEditor from '../../TaskEditor/ResponseEditor';
 import NonInteractiveResponseEditor from '../../TaskEditor/ResponseEditor/NonInteractiveResponseEditor';
 import ConditionEditor from '../../conditions/ConditionEditor';
+import { mergeConditionEditorVariablesWithLiveFlowchart } from '../../conditions/conditionEditorLiveVariables';
 import TaskEditorHost from '../../TaskEditor/EditorHost/TaskEditorHost';
 import { AssistantPanel } from '@components/ChatPanel/AssistantPanel';
 import { ErrorReportPanel } from '@components/ChatPanel/ErrorReportPanel';
@@ -70,6 +71,137 @@ function tabContentComparator(prev: { tab: DockTab }, next: { tab: DockTab }): b
   // For other tab types, use default behavior (re-render if any prop changes)
   return false; // Re-render
 }
+
+/**
+ * Condition editor: merge dock-tab variable snapshot with live VariableCreationService names
+ * and re-merge when task save syncs utterance variables (`variableStore:updated`).
+ */
+const ConditionEditorDockTab: React.FC<{
+  tab: DockTabConditionEditor;
+  currentPid?: string;
+  setDockTree: TabRendererProps['setDockTree'];
+  editorCloseRefsMap: TabRendererProps['editorCloseRefsMap'];
+}> = ({ tab, currentPid, setDockTree, editorCloseRefsMap }) => {
+  const [variableRefreshSeq, setVariableRefreshSeq] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      editorCloseRefsMap.current.delete(tab.id);
+    };
+  }, [tab.id, editorCloseRefsMap]);
+
+  useEffect(() => {
+    const bump = () => setVariableRefreshSeq((s) => s + 1);
+    document.addEventListener('variableStore:updated', bump);
+    document.addEventListener('instanceRepository:updated', bump);
+    return () => {
+      document.removeEventListener('variableStore:updated', bump);
+      document.removeEventListener('instanceRepository:updated', bump);
+    };
+  }, []);
+
+  const handleRegisterOnClose = useCallback(
+    (fn: () => Promise<boolean>) => {
+      editorCloseRefsMap.current.set(tab.id, fn);
+    },
+    [tab.id, editorCloseRefsMap]
+  );
+
+  const mergedVariables = useMemo(() => {
+    void variableRefreshSeq;
+    return mergeConditionEditorVariablesWithLiveFlowchart(
+      currentPid,
+      tab.flowId,
+      tab.variables as Record<string, unknown> | undefined
+    );
+  }, [currentPid, tab.flowId, tab.variables, variableRefreshSeq, tab.id]);
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        flex: 1,
+        minHeight: 0,
+        backgroundColor: '#1e1e1e',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <ConditionEditor
+        open={true}
+        onClose={() => {
+          try {
+            console.log('[TabRenderer] ConditionEditor onClose', {
+              tabId: tab.id,
+              edgeId: tab.edgeId,
+              conditionId: tab.conditionId,
+            });
+          } catch {
+            /* noop */
+          }
+          setDockTree((prev) => closeTab(prev, tab.id));
+          try {
+            requestAnimationFrame(() => {
+              document.dispatchEvent(new CustomEvent('flowchart:restoreViewport', { bubbles: true }));
+            });
+          } catch (err) {
+            console.warn('[ConditionEditor] Failed to emit restore viewport event', err);
+          }
+        }}
+        variables={mergedVariables}
+        initialScript={tab.script}
+        variablesTree={tab.variablesTree}
+        label={tab.label}
+        dockWithinParent={false}
+        isGenerating={tab.isGenerating}
+        edgeId={tab.edgeId}
+        conditionId={tab.conditionId}
+        flowId={tab.flowId}
+        registerOnClose={handleRegisterOnClose}
+        onRename={(next) => {
+          setDockTree((prev) =>
+            mapNode(prev, (n) => {
+              if (n.kind === 'tabset') {
+                const idx = n.tabs.findIndex((t) => t.id === tab.id);
+                if (idx !== -1) {
+                  const updated = [...n.tabs];
+                  updated[idx] = { ...tab, title: next, label: next };
+                  return { ...n, tabs: updated };
+                }
+              }
+              return n;
+            })
+          );
+          try {
+            void import('../../../ui/events').then((m) => m.emitConditionEditorRename(next));
+          } catch {
+            /* noop */
+          }
+        }}
+        onSave={(script) => {
+          setDockTree((prev) =>
+            mapNode(prev, (n) => {
+              if (n.kind === 'tabset') {
+                const idx = n.tabs.findIndex((t) => t.id === tab.id);
+                if (idx !== -1) {
+                  const updated = [...n.tabs];
+                  updated[idx] = { ...tab, script };
+                  return { ...n, tabs: updated };
+                }
+              }
+              return n;
+            })
+          );
+          try {
+            void import('../../../ui/events').then((m) => m.emitConditionEditorSave(script));
+          } catch {
+            /* noop */
+          }
+        }}
+      />
+    </div>
+  );
+};
 
 export const TabRenderer: React.FC<TabRendererProps> = React.memo(
   ({ tab, currentPid, isDraft: _isDraft, setDockTree, editorCloseRefsMap, pdUpdate, testSingleNode, onFlowCreateTaskFlow, onFlowOpenTaskFlow, onOpenSubflowForTask }) => {
@@ -274,104 +406,13 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
 
     // Condition Editor tab
     if (tab.type === 'conditionEditor') {
-      useEffect(() => {
-        return () => {
-          // ✅ Cleanup: remove close handler when tab unmounts
-          editorCloseRefsMap.current.delete(tab.id);
-        };
-      }, [tab.id, editorCloseRefsMap]);
-
-      // ✅ SIMPLIFIED: Only update the map — DockManager reads directly from editorCloseRefsMap.
-      // No setDockTree needed (avoids state-update race condition on fast close).
-      const handleRegisterOnClose = useCallback(
-        (fn: () => Promise<boolean>) => {
-          editorCloseRefsMap.current.set(tab.id, fn);
-        },
-        [tab.id, editorCloseRefsMap]
-      );
-
       return (
-        <div
-          style={{
-            width: '100%',
-            flex: 1,
-            minHeight: 0,
-            backgroundColor: '#1e1e1e',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <ConditionEditor
-            open={true}
-            onClose={() => {
-              console.log('[TabRenderer] 🚪 [TRACE] ConditionEditor onClose called', {
-                tabId: tab.id,
-                edgeId: tab.edgeId,
-                conditionId: tab.conditionId
-              });
-              setDockTree(prev => closeTab(prev, tab.id));
-              try {
-                requestAnimationFrame(() => {
-                  document.dispatchEvent(
-                    new CustomEvent('flowchart:restoreViewport', { bubbles: true })
-                  );
-                });
-              } catch (err) {
-                console.warn('[ConditionEditor] Failed to emit restore viewport event', err);
-              }
-            }}
-            variables={tab.variables}
-            initialScript={tab.script}
-            variablesTree={tab.variablesTree}
-            label={tab.label}
-            dockWithinParent={false}
-            isGenerating={tab.isGenerating} // ✅ Pass isGenerating flag
-            edgeId={tab.edgeId} // ✅ Pass edgeId for error removal
-            conditionId={tab.conditionId} // ✅ Pass conditionId (if edge is linked)
-            flowId={tab.flowId}
-            registerOnClose={handleRegisterOnClose} // ✅ NEW: Register close handler for dock tab
-            onRename={(next) => {
-              setDockTree(prev =>
-                mapNode(prev, n => {
-                  if (n.kind === 'tabset') {
-                    const idx = n.tabs.findIndex(t => t.id === tab.id);
-                    if (idx !== -1) {
-                      const updated = [...n.tabs];
-                      updated[idx] = { ...tab, title: next, label: next };
-                      return { ...n, tabs: updated };
-                    }
-                  }
-                  return n;
-                })
-              );
-              try {
-                (async () => {
-                  (await import('../../../ui/events')).emitConditionEditorRename(next);
-                })();
-              } catch { }
-            }}
-            onSave={(script) => {
-              setDockTree(prev =>
-                mapNode(prev, n => {
-                  if (n.kind === 'tabset') {
-                    const idx = n.tabs.findIndex(t => t.id === tab.id);
-                    if (idx !== -1) {
-                      const updated = [...n.tabs];
-                      updated[idx] = { ...tab, script };
-                      return { ...n, tabs: updated };
-                    }
-                  }
-                  return n;
-                })
-              );
-              try {
-                (async () => {
-                  (await import('../../../ui/events')).emitConditionEditorSave(script);
-                })();
-              } catch { }
-            }}
-          />
-        </div>
+        <ConditionEditorDockTab
+          tab={tab as DockTabConditionEditor}
+          currentPid={currentPid}
+          setDockTree={setDockTree}
+          editorCloseRefsMap={editorCloseRefsMap}
+        />
       );
     }
 

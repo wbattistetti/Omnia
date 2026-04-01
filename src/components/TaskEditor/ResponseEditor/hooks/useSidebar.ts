@@ -21,7 +21,7 @@ import {
 } from '@responseEditor/core/taskTree';
 import type { NodePath } from '@responseEditor/core/taskTree';
 import type { Task, TaskMeta, TaskTree } from '@types/taskTypes';
-import { isUtteranceInterpretationTask } from '@types/taskTypes';
+import { TaskType, isUtteranceInterpretationTask } from '@types/taskTypes';
 import { getSidebarResizeStartWidthPx } from '@responseEditor/hooks/sidebarResizeStartWidth';
 import { variableCreationService } from '@services/VariableCreationService';
 
@@ -105,13 +105,21 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
       const sync = utteranceVariableSync;
       const pid = sync?.projectId != null ? String(sync.projectId).trim() : '';
       const tid = sync?.taskId != null ? String(sync.taskId).trim() : '';
-      if (pid && tid && sync?.task && isUtteranceInterpretationTask(sync.task)) {
+      const utteranceLike =
+        sync?.task &&
+        (isUtteranceInterpretationTask(sync.task) || sync.task.type === TaskType.ClassifyProblem);
+      if (pid && tid && utteranceLike) {
         variableCreationService.syncUtteranceTaskTreeVariables(
           pid,
           tid,
           sync.taskLabel || '',
           ensured.nodes
         );
+        try {
+          document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
+        } catch {
+          /* noop */
+        }
       }
     },
     [getTree, setTaskTree, replaceSelectedTaskTree, utteranceVariableSync]

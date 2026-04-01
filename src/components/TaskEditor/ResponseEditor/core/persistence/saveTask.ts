@@ -13,6 +13,10 @@ import {
   cloneMainNodesForInstancePersistence,
   shouldPersistStandaloneInstanceSnapshot,
 } from '@responseEditor/core/persistence/standaloneInstanceSnapshot';
+import { persistReferenceScanInternalTextForTaskId } from '@domain/taskSubflowMove/persistReferenceScanInternalText';
+import { variableCreationService } from '@services/VariableCreationService';
+import { isUtteranceInterpretationTask } from '@types/taskTypes';
+import { getMainNodes } from '@responseEditor/core/domain';
 
 /**
  * Save task options
@@ -22,6 +26,11 @@ export interface SaveTaskOptions {
   includeStepsForPersistence?: boolean;
   /** Project ID for context */
   projectId?: string | null;
+  /**
+   * When true with a projectId, recomputes and saves Task.referenceScanInternalText (GUID-form corpus
+   * for variable reference scanning). Use on editor close / project save, not on every in-memory save.
+   */
+  persistReferenceScanInternalText?: boolean;
 }
 
 /**
@@ -44,7 +53,8 @@ export async function saveTask(
   task: Task | null,
   options: SaveTaskOptions = {}
 ): Promise<void> {
-  const { includeStepsForPersistence = false, projectId = null } = options;
+  const { includeStepsForPersistence = false, projectId = null, persistReferenceScanInternalText = false } =
+    options;
   const key = taskId;
   const currentMainList = getMainNodes(taskTree);
   const hasTaskTree = taskTree && Object.keys(taskTree).length > 0 && currentMainList && currentMainList.length > 0;
@@ -115,6 +125,38 @@ export async function saveTask(
       stepsKeys: savedTask?.steps ? Object.keys(savedTask.steps) : [],
     });
   }
+
+  if (persistReferenceScanInternalText && projectId) {
+    persistReferenceScanInternalTextForTaskId(key, projectId);
+  }
+
+  // Keep VariableCreationService in sync with Utterance task trees (flowchart DSL / condition editor).
+  try {
+    const pid = String(projectId || '').trim();
+    const refreshed = taskRepository.getTask(key) ?? taskInstance;
+    const utteranceLike =
+      isUtteranceInterpretationTask(refreshed) || refreshed.type === TaskType.ClassifyProblem;
+    if (pid && refreshed && utteranceLike && hasTaskTree) {
+      const roots = getMainNodes(taskTree);
+      if (roots.length > 0) {
+        const taskRowLabel = String(
+          labelKeyToSave ||
+            (task as { label?: string } | null)?.label ||
+            (refreshed as { labelKey?: string; label?: string }).labelKey ||
+            (refreshed as { label?: string }).label ||
+            ''
+        ).trim();
+        variableCreationService.syncUtteranceTaskTreeVariables(pid, key, taskRowLabel, roots);
+        try {
+          document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
+        } catch {
+          /* noop */
+        }
+      }
+    }
+  } catch {
+    /* noop: never block save */
+  }
 }
 
 /**
@@ -131,7 +173,8 @@ export async function saveTaskToRepository(
 ): Promise<void> {
   return saveTask(taskId, taskTree, task, {
     includeStepsForPersistence: false,
-    projectId: currentProjectId
+    projectId: currentProjectId,
+    persistReferenceScanInternalText: false,
   });
 }
 
@@ -150,7 +193,8 @@ export async function saveTaskOnProjectSave(
 ): Promise<void> {
   return saveTask(taskId, taskTree, task, {
     includeStepsForPersistence: true,
-    projectId: currentProjectId
+    projectId: currentProjectId,
+    persistReferenceScanInternalText: true,
   });
 }
 
@@ -169,6 +213,7 @@ export async function saveTaskOnEditorClose(
 ): Promise<void> {
   return saveTask(taskId, finalTaskTree, task, {
     includeStepsForPersistence: false,
-    projectId: currentProjectId
+    projectId: currentProjectId,
+    persistReferenceScanInternalText: true,
   });
 }
