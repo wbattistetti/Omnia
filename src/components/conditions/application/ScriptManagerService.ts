@@ -6,6 +6,8 @@ import { ASTCompiler } from '../dsl/compiler/ASTCompiler';
 import { VariableMappingService } from '../dsl/compiler/VariableMappingService';
 import { transformASTLabelsToGuids, convertDSLLabelsToGUIDs, convertDSLGUIDsToLabels, createVariableMappings } from '@utils/conditionCodeConverter';
 import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
+import { variableCreationService } from '@services/VariableCreationService';
+import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
 
 export interface ScriptManagerServiceDependencies {
   projectData: any;
@@ -13,6 +15,11 @@ export interface ScriptManagerServiceDependencies {
   variables?: Record<string, any>; // Variables map for variable mapping service
   /** Flow canvas for scoped flowchart variables (conditions on this canvas). */
   flowId?: string;
+  /**
+   * Optional: resolve a GUID to display label when not in flow mappings (e.g. project translations).
+   * If omitted, the in-memory variable store label is used as fallback.
+   */
+  resolveUnknownGuidToLabel?: (guid: string) => string | null | undefined;
 }
 
 /**
@@ -252,6 +259,7 @@ export class ScriptManagerService {
             if (!item.expression) item.expression = {} as any;
             item.expression.executableCode = executableCode;
             item.expression.compiledCode = compiledCode;
+            item.expression.internalReferenceText = executableCode;
             item.expression.format = 'dsl';
             item.expression.ast = transformedASTStr;
 
@@ -426,6 +434,7 @@ export class ScriptManagerService {
           if (!item.expression) item.expression = {} as any;
           item.expression.executableCode = executableCode; // DSL with GUIDs - source of truth
           item.expression.compiledCode = compiledCode; // JavaScript compiled
+          item.expression.internalReferenceText = executableCode;
           item.expression.format = 'dsl';
           // Transform AST: label → GUID before saving
           const transformedAST = await transformASTLabelsToGuids(parseResult.ast, this.variableMappingService);
@@ -527,7 +536,19 @@ export class ScriptManagerService {
 
           // Convert GUID → label on-the-fly
           const variableMappings = createVariableMappings(this.resolveFlowCanvasId());
-          const readableCode = convertDSLGUIDsToLabels(executableCode, variableMappings);
+          const pid = resolveVariableStoreProjectId(
+            this.deps.pdUpdate?.getCurrentProjectId?.() ??
+              (typeof localStorage !== 'undefined' ? localStorage.getItem('currentProjectId') : null)
+          );
+          const readableCode = convertDSLGUIDsToLabels(executableCode, variableMappings, {
+            resolveUnknownGuidToLabel: (guid) => {
+              const fromDep = this.deps.resolveUnknownGuidToLabel?.(guid);
+              if (fromDep != null && String(fromDep).trim() !== '') {
+                return fromDep;
+              }
+              return variableCreationService.getVarNameById(pid, guid);
+            },
+          });
 
           console.log('[LOAD_SCRIPT] ✅ SUCCESS', {
             conditionId,

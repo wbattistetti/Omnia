@@ -7,7 +7,7 @@ import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 
 /**
  * Implements VariableMappingService for the DSL compiler.
- * Resolves a human-readable variable label to its varId (GUID) using the
+ * Resolves a human-readable variable label to its variable id (GUID) using the
  * in-memory store maintained by VariableCreationService.
  *
  * The lookup is synchronous (in-memory), so no DB round-trip occurs during
@@ -17,8 +17,7 @@ export class VariableMappingService implements IVariableMappingService {
   constructor(private readonly flowCanvasId?: string) {}
 
   /**
-   * Return the varId for a variable identified by label and optional sub-path.
-   * e.g. label="data di nascita", path=["giorno"] → varId for "data di nascita.giorno"
+   * Return the id (GUID) for a variable identified by label and optional sub-path.
    */
   async getVariableId(label: string, path?: string[]): Promise<string | null> {
     try {
@@ -30,13 +29,13 @@ export class VariableMappingService implements IVariableMappingService {
 
       const varName = path && path.length > 0 ? `${label}.${path.join('.')}` : label;
       const flowId = this.flowCanvasId ?? getActiveFlowCanvasId();
-      const varId = variableCreationService.getVarIdByVarName(projectId, varName, undefined, flowId);
+      const vid = variableCreationService.getIdByVarName(projectId, varName, undefined, flowId);
 
-      if (!varId) {
+      if (!vid) {
         console.warn('[VariableMappingService] Variable not found', { varName, projectId });
       }
 
-      return varId;
+      return vid;
     } catch (error) {
       console.warn('[VariableMappingService] Error resolving variable ID', { label, path, error });
       return null;

@@ -48,6 +48,11 @@ class FlowWorkspaceSnapshotStore {
     return this.flowsById?.[flowId] ?? null;
   }
 
+  /** All flow canvas ids present in the workspace snapshot (for task→flow indexing). */
+  getAllFlowIds(): string[] {
+    return Object.keys(this.flowsById || {});
+  }
+
   getActiveFlow(): SnapshotFlow {
     return this.getFlowById(this.activeFlowId) ?? { nodes: [], edges: [] };
   }

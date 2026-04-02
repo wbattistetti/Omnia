@@ -218,32 +218,23 @@ function mapTemplateToDomain(template: any): TemplateDomainModel {
 
 /**
  * Maps a VariableInstance (UI type) to VariableDomainModel
- *
- * VariableInstance structure:
- * - varId: GUID univoco
- * - varName: Nome leggibile
- * - taskInstanceId: ID dell'istanza task
- * - nodeId: GUID del nodo nel template
- * - ddtPath: Path nel DDT
  */
 function mapVariableToDomain(variable: any): VariableDomainModel {
-  // VariableInstance uses varId and varName, not id and name
+  const legacy = variable as { ddtPath?: string; varId?: string };
   return {
-    id: variable.varId || variable.id || variable._id,
+    id: variable.id || legacy.varId || variable._id,
     name: variable.varName || variable.name || '',
     type: variable.type || 'string',
     description: variable.description,
     defaultValue: variable.defaultValue,
     taskInstanceId: variable.taskInstanceId,
-    nodeId: variable.nodeId,
-    ddtPath: variable.ddtPath,
+    dataPath: variable.dataPath ?? legacy.ddtPath,
     createdAt: variable.createdAt,
     updatedAt: variable.updatedAt,
-    // Preserve additional fields for backward compatibility
     ...Object.fromEntries(
       Object.entries(variable).filter(([key]) =>
         !['varId', 'varName', 'id', '_id', 'name', 'type', 'description',
-          'defaultValue', 'taskInstanceId', 'nodeId', 'ddtPath', 'createdAt', 'updatedAt'].includes(key)
+          'defaultValue', 'taskInstanceId', 'nodeId', 'ddtPath', 'dataPath', 'createdAt', 'updatedAt'].includes(key)
       )
     ),
   };

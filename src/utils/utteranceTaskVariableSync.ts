@@ -1,14 +1,12 @@
 /**
  * Derives project variable rows (per TaskTree node) for UtteranceInterpretation tasks.
- * Naming aligns with VariableCreationService.createVariablesForInstance + wizard dotted paths:
- * single main root uses normalized row label only; multiple roots append a segment per main;
- * nested nodes append normalized segments with dots.
+ * One row per node: id = TaskTreeNode.id (GUID), dataPath = instance JSON path, varName = display label.
  */
 
 import type { TaskTreeNode } from '@types/taskTypes';
-import { disambiguateProxyVarName, normalizeProxySegment, normalizeSemanticTaskLabel } from '@domain/variableProxyNaming';
+import { normalizeProxySegment, normalizeSemanticTaskLabel } from '@domain/variableProxyNaming';
 
-export type UtteranceVariableRow = { nodeId: string; varName: string; ddtPath: string };
+export type UtteranceVariableRow = { id: string; varName: string; dataPath: string };
 
 function segmentForPath(raw: string): string {
   const s = normalizeProxySegment(raw).toLowerCase().trim().replace(/\s+/g, ' ') || 'campo';
@@ -16,7 +14,7 @@ function segmentForPath(raw: string): string {
 }
 
 /**
- * Walks `roots` and returns one row per node (depth-first), with dotted var names.
+ * Walks `roots` and returns one row per node (depth-first), with dotted var names for display only.
  */
 export function flattenUtteranceTaskTreeVariableRows(
   taskRowLabel: string,
@@ -31,9 +29,9 @@ export function flattenUtteranceTaskTreeVariableRows(
   const hasMultipleMains = list.length > 1;
   const out: UtteranceVariableRow[] = [];
 
-  const walk = (node: TaskTreeNode, mainIndex: number, ddtPath: string, depth: number, parentDotted: string | null) => {
-    const nodeId = String(node.id || node.templateId || '').trim();
-    if (!nodeId) {
+  const walk = (node: TaskTreeNode, _mainIndex: number, dataPath: string, depth: number, parentDotted: string | null) => {
+    const id = String(node.id || node.templateId || '').trim();
+    if (!id) {
       return;
     }
 
@@ -48,12 +46,12 @@ export function flattenUtteranceTaskTreeVariableRows(
       dotted = `${parentDotted}.${segmentForPath(node.label || '')}`;
     }
 
-    out.push({ nodeId, varName: dotted, ddtPath });
+    out.push({ id, varName: dotted, dataPath });
 
     const subs = Array.isArray(node.subNodes) ? node.subNodes.filter(Boolean) : [];
     subs.forEach((sub, i) => {
-      const subPath = `${ddtPath}.subData[${i}]`;
-      walk(sub, mainIndex, subPath, depth + 1, dotted);
+      const subPath = `${dataPath}.subData[${i}]`;
+      walk(sub, _mainIndex, subPath, depth + 1, dotted);
     });
   };
 
@@ -61,10 +59,5 @@ export function flattenUtteranceTaskTreeVariableRows(
     walk(root, mainIndex, `data[${mainIndex}]`, 0, null);
   });
 
-  const used = new Set<string>();
-  return out.map((row) => {
-    const name = disambiguateProxyVarName(row.varName, (n) => used.has(n));
-    used.add(name);
-    return { ...row, varName: name };
-  });
+  return out;
 }

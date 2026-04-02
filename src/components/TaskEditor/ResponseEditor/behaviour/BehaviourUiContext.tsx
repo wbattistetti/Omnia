@@ -97,9 +97,11 @@ export function BehaviourUiProvider({
 
   useEffect(() => {
     if (uiStepKeys.length > 0 && !uiStepKeys.includes(selectedStepKey)) {
-      setSelectedStepKeyState(uiStepKeys[0]);
+      const fallback = uiStepKeys[0];
+      setSelectedStepKeyState(fallback);
+      navigation.setCurrentStepKey(fallback);
     }
-  }, [uiStepKeys, selectedStepKey]);
+  }, [uiStepKeys, selectedStepKey, navigation.setCurrentStepKey]);
 
   useEffect(() => {
     if (
@@ -112,13 +114,14 @@ export function BehaviourUiProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync only when navigation or keys change
   }, [navigation.currentStepKey, uiStepKeys]);
 
-  const setSelectedStepKey = useCallback((key: string) => {
-    setSelectedStepKeyState(key);
-  }, []);
-
-  useEffect(() => {
-    navigation.setCurrentStepKey(selectedStepKey);
-  }, [selectedStepKey, navigation.setCurrentStepKey]);
+  /** User-driven tab change only — do not mirror selectedStepKey→navigation in an effect (that races Fix / programmatic navigation and resets the step). */
+  const setSelectedStepKey = useCallback(
+    (key: string) => {
+      setSelectedStepKeyState(key);
+      navigation.setCurrentStepKey(key);
+    },
+    [navigation.setCurrentStepKey]
+  );
 
   const requestFocusParameter = useCallback((target: BehaviourFocusTarget) => {
     setFocusedParameter(target);

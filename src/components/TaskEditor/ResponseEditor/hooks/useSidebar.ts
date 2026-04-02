@@ -25,6 +25,7 @@ import { TaskType, isUtteranceInterpretationTask } from '@types/taskTypes';
 import { getSidebarResizeStartWidthPx } from '@responseEditor/hooks/sidebarResizeStartWidth';
 import { variableCreationService } from '@services/VariableCreationService';
 import { logVariableScope } from '@utils/debugVariableScope';
+import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
 
 export interface UseSidebarParams {
   isDraggingSidebar: boolean;
@@ -40,6 +41,8 @@ export interface UseSidebarParams {
   /** Sync project variables from TaskTree after each sidebar mutation (UtteranceInterpretation only). */
   utteranceVariableSync?: {
     projectId: string | null | undefined;
+    /** Flow canvas that owns this task (utterance variable rows are scoped here). */
+    flowId?: string | null;
     taskId: string | undefined;
     taskLabel: string;
     task: Task | TaskMeta | null | undefined;
@@ -104,18 +107,15 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
       }
 
       const sync = utteranceVariableSync;
-      const pid = sync?.projectId != null ? String(sync.projectId).trim() : '';
+      const pid = resolveVariableStoreProjectId(sync?.projectId);
       const tid = sync?.taskId != null ? String(sync.taskId).trim() : '';
       const utteranceLike =
         sync?.task &&
         (isUtteranceInterpretationTask(sync.task) || sync.task.type === TaskType.ClassifyProblem);
-      if (pid && tid && utteranceLike) {
-        variableCreationService.syncUtteranceTaskTreeVariables(
-          pid,
-          tid,
-          sync.taskLabel || '',
-          ensured.nodes
-        );
+      if (tid && utteranceLike) {
+        variableCreationService.hydrateVariablesFromTaskTree(pid, sync?.flowId, tid, ensured, {
+          taskRowLabel: sync.taskLabel || undefined,
+        });
         const after = variableCreationService.getVariablesByTaskInstanceId(pid, tid);
         logVariableScope('useSidebar.commit', {
           projectId: pid,
@@ -138,7 +138,9 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
   useEffect(() => {
     try {
       localStorage.removeItem('responseEditor.sidebarWidth');
-    } catch { }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   /** Removes window listeners if drag ends or component unmounts during drag. */

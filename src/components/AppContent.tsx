@@ -33,6 +33,8 @@ import {
   ProjectSaveOrchestrator,
   cloneWorkspaceFlowsSnapshot,
   buildFlowsByIdForOrchestrator,
+  persistWorkspaceRestoreForProject,
+  clearWorkspaceRestoreForProject,
 } from '../services/project-save';
 import { logFlowSaveDebug, summarizeWorkspaceFlowsForDebug } from '../utils/flowSaveDebug';
 // ✅ REMOVED: Migration moved to DB script - keep codebase clean
@@ -43,6 +45,9 @@ import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ 
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import { useChatOrchestrator } from '../hooks/useChatOrchestrator';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
+import { variableCreationService } from '../services/VariableCreationService';
+import { logVariableHydration } from '../utils/variableMenuDebug';
+import { buildFlowCanvasRowFingerprint } from '../utils/flowWorkspaceUtteranceFingerprint';
 import { initializeErrorReportPanelService } from '../services/ErrorReportPanelService';
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableNonInteractiveEditor from './TaskEditor/ResponseEditor/ResizableNonInteractiveEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
@@ -100,6 +105,36 @@ const DockManagerWithFlows: React.FC<{
   const flowActions = useFlowActions<Node<FlowNode>, Edge<EdgeData>>();
   const projectIdForMigration = projectDataCtx?.data?.id != null ? String(projectDataCtx.data.id).trim() : '';
   const subflowProxyMigrateKeyRef = React.useRef<string>('');
+
+  /** Canvas row ids + inclusion flags — when this changes, re-hydrate utterance vars from TaskRepository. */
+  const utteranceFlowHydrationFingerprint = React.useMemo(
+    () => buildFlowCanvasRowFingerprint(flowWorkspace.flows as any),
+    [flowWorkspace.flows]
+  );
+
+  React.useEffect(() => {
+    const pid = projectIdForMigration;
+    if (!pid) return;
+    const flows = flowWorkspace.flows;
+    if (!flows || Object.keys(flows).length === 0) return;
+    logVariableHydration('DockManagerWithFlows:canvasSnapshot', {
+      projectId: pid,
+      flowIds: Object.keys(flows),
+      fingerprint: utteranceFlowHydrationFingerprint.slice(0, 512),
+    });
+    if (import.meta.env.DEV) {
+      console.info('[Omnia][DockManagerWithFlows] running hydrateVariablesFromFlow', {
+        projectId: pid,
+        flowIds: Object.keys(flows),
+      });
+    }
+    variableCreationService.hydrateVariablesFromFlow(pid, flows as any);
+    try {
+      document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
+    } catch {
+      /* noop */
+    }
+  }, [projectIdForMigration, utteranceFlowHydrationFingerprint]);
 
   // ✅ CRITICAL: Update flowsRef immediately (not just in useEffect)
   // This ensures flowsRef is always up-to-date when handleSaveProject is called
@@ -992,6 +1027,12 @@ export const AppContent: React.FC<AppContentProps> = ({
                   });
                   try {
                     pid = await projectManager.commitDraftProject(currentProject);
+                    if (pid && flowsSnapshotBeforeDraftCommit) {
+                      persistWorkspaceRestoreForProject(
+                        pid,
+                        flowsSnapshotBeforeDraftCommit as Record<string, unknown>
+                      );
+                    }
                     await refreshData();
                   } catch (e) {
                     setCloneError(e instanceof Error ? e.message : String(e));
@@ -1170,6 +1211,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 });
 
                 if (saveResult.success) {
+                  clearWorkspaceRestoreForProject(pid);
                   const persisted = saveResult.results?.flow?.persistedFlowIds;
                   if (persisted && persisted.length > 0) {
                     markFlowsPersistedRef.current?.(persisted);
@@ -1236,7 +1278,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                   <>
                     {/* Canvas - occupa tutto lo spazio disponibile */}
                     <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                      <FlowWorkspaceProvider key={currentPid ?? '__no_project__'}>
+                      <FlowWorkspaceProvider
+                        key={currentPid ?? '__no_project__'}
+                        workspaceProjectId={currentPid ?? null}
+                      >
                         <DockManagerWithFlows
                           root={dockTree}
                           setRoot={setDockTree}

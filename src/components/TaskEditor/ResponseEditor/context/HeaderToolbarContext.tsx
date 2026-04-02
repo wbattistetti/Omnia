@@ -3,7 +3,7 @@
 // Allows dynamic header updates without modifying the main layout
 // ✅ ARCHITECTURE: Single source of truth for header content (icon, title, toolbar)
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 export interface HeaderToolbarContextValue {
   // Toolbar injection
@@ -50,14 +50,19 @@ export function HeaderToolbarProvider({ children }: { children: React.ReactNode 
     setTitleState(newTitle);
   }, []);
 
-  const value: HeaderToolbarContextValue = {
-    toolbar,
-    setToolbar,
-    icon,
-    setIcon,
-    title,
-    setTitle,
-  };
+  // Stable reference when toolbar/icon/title unchanged — avoids consumer useEffect loops
+  // that list the whole context object in dependency arrays.
+  const value = useMemo<HeaderToolbarContextValue>(
+    () => ({
+      toolbar,
+      setToolbar,
+      icon,
+      setIcon,
+      title,
+      setTitle,
+    }),
+    [toolbar, setToolbar, icon, setIcon, title, setTitle]
+  );
 
   return (
     <HeaderToolbarContext.Provider value={value}>

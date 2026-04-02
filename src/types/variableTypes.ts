@@ -26,7 +26,8 @@ export interface Variable {
 
 /**
  * Where a variable row is visible in the authoring/runtime UI.
- * Task-bound rows (non-empty taskInstanceId) are always treated as project-wide.
+ * Manual rows: `project` = global across flows; `flow` + scopeFlowId = one canvas.
+ * Task-bound rows use `flow` + scopeFlowId for their owning flow (per-flow namespace).
  */
 export type VariableScope = 'project' | 'flow';
 
@@ -37,15 +38,15 @@ export interface EnsureManualVariableOptions {
 }
 
 /**
- * VariableInstance: Variabile associata a un'istanza di task
- * Ogni variabile ha un varId univoco per evitare collisioni quando lo stesso template è usato in istanze diverse
+ * VariableInstance: Variabile associata a un'istanza di task.
+ * Identity: `id` is always a GUID. For task-bound rows, `id` equals TaskTreeNode.id.
+ * `dataPath` is the JSON path into the instance payload (not an identity key).
  */
 export interface VariableInstance {
-  varId: string;          // GUID univoco per ogni istanza×nodo (NUOVO)
-  varName: string;        // Nome leggibile: "data di nascita" | "data di nascita.giorno"
-  taskInstanceId: string; // rowId dell'istanza (sempre = task.id)
-  nodeId: string;         // GUID del nodo nel template (riferimento struttura)
-  ddtPath: string;        // Path nel DDT: "data[0]" | "data[0].subData[1]"
+  id: string;
+  varName: string;
+  taskInstanceId: string;
+  dataPath: string;
   /** Manual/slot visibility. Omitted or 'project' = visible in every flow. */
   scope?: VariableScope;
   /** When scope is 'flow', the canvas id (e.g. 'main', 'subflow_...'). */
@@ -53,7 +54,6 @@ export interface VariableInstance {
 }
 
 /**
- * VariableStore: Vista semplificata per valutazione condizioni
- * Usa varId come chiave (non più nodeId o label)
+ * VariableStore: Runtime map from variable GUID to semantic value (DSL / conditions use [GUID]).
  */
-export type VariableStore = Record<string, any>; // { [varId: string]: semantic value }
+export type VariableStore = Record<string, any>; // { [id: string]: semantic value }

@@ -32,7 +32,7 @@ Namespace Models
 
         ''' <summary>
         ''' ✅ NEW: Variables from VariableCreationService (in-memory)
-        ''' Used to build (nodeId, taskInstanceId) → varId mapping during compilation
+        ''' Variable rows: id = TaskTreeNode GUID, dataPath = instance JSON path
         ''' </summary>
         <JsonProperty("variables")>
         Public Property Variables As List(Of Compiler.VariableInstance)

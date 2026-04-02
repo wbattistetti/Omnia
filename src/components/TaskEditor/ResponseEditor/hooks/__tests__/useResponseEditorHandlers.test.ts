@@ -176,9 +176,16 @@ describe('useResponseEditorHandlers', () => {
       sidebarStartWidthRef: mockRefs.sidebarStartWidthRef,
       sidebarStartXRef: mockRefs.sidebarStartXRef,
       setSidebarManualWidth: mockState.setSidebarManualWidth,
+      sidebarManualWidth: null,
       sidebarRef: mockNodeSelection.sidebarRef,
       taskTree: mockTaskTree,
       replaceSelectedTaskTree: mockInitialization.replaceSelectedTaskTree,
+      utteranceVariableSync: {
+        projectId: 'project-1',
+        taskId: 'task-1',
+        taskLabel: 'Test Task',
+        task: mockTask,
+      },
     });
   });
 

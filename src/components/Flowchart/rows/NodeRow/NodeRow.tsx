@@ -850,6 +850,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       const opener = new TaskTreeOpener({
                         taskEditorCtx,
                         getProjectId,
+                        flowCanvasId,
                         row,
                       });
                       await opener.open();
@@ -867,6 +868,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     const opener = new TaskTreeOpener({
                       taskEditorCtx,
                       getProjectId,
+                      flowCanvasId,
                       row,
                     });
                     await opener.open();

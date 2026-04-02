@@ -11,6 +11,7 @@ import { ConditionAIService } from '@components/conditions/application/Condition
 import { ScriptManagerService } from '@components/conditions/application/ScriptManagerService';
 import { updateEdgeWithConditionId } from '@services/EdgeConditionUpdater';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
+import { getSafeProjectId } from '@utils/safeProjectId';
 
 export interface ConditionEditorEventHandlerParams {
   projectData: any;
@@ -220,12 +221,10 @@ export class ConditionEditorEventHandler {
   private buildFlowchartVars(flowCanvasId: string): Record<string, any> {
     const vars: Record<string, any> = {};
     try {
-      const projectId = this.params.pdUpdate?.getCurrentProjectId();
-      if (projectId) {
-        variableCreationService.getAllVarNames(projectId, flowCanvasId).forEach(name => {
-          vars[name] = '';
-        });
-      }
+      const projectId = getSafeProjectId();
+      variableCreationService.getAllVarNames(projectId, flowCanvasId).forEach(name => {
+        vars[name] = '';
+      });
     } catch { }
     return vars;
   }

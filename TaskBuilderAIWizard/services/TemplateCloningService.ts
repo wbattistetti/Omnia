@@ -13,6 +13,7 @@
  */
 
 import type { WizardTaskTreeNode } from '../types';
+import { getActiveFlowCanvasId } from '@flows/activeFlowCanvas';
 
 export interface CloneTemplateOptions {
   templateId: string;
@@ -171,6 +172,7 @@ export async function cloneTemplateToInstance(
       template,
       taskLabel,
       projectId,
+      flowId: getActiveFlowCanvasId(),
       dataSchema: effectiveDataSchema, // Pass the full tree structure from wizard
     });
     console.log('[TemplateCloningService] ✅ Variables created in memory', {

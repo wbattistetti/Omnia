@@ -4,12 +4,14 @@ import VariableTokenContextMenu from '../common/VariableTokenContextMenu';
 import { insertBracketTokenAtCaret } from '../../utils/variableTokenText';
 import { getActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
 import { useFlowActions, useFlowWorkspace } from '../../flows/FlowStore';
-import { useProjectDataUpdate } from '../../context/ProjectDataContext';
+import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
+import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
 import {
   buildVariableMenuItemsAsync,
   getVariableMenuRebuildFingerprint,
   type VariableMenuItem,
 } from '../common/variableMenuModel';
+import { resolveVariableStoreProjectId } from '../../utils/safeProjectId';
 
 interface NodeRowEditorProps {
   value: string;
@@ -38,7 +40,9 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
   const [varsMenu, setVarsMenu] = React.useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
   const { flows } = useFlowWorkspace();
   const { updateFlowMeta } = useFlowActions();
+  const { data: projectData } = useProjectData();
   const pdUpdate = useProjectDataUpdate();
+  const { translations } = useProjectTranslations();
   const DEBUG_FOCUS = (() => { try { return localStorage.getItem('debug.focus') === '1'; } catch { return false; } })();
   const log = (...args: any[]) => { if (DEBUG_FOCUS) { try { console.log('[Focus][RowEditor]', ...args); } catch {} } };
   const activeFlowId = getActiveFlowCanvasId();
@@ -47,14 +51,15 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
     () => getVariableMenuRebuildFingerprint(flows as any, activeFlowId),
     [flows, activeFlowId]
   );
-  const projectIdForMenu = pdUpdate?.getCurrentProjectId() || '';
+  const projectIdForMenu = React.useMemo(
+    () => resolveVariableStoreProjectId(pdUpdate?.getCurrentProjectId() || undefined),
+    [pdUpdate, projectData?.id]
+  );
   React.useEffect(() => {
     let cancelled = false;
-    if (!projectIdForMenu) {
-      setVariableMenuItems([]);
-      return;
-    }
-    void buildVariableMenuItemsAsync(projectIdForMenu, activeFlowId, flows as any).then((items) => {
+    void buildVariableMenuItemsAsync(projectIdForMenu, activeFlowId, flows as any, {
+      translationsByGuid: translations,
+    }).then((items) => {
       if (!cancelled) setVariableMenuItems(items);
     }).catch(() => {
       if (!cancelled) setVariableMenuItems([]);
@@ -62,7 +67,7 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [projectIdForMenu, activeFlowId, variableMenuFingerprint]);
+  }, [projectIdForMenu, activeFlowId, variableMenuFingerprint, translations]);
 
   // ✅ Calcola e aggiorna la larghezza usando scrollWidth (Regola 1)
   const updateWidth = useCallback(() => {
@@ -236,10 +241,10 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
         const owner = (flows as any)?.[item.ownerFlowId];
         if (!owner) return;
         const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
-        const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.varId);
+        const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
         const nextVars = existing
-          ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.varId ? { ...v, visibility: 'output' } : v))
-          : [...prevVars, { id: item.varId, label: item.varLabel, type: 'string', visibility: 'output' }];
+          ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v))
+          : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
         updateFlowMeta(item.ownerFlowId, { variables: nextVars });
 
         const el = inputRef.current;

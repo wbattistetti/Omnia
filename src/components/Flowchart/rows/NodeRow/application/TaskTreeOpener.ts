@@ -23,6 +23,8 @@ export interface TaskTreeOpenerDependencies {
     }) => void;
   };
   getProjectId?: () => string | undefined;
+  /** Flow canvas id for the node row (per-flow variable namespace when opening the task editor). */
+  flowCanvasId?: string;
   row: Row;
 }
 
@@ -511,8 +513,12 @@ export class TaskTreeOpener {
     contextualizationTemplateId?: string;
     taskLabel?: string;
   }): void {
+    const flowId = String(this.deps.flowCanvasId ?? '').trim();
     const event = new CustomEvent('taskEditor:open', {
-      detail,
+      detail: {
+        ...detail,
+        ...(flowId ? { flowId } : {}),
+      },
       bubbles: true,
     });
     document.dispatchEvent(event);

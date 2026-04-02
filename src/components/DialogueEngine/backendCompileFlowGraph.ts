@@ -333,9 +333,10 @@ export async function backendCompileFlowGraph(
     return true;
   });
 
-  const projectId = localStorage.getItem('currentProjectId') || undefined;
   const { variableCreationService } = await import('../../services/VariableCreationService');
-  const variables = projectId ? variableCreationService.getAllVariables(projectId) : [];
+  const { getSafeProjectId } = await import('../../utils/safeProjectId');
+  const projectId = getSafeProjectId();
+  const variables = variableCreationService.getAllVariables(projectId);
 
   const requestBody = {
     nodes: nodesWithTaskId,

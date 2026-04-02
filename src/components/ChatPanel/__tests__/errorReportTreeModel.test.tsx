@@ -85,17 +85,33 @@ describe('errorReportTreeModel', () => {
     expect(deduped.length).toBe(1);
   });
 
-  it('humanIssuesForError returns Italian copy for EmptyEscalation', () => {
+  it('humanIssuesForError returns parametric Italian copy for EmptyEscalation', () => {
     const e = err({
       taskId: 't1',
       message: 'Dialogue escalation has no actions.',
       severity: 'error',
       category: 'EmptyEscalation',
+      stepKey: 'noMatch',
+      escalationIndex: 0,
       fixTarget: { type: 'taskEscalation', taskId: 't1', stepKey: 'noMatch', escalationIndex: 0 },
     });
     const lines = humanIssuesForError(e, 'Row', null);
     expect(lines.length).toBe(1);
-    expect(lines[0].message).toContain('escalation');
+    expect(lines[0].message).toBe('Manca il messaggio nel primo tentativo di: "Non capisco".');
+  });
+
+  it('humanIssuesForError uses ordinal and step label for EmptyEscalation', () => {
+    const e = err({
+      taskId: 't1',
+      message: 'Dialogue escalation has no actions.',
+      severity: 'error',
+      category: 'EmptyEscalation',
+      stepKey: 'noInput',
+      escalationIndex: 1,
+      fixTarget: { type: 'taskEscalation', taskId: 't1', stepKey: 'noInput', escalationIndex: 1 },
+    });
+    const lines = humanIssuesForError(e, 'Row', null);
+    expect(lines[0].message).toBe('Manca il messaggio nel secondo tentativo di: "Non sento".');
   });
 
   it('humanIssuesForError uses fixed Italian copy for CompilationException / TaskCompilationFailed', () => {

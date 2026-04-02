@@ -3,6 +3,7 @@ import type { EditorProps } from '../../EditorHost/types';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { TaskType } from '../../../../types/taskTypes';
 import { useProjectDataUpdate, useProjectData } from '../../../../context/ProjectDataContext';
+import { useProjectTranslations } from '../../../../context/ProjectTranslationsContext';
 import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
 import { Server, Eye, EyeOff, Table2, RefreshCw } from 'lucide-react';
@@ -16,6 +17,7 @@ import {
 } from '../../../../components/FlowMappingPanel/backendCallMappingAdapter';
 import type { MappingEntry } from '../../../../components/FlowMappingPanel/mappingTypes';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
+import { resolveVariableStoreProjectId } from '../../../../utils/safeProjectId';
 import type { ToolbarButton } from '../../../../dock/types';
 import TableEditor from './TableEditor';
 
@@ -69,7 +71,12 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
   const instanceId = task.instanceId || task.id; // ✅ RINOMINATO: act → task
   const pdUpdate = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
+  const { getTranslation } = useProjectTranslations();
   const projectId = pdUpdate?.getCurrentProjectId() || undefined;
+  const variableStoreProjectId = React.useMemo(
+    () => resolveVariableStoreProjectId(projectId),
+    [projectId, projectData]
+  );
 
   // ✅ State to force re-render of availableVariables when a new variable is created
   const [variablesRefreshKey, setVariablesRefreshKey] = React.useState(0);
@@ -85,9 +92,9 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
   // These are the same names used in ConditionEditor and runtime (ctx["data di nascita"])
   const availableVariables = React.useMemo(() => {
     try {
-      const projectId = localStorage.getItem('currentProjectId');
-      if (projectId) {
-        return variableCreationService.getAllVarNames(projectId);
+      const pid = pdUpdate?.getCurrentProjectId() || localStorage.getItem('currentProjectId');
+      if (pid) {
+        return variableCreationService.getAllVarNames(pid, getActiveFlowCanvasId());
       }
       return [];
     } catch {
@@ -104,13 +111,15 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
   // ✅ Helper: Convert varId to varName for display
   const getVarNameFromVarId = React.useCallback((varId: string | undefined): string | null => {
     if (!varId || !projectId) return null;
-    return variableCreationService.getVarNameByVarId(projectId, varId);
-  }, [projectId]);
+    const fromTr = getTranslation(varId);
+    if (fromTr != null && String(fromTr).trim() !== '') return fromTr;
+    return variableCreationService.getVarNameById(projectId, varId);
+  }, [projectId, getTranslation]);
 
   // ✅ Helper: Get varId from varName for saving
   const getVarIdFromVarName = React.useCallback((varName: string | undefined): string | null => {
     if (!varName || !projectId) return null;
-    return variableCreationService.getVarIdByVarName(projectId, varName, undefined, getActiveFlowCanvasId());
+    return variableCreationService.getIdByVarName(projectId, varName, undefined, getActiveFlowCanvasId());
   }, [projectId]);
 
   // Get available API params (placeholder - in futuro da Backend Builder)
@@ -340,16 +349,15 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
       if (!t) return '';
       const id = getVarIdFromVarName(t);
       if (id) return id;
-      if (!projectId) return '';
       try {
-        const nv = variableCreationService.createManualVariable(projectId, t);
+        const nv = variableCreationService.createManualVariable(variableStoreProjectId, t);
         setVariablesRefreshKey((k) => k + 1);
-        return nv.varId;
+        return nv.id;
       } catch {
         return '';
       }
     },
-    [getVarIdFromVarName, projectId]
+    [getVarIdFromVarName, variableStoreProjectId]
   );
 
   const mappingSend = React.useMemo(
@@ -417,19 +425,18 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
 
   // ✅ ARCHITECTURE: Inject icon and title into main header (no local header)
   const headerContext = useHeaderToolbarContext();
+  const setHeaderIcon = headerContext?.setIcon;
+  const setHeaderTitle = headerContext?.setTitle;
   React.useEffect(() => {
-    if (headerContext) {
-      // Inject icon and title into main header
-      headerContext.setIcon(<Server size={18} style={{ color: color || '#94a3b8' }} />);
-      headerContext.setTitle(String(task?.label || 'Backend Call'));
+    if (!setHeaderIcon || !setHeaderTitle) return;
+    setHeaderIcon(<Server size={18} style={{ color: color || '#94a3b8' }} />);
+    setHeaderTitle(String(task?.label || 'Backend Call'));
 
-      return () => {
-        // Cleanup: remove injected values when editor unmounts
-        headerContext.setIcon(null);
-        headerContext.setTitle(null);
-      };
-    }
-  }, [headerContext, task?.label, task?.type, color]);
+    return () => {
+      setHeaderIcon(null);
+      setHeaderTitle(null);
+    };
+  }, [setHeaderIcon, setHeaderTitle, task?.label, task?.type, color]);
 
   return (
     <div className="h-full bg-slate-900 flex flex-col min-h-0" style={{ color: '#e5e7eb' }}>

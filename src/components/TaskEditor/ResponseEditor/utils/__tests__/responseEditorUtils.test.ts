@@ -111,14 +111,11 @@ describe('responseEditorUtils', () => {
   });
 
   describe('getStepsForNode', () => {
-    it('should return empty object for null/undefined steps', () => {
-      expect(getStepsForNode(null, 'node-1')).toEqual({});
-      expect(getStepsForNode(undefined, 'node-1')).toEqual({});
-    });
-
-    it('should return empty object for array steps', () => {
-      expect(getStepsForNode([], 'node-1')).toEqual({});
-      expect(getStepsForNode([{ type: 'start' }], 'node-1')).toEqual({});
+    it('throws when steps are null, undefined, or array (dictionary-only API)', () => {
+      expect(() => getStepsForNode(null as any, 'node-1')).toThrow(/dictionary format/);
+      expect(() => getStepsForNode(undefined as any, 'node-1')).toThrow(/dictionary format/);
+      expect(() => getStepsForNode([] as any, 'node-1')).toThrow(/array/);
+      expect(() => getStepsForNode([{ type: 'start' }] as any, 'node-1')).toThrow(/array/);
     });
 
     it('should return steps for valid node templateId', () => {
@@ -287,23 +284,13 @@ describe('responseEditorUtils', () => {
       expect(isTaskMeta(true)).toBe(false);
     });
 
-    it('should return false for object without templateId', () => {
-      const task = {
-        id: 'task-1',
-        type: 1,
-      };
-
-      expect(isTaskMeta(task)).toBe(false);
+    it('should return true when type is defined (templateId not required)', () => {
+      expect(isTaskMeta({ id: 'task-1', type: 1 })).toBe(true);
+      expect(isTaskMeta({ id: 'task-1', type: 1, steps: {} })).toBe(true);
     });
 
-    it('should return false for Task object (without templateId)', () => {
-      const task = {
-        id: 'task-1',
-        type: 1,
-        steps: {},
-      };
-
-      expect(isTaskMeta(task)).toBe(false);
+    it('should return false for object without type', () => {
+      expect(isTaskMeta({ id: 'task-1', templateId: 't' })).toBe(false);
     });
   });
 
@@ -323,14 +310,18 @@ describe('responseEditorUtils', () => {
       expect(getTaskMeta(undefined)).toBe(null);
     });
 
-    it('should return null for non-TaskMeta objects', () => {
+    it('should return task when it has type (TaskMeta shape)', () => {
       const task = {
         id: 'task-1',
         type: 1,
         steps: {},
       };
 
-      expect(getTaskMeta(task)).toBe(null);
+      expect(getTaskMeta(task)).toBe(task);
+    });
+
+    it('should return null when task has no type', () => {
+      expect(getTaskMeta({ id: 'task-1', steps: {} })).toBe(null);
     });
 
     it('should return null for primitive values', () => {

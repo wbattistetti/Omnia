@@ -1,12 +1,18 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import type { Task, TaskTreeNode } from '@types/taskTypes';
+import type { Task, TaskTree, TaskTreeNode } from '@types/taskTypes';
 import type { DialogueTask } from '@services/DialogueTaskService';
 import type { EnsureManualVariableOptions, VariableInstance, VariableScope } from '@types/variableTypes';
+import type { WorkspaceState } from '../flows/FlowTypes';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
+import { taskRepository } from './TaskRepository';
+import { buildStandaloneTaskTreeView } from '../utils/buildStandaloneTaskTreeView';
+import { getMainNodes } from '@responseEditor/core/domain';
+import { TaskType, isUtteranceInterpretationTask } from '../types/taskTypes';
 import {
+  getTaskInstanceIdToFlowIdMap,
   isVariableVisibleInFlow,
   normalizeVariableInstance,
   sameVariableScopeBucket,
@@ -14,12 +20,19 @@ import {
 import { normalizeSemanticTaskLabel } from '../domain/variableProxyNaming';
 import { flattenUtteranceTaskTreeVariableRows } from '@utils/utteranceTaskVariableSync';
 import { logVariableScope } from '@utils/debugVariableScope';
+import {
+  isFallbackProjectBucket,
+  resolveVariableStoreProjectId,
+} from '@utils/safeProjectId';
+import { logVariableHydration } from '../utils/variableMenuDebug';
 
 interface CreateVariablesOptions {
   taskInstance: Task;
   template: DialogueTask;
   taskLabel: string;
-  projectId: string;
+  projectId: string | null | undefined;
+  /** Flow canvas that owns this task row (per-flow namespace for task-bound variables). */
+  flowId?: string | null;
   dataSchema: any[]; // REQUIRED: WizardTaskTreeNode[] - always available from cloneTemplateToInstance
 }
 
@@ -28,10 +41,19 @@ interface CreateVariablesOptions {
  *
  * Variables are kept in-memory and persisted to DB only on explicit project save.
  * This mirrors the pattern used by taskRepository and project translations.
+ *
+ * Phase 1 (GUID-centric utterance): identity is always `VariableInstance.id` (GUID).
+ * For utterance tasks, `id` equals `TaskTreeNode.id`. Utterance rows are hydrated via
+ * {@link hydrateVariablesFromTaskTree} / {@link hydrateVariablesFromFlow} only — not from the variable menu.
  */
 class VariableCreationService {
   /** In-memory store: projectId → VariableInstance[] */
   private store: Map<string, VariableInstance[]> = new Map();
+
+  /** Stable store key: explicit trimmed id, else {@link resolveVariableStoreProjectId}. */
+  private projectKey(projectId: string | null | undefined): string {
+    return resolveVariableStoreProjectId(projectId);
+  }
 
   // ---------------------------------------------------------------------------
   // Normalization helpers
@@ -58,7 +80,7 @@ class VariableCreationService {
   }
 
   /**
-   * Generate a random UUID v4.
+   * Generate a random UUID v4 (manual-only rows without a TaskTreeNode).
    */
   private generateGuid(): string {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -82,9 +104,10 @@ class VariableCreationService {
    * NO network call is made here. Variables are persisted only on project save.
    */
   createVariablesForInstance(options: CreateVariablesOptions): VariableInstance[] {
-    const { taskInstance, template, taskLabel, projectId, dataSchema } = options;
+    const { taskInstance, taskLabel, dataSchema } = options;
+    const projectId = this.projectKey(options.projectId);
+    const flowScopeId = String(options.flowId ?? getActiveFlowCanvasId() ?? '').trim();
 
-    // ✅ VALIDATION: dataSchema is always required (guaranteed by cloneTemplateToInstance)
     if (!dataSchema || !Array.isArray(dataSchema) || dataSchema.length === 0) {
       throw new Error(
         '[VariableCreationService] dataSchema is required and must be a non-empty array. ' +
@@ -97,39 +120,33 @@ class VariableCreationService {
 
     console.log('[VariableCreationService] 🚀 createVariablesForInstance', {
       taskInstanceId: taskInstance.id,
-      templateId: (template as any).id,
       taskLabel,
       normalizedLabel,
       dataSchemaLength: dataSchema.length,
-      hasData: dataSchema.length > 0,
     });
 
     dataSchema.forEach((node: any, mainIndex: number) => {
-      const nodeId: string = node.id || node._id || node.templateId || '';
+      const nodeId: string = String(node.id || node._id || node.templateId || '').trim();
       if (!nodeId) {
         console.warn('[VariableCreationService] ⚠️ Skipping node without id', { mainIndex, nodeKeys: Object.keys(node) });
         return;
       }
 
-      // Root / main data node → varName is the normalized task label
       variables.push({
-        varId:
-          typeof node.variableRefId === 'string' && node.variableRefId.trim().length > 0
-            ? node.variableRefId.trim()
-            : this.generateGuid(),
+        id: nodeId,
         varName: this.buildVarName(normalizedLabel, []),
         taskInstanceId: taskInstance.id,
-        nodeId,
-        ddtPath: `data[${mainIndex}]`,
+        dataPath: `data[${mainIndex}]`,
+        scope: 'flow',
+        scopeFlowId: flowScopeId,
       });
 
-      // Sub-data nodes → varName is "normalizedLabel.<subLabel>"
       const subDataList: any[] = Array.isArray(node.subData) ? node.subData
         : Array.isArray(node.subNodes) ? node.subNodes
         : [];
 
       subDataList.forEach((sub: any, subIndex: number) => {
-        const subNodeId: string = sub.id || sub._id || sub.templateId || '';
+        const subNodeId: string = String(sub.id || sub._id || sub.templateId || '').trim();
         if (!subNodeId) {
           console.warn('[VariableCreationService] ⚠️ Skipping subData node without id', { mainIndex, subIndex, subKeys: Object.keys(sub) });
           return;
@@ -140,20 +157,16 @@ class VariableCreationService {
           .trim();
 
         variables.push({
-          varId:
-            typeof sub.variableRefId === 'string' && sub.variableRefId.trim().length > 0
-              ? sub.variableRefId.trim()
-              : this.generateGuid(),
+          id: subNodeId,
           varName: this.buildVarName(normalizedLabel, [subLabel]),
           taskInstanceId: taskInstance.id,
-          nodeId: subNodeId,
-          ddtPath: `data[${mainIndex}].subData[${subIndex}]`,
-          scope: 'project',
+          dataPath: `data[${mainIndex}].subData[${subIndex}]`,
+          scope: 'flow',
+          scopeFlowId: flowScopeId,
         });
       });
     });
 
-    // Merge into in-memory store (replace existing entries for this instance)
     const existing = (this.store.get(projectId) ?? []).filter(
       v => v.taskInstanceId !== taskInstance.id
     );
@@ -171,37 +184,42 @@ class VariableCreationService {
   }
 
   /**
-   * Sync in-memory variables for an UtteranceInterpretation task from the sidebar TaskTree.
-   * Preserves varId per nodeId when possible so bracket tokens referencing GUIDs stay stable.
+   * Replaces in-memory utterance variables for one flow row from flattened TaskTree roots.
+   * VariableInstance.id always equals TaskTreeNode.id (GUID).
    */
-  syncUtteranceTaskTreeVariables(
-    projectId: string,
+  private replaceUtteranceVariablesForTaskInstanceFromRoots(
+    projectId: string | null | undefined,
+    flowId: string | null | undefined,
     taskInstanceId: string,
     taskRowLabel: string,
     roots: TaskTreeNode[] | null | undefined
   ): void {
-    const pid = String(projectId || '').trim();
+    const pid = this.projectKey(projectId);
     const tid = String(taskInstanceId || '').trim();
-    if (!pid || !tid) {
+    if (!tid) {
       return;
+    }
+
+    let fid = String(flowId ?? '').trim();
+    if (!fid) {
+      fid = String(getTaskInstanceIdToFlowIdMap().get(tid) ?? '').trim();
+    }
+    if (!fid) {
+      fid = String(getActiveFlowCanvasId() || 'main').trim();
     }
 
     const rows = flattenUtteranceTaskTreeVariableRows(taskRowLabel, roots);
     const all = this.store.get(pid) ?? [];
-    const byNodeId = new Map(
-      all.filter((v) => String(v.taskInstanceId || '').trim() === tid).map((v) => [v.nodeId, v])
-    );
     const nextForTask: VariableInstance[] = [];
 
     for (const r of rows) {
-      const prev = byNodeId.get(r.nodeId);
       nextForTask.push({
-        varId: prev?.varId ?? this.generateGuid(),
+        id: r.id,
         varName: r.varName,
         taskInstanceId: tid,
-        nodeId: r.nodeId,
-        ddtPath: r.ddtPath,
-        scope: 'project',
+        dataPath: r.dataPath,
+        scope: 'flow',
+        scopeFlowId: fid,
       });
     }
 
@@ -210,57 +228,206 @@ class VariableCreationService {
   }
 
   /**
+   * Hydrates utterance variables from the editor TaskTree (one VariableInstance per node; id = node.id).
+   * Not used from the variable menu.
+   */
+  hydrateVariablesFromTaskTree(
+    projectId: string | null | undefined,
+    flowCanvasId: string | null | undefined,
+    taskRowId: string,
+    taskTree: TaskTree,
+    options?: { taskRowLabel?: string }
+  ): void {
+    const label = String(
+      options?.taskRowLabel ??
+        taskTree.labelKey ??
+        taskTree.label ??
+        'task'
+    ).trim();
+    const roots = getMainNodes(taskTree);
+    this.replaceUtteranceVariablesForTaskInstanceFromRoots(
+      projectId,
+      flowCanvasId,
+      taskRowId,
+      label || 'task',
+      roots
+    );
+  }
+
+  /**
+   * For every utterance-like row on all flow canvases, hydrates variables from TaskRepository trees.
+   * Call when the workspace flow snapshot changes (e.g. DockManager canvas fingerprint).
+   * Removes obsolete VariableInstance rows for utterance tasks (empty tree or removed from canvas).
+   * Does not touch manual / non-utterance task-bound variables except pruning utterance tasks off-canvas.
+   */
+  hydrateVariablesFromFlow(
+    projectId: string | null | undefined,
+    flows: WorkspaceState['flows'] | null | undefined
+  ): void {
+    const pid = this.projectKey(projectId);
+    if (isFallbackProjectBucket(pid)) {
+      logVariableHydration('hydrateVariablesFromFlow:skip', { reason: 'fallback_project_bucket', pid });
+      return;
+    }
+    if (!flows) {
+      logVariableHydration('hydrateVariablesFromFlow:skip', { reason: 'no_flows', pid });
+      return;
+    }
+
+    const storeBefore = (this.store.get(pid) ?? []).length;
+    const hydratedTaskRows: { flowCanvasId: string; taskRowId: string; nodeCount: number }[] = [];
+
+    /** Every task row id currently on an included canvas row (any flow). */
+    const taskRowIdsOnCanvas = new Set<string>();
+    for (const flowCanvasId of Object.keys(flows)) {
+      const slice = flows[flowCanvasId];
+      if (!slice?.nodes?.length) continue;
+      for (const graphNode of slice.nodes || []) {
+        const rows = (graphNode as { data?: { rows?: unknown[] } })?.data?.rows;
+        if (!Array.isArray(rows)) continue;
+        for (const row of rows) {
+          if ((row as { included?: boolean }).included === false) continue;
+          const taskId = String((row as { id?: string }).id || '').trim();
+          if (taskId) taskRowIdsOnCanvas.add(taskId);
+        }
+      }
+    }
+
+    for (const flowCanvasId of Object.keys(flows)) {
+      const slice = flows[flowCanvasId];
+      if (!slice?.nodes?.length) continue;
+
+      for (const graphNode of slice.nodes || []) {
+        const rows = (graphNode as { data?: { rows?: unknown[] } })?.data?.rows;
+        if (!Array.isArray(rows)) continue;
+        for (const row of rows) {
+          if ((row as { included?: boolean }).included === false) continue;
+          const taskId = String((row as { id?: string }).id || '').trim();
+          if (!taskId) continue;
+          const task = taskRepository.getTask(taskId);
+          if (!task) continue;
+          const utteranceLike =
+            isUtteranceInterpretationTask(task) || task.type === TaskType.ClassifyProblem;
+          if (!utteranceLike) continue;
+          const rowLabel = String(
+            (row as { text?: string }).text ||
+              (task as { label?: string }).label ||
+              (task as { labelKey?: string }).labelKey ||
+              ''
+          ).trim();
+          const tree = buildStandaloneTaskTreeView(task);
+          if (!tree) {
+            this.replaceUtteranceVariablesForTaskInstanceFromRoots(
+              pid,
+              flowCanvasId,
+              taskId,
+              rowLabel || 'task',
+              []
+            );
+            hydratedTaskRows.push({
+              flowCanvasId,
+              taskRowId: taskId,
+              nodeCount: 0,
+            });
+            continue;
+          }
+          const mains = getMainNodes(tree);
+          this.hydrateVariablesFromTaskTree(pid, flowCanvasId, taskId, tree, {
+            taskRowLabel: rowLabel || undefined,
+          });
+          hydratedTaskRows.push({
+            flowCanvasId,
+            taskRowId: taskId,
+            nodeCount: mains.length,
+          });
+        }
+      }
+    }
+
+    const all = this.store.get(pid) ?? [];
+    const pruned = all.filter((v) => {
+      const tid = String(v.taskInstanceId || '').trim();
+      if (!tid) return true;
+      if (taskRowIdsOnCanvas.has(tid)) return true;
+      const t = taskRepository.getTask(tid);
+      const utterLike =
+        t && (isUtteranceInterpretationTask(t) || t.type === TaskType.ClassifyProblem);
+      return !utterLike;
+    });
+    if (pruned.length !== all.length) {
+      this.store.set(pid, pruned);
+    }
+
+    const storeAfter = (this.store.get(pid) ?? []).length;
+    logVariableHydration('hydrateVariablesFromFlow:done', {
+      projectId: pid,
+      flowIdsInWorkspace: Object.keys(flows),
+      utteranceRowsHydrated: hydratedTaskRows.length,
+      hydratedTaskRows,
+      variableStoreCountBefore: storeBefore,
+      variableStoreCountAfter: storeAfter,
+    });
+    if (import.meta.env.DEV) {
+      console.info('[Omnia][hydrateVariablesFromFlow]', {
+        projectId: pid,
+        utteranceTaskRowsHydrated: hydratedTaskRows.length,
+        variableStoreCountAfter: storeAfter,
+        hydratedTaskRows,
+      });
+    }
+  }
+
+  /**
    * Remove all variables for a given row/instance from memory.
    * Changes are persisted on the next explicit project save.
    */
-  deleteVariablesForInstance(projectId: string, taskInstanceId: string): void {
-    const existing = this.store.get(projectId) ?? [];
+  deleteVariablesForInstance(projectId: string | null | undefined, taskInstanceId: string): void {
+    const key = this.projectKey(projectId);
+    const existing = this.store.get(key) ?? [];
     this.store.set(
-      projectId,
+      key,
       existing.filter(v => v.taskInstanceId !== taskInstanceId)
     );
   }
 
   /**
-   * Removes specific variable rows for a task instance by varId.
-   * Used when task→subflow move drops unreferenced slots from the in-memory store (optional).
-   * Task tree / resync may recreate rows when the editor opens if needed.
+   * Removes specific variable rows for a task instance by variable id (GUID).
    */
-  removeTaskVariableRowsForVarIds(projectId: string, taskInstanceId: string, varIds: string[]): number {
+  removeTaskVariableRowsForIds(
+    projectId: string | null | undefined,
+    taskInstanceId: string,
+    ids: string[]
+  ): number {
     const tid = String(taskInstanceId || '').trim();
-    if (!tid || !varIds.length) return 0;
-    const remove = new Set(varIds.map((id) => String(id || '').trim()).filter(Boolean));
+    if (!tid || !ids.length) return 0;
+    const remove = new Set(ids.map((id) => String(id || '').trim()).filter(Boolean));
     if (remove.size === 0) return 0;
-    const existing = this.store.get(projectId) ?? [];
+    const key = this.projectKey(projectId);
+    const existing = this.store.get(key) ?? [];
     let removed = 0;
     const next = existing.filter((v) => {
       if (String(v.taskInstanceId || '').trim() !== tid) return true;
-      const vid = String(v.varId || '').trim();
+      const vid = String(v.id || '').trim();
       if (!remove.has(vid)) return true;
       removed += 1;
       return false;
     });
     if (removed > 0) {
-      this.store.set(projectId, next);
+      this.store.set(key, next);
     }
     return removed;
   }
 
   /**
-   * Create a manual variable with empty instanceId and nodeId.
-   * Used when user creates a variable from BackendCallEditor output fields.
-   * The variable is added to the same in-memory store and will be persisted on project save.
-   * Creates the label-GUID mapping automatically (varId = GUID, varName = label).
-   */
-  /**
    * Create a manual variable (no task instance). Default scope is project (visible in all flows).
    * Use scope "flow" + scopeFlowId to bind to one flow canvas.
    */
   createManualVariable(
-    projectId: string,
+    projectId: string | null | undefined,
     varName: string,
     options?: EnsureManualVariableOptions
   ): VariableInstance {
+    const key = this.projectKey(projectId);
     const scope: VariableScope = options?.scope ?? 'project';
     const scopeFlowId =
       scope === 'flow'
@@ -272,7 +439,7 @@ class VariableCreationService {
       throw new Error('[VariableCreationService] createManualVariable: varName must be non-empty');
     }
 
-    const existing = this.store.get(projectId) ?? [];
+    const existing = this.store.get(key) ?? [];
 
     const existingVar = existing.find(
       v =>
@@ -284,58 +451,54 @@ class VariableCreationService {
     }
 
     const newVariable: VariableInstance = {
-      varId: this.generateGuid(),
+      id: this.generateGuid(),
       varName: trimmed,
       taskInstanceId: '',
-      nodeId: '',
-      ddtPath: '',
+      dataPath: '',
       scope,
       scopeFlowId: scope === 'flow' ? scopeFlowId : undefined,
     };
 
-    this.store.set(projectId, [...existing, newVariable]);
+    this.store.set(key, [...existing, newVariable]);
     return newVariable;
   }
 
   /**
    * Remove a variable by id only if it is not bound to a task instance (manual / flow-slot row).
    */
-  removeVariableByVarId(projectId: string, varId: string): boolean {
-    const existing = this.store.get(projectId) ?? [];
-    const v = existing.find(x => x.varId === varId);
+  removeVariableById(projectId: string | null | undefined, id: string): boolean {
+    const key = this.projectKey(projectId);
+    const existing = this.store.get(key) ?? [];
+    const v = existing.find(x => x.id === id);
     if (!v || String(v.taskInstanceId ?? '').trim().length > 0) {
       return false;
     }
     this.store.set(
-      projectId,
-      existing.filter(x => x.varId !== varId)
+      key,
+      existing.filter(x => x.id !== id)
     );
     return true;
   }
 
   /**
-   * Renames any variable row by varId (manual or task-bound). Preserves varId.
-   *
-   * Task-bound (child slot) rows must keep **local** semantic names only (e.g. `colore`).
-   * Do not set parent fully-qualified proxy names here — those belong on separate manual rows
-   * (`scope: 'flow'`, `outputBindings` from child varId → parent varId). Use
-   * `subflowVariableProxyRestore` helpers to strip legacy FQ contamination on child rows.
+   * Renames any variable row by id (manual or task-bound). Preserves id.
    */
-  renameVariableRowByVarId(projectId: string, varId: string, newVarName: string): boolean {
+  renameVariableRowById(projectId: string | null | undefined, id: string, newVarName: string): boolean {
     const trimmed = newVarName.trim();
     if (!trimmed) return false;
-    const existing = this.store.get(projectId) ?? [];
-    const target = existing.find((x) => x.varId === varId);
+    const key = this.projectKey(projectId);
+    const existing = this.store.get(key) ?? [];
+    const target = existing.find((x) => x.id === id);
     if (!target) return false;
     const sameTask = (a: VariableInstance, b: VariableInstance) =>
       String(a.taskInstanceId ?? '').trim() === String(b.taskInstanceId ?? '').trim();
     const dup = existing.some(
-      (x) => x.varId !== varId && x.varName === trimmed && sameTask(x, target)
+      (x) => x.id !== id && x.varName === trimmed && sameTask(x, target)
     );
     if (dup) return false;
     this.store.set(
-      projectId,
-      existing.map((x) => (x.varId === varId ? { ...x, varName: trimmed } : x))
+      key,
+      existing.map((x) => (x.id === id ? { ...x, varName: trimmed } : x))
     );
     return true;
   }
@@ -343,12 +506,13 @@ class VariableCreationService {
   /**
    * Rename a manual/flow-only variable; task-bound rows cannot be renamed here.
    */
-  renameVariableByVarId(projectId: string, varId: string, newName: string): boolean {
+  renameVariableById(projectId: string | null | undefined, id: string, newName: string): boolean {
     const trimmed = newName.trim();
     if (!trimmed) return false;
 
-    const existing = this.store.get(projectId) ?? [];
-    const v = existing.find(x => x.varId === varId);
+    const key = this.projectKey(projectId);
+    const existing = this.store.get(key) ?? [];
+    const v = existing.find(x => x.id === id);
     if (!v || String(v.taskInstanceId ?? '').trim().length > 0) {
       return false;
     }
@@ -358,15 +522,15 @@ class VariableCreationService {
 
     const dup = existing.some(
       x =>
-        x.varId !== varId &&
+        x.id !== id &&
         x.varName === trimmed &&
         sameVariableScopeBucket(x, scope, bucketFlowId)
     );
     if (dup) return false;
 
     this.store.set(
-      projectId,
-      existing.map(x => (x.varId === varId ? { ...x, varName: trimmed } : x))
+      key,
+      existing.map(x => (x.id === id ? { ...x, varName: trimmed } : x))
     );
     return true;
   }
@@ -376,32 +540,31 @@ class VariableCreationService {
    * Useful when a condition needs a stable promised GUID before task materialization.
    */
   ensureManualVariableWithId(
-    projectId: string,
-    varId: string,
+    projectId: string | null | undefined,
+    id: string,
     varName: string,
     options?: EnsureManualVariableOptions
   ): VariableInstance {
+    const key = this.projectKey(projectId);
     const scope: VariableScope = options?.scope ?? 'project';
     const scopeFlowId =
       scope === 'flow'
         ? String(options?.scopeFlowId ?? getActiveFlowCanvasId()).trim()
         : '';
 
-    const existing = this.store.get(projectId) ?? [];
+    const existing = this.store.get(key) ?? [];
     const normalizedName = varName.trim();
 
-    // 1) Exact varId already exists → keep GUID and refresh label if needed
-    const byId = existing.find(v => v.varId === varId);
+    const byId = existing.find(v => v.id === id);
     if (byId) {
       if (normalizedName && byId.varName !== normalizedName) {
-        const updated = existing.map(v => (v.varId === varId ? { ...v, varName: normalizedName } : v));
-        this.store.set(projectId, updated);
-        return updated.find(v => v.varId === varId)!;
+        const updated = existing.map(v => (v.id === id ? { ...v, varName: normalizedName } : v));
+        this.store.set(key, updated);
+        return updated.find(v => v.id === id)!;
       }
       return byId;
     }
 
-    // 2) Same label in the same scope bucket → preserve existing stable mapping
     const byName = existing.find(
       v =>
         v.varName === normalizedName &&
@@ -412,15 +575,14 @@ class VariableCreationService {
     }
 
     const created: VariableInstance = {
-      varId,
+      id,
       varName: normalizedName,
       taskInstanceId: '',
-      nodeId: '',
-      ddtPath: '',
+      dataPath: '',
       scope,
       scopeFlowId: scope === 'flow' ? scopeFlowId : undefined,
     };
-    this.store.set(projectId, [...existing, created]);
+    this.store.set(key, [...existing, created]);
     return created;
   }
 
@@ -429,55 +591,57 @@ class VariableCreationService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Find a varId by exact varName (and optionally taskInstanceId).
+   * Find variable id (GUID) by exact varName (and optionally taskInstanceId).
    */
-  getVarIdByVarName(
-    projectId: string,
+  getIdByVarName(
+    projectId: string | null | undefined,
     varName: string,
     taskInstanceId?: string,
     flowCanvasId?: string
   ): string | null {
-    const all = this.store.get(projectId) ?? [];
+    const key = this.projectKey(projectId);
+    const all = this.store.get(key) ?? [];
     if (taskInstanceId !== undefined) {
       const match = all.find(
         v => v.varName === varName && v.taskInstanceId === taskInstanceId
       );
-      return match?.varId ?? null;
+      return match?.id ?? null;
     }
     const flowId = flowCanvasId ?? getActiveFlowCanvasId();
     const visible = all.filter(v => isVariableVisibleInFlow(v, flowId));
     const match = visible.find(v => v.varName === varName);
-    return match?.varId ?? null;
+    return match?.id ?? null;
   }
 
   /**
-   * Find a varId by nodeId + taskInstanceId.
+   * Alias for callers that still ask by "node" id: task-bound variable id equals TaskTreeNode.id.
    */
-  getVarIdByNodeId(projectId: string, nodeId: string, taskInstanceId: string): string | null {
-    const vars = this.store.get(projectId) ?? [];
-    const match = vars.find(v => v.nodeId === nodeId && v.taskInstanceId === taskInstanceId);
-    return match?.varId ?? null;
+  getIdByTaskNodeId(projectId: string | null | undefined, taskNodeId: string, taskInstanceId: string): string | null {
+    const vars = this.store.get(this.projectKey(projectId)) ?? [];
+    const match = vars.find(v => v.id === taskNodeId && v.taskInstanceId === taskInstanceId);
+    return match?.id ?? null;
   }
 
   /**
    * Return all variables for a task instance.
    */
-  getVariablesByTaskInstanceId(projectId: string, taskInstanceId: string): VariableInstance[] {
-    return (this.store.get(projectId) ?? []).filter(v => v.taskInstanceId === taskInstanceId);
+  getVariablesByTaskInstanceId(projectId: string | null | undefined, taskInstanceId: string): VariableInstance[] {
+    return (this.store.get(this.projectKey(projectId)) ?? []).filter(v => v.taskInstanceId === taskInstanceId);
   }
 
   /**
    * Return all variable names visible on the given flow canvas (same rules as {@link getVariablesForFlowScope}).
    */
-  getAllVarNames(projectId: string, flowCanvasId?: string): string[] {
+  getAllVarNames(projectId: string | null | undefined, flowCanvasId?: string): string[] {
     const instances = this.getVariablesForFlowScope(projectId, flowCanvasId);
     return [...new Set(instances.map((v) => v.varName).filter(Boolean))].sort();
   }
 
   /**
-   * Variables visible when authoring conditions on a given flow canvas (project + that flow's slots).
+   * Variables visible when authoring conditions on a given flow canvas (globals + that flow only).
    */
-  getVariablesForFlowScope(projectId: string, flowCanvasId?: string): VariableInstance[] {
+  getVariablesForFlowScope(projectId: string | null | undefined, flowCanvasId?: string): VariableInstance[] {
+    const storeKey = this.projectKey(projectId);
     const flowId = flowCanvasId ?? getActiveFlowCanvasId();
     const flow = FlowWorkspaceSnapshot.getFlowById(flowId);
     const localTaskIds = new Set<string>();
@@ -490,21 +654,11 @@ class VariableCreationService {
       }
     }
 
-    const all = this.store.get(projectId) ?? [];
-    const filtered = all.filter(v => {
-      const taskId = String(v.taskInstanceId || '').trim();
-      if (taskId) {
-        // Strict per-flow ownership: task-bound variables are visible only
-        // when their task row belongs to the current flow canvas.
-        return localTaskIds.has(taskId);
-      }
-      // For flow authoring rail, show only this flow's manual variables.
-      const scope = (v.scope ?? 'project');
-      return scope === 'flow' && String(v.scopeFlowId || '').trim() === String(flowId).trim();
-    });
+    const all = this.store.get(storeKey) ?? [];
+    const filtered = all.filter((v) => isVariableVisibleInFlow(v, flowId));
 
     logVariableScope('getVariablesForFlowScope', {
-      projectId,
+      projectId: storeKey,
       flowId,
       snapshotHasFlow: !!flow,
       snapshotNodeCount: flow?.nodes?.length ?? 0,
@@ -521,7 +675,7 @@ class VariableCreationService {
    * Exact varName match within variables visible for the flow canvas (collision checks for bindings).
    */
   findVariableInFlowScopeByExactName(
-    projectId: string,
+    projectId: string | null | undefined,
     flowCanvasId: string,
     varName: string
   ): VariableInstance | undefined {
@@ -531,28 +685,28 @@ class VariableCreationService {
   }
 
   /**
-   * Return the varName (human-readable label) for a given varId.
+   * Return the varName (human-readable label) for a given variable id (GUID).
    * Used by condition editor to display stored GUIDs as labels.
    */
-  getVarNameByVarId(projectId: string, varId: string): string | null {
-    const vars = this.store.get(projectId) ?? [];
-    const match = vars.find(v => v.varId === varId);
+  getVarNameById(projectId: string | null | undefined, id: string): string | null {
+    const vars = this.store.get(this.projectKey(projectId)) ?? [];
+    const match = vars.find(v => v.id === id);
     return match?.varName ?? null;
   }
 
   /**
    * Return the total number of in-memory variables for a project.
    */
-  getCount(projectId: string): number {
-    return (this.store.get(projectId) ?? []).length;
+  getCount(projectId: string | null | undefined): number {
+    return (this.store.get(this.projectKey(projectId)) ?? []).length;
   }
 
   /**
    * Return all variables for a project.
    * Used by compiler to build variable mapping.
    */
-  getAllVariables(projectId: string): VariableInstance[] {
-    return this.store.get(projectId) ?? [];
+  getAllVariables(projectId: string | null | undefined): VariableInstance[] {
+    return this.store.get(this.projectKey(projectId)) ?? [];
   }
 
   // ---------------------------------------------------------------------------
@@ -563,15 +717,22 @@ class VariableCreationService {
    * Persist all in-memory variables for a project to the database.
    * Called only when the user explicitly saves the project.
    */
-  async saveToDatabase(projectId: string): Promise<boolean> {
-    const variables = this.store.get(projectId) ?? [];
+  async saveToDatabase(projectId: string | null | undefined): Promise<boolean> {
+    const key = this.projectKey(projectId);
+    if (isFallbackProjectBucket(key)) {
+      console.warn('[VariableCreationService] saveToDatabase skipped: fallback bucket (no persisted project)', {
+        bucket: key,
+      });
+      return false;
+    }
 
-    // ✅ Separate manual variables (empty taskInstanceId) from task variables for logging
+    const variables = this.store.get(key) ?? [];
+
     const manualVariables = variables.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
     const taskVariables = variables.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
 
     console.log('[VariableCreationService] 💾 saveToDatabase called', {
-      projectId,
+      projectId: key,
       totalVariablesInStore: variables.length,
       manualVariables: manualVariables.length,
       taskVariables: taskVariables.length,
@@ -579,9 +740,9 @@ class VariableCreationService {
       manualVarNames: manualVariables.map(v => v.varName),
       varNamesSample: variables.slice(0, 10).map(v => ({
         varName: v.varName,
-        varId: v.varId,
+        id: v.id,
         taskInstanceId: v.taskInstanceId || '(empty)',
-        nodeId: v.nodeId || '(empty)'
+        dataPath: v.dataPath || '(empty)',
       })),
     });
 
@@ -591,29 +752,27 @@ class VariableCreationService {
     }
 
     try {
-      // ✅ Ensure all variables have required fields (MongoDB compatibility)
       const variablesToSave = variables.map(v => {
         const scope: VariableScope = v.scope === 'flow' ? 'flow' : 'project';
         return {
-          varId: v.varId,
+          id: v.id,
           varName: v.varName,
-          taskInstanceId: v.taskInstanceId || '', // ✅ Explicit empty string (not null/undefined)
-          nodeId: v.nodeId || '', // ✅ Explicit empty string (not null/undefined)
-          ddtPath: v.ddtPath || '', // ✅ Explicit empty string (not null/undefined)
+          taskInstanceId: v.taskInstanceId || '',
+          dataPath: v.dataPath || '',
           scope,
           scopeFlowId: scope === 'flow' ? (v.scopeFlowId ?? '') : '',
-          projectId: projectId // ✅ Will be set by backend, but include for clarity
+          projectId: key,
         };
       });
 
       console.log('[VariableCreationService] 📤 Sending variables to backend', {
-        projectId,
+        projectId: key,
         totalCount: variablesToSave.length,
         manualVariablesCount: manualVariables.length,
-        taskVariablesCount: taskVariables.length
+        taskVariablesCount: taskVariables.length,
       });
 
-      const response = await fetch(`/api/projects/${projectId}/variables`, {
+      const response = await fetch(`/api/projects/${key}/variables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ variables: variablesToSave }),
@@ -626,28 +785,28 @@ class VariableCreationService {
           statusText: response.statusText,
           error: errorText,
           variablesCount: variablesToSave.length,
-          manualVariablesCount: manualVariables.length
+          manualVariablesCount: manualVariables.length,
         });
         return false;
       }
 
       const result = await response.json();
       console.log('[VariableCreationService] ✅ Variables saved to database', {
-        projectId,
+        projectId: key,
         totalCount: variablesToSave.length,
         inserted: result.insertedCount || 0,
         modified: result.modifiedCount || 0,
         manualVariablesSaved: manualVariables.length,
         taskVariablesSaved: taskVariables.length,
-        manualVarNames: manualVariables.map(v => v.varName)
+        manualVarNames: manualVariables.map(v => v.varName),
       });
       return true;
     } catch (error) {
       console.error('[VariableCreationService] ❌ Error saving variables', {
         error: error instanceof Error ? error.message : String(error),
-        projectId,
+        projectId: key,
         variablesCount: variables.length,
-        manualVariablesCount: manualVariables.length
+        manualVariablesCount: manualVariables.length,
       });
       return false;
     }
@@ -657,88 +816,119 @@ class VariableCreationService {
    * Load variables for a project from the database into memory.
    * Called when a project is opened.
    */
-  async loadFromDatabase(projectId: string): Promise<void> {
-    try {
-      console.log('[VariableCreationService] 📥 Loading variables from database', { projectId });
+  async loadFromDatabase(projectId: string | null | undefined): Promise<void> {
+    const key = this.projectKey(projectId);
+    if (isFallbackProjectBucket(key)) {
+      console.warn('[VariableCreationService] loadFromDatabase skipped: fallback bucket (no server project)', {
+        bucket: key,
+      });
+      this.store.set(key, []);
+      return;
+    }
 
-      const response = await fetch(`/api/projects/${projectId}/variables`);
+    try {
+      console.log('[VariableCreationService] 📥 Loading variables from database', { projectId: key });
+
+      const response = await fetch(`/api/projects/${key}/variables`);
 
       if (!response.ok) {
         if (response.status === 404) {
           console.log('[VariableCreationService] ⚠️ No variables found in database (404)');
-          this.store.set(projectId, []);
+          this.store.set(key, []);
           return;
         }
         console.warn('[VariableCreationService] Failed to load variables', {
           status: response.status,
-          statusText: response.statusText
+          statusText: response.statusText,
         });
         return;
       }
 
       const variables: VariableInstance[] = await response.json();
 
-      // ✅ Separate manual variables from task variables for logging
       const manualVariables = variables.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
       const taskVariables = variables.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
 
       console.log('[VariableCreationService] 📥 Variables received from database', {
-        projectId,
+        projectId: key,
         totalCount: variables.length,
         manualVariables: manualVariables.length,
         taskVariables: taskVariables.length,
-        manualVarNames: manualVariables.map(v => v.varName)
+        manualVarNames: manualVariables.map(v => v.varName),
       });
 
-      // Deduplicate by varId (canonical key). Same name + different varId = both kept (DSL references varId).
-      const byVarId = new Map<string, VariableInstance>();
+      const byId = new Map<string, VariableInstance>();
       for (const v of variables) {
-        const rawId = typeof v.varId === 'string' ? v.varId.trim() : '';
+        const raw = v as VariableInstance & { varId?: string };
+        const rawId =
+          typeof raw.id === 'string' && raw.id.trim()
+            ? raw.id.trim()
+            : typeof raw.varId === 'string'
+              ? raw.varId.trim()
+              : '';
         if (!rawId) {
-          console.warn('[VariableCreationService] ⚠️ Skipping variable row without varId', {
-            projectId,
+          console.warn('[VariableCreationService] ⚠️ Skipping variable row without id', {
+            projectId: key,
             varName: v.varName,
           });
           continue;
         }
-        if (byVarId.has(rawId)) {
-          console.warn('[VariableCreationService] ⚠️ Duplicate varId in DB response; keeping last row', {
-            projectId,
-            varId: rawId,
+        if (byId.has(rawId)) {
+          console.warn('[VariableCreationService] ⚠️ Duplicate id in DB response; keeping last row', {
+            projectId: key,
+            id: rawId,
           });
         }
-        byVarId.set(rawId, normalizeVariableInstance({
-          ...v,
-          varId: rawId,
-          varName: typeof v.varName === 'string' ? v.varName.trim() : String(v.varName ?? ''),
-          taskInstanceId: v.taskInstanceId ?? '',
-          nodeId: v.nodeId ?? '',
-          ddtPath: v.ddtPath ?? '',
-          scope: (v as VariableInstance).scope,
-          scopeFlowId: (v as VariableInstance).scopeFlowId,
-        }));
+        const legacy = v as VariableInstance & { ddtPath?: string; varId?: string };
+        byId.set(
+          rawId,
+          normalizeVariableInstance({
+            ...v,
+            id: rawId,
+            varName: typeof v.varName === 'string' ? v.varName.trim() : String(v.varName ?? ''),
+            taskInstanceId: v.taskInstanceId ?? '',
+            dataPath: legacy.dataPath ?? legacy.ddtPath ?? '',
+            scope: (v as VariableInstance).scope,
+            scopeFlowId: (v as VariableInstance).scopeFlowId,
+          })
+        );
       }
-      const deduplicated = Array.from(byVarId.values());
+      let deduplicated = Array.from(byId.values());
 
-      this.store.set(projectId, deduplicated);
+      const taskFlowIndex = getTaskInstanceIdToFlowIdMap();
+      deduplicated = deduplicated.map((v) => {
+        const tid = String(v.taskInstanceId || '').trim();
+        if (!tid) return v;
+        if (String(v.scopeFlowId || '').trim()) return v;
+        const inferred = taskFlowIndex.get(tid);
+        if (!inferred) return v;
+        return normalizeVariableInstance({
+          ...v,
+          id: v.id,
+          scope: 'flow',
+          scopeFlowId: inferred,
+        });
+      });
+
+      this.store.set(key, deduplicated);
 
       const finalManualVariables = deduplicated.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
       const finalTaskVariables = deduplicated.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
 
       console.log('[VariableCreationService] ✅ Variables loaded from database', {
-        projectId,
+        projectId: key,
         totalCount: deduplicated.length,
         manualVariables: finalManualVariables.length,
         taskVariables: finalTaskVariables.length,
-        duplicatesRemovedByVarId: variables.length - deduplicated.length,
-        manualVarNames: finalManualVariables.map(v => v.varName)
+        duplicatesRemovedById: variables.length - deduplicated.length,
+        manualVarNames: finalManualVariables.map(v => v.varName),
       });
     } catch (error) {
       console.warn('[VariableCreationService] ❌ Error loading variables', {
         error: error instanceof Error ? error.message : String(error),
-        projectId
+        projectId: key,
       });
-      this.store.set(projectId, []);
+      this.store.set(key, []);
     }
   }
 }

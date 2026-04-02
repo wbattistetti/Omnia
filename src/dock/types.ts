@@ -78,6 +78,8 @@ export type DockTabConditionEditor = DockTabBase & {
 export type DockTabTaskEditor = DockTabBase & { // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
   type: 'taskEditor'; // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
   task: TaskMeta; // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
+  /** Flow canvas that contains this task row (variable namespace / utterance sync). */
+  flowId?: string;
   headerColor?: string;
   toolbarButtons?: ToolbarButton[];
   onClose?: (tab: DockTabTaskEditor) => boolean | Promise<boolean> | void | Promise<void>; // Callback called before closing the tab. Return false to prevent closing.

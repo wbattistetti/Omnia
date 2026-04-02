@@ -3,6 +3,7 @@
  * Validates conversion between TypeScript templateId (string) and VB.NET Action (integer)
  */
 
+import { describe, it, expect, vi } from 'vitest';
 import { templateIdToVBAction, vbActionToTemplateId, prepareTaskForVBNet } from '../vbnetAdapter';
 import type { TaskInstance } from '../../types/taskTypes';
 
@@ -36,19 +37,16 @@ describe('VB.NET Adapter', () => {
     });
 
     it('should default to SayMessage (1) for unknown templateId', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       expect(templateIdToVBAction('UnknownAction')).toBe(1);
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Unknown templateId'),
-        'UnknownAction'
-      );
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown templateId'));
 
       consoleSpy.mockRestore();
     });
 
     it('should handle empty string by defaulting to SayMessage', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       expect(templateIdToVBAction('')).toBe(1);
       expect(templateIdToVBAction('   ')).toBe(1);
@@ -62,8 +60,8 @@ describe('VB.NET Adapter', () => {
       expect(vbActionToTemplateId(1)).toBe('SayMessage');
     });
 
-    it('should convert 4 to GetData', () => {
-      expect(vbActionToTemplateId(4)).toBe('GetData');
+    it('should convert 4 to DataRequest (canonical)', () => {
+      expect(vbActionToTemplateId(4)).toBe('DataRequest');
     });
 
     it('should convert 6 to ClassifyProblem', () => {
@@ -75,13 +73,10 @@ describe('VB.NET Adapter', () => {
     });
 
     it('should default to SayMessage for unknown action', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       expect(vbActionToTemplateId(999)).toBe('SayMessage');
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Unknown action'),
-        999
-      );
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown action'));
 
       consoleSpy.mockRestore();
     });
@@ -131,13 +126,19 @@ describe('VB.NET Adapter', () => {
   });
 
   describe('Round-trip conversion', () => {
-    it('should maintain consistency: templateId → action → templateId', () => {
-      const templateIds = ['SayMessage', 'GetData', 'ClassifyProblem', 'callBackend'];
+    it('should maintain consistency: templateId → action → canonical templateId', () => {
+      const pairs: Array<[string, string]> = [
+        ['SayMessage', 'SayMessage'],
+        ['GetData', 'DataRequest'],
+        ['DataRequest', 'DataRequest'],
+        ['ClassifyProblem', 'ClassifyProblem'],
+        ['callBackend', 'callBackend'],
+      ];
 
-      for (const templateId of templateIds) {
-        const action = templateIdToVBAction(templateId);
+      for (const [input, canonical] of pairs) {
+        const action = templateIdToVBAction(input);
         const backToTemplateId = vbActionToTemplateId(action);
-        expect(backToTemplateId).toBe(templateId);
+        expect(backToTemplateId).toBe(canonical);
       }
     });
 

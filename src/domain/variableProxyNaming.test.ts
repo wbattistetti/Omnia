@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildProxyVariableName,
+  buildSubflowParentProxyVariableName,
   disambiguateProxyVarName,
+  localLabelForSubflowTaskVariable,
   normalizeProxySegment,
   normalizeSemanticTaskLabel,
+  slugifyDataKeySegment,
 } from './variableProxyNaming';
 
 describe('normalizeSemanticTaskLabel', () => {
   it('strips Italian conversational verbs and articles', () => {
     expect(normalizeSemanticTaskLabel('chiedi la data di nascita')).toBe('data di nascita');
     expect(normalizeSemanticTaskLabel('raccogli il codice fiscale')).toBe('codice fiscale');
+    expect(normalizeSemanticTaskLabel('Chiedi i dati personali')).toBe('dati personali');
   });
 
   it('strips English conversational verbs and articles', () => {
@@ -29,6 +33,28 @@ describe('normalizeSemanticTaskLabel', () => {
 describe('normalizeProxySegment', () => {
   it('matches semantic task rules', () => {
     expect(normalizeProxySegment('dimmi il nome')).toBe('nome');
+  });
+});
+
+describe('localLabelForSubflowTaskVariable', () => {
+  it('strips FQ to last local segment', () => {
+    expect(localLabelForSubflowTaskVariable('dati_personali.colore')).toBe('colore');
+    expect(localLabelForSubflowTaskVariable('colore')).toBe('colore');
+  });
+});
+
+describe('buildSubflowParentProxyVariableName', () => {
+  it('produces slugified parent.colore and matches manual slug of normalized title', () => {
+    expect(buildSubflowParentProxyVariableName('Chiedi i dati personali', 'colore')).toBe('dati_personali.colore');
+    expect(
+      slugifyDataKeySegment(normalizeSemanticTaskLabel('Chiedi i dati personali') || '')
+    ).toBe('dati_personali');
+  });
+
+  it('uses last dotted segment for task var name', () => {
+    expect(buildSubflowParentProxyVariableName('Chiedi i dati personali', 'foo.bar.colore')).toBe(
+      'dati_personali.colore'
+    );
   });
 });
 

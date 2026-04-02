@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useMemo, useReducer } from 'react';
+import React, { createContext, useContext, useLayoutEffect, useMemo, useReducer } from 'react';
+import { takeWorkspaceRestoreForProjectOnce } from '../services/project-save/flowSaveSnapshot';
+import { logFlowSaveDebug } from '../utils/flowSaveDebug';
 import type { Flow, FlowId, WorkspaceState } from './FlowTypes';
 
 type ApplyFlowLoadPayload<NodeT, EdgeT> = {
@@ -121,8 +123,16 @@ const WorkspaceDispatchContext = createContext<React.Dispatch<Action> | undefine
  * In-memory flow workspace (draft when no project is selected). Persistence is gated in FlowPersistence
  * (loadFlow/saveFlow no-op without projectId); graph edits use UPDATE_FLOW_GRAPH / UPSERT_FLOW only.
  * Step 3: `hydrated` gates repeat loadFlow; first load applies server data (see flowHydrationPolicy).
+ *
+ * @param workspaceProjectId - Current catalog project id; used to restore a post-draft-commit snapshot (see flowSaveSnapshot).
  */
-export function FlowWorkspaceProvider({ children }: { children: React.ReactNode }) {
+export function FlowWorkspaceProvider({
+  children,
+  workspaceProjectId,
+}: {
+  children: React.ReactNode;
+  workspaceProjectId?: string | null;
+}) {
   const initial: WorkspaceState = useMemo(
     () => ({
       flows: {
@@ -142,6 +152,49 @@ export function FlowWorkspaceProvider({ children }: { children: React.ReactNode 
   );
 
   const [state, dispatch] = useReducer(reducer as any, initial);
+
+  useLayoutEffect(() => {
+    const pid = workspaceProjectId != null ? String(workspaceProjectId).trim() : '';
+    if (!pid) return;
+    const pending = takeWorkspaceRestoreForProjectOnce(pid);
+    if (!pending || Object.keys(pending).length === 0) return;
+    for (const [flowId, raw] of Object.entries(pending)) {
+      const f = raw as Record<string, unknown>;
+      const nodes = Array.isArray(f?.nodes) ? (f.nodes as unknown[]) : [];
+      const edges = Array.isArray(f?.edges) ? (f.edges as unknown[]) : [];
+      const titleRaw = f?.title;
+      const title =
+        typeof titleRaw === 'string' && titleRaw.trim().length > 0
+          ? titleRaw.trim()
+          : flowId === 'main'
+            ? 'Main'
+            : flowId;
+      dispatch({
+        type: 'UPSERT_FLOW',
+        flow: {
+          id: flowId,
+          title,
+          nodes,
+          edges,
+          ...(f?.meta !== undefined && typeof f.meta === 'object' ? { meta: f.meta } : {}),
+          hydrated: true,
+          hasLocalChanges: true,
+        },
+      } as any);
+    }
+    logFlowSaveDebug('FlowWorkspaceProvider: restored post-draft snapshot (useLayoutEffect)', {
+      projectId: pid,
+      flowIds: Object.keys(pending),
+      perFlow: Object.entries(pending).map(([id, raw]) => {
+        const r = raw as Record<string, unknown>;
+        return {
+          flowId: id,
+          nodes: Array.isArray(r?.nodes) ? r.nodes.length : 0,
+          edges: Array.isArray(r?.edges) ? r.edges.length : 0,
+        };
+      }),
+    });
+  }, [workspaceProjectId]);
 
   return (
     <WorkspaceContext.Provider value={state}>

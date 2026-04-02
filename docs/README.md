@@ -12,6 +12,7 @@ Welcome to the TaskTree Generation Pipeline documentation. This system generates
 
 ### Core Documentation
 
+- **[SEMANTICA_TASK_VARIABLES_E_SUBFLOW.md](./SEMANTICA_TASK_VARIABLES_E_SUBFLOW.md)** - **Normativo:** semantica task-based (`TaskTreeNode`, `taskId`), variabili e GUID (`varId` = `taskId`), calcolo **variabili referenziate**, spostamento task verso sottoflusso, mapping parent ↔ subflow e debito tecnico vs modello.
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Complete architecture overview
   - Layer structure
   - Module documentation

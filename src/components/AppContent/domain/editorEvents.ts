@@ -11,6 +11,8 @@ import type { TaskMeta, TaskWizardMode } from '@taskEditor/EditorHost/types';
 export interface TaskEditorOpenEvent {
   id: string;  // ALWAYS equals row.id (which equals task.id when task exists)
   type: TaskType;
+  /** Flow canvas that contains this task row (per-flow variable namespace). */
+  flowId?: string;
   label?: string;
   name?: string;
   taskWizardMode?: TaskWizardMode;

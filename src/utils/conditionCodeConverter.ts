@@ -4,6 +4,7 @@
 import { ASTNode } from '../components/conditions/dsl/parser/AST';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
+import { getSafeProjectId } from './safeProjectId';
 
 /** Options for label ↔ stored-id bracket conversion (message DSL, conditions). */
 export type BracketVariableMappingOptions = {
@@ -17,6 +18,68 @@ export type BracketVariableMappingOptions = {
    */
   resolveUnknownGuidToLabel?: (guid: string) => string | null;
 };
+
+const GUID_TOKEN_IN_BRACKET = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeBracketLabelKey(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function lastSegmentOfVarName(label: string): string {
+  const parts = label.split('.').map((p) => p.trim()).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1]! : label.trim();
+}
+
+function pickPreferredGuid(
+  pairs: Array<[string, string]>,
+  options?: BracketVariableMappingOptions
+): string | null {
+  if (pairs.length === 0) return null;
+  if (pairs.length === 1) return pairs[0]![0];
+  if (options?.preferKeysForEncode?.size) {
+    const preferred = pairs.find(([g]) => options.preferKeysForEncode!.has(g));
+    if (preferred) return preferred[0];
+  }
+  return pairs[0]![0];
+}
+
+/**
+ * Resolves a single [token] body to a variable GUID: exact varName, then case-insensitive full name,
+ * then case-insensitive match on the last segment (e.g. dati.colore ↔ [colore]).
+ */
+export function resolveBracketLabelTokenToGuid(
+  trimmed: string,
+  variableMappings: Map<string, string>,
+  options?: BracketVariableMappingOptions
+): string | null {
+  if (!trimmed) return null;
+  if (GUID_TOKEN_IN_BRACKET.test(trimmed) && variableMappings.has(trimmed)) {
+    return trimmed;
+  }
+
+  const exact: Array<[string, string]> = [];
+  for (const [guid, label] of variableMappings.entries()) {
+    if (label === trimmed) exact.push([guid, label]);
+  }
+  const exactPick = pickPreferredGuid(exact, options);
+  if (exactPick) return exactPick;
+
+  const nt = normalizeBracketLabelKey(trimmed);
+  const normFull: Array<[string, string]> = [];
+  for (const [guid, label] of variableMappings.entries()) {
+    if (normalizeBracketLabelKey(label) === nt) normFull.push([guid, label]);
+  }
+  const normPick = pickPreferredGuid(normFull, options);
+  if (normPick) return normPick;
+
+  const bySeg: Array<[string, string]> = [];
+  for (const [guid, label] of variableMappings.entries()) {
+    if (normalizeBracketLabelKey(lastSegmentOfVarName(label)) === nt) {
+      bySeg.push([guid, label]);
+    }
+  }
+  return pickPreferredGuid(bySeg, options);
+}
 
 /**
  * ✅ FASE 2: Converts DSL with labels to DSL with GUIDs
@@ -37,20 +100,12 @@ export function convertDSLLabelsToGUIDs(
   // ✅ FIX: Use [^\[\]]+? to match any content except brackets (supports Unicode)
   return readableCode.replace(/\[\s*([^\[\]]+?)\s*\]/g, (match, label) => {
     const trimmed = String(label).trim();
-    const matches = Array.from(variableMappings.entries()).filter(([, l]) => l === trimmed);
-
-    if (matches.length === 0) {
+    const guid = resolveBracketLabelTokenToGuid(trimmed, variableMappings, options);
+    if (!guid) {
       console.warn(`[ConditionCodeConverter] Variable [${label}] not found in mappings`);
       return match;
     }
-
-    let chosen = matches[0]!;
-    if (matches.length > 1 && options?.preferKeysForEncode?.size) {
-      const preferred = matches.find(([g]) => options.preferKeysForEncode!.has(g));
-      if (preferred) chosen = preferred;
-    }
-
-    return `[${chosen[0]}]`;
+    return `[${guid}]`;
   });
 }
 
@@ -185,27 +240,22 @@ export function transformASTGuidsToLabels(
 }
 
 /**
- * Creates a complete Map<varId, varName> from VariableInstance rows visible on the given flow canvas.
- * Primary key is varId: every loaded variable participates exactly once (no name-only indirection).
+ * Creates a complete Map<variableGuid, varName> from VariableInstance rows visible on the given flow canvas.
+ * Primary key is id (GUID = TaskTreeNode.id for task-bound rows).
  */
 export function createVariableMappings(flowCanvasId?: string): Map<string, string> {
   const mappings = new Map<string, string>();
 
   try {
-    const projectId: string | null = typeof localStorage !== 'undefined'
-      ? localStorage.getItem('currentProjectId')
-      : null;
-
-    if (!projectId) return mappings;
-
+    const projectId = getSafeProjectId();
     const fid = flowCanvasId ?? getActiveFlowCanvasId();
     const instances = variableCreationService.getVariablesForFlowScope(projectId, fid) ?? [];
     for (const v of instances) {
-      const varId = typeof v.varId === 'string' ? v.varId.trim() : '';
-      if (!varId) continue;
+      const vid = typeof v.id === 'string' ? v.id.trim() : '';
+      if (!vid) continue;
       const varName = typeof v.varName === 'string' ? v.varName.trim() : '';
       if (!varName) continue;
-      mappings.set(varId, varName);
+      mappings.set(vid, varName);
     }
   } catch (error) {
     console.warn('[ConditionCodeConverter] Could not load variable mappings', error);

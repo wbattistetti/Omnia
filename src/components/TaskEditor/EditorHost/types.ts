@@ -32,6 +32,8 @@ export type EditorProps = {
   task: TaskMeta; // ✅ RINOMINATO: act → task
   /** Stable dock tab id — use for React keys so layout drag does not remount when task ref flickers. */
   dockTabId?: string;
+  /** Flow canvas that contains this task row (per-flow variable namespace). */
+  authoringFlowCanvasId?: string | null;
   onClose?: () => void;
   onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void;
   hideHeader?: boolean;

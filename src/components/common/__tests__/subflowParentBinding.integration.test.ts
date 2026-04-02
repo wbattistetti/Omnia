@@ -30,14 +30,14 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
     const out = ensureParentVariableAndSubflowOutputBinding(projectId, parentFlowId, flows, {
       isFromActiveFlow: false,
       ownerFlowId: childFlowId,
-      varId: childVarId,
+      id: childVarId,
       varLabel: 'conferma',
       sourceTaskRowLabel: 'chiedi email',
       subflowTaskId,
     });
 
     expect(out.tokenLabel).toBe('email.conferma');
-    expect(variableCreationService.getVarNameByVarId(projectId, out.parentVarId)).toBe('email.conferma');
+    expect(variableCreationService.getVarNameById(projectId, out.parentVarId)).toBe('email.conferma');
 
     const t = taskRepository.getTask(subflowTaskId) as any;
     expect(t?.outputBindings).toEqual([{ fromVariable: childVarId, toVariable: out.parentVarId }]);
@@ -66,14 +66,14 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
     const out = ensureParentVariableAndSubflowOutputBinding(projectId, parentFlowId, flows, {
       isFromActiveFlow: false,
       ownerFlowId: childFlowId,
-      varId: childVarId,
+      id: childVarId,
       varLabel: 'conferma',
       sourceTaskRowLabel: 'chiedi email',
       subflowTaskId,
     });
 
     expect(out.tokenLabel).toBe('email.conferma_2');
-    expect(variableCreationService.getVarNameByVarId(projectId, out.parentVarId)).toBe('email.conferma_2');
+    expect(variableCreationService.getVarNameById(projectId, out.parentVarId)).toBe('email.conferma_2');
   });
 
   it('returns existing parent token when output binding already maps child var', () => {
@@ -90,7 +90,7 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
 
     taskRepository.createTask(TaskType.Subflow, null, {
       flowId: childFlowId,
-      outputBindings: [{ fromVariable: childVarId, toVariable: existing.varId }],
+      outputBindings: [{ fromVariable: childVarId, toVariable: existing.id }],
     }, subflowTaskId);
 
     const flows = { [parentFlowId]: { nodes: [] } };
@@ -98,12 +98,12 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
     const out = ensureParentVariableAndSubflowOutputBinding(projectId, parentFlowId, flows, {
       isFromActiveFlow: false,
       ownerFlowId: childFlowId,
-      varId: childVarId,
+      id: childVarId,
       varLabel: 'ignored',
       subflowTaskId,
     });
 
-    expect(out).toEqual({ tokenLabel: 'already.bound', parentVarId: existing.varId });
+    expect(out).toEqual({ tokenLabel: 'already.bound', parentVarId: existing.id });
   });
 
   it('resolves subflow task by normalized row label when subflowTaskId omitted', () => {
@@ -124,7 +124,7 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
     const out = ensureParentVariableAndSubflowOutputBinding(projectId, parentFlowId, flows, {
       isFromActiveFlow: false,
       ownerFlowId: childFlowId,
-      varId: childVarId,
+      id: childVarId,
       varLabel: 'ufficio',
       sourceTaskRowLabel: 'richiedi telefono',
     });

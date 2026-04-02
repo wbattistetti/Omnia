@@ -205,11 +205,11 @@ Public Class FlowOrchestrator
         ' ✅ Initialize all variables in VariableStore (set to Nothing if not yet extracted)
         ' This ensures manual variables are available for BackendCall inputs/outputs
         For Each var In _variables
-            If Not navInit.VariableStore.ContainsKey(var.VarId) Then
+            If Not navInit.VariableStore.ContainsKey(var.Id) Then
                 ' ✅ Initialize with Nothing (will be set when extracted or written by BackendCall)
-                navInit.VariableStore(var.VarId) = Nothing
-                Dim isManual = String.IsNullOrEmpty(var.NodeId)
-                Console.WriteLine($"[FlowOrchestrator] ✅ Initialized variable in VariableStore: varId={var.VarId}, isManual={isManual}")
+                navInit.VariableStore(var.Id) = Nothing
+                Dim isManual = String.IsNullOrEmpty(var.TaskInstanceId)
+                Console.WriteLine($"[FlowOrchestrator] ✅ Initialized variable in VariableStore: id={var.Id}, isManual={isManual}")
             End If
         Next
 
@@ -586,17 +586,16 @@ Public Class FlowOrchestrator
                     ' ✅ Lookup diretto con dati espliciti (taskInstanceId, nodeId) → varId
                     Dim var = _variables.SingleOrDefault(
                         Function(v) v.TaskInstanceId = extractedVar.TaskInstanceId AndAlso
-                                   v.NodeId = extractedVar.NodeId
+                                   v.Id = extractedVar.NodeId
                     )
 
                     If var IsNot Nothing Then
                         ' ✅ Aggiorna storico runtime
                         var.Values.Add(extractedVar.Value)
 
-                        ' ✅ Aggiorna VariableStore per DSLInterpreter (valore corrente)
-                        '    DSLInterpreter usa varId come chiave (non nodeId)
-                        nav.VariableStore(var.VarId) = extractedVar.Value
-                        Console.WriteLine($"[FlowOrchestrator] ✅ Updated: varId={var.VarId}, taskInstanceId={extractedVar.TaskInstanceId}, nodeId={extractedVar.NodeId}, value={extractedVar.Value}, historyCount={var.Values.Count}")
+                        ' ✅ Aggiorna VariableStore per DSLInterpreter (chiave = variable id = node GUID)
+                        nav.VariableStore(var.Id) = extractedVar.Value
+                        Console.WriteLine($"[FlowOrchestrator] ✅ Updated: id={var.Id}, taskInstanceId={extractedVar.TaskInstanceId}, nodeId={extractedVar.NodeId}, value={extractedVar.Value}, historyCount={var.Values.Count}")
                     Else
                         ' ✅ Fail fast: variabile non trovata
                         Dim errorMsg = $"Variable not found for taskInstanceId={extractedVar.TaskInstanceId}, nodeId={extractedVar.NodeId}. This indicates a configuration error: the variable was extracted but not registered during compilation."
@@ -913,8 +912,8 @@ Public Class FlowOrchestrator
             Dim subComp = _compilationByFlowId(task.FlowId)
             If subComp.Variables IsNot Nothing Then
                 For Each v In subComp.Variables
-                    If Not child.VariableStore.ContainsKey(v.VarId) Then
-                        child.VariableStore(v.VarId) = Nothing
+                    If Not child.VariableStore.ContainsKey(v.Id) Then
+                        child.VariableStore(v.Id) = Nothing
                     End If
                 Next
             End If

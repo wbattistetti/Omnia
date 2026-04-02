@@ -40,6 +40,8 @@ export interface UseResponseEditorCloseParams {
   task: Task | null | undefined;
   // ✅ FASE 3: taskTreeRef rimosso - store è single source of truth
   currentProjectId: string | null;
+  /** Flow canvas that owns this task row (utterance variable sync). */
+  authoringFlowCanvasId?: string | null;
 
   // Dock tree
   tabId?: string;
@@ -70,6 +72,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     selectedRoot,
     task,
     currentProjectId,
+    authoringFlowCanvasId,
     tabId,
     setDockTree,
     onClose,
@@ -179,7 +182,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
         // Il salvataggio nel DB avviene solo su comando esplicito ("Salva progetto")
         if (hasTaskTree) {
           // ✅ Usa funzione di persistenza per salvare
-          await saveTaskToRepository(key, finalTaskTree, task, currentProjectId);
+          await saveTaskToRepository(key, finalTaskTree, task, currentProjectId, authoringFlowCanvasId);
         }
 
         // ✅ NUOVO MODELLO: Alla chiusura NON si salva automaticamente nel DB
@@ -202,7 +205,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
           setTaskTree(finalTaskTreeWithSteps);
 
           // ✅ AWAIT OBBLIGATORIO: non chiudere finché non è salvato
-          await saveTaskOnEditorClose(key, finalTaskTreeWithSteps, task, currentProjectId);
+          await saveTaskOnEditorClose(key, finalTaskTreeWithSteps, task, currentProjectId, authoringFlowCanvasId);
 
           // ✅ Emetti evento per notificare NodeRow dell'aggiornamento (indipendente dal tipo di task)
           window.dispatchEvent(
@@ -212,7 +215,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
           );
         } else if (finalTaskTree) {
           // ✅ No TaskTree structure, but save other fields (e.g., Message text)
-          await saveTaskToRepository(key, finalTaskTree, task, currentProjectId);
+          await saveTaskToRepository(key, finalTaskTree, task, currentProjectId, authoringFlowCanvasId);
 
           // ✅ Emetti evento anche per task senza TaskTree (es. SayMessage con solo text)
           window.dispatchEvent(
@@ -249,6 +252,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     task,
     taskTreeFromStore,
     currentProjectId,
+    authoringFlowCanvasId,
     setTaskTree,
     replaceSelectedDDT,
     taskWizardMode,

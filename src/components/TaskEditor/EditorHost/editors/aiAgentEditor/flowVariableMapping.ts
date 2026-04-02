@@ -14,13 +14,13 @@ export function resolveOrCreateFlowVarId(
 ): string {
   const t = displayName.trim();
   if (!t) return '';
-  const existingId = variableCreationService.getVarIdByVarName(projectId, t, undefined, flowCanvasId);
+  const existingId = variableCreationService.getIdByVarName(projectId, t, undefined, flowCanvasId);
   if (existingId) return existingId;
   const nv = variableCreationService.createManualVariable(projectId, t, {
     scope: 'flow',
     scopeFlowId: flowCanvasId,
   });
-  return nv.varId;
+  return nv.id;
 }
 
 export interface ImplementMappingsResult {
@@ -74,7 +74,7 @@ export function nextMappingsAfterLabelBlur(
   }
   const varIdExisting = previous[slotId];
   if (varIdExisting) {
-    const renamed = variableCreationService.renameVariableByVarId(
+    const renamed = variableCreationService.renameVariableById(
       projectId,
       varIdExisting,
       labelTrimmed
@@ -83,7 +83,7 @@ export function nextMappingsAfterLabelBlur(
       return previous;
     }
   }
-  let vid = variableCreationService.getVarIdByVarName(
+  let vid = variableCreationService.getIdByVarName(
     projectId,
     labelTrimmed,
     undefined,
@@ -94,7 +94,7 @@ export function nextMappingsAfterLabelBlur(
       scope: 'flow',
       scopeFlowId: flowCanvasId,
     });
-    vid = nv.varId;
+    vid = nv.id;
   }
   return { ...previous, [slotId]: vid };
 }

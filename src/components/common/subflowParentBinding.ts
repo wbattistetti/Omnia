@@ -1,5 +1,5 @@
 import {
-  buildProxyVariableName,
+  buildSubflowParentProxyVariableName,
   disambiguateProxyVarName,
   normalizeSemanticTaskLabel,
 } from '../../domain/variableProxyNaming';
@@ -8,7 +8,7 @@ import { variableCreationService } from '../../services/VariableCreationService'
 import { TaskType } from '../../types/taskTypes';
 
 type VariableMenuLikeItem = {
-  varId: string;
+  id: string;
   varLabel: string;
   ownerFlowId?: string;
   isFromActiveFlow?: boolean;
@@ -84,7 +84,7 @@ export function ensureParentVariableAndSubflowOutputBinding(
   }
 
   const childFlowId = String(item.ownerFlowId || '').trim();
-  const childVarId = String(item.varId || '').trim();
+  const childVarId = String(item.id || '').trim();
   if (!childFlowId || !childVarId) {
     throw new Error('Cannot create parent binding: child flow id or child variable id is missing.');
   }
@@ -110,7 +110,7 @@ export function ensureParentVariableAndSubflowOutputBinding(
   const existingForChild = prevBindings.find((b) => String(b?.fromVariable || '') === childVarId);
   if (existingForChild) {
     const toId = String(existingForChild.toVariable || '').trim();
-    const name = variableCreationService.getVarNameByVarId(projectId, toId);
+    const name = variableCreationService.getVarNameById(projectId, toId);
     if (!name) {
       throw new Error(
         `Subflow output binding references missing parent variable '${toId}'. Fix outputBindings on this Subflow task.`
@@ -119,7 +119,7 @@ export function ensureParentVariableAndSubflowOutputBinding(
     return { tokenLabel: name, parentVarId: toId };
   }
 
-  const baseLabel = buildProxyVariableName(item.sourceTaskRowLabel || 'Subflow', item.varLabel);
+  const baseLabel = buildSubflowParentProxyVariableName(item.sourceTaskRowLabel || 'Subflow', item.varLabel);
   const tokenLabel = disambiguateProxyVarName(baseLabel, (name) =>
     !!variableCreationService.findVariableInFlowScopeByExactName(projectId, activeFlowId, name)
   );
@@ -130,12 +130,12 @@ export function ensureParentVariableAndSubflowOutputBinding(
   });
 
   const alreadyBound = prevBindings.some(
-    (b) => String(b?.fromVariable || '') === childVarId && String(b?.toVariable || '') === parentVar.varId
+    (b) => String(b?.fromVariable || '') === childVarId && String(b?.toVariable || '') === parentVar.id
   );
   if (!alreadyBound) {
     const nextBindings: SubflowIoBinding[] = [
       ...prevBindings,
-      { fromVariable: childVarId, toVariable: parentVar.varId },
+      { fromVariable: childVarId, toVariable: parentVar.id },
     ];
     const updated = taskRepository.updateTask(subflowTaskId, { outputBindings: nextBindings } as any);
     if (!updated) {
@@ -143,5 +143,5 @@ export function ensureParentVariableAndSubflowOutputBinding(
     }
   }
 
-  return { tokenLabel, parentVarId: parentVar.varId };
+  return { tokenLabel, parentVarId: parentVar.id };
 }

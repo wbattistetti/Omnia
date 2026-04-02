@@ -6,7 +6,73 @@
  * and mapping to the shape consumed by ProjectSaveOrchestrator.executeSave.
  */
 
+/**
+ * When commitDraftProject() runs, FlowWorkspaceProvider remounts (key = projectId) and the
+ * in-memory graph is lost. FlowCanvasHost then fetch-loads the server before the save PUT
+ * completes, applies an empty graph, and sets hydrated — wiping the user's canvas.
+ *
+ * After commit returns a real `projectId`, persist the pre-commit snapshot (memory + sessionStorage).
+ * FlowWorkspaceProvider calls takeWorkspaceRestoreForProjectOnce in useLayoutEffect (memory first,
+ * then session for React Strict second mount). Cleared after orchestrator save succeeds.
+ */
 export type WorkspaceFlowRecord = Record<string, unknown>;
+
+function workspaceRestoreStorageKey(projectId: string): string {
+  return `omnia.flowWorkspaceRestore.${encodeURIComponent(projectId)}`;
+}
+
+/** Call immediately after commitDraftProject() succeeds, before refreshData. */
+export function persistWorkspaceRestoreForProject(projectId: string, snapshot: WorkspaceFlowRecord): void {
+  const pid = String(projectId || '').trim();
+  if (!pid || pid.startsWith('draft_')) return;
+  if (!snapshot || typeof snapshot !== 'object') return;
+  pendingWorkspaceRestoreByProjectId[pid] = snapshot;
+  try {
+    sessionStorage.setItem(workspaceRestoreStorageKey(pid), JSON.stringify(snapshot));
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+/**
+ * In-memory queue for the first consume after persist; sessionStorage holds a copy for React Strict
+ * Mode's second mount (first take clears memory only). Third path: reload with memory empty reads session.
+ */
+const pendingWorkspaceRestoreByProjectId: Record<string, WorkspaceFlowRecord> = {};
+
+/**
+ * Prefer in-memory pending for this projectId, then sessionStorage (read-once removes session row).
+ * Call once per FlowWorkspaceProvider mount path (useLayoutEffect).
+ */
+export function takeWorkspaceRestoreForProjectOnce(projectId: string): WorkspaceFlowRecord | null {
+  const pid = String(projectId || '').trim();
+  if (!pid || pid.startsWith('draft_')) return null;
+  if (Object.prototype.hasOwnProperty.call(pendingWorkspaceRestoreByProjectId, pid)) {
+    const s = pendingWorkspaceRestoreByProjectId[pid];
+    delete pendingWorkspaceRestoreByProjectId[pid];
+    return s;
+  }
+  try {
+    const raw = sessionStorage.getItem(workspaceRestoreStorageKey(pid));
+    if (!raw) return null;
+    sessionStorage.removeItem(workspaceRestoreStorageKey(pid));
+    return JSON.parse(raw) as WorkspaceFlowRecord;
+  } catch {
+    return null;
+  }
+}
+
+/** Call after orchestrator save succeeds so the next open loads from the API, not a stale restore queue. */
+export function clearWorkspaceRestoreForProject(projectId: string): void {
+  const pid = String(projectId || '').trim();
+  if (!pid) return;
+  delete pendingWorkspaceRestoreByProjectId[pid];
+  try {
+    sessionStorage.removeItem(workspaceRestoreStorageKey(pid));
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Deep-clone workspace flows for persistence (nodes/edges + per-flow fields like meta, hasLocalChanges).

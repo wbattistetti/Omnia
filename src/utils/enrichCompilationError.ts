@@ -42,7 +42,9 @@ export function buildFixTargetForCompilationError(
     stepKey
   ) {
     const idx = escalationIndex !== undefined ? escalationIndex : 0;
-    return { type: 'taskEscalation', taskId, stepKey, escalationIndex: idx };
+    /** Flowchart instance key for taskRepository — prefer row.id over referenced task id. */
+    const instanceTaskId = rowId && rowId.length > 0 ? rowId : taskId;
+    return { type: 'taskEscalation', taskId: instanceTaskId, stepKey, escalationIndex: idx };
   }
   if (edgeId) {
     return { type: 'edge', edgeId };
@@ -78,6 +80,7 @@ export function enrichCompilationError(raw: Record<string, unknown>): Compilatio
 
   const stepKeyRaw = str(pick(raw, 'stepKey')) || undefined;
   const escalationIndex = num(pick(raw, 'escalationIndex'));
+  const taskTypeNum = num(pick(raw, 'taskType'));
 
   const fixTarget = buildFixTargetForCompilationError(
     category,
@@ -118,6 +121,7 @@ export function enrichCompilationError(raw: Record<string, unknown>): Compilatio
       : undefined,
     stepKey: stepKeyRaw,
     escalationIndex,
+    taskType: taskTypeNum,
   };
 }
 

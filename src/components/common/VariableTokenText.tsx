@@ -2,6 +2,7 @@ import React from 'react';
 import { extractBracketTokens } from '../../utils/variableTokenText';
 import { variableCreationService } from '../../services/VariableCreationService';
 import type { VariableInstance } from '../../types/variableTypes';
+import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
 
 type Props = {
   text: string;
@@ -9,6 +10,7 @@ type Props = {
 };
 
 export default function VariableTokenText({ text, className }: Props) {
+  const { translations } = useProjectTranslations();
   const tokenLabelById = React.useMemo(() => {
     let projectId = '';
     try {
@@ -23,13 +25,16 @@ export default function VariableTokenText({ text, className }: Props) {
     const vars = variableCreationService.getAllVariables(projectId) || [];
     const out = new Map<string, string>();
     vars.forEach((v) => {
-      const id = String((v as VariableInstance)?.varId || '').trim();
-      const label = String((v as VariableInstance)?.varName || '').trim();
-      if (!id || !label) return;
+      const id = String((v as VariableInstance)?.id || '').trim();
+      if (!id) return;
+      const fromTr = String(translations[id] ?? '').trim();
+      const fromVar = String((v as VariableInstance)?.varName || '').trim();
+      const label = fromTr || fromVar;
+      if (!label) return;
       out.set(id, label);
     });
     return out;
-  }, [text]);
+  }, [text, translations]);
 
   const resolveTokenLabel = React.useCallback((rawValue: string): string => {
     const value = String(rawValue || '').trim();

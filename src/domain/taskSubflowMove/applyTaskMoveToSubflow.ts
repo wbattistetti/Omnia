@@ -92,8 +92,8 @@ export type ApplyTaskMoveToSubflowResult = {
    * GUID-stable child varIds that remain wired through the subflow interface into the parent
    * (referenced). Parent-facing FQ names use separate proxy varIds (outputBindings).
    */
-  guidMappingParentSubflow: Array<{ varId: string }>;
-  renamed: Array<{ varId: string; previousName: string; nextName: string }>;
+  guidMappingParentSubflow: Array<{ id: string }>;
+  renamed: Array<{ id: string; previousName: string; nextName: string }>;
   /** Count of rows removed when deleteUnreferencedTaskVariableRows was true. */
   removedUnreferencedVariableRows: number;
   /** Task row placement + TaskRepository snapshot after move (see materializeTaskInSubflow). */
@@ -119,7 +119,7 @@ export function mergeChildFlowInterfaceOutputsForVariables(
   const vars =
     only !== undefined
       ? only.size > 0
-        ? variables.filter((v) => only.has(String(v.varId || '').trim()))
+        ? variables.filter((v) => only.has(String(v.id || '').trim()))
         : []
       : variables;
   const meta = { ...(flow.meta || {}) } as {
@@ -132,11 +132,11 @@ export function mergeChildFlowInterfaceOutputsForVariables(
   );
 
   for (const v of vars) {
-    const vid = String(v.varId || '').trim();
+    const vid = String(v.id || '').trim();
     if (!vid || seen.has(vid)) continue;
     let rawName = String(v.varName || '').trim();
     if (!rawName && optPid) {
-      rawName = String(variableCreationService.getVarNameByVarId(optPid, vid) || '').trim();
+      rawName = String(variableCreationService.getVarNameById(optPid, vid) || '').trim();
     }
     if (!rawName) rawName = vid;
     const local = localLabelForSubflowTaskVariable(rawName);
@@ -236,14 +236,14 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
   });
 
   const taskVars = variableCreationService.getVariablesByTaskInstanceId(pid, taskInstanceId);
-  const taskVarIdSet = new Set(taskVars.map((v) => String(v.varId || '').trim()));
+  const taskVarIdSet = new Set(taskVars.map((v) => String(v.id || '').trim()));
   const referencedForMovedTask = [...referencedInParent].filter((id) => taskVarIdSet.has(id));
   const refSet = new Set(referencedForMovedTask);
   const unreferencedForMovedTask = [...taskVarIdSet].filter((id) => !refSet.has(id));
 
   let removedUnreferencedVariableRows = 0;
   if (deleteUnreferencedTaskVariableRows && unreferencedForMovedTask.length > 0) {
-    removedUnreferencedVariableRows = variableCreationService.removeTaskVariableRowsForVarIds(
+    removedUnreferencedVariableRows = variableCreationService.removeTaskVariableRowsForIds(
       pid,
       taskInstanceId,
       unreferencedForMovedTask
@@ -251,7 +251,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
   }
 
   const renamed = restoreChildTaskBoundVariablesToLocalNames(pid, taskInstanceId, refSet).map((r) => ({
-    varId: r.varId,
+    id: r.id,
     previousName: r.previousName,
     nextName: r.nextName,
   }));
@@ -296,7 +296,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     });
   }
 
-  const guidMappingParentSubflow = referencedForMovedTask.map((varId) => ({ varId }));
+  const guidMappingParentSubflow = referencedForMovedTask.map((id) => ({ id }));
 
   let taskMaterialization: MaterializeMovedTaskSummary;
   if (skipMaterialization) {

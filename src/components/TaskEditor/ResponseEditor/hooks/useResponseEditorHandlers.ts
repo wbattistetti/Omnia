@@ -24,6 +24,7 @@ export interface UseResponseEditorHandlersParams {
   taskTree?: TaskTree | null;
   task?: TaskMeta | Task;
   currentProjectId: string | null;
+  authoringFlowCanvasId?: string | null;
   isTaskTreeLoading?: boolean;
 
   // State
@@ -65,6 +66,7 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     taskTree,
     task,
     currentProjectId,
+    authoringFlowCanvasId,
     isTaskTreeLoading,
     state,
     refs,
@@ -178,6 +180,7 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     selectedRoot,
     task,
     currentProjectId,
+    authoringFlowCanvasId,
     tabId,
     setDockTree,
     onClose,
@@ -206,6 +209,7 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     task,
     taskTree,
     currentProjectId,
+    authoringFlowCanvasId,
     setTaskTreeVersion,
     prevInstanceRef,
     setServiceUnavailable,

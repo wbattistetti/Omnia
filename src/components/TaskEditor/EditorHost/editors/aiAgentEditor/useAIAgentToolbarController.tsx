@@ -92,16 +92,17 @@ export function useAIAgentToolbarController({
   }, [hideHeader, onToolbarUpdate, headerColor, primaryToolbarButtons]);
 
   const headerContext = useHeaderToolbarContext();
+  const setHeaderIcon = headerContext?.setIcon;
+  const setHeaderTitle = headerContext?.setTitle;
   React.useEffect(() => {
-    if (headerContext) {
-      headerContext.setIcon(<Bot size={18} style={{ color: headerColor }} />);
-      headerContext.setTitle(String(task?.label || 'AI Agent'));
-      return () => {
-        headerContext.setIcon(null);
-        headerContext.setTitle(null);
-      };
-    }
-  }, [headerContext, task?.label, headerColor]);
+    if (!setHeaderIcon || !setHeaderTitle) return;
+    setHeaderIcon(<Bot size={18} style={{ color: headerColor }} />);
+    setHeaderTitle(String(task?.label || 'AI Agent'));
+    return () => {
+      setHeaderIcon(null);
+      setHeaderTitle(null);
+    };
+  }, [setHeaderIcon, setHeaderTitle, task?.label, headerColor]);
 
   return { headerColor, primaryAgentActionLabel };
 }

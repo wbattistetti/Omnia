@@ -10,6 +10,9 @@ import { SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_ICONS } from '@components/Sidebar
 import { setupMonacoEnvironment } from '@utils/monacoWorkerSetup';
 import { useAIProvider } from '@context/AIProviderContext';
 import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
+import { variableCreationService } from '@services/VariableCreationService';
+import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
 // Note: ScriptManagerService handles ExecCode/UICode conversion internally
 // SmartTooltip is used only in the tester's toolbar (right panel)
 
@@ -103,14 +106,27 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     // Provider not available - skip
   }
 
+  const { getTranslation } = useProjectTranslations();
+  const resolveUnknownGuidToLabel = React.useCallback(
+    (guid: string) =>
+      getTranslation(guid) ||
+      variableCreationService.getVarNameById(
+        resolveVariableStoreProjectId(pdUpdate?.getCurrentProjectId?.() ?? undefined),
+        guid
+      ) ||
+      null,
+    [getTranslation, pdUpdate]
+  );
+
   // ✅ REFACTOR: Use ScriptManagerService
   const scriptManager = React.useMemo(() => {
     return new ScriptManagerService({
       projectData,
       pdUpdate,
       flowId: flowId ?? getActiveFlowCanvasId(),
+      resolveUnknownGuidToLabel,
     });
-  }, [projectData, pdUpdate, flowId]);
+  }, [projectData, pdUpdate, flowId, resolveUnknownGuidToLabel]);
 
   // ✅ FIX: Track conditionId locally — updated after createCondition
   const localConditionIdRef = React.useRef<string | undefined>(conditionId);

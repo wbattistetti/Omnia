@@ -81,10 +81,21 @@ export function EscalationTasksList({
 
   const tasks = escalation.tasks ?? [];
 
-  /** Empty escalation: open Tasks panel so the user can drag without hunting the toolbar tab. */
+  /** Avoid opening Tasks twice when Fix / navigation already opened it (reduces panel flicker). */
+  const emptyPanelAutoOpenedRef = React.useRef(false);
+  React.useEffect(() => {
+    emptyPanelAutoOpenedRef.current = false;
+  }, [stepKey, escalationIdx]);
+
+  /** Empty escalation: open Tasks panel once per empty state (Fix may already have opened it). */
   React.useEffect(() => {
     if (!isReady) return;
-    if (tasks.length > 0) return;
+    if (tasks.length > 0) {
+      emptyPanelAutoOpenedRef.current = false;
+      return;
+    }
+    if (emptyPanelAutoOpenedRef.current) return;
+    emptyPanelAutoOpenedRef.current = true;
     openTasksPanel();
   }, [isReady, tasks.length, openTasksPanel, stepKey, escalationIdx]);
 

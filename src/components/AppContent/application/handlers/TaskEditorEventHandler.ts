@@ -304,11 +304,13 @@ export class TaskEditorEventHandler {
     const defaultTitle = getDefaultTitle(editorKind);
     const title = event.label || event.name || defaultTitle;
 
+    const flowId = String(event.flowId ?? '').trim() || undefined;
     return {
       id: tabId,
       title,
       type: 'taskEditor',
       task: taskMeta,
+      ...(flowId ? { flowId } : {}),
       headerColor,
       toolbarButtons: [],
     } as DockTabTaskEditor;

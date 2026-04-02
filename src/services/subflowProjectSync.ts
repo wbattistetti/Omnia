@@ -1,7 +1,8 @@
 /**
  * Keeps parent-flow proxy variables and Subflow outputBindings aligned with child flow interface
- * outputs (semantic name = TaskRowLabel + output label). Runs after interface edits and when
- * a parent links a Subflow task to a child flow.
+ * outputs. Child slot varIds (`fromVariable`) stay on the subflow task variables (local names);
+ * parent FQ names live on separate manual flow-scoped rows (`toVariable`). Runs after interface edits
+ * and when a parent links a Subflow task to a child flow.
  */
 
 import { taskRepository } from './TaskRepository';
@@ -11,7 +12,7 @@ import type { WorkspaceState } from '../flows/FlowTypes';
 import { loadFlow } from '../flows/FlowPersistence';
 import type { MappingEntry } from '../components/FlowMappingPanel/mappingTypes';
 import {
-  buildProxyVariableName,
+  buildSubflowParentProxyVariableName,
   disambiguateProxyVarName,
 } from '../domain/variableProxyNaming';
 import { projectHasBracketReferenceToVarId } from './subflowVariableReferenceScan';
@@ -109,7 +110,7 @@ function pickUniqueProxyNameForRename(
   return disambiguateProxyVarName(desiredBase, (name) => {
     const hit = variableCreationService.findVariableInFlowScopeByExactName(projectId, parentFlowId, name);
     if (!hit) return false;
-    return hit.varId !== ownVarId;
+    return hit.id !== ownVarId;
   });
 }
 
@@ -153,7 +154,7 @@ export function syncProxyBindingsForSubflowTask(
 
     let desiredBase: string;
     try {
-      desiredBase = buildProxyVariableName(rowText, internalLabel);
+      desiredBase = buildSubflowParentProxyVariableName(rowText, internalLabel);
     } catch {
       continue;
     }
@@ -163,9 +164,9 @@ export function syncProxyBindingsForSubflowTask(
       const parentId = String(existing.toVariable || '').trim();
       if (!parentId) continue;
       const uniqueName = pickUniqueProxyNameForRename(pid, parentFlowId, desiredBase, parentId);
-      const current = variableCreationService.getVarNameByVarId(pid, parentId);
+      const current = variableCreationService.getVarNameById(pid, parentId);
       if (current && current !== uniqueName) {
-        variableCreationService.renameVariableByVarId(pid, parentId, uniqueName);
+        variableCreationService.renameVariableById(pid, parentId, uniqueName);
       }
       nextBindings.push({ fromVariable: refId, toVariable: parentId });
     } else {
@@ -176,7 +177,7 @@ export function syncProxyBindingsForSubflowTask(
         scope: 'flow',
         scopeFlowId: parentFlowId,
       });
-      nextBindings.push({ fromVariable: refId, toVariable: parentVar.varId });
+      nextBindings.push({ fromVariable: refId, toVariable: parentVar.id });
     }
   }
 
@@ -187,9 +188,9 @@ export function syncProxyBindingsForSubflowTask(
     if (
       toId &&
       !projectHasBracketReferenceToVarId(pid, toId, flows) &&
-      variableCreationService.getVarNameByVarId(pid, toId)
+      variableCreationService.getVarNameById(pid, toId)
     ) {
-      variableCreationService.removeVariableByVarId(pid, toId);
+      variableCreationService.removeVariableById(pid, toId);
     }
   }
 

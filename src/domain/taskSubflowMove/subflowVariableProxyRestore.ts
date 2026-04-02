@@ -42,7 +42,7 @@ export function findParentFlowIdForSubflowTaskRow(
   return null;
 }
 
-export type ChildLocalRenameRecord = { varId: string; previousName: string; nextName: string };
+export type ChildLocalRenameRecord = { id: string; previousName: string; nextName: string };
 
 /**
  * Renames task-bound variable rows from legacy fully-qualified names to local labels only.
@@ -61,15 +61,15 @@ export function restoreChildTaskBoundVariablesToLocalNames(
   const renamed: ChildLocalRenameRecord[] = [];
 
   for (const v of taskVars) {
-    const vid = String(v.varId || '').trim();
+    const vid = String(v.id || '').trim();
     if (!vid || !candidateVarIds.has(vid)) continue;
 
     const localName = localLabelForSubflowTaskVariable(v.varName || 'value');
     if (!localName || localName === v.varName) continue;
 
-    const ok = variableCreationService.renameVariableRowByVarId(pid, vid, localName);
+    const ok = variableCreationService.renameVariableRowById(pid, vid, localName);
     if (ok) {
-      renamed.push({ varId: vid, previousName: v.varName, nextName: localName });
+      renamed.push({ id: vid, previousName: v.varName, nextName: localName });
     }
   }
 
@@ -110,16 +110,16 @@ export function migrateSubflowVariableProxyModel(
   const all = variableCreationService.getAllVariables(pid) ?? [];
 
   for (const vid of fromIds) {
-    const v = all.find((x) => String(x.varId || '').trim() === vid);
+    const v = all.find((x) => String(x.id || '').trim() === vid);
     if (!v || !String(v.taskInstanceId || '').trim()) continue;
 
     const localName = localLabelForSubflowTaskVariable(v.varName || '');
     if (!localName || localName === v.varName) continue;
 
     const prev = v.varName;
-    const ok = variableCreationService.renameVariableRowByVarId(pid, vid, localName);
+    const ok = variableCreationService.renameVariableRowById(pid, vid, localName);
     if (ok) {
-      childRenames.push({ varId: vid, previousName: prev, nextName: localName });
+      childRenames.push({ id: vid, previousName: prev, nextName: localName });
     }
   }
 

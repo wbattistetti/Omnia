@@ -6,9 +6,12 @@ import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { getTemplateId } from '@utils/taskHelpers';
 import { materializeTaskFromRepository } from '@utils/MaterializationOrchestrator';
 import { ensureTaskExists } from '@utils/ensureTaskExists';
-import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '@types/taskTypes';
+import { TaskType, taskIdToTaskType, getEditorFromTaskType, isUtteranceInterpretationTask } from '@types/taskTypes';
 import type { Task, TaskTree } from '@types/taskTypes';
 import { useTaskTreeStore, useTaskTreeVersion } from '@responseEditor/core/state';
+import { ensureTaskTreeNodeIds } from '@responseEditor/core/taskTree';
+import { variableCreationService } from '@services/VariableCreationService';
+import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
 
 /**
  * Avoid clearing the task tree store on every remount of this host (same task id).
@@ -57,6 +60,7 @@ export default function TaskTreeHostAdapter({
   registerOnClose,
   setDockTree,
   dockTabId,
+  authoringFlowCanvasId,
 }: EditorProps) {
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per TaskTree
   // Se il task è di tipo Message, questo componente NON dovrebbe essere montato
@@ -107,6 +111,29 @@ export default function TaskTreeHostAdapter({
       return null;
     }
   }, [taskId, taskMeta.type, taskMeta.label, currentProjectId]);
+
+  const runUtteranceVariableHydrationFromTaskTree = React.useCallback(
+    (tree: TaskTree, task: Task | null | undefined) => {
+      if (!task || !tree) return;
+      const utteranceLike =
+        isUtteranceInterpretationTask(task) || task.type === TaskType.ClassifyProblem;
+      if (!utteranceLike) return;
+      const ensured = ensureTaskTreeNodeIds(tree);
+      const pid = resolveVariableStoreProjectId(currentProjectId);
+      const label = String(
+        ensured.labelKey ?? ensured.label ?? task.label ?? task.labelKey ?? taskMeta.label ?? ''
+      ).trim();
+      variableCreationService.hydrateVariablesFromTaskTree(pid, authoringFlowCanvasId, taskId, ensured, {
+        taskRowLabel: label || undefined,
+      });
+      try {
+        document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
+      } catch {
+        /* noop */
+      }
+    },
+    [authoringFlowCanvasId, currentProjectId, taskId, taskMeta.label]
+  );
 
   // ✅ FASE 3: Store è single source of truth
   const { setTaskTree: setTaskTreeInStore } = useTaskTreeStore();
@@ -169,6 +196,7 @@ export default function TaskTreeHostAdapter({
           const { taskTree: tree, instance: updatedTask } = result;
           // ✅ FASE 3: Store è single source of truth - aggiorna solo lo store
           setTaskTreeInStore(tree);
+          runUtteranceVariableHydrationFromTaskTree(tree, updatedTask ?? fullTask ?? null);
           lastDdtHostMaterializedTaskId = taskId;
           initializedRef.current = true;
 
@@ -176,7 +204,9 @@ export default function TaskTreeHostAdapter({
         } else {
           const fresh = taskRepository.getTask(taskId);
           if (fresh) {
-            setTaskTreeInStore(buildMinimalTaskTreeFromTask(fresh));
+            const minimal = buildMinimalTaskTreeFromTask(fresh);
+            setTaskTreeInStore(minimal);
+            runUtteranceVariableHydrationFromTaskTree(minimal, fresh);
           } else {
             setTaskTreeInStore(null);
           }
@@ -187,7 +217,9 @@ export default function TaskTreeHostAdapter({
         console.error('[TaskTreeHostAdapter] Error loading TaskTree:', error);
         const fresh = taskRepository.getTask(taskId);
         if (fresh) {
-          setTaskTreeInStore(buildMinimalTaskTreeFromTask(fresh));
+          const minimal = buildMinimalTaskTreeFromTask(fresh);
+          setTaskTreeInStore(minimal);
+          runUtteranceVariableHydrationFromTaskTree(minimal, fresh);
         } else {
           setTaskTreeInStore(null);
         }
@@ -202,7 +234,7 @@ export default function TaskTreeHostAdapter({
     // ✅ CRITICAL: setTaskTreeInStore is stable from Zustand, but we don't need it in deps
     // ✅ FIX STRUTTURALE: Dipende solo da fullTask?.id, non da fullTask (evita loop)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullTask?.id, currentProjectId, taskId]);
+  }, [fullTask?.id, currentProjectId, taskId, runUtteranceVariableHydrationFromTaskTree]);
 
   // ✅ ARCHITETTURA ESPERTO: Loading solo se serve async
   const loading = taskTreeLoading;
@@ -384,8 +416,18 @@ export default function TaskTreeHostAdapter({
 
     // ✅ FASE 3: Store è single source of truth - aggiorna solo lo store
     setTaskTreeInStore(finalTaskTree);
+    const taskAfterWizard = taskRepository.getTask(taskId) ?? fullTask;
+    runUtteranceVariableHydrationFromTaskTree(finalTaskTree, taskAfterWizard);
     initializedRef.current = true; // ✅ Marca come inizializzato dopo wizard
-  }, [taskId, currentProjectId, taskMeta.label, setTaskTreeInStore]);
+  }, [
+    taskId,
+    currentProjectId,
+    taskMeta.label,
+    setTaskTreeInStore,
+    fullTask,
+    authoringFlowCanvasId,
+    runUtteranceVariableHydrationFromTaskTree,
+  ]);
 
   // ✅ ARCHITETTURA ESPERTO: Ensure nodes is always an array before passing to ResponseEditor
   // ✅ FASE 3: Usa solo store come single source of truth
@@ -484,6 +526,7 @@ export default function TaskTreeHostAdapter({
       onToolbarUpdate={onToolbarUpdate} // ✅ PATTERN CENTRALIZZATO: Passa onToolbarUpdate per ereditare header
       registerOnClose={registerOnClose} // ✅ Passa registerOnClose per gestire chiusura con controllo contracts
       setDockTree={setDockTree} // ✅ Passa setDockTree per aprire chat panel come tab dockabile
+      authoringFlowCanvasId={authoringFlowCanvasId}
     />
   );
 }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { variableCreationService } from '@services/VariableCreationService';
 import { taskRepository } from '@services/TaskRepository';
 import { TaskType } from '@types/taskTypes';
-import type { TaskTreeNode } from '@types/taskTypes';
+import type { TaskTree, TaskTreeNode } from '@types/taskTypes';
 import {
   findParentFlowIdForSubflowTaskRow,
   migrateSubflowVariableProxyModel,
@@ -37,19 +37,26 @@ describe('restoreChildTaskBoundVariablesToLocalNames', () => {
     const roots: TaskTreeNode[] = [
       { id: 'node-a', label: 'campo', subNodes: [], templateId: 't1' } as TaskTreeNode,
     ];
-    variableCreationService.syncUtteranceTaskTreeVariables(projectId, taskId, 'Ask field', roots);
+    const taskTree: TaskTree = {
+      labelKey: 'Ask field',
+      nodes: roots,
+      steps: {},
+    };
+    variableCreationService.hydrateVariablesFromTaskTree(projectId, 'main', taskId, taskTree, {
+      taskRowLabel: 'Ask field',
+    });
     const vars = variableCreationService.getVariablesByTaskInstanceId(projectId, taskId);
     expect(vars.length).toBeGreaterThan(0);
-    const vid = vars[0]!.varId;
+    const vid = vars[0]!.id;
 
-    variableCreationService.renameVariableRowByVarId(projectId, vid, 'dati_personali.colore');
+    variableCreationService.renameVariableRowById(projectId, vid, 'dati_personali.colore');
 
     const renamed = restoreChildTaskBoundVariablesToLocalNames(projectId, taskId, new Set([vid]));
     expect(renamed.length).toBe(1);
     expect(renamed[0]!.previousName).toBe('dati_personali.colore');
     expect(renamed[0]!.nextName).toMatch(/colore/i);
 
-    const after = variableCreationService.getVarNameByVarId(projectId, vid);
+    const after = variableCreationService.getVarNameById(projectId, vid);
     expect(after).toBe(renamed[0]!.nextName);
     expect(after?.includes('.')).toBe(false);
   });
@@ -76,10 +83,17 @@ describe('migrateSubflowVariableProxyModel', () => {
     const roots: TaskTreeNode[] = [
       { id: 'node-a', label: 'colore', subNodes: [], templateId: 't1' } as TaskTreeNode,
     ];
-    variableCreationService.syncUtteranceTaskTreeVariables(projectId, childTaskId, 'Chiedi', roots);
+    const childTaskTree: TaskTree = {
+      labelKey: 'Chiedi',
+      nodes: roots,
+      steps: {},
+    };
+    variableCreationService.hydrateVariablesFromTaskTree(projectId, childFlowId, childTaskId, childTaskTree, {
+      taskRowLabel: 'Chiedi',
+    });
     const vars = variableCreationService.getVariablesByTaskInstanceId(projectId, childTaskId);
-    const childVarId = vars[0]!.varId;
-    variableCreationService.renameVariableRowByVarId(projectId, childVarId, 'dati_personali.colore');
+    const childVarId = vars[0]!.id;
+    variableCreationService.renameVariableRowById(projectId, childVarId, 'dati_personali.colore');
 
     const parentProxy = variableCreationService.createManualVariable(projectId, 'dati_personali.colore', {
       scope: 'flow',
@@ -89,7 +103,7 @@ describe('migrateSubflowVariableProxyModel', () => {
     taskRepository.createTask(TaskType.Subflow, null, undefined, subflowTaskId, projectId);
     taskRepository.updateTask(subflowTaskId, {
       flowId: childFlowId,
-      outputBindings: [{ fromVariable: childVarId, toVariable: parentProxy.varId }],
+      outputBindings: [{ fromVariable: childVarId, toVariable: parentProxy.id }],
     } as any);
 
     const flows = {
@@ -117,8 +131,8 @@ describe('migrateSubflowVariableProxyModel', () => {
     const r = migrateSubflowVariableProxyModel(projectId, flows);
 
     expect(r.childRenames.length).toBe(1);
-    expect(r.childRenames[0]!.varId).toBe(childVarId);
-    expect(variableCreationService.getVarNameByVarId(projectId, childVarId)).toBe('colore');
+    expect(r.childRenames[0]!.id).toBe(childVarId);
+    expect(variableCreationService.getVarNameById(projectId, childVarId)).toBe('colore');
     expect(r.syncCalls).toBe(1);
     expect(syncSpy).toHaveBeenCalledTimes(1);
   });

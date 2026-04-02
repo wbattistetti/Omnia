@@ -20,7 +20,7 @@ describe('enrichCompilationError', () => {
     expect(e.category).toBe('EmptyEscalation');
     expect(e.fixTarget).toEqual({
       type: 'taskEscalation',
-      taskId: 'task-guid-1',
+      taskId: 'row-1',
       stepKey: 'noMatch',
       escalationIndex: 1,
     });
@@ -42,5 +42,20 @@ describe('enrichCompilationError', () => {
       stepKey: 'start',
       escalationIndex: 0,
     });
+  });
+
+  it('uses rowId as fixTarget taskId when both rowId and taskId differ (flowchart instance)', () => {
+    const e = enrichCompilationError({
+      category: 'EmptyEscalation',
+      taskId: 'ref-task-guid',
+      rowId: 'row-instance-guid',
+      stepKey: 'noMatch',
+      message: 'x',
+      severity: 'Error',
+      escalationIndex: 0,
+      taskType: 3,
+    });
+    expect((e.fixTarget as { type: 'taskEscalation' }).taskId).toBe('row-instance-guid');
+    expect(e.taskType).toBe(3);
   });
 });

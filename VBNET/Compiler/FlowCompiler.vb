@@ -46,7 +46,7 @@ Public Class FlowCompiler
 
             Dim utteranceResult = TryCast(result, CompiledUtteranceTask)
             If utteranceResult IsNot Nothing Then
-                Dim escalationErrors = UtteranceEscalationValidation.AppendEmptyEscalationErrors(utteranceResult, taskId, node, row, errors)
+                Dim escalationErrors = UtteranceEscalationValidation.AppendEmptyEscalationErrors(utteranceResult, taskId, node, row, errors, taskType)
                 If escalationErrors > 0 Then
                     Return Nothing
                 End If
@@ -65,7 +65,8 @@ Public Class FlowCompiler
                 .Severity = ErrorSeverity.Error,
                 .Category = "TaskCompilationFailed",
                 .DetailCode = detail,
-                .TechnicalDetail = ex.Message
+                .TechnicalDetail = ex.Message,
+                .TaskType = CInt(taskType)
             })
             Return Nothing
         End Try
@@ -648,13 +649,12 @@ Public Class FlowCompiler
             Console.WriteLine($"[FlowCompiler][VARIABLES] 🔍 Converting {variables.Count} variables from frontend/DB...")
             For Each var In variables
                 Dim compiledVar As New CompiledVariable() With {
-                    .VarId = var.VarId,
+                    .Id = var.Id,
                     .TaskInstanceId = If(String.IsNullOrEmpty(var.TaskInstanceId), "", var.TaskInstanceId),
-                    .NodeId = If(String.IsNullOrEmpty(var.NodeId), "", var.NodeId),
                     .Values = New List(Of Object)()
                 }
                 compiledVariables.Add(compiledVar)
-                Console.WriteLine($"[FlowCompiler][VARIABLES] ✅ Converted variable: varId={var.VarId}, varName={var.VarName}, taskInstanceId={compiledVar.TaskInstanceId}, nodeId={compiledVar.NodeId}")
+                Console.WriteLine($"[FlowCompiler][VARIABLES] ✅ Converted variable: id={var.Id}, varName={var.VarName}, taskInstanceId={compiledVar.TaskInstanceId}")
             Next
         End If
 

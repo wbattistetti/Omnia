@@ -13,7 +13,7 @@ describe('buildVariableMappingsFromMenu', () => {
     const taskId = 'task-row-1';
     const items: VariableMenuItem[] = [
       {
-        varId: childVarId,
+        id: childVarId,
         varLabel: 'nome',
         tokenLabel: 'dati personali.nome',
         ownerFlowId: 'child-flow',
@@ -50,7 +50,7 @@ describe('buildVariableMappingsFromMenu', () => {
     const syntheticVarId = 'iface:me-123';
     const items: VariableMenuItem[] = [
       {
-        varId: syntheticVarId,
+        id: syntheticVarId,
         varLabel: 'nome',
         tokenLabel: 'dati personali.nome',
         ownerFlowId: 'child-flow',
@@ -74,7 +74,7 @@ describe('buildVariableMappingsFromMenu', () => {
     const taskId = 'subflow-row-1';
     const items: VariableMenuItem[] = [
       {
-        varId: parentId,
+        id: parentId,
         varLabel: 'nome',
         tokenLabel: 'nome',
         ownerFlowId: 'main-flow',
@@ -97,7 +97,7 @@ describe('buildVariableMappingsFromMenu', () => {
     const taskId = 'task-row-1';
     const items: VariableMenuItem[] = [
       {
-        varId: childVarId,
+        id: childVarId,
         varLabel: 'nome',
         tokenLabel: 'dati personali.nome',
         ownerFlowId: 'child-flow',

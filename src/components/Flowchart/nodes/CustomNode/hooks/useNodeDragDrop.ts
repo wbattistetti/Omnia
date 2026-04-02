@@ -327,7 +327,9 @@ export function useNodeDragDrop({
                     rowId: draggedRowId,
                     rowData: rowDataToMove, // ✅ Mantiene lo stesso row.id, quindi il task è ancora disponibile
                     originalIndex: draggedRowIndex,
-                    mousePosition: { x: mousePositionRef.current.x, y: mousePositionRef.current.y }
+                    mousePosition: { x: mousePositionRef.current.x, y: mousePositionRef.current.y },
+                    /** FlowEditor may set true when the row is routed into a child flow (Subflow portal). */
+                    _state: { handled: false },
                 }
             });
 

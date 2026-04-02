@@ -9,8 +9,8 @@ describe('flattenUtteranceTaskTreeVariableRows', () => {
     ];
     const rows = flattenUtteranceTaskTreeVariableRows('Chiedi la disponibilità', roots);
     expect(rows).toHaveLength(1);
-    expect(rows[0].nodeId).toBe('n1');
-    expect(rows[0].ddtPath).toBe('data[0]');
+    expect(rows[0].id).toBe('n1');
+    expect(rows[0].dataPath).toBe('data[0]');
     expect(rows[0].varName).toContain('disponibilit');
   });
 
@@ -25,7 +25,7 @@ describe('flattenUtteranceTaskTreeVariableRows', () => {
     ];
     const rows = flattenUtteranceTaskTreeVariableRows('Chiedi la data di nascita del paziente', roots);
     expect(rows.length).toBeGreaterThanOrEqual(2);
-    const byId = Object.fromEntries(rows.map((r) => [r.nodeId, r.varName]));
+    const byId = Object.fromEntries(rows.map((r) => [r.id, r.varName]));
     expect(byId.m1).toBeDefined();
     expect(byId.s1).toMatch(/giorno/i);
     expect(byId.s1.includes('.')).toBe(true);

@@ -1,10 +1,14 @@
 /**
- * Builds variable picker items for the active flow: task rows on this canvas, flow-scoped
- * manual rows for this canvas, and Subflow interface outputs (bindings + unbound).
- * Project-scoped manual rows (no task) are not listed here — they are not part of a flow namespace.
+ * Builds variable picker items for the active flow using the same visibility rules as
+ * {@link variableCreationService.getVariablesForFlowScope} (via shared per-flow scoping).
+ *
+ * Phase 1: utterance locals are a pure GUID filter — {@link collectUtteranceNodeGuidSetForFlow} ∩ in-memory store.
+ * This module must not create or mutate utterance variables (no sync/ensure).
  */
-import { TaskType } from '../../types/taskTypes';
+import { TaskType, isUtteranceInterpretationTask, type TaskTreeNode } from '../../types/taskTypes';
 import { taskRepository } from '../../services/TaskRepository';
+import { buildStandaloneTaskTreeView } from '../../utils/buildStandaloneTaskTreeView';
+import { getMainNodes } from '@responseEditor/core/domain';
 import { variableCreationService } from '../../services/VariableCreationService';
 import type { WorkspaceState } from '../../flows/FlowTypes';
 import type { VariableInstance } from '../../types/variableTypes';
@@ -14,11 +18,23 @@ import {
   fetchChildFlowInterfaceOutputs,
   invalidateChildFlowInterfaceCache,
 } from '../../services/childFlowInterfaceService';
-import { logVariableMenuDebug } from '../../utils/variableMenuDebug';
+import { isVariableMenuDebugEnabled, logVariableMenuDebug } from '../../utils/variableMenuDebug';
 import { subflowInterfaceOutputMappingKey } from './subflowVariableMappingKey';
+import {
+  getTaskInstanceIdsOnFlowCanvas,
+  getTaskInstanceIdsOnFlowCanvasFromFlows,
+  isVariableVisibleInFlow,
+} from '../../utils/variableScopeUtils';
+import { resolveVariableMenuLabel } from '../../utils/variableDisplayLabel';
+
+/** Optional overrides when building picker items (e.g. utterance labels from project translations). */
+export type BuildVariableMenuItemsOptions = {
+  translationsByGuid?: Record<string, string> | null;
+};
 
 export type VariableMenuItem = {
-  varId: string;
+  /** Variable row GUID (= TaskTreeNode.id for task-bound). */
+  id: string;
   varLabel: string;
   tokenLabel: string;
   ownerFlowId: string;
@@ -62,15 +78,141 @@ function collectTaskIdsForFlow(flowId: string, flows: WorkspaceState['flows']): 
   return out;
 }
 
-function collectTaskIdsFromNodes(nodes: any[]): Set<string> {
-  const out = new Set<string>();
-  for (const node of nodes || []) {
-    for (const row of extractRows(node)) {
-      const taskId = String(row?.id || '').trim();
-      if (taskId) out.add(taskId);
+function walkTaskTreeNodeIds(node: TaskTreeNode, out: Set<string>): void {
+  const id = String(node?.id || '').trim();
+  if (id) out.add(id);
+  for (const sub of node.subNodes || []) {
+    walkTaskTreeNodeIds(sub, out);
+  }
+}
+
+/**
+ * GUIDs for every TaskTreeNode under utterance-like tasks included on the flow canvas.
+ * Utterance menu items are {@link VariableInstance.id} values present in this set (memory is authoritative).
+ */
+export function collectUtteranceNodeGuidSetForFlow(
+  flowId: string,
+  flows: WorkspaceState['flows'] | null | undefined
+): Set<string> {
+  const guidSet = new Set<string>();
+  const fid = String(flowId ?? '').trim();
+  if (!fid || !flows?.[fid]) return guidSet;
+  const flow = flows[fid];
+  for (const graphNode of flow.nodes || []) {
+    for (const row of extractRows(graphNode)) {
+      if ((row as { included?: boolean }).included === false) continue;
+      const taskId = String((row as { id?: string }).id || '').trim();
+      if (!taskId) continue;
+      const task = taskRepository.getTask(taskId);
+      if (!task) continue;
+      const utteranceLike =
+        isUtteranceInterpretationTask(task) || task.type === TaskType.ClassifyProblem;
+      if (!utteranceLike) continue;
+      const tree = buildStandaloneTaskTreeView(task);
+      if (!tree) continue;
+      const roots = getMainNodes(tree);
+      for (const root of roots) walkTaskTreeNodeIds(root, guidSet);
     }
   }
-  return out;
+  return guidSet;
+}
+
+function isUtteranceLikeTaskInstance(taskInstanceId: string): boolean {
+  const task = taskRepository.getTask(String(taskInstanceId || '').trim());
+  return !!(
+    task &&
+    (isUtteranceInterpretationTask(task) || task.type === TaskType.ClassifyProblem)
+  );
+}
+
+/**
+ * Utterance-bound variables: only those whose id is in `utteranceGuidSet`.
+ * Other locals: existing visibility rules, excluding utterance-task rows not in the current tree GUID set.
+ */
+function filterLocalVariablesForActiveFlow(
+  allVars: VariableInstance[],
+  activeFlowId: string,
+  flows: WorkspaceState['flows'],
+  utteranceGuidSet: Set<string>
+): VariableInstance[] {
+  const utteranceVars = allVars.filter((v) =>
+    utteranceGuidSet.has(String((v as VariableInstance).id || '').trim())
+  );
+  const nonUtterance = allVars.filter((v) => {
+    const vid = String((v as VariableInstance).id || '').trim();
+    if (!vid || utteranceGuidSet.has(vid)) return false;
+    const tid = String((v as VariableInstance).taskInstanceId || '').trim();
+    if (tid && isUtteranceLikeTaskInstance(tid)) return false;
+    return isVariableVisibleInFlow(v as VariableInstance, activeFlowId, flows);
+  });
+  return [...utteranceVars, ...nonUtterance];
+}
+
+/**
+ * Dev / opt-in: explains utterance branch of {@link filterLocalVariablesForActiveFlow}
+ * (guidSet ∩ store vs rest with isVariableVisibleInFlow).
+ */
+function logUtteranceFilterStep(
+  projectId: string,
+  menuFlowId: string,
+  allVars: VariableInstance[],
+  utteranceGuidSet: Set<string>,
+  localVars: VariableInstance[]
+): void {
+  const idsInStore = new Set(
+    allVars.map((v) => String((v as VariableInstance).id || '').trim()).filter(Boolean)
+  );
+  const guidList = [...utteranceGuidSet];
+  const missingInStore = guidList.filter((id) => !idsInStore.has(id));
+  const utteranceFromStore = allVars.filter((v) =>
+    utteranceGuidSet.has(String((v as VariableInstance).id || '').trim())
+  );
+
+  const fullPayload = {
+    projectId,
+    menuFlowId,
+    filterRule:
+      'utterance: VariableInstance.id in guidSet (from flow TaskTree nodes); others: isVariableVisibleInFlow unless utterance task row without guid match',
+    storeVarCount: allVars.length,
+    storeVariables: allVars.map((v) => ({
+      id: String((v as VariableInstance).id || '').trim(),
+      taskInstanceId: String((v as VariableInstance).taskInstanceId || '').trim(),
+      varName: String((v as VariableInstance).varName || '').trim(),
+      scopeFlowId: String((v as VariableInstance).scopeFlowId || '').trim(),
+    })),
+    utteranceGuidSetSize: utteranceGuidSet.size,
+    utteranceGuidSet: guidList,
+    expectedGuidsNotInStore: missingInStore,
+    utteranceVarsKeptFromStore: utteranceFromStore.map((v) => ({
+      id: String((v as VariableInstance).id || '').trim(),
+      varName: String((v as VariableInstance).varName || '').trim(),
+    })),
+    localVarsAfterFilter: localVars.length,
+    localVarIdsAfterFilter: localVars.map((v) => String((v as VariableInstance).id || '').trim()),
+  };
+
+  if (isVariableMenuDebugEnabled()) {
+    logVariableMenuDebug('variableMenu:utteranceFilter', fullPayload);
+  } else if (import.meta.env.DEV && utteranceGuidSet.size > 0) {
+    console.log('[Omnia][variableMenu] utteranceFilter (summary)', {
+      projectId,
+      menuFlowId,
+      storeVarCount: allVars.length,
+      utteranceGuidSet: guidList,
+      expectedGuidsNotInStore: missingInStore,
+      localVarsAfterFilter: localVars.length,
+    });
+  }
+
+  const allExpectedMissing =
+    guidList.length > 0 && missingInStore.length === guidList.length && utteranceFromStore.length === 0;
+  if (import.meta.env.DEV && allExpectedMissing) {
+    console.warn(
+      '[Omnia][variableMenu] Utterance GUIDs on canvas but none in VariableCreationService store. ' +
+        'localStorage omnia.variableMenuDebug=1 for full dump. Check hydrateVariablesFromFlow timing and DB variable rows (must have id).',
+      { projectId, menuFlowId, expectedGuids: guidList, storeVarCount: allVars.length }
+    );
+  }
 }
 
 function resolveSubflowId(task: any): string | null {
@@ -287,7 +429,7 @@ function appendSubflowInterfaceOutputItems(
       }
       seen.add(dedupeKey);
       const parentName =
-        variableCreationService.getVarNameByVarId(projectId, toId)?.trim() ||
+        variableCreationService.getVarNameById(projectId, toId)?.trim() ||
         String(varsById.get(toId)?.varName || '').trim() ||
         '';
       if (!parentName) {
@@ -298,7 +440,7 @@ function appendSubflowInterfaceOutputItems(
       stats.dbgSubflowBoundResolvedItems += 1;
       const mergeIdx = items.findIndex(
         (it) =>
-          it.varId === toId &&
+          it.id === toId &&
           it.isFromActiveFlow === true &&
           !it.subflowTaskId &&
           !it.resolvedFromSubflowOutputBinding
@@ -314,7 +456,7 @@ function appendSubflowInterfaceOutputItems(
         continue;
       }
       items.push({
-        varId: toId,
+        id: toId,
         varLabel: parentName,
         tokenLabel: parentName,
         ownerFlowId: activeFlowId,
@@ -343,7 +485,7 @@ function appendSubflowInterfaceOutputItems(
     stats.subflowItemsAdded += 1;
     if (missingRef) stats.dbgSubflowInterfaceWithoutRefAdded += 1;
     items.push({
-      varId,
+      id: varId,
       varLabel,
       tokenLabel: `${cleanSourceLabel}.${varLabel}`,
       ownerFlowId: childFlowId,
@@ -401,43 +543,41 @@ function pushInterfaceItemsForInstance(
 export function buildVariableMenuItems(
   projectId: string,
   activeFlowId: string,
-  flows: WorkspaceState['flows']
+  flows: WorkspaceState['flows'],
+  options?: BuildVariableMenuItemsOptions
 ): VariableMenuItem[] {
+  const utteranceGuidSet = collectUtteranceNodeGuidSetForFlow(activeFlowId, flows);
   const relevantFlowIds = collectLevelOneFlowIds(activeFlowId, flows);
   const instances = collectLevelOneSubflowInstances(activeFlowId, flows);
   const allVars = variableCreationService.getAllVariables(projectId) || [];
-  const activeTaskIds = collectTaskIdsForFlow(activeFlowId, flows);
   const varsById = new Map<string, VariableInstance>();
   allVars.forEach((v) => {
-    const id = String((v as VariableInstance)?.varId || '').trim();
+    const id = String((v as VariableInstance)?.id || '').trim();
     if (!id) return;
     varsById.set(id, v as VariableInstance);
   });
 
   const items: VariableMenuItem[] = [];
   const seen = new Set<string>();
-  const localVars = allVars.filter((v) => {
-    const taskId = String((v as VariableInstance).taskInstanceId || '').trim();
-    if (taskId) {
-      return activeTaskIds.has(taskId);
-    }
-    const scope = (v as VariableInstance).scope === 'flow' ? 'flow' : 'project';
-    if (scope === 'flow') {
-      return String((v as VariableInstance).scopeFlowId || '').trim() === String(activeFlowId).trim();
-    }
-    return false;
-  });
+  const localVars = filterLocalVariablesForActiveFlow(allVars, activeFlowId, flows, utteranceGuidSet);
+  if (isVariableMenuDebugEnabled() || (import.meta.env.DEV && utteranceGuidSet.size > 0)) {
+    logUtteranceFilterStep(projectId, activeFlowId, allVars, utteranceGuidSet, localVars);
+  }
 
   for (const v of localVars) {
-    const varId = String((v as VariableInstance).varId || '').trim();
-    const varLabel = String((v as VariableInstance).varName || '').trim();
+    const varId = String((v as VariableInstance).id || '').trim();
+    const rawName = String((v as VariableInstance).varName || '').trim();
+    const varLabel = resolveVariableMenuLabel(varId, rawName, {
+      utteranceGuidSet,
+      translationsByGuid: options?.translationsByGuid,
+    });
     if (!varId || !varLabel) continue;
     const key = `${activeFlowId}::${varId}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const activeFlow = flows[activeFlowId];
     items.push({
-      varId,
+      id: varId,
       varLabel,
       tokenLabel: varLabel,
       ownerFlowId: activeFlowId,
@@ -477,31 +617,60 @@ export function buildVariableMenuItems(
 }
 
 /**
+ * When `loadFlow` filled nodes but in-memory `flows[activeFlowId]` was empty, visibility must use
+ * the same graph as `activeNodes` or task-bound variables are incorrectly filtered out.
+ */
+function mergeActiveFlowIntoFlowsForMenuScope(
+  flows: WorkspaceState['flows'],
+  activeFlowId: string,
+  loadedFromApi: boolean,
+  nodes: any[],
+  edges: any[],
+  loadedTitle: string,
+  loadedMeta: unknown
+): WorkspaceState['flows'] {
+  if (!loadedFromApi || !Array.isArray(nodes) || nodes.length === 0) {
+    return flows;
+  }
+  const prev = flows[activeFlowId] as any;
+  const title =
+    String(loadedTitle || '').trim() ||
+    String(prev?.title || activeFlowId).trim() ||
+    activeFlowId;
+  return {
+    ...flows,
+    [activeFlowId]: {
+      ...(prev || { id: activeFlowId, nodes: [], edges: [] }),
+      id: activeFlowId,
+      title,
+      nodes,
+      edges: Array.isArray(edges) ? edges : prev?.edges ?? [],
+      ...(loadedMeta != null && typeof loadedMeta === 'object' ? { meta: loadedMeta as object } : {}),
+    } as any,
+  };
+}
+
+/**
  * Async variant that also resolves child flow interface outputs
  * even when the child flow is not currently loaded in workspace snapshot.
  */
 export async function buildVariableMenuItemsAsync(
   projectId: string,
   activeFlowId: string,
-  flows: WorkspaceState['flows']
+  flows: WorkspaceState['flows'],
+  options?: BuildVariableMenuItemsOptions
 ): Promise<VariableMenuItem[]> {
-  const allVars = variableCreationService.getAllVariables(projectId) || [];
-  const varsById = new Map<string, VariableInstance>();
-  allVars.forEach((v) => {
-    const id = String((v as VariableInstance)?.varId || '').trim();
-    if (!id) return;
-    varsById.set(id, v as VariableInstance);
-  });
-
   let activeFlow = flows[activeFlowId] as any;
   let loadedActiveMeta: any = null;
   let loadedActiveTitle = '';
   let activeNodes = Array.isArray(activeFlow?.nodes) ? activeFlow.nodes : [];
+  let activeEdges = Array.isArray(activeFlow?.edges) ? activeFlow.edges : [];
   let loadedActiveFlowFromApi = false;
   if (activeNodes.length === 0 && projectId) {
     try {
       const loadedActive = await loadFlow(projectId, activeFlowId);
       activeNodes = Array.isArray(loadedActive?.nodes) ? loadedActive.nodes : [];
+      activeEdges = Array.isArray(loadedActive?.edges) ? loadedActive.edges : activeEdges;
       loadedActiveMeta = loadedActive?.meta || null;
       loadedActiveTitle = String((loadedActive as any)?.title || '').trim();
       loadedActiveFlowFromApi = true;
@@ -510,9 +679,25 @@ export async function buildVariableMenuItemsAsync(
     }
   }
 
-  const activeTaskIds = activeNodes.length > 0
-    ? collectTaskIdsFromNodes(activeNodes)
-    : collectTaskIdsForFlow(activeFlowId, flows);
+  const flowsForScope = mergeActiveFlowIntoFlowsForMenuScope(
+    flows,
+    activeFlowId,
+    loadedActiveFlowFromApi,
+    activeNodes,
+    activeEdges,
+    loadedActiveTitle,
+    loadedActiveMeta
+  );
+
+  const utteranceGuidSet = collectUtteranceNodeGuidSetForFlow(activeFlowId, flowsForScope);
+
+  const allVars = variableCreationService.getAllVariables(projectId) || [];
+  const varsById = new Map<string, VariableInstance>();
+  allVars.forEach((v) => {
+    const id = String((v as VariableInstance)?.id || '').trim();
+    if (!id) return;
+    varsById.set(id, v as VariableInstance);
+  });
 
   const instances = activeNodes.length > 0
     ? collectLevelOneSubflowInstancesFromNodes(activeNodes)
@@ -529,27 +714,34 @@ export async function buildVariableMenuItemsAsync(
   };
   const subflowBuildDiag: SubflowBuildDiag[] = [];
   const seen = new Set<string>();
-  const localVars = allVars.filter((v) => {
-    const taskId = String((v as VariableInstance).taskInstanceId || '').trim();
-    if (taskId) {
-      return activeTaskIds.has(taskId);
-    }
-    const scope = (v as VariableInstance).scope === 'flow' ? 'flow' : 'project';
-    if (scope === 'flow') {
-      return String((v as VariableInstance).scopeFlowId || '').trim() === String(activeFlowId).trim();
-    }
-    return false;
-  });
+  const localVars = filterLocalVariablesForActiveFlow(
+    allVars,
+    activeFlowId,
+    flowsForScope,
+    utteranceGuidSet
+  );
+  if (isVariableMenuDebugEnabled() || (import.meta.env.DEV && utteranceGuidSet.size > 0)) {
+    logUtteranceFilterStep(projectId, activeFlowId, allVars, utteranceGuidSet, localVars);
+  }
+
+  const scopeRowIdsMerged = new Set<string>([
+    ...getTaskInstanceIdsOnFlowCanvasFromFlows(activeFlowId, flowsForScope),
+    ...getTaskInstanceIdsOnFlowCanvas(activeFlowId),
+  ]);
 
   for (const v of localVars) {
-    const varId = String((v as VariableInstance).varId || '').trim();
-    const varLabel = String((v as VariableInstance).varName || '').trim();
+    const varId = String((v as VariableInstance).id || '').trim();
+    const rawName = String((v as VariableInstance).varName || '').trim();
+    const varLabel = resolveVariableMenuLabel(varId, rawName, {
+      utteranceGuidSet,
+      translationsByGuid: options?.translationsByGuid,
+    });
     if (!varId || !varLabel) continue;
     const key = `${activeFlowId}::${varId}`;
     if (seen.has(key)) continue;
     seen.add(key);
     items.push({
-      varId,
+      id: varId,
       varLabel,
       tokenLabel: varLabel,
       ownerFlowId: activeFlowId,
@@ -626,9 +818,20 @@ export async function buildVariableMenuItemsAsync(
 
   const localItemsCount = items.length - subflowAppendStats.subflowItemsAdded;
   logVariableMenuDebug('variableMenu:build', {
+    projectId,
     menuFlowId: activeFlowId,
+    utteranceGuidSetSize: utteranceGuidSet.size,
+    storeVarCount: allVars.length,
+    visibilityPassCount: localVars.length,
+    mergedTaskRowIdsCount: scopeRowIdsMerged.size,
+    sampleTaskRowIds: [...scopeRowIdsMerged].slice(0, 16),
+    sampleVarTaskInstanceIds: allVars
+      .map((v) => String((v as VariableInstance).taskInstanceId || '').trim())
+      .filter(Boolean)
+      .slice(0, 12),
     activeNodes: activeNodes.length,
     loadedMenuFlowFromApi: loadedActiveFlowFromApi,
+    mergedScopeFromApi: loadedActiveFlowFromApi && activeNodes.length > 0,
     instancesCount: instances.length,
     instances: instances.slice(0, 12).map((i) => ({
       rowLabel: i.rowLabel,
@@ -662,7 +865,7 @@ export function buildSubflowCompositeKeySet(items: VariableMenuItem[]): Set<stri
   const s = new Set<string>();
   for (const item of items) {
     if (item.isFromActiveFlow === false && item.subflowTaskId) {
-      const id = String(item.varId || '').trim();
+      const id = String(item.id || '').trim();
       if (!id) continue;
       s.add(subflowInterfaceOutputMappingKey(item.subflowTaskId, id));
     }
@@ -687,7 +890,7 @@ export function buildVariableMappingsFromMenu(items: VariableMenuItem[]): Map<st
   });
 
   for (const item of sorted) {
-    const id = String(item.varId || '').trim();
+    const id = String(item.id || '').trim();
     const label = String(item.tokenLabel || '').trim();
     if (!id || !label) continue;
 

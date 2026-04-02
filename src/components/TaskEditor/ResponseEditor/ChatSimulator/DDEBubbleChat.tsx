@@ -13,6 +13,14 @@ import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { taskRepository } from '@services/TaskRepository';
 import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 
+/** Maps browser/network error messages to user-facing Italian copy for the chat simulator header. */
+function userFacingChatErrorMessage(raw: string | null | undefined): string | null {
+  if (raw == null || raw === '') return null;
+  const t = raw.trim();
+  if (/^failed to fetch$/i.test(t)) return 'Il motore non è disponibile';
+  return raw;
+}
+
 /**
  * Estrae tutti i GUID dai step (utterance, invalid, nomatch, noinput, escalation, constraint)
  * Formato steps: { "templateId": { "start": { escalations: [...] }, "noMatch": { escalations: [...] }, ... } }
@@ -310,6 +318,10 @@ export default function DDEBubbleChat({
   // ✅ ARCHITECTURAL: Merge flow mode state with component state
   const effectiveIsWaitingForInput = isFlowMode ? flowModeChat.isWaitingForInput : isWaitingForInput;
   const effectiveError = isFlowMode ? flowModeChat.error : backendError;
+  const displayChatError = React.useMemo(
+    () => userFacingChatErrorMessage(effectiveError),
+    [effectiveError],
+  );
 
   // Message ID generator
   const messageIdCounter = React.useRef(0);
@@ -1634,10 +1646,10 @@ export default function DDEBubbleChat({
             )}
           </div>
         </div>
-        {effectiveError && (
+        {displayChatError && (
           <div className="mt-1 flex items-center gap-2 text-red-900 text-xs min-w-0">
             <AlertTriangle size={14} className="flex-shrink-0" />
-            <span className="break-words whitespace-normal">{effectiveError}</span>
+            <span className="break-words whitespace-normal">{displayChatError}</span>
           </div>
         )}
       </div>

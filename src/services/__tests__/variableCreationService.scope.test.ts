@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import type { TaskTreeNode } from '@types/taskTypes';
+import type { TaskTree, TaskTreeNode } from '@types/taskTypes';
 import { variableCreationService } from '../VariableCreationService';
 import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
 
@@ -18,7 +18,7 @@ describe('VariableCreationService per-flow scope', () => {
     FlowWorkspaceSnapshot.setSnapshot({}, 'main');
   });
 
-  it('project manual vars are not listed per-flow; flow-scoped only on matching canvas', () => {
+  it('project manual globals appear on every flow; flow-scoped manual only on matching canvas', () => {
     const pid = `vitest_scope_${Math.random().toString(36).slice(2, 12)}`;
     variableCreationService.createManualVariable(pid, 'global_x');
     const vFlow = variableCreationService.createManualVariable(pid, 'flow_only', {
@@ -27,14 +27,14 @@ describe('VariableCreationService per-flow scope', () => {
     });
 
     const mainNames = variableCreationService.getAllVarNames(pid, 'main');
-    expect(mainNames).not.toContain('global_x');
+    expect(mainNames).toContain('global_x');
     expect(mainNames).not.toContain('flow_only');
 
     const subNames = variableCreationService.getAllVarNames(pid, 'sub1');
-    expect(subNames).not.toContain('global_x');
+    expect(subNames).toContain('global_x');
     expect(subNames).toContain('flow_only');
 
-    expect(variableCreationService.removeVariableByVarId(pid, vFlow.varId)).toBe(true);
+    expect(variableCreationService.removeVariableById(pid, vFlow.id)).toBe(true);
     expect(variableCreationService.getAllVarNames(pid, 'sub1')).not.toContain('flow_only');
   });
 
@@ -55,7 +55,14 @@ describe('VariableCreationService per-flow scope', () => {
     const roots: TaskTreeNode[] = [
       { id: 'tree-node-1', label: 'campo', subNodes: [], templateId: 't' } as TaskTreeNode,
     ];
-    variableCreationService.syncUtteranceTaskTreeVariables(pid, taskRowId, 'Ask', roots);
+    const taskTree: TaskTree = {
+      labelKey: 'Ask',
+      nodes: roots,
+      steps: {},
+    };
+    variableCreationService.hydrateVariablesFromTaskTree(pid, 'main', taskRowId, taskTree, {
+      taskRowLabel: 'Ask',
+    });
     const namesOnMain = variableCreationService.getAllVarNames(pid, 'main');
     expect(namesOnMain.length).toBeGreaterThan(0);
 
@@ -65,7 +72,22 @@ describe('VariableCreationService per-flow scope', () => {
   it('renameManual updates label when no duplicate in bucket', () => {
     const pid = `vitest_rename_${Math.random().toString(36).slice(2, 12)}`;
     const v = variableCreationService.createManualVariable(pid, 'orig_name');
-    expect(variableCreationService.renameVariableByVarId(pid, v.varId, 'new_name')).toBe(true);
-    expect(variableCreationService.getVarNameByVarId(pid, v.varId)).toBe('new_name');
+    expect(variableCreationService.renameVariableById(pid, v.id, 'new_name')).toBe(true);
+    expect(variableCreationService.getVarNameById(pid, v.id)).toBe('new_name');
+  });
+
+  it('getAllVarNames with undefined projectId resolves to default bucket; globals on all flows', () => {
+    const suffix = Math.random().toString(36).slice(2, 10);
+    variableCreationService.createManualVariable(undefined, `g_${suffix}`);
+    variableCreationService.createManualVariable(undefined, `f_${suffix}`, {
+      scope: 'flow',
+      scopeFlowId: 'main',
+    });
+    const main = variableCreationService.getAllVarNames(undefined, 'main');
+    expect(main).toContain(`g_${suffix}`);
+    expect(main).toContain(`f_${suffix}`);
+    const other = variableCreationService.getAllVarNames(undefined, 'other');
+    expect(other).toContain(`g_${suffix}`);
+    expect(other).not.toContain(`f_${suffix}`);
   });
 });

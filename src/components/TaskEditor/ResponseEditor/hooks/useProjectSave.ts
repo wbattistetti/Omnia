@@ -10,6 +10,7 @@ export interface UseProjectSaveParams {
   task?: Task | null;
   // ✅ FASE 3: taskTreeRef rimosso - store è single source of truth
   currentProjectId: string | null;
+  authoringFlowCanvasId?: string | null;
 }
 
 /**
@@ -20,7 +21,7 @@ export interface UseProjectSaveParams {
  * - Rimossi completamente taskTreeRef
  */
 export function useProjectSave(params: UseProjectSaveParams) {
-  const { task, currentProjectId } = params;
+  const { task, currentProjectId, authoringFlowCanvasId } = params;
 
   // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
   const taskTreeFromStore = useTaskTreeFromStore();
@@ -32,7 +33,7 @@ export function useProjectSave(params: UseProjectSaveParams) {
         const key = ((task as any)?.instanceId ?? task?.id) as string;
         // ✅ FASE 2.3: Usa solo store - no fallback chain
         const currentTaskTree = taskTreeFromStore;
-        await saveTaskOnProjectSave(key, currentTaskTree, task, currentProjectId);
+        await saveTaskOnProjectSave(key, currentTaskTree, task, currentProjectId, authoringFlowCanvasId);
       }
     };
 
@@ -40,5 +41,5 @@ export function useProjectSave(params: UseProjectSaveParams) {
     return () => {
       window.removeEventListener('project:save', handleProjectSave);
     };
-  }, [task?.id, (task as any)?.instanceId, currentProjectId, taskTreeFromStore, task]);
+  }, [task?.id, (task as any)?.instanceId, currentProjectId, authoringFlowCanvasId, taskTreeFromStore, task]);
 }

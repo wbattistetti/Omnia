@@ -38,7 +38,14 @@ export function templateIdToVBAction(templateId: string): number {
   };
 
   const normalized = templateId.trim();
-  const action = mapping[normalized];
+  let action = mapping[normalized];
+  if (action === undefined) {
+    const lower = normalized.toLowerCase();
+    const matchKey = Object.keys(mapping).find((k) => k.toLowerCase() === lower);
+    if (matchKey !== undefined) {
+      action = mapping[matchKey];
+    }
+  }
 
   if (action === undefined) {
     console.warn(`[VB.NET Adapter] Unknown templateId: "${templateId}", defaulting to SayMessage (1)`);

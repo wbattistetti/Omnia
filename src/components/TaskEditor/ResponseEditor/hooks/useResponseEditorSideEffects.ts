@@ -40,6 +40,7 @@ interface UseResponseEditorSideEffectsProps {
   taskTree?: TaskTree | null;
   // ✅ FASE 3: taskTreeRef rimosso - store è single source of truth
   currentProjectId: string | null;
+  authoringFlowCanvasId?: string | null;
   setTaskTreeVersion: React.Dispatch<React.SetStateAction<number>>;
   prevInstanceRef: React.MutableRefObject<string | undefined>;
 
@@ -107,6 +108,7 @@ export function useResponseEditorSideEffects(props: UseResponseEditorSideEffects
     task,
     taskTree,
     currentProjectId,
+    authoringFlowCanvasId,
     setTaskTreeVersion,
     prevInstanceRef,
     setServiceUnavailable,
@@ -155,7 +157,7 @@ export function useResponseEditorSideEffects(props: UseResponseEditorSideEffects
   usePendingEditorClear({ pendingEditorOpen, showSynonyms, selectedNode, setPendingEditorOpen });
   useTemplateSync({ task, taskTree, currentProjectId, prevInstanceRef, replaceSelectedTaskTree });
   useDebugFlags();
-  useProjectSave({ task, currentProjectId });
+  useProjectSave({ task, currentProjectId, authoringFlowCanvasId });
   // ✅ FASE 2.1: Sidebar functionality now handled by useSidebar composito in useResponseEditorHandlers
   // useSidebarCleanup(); // Consolidated into useSidebar
   // useSidebarDrag({ isDraggingSidebar, sidebarStartWidthRef, sidebarStartXRef, setSidebarManualWidth, setIsDraggingSidebar }); // Consolidated into useSidebar

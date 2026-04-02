@@ -17,7 +17,11 @@ import { persistReferenceScanInternalTextForTaskId } from '@domain/taskSubflowMo
 import { logVariableScope } from '@utils/debugVariableScope';
 import { variableCreationService } from '@services/VariableCreationService';
 import { isUtteranceInterpretationTask } from '@types/taskTypes';
-import { getMainNodes } from '@responseEditor/core/domain';
+import {
+  getSafeProjectId,
+  isFallbackProjectBucket,
+  resolveVariableStoreProjectId,
+} from '@utils/safeProjectId';
 
 /**
  * Save task options
@@ -27,6 +31,8 @@ export interface SaveTaskOptions {
   includeStepsForPersistence?: boolean;
   /** Project ID for context */
   projectId?: string | null;
+  /** Flow canvas that owns this task row (utterance variable sync / per-flow scope). */
+  flowId?: string | null;
   /**
    * When true with a projectId, recomputes and saves Task.referenceScanInternalText (GUID-form corpus
    * for variable reference scanning). Use on editor close / project save, not on every in-memory save.
@@ -54,8 +60,12 @@ export async function saveTask(
   task: Task | null,
   options: SaveTaskOptions = {}
 ): Promise<void> {
-  const { includeStepsForPersistence = false, projectId = null, persistReferenceScanInternalText = false } =
-    options;
+  const {
+    includeStepsForPersistence = false,
+    projectId = null,
+    flowId: flowIdOption = null,
+    persistReferenceScanInternalText = false,
+  } = options;
   const key = taskId;
   const currentMainList = getMainNodes(taskTree);
   const hasTaskTree = taskTree && Object.keys(taskTree).length > 0 && currentMainList && currentMainList.length > 0;
@@ -127,41 +137,44 @@ export async function saveTask(
     });
   }
 
-  if (persistReferenceScanInternalText && projectId) {
-    persistReferenceScanInternalTextForTaskId(key, projectId);
+  if (persistReferenceScanInternalText) {
+    const resolvedForPersist = resolveVariableStoreProjectId(projectId);
+    if (!isFallbackProjectBucket(resolvedForPersist)) {
+      persistReferenceScanInternalTextForTaskId(key, resolvedForPersist);
+    }
   }
 
   // Keep VariableCreationService in sync with Utterance task trees (flowchart DSL / condition editor).
   try {
-    const pid = String(projectId || '').trim();
+    const pid = resolveVariableStoreProjectId(projectId);
     const refreshed = taskRepository.getTask(key) ?? taskInstance;
     const utteranceLike =
       isUtteranceInterpretationTask(refreshed) || refreshed.type === TaskType.ClassifyProblem;
-    if (pid && refreshed && utteranceLike && hasTaskTree) {
+    if (refreshed && utteranceLike && hasTaskTree) {
       const roots = getMainNodes(taskTree);
-      if (roots.length > 0) {
-        const taskRowLabel = String(
-          labelKeyToSave ||
-            (task as { label?: string } | null)?.label ||
-            (refreshed as { labelKey?: string; label?: string }).labelKey ||
-            (refreshed as { label?: string }).label ||
-            ''
-        ).trim();
-        variableCreationService.syncUtteranceTaskTreeVariables(pid, key, taskRowLabel, roots);
-        const after = variableCreationService.getVariablesByTaskInstanceId(pid, key);
-        logVariableScope('saveTask.syncUtterance', {
-          projectId: pid,
-          taskId: key,
-          taskRowLabel,
-          rootsCount: roots.length,
-          varRows: after.length,
-          varNames: after.map((v) => v.varName),
-        });
-        try {
-          document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
-        } catch {
-          /* noop */
-        }
+      const taskRowLabel = String(
+        labelKeyToSave ||
+          (task as { label?: string } | null)?.label ||
+          (refreshed as { labelKey?: string; label?: string }).labelKey ||
+          (refreshed as { label?: string }).label ||
+          ''
+      ).trim();
+      variableCreationService.hydrateVariablesFromTaskTree(pid, flowIdOption, key, taskTree, {
+        taskRowLabel: taskRowLabel || undefined,
+      });
+      const after = variableCreationService.getVariablesByTaskInstanceId(pid, key);
+      logVariableScope('saveTask.hydrateUtterance', {
+        projectId: pid,
+        taskId: key,
+        taskRowLabel,
+        rootsCount: roots.length,
+        varRows: after.length,
+        varNames: after.map((v) => v.varName),
+      });
+      try {
+        document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
+      } catch {
+        /* noop */
       }
     }
   } catch {
@@ -179,11 +192,13 @@ export async function saveTaskToRepository(
   taskId: string,
   taskTree: TaskTree,
   task: Task | null,
-  currentProjectId: string | null
+  currentProjectId: string | null,
+  flowId?: string | null
 ): Promise<void> {
   return saveTask(taskId, taskTree, task, {
     includeStepsForPersistence: false,
-    projectId: currentProjectId,
+    projectId: currentProjectId ?? getSafeProjectId(),
+    flowId,
     persistReferenceScanInternalText: false,
   });
 }
@@ -199,11 +214,13 @@ export async function saveTaskOnProjectSave(
   taskId: string,
   taskTree: TaskTree,
   task: Task | null,
-  currentProjectId: string | null
+  currentProjectId: string | null,
+  flowId?: string | null
 ): Promise<void> {
   return saveTask(taskId, taskTree, task, {
     includeStepsForPersistence: true,
-    projectId: currentProjectId,
+    projectId: currentProjectId ?? getSafeProjectId(),
+    flowId,
     persistReferenceScanInternalText: true,
   });
 }
@@ -219,11 +236,13 @@ export async function saveTaskOnEditorClose(
   taskId: string,
   finalTaskTree: TaskTree,
   task: Task | null,
-  currentProjectId: string | null
+  currentProjectId: string | null,
+  flowId?: string | null
 ): Promise<void> {
   return saveTask(taskId, finalTaskTree, task, {
     includeStepsForPersistence: false,
-    projectId: currentProjectId,
+    projectId: currentProjectId ?? getSafeProjectId(),
+    flowId,
     persistReferenceScanInternalText: true,
   });
 }

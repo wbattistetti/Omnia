@@ -1,0 +1,27 @@
+---
+description: Semantica task-based, variabili/GUID e spostamento task→sottoflusso (vincolo architetturale Omnia)
+alwaysApply: true
+---
+
+# Omnia: task, variabili e sottoflusso
+
+Fonte dettagliata: `docs/SEMANTICA_TASK_VARIABLES_E_SUBFLOW.md`.
+
+## Invarianti
+
+- Ogni `TaskTreeNode` = task reale; `taskId` obbligatorio (assenza = bug).
+- Un task = un valore atomico = una variabile; **`VariableInstance.varId` = `node.taskId`**; `nodeId` = identità nell’albero.
+- Dato e variabile: **stesso GUID** (`varId` = `dataId` = `taskId` del nodo).
+- Non usare il modello legacy «un solo task canvas con subcampi logici» come verità.
+
+## Variabili referenziate
+
+Prima di cancellare/mantenere variabili nel parent dopo lo spostamento di un task, calcolare **`variabiliReferenziate`**: insieme di `varId` trovati con scansione statica del flow in **tutti** i punti che possono citare variabili (condizioni, script, messaggi/template, API, I/O sottoflusso, azioni, validazioni, transizioni, espressioni).
+
+## Spostamento task → sottoflusso
+
+1. Sottoflusso: creare tutte le variabili dati/subtask, **stessi GUID**.
+2. Parent: per ogni `varId` del task spostato — se **non** in `variabiliReferenziate` → rimuovi dal parent; se **in** `variabiliReferenziate` → mantieni, **rinomina** label (`Sottoflusso.labelOriginale`), **stesso GUID**, collega interfaccia.
+3. Mapping parent ↔ sottoflusso **1:1 sullo stesso GUID**.
+
+Deviazioni nel codice = debito tecnico, non modello alternativo.

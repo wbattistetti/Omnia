@@ -1,27 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { modeToType, typeToMode } from '../normalizers';
+import { normalizeProjectData } from '../normalizers';
+import { TaskType } from '../../types/taskTypes';
 
-describe('normalizers mode/type mapping', () => {
-  it('maps mode to type correctly', () => {
-    expect(modeToType('DataRequest')).toBe('DataRequest');
-    expect(modeToType('DataConfirmation')).toBe('Confirmation');
-    expect(modeToType('ProblemClassification')).toBe('ProblemClassification');
-    expect(modeToType('Summarizer')).toBe('Summarizer');
-    expect(modeToType('BackendCall')).toBe('BackendCall');
-    expect(modeToType('Unknown')).toBe('Message');
-    expect(modeToType(undefined)).toBe('Message');
-  });
-
-  it('maps type to mode correctly', () => {
-    expect(typeToMode('DataRequest')).toBe('DataRequest');
-    expect(typeToMode('Confirmation')).toBe('DataConfirmation');
-    expect(typeToMode('ProblemClassification')).toBe('ProblemClassification');
-    expect(typeToMode('Summarizer')).toBe('Summarizer');
-    expect(typeToMode('BackendCall')).toBe('BackendCall');
-    expect(typeToMode('Message')).toBe('Message');
-    // @ts-expect-error intentional wrong type
-    expect(typeToMode('Unknown')).toBe('Message');
-    // @ts-expect-error intentional undefined
-    expect(typeToMode(undefined)).toBe('Message');
+describe('normalizeProjectData', () => {
+  it('strips mode from task template items and ensures type', () => {
+    const pd = {
+      taskTemplates: [
+        {
+          items: [
+            { name: 'A', mode: 'DataRequest', type: TaskType.SayMessage },
+            { name: 'B' },
+          ],
+        },
+      ],
+    };
+    const out = normalizeProjectData(pd);
+    const items = out.taskTemplates[0].items;
+    expect(items[0].mode).toBeUndefined();
+    expect(items[0].type).toBe(TaskType.SayMessage);
+    expect(items[1].type).toBe(TaskType.UNDEFINED);
   });
 });

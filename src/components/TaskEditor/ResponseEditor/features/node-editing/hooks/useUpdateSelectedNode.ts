@@ -16,6 +16,8 @@ export interface UseUpdateSelectedNodeParams {
   // ✅ FASE 3: Parametri opzionali rimossi - store è single source of truth
   task?: Task | null | undefined;
   currentProjectId: string | null;
+  /** Flow canvas that owns this task (utterance variable sync). */
+  authoringFlowCanvasId?: string | null;
   tabId?: string;
   setDockTree?: (updater: (prev: any) => any) => void;
   setSelectedNode: React.Dispatch<React.SetStateAction<any>>;
@@ -36,6 +38,7 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
     selectedRoot,
     task,
     currentProjectId,
+    authoringFlowCanvasId,
     tabId,
     setDockTree,
     setSelectedNode,
@@ -185,7 +188,8 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
           result.saveKey,
           result.updatedTaskTree,
           result.taskInstance,
-          currentProjectId
+          currentProjectId,
+          authoringFlowCanvasId
         );
       }
 
@@ -242,6 +246,7 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
     setDockTree,
     task,
     currentProjectId,
+    authoringFlowCanvasId,
     setSelectedNode,
     setTaskTreeVersion,
     setTaskTree,

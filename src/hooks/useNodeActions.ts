@@ -6,6 +6,7 @@ import { Node, ReactFlowInstance } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
 import { FlowNode } from '../components/Flowchart/types/flowTypes';
 import { taskRepository } from '../services/TaskRepository';
+import { TaskType } from '../types/taskTypes';
 import { getTaskIdFromRow } from '../utils/taskHelpers';
 
 /**
@@ -36,6 +37,11 @@ export interface UseNodeActionsDeps {
   reactFlowInstance: ReactFlowInstance | null;
   /** Project ID for task repository operations */
   projectId?: string;
+  /**
+   * Active flow canvas id (e.g. `main`, `subflow_<portalRowId>`). Used to set `authoringFlowCanvasId`
+   * when a row is dropped on the canvas so subflow interface sync can run.
+   */
+  flowCanvasId?: string;
 }
 
 export interface UseNodeActionsResult {
@@ -57,6 +63,7 @@ export function useNodeActions(deps: UseNodeActionsDeps): UseNodeActionsResult {
     updateNode,
     reactFlowInstance,
     projectId,
+    flowCanvasId,
   } = deps;
 
   /**
@@ -133,6 +140,18 @@ export function useNodeActions(deps: UseNodeActionsDeps): UseNodeActionsResult {
           instanceId: initialRow.instanceId
         }
       });
+
+      const canvasId = String(flowCanvasId || 'main').trim() || 'main';
+      if (
+        task &&
+        task.type !== TaskType.Subflow &&
+        canvasId.startsWith('subflow_')
+      ) {
+        const prevAuth = String(task.authoringFlowCanvasId ?? '').trim();
+        if (prevAuth !== canvasId) {
+          taskRepository.updateTask(taskId, { authoringFlowCanvasId: canvasId }, projectId, { merge: true });
+        }
+      }
     }
 
     const focusRowId = initialRow ? initialRow.id : `${newNodeId}-${Math.random().toString(36).substr(2, 9)}`;
@@ -154,7 +173,7 @@ export function useNodeActions(deps: UseNodeActionsDeps): UseNodeActionsResult {
     };
 
     addNodeAtPosition(node, x, y);
-  }, [addNodeAtPosition, reactFlowInstance, deleteNodeWithLog, updateNode]);
+  }, [addNodeAtPosition, reactFlowInstance, deleteNodeWithLog, updateNode, flowCanvasId, projectId]);
 
   return {
     deleteNodeWithLog,

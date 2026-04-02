@@ -5,7 +5,7 @@ import {
   splitTokenLabelSegments,
 } from './variableMenuTree';
 
-type Item = { varId: string; varLabel: string; tokenLabel?: string; isFromActiveFlow?: boolean };
+type Item = { id: string; varLabel: string; tokenLabel?: string; isFromActiveFlow?: boolean };
 
 describe('splitTokenLabelSegments', () => {
   it('splits on dots and trims', () => {
@@ -16,8 +16,8 @@ describe('splitTokenLabelSegments', () => {
 describe('buildFlatVariableMenuRows', () => {
   it('emits a header and indented leaves for a shared prefix', () => {
     const items: Item[] = [
-      { varId: '1', varLabel: 'nome', tokenLabel: 'dati personali.nome' },
-      { varId: '2', varLabel: 'telefono', tokenLabel: 'dati personali.telefono' },
+      { id: '1', varLabel: 'nome', tokenLabel: 'dati personali.nome' },
+      { id: '2', varLabel: 'telefono', tokenLabel: 'dati personali.telefono' },
     ];
     const rows = buildFlatVariableMenuRows(items);
     expect(rows).toEqual([
@@ -29,8 +29,8 @@ describe('buildFlatVariableMenuRows', () => {
 
   it('does not emit a header when the prefix is itself a selectable variable', () => {
     const items: Item[] = [
-      { varId: 'a', varLabel: 'foo', tokenLabel: 'foo' },
-      { varId: 'b', varLabel: 'bar', tokenLabel: 'foo.bar' },
+      { id: 'a', varLabel: 'foo', tokenLabel: 'foo' },
+      { id: 'b', varLabel: 'bar', tokenLabel: 'foo.bar' },
     ];
     const rows = buildFlatVariableMenuRows(items);
     expect(rows.map((r) => r.kind)).toEqual(['leaf', 'leaf']);
@@ -40,8 +40,8 @@ describe('buildFlatVariableMenuRows', () => {
 
   it('sorts siblings by segment', () => {
     const items: Item[] = [
-      { varId: 'z', varLabel: 'z', tokenLabel: 'g.z' },
-      { varId: 'a', varLabel: 'a', tokenLabel: 'g.a' },
+      { id: 'z', varLabel: 'z', tokenLabel: 'g.z' },
+      { id: 'a', varLabel: 'a', tokenLabel: 'g.a' },
     ];
     const rows = buildFlatVariableMenuRows(items);
     expect(rows[1]).toMatchObject({ kind: 'leaf', displayLabel: 'a' });
@@ -52,8 +52,8 @@ describe('buildFlatVariableMenuRows', () => {
 describe('buildRadixVariableMenuTree', () => {
   it('wraps shared prefix in a sub with subflowGroup when all leaves are Subflow outputs', () => {
     const items: Item[] = [
-      { varId: '1', varLabel: 'nome', tokenLabel: 'dati personali.nome', isFromActiveFlow: false },
-      { varId: '2', varLabel: 'telefono', tokenLabel: 'dati personali.telefono', isFromActiveFlow: false },
+      { id: '1', varLabel: 'nome', tokenLabel: 'dati personali.nome', isFromActiveFlow: false },
+      { id: '2', varLabel: 'telefono', tokenLabel: 'dati personali.telefono', isFromActiveFlow: false },
     ];
     const tree = buildRadixVariableMenuTree(items);
     expect(tree).toHaveLength(1);
@@ -71,8 +71,8 @@ describe('buildRadixVariableMenuTree', () => {
 
   it('uses subflowGroup false when prefix mixes local and subflow leaves', () => {
     const items: Item[] = [
-      { varId: 'a', varLabel: 'foo', tokenLabel: 'foo', isFromActiveFlow: true },
-      { varId: 'b', varLabel: 'bar', tokenLabel: 'foo.bar', isFromActiveFlow: false },
+      { id: 'a', varLabel: 'foo', tokenLabel: 'foo', isFromActiveFlow: true },
+      { id: 'b', varLabel: 'bar', tokenLabel: 'foo.bar', isFromActiveFlow: false },
     ];
     const tree = buildRadixVariableMenuTree(items);
     expect(tree).toHaveLength(1);

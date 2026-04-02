@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import type { EditorProps } from '../../EditorHost/types';
 import { getTaskVisualsByType } from '../../../Flowchart/utils/taskVisuals';
 import { taskRepository } from '../../../../services/TaskRepository';
-import { useProjectDataUpdate } from '../../../../context/ProjectDataContext';
+import { useProjectData, useProjectDataUpdate } from '../../../../context/ProjectDataContext';
 import { useProjectTranslations } from '../../../../context/ProjectTranslationsContext';
 import { TaskType } from '../../../../types/taskTypes';
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
@@ -26,10 +26,12 @@ import { ensureParentVariableAndSubflowOutputBinding } from '../../../common/sub
 import { useTextTranslationField } from './shared/useTextTranslationField';
 import { fingerprintVariableMapping } from './shared/variableMappingFingerprint';
 import { logVariableMenuDebug } from '../../../../utils/variableMenuDebug';
+import { resolveVariableStoreProjectId } from '../../../../utils/safeProjectId';
 
 export default function TextMessageEditor({ task: taskMeta, onClose }: EditorProps) {
   const instanceId = taskMeta.instanceId || taskMeta.id;
   const pdUpdate = useProjectDataUpdate();
+  const { data: projectData } = useProjectData();
   const { translations, addTranslation, getTranslation } = useProjectTranslations();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [varsMenu, setVarsMenu] = useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
@@ -58,15 +60,16 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     [flows, menuFlowId]
   );
 
-  const projectIdForMenu = pdUpdate?.getCurrentProjectId() || '';
+  const projectIdForMenu = useMemo(
+    () => resolveVariableStoreProjectId(pdUpdate?.getCurrentProjectId() || undefined),
+    [pdUpdate, projectData?.id]
+  );
 
   useEffect(() => {
     let cancelled = false;
-    if (!projectIdForMenu) {
-      setVariableMenuItems([]);
-      return;
-    }
-    void buildVariableMenuItemsAsync(projectIdForMenu, menuFlowId, flows as any)
+    void buildVariableMenuItemsAsync(projectIdForMenu, menuFlowId, flows as any, {
+      translationsByGuid: translations,
+    })
       .then((items) => {
         if (!cancelled) setVariableMenuItems(items);
       })
@@ -80,7 +83,7 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     return () => {
       cancelled = true;
     };
-  }, [projectIdForMenu, menuFlowId, variableMenuFingerprint]);
+  }, [projectIdForMenu, menuFlowId, variableMenuFingerprint, translations]);
 
   const variableMappings = React.useMemo(() => buildVariableMappingsFromMenu(variableMenuItems), [variableMenuItems]);
 
@@ -111,10 +114,11 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
       const projectId = pdUpdate?.getCurrentProjectId() || '';
       return convertDSLGUIDsToLabels(value, variableMappings, {
         resolveUnknownGuidToLabel: (guid) =>
-          projectId ? variableCreationService.getVarNameByVarId(projectId, guid) : null,
+          getTranslation(guid) ||
+          (projectId ? variableCreationService.getVarNameById(projectId, guid) : null),
       });
     },
-    [variableMappings, pdUpdate]
+    [variableMappings, pdUpdate, getTranslation]
   );
 
   const getTranslationForField = useCallback(
@@ -137,21 +141,21 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
 
   // ✅ ARCHITECTURE: Inject icon and title into main header (no local header)
   const headerContext = useHeaderToolbarContext();
+  const setHeaderIcon = headerContext?.setIcon;
+  const setHeaderTitle = headerContext?.setTitle;
   const { Icon, color } = getTaskVisualsByType(taskMeta.type ?? TaskType.SayMessage, false);
 
   React.useEffect(() => {
-    if (headerContext) {
-      // Inject icon and title into main header
-      headerContext.setIcon(<Icon size={18} style={{ color }} />);
-      headerContext.setTitle(String(taskMeta?.label || 'Message'));
+    if (!setHeaderIcon || !setHeaderTitle) return;
+    setHeaderIcon(<Icon size={18} style={{ color }} />);
+    setHeaderTitle(String(taskMeta?.label || 'Message'));
 
-      return () => {
-        // Cleanup: remove injected values when editor unmounts
-        headerContext.setIcon(null);
-        headerContext.setTitle(null);
-      };
-    }
-  }, [headerContext, taskMeta?.label, taskMeta?.type, Icon, color]);
+    return () => {
+      setHeaderIcon(null);
+      setHeaderTitle(null);
+    };
+    // Depend on stable setters from HeaderToolbarProvider, not the whole context value.
+  }, [setHeaderIcon, setHeaderTitle, taskMeta?.label, taskMeta?.type, Icon, color]);
 
   return (
     <div className="h-full bg-white flex flex-col min-h-0">
@@ -217,10 +221,10 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
           const owner = (flows as any)?.[item.ownerFlowId];
           if (!owner) return;
           const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
-          const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.varId);
+          const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
           const nextVars = existing
-            ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.varId ? { ...v, visibility: 'output' } : v))
-            : [...prevVars, { id: item.varId, label: item.varLabel, type: 'string', visibility: 'output' }];
+            ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v))
+            : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
           updateFlowMeta(item.ownerFlowId, { variables: nextVars });
 
           const el = textareaRef.current;

@@ -26,7 +26,7 @@ import type { TaskMeta } from '@taskEditor/EditorHost/types';
 import type { Task, TaskTree } from '@types/taskTypes';
 import '@responseEditor/styles/errorHighlight.css';
 
-function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose, saveDecisionMade, onOpenSaveDialog }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void, saveDecisionMade?: boolean, onOpenSaveDialog?: () => void }) {
+function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose, saveDecisionMade, onOpenSaveDialog, authoringFlowCanvasId }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void, saveDecisionMade?: boolean, onOpenSaveDialog?: () => void, authoringFlowCanvasId?: string | null }) {
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
   const { combinedClass } = useFontContext();
@@ -97,6 +97,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     isTaskTreeLoading,
     onWizardComplete,
     currentProjectId,
+    authoringFlowCanvasId,
     tabId,
     setDockTree,
     onClose,
@@ -524,11 +525,11 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   return layoutContent;
 }
 
-export default function ResponseEditor({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose, saveDecisionMade, onOpenSaveDialog }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void, saveDecisionMade?: boolean, onOpenSaveDialog?: () => void }) {
+export default function ResponseEditor({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose, saveDecisionMade, onOpenSaveDialog, authoringFlowCanvasId }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void, saveDecisionMade?: boolean, onOpenSaveDialog?: () => void, authoringFlowCanvasId?: string | null }) {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <FontProvider>
-        <ResponseEditorInner taskTree={taskTree} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isTaskTreeLoading={isTaskTreeLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} registerOnClose={registerOnClose} saveDecisionMade={saveDecisionMade} onOpenSaveDialog={onOpenSaveDialog} />
+        <ResponseEditorInner taskTree={taskTree} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isTaskTreeLoading={isTaskTreeLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} registerOnClose={registerOnClose} saveDecisionMade={saveDecisionMade} onOpenSaveDialog={onOpenSaveDialog} authoringFlowCanvasId={authoringFlowCanvasId} />
       </FontProvider>
     </div>
   );

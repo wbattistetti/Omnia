@@ -23,14 +23,16 @@ Public NotInheritable Class UtteranceEscalationValidation
         taskId As String,
         node As FlowNode,
         row As TaskRow,
-        errors As List(Of CompilationError)) As Integer
+        errors As List(Of CompilationError),
+        flowTaskType As TaskTypes) As Integer
 
         If root Is Nothing OrElse errors Is Nothing Then
             Return 0
         End If
 
         Dim initial = errors.Count
-        WalkAdd(root, taskId, node, row, errors)
+        Dim typeInt = CInt(flowTaskType)
+        WalkAdd(root, taskId, node, row, errors, typeInt)
         Return errors.Count - initial
     End Function
 
@@ -39,7 +41,8 @@ Public NotInheritable Class UtteranceEscalationValidation
         taskId As String,
         node As FlowNode,
         row As TaskRow,
-        errors As List(Of CompilationError))
+        errors As List(Of CompilationError),
+        flowTaskType As Integer)
 
         If ut Is Nothing Then
             Return
@@ -67,7 +70,8 @@ Public NotInheritable Class UtteranceEscalationValidation
                             .Severity = ErrorSeverity.Error,
                             .Category = "EmptyEscalation",
                             .StepKey = stepKey,
-                            .EscalationIndex = ei
+                            .EscalationIndex = ei,
+                            .TaskType = flowTaskType
                         })
                     End If
                 Next
@@ -79,7 +83,7 @@ Public NotInheritable Class UtteranceEscalationValidation
         End If
 
         For Each child As CompiledUtteranceTask In ut.SubTasks
-            WalkAdd(child, taskId, node, row, errors)
+            WalkAdd(child, taskId, node, row, errors, flowTaskType)
         Next
     End Sub
 

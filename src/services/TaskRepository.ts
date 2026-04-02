@@ -14,6 +14,8 @@ import {
   resolveTemplateDefinitionTask as resolveTemplateDefinitionTaskFromUtil,
 } from '@utils/taskScopedLookup';
 import { isProjectTemplateDefinitionRowForTemplateEndpointOnly } from './project-save/projectBulkTaskRules';
+import { syncSubflowInterfaceAfterAuthoringCanvasChange } from '@domain/taskSubflowMove/syncSubflowInterfaceOnAuthoringChange';
+import { upsertFlowSlicesFromSubflowSync } from '@domain/taskSubflowMove/subflowSyncFlowsRef';
 
 /**
  * TaskRepository: Primary repository for Task data
@@ -125,7 +127,7 @@ class TaskRepository {
     taskId: string,
     updates: Partial<Task>,
     projectId?: string,
-    options?: { merge?: boolean; allowClearTemplateId?: boolean }
+    options?: { merge?: boolean; allowClearTemplateId?: boolean; skipSubflowInterfaceSync?: boolean }
   ): boolean {
     // Check internal storage first
     const existingTask = this.tasks.get(taskId);
@@ -273,11 +275,33 @@ class TaskRepository {
       updatedAt: updates.updatedAt || new Date()
     };
 
+    const prevAuthoringCanvas = String(existingTask.authoringFlowCanvasId ?? '').trim();
+    const nextAuthoringCanvas = String(updatedTask.authoringFlowCanvasId ?? '').trim();
 
     // ✅ Update internal storage only (in-memory)
     // ✅ NO automatic database save - save only on explicit user action (project:save event)
     this.tasks.set(taskId, updatedTask);
 
+    if (
+      !options?.skipSubflowInterfaceSync &&
+      finalType !== TaskType.Subflow &&
+      prevAuthoringCanvas !== nextAuthoringCanvas &&
+      nextAuthoringCanvas.startsWith('subflow_')
+    ) {
+      const pid = String(projectId || this.getCurrentProjectId() || '').trim();
+      if (pid) {
+        const res = syncSubflowInterfaceAfterAuthoringCanvasChange({
+          projectId: pid,
+          taskInstanceId: taskId,
+          previousAuthoringCanvasId: prevAuthoringCanvas || undefined,
+          nextAuthoringCanvasId: nextAuthoringCanvas || undefined,
+          taskType: finalType,
+        });
+        if (res) {
+          upsertFlowSlicesFromSubflowSync(res.flowsNext, [res.parentFlowId, res.childFlowId]);
+        }
+      }
+    }
 
     return true;
   }

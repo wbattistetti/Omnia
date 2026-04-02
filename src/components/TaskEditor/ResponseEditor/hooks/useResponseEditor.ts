@@ -24,6 +24,8 @@ export interface UseResponseEditorParams {
   isTaskTreeLoading?: boolean;
   onWizardComplete?: (finalTaskTree: TaskTree) => void;
   currentProjectId: string | null;
+  /** Flow canvas that owns this task row (per-flow variable namespace). */
+  authoringFlowCanvasId?: string | null;
   tabId?: string;
   setDockTree?: (updater: (prev: any) => any) => void;
   onClose?: () => void;
@@ -155,6 +157,7 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     isTaskTreeLoading,
     onWizardComplete,
     currentProjectId,
+    authoringFlowCanvasId,
     tabId,
     setDockTree,
     onClose,
@@ -170,6 +173,7 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     isTaskTreeLoading,
     onWizardComplete,
     currentProjectId,
+    authoringFlowCanvasId,
     tabId,
     setDockTree,
     // ✅ REMOVED: shouldBeGeneral - now from WizardContext
@@ -184,6 +188,7 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     taskTree,
     task,
     currentProjectId,
+    authoringFlowCanvasId,
     isTaskTreeLoading,
     state: core.state,
     refs: core.refs,

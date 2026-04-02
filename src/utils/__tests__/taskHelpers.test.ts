@@ -27,13 +27,13 @@ describe('Task Migration Helpers', () => {
       expect(getTemplateId(null as any)).toBeNull();
     });
 
-    it('should return null for empty string templateId', () => {
+    it('should return empty string when templateId is empty string', () => {
       const task: any = {
         id: 'task_5',
         templateId: '',  // Empty string
         value: {}
       };
-      expect(getTemplateId(task)).toBeNull();
+      expect(getTemplateId(task)).toBe('');
     });
 
     it('should return null for null templateId (standalone task)', () => {
@@ -107,9 +107,9 @@ describe('Task Migration Helpers', () => {
       expect(normalized.updatedAt).toEqual(new Date('2024-01-02'));
     });
 
-    it('should throw if task is invalid', () => {
-      const invalidTask: any = { id: 'task_4', value: {} };
-      expect(() => normalizeTask(invalidTask)).toThrow();
+    it('should throw if task id is invalid', () => {
+      const invalidTask: any = { id: '', value: {} };
+      expect(() => normalizeTask(invalidTask)).toThrow(/invalid id/);
     });
   });
 

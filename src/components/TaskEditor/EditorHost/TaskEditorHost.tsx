@@ -5,7 +5,16 @@ import type { EditorProps } from './types';
 import { HeaderToolbarProvider } from '../ResponseEditor/context/HeaderToolbarContext';
 // ✅ RIMOSSO: getAgentActVisualsByType - non più usato in questo file
 
-export default function TaskEditorHost({ task, dockTabId, onClose, onToolbarUpdate, hideHeader, registerOnClose, setDockTree }: EditorProps) {
+export default function TaskEditorHost({
+  task,
+  dockTabId,
+  authoringFlowCanvasId,
+  onClose,
+  onToolbarUpdate,
+  hideHeader,
+  registerOnClose,
+  setDockTree,
+}: EditorProps) {
   const kind = resolveEditorKind(task);
 
   // ✅ LOG DISABILITATO - troppo rumoroso (si attiva ad ogni render)
@@ -49,6 +58,7 @@ export default function TaskEditorHost({ task, dockTabId, onClose, onToolbarUpda
           key={editorInstanceKey}
           task={task}
           dockTabId={dockTabId}
+          authoringFlowCanvasId={authoringFlowCanvasId}
           onClose={onClose}
           onToolbarUpdate={onToolbarUpdate}
           hideHeader={hideHeader}
@@ -74,6 +84,7 @@ export default function TaskEditorHost({ task, dockTabId, onClose, onToolbarUpda
             key={editorInstanceKey}
             task={task}
             dockTabId={dockTabId}
+            authoringFlowCanvasId={authoringFlowCanvasId}
             onClose={onClose}
             onToolbarUpdate={onToolbarUpdate}
             hideHeader={hideHeader}

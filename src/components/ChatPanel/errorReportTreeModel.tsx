@@ -25,6 +25,7 @@ import {
   stripNodeRowReferences,
 } from './errorReportDisplay';
 import { compilationErrorFixKey } from '@utils/compilationErrorFix';
+import { getDialogueStepUserLabel, ordinalItalianEscalation } from '@utils/dialogueStepUserLabels';
 
 export type FlowVisualMeta = {
   Icon: ComponentType<{ className?: string; style?: CSSProperties; size?: number }>;
@@ -274,10 +275,11 @@ export function humanIssuesForError(
       return bind([
         'Due o più collegamenti condividono la stessa condizione o lo stesso script: i rami non sono distinguibili.',
       ]);
-    case 'EmptyEscalation':
-      return bind([
-        'In un passo del task manca un’azione in un’escalation: apri il task, scheda Tasks, e aggiungi un prompt o un task in quell’escalation.',
-      ]);
+    case 'EmptyEscalation': {
+      const stepLabel = getDialogueStepUserLabel(error.stepKey);
+      const ordinal = ordinalItalianEscalation(error.escalationIndex);
+      return bind([`Manca il messaggio nel ${ordinal} tentativo di: "${stepLabel}".`]);
+    }
     default: {
       const { body } = splitFlowPrefixedMessage(error.message);
       const cleaned = stripNodeRowReferences(body);

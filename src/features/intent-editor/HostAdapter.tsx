@@ -139,28 +139,20 @@ export default function IntentHostAdapter({ task, onClose: _onClose, hideHeader,
 
 
   const headerContext = useHeaderToolbarContext();
+  const setHeaderIcon = headerContext?.setIcon;
+  const setHeaderTitle = headerContext?.setTitle;
 
   React.useEffect(() => {
+    if (!setHeaderIcon || !setHeaderTitle) return;
 
-    if (headerContext) {
+    setHeaderIcon(<Icon size={18} style={{ color }} />);
+    setHeaderTitle(String(task?.label || 'Problem'));
 
-      headerContext.setIcon(<Icon size={18} style={{ color }} />);
-
-      headerContext.setTitle(String(task?.label || 'Problem'));
-
-
-
-      return () => {
-
-        headerContext.setIcon(null);
-
-        headerContext.setTitle(null);
-
-      };
-
-    }
-
-  }, [headerContext, task?.label, Icon, color]);
+    return () => {
+      setHeaderIcon(null);
+      setHeaderTitle(null);
+    };
+  }, [setHeaderIcon, setHeaderTitle, task?.label, Icon, color]);
 
 
 

@@ -43,9 +43,12 @@ export interface UseResponseEditorCoreParams {
   isTaskTreeLoading?: boolean;
   onWizardComplete?: (finalTaskTree: TaskTree) => void;
   currentProjectId: string | null;
+  /** Flow canvas that owns this task row (per-flow variable namespace). */
+  authoringFlowCanvasId?: string | null;
   tabId?: string;
   setDockTree?: (updater: (prev: any) => any) => void;
-  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
+  /** @deprecated WizardContext is preferred; kept for return shape compatibility. */
+  shouldBeGeneral?: boolean;
   saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
   // ✅ NEW: Ref per il pulsante save-to-library
@@ -107,6 +110,7 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     isTaskTreeLoading,
     onWizardComplete,
     currentProjectId,
+    authoringFlowCanvasId,
     tabId,
     setDockTree,
     // ✅ NEW: Generalization params
@@ -500,6 +504,7 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     selectedRoot,
     task,
     currentProjectId,
+    authoringFlowCanvasId,
     tabId,
     setDockTree,
     setSelectedNode,

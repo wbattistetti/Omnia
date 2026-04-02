@@ -10,6 +10,7 @@ import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 import type { WorkspaceState } from '@flows/FlowTypes';
 import { buildVariableMenuItemsAsync } from '@components/common/variableMenuModel';
+import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
 import VariableTokenContextMenu, {
   type VariableMenuRowItem,
 } from '@components/common/VariableTokenContextMenu';
@@ -372,13 +373,15 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
 
   const openSubflowInterfaceMenu = useCallback(
     async (anchor: DOMRect) => {
-      const pid = getProjectId?.();
-      if (!pid?.trim() || !activeFlowId?.trim() || !flows) return;
+      const pid = resolveVariableStoreProjectId(getProjectId?.());
+      if (!activeFlowId?.trim() || !flows) return;
       try {
-        const all = await buildVariableMenuItemsAsync(pid, activeFlowId, flows);
+        const all = await buildVariableMenuItemsAsync(pid, activeFlowId, flows, {
+          translationsByGuid: translations,
+        });
         const filtered = all.filter((i) => i.subflowTaskId === row.id);
         const items: VariableMenuRowItem[] = filtered.map((i) => ({
-          varId: i.varId,
+          id: i.id,
           varLabel: i.varLabel,
           tokenLabel: i.tokenLabel,
           ownerFlowId: i.ownerFlowId,
@@ -395,7 +398,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
         console.error('[NodeRowLabel] Subflow interface menu', e);
       }
     },
-    [getProjectId, activeFlowId, flows, row.id]
+    [getProjectId, activeFlowId, flows, row.id, translations]
   );
 
   const handleTestTask = useCallback(async () => {

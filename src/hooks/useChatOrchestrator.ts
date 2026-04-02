@@ -122,6 +122,10 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
   const openFlowChat = useCallback(() => {
     console.log('[ChatOrchestrator] openFlowChat called');
 
+    void import('../context/CompilationErrorsContext').then(({ clearCompilationErrorsGlobal }) => {
+      clearCompilationErrorsGlobal();
+    });
+
     // Reset retry count
     flowChatRetryRef.current = 0;
 

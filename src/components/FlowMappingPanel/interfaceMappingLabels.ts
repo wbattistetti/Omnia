@@ -14,7 +14,7 @@ export function getInterfaceLeafDisplayName(
   const pid = projectId?.trim();
   const vid = entry.variableRefId?.trim();
   if (pid && vid) {
-    const fromStore = variableCreationService.getVarNameByVarId(pid, vid)?.trim() ?? '';
+    const fromStore = variableCreationService.getVarNameById(pid, vid)?.trim() ?? '';
     if (fromStore) return fromStore;
   }
   return (
@@ -33,7 +33,7 @@ export function computeInterfaceEntryLabels(
   const pid = projectId?.trim();
   const vid = variableRefId?.trim();
   const fromStore =
-    pid && vid ? variableCreationService.getVarNameByVarId(pid, vid)?.trim() ?? '' : '';
+    pid && vid ? variableCreationService.getVarNameById(pid, vid)?.trim() ?? '' : '';
   const cleanRow = variableCreationService.normalizeTaskLabel(
     (rowLabel || internalPath || 'field').trim()
   );
@@ -43,7 +43,7 @@ export function computeInterfaceEntryLabels(
 }
 
 /**
- * Registers GUID → normalized label in the flow scope so getVarNameByVarId matches UI.
+ * Registers GUID → normalized label in the flow scope so getVarNameById matches UI.
  */
 export function ensureFlowVariableBindingForInterfaceRow(
   projectId: string | undefined,

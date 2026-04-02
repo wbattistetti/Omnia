@@ -1,10 +1,13 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { convertDSLGUIDsToLabels } from '../../../utils/conditionCodeConverter';
 import { createVariableMappings } from '../../../utils/conditionCodeConverter';
 import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
+import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
+import { variableCreationService } from '../../../services/VariableCreationService';
+import { resolveVariableStoreProjectId } from '../../../utils/safeProjectId';
 
 export interface UseConditionEditorStateProps {
   open: boolean;
@@ -79,6 +82,7 @@ export interface UseConditionEditorStateReturn {
  */
 export function useConditionEditorState(props: UseConditionEditorStateProps): UseConditionEditorStateReturn {
   const { open, initialScript, label, defaultCode, flowCanvasId } = props;
+  const { getTranslation } = useProjectTranslations();
 
   // Script state
   const [script, setScript] = useState(initialScript && initialScript.trim() ? initialScript : defaultCode);
@@ -137,7 +141,15 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
         // Convert GUIDs to labels for human-readable display
         const fid = flowCanvasId ?? getActiveFlowCanvasId();
         const variableMappings = createVariableMappings(fid);
-        base = convertDSLGUIDsToLabels(base, variableMappings);
+        const pid = resolveVariableStoreProjectId(
+          typeof localStorage !== 'undefined' ? localStorage.getItem('currentProjectId') : null
+        );
+        base = convertDSLGUIDsToLabels(base, variableMappings, {
+          resolveUnknownGuidToLabel: (guid) =>
+            getTranslationRef.current(guid) ||
+            variableCreationService.getVarNameById(pid, guid) ||
+            null,
+        });
       }
     }
 

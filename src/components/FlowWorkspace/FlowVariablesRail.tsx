@@ -11,6 +11,7 @@ import type { FlowVariableDefinition } from '../../flows/flowVariableTypes';
 import { buildFlowVariableTree, flowVariablesWithoutPath, type FlowVariableTreeNode } from '../../flows/flowVariableTree';
 import { variableCreationService } from '../../services/VariableCreationService';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
+import { resolveVariableStoreProjectId } from '../../utils/safeProjectId';
 
 export interface FlowVariablesRailProps {
   flowId: string;
@@ -20,7 +21,7 @@ export interface FlowVariablesRailProps {
 
 function instanceToDef(v: VariableInstance): FlowVariableDefinition {
   return {
-    id: v.varId,
+    id: v.id,
     label: v.varName,
     type: 'string',
     visibility: 'internal',
@@ -46,16 +47,16 @@ function InstanceCard({ instance, projectId, onRenamed, onRemoved }: InstanceCar
 
   React.useEffect(() => {
     setDraft(instance.varName);
-  }, [instance.varId, instance.varName]);
+  }, [instance.id, instance.varName]);
 
   const commitRename = useCallback(() => {
     if (taskBound) return;
     const t = draft.trim();
     if (!t || t === instance.varName) return;
-    const ok = variableCreationService.renameVariableByVarId(projectId, instance.varId, t);
+    const ok = variableCreationService.renameVariableById(projectId, instance.id, t);
     if (ok) onRenamed();
     else setDraft(instance.varName);
-  }, [draft, instance.varId, instance.varName, projectId, taskBound, onRenamed]);
+  }, [draft, instance.id, instance.varName, projectId, taskBound, onRenamed]);
 
   return (
     <div className="rounded-md border border-slate-700/80 bg-slate-800/50 p-2 space-y-1.5">
@@ -80,7 +81,7 @@ function InstanceCard({ instance, projectId, onRenamed, onRemoved }: InstanceCar
             className="shrink-0 p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800"
             aria-label="Remove variable"
             onClick={() => {
-              variableCreationService.removeVariableByVarId(projectId, instance.varId);
+              variableCreationService.removeVariableById(projectId, instance.id);
               onRemoved();
             }}
           >
@@ -188,24 +189,23 @@ export function FlowVariablesRail({ flowId, projectId: projectIdProp }: FlowVari
 
   const projectId = useMemo(() => {
     const fromProp = projectIdProp?.trim();
-    if (fromProp) return fromProp;
     const fromCtx = pdUpdate?.getCurrentProjectId?.()?.trim();
-    if (fromCtx) return fromCtx;
+    let fromStorage = '';
     try {
-      return localStorage.getItem('currentProjectId') || '';
+      fromStorage = localStorage.getItem('currentProjectId') || '';
     } catch {
-      return '';
+      /* noop */
     }
+    return resolveVariableStoreProjectId(fromProp || fromCtx || fromStorage || undefined);
   }, [projectIdProp, pdUpdate, projectData, refresh]);
 
   const instances = useMemo(() => {
-    if (!projectId) return [];
     return variableCreationService.getVariablesForFlowScope(projectId, flowId);
   }, [projectId, flowId, refresh, projectData]);
 
   const byVarId = useMemo(() => {
     const m = new Map<string, VariableInstance>();
-    instances.forEach((v) => m.set(v.varId, v));
+    instances.forEach((v) => m.set(v.id, v));
     return m;
   }, [instances]);
 
@@ -214,7 +214,6 @@ export function FlowVariablesRail({ flowId, projectId: projectIdProp }: FlowVari
   const tree = useMemo(() => buildFlowVariableTree(defs), [defs]);
 
   const addVariable = useCallback(() => {
-    if (!projectId) return;
     const base =
       addScope === 'flow'
         ? variableCreationService.createManualVariable(projectId, `var_${Date.now().toString(36)}`, {

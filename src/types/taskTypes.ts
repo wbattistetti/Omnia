@@ -455,6 +455,19 @@ export interface Task {
    */
   subTasks?: TaskTreeNode[];
 
+  /**
+   * Optional: flow canvas id (`main`, `subflow_*`) that owns authoring for this task row after moves.
+   * TaskRepository remains global per project; this marks which canvas materialized the instance.
+   */
+  authoringFlowCanvasId?: string;
+
+  /**
+   * Precomputed GUID-form reference corpus for this task (messages, scripts, API strings), refreshed on
+   * editor close / project save. Used to speed variable reference scanning; if absent, the scanner
+   * reconstructs from task JSON.
+   */
+  referenceScanInternalText?: string;
+
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
   // category?: string;              // ID categoria (preset o custom)
   // categoryCustom?: CustomCategory; // Se custom, dettagli completi

@@ -12,6 +12,9 @@ import { FlowActionsProvider } from '../../context/FlowActionsContext';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { IntellisenseProvider } from '../../context/IntellisenseContext';
+import { variableCreationService } from '../../services/VariableCreationService';
+import { resolveVariableStoreProjectId, isFallbackProjectBucket } from '../../utils/safeProjectId';
+import { buildFlowCanvasRowFingerprint } from '../../utils/flowWorkspaceUtteranceFingerprint';
 
 function getDefaultFlowTitle(flowId: string): string {
   return flowId === 'main' ? 'MAIN' : 'Subflow';
@@ -50,6 +53,24 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
   const hasLocalChanges = flowSlice?.hasLocalChanges;
   const nodeCount = flowSlice?.nodes?.length ?? 0;
   const edgeCount = flowSlice?.edges?.length ?? 0;
+
+  /** Re-hydrate utterance variables as soon as the workspace graph is available (ordering vs DockManager). */
+  const utteranceHydrationFingerprint = useMemo(
+    () => buildFlowCanvasRowFingerprint(flows as any),
+    [flows]
+  );
+
+  useEffect(() => {
+    const pid = resolveVariableStoreProjectId(projectId);
+    if (!pid || isFallbackProjectBucket(pid)) return;
+    if (!flows || Object.keys(flows).length === 0) return;
+    variableCreationService.hydrateVariablesFromFlow(pid, flows as any);
+    try {
+      document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
+    } catch {
+      /* noop */
+    }
+  }, [projectId, utteranceHydrationFingerprint]);
 
   useEffect(() => {
     let cancelled = false;
@@ -223,7 +244,9 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
             Loading flow...
           </div>
         ) : null}
-        {isFlowInterfacePanelEnabled(flowId) ? <FlowInterfaceBottomPanel flowId={flowId} /> : null}
+        {isFlowInterfacePanelEnabled(flowId) ? (
+          <FlowInterfaceBottomPanel flowId={flowId} projectId={projectId} />
+        ) : null}
         <FlowVariablesRail flowId={flowId} projectId={projectId} />
       </div>
     </FlowActionsProvider>

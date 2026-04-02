@@ -707,7 +707,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // ✅ CROSS-NODE DRAG: Listen for cross-node row moves - VERSIONE SEMPLIFICATA
   React.useEffect(() => {
     const handleCrossNodeMove = (event: CustomEvent) => {
-      const { toNodeId, rowData, mousePosition } = event.detail;
+      const detail = event.detail as { toNodeId?: string; rowData?: unknown; mousePosition?: { x: number; y: number }; _state?: { handled: boolean } };
+      if (detail._state?.handled) {
+        return;
+      }
+      const { toNodeId, rowData, mousePosition } = detail;
 
       if (toNodeId === id && rowData) {
 

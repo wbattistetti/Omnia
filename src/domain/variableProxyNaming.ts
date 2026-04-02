@@ -7,7 +7,8 @@ const CONVERSATIONAL_VERBS_IT =
   /^(chiedi|richiedi|inserisci|fornisci|inserire|fornire|raccogli|dimmi|indica|specifica|descrivi|seleziona|completa)\s+/i;
 const CONVERSATIONAL_VERBS_EN =
   /^(ask for|request|enter|provide|insert|collect|tell|specify|describe|select|complete)\s+/i;
-const LEADING_ARTICLES = /^(la|il|lo|le|gli|un|una|uno|the|a|an)\s+/i;
+/** Italian plural article "i" included (e.g. "i dati personali"). */
+const LEADING_ARTICLES = /^(i|la|il|lo|le|gli|un|una|uno|the|a|an)\s+/i;
 
 /**
  * Strips conversational verbs and leading articles (IT/EN) from a task row or segment.
@@ -29,6 +30,62 @@ export function normalizeSemanticTaskLabel(raw: string): string {
 /** Alias: internal interface / child segment uses the same strip rules. */
 export function normalizeProxySegment(raw: string): string {
   return normalizeSemanticTaskLabel(raw);
+}
+
+/**
+ * Stable snake_case segment for data-style names (aligned with
+ * `slugifyManualDataKeySegment` in ResponseEditor manual task tree).
+ */
+export function slugifyDataKeySegment(input: string): string {
+  const s = String(input || '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return s || 'data';
+}
+
+/** Last dotted segment, or full string if no dot. */
+export function lastDottedSegment(raw: string): string {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  return s.includes('.') ? String(s.split('.').pop() || '').trim() : s;
+}
+
+/**
+ * Single local label for a subflow task-bound variable (never parent FQ).
+ * If `varName` was mistakenly fully qualified (e.g. legacy `dati_personali.colore`), keeps only the last segment and normalizes.
+ */
+export function localLabelForSubflowTaskVariable(varName: string): string {
+  const raw = String(varName || '').trim();
+  if (!raw) return '';
+  const segment = raw.includes('.') ? lastDottedSegment(raw) : raw;
+  return normalizeProxySegment(segment) || segment;
+}
+
+/**
+ * Parent-flow proxy name for Subflow wiring: `<slug(normalized subflow title)>.<slug(internal segment)>`.
+ * Example: "Chiedi i dati personali" + "colore" → `dati_personali.colore`.
+ */
+export function buildSubflowParentProxyVariableName(
+  subflowTitleRaw: string,
+  internalOrTaskVarNameRaw: string
+): string {
+  const titleNorm =
+    normalizeSemanticTaskLabel(subflowTitleRaw) || String(subflowTitleRaw || '').trim() || 'subflow';
+  const prefix = slugifyDataKeySegment(titleNorm);
+
+  const raw = String(internalOrTaskVarNameRaw || '').trim() || 'value';
+  const lastSeg = lastDottedSegment(raw) || raw;
+  const internalNorm = normalizeProxySegment(lastSeg) || lastSeg;
+  const internal = slugifyDataKeySegment(internalNorm);
+
+  if (!prefix || !internal) {
+    throw new Error('Cannot build subflow parent proxy name: empty prefix or internal segment.');
+  }
+  return `${prefix}.${internal}`;
 }
 
 /**

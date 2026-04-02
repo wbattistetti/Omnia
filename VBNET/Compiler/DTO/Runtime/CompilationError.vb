@@ -88,6 +88,12 @@ Public Class CompilationError
     <JsonProperty("escalationIndex")>
     Public Property EscalationIndex As Integer?
 
+    ''' <summary>
+    ''' TaskTypes enum (integer) for the row — lets the client open the correct editor (e.g. UtteranceInterpretation → Response Editor).
+    ''' </summary>
+    <JsonProperty("taskType")>
+    Public Property TaskType As Integer?
+
     Public Sub New()
         TaskId = String.Empty
         NodeId = String.Empty

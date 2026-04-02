@@ -15,6 +15,7 @@ import { useTaskEditor } from '../TaskEditor/EditorHost/TaskEditorContext'; // â
 import { taskToTaskMeta } from '../../utils/taskToTaskMeta';
 import { TaskType } from '../../types/taskTypes';
 import type { TaskMeta } from '../TaskEditor/EditorHost/types';
+import { getActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   bot: <Bot className="w-5 h-5" />,
@@ -180,6 +181,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
           id: taskMeta.id,
           type: taskMeta.type, // âœ… TaskType enum invece di stringa
           label: taskMeta.label,
+          flowId: getActiveFlowCanvasId(),
           task: task // Pass full Task in event detail
         },
         bubbles: true

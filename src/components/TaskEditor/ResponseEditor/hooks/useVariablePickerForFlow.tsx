@@ -6,7 +6,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import { useFlowActions, useFlowWorkspace } from '../../../../flows/FlowStore';
-import { useProjectDataUpdate } from '../../../../context/ProjectDataContext';
+import { useProjectData, useProjectDataUpdate } from '../../../../context/ProjectDataContext';
+import { useProjectTranslations } from '../../../../context/ProjectTranslationsContext';
 import {
   buildVariableMenuItemsAsync,
   getVariableMenuRebuildFingerprint,
@@ -15,6 +16,7 @@ import {
 import VariableTokenContextMenu from '../../../common/VariableTokenContextMenu';
 import { insertBracketTokenAtCaret } from '../../../../utils/variableTokenText';
 import { ensureParentVariableAndSubflowOutputBinding } from '../../../common/subflowParentBinding';
+import { resolveVariableStoreProjectId } from '../../../../utils/safeProjectId';
 
 export type UseVariablePickerForFlowParams = {
   enabled: boolean;
@@ -47,6 +49,8 @@ export function useVariablePickerForFlow(
   const { flows } = useFlowWorkspace();
   const { updateFlowMeta } = useFlowActions();
   const pdUpdate = useProjectDataUpdate();
+  const { data: projectData } = useProjectData();
+  const { translations } = useProjectTranslations();
   const activeFlowId = getActiveFlowCanvasId();
   const [variableMenuItems, setVariableMenuItems] = useState<VariableMenuItem[]>([]);
 
@@ -54,7 +58,10 @@ export function useVariablePickerForFlow(
     () => getVariableMenuRebuildFingerprint(flows as any, activeFlowId),
     [flows, activeFlowId]
   );
-  const projectIdForMenu = pdUpdate?.getCurrentProjectId() || '';
+  const projectIdForMenu = useMemo(
+    () => resolveVariableStoreProjectId(pdUpdate?.getCurrentProjectId() || undefined),
+    [pdUpdate, projectData?.id]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -62,11 +69,9 @@ export function useVariablePickerForFlow(
       setVariableMenuItems([]);
       return;
     }
-    if (!projectIdForMenu) {
-      setVariableMenuItems([]);
-      return;
-    }
-    void buildVariableMenuItemsAsync(projectIdForMenu, activeFlowId, flows as any)
+    void buildVariableMenuItemsAsync(projectIdForMenu, activeFlowId, flows as any, {
+      translationsByGuid: translations,
+    })
       .then((items) => {
         if (!cancelled) setVariableMenuItems(items);
       })
@@ -76,7 +81,7 @@ export function useVariablePickerForFlow(
     return () => {
       cancelled = true;
     };
-  }, [enabled, editing, projectIdForMenu, activeFlowId, variableMenuFingerprint, flows]);
+  }, [enabled, editing, projectIdForMenu, activeFlowId, variableMenuFingerprint, flows, translations]);
 
   useEffect(() => {
     if (!enabled || !editing) {
@@ -150,12 +155,12 @@ export function useVariablePickerForFlow(
         const owner = (flows as any)?.[item.ownerFlowId];
         if (!owner) return;
         const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
-        const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.varId);
+        const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
         const nextVars = existing
           ? prevVars.map((v: any) =>
-              String(v?.id || '').trim() === item.varId ? { ...v, visibility: 'output' } : v
+              String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v
             )
-          : [...prevVars, { id: item.varId, label: item.varLabel, type: 'string', visibility: 'output' }];
+          : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
         updateFlowMeta(item.ownerFlowId, { variables: nextVars });
         applyInsert(item.tokenLabel || item.varLabel);
       }}

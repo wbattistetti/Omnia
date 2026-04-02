@@ -65,9 +65,8 @@ export function ResponseEditorNavigationProvider({
   }, []);
 
   const navigateToEscalation = useCallback((stepKey: string, escalationIndex: number) => {
-    // First navigate to step
-    navigateToStep(stepKey);
-    // Then scroll to escalation
+    /** One update + one scroll — do not call navigateToStep (avoids double scroll / tab fight with BehaviourUi). */
+    setCurrentStepKey(stepKey);
     setTimeout(() => {
       const escalationElement = document.querySelector(`[data-escalation-index="${escalationIndex}"]`);
       if (escalationElement) {
@@ -77,8 +76,8 @@ export function ResponseEditorNavigationProvider({
           escalationElement.classList.remove('navigation-step-flash');
         }, 450);
       }
-    }, 200);
-  }, [navigateToStep]);
+    }, 120);
+  }, []);
 
   const setAutoEditTarget = useCallback((target: { escIdx: number; taskIdx: number } | null) => {
     setAutoEditTargetState(target);
@@ -130,19 +129,31 @@ export function ResponseEditorNavigationProvider({
   // Listen for navigation events from taskEditor:open
   useEffect(() => {
     const handleNavigationEvent = (event: CustomEvent) => {
-      const navigation = event.detail?.navigation;
+      const raw = event.detail as
+        | { navigation?: ResponseEditorNavigationContextValue['pendingNavigation'] }
+        | ResponseEditorNavigationContextValue['pendingNavigation']
+        | undefined;
+      if (!raw || typeof raw !== 'object') return;
+      const navigation =
+        'navigation' in raw && raw.navigation && typeof raw.navigation === 'object'
+          ? raw.navigation
+          : 'stepKey' in raw ||
+              'openTasksPanel' in raw ||
+              'escalationIndex' in raw ||
+              'openBehaviorPanel' in raw ||
+              'autoEditTarget' in raw
+            ? (raw as ResponseEditorNavigationContextValue['pendingNavigation'])
+            : null;
       if (!navigation) return;
 
       // Store pending navigation
       setPendingNavigation(navigation);
 
-      // Apply navigation
-      if (navigation.stepKey) {
-        navigateToStep(navigation.stepKey);
-      }
-
+      // Apply navigation (escalation path sets the step once; do not also call navigateToStep)
       if (navigation.escalationIndex !== undefined && navigation.stepKey) {
         navigateToEscalation(navigation.stepKey, navigation.escalationIndex);
+      } else if (navigation.stepKey) {
+        navigateToStep(navigation.stepKey);
       }
 
       if (navigation.autoEditTarget) {

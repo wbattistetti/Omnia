@@ -36,7 +36,7 @@ export function convertScriptLabelsToGuids(script: string): string {
   if (!projectId) return script;
 
   const replaceLabel = (match: string, quote: string, label: string, isGetVar: boolean): string => {
-    const varId = variableCreationService.getVarIdByVarName(projectId, label, undefined, getActiveFlowCanvasId());
+    const varId = variableCreationService.getIdByVarName(projectId, label, undefined, getActiveFlowCanvasId());
     if (varId) {
       return isGetVar
         ? `getVar(ctx, ${quote}${varId}${quote})`
@@ -58,7 +58,15 @@ export function convertScriptLabelsToGuids(script: string): string {
  *
  * Called when loading a condition from the database for display in the editor.
  */
-export function convertScriptGuidsToLabels(script: string): string {
+export type ConvertScriptGuidsToLabelsOptions = {
+  /** Prefer project translation for GUID keys before variable store varName. */
+  resolveGuidToLabel?: (guid: string) => string | null | undefined;
+};
+
+export function convertScriptGuidsToLabels(
+  script: string,
+  options?: ConvertScriptGuidsToLabelsOptions
+): string {
   if (!script || typeof script !== 'string') return script;
 
   const projectId = getProjectId();
@@ -67,7 +75,11 @@ export function convertScriptGuidsToLabels(script: string): string {
   const replaceGuid = (match: string, quote: string, key: string, isGetVar: boolean): string => {
     if (!GUID_PATTERN.test(key)) return match;
 
-    const varName = variableCreationService.getVarNameByVarId(projectId, key);
+    const fromOpt = options?.resolveGuidToLabel?.(key);
+    const varName =
+      fromOpt != null && String(fromOpt).trim() !== ''
+        ? String(fromOpt).trim()
+        : variableCreationService.getVarNameById(projectId, key);
     if (varName) {
       return isGetVar
         ? `getVar(ctx, ${quote}${varName}${quote})`

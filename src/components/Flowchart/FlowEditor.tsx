@@ -52,6 +52,7 @@ import { ExecutionStateProvider } from './executionHighlight/ExecutionStateConte
 import { FlowStateBridge } from '../../services/FlowStateBridge';
 import { useCompilationErrors } from '../../context/CompilationErrorsContext';
 import { useFlowchartState } from '../../context/FlowchartStateContext';
+import { useCrossNodeSubflowPortalMove } from './hooks/useCrossNodeSubflowPortalMove';
 import { intellisenseAnchorFlowFromHandles, VHV_COLLINEAR_EPS_PX } from './edges/utils/edgeRouting';
 import { waitForHandleBounds } from './utils/waitForHandleBounds';
 import { diagFlowLink } from './utils/flowTempLinkDiag';
@@ -293,13 +294,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ProjectData for condition creation
   const { data: projectData } = useProjectData();
 
+  useCrossNodeSubflowPortalMove({ flowId, nodes });
+
   const nodeActions = useNodeActions({
     nodes,
     deleteNode,
     addNodeAtPosition,
     updateNode,
     reactFlowInstance,
-    projectId: projectData?.projectId,
+    projectId: (projectData as { id?: string; projectId?: string } | null)?.id ?? (projectData as { projectId?: string } | null)?.projectId,
+    flowCanvasId: flowId,
   });
   const { deleteNodeWithLog } = nodeActions;
 

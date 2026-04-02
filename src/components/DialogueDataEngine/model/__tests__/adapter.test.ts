@@ -26,8 +26,8 @@ const current = {
 };
 
 describe('adapter current -> V2', () => {
-  it('maps fields and creates nodes for main + subs', () => {
-    const v2 = adaptCurrentToV2(current as any);
+  it('maps fields and creates nodes for main + subs', async () => {
+    const v2 = await adaptCurrentToV2(current as any, 'it');
     expect(v2.schemaVersion).toBe('2');
     expect(v2.metadata.id).toBe('DDT_Date');
     expect(v2.nodes.length).toBe(4);

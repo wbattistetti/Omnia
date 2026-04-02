@@ -2945,21 +2945,27 @@ app.post('/api/projects/:pid/variables', async (req, res) => {
     const manualVariables = variables.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
     const taskVariables = variables.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
 
-    // Insert variables (upsert by varId to avoid duplicates)
-    // ✅ Ensure empty strings are preserved (not converted to null/undefined)
+    // Upsert by variable identity GUID: `id` (client) or legacy `varId` in DB.
     const operations = variables.map(v => {
+      const rowId = String(v.id || v.varId || '').trim();
+      if (!rowId) {
+        return null;
+      }
       const scope = v.scope === 'flow' ? 'flow' : 'project';
       const scopeFlowId = scope === 'flow' ? String(v.scopeFlowId || '').trim() : '';
+      const dataPath = String(v.dataPath ?? v.ddtPath ?? '').trim();
       return {
         updateOne: {
-          filter: { varId: v.varId },
+          filter: { projectId, $or: [{ id: rowId }, { varId: rowId }] },
           update: {
             $set: {
-              varId: v.varId,
+              id: rowId,
+              varId: rowId,
               varName: v.varName,
-              taskInstanceId: v.taskInstanceId || '', // ✅ Explicit empty string
-              nodeId: v.nodeId || '', // ✅ Explicit empty string
-              ddtPath: v.ddtPath || '', // ✅ Explicit empty string
+              taskInstanceId: v.taskInstanceId || '',
+              nodeId: String(v.nodeId || rowId || '').trim(),
+              dataPath,
+              ddtPath: dataPath,
               scope,
               scopeFlowId,
               projectId: projectId
@@ -2968,7 +2974,11 @@ app.post('/api/projects/:pid/variables', async (req, res) => {
           upsert: true
         }
       };
-    });
+    }).filter(Boolean);
+
+    if (operations.length === 0) {
+      return res.status(400).json({ error: 'variables: every row must have id or varId' });
+    }
 
     const result = await projDb.collection('variables').bulkWrite(operations);
 
@@ -3018,7 +3028,12 @@ app.get('/api/projects/:pid/variables', async (req, res) => {
       query.scopeFlowId = scopeFlowId;
     }
 
-    const variables = await projDb.collection('variables').find(query).toArray();
+    const rawVariables = await projDb.collection('variables').find(query).toArray();
+    const variables = rawVariables.map((doc) => {
+      const id = String(doc.id || doc.varId || '').trim();
+      const dataPath = String(doc.dataPath ?? doc.ddtPath ?? '').trim();
+      return { ...doc, id, dataPath };
+    });
 
       const duration = Date.now() - startTime;
     logInfo('Variables.get', {
@@ -3045,7 +3060,10 @@ app.get('/api/projects/:pid/variables/:varId', async (req, res) => {
   const startTime = Date.now();
   try {
     const projDb = await getProjectDb(client, projectId);
-    const variable = await projDb.collection('variables').findOne({ projectId, varId });
+    const variable = await projDb.collection('variables').findOne({
+      projectId,
+      $or: [{ id: varId }, { varId }],
+    });
 
     if (!variable) {
       const duration = Date.now() - startTime;
@@ -3053,9 +3071,11 @@ app.get('/api/projects/:pid/variables/:varId', async (req, res) => {
       return res.status(404).json({ error: 'not_found' });
     }
 
+    const id = String(variable.id || variable.varId || '').trim();
+    const dataPath = String(variable.dataPath ?? variable.ddtPath ?? '').trim();
     const duration = Date.now() - startTime;
     logInfo('Variables.getById', { projectId, varId, found: true, duration: `${duration}ms` });
-    res.json(variable);
+    res.json({ ...variable, id, dataPath });
   } catch (e) {
     const duration = Date.now() - startTime;
     logError('Variables.getById', e, { projectId, varId, duration: `${duration}ms` });

@@ -3,19 +3,14 @@ Option Explicit On
 Imports Newtonsoft.Json
 
 ''' <summary>
-''' CompiledVariable: Variabile trasformata per runtime
-''' Mantiene solo ID necessari (varId, taskInstanceId, nodeId)
-''' Aggiunge values per storico runtime
+''' CompiledVariable: Variabile per runtime. Chiave VariableStore = <c>Id</c> (GUID = TaskTreeNode.id).
 ''' </summary>
 Public Class CompiledVariable
-    <JsonProperty("varId")>
-    Public Property VarId As String
+    <JsonProperty("id")>
+    Public Property Id As String
 
     <JsonProperty("taskInstanceId")>
     Public Property TaskInstanceId As String
-
-    <JsonProperty("nodeId")>
-    Public Property NodeId As String
 
     <JsonProperty("values")>
     Public Property Values As List(Of Object)

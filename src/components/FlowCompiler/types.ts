@@ -120,6 +120,8 @@ export interface CompilationError {
   stepKey?: string;
   /** Zero-based escalation index within the step (EmptyEscalation). */
   escalationIndex?: number;
+  /** TaskTypes enum (aligned with VB) so Fix opens the correct editor without guessing. */
+  taskType?: number;
 }
 
 /**

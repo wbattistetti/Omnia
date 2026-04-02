@@ -154,6 +154,14 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     setIsRunning(true);
 
     try {
+      // Clear flowchart highlights from the previous run — user may have fixed issues since then.
+      try {
+        const { setCompilationErrorsGlobal } = await import('../../context/CompilationErrorsContext');
+        setCompilationErrorsGlobal([]);
+      } catch {
+        /* non-fatal if provider not mounted */
+      }
+
       // ✅ Use currentOptions from ref throughout (all compilation logic)
       // Ensure all tasks exist in memory before compilation
       // Enrich all rows with taskId (creates tasks in memory if missing)
@@ -258,6 +266,15 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       if (mergedErrorList.length > 0) {
         compileData.errors = mergedErrorList;
         compileData.hasErrors = mergedErrorList.some((e) => normalizeSeverity(e.severity) === 'error');
+      } else {
+        delete compileData.errors;
+        compileData.hasErrors = false;
+        try {
+          const { clearCompilationErrorsGlobal } = await import('../../context/CompilationErrorsContext');
+          clearCompilationErrorsGlobal();
+        } catch {
+          /* noop */
+        }
       }
 
       // Convert taskMap from object back to Map (for frontend use only)

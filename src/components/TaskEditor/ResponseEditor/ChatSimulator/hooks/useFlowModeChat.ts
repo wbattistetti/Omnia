@@ -337,6 +337,13 @@ export function useFlowModeChat(
       return;
     }
 
+    try {
+      const { clearCompilationErrorsGlobal } = await import('@context/CompilationErrorsContext');
+      clearCompilationErrorsGlobal();
+    } catch {
+      /* noop */
+    }
+
     // Step 1: Raise the restart flag SYNCHRONOUSLY so useEffect auto-start
     // is blocked for the entire duration of this protocol.
     isRestartingRef.current = true;

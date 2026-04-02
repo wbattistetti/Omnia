@@ -92,3 +92,8 @@ export function setCompilationErrorsGlobal(errors: CompilationError[]): void {
     console.error('[CompilationErrorsContext] ❌ Global setter not initialized - errors will be lost. Ensure CompilationErrorsProvider is mounted.');
   }
 }
+
+/** Clears flowchart / error-report compilation state (e.g. every time the user hits Run — start() may not run again if the session was already started). */
+export function clearCompilationErrorsGlobal(): void {
+  setCompilationErrorsGlobal([]);
+}

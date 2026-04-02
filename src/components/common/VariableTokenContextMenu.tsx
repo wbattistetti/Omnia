@@ -22,7 +22,7 @@ import {
 } from '../FlowMappingPanel/flowInterfaceDragTypes';
 
 export type VariableMenuRowItem = {
-  varId: string;
+  id: string;
   varLabel: string;
   tokenLabel?: string;
   ownerFlowId?: string;
@@ -178,8 +178,8 @@ function NativeDraggablePanel({ x, y, items, nodeId, onClose }: NativePanelProps
       e.dataTransfer.setData(
         DND_FLOWROW_VAR,
         JSON.stringify({
-          variableRefId: item.varId,
-          suggestedInternalPath: stableInterfacePathForVariable(item.varId),
+          variableRefId: item.id,
+          suggestedInternalPath: stableInterfacePathForVariable(item.id),
           displayLabel: label,
           nodeId,
         })
@@ -351,7 +351,7 @@ export default function VariableTokenContextMenu({
   const items: VariableMenuRowItem[] =
     variableItems ??
     variables.map((v) => ({
-      varId: v, varLabel: v, tokenLabel: v,
+      id: v, varLabel: v, tokenLabel: v,
       ownerFlowId: '', ownerFlowTitle: '',
       isExposed: true, isFromActiveFlow: true, sourceTaskRowLabel: '',
     }));

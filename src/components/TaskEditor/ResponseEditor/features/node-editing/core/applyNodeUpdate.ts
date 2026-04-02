@@ -277,10 +277,11 @@ export async function saveTaskAsync(
   key: string,
   updatedTaskTree: TaskTree,
   taskInstance: Task | null | undefined,
-  currentProjectId: string | null
+  currentProjectId: string | null,
+  flowId?: string | null
 ): Promise<void> {
   try {
-    await saveTaskToRepository(key, updatedTaskTree, taskInstance, currentProjectId);
+    await saveTaskToRepository(key, updatedTaskTree, taskInstance, currentProjectId, flowId);
   } catch (err) {
     console.error('[ResponseEditor] Failed to save task:', err);
   }

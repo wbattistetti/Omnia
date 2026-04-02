@@ -178,18 +178,17 @@ export interface EngineConfigDomainModel {
 /**
  * VariableDomainModel: Pure domain representation of a variable
  *
- * Maps from VariableInstance (varId, varName) to domain model (id, name)
+ * Maps from VariableInstance (id = TaskTreeNode GUID, varName, dataPath).
  */
 export interface VariableDomainModel {
-  id: string; // Maps from varId (GUID)
+  id: string;
   name: string; // Maps from varName (human-readable)
   type?: string;
   description?: string;
   defaultValue?: any;
-  taskInstanceId?: string; // ID of the task instance this variable belongs to
-  nodeId?: string; // GUID of the node in the template
-  ddtPath?: string; // Path in the DDT structure
+  taskInstanceId?: string;
+  dataPath?: string;
   createdAt?: Date;
   updatedAt?: Date;
-  [key: string]: any; // Allow additional fields for backward compatibility
+  [key: string]: any;
 }

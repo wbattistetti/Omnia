@@ -10,6 +10,36 @@ import { splitFlowPrefixedMessage } from '@components/ChatPanel/errorReportDispl
 import { FlowStateBridge } from '@services/FlowStateBridge';
 import { resolveEdgeCaption } from '@components/Flowchart/utils/edgeConditionState';
 import { getActiveFlowCanvasId } from '@flows/activeFlowCanvas';
+import { taskRepository } from '@services/TaskRepository';
+import { TaskType, normalizeLegacyTaskTypeValue } from '@types/taskTypes';
+
+/**
+ * Flowchart row id equals task instance id in taskRepository; prefer it over referenced task id.
+ */
+function resolveCompilationFixInstanceId(error: CompilationError): string {
+  const rowId = error.rowId?.trim();
+  if (rowId) return rowId;
+  const ft = error.fixTarget;
+  if (ft && 'taskId' in ft && typeof ft.taskId === 'string' && ft.taskId.trim()) {
+    return ft.taskId.trim();
+  }
+  return error.taskId;
+}
+
+/**
+ * Task type for editor selection: compiler payload first, then repository, then UNDEFINED.
+ */
+function resolveCompilationFixTaskType(error: CompilationError, instanceId: string): TaskType {
+  const n = error.taskType;
+  if (typeof n === 'number' && Number.isFinite(n)) {
+    return normalizeLegacyTaskTypeValue(n);
+  }
+  const fromRepo = taskRepository.getTask(instanceId)?.type;
+  if (fromRepo !== undefined && fromRepo !== null) {
+    return fromRepo;
+  }
+  return TaskType.UNDEFINED;
+}
 
 /** Flow id from optional `[flowId] message` on merged compile errors; default `main`. */
 export function compilationErrorFlowId(error: CompilationError): string {
@@ -130,6 +160,7 @@ async function openTaskEditorForCompilationError(error: CompilationError): Promi
       if (fixTarget.type === 'taskEscalation') {
         navigation.stepKey = fixTarget.stepKey;
         navigation.openTasksPanel = true;
+        navigation.openBehaviorPanel = false;
         if (fixTarget.escalationIndex !== undefined) {
           navigation.escalationIndex = fixTarget.escalationIndex;
         }
@@ -142,6 +173,7 @@ async function openTaskEditorForCompilationError(error: CompilationError): Promi
       if (fixTarget.type === 'taskStep' || fixTarget.type === 'taskEscalation') {
         navigation.stepKey = fixTarget.stepKey;
         navigation.openTasksPanel = true;
+        navigation.openBehaviorPanel = false;
         if (fixTarget.type === 'taskEscalation' && fixTarget.escalationIndex !== undefined) {
           navigation.escalationIndex = fixTarget.escalationIndex;
         }
@@ -161,10 +193,15 @@ async function openTaskEditorForCompilationError(error: CompilationError): Promi
       break;
   }
 
+  const instanceId = resolveCompilationFixInstanceId(error);
+  const resolvedTaskType = resolveCompilationFixTaskType(error, instanceId);
+  const flowId = compilationErrorFlowId(error);
+
   const event = new CustomEvent<TaskEditorOpenEvent>('taskEditor:open', {
     detail: {
-      id: fixTarget.taskId,
-      type: 1,
+      id: instanceId,
+      type: resolvedTaskType,
+      flowId,
       navigation,
     },
     bubbles: true,
@@ -174,7 +211,7 @@ async function openTaskEditorForCompilationError(error: CompilationError): Promi
   setTimeout(() => {
     document.dispatchEvent(
       new CustomEvent('taskEditor:navigate', {
-        detail: navigation,
+        detail: { navigation },
         bubbles: true,
       })
     );
