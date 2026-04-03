@@ -6,7 +6,7 @@ import { TaskEditorEventHandler, type TaskEditorEventHandlerParams } from '../ha
 import { ConditionEditorEventHandler, type ConditionEditorEventHandlerParams } from '../handlers/ConditionEditorEventHandler';
 import { NonInteractiveEditorEventHandler } from '../handlers/NonInteractiveEditorEventHandler';
 import { openBottomDockedTab } from '../../infrastructure/docking/DockingHelpers';
-import { upsertAddNextTo, activateTab } from '@dock/ops';
+import { upsertAddNextTo, activateTab, findTabsetIdContainingTab } from '@dock/ops';
 import type { TaskEditorOpenEvent } from '../../domain/editorEvents';
 import type { ConditionEditorOpenEvent } from '../../domain/editorEvents';
 import type { NonInteractiveEditorOpenEvent } from '../../domain/editorEvents';
@@ -42,10 +42,15 @@ export class EditorCoordinator {
     event: TaskEditorOpenEvent
   ): Promise<DockNode> {
     const { tabId, dockTab, onExisting } = await this.taskEditorHandler.handle(event);
+    const flowId = event.flowId != null ? String(event.flowId).trim() : '';
+    const anchorTabsetId = flowId
+      ? findTabsetIdContainingTab(tree, `tab_${flowId}`)
+      : null;
     return openBottomDockedTab(tree, {
       tabId,
       newTab: dockTab,
       onExisting,
+      anchorTabsetId: anchorTabsetId ?? undefined,
     });
   }
 
@@ -57,9 +62,14 @@ export class EditorCoordinator {
     event: ConditionEditorOpenEvent
   ): Promise<DockNode> {
     const { tabId, dockTab } = await this.conditionEditorHandler.handle(event);
+    const flowId = event.flowId != null ? String(event.flowId).trim() : '';
+    const anchorTabsetId = flowId
+      ? findTabsetIdContainingTab(tree, `tab_${flowId}`)
+      : null;
     return openBottomDockedTab(tree, {
       tabId,
       newTab: dockTab,
+      anchorTabsetId: anchorTabsetId ?? undefined,
     });
   }
 

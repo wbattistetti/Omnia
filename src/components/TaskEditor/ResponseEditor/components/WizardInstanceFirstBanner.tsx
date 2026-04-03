@@ -1,5 +1,5 @@
 /**
- * Visible when wizard instance-first is enabled (default on in dev; overridable via localStorage).
+ * Dev banner when WIZARD_INSTANCE_FIRST is on: completing the wizard keeps the row as a project instance.
  */
 
 import React from 'react';
@@ -22,10 +22,10 @@ export function WizardInstanceFirstBanner() {
         borderBottom: '1px solid #fcd34d',
       }}
     >
-      <strong>Wizard instance-first (beta):</strong> finishing the wizard saves this row as{' '}
-      <strong>standalone</strong> (local tree + steps) and clears the project template link. In dev this is on by
-      default; set <code style={{ fontSize: 12 }}>localStorage featureFlag_WIZARD_INSTANCE_FIRST</code> to{' '}
-      <code style={{ fontSize: 12 }}>false</code> and reload to turn off.
+      <strong>Wizard → progetto (beta):</strong> completando il wizard la riga resta un&apos;istanza nel{' '}
+      <strong>progetto</strong> corrente (albero e step locali) e il legame al template di progetto viene rimosso. In
+      sviluppo è attivo di default; imposta{' '}
+      <code style={{ fontSize: 12 }}>localStorage featureFlag_WIZARD_INSTANCE_FIRST</code> a <code style={{ fontSize: 12 }}>false</code> e ricarica per disattivare.
     </div>
   );
 }

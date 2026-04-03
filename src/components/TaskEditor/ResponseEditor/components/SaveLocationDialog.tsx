@@ -11,35 +11,27 @@ interface SaveLocationDialogProps {
   onClose: () => void;
   onSaveToFactory: () => void;
   onCancel: () => void;
-  // ✅ REMOVED: originalLabel, generalizedLabel, generalizationReason, generalizedMessages - now from contexts
   anchorRef?: React.RefObject<HTMLElement> | null;
   isSaving?: boolean; // ✅ NEW: State for saving operation
   responseEditorRef?: React.RefObject<HTMLElement> | null; // ✅ NEW: Ref to ResponseEditor container for positioning
 }
 
 /**
- * Popover component for choosing where to save a generalizable template
- *
- * Shows when shouldBeGeneral === true and user hasn't made a decision yet
- * Positioned as a popover below the "Vuoi salvare in libreria?" button
+ * Popover to save the current template to the global Factory library.
+ * Opened from the toolbar; primary action delegates to the parent `onSaveToFactory` (handleSaveToFactory).
  */
 export function SaveLocationDialog({
   isOpen,
   onClose,
   onSaveToFactory,
   onCancel,
-  // ✅ REMOVED: originalLabel, generalizedLabel, generalizationReason, generalizedMessages - now from contexts
   anchorRef,
   isSaving = false, // ✅ NEW: Default to false
   responseEditorRef // ✅ NEW: Ref to ResponseEditor container
 }: SaveLocationDialogProps) {
-  // ✅ REMOVED: Log rumoroso - verrà ripristinato se necessario durante refactoring
-
   // ✅ ARCHITECTURE: Read from contexts (single source of truth)
   const { taskLabel } = useResponseEditorContext();
   const wizardContext = useWizardContext();
-  const generalizedLabel = wizardContext?.generalizedLabel ?? null;
-  const generalizationReason = wizardContext?.generalizationReason ?? null;
   const generalizedMessages = wizardContext?.generalizedMessages ?? null;
   const popoverRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -54,41 +46,17 @@ export function SaveLocationDialog({
       return;
     }
 
-    console.log('[SaveLocationDialog] 🔍 POPOVER OPENING - useLayoutEffect triggered', {
-      isOpen,
-      hasAnchorRef: !!anchorRef,
-      anchorRefCurrent: anchorRef?.current,
-      anchorRefTagName: anchorRef?.current?.tagName,
-      anchorRefDataId: anchorRef?.current?.getAttribute('data-button-id')
-    });
-
     const updatePosition = () => {
       // Try to get button from anchorRef first
       let anchorElement: HTMLElement | null = null;
 
       if (anchorRef?.current) {
         anchorElement = anchorRef.current;
-        console.log('[SaveLocationDialog] ✅✅✅ FOUND BUTTON via anchorRef.current', {
-          tagName: anchorElement.tagName,
-          dataButtonId: anchorElement.getAttribute('data-button-id'),
-          rect: anchorElement.getBoundingClientRect()
-        });
       } else {
-        console.log('[SaveLocationDialog] ⚠️ anchorRef.current is NULL, trying querySelector fallback');
-        // Fallback: find button by data attribute (should not be needed, but keep as safety)
         anchorElement = document.querySelector('[data-button-id="save-to-library"]') as HTMLElement;
-        if (anchorElement) {
-          console.log('[SaveLocationDialog] ✅ Found via querySelector fallback', {
-            tagName: anchorElement.tagName,
-            rect: anchorElement.getBoundingClientRect()
-          });
-        } else {
-          console.log('[SaveLocationDialog] ❌ querySelector ALSO FAILED - NO BUTTON FOUND');
-        }
       }
 
       if (!anchorElement) {
-        console.log('[SaveLocationDialog] ❌❌❌ CRITICAL: NO ANCHOR ELEMENT - Cannot position popover');
         setPosition(null);
         return;
       }
@@ -131,7 +99,6 @@ export function SaveLocationDialog({
         }
       }
 
-      console.log('[SaveLocationDialog] ✅ Position calculated:', { top, left });
       setPosition({ top, left });
     };
 
@@ -145,18 +112,7 @@ export function SaveLocationDialog({
       window.removeEventListener('scroll', updatePosition, true);
       window.removeEventListener('resize', updatePosition);
     };
-  }, [isOpen, anchorRef, responseEditorRef]); // ✅ Added responseEditorRef dependency
-
-  // ✅ Log quando position è null (solo quando cambia isOpen o position)
-  React.useEffect(() => {
-    if (isOpen && !position) {
-      console.log('[SaveLocationDialog] ❌ BLOCKED: position is null - button not found!', {
-        hasAnchorRef: !!anchorRef,
-        anchorRefCurrent: anchorRef?.current,
-        querySelectorResult: document.querySelector('[data-button-id="save-to-library"]')
-      });
-    }
-  }, [isOpen, position, anchorRef]);
+  }, [isOpen, anchorRef, responseEditorRef, generalizedMessages]);
 
   if (!isOpen) {
     return null;
@@ -199,9 +155,9 @@ export function SaveLocationDialog({
         <div className="p-4 flex-1 overflow-y-auto">
           {/* ✅ FIX: Testo introduttivo con link cliccabile */}
           <p className="text-sm text-gray-700 mb-3">
-            "<span className="font-semibold">{taskLabel}</span>" può essere generalizzato per contesti diversi.
+            "<span className="font-semibold">{taskLabel}</span>" può essere riutilizzato in contesti diversi.
             <br />
-            Consiglio di salvarlo nella libreria generale.
+            Pubblicalo nella <span className="font-medium">Factory</span> (libreria globale) per renderlo disponibile a tutti i progetti.
             {generalizedMessages && generalizedMessages.length > 0 && (
               <>
                 {' '}
@@ -211,17 +167,16 @@ export function SaveLocationDialog({
                   className="text-blue-600 hover:text-blue-800 underline cursor-pointer font-medium"
                   style={{ background: 'none', border: 'none', padding: 0 }}
                 >
-                  {showMessages ? 'Nascondi messaggi generalizzati' : 'Clicca qui per vedere i messaggi generalizzati'}
+                  {showMessages ? 'Nascondi messaggi suggeriti' : 'Mostra messaggi suggeriti dal wizard'}
                 </button>
                 .
               </>
             )}
           </p>
 
-          {/* ✅ FIX: Lista messaggi generalizzati - visibile solo dopo click */}
           {showMessages && generalizedMessages && generalizedMessages.length > 0 && (
             <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200 max-h-48 overflow-y-auto">
-              <p className="text-xs font-semibold text-gray-700 mb-2">Messaggi generalizzati:</p>
+              <p className="text-xs font-semibold text-gray-700 mb-2">Messaggi suggeriti:</p>
               <ul className="list-disc list-inside space-y-1">
                 {generalizedMessages.map((msg, idx) => (
                   <li key={idx} className="text-xs text-gray-600">
@@ -236,26 +191,14 @@ export function SaveLocationDialog({
         <div className="flex gap-2 justify-end p-4 border-t border-gray-200">
           <button
             onClick={async () => {
-              console.log('[SaveLocationDialog] 🔍 CLICK su "Salva nella libreria generale"', {
-                isSavingBeforeClick: isSaving,
-                hasOnSaveToFactory: !!onSaveToFactory,
-                onSaveToFactoryType: typeof onSaveToFactory
-              });
-              // ✅ FIX: await the async function to ensure isSaving state updates correctly
               try {
                 if (!onSaveToFactory) {
-                  console.error('[SaveLocationDialog] ❌ onSaveToFactory is not defined!');
+                  console.error('[SaveLocationDialog] onSaveToFactory is not defined');
                   return;
                 }
-                console.log('[SaveLocationDialog] 🚀 Calling onSaveToFactory...');
                 await onSaveToFactory();
-                console.log('[SaveLocationDialog] ✅ onSaveToFactory completed');
-                // ✅ onClose viene chiamato dopo il salvataggio in handleSaveToFactory
-                // Non chiamare onClose qui perché handleSaveToFactory lo gestisce
               } catch (error) {
-                console.error('[SaveLocationDialog] ❌ Error saving to factory:', error);
-                // ✅ Don't close dialog on error - let user see what happened
-                // handleSaveToFactory will set isSaving(false) in its catch block
+                console.error('[SaveLocationDialog] Error saving to factory:', error);
               }
             }}
             disabled={isSaving}
@@ -267,7 +210,7 @@ export function SaveLocationDialog({
                 <span>Sto salvando...</span>
               </>
             ) : (
-              <span>Salva nella libreria generale</span>
+              <span>Pubblica in Factory</span>
             )}
           </button>
           <button

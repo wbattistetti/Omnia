@@ -1,10 +1,11 @@
 /**
- * Per-row field strip: backend (API + variable). Interface: no extra fields — label lives in the tree.
+ * Per-row field strip: backend (API + variable) as label → edit in place. Interface: no extra fields.
  */
 
 import React from 'react';
 import type { MappingEntry } from './mappingTypes';
-import { AutosizeOneLineInput } from './AutosizeOneLineInput';
+import { InlineFieldWithPencilEdit } from './InlineFieldWithPencilEdit';
+import { BackendMappingVariableField } from './BackendMappingVariableField';
 
 export interface MappingRowFieldsProps {
   variant: 'backend' | 'interface';
@@ -14,12 +15,19 @@ export interface MappingRowFieldsProps {
   groupOnlyInterface?: boolean;
   /** Backend: when false, hide API field (variable only). */
   showApiFields?: boolean;
+  /** Backend: finché il nome interno è effimero, API/Variabile non prendono focus (prima la label). */
+  secondaryFieldsLocked?: boolean;
+  /** When true, API/var view spans use tabIndex -1 so Tab targets the internal-name label first. */
+  suppressFieldTabFocus?: boolean;
   datalistApiId: string;
   datalistVarId: string;
   onPatch: (patch: Partial<MappingEntry>) => void;
+  /** Backend: SEND = solo variabili esistenti; RECEIVE = crea al volo. */
+  backendColumn?: 'send' | 'receive';
+  variableOptions: string[];
+  onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
+  onOutputVariableCreated?: () => void;
 }
-
-const mirror10 = 'text-[10px] px-2 py-1 font-normal';
 
 export function MappingRowFields({
   variant,
@@ -27,14 +35,16 @@ export function MappingRowFields({
   groupOnlyBackend,
   groupOnlyInterface,
   showApiFields = true,
+  secondaryFieldsLocked = false,
+  suppressFieldTabFocus = false,
   datalistApiId,
   datalistVarId,
   onPatch,
+  backendColumn,
+  variableOptions = [],
+  onCreateOutputVariable,
+  onOutputVariableCreated,
 }: MappingRowFieldsProps) {
-  const inputBase =
-    'rounded text-[10px] bg-slate-950/60 ' +
-    'focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-500/50';
-
   if (variant === 'backend' && groupOnlyBackend) {
     return (
       <div className="flex items-center gap-2 shrink-0 opacity-30 pointer-events-none" aria-hidden>
@@ -59,30 +69,43 @@ export function MappingRowFields({
   }
 
   if (variant === 'backend') {
+    const varMode = backendColumn === 'receive' ? 'receive' : 'send';
     return (
       <div className="flex items-center gap-2 shrink-0 min-w-0">
         {showApiFields ? (
-          <AutosizeOneLineInput
-            mirrorClassName={mirror10}
-            inputClassName={`${inputBase} border border-dashed border-sky-500/50 text-sky-200/90 placeholder:text-slate-500`}
-            maxWidthClassName="max-w-[min(16rem,92vw)]"
-            minChars={3}
-            list={datalistApiId}
-            placeholder="Campo API"
+          <InlineFieldWithPencilEdit
             value={entry.apiField}
-            onChange={(e) => onPatch({ apiField: e.target.value })}
+            placeholder="Campo API (opz.)"
+            ariaLabel="Campo API (opzionale)"
+            listId={datalistApiId}
+            accent="sky"
+            suppressFocus={secondaryFieldsLocked}
+            viewTabIndex={suppressFieldTabFocus ? -1 : 0}
+            onCommit={(next) => onPatch({ apiField: next })}
           />
         ) : null}
-        <AutosizeOneLineInput
-          mirrorClassName={mirror10}
-          inputClassName={`${inputBase} border border-amber-600/60 text-amber-100/90 placeholder:text-slate-500`}
-          maxWidthClassName="max-w-[min(16rem,92vw)]"
-          minChars={3}
-          list={datalistVarId}
-          placeholder="Variabile"
-          value={entry.linkedVariable}
-          onChange={(e) => onPatch({ linkedVariable: e.target.value })}
-        />
+        {secondaryFieldsLocked ? (
+          <InlineFieldWithPencilEdit
+            value={entry.linkedVariable}
+            placeholder="Variabile"
+            ariaLabel="Variabile collegata"
+            listId={datalistVarId}
+            accent="amber"
+            suppressFocus
+            viewTabIndex={-1}
+            onCommit={(next) => onPatch({ linkedVariable: next })}
+          />
+        ) : (
+          <BackendMappingVariableField
+            mode={varMode}
+            value={entry.linkedVariable}
+            variableRefId={entry.variableRefId}
+            variableOptions={variableOptions}
+            onCommit={(patch) => onPatch(patch)}
+            onCreateVariable={varMode === 'receive' ? onCreateOutputVariable : undefined}
+            onVariableCreated={varMode === 'receive' ? onOutputVariableCreated : undefined}
+          />
+        )}
       </div>
     );
   }

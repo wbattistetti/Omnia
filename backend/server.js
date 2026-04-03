@@ -6796,9 +6796,9 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
 });
 
 // -----------------------------
-// POST /api/projects/clone - Create new project by cloning source (new version)
+// POST /api/projects/create-version - New catalog row + DB copy from source (after client saved source)
 // -----------------------------
-app.post('/api/projects/clone', async (req, res) => {
+app.post('/api/projects/create-version', async (req, res) => {
   const payload = req.body || {};
   const sourceProjectId = payload.sourceProjectId;
   const projectName = (payload.projectName || '').trim();
@@ -6901,7 +6901,7 @@ app.post('/api/projects/clone', async (req, res) => {
       try {
         list = await sourceDb.collection(collName).find({}).toArray();
       } catch (findErr) {
-        console.warn('[Clone] Collection not found or error reading:', collName, findErr.message);
+        console.warn('[CreateVersion] Collection not found or error reading:', collName, findErr.message);
         return;
       }
       if (list.length === 0) return;
@@ -6923,8 +6923,8 @@ app.post('/api/projects/clone', async (req, res) => {
       try {
         await copyCollection(collName, transform);
       } catch (err) {
-        console.error('[Clone] Failed to copy collection:', collName, err);
-        throw new Error(`Clone failed at collection "${collName}": ${err.message}`);
+        console.error('[CreateVersion] Failed to copy collection:', collName, err);
+        throw new Error(`Create version failed at collection "${collName}": ${err.message}`);
       }
     }
     try {
@@ -6934,14 +6934,14 @@ app.post('/api/projects/clone', async (req, res) => {
         return rest;
       });
     } catch (embErr) {
-      console.warn('[Clone] embeddings collection missing or error:', embErr.message);
+      console.warn('[CreateVersion] embeddings collection missing or error:', embErr.message);
     }
 
-    console.log('[Clone] ✅ Project cloned', { sourceProjectId, newProjectId, version });
+    console.log('[CreateVersion] ✅ New version created', { sourceProjectId, newProjectId, version });
     res.json({ projectId: newProjectId });
   } catch (e) {
     const msg = e?.message || String(e);
-    console.error('[Clone] ERROR', msg, e?.stack);
+    console.error('[CreateVersion] ERROR', msg, e?.stack);
     res.status(500).json({ error: msg });
   }
 });

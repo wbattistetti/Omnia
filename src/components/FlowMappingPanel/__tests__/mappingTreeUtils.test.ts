@@ -24,6 +24,24 @@ describe('buildMappingTree', () => {
     expect(tree[0].entry?.id).toBe('1');
     expect(tree[0].children).toHaveLength(2);
   });
+
+  it('construction order preserves flat array order for root siblings', () => {
+    const tree = buildMappingTree([e('zebra', 'z'), e('alfa', 'a')], { siblingOrder: 'construction' });
+    expect(tree.map((n) => n.segment)).toEqual(['zebra', 'alfa']);
+  });
+
+  it('alphabetical order sorts root siblings by segment', () => {
+    const tree = buildMappingTree([e('zebra', 'z'), e('alfa', 'a')], { siblingOrder: 'alphabetical' });
+    expect(tree.map((n) => n.segment)).toEqual(['alfa', 'zebra']);
+  });
+
+  it('alphabetical order with any ephemeral row uses construction order so drop position is preserved', () => {
+    const tree = buildMappingTree(
+      [e('zebra', 'z'), e('__omnia_n_abc', 'eph'), e('alfa', 'a')],
+      { siblingOrder: 'alphabetical' }
+    );
+    expect(tree.map((n) => n.segment)).toEqual(['zebra', '__omnia_n_abc', 'alfa']);
+  });
 });
 
 describe('renameLeafSegment', () => {

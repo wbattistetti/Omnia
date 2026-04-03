@@ -53,4 +53,9 @@ export interface OpenBottomDockedTabRequest {
   tabId: string;
   newTab: DockTab;
   onExisting?: (tree: DockNode, tabId: string) => DockNode;
+  /**
+   * Tabset that owns the flow canvas (`tab_${flowId}`). When set, the bottom dock is created or
+   * reused only under this column — not under another pane’s existing bottom strip.
+   */
+  anchorTabsetId?: string | null;
 }

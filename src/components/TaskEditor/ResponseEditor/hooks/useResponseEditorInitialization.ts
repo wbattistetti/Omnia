@@ -43,10 +43,7 @@ export interface UseResponseEditorInitializationParams {
   setNeedsTaskContextualization: React.Dispatch<React.SetStateAction<boolean>>;
   setNeedsTaskBuilder: React.Dispatch<React.SetStateAction<boolean>>;
   setWizardMode: React.Dispatch<React.SetStateAction<'library' | 'ai' | null>>;
-  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
-  saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
-  // ✅ NEW: Ref per il pulsante save-to-library
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
   // ✅ NEW: Dock tree setter for opening chat panel as dockable tab
   setDockTree?: (updater: (prev: any) => any) => void;
@@ -209,10 +206,7 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     // ✅ NEW: Wizard handlers
     onChooseFromLibrary: handleChooseFromLibrary,
     onGenerateNewTask: handleGenerateNewTask,
-    // ✅ REMOVED: shouldBeGeneral - now from WizardContext
-    saveDecisionMade: params.saveDecisionMade,
     onOpenSaveDialog: params.onOpenSaveDialog,
-    // ✅ NEW: Ref per il pulsante save-to-library
     saveToLibraryButtonRef: params.saveToLibraryButtonRef,
     // ✅ NEW: Pass task data for test panel
     taskTree: params.taskTree,

@@ -14,6 +14,10 @@ export interface MappingEntry {
   externalName: string;
   /** Promised variable GUID when wired from a flow row or wizard (stable for runtime). */
   variableRefId?: string;
+  /** Backend: human description for tooltip / docs. */
+  fieldDescription?: string;
+  /** Backend: example or allowed values (shown in grid; first value may surface as hint). */
+  sampleValues?: string[];
 }
 
 export function createMappingEntry(partial: Partial<MappingEntry> & Pick<MappingEntry, 'internalPath'>): MappingEntry {
@@ -28,6 +32,8 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
     apiField: partial.apiField ?? '',
     linkedVariable: partial.linkedVariable?.trim() ?? (vid ? vid : ''),
     externalName: partial.externalName ?? partial.internalPath.trim(),
+    ...(partial.fieldDescription != null ? { fieldDescription: partial.fieldDescription } : {}),
+    ...(partial.sampleValues != null ? { sampleValues: partial.sampleValues } : {}),
     ...(vid ? { variableRefId: vid } : {}),
   };
 }

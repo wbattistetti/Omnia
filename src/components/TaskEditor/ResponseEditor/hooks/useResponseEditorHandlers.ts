@@ -186,9 +186,6 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
     // ✅ NEW: Pass taskWizardMode per permettere chiusura in modalità wizard
     taskWizardMode: state.taskWizardMode,
-    // ✅ REMOVED: shouldBeGeneral - now from WizardContext
-    saveDecisionMade: params.saveDecisionMade,
-    onOpenSaveDialog: params.onOpenSaveDialog,
   });
 
   // Contract dialog handlers

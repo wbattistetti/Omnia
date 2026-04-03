@@ -25,7 +25,7 @@ import type { TaskMeta } from '@taskEditor/EditorHost/types';
 import type { Task, TaskTree } from '@types/taskTypes';
 import '@responseEditor/styles/errorHighlight.css';
 
-function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose, saveDecisionMade, onOpenSaveDialog, authoringFlowCanvasId }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void, saveDecisionMade?: boolean, onOpenSaveDialog?: () => void, authoringFlowCanvasId?: string | null }) {
+function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose, saveDecisionMade, onOpenSaveDialog: onOpenSaveDialogFromHost, authoringFlowCanvasId }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void, saveDecisionMade?: boolean, onOpenSaveDialog?: () => void, authoringFlowCanvasId?: string | null }) {
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
   const { combinedClass } = useFontContext();
@@ -40,12 +40,14 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
   // ✅ State per save location dialog
   const [showSaveDialog, setShowSaveDialog] = React.useState(false);
-  const [effectiveSaveDecisionMade, setEffectiveSaveDecisionMade] = React.useState(saveDecisionMade || false);
+  /** Set true after a successful publish to Factory from SaveLocationDialog (handleSaveToFactory). */
+  const [, setFactoryLibrarySaveCompleted] = React.useState(saveDecisionMade || false);
 
-  // ✅ Handler per aprire dialog
+  /** Opens the save-location popover; optional host callback (e.g. analytics) runs after open. */
   const handleOpenSaveDialog = React.useCallback(() => {
     setShowSaveDialog(true);
-  }, []);
+    onOpenSaveDialogFromHost?.();
+  }, [onOpenSaveDialogFromHost]);
 
   // Validate TaskTree structure on mount/update
   useEffect(() => {
@@ -103,8 +105,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     hideHeader,
     onToolbarUpdate,
     registerOnClose,
-    // ✅ REMOVED: shouldBeGeneral - now from WizardContext
-    saveDecisionMade: effectiveSaveDecisionMade,
     onOpenSaveDialog: handleOpenSaveDialog,
     // ✅ FIX: Pass ref per il pulsante save-to-library
     saveToLibraryButtonRef: saveToLibraryButtonRef,
@@ -229,11 +229,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     // ✅ Altrimenti, null
     return null;
   }, [taskWizardMode, wizardResult, wizardIntegrationRaw]);
-
-  // ✅ REMOVED: Debug log che causava loop infinito
-
-  // ✅ REMOVED: effectiveShouldBeGeneral, generalizedLabel, generalizedMessages, generalizationReason
-  // ✅ These are now read from WizardContext in components that need them
 
   // ✅ ARCHITECTURE: Monitor wizard completion and update Context (SINGLE SOURCE OF TRUTH)
   // No local state, no derives - update Context directly via editor.setTaskWizardMode
@@ -423,8 +418,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       headerTitle={editor.headerTitle}
       toolbarButtons={editor.toolbarButtons}
       handleEditorClose={editor.handleEditorClose}
-      isGeneralizable={editor.isGeneralizable}
-      generalizationReason={editor.generalizationReason}
       showContractWizard={editor.showContractWizard}
       handleContractWizardClose={editor.handleContractWizardClose}
       handleContractWizardNodeUpdate={editor.handleContractWizardNodeUpdate}
@@ -491,12 +484,9 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       onTaskBuilderComplete={editor.onTaskBuilderComplete}
       onTaskBuilderCancel={editor.onTaskBuilderCancel}
       onToolbarUpdate={onToolbarUpdate}
-      // ✅ REMOVED: shouldBeGeneral, generalizedLabel, generalizedMessages, generalizationReason - now from WizardContext
-      saveDecisionMade={effectiveSaveDecisionMade}
-      onOpenSaveDialog={handleOpenSaveDialog}
       showSaveDialog={showSaveDialog}
       setShowSaveDialog={setShowSaveDialog}
-      setSaveDecisionMade={setEffectiveSaveDecisionMade}
+      setSaveDecisionMade={setFactoryLibrarySaveCompleted}
       wizardIntegration={wizardIntegration}
       onStartWizard={handleStartWizard}
       onSwitchToManual={handleSwitchToManual}
@@ -521,6 +511,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   return layoutContent;
 }
 
+/** `saveDecisionMade`: optional initial value for “already published to Factory” (rare); host `onOpenSaveDialog` runs when opening the Factory popover. */
 export default function ResponseEditor({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose, saveDecisionMade, onOpenSaveDialog, authoringFlowCanvasId }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void, saveDecisionMade?: boolean, onOpenSaveDialog?: () => void, authoringFlowCanvasId?: string | null }) {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

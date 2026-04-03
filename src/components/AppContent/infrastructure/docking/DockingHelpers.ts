@@ -6,6 +6,34 @@ import { findRootTabset, type OpenBottomDockedTabRequest } from '../../domain/do
 import { activateTab, splitWithTab, getTab, upsertAddCenter, addTabCenter, updateTab } from '@dock/ops';
 
 /**
+ * If a vertical split already exists directly under this flow tabset (top = flows, bottom = editors),
+ * returns the bottom tabset id; otherwise null.
+ */
+export function findBottomTabsetBelowFlowTabset(
+  node: DockNode,
+  anchorTabsetId: string
+): string | null {
+  if (node.kind === 'split' && node.orientation === 'col' && node.children.length >= 2) {
+    const top = node.children[0];
+    const bottom = node.children[1];
+    if (
+      top.kind === 'tabset' &&
+      top.id === anchorTabsetId &&
+      bottom.kind === 'tabset'
+    ) {
+      return bottom.id;
+    }
+  }
+  if (node.kind === 'split') {
+    for (const c of node.children) {
+      const found = findBottomTabsetBelowFlowTabset(c, anchorTabsetId);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/**
  * Finds the bottom tabset in a dock tree (if a bottom split exists)
  * Improved version that handles nested splits better
  */
@@ -65,7 +93,7 @@ export function openBottomDockedTab(
   prev: DockNode,
   options: OpenBottomDockedTabRequest
 ): DockNode {
-  const { tabId, newTab, onExisting } = options;
+  const { tabId, newTab, onExisting, anchorTabsetId } = options;
 
   // Check if already open using getTab from ops
   const existing = getTab(prev, tabId);
@@ -78,14 +106,24 @@ export function openBottomDockedTab(
     return activateTab(prev, tabId);
   }
 
-  // Check if a bottom tabset already exists (from a previous bottom-docked editor)
+  const anchor = anchorTabsetId != null && String(anchorTabsetId).trim() !== ''
+    ? String(anchorTabsetId).trim()
+    : null;
+
+  if (anchor) {
+    const bottomBelowAnchor = findBottomTabsetBelowFlowTabset(prev, anchor);
+    if (bottomBelowAnchor) {
+      return addTabCenter(prev, bottomBelowAnchor, newTab);
+    }
+    return splitWithTab(prev, anchor, 'bottom', newTab);
+  }
+
+  // Legacy: no anchor — reuse any bottom strip in the tree, else split root tabset (first column).
   const bottomTabsetId = findBottomTabset(prev);
   if (bottomTabsetId) {
-    // Add to existing bottom tabset instead of creating a new split
     return addTabCenter(prev, bottomTabsetId, newTab);
   }
 
-  // Find root tabset and open as bottom docked panel
   const rootTabsetId = findRootTabset(prev) || 'ts_main';
   return splitWithTab(prev, rootTabsetId, 'bottom', newTab);
 }

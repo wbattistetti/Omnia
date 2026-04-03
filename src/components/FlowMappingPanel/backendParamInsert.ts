@@ -1,10 +1,16 @@
 /**
- * Insert a new backend mapping row at a tree drop position (flat entries array order).
+ * Insert a new backend mapping row at a tree drop position.
+ * Insert index follows depth-first tree order (same as on-screen order), so it stays correct when
+ * the flat `entries` array order differs from alphabetical display.
  */
 
 import type { MappingEntry } from './mappingTypes';
 import { createMappingEntry } from './mappingTypes';
-import { parentPathKey } from './mappingTreeUtils';
+import {
+  entriesInDepthFirstOrder,
+  parentPathKey,
+  type MappingTreeSiblingOrder,
+} from './mappingTreeUtils';
 
 /** MIME type for dragging "new parameter" from SEND/RECEIVE headers. */
 export const DND_NEW_BACKEND_PARAM = 'application/x-omnia-new-backend-param';
@@ -17,6 +23,11 @@ export type ParamDropPlacement = 'before' | 'after' | 'child';
 export interface ParamDropPosition {
   targetPathKey: string;
   placement: ParamDropPlacement;
+}
+
+export interface ComputeBackendParamInsertOptions {
+  /** Must match FlowMappingTree so the inserted row appears where the user dropped. */
+  siblingOrder?: MappingTreeSiblingOrder;
 }
 
 export function isEphemeralNewSegment(segment: string): boolean {
@@ -98,11 +109,34 @@ export function expandAncestorsOfPath(collapsed: Set<string>, internalPath: stri
   return next;
 }
 
-/**
- * Returns insertion index in entries and the new internalPath.
- */
-export function computeBackendParamInsert(
+function orderedSubtreeBounds(
+  ordered: MappingEntry[],
+  pathKey: string
+): { start: number; end: number } | null {
+  let start = -1;
+  let end = -1;
+  for (let i = 0; i < ordered.length; i++) {
+    const p = ordered[i].internalPath;
+    if (p === pathKey || p.startsWith(`${pathKey}.`)) {
+      if (start < 0) start = i;
+      end = i;
+    }
+  }
+  if (start < 0) return null;
+  return { start, end };
+}
+
+function firstDescendantIndex(ordered: MappingEntry[], pathKey: string): number | null {
+  const prefix = `${pathKey}.`;
+  for (let i = 0; i < ordered.length; i++) {
+    if (ordered[i].internalPath.startsWith(prefix)) return i;
+  }
+  return null;
+}
+
+function computeInsertAtAndPath(
   entries: MappingEntry[],
+  ordered: MappingEntry[],
   pos: ParamDropPosition
 ): { insertAt: number; internalPath: string } {
   const { targetPathKey, placement } = pos;
@@ -115,43 +149,57 @@ export function computeBackendParamInsert(
 
   if (placement === 'child') {
     const internalPath = internalPathForChild(entries, T);
-    const childIdx = entries
-      .map((e, i) => i)
-      .filter((i) => entries[i].internalPath.startsWith(`${T}.`));
-    const selfIdx = entries.findIndex((e) => e.internalPath === T);
+    const fd = firstDescendantIndex(ordered, T);
     let insertAt: number;
-    if (childIdx.length > 0) insertAt = Math.min(...childIdx);
-    else if (selfIdx >= 0) insertAt = selfIdx + 1;
-    else insertAt = entries.length;
+    if (fd !== null) insertAt = fd;
+    else {
+      const self = ordered.findIndex((e) => e.internalPath === T);
+      insertAt = self >= 0 ? self + 1 : ordered.length;
+    }
     return { insertAt, internalPath };
   }
 
-  const indices = subtreeEntryIndices(entries, T);
   const internalPath = internalPathForSibling(entries, T);
-
-  if (placement === 'before') {
-    const insertAt = indices.length > 0 ? Math.min(...indices) : entries.length;
-    return { insertAt, internalPath };
+  const bounds = orderedSubtreeBounds(ordered, T);
+  if (!bounds) {
+    return { insertAt: ordered.length, internalPath };
   }
-
-  const insertAt = indices.length > 0 ? Math.max(...indices) + 1 : entries.length;
-  return { insertAt, internalPath };
+  if (placement === 'before') {
+    return { insertAt: bounds.start, internalPath };
+  }
+  return { insertAt: bounds.end + 1, internalPath };
 }
 
 /**
- * Insert a new empty-ish mapping row; returns updated entries and the new entry id.
+ * Returns insertion index in **depth-first tree order** (see `entriesInDepthFirstOrder`) and the new internalPath.
+ */
+export function computeBackendParamInsert(
+  entries: MappingEntry[],
+  pos: ParamDropPosition,
+  options?: ComputeBackendParamInsertOptions
+): { insertAt: number; internalPath: string } {
+  const siblingOrder = options?.siblingOrder ?? 'construction';
+  const ordered = entriesInDepthFirstOrder(entries, siblingOrder);
+  return computeInsertAtAndPath(entries, ordered, pos);
+}
+
+/**
+ * Insert a new empty-ish mapping row; returns updated entries (reordered to depth-first order) and the new entry id.
  */
 export function insertNewBackendParameter(
   entries: MappingEntry[],
-  pos: ParamDropPosition
+  pos: ParamDropPosition,
+  options?: ComputeBackendParamInsertOptions
 ): { next: MappingEntry[]; newEntry: MappingEntry } {
-  const { insertAt, internalPath } = computeBackendParamInsert(entries, pos);
+  const siblingOrder = options?.siblingOrder ?? 'construction';
+  const ordered = entriesInDepthFirstOrder(entries, siblingOrder);
+  const { insertAt, internalPath } = computeInsertAtAndPath(entries, ordered, pos);
   const newEntry = createMappingEntry({
     internalPath,
     apiField: '',
     linkedVariable: '',
     externalName: '',
   });
-  const next = [...entries.slice(0, insertAt), newEntry, ...entries.slice(insertAt)];
+  const next = [...ordered.slice(0, insertAt), newEntry, ...ordered.slice(insertAt)];
   return { next, newEntry };
 }

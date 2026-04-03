@@ -32,10 +32,7 @@ export interface UseResponseEditorParams {
   hideHeader?: boolean;
   onToolbarUpdate?: (toolbar: any[], color: string) => void;
   registerOnClose?: (fn: () => Promise<boolean>) => void;
-  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
-  saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
-  // ✅ NEW: Ref per il pulsante save-to-library
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
 }
 
@@ -63,8 +60,6 @@ export interface UseResponseEditorResult {
   headerTitle: ReturnType<typeof useResponseEditorCore>['headerTitle'];
   icon: ReturnType<typeof useResponseEditorCore>['icon'];
   iconColor: ReturnType<typeof useResponseEditorCore>['iconColor'];
-  isGeneralizable: ReturnType<typeof useResponseEditorCore>['isGeneralizable'];
-  generalizationReason: ReturnType<typeof useResponseEditorCore>['generalizationReason'];
 
   // Handlers
   sidebar: ReturnType<typeof useResponseEditorHandlers>['sidebar']; // ✅ FASE 2.1: Consolidated sidebar hook
@@ -176,10 +171,7 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     authoringFlowCanvasId,
     tabId,
     setDockTree,
-    // ✅ REMOVED: shouldBeGeneral - now from WizardContext
-    saveDecisionMade: params.saveDecisionMade,
     onOpenSaveDialog: params.onOpenSaveDialog,
-    // ✅ NEW: Pass ref to core
     saveToLibraryButtonRef: params.saveToLibraryButtonRef,
   });
 
@@ -203,9 +195,6 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     hideHeader,
     onToolbarUpdate,
     registerOnClose,
-    // ✅ REMOVED: shouldBeGeneral - now from WizardContext
-    saveDecisionMade: params.saveDecisionMade,
-    onOpenSaveDialog: params.onOpenSaveDialog,
   });
 
   // Extract convenience values
@@ -224,8 +213,6 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     headerTitle,
     icon,
     iconColor,
-    isGeneralizable,
-    generalizationReason,
     handleParserCreate,
     handleParserModify,
     handleEngineChipClick,
@@ -390,8 +377,6 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     headerTitle,
     icon,
     iconColor,
-    isGeneralizable,
-    generalizationReason,
     sidebar, // ✅ FASE 2.1: Consolidated sidebar hook (replaces sidebarHandlers + handleSidebarResizeStart)
     handleEditorClose,
     contractDialogHandlers,

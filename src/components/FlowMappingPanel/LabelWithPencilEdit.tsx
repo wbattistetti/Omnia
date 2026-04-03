@@ -1,147 +1,235 @@
 /**
- * Segment label with pencil visible on label hover / focus-within; edits only that label (leaf paths).
+ * Segment label with optional inline pencil; ref exposes startEditing for toolbar-triggered edit.
+ * In editing mode: focus sull'input, ✓ conferma, ✗ annulla, Esc annulla, Enter conferma.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pencil } from 'lucide-react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { Check, Pencil, X } from 'lucide-react';
 import { AutosizeOneLineInput } from './AutosizeOneLineInput';
+
+export type LabelWithPencilEditHandle = {
+  startEditing: () => void;
+};
 
 export interface LabelWithPencilEditProps {
   segment: string;
-  /** Shown instead of `segment` when not editing (e.g. row label while path is stable id). */
   displayLabel?: string;
-  /** When false, pencil hidden (e.g. group-only node). */
   editable: boolean;
   onCommit: (newSegment: string) => void;
-  /** Parent signals one-shot open edit (e.g. new row from drag-drop). */
   editIntent?: boolean;
   onConsumeEditIntent?: () => void;
-  /** Row uses a hidden placeholder segment (__omnia_n_*); show empty field and allow abandon. */
   ephemeralNew?: boolean;
-  /** ESC or empty commit on ephemeral row: remove the new mapping row. */
   onAbandonEphemeral?: () => void;
+  inlinePencil?: boolean;
+  viewTitle?: string;
 }
 
-export function LabelWithPencilEdit({
-  segment,
-  displayLabel,
-  editable,
-  onCommit,
-  editIntent,
-  onConsumeEditIntent,
-  ephemeralNew,
-  onAbandonEphemeral,
-}: LabelWithPencilEditProps) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(() => (ephemeralNew ? '' : segment));
-  const inputRef = useRef<HTMLInputElement>(null);
-  const prevEditingRef = useRef(editing);
+export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWithPencilEditProps>(
+  function LabelWithPencilEdit(
+    {
+      segment,
+      displayLabel,
+      editable,
+      onCommit,
+      editIntent,
+      onConsumeEditIntent,
+      ephemeralNew,
+      onAbandonEphemeral,
+      inlinePencil = true,
+      viewTitle,
+    },
+    ref
+  ) {
+    const [editing, setEditing] = useState(() => Boolean(ephemeralNew));
+    const [draft, setDraft] = useState(() => (ephemeralNew ? '' : segment));
+    const inputRef = useRef<HTMLInputElement>(null);
+    const prevEditingRef = useRef(false);
 
-  useEffect(() => {
-    if (!editable) return;
-    if (ephemeralNew) return;
-    setDraft(segment);
-  }, [segment, ephemeralNew, editable]);
+    useImperativeHandle(
+      ref,
+      () => ({
+        startEditing: () => {
+          if (editable) setEditing(true);
+        },
+      }),
+      [editable]
+    );
 
-  /** Focus + select only on transition into edit; not on each keystroke (select() would keep replacing text). */
-  useEffect(() => {
-    if (editing && !prevEditingRef.current) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-    prevEditingRef.current = editing;
-  }, [editing]);
+    useEffect(() => {
+      if (!editable) return;
+      if (ephemeralNew) return;
+      setDraft(segment);
+    }, [segment, ephemeralNew, editable]);
 
-  useEffect(() => {
-    if (editIntent && editable) {
+    useEffect(() => {
+      if (!editable || !ephemeralNew) return;
       setEditing(true);
-      if (ephemeralNew) setDraft('');
-      onConsumeEditIntent?.();
-    }
-  }, [editIntent, editable, ephemeralNew, onConsumeEditIntent]);
+      setDraft('');
+    }, [editable, ephemeralNew]);
 
-  const finish = useCallback(() => {
-    const t = draft.trim();
-    if (ephemeralNew) {
-      if (!t) {
+    useEffect(() => {
+      if (!editing || !ephemeralNew) return;
+      const id = window.setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 0);
+      return () => window.clearTimeout(id);
+    }, [editing, ephemeralNew]);
+
+    useLayoutEffect(() => {
+      if (editIntent && editable) {
+        setEditing(true);
+        if (ephemeralNew) setDraft('');
+        queueMicrotask(() => {
+          onConsumeEditIntent?.();
+        });
+      }
+    }, [editIntent, editable, ephemeralNew, onConsumeEditIntent]);
+
+    useLayoutEffect(() => {
+      if (editing && !prevEditingRef.current) {
+        const focusInput = () => {
+          const el = inputRef.current;
+          if (el) {
+            el.focus();
+            el.select();
+            return true;
+          }
+          return false;
+        };
+        if (!focusInput()) {
+          requestAnimationFrame(() => {
+            if (!focusInput()) {
+              requestAnimationFrame(() => {
+                focusInput();
+              });
+            }
+          });
+        }
+      }
+      prevEditingRef.current = editing;
+    }, [editing]);
+
+    const finish = useCallback(() => {
+      const t = draft.trim();
+      if (ephemeralNew) {
+        if (!t) {
+          onAbandonEphemeral?.();
+          return;
+        }
+        onCommit(t);
+        setEditing(false);
+        return;
+      }
+      setEditing(false);
+      if (t && t !== segment) {
+        onCommit(t);
+      } else {
+        setDraft(segment);
+      }
+    }, [draft, segment, onCommit, ephemeralNew, onAbandonEphemeral]);
+
+    const cancel = useCallback(() => {
+      if (ephemeralNew) {
         onAbandonEphemeral?.();
         return;
       }
-      onCommit(t);
-      setEditing(false);
-      return;
-    }
-    setEditing(false);
-    if (t && t !== segment) {
-      onCommit(t);
-    } else {
       setDraft(segment);
+      setEditing(false);
+    }, [segment, ephemeralNew, onAbandonEphemeral]);
+
+    const viewLabel = displayLabel ?? segment;
+    const defaultTitle = 'Hover toolbar sopra il nome · doppio click per modificare';
+
+    if (!editable) {
+      return (
+        <span className="truncate text-slate-100 text-[11px] font-medium" title={viewTitle ?? viewLabel}>
+          {viewLabel}
+        </span>
+      );
     }
-  }, [draft, segment, onCommit, ephemeralNew, onAbandonEphemeral]);
 
-  const cancel = useCallback(() => {
-    if (ephemeralNew) {
-      onAbandonEphemeral?.();
-      return;
+    const displaySegment = ephemeralNew ? '\u00a0' : viewLabel;
+
+    if (editing) {
+      return (
+        <div className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
+          <AutosizeOneLineInput
+            ref={inputRef}
+            mirrorClassName="text-[11px] px-1 py-0.5 font-medium"
+            inputClassName="rounded border border-amber-400/55 bg-slate-950/90 text-[11px] font-medium text-slate-100 ring-1 ring-amber-400/40 shadow-[0_0_0_1px_rgba(251,191,36,0.12)] focus:outline-none focus:ring-2 focus:ring-amber-400/55 focus:border-amber-300/70"
+            maxWidthClassName="max-w-[min(16rem,80vw)]"
+            maxWidthPx={320}
+            minChars={ephemeralNew ? 1 : 2}
+            placeholder={ephemeralNew ? 'Nome parametro' : undefined}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                finish();
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            aria-label="Edit parameter name"
+            autoFocus
+          />
+          <button
+            type="button"
+            tabIndex={0}
+            className="shrink-0 rounded p-0.5 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300"
+            title="Conferma"
+            aria-label="Conferma nome"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={finish}
+          >
+            <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
+          </button>
+          <button
+            type="button"
+            tabIndex={0}
+            className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800 hover:text-red-400"
+            title="Annulla"
+            aria-label="Annulla modifica nome"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={cancel}
+          >
+            <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+          </button>
+        </div>
+      );
     }
-    setDraft(segment);
-    setEditing(false);
-  }, [segment, ephemeralNew, onAbandonEphemeral]);
 
-  const viewLabel = displayLabel ?? segment;
-
-  if (!editable) {
-    return <span className="truncate text-slate-100 text-[11px] font-medium">{viewLabel}</span>;
-  }
-
-  const displaySegment = ephemeralNew ? '\u00a0' : viewLabel;
-
-  if (editing) {
     return (
-      <AutosizeOneLineInput
-        ref={inputRef}
-        mirrorClassName="text-[11px] px-1 py-0.5 font-medium"
-        inputClassName="rounded border border-amber-500/70 bg-slate-950 text-[11px] font-medium text-slate-100"
-        maxWidthClassName="max-w-[min(20rem,75vw)]"
-        maxWidthPx={320}
-        minChars={ephemeralNew ? 1 : 2}
-        placeholder={ephemeralNew ? 'Nome parametro' : undefined}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={finish}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') finish();
-          if (e.key === 'Escape') cancel();
-        }}
-        aria-label="Edit parameter name"
-      />
+      <div className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
+        <span
+          className="peer whitespace-nowrap text-slate-100 text-[11px] font-medium cursor-default select-none rounded px-0.5 outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 overflow-hidden text-ellipsis min-w-0 max-w-full min-h-[1.1em]"
+          tabIndex={0}
+          onDoubleClick={() => setEditing(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setEditing(true);
+            }
+          }}
+          title={viewTitle ?? defaultTitle}
+        >
+          {displaySegment}
+        </span>
+        {inlinePencil ? (
+          <button
+            type="button"
+            className="shrink-0 p-0.5 rounded text-slate-500 opacity-0 transition-opacity peer-hover:opacity-100 hover:opacity-100 peer-focus-visible:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-500"
+            aria-label="Modifica nome"
+            onClick={() => setEditing(true)}
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
+        ) : null}
+      </div>
     );
   }
-
-  return (
-    <div className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
-      <span
-        className="peer whitespace-nowrap text-slate-100 text-[11px] font-medium cursor-default select-none rounded px-0.5 outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 overflow-hidden text-ellipsis min-w-0 max-w-full min-h-[1.1em]"
-        tabIndex={0}
-        onDoubleClick={() => setEditing(true)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setEditing(true);
-          }
-        }}
-        title="Hover per matita · doppio click o Invio per modificare"
-      >
-        {displaySegment}
-      </span>
-      <button
-        type="button"
-        className="shrink-0 p-0.5 rounded text-slate-500 opacity-0 transition-opacity peer-hover:opacity-100 hover:opacity-100 peer-focus-visible:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-500"
-        aria-label="Modifica nome"
-        onClick={() => setEditing(true)}
-      >
-        <Pencil className="w-3 h-3" />
-      </button>
-    </div>
-  );
-}
+);

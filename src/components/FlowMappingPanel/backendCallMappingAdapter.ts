@@ -9,12 +9,16 @@ export type BackendCallInputRow = {
   internalName: string;
   apiParam?: string;
   variable?: string;
+  fieldDescription?: string;
+  sampleValues?: string[];
 };
 
 export type BackendCallOutputRow = {
   internalName: string;
   apiField?: string;
   variable?: string;
+  fieldDescription?: string;
+  sampleValues?: string[];
 };
 
 /** Task rows → tree entries (skips empty internal names). */
@@ -31,6 +35,8 @@ export function backendInputsToMappingEntries(
         apiField: row.apiParam?.trim() ?? '',
         linkedVariable: getVarNameFromVarId(row.variable) ?? '',
         externalName: row.internalName.trim(),
+        ...(row.fieldDescription !== undefined ? { fieldDescription: row.fieldDescription } : {}),
+        ...(row.sampleValues !== undefined ? { sampleValues: row.sampleValues } : {}),
       })
     );
 }
@@ -48,6 +54,8 @@ export function backendOutputsToMappingEntries(
         apiField: row.apiField?.trim() ?? '',
         linkedVariable: getVarNameFromVarId(row.variable) ?? '',
         externalName: row.internalName.trim(),
+        ...(row.fieldDescription !== undefined ? { fieldDescription: row.fieldDescription } : {}),
+        ...(row.sampleValues !== undefined ? { sampleValues: row.sampleValues } : {}),
       })
     );
 }
@@ -62,6 +70,8 @@ export function mappingEntriesToBackendInputs(
       internalName: e.internalPath.trim(),
       apiParam: e.apiField.trim(),
       variable: resolveVarId(e.linkedVariable),
+      ...(e.fieldDescription !== undefined ? { fieldDescription: e.fieldDescription } : {}),
+      ...(e.sampleValues !== undefined ? { sampleValues: e.sampleValues } : {}),
     }));
 }
 
@@ -75,5 +85,7 @@ export function mappingEntriesToBackendOutputs(
       internalName: e.internalPath.trim(),
       apiField: e.apiField.trim(),
       variable: resolveVarId(e.linkedVariable),
+      ...(e.fieldDescription !== undefined ? { fieldDescription: e.fieldDescription } : {}),
+      ...(e.sampleValues !== undefined ? { sampleValues: e.sampleValues } : {}),
     }));
 }

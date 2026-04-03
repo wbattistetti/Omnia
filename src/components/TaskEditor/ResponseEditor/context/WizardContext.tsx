@@ -22,7 +22,7 @@ export interface WizardContextValue {
   correctionInput: string;
   setCorrectionInput: (value: string) => void;
 
-  // Generalization state
+  /** Wizard output: whether to offer Factory publish; labels/messages for that flow. */
   shouldBeGeneral: boolean;
   generalizedLabel: string | null;
   generalizedMessages: string[] | null;

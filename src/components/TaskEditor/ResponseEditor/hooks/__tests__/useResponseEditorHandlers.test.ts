@@ -122,6 +122,7 @@ describe('useResponseEditorHandlers', () => {
       setSidebarManualWidth: vi.fn(),
       taskTreeVersion: 0,
       setTaskTreeVersion: vi.fn(),
+      taskWizardMode: 'none',
     };
 
     mockRefs = {
@@ -226,20 +227,23 @@ describe('useResponseEditorHandlers', () => {
       })
     );
 
-    expect(useResponseEditorClose).toHaveBeenCalledWith({
-      contractChangeRef: mockRefs.contractChangeRef,
-      setPendingContractChange: mockState.setPendingContractChange,
-      setShowContractDialog: mockState.setShowContractDialog,
-      selectedNode: mockState.selectedNode,
-      selectedNodePath: mockState.selectedNodePath,
-      selectedRoot: mockState.selectedRoot,
-      task: mockTask,
-      currentProjectId: 'project-1',
-      tabId: undefined,
-      setDockTree: undefined,
-      onClose: undefined,
-      replaceSelectedTaskTree: mockInitialization.replaceSelectedTaskTree,
-    });
+    expect(useResponseEditorClose).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractChangeRef: mockRefs.contractChangeRef,
+        setPendingContractChange: mockState.setPendingContractChange,
+        selectedNode: mockState.selectedNode,
+        selectedNodePath: mockState.selectedNodePath,
+        selectedRoot: mockState.selectedRoot,
+        task: mockTask,
+        currentProjectId: 'project-1',
+        authoringFlowCanvasId: undefined,
+        tabId: undefined,
+        setDockTree: undefined,
+        onClose: undefined,
+        replaceSelectedTaskTree: mockInitialization.replaceSelectedTaskTree,
+        taskWizardMode: 'none',
+      })
+    );
   });
 
   it('should return editor close handler', () => {

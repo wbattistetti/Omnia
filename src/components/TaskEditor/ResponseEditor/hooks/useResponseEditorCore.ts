@@ -28,7 +28,6 @@ import { usePanelWidths } from '@responseEditor/hooks/usePanelWidths';
 import { useParserHandlers, useProfileUpdate } from '@responseEditor/features/step-management/hooks';
 import { useUpdateSelectedNode } from '@responseEditor/features/node-editing/hooks/useUpdateSelectedNode';
 import { useIntentMessagesHandler } from '@responseEditor/hooks/useIntentMessagesHandler';
-import { useGeneralizabilityCheck } from '@responseEditor/hooks/useGeneralizabilityCheck';
 import { getTaskMeta, isTaskMeta } from '@responseEditor/utils/responseEditorUtils';
 import { getStepsForNode, getStepsAsArray } from '@responseEditor/core/domain';
 import { useManualEmptyTaskTreeSeed } from '@responseEditor/hooks/useManualEmptyTaskTreeSeed';
@@ -47,11 +46,8 @@ export interface UseResponseEditorCoreParams {
   authoringFlowCanvasId?: string | null;
   tabId?: string;
   setDockTree?: (updater: (prev: any) => any) => void;
-  /** @deprecated WizardContext is preferred; kept for return shape compatibility. */
-  shouldBeGeneral?: boolean;
-  saveDecisionMade?: boolean;
+  /** Toolbar control that opens the Factory save-location popover. */
   onOpenSaveDialog?: () => void;
-  // ✅ NEW: Ref per il pulsante save-to-library
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
 }
 
@@ -76,9 +72,6 @@ export interface UseResponseEditorCoreResult {
   icon: React.ComponentType<any>;
   iconColor: string;
   rightMode: any;
-  isGeneralizable: boolean;
-  generalizationReason: string | null;
-  isCheckingGeneralizability: boolean;
 
   // Node selection
   nodeSelection: ReturnType<typeof useNodeSelection>;
@@ -113,9 +106,6 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     authoringFlowCanvasId,
     tabId,
     setDockTree,
-    // ✅ NEW: Generalization params
-    shouldBeGeneral,
-    saveDecisionMade,
     onOpenSaveDialog,
     saveToLibraryButtonRef,
   } = params;
@@ -326,17 +316,6 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     isTaskTreeLoading,
   });
 
-  // Generalizability check
-  const {
-    isGeneralizable,
-    generalizationReason,
-    isLoading: isCheckingGeneralizability,
-  } = useGeneralizabilityCheck(
-    taskTree,
-    task?.label,
-    currentProjectId
-  );
-
   // Panel widths
   const panelWidths = usePanelWidths();
   const {
@@ -449,12 +428,8 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     // ✅ NEW: Pass setDockTree for dockable chat panel
     setDockTree,
     setWizardMode,
-    // ✅ NEW: Generalization params (passed from useResponseEditor)
-    shouldBeGeneral: shouldBeGeneral,
-    saveDecisionMade: saveDecisionMade,
-    onOpenSaveDialog: onOpenSaveDialog,
-    // ✅ NEW: Ref per il pulsante save-to-library
-    saveToLibraryButtonRef: saveToLibraryButtonRef,
+    onOpenSaveDialog,
+    saveToLibraryButtonRef,
     // ✅ NEW: View mode for Behaviour
     viewMode,
     onViewModeChange: setViewMode,
@@ -539,9 +514,6 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     icon: Icon,
     iconColor,
     rightMode,
-    isGeneralizable,
-    generalizationReason,
-    isCheckingGeneralizability,
     nodeSelection,
     findAndSelectNodeById,
     handleParserCreate,

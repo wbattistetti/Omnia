@@ -27,10 +27,33 @@ type Mutable = {
   children: Map<string, Mutable>;
 };
 
+/** Matches `EPHEMERAL_SEGMENT_PREFIX` in backendParamInsert (no import: avoids circular dependency). */
+const EPHEMERAL_PATH_PREFIX = '__omnia_n_';
+
+function isEphemeralSegment(segment: string): boolean {
+  return segment.startsWith(EPHEMERAL_PATH_PREFIX);
+}
+
+function compareSegmentAlphabetical(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: 'base' });
+}
+
+/** How sibling rows are ordered under each tree node. */
+export type MappingTreeSiblingOrder = 'construction' | 'alphabetical';
+
+export interface BuildMappingTreeOptions {
+  /** Default `construction` (flat array order). `alphabetical` sorts by segment name at each level. */
+  siblingOrder?: MappingTreeSiblingOrder;
+}
+
 /**
- * Merges all entries into one tree; sorts children by segment.
+ * Merges all entries into one tree; orders children per `siblingOrder`.
  */
-export function buildMappingTree(entries: MappingEntry[]): MappingTreeNode[] {
+export function buildMappingTree(
+  entries: MappingEntry[],
+  options?: BuildMappingTreeOptions
+): MappingTreeNode[] {
+  const siblingOrder: MappingTreeSiblingOrder = options?.siblingOrder ?? 'construction';
   const root = new Map<string, Mutable>();
 
   for (const entry of entries) {
@@ -68,12 +91,22 @@ export function buildMappingTree(entries: MappingEntry[]): MappingTreeNode[] {
   }
 
   function toArray(m: Map<string, Mutable>): MappingTreeNode[] {
-    return Array.from(m.values())
+    const values = Array.from(m.values());
+    return values
       .sort((a, b) => {
+        if (siblingOrder === 'alphabetical') {
+          const anyEphemeral = values.some((n) => isEphemeralSegment(n.segment));
+          if (anyEphemeral) {
+            const ia = minIndexInSubtree(a.pathKey);
+            const ib = minIndexInSubtree(b.pathKey);
+            if (ia !== ib) return ia - ib;
+          }
+          return compareSegmentAlphabetical(a.segment, b.segment);
+        }
         const ia = minIndexInSubtree(a.pathKey);
         const ib = minIndexInSubtree(b.pathKey);
         if (ia !== ib) return ia - ib;
-        return a.segment.localeCompare(b.segment, undefined, { sensitivity: 'base' });
+        return compareSegmentAlphabetical(a.segment, b.segment);
       })
       .map((n) => ({
         segment: n.segment,
@@ -84,6 +117,26 @@ export function buildMappingTree(entries: MappingEntry[]): MappingTreeNode[] {
   }
 
   return toArray(root);
+}
+
+/**
+ * Depth-first order of mapping rows as rendered in the tree (matches `buildMappingTree` walk).
+ * Use this when mutating `entries` so positions align with on-screen sibling order (e.g. alphabetical).
+ */
+export function entriesInDepthFirstOrder(
+  entries: MappingEntry[],
+  siblingOrder: MappingTreeSiblingOrder = 'construction'
+): MappingEntry[] {
+  const tree = buildMappingTree(entries, { siblingOrder });
+  const out: MappingEntry[] = [];
+  function walk(nodes: MappingTreeNode[]): void {
+    for (const n of nodes) {
+      if (n.entry) out.push(n.entry);
+      walk(n.children);
+    }
+  }
+  walk(tree);
+  return out;
 }
 
 /** Parent path for "a.b.c" -> "a.b"; single segment -> "". */

@@ -3,7 +3,7 @@
  * Used by UnifiedFlowMappingPanel (demo) and BackendCallEditor (persisted task rows).
  */
 
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Brackets } from 'lucide-react';
 import { MappingBlock } from './MappingBlock';
 import { FlowMappingTree, DND_NEW_BACKEND_PARAM, DND_TYPE } from './FlowMappingTree';
@@ -35,6 +35,38 @@ export function BackendParameterDragChip() {
   );
 }
 
+/** A–B toggle (left) + Parameter chip: alphabetical view vs construction order (stored array unchanged). */
+function BackendMappingHeaderToolbar({
+  sortAlphabetical,
+  onSortAlphabeticalChange,
+}: {
+  sortAlphabetical: boolean;
+  onSortAlphabeticalChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <button
+        type="button"
+        aria-pressed={sortAlphabetical}
+        title={
+          sortAlphabetical
+            ? 'Ordine per nome interno (A–Z) — clic per ordine di inserimento (trascina per riordinare)'
+            : 'Ordine di inserimento — trascina le righe per riordinare; clic per ordinare per nome interno (A–Z)'
+        }
+        onClick={() => onSortAlphabeticalChange(!sortAlphabetical)}
+        className={`rounded-md border px-1.5 py-0.5 text-[9px] font-extrabold tracking-tight select-none transition-colors ${
+          sortAlphabetical
+            ? 'border-amber-400/85 bg-amber-500/30 text-amber-100 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.4)]'
+            : 'border-slate-950/45 bg-black/25 text-slate-500 hover:bg-black/40 hover:text-slate-300'
+        }`}
+      >
+        A–B
+      </button>
+      <BackendParameterDragChip />
+    </div>
+  );
+}
+
 export interface InterfaceMappingEditorProps {
   /** Backend: SEND/RECEIVE entries (controlled). */
   backendSend: MappingEntry[];
@@ -60,7 +92,7 @@ export interface InterfaceMappingEditorProps {
   endpointMethod?: string;
   onEndpointUrlChange?: (url: string) => void;
   onEndpointMethodChange?: (method: string) => void;
-  /** Backend: when false, only variable field is shown per row (Hide API). */
+  /** Backend: when false, only variable field is shown per row (Hide API). Controlled by parent (e.g. dock toolbar). */
   showApiFields?: boolean;
   /** Demo: draggable variable chips below interface blocks. */
   interfaceDragLabels?: string[];
@@ -81,6 +113,9 @@ export interface InterfaceMappingEditorProps {
   interfaceShellHeaderExtra?: React.ReactNode;
   /** Resolves human variable names for linkedVariable when saving drops. */
   projectId?: string;
+  /** Backend RECEIVE: create variable from typed name (Invio). */
+  onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
+  onOutputVariableCreated?: () => void;
 }
 
 export function InterfaceMappingEditor({
@@ -105,6 +140,8 @@ export function InterfaceMappingEditor({
   onEndpointUrlChange,
   onEndpointMethodChange,
   showApiFields = true,
+  onCreateOutputVariable,
+  onOutputVariableCreated,
   interfaceDragLabels = [],
   showInterfacePalette = true,
   showLayoutHint = true,
@@ -123,6 +160,10 @@ export function InterfaceMappingEditor({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const { layout } = useContainerWidth(containerRef);
+
+  /** Backend SEND/RECEIVE: default alphabetical by internal path segment (nome interno). */
+  const [sortBackendSendAlphabetical, setSortBackendSendAlphabetical] = useState(true);
+  const [sortBackendReceiveAlphabetical, setSortBackendReceiveAlphabetical] = useState(true);
 
   const setInterfaceInputWrapped = useCallback(
     (updater: React.SetStateAction<MappingEntry[]>) => {
@@ -297,7 +338,16 @@ export function InterfaceMappingEditor({
 
         {variant === 'backend' && (
           <div className={blocksClass}>
-            <MappingBlock accent="send" rootClassName={mappingBlockRootClass} headerExtra={<BackendParameterDragChip />}>
+            <MappingBlock
+              accent="send"
+              rootClassName={mappingBlockRootClass}
+              headerExtra={
+                <BackendMappingHeaderToolbar
+                  sortAlphabetical={sortBackendSendAlphabetical}
+                  onSortAlphabeticalChange={setSortBackendSendAlphabetical}
+                />
+              }
+            >
               <FlowMappingTree
                 variant="backend"
                 entries={backendSend}
@@ -309,9 +359,22 @@ export function InterfaceMappingEditor({
                 showApiFields={showApiFields}
                 projectId={projectId}
                 flowCanvasId={flowDropTarget?.flowCanvasId}
+                siblingOrder={sortBackendSendAlphabetical ? 'alphabetical' : 'construction'}
+                backendColumn="send"
+                onCreateOutputVariable={onCreateOutputVariable}
+                onOutputVariableCreated={onOutputVariableCreated}
               />
             </MappingBlock>
-            <MappingBlock accent="receive" rootClassName={mappingBlockRootClass} headerExtra={<BackendParameterDragChip />}>
+            <MappingBlock
+              accent="receive"
+              rootClassName={mappingBlockRootClass}
+              headerExtra={
+                <BackendMappingHeaderToolbar
+                  sortAlphabetical={sortBackendReceiveAlphabetical}
+                  onSortAlphabeticalChange={setSortBackendReceiveAlphabetical}
+                />
+              }
+            >
               <FlowMappingTree
                 variant="backend"
                 entries={backendReceive}
@@ -323,6 +386,10 @@ export function InterfaceMappingEditor({
                 showApiFields={showApiFields}
                 projectId={projectId}
                 flowCanvasId={flowDropTarget?.flowCanvasId}
+                siblingOrder={sortBackendReceiveAlphabetical ? 'alphabetical' : 'construction'}
+                backendColumn="receive"
+                onCreateOutputVariable={onCreateOutputVariable}
+                onOutputVariableCreated={onOutputVariableCreated}
               />
             </MappingBlock>
           </div>

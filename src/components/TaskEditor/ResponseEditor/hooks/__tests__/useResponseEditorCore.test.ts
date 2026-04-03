@@ -103,6 +103,22 @@ vi.mock('@responseEditor/hooks/useResponseEditorState', () => ({
     setIsDraggingSidebar: vi.fn(),
     draggingPanel: null,
     setDraggingPanel: vi.fn(),
+    taskWizardMode: 'none',
+    setTaskWizardMode: vi.fn(),
+    needsTaskContextualization: false,
+    setNeedsTaskContextualization: vi.fn(),
+    needsTaskBuilder: false,
+    setNeedsTaskBuilder: vi.fn(),
+    isContextualizing: false,
+    setIsContextualizing: vi.fn(),
+    contextualizationTemplateId: null,
+    setContextualizationTemplateId: vi.fn(),
+    taskLabel: '',
+    setTaskLabel: vi.fn(),
+    wizardMode: 'none',
+    setWizardMode: vi.fn(),
+    contextualizationAbortController: null,
+    setContextualizationAbortController: vi.fn(),
   })),
 }));
 
@@ -205,16 +221,16 @@ vi.mock('@responseEditor/hooks/useIntentMessagesHandler', () => ({
   useIntentMessagesHandler: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('@responseEditor/hooks/useGeneralizabilityCheck', () => ({
-  useGeneralizabilityCheck: vi.fn(() => ({
-    isGeneralizable: false,
-    generalizationReason: null,
-    isLoading: false,
-  })),
-}));
-
 // Mock utility functions
 vi.mock('@responseEditor/utils/responseEditorUtils', () => ({
+  isTaskMeta: vi.fn(
+    (task: any) =>
+      task &&
+      typeof task === 'object' &&
+      'type' in task &&
+      task.type !== undefined &&
+      task.type !== null
+  ),
   getTaskMeta: vi.fn((task: any) => ({
     id: task?.id || 'task-1',
     type: task?.type || 1,
@@ -353,19 +369,5 @@ describe('useResponseEditorCore', () => {
     expect(result.current.initialization).toBeDefined();
     expect(result.current.initialization.replaceSelectedTaskTree).toBeDefined();
     expect(result.current.initialization.handleGenerateAll).toBeDefined();
-  });
-
-  it('should return generalizability check results', () => {
-    const { result } = renderHook(() =>
-      useResponseEditorCore({
-        taskTree: mockTaskTree,
-        task: mockTask,
-        currentProjectId: 'project-1',
-      })
-    );
-
-    expect(result.current.isGeneralizable).toBeDefined();
-    expect(result.current.generalizationReason).toBeDefined();
-    expect(result.current.isCheckingGeneralizability).toBeDefined();
   });
 });

@@ -31,10 +31,8 @@ interface ResponseEditorToolbarProps {
   // ✅ NEW: Wizard handlers
   onChooseFromLibrary?: () => void;
   onGenerateNewTask?: () => void;
-  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
-  saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
-  // ✅ NEW: Ref per il pulsante save-to-library (sempre presente, visibilità controllata)
+  /** Anchor for the Factory save-location popover. */
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
   // ✅ NEW: Task data for test panel (optional - can come from context or props)
   taskTree?: any;
@@ -73,10 +71,7 @@ export function useResponseEditorToolbar({
   // ✅ NEW: Wizard handlers
   onChooseFromLibrary,
   onGenerateNewTask,
-  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
-  saveDecisionMade = false,
   onOpenSaveDialog,
-  // ✅ NEW: Ref per il pulsante save-to-library
   saveToLibraryButtonRef,
   // ✅ NEW: Task data for test panel (optional - can come from context or props)
   taskTree: taskTreeProp,
@@ -704,13 +699,13 @@ export function useResponseEditorToolbar({
     // ✅ FIX: Pulsante statico sempre presente (come gli altri)
     {
       icon: <Star size={16} />,
-      label: "Vuoi salvare in libreria?",
+      label: "Pubblica in Factory",
       onClick: () => {
         if (onOpenSaveDialog) {
           onOpenSaveDialog();
         }
       },
-      title: "Salva il template nella libreria generale",
+      title: "Salva il template nella libreria globale (Factory), condivisa tra i progetti",
       primary: true,
       active: false,
       buttonId: "save-to-library",

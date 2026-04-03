@@ -16,7 +16,6 @@ import TaskDragLayer from '@responseEditor/TaskDragLayer';
 import { ResponseEditorContent } from '@responseEditor/components/ResponseEditorContent';
 import { ResponseEditorNormalLayout } from '@responseEditor/components/ResponseEditorNormalLayout';
 import { ServiceUnavailableModal } from '@responseEditor/components/ServiceUnavailableModal';
-import { GeneralizabilityBanner } from '@responseEditor/components/GeneralizabilityBanner';
 import { WizardInstanceFirstBanner } from '@responseEditor/components/WizardInstanceFirstBanner';
 import { SaveLocationDialog } from '@responseEditor/components/SaveLocationDialog';
 import { MainViewMode } from '@responseEditor/types/mainViewMode';
@@ -106,10 +105,6 @@ export interface ResponseEditorLayoutProps {
   headerTitle: string;
   toolbarButtons: any[];
   handleEditorClose: () => Promise<boolean>;
-
-  // Generalizability
-  isGeneralizable: boolean;
-  generalizationReason: string | null;
 
   // Contract wizard
   showContractWizard: boolean;
@@ -219,9 +214,6 @@ export interface ResponseEditorLayoutProps {
   // ✅ NEW: Toolbar update callback (for hideHeader === true mode)
   onToolbarUpdate?: (toolbar: any[], color: string) => void;
 
-  // ✅ REMOVED: shouldBeGeneral, generalizedLabel, generalizedMessages, generalizationReason - now from WizardContext
-  saveDecisionMade?: boolean;
-  onOpenSaveDialog?: () => void;
   showSaveDialog?: boolean;
   setShowSaveDialog?: (show: boolean) => void;
   setSaveDecisionMade?: (made: boolean) => void;
@@ -252,8 +244,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     headerTitle,
     toolbarButtons,
     handleEditorClose,
-    isGeneralizable,
-    generalizationReason,
     showContractWizard,
     handleContractWizardClose,
     handleContractWizardNodeUpdate,
@@ -322,9 +312,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     onToolbarUpdate,
     onStartWizard,
     onSwitchToManual,
-    // ✅ REMOVED: shouldBeGeneral, generalizedLabel, generalizedMessages, generalizationReason - now from wizardIntegration
-    saveDecisionMade: saveDecisionMadeProp,
-    onOpenSaveDialog: onOpenSaveDialogProp,
     showSaveDialog: showSaveDialogProp,
     setShowSaveDialog: setShowSaveDialogProp,
     setSaveDecisionMade: setSaveDecisionMadeProp,
@@ -338,15 +325,12 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     onViewModeChange: onViewModeChangeProp,
   } = props;
 
-  // ✅ ARCHITECTURE: Extract generalization values from wizardIntegration to populate WizardContext
-  // These values come from useWizard() in ResponseEditorInner (via WizardContext)
-  const shouldBeGeneral = wizardIntegrationProp?.shouldBeGeneral ?? false;
+  // Wizard copy for labels/messages (WizardContext): used when publishing template data to Factory.
   const generalizedLabel = wizardIntegrationProp?.generalizedLabel ?? null;
   const generalizedMessages = wizardIntegrationProp?.generalizedMessages ?? null;
 
   // ✅ Project locale (for other uses)
   const projectLocale = 'it-IT'; // TODO: Get from project context
-  const generalizationReasonEffective = wizardIntegrationProp?.generalizationReason ?? null;
 
   // ✅ ARCHITECTURE: Context is SINGLE SOURCE OF TRUTH for taskWizardMode
   // No derives from taskMeta - use prop directly (which comes from state in useResponseEditorCore)
@@ -379,25 +363,12 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ State for save location dialog (usa props se disponibili, altrimenti state locale)
   const [localShowSaveDialog, setLocalShowSaveDialog] = React.useState(false);
   const [localSaveDecisionMade, setLocalSaveDecisionMade] = React.useState(false);
-  const [saveDecision, setSaveDecision] = React.useState<'factory' | 'project' | null>(null);
 
   const showSaveDialog = showSaveDialogProp !== undefined ? showSaveDialogProp : localShowSaveDialog;
   const setShowSaveDialog = setShowSaveDialogProp || setLocalShowSaveDialog;
-  const saveDecisionMade = saveDecisionMadeProp !== undefined ? saveDecisionMadeProp : localSaveDecisionMade;
   const setSaveDecisionMade = setSaveDecisionMadeProp || setLocalSaveDecisionMade;
 
-  // ✅ Wrapper per onOpenSaveDialog che apre il dialog
-  const handleOpenSaveDialog = React.useCallback(() => {
-    // Apri il dialog
-    setShowSaveDialog(true);
-
-    // Chiama anche il prop se presente
-    if (onOpenSaveDialogProp) {
-      onOpenSaveDialogProp();
-    }
-  }, [onOpenSaveDialogProp, setShowSaveDialog]);
-
-  // ✅ REMOVED: Auto-open dialog - dialog opens only when user clicks button or tries to close
+  // Toolbar opens the dialog via useResponseEditor → onOpenSaveDialog (ResponseEditorInner); no second wrapper here.
 
   // ✅ State for saving operation (must be declared before handleSaveToFactory)
   const [isSaving, setIsSaving] = React.useState(false);
@@ -856,7 +827,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         }
       }
 
-      setSaveDecision('factory');
       setSaveDecisionMade(true);
       setIsSaving(false);
       setShowSaveDialog(false);
@@ -866,44 +836,18 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       alert(`Error saving to Factory: ${error instanceof Error ? error.message : String(error)}`);
       setIsSaving(false);
     }
-  }, [wizardIntegrationProp, taskTree, generalizedLabel, taskMeta, currentProjectId, setSaveDecision, setSaveDecisionMade, setIsSaving, setShowSaveDialog]);
+  }, [wizardIntegrationProp, taskTree, generalizedLabel, taskMeta, currentProjectId, setSaveDecisionMade, setIsSaving, setShowSaveDialog]);
 
 
   // ✅ NEW: Handler to cancel save dialog
   const handleCancelSaveDialog = React.useCallback(() => {
     setShowSaveDialog(false);
-    // Don't set saveDecisionMade - user can open dialog again
   }, []);
 
-  // ✅ NEW: Wrapper for handleEditorClose to add tutor on close
+  // Close always proceeds to core persistence/tab logic; save-location choice is not a hard gate.
   const handleEditorCloseWithTutor = React.useCallback(async (): Promise<boolean> => {
-    console.log('[ResponseEditorLayout] 🚪 handleEditorCloseWithTutor called', {
-      shouldBeGeneral,
-      saveDecisionMade,
-      condition1: shouldBeGeneral,
-      condition2: !saveDecisionMade,
-      shouldBlock: shouldBeGeneral && !saveDecisionMade,
-      wizardIntegrationExists: !!wizardIntegrationProp,
-      wizardIntegrationShouldBeGeneral: wizardIntegrationProp?.shouldBeGeneral,
-      wizardMode: wizardIntegrationProp?.wizardMode,
-      taskWizardMode
-    });
-
-    // ✅ Tutor alla chiusura - verifica se deve essere scelto dove salvare
-    if (shouldBeGeneral && !saveDecisionMade) {
-      console.log('[ResponseEditorLayout] ⚠️ Template generalizable but decision not made, blocking close');
-      console.log('[ResponseEditorLayout] 🔔 Opening save dialog automatically');
-      // ✅ Auto-open dialog instead of alert
-      setShowSaveDialog(true);
-      return false;  // ✅ Blocca chiusura - obbligatorio
-    }
-
-    console.log('[ResponseEditorLayout] ✅ Allowing close - proceeding with normal close', {
-      reason: shouldBeGeneral ? 'saveDecisionMade is true' : 'shouldBeGeneral is false'
-    });
-    // ✅ Se tutto ok, procedi con chiusura normale
     return handleEditorClose();
-  }, [shouldBeGeneral, saveDecisionMade, handleEditorClose, wizardIntegrationProp, taskWizardMode]);
+  }, [handleEditorClose]);
 
   // ✅ NEW: Calcola mainViewMode in base a taskWizardMode, wizardMode e showMessageReview/showSynonyms
   // ✅ IMPORTANTE: Questo useMemo deve venire DOPO la dichiarazione di wizardIntegrationProp
@@ -1037,7 +981,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       currentStep: wizardIntegrationProp.currentStep, // DEPRECATED
       pipelineSteps: wizardIntegrationProp.pipelineSteps,
       dataSchema: wizardIntegrationProp.dataSchema,
-      // ✅ NEW: Add generalizedLabel to wizardProps
       generalizedLabel: wizardIntegrationProp.generalizedLabel,
       onProceedFromEuristica: wizardIntegrationProp.onProceedFromEuristica,
       onShowModuleList: wizardIntegrationProp.onShowModuleList,
@@ -1248,12 +1191,11 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   const hasSidebarElement = sidebarElement != null; // ✅ FIX: Use != to check both null and undefined
   const toolbarButtonsCount = toolbarButtons.length;
   const shouldShowHeader = !hideHeader && taskWizardMode === 'none';
-  const shouldShowBanner = isGeneralizable && taskWizardMode === 'none';
   React.useEffect(() => {
     if (taskWizardMode === 'full') {
       // Layout check (silent)
     }
-  }, [taskWizardMode, hasNormalEditorLayoutElement, hasSidebarElement, toolbarButtonsCount, shouldShowHeader, shouldShowBanner]);
+  }, [taskWizardMode, hasNormalEditorLayoutElement, hasSidebarElement, toolbarButtonsCount, shouldShowHeader]);
 
   // ✅ NEW: Wrap content in Context Providers
   const content = (
@@ -1294,23 +1236,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
       <WizardInstanceFirstBanner />
 
-      {/* Generalizability Banner: visibile solo quando taskWizardMode === 'none' (STATO 1) */}
-      {/* ✅ CRITICAL: Quando taskWizardMode === 'full', banner deve essere nascosto */}
-      {isGeneralizable && taskWizardMode === 'none' && (
-        <GeneralizabilityBanner
-          isGeneralizable={isGeneralizable}
-          generalizationReason={generalizationReason}
-          onSaveToFactory={() => {
-            // TODO: Implement save to factory logic
-            // Log removed - keep render pure
-          }}
-          onIgnore={() => {
-            // Banner will be dismissed automatically
-            // Log removed - keep render pure
-          }}
-        />
-      )}
-
       <ResponseEditorContent
         showContractWizard={showContractWizard}
         needsIntentMessages={needsIntentMessages}
@@ -1338,19 +1263,13 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         />
       )}
 
-      {/* ✅ NEW: Save Location Popover for generalizable templates */}
       <SaveLocationDialog
         isOpen={showSaveDialog}
         onClose={() => {
-          // Don't allow closing without decision if shouldBeGeneral
-          if (shouldBeGeneral && !saveDecisionMade) {
-            return; // Block close
-          }
           setShowSaveDialog(false);
         }}
         onSaveToFactory={handleSaveToFactory}
         onCancel={handleCancelSaveDialog}
-        // ✅ REMOVED: originalLabel, generalizedLabel, generalizationReason, generalizedMessages - now from contexts
         anchorRef={saveToLibraryButtonRef}
         isSaving={isSaving} // ✅ NEW: Pass saving state to dialog
         responseEditorRef={rootRef} // ✅ NEW: Pass ResponseEditor container ref for positioning

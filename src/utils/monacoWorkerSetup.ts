@@ -26,8 +26,6 @@ export function setupMonacoEnvironment(): void {
         return new (editorWorker as any)();
       },
     };
-    // eslint-disable-next-line no-console
-    console.log('[Monaco][workers] Environment configured');
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[Monaco][workers] Failed to setup environment', e);

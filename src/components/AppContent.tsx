@@ -36,6 +36,7 @@ import {
   persistWorkspaceRestoreForProject,
   clearWorkspaceRestoreForProject,
 } from '../services/project-save';
+import { createProjectVersion } from '../services/createProjectVersion';
 import { logFlowSaveDebug, summarizeWorkspaceFlowsForDebug } from '../utils/flowSaveDebug';
 // ✅ REMOVED: Migration moved to DB script - keep codebase clean
 // Migration should be a separate DB script, not executed during save
@@ -500,43 +501,8 @@ export const AppContent: React.FC<AppContentProps> = ({
     });
   }, [currentPid, projectData, pdUpdate]);
 
-  /** Clone project via API and open the new project. Payload uses projectName, version, versionQualifier, clientName, ownerCompany, ownerClient. */
-  const handleCloneAndOpen = React.useCallback(
-    async (payload: {
-      sourceProjectId: string;
-      projectName: string;
-      version: string;
-      versionQualifier: string;
-      clientName?: string | null;
-      ownerCompany?: string | null;
-      ownerClient?: string | null;
-    }) => {
-      const res = await fetch('/api/projects/clone', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceProjectId: payload.sourceProjectId,
-          projectName: payload.projectName,
-          version: payload.version,
-          versionQualifier: payload.versionQualifier || 'production',
-          clientName: payload.clientName ?? null,
-          ownerCompany: payload.ownerCompany ?? null,
-          ownerClient: payload.ownerClient ?? null,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || err.message || `Clone failed: ${res.status}`);
-      }
-      const { projectId } = await res.json();
-      if (!projectId) throw new Error('Clone response missing projectId');
-      await projectManager.openProjectById(projectId);
-    },
-    [projectManager]
-  );
-
-  /** Build clone payload from current project and override version/name/etc. */
-  const buildClonePayload = React.useCallback(
+  /** Build create-version API payload from current project and overrides (name, version, etc.). */
+  const buildCreateVersionPayload = React.useCallback(
     (overrides: { projectName?: string; version: string; versionQualifier?: string; clientName?: string | null }) => {
       if (!currentProject?.id) throw new Error('No project open');
       return {
@@ -551,6 +517,216 @@ export const AppContent: React.FC<AppContentProps> = ({
     },
     [currentProject]
   );
+
+  /**
+   * Persist full project state (flows, tasks, flow_nodes/edges via orchestrator).
+   * Throws on failure. Caller sets isCreatingProject and cloneError around this.
+   * Does not list setIsCreatingProject in deps (useState setter is stable; it is declared below this callback).
+   */
+  const runProjectSave = React.useCallback(async (): Promise<void> => {
+    let pid = pdUpdate.getCurrentProjectId();
+    let flowsSnapshotBeforeDraftCommit: Record<string, unknown> | null = null;
+    if (!pid && currentProject && isDraftProjectId(currentProject.id)) {
+      flowsSnapshotBeforeDraftCommit = cloneWorkspaceFlowsSnapshot(
+        flowsRef.current as Record<string, unknown> | undefined
+      );
+      logFlowSaveDebug('save: draft snapshot captured BEFORE commitDraftProject', {
+        draftSnapshot: summarizeWorkspaceFlowsForDebug(flowsSnapshotBeforeDraftCommit),
+      });
+      try {
+        pid = await projectManager.commitDraftProject(currentProject);
+        if (pid && flowsSnapshotBeforeDraftCommit) {
+          persistWorkspaceRestoreForProject(
+            pid,
+            flowsSnapshotBeforeDraftCommit as Record<string, unknown>
+          );
+        }
+        await refreshData();
+      } catch (e) {
+        throw e instanceof Error ? e : new Error(String(e));
+      } finally {
+        setIsCreatingProject(false);
+      }
+      setIsCreatingProject(true);
+    }
+    if (!pid) {
+      console.warn('[Save] No project ID available');
+      throw new Error('No project ID available');
+    }
+    console.log('[Save] ═══════════════════════════════════════════════════════');
+    console.log('[Save] 🚀 START SAVE PROJECT', { projectId: pid, timestamp: new Date().toISOString() });
+    console.log('[Save] ═══════════════════════════════════════════════════════');
+
+    flushAiAgentEditorsBeforeProjectSave();
+    window.dispatchEvent(new CustomEvent('project:save', {
+      detail: { projectId: pid }
+    }));
+
+    const cleanupStart = performance.now();
+    console.log('[Save][Cleanup] 🔍 START - Detecting orphan tasks from in-memory state');
+
+    const allFlows = (flowsSnapshotBeforeDraftCommit ??
+      flowsRef.current) as Record<string, unknown>;
+    logFlowSaveDebug('save: allFlows used for domain + orchestrator', {
+      usedDraftSnapshot: Boolean(flowsSnapshotBeforeDraftCommit),
+      allFlows: summarizeWorkspaceFlowsForDebug(allFlows),
+      flowsRefCurrent: summarizeWorkspaceFlowsForDebug(
+        flowsRef.current as Record<string, unknown> | undefined
+      ),
+    });
+    const allTasksInMemory = taskRepository.getAllTasks();
+
+    const referencedTaskIds = new Set<string>();
+    Object.values(allFlows).forEach((flow: any) => {
+      if (flow && flow.nodes && Array.isArray(flow.nodes)) {
+        flow.nodes.forEach((node: any) => {
+          const nodeData = node.data as FlowNode;
+          if (nodeData.rows && Array.isArray(nodeData.rows)) {
+            nodeData.rows.forEach((row: any) => {
+              if (row.id) {
+                referencedTaskIds.add(row.id);
+              }
+            });
+          }
+        });
+      }
+    });
+
+    const orphanTasks = allTasksInMemory.filter(task => !referencedTaskIds.has(task.id));
+    const allTasksInMemoryFiltered = allTasksInMemory.filter(task => referencedTaskIds.has(task.id));
+
+    const cleanupEnd = performance.now();
+    console.log('[Save][Cleanup] ✅ DONE', {
+      ms: Math.round(cleanupEnd - cleanupStart),
+      totalTasks: allTasksInMemory.length,
+      referencedTaskIds: referencedTaskIds.size,
+      orphanTasks: orphanTasks.length,
+      tasksToSave: allTasksInMemoryFiltered.length,
+      orphanTaskIds: orphanTasks.map(t => t.id)
+    });
+
+    if (orphanTasks.length > 0) {
+      const orphanTasksInfo = orphanTasks.map(t => ({
+        id: t.id,
+        name: t.name || '(unnamed)',
+        type: t.type || 'unknown'
+      }));
+      console.warn('[Save][Cleanup] ⚠️ Orphan tasks excluded from save', {
+        count: orphanTasks.length,
+        tasks: orphanTasksInfo
+      });
+      console.table(orphanTasksInfo);
+    }
+
+    const { DialogueTaskService } = await import('../services/DialogueTaskService');
+    const { variableCreationService } = await import('../services/VariableCreationService');
+
+    const allTemplates = DialogueTaskService.getAllTemplates();
+    const allVariables = variableCreationService.getAllVariables(pid);
+
+    console.log('[Save][Orchestrator] 📊 Loaded data for orchestrator', {
+      templatesCount: allTemplates.length,
+      variablesCount: allVariables.length,
+      templatesSource: allTemplates.reduce((acc: Record<string, number>, t: any) => {
+        const source = t.source || 'Project';
+        acc[source] = (acc[source] || 0) + 1;
+        return acc;
+      }, {}),
+    });
+
+    if (isAiAgentDebugEnabled()) {
+      console.log('ALL TASKS BEFORE SAVE', allTasksInMemory.map(summarizeAgentTaskFields));
+    }
+
+    const domain = mapUIStateToDomain({
+      projectId: pid,
+      projectName: currentProject?.name,
+      flows: allFlows,
+      tasks: allTasksInMemory,
+      conditions: projectData?.conditions?.flatMap((cat: any) => cat.items || []) || [],
+      templates: allTemplates,
+      variables: allVariables,
+      metadata: {
+        ownerCompany: currentProject?.ownerCompany,
+        ownerClient: currentProject?.ownerClient,
+      },
+    });
+
+    const orchestrator = new ProjectSaveOrchestrator();
+    const saveRequest = orchestrator.prepareSave(domain, {
+      flows: allFlows,
+      allTemplates: allTemplates,
+    });
+
+    const validation = orchestrator.validateRequest(saveRequest);
+    if (!validation.valid) {
+      throw new Error(`Save request validation failed: ${validation.errors.join(', ')}`);
+    }
+
+    const { flushFlowPersist } = await import('../services/FlowPersistService');
+    const { transformNodesToSimplified, transformEdgesToSimplified } = await import('../flows/flowTransformers');
+
+    const flowsById = buildFlowsByIdForOrchestrator(allFlows);
+    logFlowSaveDebug('save: flowsById after buildFlowsByIdForOrchestrator', {
+      keys: Object.keys(flowsById),
+      perFlow: Object.entries(flowsById).map(([id, f]) => ({
+        flowId: id,
+        nodes: f.nodes?.length ?? 0,
+        edges: f.edges?.length ?? 0,
+        hasLocalChanges: f.hasLocalChanges,
+      })),
+    });
+
+    const saveResult = await orchestrator.executeSave(saveRequest, {
+      translationsContext: (window as any).__projectTranslationsContext,
+      flowsById,
+      flowState: {
+        flushFlowPersist: async () => {
+          await flushFlowPersist();
+        },
+        getFlowById: (id: string) => {
+          const f = flowsById?.[id];
+          return f ? { nodes: f.nodes ?? [], edges: f.edges ?? [] } : null;
+        },
+        getNodes: () => flowsById?.main?.nodes ?? [],
+        getEdges: () => flowsById?.main?.edges ?? [],
+        transformNodesToSimplified,
+        transformEdgesToSimplified,
+      },
+      taskRepository,
+      variableService: variableCreationService,
+      dialogueTaskService: DialogueTaskService,
+      projectDataService: ProjectDataService,
+      projectData,
+    });
+
+    if (saveResult.success) {
+      clearWorkspaceRestoreForProject(pid);
+      const persisted = saveResult.results?.flow?.persistedFlowIds;
+      if (persisted && persisted.length > 0) {
+        markFlowsPersistedRef.current?.(persisted);
+      }
+      console.log('[Save][Orchestrator] ✅ Save completed successfully', {
+        projectId: pid,
+        duration: saveResult.duration,
+      });
+    } else {
+      console.error('[Save][Orchestrator] ❌ Save completed with errors', {
+        projectId: pid,
+        duration: saveResult.duration,
+        errors: saveResult.errors,
+      });
+      throw new Error(`Save failed: ${saveResult.errors?.join(', ') || 'Unknown error'}`);
+    }
+  }, [
+    pdUpdate,
+    projectManager,
+    currentProject,
+    flowsRef,
+    projectData,
+    refreshData,
+    markFlowsPersistedRef,
+  ]);
 
   // Listen for TaskEditor open events (open as docking tab)
   React.useEffect(() => {
@@ -980,14 +1156,16 @@ export const AppContent: React.FC<AppContentProps> = ({
               setCloneError(null);
               setIsCreatingProject(true);
               try {
-                await handleCloneAndOpen({
-                  ...buildClonePayload({
+                await runProjectSave();
+                const newProjectId = await createProjectVersion(
+                  buildCreateVersionPayload({
                     projectName: payload.name,
                     version: payload.version,
                     versionQualifier: payload.versionQualifier,
                     clientName: payload.clientName ?? undefined,
-                  }),
-                });
+                  })
+                );
+                await projectManager.openProjectById(newProjectId);
               } catch (e) {
                 setCloneError(e instanceof Error ? e.message : String(e));
               } finally {
@@ -1000,10 +1178,12 @@ export const AppContent: React.FC<AppContentProps> = ({
               setCloneError(null);
               setIsCreatingProject(true);
               try {
+                await runProjectSave();
                 const newVersion = getNextMinor(currentProject.version || '1.0');
-                await handleCloneAndOpen(
-                  buildClonePayload({ version: newVersion })
+                const newProjectId = await createProjectVersion(
+                  buildCreateVersionPayload({ version: newVersion })
                 );
+                await projectManager.openProjectById(newProjectId);
               } catch (e) {
                 setCloneError(e instanceof Error ? e.message : String(e));
               } finally {
@@ -1014,10 +1194,12 @@ export const AppContent: React.FC<AppContentProps> = ({
               setCloneError(null);
               setIsCreatingProject(true);
               try {
+                await runProjectSave();
                 const newVersion = getNextMajor(currentProject.version || '1.0');
-                await handleCloneAndOpen(
-                  buildClonePayload({ version: newVersion })
+                const newProjectId = await createProjectVersion(
+                  buildCreateVersionPayload({ version: newVersion })
                 );
+                await projectManager.openProjectById(newProjectId);
               } catch (e) {
                 setCloneError(e instanceof Error ? e.message : String(e));
               } finally {
@@ -1026,227 +1208,13 @@ export const AppContent: React.FC<AppContentProps> = ({
             } : undefined}
             saveError={cloneError}
             onSave={async () => {
+              setCloneError(null);
+              setIsCreatingProject(true);
               try {
-                setCloneError(null);
-                setIsCreatingProject(true);
-                const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                let pid = pdUpdate.getCurrentProjectId();
-                /**
-                 * First save from draft: commitDraftProject() assigns a real projectId → FlowWorkspaceProvider key
-                 * changes → provider remount → flowsRef points at reset (empty) FlowStore. Capture flows before commit.
-                 */
-                let flowsSnapshotBeforeDraftCommit: Record<string, unknown> | null = null;
-                if (!pid && currentProject && isDraftProjectId(currentProject.id)) {
-                  flowsSnapshotBeforeDraftCommit = cloneWorkspaceFlowsSnapshot(
-                    flowsRef.current as Record<string, unknown> | undefined
-                  );
-                  logFlowSaveDebug('save: draft snapshot captured BEFORE commitDraftProject', {
-                    draftSnapshot: summarizeWorkspaceFlowsForDebug(flowsSnapshotBeforeDraftCommit),
-                  });
-                  try {
-                    pid = await projectManager.commitDraftProject(currentProject);
-                    if (pid && flowsSnapshotBeforeDraftCommit) {
-                      persistWorkspaceRestoreForProject(
-                        pid,
-                        flowsSnapshotBeforeDraftCommit as Record<string, unknown>
-                      );
-                    }
-                    await refreshData();
-                  } catch (e) {
-                    setCloneError(e instanceof Error ? e.message : String(e));
-                    return;
-                  } finally {
-                    setIsCreatingProject(false);
-                  }
-                  setIsCreatingProject(true);
-                }
-                if (!pid) {
-                  console.warn('[Save] No project ID available');
-                  return;
-                }
-                console.log('[Save] ═══════════════════════════════════════════════════════');
-                console.log('[Save] 🚀 START SAVE PROJECT', { projectId: pid, timestamp: new Date().toISOString() });
-                console.log('[Save] ═══════════════════════════════════════════════════════');
-
-                // Flush AI Agent editors into TaskRepository before save reads tasks (explicit, not event-order dependent).
-                flushAiAgentEditorsBeforeProjectSave();
-                // Emetti evento per salvare modifiche in corso negli altri editor (es. ResponseEditor)
-                window.dispatchEvent(new CustomEvent('project:save', {
-                  detail: { projectId: pid }
-                }));
-
-                // ✅ ARCHITECTURAL FIX: Cleanup orphan tasks BEFORE saving to database
-                // This ensures the database only receives coherent data
-                const cleanupStart = performance.now();
-                console.log('[Save][Cleanup] 🔍 START - Detecting orphan tasks from in-memory state');
-
-                // Draft first-save: use snapshot taken before commit (see flowsSnapshotBeforeDraftCommit). Otherwise current store.
-                const allFlows = (flowsSnapshotBeforeDraftCommit ??
-                  flowsRef.current) as Record<string, unknown>;
-                logFlowSaveDebug('save: allFlows used for domain + orchestrator', {
-                  usedDraftSnapshot: Boolean(flowsSnapshotBeforeDraftCommit),
-                  allFlows: summarizeWorkspaceFlowsForDebug(allFlows),
-                  flowsRefCurrent: summarizeWorkspaceFlowsForDebug(
-                    flowsRef.current as Record<string, unknown> | undefined
-                  ),
-                });
-                const allTasksInMemory = taskRepository.getAllTasks();
-
-                // Extract all task IDs referenced in flows
-                const referencedTaskIds = new Set<string>();
-                Object.values(allFlows).forEach((flow: any) => {
-                  if (flow && flow.nodes && Array.isArray(flow.nodes)) {
-                    flow.nodes.forEach((node: any) => {
-                      const nodeData = node.data as FlowNode;
-                      if (nodeData.rows && Array.isArray(nodeData.rows)) {
-                        nodeData.rows.forEach((row: any) => {
-                          // row.id is the taskId (unified model: row.id === task.id)
-                          if (row.id) {
-                            referencedTaskIds.add(row.id);
-                          }
-                        });
-                      }
-                    });
-                  }
-                });
-
-                // Filter orphan tasks: tasks not referenced in any flow
-                const orphanTasks = allTasksInMemory.filter(task => !referencedTaskIds.has(task.id));
-                const tasksToSave = allTasksInMemory.filter(task => referencedTaskIds.has(task.id));
-
-                const cleanupEnd = performance.now();
-                console.log('[Save][Cleanup] ✅ DONE', {
-                  ms: Math.round(cleanupEnd - cleanupStart),
-                  totalTasks: allTasksInMemory.length,
-                  referencedTaskIds: referencedTaskIds.size,
-                  orphanTasks: orphanTasks.length,
-                  tasksToSave: tasksToSave.length,
-                  orphanTaskIds: orphanTasks.map(t => t.id)
-                });
-
-                if (orphanTasks.length > 0) {
-                  const orphanTasksInfo = orphanTasks.map(t => ({
-                    id: t.id,
-                    name: t.name || '(unnamed)',
-                    type: t.type || 'unknown'
-                  }));
-                  console.warn('[Save][Cleanup] ⚠️ Orphan tasks excluded from save', {
-                    count: orphanTasks.length,
-                    tasks: orphanTasksInfo
-                  });
-                  // Log details in a table for better readability
-                  console.table(orphanTasksInfo);
-                }
-
-                // ✅ M5: Use new orchestrator for project save
-                // Load templates and variables for orchestrator
-                const { DialogueTaskService } = await import('../services/DialogueTaskService');
-                const { variableCreationService } = await import('../services/VariableCreationService');
-
-                const allTemplates = DialogueTaskService.getAllTemplates();
-                const allVariables = variableCreationService.getAllVariables(pid);
-
-                console.log('[Save][Orchestrator] 📊 Loaded data for orchestrator', {
-                  templatesCount: allTemplates.length,
-                  variablesCount: allVariables.length,
-                  templatesSource: allTemplates.reduce((acc: Record<string, number>, t: any) => {
-                    const source = t.source || 'Project';
-                    acc[source] = (acc[source] || 0) + 1;
-                    return acc;
-                  }, {}),
-                });
-
-                if (isAiAgentDebugEnabled()) {
-                  console.log('ALL TASKS BEFORE SAVE', allTasksInMemory.map(summarizeAgentTaskFields));
-                }
-
-                // Map UI state to domain model
-                const domain = mapUIStateToDomain({
-                  projectId: pid,
-                  projectName: currentProject?.name,
-                  flows: allFlows,
-                  tasks: allTasksInMemory,
-                  conditions: projectData?.conditions?.flatMap((cat: any) => cat.items || []) || [],
-                  templates: allTemplates,
-                  variables: allVariables,
-                  metadata: {
-                    ownerCompany: currentProject?.ownerCompany,
-                    ownerClient: currentProject?.ownerClient,
-                  },
-                });
-
-                // Prepare and validate save request
-                const orchestrator = new ProjectSaveOrchestrator();
-                const saveRequest = orchestrator.prepareSave(domain, {
-                  flows: allFlows,
-                  allTemplates: allTemplates,
-                });
-
-                // Validate request
-                const validation = orchestrator.validateRequest(saveRequest);
-                if (!validation.valid) {
-                  throw new Error(`Save request validation failed: ${validation.errors.join(', ')}`);
-                }
-
-                // Import services needed for execution
-                const { flushFlowPersist } = await import('../services/FlowPersistService');
-                const { transformNodesToSimplified, transformEdgesToSimplified } = await import('../flows/flowTransformers');
-                // Note: taskRepository is already imported statically at the top of the file
-
-                // Execute save using orchestrator
-                const flowsById = buildFlowsByIdForOrchestrator(allFlows);
-                logFlowSaveDebug('save: flowsById after buildFlowsByIdForOrchestrator', {
-                  keys: Object.keys(flowsById),
-                  perFlow: Object.entries(flowsById).map(([id, f]) => ({
-                    flowId: id,
-                    nodes: f.nodes?.length ?? 0,
-                    edges: f.edges?.length ?? 0,
-                    hasLocalChanges: f.hasLocalChanges,
-                  })),
-                });
-
-                const saveResult = await orchestrator.executeSave(saveRequest, {
-                  translationsContext: (window as any).__projectTranslationsContext,
-                  flowsById,
-                  flowState: {
-                    flushFlowPersist: async () => {
-                      await flushFlowPersist();
-                    },
-                    getFlowById: (id: string) => {
-                      const f = flowsById?.[id];
-                      return f ? { nodes: f.nodes ?? [], edges: f.edges ?? [] } : null;
-                    },
-                    getNodes: () => flowsById?.main?.nodes ?? [],
-                    getEdges: () => flowsById?.main?.edges ?? [],
-                    transformNodesToSimplified,
-                    transformEdgesToSimplified,
-                  },
-                  taskRepository,
-                  variableService: variableCreationService,
-                  dialogueTaskService: DialogueTaskService,
-                  projectDataService: ProjectDataService,
-                  projectData,
-                });
-
-                if (saveResult.success) {
-                  clearWorkspaceRestoreForProject(pid);
-                  const persisted = saveResult.results?.flow?.persistedFlowIds;
-                  if (persisted && persisted.length > 0) {
-                    markFlowsPersistedRef.current?.(persisted);
-                  }
-                  console.log('[Save][Orchestrator] ✅ Save completed successfully', {
-                    projectId: pid,
-                    duration: saveResult.duration,
-                  });
-                } else {
-                  console.error('[Save][Orchestrator] ❌ Save completed with errors', {
-                    projectId: pid,
-                    duration: saveResult.duration,
-                    errors: saveResult.errors,
-                  });
-                  throw new Error(`Save failed: ${saveResult.errors?.join(', ') || 'Unknown error'}`);
-                }
+                await runProjectSave();
               } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                setCloneError(msg);
                 console.error('[SaveProject] commit error', e);
               } finally {
                 setIsCreatingProject(false);

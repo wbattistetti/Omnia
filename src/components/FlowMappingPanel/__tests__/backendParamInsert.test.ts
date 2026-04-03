@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMappingEntry } from '../mappingTypes';
+import { entriesInDepthFirstOrder } from '../mappingTreeUtils';
 import {
   EPHEMERAL_SEGMENT_PREFIX,
   computeBackendParamInsert,
@@ -48,6 +49,27 @@ describe('computeBackendParamInsert', () => {
     const r = computeBackendParamInsert([], { targetPathKey: '', placement: 'after' });
     expect(r.insertAt).toBe(0);
     expect(r.internalPath.startsWith(EPHEMERAL_SEGMENT_PREFIX)).toBe(true);
+  });
+
+  it('inserts before target in alphabetical tree order (not raw array tail)', () => {
+    const entries = [
+      createMappingEntry({ internalPath: 'zebra' }),
+      createMappingEntry({ internalPath: 'alfa' }),
+      createMappingEntry({ internalPath: 'mike' }),
+    ];
+    const orderedBefore = entriesInDepthFirstOrder(entries, 'alphabetical');
+    expect(orderedBefore.map((e) => e.internalPath)).toEqual(['alfa', 'mike', 'zebra']);
+
+    const { next, newEntry } = insertNewBackendParameter(
+      entries,
+      { targetPathKey: 'mike', placement: 'before' },
+      { siblingOrder: 'alphabetical' }
+    );
+    const orderedAfter = entriesInDepthFirstOrder(next, 'alphabetical');
+    const newIdx = orderedAfter.findIndex((e) => e.id === newEntry.id);
+    const mikeIdx = orderedAfter.findIndex((e) => e.internalPath === 'mike');
+    expect(newIdx).toBe(mikeIdx - 1);
+    expect(newIdx).toBeGreaterThan(-1);
   });
 });
 

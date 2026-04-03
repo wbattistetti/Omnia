@@ -38,11 +38,15 @@ interface BackendCallConfig {
     internalName: string; // textbox
     apiParam?: string; // combobox (mapping API)
     variable?: string; // combobox (variabile app)
+    fieldDescription?: string;
+    sampleValues?: string[];
   }>;
   outputs?: Array<{
     internalName: string; // textbox
     apiField?: string; // combobox (mapping API)
     variable?: string; // combobox (variabile app)
+    fieldDescription?: string;
+    sampleValues?: string[];
   }>;
   // Mock table: array di righe con valori input/output
   mockTable?: Array<{
@@ -72,7 +76,7 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
   const instanceId = task.instanceId || task.id; // ✅ RINOMINATO: act → task
   const pdUpdate = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
-  const { getTranslation } = useProjectTranslations();
+  const { translations } = useProjectTranslations();
   const projectId = pdUpdate?.getCurrentProjectId() || undefined;
   const variableStoreProjectId = React.useMemo(
     () => resolveVariableStoreProjectId(projectId),
@@ -360,6 +364,16 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
     [getVarIdFromVarName, variableStoreProjectId]
   );
 
+  /** SEND: only link existing variables — never create new ids when saving. */
+  const resolveVarIdForInputMapping = React.useCallback(
+    (linkedName: string): string => {
+      const t = linkedName.trim();
+      if (!t) return '';
+      return getVarIdFromVarName(t) ?? '';
+    },
+    [getVarIdFromVarName]
+  );
+
   const mappingSend = React.useMemo(
     () => backendInputsToMappingEntries(config.inputs, getVarNameFromVarId),
     [config.inputs, getVarNameFromVarId]
@@ -374,10 +388,10 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
     (entries: MappingEntry[]) => {
       setConfig((prev) => ({
         ...prev,
-        inputs: mappingEntriesToBackendInputs(entries, resolveVarIdForLinkedName),
+        inputs: mappingEntriesToBackendInputs(entries, resolveVarIdForInputMapping),
       }));
     },
-    [resolveVarIdForLinkedName]
+    [resolveVarIdForInputMapping]
   );
 
   const handleBackendReceiveChange = React.useCallback(
@@ -389,6 +403,24 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
     },
     [resolveVarIdForLinkedName]
   );
+
+  const handleCreateOutputVariable = React.useCallback(
+    (displayName: string): { id: string; label: string } | null => {
+      const t = displayName.trim();
+      if (!t) return null;
+      try {
+        const nv = variableCreationService.createManualVariable(variableStoreProjectId, t);
+        return { id: nv.id, label: nv.varName };
+      } catch {
+        return null;
+      }
+    },
+    [variableStoreProjectId]
+  );
+
+  const handleOutputVariableCreated = React.useCallback(() => {
+    setVariablesRefreshKey((k) => k + 1);
+  }, []);
 
   // Toolbar buttons
   const toolbarButtons = React.useMemo<ToolbarButton[]>(() => {
@@ -514,6 +546,8 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
             apiOptions={availableApiParams}
             variableOptions={availableVariables}
             showApiFields={showApiColumn}
+            onCreateOutputVariable={handleCreateOutputVariable}
+            onOutputVariableCreated={handleOutputVariableCreated}
             showInterfacePalette={false}
             className="bg-slate-900"
             innerClassName="!p-2"
