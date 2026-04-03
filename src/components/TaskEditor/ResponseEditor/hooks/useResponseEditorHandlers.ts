@@ -174,7 +174,6 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
   const handleEditorClose = useResponseEditorClose({
     contractChangeRef,
     setPendingContractChange,
-    setShowContractDialog,
     selectedNode,
     selectedNodePath,
     selectedRoot,

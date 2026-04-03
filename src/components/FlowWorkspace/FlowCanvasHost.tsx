@@ -35,8 +35,8 @@ type Props = {
   testSingleNode?: (nodeId: string, nodeRows?: any[]) => Promise<void>;
   onCreateTaskFlow?: (flowId: string, title: string, nodes: any[], edges: any[]) => void;
   onOpenTaskFlow?: (flowId: string, title: string) => void;
-  /** Opens a subflow tab for a Flow-type row (taskId, optional existingFlowId, optional title = row label) */
-  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string) => void;
+  /** Opens a subflow tab for a Flow-type row (taskId, optional existingFlowId, optional title, optional canvas node id for pan-after-split) */
+  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string, canvasNodeId?: string) => void;
 };
 
 export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleNode, onCreateTaskFlow, onOpenTaskFlow, onOpenSubflowForTask }) => {

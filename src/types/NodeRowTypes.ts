@@ -30,8 +30,8 @@ export interface NodeRowProps {
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
   getProjectId?: () => string | null;
   onWidthChange?: (width: number) => void;
-  /** Opens a subflow tab for Flow-type rows (taskId, optional existingFlowId, optional title = row label) */
-  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string) => void;
+  /** Opens a subflow tab for Flow-type rows (taskId, optional existingFlowId, optional title = row label, optional React Flow node id for viewport centering) */
+  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string, canvasNodeId?: string) => void;
   /** Immutable update of all rows in this node (flowchart); required for row.meta draft fields */
   updateNodeRows?: (mutate: (rows: import('./project').NodeRowData[]) => import('./project').NodeRowData[]) => void;
   /** Generates child nodes/edges from semantic values of this row. */

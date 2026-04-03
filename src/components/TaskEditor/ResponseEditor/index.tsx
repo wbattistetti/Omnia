@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
-import { ContractUpdateDialog } from '@responseEditor/ContractUpdateDialog';
 import EditorHeader from '@components/common/EditorHeader';
 import TaskDragLayer from '@responseEditor/TaskDragLayer';
 import { FontProvider, useFontContext } from '@context/FontContext';
@@ -482,9 +481,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       replaceSelectedTaskTree={editor.replaceSelectedTaskTree}
       serviceUnavailable={editor.serviceUnavailable}
       setServiceUnavailable={editor.setServiceUnavailable}
-      showContractDialog={editor.showContractDialog}
-      pendingContractChange={editor.pendingContractChange}
-      contractDialogHandlers={editor.contractDialogHandlers}
       taskWizardMode={editor.taskWizardMode}
       setTaskWizardMode={editor.setTaskWizardMode} // ✅ ARCHITECTURE: For Context single source of truth
       needsTaskContextualization={editor.needsTaskContextualization}

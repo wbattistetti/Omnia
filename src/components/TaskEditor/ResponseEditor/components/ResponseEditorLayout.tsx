@@ -18,7 +18,6 @@ import { ResponseEditorNormalLayout } from '@responseEditor/components/ResponseE
 import { ServiceUnavailableModal } from '@responseEditor/components/ServiceUnavailableModal';
 import { GeneralizabilityBanner } from '@responseEditor/components/GeneralizabilityBanner';
 import { WizardInstanceFirstBanner } from '@responseEditor/components/WizardInstanceFirstBanner';
-import { ContractUpdateDialog } from '@responseEditor/ContractUpdateDialog';
 import { SaveLocationDialog } from '@responseEditor/components/SaveLocationDialog';
 import { MainViewMode } from '@responseEditor/types/mainViewMode';
 // ✅ REMOVED: useWizardIntegration - ora viene chiamato in ResponseEditorInner
@@ -27,7 +26,6 @@ import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode'
 import type { TaskTree, TaskMeta } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 import type { useResponseEditorCore } from '@responseEditor/hooks/useResponseEditorCore';
-import type { useResponseEditorHandlers } from '@responseEditor/hooks/useResponseEditorHandlers';
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { ResponseEditorNavigationProvider } from '@responseEditor/context/ResponseEditorNavigationContext';
@@ -200,11 +198,6 @@ export interface ResponseEditorLayoutProps {
   serviceUnavailable: { service: string; message: string; endpoint?: string; onRetry?: () => void } | null;
   setServiceUnavailable: (value: any) => void;
 
-  // Contract dialog
-  showContractDialog: boolean;
-  pendingContractChange: { templateId: string; templateLabel: string; modifiedContract: any } | null;
-  contractDialogHandlers: ReturnType<typeof useResponseEditorHandlers>['contractDialogHandlers'];
-
   // Wizard state
   taskWizardMode: TaskWizardMode;
   setTaskWizardMode: (mode: TaskWizardMode) => void; // ✅ ARCHITECTURE: For Context single source of truth
@@ -317,9 +310,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     replaceSelectedTaskTree,
     serviceUnavailable,
     setServiceUnavailable,
-    showContractDialog,
-    pendingContractChange,
-    contractDialogHandlers,
     taskWizardMode,
     setTaskWizardMode, // ✅ ARCHITECTURE: For Context single source of truth
     needsTaskContextualization,
@@ -1345,16 +1335,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         <ServiceUnavailableModal
           serviceUnavailable={serviceUnavailable}
           onClose={() => setServiceUnavailable(null)}
-        />
-      )}
-
-      {showContractDialog && pendingContractChange && (
-        <ContractUpdateDialog
-          open={showContractDialog}
-          templateLabel={pendingContractChange.templateLabel}
-          onKeep={contractDialogHandlers.handleKeep}
-          onDiscard={contractDialogHandlers.handleDiscard}
-          onCancel={contractDialogHandlers.handleCancel}
         />
       )}
 

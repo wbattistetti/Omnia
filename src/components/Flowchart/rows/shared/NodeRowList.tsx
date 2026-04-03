@@ -30,7 +30,7 @@ interface NodeRowListProps {
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
   getProjectId?: () => string | null;
   onWidthChange?: (width: number) => void;
-  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string) => void;
+  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string, canvasNodeId?: string) => void;
   updateNodeRows?: (mutate: (rows: NodeRowData[]) => NodeRowData[]) => void;
   nodeId?: string;
   onAppendSemanticNodes?: (row: NodeRowData, values: SemanticValue[]) => Promise<void> | void;
@@ -117,19 +117,19 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             onDragStart={onDragStart}
             onMoveRow={(from, to) => {
               const boundedTo = Math.max(0, Math.min(totalRows - 1, to));
-              if (from !== boundedTo) {
-                // Implementa il riordinamento immediato
-                const newRows = [...rows];
-                const [movedRow] = newRows.splice(from, 1);
-                newRows.splice(boundedTo, 0, movedRow);
+              if (from === boundedTo) {
+                return;
+              }
+              const newRows = [...rows];
+              const [movedRow] = newRows.splice(from, 1);
+              newRows.splice(boundedTo, 0, movedRow);
 
-                // Aggiorna le righe tramite callback
-                if (onUpdate) {
-                  // Chiama onUpdate per ogni riga per aggiornare l'ordine
-                  newRows.forEach((row, index) => {
-                    onUpdate(row, row.text);
-                  });
-                }
+              if (updateNodeRows) {
+                updateNodeRows(() => newRows);
+              } else if (onUpdate) {
+                newRows.forEach((row) => {
+                  onUpdate(row, row.text);
+                });
               }
             }}
             onDropRow={() => {

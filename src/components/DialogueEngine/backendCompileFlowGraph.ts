@@ -16,6 +16,35 @@ import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
 
 const VB_COMPILE_URL = 'http://localhost:5000/api/runtime/compile';
 
+/**
+ * Resolves the child canvas id for a Subflow task: root `flowId`, `parameters[].flowId`, or `subflow_<task.id>`.
+ * ApiServer DeserializeTaskFromJson requires `flowId` at task root for Subflow (see CompilationHandlers.vb).
+ */
+/**
+ * Subflow id stored on the task (root or parameters only). Used for graph discovery so we do not
+ * invent `subflow_<id>` canvases that were never opened/saved — those would fail nested compile.
+ */
+export function resolveSubflowFlowIdExplicitOnly(task: unknown): string {
+  const t = task as Record<string, unknown> | null | undefined;
+  if (!t) return '';
+  const direct = typeof t.flowId === 'string' ? t.flowId.trim() : '';
+  if (direct) return direct;
+  const params = Array.isArray(t.parameters) ? t.parameters : [];
+  const flowParam = params.find(
+    (p: unknown) => String((p as { parameterId?: string }).parameterId || '').trim() === 'flowId'
+  ) as { value?: string } | undefined;
+  return String(flowParam?.value || '').trim();
+}
+
+export function resolveSubflowFlowIdFromTask(task: unknown): string {
+  const explicit = resolveSubflowFlowIdExplicitOnly(task);
+  if (explicit) return explicit;
+  const t = task as Record<string, unknown> | null | undefined;
+  const tid = String(t?.id || '').trim();
+  if (tid) return `subflow_${tid}`;
+  return '';
+}
+
 export type BackendCompileFlowContext = {
   projectData: unknown;
   translations: Record<string, string>;
@@ -29,14 +58,6 @@ export type BackendCompileFlowArtifacts = {
 
 function collectSubflowFlowIdsFromEnrichedNodes(nodes: Node<FlowNode>[]): string[] {
   const out = new Set<string>();
-  const resolveSubflowFlowId = (task: any): string => {
-    const direct = typeof task?.flowId === 'string' ? task.flowId.trim() : '';
-    if (direct) return direct;
-    const params = Array.isArray(task?.parameters) ? task.parameters : [];
-    const flowParam = params.find((p: any) => String(p?.parameterId || '').trim() === 'flowId');
-    const fromParam = String(flowParam?.value || '').trim();
-    return fromParam;
-  };
   for (const node of nodes) {
     const rows = node.data?.rows || [];
     for (const row of rows) {
@@ -44,7 +65,7 @@ function collectSubflowFlowIdsFromEnrichedNodes(nodes: Node<FlowNode>[]): string
       if (!taskId) continue;
       const task = taskRepository.getTask(taskId);
       if (task?.type === TaskType.Subflow) {
-        const fid = resolveSubflowFlowId(task);
+        const fid = resolveSubflowFlowIdExplicitOnly(task);
         if (fid && fid !== 'main') {
           out.add(fid);
         }
@@ -202,13 +223,20 @@ export async function backendCompileFlowGraph(
 
   const allTasksWithTemplates = [...referencedInstances, ...referencedTemplates];
   const aiAgentRulesVariant = readAiAgentRuntimeRulesVariant();
-  const tasksForCompile = allTasksWithTemplates.map((t: Record<string, unknown>) =>
-    t.type === TaskType.AIAgent
-      ? buildMinimalAiAgentCompileTask(t as Parameters<typeof buildMinimalAiAgentCompileTask>[0], {
-          rulesVariant: aiAgentRulesVariant,
-        })
-      : t
-  );
+  const tasksForCompile = allTasksWithTemplates.map((t: Record<string, unknown>) => {
+    if (t.type === TaskType.AIAgent) {
+      return buildMinimalAiAgentCompileTask(t as Parameters<typeof buildMinimalAiAgentCompileTask>[0], {
+        rulesVariant: aiAgentRulesVariant,
+      });
+    }
+    if (t.type === TaskType.Subflow) {
+      const fid = resolveSubflowFlowIdFromTask(t);
+      if (fid) {
+        return { ...t, flowId: fid };
+      }
+    }
+    return t;
+  });
 
   const allDDTs: unknown[] = [];
   let buildTaskTree: ((task: unknown, projectId?: string) => Promise<unknown>) | null = null;

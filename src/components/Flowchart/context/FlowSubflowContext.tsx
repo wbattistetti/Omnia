@@ -5,8 +5,8 @@
 import React, { createContext, useContext } from 'react';
 
 export interface FlowSubflowContextValue {
-  /** taskId, optional existingFlowId, optional title (row label → tab title) */
-  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string) => void;
+  /** taskId, optional existingFlowId, optional title (row label → tab title), optional canvas node id for pan-after-split */
+  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string, canvasNodeId?: string) => void;
 }
 
 const FlowSubflowContext = createContext<FlowSubflowContextValue>({});

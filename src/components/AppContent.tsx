@@ -20,7 +20,7 @@ import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
 import { DockManager } from './Dock/DockManager';
 import { DockNode, DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabChat, ToolbarButton } from '../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { FlowWorkspaceProvider, useFlowWorkspace, useFlowActions } from '@flows/FlowStore';
-import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/ops';
+import { upsertAddNextTo, closeTab, activateTab, upsertFlowTabInDualPane } from '../dock/ops';
 import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
 import { openBottomDockedTab } from './AppContent/infrastructure/docking/DockingHelpers';
 import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
@@ -349,7 +349,7 @@ export const AppContent: React.FC<AppContentProps> = ({
               })
             );
           }}
-          onOpenSubflowForTask={(tabId, taskId, existingFlowId, title) => {
+          onOpenSubflowForTask={(tabId, taskId, existingFlowId, title, canvasNodeId, sourceFlowId) => {
             const flowId = (existingFlowId && String(existingFlowId).trim())
               ? String(existingFlowId).trim()
               : `subflow_${taskId}`;
@@ -387,14 +387,32 @@ export const AppContent: React.FC<AppContentProps> = ({
                 flowsRef.current as Record<string, unknown>
               );
             }
-            setDockTree(prev =>
-              upsertAddNextTo(prev, tabId, {
+            setDockTree((prev) =>
+              upsertFlowTabInDualPane(prev, tabId, {
                 id: `tab_${flowId}`,
                 title: tabTitle,
                 type: 'flow',
                 flowId,
               })
             );
+            const fid = String(sourceFlowId || '').trim();
+            const nid = String(canvasNodeId || '').trim();
+            if (fid && nid) {
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  try {
+                    document.dispatchEvent(
+                      new CustomEvent('flowchart:centerViewportOnNode', {
+                        bubbles: true,
+                        detail: { flowId: fid, nodeId: nid },
+                      })
+                    );
+                  } catch {
+                    /* noop */
+                  }
+                });
+              });
+            }
           }}
         />
       );

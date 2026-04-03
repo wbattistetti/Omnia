@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { NodeProps, useReactFlow, NodeToolbar, Position } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
 import { NodeDragHeader } from '../shared/NodeDragHeader';
@@ -93,6 +93,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     inAutoAppend
   } = rowManagement;
 
+  const editingRowIdRef = useRef(editingRowId);
+  editingRowIdRef.current = editingRowId;
+
   // ✅ Initialize previousRowsCountRef after nodeRows is available (safety net if nodeHeightRef initialization doesn't run)
   useEffect(() => {
     if (nodeHeightRef.current === null && previousRowsCountRef.current === 0) {
@@ -122,7 +125,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const nodeContainerRef = useRef<HTMLDivElement>(null);
 
   // ✅ NODE DRAG: Hook per accedere a React Flow per aggiornare posizione nodo (deve essere prima di findAllDescendants)
-  const { getNode, setNodes, setEdges, getViewport, getEdges } = useReactFlow();
+  const { getNode, setNodes, setEdges, getViewport, getEdges, updateNodeInternals } = useReactFlow();
 
   // ✅ Funzione per trovare tutti i discendenti di un nodo (ricorsivo) - deve essere prima del useEffect che la usa
   const findAllDescendants = useCallback((nodeId: string, visited: Set<string> = new Set()): string[] => {
@@ -215,6 +218,43 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     }
   }, [editingRowId]);
 
+  /** Remeasure intrinsic width (e.g. after row reorder). Ref used so useNodeDragDrop can call latest closure without reordering hooks. */
+  const measureNodeWidthFromContentRef = useRef<() => void>(() => {});
+  const measureNodeWidthFromContent = useCallback(() => {
+    if (editingRowIdRef.current) {
+      return;
+    }
+    const el = nodeContainerRef.current;
+    if (!el) {
+      return;
+    }
+    el.style.setProperty('min-width', '140px', 'important');
+    el.style.setProperty('width', 'max-content', 'important');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (editingRowIdRef.current) {
+          return;
+        }
+        const container = nodeContainerRef.current;
+        if (!container) {
+          return;
+        }
+        const w = Math.max(Math.ceil(container.getBoundingClientRect().width), 140);
+        nodeWidthRef.current = w;
+        setNodeWidth(w);
+        container.style.setProperty('min-width', `${w}px`, 'important');
+        container.style.setProperty('width', `${w}px`, 'important');
+        container.style.setProperty('flex-shrink', '0', 'important');
+        try {
+          updateNodeInternals(id);
+        } catch {
+          /* RF may not be ready */
+        }
+      });
+    });
+  }, [id, updateNodeInternals]);
+  measureNodeWidthFromContentRef.current = measureNodeWidthFromContent;
+
   // Measure node width ONLY when entering editing (not when exiting)
   useEffect(() => {
     if (!editingRowId) {
@@ -256,6 +296,43 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     }
   }, [editingRowId, id, nodeRows.length]);
 
+  /** Order of rows (ids) — length-only deps miss reorder; remeasure width after DnD so the box fits the widest label again. */
+  const rowOrderSignature = useMemo(
+    () => nodeRows.map((r) => r.id).join('|'),
+    [nodeRows]
+  );
+
+  useLayoutEffect(() => {
+    measureNodeWidthFromContent();
+  }, [rowOrderSignature, editingRowId, measureNodeWidthFromContent]);
+
+  useEffect(() => {
+    const inner = rowsContainerRef.current;
+    if (!inner) {
+      return;
+    }
+    let raf: number | null = null;
+    const schedule = () => {
+      if (raf != null) {
+        cancelAnimationFrame(raf);
+      }
+      raf = requestAnimationFrame(() => {
+        raf = null;
+        if (!editingRowIdRef.current) {
+          measureNodeWidthFromContentRef.current();
+        }
+      });
+    };
+    const ro = new ResizeObserver(schedule);
+    ro.observe(inner);
+    return () => {
+      if (raf != null) {
+        cancelAnimationFrame(raf);
+      }
+      ro.disconnect();
+    };
+  }, [editingRowId, measureNodeWidthFromContent, rowsContainerRef]);
+
   // ✅ TOOLBAR: Ref per l'elemento toolbar (dichiarato prima dell'uso)
   const toolbarElementRef = useRef<HTMLDivElement>(null);
 
@@ -289,6 +366,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     rowsContainerRef,
     nodeId: id,
     flowCanvasId: flowCanvasId,
+    onSameNodeRowsReordered: () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          measureNodeWidthFromContentRef.current();
+        });
+      });
+    },
   });
   const {
     draggedRowId, handleRowDragStart

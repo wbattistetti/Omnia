@@ -839,7 +839,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     const task = taskRepository.getTask(row.id) ?? null;
                     const existingFlowId = task?.parameters?.flowId ?? (task as any)?.flowId;
                     const rowLabel = (row.text || '').trim() || task?.name || 'Subflow';
-                    onOpenSubflowForTask(row.id, existingFlowId, rowLabel);
+                    onOpenSubflowForTask(row.id, existingFlowId, rowLabel, nodeId);
                   };
                 }
                 // ✅ REFACTOR: Use TaskTreeOpener service for other types

@@ -72,8 +72,8 @@ interface FlowEditorProps {
   setCurrentProject: (project: any) => void;
   onCreateTaskFlow?: (flowId: string, title: string, nodes: Node<FlowNode>[], edges: Edge<EdgeData>[]) => void;
   onOpenTaskFlow?: (flowId: string, title: string) => void;
-  /** Opens a subflow tab for a Flow-type row (taskId, optional existingFlowId, optional title = row label) */
-  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string) => void;
+  /** Opens a subflow tab for a Flow-type row (taskId, optional existingFlowId, optional title = row label, optional canvas node id) */
+  onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string, canvasNodeId?: string) => void;
 }
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({
@@ -520,6 +520,49 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const NODE_HEIGHT = 40; // px (min-h-[40px])
   const canvasRef = useRef<HTMLDivElement>(null);
   const [contentSize, setContentSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+
+  // After dock split: instant horizontal pan only (split is lateral; keep Y + zoom — no vertical jump).
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ flowId?: string; nodeId?: string }>;
+      const targetFlow = String(ce.detail?.flowId || '').trim();
+      const nodeId = String(ce.detail?.nodeId || '').trim();
+      const selfFlow = String(flowId ?? 'main').trim();
+      if (!nodeId || !targetFlow || targetFlow !== selfFlow) return;
+
+      const applyHorizontalPan = () => {
+        try {
+          const inst = reactFlowInstance;
+          if (!inst) return;
+          const n = inst.getNode(nodeId);
+          if (!n) return;
+          const w = Number((n as any).width ?? (n as any).measured?.width ?? 320) || 320;
+          const h = Number((n as any).height ?? (n as any).measured?.height ?? 140) || 140;
+          const cx = n.position.x + w / 2;
+          const cy = n.position.y + h / 2;
+
+          const paneEl = canvasRef.current?.querySelector('.react-flow__pane') as HTMLElement | null;
+          if (!paneEl || paneEl.clientWidth <= 0) return;
+
+          const screen = inst.flowToScreenPosition({ x: cx, y: cy });
+          const vp = inst.getViewport();
+          const deltaX = paneEl.clientWidth / 2 - screen.x;
+          inst.setViewport({ x: vp.x + deltaX, y: vp.y, zoom: vp.zoom }, { duration: 0 });
+        } catch {
+          /* noop */
+        }
+      };
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(applyHorizontalPan);
+      });
+      window.setTimeout(applyHorizontalPan, 90);
+      window.setTimeout(applyHorizontalPan, 220);
+    };
+
+    document.addEventListener('flowchart:centerViewportOnNode', handler as EventListener);
+    return () => document.removeEventListener('flowchart:centerViewportOnNode', handler as EventListener);
+  }, [flowId, reactFlowInstance]);
 
   // Calcola estensione contenuto per eventuali scrollbar
   useEffect(() => {

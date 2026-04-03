@@ -22,6 +22,8 @@ interface UseNodeDragDropProps {
     nodeId: string;
     /** Current flow canvas id — enables drop on Interface INPUT/OUTPUT without removing the row. */
     flowCanvasId?: string;
+    /** Called after same-node row reorder commits so the node can remeasure width (DOM order updates after setState). */
+    onSameNodeRowsReordered?: () => void;
 }
 
 /**
@@ -35,6 +37,7 @@ export function useNodeDragDrop({
     rowsContainerRef,
     nodeId,
     flowCanvasId,
+    onSameNodeRowsReordered,
 }: UseNodeDragDropProps) {
     // Context for node operations (with fallback to legacy)
     const flowActions = useFlowActions();
@@ -572,6 +575,13 @@ export function useNodeDragDrop({
                         rowComponent.highlight();
                     }
                 });
+
+                // Remeasure node width after React commits new row order (layout + paint)
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        onSameNodeRowsReordered?.();
+                    });
+                });
             } else {
                 // ✅ La riga non è stata spostata - non fare nulla
                 // Rimuovi solo l'evidenziazione del nodo
@@ -604,7 +614,7 @@ export function useNodeDragDrop({
 
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-    }, [isRowDragging, draggedRowId, draggedRowIndex, nodeRows, setNodeRows, data, dragElement, rowsContainerRef, targetNodeId, nodeId, draggedRowData, getRowComponent, flowCanvasId, flowActions]);
+    }, [isRowDragging, draggedRowId, draggedRowIndex, nodeRows, setNodeRows, data, dragElement, rowsContainerRef, targetNodeId, nodeId, draggedRowData, getRowComponent, flowCanvasId, flowActions, onSameNodeRowsReordered]);
 
     // Event listeners
     useEffect(() => {

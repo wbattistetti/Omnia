@@ -6,7 +6,6 @@ import { saveTaskToRepository, saveTaskOnEditorClose } from '@responseEditor/cor
 import { getMainNodes } from '@responseEditor/core/domain';
 import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 import { replaceNodeAtPath } from '@responseEditor/core/taskTree';
-import DialogueTaskService from '@services/DialogueTaskService';
 import { closeTab } from '@dock/ops';
 import { useTaskTreeStore, useTaskTreeFromStore } from '@responseEditor/core/state';
 import { useWizardContext } from '@responseEditor/context/WizardContext';
@@ -27,7 +26,6 @@ export interface UseResponseEditorCloseParams {
     templateLabel: string;
     modifiedContract: any;
   } | null>>;
-  setShowContractDialog: React.Dispatch<React.SetStateAction<boolean>>;
 
   // Node selection
   selectedNode: any;
@@ -66,7 +64,6 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
   const {
     contractChangeRef,
     setPendingContractChange,
-    setShowContractDialog,
     selectedNode,
     selectedNodePath,
     selectedRoot,
@@ -102,23 +99,19 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     const { useWizardStore } = await import('../../../../../TaskBuilderAIWizard/store/wizardStore');
     useWizardStore.getState().reset();
 
-    // ✅ Verifica se ci sono modifiche ai contracts non salvate
+    // Contract edits: keep automatically (same as former "Mantieni modifiche"); no confirmation dialog
+    let didAutoKeepContract = false;
     const contractChange = contractChangeRef.current;
-
-    // ✅ CRITICAL: Controlla anche se contractChangeRef.current è stato aggiornato via useImperativeHandle
-    // Se contractChange è null/undefined, prova a leggere direttamente dal RecognitionEditor ref
     if (contractChange?.hasUnsavedChanges && contractChange.modifiedContract && contractChange.nodeTemplateId) {
-      // ✅ Mostra dialog e blocca chiusura
-      const template = DialogueTaskService.getTemplate(contractChange.nodeTemplateId);
-
-      setPendingContractChange({
-        templateId: contractChange.nodeTemplateId,
-        templateLabel: template?.label ?? contractChange.nodeLabel ?? 'Template',
-        modifiedContract: contractChange.modifiedContract
-      });
-      setShowContractDialog(true);
-      // ✅ Ritorna false per bloccare la chiusura del tab
-      return false;
+      didAutoKeepContract = true;
+      setPendingContractChange(null);
+      contractChangeRef.current = {
+        hasUnsavedChanges: false,
+        modifiedContract: null,
+        originalContract: null,
+        nodeTemplateId: undefined,
+        nodeLabel: undefined,
+      };
     }
 
     // ✅ FASE 2.3: Salva selectedNode corrente nello store prima di chiudere (se non già salvato)
@@ -164,7 +157,15 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
       if (taskWizardMode === 'full' || taskWizardMode === 'adaptation') {
         return true; // ✅ Permetti chiusura in modalità wizard
       }
-      // ✅ Se NON siamo in wizard mode, bloccare la chiusura (comportamento originale)
+      // After auto-keeping contract edits, close tab like the old dialog "Mantieni" path
+      if (didAutoKeepContract) {
+        if (tabId && setDockTree) {
+          setDockTree((prev) => closeTab(prev, tabId));
+        } else if (onClose) {
+          onClose();
+        }
+        return true;
+      }
       return false;
     }
     const finalTaskTree = taskTreeFromStore;
@@ -245,7 +246,6 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
   }, [
     contractChangeRef,
     setPendingContractChange,
-    setShowContractDialog,
     selectedNode,
     selectedNodePath,
     selectedRoot,

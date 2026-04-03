@@ -30,7 +30,14 @@ export interface TabRendererProps {
   onFlowCreateTaskFlow?: (tabId: string, newFlowId: string, title: string, nodes: any[], edges: any[]) => void;
   onFlowOpenTaskFlow?: (tabId: string, taskFlowId: string, title: string) => void;
   /** Opens a subflow tab for a Flow-type row; creates flow if existingFlowId not provided. Title = row label for tab. */
-  onOpenSubflowForTask?: (tabId: string, taskId: string, existingFlowId?: string, title?: string) => void;
+  onOpenSubflowForTask?: (
+    tabId: string,
+    taskId: string,
+    existingFlowId?: string,
+    title?: string,
+    canvasNodeId?: string,
+    sourceFlowId?: string
+  ) => void;
 }
 
 /**
@@ -221,7 +228,10 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
             onFlowOpenTaskFlow ? (taskFlowId, title) => onFlowOpenTaskFlow(tab.id, taskFlowId, title) : undefined
           }
           onOpenSubflowForTask={
-            onOpenSubflowForTask ? (taskId, existingFlowId, title) => onOpenSubflowForTask(tab.id, taskId, existingFlowId, title) : undefined
+            onOpenSubflowForTask
+              ? (taskId, existingFlowId, title, canvasNodeId) =>
+                  onOpenSubflowForTask(tab.id, taskId, existingFlowId, title, canvasNodeId, tab.flowId)
+              : undefined
           }
         />
       );

@@ -135,6 +135,122 @@ export function moveTab(tree: DockNode, tabId: string, targetId: string, region:
   return insertTab(without, targetId, region, tab, sizes);
 }
 
+// --- Dual-pane flow tabs (main + subflow): split once, then reuse the opposite side ---
+
+function nodeContainsTabsetWithId(n: DockNode, tabsetId: string): boolean {
+  if (n.kind === 'tabset') return n.id === tabsetId;
+  if (n.kind === 'split') return n.children.some((c) => nodeContainsTabsetWithId(c, tabsetId));
+  return false;
+}
+
+function getPrimaryTabsetId(n: DockNode): string | null {
+  if (n.kind === 'tabset') return n.id;
+  if (n.kind === 'split') {
+    for (const c of n.children) {
+      const id = getPrimaryTabsetId(c);
+      if (id) return id;
+    }
+  }
+  return null;
+}
+
+function findFirstTabsetId(n: DockNode): string | null {
+  if (n.kind === 'tabset') return n.id;
+  if (n.kind === 'split') {
+    for (const c of n.children) {
+      const id = findFirstTabsetId(c);
+      if (id) return id;
+    }
+  }
+  return null;
+}
+
+/** Returns the tabset `id` that owns the given dock tab, or null. */
+export function findTabsetIdContainingTab(tree: DockNode, tabId: string): string | null {
+  function walk(n: DockNode): string | null {
+    if (n.kind === 'tabset') {
+      if (n.tabs.some((t) => t.id === tabId)) return n.id;
+      return null;
+    }
+    for (const c of n.children) {
+      const r = walk(c);
+      if (r) return r;
+    }
+    return null;
+  }
+  return walk(tree);
+}
+
+/**
+ * In a horizontal split, returns the tabset id on the side that does not contain `sourceTabsetId`.
+ * Used to open a flow in the opposite pane (VS Code / Figma style).
+ */
+export function findOpposingTabsetIdInRowSplit(tree: DockNode, sourceTabsetId: string): string | null {
+  function walk(n: DockNode): string | null {
+    if (n.kind === 'split' && n.orientation === 'row' && n.children.length === 2) {
+      const [c0, c1] = n.children;
+      const leftHas = nodeContainsTabsetWithId(c0, sourceTabsetId);
+      const rightHas = nodeContainsTabsetWithId(c1, sourceTabsetId);
+      if (leftHas && !rightHas) return getPrimaryTabsetId(c1);
+      if (rightHas && !leftHas) return getPrimaryTabsetId(c0);
+    }
+    if (n.kind === 'split') {
+      for (const c of n.children) {
+        const r = walk(c);
+        if (r) return r;
+      }
+    }
+    return null;
+  }
+  return walk(tree);
+}
+
+/** Replaces all tabs in a tabset (e.g. swap the entire opposite pane). */
+export function replaceTabsetTabs(tree: DockNode, tabsetId: string, tabs: DockTab[], active: number): DockNode {
+  return mapNode(tree, (n) => {
+    if (n.kind === 'tabset' && n.id === tabsetId) {
+      const safeActive = tabs.length === 0 ? 0 : Math.max(0, Math.min(active, tabs.length - 1));
+      return { ...n, tabs, active: safeActive };
+    }
+    return n;
+  });
+}
+
+export type UpsertFlowTabInDualPaneOptions = {
+  /** Split proportions when creating the first horizontal split [left, right]. Default [0.5, 0.5]. */
+  splitSizes?: number[];
+};
+
+/**
+ * Opens a flow tab in a two-pane layout: first open splits the source tabset (new tab on the right);
+ * when a row split already exists, replaces the opposite pane only (no third column).
+ */
+export function upsertFlowTabInDualPane(
+  tree: DockNode,
+  sourceTabId: string,
+  newTab: DockTab,
+  options?: UpsertFlowTabInDualPaneOptions
+): DockNode {
+  const without = removeTab(tree, newTab.id);
+  const sourceTabsetId = findTabsetIdContainingTab(without, sourceTabId);
+  const sizes = options?.splitSizes ?? [0.5, 0.5];
+
+  if (!sourceTabsetId) {
+    const fallbackTs = findFirstTabsetId(without);
+    if (fallbackTs) {
+      return splitWithTab(without, fallbackTs, 'right', newTab, sizes);
+    }
+    return without;
+  }
+
+  const opposingTabsetId = findOpposingTabsetIdInRowSplit(without, sourceTabsetId);
+  if (opposingTabsetId) {
+    return replaceTabsetTabs(without, opposingTabsetId, [newTab], 0);
+  }
+
+  return splitWithTab(without, sourceTabsetId, 'right', newTab, sizes);
+}
+
 // helpers
 
 export function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {

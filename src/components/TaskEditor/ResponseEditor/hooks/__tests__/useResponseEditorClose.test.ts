@@ -18,8 +18,8 @@ import type { Task, TaskTree } from '@types/taskTypes';
  * We test the critical flows: normal close, close with unsaved changes, and save behavior.
  */
 
-// Mock dependencies
-vi.mock('../../modules/ResponseEditor/persistence/ResponseEditorPersistence', () => ({
+// Mock dependencies (module id must match useResponseEditorClose imports)
+vi.mock('@responseEditor/core/persistence/ResponseEditorPersistence', () => ({
   saveTaskToRepository: vi.fn(),
   saveTaskOnEditorClose: vi.fn(),
 }));
@@ -28,24 +28,16 @@ vi.mock('../../ddtSelectors', () => ({
   getdataList: vi.fn(),
 }));
 
-vi.mock('../../../../../services/DialogueTaskService', () => ({
-  default: {
-    getTemplate: vi.fn(),
-  },
-}));
-
 vi.mock('../../../../../dock/ops', () => ({
   closeTab: vi.fn(),
 }));
 
 import { saveTaskOnEditorClose, saveTaskToRepository } from '@responseEditor/core/persistence/ResponseEditorPersistence';
 import { getdataList } from '@responseEditor/ddtSelectors';
-import DialogueTaskService from '@services/DialogueTaskService';
 import { closeTab } from '@dock/ops';
 
 describe('useResponseEditorClose', () => {
   const mockSetPendingContractChange = vi.fn();
-  const mockSetShowContractDialog = vi.fn();
   const mockSetDockTree = vi.fn();
   const mockOnClose = vi.fn();
   const mockReplaceSelectedDDT = vi.fn();
@@ -53,7 +45,6 @@ describe('useResponseEditorClose', () => {
   const defaultParams = {
     contractChangeRef: { current: null },
     setPendingContractChange: mockSetPendingContractChange,
-    setShowContractDialog: mockSetShowContractDialog,
     selectedNode: null,
     selectedNodePath: null,
     selectedRoot: false,
@@ -69,7 +60,6 @@ describe('useResponseEditorClose', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (getdataList as any).mockReturnValue([]);
-    (DialogueTaskService.getTemplate as any).mockReturnValue(null);
     (saveTaskOnEditorClose as any).mockResolvedValue(undefined);
     (saveTaskToRepository as any).mockResolvedValue(undefined);
 
@@ -81,7 +71,15 @@ describe('useResponseEditorClose', () => {
   });
 
   describe('normal close (no contract changes)', () => {
+    const seedMinimalTaskTree = () => {
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree({ nodes: [{ id: 'node-1', templateId: 'template-1' }] });
+      });
+    };
+
     it('should return true when there are no contract changes', async () => {
+      seedMinimalTaskTree();
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
@@ -92,11 +90,11 @@ describe('useResponseEditorClose', () => {
       const closeResult = await result.current();
 
       expect(closeResult).toBe(true);
-      expect(mockSetShowContractDialog).not.toHaveBeenCalled();
       expect(mockSetPendingContractChange).not.toHaveBeenCalled();
     });
 
     it('should return true when contractChange has no unsaved changes', async () => {
+      seedMinimalTaskTree();
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
@@ -115,73 +113,91 @@ describe('useResponseEditorClose', () => {
       const closeResult = await result.current();
 
       expect(closeResult).toBe(true);
-      expect(mockSetShowContractDialog).not.toHaveBeenCalled();
     });
   });
 
   describe('close with unsaved contract changes', () => {
-    it('should show dialog and return false when contract changes are unsaved', async () => {
-      const mockTemplate = {
-        id: 'template-1',
-        label: 'Template 1',
+    it('should auto-keep contract edits, clear pending, and continue close when TaskTree exists', async () => {
+      const task: Task = {
+        id: 'task-1',
+        type: 1,
+        steps: {},
       };
 
-      (DialogueTaskService.getTemplate as any).mockReturnValue(mockTemplate);
+      const taskTree: TaskTree = {
+        nodes: [{ id: 'node-1', templateId: 'template-1' }],
+      };
+
+      (getdataList as any).mockReturnValue([{ id: 'node-1', templateId: 'template-1' }]);
+
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree(taskTree);
+      });
+
+      const contractRef = {
+        current: {
+          hasUnsavedChanges: true,
+          modifiedContract: { type: 'regex', patterns: ['new-pattern'] },
+          originalContract: { type: 'regex', patterns: ['old-pattern'] },
+          nodeTemplateId: 'template-1',
+          nodeLabel: 'Node 1',
+        },
+      };
 
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
-          contractChangeRef: {
-            current: {
-              hasUnsavedChanges: true,
-              modifiedContract: { type: 'regex', patterns: ['new-pattern'] },
-              originalContract: { type: 'regex', patterns: ['old-pattern'] },
-              nodeTemplateId: 'template-1',
-              nodeLabel: 'Node 1',
-            },
-          },
+          task,
+          contractChangeRef: contractRef,
         })
       );
 
       const closeResult = await result.current();
 
-      expect(closeResult).toBe(false);
-      expect(mockSetPendingContractChange).toHaveBeenCalledWith({
-        templateId: 'template-1',
-        templateLabel: 'Template 1',
-        modifiedContract: { type: 'regex', patterns: ['new-pattern'] },
-      });
-      expect(mockSetShowContractDialog).toHaveBeenCalledWith(true);
+      expect(closeResult).toBe(true);
+      expect(mockSetPendingContractChange).toHaveBeenCalledWith(null);
+      expect(contractRef.current.hasUnsavedChanges).toBe(false);
+      expect(saveTaskOnEditorClose).toHaveBeenCalled();
     });
 
-    it('should use nodeLabel as fallback when template is not found', async () => {
-      (DialogueTaskService.getTemplate as any).mockReturnValue(null);
+    it('should auto-keep contract edits and close tab when no TaskTree (same as old dialog Mantieni)', async () => {
+      mockSetDockTree.mockImplementation((updater: (prev: unknown) => unknown) => {
+        return updater({ kind: 'tabset', id: 'ts', tabs: [], active: 0 });
+      });
+      const contractRef = {
+        current: {
+          hasUnsavedChanges: true,
+          modifiedContract: { type: 'regex', patterns: ['new-pattern'] },
+          originalContract: { type: 'regex', patterns: ['old-pattern'] },
+          nodeTemplateId: 'template-1',
+          nodeLabel: 'Node 1',
+        },
+      };
 
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
-          contractChangeRef: {
-            current: {
-              hasUnsavedChanges: true,
-              modifiedContract: { type: 'regex', patterns: ['new-pattern'] },
-              originalContract: { type: 'regex', patterns: ['old-pattern'] },
-              nodeTemplateId: 'template-1',
-              nodeLabel: 'Node 1',
-            },
-          },
+          contractChangeRef: contractRef,
+          tabId: 'tab-1',
+          setDockTree: mockSetDockTree,
         })
       );
 
-      await result.current();
+      const closeResult = await result.current();
 
-      expect(mockSetPendingContractChange).toHaveBeenCalledWith({
-        templateId: 'template-1',
-        templateLabel: 'Node 1',
-        modifiedContract: { type: 'regex', patterns: ['new-pattern'] },
-      });
+      expect(closeResult).toBe(true);
+      expect(mockSetPendingContractChange).toHaveBeenCalledWith(null);
+      expect(closeTab).toHaveBeenCalled();
+      expect(contractRef.current.hasUnsavedChanges).toBe(false);
+      mockSetDockTree.mockReset();
     });
 
     it('should not show dialog when hasUnsavedChanges is true but modifiedContract is null', async () => {
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree({ nodes: [{ id: 'node-1', templateId: 'template-1' }] });
+      });
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
@@ -200,10 +216,13 @@ describe('useResponseEditorClose', () => {
       const closeResult = await result.current();
 
       expect(closeResult).toBe(true);
-      expect(mockSetShowContractDialog).not.toHaveBeenCalled();
     });
 
     it('should not show dialog when hasUnsavedChanges is true but nodeTemplateId is missing', async () => {
+      const { result: storeResult } = renderHook(() => useTaskTreeStore());
+      act(() => {
+        storeResult.current.setTaskTree({ nodes: [{ id: 'node-1', templateId: 'template-1' }] });
+      });
       const { result } = renderHook(() =>
         useResponseEditorClose({
           ...defaultParams,
@@ -222,7 +241,6 @@ describe('useResponseEditorClose', () => {
       const closeResult = await result.current();
 
       expect(closeResult).toBe(true);
-      expect(mockSetShowContractDialog).not.toHaveBeenCalled();
     });
   });
 
@@ -262,7 +280,8 @@ describe('useResponseEditorClose', () => {
           steps: expect.any(Object),
         }),
         task,
-        'proj-1'
+        'proj-1',
+        undefined
       );
     });
 
@@ -298,7 +317,8 @@ describe('useResponseEditorClose', () => {
         'instance-1',
         expect.any(Object),
         task,
-        'proj-1'
+        'proj-1',
+        undefined
       );
     });
 
@@ -386,7 +406,8 @@ describe('useResponseEditorClose', () => {
           steps: task.steps,
         }),
         task,
-        'proj-1'
+        'proj-1',
+        undefined
       );
     });
   });
