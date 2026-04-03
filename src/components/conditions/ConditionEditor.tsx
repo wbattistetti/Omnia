@@ -11,8 +11,7 @@ import { setupMonacoEnvironment } from '@utils/monacoWorkerSetup';
 import { useAIProvider } from '@context/AIProviderContext';
 import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
-import { variableCreationService } from '@services/VariableCreationService';
-import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
+import { getVariableLabel } from '@utils/getVariableLabel';
 // Note: ScriptManagerService handles ExecCode/UICode conversion internally
 // SmartTooltip is used only in the tester's toolbar (right panel)
 
@@ -106,16 +105,10 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     // Provider not available - skip
   }
 
-  const { getTranslation } = useProjectTranslations();
+  const { translations } = useProjectTranslations();
   const resolveUnknownGuidToLabel = React.useCallback(
-    (guid: string) =>
-      getTranslation(guid) ||
-      variableCreationService.getVarNameById(
-        resolveVariableStoreProjectId(pdUpdate?.getCurrentProjectId?.() ?? undefined),
-        guid
-      ) ||
-      null,
-    [getTranslation, pdUpdate]
+    (guid: string) => getVariableLabel(guid, translations) || null,
+    [translations]
   );
 
   // ✅ REFACTOR: Use ScriptManagerService

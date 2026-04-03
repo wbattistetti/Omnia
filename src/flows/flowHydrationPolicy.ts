@@ -1,6 +1,12 @@
 /**
  * Step 3: When the workspace may fetch server flow data vs keep local-only state.
  * Used by FlowCanvasHost / FlowWorkspace to avoid load↔save races.
+ *
+ * If `loadFlow` returns an empty graph while the slice already has nodes and `hasLocalChanges`,
+ * `FlowStore` APPLY_FLOW_LOAD_RESULT keeps local nodes/edges (see `flowLoadMergePolicy`).
+ *
+ * When the slice is not hydrated but already has local nodes and `hasLocalChanges`, we skip
+ * fetching so an empty API response cannot race ahead of persist (hosts then mark `hydrated`).
  */
 
 import type { Flow } from './FlowTypes';
@@ -13,10 +19,10 @@ export function isRealProjectId(projectId: string | undefined): boolean {
  * Returns true only when we should call the API loadFlow and apply via APPLY_FLOW_LOAD_RESULT.
  * Never true without a real project id.
  *
- * Until `flow.hydrated === true`, the server is the source of truth for an opened project.
- * We do NOT skip load because of local nodes or hasLocalChanges: those flags can be wrong
- * (race, stale upsert) and would block existing projects from ever loading from the API.
- * After APPLY_FLOW_LOAD_RESULT sets hydrated, we stop fetching until remount or explicit reload.
+ * Until `flow.hydrated === true`, the server is normally the source of truth.
+ * Exception: if the slice already has nodes and `hasLocalChanges`, we skip the initial fetch so an
+ * empty API response cannot race in-memory edits; hosts mark the slice `hydrated` (see FlowCanvasHost).
+ * After hydration, we stop fetching until remount or explicit reload.
  */
 export function shouldLoadFlowFromServer(projectId: string | undefined, flow: Flow | undefined): boolean {
   return explainShouldLoadFlowFromServer(projectId, flow).shouldLoad;
@@ -45,6 +51,14 @@ export function explainShouldLoadFlowFromServer(
   }
   if (flow.hydrated === true) {
     return { shouldLoad: false, reason: 'already_hydrated', nodeCount, edgeCount };
+  }
+  if (flow.hasLocalChanges === true && nodeCount > 0) {
+    return {
+      shouldLoad: false,
+      reason: 'local_nonempty_skip_server_fetch',
+      nodeCount,
+      edgeCount,
+    };
   }
   return {
     shouldLoad: true,

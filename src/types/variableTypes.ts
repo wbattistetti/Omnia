@@ -51,6 +51,12 @@ export interface VariableInstance {
   scope?: VariableScope;
   /** When scope is 'flow', the canvas id (e.g. 'main', 'subflow_...'). */
   scopeFlowId?: string | null;
+  /**
+   * Phase 5: subflow interface binding persisted as minimal `{ from, to }` on the variable document.
+   * Labels resolve via translations on `id`.
+   */
+  bindingFrom?: string;
+  bindingTo?: string;
 }
 
 /**

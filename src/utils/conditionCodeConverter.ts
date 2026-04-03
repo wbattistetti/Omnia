@@ -5,6 +5,8 @@ import { ASTNode } from '../components/conditions/dsl/parser/AST';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 import { getSafeProjectId } from './safeProjectId';
+import { getVariableLabel } from './getVariableLabel';
+import { getProjectTranslationsTable } from './projectTranslationsRegistry';
 
 /** Options for label ↔ stored-id bracket conversion (message DSL, conditions). */
 export type BracketVariableMappingOptions = {
@@ -14,7 +16,10 @@ export type BracketVariableMappingOptions = {
    */
   preferKeysForEncode?: Set<string>;
   /**
-   * When [guid] is missing from the map (stale id), resolve a display label (e.g. from VariableCreationService).
+   * When set, called for each [guid] token **before** the variable map lookup.
+   * Use for parent-flow display where the map may map a child slot GUID to a short internal label
+   * while bindings + translations define the qualified parent label (Subflow outputs).
+   * If this returns null/empty, `variableMappings` is used as before.
    */
   resolveUnknownGuidToLabel?: (guid: string) => string | null;
 };
@@ -133,9 +138,15 @@ export function convertDSLGUIDsToLabels(
 
     // Check if content is a GUID
     if (GUID_PATTERN.test(trimmed)) {
-      let label = variableMappings.get(trimmed);
-      if (!label && options?.resolveUnknownGuidToLabel) {
-        label = options.resolveUnknownGuidToLabel(trimmed) ?? undefined;
+      let label: string | undefined;
+      if (options?.resolveUnknownGuidToLabel) {
+        const r = options.resolveUnknownGuidToLabel(trimmed);
+        if (r != null && String(r).trim() !== '') {
+          label = String(r).trim();
+        }
+      }
+      if (!label) {
+        label = variableMappings.get(trimmed);
       }
 
       if (label) {
@@ -240,11 +251,12 @@ export function transformASTGuidsToLabels(
 }
 
 /**
- * Creates a complete Map<variableGuid, varName> from VariableInstance rows visible on the given flow canvas.
- * Primary key is id (GUID = TaskTreeNode.id for task-bound rows).
+ * Map&lt;variableGuid, display label&gt; for the active flow scope.
+ * Labels come from project translations (registry); primary key is variable `id`.
  */
 export function createVariableMappings(flowCanvasId?: string): Map<string, string> {
   const mappings = new Map<string, string>();
+  const tr = getProjectTranslationsTable();
 
   try {
     const projectId = getSafeProjectId();
@@ -253,9 +265,11 @@ export function createVariableMappings(flowCanvasId?: string): Map<string, strin
     for (const v of instances) {
       const vid = typeof v.id === 'string' ? v.id.trim() : '';
       if (!vid) continue;
-      const varName = typeof v.varName === 'string' ? v.varName.trim() : '';
-      if (!varName) continue;
-      mappings.set(vid, varName);
+      const devFb =
+        import.meta.env.DEV && typeof v.varName === 'string' ? v.varName.trim() : undefined;
+      const label = getVariableLabel(vid, tr, devFb);
+      if (!label) continue;
+      mappings.set(vid, label);
     }
   } catch (error) {
     console.warn('[ConditionCodeConverter] Could not load variable mappings', error);

@@ -14,7 +14,7 @@ describe('resolveVariableMenuLabel', () => {
     ).toBe('Etichetta UI');
   });
 
-  it('falls back to varName when translation missing', () => {
+  it('uses varName fallback when translation missing', () => {
     const set = new Set([guid]);
     expect(
       resolveVariableMenuLabel(guid, 'nome.dotted', {
@@ -24,13 +24,13 @@ describe('resolveVariableMenuLabel', () => {
     ).toBe('nome.dotted');
   });
 
-  it('ignores translation table for non-utterance GUIDs', () => {
+  it('uses translation for any GUID when present in the table', () => {
     const set = new Set<string>();
     expect(
       resolveVariableMenuLabel(guid, 'solo.var', {
         utteranceGuidSet: set,
-        translationsByGuid: { [guid]: 'Ignored' },
+        translationsByGuid: { [guid]: 'From translations' },
       })
-    ).toBe('solo.var');
+    ).toBe('From translations');
   });
 });

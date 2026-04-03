@@ -140,6 +140,10 @@ const DockManagerWithFlows: React.FC<{
   // This ensures flowsRef is always up-to-date when handleSaveProject is called
   flowsRef.current = flowWorkspace.flows;
 
+  // ✅ Same-frame as React state: subflow sync + TaskRepository must not read stale graphs
+  // (portal upsert → syncSubflowInterfaceAfterAuthoringCanvasChange in same tick used empty child).
+  setSubflowSyncFlows(flowWorkspace.flows);
+
   // ✅ Also update in useEffect for safety (in case flows change during render)
   React.useEffect(() => {
     flowsRef.current = flowWorkspace.flows;
@@ -156,10 +160,6 @@ const DockManagerWithFlows: React.FC<{
       markFlowsPersistedRef.current = null;
     };
   }, [flowActions.markFlowsPersisted]);
-
-  React.useEffect(() => {
-    setSubflowSyncFlows(flowWorkspace.flows);
-  }, [flowWorkspace.flows]);
 
   /**
    * Legacy projects: child task variables may carry parent FQ names; parent proxies may be missing

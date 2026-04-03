@@ -113,6 +113,24 @@ describe('buildVariableMappingsFromMenu', () => {
     const decoded = convertDSLGUIDsToLabels(`[${childVarId}]`, map);
     expect(decoded).toBe('[dati personali.nome]');
   });
+
+  it('decode prefers resolveUnknownGuidToLabel over map when both apply (parent FQ vs subflow short label)', () => {
+    const childVarId = '2c3b419f-0c6b-4f5f-8d71-d784a7e9c617';
+    const map = new Map<string, string>([[childVarId, 'colore']]);
+    const decoded = convertDSLGUIDsToLabels(`[${childVarId}]`, map, {
+      resolveUnknownGuidToLabel: () => 'dati personali.colore',
+    });
+    expect(decoded).toBe('[dati personali.colore]');
+  });
+
+  it('decode falls back to map when resolver returns null', () => {
+    const id = '2c3b419f-0c6b-4f5f-8d71-d784a7e9c617';
+    const map = new Map<string, string>([[id, 'from map']]);
+    const decoded = convertDSLGUIDsToLabels(`[${id}]`, map, {
+      resolveUnknownGuidToLabel: () => null,
+    });
+    expect(decoded).toBe('[from map]');
+  });
 });
 
 describe('getVariableMenuRebuildFingerprint', () => {

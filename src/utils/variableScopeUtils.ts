@@ -32,7 +32,7 @@ export function normalizeVariableInstance(
     }
   }
 
-  return {
+  const base: VariableInstance = {
     id,
     varName: typeof raw.varName === 'string' ? raw.varName.trim() : String(raw.varName ?? ''),
     taskInstanceId: raw.taskInstanceId ?? '',
@@ -40,6 +40,11 @@ export function normalizeVariableInstance(
     scope,
     scopeFlowId: scope === 'flow' ? scopeFlowId ?? '' : undefined,
   };
+  const bf = (raw as VariableInstance).bindingFrom;
+  const bt = (raw as VariableInstance).bindingTo;
+  if (typeof bf === 'string' && bf.trim()) base.bindingFrom = bf.trim();
+  if (typeof bt === 'string' && bt.trim()) base.bindingTo = bt.trim();
+  return base;
 }
 
 /**

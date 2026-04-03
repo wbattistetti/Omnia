@@ -9,6 +9,7 @@ import { DSLParser } from '../parser/DSLParser';
 import { InsertMenu } from '../menu/InsertMenu';
 import { DSLContextMenu } from '../menu/DSLContextMenu';
 import { Plus } from 'lucide-react';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 
 interface DSLEditorProps {
   value: string;
@@ -27,6 +28,14 @@ export function DSLEditor({
   variablesTree,
   fontSize = 13,
 }: DSLEditorProps) {
+  const { translations } = useProjectTranslations();
+  const variablesRef = useRef(variables);
+  const variablesTreeRef = useRef(variablesTree);
+  const translationsRef = useRef(translations);
+  variablesRef.current = variables;
+  variablesTreeRef.current = variablesTree;
+  translationsRef.current = translations;
+
   const editorRef = useRef<HTMLDivElement>(null);
   const monacoEditorRef = useRef<monacoNS.editor.IStandaloneCodeEditor | null>(null);
   const monacoInstanceRef = useRef<typeof monacoNS | null>(null);
@@ -63,8 +72,12 @@ export function DSLEditor({
         // Register DSL language
         registerDslLanguage(monaco);
 
-        // Register intellisense
-        registerDSLIntellisense(monaco, variables, variablesTree);
+        // Register intellisense (reads latest variables/translations via refs on each completion)
+        registerDSLIntellisense(monaco, {
+          getVariables: () => variablesRef.current as Record<string, unknown>,
+          getVariablesTree: () => variablesTreeRef.current,
+          getTranslations: () => translationsRef.current,
+        });
 
         // Create editor
         const editor = monaco.editor.create(editorRef.current, {
@@ -521,6 +534,7 @@ export function DSLEditor({
             <InsertMenu
               variables={variables}
               variablesTree={variablesTree}
+              translations={translations}
               onInsert={handleInsert}
               onClose={() => setShowInsertMenu(false)}
             />
@@ -537,6 +551,7 @@ export function DSLEditor({
           position={contextMenuPosition}
           variables={variables}
           variablesTree={variablesTree}
+          translations={translations}
           onInsert={handleInsert}
           onClose={() => {
             setContextMenuOpen(false);

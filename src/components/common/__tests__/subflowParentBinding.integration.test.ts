@@ -1,17 +1,26 @@
 /**
  * Integration tests: Subflow parent proxy binding, naming via variableProxyNaming, disambiguation.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { taskRepository } from '../../../services/TaskRepository';
 import { variableCreationService } from '../../../services/VariableCreationService';
 import { TaskType } from '../../../types/taskTypes';
 import { ensureParentVariableAndSubflowOutputBinding } from '../subflowParentBinding';
+import { getVariableLabel } from '../../../utils/getVariableLabel';
+import {
+  getProjectTranslationsTable,
+  setProjectTranslationsRegistry,
+} from '../../../utils/projectTranslationsRegistry';
 
 function pid(): string {
   return `vitest_subflow_bind_${Math.random().toString(36).slice(2, 14)}`;
 }
 
 describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
+  beforeEach(() => {
+    setProjectTranslationsRegistry({});
+  });
+
   it('creates flow-scoped parent var with semantic proxy name and output binding', () => {
     const projectId = pid();
     const parentFlowId = 'flow_parent';
@@ -37,7 +46,8 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
     });
 
     expect(out.tokenLabel).toBe('email.conferma');
-    expect(variableCreationService.getVarNameById(projectId, out.parentVarId)).toBe('email.conferma');
+    setProjectTranslationsRegistry({ [out.parentVarId]: out.tokenLabel });
+    expect(getVariableLabel(out.parentVarId, getProjectTranslationsTable())).toBe('email.conferma');
 
     const t = taskRepository.getTask(subflowTaskId) as any;
     expect(t?.outputBindings).toEqual([{ fromVariable: childVarId, toVariable: out.parentVarId }]);
@@ -73,7 +83,8 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
     });
 
     expect(out.tokenLabel).toBe('email.conferma_2');
-    expect(variableCreationService.getVarNameById(projectId, out.parentVarId)).toBe('email.conferma_2');
+    setProjectTranslationsRegistry({ [out.parentVarId]: out.tokenLabel });
+    expect(getVariableLabel(out.parentVarId, getProjectTranslationsTable())).toBe('email.conferma_2');
   });
 
   it('returns existing parent token when output binding already maps child var', () => {
@@ -87,6 +98,7 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
       scope: 'flow',
       scopeFlowId: parentFlowId,
     });
+    setProjectTranslationsRegistry({ [existing.id]: 'already.bound' });
 
     taskRepository.createTask(TaskType.Subflow, null, {
       flowId: childFlowId,

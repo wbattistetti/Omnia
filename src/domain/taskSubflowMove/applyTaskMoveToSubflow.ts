@@ -7,14 +7,20 @@
  * `syncProxyBindingsForSubflowTask` (outputBindings: child varId → parent proxy varId).
  */
 
-import { createMappingEntry } from '@components/FlowMappingPanel/mappingTypes';
+import { createMappingEntry, type MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 import { localLabelForSubflowTaskVariable } from '@domain/variableProxyNaming';
 import type { WorkspaceState } from '@flows/FlowTypes';
 import type { VariableInstance } from '@types/variableTypes';
 import { invalidateChildFlowInterfaceCache } from '@services/childFlowInterfaceService';
 import { taskRepository } from '@services/TaskRepository';
-import { syncProxyBindingsForSubflowTask } from '@services/subflowProjectSync';
+import {
+  ensureSubflowOutputBindingsDisplayLabels,
+  syncProxyBindingsForSubflowTask,
+} from '@services/subflowProjectSync';
 import { variableCreationService } from '@services/VariableCreationService';
+import { getVariableLabel } from '@utils/getVariableLabel';
+import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
+import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
 import type { NodeRowData } from '@types/project';
 
 import {
@@ -71,6 +77,19 @@ export type ApplyTaskMoveToSubflowParams = {
    * + repository were already updated and only interface merge / bindings sync is needed).
    */
   skipMaterialization?: boolean;
+  /**
+   * When true, structural move/append is skipped (row already on child flow). Use for a second idempotent
+   * pass after hydrate when the graph was updated in a previous applyTaskMoveToSubflow call.
+   */
+  skipStructuralPhase?: boolean;
+  /**
+   * When false, the task is moved to another flow without Subflow wiring (no child interface merge, no outputBindings sync).
+   */
+  isLinkedSubflowMove?: boolean;
+  /**
+   * When true, logs apply:secondPass:* and indicates a wiring-only pass after variableStore is populated.
+   */
+  secondPass?: boolean;
 };
 
 export type MaterializeMovedTaskSummary = {
@@ -98,6 +117,8 @@ export type ApplyTaskMoveToSubflowResult = {
   removedUnreferencedVariableRows: number;
   /** Task row placement + TaskRepository snapshot after move (see materializeTaskInSubflow). */
   taskMaterialization: MaterializeMovedTaskSummary;
+  /** Parent/child GUID → FQ label entries written in the second pass (subflow proxy display). */
+  secondPassDisplayLabelUpdates: number;
   flowsNext: WorkspaceState['flows'];
 };
 
@@ -115,7 +136,6 @@ export function mergeChildFlowInterfaceOutputsForVariables(
   const flow = flows[childFlowId];
   if (!flow) return flows;
   const only = options?.onlyVarIds;
-  const optPid = String(options?.projectId || '').trim();
   const vars =
     only !== undefined
       ? only.size > 0
@@ -135,8 +155,8 @@ export function mergeChildFlowInterfaceOutputsForVariables(
     const vid = String(v.id || '').trim();
     if (!vid || seen.has(vid)) continue;
     let rawName = String(v.varName || '').trim();
-    if (!rawName && optPid) {
-      rawName = String(variableCreationService.getVarNameById(optPid, vid) || '').trim();
+    if (!rawName) {
+      rawName = getVariableLabel(vid, getProjectTranslationsTable());
     }
     if (!rawName) rawName = vid;
     const local = localLabelForSubflowTaskVariable(rawName);
@@ -150,6 +170,13 @@ export function mergeChildFlowInterfaceOutputsForVariables(
       })
     );
     seen.add(vid);
+    logTaskSubflowMove('merge:interfaceOutputRow', {
+      childFlowId,
+      variableRefId: vid,
+      resolvedLabel: label,
+      rawNameSource: rawName,
+      onlyVarIdsMode: only !== undefined,
+    });
   }
 
   const nextFlow = {
@@ -167,8 +194,9 @@ export function mergeChildFlowInterfaceOutputsForVariables(
 }
 
 /**
- * Applies renames for referenced variables, merges child interface outputs, syncs Subflow bindings,
- * and optionally performs the structural row move.
+ * Pipeline (GUID-centric): optional structural move/append onto child flow →
+ * VariableCreationService.hydrateVariablesFromFlow (utterance + task rows on canvas) →
+ * parent reference scan (CASO A/B) → child interface merge + bindings (linked subflow only) → materialize.
  */
 export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): ApplyTaskMoveToSubflowResult {
   const {
@@ -186,17 +214,30 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     projectData,
     deleteUnreferencedTaskVariableRows,
     skipMaterialization,
+    skipStructuralPhase,
+    isLinkedSubflowMove,
+    secondPass,
   } = params;
+
+  const linkedSubflow = isLinkedSubflowMove !== false;
+  const shouldDeleteUnreferenced = deleteUnreferencedTaskVariableRows !== false;
 
   const pid = String(projectId || '').trim();
   const parentFlow = flows[parentFlowId];
   if (!pid || !parentFlow) {
+    logTaskSubflowMove('apply:abort', {
+      reason: 'missing_project_or_parent_flow',
+      projectId: pid || '(empty)',
+      parentFlowId,
+      hasParentFlow: !!parentFlow,
+    });
     return {
       referencedVarIdsForMovedTask: [],
       unreferencedVarIdsForMovedTask: [],
       guidMappingParentSubflow: [],
       renamed: [],
       removedUnreferencedVariableRows: 0,
+      secondPassDisplayLabelUpdates: 0,
       taskMaterialization: {
         ok: false,
         parentFlowContainedRowBeforeStrip: false,
@@ -219,35 +260,117 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     extraCorpusChunks.push(JSON.stringify(movedTask));
   }
 
+  logTaskSubflowMove('apply:enter', {
+    projectId: pid,
+    parentFlowId,
+    childFlowId,
+    taskInstanceId,
+    subflowDisplayTitle,
+    parentSubflowTaskRowId,
+    linkedSubflow,
+    shouldDeleteUnreferenced,
+    skipMaterialization: !!skipMaterialization,
+    skipStructuralPhase: !!skipStructuralPhase,
+    secondPass: !!secondPass,
+    hasStructuralMove: !!structuralMove,
+    hasStructuralAppend: !!structuralAppend,
+    extraCorpusChunksCount: extraCorpusChunks.length,
+  });
+
+  let flowsWorking: WorkspaceState['flows'] = flows;
+
+  if (!skipStructuralPhase && structuralMove) {
+    flowsWorking = moveTaskRowBetweenFlows(flowsWorking, {
+      ...structuralMove,
+      rowId: taskInstanceId,
+    });
+    logTaskSubflowMove('apply:structuralMoveEarly', { ...structuralMove, rowId: taskInstanceId });
+  } else if (!skipStructuralPhase && structuralAppend) {
+    const { targetFlowId, targetNodeId, row } = structuralAppend;
+    flowsWorking = removeRowByIdFromFlow(flowsWorking, parentFlowId, taskInstanceId);
+    flowsWorking = appendRowToFlowNode(flowsWorking, {
+      targetFlowId,
+      targetNodeId,
+      row: row as Record<string, unknown>,
+    });
+    logTaskSubflowMove('apply:structuralAppendEarly', {
+      parentFlowId,
+      targetFlowId,
+      targetNodeId,
+      rowId: taskInstanceId,
+    });
+  }
+
+  if (!skipStructuralPhase) {
+    variableCreationService.hydrateVariablesFromFlow(pid, flowsWorking);
+    logTaskSubflowMove('apply:hydrateVariablesFromFlowAfterStructural', {
+      parentFlowId,
+      childFlowId,
+      taskInstanceId,
+    });
+  }
+
   const allVars = variableCreationService.getAllVariables(pid) ?? [];
   const translationsInternal = translations
     ? compileTranslationsToInternalMap(translations, allVars)
     : undefined;
 
+  const taskVars = variableCreationService.getVariablesByTaskInstanceId(pid, taskInstanceId);
+  logTaskSubflowMove('apply:taskVariableRowsInStore', {
+    taskInstanceId,
+    count: taskVars.length,
+    projectVariableCount: allVars.length,
+    rows: taskVars.map((v) => ({
+      id: v.id,
+      varName: v.varName,
+      scopeFlowId: v.scopeFlowId,
+      taskInstanceId: v.taskInstanceId,
+    })),
+  });
+
+  if (secondPass && taskVars.length > 0) {
+    logTaskSubflowMove('apply:secondPass:enter', {
+      taskInstanceId,
+      taskVarCount: taskVars.length,
+      childFlowId,
+    });
+  }
+
   const referencedInParent = collectReferencedVarIdsForParentFlowWorkspace({
     projectId: pid,
     parentFlowId,
-    flows,
+    flows: flowsWorking,
     conditions,
     translationsInternal,
     projectData,
-    useAllProjectConditionsForReferenceScan: projectData !== undefined && projectData !== null,
+    useAllProjectConditionsForReferenceScan: false,
     extraCorpusChunks,
   });
 
-  const taskVars = variableCreationService.getVariablesByTaskInstanceId(pid, taskInstanceId);
   const taskVarIdSet = new Set(taskVars.map((v) => String(v.id || '').trim()));
   const referencedForMovedTask = [...referencedInParent].filter((id) => taskVarIdSet.has(id));
   const refSet = new Set(referencedForMovedTask);
   const unreferencedForMovedTask = [...taskVarIdSet].filter((id) => !refSet.has(id));
 
+  logTaskSubflowMove('apply:referenceScan', {
+    taskVarCount: taskVarIdSet.size,
+    referencedCount: referencedForMovedTask.length,
+    unreferencedCount: unreferencedForMovedTask.length,
+    referencedVarIds: referencedForMovedTask,
+    unreferencedVarIds: unreferencedForMovedTask,
+  });
+
   let removedUnreferencedVariableRows = 0;
-  if (deleteUnreferencedTaskVariableRows && unreferencedForMovedTask.length > 0) {
+  if (shouldDeleteUnreferenced && unreferencedForMovedTask.length > 0) {
     removedUnreferencedVariableRows = variableCreationService.removeTaskVariableRowsForIds(
       pid,
       taskInstanceId,
       unreferencedForMovedTask
     );
+    logTaskSubflowMove('apply:removedUnreferencedRows', {
+      count: removedUnreferencedVariableRows,
+      varIds: unreferencedForMovedTask,
+    });
   }
 
   const renamed = restoreChildTaskBoundVariablesToLocalNames(pid, taskInstanceId, refSet).map((r) => ({
@@ -258,48 +381,78 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
 
   const taskVarsAfterLocal = variableCreationService.getVariablesByTaskInstanceId(pid, taskInstanceId);
 
-  let flowsNext = mergeChildFlowInterfaceOutputsForVariables(flows, childFlowId, taskVarsAfterLocal, {
-    onlyVarIds: refSet,
-    projectId: pid,
-  });
+  if (renamed.length > 0) {
+    logTaskSubflowMove('apply:childLocalRenames', { renamed });
+  }
 
-  const outSlice = flowsNext[childFlowId]?.meta as
-    | { flowInterface?: { output?: unknown[] } }
-    | undefined;
-  const outputs = Array.isArray(outSlice?.flowInterface?.output)
-    ? (outSlice!.flowInterface!.output as any[])
-    : [];
+  let flowsNext: WorkspaceState['flows'] = { ...flowsWorking };
+  let secondPassDisplayLabelUpdates = 0;
 
-  syncProxyBindingsForSubflowTask(
-    pid,
-    parentFlowId,
-    parentSubflowTaskRowId,
-    childFlowId,
-    outputs,
-    flowsNext
-  );
-
-  invalidateChildFlowInterfaceCache(pid, childFlowId);
-
-  if (structuralMove) {
-    flowsNext = moveTaskRowBetweenFlows(flowsNext, {
-      ...structuralMove,
-      rowId: taskInstanceId,
+  if (linkedSubflow) {
+    flowsNext = mergeChildFlowInterfaceOutputsForVariables(flowsNext, childFlowId, taskVarsAfterLocal, {
+      onlyVarIds: refSet,
+      projectId: pid,
     });
-  } else if (structuralAppend) {
-    const { targetFlowId, targetNodeId, row } = structuralAppend;
-    flowsNext = removeRowByIdFromFlow(flowsNext, parentFlowId, taskInstanceId);
-    flowsNext = appendRowToFlowNode(flowsNext, {
-      targetFlowId,
-      targetNodeId,
-      row: row as Record<string, unknown>,
+
+    const outSlice = flowsNext[childFlowId]?.meta as
+      | { flowInterface?: { output?: unknown[] } }
+      | undefined;
+    const outputs = Array.isArray(outSlice?.flowInterface?.output)
+      ? (outSlice!.flowInterface!.output as any[])
+      : [];
+
+    if (secondPass) {
+      logTaskSubflowMove('apply:secondPass:mergeChildInterface', {
+        exposedOutputCount: outputs.length,
+        variableRefIdsInOutput: outputs
+          .map((o: { variableRefId?: string }) => String(o?.variableRefId || '').trim())
+          .filter(Boolean),
+        onlyReferencedVarIds: [...refSet],
+      });
+    } else {
+      logTaskSubflowMove('apply:mergeChildInterface', {
+        exposedOutputCount: outputs.length,
+        variableRefIdsInOutput: outputs
+          .map((o: { variableRefId?: string }) => String(o?.variableRefId || '').trim())
+          .filter(Boolean),
+        onlyReferencedVarIds: [...refSet],
+      });
+    }
+
+    syncProxyBindingsForSubflowTask(
+      pid,
+      parentFlowId,
+      parentSubflowTaskRowId,
+      childFlowId,
+      outputs,
+      flowsNext,
+      { qualifiedSubflowTitle: subflowDisplayTitle }
+    );
+
+    if (secondPass && referencedForMovedTask.length > 0) {
+      secondPassDisplayLabelUpdates = ensureSubflowOutputBindingsDisplayLabels({
+        parentSubflowTaskRowId,
+        referencedChildVarIds: new Set(referencedForMovedTask),
+        qualifiedSubflowTitle: subflowDisplayTitle,
+        interfaceOutputs: outputs as MappingEntry[],
+      });
+    }
+
+    logTaskSubflowMove('apply:syncProxyBindingsDone', {
+      parentSubflowTaskRowId,
+      qualifiedSubflowTitle: subflowDisplayTitle,
     });
+
+    invalidateChildFlowInterfaceCache(pid, childFlowId);
+  } else {
+    logTaskSubflowMove('apply:skipSubflowWiring', { reason: 'isLinkedSubflowMove false' });
   }
 
   const guidMappingParentSubflow = referencedForMovedTask.map((id) => ({ id }));
 
   let taskMaterialization: MaterializeMovedTaskSummary;
   if (skipMaterialization) {
+    logTaskSubflowMove('apply:materializeSkipped', { reason: 'skipMaterialization' });
     taskMaterialization = {
       ok: true,
       parentFlowContainedRowBeforeStrip: false,
@@ -326,7 +479,26 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       repositoryPatchApplied: mat.repositoryPatchApplied,
       ...(mat.errorMessage ? { errorMessage: mat.errorMessage } : {}),
     };
+    logTaskSubflowMove('apply:materialize', {
+      ok: mat.ok,
+      parentFlowContainedRowBeforeStrip: mat.parentFlowContainedRowBeforeStrip,
+      parentFlowContainsRowAfter: mat.parentFlowContainsRowAfter,
+      childFlowContainsRow: mat.childFlowContainsRow,
+      taskFoundInRepository: mat.taskFoundInRepository,
+      repositoryPatchApplied: mat.repositoryPatchApplied,
+      errorMessage: mat.errorMessage,
+    });
   }
+
+  logTaskSubflowMove('apply:done', {
+    referencedVarIdsForMovedTask: referencedForMovedTask,
+    unreferencedVarIdsForMovedTask: unreferencedForMovedTask,
+    guidMappingCount: guidMappingParentSubflow.length,
+    renamedCount: renamed.length,
+    secondPassDisplayLabelUpdates,
+    removedUnreferencedVariableRows,
+    taskMaterializationOk: taskMaterialization.ok,
+  });
 
   return {
     referencedVarIdsForMovedTask: referencedForMovedTask,
@@ -335,6 +507,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     renamed,
     removedUnreferencedVariableRows,
     taskMaterialization,
+    secondPassDisplayLabelUpdates,
     flowsNext,
   };
 }

@@ -2,9 +2,10 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 type VarsMap = Record<string, any>;
-type VarsTreeSub = { label: string; kind?: string };
-type VarsTreeMain = { label: string; kind?: string; subs: VarsTreeSub[] };
-export type VarsTreeAct = { label: string; color?: string; Icon?: any; mains: VarsTreeMain[] };
+/** Optional `id` = variable / template node GUID for translation-backed labels in DSL UI. */
+type VarsTreeSub = { label: string; kind?: string; id?: string };
+type VarsTreeMain = { label: string; kind?: string; subs: VarsTreeSub[]; id?: string };
+export type VarsTreeAct = { label: string; color?: string; Icon?: any; mains: VarsTreeMain[]; id?: string };
 
 /**
  * Lists all variable keys from a variables map, sorted alphabetically.

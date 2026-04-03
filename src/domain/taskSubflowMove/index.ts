@@ -10,3 +10,9 @@ export * from './findSubflowPortal';
 export * from './moveTaskRowInFlows';
 export * from './materializeTaskInSubflow';
 export * from './applyTaskMoveToSubflow';
+export {
+  registerSubflowWiringSecondPass,
+  tryFlushSubflowSecondPassForTask,
+  unregisterSubflowWiringSecondPass,
+} from './subflowWiringAfterVariableStore';
+export type { SubflowWiringSecondPassRequest } from './subflowWiringAfterVariableStore';

@@ -5,11 +5,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight } from 'lucide-react';
 import { getAllFunctionNames, getBuiltinFunction } from '../compiler/builtinFunctions';
+import { dslFlatVariableDisplayKey, dslTreeNodeDisplayLabel } from '@utils/dslVariableUiLabel';
 
 interface DSLContextMenuProps {
   position: { x: number; y: number };
   variables?: Record<string, any>;
   variablesTree?: any[];
+  translations?: Record<string, string>;
   onInsert: (text: string) => void;
   onClose: () => void;
   editor?: any; // Monaco editor instance
@@ -20,6 +22,7 @@ export function DSLContextMenu({
   position,
   variables,
   variablesTree,
+  translations = {},
   onInsert,
   onClose,
   editor,
@@ -79,22 +82,19 @@ export function DSLContextMenu({
       return variablesTree.map((act: any, actIdx: number) => {
         const actMains = act.mains && Array.isArray(act.mains) ? act.mains : [];
         if (actMains.length === 0) return null;
+        const actDisp = dslTreeNodeDisplayLabel(act, translations);
 
         return (
           <div key={actIdx} className="mb-3">
-            {/* Act label (task name) - optional header */}
-            {act.label && (
-              <div className="px-2 py-1 text-xs text-gray-400 font-semibold mb-1">
-                {act.label}
-              </div>
-            )}
+            {actDisp ? (
+              <div className="px-2 py-1 text-xs text-gray-400 font-semibold mb-1">{actDisp}</div>
+            ) : null}
             {actMains.map((main: any, mainIdx: number) => {
               const mainPath = `${actIdx}-${mainIdx}`;
               const isExpanded = expandedNodes.has(mainPath);
               const hasSubs = main.subs && Array.isArray(main.subs) && main.subs.length > 0;
-
-              // Use full path: act.label.main.label or just main.label
-              const fullMainLabel = act.label ? `${act.label}.${main.label}` : main.label;
+              const mainDisp = dslTreeNodeDisplayLabel(main, translations);
+              const fullMainLabel = actDisp ? `${actDisp}.${mainDisp}` : mainDisp;
 
               return (
                 <div key={mainIdx} className="mb-1">
@@ -116,7 +116,8 @@ export function DSLContextMenu({
                   {hasSubs && isExpanded && (
                     <div className="ml-4">
                       {main.subs.map((sub: any, subIdx: number) => {
-                        const fullSubLabel = `${fullMainLabel}.${sub.label}`;
+                        const subDisp = dslTreeNodeDisplayLabel(sub, translations);
+                        const fullSubLabel = `${fullMainLabel}.${subDisp}`;
                         return (
                           <div
                             key={subIdx}
@@ -144,15 +145,18 @@ export function DSLContextMenu({
       const varKeys = Object.keys(variables).sort();
       return (
         <div className="py-1">
-          {varKeys.map((varName) => (
-            <div
-              key={varName}
-              className="px-2 py-1 hover:bg-gray-700 cursor-pointer rounded text-sm text-blue-300"
-              onClick={() => handleInsert(`[${varName}]`)}
-            >
-              [{varName}]
-            </div>
-          ))}
+          {varKeys.map((key) => {
+            const display = dslFlatVariableDisplayKey(key, translations);
+            return (
+              <div
+                key={key}
+                className="px-2 py-1 hover:bg-gray-700 cursor-pointer rounded text-sm text-blue-300"
+                onClick={() => handleInsert(`[${display}]`)}
+              >
+                [{display}]
+              </div>
+            );
+          })}
         </div>
       );
     }

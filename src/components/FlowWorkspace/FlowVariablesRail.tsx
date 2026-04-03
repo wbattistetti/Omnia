@@ -11,7 +11,9 @@ import type { FlowVariableDefinition } from '../../flows/flowVariableTypes';
 import { buildFlowVariableTree, flowVariablesWithoutPath, type FlowVariableTreeNode } from '../../flows/flowVariableTree';
 import { variableCreationService } from '../../services/VariableCreationService';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
+import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
 import { resolveVariableStoreProjectId } from '../../utils/safeProjectId';
+import { getVariableLabel } from '../../utils/getVariableLabel';
 
 export interface FlowVariablesRailProps {
   flowId: string;
@@ -19,10 +21,11 @@ export interface FlowVariablesRailProps {
   projectId?: string;
 }
 
-function instanceToDef(v: VariableInstance): FlowVariableDefinition {
+function instanceToDef(v: VariableInstance, translations: Record<string, string>): FlowVariableDefinition {
+  const devFb = import.meta.env.DEV ? String(v.varName || '').trim() : undefined;
   return {
     id: v.id,
-    label: v.varName,
+    label: getVariableLabel(v.id, translations, devFb),
     type: 'string',
     visibility: 'internal',
   };
@@ -37,26 +40,40 @@ function scopeLabel(v: VariableInstance): string {
 interface InstanceCardProps {
   instance: VariableInstance;
   projectId: string;
+  translations: Record<string, string>;
+  addTranslation: (guid: string, text: string) => void;
   onRenamed: () => void;
   onRemoved: () => void;
 }
 
-function InstanceCard({ instance, projectId, onRenamed, onRemoved }: InstanceCardProps) {
+function InstanceCard({
+  instance,
+  projectId,
+  translations,
+  addTranslation,
+  onRenamed,
+  onRemoved,
+}: InstanceCardProps) {
   const taskBound = String(instance.taskInstanceId ?? '').trim().length > 0;
-  const [draft, setDraft] = React.useState(instance.varName);
+  const devFb = import.meta.env.DEV ? String(instance.varName || '').trim() : undefined;
+  const resolvedLabel = getVariableLabel(instance.id, translations, devFb);
+  const [draft, setDraft] = React.useState(resolvedLabel);
 
   React.useEffect(() => {
-    setDraft(instance.varName);
-  }, [instance.id, instance.varName]);
+    setDraft(getVariableLabel(instance.id, translations, devFb));
+  }, [instance.id, translations, devFb]);
 
   const commitRename = useCallback(() => {
     if (taskBound) return;
     const t = draft.trim();
-    if (!t || t === instance.varName) return;
+    const current = getVariableLabel(instance.id, translations, devFb);
+    if (!t || t === current) return;
     const ok = variableCreationService.renameVariableById(projectId, instance.id, t);
-    if (ok) onRenamed();
-    else setDraft(instance.varName);
-  }, [draft, instance.id, instance.varName, projectId, taskBound, onRenamed]);
+    if (ok) {
+      addTranslation(instance.id, t);
+      onRenamed();
+    } else setDraft(current);
+  }, [draft, instance.id, translations, devFb, projectId, taskBound, onRenamed, addTranslation]);
 
   return (
     <div className="rounded-md border border-slate-700/80 bg-slate-800/50 p-2 space-y-1.5">
@@ -110,10 +127,20 @@ interface TreeNodesProps {
   depth: number;
   byVarId: Map<string, VariableInstance>;
   projectId: string;
+  translations: Record<string, string>;
+  addTranslation: (guid: string, text: string) => void;
   onRefresh: () => void;
 }
 
-function FlowVariableTreeNodes({ nodes, depth, byVarId, projectId, onRefresh }: TreeNodesProps) {
+function FlowVariableTreeNodes({
+  nodes,
+  depth,
+  byVarId,
+  projectId,
+  translations,
+  addTranslation,
+  onRefresh,
+}: TreeNodesProps) {
   return (
     <ul className={depth > 0 ? 'mt-1 space-y-1 border-l border-slate-700/50 pl-2 ml-1' : 'space-y-1'}>
       {nodes.map((node) => (
@@ -123,6 +150,8 @@ function FlowVariableTreeNodes({ nodes, depth, byVarId, projectId, onRefresh }: 
           depth={depth}
           byVarId={byVarId}
           projectId={projectId}
+          translations={translations}
+          addTranslation={addTranslation}
           onRefresh={onRefresh}
         />
       ))}
@@ -135,6 +164,8 @@ function FlowVariableTreeBranch({
   depth,
   byVarId,
   projectId,
+  translations,
+  addTranslation,
   onRefresh,
 }: TreeNodesProps & { node: FlowVariableTreeNode }) {
   const hasChildren = node.children.length > 0;
@@ -158,7 +189,14 @@ function FlowVariableTreeBranch({
         )}
         <div className="flex-1 min-w-0 space-y-1">
           {inst ? (
-            <InstanceCard instance={inst} projectId={projectId} onRenamed={onRefresh} onRemoved={onRefresh} />
+            <InstanceCard
+              instance={inst}
+              projectId={projectId}
+              translations={translations}
+              addTranslation={addTranslation}
+              onRenamed={onRefresh}
+              onRemoved={onRefresh}
+            />
           ) : hasChildren ? (
             <div className="rounded-md border border-dashed border-slate-600/60 bg-slate-900/30 px-2 py-1.5">
               <span className="text-[11px] font-medium text-slate-400">{node.segment}</span>
@@ -171,6 +209,8 @@ function FlowVariableTreeBranch({
               depth={depth + 1}
               byVarId={byVarId}
               projectId={projectId}
+              translations={translations}
+              addTranslation={addTranslation}
               onRefresh={onRefresh}
             />
           )}
@@ -186,6 +226,7 @@ export function FlowVariablesRail({ flowId, projectId: projectIdProp }: FlowVari
   const [, refresh] = useReducer((n: number) => n + 1, 0);
   const { data: projectData } = useProjectData();
   const pdUpdate = useProjectDataUpdate();
+  const { translations, addTranslation } = useProjectTranslations();
 
   const projectId = useMemo(() => {
     const fromProp = projectIdProp?.trim();
@@ -209,7 +250,10 @@ export function FlowVariablesRail({ flowId, projectId: projectIdProp }: FlowVari
     return m;
   }, [instances]);
 
-  const defs = useMemo(() => instances.map(instanceToDef), [instances]);
+  const defs = useMemo(
+    () => instances.map((v) => instanceToDef(v, translations)),
+    [instances, translations]
+  );
   const orphans = useMemo(() => flowVariablesWithoutPath(defs), [defs]);
   const tree = useMemo(() => buildFlowVariableTree(defs), [defs]);
 
@@ -221,9 +265,10 @@ export function FlowVariablesRail({ flowId, projectId: projectIdProp }: FlowVari
             scopeFlowId: flowId,
           })
         : variableCreationService.createManualVariable(projectId, `var_${Date.now().toString(36)}`);
-    void base;
+    const label = String(base.varName || '').trim();
+    if (label) addTranslation(base.id, label);
     refresh();
-  }, [projectId, addScope, flowId]);
+  }, [projectId, addScope, flowId, addTranslation]);
 
   return (
     <>
@@ -270,7 +315,7 @@ export function FlowVariablesRail({ flowId, projectId: projectIdProp }: FlowVari
               Flow: {flowId}
             </p>
             <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
-              Single store: project-wide and this flow&apos;s manual vars, plus task-bound names visible here.
+              Labels come from project translations (GUID keys). Manual renames update the translation table.
             </p>
           </div>
         </div>
@@ -322,6 +367,8 @@ export function FlowVariablesRail({ flowId, projectId: projectIdProp }: FlowVari
                       key={row.id}
                       instance={inst}
                       projectId={projectId}
+                      translations={translations}
+                      addTranslation={addTranslation}
                       onRenamed={refresh}
                       onRemoved={refresh}
                     />
@@ -336,6 +383,8 @@ export function FlowVariablesRail({ flowId, projectId: projectIdProp }: FlowVari
                 depth={0}
                 byVarId={byVarId}
                 projectId={projectId}
+                translations={translations}
+                addTranslation={addTranslation}
                 onRefresh={refresh}
               />
             )}

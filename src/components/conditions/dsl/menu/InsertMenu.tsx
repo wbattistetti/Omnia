@@ -4,15 +4,24 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { getAllFunctionNames, getBuiltinFunction } from '../compiler/builtinFunctions';
+import { dslFlatVariableDisplayKey, dslTreeNodeDisplayLabel } from '@utils/dslVariableUiLabel';
 
 interface InsertMenuProps {
   variables?: Record<string, any>;
   variablesTree?: any[];
+  /** Project locale map for GUID → label on tree nodes and flat keys. */
+  translations?: Record<string, string>;
   onInsert: (text: string) => void;
   onClose?: () => void;
 }
 
-export function InsertMenu({ variables, variablesTree, onInsert, onClose }: InsertMenuProps) {
+export function InsertMenu({
+  variables,
+  variablesTree,
+  translations = {},
+  onInsert,
+  onClose,
+}: InsertMenuProps) {
   const [activeTab, setActiveTab] = useState<'variables' | 'functions' | 'constants'>('variables');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const menuRef = useRef<HTMLDivElement>(null);
@@ -46,61 +55,76 @@ export function InsertMenu({ variables, variablesTree, onInsert, onClose }: Inse
 
   const renderVariables = () => {
     if (variablesTree && Array.isArray(variablesTree)) {
-      return variablesTree.map((act: any, actIdx: number) => (
-        <div key={actIdx} className="mb-2">
-          {act.mains && Array.isArray(act.mains) && act.mains.map((main: any, mainIdx: number) => {
-            const mainPath = `${actIdx}-${mainIdx}`;
-            const isExpanded = expandedNodes.has(mainPath);
-            const hasSubs = main.subs && Array.isArray(main.subs) && main.subs.length > 0;
+      return variablesTree.map((act: any, actIdx: number) => {
+        const actDisp = dslTreeNodeDisplayLabel(act, translations);
+        const actMains = act.mains && Array.isArray(act.mains) ? act.mains : [];
+        if (actMains.length === 0) return null;
+        return (
+          <div key={actIdx} className="mb-2">
+            {actDisp ? (
+              <div className="px-2 py-0.5 text-[11px] text-gray-500 font-medium">{actDisp}</div>
+            ) : null}
+            {actMains.map((main: any, mainIdx: number) => {
+              const mainPath = `${actIdx}-${mainIdx}`;
+              const isExpanded = expandedNodes.has(mainPath);
+              const hasSubs = main.subs && Array.isArray(main.subs) && main.subs.length > 0;
+              const mainDisp = dslTreeNodeDisplayLabel(main, translations);
+              const fullMainLabel = actDisp ? `${actDisp}.${mainDisp}` : mainDisp;
 
-            return (
-              <div key={mainIdx} className="mb-1">
-                <div
-                  className="flex items-center gap-1 px-2 py-1 hover:bg-gray-700 cursor-pointer rounded"
-                  onClick={() => {
-                    if (hasSubs) {
-                      toggleNode(mainPath);
-                    } else {
-                      handleInsert(`[${main.label}]`);
-                    }
-                  }}
-                >
-                  {hasSubs && (
-                    isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
-                  )}
-                  <span className="text-sm text-blue-300">[{main.label}]</span>
-                </div>
-                {hasSubs && isExpanded && (
-                  <div className="ml-4">
-                    {main.subs.map((sub: any, subIdx: number) => (
-                      <div
-                        key={subIdx}
-                        className="px-2 py-1 hover:bg-gray-700 cursor-pointer rounded text-sm text-blue-200"
-                        onClick={() => handleInsert(`[${main.label}.${sub.label}]`)}
-                      >
-                        [{main.label}.{sub.label}]
-                      </div>
-                    ))}
+              return (
+                <div key={mainIdx} className="mb-1">
+                  <div
+                    className="flex items-center gap-1 px-2 py-1 hover:bg-gray-700 cursor-pointer rounded"
+                    onClick={() => {
+                      if (hasSubs) {
+                        toggleNode(mainPath);
+                      } else {
+                        handleInsert(`[${fullMainLabel}]`);
+                      }
+                    }}
+                  >
+                    {hasSubs && (isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
+                    <span className="text-sm text-blue-300">[{fullMainLabel}]</span>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ));
+                  {hasSubs && isExpanded && (
+                    <div className="ml-4">
+                      {main.subs.map((sub: any, subIdx: number) => {
+                        const subDisp = dslTreeNodeDisplayLabel(sub, translations);
+                        const fullSubLabel = `${fullMainLabel}.${subDisp}`;
+                        return (
+                          <div
+                            key={subIdx}
+                            className="px-2 py-1 hover:bg-gray-700 cursor-pointer rounded text-sm text-blue-200"
+                            onClick={() => handleInsert(`[${fullSubLabel}]`)}
+                          >
+                            [{fullSubLabel}]
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      });
     }
 
     // Fallback: flat variables
     if (variables) {
-      return Object.keys(variables).map((varName) => (
-        <div
-          key={varName}
-          className="px-2 py-1 hover:bg-gray-700 cursor-pointer rounded text-sm text-blue-300"
-          onClick={() => handleInsert(`[${varName}]`)}
-        >
-          [{varName}]
-        </div>
-      ));
+      return Object.keys(variables).map((key) => {
+        const display = dslFlatVariableDisplayKey(key, translations);
+        return (
+          <div
+            key={key}
+            className="px-2 py-1 hover:bg-gray-700 cursor-pointer rounded text-sm text-blue-300"
+            onClick={() => handleInsert(`[${display}]`)}
+          >
+            [{display}]
+          </div>
+        );
+      });
     }
 
     return <div className="text-sm text-gray-400 px-2">No variables available</div>;

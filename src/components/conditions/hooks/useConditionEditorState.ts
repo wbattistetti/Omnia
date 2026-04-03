@@ -6,8 +6,7 @@ import { convertDSLGUIDsToLabels } from '../../../utils/conditionCodeConverter';
 import { createVariableMappings } from '../../../utils/conditionCodeConverter';
 import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
 import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
-import { variableCreationService } from '../../../services/VariableCreationService';
-import { resolveVariableStoreProjectId } from '../../../utils/safeProjectId';
+import { getVariableLabel } from '../../../utils/getVariableLabel';
 
 export interface UseConditionEditorStateProps {
   open: boolean;
@@ -82,7 +81,7 @@ export interface UseConditionEditorStateReturn {
  */
 export function useConditionEditorState(props: UseConditionEditorStateProps): UseConditionEditorStateReturn {
   const { open, initialScript, label, defaultCode, flowCanvasId } = props;
-  const { getTranslation } = useProjectTranslations();
+  const { translations } = useProjectTranslations();
 
   // Script state
   const [script, setScript] = useState(initialScript && initialScript.trim() ? initialScript : defaultCode);
@@ -141,14 +140,8 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
         // Convert GUIDs to labels for human-readable display
         const fid = flowCanvasId ?? getActiveFlowCanvasId();
         const variableMappings = createVariableMappings(fid);
-        const pid = resolveVariableStoreProjectId(
-          typeof localStorage !== 'undefined' ? localStorage.getItem('currentProjectId') : null
-        );
         base = convertDSLGUIDsToLabels(base, variableMappings, {
-          resolveUnknownGuidToLabel: (guid) =>
-            getTranslationRef.current(guid) ||
-            variableCreationService.getVarNameById(pid, guid) ||
-            null,
+          resolveUnknownGuidToLabel: (guid) => getVariableLabel(guid, translations) || null,
         });
       }
     }
@@ -161,7 +154,7 @@ export function useConditionEditorState(props: UseConditionEditorStateProps): Us
     setHeightPx(480);
     setWTester(360);
     setFontPx(13);
-  }, [open, initialScript, label, defaultCode, flowCanvasId]);
+  }, [open, initialScript, label, defaultCode, flowCanvasId, translations]);
 
   // Sync title when label changes
   useEffect(() => {

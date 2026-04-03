@@ -2,18 +2,23 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { getAllFunctionNames, getBuiltinFunction } from '../compiler/builtinFunctions';
+import { dslFlatVariableDisplayKey, dslTreeNodeDisplayLabel } from '@utils/dslVariableUiLabel';
 
-// Global flag to track if intellisense is already registered
-let isIntellisenseRegistered = false;
-let intellisenseDisposable: any = null;
+export type DSLIntellisenseSources = {
+  getVariables: () => Record<string, unknown>;
+  getVariablesTree: () => any[] | undefined;
+  getTranslations: () => Record<string, string>;
+};
+
+let intellisenseDisposable: { dispose: () => void } | null = null;
 
 /**
- * Provides intellisense for DSL editor.
+ * Registers DSL completion; variable lists are read via getters on each completion request
+ * so labels stay in sync with project translations without re-initializing Monaco.
  */
-export function registerDSLIntellisense(monaco: any, variables: Record<string, any>, variablesTree?: any[]): void {
+export function registerDSLIntellisense(monaco: any, sources: DSLIntellisenseSources): void {
   const langId = 'dsl-condition';
 
-  // Dispose previous provider if exists
   if (intellisenseDisposable) {
     try {
       intellisenseDisposable.dispose();
@@ -23,19 +28,14 @@ export function registerDSLIntellisense(monaco: any, variables: Record<string, a
     intellisenseDisposable = null;
   }
 
-  // Register completion item provider
   intellisenseDisposable = monaco.languages.registerCompletionItemProvider(langId, {
-    provideCompletionItems: (model: any, position: any) => {
-      const textUntilPosition = model.getValueInRange({
-        startLineNumber: 1,
-        startColumn: 1,
-        endLineNumber: position.lineNumber,
-        endColumn: position.column,
-      });
+    provideCompletionItems: () => {
+      const variables = sources.getVariables() || {};
+      const variablesTree = sources.getVariablesTree();
+      const translations = sources.getTranslations() || {};
 
       const suggestions: any[] = [];
 
-      // Function completions
       const functionNames = getAllFunctionNames();
       functionNames.forEach((fnName) => {
         const fnDef = getBuiltinFunction(fnName);
@@ -51,27 +51,30 @@ export function registerDSLIntellisense(monaco: any, variables: Record<string, a
         }
       });
 
-      // Variable completions
-      if (variablesTree && Array.isArray(variablesTree)) {
+      if (variablesTree && Array.isArray(variablesTree) && variablesTree.length > 0) {
         variablesTree.forEach((act: any) => {
           if (act.mains && Array.isArray(act.mains)) {
+            const actDisp = dslTreeNodeDisplayLabel(act, translations);
             act.mains.forEach((main: any) => {
-              // Main variable
+              const mainDisp = dslTreeNodeDisplayLabel(main, translations);
+              const fullMainLabel = actDisp ? `${actDisp}.${mainDisp}` : mainDisp;
+
               suggestions.push({
-                label: `[${main.label}]`,
+                label: `[${fullMainLabel}]`,
                 kind: monaco.languages.CompletionItemKind.Variable,
-                insertText: `[${main.label}]`,
-                documentation: `Variable: ${main.label}`,
+                insertText: `[${fullMainLabel}]`,
+                documentation: `Variable: ${fullMainLabel}`,
               });
 
-              // Sub variables
               if (main.subs && Array.isArray(main.subs)) {
                 main.subs.forEach((sub: any) => {
+                  const subDisp = dslTreeNodeDisplayLabel(sub, translations);
+                  const fullSubLabel = `${fullMainLabel}.${subDisp}`;
                   suggestions.push({
-                    label: `[${main.label}.${sub.label}]`,
+                    label: `[${fullSubLabel}]`,
                     kind: monaco.languages.CompletionItemKind.Variable,
-                    insertText: `[${main.label}.${sub.label}]`,
-                    documentation: `Variable: ${main.label}.${sub.label}`,
+                    insertText: `[${fullSubLabel}]`,
+                    documentation: `Variable: ${fullSubLabel}`,
                   });
                 });
               }
@@ -79,18 +82,17 @@ export function registerDSLIntellisense(monaco: any, variables: Record<string, a
           }
         });
       } else {
-        // Fallback: use flat variables map
-        Object.keys(variables).forEach((varName) => {
+        Object.keys(variables).forEach((key) => {
+          const display = dslFlatVariableDisplayKey(key, translations);
           suggestions.push({
-            label: `[${varName}]`,
+            label: `[${display}]`,
             kind: monaco.languages.CompletionItemKind.Variable,
-            insertText: `[${varName}]`,
-            documentation: `Variable: ${varName}`,
+            insertText: `[${display}]`,
+            documentation: `Variable: ${display}`,
           });
         });
       }
 
-      // Keyword completions
       suggestions.push(
         {
           label: 'AND',
@@ -127,9 +129,6 @@ export function registerDSLIntellisense(monaco: any, variables: Record<string, a
       return { suggestions };
     },
   });
-
-  isIntellisenseRegistered = true;
-  console.log('[DSLIntellisense] ✅ Intellisense registered', { langId });
 }
 
 /**
@@ -144,5 +143,4 @@ export function disposeDSLIntellisense(): void {
     }
     intellisenseDisposable = null;
   }
-  isIntellisenseRegistered = false;
 }

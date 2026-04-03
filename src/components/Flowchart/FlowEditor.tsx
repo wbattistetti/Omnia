@@ -46,7 +46,7 @@ import { useFlowViewport } from './hooks/useFlowViewport';
 import { useCursorTooltip } from './hooks/useCursorTooltip';
 import { useTaskCreationFromSelection } from './hooks/useTaskCreationFromSelection';
 import { CustomEdge } from './edges/CustomEdge';
-import { useIntellisense } from '../../context/IntellisenseContext';
+import { IntellisenseProvider, useIntellisense } from '../../context/IntellisenseContext';
 import { FlowchartWrapper } from './FlowchartWrapper';
 import { ExecutionStateProvider } from './executionHighlight/ExecutionStateContext';
 import { FlowStateBridge } from '../../services/FlowStateBridge';
@@ -971,13 +971,25 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
   console.debug('[FlowEditor] Component mounted');
 
-  // IntellisenseProvider lives in FlowCanvasHost so it wraps FlowActionsProvider + canvas (stable context for node portals).
+  const { data: projectData } = useProjectData();
+  const intellisenseProviders = useMemo(
+    () => ({
+      getProjectData: () => projectData,
+      getFlowNodes: () => props.nodes ?? [],
+      getFlowEdges: () => props.edges ?? [],
+    }),
+    [projectData, props.nodes, props.edges]
+  );
+
+  /** Provider must wrap both FlowEditorContent and IntellisensePopover (siblings under ReactFlowProvider). */
   return (
-    <NodeRegistryProvider>
-      <ReactFlowProvider>
-        <FlowEditorContent {...props} />
-        <IntellisensePopover />
-      </ReactFlowProvider>
-    </NodeRegistryProvider>
+    <IntellisenseProvider providers={intellisenseProviders}>
+      <NodeRegistryProvider>
+        <ReactFlowProvider>
+          <FlowEditorContent {...props} />
+          <IntellisensePopover />
+        </ReactFlowProvider>
+      </NodeRegistryProvider>
+    </IntellisenseProvider>
   );
 };

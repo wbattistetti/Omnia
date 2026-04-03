@@ -25,6 +25,17 @@ import {
   resolveVariableStoreProjectId,
 } from '@utils/safeProjectId';
 import { logVariableHydration } from '../utils/variableMenuDebug';
+import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import {
+  MANUAL_VARIABLE_METADATA_TYPE,
+  PROJECT_VARIABLE_METADATA_TYPE,
+  reconstructVariableInstanceFromMinimalDoc,
+  SUBFLOW_VARIABLE_METADATA_TYPE,
+  TASK_BOUND_VARIABLE_METADATA_TYPE,
+  UTTERANCE_VARIABLE_METADATA_TYPE,
+} from '@utils/utteranceVariablePersistence';
+import { getVariableLabel } from '@utils/getVariableLabel';
+import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
 
 interface CreateVariablesOptions {
   taskInstance: Task;
@@ -88,6 +99,74 @@ class VariableCreationService {
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
     });
+  }
+
+  /**
+   * Phase 4: task-bound rows whose task is UtteranceInterpretation or ClassifyProblem
+   * are persisted as minimal Mongo documents (id + projectId + metadata); labels live in translations.
+   */
+  private isPersistedUtteranceVariable(v: VariableInstance): boolean {
+    const tid = String(v.taskInstanceId || '').trim();
+    if (!tid) return false;
+    const task = taskRepository.getTask(tid);
+    if (!task) return false;
+    return isUtteranceInterpretationTask(task) || task.type === TaskType.ClassifyProblem;
+  }
+
+  /**
+   * Phase 5: every variable row is persisted as a minimal GUID-centric document; labels are in translations.
+   */
+  private buildGuidCentricPersistPayload(
+    v: VariableInstance,
+    projectId: string
+  ): Record<string, unknown> {
+    if (this.isPersistedUtteranceVariable(v)) {
+      return {
+        id: v.id,
+        projectId,
+        metadata: { type: UTTERANCE_VARIABLE_METADATA_TYPE },
+      };
+    }
+    const bf = String(v.bindingFrom ?? '').trim();
+    const bt = String(v.bindingTo ?? '').trim();
+    if (bf && bt) {
+      return {
+        id: v.id,
+        projectId,
+        from: bf,
+        to: bt,
+        metadata: { type: SUBFLOW_VARIABLE_METADATA_TYPE },
+      };
+    }
+    const tid = String(v.taskInstanceId || '').trim();
+    if (!tid) {
+      const scope: VariableScope = v.scope ?? 'project';
+      if (scope === 'project') {
+        return {
+          id: v.id,
+          projectId,
+          metadata: { type: PROJECT_VARIABLE_METADATA_TYPE },
+        };
+      }
+      return {
+        id: v.id,
+        projectId,
+        metadata: {
+          type: MANUAL_VARIABLE_METADATA_TYPE,
+          flowCanvasId: String(v.scopeFlowId || '').trim() || undefined,
+        },
+      };
+    }
+    return {
+      id: v.id,
+      projectId,
+      metadata: {
+        type: TASK_BOUND_VARIABLE_METADATA_TYPE,
+        taskInstanceId: tid,
+        dataPath: String(v.dataPath || ''),
+        scopeFlowId: String(v.scopeFlowId || ''),
+      },
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -225,6 +304,20 @@ class VariableCreationService {
 
     const others = all.filter((v) => String(v.taskInstanceId || '').trim() !== tid);
     this.store.set(pid, [...others, ...nextForTask]);
+
+    logTaskSubflowMove('hydrate:utteranceReplace', {
+      projectId: pid,
+      flowCanvasId: fid,
+      taskInstanceId: tid,
+      taskRowLabel,
+      flattenedRowCount: rows.length,
+      variableRows: nextForTask.map((v) => ({
+        id: v.id,
+        varName: v.varName,
+        dataPath: v.dataPath,
+        scopeFlowId: v.scopeFlowId,
+      })),
+    });
   }
 
   /**
@@ -685,13 +778,13 @@ class VariableCreationService {
   }
 
   /**
-   * Return the varName (human-readable label) for a given variable id (GUID).
-   * Used by condition editor to display stored GUIDs as labels.
+   * @deprecated Prefer {@link getVariableLabel} with explicit `translations` map.
+   * Resolves display label from the project translations registry (not from `varName` in memory).
    */
   getVarNameById(projectId: string | null | undefined, id: string): string | null {
-    const vars = this.store.get(this.projectKey(projectId)) ?? [];
-    const match = vars.find(v => v.id === id);
-    return match?.varName ?? null;
+    void this.projectKey(projectId);
+    const label = getVariableLabel(String(id), getProjectTranslationsTable());
+    return label || null;
   }
 
   /**
@@ -752,18 +845,14 @@ class VariableCreationService {
     }
 
     try {
-      const variablesToSave = variables.map(v => {
-        const scope: VariableScope = v.scope === 'flow' ? 'flow' : 'project';
-        return {
-          id: v.id,
-          varName: v.varName,
-          taskInstanceId: v.taskInstanceId || '',
-          dataPath: v.dataPath || '',
-          scope,
-          scopeFlowId: scope === 'flow' ? (v.scopeFlowId ?? '') : '',
-          projectId: key,
-        };
-      });
+      const variablesToSave = variables.map(v => this.buildGuidCentricPersistPayload(v, key));
+
+      let locale = 'pt';
+      try {
+        locale = String(localStorage.getItem('project.lang') || 'pt').trim() || 'pt';
+      } catch {
+        locale = 'pt';
+      }
 
       console.log('[VariableCreationService] 📤 Sending variables to backend', {
         projectId: key,
@@ -775,7 +864,7 @@ class VariableCreationService {
       const response = await fetch(`/api/projects/${key}/variables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ variables: variablesToSave }),
+        body: JSON.stringify({ variables: variablesToSave, locale }),
       });
 
       if (!response.ok) {
@@ -829,7 +918,15 @@ class VariableCreationService {
     try {
       console.log('[VariableCreationService] 📥 Loading variables from database', { projectId: key });
 
-      const response = await fetch(`/api/projects/${key}/variables`);
+      let locale = 'pt';
+      try {
+        locale = String(localStorage.getItem('project.lang') || 'pt').trim() || 'pt';
+      } catch {
+        locale = 'pt';
+      }
+      const response = await fetch(
+        `/api/projects/${key}/variables?${new URLSearchParams({ locale }).toString()}`
+      );
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -844,52 +941,62 @@ class VariableCreationService {
         return;
       }
 
-      const variables: VariableInstance[] = await response.json();
-
-      const manualVariables = variables.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
-      const taskVariables = variables.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
+      const rawRows: unknown[] = await response.json();
 
       console.log('[VariableCreationService] 📥 Variables received from database', {
         projectId: key,
-        totalCount: variables.length,
-        manualVariables: manualVariables.length,
-        taskVariables: taskVariables.length,
-        manualVarNames: manualVariables.map(v => v.varName),
+        totalCountRaw: rawRows.length,
       });
 
       const byId = new Map<string, VariableInstance>();
-      for (const v of variables) {
-        const raw = v as VariableInstance & { varId?: string };
+      for (const row of rawRows) {
+        const doc = row as VariableInstance & {
+          metadata?: { type?: string };
+          varId?: string;
+          ddtPath?: string;
+        };
         const rawId =
-          typeof raw.id === 'string' && raw.id.trim()
-            ? raw.id.trim()
-            : typeof raw.varId === 'string'
-              ? raw.varId.trim()
+          typeof doc.id === 'string' && doc.id.trim()
+            ? doc.id.trim()
+            : typeof doc.varId === 'string'
+              ? doc.varId.trim()
               : '';
         if (!rawId) {
           console.warn('[VariableCreationService] ⚠️ Skipping variable row without id', {
             projectId: key,
-            varName: v.varName,
           });
           continue;
         }
-        if (byId.has(rawId)) {
-          console.warn('[VariableCreationService] ⚠️ Duplicate id in DB response; keeping last row', {
-            projectId: key,
-            id: rawId,
-          });
+
+        if (doc.metadata?.type === UTTERANCE_VARIABLE_METADATA_TYPE) {
+          continue;
         }
-        const legacy = v as VariableInstance & { ddtPath?: string; varId?: string };
+
+        const reconstructed = reconstructVariableInstanceFromMinimalDoc(
+          doc as Parameters<typeof reconstructVariableInstanceFromMinimalDoc>[0]
+        );
+        if (reconstructed) {
+          if (byId.has(rawId)) {
+            console.warn('[VariableCreationService] ⚠️ Duplicate id in DB response; keeping last row', {
+              projectId: key,
+              id: rawId,
+            });
+          }
+          byId.set(rawId, normalizeVariableInstance({ ...reconstructed, id: rawId }));
+          continue;
+        }
+
+        const legacy = doc as VariableInstance & { ddtPath?: string; varId?: string };
         byId.set(
           rawId,
           normalizeVariableInstance({
-            ...v,
+            ...doc,
             id: rawId,
-            varName: typeof v.varName === 'string' ? v.varName.trim() : String(v.varName ?? ''),
-            taskInstanceId: v.taskInstanceId ?? '',
+            varName: typeof doc.varName === 'string' ? doc.varName.trim() : String(doc.varName ?? ''),
+            taskInstanceId: doc.taskInstanceId ?? '',
             dataPath: legacy.dataPath ?? legacy.ddtPath ?? '',
-            scope: (v as VariableInstance).scope,
-            scopeFlowId: (v as VariableInstance).scopeFlowId,
+            scope: doc.scope,
+            scopeFlowId: doc.scopeFlowId,
           })
         );
       }

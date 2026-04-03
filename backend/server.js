@@ -2928,6 +2928,176 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
 
 // variable-mappings endpoints removed — superseded by /variables endpoints
 
+/** Phase 4: legacy task-bound tree rows (utterance/classify) before minimal migration. */
+function isLegacyUtteranceLikeVariableDoc(doc) {
+  if (doc && doc.metadata && doc.metadata.type === 'utterance') {
+    return false;
+  }
+  const tid = String(doc.taskInstanceId || '').trim();
+  const dp = String(doc.dataPath || doc.ddtPath || '');
+  const sc = doc.scope;
+  if (!tid) {
+    return false;
+  }
+  if (sc && sc !== 'flow') {
+    return false;
+  }
+  return /^data\[\d+\]/.test(dp);
+}
+
+const LEGACY_UTTERANCE_FIELD_UNSET = {
+  varId: '',
+  nodeId: '',
+  taskInstanceId: '',
+  scopeFlowId: '',
+  scope: '',
+  ddtPath: '',
+  dataPath: '',
+  varName: ''
+};
+
+/** Phase 5: client sends only minimal GUID-centric payloads (or legacy for coercion). */
+function isMinimalVariablePayload(v) {
+  const t = v && v.metadata && v.metadata.type;
+  return (
+    t === 'utterance' ||
+    t === 'manual' ||
+    t === 'project' ||
+    t === 'subflow' ||
+    t === 'task_bound'
+  );
+}
+
+function isLegacyManualOrProjectLikeDoc(doc) {
+  if (doc && doc.metadata && doc.metadata.type) {
+    return false;
+  }
+  const tid = String(doc.taskInstanceId || '').trim();
+  if (tid) {
+    return false;
+  }
+  return true;
+}
+
+function isLegacyTaskBoundDoc(doc) {
+  if (doc && doc.metadata && doc.metadata.type) {
+    return false;
+  }
+  const tid = String(doc.taskInstanceId || '').trim();
+  if (!tid) {
+    return false;
+  }
+  return !isLegacyUtteranceLikeVariableDoc(doc);
+}
+
+/**
+ * Build a single bulkWrite operation: minimal payload, or coerce legacy body to minimal + translation.
+ */
+async function buildVariableUpsertOperation(projDb, projectId, v, locale) {
+  const rowId = String(v.id || v.varId || '').trim();
+  if (!rowId) {
+    return null;
+  }
+
+  if (isMinimalVariablePayload(v)) {
+    const t = v.metadata.type;
+    const meta =
+      typeof v.metadata === 'object' && v.metadata !== null
+        ? { ...v.metadata, type: t }
+        : { type: t };
+    const $set = { id: rowId, projectId, metadata: meta };
+    if (t === 'subflow') {
+      $set.from = String(v.from || v.metadata.from || '').trim();
+      $set.to = String(v.to || v.metadata.to || '').trim();
+    }
+    return {
+      updateOne: {
+        filter: { projectId, $or: [{ id: rowId }, { varId: rowId }] },
+        update: {
+          $set,
+          $unset: LEGACY_UTTERANCE_FIELD_UNSET
+        },
+        upsert: true
+      }
+    };
+  }
+
+  const vn = String(v.varName || '').trim();
+  if (vn) {
+    await upsertProjectTranslationIfMissing(projDb, rowId, vn, locale);
+  }
+
+  const tid = String(v.taskInstanceId || '').trim();
+  if (!tid) {
+    const scope = v.scope === 'flow' ? 'flow' : 'project';
+    const meta =
+      scope === 'project'
+        ? { type: 'project' }
+        : { type: 'manual', flowCanvasId: String(v.scopeFlowId || '').trim() || undefined };
+    return {
+      updateOne: {
+        filter: { projectId, $or: [{ id: rowId }, { varId: rowId }] },
+        update: {
+          $set: { id: rowId, projectId, metadata: meta },
+          $unset: LEGACY_UTTERANCE_FIELD_UNSET
+        },
+        upsert: true
+      }
+    };
+  }
+
+  if (isLegacyUtteranceLikeVariableDoc(v)) {
+    return {
+      updateOne: {
+        filter: { projectId, $or: [{ id: rowId }, { varId: rowId }] },
+        update: {
+          $set: { id: rowId, projectId, metadata: { type: 'utterance' } },
+          $unset: LEGACY_UTTERANCE_FIELD_UNSET
+        },
+        upsert: true
+      }
+    };
+  }
+
+  return {
+    updateOne: {
+      filter: { projectId, $or: [{ id: rowId }, { varId: rowId }] },
+      update: {
+        $set: {
+          id: rowId,
+          projectId,
+          metadata: {
+            type: 'task_bound',
+            taskInstanceId: tid,
+            dataPath: String(v.dataPath || v.ddtPath || ''),
+            scopeFlowId: String(v.scopeFlowId || '')
+          }
+        },
+        $unset: LEGACY_UTTERANCE_FIELD_UNSET
+      },
+      upsert: true
+    }
+  };
+}
+
+async function upsertProjectTranslationIfMissing(projDb, guid, text, language) {
+  const coll = projDb.collection('Translations');
+  const existing = await coll.findOne({ guid, language });
+  if (existing && existing.text != null && String(existing.text).trim() !== '') {
+    return false;
+  }
+  const now = new Date();
+  await coll.updateOne(
+    { guid, language },
+    {
+      $set: { guid, language, text: String(text), updatedAt: now },
+      $setOnInsert: { createdAt: now }
+    },
+    { upsert: true }
+  );
+  return true;
+}
+
 // POST /api/projects/:pid/variables - Create variables for a task instance
 app.post('/api/projects/:pid/variables', async (req, res) => {
   const projectId = req.params.pid;
@@ -2940,41 +3110,18 @@ app.post('/api/projects/:pid/variables', async (req, res) => {
     }
 
     const projDb = await getProjectDb(client, projectId);
+    const locale = String(req.body.locale || 'pt').trim() || 'pt';
 
-    // ✅ Separate manual variables (empty taskInstanceId) from task variables for logging
     const manualVariables = variables.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
     const taskVariables = variables.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
 
-    // Upsert by variable identity GUID: `id` (client) or legacy `varId` in DB.
-    const operations = variables.map(v => {
-      const rowId = String(v.id || v.varId || '').trim();
-      if (!rowId) {
-        return null;
+    const operations = [];
+    for (const v of variables) {
+      const op = await buildVariableUpsertOperation(projDb, projectId, v, locale);
+      if (op) {
+        operations.push(op);
       }
-      const scope = v.scope === 'flow' ? 'flow' : 'project';
-      const scopeFlowId = scope === 'flow' ? String(v.scopeFlowId || '').trim() : '';
-      const dataPath = String(v.dataPath ?? v.ddtPath ?? '').trim();
-      return {
-        updateOne: {
-          filter: { projectId, $or: [{ id: rowId }, { varId: rowId }] },
-          update: {
-            $set: {
-              id: rowId,
-              varId: rowId,
-              varName: v.varName,
-              taskInstanceId: v.taskInstanceId || '',
-              nodeId: String(v.nodeId || rowId || '').trim(),
-              dataPath,
-              ddtPath: dataPath,
-              scope,
-              scopeFlowId,
-              projectId: projectId
-            }
-          },
-          upsert: true
-        }
-      };
-    }).filter(Boolean);
+    }
 
     if (operations.length === 0) {
       return res.status(400).json({ error: 'variables: every row must have id or varId' });
@@ -3006,6 +3153,7 @@ app.post('/api/projects/:pid/variables', async (req, res) => {
 app.get('/api/projects/:pid/variables', async (req, res) => {
   const projectId = req.params.pid;
   const { taskInstanceId, varName, nodeId, scope, scopeFlowId } = req.query;
+  const locale = String(req.query.locale || 'pt').trim() || 'pt';
   const client = await getMongoClient();
   const startTime = Date.now();
   try {
@@ -3029,22 +3177,144 @@ app.get('/api/projects/:pid/variables', async (req, res) => {
     }
 
     const rawVariables = await projDb.collection('variables').find(query).toArray();
-    const variables = rawVariables.map((doc) => {
-      const id = String(doc.id || doc.varId || '').trim();
-      const dataPath = String(doc.dataPath ?? doc.ddtPath ?? '').trim();
-      return { ...doc, id, dataPath };
-    });
+    const varsColl = projDb.collection('variables');
+    const normalized = [];
 
-      const duration = Date.now() - startTime;
+    for (const doc of rawVariables) {
+      let rowId = String(doc.id || doc.varId || '').trim();
+      if (!rowId && doc.nodeId) {
+        rowId = String(doc.nodeId).trim();
+      }
+      if (!rowId) {
+        continue;
+      }
+
+      const isUtteranceMinimal = doc.metadata && doc.metadata.type === 'utterance';
+      const legacyUtterance = !isUtteranceMinimal && isLegacyUtteranceLikeVariableDoc(doc);
+
+      if (legacyUtterance) {
+        const vn = String(doc.varName || '').trim();
+        if (vn) {
+          await upsertProjectTranslationIfMissing(projDb, rowId, vn, locale);
+        }
+        const meta =
+          doc.metadata && typeof doc.metadata === 'object'
+            ? { ...doc.metadata, type: 'utterance' }
+            : { type: 'utterance' };
+        await varsColl.updateOne(
+          { _id: doc._id },
+          {
+            $set: { id: rowId, projectId, metadata: meta },
+            $unset: LEGACY_UTTERANCE_FIELD_UNSET
+          }
+        );
+        normalized.push({ id: rowId, projectId, metadata: { type: 'utterance' } });
+        continue;
+      }
+
+      if (isLegacyManualOrProjectLikeDoc(doc)) {
+        const vn = String(doc.varName || '').trim();
+        if (vn) {
+          await upsertProjectTranslationIfMissing(projDb, rowId, vn, locale);
+        }
+        const scope = doc.scope === 'flow' ? 'flow' : 'project';
+        const meta =
+          scope === 'project'
+            ? { type: 'project' }
+            : { type: 'manual', flowCanvasId: String(doc.scopeFlowId || '').trim() || undefined };
+        await varsColl.updateOne(
+          { _id: doc._id },
+          {
+            $set: { id: rowId, projectId, metadata: meta },
+            $unset: LEGACY_UTTERANCE_FIELD_UNSET
+          }
+        );
+        normalized.push({ id: rowId, projectId, metadata: meta });
+        continue;
+      }
+
+      if (isLegacyTaskBoundDoc(doc)) {
+        const vn = String(doc.varName || '').trim();
+        if (vn) {
+          await upsertProjectTranslationIfMissing(projDb, rowId, vn, locale);
+        }
+        const meta = {
+          type: 'task_bound',
+          taskInstanceId: String(doc.taskInstanceId || ''),
+          dataPath: String(doc.dataPath || doc.ddtPath || ''),
+          scopeFlowId: String(doc.scopeFlowId || '')
+        };
+        await varsColl.updateOne(
+          { _id: doc._id },
+          {
+            $set: { id: rowId, projectId, metadata: meta },
+            $unset: LEGACY_UTTERANCE_FIELD_UNSET
+          }
+        );
+        normalized.push({ id: rowId, projectId, metadata: meta });
+        continue;
+      }
+
+      const mt = doc.metadata && doc.metadata.type;
+      if (
+        mt === 'utterance' ||
+        mt === 'manual' ||
+        mt === 'project' ||
+        mt === 'subflow' ||
+        mt === 'task_bound'
+      ) {
+        if (mt === 'subflow') {
+          normalized.push({
+            id: rowId,
+            projectId,
+            from: String(doc.from || (doc.metadata && doc.metadata.from) || ''),
+            to: String(doc.to || (doc.metadata && doc.metadata.to) || ''),
+            metadata:
+              doc.metadata && typeof doc.metadata === 'object'
+                ? doc.metadata
+                : { type: 'subflow' }
+          });
+        } else {
+          normalized.push({
+            id: rowId,
+            projectId,
+            metadata:
+              doc.metadata && typeof doc.metadata === 'object' ? doc.metadata : { type: mt }
+          });
+        }
+        continue;
+      }
+
+      const vnFallback = String(doc.varName || '').trim();
+      if (vnFallback) {
+        await upsertProjectTranslationIfMissing(projDb, rowId, vnFallback, locale);
+      }
+      const metaFb = {
+        type: 'task_bound',
+        taskInstanceId: String(doc.taskInstanceId || ''),
+        dataPath: String(doc.dataPath || doc.ddtPath || ''),
+        scopeFlowId: String(doc.scopeFlowId || '')
+      };
+      await varsColl.updateOne(
+        { _id: doc._id },
+        {
+          $set: { id: rowId, projectId, metadata: metaFb },
+          $unset: LEGACY_UTTERANCE_FIELD_UNSET
+        }
+      );
+      normalized.push({ id: rowId, projectId, metadata: metaFb });
+    }
+
+    const duration = Date.now() - startTime;
     logInfo('Variables.get', {
       projectId,
       taskInstanceId,
       varName,
-      variablesCount: variables.length,
+      variablesCount: normalized.length,
       duration: `${duration}ms`
     });
 
-    res.json(variables);
+    res.json(normalized);
   } catch (e) {
     const duration = Date.now() - startTime;
     logError('Variables.get', e, { projectId, duration: `${duration}ms` });
@@ -3056,11 +3326,13 @@ app.get('/api/projects/:pid/variables', async (req, res) => {
 app.get('/api/projects/:pid/variables/:varId', async (req, res) => {
   const projectId = req.params.pid;
   const { varId } = req.params;
+  const locale = String(req.query.locale || 'pt').trim() || 'pt';
   const client = await getMongoClient();
   const startTime = Date.now();
   try {
     const projDb = await getProjectDb(client, projectId);
-    const variable = await projDb.collection('variables').findOne({
+    const varsColl = projDb.collection('variables');
+    const variable = await varsColl.findOne({
       projectId,
       $or: [{ id: varId }, { varId }],
     });
@@ -3071,11 +3343,135 @@ app.get('/api/projects/:pid/variables/:varId', async (req, res) => {
       return res.status(404).json({ error: 'not_found' });
     }
 
-    const id = String(variable.id || variable.varId || '').trim();
-    const dataPath = String(variable.dataPath ?? variable.ddtPath ?? '').trim();
+    let rowId = String(variable.id || variable.varId || '').trim();
+    if (!rowId && variable.nodeId) {
+      rowId = String(variable.nodeId).trim();
+    }
+    if (!rowId) {
+      rowId = varId;
+    }
+
+    const isUtteranceMinimal = variable.metadata && variable.metadata.type === 'utterance';
+    const legacyUtterance = !isUtteranceMinimal && isLegacyUtteranceLikeVariableDoc(variable);
+
+    if (legacyUtterance) {
+      const vn = String(variable.varName || '').trim();
+      if (vn) {
+        await upsertProjectTranslationIfMissing(projDb, rowId, vn, locale);
+      }
+      const meta =
+        variable.metadata && typeof variable.metadata === 'object'
+          ? { ...variable.metadata, type: 'utterance' }
+          : { type: 'utterance' };
+      await varsColl.updateOne(
+        { _id: variable._id },
+        {
+          $set: { id: rowId, projectId, metadata: meta },
+          $unset: LEGACY_UTTERANCE_FIELD_UNSET
+        }
+      );
+      const duration = Date.now() - startTime;
+      logInfo('Variables.getById', { projectId, varId, found: true, utterance: true, duration: `${duration}ms` });
+      return res.json({ id: rowId, projectId, metadata: { type: 'utterance' } });
+    }
+
+    if (isLegacyManualOrProjectLikeDoc(variable)) {
+      const vn = String(variable.varName || '').trim();
+      if (vn) {
+        await upsertProjectTranslationIfMissing(projDb, rowId, vn, locale);
+      }
+      const scope = variable.scope === 'flow' ? 'flow' : 'project';
+      const meta =
+        scope === 'project'
+          ? { type: 'project' }
+          : { type: 'manual', flowCanvasId: String(variable.scopeFlowId || '').trim() || undefined };
+      await varsColl.updateOne(
+        { _id: variable._id },
+        {
+          $set: { id: rowId, projectId, metadata: meta },
+          $unset: LEGACY_UTTERANCE_FIELD_UNSET
+        }
+      );
+      const duration = Date.now() - startTime;
+      logInfo('Variables.getById', { projectId, varId, found: true, minimal: true, duration: `${duration}ms` });
+      return res.json({ id: rowId, projectId, metadata: meta });
+    }
+
+    if (isLegacyTaskBoundDoc(variable)) {
+      const vn = String(variable.varName || '').trim();
+      if (vn) {
+        await upsertProjectTranslationIfMissing(projDb, rowId, vn, locale);
+      }
+      const meta = {
+        type: 'task_bound',
+        taskInstanceId: String(variable.taskInstanceId || ''),
+        dataPath: String(variable.dataPath || variable.ddtPath || ''),
+        scopeFlowId: String(variable.scopeFlowId || '')
+      };
+      await varsColl.updateOne(
+        { _id: variable._id },
+        {
+          $set: { id: rowId, projectId, metadata: meta },
+          $unset: LEGACY_UTTERANCE_FIELD_UNSET
+        }
+      );
+      const duration = Date.now() - startTime;
+      logInfo('Variables.getById', { projectId, varId, found: true, minimal: true, duration: `${duration}ms` });
+      return res.json({ id: rowId, projectId, metadata: meta });
+    }
+
+    const mt = variable.metadata && variable.metadata.type;
+    if (
+      mt === 'utterance' ||
+      mt === 'manual' ||
+      mt === 'project' ||
+      mt === 'subflow' ||
+      mt === 'task_bound'
+    ) {
+      const duration = Date.now() - startTime;
+      logInfo('Variables.getById', { projectId, varId, found: true, minimal: true, duration: `${duration}ms` });
+      if (mt === 'subflow') {
+        return res.json({
+          id: rowId,
+          projectId,
+          from: String(variable.from || (variable.metadata && variable.metadata.from) || ''),
+          to: String(variable.to || (variable.metadata && variable.metadata.to) || ''),
+          metadata:
+            variable.metadata && typeof variable.metadata === 'object'
+              ? variable.metadata
+              : { type: 'subflow' }
+        });
+      }
+      return res.json({
+        id: rowId,
+        projectId,
+        metadata:
+          variable.metadata && typeof variable.metadata === 'object'
+            ? variable.metadata
+            : { type: mt }
+      });
+    }
+
+    const vnFb = String(variable.varName || '').trim();
+    if (vnFb) {
+      await upsertProjectTranslationIfMissing(projDb, rowId, vnFb, locale);
+    }
+    const metaFb = {
+      type: 'task_bound',
+      taskInstanceId: String(variable.taskInstanceId || ''),
+      dataPath: String(variable.dataPath || variable.ddtPath || ''),
+      scopeFlowId: String(variable.scopeFlowId || '')
+    };
+    await varsColl.updateOne(
+      { _id: variable._id },
+      {
+        $set: { id: rowId, projectId, metadata: metaFb },
+        $unset: LEGACY_UTTERANCE_FIELD_UNSET
+      }
+    );
     const duration = Date.now() - startTime;
     logInfo('Variables.getById', { projectId, varId, found: true, duration: `${duration}ms` });
-    res.json({ ...variable, id, dataPath });
+    res.json({ id: rowId, projectId, metadata: metaFb });
   } catch (e) {
     const duration = Date.now() - startTime;
     logError('Variables.getById', e, { projectId, varId, duration: `${duration}ms` });

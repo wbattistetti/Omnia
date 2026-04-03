@@ -1,12 +1,17 @@
 /**
  * When a task row's authoring canvas moves onto a subflow (`authoringFlowCanvasId` → subflow_*),
  * runs the same interface merge as the subflow portal path (reference scan + OUTPUT merge).
+ *
+ * If the variable store is still empty after the first apply, registers a second wiring pass that
+ * flushes on `variableStore:updated` (see subflowWiringAfterVariableStore).
  */
 
 import type { WorkspaceState } from '@flows/FlowTypes';
 import { TaskType } from '@types/taskTypes';
-import { applyTaskMoveToSubflow, type ApplyTaskMoveToSubflowResult } from './applyTaskMoveToSubflow';
+import { variableCreationService } from '@services/VariableCreationService';
+import { applyTaskMoveToSubflow } from './applyTaskMoveToSubflow';
 import type { ProjectConditionLike } from './collectReferencedVarIds';
+import { registerSubflowWiringSecondPass } from './subflowWiringAfterVariableStore';
 import { getSubflowSyncFlows, getSubflowSyncTranslations } from './subflowSyncFlowsRef';
 
 const SUBFLOW_PREFIX = 'subflow_';
@@ -114,7 +119,7 @@ export function syncSubflowInterfaceAfterAuthoringCanvasChange(
   if (syncInFlight) return null;
   syncInFlight = true;
   try {
-    const result = applyTaskMoveToSubflow({
+    const first = applyTaskMoveToSubflow({
       projectId: pid,
       parentFlowId,
       childFlowId,
@@ -127,7 +132,23 @@ export function syncSubflowInterfaceAfterAuthoringCanvasChange(
       projectData,
       skipMaterialization: true,
     });
-    return { ...result, parentFlowId, childFlowId };
+
+    variableCreationService.hydrateVariablesFromFlow(pid, first.flowsNext);
+    variableCreationService.hydrateVariablesFromFlow(pid, getSubflowSyncFlows());
+
+    const flushed = registerSubflowWiringSecondPass({
+      projectId: pid,
+      parentFlowId,
+      childFlowId,
+      taskInstanceId: tid,
+      subflowDisplayTitle,
+      parentSubflowTaskRowId: portalRowId,
+      conditions,
+      translations: translationsArg,
+      projectData,
+    });
+    const out = flushed ?? first;
+    return { ...out, parentFlowId, childFlowId };
   } finally {
     syncInFlight = false;
   }

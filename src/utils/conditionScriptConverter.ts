@@ -7,6 +7,8 @@
 
 import { variableCreationService } from '../services/VariableCreationService';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
+import { getVariableLabel } from './getVariableLabel';
+import { getProjectTranslationsTable } from './projectTranslationsRegistry';
 
 /** UUID pattern used to detect varIds in scripts. */
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -79,7 +81,7 @@ export function convertScriptGuidsToLabels(
     const varName =
       fromOpt != null && String(fromOpt).trim() !== ''
         ? String(fromOpt).trim()
-        : variableCreationService.getVarNameById(projectId, key);
+        : getVariableLabel(key, getProjectTranslationsTable());
     if (varName) {
       return isGetVar
         ? `getVar(ctx, ${quote}${varName}${quote})`

@@ -238,7 +238,10 @@ export type CollectReferencedWorkspaceParams = {
   translationsInternal?: Record<string, string>;
   /** When set, all condition expressions from project data are scanned (not only edge-linked). */
   projectData?: unknown;
-  /** When true with `projectData`, edge-linked condition chunks are skipped in favor of full project scan. */
+  /**
+   * When true with `projectData`, scan every condition expression in the project (not only edges of flow A).
+   * Default behavior for task moves is **false**: only conditions attached to edges of `parentFlowId` (flow A).
+   */
   useAllProjectConditionsForReferenceScan?: boolean;
   /** Extra text blobs (e.g. serialized moved task) — only `referenceScanInternalText` is read if JSON. */
   extraCorpusChunks?: string[];
@@ -268,13 +271,12 @@ export function collectReferencedVarIdsForParentFlowWorkspace(
   if (params.useAllProjectConditionsForReferenceScan && params.projectData !== undefined) {
     conditionInternalTexts = collectAllProjectConditionInternalExpressionTexts(params.projectData);
   } else {
-    conditionInternalTexts = [
-      ...conditionInternalTextsForIds(conditionIds, params.conditions),
-      ...(params.projectData !== undefined ? collectAllProjectConditionInternalExpressionTexts(params.projectData) : []),
-    ];
+    conditionInternalTexts = conditionInternalTextsForIds(conditionIds, params.conditions);
   }
 
   const taskJsonChunks = buildTaskJsonChunksForParentFlow(parentFlowId, params.flows);
+  /** Serialized flow A (outputBindings, meta, nodes) — appended as raw text; not parsed for referenceScanInternalText. */
+  const flowStructureChunk = JSON.stringify(parentFlow ?? null);
 
   const internalHaystack = buildInternalReferenceHaystackForParentFlow({
     conditionInternalTexts,
@@ -283,5 +285,19 @@ export function collectReferencedVarIdsForParentFlowWorkspace(
     extraCorpusChunks: params.extraCorpusChunks,
   });
 
-  return extractReferencedVarIdsFromText(internalHaystack, knownVarIds);
+  const haystack = `${internalHaystack}\n${flowStructureChunk}`;
+  return extractReferencedVarIdsFromText(haystack, knownVarIds);
+}
+
+/**
+ * True iff `variableId` appears in the static reference corpus for flow A only
+ * (conditions on edges of that flow, tasks on canvas, serialized flow JSON including outputBindings, translations slice).
+ */
+export function isVariableReferencedInFlow(
+  variableId: string,
+  params: CollectReferencedWorkspaceParams
+): boolean {
+  const vid = String(variableId || '').trim();
+  if (!vid) return false;
+  return collectReferencedVarIdsForParentFlowWorkspace(params).has(vid);
 }

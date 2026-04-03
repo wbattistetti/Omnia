@@ -22,7 +22,7 @@ describe('flowHydrationPolicy', () => {
     expect(shouldLoadFlowFromServer('proj1', f)).toBe(ex.shouldLoad);
   });
 
-  it('still fetches when not hydrated even if local graph or flags look dirty (server wins until hydrated)', () => {
+  it('skips fetch when not hydrated but local graph is already dirty (in-memory edit not yet persisted)', () => {
     const f = flow({
       id: 'main',
       nodes: [{ id: 'n1' } as any],
@@ -31,8 +31,8 @@ describe('flowHydrationPolicy', () => {
       hasLocalChanges: true,
     });
     const ex = explainShouldLoadFlowFromServer('proj1', f);
-    expect(ex.shouldLoad).toBe(true);
-    expect(ex.reason).toBe('not_hydrated_will_fetch_server');
+    expect(ex.shouldLoad).toBe(false);
+    expect(ex.reason).toBe('local_nonempty_skip_server_fetch');
   });
 
   it('skips when hydrated', () => {

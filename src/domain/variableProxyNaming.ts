@@ -66,6 +66,19 @@ export function localLabelForSubflowTaskVariable(varName: string): string {
 }
 
 /**
+ * User-visible qualified label for a Subflow output in the parent: `<SubflowName>.<internal>` (no slugify).
+ * Use resolved subflow title (e.g. from labelKey → translations) and internal segment label.
+ */
+export function buildSubflowQualifiedDisplayLabel(
+  subflowTitleDisplay: string,
+  internalLabel: string
+): string {
+  const a = String(subflowTitleDisplay || '').trim() || 'Subflow';
+  const b = String(internalLabel || '').trim() || 'value';
+  return `${a}.${b}`;
+}
+
+/**
  * Parent-flow proxy name for Subflow wiring: `<slug(normalized subflow title)>.<slug(internal segment)>`.
  * Example: "Chiedi i dati personali" + "colore" → `dati_personali.colore`.
  */

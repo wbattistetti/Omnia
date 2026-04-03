@@ -2,6 +2,11 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import type { TaskTree, TaskTreeNode } from '@types/taskTypes';
 import { variableCreationService } from '../VariableCreationService';
 import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
+import { getVariableLabel } from '../../utils/getVariableLabel';
+import {
+  getProjectTranslationsTable,
+  setProjectTranslationsRegistry,
+} from '../../utils/projectTranslationsRegistry';
 
 describe('VariableCreationService per-flow scope', () => {
   beforeEach(() => {
@@ -72,8 +77,10 @@ describe('VariableCreationService per-flow scope', () => {
   it('renameManual updates label when no duplicate in bucket', () => {
     const pid = `vitest_rename_${Math.random().toString(36).slice(2, 12)}`;
     const v = variableCreationService.createManualVariable(pid, 'orig_name');
+    setProjectTranslationsRegistry({ [v.id]: 'orig_name' });
     expect(variableCreationService.renameVariableById(pid, v.id, 'new_name')).toBe(true);
-    expect(variableCreationService.getVarNameById(pid, v.id)).toBe('new_name');
+    setProjectTranslationsRegistry({ [v.id]: 'new_name' });
+    expect(getVariableLabel(v.id, getProjectTranslationsTable())).toBe('new_name');
   });
 
   it('getAllVarNames with undefined projectId resolves to default bucket; globals on all flows', () => {

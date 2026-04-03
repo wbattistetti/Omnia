@@ -1,25 +1,24 @@
 /**
- * Display labels for variable rows: utterance node GUIDs prefer project translations;
- * otherwise fall back to in-memory / persisted varName.
+ * Display labels for variable rows in pickers and menus.
+ * All user-visible labels come from project translations (see {@link getVariableLabel}).
  */
 
+import { getVariableLabel } from './getVariableLabel';
+
 /**
- * Resolves picker/token label for a variable instance.
- * For utterance TaskTree nodes (GUID in `utteranceGuidSet`), uses `translationsByGuid[id]` when set.
+ * Resolves picker/token label for a variable instance: project translation first,
+ * then non-empty fallback (typically {@link VariableInstance.varName}) when the GUID is not in the table.
  */
 export function resolveVariableMenuLabel(
   variableId: string,
-  varNameFallback: string,
+  fallbackWhenUntranslated: string,
   opts: {
     utteranceGuidSet: Set<string>;
     translationsByGuid?: Record<string, string> | null;
   }
 ): string {
   const id = String(variableId || '').trim();
-  const fb = String(varNameFallback || '').trim();
-  if (opts.utteranceGuidSet.has(id) && opts.translationsByGuid) {
-    const t = String(opts.translationsByGuid[id] ?? '').trim();
-    if (t) return t;
-  }
-  return fb;
+  const translations = opts.translationsByGuid ?? {};
+  const fb = String(fallbackWhenUntranslated || '').trim();
+  return getVariableLabel(id, translations, fb || undefined);
 }

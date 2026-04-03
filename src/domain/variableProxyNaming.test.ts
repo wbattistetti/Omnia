@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildProxyVariableName,
+  buildSubflowQualifiedDisplayLabel,
   buildSubflowParentProxyVariableName,
   disambiguateProxyVarName,
   localLabelForSubflowTaskVariable,
@@ -66,6 +67,14 @@ describe('buildProxyVariableName', () => {
   it('throws when segments are unusable after normalization', () => {
     expect(() => buildProxyVariableName('   ', 'x')).toThrow(/empty semantic task/);
     expect(() => buildProxyVariableName('Subflow', '   ')).toThrow(/empty semantic task/);
+  });
+});
+
+describe('buildSubflowQualifiedDisplayLabel', () => {
+  it('joins resolved subflow title and internal label without slugify', () => {
+    expect(buildSubflowQualifiedDisplayLabel('Chiedi dati personali', 'colore')).toBe(
+      'Chiedi dati personali.colore'
+    );
   });
 });
 

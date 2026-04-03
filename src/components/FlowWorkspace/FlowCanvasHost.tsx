@@ -3,6 +3,7 @@ import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '@flows/
 import { loadFlow } from '../../flows/FlowPersistence';
 import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
 import { logFlowSaveDebug } from '../../utils/flowSaveDebug';
+import { logSubflowCanvasDebug, summarizeFlowSlice } from '../../utils/subflowCanvasDebug';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
 import { FlowInterfaceBottomPanel } from './FlowInterfaceBottomPanel';
@@ -11,7 +12,6 @@ import { FlowTestProvider } from '../../context/FlowTestContext';
 import { FlowActionsProvider } from '../../context/FlowActionsContext';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 import { useProjectData } from '../../context/ProjectDataContext';
-import { IntellisenseProvider } from '../../context/IntellisenseContext';
 import { variableCreationService } from '../../services/VariableCreationService';
 import { resolveVariableStoreProjectId, isFallbackProjectBucket } from '../../utils/safeProjectId';
 import { buildFlowCanvasRowFingerprint } from '../../utils/flowWorkspaceUtteranceFingerprint';
@@ -93,11 +93,20 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
     const flow = flows[flowId];
     if (!flow) {
       logFlowSaveDebug('FlowCanvasHost: flow slice missing; direct server load', { flowId, projectId });
+      logSubflowCanvasDebug('FlowCanvasHost: no slice yet — will loadFlow then UPSERT (replaces entire slice)', {
+        flowId,
+        projectId,
+      });
       setIsLoadingFlow(true);
       (async () => {
         try {
           const data = await loadFlow(projectId, flowId);
           if (cancelled) return;
+          logSubflowCanvasDebug('FlowCanvasHost: initial loadFlow response (missing slice path)', {
+            flowId,
+            serverNodeCount: data.nodes.length,
+            serverEdgeCount: data.edges.length,
+          });
           upsertFlow({
             id: flowId,
             title: pickFlowTitle(flowId, flow?.title),
@@ -128,6 +137,12 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
     }
 
     const explain = explainShouldLoadFlowFromServer(projectId, flow);
+    logSubflowCanvasDebug('FlowCanvasHost: hydration effect tick', {
+      flowId,
+      explainReason: explain.reason,
+      shouldLoad: explain.shouldLoad,
+      slice: summarizeFlowSlice(flow as any, { rowIdsSample: true }),
+    });
     if (!explain.shouldLoad) {
       setIsLoadingFlow(false);
       logFlowSaveDebug('FlowCanvasHost: skip server loadFlow', {
@@ -135,6 +150,17 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
         flowId,
         ...explain,
       });
+      if (explain.reason === 'local_nonempty_skip_server_fetch') {
+        logSubflowCanvasDebug('FlowCanvasHost: marking hydrated without fetch (local_nonempty_skip_server_fetch)', {
+          flowId,
+          sliceBeforeUpsert: summarizeFlowSlice(flow as any, { rowIdsSample: true }),
+        });
+        upsertFlow({
+          ...flow,
+          hydrated: true,
+          hasLocalChanges: true,
+        });
+      }
       return;
     }
 
@@ -164,6 +190,13 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
         edges: data.edges.length,
         hasMeta: data.meta !== undefined,
       });
+      logSubflowCanvasDebug('FlowCanvasHost: about to applyFlowLoadResult (server → store)', {
+        flowId,
+        serverNodeCount: data.nodes.length,
+        serverEdgeCount: data.edges.length,
+        note:
+          'Slice snapshot omitted here (async closure may be stale vs store if portal updated graph meanwhile). See FlowStore:APPLY_FLOW_LOAD_RESULT for before/after.',
+      });
       applyFlowLoadResult(flowId, {
         nodes: data.nodes,
         edges: data.edges,
@@ -178,15 +211,6 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
   }, [projectId, flowId, flowPresent, hydrated, hasLocalChanges, nodeCount, edgeCount, upsertFlow, applyFlowLoadResult]);
 
   const flow = flows[flowId];
-
-  const intellisenseProviders = useMemo(
-    () => ({
-      getProjectData: () => projectData,
-      getFlowNodes: () => flow?.nodes ?? [],
-      getFlowEdges: () => flow?.edges ?? [],
-    }),
-    [projectData, flow?.nodes, flow?.edges],
-  );
 
   // Stable setNodes function for FlowActionsProvider
   const setNodes = useCallback(
@@ -206,26 +230,24 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
     [flowId, updateFlowGraph]
   );
 
-  // Wrap FlowEditor with providers + right Variables rail (per flowId)
+  // FlowEditor wraps IntellisenseProvider + ReactFlowProvider (see FlowEditor.tsx)
   const flowEditor = (
-    <IntellisenseProvider providers={intellisenseProviders}>
-      <FlowEditor
-        flowId={flowId}
-        nodes={flow?.nodes || []}
-        edges={flow?.edges || []}
-        setNodes={setNodes}
-        setEdges={setEdges}
-        currentProject={{ id: projectId, name: 'Project' } as any}
-        setCurrentProject={() => { }}
-        testPanelOpen={false}
-        setTestPanelOpen={() => { }}
-        testNodeId={null}
-        setTestNodeId={() => { }}
-        onCreateTaskFlow={onCreateTaskFlow}
-        onOpenTaskFlow={onOpenTaskFlow}
-        onOpenSubflowForTask={onOpenSubflowForTask}
-      />
-    </IntellisenseProvider>
+    <FlowEditor
+      flowId={flowId}
+      nodes={flow?.nodes || []}
+      edges={flow?.edges || []}
+      setNodes={setNodes}
+      setEdges={setEdges}
+      currentProject={{ id: projectId, name: 'Project' } as any}
+      setCurrentProject={() => { }}
+      testPanelOpen={false}
+      setTestPanelOpen={() => { }}
+      testNodeId={null}
+      setTestNodeId={() => { }}
+      onCreateTaskFlow={onCreateTaskFlow}
+      onOpenTaskFlow={onOpenTaskFlow}
+      onOpenSubflowForTask={onOpenSubflowForTask}
+    />
   );
 
   const withFlowActions = (

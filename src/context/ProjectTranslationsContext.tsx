@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import { useProjectDataUpdate } from './ProjectDataContext';
 import { loadProjectTranslations, saveProjectTranslations, loadAllProjectTranslations } from '../services/ProjectDataService';
 import { notifyTranslationAdded, notifyTranslationsAdded } from '../utils/translationTracker';
+import { setProjectTranslationsRegistry } from '../utils/projectTranslationsRegistry';
 
 export interface ProjectTranslationsContextType {
   // Global translations table: { guid: text } where text is for project locale only
@@ -95,6 +96,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     // This ensures cloneAndContextualizeTranslations can read translations immediately
     // during wizard pipeline execution, before React state has updated
     translationsLiveRef.current = { ...translationsLiveRef.current, [guid]: text };
+    setProjectTranslationsRegistry(translationsLiveRef.current);
 
     // ⏳ ASYNC: React state update (for UI re-render and context value)
     setTranslations((prev) => {
@@ -117,6 +119,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
 
     // ✅ FIX: Update ref SYNCHRONOUSLY (immediate, no React render wait)
     translationsLiveRef.current = { ...translationsLiveRef.current, ...newTranslations };
+    setProjectTranslationsRegistry(translationsLiveRef.current);
 
     // ⏳ ASYNC: React state update (for UI re-render and context value)
     setTranslations((prev) => {
@@ -169,6 +172,11 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       });
     }
   }, [loadingCompleted, isLoading, translations, currentProjectId, projectLocale]);
+
+  // Keep synchronous registry in sync for non-React readers (DSL, services).
+  useEffect(() => {
+    setProjectTranslationsRegistry(translations);
+  }, [translations]);
 
   // Load all project translations from database
   const loadAllTranslations = useCallback(async () => {

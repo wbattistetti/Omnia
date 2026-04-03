@@ -134,12 +134,15 @@ export function useVariablePickerForFlow(
       onClose={closeMenu}
       onExposeAndSelect={(item) => {
         const projectId = pdUpdate?.getCurrentProjectId() || '';
-        if (!projectId) return;
         if (item.isFromActiveFlow === false) {
           if (item.missingChildVariableRef === true) {
             window.alert(
               'Questo parametro di interfaccia non è ancora collegato a una variabile nel sotto-flusso. Apri il flow figlio, collega l’uscita dell’interfaccia a una variabile, poi riprova.'
             );
+            return;
+          }
+          if (!projectId) {
+            applyInsert(item.tokenLabel || item.varLabel);
             return;
           }
           const bound = ensureParentVariableAndSubflowOutputBinding(
@@ -153,15 +156,16 @@ export function useVariablePickerForFlow(
         }
 
         const owner = (flows as any)?.[item.ownerFlowId];
-        if (!owner) return;
-        const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
-        const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
-        const nextVars = existing
-          ? prevVars.map((v: any) =>
-              String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v
-            )
-          : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
-        updateFlowMeta(item.ownerFlowId, { variables: nextVars });
+        if (projectId && owner) {
+          const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
+          const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
+          const nextVars = existing
+            ? prevVars.map((v: any) =>
+                String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v
+              )
+            : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
+          updateFlowMeta(item.ownerFlowId, { variables: nextVars });
+        }
         applyInsert(item.tokenLabel || item.varLabel);
       }}
       onSelect={(label) => {

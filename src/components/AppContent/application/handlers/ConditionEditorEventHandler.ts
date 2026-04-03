@@ -4,7 +4,6 @@
 import type { DockTab } from '@dock/types';
 import type { ConditionEditorOpenEvent } from '../../domain/editorEvents';
 import { validateConditionEditorEvent } from '../../domain/editorEvents';
-import { variableCreationService } from '@services/VariableCreationService';
 import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from '@components/Sidebar/sidebarTheme';
 import { getNodesWithFallback } from '@utils/taskTreeMigrationHelpers';
 import { ConditionAIService } from '@components/conditions/application/ConditionAIService';
@@ -12,6 +11,8 @@ import { ScriptManagerService } from '@components/conditions/application/ScriptM
 import { updateEdgeWithConditionId } from '@services/EdgeConditionUpdater';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import { getSafeProjectId } from '@utils/safeProjectId';
+import { buildFlowchartVariableLabelRecord } from '@components/conditions/conditionEditorLiveVariables';
+import { resolveTemplateTreeNodeVariableId } from '@utils/dslVariableUiLabel';
 
 export interface ConditionEditorEventHandlerParams {
   projectData: any;
@@ -219,18 +220,30 @@ export class ConditionEditorEventHandler {
    * Builds flowchart variables
    */
   private buildFlowchartVars(flowCanvasId: string): Record<string, any> {
-    const vars: Record<string, any> = {};
     try {
       const projectId = getSafeProjectId();
-      variableCreationService.getAllVarNames(projectId, flowCanvasId).forEach(name => {
-        vars[name] = '';
-      });
-    } catch { }
-    return vars;
+      return buildFlowchartVariableLabelRecord(projectId, flowCanvasId) as Record<string, any>;
+    } catch {
+      return {};
+    }
   }
 
   /**
-   * Builds hierarchical tree with icons/colors for Intellisense
+   * Sub-fields for a template main node: prefer `subNodes` (TaskTreeNode) then legacy subData/subs.
+   */
+  private collectTemplateSubNodes(main: any): any[] {
+    if (Array.isArray(main?.subNodes) && main.subNodes.length > 0) {
+      return main.subNodes;
+    }
+    if (Array.isArray(main?.subData)) return main.subData;
+    if (Array.isArray(main?.subs)) return main.subs;
+    return [];
+  }
+
+  /**
+   * Builds hierarchical tree with icons/colors for DSL menus / IntelliSense.
+   * Carries stable `id` (GUID) on act / main / sub when present on template nodes so
+   * {@link dslTreeNodeDisplayLabel} can resolve labels from project translations.
    */
   private buildVarsTree(): any[] {
     const tasks: any[] = [];
@@ -247,27 +260,47 @@ export class ConditionEditorEventHandler {
           if (!taskName) continue;
           const taskTree: any = it?.ddt || it?.taskTree;
           if (!taskTree) continue;
-          const mains: any[] = Array.isArray(taskTree?.nodes)
-            ? taskTree.nodes
-            : (Array.isArray(taskTree?.mains) ? taskTree.mains : []);
+          let mains: any[] = getNodesWithFallback(taskTree, 'ConditionEditorEventHandler.buildVarsTree');
+          if (!mains.length && Array.isArray(taskTree?.mains)) {
+            mains = taskTree.mains.filter(Boolean);
+          }
           const mainsOut: any[] = [];
-          for (const m of (mains || [])) {
+          for (const m of mains || []) {
             const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
-            const subsArr: any[] = Array.isArray(m?.subData) ? m.subData : (Array.isArray(m?.subs) ? m.subs : []);
-            const subsOut = (subsArr || []).map((s: any) => ({
-              label: String(s?.labelKey || s?.label || s?.name || 'Field').trim(),
-              kind: String(s?.kind || s?.type || ''),
-            }));
-            mainsOut.push({
+            const mainId = resolveTemplateTreeNodeVariableId(m);
+            const subsArr = this.collectTemplateSubNodes(m);
+            const subsOut = (subsArr || []).map((s: any) => {
+              const subLabel = String(s?.labelKey || s?.label || s?.name || 'Field').trim();
+              const subId = resolveTemplateTreeNodeVariableId(s);
+              const sub: { label: string; kind: string; id?: string } = {
+                label: subLabel,
+                kind: String(s?.kind || s?.type || ''),
+              };
+              if (subId) sub.id = subId;
+              return sub;
+            });
+            const mainRow: { label: string; kind: string; subs: typeof subsOut; id?: string } = {
               label: mainLabel,
               kind: String(m?.kind || m?.type || ''),
               subs: subsOut,
-            });
+            };
+            if (mainId) mainRow.id = mainId;
+            mainsOut.push(mainRow);
           }
-          tasks.push({ label: taskName, color: taskColor, Icon, mains: mainsOut });
+          const actId = resolveTemplateTreeNodeVariableId(it);
+          const act: { label: string; color: string; Icon: any; mains: typeof mainsOut; id?: string } = {
+            label: taskName,
+            color: taskColor,
+            Icon,
+            mains: mainsOut,
+          };
+          if (actId) act.id = actId;
+          tasks.push(act);
         }
       }
-    } catch { }
+    } catch {
+      /* keep tasks */
+    }
     return tasks;
   }
 

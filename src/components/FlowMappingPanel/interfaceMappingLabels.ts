@@ -1,12 +1,14 @@
 /**
- * Derives Interface row labels from flow row text + variable GUID: prefers store varName,
- * otherwise uses normalizeTaskLabel (same as CustomNode / VariableCreationService).
+ * Derives Interface row labels from flow row text + variable GUID: prefers project translations,
+ * otherwise uses linkedVariable / externalName / path.
  */
 
 import { variableCreationService } from '../../services/VariableCreationService';
+import { getVariableLabel } from '../../utils/getVariableLabel';
+import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegistry';
 import type { MappingEntry } from './mappingTypes';
 
-/** Single label for Interface tree rows: store varName, else linkedVariable / externalName / path. */
+/** Single label for Interface tree rows: translation by GUID, else linkedVariable / externalName / path. */
 export function getInterfaceLeafDisplayName(
   entry: MappingEntry,
   projectId: string | undefined
@@ -14,8 +16,8 @@ export function getInterfaceLeafDisplayName(
   const pid = projectId?.trim();
   const vid = entry.variableRefId?.trim();
   if (pid && vid) {
-    const fromStore = variableCreationService.getVarNameById(pid, vid)?.trim() ?? '';
-    if (fromStore) return fromStore;
+    const fromTr = getVariableLabel(vid, getProjectTranslationsTable());
+    if (fromTr) return fromTr;
   }
   return (
     entry.linkedVariable?.trim() ||
@@ -32,8 +34,7 @@ export function computeInterfaceEntryLabels(
 ): { externalName: string; linkedVariable: string } {
   const pid = projectId?.trim();
   const vid = variableRefId?.trim();
-  const fromStore =
-    pid && vid ? variableCreationService.getVarNameById(pid, vid)?.trim() ?? '' : '';
+  const fromStore = pid && vid ? getVariableLabel(vid, getProjectTranslationsTable()) : '';
   const cleanRow = variableCreationService.normalizeTaskLabel(
     (rowLabel || internalPath || 'field').trim()
   );
@@ -43,7 +44,7 @@ export function computeInterfaceEntryLabels(
 }
 
 /**
- * Registers GUID → normalized label in the flow scope so getVarNameById matches UI.
+ * Registers GUID → normalized label in the flow scope so translations and UI stay aligned.
  */
 export function ensureFlowVariableBindingForInterfaceRow(
   projectId: string | undefined,

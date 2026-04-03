@@ -11,6 +11,7 @@ import {
   getVariableMenuRebuildFingerprint,
   type VariableMenuItem,
 } from '../common/variableMenuModel';
+import { ensureParentVariableAndSubflowOutputBinding } from '../common/subflowParentBinding';
 import { resolveVariableStoreProjectId } from '../../utils/safeProjectId';
 
 interface NodeRowEditorProps {
@@ -238,32 +239,60 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
       variableItems={variableMenuItems}
       onClose={() => setVarsMenu({ open: false, x: 0, y: 0 })}
       onExposeAndSelect={(item) => {
-        const owner = (flows as any)?.[item.ownerFlowId];
-        if (!owner) return;
-        const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
-        const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
-        const nextVars = existing
-          ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v))
-          : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
-        updateFlowMeta(item.ownerFlowId, { variables: nextVars });
+        const projectId = pdUpdate?.getCurrentProjectId() || '';
 
-        const el = inputRef.current;
-        const caret = {
-          start: el?.selectionStart ?? value.length,
-          end: el?.selectionEnd ?? value.length,
+        const applyInsert = (label: string) => {
+          const el = inputRef.current;
+          const caret = {
+            start: el?.selectionStart ?? value.length,
+            end: el?.selectionEnd ?? value.length,
+          };
+          const out = insertBracketTokenAtCaret(value, caret, label);
+          const nextValue = out.text;
+          onChange({
+            target: { value: nextValue },
+            currentTarget: { value: nextValue },
+          } as React.ChangeEvent<HTMLTextAreaElement>);
+          setVarsMenu({ open: false, x: 0, y: 0 });
+          requestAnimationFrame(() => {
+            if (!el) return;
+            el.focus();
+            el.setSelectionRange(out.caret.start, out.caret.end);
+          });
         };
-        const out = insertBracketTokenAtCaret(value, caret, item.tokenLabel || item.varLabel);
-        const nextValue = out.text;
-        onChange({
-          target: { value: nextValue },
-          currentTarget: { value: nextValue },
-        } as React.ChangeEvent<HTMLTextAreaElement>);
-        setVarsMenu({ open: false, x: 0, y: 0 });
-        requestAnimationFrame(() => {
-          if (!el) return;
-          el.focus();
-          el.setSelectionRange(out.caret.start, out.caret.end);
-        });
+
+        if (item.isFromActiveFlow === false) {
+          if (item.missingChildVariableRef === true) {
+            window.alert(
+              'Questo parametro di interfaccia non è ancora collegato a una variabile nel sotto-flusso. Apri il flow figlio, collega l’uscita dell’interfaccia a una variabile, poi riprova.'
+            );
+            return;
+          }
+          if (!projectId) {
+            applyInsert(item.tokenLabel || item.varLabel);
+            return;
+          }
+          const bound = ensureParentVariableAndSubflowOutputBinding(
+            projectId,
+            activeFlowId,
+            flows as any,
+            item
+          );
+          applyInsert(bound.tokenLabel);
+          return;
+        }
+
+        const owner = (flows as any)?.[item.ownerFlowId];
+        if (projectId && owner) {
+          const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
+          const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
+          const nextVars = existing
+            ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v))
+            : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
+          updateFlowMeta(item.ownerFlowId, { variables: nextVars });
+        }
+
+        applyInsert(item.tokenLabel || item.varLabel);
       }}
       onSelect={(label) => {
         const el = inputRef.current;

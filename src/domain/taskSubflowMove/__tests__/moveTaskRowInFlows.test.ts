@@ -66,4 +66,35 @@ describe('appendRowToFlowNode', () => {
     const next = appendRowToFlowNode(flows, { targetFlowId: 'sf', targetNodeId: 'n2', row });
     expect(next.sf.nodes[0].data.rows.some((r: any) => r.id === 'r2')).toBe(true);
   });
+
+  it('does not append twice when the row id already exists on the target node', () => {
+    const row = { id: 'r2', text: 'new' };
+    const flows = {
+      sf: {
+        id: 'sf',
+        nodes: [{ id: 'n2', data: { rows: [{ id: 'r2', text: 'old' }] } }],
+        edges: [],
+      },
+    } as any;
+    const next = appendRowToFlowNode(flows, { targetFlowId: 'sf', targetNodeId: 'n2', row });
+    expect(next.sf.nodes[0].data.rows.filter((r: any) => r.id === 'r2').length).toBe(1);
+    expect(next.sf.nodes[0].data.rows[0].text).toBe('old');
+  });
+
+  it('creates first canvas node when child flow has no nodes (empty subflow tab)', () => {
+    const row = { id: 'moved-row', text: 'Task' };
+    const flows = {
+      sf: {
+        id: 'sf',
+        title: 'Sub',
+        nodes: [],
+        edges: [],
+      },
+    } as any;
+    const next = appendRowToFlowNode(flows, { targetFlowId: 'sf', targetNodeId: '', row });
+    expect(next.sf.nodes.length).toBe(1);
+    expect(next.sf.nodes[0].type).toBe('custom');
+    expect(next.sf.nodes[0].data.rows.some((r: any) => r.id === 'moved-row')).toBe(true);
+    expect(next.sf.hasLocalChanges).toBe(true);
+  });
 });

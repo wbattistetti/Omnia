@@ -11,6 +11,7 @@
 import type { Task } from '@types/taskTypes';
 import type { WorkspaceState } from '@flows/FlowTypes';
 import { taskRepository } from '@services/TaskRepository';
+import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
 import { removeRowByIdFromFlow } from './moveTaskRowInFlows';
 
 /** Key aligned with {@link Task.authoringFlowCanvasId}. */
@@ -65,9 +66,17 @@ export function materializeMovedTaskForSubflow(params: {
   const tid = String(taskInstanceId || '').trim();
   let flowsNext = params.flows;
 
+  logTaskSubflowMove('materialize:enter', {
+    projectId: pid,
+    parentFlowId,
+    childFlowId,
+    taskInstanceId: tid,
+  });
+
   const parentBefore = flowContainsTaskRow(flowsNext, parentFlowId, tid);
   if (parentBefore) {
     flowsNext = removeRowByIdFromFlow(flowsNext, parentFlowId, tid);
+    logTaskSubflowMove('materialize:strippedParentRow', { parentFlowId, taskInstanceId: tid });
   }
 
   const parentAfter = flowContainsTaskRow(flowsNext, parentFlowId, tid);
@@ -85,6 +94,12 @@ export function materializeMovedTaskForSubflow(params: {
     repositoryPatchApplied = taskRepository.updateTask(tid, patch, pid, {
       merge: true,
       skipSubflowInterfaceSync: true,
+    });
+    logTaskSubflowMove('materialize:repositoryPatch', {
+      taskInstanceId: tid,
+      authoringFlowCanvasId: patch.authoringFlowCanvasId,
+      repositoryPatchApplied,
+      hadSubTasksClone: Array.isArray(patch.subTasks) && patch.subTasks.length > 0,
     });
   }
 
@@ -104,6 +119,16 @@ export function materializeMovedTaskForSubflow(params: {
   } else if (!repositoryPatchApplied) {
     errorMessage = 'repository_update_failed';
   }
+
+  logTaskSubflowMove('materialize:result', {
+    ok,
+    parentFlowContainedRowBeforeStrip: parentBefore,
+    parentFlowContainsRowAfter: parentAfter,
+    childFlowContainsRow: childHas,
+    taskFoundInRepository: !!task,
+    repositoryPatchApplied,
+    errorMessage,
+  });
 
   return {
     flowsNext,

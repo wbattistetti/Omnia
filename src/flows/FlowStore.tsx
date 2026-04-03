@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useLayoutEffect, useMemo, useReducer } from 'react';
 import { takeWorkspaceRestoreForProjectOnce } from '../services/project-save/flowSaveSnapshot';
+import { shouldKeepLocalGraphOnEmptyServerResponse } from './flowLoadMergePolicy';
 import { logFlowSaveDebug } from '../utils/flowSaveDebug';
+import { isSubflowCanvasDebugEnabled, logSubflowCanvasDebug, summarizeFlowSlice } from '../utils/subflowCanvasDebug';
 import type { Flow, FlowId, WorkspaceState } from './FlowTypes';
 
 type ApplyFlowLoadPayload<NodeT, EdgeT> = {
@@ -26,17 +28,57 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
     case 'UPSERT_FLOW': {
       const prev = state.flows[action.flow.id];
       const inc = action.flow;
-      const nonEmpty = (inc.nodes?.length ?? 0) > 0 || (inc.edges?.length ?? 0) > 0;
+      const fid = String(action.flow.id || '');
+
+      let incMerged = inc;
+      if (
+        fid.startsWith('subflow_') &&
+        prev &&
+        Array.isArray(inc.nodes) &&
+        inc.nodes.length === 0 &&
+        Array.isArray(prev.nodes) &&
+        prev.nodes.length > 0
+      ) {
+        incMerged = {
+          ...inc,
+          nodes: prev.nodes as any,
+          edges:
+            Array.isArray(inc.edges) &&
+            inc.edges.length === 0 &&
+            Array.isArray(prev.edges) &&
+            prev.edges.length > 0
+              ? (prev.edges as any)
+              : inc.edges !== undefined
+                ? inc.edges
+                : prev.edges,
+        } as Flow<NodeT, EdgeT>;
+        logSubflowCanvasDebug('FlowStore:UPSERT_FLOW preserved graph (rejected empty nodes over stale subflow upsert)', {
+          flowId: fid,
+          preservedNodeCount: prev.nodes.length,
+          preservedEdgeCount: Array.isArray(prev.edges) ? prev.edges.length : 0,
+        });
+      }
+
+      const nonEmpty =
+        (incMerged.nodes?.length ?? 0) > 0 || (incMerged.edges?.length ?? 0) > 0;
       const flow = {
-        ...inc,
-        hydrated: inc.hydrated !== undefined ? inc.hydrated : (prev?.hydrated ?? false),
+        ...incMerged,
+        hydrated: incMerged.hydrated !== undefined ? incMerged.hydrated : (prev?.hydrated ?? false),
         hasLocalChanges:
-          inc.hasLocalChanges !== undefined
-            ? inc.hasLocalChanges
+          incMerged.hasLocalChanges !== undefined
+            ? incMerged.hasLocalChanges
             : prev !== undefined
               ? (prev.hasLocalChanges ?? false)
               : nonEmpty,
       } as Flow<NodeT, EdgeT>;
+      if (isSubflowCanvasDebugEnabled() && fid.startsWith('subflow_')) {
+        logSubflowCanvasDebug('FlowStore:UPSERT_FLOW', {
+          flowId: action.flow.id,
+          incomingHydrated: inc.hydrated,
+          incomingHasLocalChanges: inc.hasLocalChanges,
+          merged: summarizeFlowSlice(flow as any, { rowIdsSample: true }),
+        });
+      }
       const flows = { ...state.flows, [action.flow.id]: flow };
       return { ...state, flows };
     }
@@ -65,19 +107,63 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
     }
     case 'APPLY_FLOW_LOAD_RESULT': {
       const curr = state.flows[action.flowId];
-      if (!curr) return state;
-      if (curr.hydrated === true) return state;
+      if (!curr) {
+        if (isSubflowCanvasDebugEnabled()) {
+          logSubflowCanvasDebug('FlowStore:APPLY_FLOW_LOAD_RESULT noop (missing slice)', {
+            flowId: action.flowId,
+          });
+        }
+        return state;
+      }
+      if (curr.hydrated === true) {
+        if (isSubflowCanvasDebugEnabled()) {
+          logSubflowCanvasDebug('FlowStore:APPLY_FLOW_LOAD_RESULT noop (already hydrated)', {
+            flowId: action.flowId,
+            ...summarizeFlowSlice(curr as any, { rowIdsSample: true }),
+          });
+        }
+        return state;
+      }
       const p = action.payload;
+      const serverNodes = (p.nodes as any[]) ?? [];
+      const serverEdges = (p.edges as any[]) ?? [];
+      const localNodeCount = curr.nodes?.length ?? 0;
+      const keepLocalGraph = shouldKeepLocalGraphOnEmptyServerResponse({
+        serverNodeCount: serverNodes.length,
+        localNodeCount,
+        hasLocalChanges: curr.hasLocalChanges,
+        flowId: action.flowId,
+      });
+      const nextNodes = keepLocalGraph ? (curr.nodes as any[]) : serverNodes;
+      const nextEdges = keepLocalGraph ? (curr.edges as any[]) : serverEdges;
       const mergedMeta =
         p.meta !== undefined ? { ...curr.meta, ...p.meta } : curr.meta;
       const flow = {
         ...curr,
-        nodes: p.nodes as any,
-        edges: p.edges as any,
+        nodes: nextNodes as any,
+        edges: nextEdges as any,
         ...(mergedMeta !== undefined ? { meta: mergedMeta } : {}),
         hydrated: true,
-        hasLocalChanges: false,
+        hasLocalChanges: keepLocalGraph ? true : false,
       } as Flow<NodeT, EdgeT>;
+      if (keepLocalGraph) {
+        logFlowSaveDebug('FlowStore: APPLY_FLOW_LOAD_RESULT kept local graph (server empty, local dirty)', {
+          flowId: action.flowId,
+          localNodeCount,
+          serverNodeCount: serverNodes.length,
+        });
+      }
+      if (isSubflowCanvasDebugEnabled()) {
+        logSubflowCanvasDebug('FlowStore:APPLY_FLOW_LOAD_RESULT', {
+          flowId: action.flowId,
+          keepLocalGraph,
+          serverNodeCount: serverNodes.length,
+          serverEdgeCount: ((p.edges as any[]) ?? []).length,
+          hadHydratedBefore: curr.hydrated === true,
+          before: summarizeFlowSlice(curr as any, { rowIdsSample: true }),
+          after: summarizeFlowSlice(flow as any, { rowIdsSample: true }),
+        });
+      }
       return { ...state, flows: { ...state.flows, [action.flowId]: flow } };
     }
     case 'MARK_FLOWS_PERSISTED': {

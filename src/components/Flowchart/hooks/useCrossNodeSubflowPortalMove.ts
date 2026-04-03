@@ -11,6 +11,11 @@ import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContex
 import { applyTaskMoveToSubflow } from '@domain/taskSubflowMove/applyTaskMoveToSubflow';
 import type { ProjectConditionLike } from '@domain/taskSubflowMove/collectReferencedVarIds';
 import { findFirstSubflowPortalInNode } from '@domain/taskSubflowMove/findSubflowPortal';
+import type { ApplyTaskMoveToSubflowResult } from '@domain/taskSubflowMove/applyTaskMoveToSubflow';
+import { registerSubflowWiringSecondPass } from '@domain/taskSubflowMove/subflowWiringAfterVariableStore';
+import { variableCreationService } from '@services/VariableCreationService';
+import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logSubflowCanvasDebug, summarizeFlowSlice } from '@utils/subflowCanvasDebug';
 import type { FlowNode } from '../types/flowTypes';
 import type { NodeRowData } from '@types/project';
 
@@ -47,29 +52,69 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
       const d = ev.detail;
       if (!d?._state || d._state.handled) return;
 
+      logSubflowCanvasDebug('portal:crossNodeRowMove received', {
+        canvasFlowId: params.flowId?.trim() || 'main',
+        toNodeId: d.toNodeId,
+        rowId: d.rowData?.id,
+      });
+
       const canvasFlowId = params.flowId?.trim() || 'main';
       const toNode = nodesRef.current.find((n) => n.id === d.toNodeId);
       const portal = findFirstSubflowPortalInNode(toNode as { data?: { rows?: unknown[] } });
-      if (!portal) return;
+      if (!portal) {
+        logTaskSubflowMove('portal:skip', { reason: 'noSubflowPortalOnTargetNode', toNodeId: d.toNodeId, canvasFlowId });
+        logSubflowCanvasDebug('portal:skip (no subflow portal on target node)', {
+          toNodeId: d.toNodeId,
+          canvasFlowId,
+        });
+        return;
+      }
 
       const childSlice = flowsRef.current[portal.childFlowId];
       const childNodes = (childSlice?.nodes as Array<{ id?: string }>) || [];
-      if (!childNodes.length) return;
-
-      const targetNodeId = String(childNodes[0]?.id || '').trim();
-      if (!targetNodeId) return;
+      const targetNodeId = childNodes.length
+        ? String(childNodes[0]?.id || '').trim()
+        : '';
+      if (childNodes.length && !targetNodeId) {
+        logTaskSubflowMove('portal:skip', { reason: 'emptyTargetNodeId', childFlowId: portal.childFlowId });
+        return;
+      }
 
       const pid = String(getCurrentProjectId() || (projectData as { id?: string } | null)?.id || '').trim();
-      if (!pid) return;
+      if (!pid) {
+        logTaskSubflowMove('portal:skip', { reason: 'noProjectId', canvasFlowId });
+        return;
+      }
+
+      logTaskSubflowMove('portal:dragIntoSubflow', {
+        canvasFlowId,
+        toNodeId: d.toNodeId,
+        taskInstanceId: d.rowData.id,
+        childFlowId: portal.childFlowId,
+        targetNodeId,
+        parentSubflowTaskRowId: portal.subflowTaskRowId,
+      });
+
+      logSubflowCanvasDebug('portal:preApply child slice (workspace)', {
+        childFlowId: portal.childFlowId,
+        childSliceExists: !!childSlice,
+        ...summarizeFlowSlice(childSlice as any, { rowIdsSample: true }),
+      });
+      logSubflowCanvasDebug('portal:preApply parent slice (workspace)', {
+        parentFlowId: canvasFlowId,
+        ...summarizeFlowSlice(flowsRef.current[canvasFlowId] as any, { rowIdsSample: true }),
+      });
 
       const conditions = flattenProjectConditions(projectData);
+      const subflowDisplayTitle =
+        String(childSlice?.title || '').trim() || portal.subflowRowLabel || 'Subflow';
 
-      const result = applyTaskMoveToSubflow({
+      let result = applyTaskMoveToSubflow({
         projectId: pid,
         parentFlowId: canvasFlowId,
         childFlowId: portal.childFlowId,
         taskInstanceId: d.rowData.id,
-        subflowDisplayTitle: String(childSlice?.title || '').trim() || portal.subflowRowLabel || 'Subflow',
+        subflowDisplayTitle,
         parentSubflowTaskRowId: portal.subflowTaskRowId,
         flows: flowsRef.current,
         conditions,
@@ -81,10 +126,57 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
         },
       });
 
+      const taskRowId = d.rowData.id;
+      let flushed: ApplyTaskMoveToSubflowResult | null = null;
+      if (variableCreationService.getVariablesByTaskInstanceId(pid, taskRowId).length === 0) {
+        flushed = registerSubflowWiringSecondPass({
+          projectId: pid,
+          parentFlowId: canvasFlowId,
+          childFlowId: portal.childFlowId,
+          taskInstanceId: taskRowId,
+          subflowDisplayTitle,
+          parentSubflowTaskRowId: portal.subflowTaskRowId,
+          conditions,
+          projectData,
+        });
+      }
+      if (flushed) {
+        result = flushed;
+        logTaskSubflowMove('portal:secondPassFromVariableStore', { taskInstanceId: taskRowId });
+      }
+
+      logTaskSubflowMove('portal:applyResult', {
+        referencedCount: result.referencedVarIdsForMovedTask.length,
+        unreferencedCount: result.unreferencedVarIdsForMovedTask.length,
+        materializationOk: result.taskMaterialization.ok,
+        removedUnreferencedRows: result.removedUnreferencedVariableRows,
+      });
+
       const parentNext = result.flowsNext[canvasFlowId];
       const childNext = result.flowsNext[portal.childFlowId];
+
+      logSubflowCanvasDebug('portal:flowsNext after applyTaskMoveToSubflow (before upsert)', {
+        childFlowId: portal.childFlowId,
+        ...summarizeFlowSlice(childNext as any, { rowIdsSample: true }),
+        parentFlowId: canvasFlowId,
+        parentSummary: summarizeFlowSlice(parentNext as any, { rowIdsSample: true }),
+      });
+
       if (parentNext) upsertFlow(parentNext as any);
       if (childNext) upsertFlow(childNext as any);
+
+      logTaskSubflowMove('portal:upsertFlows', {
+        updatedParent: !!parentNext,
+        updatedChild: !!childNext,
+      });
+
+      const childFid = portal.childFlowId;
+      setTimeout(() => {
+        logSubflowCanvasDebug('portal:workspace snapshot after upsert (next task; React may have committed)', {
+          childFlowId: childFid,
+          ...summarizeFlowSlice(flowsRef.current[childFid] as any, { rowIdsSample: true }),
+        });
+      }, 0);
 
       d._state.handled = true;
     };

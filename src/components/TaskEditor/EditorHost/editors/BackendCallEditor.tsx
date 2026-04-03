@@ -18,6 +18,7 @@ import {
 import type { MappingEntry } from '../../../../components/FlowMappingPanel/mappingTypes';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import { resolveVariableStoreProjectId } from '../../../../utils/safeProjectId';
+import { getVariableLabel } from '../../../../utils/getVariableLabel';
 import type { ToolbarButton } from '../../../../dock/types';
 import TableEditor from './TableEditor';
 
@@ -110,11 +111,10 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
 
   // ✅ Helper: Convert varId to varName for display
   const getVarNameFromVarId = React.useCallback((varId: string | undefined): string | null => {
-    if (!varId || !projectId) return null;
-    const fromTr = getTranslation(varId);
-    if (fromTr != null && String(fromTr).trim() !== '') return fromTr;
-    return variableCreationService.getVarNameById(projectId, varId);
-  }, [projectId, getTranslation]);
+    if (!varId) return null;
+    const label = getVariableLabel(varId, translations);
+    return label || null;
+  }, [translations]);
 
   // ✅ Helper: Get varId from varName for saving
   const getVarIdFromVarName = React.useCallback((varName: string | undefined): string | null => {

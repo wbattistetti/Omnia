@@ -1,8 +1,10 @@
+/**
+ * Renders text containing `[variableId]` tokens; bracket bodies are GUIDs resolved via {@link getVariableLabel}.
+ */
 import React from 'react';
 import { extractBracketTokens } from '../../utils/variableTokenText';
-import { variableCreationService } from '../../services/VariableCreationService';
-import type { VariableInstance } from '../../types/variableTypes';
 import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
+import { getVariableLabel } from '../../utils/getVariableLabel';
 
 type Props = {
   text: string;
@@ -11,36 +13,16 @@ type Props = {
 
 export default function VariableTokenText({ text, className }: Props) {
   const { translations } = useProjectTranslations();
-  const tokenLabelById = React.useMemo(() => {
-    let projectId = '';
-    try {
-      projectId = String(localStorage.getItem('currentProjectId') || '').trim();
-    } catch {
-      projectId = '';
-    }
-    if (!projectId) {
-      return new Map<string, string>();
-    }
 
-    const vars = variableCreationService.getAllVariables(projectId) || [];
-    const out = new Map<string, string>();
-    vars.forEach((v) => {
-      const id = String((v as VariableInstance)?.id || '').trim();
-      if (!id) return;
-      const fromTr = String(translations[id] ?? '').trim();
-      const fromVar = String((v as VariableInstance)?.varName || '').trim();
-      const label = fromTr || fromVar;
-      if (!label) return;
-      out.set(id, label);
-    });
-    return out;
-  }, [text, translations]);
-
-  const resolveTokenLabel = React.useCallback((rawValue: string): string => {
-    const value = String(rawValue || '').trim();
-    if (!value) return value;
-    return tokenLabelById.get(value) || value;
-  }, [tokenLabelById]);
+  const resolveTokenLabel = React.useCallback(
+    (rawValue: string): string => {
+      const value = String(rawValue || '').trim();
+      if (!value) return value;
+      const label = getVariableLabel(value, translations);
+      return label || value;
+    },
+    [translations]
+  );
 
   const tokens = extractBracketTokens(text);
   if (tokens.length === 0) {

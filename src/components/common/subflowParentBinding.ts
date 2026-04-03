@@ -5,6 +5,8 @@ import {
 } from '../../domain/variableProxyNaming';
 import { taskRepository } from '../../services/TaskRepository';
 import { variableCreationService } from '../../services/VariableCreationService';
+import { getVariableLabel } from '../../utils/getVariableLabel';
+import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegistry';
 import { TaskType } from '../../types/taskTypes';
 
 type VariableMenuLikeItem = {
@@ -110,7 +112,7 @@ export function ensureParentVariableAndSubflowOutputBinding(
   const existingForChild = prevBindings.find((b) => String(b?.fromVariable || '') === childVarId);
   if (existingForChild) {
     const toId = String(existingForChild.toVariable || '').trim();
-    const name = variableCreationService.getVarNameById(projectId, toId);
+    const name = getVariableLabel(toId, getProjectTranslationsTable());
     if (!name) {
       throw new Error(
         `Subflow output binding references missing parent variable '${toId}'. Fix outputBindings on this Subflow task.`

@@ -8,6 +8,7 @@ import {
   collectConditionIdsFromFlowEdges,
   collectReferencedVarIdsForParentFlowWorkspace,
   collectReferencedVarIdsInParentFlowCorpus,
+  isVariableReferencedInFlow,
   conditionTextsForIds,
   extractReferencedVarIdsFromText,
   partitionVariablesByReference,
@@ -227,5 +228,48 @@ describe('collectReferencedVarIdsForParentFlowWorkspace (internal haystack)', ()
     });
 
     expect(refs.has(d1)).toBe(true);
+  });
+
+  it('finds varId in serialized flow A JSON (e.g. meta / bindings)', () => {
+    getAllVariablesSpy.mockReturnValue([
+      { id: d1, varName: 'x', taskInstanceId: taskId, dataPath: 'p' },
+    ] as any);
+    getTaskSpy.mockReturnValue(null);
+
+    const refs = collectReferencedVarIdsForParentFlowWorkspace({
+      projectId: 'proj1',
+      parentFlowId: 'main',
+      flows: {
+        main: {
+          nodes: [],
+          edges: [],
+          meta: { flowInterface: { output: [{ variableRefId: d1 }] } },
+        },
+      } as any,
+    });
+
+    expect(refs.has(d1)).toBe(true);
+  });
+
+  it('isVariableReferencedInFlow matches collectReferencedVarIdsForParentFlowWorkspace', () => {
+    getAllVariablesSpy.mockReturnValue([
+      { id: d1, varName: 'x', taskInstanceId: taskId, dataPath: 'p' },
+    ] as any);
+    getTaskSpy.mockReturnValue(null);
+
+    const params = {
+      projectId: 'proj1',
+      parentFlowId: 'main',
+      flows: {
+        main: {
+          nodes: [],
+          edges: [],
+          meta: { flowInterface: { output: [{ variableRefId: d1 }] } },
+        },
+      } as any,
+    };
+
+    expect(isVariableReferencedInFlow(d1, params)).toBe(true);
+    expect(isVariableReferencedInFlow(d2, params)).toBe(false);
   });
 });

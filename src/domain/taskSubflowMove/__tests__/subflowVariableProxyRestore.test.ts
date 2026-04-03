@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { variableCreationService } from '@services/VariableCreationService';
+import { getVariableLabel } from '@utils/getVariableLabel';
+import {
+  getProjectTranslationsTable,
+  setProjectTranslationsRegistry,
+} from '@utils/projectTranslationsRegistry';
 import { taskRepository } from '@services/TaskRepository';
 import { TaskType } from '@types/taskTypes';
 import type { TaskTree, TaskTreeNode } from '@types/taskTypes';
@@ -56,7 +61,8 @@ describe('restoreChildTaskBoundVariablesToLocalNames', () => {
     expect(renamed[0]!.previousName).toBe('dati_personali.colore');
     expect(renamed[0]!.nextName).toMatch(/colore/i);
 
-    const after = variableCreationService.getVarNameById(projectId, vid);
+    setProjectTranslationsRegistry({ [vid]: renamed[0]!.nextName });
+    const after = getVariableLabel(vid, getProjectTranslationsTable());
     expect(after).toBe(renamed[0]!.nextName);
     expect(after?.includes('.')).toBe(false);
   });
@@ -132,7 +138,8 @@ describe('migrateSubflowVariableProxyModel', () => {
 
     expect(r.childRenames.length).toBe(1);
     expect(r.childRenames[0]!.id).toBe(childVarId);
-    expect(variableCreationService.getVarNameById(projectId, childVarId)).toBe('colore');
+    setProjectTranslationsRegistry({ [childVarId]: 'colore' });
+    expect(getVariableLabel(childVarId, getProjectTranslationsTable())).toBe('colore');
     expect(r.syncCalls).toBe(1);
     expect(syncSpy).toHaveBeenCalledTimes(1);
   });

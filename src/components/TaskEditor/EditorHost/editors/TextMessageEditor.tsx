@@ -21,7 +21,9 @@ import {
   getVariableMenuRebuildFingerprint,
   type VariableMenuItem,
 } from '../../../common/variableMenuModel';
-import { variableCreationService } from '../../../../services/VariableCreationService';
+import { getVariableLabel } from '../../../../utils/getVariableLabel';
+import { getProjectTranslationsTable } from '../../../../utils/projectTranslationsRegistry';
+import { resolveChildOutputGuidToParentProxyLabelForFlow } from '../../../../services/subflowProjectSync';
 import { ensureParentVariableAndSubflowOutputBinding } from '../../../common/subflowParentBinding';
 import { useTextTranslationField } from './shared/useTextTranslationField';
 import { fingerprintVariableMapping } from './shared/variableMappingFingerprint';
@@ -111,14 +113,23 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
 
   const guidsToLabels = useCallback(
     (value: string): string => {
-      const projectId = pdUpdate?.getCurrentProjectId() || '';
       return convertDSLGUIDsToLabels(value, variableMappings, {
-        resolveUnknownGuidToLabel: (guid) =>
-          getTranslation(guid) ||
-          (projectId ? variableCreationService.getVarNameById(projectId, guid) : null),
+        resolveUnknownGuidToLabel: (guid) => {
+          const viaSubflowBinding = resolveChildOutputGuidToParentProxyLabelForFlow(
+            guid,
+            menuFlowId,
+            flows as any
+          );
+          if (viaSubflowBinding) return viaSubflowBinding;
+          return (
+            getVariableLabel(guid, translations) ||
+            getVariableLabel(guid, getProjectTranslationsTable()) ||
+            null
+          );
+        },
       });
     },
-    [variableMappings, pdUpdate, getTranslation]
+    [variableMappings, translations, menuFlowId, flows]
   );
 
   const getTranslationForField = useCallback(
@@ -188,12 +199,32 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
         onClose={() => setVarsMenu({ open: false, x: 0, y: 0 })}
         onExposeAndSelect={(item) => {
           const projectId = pdUpdate?.getCurrentProjectId() || '';
-          if (!projectId) return;
+
+          const applyInsert = (label: string) => {
+            const el = textareaRef.current;
+            const caret = {
+              start: el?.selectionStart ?? text.length,
+              end: el?.selectionEnd ?? text.length,
+            };
+            const out = insertBracketTokenAtCaret(text, caret, label);
+            setText(out.text);
+            setVarsMenu({ open: false, x: 0, y: 0 });
+            requestAnimationFrame(() => {
+              if (!el) return;
+              el.focus();
+              el.setSelectionRange(out.caret.start, out.caret.end);
+            });
+          };
+
           if (item.isFromActiveFlow === false) {
             if (item.missingChildVariableRef === true) {
               window.alert(
                 'Questo parametro di interfaccia non è ancora collegato a una variabile nel sotto-flusso. Apri il flow figlio, collega l’uscita dell’interfaccia a una variabile, poi riprova.'
               );
+              return;
+            }
+            if (!projectId) {
+              applyInsert(item.tokenLabel || item.varLabel);
               return;
             }
             const bound = ensureParentVariableAndSubflowOutputBinding(
@@ -202,44 +233,21 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
               flows as any,
               item
             );
-            const el = textareaRef.current;
-            const caret = {
-              start: el?.selectionStart ?? text.length,
-              end: el?.selectionEnd ?? text.length,
-            };
-            const out = insertBracketTokenAtCaret(text, caret, bound.tokenLabel);
-            setText(out.text);
-            setVarsMenu({ open: false, x: 0, y: 0 });
-            requestAnimationFrame(() => {
-              if (!el) return;
-              el.focus();
-              el.setSelectionRange(out.caret.start, out.caret.end);
-            });
+            applyInsert(bound.tokenLabel);
             return;
           }
 
           const owner = (flows as any)?.[item.ownerFlowId];
-          if (!owner) return;
-          const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
-          const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
-          const nextVars = existing
-            ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v))
-            : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
-          updateFlowMeta(item.ownerFlowId, { variables: nextVars });
+          if (projectId && owner) {
+            const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
+            const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
+            const nextVars = existing
+              ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v))
+              : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
+            updateFlowMeta(item.ownerFlowId, { variables: nextVars });
+          }
 
-          const el = textareaRef.current;
-          const caret = {
-            start: el?.selectionStart ?? text.length,
-            end: el?.selectionEnd ?? text.length,
-          };
-          const out = insertBracketTokenAtCaret(text, caret, item.tokenLabel || item.varLabel);
-          setText(out.text);
-          setVarsMenu({ open: false, x: 0, y: 0 });
-          requestAnimationFrame(() => {
-            if (!el) return;
-            el.focus();
-            el.setSelectionRange(out.caret.start, out.caret.end);
-          });
+          applyInsert(item.tokenLabel || item.varLabel);
         }}
         onSelect={(label) => {
           const el = textareaRef.current;

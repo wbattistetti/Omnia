@@ -8,6 +8,8 @@ import { transformASTLabelsToGuids, convertDSLLabelsToGUIDs, convertDSLGUIDsToLa
 import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
 import { variableCreationService } from '@services/VariableCreationService';
 import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
+import { getVariableLabel } from '@utils/getVariableLabel';
+import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
 
 export interface ScriptManagerServiceDependencies {
   projectData: any;
@@ -546,7 +548,7 @@ export class ScriptManagerService {
               if (fromDep != null && String(fromDep).trim() !== '') {
                 return fromDep;
               }
-              return variableCreationService.getVarNameById(pid, guid);
+              return getVariableLabel(String(guid), getProjectTranslationsTable()) || null;
             },
           });
 

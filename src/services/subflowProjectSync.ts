@@ -12,10 +12,15 @@ import type { WorkspaceState } from '../flows/FlowTypes';
 import { loadFlow } from '../flows/FlowPersistence';
 import type { MappingEntry } from '../components/FlowMappingPanel/mappingTypes';
 import {
+  buildSubflowQualifiedDisplayLabel,
   buildSubflowParentProxyVariableName,
   disambiguateProxyVarName,
+  localLabelForSubflowTaskVariable,
 } from '../domain/variableProxyNaming';
 import { projectHasBracketReferenceToVarId } from './subflowVariableReferenceScan';
+import { getVariableLabel } from '../utils/getVariableLabel';
+import { getProjectTranslationsTable, mergeProjectTranslationEntry } from '../utils/projectTranslationsRegistry';
+import { logTaskSubflowMove } from '../utils/taskSubflowMoveDebug';
 
 type SubflowIoBinding = { fromVariable: string; toVariable: string };
 
@@ -117,20 +122,48 @@ function pickUniqueProxyNameForRename(
 /**
  * Creates/renames parent proxy vars and rewrites outputBindings for one Subflow task instance.
  */
+export type SyncProxyBindingsForSubflowTaskOptions = {
+  /** Resolved subflow title for qualified parent labels (`Title.internal`). Overrides canvas row text when set. */
+  qualifiedSubflowTitle?: string;
+};
+
+function mergeTranslationForGuid(guid: string, text: string): void {
+  mergeProjectTranslationEntry(guid, text);
+}
+
 export function syncProxyBindingsForSubflowTask(
   projectId: string,
   parentFlowId: string,
   subflowTaskId: string,
   childFlowId: string,
   interfaceOutputs: MappingEntry[],
-  flows: WorkspaceState['flows']
+  flows: WorkspaceState['flows'],
+  options?: SyncProxyBindingsForSubflowTaskOptions
 ): void {
   const pid = String(projectId || '').trim();
-  if (!pid) return;
+  if (!pid) {
+    logTaskSubflowMove('sync:abort', { reason: 'no_projectId' });
+    return;
+  }
 
   const task = taskRepository.getTask(subflowTaskId);
-  if (!task || task.type !== TaskType.Subflow) return;
-  if (resolveSubflowId(task) !== String(childFlowId).trim()) return;
+  if (!task || task.type !== TaskType.Subflow) {
+    logTaskSubflowMove('sync:abort', {
+      reason: 'not_subflow_task',
+      subflowTaskId,
+      taskFound: !!task,
+      taskType: task?.type,
+    });
+    return;
+  }
+  if (resolveSubflowId(task) !== String(childFlowId).trim()) {
+    logTaskSubflowMove('sync:abort', {
+      reason: 'childFlowId_mismatch',
+      resolvedChild: resolveSubflowId(task),
+      expectedChildFlowId: childFlowId,
+    });
+    return;
+  }
 
   const rowText =
     getCanvasRowTextForTask(parentFlowId, subflowTaskId, flows) ||
@@ -145,6 +178,20 @@ export function syncProxyBindingsForSubflowTask(
   const nextBindings: SubflowIoBinding[] = [];
   const keptChildIds = new Set<string>();
 
+  logTaskSubflowMove('sync:enter', {
+    parentFlowId,
+    subflowTaskId,
+    childFlowId,
+    interfaceOutputEntryCount: output.length,
+    prevBindingCount: prevBindings.length,
+    prevBindings: prevBindings.map((b) => ({
+      fromVariable: String(b?.fromVariable || '').trim(),
+      toVariable: String(b?.toVariable || '').trim(),
+    })),
+    rowText,
+    qualifiedSubflowTitle: options?.qualifiedSubflowTitle,
+  });
+
   for (const entry of output) {
     const refId = String(entry?.variableRefId || '').trim();
     if (!refId) continue;
@@ -152,9 +199,14 @@ export function syncProxyBindingsForSubflowTask(
     if (!internalLabel) continue;
     keptChildIds.add(refId);
 
+    const internalDisplay =
+      getVariableLabel(refId, getProjectTranslationsTable()) || internalLabel;
+    const titleForQual = String(options?.qualifiedSubflowTitle ?? '').trim() || rowText;
     let desiredBase: string;
     try {
-      desiredBase = buildSubflowParentProxyVariableName(rowText, internalLabel);
+      desiredBase = options?.qualifiedSubflowTitle
+        ? buildSubflowQualifiedDisplayLabel(titleForQual, internalDisplay)
+        : buildSubflowParentProxyVariableName(rowText, internalLabel);
     } catch {
       continue;
     }
@@ -164,10 +216,20 @@ export function syncProxyBindingsForSubflowTask(
       const parentId = String(existing.toVariable || '').trim();
       if (!parentId) continue;
       const uniqueName = pickUniqueProxyNameForRename(pid, parentFlowId, desiredBase, parentId);
-      const current = variableCreationService.getVarNameById(pid, parentId);
-      if (current && current !== uniqueName) {
-        variableCreationService.renameVariableById(pid, parentId, uniqueName);
+      const current = getVariableLabel(parentId, getProjectTranslationsTable());
+      if (current !== uniqueName) {
+        if (variableCreationService.renameVariableById(pid, parentId, uniqueName)) {
+          mergeTranslationForGuid(parentId, uniqueName);
+        }
       }
+      logTaskSubflowMove('sync:binding', {
+        mode: 'reuse_parent_proxy',
+        childVariableGuid: refId,
+        parentProxyGuid: parentId,
+        desiredBase,
+        uniqueName,
+        renamed: current !== uniqueName,
+      });
       nextBindings.push({ fromVariable: refId, toVariable: parentId });
     } else {
       const tokenLabel = disambiguateProxyVarName(desiredBase, (name) =>
@@ -176,6 +238,14 @@ export function syncProxyBindingsForSubflowTask(
       const parentVar = variableCreationService.createManualVariable(pid, tokenLabel, {
         scope: 'flow',
         scopeFlowId: parentFlowId,
+      });
+      mergeTranslationForGuid(parentVar.id, tokenLabel);
+      logTaskSubflowMove('sync:binding', {
+        mode: 'new_parent_proxy',
+        childVariableGuid: refId,
+        parentProxyGuid: parentVar.id,
+        desiredBase,
+        tokenLabel,
       });
       nextBindings.push({ fromVariable: refId, toVariable: parentVar.id });
     }
@@ -188,13 +258,111 @@ export function syncProxyBindingsForSubflowTask(
     if (
       toId &&
       !projectHasBracketReferenceToVarId(pid, toId, flows) &&
-      variableCreationService.getVarNameById(pid, toId)
+      variableCreationService.getAllVariables(pid).some((v) => String(v?.id || '').trim() === toId)
     ) {
+      logTaskSubflowMove('sync:removedStaleParentProxy', {
+        fromVariable: from,
+        removedParentProxyId: toId,
+      });
       variableCreationService.removeVariableById(pid, toId);
     }
   }
 
   taskRepository.updateTask(subflowTaskId, { outputBindings: nextBindings } as any);
+
+  logTaskSubflowMove('sync:exit', {
+    subflowTaskId,
+    nextBindingCount: nextBindings.length,
+    nextBindings: nextBindings.map((b) => ({
+      from: String(b?.fromVariable || '').trim(),
+      to: String(b?.toVariable || '').trim(),
+    })),
+  });
+}
+
+/**
+ * When a parent-flow message still references the child slot GUID, resolve bracket display to the
+ * parent proxy's qualified label (child GUID → parent translation).
+ */
+export function resolveChildOutputGuidToParentProxyLabelForFlow(
+  childSlotGuid: string,
+  parentFlowId: string,
+  flows: WorkspaceState['flows']
+): string | null {
+  const g = String(childSlotGuid || '').trim();
+  if (!g) return null;
+  const flow = flows[parentFlowId];
+  if (!flow) return null;
+  for (const node of flow.nodes || []) {
+    for (const row of extractRows(node)) {
+      const tid = String(row?.id || '').trim();
+      if (!tid) continue;
+      const task = taskRepository.getTask(tid);
+      if (!task || task.type !== TaskType.Subflow) continue;
+      const bindings = Array.isArray((task as any).outputBindings)
+        ? ((task as any).outputBindings as SubflowIoBinding[])
+        : [];
+      for (const b of bindings) {
+        if (String(b?.fromVariable || '').trim() !== g) continue;
+        const parentId = String(b?.toVariable || '').trim();
+        if (!parentId) continue;
+        const lbl = getVariableLabel(parentId, getProjectTranslationsTable());
+        return lbl || null;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Second pass: set the parent proxy GUID to the qualified display label only. Child slot GUID keeps
+ * the internal segment (e.g. "colore") for subflow canvas / interface, not the FQ parent label.
+ */
+export function ensureSubflowOutputBindingsDisplayLabels(params: {
+  parentSubflowTaskRowId: string;
+  referencedChildVarIds: ReadonlySet<string> | ReadonlyArray<string>;
+  qualifiedSubflowTitle: string;
+  interfaceOutputs: MappingEntry[];
+}): number {
+  const { parentSubflowTaskRowId, qualifiedSubflowTitle, interfaceOutputs } = params;
+  const refSet =
+    params.referencedChildVarIds instanceof Set
+      ? params.referencedChildVarIds
+      : new Set(
+          [...params.referencedChildVarIds].map((x) => String(x || '').trim()).filter(Boolean)
+        );
+
+  const task = taskRepository.getTask(parentSubflowTaskRowId);
+  if (!task || task.type !== TaskType.Subflow) return 0;
+  const bindings = Array.isArray((task as any).outputBindings)
+    ? ((task as any).outputBindings as SubflowIoBinding[])
+    : [];
+
+  const title = String(qualifiedSubflowTitle || '').trim() || 'Subflow';
+  let count = 0;
+
+  for (const b of bindings) {
+    const childId = String(b?.fromVariable || '').trim();
+    const parentId = String(b?.toVariable || '').trim();
+    if (!childId || !parentId || !refSet.has(childId)) continue;
+
+    const entry = interfaceOutputs.find((o) => String(o?.variableRefId || '').trim() === childId);
+    const internalLabel = entry ? entryLabel(entry) : '';
+    const internalOnly =
+      localLabelForSubflowTaskVariable(internalLabel) || internalLabel || childId;
+    const fq = buildSubflowQualifiedDisplayLabel(title, internalOnly);
+
+    mergeProjectTranslationEntry(parentId, fq);
+    mergeProjectTranslationEntry(childId, internalOnly);
+    logTaskSubflowMove('apply:secondPass:rename', {
+      varId: parentId,
+      childVarId: childId,
+      parentNewLabel: fq,
+      childInternalLabel: internalOnly,
+    });
+    count++;
+  }
+  return count;
 }
 
 /**

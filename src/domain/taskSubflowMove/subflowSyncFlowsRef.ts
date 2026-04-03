@@ -1,5 +1,7 @@
 /**
  * Bridge: FlowStore `flows`, upsert handler, and translations for non-React callers (e.g. TaskRepository).
+ * `setSubflowSyncFlows` is invoked from DockManagerWithFlows **on every render** so `getSubflowSyncFlows()`
+ * matches the latest reducer state before TaskRepository runs sync in the same frame as a portal upsert.
  */
 
 import type { Flow, WorkspaceState } from '@flows/FlowTypes';
