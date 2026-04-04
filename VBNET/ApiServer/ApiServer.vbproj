@@ -64,6 +64,7 @@
     <Compile Include="Interfaces\Handlers\TestExtractionHandlers.vb" />
     <Compile Include="Interfaces\Handlers\GrammarTestHandlers.vb" />
     <Compile Include="Interfaces\Handlers\GrammarFlowExtractHandlers.vb" />
+    <Compile Include="Interfaces\Handlers\ContractExtractHandlers.vb" />
     <Compile Include="Middleware\Utf8EncodingMiddleware.vb" />
     <Compile Include="Middleware\ExceptionLoggingMiddleware.vb" />
     <!-- ❌ RIMOSSO: Migration\ContractMigrationRunner.vb - migrazione completata -->

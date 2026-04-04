@@ -11,6 +11,7 @@ import {
   getProjectTranslationsTable,
   setProjectTranslationsRegistry,
 } from '../../../utils/projectTranslationsRegistry';
+import { makeTranslationKey } from '../../../utils/translationKeys';
 
 function pid(): string {
   return `vitest_subflow_bind_${Math.random().toString(36).slice(2, 14)}`;
@@ -46,7 +47,7 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
     });
 
     expect(out.tokenLabel).toBe('email.conferma');
-    setProjectTranslationsRegistry({ [out.parentVarId]: out.tokenLabel });
+    setProjectTranslationsRegistry({ [makeTranslationKey('variable', out.parentVarId)]: out.tokenLabel });
     expect(getVariableLabel(out.parentVarId, getProjectTranslationsTable())).toBe('email.conferma');
 
     const t = taskRepository.getTask(subflowTaskId) as any;
@@ -83,7 +84,7 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
     });
 
     expect(out.tokenLabel).toBe('email.conferma_2');
-    setProjectTranslationsRegistry({ [out.parentVarId]: out.tokenLabel });
+    setProjectTranslationsRegistry({ [makeTranslationKey('variable', out.parentVarId)]: out.tokenLabel });
     expect(getVariableLabel(out.parentVarId, getProjectTranslationsTable())).toBe('email.conferma_2');
   });
 
@@ -98,7 +99,7 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
       scope: 'flow',
       scopeFlowId: parentFlowId,
     });
-    setProjectTranslationsRegistry({ [existing.id]: 'already.bound' });
+    setProjectTranslationsRegistry({ [makeTranslationKey('variable', existing.id)]: 'already.bound' });
 
     taskRepository.createTask(TaskType.Subflow, null, {
       flowId: childFlowId,

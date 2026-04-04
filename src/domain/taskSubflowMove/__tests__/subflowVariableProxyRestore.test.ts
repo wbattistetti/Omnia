@@ -5,6 +5,7 @@ import {
   getProjectTranslationsTable,
   setProjectTranslationsRegistry,
 } from '@utils/projectTranslationsRegistry';
+import { makeTranslationKey } from '@utils/translationKeys';
 import { taskRepository } from '@services/TaskRepository';
 import { TaskType } from '@types/taskTypes';
 import type { TaskTree, TaskTreeNode } from '@types/taskTypes';
@@ -39,8 +40,9 @@ describe('restoreChildTaskBoundVariablesToLocalNames', () => {
   it('strips legacy FQ on child task-bound rows; never applies FQ', () => {
     const projectId = `vitest_restore_${Math.random().toString(36).slice(2, 14)}`;
     const taskId = 'task-restore-1';
+    const nodeId = 'a0000000-0000-4000-8000-0000000000a1';
     const roots: TaskTreeNode[] = [
-      { id: 'node-a', label: 'campo', subNodes: [], templateId: 't1' } as TaskTreeNode,
+      { id: nodeId, label: 'campo', subNodes: [], templateId: 't1' } as TaskTreeNode,
     ];
     const taskTree: TaskTree = {
       labelKey: 'Ask field',
@@ -61,7 +63,7 @@ describe('restoreChildTaskBoundVariablesToLocalNames', () => {
     expect(renamed[0]!.previousName).toBe('dati_personali.colore');
     expect(renamed[0]!.nextName).toMatch(/colore/i);
 
-    setProjectTranslationsRegistry({ [vid]: renamed[0]!.nextName });
+    setProjectTranslationsRegistry({ [makeTranslationKey('variable', vid)]: renamed[0]!.nextName });
     const after = getVariableLabel(vid, getProjectTranslationsTable());
     expect(after).toBe(renamed[0]!.nextName);
     expect(after?.includes('.')).toBe(false);
@@ -86,8 +88,9 @@ describe('migrateSubflowVariableProxyModel', () => {
     const subflowTaskId = `subflow-task-m1-${Math.random().toString(36).slice(2, 8)}`;
     const childTaskId = `utter-task-m1-${Math.random().toString(36).slice(2, 8)}`;
 
+    const nodeIdB = 'b0000000-0000-4000-8000-0000000000b1';
     const roots: TaskTreeNode[] = [
-      { id: 'node-a', label: 'colore', subNodes: [], templateId: 't1' } as TaskTreeNode,
+      { id: nodeIdB, label: 'colore', subNodes: [], templateId: 't1' } as TaskTreeNode,
     ];
     const childTaskTree: TaskTree = {
       labelKey: 'Chiedi',
@@ -138,7 +141,7 @@ describe('migrateSubflowVariableProxyModel', () => {
 
     expect(r.childRenames.length).toBe(1);
     expect(r.childRenames[0]!.id).toBe(childVarId);
-    setProjectTranslationsRegistry({ [childVarId]: 'colore' });
+    setProjectTranslationsRegistry({ [makeTranslationKey('variable', childVarId)]: 'colore' });
     expect(getVariableLabel(childVarId, getProjectTranslationsTable())).toBe('colore');
     expect(r.syncCalls).toBe(1);
     expect(syncSpy).toHaveBeenCalledTimes(1);

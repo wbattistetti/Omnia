@@ -23,6 +23,16 @@ describe('sayMessageTaskSync', () => {
     expect(getSayMessageSyncedBody(task)).toBe('inline literal');
   });
 
+  it('returns empty when text parameter is bare UUID (no dual-read)', () => {
+    const task = {
+      id: 'b-bare',
+      type: TaskType.SayMessage,
+      templateId: null,
+      parameters: [{ parameterId: 'text', value: 'aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee' }],
+    } as any;
+    expect(getSayMessageSyncedBody(task)).toBe('');
+  });
+
   it('returns empty for non-SayMessage tasks', () => {
     const task = { id: 'c', type: TaskType.UtteranceInterpretation, text: 'x' } as any;
     expect(getSayMessageSyncedBody(task)).toBe('');

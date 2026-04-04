@@ -7,6 +7,7 @@ import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { cloneAndAdaptContract, createSubIdMapping } from '../../../utils/contractUtils';
 import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
 import { extractTranslationKeysFromSteps } from '../../../utils/stepPromptsConverter';
+import { isUuidString, makeTranslationKey } from '../../../utils/translationKeys';
 
 // ✅ REMOVED: extractPromptsFromMainData - DEPRECATED
 // Ora usiamo extractStartPrompts da taskTreePromptExtractor.ts direttamente
@@ -372,8 +373,8 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
     // ✅ Save node label to Translations (for current project locale)
     // This will be saved to DB when the TaskTree is saved
     // Use resolved label (from template if deriving, otherwise from node)
-    if (nodeLabel && nodeId) {
-      projectTranslations[nodeId] = nodeLabel;
+    if (nodeLabel && nodeId && isUuidString(String(nodeId))) {
+      projectTranslations[makeTranslationKey('task', String(nodeId))] = nodeLabel;
       console.log('[assembleFinalTaskTree] ✅ Saved node label to translations', {
         nodeId: nodeId.substring(0, 20) + '...',
         label: nodeLabel,
@@ -823,8 +824,9 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
           templateKeyForEsc = nodesteps[stepKey][escIdx];
         }
 
-        // ✅ Generate new runtime GUID for instance (always generate new, even if template key exists)
+        // ✅ Generate new task id; translation store key is always canonical `task:<uuid>`
         const actionInstanceId = uuidv4();
+        const textStoreKey = makeTranslationKey('task', actionInstanceId);
 
         // ✅ If we have a template key, copy translation from template to new runtime GUID
         if (templateKeyForEsc && templateTranslations[templateKeyForEsc]) {
@@ -834,13 +836,14 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
 
           if (templateText) {
             // ✅ Add translation to projectTranslations (flat dictionary for project locale only)
-            projectTranslations[actionInstanceId] = templateText;
+            projectTranslations[textStoreKey] = templateText;
 
             console.log('[assembleFinalTaskTree] Copied translation from template', {
               path,
               stepKey,
               templateGuid: templateKeyForEsc,
               runtimeGuid: actionInstanceId,
+              textStoreKey,
               locale: projectLocale,
               text: templateText.substring(0, 50)
             });
@@ -860,14 +863,14 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
           id: actionInstanceId,      // ✅ Standard: id (GUID univoco)
           type: taskType,             // ✅ NO FALLBACK - must be present
           templateId: null,           // ✅ null = standalone task (non deriva da altri Task)
-          parameters: [{ parameterId: 'text', value: actionInstanceId }]
+          parameters: [{ parameterId: 'text', value: textStoreKey }]
         };
 
         const escalation = {
           escalationId: `e_${uuidv4()}`,
           tasks: [{
             ...baseTask,
-            parameters: [{ parameterId: 'text', value: actionInstanceId }]
+            parameters: [{ parameterId: 'text', value: textStoreKey }]
           }]
           // ❌ RIMOSSO: actions - legacy field, non più necessario
         };
@@ -886,7 +889,9 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
       if (escalations.length > 0 && firstTask?.id) {
         const firstEscalationTaskId = firstTask.id;
         const firstEscalationTemplateKey = (escalations[0] as any).__templateKey;
-        assembled.messages[stepKey] = { textKey: firstEscalationTaskId };
+        assembled.messages[stepKey] = {
+          textKey: makeTranslationKey('task', String(firstEscalationTaskId)),
+        };
         // Also store template key if present in first escalation
         if (firstEscalationTemplateKey) {
           (assembled.messages[stepKey] as any).__templateKey = firstEscalationTemplateKey;

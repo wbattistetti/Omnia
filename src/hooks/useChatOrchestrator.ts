@@ -7,6 +7,7 @@ import { openLateralChatPanel } from '../components/AppContent/infrastructure/do
 import { scheduleDockLayoutRefresh } from '../utils/scheduleDockLayoutRefresh';
 import { createSingleNodeFlow } from '../utils/flowTestHelpers';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
+import { looksLikeTechnicalTranslationOrId } from '../utils/translationKeys';
 
 /**
  * Chat orchestration hook - Phase 2 Refactoring
@@ -63,11 +64,10 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
   // Retry counters to prevent infinite loops
   const flowChatRetryRef = useRef(0);
   const singleNodeRetryRef = useRef(0);
-  const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-[a-z0-9_-]+)?$/i;
 
   const getReadableLabel = useCallback((value: unknown, fallback: string): string => {
     const text = String(value || '').trim();
-    if (!text || GUID_RE.test(text)) {
+    if (!text || looksLikeTechnicalTranslationOrId(text)) {
       return fallback;
     }
     return text;
@@ -79,7 +79,7 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
     }
     const candidate = nodeRows.find((r: any) => {
       const text = String(r?.text || r?.label || r?.title || '').trim();
-      return text.length > 0 && !GUID_RE.test(text);
+      return text.length > 0 && !looksLikeTechnicalTranslationOrId(text);
     });
     const resolved = String(candidate?.text || candidate?.label || candidate?.title || '').trim();
     return resolved || undefined;
@@ -160,7 +160,9 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
     // Retry if translations are still loading
     if (translationsLoading) {
       if (flowChatRetryRef.current >= 10) {
-        console.error('[ChatOrchestrator] Max retries reached');
+        console.error('[ChatOrchestrator] Max retries reached while waiting for translations load');
+        alert('Translations are still loading. Wait a moment and try Run again.');
+        flowChatRetryRef.current = 0;
         return;
       }
       flowChatRetryRef.current += 1;
@@ -169,12 +171,7 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
       return;
     }
 
-    // Validate translations
-    if (!translations || Object.keys(translations).length === 0) {
-      console.error('[ChatOrchestrator] Translations empty');
-      alert('Translations are not available.');
-      return;
-    }
+    // Empty translation map is valid (new project / keys not in DB yet) — same as ProjectTranslationsContext.
 
     const rootPref = (() => {
       try {
@@ -251,7 +248,9 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
     // Retry if translations are still loading
     if (translationsLoading) {
       if (singleNodeRetryRef.current >= 10) {
-        console.error('[ChatOrchestrator] Max retries reached');
+        console.error('[ChatOrchestrator] Max retries reached while waiting for translations load');
+        alert('Translations are still loading. Wait a moment and try again.');
+        singleNodeRetryRef.current = 0;
         return;
       }
       singleNodeRetryRef.current += 1;
@@ -260,12 +259,7 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
       return;
     }
 
-    // Validate translations
-    if (!translations || Object.keys(translations).length === 0) {
-      console.error('[ChatOrchestrator] Translations empty');
-      alert('Translations are not available.');
-      return;
-    }
+    // Empty translation map is valid for new projects.
 
     // Create and open chat tab
     const nodeLabel = getReadableLabel(node.data?.label, 'Nodo');

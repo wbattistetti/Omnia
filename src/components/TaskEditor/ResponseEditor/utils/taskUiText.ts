@@ -5,13 +5,7 @@
 
 import { getTaskLabel } from '@responseEditor/taskMeta';
 import { isMessageLikeEscalationTask } from '@responseEditor/utils/escalationHelpers';
-
-const GUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isGuid(value: unknown): value is string {
-  return typeof value === 'string' && GUID_RE.test(value);
-}
+import { isCanonicalTranslationKey } from '@utils/translationKeys';
 
 export function getParameterRecord(task: unknown, parameterId: string): { parameterId: string; value: unknown } | undefined {
   const params = (task as { parameters?: { parameterId?: string; value?: unknown }[] })?.parameters;
@@ -23,10 +17,18 @@ export function getParameterValue(task: unknown, parameterId: string): unknown {
   return getParameterRecord(task, parameterId)?.value;
 }
 
-/** Returns translation store key (GUID) when the parameter value is a GUID; otherwise null. */
+/**
+ * Returns translation store key when the parameter holds a canonical key (`kind:uuid`) or legacy `runtime.*` key.
+ * Bare UUIDs are invalid (no dual-read).
+ */
 export function resolveTranslationKey(task: unknown, parameterId: string): string | null {
   const v = getParameterValue(task, parameterId);
-  return isGuid(v) ? v : null;
+  if (v == null || typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s) return null;
+  if (isCanonicalTranslationKey(s)) return s;
+  if (s.startsWith('runtime.')) return s;
+  return null;
 }
 
 export function getTranslatedParameterText(

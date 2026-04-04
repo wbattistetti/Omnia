@@ -4,8 +4,7 @@ import { NLPContract } from '../../DialogueDataEngine/contracts/types';
 
 /**
  * Parses user input using the NLP contract extraction system.
- * Supports GrammarFlow, regex, NER, LLM engines based on contract configuration.
- * ⚠️ NO HARDCODED FALLBACK: Uses only the contract extraction with escalation between enabled engines.
+ * Delegates to VB.NET ParserExtraction via /api/nlp/contract-extract (same as runtime).
  * @param input User's raw input
  * @param expectedType The type of data expected (e.g., 'date', 'number')
  * @param contract NLP contract for extraction (required)
@@ -26,7 +25,7 @@ export async function parseInput(
   // ✅ Use contract-based extraction if available
   if (contract) {
     try {
-      const extractionResult = await extractWithContractAsync(input, contract);
+      const extractionResult = await extractWithContractAsync(input, contract, composite);
 
       if (extractionResult.hasMatch && extractionResult.values) {
         // Convert extraction values to variables format

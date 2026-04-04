@@ -3,6 +3,8 @@
  * (DSL converters, services, variable label resolution). Updated from ProjectTranslationsContext.
  */
 
+import { isValidTranslationStoreKey } from './translationKeys';
+
 let currentTable: Record<string, string> = {};
 
 /**
@@ -21,6 +23,9 @@ export function mergeProjectTranslationEntry(guid: string, text: string): void {
   const g = String(guid || '').trim();
   const t = String(text || '').trim();
   if (!g || !t) return;
+  if (!isValidTranslationStoreKey(g)) {
+    throw new Error(`[mergeProjectTranslationEntry] Invalid translation store key: ${g}`);
+  }
   const tbl = getProjectTranslationsTable();
   setProjectTranslationsRegistry({ ...tbl, [g]: t });
 }

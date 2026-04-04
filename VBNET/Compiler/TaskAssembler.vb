@@ -468,11 +468,7 @@ Public Class TaskAssembler
                 $"Checked: Parameters[parameterId='text'], Value.parameters.")
         End If
 
-        If Not IsGuid(textKey) AndAlso textKey.Contains(" ") Then
-            Throw New InvalidOperationException(
-                $"SayMessage task '{ideTask.Id}': TextKey '{textKey}' looks like literal text. " &
-                $"Only translation keys (GUIDs) are accepted — not raw text strings.")
-        End If
+        TranslationKeyCanonical.ValidateTranslationKeyParameterOrThrow(textKey, $"SayMessage task '{ideTask.Id}'")
 
         Return textKey
     End Function

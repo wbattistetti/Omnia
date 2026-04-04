@@ -375,6 +375,11 @@ Module Program
                                                         Return GrammarFlowExtractHandlers.HandleGrammarFlowExtract(context)
                                                     End Function)
 
+        ' ✅ POST /api/nlp/contract-extract — ParserExtraction (GrammarFlow → regex), same as runtime
+        app.MapPost("/api/nlp/contract-extract", Function(context As HttpContext) As Task(Of IResult)
+                                                     Return ContractExtractHandlers.HandleContractExtract(context)
+                                                 End Function)
+
         ' ✅ POST /api/runtime/translations/invalidate-cache - Invalida cache traduzioni
         app.MapPost("/api/runtime/translations/invalidate-cache", Function(req As HttpRequest) As IResult
                                                                       Try

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:dialogue": "concurrently -n web,vb -c green,magenta \"vite\" \"npm run be:vbnet\"",
     "redis:up": "docker-compose up -d redis",
     "redis:up:ignore": "docker-compose up -d redis 2>&1 || exit 0",
     "redis:down": "docker-compose down redis",

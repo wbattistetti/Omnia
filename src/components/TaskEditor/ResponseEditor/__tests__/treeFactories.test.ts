@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { estraiNodiDaDDT, removeNodePure } from '../treeFactories';
 import { TreeNodeProps } from '../types';
 
+/** Canonical translation key for tests (never bare GUID). */
+const TEXT_KEY = 'task:a0000000-0000-4000-8000-000000000001';
+
 // Funzione di filtraggio che riflette la logica attuale
 function getFilteredNodes(nodes: TreeNodeProps[], selectedStep: string | null): TreeNodeProps[] {
   if (!selectedStep) return [];
@@ -39,14 +42,14 @@ describe('treeFactories', () => {
               {
                 escalationId: 'esc1',
                 tasks: [
-                  { id: 'action1', parameters: [{ parameterId: 'text', value: 'key1' }] },
+                  { id: 'action1', parameters: [{ parameterId: 'text', value: TEXT_KEY }] },
                 ],
               },
             ],
           },
         ],
       };
-      const translations = { key1: 'Ho capito!' };
+      const translations = { [TEXT_KEY]: 'Ho capito!' };
       const result = estraiNodiDaDDT(ddt, translations, 'it');
       
       expect(result).toHaveLength(2);
@@ -77,14 +80,14 @@ describe('treeFactories', () => {
               {
                 escalationId: 'esc1',
                 tasks: [
-                  { id: 'action1', parameters: [{ parameterId: 'text', value: 'key1' }] },
+                  { id: 'action1', parameters: [{ parameterId: 'text', value: TEXT_KEY }] },
                 ],
               },
             ],
           },
         ],
       };
-      const translations = { key1: 'Dato acquisito con successo!' };
+      const translations = { [TEXT_KEY]: 'Dato acquisito con successo!' };
       const result = estraiNodiDaDDT(ddt, translations, 'it');
       
       expect(result).toHaveLength(2);
@@ -114,15 +117,18 @@ describe('treeFactories', () => {
             escalations: [
               {
                 escalationId: 'esc1',
-                actions: [
-                  { actionInstanceId: 'action1', parameters: [{ value: 'key1' }] }
-                ]
-              }
-            ]
-          }
-        ]
+                tasks: [
+                  {
+                    id: 'action1',
+                    parameters: [{ parameterId: 'text', value: TEXT_KEY }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       };
-      const translations = { key1: 'Non ho capito, puoi ripetere?' };
+      const translations = { [TEXT_KEY]: 'Non ho capito, puoi ripetere?' };
       const result = estraiNodiDaDDT(ddt, translations, 'it');
       
       expect(result).toHaveLength(2);
@@ -153,7 +159,7 @@ describe('treeFactories', () => {
               {
                 escalationId: 'esc1',
                 tasks: [
-                  { id: 'action1', parameters: [{ parameterId: 'text', value: 'key1' }] },
+                  { id: 'action1', parameters: [{ parameterId: 'text', value: TEXT_KEY }] },
                 ],
               },
             ],

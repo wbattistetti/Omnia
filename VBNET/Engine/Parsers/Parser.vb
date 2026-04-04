@@ -90,15 +90,26 @@ Partial Public Class Parser
     ' -------------------------------------------------------------------------
 
     Private Function ParseSimple(utterance As String, current As IParsableTask) As ParseResult
-        Dim value = ExtractSimple(utterance, current)
-        If String.IsNullOrEmpty(value) Then
+        Dim dict = ExtractLeafDictionary(utterance, current)
+        If dict Is Nothing OrElse dict.Count = 0 Then
             Return New ParseResult() With {.Result = ParseResultType.NoMatch}
         End If
 
-        ' ✅ Restituisce tripla esplicita (taskInstanceId, nodeId, value)
-        '    FlowOrchestrator userà questa tripla per lookup diretto senza assunzioni.
         Dim taskInstanceId = current.Id
         Dim nodeId = GetNodeId(current)
+
+        For Each k In dict.Keys
+            If Not String.Equals(k, nodeId, StringComparison.OrdinalIgnoreCase) Then
+                Throw New InvalidOperationException(
+                    $"Leaf utterance task '{current.Id}': extracted subId '{k}' does not match template nodeId '{nodeId}'. " &
+                    "Use a composite task (sub-tasks) when the contract maps multiple subIds.")
+            End If
+        Next
+
+        Dim value = MergeLeafDictionaryToString(dict)
+        If String.IsNullOrEmpty(value) Then
+            Return New ParseResult() With {.Result = ParseResultType.NoMatch}
+        End If
 
         Return New ParseResult() With {
             .Result = ParseResultType.Match,
@@ -135,13 +146,12 @@ Partial Public Class Parser
                     Function(st) st.NodeId = subNodeId
                 )
 
-                If subTask IsNot Nothing Then
-                    ' ✅ Trovato: crea tripla con taskInstanceId del sub-task
-                    extractedVars.Add(New ExtractedVariable(subTask.Id, subTask.NodeId, value))
-                Else
-                    ' ⚠️ Sub-task non trovato: usa current.Id come fallback (caso edge)
-                    extractedVars.Add(New ExtractedVariable(current.Id, subNodeId, value))
+                If subTask Is Nothing Then
+                    Throw New InvalidOperationException(
+                        $"Composite utterance task '{current.Id}': no sub-task with NodeId '{subNodeId}' for extracted value. " &
+                        "Fix SubDataMapping keys to match CompiledUtteranceTask.SubTasks[].NodeId.")
                 End If
+                extractedVars.Add(New ExtractedVariable(subTask.Id, subTask.NodeId, value))
             Next
         Else
             ' ⚠️ Fallback: se non ci sono sub-task, usa current.Id per tutti

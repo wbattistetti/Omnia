@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LogEvent } from './logger';
 import type { DDTTemplateV2, HumanLikeConfig } from './model/ddt.v2.types';
 import { initEngine, advance, type SimulatorState } from './engine';
+import { loadContract } from './contracts/contractLoader';
+import { extractWithVbContract } from '../../services/vbContractExtract';
+import { assertVbKeysMatchSubs } from './validation/vbExtractedKeys';
+import type { DDTNode } from './model/ddt.v2.types';
 import { runAddressEnrichment } from './effects/addressEnrichment';
 import { setMemory } from './state';
 import type { Logger } from './logger';
@@ -115,8 +119,49 @@ export function useDDTSimulator(template: DDTTemplateV2, initialConfig?: HookCon
       if (tasks.length) await Promise.allSettled(tasks);
     } catch {}
 
+    let vbExtracted: Record<string, any> | undefined = extractedVariables;
+    if (!vbExtracted && String(input || '').trim()) {
+      const st = stateRef.current;
+      const mainId = st.plan.order[st.currentIndex];
+      const main = st.plan.byId[mainId];
+      if (main) {
+        const contract = loadContract(main as any);
+        if (contract) {
+          const composite = Array.isArray((main as any).subs) && (main as any).subs.length > 0;
+          try {
+            const r = await extractWithVbContract(input, contract, composite);
+            if (r.hasMatch && r.values && Object.keys(r.values).length > 0) {
+              if (composite) {
+                try {
+                  assertVbKeysMatchSubs(r.values as Record<string, unknown>, main as DDTNode);
+                  vbExtracted = r.values as Record<string, any>;
+                } catch (e) {
+                  const isDevOrTest =
+                    import.meta.env.DEV === true ||
+                    import.meta.env.MODE === 'test' ||
+                    String(import.meta.env.MODE || '') === 'test';
+                  if (isDevOrTest) throw e;
+                  // eslint-disable-next-line no-console
+                  console.error('[DDE] VB response keys do not match DDT subs; ignoring extraction', e);
+                  vbExtracted = undefined;
+                }
+              } else {
+                const vals = Object.values(r.values);
+                vbExtracted = { value: vals.length === 1 ? vals[0] : vals.join(' ') };
+              }
+            }
+          } catch (e) {
+            if (cfgRef.current.debug) {
+              // eslint-disable-next-line no-console
+              console.warn('[DDE] VB contract-extract failed', e);
+            }
+          }
+        }
+      }
+    }
+
     setState((prev) => {
-      const next = advance(prev, input, extractedVariables);
+      const next = advance(prev, input, vbExtracted);
       // Detailed memory debug (flattened) for inspection
       if (cfgRef.current.debug) {
         try {

@@ -34,6 +34,7 @@ import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataC
 import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
 import { resolveVariableStoreProjectId } from '../../utils/safeProjectId';
 import { getVariableLabel } from '../../utils/getVariableLabel';
+import { makeTranslationKey } from '../../utils/translationKeys';
 
 export interface FlowVariablesRailProps {
   flowId: string;
@@ -124,7 +125,7 @@ function DataTreeVariableRow({
     }
     const ok = variableCreationService.renameVariableById(projectId, instance.id, t);
     if (ok) {
-      addTranslation(instance.id, t);
+      addTranslation(makeTranslationKey('variable', instance.id), t);
       onRefresh();
     } else {
       setDraft(current);
@@ -482,7 +483,7 @@ export function FlowVariablesRail({
         scopeFlowId: flowId,
       });
       const label = String(base.varName || '').trim();
-      if (label) addTranslation(base.id, label);
+      if (label) addTranslation(makeTranslationKey('variable', base.id), label);
       refresh();
     },
     [projectId, flowId, varNames, addTranslation]

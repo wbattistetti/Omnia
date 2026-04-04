@@ -7,6 +7,7 @@ import {
   getProjectTranslationsTable,
   setProjectTranslationsRegistry,
 } from '../../utils/projectTranslationsRegistry';
+import { makeTranslationKey } from '../../utils/translationKeys';
 
 describe('VariableCreationService per-flow scope', () => {
   beforeEach(() => {
@@ -77,9 +78,9 @@ describe('VariableCreationService per-flow scope', () => {
   it('renameManual updates label when no duplicate in bucket', () => {
     const pid = `vitest_rename_${Math.random().toString(36).slice(2, 12)}`;
     const v = variableCreationService.createManualVariable(pid, 'orig_name');
-    setProjectTranslationsRegistry({ [v.id]: 'orig_name' });
+    setProjectTranslationsRegistry({ [makeTranslationKey('variable', v.id)]: 'orig_name' });
     expect(variableCreationService.renameVariableById(pid, v.id, 'new_name')).toBe(true);
-    setProjectTranslationsRegistry({ [v.id]: 'new_name' });
+    setProjectTranslationsRegistry({ [makeTranslationKey('variable', v.id)]: 'new_name' });
     expect(getVariableLabel(v.id, getProjectTranslationsTable())).toBe('new_name');
   });
 

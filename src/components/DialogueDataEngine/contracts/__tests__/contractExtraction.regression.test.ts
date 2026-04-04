@@ -2,7 +2,6 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { extractWithContractAsync } from '../contractExtractor';
 import type { DataContract, LLMContract } from '../contractLoader';
 
 // Mock fetch for LLM calls

@@ -10,6 +10,7 @@ import {
   trySeedSayMessageTranslation,
   applySayMessagePlainTextToTask,
 } from './sayMessageTaskSync';
+import { makeTranslationKey } from './translationKeys';
 
 /**
  * Helper functions for Task/Instance migration
@@ -174,7 +175,7 @@ export function createRowWithTask(
   const sayMessageFields =
     taskType === TaskType.SayMessage
       ? (() => {
-          const textKey = uuidv4();
+          const textKey = makeTranslationKey('task', uuidv4());
           trySeedSayMessageTranslation(textKey, initialText || '');
           return { parameters: [{ parameterId: 'text', value: textKey }] };
         })()

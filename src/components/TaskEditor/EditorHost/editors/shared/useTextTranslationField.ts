@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { v4 as uuidv4 } from 'uuid';
 import { taskRepository } from '../../../../../services/TaskRepository';
 import { TaskType } from '../../../../../types/taskTypes';
+import { makeTranslationKey } from '../../../../../utils/translationKeys';
 
 type Args = {
   instanceId: string;
@@ -79,7 +80,7 @@ export function useTextTranslationField({
     const key = typeof param?.value === 'string' ? param.value.trim() : '';
     if (key) return key;
 
-    const newKey = uuidv4();
+    const newKey = makeTranslationKey('task', uuidv4());
     taskRepository.updateTask(
       instanceId,
       { parameters: [{ parameterId: 'text', value: newKey }] },

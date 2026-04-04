@@ -55,6 +55,7 @@
     <!-- Utilities -->
     <Compile Include="Utils\GlobalVariableContext.vb" />
     <Compile Include="Utils\PlaceholderUtils.vb" />
+    <Compile Include="Utils\TranslationKeyCanonical.vb" />
     <Compile Include="VariableMappingService.vb" />
 
     <!-- JSON Converters (shared between Compiler and Engine) -->

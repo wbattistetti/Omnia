@@ -3,6 +3,7 @@ import { StepGroup, Escalation, KNOWN_ACTIONS } from './types';
 import type { Task } from '../../../types/taskTypes';
 import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
 import { v4 as uuidv4 } from 'uuid';
+import { makeTranslationKey } from '../../../utils/translationKeys';
 
 /**
  * Builds a complete Task object for escalation.
@@ -23,7 +24,7 @@ export function buildTask(
   const templateId = stepType === 'start' ? 'UtteranceInterpretation' : 'sayMessage';
   const taskId = uuidv4(); // Unique Task ID
   const parameterId = KNOWN_ACTIONS[templateId]?.defaultParameter || 'text';
-  const valueKey = `runtime.${ddtId}.${stepType}.${templateId}.${taskId}.text`;
+  const valueKey = makeTranslationKey('task', taskId);
 
   // Save translation key-value pair
   translations[valueKey] = message;

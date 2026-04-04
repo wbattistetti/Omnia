@@ -265,11 +265,7 @@ Public Class SimpleTaskCompiler
                 $"Checked: Parameters[parameterId='text'], Value.parameters.")
         End If
 
-        ' ✅ ACCETTA sia GUID che testo letterale
-        ' - GUID: viene risolto a runtime tramite TranslationRepository nel messageCallback
-        ' - Testo letterale: usato direttamente (per flow semplici senza traduzioni)
-        ' La validazione rigida è stata rimossa per supportare entrambi i casi d'uso
-        ' La risoluzione TextKey → testo avviene nel messageCallback di FlowOrchestrator (single point of truth)
+        TranslationKeyCanonical.ValidateTranslationKeyParameterOrThrow(textKey, $"SayMessage task '{task.Id}'")
         Return textKey
     End Function
 

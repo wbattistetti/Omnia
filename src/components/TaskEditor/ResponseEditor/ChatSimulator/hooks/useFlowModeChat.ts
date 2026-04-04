@@ -1,5 +1,6 @@
 import React from 'react';
 import { useDialogueEngine } from '@components/DialogueEngine/useDialogueEngine';
+import { looksLikeTechnicalTranslationOrId } from '@utils/translationKeys';
 import type { Message } from '@components/ChatSimulator/UserMessage';
 
 /**
@@ -27,18 +28,13 @@ export function useFlowModeChat(
   onMessage?: (message: Message) => void,
   executionFlowName?: string
 ) {
-  const isGuidLike = React.useCallback((value: unknown): boolean => {
-    const text = String(value || '').trim();
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-[a-z0-9_-]+)?$/i.test(text);
-  }, []);
-
   const toReadableLabel = React.useCallback((value: unknown): string => {
     const text = String(value || '').trim();
-    if (!text || isGuidLike(text)) {
+    if (!text || looksLikeTechnicalTranslationOrId(text)) {
       return '';
     }
     return text;
-  }, [isGuidLike]);
+  }, []);
 
   // ✅ CRITICAL: Store onMessage in ref for stable access
   const onMessageRef = React.useRef(onMessage);

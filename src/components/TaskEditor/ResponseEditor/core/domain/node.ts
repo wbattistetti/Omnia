@@ -7,6 +7,7 @@
 
 import { validateNodeStructure } from './validators';
 import type { TaskTreeNode } from '@types/taskTypes';
+import { isUuidString, makeTranslationKey } from '@utils/translationKeys';
 
 /**
  * Get step keys from a node - STRICT, dictionary only
@@ -67,9 +68,13 @@ export function getNodeLabel(node: TaskTreeNode | null | undefined, translations
 
   validateNodeStructure(node, 'getNodeLabel');
 
-  // Priority 1: Use Translations if available
-  if (translations && node.id && translations[node.id]) {
-    return translations[node.id];
+  // Priority 1: Use Translations if available (canonical key task:<uuid> when id is a UUID)
+  if (translations && node.id) {
+    const id = String(node.id).trim();
+    const key = isUuidString(id) ? makeTranslationKey('task', id) : id;
+    if (translations[key]) {
+      return translations[key];
+    }
   }
 
   // Priority 2: Return node.label

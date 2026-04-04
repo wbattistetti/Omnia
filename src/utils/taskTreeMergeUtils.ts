@@ -2,6 +2,7 @@ import type { Task, MaterializedStep, TaskTreeNode } from '../types/taskTypes';
 import { DialogueTaskService } from '../services/DialogueTaskService';
 import { buildTaskTreeNodes, cloneTemplateSteps } from './taskUtils';
 import { v4 as uuidv4 } from 'uuid';
+import { isUuidString, makeTranslationKey, parseTranslationKey } from './translationKeys';
 
 /**
  * ============================================================================
@@ -454,31 +455,31 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
         throw new Error(`[cloneEscalationWithNewTaskIds] Template task ${task.id || 'unknown'} is missing required field 'templateId' (must be explicitly null for standalone tasks, or a GUID if derived from another template). The template is corrupted and must be fixed in the database. Task structure: ${JSON.stringify(task, null, 2)}`);
       }
 
-      // ✅ STEP 1: Clona i parametri e genera nuovi GUID per i parametri "text"
-      // ✅ CRITICAL: Estrai i GUID delle traduzioni da parameters[].value (non solo task.id)
+      // ✅ STEP 1: Clone text parameters — canonical `task:uuid` keys (aligned with taskUtils)
       const clonedParameters = (task.parameters || []).map((param: any) => {
-        // ✅ Se è il parametro "text" e contiene un GUID, genera un nuovo GUID
         if (param.parameterId === 'text' && param.value) {
-          const textValue = String(param.value);
-          // ✅ Verifica se è un GUID (formato UUID v4)
-          const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          if (GUID_REGEX.test(textValue)) {
-            // ✅ È un GUID del template, genera un nuovo GUID per l'istanza
-            const newTextGuid = uuidv4();
-            guidMapping.set(textValue, newTextGuid); // ✅ Aggiungi mapping per copiare traduzioni
-            return {
-              ...param,
-              value: newTextGuid // ✅ Sostituisci con nuovo GUID
-            };
+          const textValue = String(param.value).trim();
+          if (textValue.startsWith('runtime.')) {
+            return param;
           }
-          // ❌ Se non è un GUID, è testo letterale (errore nel template)
-          // Mantieni il valore originale ma logga un warning
-          console.warn('[cloneEscalationWithNewTaskIds] ⚠️ Template parameter "text" contains literal text instead of GUID', {
+          const parsed = parseTranslationKey(textValue);
+          if (parsed?.kind === 'task') {
+            const newTextUuid = uuidv4();
+            const newKey = makeTranslationKey('task', newTextUuid);
+            guidMapping.set(textValue, newKey);
+            return { ...param, value: newKey };
+          }
+          if (isUuidString(textValue)) {
+            const newTextUuid = uuidv4();
+            const newKey = makeTranslationKey('task', newTextUuid);
+            guidMapping.set(makeTranslationKey('task', textValue), newKey);
+            return { ...param, value: newKey };
+          }
+          console.warn('[cloneEscalationWithNewTaskIds] ⚠️ Template parameter "text" is not a canonical task: key or legacy UUID', {
             taskId: task.id,
             parameterValue: textValue.substring(0, 50) + (textValue.length > 50 ? '...' : '')
           });
         }
-        // ✅ Per tutti gli altri parametri, mantieni il valore originale
         return param;
       });
 

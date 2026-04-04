@@ -7,6 +7,7 @@ import { useResponseEditorContextSafe } from '@hooks/useResponseEditorContextSaf
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { openLateralChatPanel } from '@components/AppContent/infrastructure/docking/DockingHelpers';
 import { scheduleDockLayoutRefresh } from '@utils/scheduleDockLayoutRefresh';
+import { isCanonicalTranslationKey, translationKeyFromStoredValue } from '@utils/translationKeys';
 import type { DockTabChat } from '@dock/types';
 
 interface ResponseEditorToolbarProps {
@@ -250,9 +251,8 @@ export function useResponseEditorToolbar({
 
         // Import extractGuidsFromSteps function (same logic as DDEBubbleChat)
         const extractGuidsFromSteps = (steps: Record<string, any>, guids: Set<string>) => {
-          const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           let extractedCount = 0;
-          let debugInfo: any[] = [];
+          const debugInfo: any[] = [];
 
           for (const [templateId, stepDict] of Object.entries(steps)) {
             if (!stepDict || typeof stepDict !== 'object') {
@@ -270,18 +270,14 @@ export function useResponseEditorToolbar({
                           const textParam = taskItem.parameters.find((p: any) =>
                             p?.parameterId === 'text' || p?.key === 'text'
                           );
-                          if (textParam?.value && guidPattern.test(textParam.value)) {
-                            guids.add(textParam.value);
+                          const tk = textParam?.value ? translationKeyFromStoredValue(String(textParam.value)) : null;
+                          if (tk) {
+                            guids.add(tk);
                             extractedCount++;
-                            debugInfo.push({ templateId, source: 'array-step-parameter', guid: textParam.value });
+                            debugInfo.push({ templateId, source: 'array-step-parameter', guid: tk });
                           } else if (textParam?.value) {
                             debugInfo.push({ templateId, source: 'array-step-parameter', value: textParam.value, isGuid: false });
                           }
-                        }
-                        if (taskItem.id && guidPattern.test(taskItem.id)) {
-                          guids.add(taskItem.id);
-                          extractedCount++;
-                          debugInfo.push({ templateId, source: 'array-step-taskId', guid: taskItem.id });
                         }
                       }
                     }
@@ -305,10 +301,11 @@ export function useResponseEditorToolbar({
                         const textParam = taskItem.parameters.find((p: any) =>
                           p?.parameterId === 'text' || p?.key === 'text'
                         );
-                        if (textParam?.value && guidPattern.test(textParam.value)) {
-                          guids.add(textParam.value);
+                        const tk = textParam?.value ? translationKeyFromStoredValue(String(textParam.value)) : null;
+                        if (tk) {
+                          guids.add(tk);
                           extractedCount++;
-                          debugInfo.push({ templateId, stepType, source: 'step-parameter', guid: textParam.value });
+                          debugInfo.push({ templateId, stepType, source: 'step-parameter', guid: tk });
                         } else if (textParam?.value) {
                           debugInfo.push({ templateId, stepType, source: 'step-parameter', value: textParam.value, isGuid: false });
                         } else if (textParam) {
@@ -316,11 +313,6 @@ export function useResponseEditorToolbar({
                         }
                       } else {
                         debugInfo.push({ templateId, stepType, source: 'taskItem', hasParameters: !!taskItem.parameters, parametersType: Array.isArray(taskItem.parameters) ? 'array' : typeof taskItem.parameters });
-                      }
-                      if (taskItem.id && guidPattern.test(taskItem.id)) {
-                        guids.add(taskItem.id);
-                        extractedCount++;
-                        debugInfo.push({ templateId, stepType, source: 'taskId', guid: taskItem.id });
                       }
                     }
                   } else {
@@ -332,8 +324,6 @@ export function useResponseEditorToolbar({
               }
             }
           }
-
-          // ✅ Log rimosso: troppo verboso
         };
 
         extractGuidsFromSteps(taskTree.steps, runtimeGuids);
@@ -346,8 +336,8 @@ export function useResponseEditorToolbar({
       }
 
       // ✅ DEBUG: Also check if GUIDs from translations match extracted GUIDs
-      const allTranslationGuids = Object.keys(allTranslations).filter(guid =>
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)
+      const allTranslationGuids = Object.keys(allTranslations).filter(
+        (k) => k.startsWith('runtime.') || isCanonicalTranslationKey(k)
       );
       const matchingGuids = allTranslationGuids.filter(guid => runtimeGuids.has(guid));
       const missingGuids = allTranslationGuids.filter(guid => !runtimeGuids.has(guid));

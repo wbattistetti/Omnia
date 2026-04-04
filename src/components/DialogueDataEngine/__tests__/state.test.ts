@@ -25,9 +25,10 @@ describe('state helpers', () => {
   it('isSaturated for date depends on day/month/year', () => {
     let mem: any = {};
     expect(isSaturated(main, mem)).toBe(false);
-    mem = setMemory(mem, 'date', { day: 1 }, false);
+    mem = setMemory(mem, 'day', 1, false);
     expect(isSaturated(main, mem)).toBe(false);
-    mem = setMemory(mem, 'date', { day: 1, month: 2, year: 1990 }, false);
+    mem = setMemory(mem, 'month', 2, false);
+    mem = setMemory(mem, 'year', 1990, false);
     expect(isSaturated(main, mem)).toBe(true);
   });
 

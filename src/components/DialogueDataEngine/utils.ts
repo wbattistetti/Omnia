@@ -13,13 +13,16 @@ export function isNo(text: string): boolean {
 }
 
 export function extractImplicitCorrection(input: string): string | null {
-  const t = String(input || '');
+  const t = String(input || '').normalize('NFC');
   // Pattern: "not X but Y"
   let m = t.match(/not\s+.+?\s+but\s+(.+)/i);
   if (m && m[1]) return m[1].trim();
   // Pattern: "intendevo Y" or "correggo: Y"
   m = t.match(/\b(intendevo|correggo)[:\s]+(.+)/i);
   if (m && m[2]) return m[2].trim();
+  // Italian: "no, è novembre"
+  m = t.match(/no\s*,\s*[eè]\s+(\S+)/i);
+  if (m && m[1]) return m[1].trim();
   return null;
 }
 

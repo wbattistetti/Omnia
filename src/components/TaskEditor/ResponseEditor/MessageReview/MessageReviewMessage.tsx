@@ -7,6 +7,7 @@ import { ensureHexColor, tailwindToHex } from '@responseEditor/utils/color';
 import ActionText from '@responseEditor/ActionText';
 import { useFontContext } from '@context/FontContext';
 import VariableTokenText from '@components/common/VariableTokenText';
+import { translationKeyFromStoredValue } from '@utils/translationKeys';
 
 type Props = {
     item: ReviewItem;
@@ -67,7 +68,7 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                 stepKey: item.stepKey,
                 escIndex: item.escIndex,
                 taskIndex: item.taskIndex,
-                isGuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.textKey || '')
+                isTranslationKey: Boolean(item.textKey && translationKeyFromStoredValue(item.textKey)),
             });
             try {
                 addTranslation(item.textKey, newText);

@@ -2016,6 +2016,19 @@ function isValidGuid(str) {
   return guidRegex.test(str);
 }
 
+/** Translation document key: `kind:uuid` (slot|variable|task|flow|interface). No bare UUID keys. */
+function isCanonicalTranslationKey(str) {
+  if (!str || typeof str !== 'string') return false;
+  const s = str.trim();
+  const idx = s.indexOf(':');
+  if (idx <= 0) return false;
+  const kind = s.slice(0, idx).toLowerCase();
+  const uuid = s.slice(idx + 1).trim();
+  const kinds = new Set(['slot', 'variable', 'task', 'flow', 'interface']);
+  if (!kinds.has(kind)) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
+}
+
 // ✅ Helper: Validate TaskType enum (0-19 or -1 for UNDEFINED)
 function isValidTaskType(type) {
   return typeof type === 'number' && type >= -1 && type <= 19;
@@ -4347,31 +4360,34 @@ app.post('/api/factory/template-translations', async (req, res) => {
     const db = client.db(dbFactory);
     const coll = db.collection('Translations');
 
-    // Check if keys are GUIDs (new format) or old-style keys
-    const isGuid = (key) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
-    const guidKeys = keys.filter(isGuid);
-    const oldKeys = keys.filter(k => !isGuid(k));
+    // Mongo `guid` field: canonical `kind:uuid` or legacy `runtime.*` composite keys (not bare UUID)
+    const mongoGuidKeys = keys.filter(
+      (k) => typeof k === 'string' && (isCanonicalTranslationKey(k) || k.startsWith('runtime.'))
+    );
+    const legacyIdKeys = keys.filter(
+      (k) => typeof k === 'string' && !isCanonicalTranslationKey(k) && !k.startsWith('runtime.')
+    );
 
     console.log('[TEMPLATE_TRANSLATIONS] Request:', {
       totalKeys: keys.length,
-      guidKeys: guidKeys.length,
-      oldKeys: oldKeys.length,
-      sampleGuids: guidKeys.slice(0, 3),
-      sampleOldKeys: oldKeys.slice(0, 3)
+      mongoGuidKeys: mongoGuidKeys.length,
+      legacyIdKeys: legacyIdKeys.length,
+      sampleMongoGuids: mongoGuidKeys.slice(0, 3),
+      sampleLegacyKeys: legacyIdKeys.slice(0, 3)
     });
 
     const merged = {};
 
-    // Query for GUIDs (new format): guid field (type rimosso - GUID identifica già l'oggetto)
-    if (guidKeys.length > 0) {
+    // Query Translations by `guid` (canonical keys + runtime.*)
+    if (mongoGuidKeys.length > 0) {
       const guidQuery = {
-        guid: { $in: guidKeys }
+        guid: { $in: mongoGuidKeys }
       };
       const guidDocs = await coll.find(guidQuery).toArray();
 
       console.log('[TEMPLATE_TRANSLATIONS] 🔍 Query for GUIDs:', {
         query: guidQuery,
-        requestedGuids: guidKeys.slice(0, 10),
+        requestedGuids: mongoGuidKeys.slice(0, 10),
         foundDocs: guidDocs.length,
         sampleDocs: guidDocs.slice(0, 3).map(doc => ({
           guid: doc.guid,
@@ -4397,7 +4413,7 @@ app.post('/api/factory/template-translations', async (req, res) => {
       console.log('[TEMPLATE_TRANSLATIONS] ✅ Merged translations:', {
         mergedKeys: Object.keys(merged).slice(0, 10),
         mergedCount: Object.keys(merged).length,
-        missingGuids: guidKeys.filter(k => !merged[k]).slice(0, 10),
+        missingGuids: mongoGuidKeys.filter(k => !merged[k]).slice(0, 10),
         sampleMerged: Object.keys(merged).length > 0 ? {
           guid: Object.keys(merged)[0],
           translations: merged[Object.keys(merged)[0]]
@@ -4405,10 +4421,10 @@ app.post('/api/factory/template-translations', async (req, res) => {
       });
     }
 
-    // Query for old-style keys (backward compatibility): _id field
-    if (oldKeys.length > 0) {
-      const oldDocs = await coll.find({ _id: { $in: oldKeys } }).toArray();
-      console.log('[TEMPLATE_TRANSLATIONS] Found', oldDocs.length, 'translations for old keys');
+    // Legacy: dotted template keys stored as document _id (not kind:uuid)
+    if (legacyIdKeys.length > 0) {
+      const oldDocs = await coll.find({ _id: { $in: legacyIdKeys } }).toArray();
+      console.log('[TEMPLATE_TRANSLATIONS] Found', oldDocs.length, 'translations for legacy _id keys');
 
       for (const doc of oldDocs) {
         if (doc && doc._id) {

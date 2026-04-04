@@ -1,5 +1,5 @@
 /**
- * Sync helpers for SayMessage tasks: body lives in ProjectTranslations (by GUID)
+ * Sync helpers for SayMessage tasks: body lives in ProjectTranslations (canonical `task:<uuid>` key)
  * under task.parameters (parameterId === 'text'). No task.text.
  */
 
@@ -7,8 +7,11 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Task } from '@types/taskTypes';
 import { TaskType } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
+import { isCanonicalTranslationKey, isUuidString, makeTranslationKey, parseTranslationKey } from './translationKeys';
 
-const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isTaskTranslationStorageKey(s: string): boolean {
+  return parseTranslationKey(s)?.kind === 'task';
+}
 
 /** Writes plaintext into project translations for the given key (when context is mounted). */
 export function trySeedSayMessageTranslation(textKey: string, plaintext: string): void {
@@ -28,7 +31,8 @@ function readTranslationFromWindow(textKey: string): string {
 }
 
 /**
- * Resolved message body: translation by GUID from window context, else non-GUID param value as literal.
+ * Resolved message body: translation by canonical key from window context; legacy `runtime.*` keys;
+ * non-key strings treated as inline literal only when not a bare UUID.
  */
 export function getSayMessageSyncedBody(task: Task | null | undefined): string {
   if (!task || task.type !== TaskType.SayMessage) return '';
@@ -36,10 +40,11 @@ export function getSayMessageSyncedBody(task: Task | null | undefined): string {
   const param = params?.find((p) => p?.parameterId === 'text');
   const key = typeof param?.value === 'string' ? param.value.trim() : '';
   if (!key) return '';
+  if (isUuidString(key)) return '';
   const fromStore = readTranslationFromWindow(key);
   if (fromStore) return fromStore;
-  if (!GUID_RE.test(key)) return key;
-  return '';
+  if (isCanonicalTranslationKey(key) || key.startsWith('runtime.')) return '';
+  return key;
 }
 
 /**
@@ -58,8 +63,9 @@ export function applySayMessagePlainTextToTask(taskId: string, plainText: string
       ? String((prevParams[idx] as { value: string }).value).trim()
       : '';
 
-  if (!textKey || !GUID_RE.test(textKey)) {
-    textKey = uuidv4();
+  if (!textKey || !isTaskTranslationStorageKey(textKey)) {
+    textKey =
+      textKey && isUuidString(textKey) ? makeTranslationKey('task', textKey) : makeTranslationKey('task', uuidv4());
     const next = (prevParams as any[]).filter((p) => p?.parameterId !== 'text');
     next.push({ parameterId: 'text', value: textKey });
     taskRepository.updateTask(taskId, { parameters: next } as Partial<Task>, projectId);

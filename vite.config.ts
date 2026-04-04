@@ -72,6 +72,7 @@ export default defineConfig({
 
       // VB.NET ApiServer endpoints (porta 5000) - MUST come BEFORE Node.js and FastAPI
       '/api/grammar': { target: 'http://localhost:5000', changeOrigin: true },
+      '/api/nlp': { target: 'http://localhost:5000', changeOrigin: true },
       '/api/runtime': { target: 'http://localhost:5000', changeOrigin: true },
 
       // Node.js backend endpoints (MongoDB) - MUST come BEFORE generic /api

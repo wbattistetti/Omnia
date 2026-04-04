@@ -1,6 +1,5 @@
 import { TreeNodeProps } from './types';
 import { getTranslationText } from './responseEditorHelpers';
-import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
 
 // Estrae i nodi dall'oggetto DDT e translations
 export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): TreeNodeProps[] => {
@@ -36,7 +35,6 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
             }
             const taskId = taskRef.id;
             if (taskId) {
-              const ddtId = getNodeIdStrict(ddt);
               const key = taskRef.parameters && taskRef.parameters[0] && taskRef.parameters[0].value;
               const testo = translations[key];
               const text = testo || '';
@@ -68,7 +66,7 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
             nodes.push({ id: action.id, text: 'recovery', type: 'escalation', level: 0, included: true });
           } else if (action.actionInstanceId && currentEscalationId) {
             const actionInstanceId = action.actionInstanceId;
-            const ddtId = getNodeIdStrict(ddt);
+            const ddtId = String(ddt?.id ?? '').trim();
             const text = getTranslationText(translations, ddtId, stepKey, escalationIdx, actionInstanceId, lang);
             nodes.push({ id: actionInstanceId, text, type: stepKey, level: 1, parentId: currentEscalationId });
           }

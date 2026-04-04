@@ -9,6 +9,7 @@ Imports Microsoft.AspNetCore.Mvc
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports GrammarFlowEngine
+Imports TaskEngine
 
 ''' <summary>
 ''' Handles GrammarFlow extraction endpoint for NLP contract extraction
@@ -114,45 +115,25 @@ Public Module GrammarFlowExtractHandlers
                 Next
             End If
 
-            ' Extract values from bindings (slot name → value)
-            Dim extractedValues As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
-
-            If parseResult.Bindings IsNot Nothing AndAlso parseResult.Bindings.Count > 0 Then
-                ' Map slot names to subIds using contract.subDataMapping
+            Dim extractedValues As Dictionary(Of String, Object)
+            If parseResult.Bindings Is Nothing OrElse parseResult.Bindings.Count = 0 Then
+                extractedValues = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
+            Else
+                Dim compiled As New CompiledNlpContract()
                 If request.Contract IsNot Nothing AndAlso request.Contract.SubDataMapping IsNot Nothing Then
-                    For Each binding In parseResult.Bindings
-                        Dim slotName = binding.Key
-                        Dim slotValue = binding.Value
-
-                        ' Try to find subId by slot name (check if slotName matches groupName or subId)
-                        Dim matchedSubId As String = Nothing
-
-                        ' First, try direct match: slotName == subId
-                        If request.Contract.SubDataMapping.ContainsKey(slotName) Then
-                            matchedSubId = slotName
-                        Else
-                            ' Second, try to find by groupName
-                            matchedSubId = request.Contract.SubDataMapping.FirstOrDefault(
-                                Function(kvp) String.Equals(kvp.Value.GroupName, slotName, StringComparison.OrdinalIgnoreCase)
-                            ).Key
-                        End If
-
-                        If Not String.IsNullOrEmpty(matchedSubId) Then
-                            extractedValues(matchedSubId) = slotValue
-                            Console.WriteLine($"[GrammarFlowExtract] ✅ Mapped: slot '{slotName}' → subId '{matchedSubId}' = {slotValue}")
-                        Else
-                            ' Fallback: use slotName directly as key (might be subId already)
-                            extractedValues(slotName) = slotValue
-                            Console.WriteLine($"[GrammarFlowExtract] ⚠️ No mapping found for slot '{slotName}', using as-is")
-                        End If
+                    For Each kvp In request.Contract.SubDataMapping
+                        Dim src = kvp.Value
+                        compiled.SubDataMapping(kvp.Key) = New TaskEngine.SubDataMappingInfo With {
+                            .GroupName = src.GroupName,
+                            .Label = src.Label,
+                            .Type = src.Type
+                        }
                     Next
-                Else
-                    ' No contract mapping: use bindings directly
-                    For Each binding In parseResult.Bindings
-                        extractedValues(binding.Key) = binding.Value
-                    Next
-                    Console.WriteLine($"[GrammarFlowExtract] ⚠️ No contract.subDataMapping provided, using bindings directly")
                 End If
+                extractedValues = Parser.MapGrammarBindingsToSubIds(parseResult.Bindings, compiled)
+                For Each kvp In extractedValues
+                    Console.WriteLine($"[GrammarFlowExtract] ✅ Mapped subId '{kvp.Key}' = {kvp.Value}")
+                Next
             End If
 
             ' Calculate confidence (simple heuristic: 0.8 if match found, 0.9 if all expected slots matched)

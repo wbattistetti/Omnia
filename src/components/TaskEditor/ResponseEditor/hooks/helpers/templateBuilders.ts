@@ -5,6 +5,7 @@
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { getNodeIdStrict, getNodeLabelStrict } from '@responseEditor/core/domain/nodeStrict';
 import { StepType } from '@types/stepTypes';
+import { translationKeyFromStoredValue } from '@utils/translationKeys';
 
 export interface TemplateMatchResult {
   ai: {
@@ -19,12 +20,10 @@ export interface TemplateMatchResult {
 }
 
 /**
- * Estrae i GUID delle traduzioni da data e subData
- * Cerca pattern UUID negli steps
+ * Estrae le chiavi canoniche di traduzione dagli steps (parametro `text` dei task in escalation).
  */
 export function extractTranslationGuids(data: any[]): string[] {
   const guids: string[] = [];
-  const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   const extractFromSteps = (steps: any, nodeId: string) => {
     if (!steps || !nodeId) return;
@@ -36,9 +35,12 @@ export function extractTranslationGuids(data: any[]): string[] {
         step.escalations.forEach((escalation: any) => {
           if (escalation.tasks && Array.isArray(escalation.tasks)) {
             escalation.tasks.forEach((task: any) => {
-              if (task.id && typeof task.id === 'string' && guidRegex.test(task.id)) {
-                guids.push(task.id);
-              }
+              const raw = Array.isArray(task?.parameters)
+                ? task.parameters.find((p: any) => p?.parameterId === 'text')?.value
+                : undefined;
+              const key =
+                typeof raw === 'string' ? translationKeyFromStoredValue(raw) : null;
+              if (key) guids.push(key);
             });
           }
         });

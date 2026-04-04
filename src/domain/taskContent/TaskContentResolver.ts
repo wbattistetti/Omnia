@@ -3,6 +3,7 @@
 
 import { TaskType } from '@types/taskTypes';
 import type { TaskContentResolverConfig, TaskContentResult } from './TaskContentResolver.types';
+import { translationKeyFromStoredValue } from '../../utils/translationKeys';
 
 /**
  * TaskContentResolver: Domain service for resolving task content
@@ -58,27 +59,35 @@ export class TaskContentResolver {
     const textParam = task.parameters?.find(
       (p: any) => p?.parameterId === 'text'
     );
-    const textKey = textParam?.value;
+    const rawText = textParam?.value;
 
-    if (textKey && typeof textKey === 'string') {
+    if (rawText && typeof rawText === 'string') {
+      const storeKey = translationKeyFromStoredValue(rawText.trim());
+      if (!storeKey) {
+        return {
+          text: null,
+          textKey: null,
+          hasContent: false,
+          source: 'none'
+        };
+      }
       const translations = this.config.getTranslations();
-      const translation = translations[textKey];
+      const translation = translations[storeKey];
 
       if (translation && translation.trim().length > 0) {
         return {
           text: translation,
-          textKey: textKey,
+          textKey: storeKey,
           hasContent: true,
           source: 'translation'
         };
       }
 
-      // TextKey exists but translation not found
       return {
         text: null,
-        textKey: textKey,
+        textKey: storeKey,
         hasContent: false,
-        source: 'translation' // textKey present but translation missing
+        source: 'translation'
       };
     }
 

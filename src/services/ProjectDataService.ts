@@ -964,6 +964,32 @@ export async function saveProjectTranslations(
   return res.json();
 }
 
+/** Upsert factory DB rows for template-label / template prompt keys (`projectId: null` on server). */
+export async function saveFactoryTemplateLabelTranslations(
+  translations: Array<{ guid: string; language: string; text: string; type?: string }>
+): Promise<{ success: boolean; count: number }> {
+  const res = await fetch('/api/factory/template-label-translations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ translations }),
+  });
+  if (!res.ok) throw new Error('Errore nel salvataggio di Factory Template Label Translations');
+  return res.json();
+}
+
+/**
+ * Bulk translation persistence: project store first, then factory template store.
+ * Each call is a full upsert of the provided rows for that store.
+ */
+export async function saveAllTranslationsBulk(
+  projectId: string,
+  projectTranslations: Array<{ guid: string; language: string; text: string; type?: string }>,
+  factoryTranslations: Array<{ guid: string; language: string; text: string; type?: string }>
+): Promise<void> {
+  await saveProjectTranslations(projectId, projectTranslations);
+  await saveFactoryTemplateLabelTranslations(factoryTranslations);
+}
+
 export async function loadProjectTranslations(
   projectId: string,
   guids: string[]

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { useProjectTranslations } from '../context/ProjectTranslationsContext';
 import { extractGUIDsFromDDT } from '../utils/ddtUtils';
+import { translationKeyFromStoredValue } from '../utils/translationKeys';
 
 /**
  * Hook to load translations for a DDT from the global translation table.
@@ -64,8 +65,9 @@ export function useDDTTranslations(
               if (esc?.tasks && Array.isArray(esc.tasks)) {
                 esc.tasks.forEach((taskItem: any) => {
                   const textParam = taskItem.parameters?.find((p: any) => p?.parameterId === 'text');
-                  if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
-                    guidsSet.add(textParam.value);
+                  const tk = textParam?.value ? translationKeyFromStoredValue(String(textParam.value)) : null;
+                  if (tk) {
+                    guidsSet.add(tk);
                   }
                 });
               }
@@ -84,8 +86,9 @@ export function useDDTTranslations(
                 if (esc?.tasks) {
                   esc.tasks.forEach((taskItem: any) => {
                     const textParam = taskItem.parameters?.find((p: any) => p?.parameterId === 'text');
-                    if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
-                      guidsSet.add(textParam.value);
+                    const tk = textParam?.value ? translationKeyFromStoredValue(String(textParam.value)) : null;
+                    if (tk) {
+                      guidsSet.add(tk);
                     }
                   });
                 }
@@ -146,11 +149,11 @@ export function useDDTTranslations(
             step.escalations.forEach((esc: any) => {
               if (esc?.tasks && Array.isArray(esc.tasks)) {
                 esc.tasks.forEach((taskItem: any) => {
-                  // Extract text parameter GUID
                   const textParam = taskItem.parameters?.find((p: any) => p?.parameterId === 'text');
-                  if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
-                    guidsSet.add(textParam.value);
-                    taskStepsGuids.push(textParam.value);
+                  const tk = textParam?.value ? translationKeyFromStoredValue(String(textParam.value)) : null;
+                  if (tk) {
+                    guidsSet.add(tk);
+                    taskStepsGuids.push(tk);
                   }
                 });
               }
@@ -174,11 +177,11 @@ export function useDDTTranslations(
               step.escalations.forEach((esc: any) => {
                 if (esc?.tasks) {
                   esc.tasks.forEach((taskItem: any) => {
-                    // Extract text parameter GUID
                     const textParam = taskItem.parameters?.find((p: any) => p?.parameterId === 'text');
-                    if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
-                      guidsSet.add(textParam.value);
-                      taskStepsGuids.push(textParam.value);
+                    const tk = textParam?.value ? translationKeyFromStoredValue(String(textParam.value)) : null;
+                    if (tk) {
+                      guidsSet.add(tk);
+                      taskStepsGuids.push(tk);
                     }
                   });
                 }

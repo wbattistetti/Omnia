@@ -20,6 +20,7 @@ import {
 import { projectHasBracketReferenceToVarId } from './subflowVariableReferenceScan';
 import { getVariableLabel } from '../utils/getVariableLabel';
 import { getProjectTranslationsTable, mergeProjectTranslationEntry } from '../utils/projectTranslationsRegistry';
+import { isUuidString, makeTranslationKey } from '../utils/translationKeys';
 import { logTaskSubflowMove } from '../utils/taskSubflowMoveDebug';
 
 type SubflowIoBinding = { fromVariable: string; toVariable: string };
@@ -127,8 +128,20 @@ export type SyncProxyBindingsForSubflowTaskOptions = {
   qualifiedSubflowTitle?: string;
 };
 
-function mergeTranslationForGuid(guid: string, text: string): void {
-  mergeProjectTranslationEntry(guid, text);
+/** Project translation map keys for variables are always `variable:<uuid>`. */
+function variableTranslationStoreKey(varId: string): string {
+  const id = String(varId || '').trim();
+  if (!id) {
+    throw new Error('[subflowProjectSync] mergeTranslation: empty variable id');
+  }
+  if (!isUuidString(id)) {
+    throw new Error(`[subflowProjectSync] mergeTranslation: expected UUID variable id, got: ${id}`);
+  }
+  return makeTranslationKey('variable', id);
+}
+
+function mergeTranslationForGuid(varId: string, text: string): void {
+  mergeProjectTranslationEntry(variableTranslationStoreKey(varId), text);
 }
 
 export function syncProxyBindingsForSubflowTask(
@@ -352,8 +365,8 @@ export function ensureSubflowOutputBindingsDisplayLabels(params: {
       localLabelForSubflowTaskVariable(internalLabel) || internalLabel || childId;
     const fq = buildSubflowQualifiedDisplayLabel(title, internalOnly);
 
-    mergeProjectTranslationEntry(parentId, fq);
-    mergeProjectTranslationEntry(childId, internalOnly);
+    mergeProjectTranslationEntry(variableTranslationStoreKey(parentId), fq);
+    mergeProjectTranslationEntry(variableTranslationStoreKey(childId), internalOnly);
     logTaskSubflowMove('apply:secondPass:rename', {
       varId: parentId,
       childVarId: childId,

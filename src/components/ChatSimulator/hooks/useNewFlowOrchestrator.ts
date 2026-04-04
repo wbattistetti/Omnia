@@ -13,8 +13,6 @@ import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { extractGUIDsFromDDT } from '../../../utils/ddtUtils';
 import { useProjectTranslations, ProjectTranslationsContextType } from '../../../context/ProjectTranslationsContext';
 import { findOriginalNode } from '../../TaskEditor/ResponseEditor/ChatSimulator/messageResolvers';
-import { loadContract } from '../../DialogueDataEngine/contracts/contractLoader';
-import { extractWithContractSync } from '../../DialogueDataEngine/contracts/contractExtractor';
 
 interface UseNewFlowOrchestratorProps {
   nodes: Node<FlowNode>[];

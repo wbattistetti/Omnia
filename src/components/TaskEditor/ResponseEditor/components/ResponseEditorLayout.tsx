@@ -42,6 +42,7 @@ import {
   promoteStandaloneToProjectTemplate,
 } from '@utils/promoteStandaloneToProjectTemplate';
 import type { ToolbarButton } from '@dock/types';
+import { isUuidString, makeTranslationKey, translationKeyFromStoredValue } from '@utils/translationKeys';
 
 /**
  * Internal component that wraps EditorHeader with dynamic injection support
@@ -498,9 +499,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
           // ❌ DO NOT extract: task.id, escalationId, etc. (these are system GUIDs, not translation keys)
 
           if (key === 'textKey' || key === 'guid') {
-            // ✅ These are translation keys
-            if (typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
-              allGuids.add(value);
+            if (typeof value === 'string') {
+              const tk = translationKeyFromStoredValue(value);
+              if (tk) allGuids.add(tk);
             }
           }
 
@@ -508,10 +509,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
           // This is the PRIMARY source of translation GUIDs
           if (key === 'parameters' && Array.isArray(value)) {
             value.forEach((param: any) => {
-              if (param?.parameterId === 'text' && param?.value) {
-                if (typeof param.value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param.value)) {
-                  allGuids.add(param.value);
-                }
+              if (param?.parameterId === 'text' && param?.value && typeof param.value === 'string') {
+                const tk = translationKeyFromStoredValue(String(param.value));
+                if (tk) allGuids.add(tk);
               }
             });
           }
@@ -526,9 +526,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
       // Extract GUIDs from templates (these might be instance GUIDs, not original template GUIDs)
       templatesToSave.forEach(t => {
-        // Add template.id (label GUID)
-        if (t.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t.id)) {
-          allGuids.add(t.id);
+        // Add template.id as task-scoped label translation key
+        if (t.id && isUuidString(String(t.id))) {
+          allGuids.add(makeTranslationKey('task', String(t.id)));
         }
         // Extract all GUIDs recursively from template structure
         extractGuidsRecursive(t);
@@ -658,7 +658,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       dematerializedTemplates.forEach(t => {
         if (t.id && t.label) {
           translationsToSave.push({
-            guid: t.id,
+            guid: makeTranslationKey('task', String(t.id)),
             language: currentLanguage,
             text: t.label,
             type: TranslationType.LABEL,
@@ -670,7 +670,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       // Add prompt translations (GUIDs from steps) - use INSTANCE type
       for (const guid of allGuids) {
         // Skip if already added as label
-        if (dematerializedTemplates.some(t => t.id === guid)) {
+        if (dematerializedTemplates.some(t => t.id && makeTranslationKey('task', String(t.id)) === guid)) {
           continue;
         }
 

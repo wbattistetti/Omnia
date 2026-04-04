@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { resolveVariableMenuLabel } from '../variableDisplayLabel';
+import { makeTranslationKey } from '../translationKeys';
 
 describe('resolveVariableMenuLabel', () => {
   const guid = '11111111-1111-4111-8111-111111111111';
+  const vkey = makeTranslationKey('variable', guid);
 
   it('uses translation for utterance GUID when present', () => {
     const set = new Set([guid]);
     expect(
       resolveVariableMenuLabel(guid, 'fallback.name', {
         utteranceGuidSet: set,
-        translationsByGuid: { [guid]: 'Etichetta UI' },
+        translationsByGuid: { [vkey]: 'Etichetta UI' },
       })
     ).toBe('Etichetta UI');
   });
@@ -29,7 +31,7 @@ describe('resolveVariableMenuLabel', () => {
     expect(
       resolveVariableMenuLabel(guid, 'solo.var', {
         utteranceGuidSet: set,
-        translationsByGuid: { [guid]: 'From translations' },
+        translationsByGuid: { [vkey]: 'From translations' },
       })
     ).toBe('From translations');
   });

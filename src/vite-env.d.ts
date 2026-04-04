@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  /** Vitest injects this when running tests. */
+  readonly VITEST?: boolean | string;
   /** When `"true"`, enables AI Agent revisioning console logs without localStorage (dev or explicit prod debug). */
   readonly VITE_REVISIONING_DEBUG?: string;
   /** When `"true"`, structured sections use OT persistence + textarea commit path. */

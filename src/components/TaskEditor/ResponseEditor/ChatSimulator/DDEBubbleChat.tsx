@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { taskRepository } from '@services/TaskRepository';
 import { buildTaskTreeFromRepository } from '@utils/taskUtils';
+import { translationKeyFromStoredValue } from '@utils/translationKeys';
 
 /** Maps browser/network error messages to user-facing Italian copy for the chat simulator header. */
 function userFacingChatErrorMessage(raw: string | null | undefined): string | null {
@@ -30,7 +31,6 @@ function extractGuidsFromSteps(
   steps: Record<string, any>,
   guids: Set<string>
 ): void {
-  const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   let extractedCount = 0;
   let debugInfo: any[] = [];
 
@@ -54,18 +54,14 @@ function extractGuidsFromSteps(
                   const textParam = taskItem.parameters.find((p: any) =>
                     p?.parameterId === 'text' || p?.key === 'text'
                   );
-                  if (textParam?.value && guidPattern.test(textParam.value)) {
-                    guids.add(textParam.value);
+                  const tk = textParam?.value ? translationKeyFromStoredValue(String(textParam.value)) : null;
+                  if (tk) {
+                    guids.add(tk);
                     extractedCount++;
-                    debugInfo.push({ templateId, source: 'array-step-parameter', guid: textParam.value });
+                    debugInfo.push({ templateId, source: 'array-step-parameter', guid: tk });
                   } else if (textParam?.value) {
                     debugInfo.push({ templateId, source: 'array-step-parameter', value: textParam.value, isGuid: false });
                   }
-                }
-                if (taskItem.id && guidPattern.test(taskItem.id)) {
-                  guids.add(taskItem.id);
-                  extractedCount++;
-                  debugInfo.push({ templateId, source: 'array-step-taskId', guid: taskItem.id });
                 }
               }
             }
@@ -92,10 +88,11 @@ function extractGuidsFromSteps(
                 const textParam = taskItem.parameters.find((p: any) =>
                   p?.parameterId === 'text' || p?.key === 'text'
                 );
-                if (textParam?.value && guidPattern.test(textParam.value)) {
-                  guids.add(textParam.value);
+                const tk = textParam?.value ? translationKeyFromStoredValue(String(textParam.value)) : null;
+                if (tk) {
+                  guids.add(tk);
                   extractedCount++;
-                  debugInfo.push({ templateId, stepType, source: 'step-parameter', guid: textParam.value });
+                  debugInfo.push({ templateId, stepType, source: 'step-parameter', guid: tk });
                 } else if (textParam?.value) {
                   debugInfo.push({ templateId, stepType, source: 'step-parameter', value: textParam.value, isGuid: false });
                 } else if (textParam) {
@@ -103,12 +100,6 @@ function extractGuidsFromSteps(
                 }
               } else {
                 debugInfo.push({ templateId, stepType, source: 'taskItem', hasParameters: !!taskItem.parameters, parametersType: Array.isArray(taskItem.parameters) ? 'array' : typeof taskItem.parameters });
-              }
-              // ✅ GUID da taskItem.id (se è un GUID)
-              if (taskItem.id && guidPattern.test(taskItem.id)) {
-                guids.add(taskItem.id);
-                extractedCount++;
-                debugInfo.push({ templateId, stepType, source: 'taskId', guid: taskItem.id });
               }
             }
           } else {

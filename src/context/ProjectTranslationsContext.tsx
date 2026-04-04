@@ -1,32 +1,31 @@
+/**
+ * Global project translation map: load (factory+project merge from API), snapshot after load for
+ * flow-key materialization, bulk save split by deterministic project vs factory classification.
+ */
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback, useMemo } from 'react';
 import { useProjectDataUpdate } from './ProjectDataContext';
-import { loadProjectTranslations, saveProjectTranslations, loadAllProjectTranslations } from '../services/ProjectDataService';
+import { loadAllProjectTranslations, saveAllTranslationsBulk } from '../services/ProjectDataService';
 import { notifyTranslationAdded, notifyTranslationsAdded } from '../utils/translationTracker';
 import { setProjectTranslationsRegistry } from '../utils/projectTranslationsRegistry';
+import { isValidTranslationStoreKey, parseTranslationKey, translationKeyFromStoredValue } from '../utils/translationKeys';
+import { extractGUIDsFromDDT } from '../utils/ddtUtils';
+import { taskRepository } from '../services/TaskRepository';
+import { DialogueTaskService } from '../services/DialogueTaskService';
+import { TemplateSource } from '../types/taskTypes';
+import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
+import type { FlowNode } from '../components/Flowchart/types/flowTypes';
 
 export interface ProjectTranslationsContextType {
-  // Global translations table: { guid: text } where text is for project locale only
   translations: Record<string, string>;
-  // Add translation to global table (in memory only)
   addTranslation: (guid: string, text: string, templateId?: string) => void;
-  // Add multiple translations to global table (in memory only)
   addTranslations: (translations: Record<string, string>, templateId?: string) => void;
-  // Get translation by GUID
   getTranslation: (guid: string) => string | undefined;
-  // Load all project translations from database
   loadAllTranslations: () => Promise<void>;
-  // Save all translations to database (explicit save)
   saveAllTranslations: () => Promise<void>;
-  // Check if translations are dirty (have unsaved changes)
+  /** Kept for API compatibility; persistence no longer uses dirty tracking (always false). */
   isDirty: boolean;
-  /** True while a load from persistence is in flight. */
   isLoading: boolean;
-  /**
-   * True once the initial load for the current project has settled (success or failure).
-   * Missing keys for new tasks are normal — this does not mean “every string exists in DB”.
-   */
   isReady: boolean;
-  // ✅ NEW: Set current template ID for translation tracking
   setCurrentTemplateId: (templateId: string | null) => void;
 }
 
@@ -44,11 +43,93 @@ interface ProjectTranslationsProviderProps {
   children: ReactNode;
 }
 
+/** Extract `task:...` keys from persisted steps dictionary (same shape as DDT `steps`). */
+function extractTaskKeysFromStepsObject(
+  steps: Record<string, Record<string, any>> | undefined | null
+): string[] {
+  const guids = new Set<string>();
+  if (!steps || typeof steps !== 'object') return [];
+  Object.values(steps).forEach((nodeSteps) => {
+    if (!nodeSteps || typeof nodeSteps !== 'object') return;
+    Object.values(nodeSteps).forEach((step: any) => {
+      if (!step?.escalations || !Array.isArray(step.escalations)) return;
+      step.escalations.forEach((esc: any) => {
+        (esc?.tasks || []).forEach((task: any) => {
+          const textParam = task.parameters?.find((p: any) => p.parameterId === 'text');
+          const tk = textParam?.value ? translationKeyFromStoredValue(String(textParam.value)) : null;
+          if (tk) guids.add(tk);
+        });
+      });
+    });
+  });
+  return Array.from(guids);
+}
+
+function collectKeysFromPersistedTask(task: any): string[] {
+  const keys = new Set<string>();
+  const params = task.parameters;
+  if (Array.isArray(params)) {
+    for (const p of params) {
+      if (p?.parameterId === 'text' && p?.value) {
+        const tk = translationKeyFromStoredValue(String(p.value));
+        if (tk) keys.add(tk);
+      }
+    }
+  }
+  if (task.subTasks && Array.isArray(task.subTasks) && task.subTasks.length > 0) {
+    extractGUIDsFromDDT({ nodes: task.subTasks }).forEach((k) => keys.add(k));
+  }
+  extractTaskKeysFromStepsObject(task.steps).forEach((k) => keys.add(k));
+  return Array.from(keys);
+}
+
+/**
+ * FLOW_KEYS: every `task:...` key referenced from task tree (steps/subtasks), DDT-shaped task
+ * fragments, and flowchart rows (task id per row).
+ */
+function collectFlowTaskTranslationKeys(): string[] {
+  const keys = new Set<string>();
+  for (const task of taskRepository.getAllTasks()) {
+    collectKeysFromPersistedTask(task).forEach((k) => keys.add(k));
+  }
+  const flowIds = FlowWorkspaceSnapshot.getAllFlowIds();
+  for (const fid of flowIds) {
+    const flow = FlowWorkspaceSnapshot.getFlowById(fid);
+    if (!flow?.nodes) continue;
+    for (const n of flow.nodes) {
+      const data = n.data as FlowNode | undefined;
+      const rows = data?.rows;
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const tid = row?.id;
+        if (!tid) continue;
+        const t = taskRepository.getTask(tid);
+        if (t) {
+          collectKeysFromPersistedTask(t).forEach((k) => keys.add(k));
+        }
+      }
+    }
+  }
+  return Array.from(keys).filter((k) => parseTranslationKey(k)?.kind === 'task');
+}
+
+function classifyTranslationKeyDestination(key: string): 'project' | 'factory' {
+  if (key.startsWith('runtime.')) return 'project';
+  const parsed = parseTranslationKey(key);
+  if (!parsed || parsed.kind !== 'task') return 'project';
+  const uuid = parsed.guid;
+  if (taskRepository.hasTask(uuid)) return 'project';
+  const tpl = DialogueTaskService.getTemplate(uuid);
+  if (tpl) {
+    return tpl.source === TemplateSource.Factory ? 'factory' : 'project';
+  }
+  return 'project';
+}
+
 export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderProps> = ({ children }) => {
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
 
-  // Get project locale
   const projectLocale = (() => {
     try {
       return (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
@@ -57,71 +138,56 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
   })();
 
-  // Global translations table: { guid: text } where text is for project locale only
   const [translations, setTranslations] = useState<Record<string, string>>({});
-  // Original translations loaded from DB (for comparison)
-  const [originalTranslations, setOriginalTranslations] = useState<Record<string, string>>({});
-  const [isDirty, setIsDirty] = useState(false);
-  const [allGuids, setAllGuids] = useState<Set<string>>(new Set());
-  // ✅ NEW: Loading and ready states for translations
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  // ✅ NEW: Track current template ID for translation tracking
   const [currentTemplateId, setCurrentTemplateIdState] = useState<string | null>(null);
 
-  // ✅ FIX: Live ref for synchronous access to translations (updated immediately, not waiting for React render)
-  // This solves the timing issue where cloneAndContextualizeTranslations reads translations
-  // before React state has updated (during wizard pipeline execution)
   const translationsLiveRef = useRef<Record<string, string>>({});
+  /** Copy of merged load result; used only to materialize missing flow keys before save. */
+  const snapshotAfterLoadRef = useRef<Record<string, string>>({});
 
-  // ✅ Keep ref in sync with state (for DB loads and initial state)
   useEffect(() => {
     translationsLiveRef.current = translations;
   }, [translations]);
 
-  // ✅ NEW: Set current template ID for translation tracking
   const setCurrentTemplateId = useCallback((templateId: string | null) => {
     setCurrentTemplateIdState(templateId);
-    console.log('[ProjectTranslations] 📌 Current template ID set', { templateId });
   }, []);
 
-  // Add translation to global table (in memory only)
   const addTranslation = useCallback((guid: string, text: string, templateId?: string) => {
     if (!guid) return;
+    if (!isValidTranslationStoreKey(guid)) {
+      throw new Error(`[ProjectTranslations] Invalid translation store key (expected kind:uuid or runtime.*): ${guid}`);
+    }
 
-    // Use provided templateId or current templateId
     const activeTemplateId = templateId || currentTemplateId;
 
-    // ✅ FIX: Update ref SYNCHRONOUSLY (immediate, no React render wait)
-    // This ensures cloneAndContextualizeTranslations can read translations immediately
-    // during wizard pipeline execution, before React state has updated
     translationsLiveRef.current = { ...translationsLiveRef.current, [guid]: text };
     setProjectTranslationsRegistry(translationsLiveRef.current);
 
-    // ⏳ ASYNC: React state update (for UI re-render and context value)
     setTranslations((prev) => {
-      if (prev[guid] === text) return prev; // No change
-      setIsDirty(true);
+      if (prev[guid] === text) return prev;
       return { ...prev, [guid]: text };
     });
-    setAllGuids((prev) => new Set([...prev, guid]));
 
-    // ✅ EVENT-DRIVEN: Notify translation tracker if we have a templateId
     if (activeTemplateId) {
       notifyTranslationAdded(activeTemplateId, guid);
     }
   }, [currentTemplateId]);
 
-  // Add multiple translations to global table (in memory only)
   const addTranslations = useCallback((newTranslations: Record<string, string>, templateId?: string) => {
-    // Use provided templateId or current templateId
     const activeTemplateId = templateId || currentTemplateId;
 
-    // ✅ FIX: Update ref SYNCHRONOUSLY (immediate, no React render wait)
+    Object.keys(newTranslations).forEach((k) => {
+      if (k && !isValidTranslationStoreKey(k)) {
+        throw new Error(`[ProjectTranslations] Invalid translation store key (expected kind:uuid or runtime.*): ${k}`);
+      }
+    });
+
     translationsLiveRef.current = { ...translationsLiveRef.current, ...newTranslations };
     setProjectTranslationsRegistry(translationsLiveRef.current);
 
-    // ⏳ ASYNC: React state update (for UI re-render and context value)
     setTranslations((prev) => {
       let hasChanges = false;
       const updated = { ...prev };
@@ -131,54 +197,33 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
           hasChanges = true;
         }
       });
-      if (hasChanges) {
-        setIsDirty(true);
-        setAllGuids((prev) => new Set([...prev, ...Object.keys(newTranslations)]));
-      }
-      return updated;
+      return hasChanges ? updated : prev;
     });
 
-    // ✅ EVENT-DRIVEN: Notify translation tracker if we have a templateId
     if (activeTemplateId) {
       notifyTranslationsAdded(activeTemplateId, Object.keys(newTranslations));
     }
   }, [currentTemplateId]);
 
-  // Get translation by GUID (prefer live ref so readers see values written in the same tick as addTranslation)
   const getTranslation = useCallback((guid: string): string | undefined => {
     const live = translationsLiveRef.current[guid];
     if (live !== undefined) return live;
     return translations[guid];
   }, [translations]);
 
-  // ✅ Track loading completion to set isReady after translations state is updated
   const [loadingCompleted, setLoadingCompleted] = useState(false);
-  const [loadedTranslations, setLoadedTranslations] = useState<Record<string, string> | null>(null);
 
-  // ✅ Set isReady only after translations state is updated (via useEffect)
   useEffect(() => {
     if (loadingCompleted && !isLoading) {
-      // Loading completed and translations state has been updated
       setIsReady(true);
       setLoadingCompleted(false);
-      setLoadedTranslations(null);
-
-      // ✅ DEBUG: Verifica che le traduzioni siano state caricate
-      console.log('[ProjectTranslations] ✅ Translations ready', {
-        projectId: currentProjectId,
-        locale: projectLocale,
-        totalTranslations: Object.keys(translations).length,
-        sampleGuids: Object.keys(translations).slice(0, 10)
-      });
     }
-  }, [loadingCompleted, isLoading, translations, currentProjectId, projectLocale]);
+  }, [loadingCompleted, isLoading]);
 
-  // Keep synchronous registry in sync for non-React readers (DSL, services).
   useEffect(() => {
     setProjectTranslationsRegistry(translations);
   }, [translations]);
 
-  // Load all project translations from database
   const loadAllTranslations = useCallback(async () => {
     if (!currentProjectId) {
       setIsReady(false);
@@ -191,131 +236,95 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
 
     try {
       const allTranslations = await loadAllProjectTranslations(currentProjectId, projectLocale);
-      // ✅ CRITICAL: Merge instead of replace to preserve in-memory translations (e.g., template translations not yet in DB)
-      setTranslations((prev) => {
-        const merged = { ...prev, ...allTranslations };
-        // Update allGuids to include both existing and new GUIDs
-        setAllGuids(new Set([...Object.keys(prev), ...Object.keys(allTranslations)]));
-        return merged;
-      });
-      // Save original values for comparison (deep copy)
-      setOriginalTranslations(JSON.parse(JSON.stringify(allTranslations)));
-      setIsDirty(false);
+      const invalidKeys = Object.keys(allTranslations).filter((k) => !isValidTranslationStoreKey(k));
+      if (invalidKeys.length > 0) {
+        console.warn('[ProjectTranslations] Dropping translation rows with non-canonical keys (expected kind:uuid or runtime.*):', {
+          count: invalidKeys.length,
+          sample: invalidKeys.slice(0, 10),
+        });
+      }
+      const sanitized = Object.fromEntries(
+        Object.entries(allTranslations).filter(([k]) => isValidTranslationStoreKey(k))
+      );
 
-      // ✅ Mark loading as completed - isReady will be set by useEffect after translations state updates
-      setLoadedTranslations(allTranslations);
+      snapshotAfterLoadRef.current = { ...sanitized };
+      translationsLiveRef.current = sanitized;
+      setProjectTranslationsRegistry(sanitized);
+      setTranslations(sanitized);
+
       setLoadingCompleted(true);
-
-      // ✅ DEBUG: Verifica che le traduzioni Factory siano state caricate
-      console.log('[ProjectTranslations] 🔍 VERIFICA TRADUZIONI CARICATE', {
-        projectId: currentProjectId,
-        locale: projectLocale,
-        totalTranslations: Object.keys(allTranslations).length,
-        sampleGuids: Object.keys(allTranslations).slice(0, 10),
-        // ✅ Verifica se ci sono traduzioni Factory (quelle senza projectId specifico)
-        // Nota: Le traduzioni Factory vengono caricate dal backend insieme alle traduzioni del progetto
-        translationsSample: Object.entries(allTranslations).slice(0, 3).map(([guid, text]) => ({
-          guid,
-          textPreview: typeof text === 'string' ? text.substring(0, 50) : String(text).substring(0, 50)
-        }))
-      });
     } catch (err) {
       console.error('[ProjectTranslations] ❌ ERROR loadAllTranslations:', err);
-      setLoadedTranslations(null);
-      // Fail-open: initial load attempt finished (with error). Empty/partial in-memory map is valid;
-      // UI must not wait forever (e.g. new tasks have no DB keys yet).
+      snapshotAfterLoadRef.current = {};
       setLoadingCompleted(true);
     } finally {
       setIsLoading(false);
     }
   }, [currentProjectId, projectLocale]);
 
-  // Save all translations to database (explicit save) - only modified ones
   const saveAllTranslations = useCallback(async () => {
     if (!currentProjectId) {
       console.warn('[ProjectTranslations] No project ID, cannot save');
       return;
     }
 
-    if (!isDirty) {
-      return;
-    }
-
-    try {
-      // Compare current translations with original ones to find only modified ones
-      const modifiedTranslations: Array<{ guid: string; language: string; text: string; type: string }> = [];
-
-      Object.entries(translations).forEach(([guid, text]) => {
-        const originalText = originalTranslations[guid];
-        // Include if: new translation (not in original) OR modified (different from original)
-        if (originalText === undefined || originalText !== text) {
-          modifiedTranslations.push({
-            guid,
-            language: projectLocale,
-            text,
-            type: 'Instance'
-          });
-        }
-      });
-
-      if (modifiedTranslations.length === 0) {
-        setIsDirty(false);
-        return;
+    const FLOW_KEYS = collectFlowTaskTranslationKeys();
+    const snap = snapshotAfterLoadRef.current;
+    const base: Record<string, string> = { ...translationsLiveRef.current };
+    for (const key of FLOW_KEYS) {
+      if (!(key in base)) {
+        base[key] = snap[key] ?? '';
       }
-
-      await saveProjectTranslations(currentProjectId, modifiedTranslations);
-
-      // Update original translations with saved values
-      const newOriginal = { ...originalTranslations };
-      modifiedTranslations.forEach(({ guid, text }) => {
-        newOriginal[guid] = text;
-      });
-      setOriginalTranslations(newOriginal);
-      setIsDirty(false);
-    } catch (err) {
-      console.error('[ProjectTranslations] Error saving translations:', err);
-      throw err;
     }
-  }, [currentProjectId, translations, originalTranslations, projectLocale, isDirty]);
 
-  // Load translations when project changes
-  // ✅ CRITICAL: Only reset if project actually changed, not on every loadAllTranslations change
+    translationsLiveRef.current = base;
+    setProjectTranslationsRegistry(base);
+    setTranslations(base);
+
+    const projectTranslationsToSave: Array<{ guid: string; language: string; text: string; type?: string }> = [];
+    const factoryTranslationsToSave: Array<{ guid: string; language: string; text: string; type?: string }> = [];
+
+    for (const [guid, text] of Object.entries(base)) {
+      const dest = classifyTranslationKeyDestination(guid);
+      const row = {
+        guid,
+        language: projectLocale,
+        text: String(text ?? ''),
+        type: 'Instance' as const,
+      };
+      if (dest === 'factory') {
+        factoryTranslationsToSave.push(row);
+      } else {
+        projectTranslationsToSave.push(row);
+      }
+    }
+
+    await saveAllTranslationsBulk(currentProjectId, projectTranslationsToSave, factoryTranslationsToSave);
+  }, [currentProjectId, projectLocale]);
+
   const prevProjectIdRef = React.useRef<string | null>(null);
   useEffect(() => {
     if (currentProjectId) {
       const projectChanged = prevProjectIdRef.current !== currentProjectId;
 
       if (projectChanged) {
-        // Only reset when project actually changes
         prevProjectIdRef.current = currentProjectId;
+        snapshotAfterLoadRef.current = {};
         setTranslations({});
-        setOriginalTranslations({});
-        setAllGuids(new Set());
-        setIsDirty(false);
-        setIsReady(false); // ✅ Reset ready state when project changes
-        // Load all translations for the project
-        console.log('[ProjectTranslations] 🔄 Project changed, loading translations', {
-          projectId: currentProjectId,
-          locale: projectLocale
-        });
+        translationsLiveRef.current = {};
+        setProjectTranslationsRegistry({});
+        setIsReady(false);
         loadAllTranslations();
-      }
-      // ✅ DO NOT reset if project hasn't changed - preserve in-memory translations
-      // ✅ BUT: If translations are empty and not loading, try to load them
-      else if (Object.keys(translations).length === 0 && !isLoading && !isReady) {
-        console.log('[ProjectTranslations] 🔄 Translations empty but project unchanged, loading translations', {
-          projectId: currentProjectId,
-          locale: projectLocale
-        });
+      } else if (Object.keys(translations).length === 0 && !isLoading && !isReady) {
         loadAllTranslations();
       }
     } else {
       prevProjectIdRef.current = null;
+      snapshotAfterLoadRef.current = {};
       setIsReady(false);
     }
-  }, [currentProjectId, translations, isLoading, isReady, projectLocale, loadAllTranslations]); // ✅ Added dependencies to check if translations need to be loaded
+  }, [currentProjectId, translations, isLoading, isReady, loadAllTranslations]);
 
-  // Memoize context value to prevent unnecessary re-renders
   const value: ProjectTranslationsContextType = useMemo(() => ({
     translations,
     addTranslation,
@@ -323,23 +332,18 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     getTranslation,
     loadAllTranslations,
     saveAllTranslations,
-    isDirty,
-    isLoading, // ✅ NEW
-    isReady, // ✅ NEW
-    setCurrentTemplateId // ✅ NEW
-  }), [translations, addTranslation, addTranslations, getTranslation, loadAllTranslations, saveAllTranslations, isDirty, isLoading, isReady, setCurrentTemplateId]);
+    isDirty: false,
+    isLoading,
+    isReady,
+    setCurrentTemplateId
+  }), [translations, addTranslation, addTranslations, getTranslation, loadAllTranslations, saveAllTranslations, isLoading, isReady, setCurrentTemplateId]);
 
-  // Expose saveAllTranslations, addTranslations, and loadAllTranslations on window for explicit save from AppContent and taskUtils
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // ✅ CRITICAL: Use Object.defineProperty to create a getter that always reads from current React state
-      // This ensures that when DDEBubbleChat reads translations during compilation, it always gets the latest value
       Object.defineProperty((window as any), '__projectTranslationsContext', {
         value: {
           saveAllTranslations: async () => {
-            if (isDirty) {
-              await saveAllTranslations();
-            }
+            await saveAllTranslations();
           },
           addTranslations: (newTranslations: Record<string, string>, templateId?: string) => {
             addTranslations(newTranslations, templateId);
@@ -354,16 +358,12 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
             await loadAllTranslations();
           },
           get isDirty() {
-            return isDirty;
+            return false;
           },
           get translationsCount() {
             return Object.keys(translations).length;
           },
           get translations() {
-            // ✅ FIX: Read from live ref (updated synchronously in addTranslation/addTranslations)
-            // instead of React state closure (stale during wizard pipeline execution)
-            // This ensures cloneAndContextualizeTranslations can read translations immediately
-            // after they are added during AIGenerateTemplateMessages, before React re-render
             return translationsLiveRef.current;
           }
         },
@@ -376,7 +376,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
         delete (window as any).__projectTranslationsContext;
       }
     };
-  }, [saveAllTranslations, addTranslations, addTranslation, loadAllTranslations, isDirty, translations, setCurrentTemplateId]);
+  }, [saveAllTranslations, addTranslations, addTranslation, loadAllTranslations, translations, setCurrentTemplateId]);
 
   return (
     <ProjectTranslationsContext.Provider value={value}>
@@ -384,4 +384,3 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     </ProjectTranslationsContext.Provider>
   );
 };
-

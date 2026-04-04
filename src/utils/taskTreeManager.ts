@@ -4,6 +4,7 @@ import { buildTaskTreeNodes, cloneTemplateSteps } from './taskUtils';
 import { TaskType } from '../types/taskTypes';
 import { taskRepository } from '../services/TaskRepository';
 import { extractStartPrompts } from './ddtPromptExtractor';
+import { translationKeyFromStoredValue } from './translationKeys';
 
 /**
  * ============================================================================
@@ -364,9 +365,10 @@ export async function loadAndAdaptTaskTreeForExistingTask(
         const startStep = nodeSteps?.start || nodeSteps?.normal;
         if (startStep?.escalations?.[0]?.tasks) {
           startStep.escalations[0].tasks.forEach((task: any) => {
-            const textGuid = task.parameters?.find((p: any) => p.parameterId === 'text')?.value ||
-                            task.id;
-            if (textGuid) allGuids.add(textGuid);
+            const raw = task.parameters?.find((p: any) => p.parameterId === 'text')?.value;
+            const key =
+              typeof raw === 'string' ? translationKeyFromStoredValue(raw) : null;
+            if (key) allGuids.add(key);
           });
         }
       });

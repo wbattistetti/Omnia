@@ -3,6 +3,7 @@ import { DialogueTaskService } from '../services/DialogueTaskService';
 import { TaskType, templateIdToTaskType } from '../types/taskTypes';
 import { StepType } from '../types/stepTypes';
 import { v4 as uuidv4 } from 'uuid';
+import { isUuidString, makeTranslationKey, parseTranslationKey, translationKeyFromStoredValue } from './translationKeys';
 import { buildMinimalStandaloneTaskTree, buildStandaloneTaskTreeView } from './buildStandaloneTaskTreeView';
 import { hasValidTemplateIdRef } from './taskKind';
 
@@ -486,28 +487,30 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
 
       // ✅ STEP 1: Clona i parametri e genera nuovi GUID per i parametri "text"
       const clonedParameters = (task.parameters || []).map((param: any) => {
-        // ✅ Se è il parametro "text" e contiene un GUID, genera un nuovo GUID
         if (param.parameterId === 'text' && param.value) {
-          const textValue = String(param.value);
-          // ✅ Verifica se è un GUID (formato UUID v4)
+          const textValue = String(param.value).trim();
+          if (textValue.startsWith('runtime.')) {
+            return param;
+          }
+          const parsed = parseTranslationKey(textValue);
+          if (parsed?.kind === 'task') {
+            const newTextUuid = uuidv4();
+            const newKey = makeTranslationKey('task', newTextUuid);
+            guidMapping.set(textValue, newKey);
+            return { ...param, value: newKey };
+          }
           const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           if (GUID_REGEX.test(textValue)) {
-            // ✅ È un GUID del template, genera un nuovo GUID per l'istanza
-            const newTextGuid = uuidv4();
-            guidMapping.set(textValue, newTextGuid); // ✅ Aggiungi mapping per copiare traduzioni
-            return {
-              ...param,
-              value: newTextGuid // ✅ Sostituisci con nuovo GUID
-            };
+            const newTextUuid = uuidv4();
+            const newKey = makeTranslationKey('task', newTextUuid);
+            guidMapping.set(makeTranslationKey('task', textValue), newKey);
+            return { ...param, value: newKey };
           }
-          // ❌ Se non è un GUID, è testo letterale (errore nel template)
-          // Mantieni il valore originale ma logga un warning
-          console.warn('[cloneEscalationWithNewTaskIds] ⚠️ Template parameter "text" contains literal text instead of GUID', {
+          console.warn('[cloneEscalationWithNewTaskIds] ⚠️ Template parameter "text" is not a canonical task: key or legacy UUID', {
             taskId: task.id,
             parameterValue: textValue.substring(0, 50) + (textValue.length > 50 ? '...' : '')
           });
         }
-        // ✅ Per tutti gli altri parametri, mantieni il valore originale
         return param;
       });
 
@@ -1201,7 +1204,7 @@ export async function buildTaskTree(
       firstNodeId,
       firstStepKey,
       firstTaskTextKey,
-      firstTaskTextKeyIsGuid: firstTaskTextKey ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(firstTaskTextKey) : false,
+      firstTaskTextKeyIsStoreKey: !!translationKeyFromStoredValue(firstTaskTextKey),
       guidMappingSize: guidMapping?.size || 0,
       guidMappingSample: guidMapping && guidMapping.size > 0 ? Array.from(guidMapping.entries()).slice(0, 3) : []
     });

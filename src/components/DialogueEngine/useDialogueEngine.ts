@@ -6,6 +6,7 @@ import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import type { CompiledTask, CompilationError, CompilationResult, ExecutionState } from '../FlowCompiler/types';
 // Frontend DialogueEngine removed - backend orchestrator is now default
 import { useProjectData } from '../../context/ProjectDataContext';
+import { looksLikeTechnicalTranslationOrId } from '../../utils/translationKeys';
 
 interface UseDialogueEngineOptions {
   nodes: Node<FlowNode>[];
@@ -40,18 +41,13 @@ interface UseDialogueEngineOptions {
  * - Options can be updated without recreating the engine
  */
 export function useDialogueEngine(options: UseDialogueEngineOptions) {
-  const isGuidLike = useCallback((value: unknown): boolean => {
-    const text = String(value || '').trim();
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-[a-z0-9_-]+)?$/i.test(text);
-  }, []);
-
   const toReadableLabel = useCallback((value: unknown): string => {
     const text = String(value || '').trim();
-    if (!text || isGuidLike(text)) {
+    if (!text || looksLikeTechnicalTranslationOrId(text)) {
       return '';
     }
     return text;
-  }, [isGuidLike]);
+  }, []);
 
   const getRuntimeValueText = useCallback((value: unknown): string => {
     if (value === null || value === undefined) return '';

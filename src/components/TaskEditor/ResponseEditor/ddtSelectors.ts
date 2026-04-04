@@ -13,6 +13,7 @@ import {
   getNodeLabel,
   hasMultipleMainNodes,
 } from './core/domain';
+import { isUuidString, makeTranslationKey } from '../../../utils/translationKeys';
 
 /**
  * Get node list from TaskTree
@@ -115,8 +116,8 @@ export function useNodeLabel(node: any): string {
   const guid = getNodeIdStrict(node);
   if (!guid) return '';
 
-  // Use Translations if available, otherwise fallback to node.label
-  return getTranslation(guid) || getNodeLabelStrict(node);
+  const storeKey = isUuidString(guid) ? makeTranslationKey('task', guid) : guid;
+  return getTranslation(storeKey) || getNodeLabelStrict(node);
 }
 
 

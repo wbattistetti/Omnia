@@ -10,6 +10,7 @@ import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataCont
 import { useProjectTranslations } from '../context/ProjectTranslationsContext';
 import { resolveVariableStoreProjectId } from '../utils/safeProjectId';
 import { getVariableLabel } from '../utils/getVariableLabel';
+import { makeTranslationKey } from '../utils/translationKeys';
 
 export interface GlobalProjectDataPanelProps {
   open: boolean;
@@ -51,7 +52,7 @@ function GlobalVarRow({
     if (!t || t === current) return;
     const ok = variableCreationService.renameVariableById(projectId, instance.id, t);
     if (ok) {
-      addTranslation(instance.id, t);
+      addTranslation(makeTranslationKey('variable', instance.id), t);
       onRefresh();
     } else setDraft(current);
   }, [draft, instance.id, translations, devFb, projectId, addTranslation, onRefresh]);
@@ -125,7 +126,7 @@ export function GlobalProjectDataPanel({ open, onClose, projectId: projectIdProp
       scope: 'project',
     });
     const label = String(base.varName || '').trim();
-    if (label) addTranslation(base.id, label);
+    if (label) addTranslation(makeTranslationKey('variable', base.id), label);
     refresh();
   }, [projectId, addTranslation]);
 

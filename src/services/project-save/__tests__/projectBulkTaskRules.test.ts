@@ -50,7 +50,7 @@ describe('isProjectTemplateDefinitionRowForTemplateEndpointOnly', () => {
       id: 'msg-row',
       type: TaskType.SayMessage,
       templateId: null,
-      parameters: [{ parameterId: 'text', value: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' }],
+      parameters: [{ parameterId: 'text', value: 'task:aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee' }],
     } as Task;
     expect(isProjectTemplateDefinitionRowForTemplateEndpointOnly(task)).toBe(false);
   });

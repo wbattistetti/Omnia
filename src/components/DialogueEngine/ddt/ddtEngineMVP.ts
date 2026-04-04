@@ -3,6 +3,7 @@
 
 import type { AssembledTaskTree } from '../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import type { DDTNavigatorCallbacks, RetrieveResult } from './ddtTypes';
+import { translationKeyFromStoredValue } from '../../../utils/translationKeys';
 
 /**
  * Motore MVP FASE 2 - Escalation Base
@@ -83,11 +84,12 @@ async function executeEscalation(
     return;
   }
 
-  const textKey = textParam.value;
-  const translatedText = translations[textKey] || textKey;
+  const raw = String(textParam.value).trim();
+  const storeKey = translationKeyFromStoredValue(raw);
+  const translatedText = storeKey ? (translations[storeKey] ?? '') : '';
 
   if (!translatedText || translatedText.trim().length === 0) {
-    console.warn('[DDTEngineMVP] ⚠️ Translated text is empty', { textKey, stepType, escalationNumber });
+    console.warn('[DDTEngineMVP] ⚠️ Translated text is empty', { raw, storeKey, stepType, escalationNumber });
     return;
   }
 

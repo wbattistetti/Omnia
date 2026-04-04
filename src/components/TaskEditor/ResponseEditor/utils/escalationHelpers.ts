@@ -1,4 +1,5 @@
 import { TaskType } from '@types/taskTypes';
+import { makeTranslationKey } from '@utils/translationKeys';
 
 /** Built-in Message template ids (palette / escalation). */
 export function isMessageSemanticTemplateId(templateId: string | null | undefined): boolean {
@@ -49,7 +50,7 @@ export function normalizeTaskForEscalation(
   const hasTextParam = baseParams.some((p: any) => p?.parameterId === 'text');
   const parameters =
     isMessageKind && !hasTextParam
-      ? [...baseParams, { parameterId: 'text', value: generateGuidFn() }]
+      ? [...baseParams, { parameterId: 'text', value: makeTranslationKey('task', generateGuidFn()) }]
       : baseParams;
 
   return {
