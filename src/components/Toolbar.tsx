@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useReducer } from 'react';
-import { Home, Save, Settings, Loader2, CheckCircle, AlertCircle, X, Upload, Copy, ChevronDown } from 'lucide-react';
+import { Home, Save, Settings, Loader2, CheckCircle, AlertCircle, X, Upload, Copy, ChevronDown, Database } from 'lucide-react';
 import { ProjectData } from '../types/project';
 import { useAIProvider, AI_PROVIDERS } from '../context/AIProviderContext';
 import { useFontStore } from '../state/fontStore';
@@ -60,6 +60,9 @@ export interface ToolbarProps {
   latestVersion?: string | null;
   /** Catalogo progetti per validazione "Salva come" (nome, cliente, versione univoci e lineari). */
   existingProjectsForSaveAs?: Array<{ projectName?: string; name?: string; clientName?: string; version?: string }>;
+  /** Pannello variabili globali di progetto (toolbar principale). */
+  globalDataOpen?: boolean;
+  onGlobalDataToggle?: () => void;
 }
 
 export function Toolbar({
@@ -79,7 +82,9 @@ export function Toolbar({
   onSaveAsNewMajor,
   isLatestVersion = true,
   latestVersion = null,
-  existingProjectsForSaveAs = []
+  existingProjectsForSaveAs = [],
+  globalDataOpen = false,
+  onGlobalDataToggle,
 }: ToolbarProps) {
   // ✅ DEBUG: Log component mount and props (log removed to reduce noise)
   // React.useEffect(() => {
@@ -248,6 +253,20 @@ export function Toolbar({
           >
             <X className="w-4 h-4 flex-shrink-0" />
             <span>Chiudi</span>
+          </button>
+        )}
+        {currentProjectId && onGlobalDataToggle && (
+          <button
+            type="button"
+            onClick={onGlobalDataToggle}
+            className={`${BTN_BASE} flex-shrink-0 ${
+              globalDataOpen ? 'bg-teal-700 hover:bg-teal-600 text-white border border-teal-500/50' : BTN_SECONDARY
+            }`}
+            title="Dati globali del progetto (visibili in tutti i flow)"
+            aria-pressed={globalDataOpen}
+          >
+            <Database className="w-4 h-4 flex-shrink-0" strokeWidth={2} aria-hidden />
+            <span>Global Data</span>
           </button>
         )}
         <div className="relative flex-shrink-0" ref={saveMenuRef}>

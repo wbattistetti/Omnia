@@ -27,6 +27,8 @@ interface EditorRendererProps {
     examplesList?: string[];
     rowResults?: RowResult[];
     getNote?: (rowIndex: number, col: string) => string | undefined;
+    mainList?: unknown[];
+    dataTranslations?: Record<string, string>;
   };
   onCloseEditor?: () => void;
   toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow') => void;
@@ -158,6 +160,8 @@ export function EditorRenderer({
           onProfileUpdate={editorProps.onProfileUpdate}
           onClose={onCloseEditor || (() => toggleEditor('grammarflow'))}
           taskId={editorProps.task?.id ?? editorProps.task?.instanceId}
+          mainList={editorProps.mainList}
+          dataTranslations={editorProps.dataTranslations}
         />
       );
     default:

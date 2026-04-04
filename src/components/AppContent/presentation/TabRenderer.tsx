@@ -2,7 +2,17 @@
 // Renders different tab types (flow, responseEditor, conditionEditor, taskEditor, nonInteractive)
 
 import React, { useMemo, useCallback, useEffect, useState } from 'react';
-import type { DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabConditionEditor, DockTabChat, DockTabErrorReport, DockTabFlowMapping, ToolbarButton } from '@dock/types';
+import type {
+  DockTab,
+  DockTabFlow,
+  DockTabResponseEditor,
+  DockTabTaskEditor,
+  DockTabConditionEditor,
+  DockTabChat,
+  DockTabErrorReport,
+  DockTabFlowMapping,
+  ToolbarButton,
+} from '@dock/types';
 import type { DockNode } from '@dock/types';
 import { TaskType } from '@types/taskTypes';
 import { resolveEditorKind } from '@taskEditor/EditorHost/resolveKind';
@@ -71,6 +81,13 @@ function tabContentComparator(prev: { tab: DockTab }, next: { tab: DockTab }): b
     return true; // NO re-render
   }
 
+  if (prevTab.type === 'flow' && nextTab.type === 'flow') {
+    if (prevTab.flowId !== nextTab.flowId || prevTab.title !== nextTab.title) {
+      return false;
+    }
+    return true;
+  }
+
   if (prevTab.type === 'flowMapping' && nextTab.type === 'flowMapping') {
     return prevTab.id === nextTab.id && prevTab.initialMode === nextTab.initialMode && prevTab.title === nextTab.title;
   }
@@ -83,6 +100,70 @@ function tabContentComparator(prev: { tab: DockTab }, next: { tab: DockTab }): b
  * Condition editor: merge dock-tab variable snapshot with live VariableCreationService names
  * and re-merge when task save syncs utterance variables (`variableStore:updated`).
  */
+/** Flow canvas in dock: Variables / Interfaces toggles live in the dock tab bar (not fixed edge tabs). */
+const FlowTabWithDockToolbar: React.FC<{
+  tab: DockTabFlow;
+  currentPid?: string;
+  setDockTree: TabRendererProps['setDockTree'];
+  testSingleNode?: TabRendererProps['testSingleNode'];
+  onFlowCreateTaskFlow?: TabRendererProps['onFlowCreateTaskFlow'];
+  onFlowOpenTaskFlow?: TabRendererProps['onFlowOpenTaskFlow'];
+  onOpenSubflowForTask?: TabRendererProps['onOpenSubflowForTask'];
+}> = ({
+  tab,
+  currentPid,
+  setDockTree,
+  testSingleNode,
+  onFlowCreateTaskFlow,
+  onFlowOpenTaskFlow,
+  onOpenSubflowForTask,
+}) => {
+  const onToolbarUpdate = useCallback(
+    (toolbar: ToolbarButton[], color: string) => {
+      setDockTree((prev) =>
+        mapNode(prev, (n) => {
+          if (n.kind !== 'tabset') return n;
+          const idx = n.tabs.findIndex((t) => t.id === tab.id);
+          if (idx === -1 || n.tabs[idx].type !== 'flow') return n;
+          const updatedTab = {
+            ...n.tabs[idx],
+            toolbarButtons: toolbar,
+            headerColor: color,
+          } as DockTabFlow;
+          return {
+            ...n,
+            tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)],
+          };
+        })
+      );
+    },
+    [tab.id, setDockTree]
+  );
+
+  return (
+    <FlowCanvasHost
+      projectId={currentPid ?? undefined}
+      flowId={tab.flowId}
+      onToolbarUpdate={onToolbarUpdate}
+      testSingleNode={testSingleNode}
+      onCreateTaskFlow={
+        onFlowCreateTaskFlow
+          ? (newFlowId, title, nodes, edges) => onFlowCreateTaskFlow(tab.id, newFlowId, title, nodes, edges)
+          : undefined
+      }
+      onOpenTaskFlow={
+        onFlowOpenTaskFlow ? (taskFlowId, title) => onFlowOpenTaskFlow(tab.id, taskFlowId, title) : undefined
+      }
+      onOpenSubflowForTask={
+        onOpenSubflowForTask
+          ? (taskId, existingFlowId, title, canvasNodeId) =>
+              onOpenSubflowForTask(tab.id, taskId, existingFlowId, title, canvasNodeId, tab.flowId)
+          : undefined
+      }
+    />
+  );
+};
+
 const ConditionEditorDockTab: React.FC<{
   tab: DockTabConditionEditor;
   currentPid?: string;
@@ -215,24 +296,14 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
     // Flow tab - FlowCanvasHost handles useFlowActions internally
     if (tab.type === 'flow') {
       return (
-        <FlowCanvasHost
-          projectId={currentPid ?? undefined}
-          flowId={tab.flowId}
+        <FlowTabWithDockToolbar
+          tab={tab}
+          currentPid={currentPid}
+          setDockTree={setDockTree}
           testSingleNode={testSingleNode}
-          onCreateTaskFlow={
-            onFlowCreateTaskFlow
-              ? (newFlowId, title, nodes, edges) => onFlowCreateTaskFlow(tab.id, newFlowId, title, nodes, edges)
-              : undefined
-          }
-            onOpenTaskFlow={
-            onFlowOpenTaskFlow ? (taskFlowId, title) => onFlowOpenTaskFlow(tab.id, taskFlowId, title) : undefined
-          }
-          onOpenSubflowForTask={
-            onOpenSubflowForTask
-              ? (taskId, existingFlowId, title, canvasNodeId) =>
-                  onOpenSubflowForTask(tab.id, taskId, existingFlowId, title, canvasNodeId, tab.flowId)
-              : undefined
-          }
+          onFlowCreateTaskFlow={onFlowCreateTaskFlow}
+          onFlowOpenTaskFlow={onFlowOpenTaskFlow}
+          onOpenSubflowForTask={onOpenSubflowForTask}
         />
       );
     }

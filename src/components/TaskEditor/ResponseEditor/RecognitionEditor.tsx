@@ -112,6 +112,9 @@ interface RecognitionEditorProps {
     setTestPhrases?: (phrases: string[]) => void;
     onProfileUpdate?: (profile: any) => void;
     task?: any;
+    /** Task data roots (sidebar); used by GrammarFlow to seed slots when there is a single root. */
+    mainList?: unknown[];
+    dataTranslations?: Record<string, string>;
   };
   runAllRows?: () => Promise<void>;
   testing?: boolean;
@@ -749,6 +752,8 @@ export default function RecognitionEditor({
       setTestPhrases: editorProps?.setTestPhrases,
       onProfileUpdate: editorProps?.onProfileUpdate,
       task: editorProps?.task,
+      mainList: editorProps?.mainList,
+      dataTranslations: editorProps?.dataTranslations,
       // ✅ NEW: Feedback from test notes
       examplesList,
       rowResults,
@@ -786,7 +791,7 @@ export default function RecognitionEditor({
           },
         };
       default:
-        return editorProps || baseProps;
+        return { ...baseProps, ...(editorProps || {}) };
     }
     // Include contract in dependencies to update when contract changes
     // handleContractChange creates a new object, so this won't cause infinite loops

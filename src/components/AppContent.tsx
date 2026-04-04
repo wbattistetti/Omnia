@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { LandingPage } from './LandingPage';
 import { Toolbar } from './Toolbar';
+import { GlobalProjectDataPanel } from './GlobalProjectDataPanel';
 import { useFontClasses } from '../hooks/useFontClasses';
 import { NewProjectModal } from './NewProjectModal';
 import Sidebar from './Sidebar/Sidebar';
@@ -796,6 +797,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   }, [currentProject?.id, currentProject?.name, currentProject?.clientName, currentProject?.version]);
 
   const [showBackendBuilder, setShowBackendBuilder] = useState(false);
+  const [globalDataPanelOpen, setGlobalDataPanelOpen] = useState(false);
   const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
   const [debuggerWidth, setDebuggerWidth] = useState(380); // Larghezza dinamica invece di fissa
   const [isResizing, setIsResizing] = useState(false);
@@ -1222,6 +1224,14 @@ export const AppContent: React.FC<AppContentProps> = ({
             }}
             onRun={handleRunFlow}
             onSettings={() => setShowBackendBuilder(true)}
+            globalDataOpen={globalDataPanelOpen}
+            onGlobalDataToggle={() => setGlobalDataPanelOpen((v) => !v)}
+          />
+
+          <GlobalProjectDataPanel
+            open={globalDataPanelOpen}
+            onClose={() => setGlobalDataPanelOpen(false)}
+            projectId={currentPid}
           />
 
           {/* Area principale: Library Label + Sidebar + Canvas */}

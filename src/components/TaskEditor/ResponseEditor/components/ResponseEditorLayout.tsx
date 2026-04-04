@@ -16,7 +16,6 @@ import TaskDragLayer from '@responseEditor/TaskDragLayer';
 import { ResponseEditorContent } from '@responseEditor/components/ResponseEditorContent';
 import { ResponseEditorNormalLayout } from '@responseEditor/components/ResponseEditorNormalLayout';
 import { ServiceUnavailableModal } from '@responseEditor/components/ServiceUnavailableModal';
-import { WizardInstanceFirstBanner } from '@responseEditor/components/WizardInstanceFirstBanner';
 import { SaveLocationDialog } from '@responseEditor/components/SaveLocationDialog';
 import { MainViewMode } from '@responseEditor/types/mainViewMode';
 // ✅ REMOVED: useWizardIntegration - ora viene chiamato in ResponseEditorInner
@@ -1233,8 +1232,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
           color="orange"
         />
       )}
-
-      <WizardInstanceFirstBanner />
 
       <ResponseEditorContent
         showContractWizard={showContractWizard}

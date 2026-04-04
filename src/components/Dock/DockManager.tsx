@@ -418,9 +418,15 @@ function TabSet(props: {
         setRegion(null);
       }}
     >
-      {!hideTabStrip && (
-        <div className="flex items-center gap-1 px-2 border-b flex-shrink-0"
-          style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', height: 40 }}>
+      {!hideTabStrip && (() => {
+        const activeDockTab = props.tabs[props.active];
+        const tallFlowDockHeader =
+          activeDockTab?.type === 'flow' &&
+          ((activeDockTab as DockTabFlow).toolbarButtons?.length ?? 0) > 0;
+        const stripHeight = tallFlowDockHeader ? 44 : 40;
+        return (
+        <div className="flex items-center gap-1 px-2 border-b flex-shrink-0 w-full min-w-0"
+          style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', minHeight: stripHeight, height: stripHeight }}>
           {props.tabs.map((t, i) => {
           const isActive = props.active === i;
           const isFlowTab = t.type === 'flow';
@@ -428,19 +434,21 @@ function TabSet(props: {
           const isTaskEditor = t.type === 'taskEditor'; // ✅ RINOMINATO: isActEditor → isTaskEditor, 'actEditor' → 'taskEditor'
           const responseEditorTab = isResponseEditor ? (t as DockTabResponseEditor) : null;
           const taskEditorTab = isTaskEditor ? (t as DockTabTaskEditor) : null; // ✅ RINOMINATO: actEditorTab → taskEditorTab, DockTabActEditor → DockTabTaskEditor
-          // Get color from either responseEditor or taskEditor
-          const tabColor = isActive && (responseEditorTab?.headerColor || taskEditorTab?.headerColor) // ✅ RINOMINATO: actEditorTab → taskEditorTab
-            ? (responseEditorTab?.headerColor || taskEditorTab?.headerColor) // ✅ RINOMINATO: actEditorTab → taskEditorTab
+          const flowTab = isFlowTab ? (t as DockTabFlow) : null;
+          // Get color from responseEditor, taskEditor, or flow (dock toolbar)
+          const tabColor = isActive && (responseEditorTab?.headerColor || taskEditorTab?.headerColor || flowTab?.headerColor)
+            ? (responseEditorTab?.headerColor || taskEditorTab?.headerColor || flowTab?.headerColor)
             : undefined;
-          // Get toolbar buttons from either responseEditor or taskEditor
-          const toolbarButtons = isActive && (responseEditorTab?.toolbarButtons || taskEditorTab?.toolbarButtons) // ✅ RINOMINATO: actEditorTab → taskEditorTab
-            ? (responseEditorTab?.toolbarButtons || taskEditorTab?.toolbarButtons || []) // ✅ RINOMINATO: actEditorTab → taskEditorTab
+          const toolbarButtons = isActive && (responseEditorTab?.toolbarButtons || taskEditorTab?.toolbarButtons || flowTab?.toolbarButtons)
+            ? (responseEditorTab?.toolbarButtons || taskEditorTab?.toolbarButtons || flowTab?.toolbarButtons || [])
             : [];
-          const showToolbar = isActive && (isResponseEditor || isTaskEditor) && toolbarButtons.length > 0; // ✅ RINOMINATO: isActEditor → isTaskEditor
+          const showToolbar =
+            isActive && (isResponseEditor || isTaskEditor || isFlowTab) && toolbarButtons.length > 0;
           const titleSuffixButtons = toolbarButtons.filter(b => b.position === 'title-suffix');
           const rightButtons = toolbarButtons.filter(b => b.position !== 'title-suffix');
-          /** Only flow tabs are caption-sized; editor tabs keep legacy full-width active behavior. */
-          const tabFlexGrow = isFlowTab ? '0 0 auto' : (isActive ? 1 : '0 0 auto');
+          /** Flow + dock toolbar: tab fills strip width so title + Data/Output use full header. */
+          const flowToolbarExpanded = Boolean(isFlowTab && isActive && showToolbar);
+          const tabFlexGrow = flowToolbarExpanded ? '1 1 0%' : isFlowTab ? '0 0 auto' : (isActive ? 1 : '0 0 auto');
 
             return (
               <div key={t.id}
@@ -455,29 +463,35 @@ function TabSet(props: {
                 props.onDragTabEnd();
               }}
               onClick={() => props.setActive(i)}
-              className="px-2 py-0.5 text-xs rounded border cursor-grab flex items-center gap-1"
+              className="px-2 py-0.5 text-xs rounded border cursor-grab flex items-center gap-1 min-w-0"
               style={{
                 flex: tabFlexGrow,
-                minWidth: isFlowTab ? 'auto' : (isActive ? 0 : 'auto'),
-                maxWidth: isFlowTab ? 280 : undefined,
+                minWidth: flowToolbarExpanded ? 0 : (isFlowTab ? 'auto' : (isActive ? 0 : 'auto')),
+                maxWidth: flowToolbarExpanded ? undefined : (isFlowTab ? 280 : undefined),
                 backgroundColor: isActive
                   ? (tabColor || '#bae6fd')
                   : '#ffffff',
                 borderColor: tabColor || '#38bdf8',
                 color: isActive && tabColor ? '#ffffff' : '#0c4a6e'
               }}>
-              {/* icona dinamica in base al tipo */}
-              {getTabIcon(t)}
-              {/* Title: no flex:1 here — a spacer div below fills the gap instead,
-                  so that title-suffix buttons sit immediately after the label. */}
-              <span style={{
-                flex: '0 1 auto',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontWeight: 600,
-                minWidth: 0
-              }}>{t.title}</span>
+              {/* icona dinamica in base al tipo — flow attivo con header colorato: icona chiara */}
+              {isFlowTab ? (
+                <Workflow size={14} color={isActive && tabColor ? '#ffffff' : '#0c4a6e'} aria-hidden />
+              ) : (
+                getTabIcon(t)
+              )}
+              {/* Title: con flow toolbar il titolo usa lo spazio centrale (ellipsis solo se stretto) */}
+              <span
+                title={t.title}
+                style={{
+                  flex: flowToolbarExpanded ? 1 : '0 1 auto',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontWeight: 600,
+                  minWidth: 0,
+                }}
+              >{t.title}</span>
 
               {/* title-suffix buttons: immediately after title, not pushed right */}
               {showToolbar && titleSuffixButtons.length > 0 && (
@@ -486,8 +500,8 @@ function TabSet(props: {
                 </div>
               )}
 
-              {/* Spacer: pushes close (×) and right toolbar to the tab end for expanded editor tabs */}
-              {isActive && (isResponseEditor || isTaskEditor) && (
+              {/* Spacer: pushes close (×) and right toolbar to the tab end for expanded editor / flow toolbars */}
+              {isActive && (isResponseEditor || isTaskEditor || (isFlowTab && showToolbar)) && (
                 <div style={{ flex: 1, minWidth: 0 }} aria-hidden />
               )}
 
@@ -498,12 +512,13 @@ function TabSet(props: {
                 </div>
               )}
 
-              <button className="ml-1" style={{ color: isActive && tabColor ? '#ffffff' : '#0c4a6e' }} onClick={async (e) => { e.stopPropagation(); await props.onClose(t.id); }}>×</button>
+              <button className="ml-1 shrink-0" style={{ color: isActive && tabColor ? '#ffffff' : '#0c4a6e' }} onClick={async (e) => { e.stopPropagation(); await props.onClose(t.id); }}>×</button>
               </div>
             );
           })}
         </div>
-      )}
+        );
+      })()}
       {/* ✅ Key stabile sul contenuto del tab per preservare lo stato quando si cambia tab */}
       {(() => {
         const activeTab = props.tabs[props.active];

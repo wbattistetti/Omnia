@@ -216,6 +216,8 @@ export function MainContentArea({
               locale={'it-IT'}
               intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining || undefined : undefined}
               task={task}
+              mainList={mainList}
+              dataTranslations={localTranslations}
               updateSelectedNode={updateSelectedNode}
               contractChangeRef={contractChangeRef}
               initialEditor={

@@ -80,6 +80,21 @@ export function buildFlowVariableTree(variables: FlowVariableDefinition[]): Flow
 }
 
 /**
+ * Depth-first path keys as rendered in the tree (matches on-screen order).
+ */
+export function flattenFlowVariablePathKeysDfs(nodes: FlowVariableTreeNode[]): string[] {
+  const out: string[] = [];
+  const walk = (list: FlowVariableTreeNode[]) => {
+    for (const n of list) {
+      out.push(n.pathKey);
+      if (n.children.length > 0) walk(n.children);
+    }
+  };
+  walk(nodes);
+  return out;
+}
+
+/**
  * Variables with empty or whitespace-only labels (shown outside the tree).
  */
 export function flowVariablesWithoutPath(variables: FlowVariableDefinition[]): FlowVariableDefinition[] {

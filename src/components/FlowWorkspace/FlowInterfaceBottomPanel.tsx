@@ -45,6 +45,11 @@ import {
 export interface FlowInterfaceBottomPanelProps {
   flowId: string;
   projectId?: string;
+  /** Controlled open state (dock toolbar). Omit for edge linguetta + internal state. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** When true, hide edge linguetta; open/close comes from parent (e.g. dock tab bar). */
+  hideEdgeToggle?: boolean;
 }
 
 const shellClass =
@@ -60,14 +65,33 @@ const thinSplitterVertical = (edge: 'left' | 'right'): string => {
   return `pointer-events-auto shrink-0 ${edge === 'left' ? 'order-first' : 'order-last'} w-1.5 min-w-[6px] cursor-ew-resize touch-none select-none bg-transparent hover:bg-violet-500/20 ${border} border-transparent hover:border-violet-500/35 transition-colors`;
 };
 
-export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBottomPanelProps) {
+export function FlowInterfaceBottomPanel({
+  flowId,
+  projectId,
+  open: openProp,
+  onOpenChange,
+  hideEdgeToggle = false,
+}: FlowInterfaceBottomPanelProps) {
   const { flows } = useFlowWorkspace();
   const { translations } = useProjectTranslations();
   const { conditions } = useInMemoryConditions();
   const flowsRef = useRef(flows);
   flowsRef.current = flows;
   const { updateFlowMeta } = useFlowActions();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? Boolean(openProp) : internalOpen;
+  const setOpen = useCallback(
+    (next: boolean | ((p: boolean) => boolean)) => {
+      if (isControlled) {
+        const resolved = typeof next === 'function' ? next(open) : next;
+        onOpenChange?.(resolved);
+      } else {
+        setInternalOpen((prev) => (typeof next === 'function' ? next(prev) : next));
+      }
+    },
+    [isControlled, onOpenChange, open]
+  );
   const [removalBlockRefs, setRemovalBlockRefs] = useState<ReferenceLocation[] | null>(null);
   const [dockRegion, setDockRegion] = useState<FlowInterfaceDockRegion>(() => readDockRegion());
   const [panelHeightPx, setPanelHeightPx] = useState(() => readPanelHeight());
@@ -707,10 +731,10 @@ export function FlowInterfaceBottomPanel({ flowId, projectId }: FlowInterfaceBot
       {dockRegion === 'left' ? leftPanel : null}
       {dockRegion === 'right' ? rightPanel : null}
 
-      {!open && dockRegion === 'bottom' ? toggleBottom : null}
-      {!open && dockRegion === 'top' ? toggleTop : null}
-      {!open && dockRegion === 'left' ? toggleLeft : null}
-      {!open && dockRegion === 'right' ? toggleRight : null}
+      {!open && !hideEdgeToggle && dockRegion === 'bottom' ? toggleBottom : null}
+      {!open && !hideEdgeToggle && dockRegion === 'top' ? toggleTop : null}
+      {!open && !hideEdgeToggle && dockRegion === 'left' ? toggleLeft : null}
+      {!open && !hideEdgeToggle && dockRegion === 'right' ? toggleRight : null}
     </div>
   );
 }

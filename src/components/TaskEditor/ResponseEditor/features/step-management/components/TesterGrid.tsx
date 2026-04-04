@@ -102,6 +102,8 @@ interface TesterGridProps {
     setTestCases?: (cases: string[]) => void;
     onProfileUpdate?: (profile: any) => void;
     task?: any;
+    mainList?: unknown[];
+    dataTranslations?: Record<string, string>;
   };
   // Buttons props
   runAllRows?: () => Promise<void>;

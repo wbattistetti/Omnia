@@ -80,6 +80,8 @@ export default function DataExtractionEditor({
   updateSelectedNode,
   contractChangeRef,
   initialEditor, // ✅ NEW: Editor to open on mount (from Sidebar chip click)
+  mainList,
+  dataTranslations,
 }: {
   node: any;
   taskType?: TaskType; // ✅ Type del task per determinare classification vs extraction mode
@@ -95,6 +97,10 @@ export default function DataExtractionEditor({
     nodeLabel: string | undefined;
   }>;
   initialEditor?: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | 'grammarflow'; // ✅ NEW: Editor to open on mount
+  /** Roots of the task data tree (Recognition sidebar); GrammarFlow seeds slots when there is exactly one root. */
+  mainList?: unknown[];
+  /** Translation overrides for data node labels (same as ResponseEditor localTranslations). */
+  dataTranslations?: Record<string, string>;
 }) {
   // Profile state management (extracted to hook)
   const {
@@ -370,6 +376,8 @@ export default function DataExtractionEditor({
       onChange?.(updatedProfile);
     },
     task,
+    mainList,
+    dataTranslations,
   }), [
     regex,
     setRegex, // setRegex is stable, but include for safety
@@ -382,6 +390,8 @@ export default function DataExtractionEditor({
     setTestPhrases, // setTestPhrases is stable
     onChange, // onChange is stable
     task?.id, // Use only task.id instead of entire task object
+    mainList,
+    dataTranslations,
   ]);
 
   return (

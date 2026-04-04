@@ -19,6 +19,7 @@ import {
   getGrammarFlowFromContract,
   mergeGrammarFlowIntoContract,
 } from './grammarFlowContractHelpers';
+import { buildNewGrammarWithSlotsFromMainList } from './grammarFlowInitialSlots';
 import { useGrammarFlowContractSync } from './useGrammarFlowContractSync';
 
 interface GrammarFlowInlineEditorProps {
@@ -32,6 +33,9 @@ interface GrammarFlowInlineEditorProps {
   setTestCases?: (cases: string[]) => void;
   onProfileUpdate?: (profile: any) => void;
   taskId?: string;
+  /** Task data roots; when there is exactly one root, new GrammarFlow gets slots pre-filled from this tree. */
+  mainList?: unknown[];
+  dataTranslations?: Record<string, string>;
 }
 
 export default function GrammarFlowInlineEditor({
@@ -40,6 +44,8 @@ export default function GrammarFlowInlineEditor({
   onClose,
   node,
   taskId,
+  mainList,
+  dataTranslations,
 }: GrammarFlowInlineEditorProps) {
   const taskRow = taskId ? taskRepository.getTask(taskId) : null;
   const useNodeContractOnly = taskRowUsesSubTasksContract(taskRow);
@@ -64,6 +70,14 @@ export default function GrammarFlowInlineEditor({
     nodeId: node?.id,
     nodeTemplateId: effectiveTemplateLookupId || undefined,
   });
+
+  /** When the contract has no GrammarFlow yet, pre-fill slots from the data tree (single root only). */
+  const grammarSeededFromDataTree = useMemo(
+    () => buildNewGrammarWithSlotsFromMainList(mainList, dataTranslations),
+    [mainList, dataTranslations]
+  );
+
+  const displayGrammar = grammar ?? grammarSeededFromDataTree ?? undefined;
 
   const useNodeContractOnlyRef = useRef(useNodeContractOnly);
   useNodeContractOnlyRef.current = useNodeContractOnly;
@@ -220,7 +234,7 @@ export default function GrammarFlowInlineEditor({
 
   const grammarKey = useNodeContractOnly
     ? `grammarflow-editor-node-${node?.id || 'no-node'}`
-    : `grammarflow-editor-${effectiveTemplateLookupId || 'no-template'}-${grammar?.id || 'no-grammar'}`;
+    : `grammarflow-editor-${effectiveTemplateLookupId || 'no-template'}-${displayGrammar?.id || 'no-grammar'}`;
 
   return (
     <div
@@ -263,10 +277,10 @@ export default function GrammarFlowInlineEditor({
       >
         <GrammarEditor
           key={grammarKey}
-          initialGrammar={grammar || undefined}
+          initialGrammar={displayGrammar}
           onSave={handleGrammarSave}
-          slots={grammar?.slots || []}
-          semanticSets={grammar?.semanticSets || []}
+          slots={displayGrammar?.slots ?? []}
+          semanticSets={displayGrammar?.semanticSets ?? []}
           hideToolbar={false}
           editorMode="graph"
           initialTestPhrases={testPhrases}

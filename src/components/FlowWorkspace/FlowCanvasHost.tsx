@@ -15,6 +15,8 @@ import { useProjectData } from '../../context/ProjectDataContext';
 import { variableCreationService } from '../../services/VariableCreationService';
 import { resolveVariableStoreProjectId, isFallbackProjectBucket } from '../../utils/safeProjectId';
 import { buildFlowCanvasRowFingerprint } from '../../utils/flowWorkspaceUtteranceFingerprint';
+import type { ToolbarButton } from '@dock/types';
+import { ArrowUpFromLine, Database } from 'lucide-react';
 
 function getDefaultFlowTitle(flowId: string): string {
   return flowId === 'main' ? 'MAIN' : 'Subflow';
@@ -37,15 +39,61 @@ type Props = {
   onOpenTaskFlow?: (flowId: string, title: string) => void;
   /** Opens a subflow tab for a Flow-type row (taskId, optional existingFlowId, optional title, optional canvas node id for pan-after-split) */
   onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string, canvasNodeId?: string) => void;
+  /** When set (AppContent dock), Variables/Interfaces toggles are shown on the dock tab bar instead of edge handles. */
+  onToolbarUpdate?: (toolbar: ToolbarButton[], headerColor: string) => void;
 };
 
-export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleNode, onCreateTaskFlow, onOpenTaskFlow, onOpenSubflowForTask }) => {
+/** Teal header bar for flow dock tab (full-width strip, readable with white labels). */
+const FLOW_DOCK_HEADER_COLOR = '#0e7490';
+
+export const FlowCanvasHost: React.FC<Props> = ({
+  projectId,
+  flowId,
+  testSingleNode,
+  onCreateTaskFlow,
+  onOpenTaskFlow,
+  onOpenSubflowForTask,
+  onToolbarUpdate,
+}) => {
   const { data: projectData } = useProjectData();
   const { flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph, applyFlowLoadResult } = useFlowStoreActions();
   const [isLoadingFlow, setIsLoadingFlow] = React.useState(false);
+  const [variablesPanelOpen, setVariablesPanelOpen] = React.useState(false);
+  const [interfacePanelOpen, setInterfacePanelOpen] = React.useState(false);
 
   const entityCreation = useEntityCreation();
+
+  const flowDisplayName = useMemo(
+    () => pickFlowTitle(flowId, flows[flowId]?.title),
+    [flowId, flows[flowId]?.title]
+  );
+
+  useEffect(() => {
+    if (!onToolbarUpdate) return;
+    const iconClass = 'w-3.5 h-3.5 shrink-0 opacity-95';
+    const dataTitle = `Mostra tutti i dati interni a ${flowDisplayName}.`;
+    const outputTitle = `Mostra i dati che ${flowDisplayName} può fornire all'esterno.`;
+    const buttons: ToolbarButton[] = [
+      {
+        icon: <Database className={iconClass} strokeWidth={2} aria-hidden />,
+        label: 'Data',
+        title: dataTitle,
+        active: variablesPanelOpen,
+        onClick: () => setVariablesPanelOpen((o) => !o),
+      },
+    ];
+    if (isFlowInterfacePanelEnabled(flowId)) {
+      buttons.push({
+        icon: <ArrowUpFromLine className={iconClass} strokeWidth={2} aria-hidden />,
+        label: 'Output',
+        title: outputTitle,
+        active: interfacePanelOpen,
+        onClick: () => setInterfacePanelOpen((o) => !o),
+      });
+    }
+    onToolbarUpdate(buttons, FLOW_DOCK_HEADER_COLOR);
+  }, [onToolbarUpdate, variablesPanelOpen, interfacePanelOpen, flowId, flowDisplayName]);
 
   const flowSlice = flows[flowId];
   const flowPresent = flowSlice !== undefined;
@@ -259,18 +307,48 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, testSingleN
       createTask={entityCreation.createTask}
       createCondition={entityCreation.createCondition}
     >
-      <div className="relative flex flex-1 min-h-0 w-full h-full min-w-0 overflow-hidden">
-        <div className="absolute inset-0 z-0 min-h-0 min-w-0">{flowEditor}</div>
-        {isLoadingFlow ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-[1px] text-sm font-medium text-slate-700">
-            Loading flow...
+      {onToolbarUpdate ? (
+        <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-row overflow-hidden">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="absolute inset-0 z-0 min-h-0 min-w-0">{flowEditor}</div>
+            {isLoadingFlow ? (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-[1px] text-sm font-medium text-slate-700">
+                Loading flow...
+              </div>
+            ) : null}
+            {isFlowInterfacePanelEnabled(flowId) ? (
+              <FlowInterfaceBottomPanel
+                flowId={flowId}
+                projectId={projectId}
+                open={interfacePanelOpen}
+                onOpenChange={setInterfacePanelOpen}
+                hideEdgeToggle
+              />
+            ) : null}
           </div>
-        ) : null}
-        {isFlowInterfacePanelEnabled(flowId) ? (
-          <FlowInterfaceBottomPanel flowId={flowId} projectId={projectId} />
-        ) : null}
-        <FlowVariablesRail flowId={flowId} projectId={projectId} />
-      </div>
+          <FlowVariablesRail
+            flowId={flowId}
+            projectId={projectId}
+            open={variablesPanelOpen}
+            onOpenChange={setVariablesPanelOpen}
+            hideEdgeToggle
+            dockAsColumn
+          />
+        </div>
+      ) : (
+        <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="absolute inset-0 z-0 min-h-0 min-w-0">{flowEditor}</div>
+          {isLoadingFlow ? (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-[1px] text-sm font-medium text-slate-700">
+              Loading flow...
+            </div>
+          ) : null}
+          {isFlowInterfacePanelEnabled(flowId) ? (
+            <FlowInterfaceBottomPanel flowId={flowId} projectId={projectId} />
+          ) : null}
+          <FlowVariablesRail flowId={flowId} projectId={projectId} />
+        </div>
+      )}
     </FlowActionsProvider>
   );
 

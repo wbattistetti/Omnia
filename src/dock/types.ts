@@ -9,13 +9,7 @@ type DockTabBase = {
   title: string;
 };
 
-// Flow tab - for flowchart canvas
-export type DockTabFlow = DockTabBase & {
-  type: 'flow';
-  flowId: string;
-};
-
-// Toolbar button type
+// Toolbar button type (used by dock tab chrome and flow/task/response toolbars)
 export type ToolbarButton = {
   icon?: React.ReactNode;
   label?: string;
@@ -39,6 +33,15 @@ export type ToolbarButton = {
    *  'title-suffix' → rendered immediately after the tab title (not pushed right).
    *  Default (undefined) → rendered right-aligned in the tab toolbar strip. */
   position?: 'title-suffix';
+};
+
+// Flow tab - for flowchart canvas
+export type DockTabFlow = DockTabBase & {
+  type: 'flow';
+  flowId: string;
+  /** Toggle buttons (e.g. variables / interfaces) mirrored from FlowCanvasHost when docked. */
+  toolbarButtons?: ToolbarButton[];
+  headerColor?: string;
 };
 
 // Response Editor tab - for DDT editing

@@ -41,6 +41,9 @@ interface ContractEditorWrapperProps {
   onClose?: () => void;
   /** Owning task id for GrammarFlow standalone vs template cache resolution. */
   taskId?: string;
+  /** Task data tree roots; GrammarFlow seeds slots when there is exactly one root. */
+  mainList?: unknown[];
+  dataTranslations?: Record<string, string>;
 }
 
 export default function ContractEditorWrapper({
@@ -55,6 +58,8 @@ export default function ContractEditorWrapper({
   onProfileUpdate,
   onClose,
   taskId,
+  mainList,
+  dataTranslations,
 }: ContractEditorWrapperProps) {
   // Get method data from contract.engines array
   const methodData = React.useMemo(() => {
@@ -133,6 +138,8 @@ export default function ContractEditorWrapper({
           contract={contract}
           onContractChange={onContractChange}
           taskId={taskId}
+          mainList={mainList}
+          dataTranslations={dataTranslations}
           {...commonProps}
         />
       );
