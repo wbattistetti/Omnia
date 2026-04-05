@@ -94,7 +94,18 @@ Public Class TaskCompiler
             Next
         End If
 
-        ' Valida regex nel contract (se presente)
+        ' Gating utterance: step attivi richiedono contratto NLP, tabella GUID e almeno un motore.
+        If compiledTask.Steps IsNot Nothing AndAlso compiledTask.Steps.Count > 0 Then
+            If compiledTask.NlpContract Is Nothing Then
+                errors.Add($"Task '{compiledTask.Id}': dialogue steps require a compiled NLP contract (dataContract).")
+            ElseIf compiledTask.Engines Is Nothing OrElse compiledTask.Engines.Count = 0 Then
+                errors.Add($"Task '{compiledTask.Id}': interpretation engines list is missing or empty (compiler must bind at least one engine).")
+            ElseIf compiledTask.CanonicalGuidTable Is Nothing Then
+                errors.Add($"Task '{compiledTask.Id}': canonical GUID table is missing for this utterance task.")
+            End If
+        End If
+
+        ' Valida regex nel contract (se presente) — ridondante con NlpContractCompiler ma mantiene messaggi aggiuntivi
         If compiledTask.NlpContract IsNot Nothing AndAlso compiledTask.NlpContract.Engines IsNot Nothing Then
             Dim regexContract = compiledTask.NlpContract.Engines.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
             If regexContract IsNot Nothing Then

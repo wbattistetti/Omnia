@@ -1,8 +1,8 @@
 Option Strict On
 Option Explicit On
 
+Imports System.Collections.Generic
 Imports System.IO
-Imports System.Linq
 Imports System.Threading.Tasks
 Imports Microsoft.AspNetCore.Http
 Imports Microsoft.AspNetCore.Mvc
@@ -123,14 +123,14 @@ Public Module GrammarFlowExtractHandlers
                 If request.Contract IsNot Nothing AndAlso request.Contract.SubDataMapping IsNot Nothing Then
                     For Each kvp In request.Contract.SubDataMapping
                         Dim src = kvp.Value
-                        compiled.SubDataMapping(kvp.Key) = New TaskEngine.SubDataMappingInfo With {
+                        compiled.DataMapping(kvp.Key) = New TaskEngine.SubDataMappingInfo With {
                             .GroupName = src.GroupName,
                             .Label = src.Label,
                             .Type = src.Type
                         }
                     Next
                 End If
-                extractedValues = Parser.MapGrammarBindingsToSubIds(parseResult.Bindings, compiled)
+                extractedValues = MapGrammarBindingsToCanonicalKeys(parseResult.Bindings, compiled)
                 For Each kvp In extractedValues
                     Console.WriteLine($"[GrammarFlowExtract] ✅ Mapped subId '{kvp.Key}' = {kvp.Value}")
                 Next
@@ -159,6 +159,39 @@ Public Module GrammarFlowExtractHandlers
                 statusCode:=500
             )
         End Try
+    End Function
+
+    ''' <summary>
+    ''' Per ogni chiave in SubDataMapping: legge il binding solo da chiave canonica o da GroupName (stesso nome gruppo GF).
+    ''' Nessun merge, nessun pass-through dei binding senza mapping.
+    ''' </summary>
+    Private Function MapGrammarBindingsToCanonicalKeys(
+        bindings As Dictionary(Of String, Object),
+        contract As CompiledNlpContract
+    ) As Dictionary(Of String, Object)
+
+        Dim extracted As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
+        If bindings Is Nothing OrElse bindings.Count = 0 Then Return extracted
+        If contract Is Nothing OrElse contract.DataMapping Is Nothing OrElse contract.DataMapping.Count = 0 Then
+            Return extracted
+        End If
+
+        For Each kvp In contract.DataMapping
+            Dim subId = kvp.Key
+            Dim groupName = kvp.Value?.GroupName
+            Dim raw As Object = Nothing
+            If bindings.TryGetValue(subId, raw) Then
+            ElseIf Not String.IsNullOrEmpty(groupName) AndAlso bindings.TryGetValue(groupName, raw) Then
+            Else
+                Continue For
+            End If
+            If raw Is Nothing Then Continue For
+            Dim s = raw.ToString()
+            If String.IsNullOrWhiteSpace(s) Then Continue For
+            extracted(subId) = raw
+        Next
+
+        Return extracted
     End Function
 
 End Module

@@ -59,7 +59,6 @@
     <Compile Include="Parsers\MessageEventArgs.vb" />
     <!-- IParsableTask moved to Compiler/DTO/Runtime (uses CompiledNlpContract) -->
     <Compile Include="Parsers\Parser.vb" />
-    <Compile Include="Parsers\ParserExtraction.vb" />
     <!-- NLP Engine and Contract moved back to Common (to break Engine ↔ Compiler cycle) -->
   </ItemGroup>
 
@@ -82,5 +81,19 @@
 
   <!-- Placeholder files removed - not implemented -->
   <!-- Interfaces folder removed - empty -->
+
+  <!-- UtteranceInterpretation: modulo parallelo (non sostituisce Parser/FlowOrchestrator) -->
+  <ItemGroup>
+    <Compile Include="UtteranceInterpretation\IVariableAssignmentSink.vb" />
+    <Compile Include="UtteranceInterpretation\UtteranceRemainder.vb" />
+    <Compile Include="UtteranceInterpretation\TaskEngineBundle.vb" />
+    <Compile Include="UtteranceInterpretation\MixedInitiativeOrder.vb" />
+    <Compile Include="UtteranceInterpretation\SingleTaskExtractionResult.vb" />
+    <Compile Include="UtteranceInterpretation\UtteranceInterpretationSessionResult.vb" />
+    <Compile Include="UtteranceInterpretation\UtteranceInterpretationOrchestrator.vb" />
+    <Compile Include="UtteranceInterpretation\LastWordUtteranceEngine.vb" />
+    <Compile Include="UtteranceInterpretation\ParseResultBuilder.vb" />
+    <Compile Include="UtteranceInterpretation\UtteranceInterpretationParse.vb" />
+  </ItemGroup>
 
 </Project>

@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System.Collections.Generic
 Imports System.Text.RegularExpressions
 Imports TaskEngine
 
@@ -28,7 +29,7 @@ Public Class CompiledNlpContract
     ''' <summary>
     ''' Mapping tra subId e metadata per l'estrazione
     ''' </summary>
-    Public Property SubDataMapping As Dictionary(Of String, SubDataMappingInfo)
+    Public Property DataMapping As Dictionary(Of String, SubDataMappingInfo)
 
     ''' <summary>
     ''' Array di engines (fonte di verità unica)
@@ -41,6 +42,11 @@ Public Class CompiledNlpContract
     Public Property CompiledMainRegex As Regex
 
     ''' <summary>
+    ''' Tutti i pattern regex dell'engine regex abilitato, pre-compilati nello stesso ordine del contratto.
+    ''' </summary>
+    Public Property CompiledRegexPatterns As List(Of Regex)
+
+    ''' <summary>
     ''' Indica se il contract è valido (tutti i pattern sono compilabili)
     ''' </summary>
     Public Property IsValid As Boolean
@@ -51,9 +57,10 @@ Public Class CompiledNlpContract
     Public Property ValidationErrors As List(Of String)
 
     Public Sub New()
-        SubDataMapping = New Dictionary(Of String, SubDataMappingInfo)()
+        DataMapping = New Dictionary(Of String, SubDataMappingInfo)()
         Engines = New List(Of NLPEngine)()
         ValidationErrors = New List(Of String)()
+        CompiledRegexPatterns = New List(Of Regex)()
         IsValid = True
     End Sub
 End Class

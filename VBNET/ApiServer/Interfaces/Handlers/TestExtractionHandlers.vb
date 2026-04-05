@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 
+Imports System.Collections.Generic
 Imports System.IO
 Imports System.Linq
 Imports System.Text.RegularExpressions
@@ -10,10 +11,10 @@ Imports Microsoft.AspNetCore.Mvc
 Imports Newtonsoft.Json
 Imports TaskEngine
 Imports TaskEngine.Models
-Imports Compiler.DTO.Runtime
+Imports TaskEngine.UtteranceInterpretation
 Imports Compiler
-Imports Compiler.TaskCompiler
-Imports Common
+Imports Compiler.DTO.IDE
+Imports Compiler.DTO.Runtime
 
 Namespace ApiServer.Handlers
     ''' <summary>
@@ -130,43 +131,23 @@ Namespace ApiServer.Handlers
                 Console.WriteLine($"[TestExtraction] ✅ Regex parser found with {regexParser.Patterns.Count} pattern(s)")
                 Console.WriteLine($"[TestExtraction]   - First pattern: '{If(regexParser.Patterns.Count > 0, regexParser.Patterns(0), "N/A")}'")
 
-                ' ✅ CRITICAL: Compile the regex pattern before using it
-                ' The CompiledMainRegex is not deserialized from JSON, so we must compile it manually
-                If contract.CompiledMainRegex Is Nothing AndAlso regexParser.Patterns.Count > 0 Then
-                    Try
-                        Dim firstPattern = regexParser.Patterns(0)
-                        Console.WriteLine($"[TestExtraction] Compiling regex pattern: '{firstPattern}'")
-                        contract.CompiledMainRegex = New Regex(firstPattern, RegexOptions.IgnoreCase Or RegexOptions.Compiled)
-                        Console.WriteLine($"[TestExtraction] ✅ Regex compiled successfully")
-                    Catch ex As Exception
-                        Console.WriteLine($"[TestExtraction] ❌ ERROR compiling regex: {ex.Message}")
-                        Return Results.BadRequest(New With {
-                            .error = $"Invalid regex pattern: {ex.Message}"
-                        })
-                    End Try
+                CompileContractRegexIfNeeded(contract)
+
+                Dim task = BuildMinimalUtteranceTaskForTest(contract)
+                If task.Engines Is Nothing OrElse task.Engines.Count = 0 Then
+                    Return Results.BadRequest(New With {.error = "Could not bind interpretation engines from contract."})
                 End If
 
-                ' Create a minimal IParsableTask wrapper for the contract
-                ' The Parser only needs the NlpContract, so we create a simple wrapper
-                Dim minimalTask As New MinimalParsableTask(contract)
+                Console.WriteLine($"[TestExtraction] Calling UtteranceInterpretationParse with text: '{request.Text}'")
+                Dim pr = UtteranceInterpretationParse.Parse(request.Text.Trim(), task)
+                Dim hasMatch = pr.Result = ParseResultType.Match AndAlso pr.ExtractedVariables IsNot Nothing AndAlso pr.ExtractedVariables.Count > 0
+                Console.WriteLine($"[TestExtraction] Parse result: {pr.Result}, hasMatch={hasMatch}")
 
-                ' ✅ FIX: Use ExtractSimple directly instead of ParseSimple
-                ' Test extraction doesn't need runtime metadata (taskInstanceId, nodeId)
-                ' ExtractSimple is stateless and perfect for testing engine functionality
-                Console.WriteLine($"[TestExtraction] Calling Parser.ExtractSimple with text: '{request.Text}'")
-                Dim extractedValue = Parser.ExtractSimple(request.Text, minimalTask)
-                Console.WriteLine($"[TestExtraction] Extracted value: {If(extractedValue IsNot Nothing, $"'{extractedValue}'", "Nothing (no match)")}")
-
-                ' Convert extracted value to ExtractionResult format
-                Dim extractedValues As New Dictionary(Of String, Object)
-                Dim hasMatch = extractedValue IsNot Nothing
-
-                If hasMatch Then
-                    ' ✅ Store extracted value with key "value" (standard format)
-                    extractedValues("value") = extractedValue
-                    Console.WriteLine($"[TestExtraction] ✅ Match found: value='{extractedValue}'")
-                Else
-                    Console.WriteLine($"[TestExtraction] ❌ No match found")
+                Dim extractedValues As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
+                If hasMatch AndAlso pr.ExtractedVariables IsNot Nothing Then
+                    For Each ev In pr.ExtractedVariables
+                        extractedValues(ev.NodeId) = ev.Value
+                    Next
                 End If
 
                 Dim extractionResult As New With {
@@ -176,7 +157,7 @@ Namespace ApiServer.Handlers
                     .errors = If(hasMatch,
                                  New List(Of String)(),
                                  New List(Of String) From {"No match found"}),
-                    .confidence = If(hasMatch, 0.95, 0.0)
+                    .confidence = If(hasMatch, If(pr.Confidence > 0R, pr.Confidence, 0.95), 0.0)
                 }
 
                 Console.WriteLine($"[TestExtraction] ✅ Success - returning result with {extractedValues.Count} values")
@@ -197,38 +178,52 @@ Namespace ApiServer.Handlers
             End Try
         End Function
 
-        ' Minimal IParsableTask implementation for testing
-        Private Class MinimalParsableTask
-            Implements IParsableTask
+        ''' <summary>Compila la regex principale da NLPEngine se assente nel JSON (allineato a contract-extract).</summary>
+        Private Sub CompileContractRegexIfNeeded(contract As CompiledNlpContract)
+            If contract Is Nothing OrElse contract.CompiledMainRegex IsNot Nothing Then Return
+            Dim rxEngine = contract.Engines?.FirstOrDefault(Function(e) e IsNot Nothing AndAlso String.Equals(e.Type, "regex", StringComparison.OrdinalIgnoreCase) AndAlso e.Enabled)
+            If rxEngine Is Nothing OrElse rxEngine.Patterns Is Nothing OrElse rxEngine.Patterns.Count = 0 Then Return
+            Try
+                contract.CompiledMainRegex = New Regex(rxEngine.Patterns(0), RegexOptions.IgnoreCase Or RegexOptions.Compiled)
+                If contract.CompiledRegexPatterns Is Nothing Then
+                    contract.CompiledRegexPatterns = New List(Of Regex)()
+                Else
+                    contract.CompiledRegexPatterns.Clear()
+                End If
+                For Each p In rxEngine.Patterns
+                    contract.CompiledRegexPatterns.Add(New Regex(p, RegexOptions.IgnoreCase Or RegexOptions.Compiled))
+                Next
+            Catch
+            End Try
+        End Sub
 
-            Private ReadOnly _contract As CompiledNlpContract
-
-            Public Sub New(contract As CompiledNlpContract)
-                _contract = contract
-            End Sub
-
-            Public ReadOnly Property Id As String Implements IParsableTask.Id
-                Get
-                    Return "test-task"
-                End Get
-            End Property
-
-            Public ReadOnly Property NlpContract As CompiledNlpContract Implements IParsableTask.NlpContract
-                Get
-                    Return _contract
-                End Get
-            End Property
-
-            Public ReadOnly Property SubTasks As List(Of IParsableTask) Implements IParsableTask.SubTasks
-                Get
-                    Return New List(Of IParsableTask)() ' Empty list for simple tasks
-                End Get
-            End Property
-
-            Public Function HasSubTasks() As Boolean Implements IParsableTask.HasSubTasks
-                Return False ' Simple task, no sub-tasks
-            End Function
-        End Class
+        Private Function BuildMinimalUtteranceTaskForTest(contract As CompiledNlpContract) As CompiledUtteranceTask
+            Const nodeId As String = "00000000-0000-0000-0000-000000000001"
+            Dim task As New CompiledUtteranceTask With {
+                .Id = "test-task",
+                .NodeId = nodeId,
+                .NlpContract = contract
+            }
+            Dim table As New CanonicalGuidTable With {.MainNodeCanonicalGuid = nodeId}
+            If contract.DataMapping IsNot Nothing Then
+                For Each kvp In contract.DataMapping
+                    table.Data.Add(New CanonicalDatumRow With {
+                        .SubDataMappingKey = kvp.Key,
+                        .CanonicalGuid = kvp.Key,
+                        .RegexGroupName = If(kvp.Value?.GroupName, String.Empty)
+                    })
+                Next
+            End If
+            Dim ide As New NLPContract With {
+                .TemplateName = contract.TemplateName,
+                .TemplateId = contract.TemplateId,
+                .SourceTemplateId = contract.SourceTemplateId,
+                .SubDataMapping = contract.DataMapping,
+                .Engines = contract.Engines
+            }
+            task.Engines = InterpretationEngineBinding.CreateEngines(task, contract, ide, table)
+            Return task
+        End Function
 
     End Module
 

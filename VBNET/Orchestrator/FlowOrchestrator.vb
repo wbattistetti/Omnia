@@ -556,6 +556,12 @@ Public Class FlowOrchestrator
         ' Carica o crea DialogueState per questa riga
         Dim ds = LoadDialogueState(rowTask)
 
+        ' Engines ha JsonIgnore: dopo deserializzazione DialogueState, CurrentTask/RootTask possono essere copie senza motori.
+        Dim curUt = TryCast(ds.CurrentTask, CompiledUtteranceTask)
+        If curUt IsNot Nothing Then UtteranceTaskEnginesRehydration.EnsureEngines(curUt)
+        Dim rootUt = TryCast(ds.RootTask, CompiledUtteranceTask)
+        If rootUt IsNot Nothing Then UtteranceTaskEnginesRehydration.EnsureEngines(rootUt)
+
         ' Consuma PendingUtterance (input utente o stringa vuota per auto-advance)
         Dim utterance As String = nav.PendingUtterance
         nav.PendingUtterance = ""

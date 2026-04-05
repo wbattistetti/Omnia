@@ -114,6 +114,18 @@ Public Class CompiledUtteranceTask
     ''' </summary>
     Public Property NodeId As String
 
+    ''' <summary>
+    ''' Motori di interpretazione utterance (runtime). Non serializzati nel JSON del flusso.
+    ''' Tipi effettivi: TaskEngine.UtteranceInterpretation.IUtteranceInterpretationEngine.
+    ''' </summary>
+    <JsonIgnore>
+    Public Property Engines As List(Of Object)
+
+    ''' <summary>
+    ''' Tabella GUID canonici prodotta dal compilatore (persistita nel JSON dialogo).
+    ''' </summary>
+    Public Property CanonicalGuidTable As CanonicalGuidTable
+
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
             Return TaskTypes.UtteranceInterpretation

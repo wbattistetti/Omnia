@@ -1,16 +1,24 @@
-' POST /api/nlp/contract-extract — single VB extraction engine for IDE simulator/debugger.
+' POST /api/nlp/contract-extract — estrazione via UtteranceInterpretationParse (stesso motore del runtime).
 Option Strict On
 Option Explicit On
 
+Imports System.Collections.Generic
 Imports System.IO
+Imports System.Linq
+Imports System.Text.RegularExpressions
 Imports System.Threading.Tasks
+Imports Compiler
+Imports Compiler.DTO.IDE
+Imports Compiler.DTO.Runtime
 Imports Microsoft.AspNetCore.Http
 Imports Microsoft.AspNetCore.Mvc
 Imports Newtonsoft.Json
 Imports TaskEngine
+Imports TaskEngine.Models
+Imports TaskEngine.UtteranceInterpretation
 
 ''' <summary>
-''' HTTP contract extraction using ParserExtraction (GrammarFlow → regex), same as runtime.
+''' HTTP contract extraction: CompiledUtteranceTask minimale + UtteranceInterpretationParse.
 ''' </summary>
 Public Module ContractExtractHandlers
 
@@ -18,8 +26,6 @@ Public Module ContractExtractHandlers
         Public Property Text As String
         ''' <summary>JSON of CompiledNlpContract (engines, subDataMapping, patterns).</summary>
         Public Property ContractJson As String
-        ''' <summary>True = multi-subId composite mapping; False = leaf (single nodeId validation path).</summary>
-        Public Property Composite As Boolean
     End Class
 
     Public Async Function HandleContractExtract(context As HttpContext) As Task(Of IResult)
@@ -46,20 +52,24 @@ Public Module ContractExtractHandlers
                 Return Results.BadRequest(New With {.error = "Invalid contractJson"})
             End If
 
-            Parser.EnsureCompiledMainRegex(contract)
+            CompileContractRegexIfNeeded(contract)
 
-            Dim minimal As New ContractMinimalParsableTask(contract)
-            Dim values As Dictionary(Of String, Object)
-
-            If request.Composite Then
-                values = Parser.ExtractCompositeDictionary(request.Text, minimal)
-            Else
-                values = Parser.ExtractLeafDictionary(request.Text, minimal)
+            Dim task = BuildMinimalUtteranceTaskForContractExtract(contract)
+            If task.Engines Is Nothing OrElse task.Engines.Count = 0 Then
+                Return Results.BadRequest(New With {.error = "Contract must have at least one enabled regex or grammarflow engine."})
             End If
 
-            Dim hasMatch = values IsNot Nothing AndAlso values.Count > 0
+            Dim pr = UtteranceInterpretationParse.Parse(request.Text.Trim(), task)
+            Dim values As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
+            If pr.Result = ParseResultType.Match AndAlso pr.ExtractedVariables IsNot Nothing Then
+                For Each ev In pr.ExtractedVariables
+                    values(ev.NodeId) = ev.Value
+                Next
+            End If
+
+            Dim hasMatch = values.Count > 0
             Return Results.Ok(New With {
-                .values = If(values, New Dictionary(Of String, Object)()),
+                .values = values,
                 .hasMatch = hasMatch,
                 .engine = "vb"
             })
@@ -71,36 +81,54 @@ Public Module ContractExtractHandlers
         End Try
     End Function
 
-    Private Class ContractMinimalParsableTask
-        Implements IParsableTask
+    Private Sub CompileContractRegexIfNeeded(contract As CompiledNlpContract)
+        If contract Is Nothing Then Return
+        If contract.CompiledMainRegex IsNot Nothing Then Return
+        Dim rxEngine = contract.Engines?.FirstOrDefault(Function(e) e IsNot Nothing AndAlso String.Equals(e.Type, "regex", StringComparison.OrdinalIgnoreCase) AndAlso e.Enabled)
+        If rxEngine Is Nothing OrElse rxEngine.Patterns Is Nothing OrElse rxEngine.Patterns.Count = 0 Then Return
+        Try
+            contract.CompiledMainRegex = New Regex(rxEngine.Patterns(0), RegexOptions.IgnoreCase Or RegexOptions.Compiled)
+            If contract.CompiledRegexPatterns Is Nothing Then
+                contract.CompiledRegexPatterns = New List(Of Regex)()
+            Else
+                contract.CompiledRegexPatterns.Clear()
+            End If
+            For Each p In rxEngine.Patterns
+                contract.CompiledRegexPatterns.Add(New Regex(p, RegexOptions.IgnoreCase Or RegexOptions.Compiled))
+            Next
+        Catch
+        End Try
+    End Sub
 
-        Private ReadOnly _contract As CompiledNlpContract
+    Private Function BuildMinimalUtteranceTaskForContractExtract(contract As CompiledNlpContract) As CompiledUtteranceTask
+        Const nodeId As String = "00000000-0000-0000-0000-000000000001"
+        Dim task As New CompiledUtteranceTask With {
+            .Id = "contract-extract",
+            .NodeId = nodeId,
+            .NlpContract = contract
+        }
 
-        Public Sub New(contract As CompiledNlpContract)
-            _contract = contract
-        End Sub
+        Dim table As New CanonicalGuidTable With {.MainNodeCanonicalGuid = nodeId}
+        If contract.DataMapping IsNot Nothing Then
+            For Each kvp In contract.DataMapping
+                table.Data.Add(New CanonicalDatumRow With {
+                    .SubDataMappingKey = kvp.Key,
+                    .CanonicalGuid = kvp.Key,
+                    .RegexGroupName = If(kvp.Value?.GroupName, String.Empty)
+                })
+            Next
+        End If
 
-        Public ReadOnly Property Id As String Implements IParsableTask.Id
-            Get
-                Return "contract-extract"
-            End Get
-        End Property
+        Dim ide As New NLPContract With {
+            .TemplateName = contract.TemplateName,
+            .TemplateId = contract.TemplateId,
+            .SourceTemplateId = contract.SourceTemplateId,
+            .SubDataMapping = contract.DataMapping,
+            .Engines = contract.Engines
+        }
 
-        Public ReadOnly Property NlpContract As CompiledNlpContract Implements IParsableTask.NlpContract
-            Get
-                Return _contract
-            End Get
-        End Property
-
-        Public ReadOnly Property SubTasks As List(Of IParsableTask) Implements IParsableTask.SubTasks
-            Get
-                Return New List(Of IParsableTask)()
-            End Get
-        End Property
-
-        Public Function HasSubTasks() As Boolean Implements IParsableTask.HasSubTasks
-            Return False
-        End Function
-    End Class
+        task.Engines = InterpretationEngineBinding.CreateEngines(task, contract, ide, table)
+        Return task
+    End Function
 
 End Module

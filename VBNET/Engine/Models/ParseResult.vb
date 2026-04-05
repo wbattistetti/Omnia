@@ -40,12 +40,42 @@ Public Class ParseResult
     Public Property ExtractedVariables As List(Of ExtractedVariable)
 
     ''' <summary>
+    ''' Porzione di utterance considerata coperta dal match (UtteranceInterpretation / telemetria).
+    ''' Opzionale: il vecchio Parser non la imposta.
+    ''' </summary>
+    Public Property MatchedText As String
+
+    ''' <summary>
+    ''' Residuo dopo consumo del match (UtteranceInterpretation).
+    ''' </summary>
+    Public Property UnmatchedText As String
+
+    ''' <summary>
+    ''' Confidenza 0..1 se nota; altrimenti 0.
+    ''' </summary>
+    Public Property Confidence As Double
+
+    ''' <summary>
     ''' Costruttore
     ''' </summary>
     Public Sub New()
         ExtractedData = New Dictionary(Of String, Object)()
         CorrectedData = New Dictionary(Of String, Object)()
         ExtractedVariables = New List(Of ExtractedVariable)()
+        MatchedText = String.Empty
+        UnmatchedText = String.Empty
+        Confidence = 0R
     End Sub
+
+    ''' <summary>Nessun match: residuo opzionale dell'utterance.</summary>
+    Public Shared Function NoMatch(Optional utteranceRemainder As String = "") As ParseResult
+        Dim u = If(utteranceRemainder, String.Empty).Trim()
+        Return New ParseResult() With {
+            .Result = ParseResultType.NoMatch,
+            .UnmatchedText = u,
+            .Confidence = 0R,
+            .MatchedText = String.Empty
+        }
+    End Function
 End Class
 

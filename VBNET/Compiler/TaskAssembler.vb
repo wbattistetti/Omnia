@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System.Collections.Generic
 Imports System.Linq
 Imports System.Text.RegularExpressions
 Imports Newtonsoft.Json
@@ -168,28 +169,60 @@ Public Class TaskAssembler
             Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has a step of type 'invalid' but no constraints. The 'invalid' step is only needed when constraints are present. Remove the 'invalid' step or add constraints.")
         End If
 
-        ' ✅ Compila dataContract in CompiledNlpContract se presente
+        ' DataContract obbligatorio se esistono step dialogo compilati (task che richiedono NLP).
+        Dim hasActiveSteps = task.Steps IsNot Nothing AndAlso task.Steps.Count > 0
+        If hasActiveSteps AndAlso ideNode.DataContract Is Nothing Then
+            Throw New UtteranceTaskCompilationException(
+                $"Node '{ideNode.Id}' has dialogue steps but no dataContract.",
+                New List(Of CompilationError) From {
+                    New CompilationError With {
+                        .NodeId = ideNode.Id,
+                        .Category = "MissingDataContract",
+                        .DetailCode = "DataContractRequired",
+                        .Message = "Utterance task with dialogue steps must declare a dataContract (NLP contract)."
+                    }
+                })
+        End If
+
         If ideNode.DataContract IsNot Nothing Then
-            Try
-                ' DataContract è già NLPContract (tipizzato), compila direttamente
-                task.NlpContract = NlpContractCompiler.Compile(ideNode.DataContract)
-
-                If Not task.NlpContract.IsValid Then
-                    Throw New InvalidOperationException($"NlpContract compilation failed for node {ideNode.Id}: {String.Join(", ", task.NlpContract.ValidationErrors)}")
+            Dim guidTable = BuildCanonicalGuidTable(ideNode, ideNode.DataContract)
+            task.NlpContract = NlpContractCompiler.Compile(ideNode.DataContract)
+            If task.NlpContract Is Nothing OrElse Not task.NlpContract.IsValid Then
+                Dim errList As New List(Of CompilationError)()
+                If task.NlpContract IsNot Nothing AndAlso task.NlpContract.ValidationErrors IsNot Nothing Then
+                    For Each ve As String In task.NlpContract.ValidationErrors
+                        errList.Add(New CompilationError With {
+                            .NodeId = ideNode.Id,
+                            .Category = "NlpContractInvalid",
+                            .DetailCode = "ValidationFailed",
+                            .Message = ve
+                        })
+                    Next
+                Else
+                    errList.Add(New CompilationError With {
+                        .NodeId = ideNode.Id,
+                        .Category = "NlpContractInvalid",
+                        .DetailCode = "ValidationFailed",
+                        .Message = "NLP contract compilation failed."
+                    })
                 End If
+                Throw New UtteranceTaskCompilationException("NLP contract validation failed.", errList)
+            End If
 
-                ' ✅ Validate group-name coherence: mapping ↔ regex bidirectional check.
-                ' Only runs when a composite mapping exists (leaf contracts are skipped).
-                If ideNode.DataContract.SubDataMapping IsNot Nothing AndAlso ideNode.DataContract.SubDataMapping.Count > 0 Then
-                    ValidateGroupNameCoherence(ideNode.DataContract)
-                End If
-            Catch ex As Exception
-                Console.WriteLine($"[TaskAssembler.CompileNode] ❌ Node {ideNode.Id}: Exception during compilation: {ex.Message}")
-                Console.WriteLine($"[TaskAssembler.CompileNode]   - StackTrace: {ex.StackTrace}")
-                Throw New InvalidOperationException($"Failed to compile dataContract for node {ideNode.Id}: {ex.Message}", ex)
-            End Try
-        Else
-            Console.WriteLine($"[TaskAssembler.CompileNode] ⚠️ Node {ideNode.Id}: ideNode.DataContract is Nothing")
+            task.CanonicalGuidTable = guidTable
+            task.Engines = InterpretationEngineBinding.CreateEngines(task, task.NlpContract, ideNode.DataContract, guidTable)
+            If task.Engines Is Nothing OrElse task.Engines.Count = 0 Then
+                Throw New UtteranceTaskCompilationException(
+                    "No interpretation engines were bound for this utterance task.",
+                    New List(Of CompilationError) From {
+                        New CompilationError With {
+                            .NodeId = ideNode.Id,
+                            .Category = "EmptyInterpretationEngines",
+                            .DetailCode = "NoEnginesBound",
+                            .Message = "At least one enabled NLP engine (regex and/or grammarflow) must be present and valid."
+                        }
+                    })
+            End If
         End If
 
         ' Compila SubTasks (ricorsivo) - inizializza solo se ci sono subTasks
@@ -502,112 +535,50 @@ Public Class TaskAssembler
     ''' Non serve più conversione manuale da Object/JObject a NLPContract.
     ''' </summary>
 
-    ' ── Group-name validation helpers ────────────────────────────────────────
-
     ''' <summary>
-    ''' ✅ REMOVED: _guidGroupPattern - no longer needed, using inline pattern for s[0-9]+
-    ''' Pattern for deterministic group names based on index.
-    ''' Format: s followed by one or more digits (e.g. s1, s2, s3).
+    ''' Costruisce la tabella GUID canonici (subId → GUID, gruppi regex allineati). Nessun mapping a runtime.
     ''' </summary>
-    ' Private Shared ReadOnly _guidGroupPattern As New System.Text.RegularExpressions.Regex(
-    '     "^g_[a-f0-9]{12}$",
-    '     System.Text.RegularExpressions.RegexOptions.IgnoreCase Or
-    '     System.Text.RegularExpressions.RegexOptions.Compiled)
-
-    ''' <summary>
-    ''' Validates that every GroupName in SubDataMapping exists as a named group
-    ''' in the main regex pattern, and that every named group in the pattern has
-    ''' a corresponding entry in SubDataMapping.
-    ''' GroupName is mandatory and must match the format g_[a-f0-9]{12}.
-    ''' Throws InvalidOperationException with a complete error list on any mismatch.
-    ''' </summary>
-    Private Shared Sub ValidateGroupNameCoherence(contract As NLPContract)
-        If contract Is Nothing Then Return
-        If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then Return
-
-        ' ✅ NEW: Leggi regex contract da Parsers invece di contract.Regex
-        Dim regexContract = contract.Engines?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
-        If regexContract Is Nothing OrElse
-           regexContract.Patterns Is Nothing OrElse
-           regexContract.Patterns.Count = 0 Then
-            Return ' No regex contract, skip validation
+    Private Shared Function BuildCanonicalGuidTable(ideNode As TaskNode, contract As NLPContract) As CanonicalGuidTable
+        Dim t As New CanonicalGuidTable With {.MainNodeCanonicalGuid = ideNode.Id}
+        If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then
+            Return t
         End If
 
-        ' --- Step 1: extract named groups from the compiled main pattern ---
-        Dim mainPattern = regexContract.Patterns(0)
-        Dim rx As System.Text.RegularExpressions.Regex
-        Try
-            rx = New System.Text.RegularExpressions.Regex(
-                mainPattern,
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-        Catch ex As Exception
-            Throw New InvalidOperationException(
-                $"NlpContract main regex pattern is invalid for template '{contract.TemplateName}': {ex.Message}" &
-                $"  Pattern: {mainPattern}")
-        End Try
-
-        Dim regexGroups As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-        For Each name As String In rx.GetGroupNames()
-            ' Skip the full-match group ("0") and any unnamed numbered groups ("1", "2", …).
-            ' .NET's GetGroupNames() returns both named groups AND implicit numbered groups
-            ' for every capturing parenthesis; we only care about explicitly named groups.
-            Dim parsedIndex As Integer
-            If Not String.IsNullOrEmpty(name) AndAlso
-               Not Integer.TryParse(name, parsedIndex) Then
-                regexGroups.Add(name)
-            End If
-        Next
-
-        ' --- Step 2: collect group names from the mapping (GroupName is required) ---
-        Dim mappingGroups As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
         For Each kvp As KeyValuePair(Of String, SubDataMappingInfo) In contract.SubDataMapping
-            Dim groupName = kvp.Value.GroupName
-            If String.IsNullOrWhiteSpace(groupName) Then
-                Throw New InvalidOperationException(
-                    $"NlpContract (template '{contract.TemplateName}'): SubDataMapping entry for subtask " &
-                    $"'{kvp.Key}' is missing GroupName. GroupName is required " &
-                    $"(format: s[0-9]+, e.g. s1, s2, s3).")
+            Dim canonical As String = Nothing
+            If ideNode.SubTasks IsNot Nothing Then
+                For Each st As TaskNode In ideNode.SubTasks
+                    If String.Equals(st.Id, kvp.Key, StringComparison.OrdinalIgnoreCase) Then
+                        canonical = st.Id
+                        Exit For
+                    End If
+                Next
+            End If
+            If canonical Is Nothing Then
+                If IsGuid(kvp.Key) Then
+                    canonical = kvp.Key
+                Else
+                    Throw New UtteranceTaskCompilationException(
+                        $"SubDataMapping key '{kvp.Key}' does not match any subTask id and is not a GUID.",
+                        New List(Of CompilationError) From {
+                            New CompilationError With {
+                                .NodeId = ideNode.Id,
+                                .Category = "CanonicalGuidResolution",
+                                .DetailCode = "SubMappingKeyNotResolved",
+                                .Message = $"SubDataMapping key '{kvp.Key}' must match a subTask node id or be a valid GUID."
+                            }
+                        })
+                End If
             End If
 
-            ' ✅ UPDATED: Accept s[0-9]+ format (deterministic based on index)
-            Dim indexPattern As New Regex("^s[0-9]+$", RegexOptions.IgnoreCase)
-            If Not indexPattern.IsMatch(groupName) Then
-                Throw New InvalidOperationException(
-                    $"NlpContract (template '{contract.TemplateName}'): GroupName '{groupName}' " &
-                    $"for subtask '{kvp.Key}' is not a valid technical group name. " &
-                    $"Expected format: s[0-9]+ (e.g. s1, s2, s3).")
-            End If
-
-            mappingGroups.Add(groupName)
+            t.Data.Add(New CanonicalDatumRow With {
+                .SubDataMappingKey = kvp.Key,
+                .CanonicalGuid = canonical,
+                .RegexGroupName = If(kvp.Value?.GroupName, String.Empty)
+            })
         Next
-
-        ' --- Step 3: bidirectional check ---
-        Dim errors As New List(Of String)()
-
-        ' Groups in regex that have no mapping entry
-        For Each name As String In regexGroups
-            If Not mappingGroups.Contains(name) Then
-                errors.Add($"  - Regex group '{name}' exists in pattern but has no entry in SubDataMapping.")
-            End If
-        Next
-
-        ' Groups in mapping that are absent from the regex
-        For Each kvp As KeyValuePair(Of String, SubDataMappingInfo) In contract.SubDataMapping
-            Dim groupName = kvp.Value.GroupName
-            If Not regexGroups.Contains(groupName) Then
-                errors.Add(
-                    $"  - SubDataMapping references group '{groupName}' (subtask '{kvp.Key}') " &
-                    $"but that group is absent from the regex pattern.")
-            End If
-        Next
-
-        If errors.Count > 0 Then
-            Throw New InvalidOperationException(
-                $"NlpContract validation failed for template '{contract.TemplateName}':" &
-                Environment.NewLine &
-                String.Join(Environment.NewLine, errors))
-        End If
-    End Sub
+        Return t
+    End Function
 
 End Class
 

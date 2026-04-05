@@ -51,6 +51,9 @@
     <Compile Include="NLP\NLPEngine.vb" />
     <Compile Include="NLP\CompiledNlpContract.vb" />
     <Compile Include="NLP\SubDataMappingInfo.vb" />
+    <Compile Include="NLP\UtteranceInterpretation\IUtteranceInterpretationEngine.vb" />
+    <Compile Include="NLP\UtteranceInterpretation\UniformExtraction.vb" />
+    <Compile Include="NLP\UtteranceInterpretation\UtteranceParseResult.vb" />
 
     <!-- Utilities -->
     <Compile Include="Utils\GlobalVariableContext.vb" />

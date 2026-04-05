@@ -18,7 +18,6 @@ Imports Microsoft.Extensions.Hosting
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports Newtonsoft.Json.Serialization
-
 Module Program
     ' ✅ STATELESS: Configurazione Redis (condivisa)
     Friend _redisConnectionString As String = Nothing
@@ -375,7 +374,7 @@ Module Program
                                                         Return GrammarFlowExtractHandlers.HandleGrammarFlowExtract(context)
                                                     End Function)
 
-        ' ✅ POST /api/nlp/contract-extract — ParserExtraction (GrammarFlow → regex), same as runtime
+        ' POST /api/nlp/contract-extract — UtteranceInterpretationParse (stesso motore del runtime)
         app.MapPost("/api/nlp/contract-extract", Function(context As HttpContext) As Task(Of IResult)
                                                      Return ContractExtractHandlers.HandleContractExtract(context)
                                                  End Function)
