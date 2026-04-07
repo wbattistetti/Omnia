@@ -6,7 +6,7 @@ import { useProjectDataUpdate, useProjectData } from '../../../../context/Projec
 import { useProjectTranslations } from '../../../../context/ProjectTranslationsContext';
 import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
-import { Server, Eye, EyeOff, Table2, RefreshCw } from 'lucide-react';
+import { Server, Eye, EyeOff, Table2, RefreshCw, BookOpen, FlaskConical, ListPlus } from 'lucide-react';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { InterfaceMappingEditor } from '../../../../components/FlowMappingPanel/InterfaceMappingEditor';
 import {
@@ -21,6 +21,36 @@ import { resolveVariableStoreProjectId } from '../../../../utils/safeProjectId';
 import { getVariableLabel } from '../../../../utils/getVariableLabel';
 import type { ToolbarButton } from '../../../../dock/types';
 import TableEditor from './TableEditor';
+import {
+  extractOperationFields,
+  fetchOpenApiDocument,
+  pickOpenApiPathForReadApi,
+  slugInternalName,
+} from '../../../../services/openApiBackendCallSpec';
+
+function collectUsedInternalNames(cfg: BackendCallConfig): Set<string> {
+  const s = new Set<string>();
+  for (const i of cfg.inputs || []) {
+    const t = i.internalName?.trim();
+    if (t) s.add(t);
+  }
+  for (const o of cfg.outputs || []) {
+    const t = o.internalName?.trim();
+    if (t) s.add(t);
+  }
+  return s;
+}
+
+function nextUniqueInternalName(base: string, used: Set<string>): string {
+  let n = base;
+  let k = 0;
+  while (used.has(n)) {
+    k += 1;
+    n = `${base}_${k}`;
+  }
+  used.add(n);
+  return n;
+}
 
 // Config Istanza: può sovrascrivere variabili
 interface BackendCallConfig {
@@ -92,6 +122,12 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
   // Toggle between mapping view and table view
   const [showTableView, setShowTableView] = React.useState(false);
 
+  /** Last successful Read API: expected field names from Swagger (for datalist + missing). */
+  const [swaggerInputContract, setSwaggerInputContract] = React.useState<string[]>([]);
+  const [swaggerOutputContract, setSwaggerOutputContract] = React.useState<string[]>([]);
+  const [readApiBusy, setReadApiBusy] = React.useState(false);
+  const [testApiBusy, setTestApiBusy] = React.useState(false);
+
   // Get available variables for autocomplete
   // ✅ Use readable names directly (e.g., "data di nascita", "data di nascita.giorno")
   // These are the same names used in ConditionEditor and runtime (ctx["data di nascita"])
@@ -126,15 +162,8 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
     return variableCreationService.getIdByVarName(projectId, varName, undefined, getActiveFlowCanvasId());
   }, [projectId]);
 
-  // Get available API params (placeholder - in futuro da Backend Builder)
-  const availableApiParams = React.useMemo(() => {
-    // TODO: Load from Backend Builder Sources
-    return [];
-  }, []);
-
   // ─────────────────────────────────────────────────────────
-  // Helper: build a BackendCallConfig from a raw Task object
-  // Fields are stored FLAT on the Task: task.endpoint, task.inputs, task.outputs, task.mockTable, task.mockTableColumns
+  // Config state must be declared before hooks that read `config` (Swagger / missing fields).
   // ─────────────────────────────────────────────────────────
   const buildConfigFromTask = React.useCallback((rawTask: any): BackendCallConfig => {
     const endpoint = rawTask?.endpoint ?? DEFAULT_CONFIG.endpoint;
@@ -152,13 +181,11 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
       inputs,
       outputs,
       ...(mockTable !== undefined ? { mockTable } : {}),
-      ...(mockTableColumns !== undefined ? { mockTableColumns } : {})
+      ...(mockTableColumns !== undefined ? { mockTableColumns } : {}),
     };
     return cfg;
   }, []);
 
-  // Load or create backend call config from Task
-  // Fields are stored FLAT on the Task: task.endpoint, task.inputs, task.outputs, task.mockTable
   const [config, setConfig] = React.useState<BackendCallConfig>(() => {
     if (!instanceId) {
       return {
@@ -187,7 +214,6 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
     return buildConfigFromTask(existingTask);
   });
 
-  // Reload config from Task when instanceId changes (e.g. editor reopened)
   React.useEffect(() => {
     if (!instanceId) return;
     const storedTask = taskRepository.getTask(instanceId);
@@ -197,18 +223,159 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
     setConfig(loaded);
   }, [instanceId, buildConfigFromTask]);
 
-  // Save config to Task when it changes — flat fields, no wrapper
   React.useEffect(() => {
     if (instanceId && config) {
-      taskRepository.updateTask(instanceId, {
-        endpoint: config.endpoint,
-        inputs: config.inputs,
-        outputs: config.outputs,
-        ...(config.mockTable !== undefined ? { mockTable: config.mockTable } : {}),
-        ...(config.mockTableColumns !== undefined ? { mockTableColumns: config.mockTableColumns } : {})
-      } as any, projectId);
+      taskRepository.updateTask(
+        instanceId,
+        {
+          endpoint: config.endpoint,
+          inputs: config.inputs,
+          outputs: config.outputs,
+          ...(config.mockTable !== undefined ? { mockTable: config.mockTable } : {}),
+          ...(config.mockTableColumns !== undefined ? { mockTableColumns: config.mockTableColumns } : {}),
+        } as any,
+        projectId
+      );
     }
   }, [config, instanceId, projectId]);
+
+  /** Datalist for "Campo API": filled after Read API from Swagger. */
+  const availableApiParams = React.useMemo(() => {
+    const merged = [...swaggerInputContract, ...swaggerOutputContract];
+    return [...new Set(merged.map((x) => x.trim()).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+  }, [swaggerInputContract, swaggerOutputContract]);
+
+  const missingInputApiNames = React.useMemo(() => {
+    if (!swaggerInputContract.length) return [];
+    const mapped = new Set(
+      (config.inputs || [])
+        .map((i) => (i.apiParam || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+    return swaggerInputContract.filter((n) => !mapped.has(n.trim().toLowerCase()));
+  }, [swaggerInputContract, config.inputs]);
+
+  const missingOutputApiNames = React.useMemo(() => {
+    if (!swaggerOutputContract.length) return [];
+    const mapped = new Set(
+      (config.outputs || [])
+        .map((o) => (o.apiField || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+    return swaggerOutputContract.filter((n) => !mapped.has(n.trim().toLowerCase()));
+  }, [swaggerOutputContract, config.outputs]);
+
+  const missingFieldsTotal = missingInputApiNames.length + missingOutputApiNames.length;
+
+  const appendMissingParam = React.useCallback((zone: 'send' | 'receive', apiName: string) => {
+    setConfig((prev) => {
+      const used = collectUsedInternalNames(prev);
+      const internal = nextUniqueInternalName(slugInternalName(apiName), used);
+      if (zone === 'send') {
+        return {
+          ...prev,
+          inputs: [...(prev.inputs || []), { internalName: internal, apiParam: apiName, variable: '' }],
+        };
+      }
+      return {
+        ...prev,
+        outputs: [...(prev.outputs || []), { internalName: internal, apiField: apiName, variable: '' }],
+      };
+    });
+  }, []);
+
+  const handleReadApi = React.useCallback(async () => {
+    const url = config.endpoint.url.trim();
+    if (!url) return;
+    setReadApiBusy(true);
+    try {
+      const { doc } = await fetchOpenApiDocument(url);
+      const picked = pickOpenApiPathForReadApi(url, doc, config.endpoint.method);
+      if ('error' in picked) {
+        window.alert(picked.error);
+        return;
+      }
+      const pathKey = picked.pathKey;
+      const fields = extractOperationFields(doc, pathKey, config.endpoint.method);
+      if (!fields) {
+        window.alert(`Operazione ${config.endpoint.method} non trovata per ${pathKey}.`);
+        return;
+      }
+      const inputNames = [...new Set([...fields.requestParamNames, ...fields.requestBodyPropertyNames])].filter(
+        Boolean
+      );
+      const outputNames = fields.responsePropertyNames.filter(Boolean);
+      setSwaggerInputContract(inputNames);
+      setSwaggerOutputContract(outputNames);
+
+      const inputsEmpty = !(config.inputs && config.inputs.length);
+      const outputsEmpty = !(config.outputs && config.outputs.length);
+
+      if (inputNames.length > 0 || outputNames.length > 0) {
+        setConfig((prev) => {
+          const used = new Set<string>();
+          for (const i of prev.inputs || []) {
+            const t = i.internalName?.trim();
+            if (t) used.add(t);
+          }
+          for (const o of prev.outputs || []) {
+            const t = o.internalName?.trim();
+            if (t) used.add(t);
+          }
+          let nextInputs = prev.inputs || [];
+          let nextOutputs = prev.outputs || [];
+          if (inputsEmpty && inputNames.length > 0) {
+            nextInputs = inputNames.map((apiName) => ({
+              internalName: nextUniqueInternalName(slugInternalName(apiName), used),
+              apiParam: apiName,
+              variable: '',
+            }));
+          }
+          if (outputsEmpty && outputNames.length > 0) {
+            nextOutputs = outputNames.map((apiName) => ({
+              internalName: nextUniqueInternalName(slugInternalName(apiName), used),
+              apiField: apiName,
+              variable: '',
+            }));
+          }
+          return { ...prev, inputs: nextInputs, outputs: nextOutputs };
+        });
+      }
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setReadApiBusy(false);
+    }
+  }, [config.endpoint.url, config.endpoint.method, config.inputs, config.outputs]);
+
+  const handleTestApi = React.useCallback(async () => {
+    const url = config.endpoint.url.trim();
+    if (!url) return;
+    setTestApiBusy(true);
+    try {
+      const method = config.endpoint.method;
+      const init: RequestInit = {
+        method,
+        credentials: 'omit',
+        headers: { ...(config.endpoint.headers || {}) },
+      };
+      if (method !== 'GET' && method !== 'HEAD') {
+        const h = init.headers as Record<string, string>;
+        h['Content-Type'] = h['Content-Type'] || 'application/json';
+        init.body = '{}';
+      }
+      const res = await fetch(url, init);
+      const text = await res.text();
+      const preview = text.length > 3500 ? `${text.slice(0, 3500)}…` : text;
+      window.alert(`HTTP ${res.status} ${res.statusText}\n\n${preview}`);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTestApiBusy(false);
+    }
+  }, [config.endpoint]);
 
   // ✅ NEW: Update mockTable columns based on current signature (active + parked columns)
   const updateMockTableColumns = React.useCallback(() => {
@@ -384,24 +551,36 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
     [config.outputs, getVarNameFromVarId]
   );
 
+  type MappingEntriesUpdater = MappingEntry[] | ((prev: MappingEntry[]) => MappingEntry[]);
+
   const handleBackendSendChange = React.useCallback(
-    (entries: MappingEntry[]) => {
-      setConfig((prev) => ({
-        ...prev,
-        inputs: mappingEntriesToBackendInputs(entries, resolveVarIdForInputMapping),
-      }));
+    (entriesOrUpdater: MappingEntriesUpdater) => {
+      setConfig((prev) => {
+        const currentMapping = backendInputsToMappingEntries(prev.inputs, getVarNameFromVarId);
+        const nextEntries =
+          typeof entriesOrUpdater === 'function' ? entriesOrUpdater(currentMapping) : entriesOrUpdater;
+        return {
+          ...prev,
+          inputs: mappingEntriesToBackendInputs(nextEntries, resolveVarIdForInputMapping),
+        };
+      });
     },
-    [resolveVarIdForInputMapping]
+    [getVarNameFromVarId, resolveVarIdForInputMapping]
   );
 
   const handleBackendReceiveChange = React.useCallback(
-    (entries: MappingEntry[]) => {
-      setConfig((prev) => ({
-        ...prev,
-        outputs: mappingEntriesToBackendOutputs(entries, resolveVarIdForLinkedName),
-      }));
+    (entriesOrUpdater: MappingEntriesUpdater) => {
+      setConfig((prev) => {
+        const currentMapping = backendOutputsToMappingEntries(prev.outputs, getVarNameFromVarId);
+        const nextEntries =
+          typeof entriesOrUpdater === 'function' ? entriesOrUpdater(currentMapping) : entriesOrUpdater;
+        return {
+          ...prev,
+          outputs: mappingEntriesToBackendOutputs(nextEntries, resolveVarIdForLinkedName),
+        };
+      });
     },
-    [resolveVarIdForLinkedName]
+    [getVarNameFromVarId, resolveVarIdForLinkedName]
   );
 
   const handleCreateOutputVariable = React.useCallback(
@@ -422,25 +601,83 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
     setVariablesRefreshKey((k) => k + 1);
   }, []);
 
+  const missingFieldsDropdownItems = React.useMemo(
+    () => [
+      ...missingInputApiNames.map((n) => ({
+        label: `SEND · ${n}`,
+        onClick: () => appendMissingParam('send', n),
+      })),
+      ...missingOutputApiNames.map((n) => ({
+        label: `RECEIVE · ${n}`,
+        onClick: () => appendMissingParam('receive', n),
+      })),
+    ],
+    [missingInputApiNames, missingOutputApiNames, appendMissingParam]
+  );
+
+  const endpointUrlNonEmpty = Boolean(config.endpoint.url?.trim());
+
   // Toolbar buttons
   const toolbarButtons = React.useMemo<ToolbarButton[]>(() => {
+    const readTestVisible = endpointUrlNonEmpty;
+    const showMissing =
+      readTestVisible &&
+      missingFieldsTotal > 0 &&
+      (swaggerInputContract.length > 0 || swaggerOutputContract.length > 0);
+
     return [
       {
         icon: showApiColumn ? <EyeOff size={16} /> : <Eye size={16} />,
         label: showApiColumn ? 'Hide API' : 'Show API',
-        onClick: () => setShowApiColumn(prev => !prev),
+        onClick: () => setShowApiColumn((prev) => !prev),
         title: showApiColumn ? 'Hide API parameter mapping column' : 'Show API parameter mapping column',
-        active: showApiColumn
+        active: showApiColumn,
       },
       {
         icon: <Table2 size={16} />,
         label: 'Mock Table',
-        onClick: () => setShowTableView(prev => !prev),
+        onClick: () => setShowTableView((prev) => !prev),
         title: showTableView ? 'Show mapping editor' : 'Show mock table',
-        active: showTableView
-      }
+        active: showTableView,
+      },
+      {
+        icon: <BookOpen size={16} />,
+        label: readApiBusy ? 'Reading…' : 'Read API',
+        onClick: () => void handleReadApi(),
+        title:
+          'Scarica OpenAPI via server (no CORS): URL JSON, base API, o link Redoc con ?url=…. Se non indichi l’URL della singola chiamata, si usa #operation/id o #tag/nome se presenti nell’URL, altrimenti il primo path per il metodo scelto.',
+        disabled: readApiBusy,
+        visible: readTestVisible,
+      },
+      {
+        icon: <FlaskConical size={16} />,
+        label: testApiBusy ? 'Testing…' : 'Test API',
+        onClick: () => void handleTestApi(),
+        title: 'Chiamata di prova all’URL con il metodo selezionato (corpo JSON vuoto se non GET).',
+        disabled: testApiBusy,
+        visible: readTestVisible,
+      },
+      {
+        icon: <ListPlus size={16} />,
+        label: `Missing (${missingFieldsTotal})`,
+        title: 'Campi definiti nello Swagger ma non ancora mappati: clic per aggiungere la riga in SEND o RECEIVE.',
+        visible: showMissing,
+        dropdownItems: missingFieldsDropdownItems,
+      },
     ];
-  }, [showApiColumn, showTableView]);
+  }, [
+    showApiColumn,
+    showTableView,
+    endpointUrlNonEmpty,
+    readApiBusy,
+    testApiBusy,
+    handleReadApi,
+    handleTestApi,
+    missingFieldsTotal,
+    swaggerInputContract.length,
+    swaggerOutputContract.length,
+    missingFieldsDropdownItems,
+  ]);
 
   // Update toolbar when it changes (for docking mode)
   const headerColor = '#94a3b8'; // Gray color for BackendCall
@@ -483,7 +720,7 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
                 type="text"
                 value={config.endpoint.url}
                 onChange={(e) => updateEndpoint({ url: e.target.value })}
-                placeholder="https://api.example.com/endpoint"
+                placeholder="https://api.example.com/v1/risorsa oppure …/v3/api-docs"
                 className="w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -548,9 +785,13 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
             showApiFields={showApiColumn}
             onCreateOutputVariable={handleCreateOutputVariable}
             onOutputVariableCreated={handleOutputVariableCreated}
+            resolveVariableRefIdFromLabel={(label) => getVarIdFromVarName(label) ?? undefined}
             showInterfacePalette={false}
             className="bg-slate-900"
             innerClassName="!p-2"
+            flowDropTarget={
+              getActiveFlowCanvasId() ? { flowCanvasId: getActiveFlowCanvasId()! } : undefined
+            }
           />
         </div>
         )}

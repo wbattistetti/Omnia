@@ -44,11 +44,8 @@ import {
   type FlowInterfaceDropPayload,
   type FlowInterfacePointerPreviewDetail,
 } from './flowInterfaceDragTypes';
-import {
-  computeInterfaceEntryLabels,
-  ensureFlowVariableBindingForInterfaceRow,
-  getInterfaceLeafDisplayName,
-} from './interfaceMappingLabels';
+import { mergeBackendMappingVariableDrop } from './backendMappingVariableDrop';
+import { getInterfaceLeafDisplayName } from './interfaceMappingLabels';
 
 const DND_TYPE = 'application/x-omnia-varlabel';
 
@@ -61,6 +58,21 @@ function hasFlowRowVarDrag(e: React.DragEvent): boolean {
   if (types.includes(DND_FLOWROW_VAR)) return true;
   const lower = DND_FLOWROW_VAR.toLowerCase();
   return types.some((t) => t.toLowerCase() === lower);
+}
+
+/** Hit-test row under cursor (for drag preview when pointer is over nested controls). */
+function findBackendMapRowElementFromPoint(clientX: number, clientY: number): HTMLElement | null {
+  try {
+    const stack = document.elementsFromPoint(clientX, clientY);
+    for (const n of stack) {
+      if (!(n instanceof HTMLElement)) continue;
+      const row = n.closest('[data-backend-map-row]');
+      if (row instanceof HTMLElement) return row;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function hasIfaceReorderDrag(e: React.DragEvent): boolean {
@@ -209,6 +221,8 @@ export interface FlowMappingTreeProps {
   /** Backend RECEIVE: crea variabile manuale da nome digitato. */
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
+  /** Backend SEND: label → var id when user picks from dropdown (persist same GUID as variable). */
+  resolveVariableRefIdFromLabel?: (label: string) => string | undefined;
 }
 
 function updateEntry(entries: MappingEntry[], id: string, patch: Partial<MappingEntry>): MappingEntry[] {
@@ -255,6 +269,7 @@ interface RowProps {
   variableOptions: string[];
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
+  resolveVariableRefIdFromLabel?: (label: string) => string | undefined;
 }
 
 function MappingTreeRow({
@@ -287,6 +302,7 @@ function MappingTreeRow({
   variableOptions,
   onCreateOutputVariable,
   onOutputVariableCreated,
+  resolveVariableRefIdFromLabel,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const labelEditRef = useRef<LabelWithPencilEditHandle>(null);
@@ -509,6 +525,12 @@ function MappingTreeRow({
       <div className={`relative ${depth > 0 ? 'ml-2 border-l border-slate-700/40 pl-2' : ''}`}>
         <div
           ref={rowRef}
+          {...(variant === 'backend' && enableBackendParamDrop
+            ? ({
+                'data-backend-map-row': node.pathKey,
+                'data-backend-map-has-children': hasChildren ? '1' : '0',
+              } as const)
+            : {})}
           draggable={Boolean(enableRowReorder && node.entry)}
           onDragStart={(e) => {
             if (!enableRowReorder || !node.entry) return;
@@ -529,6 +551,7 @@ function MappingTreeRow({
             enableRowReorder && node.entry ? 'cursor-grab active:cursor-grabbing' : ''
           }`}
           onDragOver={combinedRowDragOver}
+          onDragOverCapture={combinedRowDragOver}
           onDrop={combinedRowDrop}
         >
         <div className="flex items-center gap-0.5 shrink-0 w-4 justify-start min-w-[1rem]">
@@ -660,6 +683,7 @@ function MappingTreeRow({
             variableOptions={variableOptions}
             onCreateOutputVariable={onCreateOutputVariable}
             onOutputVariableCreated={onOutputVariableCreated}
+            resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
           />
         </div>
 
@@ -749,6 +773,7 @@ function MappingTreeRow({
               variableOptions={variableOptions}
               onCreateOutputVariable={onCreateOutputVariable}
               onOutputVariableCreated={onOutputVariableCreated}
+              resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
             />
           ))}
         </div>
@@ -782,6 +807,7 @@ export function FlowMappingTree({
   backendColumn,
   onCreateOutputVariable,
   onOutputVariableCreated,
+  resolveVariableRefIdFromLabel,
 }: FlowMappingTreeProps) {
   const tree = useMemo(
     () => buildMappingTree(entries, { siblingOrder }),
@@ -879,31 +905,25 @@ export function FlowMappingTree({
   const commitBackendFlowVariableDrop = useCallback(
     (e: React.DragEvent, pos: ParamDropPosition) => {
       const payload = parseFlowInterfaceDropFromDataTransfer(e.dataTransfer);
-      if (!payload?.variableRefId?.trim()) return;
+      const vid = payload?.variableRefId?.trim();
+      if (!vid) return;
       e.preventDefault();
       e.stopPropagation();
-      const { next, newEntry } = insertNewBackendParameter(entries, pos, { siblingOrder });
-      const path = newEntry.internalPath;
       const rowText = (payload.rowLabel ?? '').trim();
-      if (projectId && flowCanvasId) {
-        ensureFlowVariableBindingForInterfaceRow(projectId, flowCanvasId, payload.variableRefId, rowText, path);
-      }
-      const { externalName, linkedVariable } = computeInterfaceEntryLabels(
+      const result = mergeBackendMappingVariableDrop(
+        entries,
+        { variableRefId: vid, rowLabel: rowText },
         projectId,
-        payload.variableRefId,
-        rowText,
-        path
+        flowCanvasId,
+        siblingOrder,
+        pos
       );
-      const merged = next.map((entry) =>
-        entry.id === newEntry.id
-          ? { ...entry, variableRefId: payload.variableRefId, linkedVariable, externalName }
-          : entry
-      );
-      onEntriesChange(merged);
-      setCollapsed((prev) => expandAncestorsOfPath(prev, newEntry.internalPath));
+      if (!result) return;
+      onEntriesChange(result.merged);
+      setCollapsed((prev) => expandAncestorsOfPath(prev, result.newEntry.internalPath));
       setDropIndicator(null);
       setRootEdgeDrop(null);
-      setPendingLabelEditId(newEntry.id);
+      setPendingLabelEditId(result.newEntry.id);
     },
     [entries, onEntriesChange, projectId, flowCanvasId, siblingOrder]
   );
@@ -977,11 +997,33 @@ export function FlowMappingTree({
       if (enableBackendParamDrop && variant === 'backend' && tree.length > 0 && hasFlowRowVarDrag(e)) {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
+        const rowEl = findBackendMapRowElementFromPoint(e.clientX, e.clientY);
+        if (rowEl) {
+          const pathKey = rowEl.getAttribute('data-backend-map-row') || '';
+          const hasCh = rowEl.getAttribute('data-backend-map-has-children') === '1';
+          const rect = rowEl.getBoundingClientRect();
+          const p = placementFromY(e.clientY, rect, hasCh);
+          setDropIndicator({ targetPathKey: pathKey, placement: p });
+          setRootEdgeDrop(null);
+        } else {
+          setDropIndicator(null);
+        }
         return;
       }
       if (enableBackendParamDrop && variant === 'backend' && tree.length > 0 && hasNewParamDrag(e)) {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
+        const rowEl = findBackendMapRowElementFromPoint(e.clientX, e.clientY);
+        if (rowEl) {
+          const pathKey = rowEl.getAttribute('data-backend-map-row') || '';
+          const hasCh = rowEl.getAttribute('data-backend-map-has-children') === '1';
+          const rect = rowEl.getBoundingClientRect();
+          const p = placementFromY(e.clientY, rect, hasCh);
+          setDropIndicator({ targetPathKey: pathKey, placement: p });
+          setRootEdgeDrop(null);
+        } else {
+          setDropIndicator(null);
+        }
       }
     },
     [showDropZone, onDragOver, enableBackendParamDrop, variant, tree.length]
@@ -1105,6 +1147,7 @@ export function FlowMappingTree({
           variableOptions={variableOptions}
           onCreateOutputVariable={onCreateOutputVariable}
           onOutputVariableCreated={onOutputVariableCreated}
+          resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
         />
       ))}
 

@@ -38,6 +38,29 @@ describe('backendCallMappingAdapter', () => {
     expect(rows).toEqual([{ internalName: 'x.y', apiParam: 'q', variable: 'vid' }]);
   });
 
+  it('entries → inputs prefers variableRefId over resolveVarId', () => {
+    const entries = [
+      createMappingEntry({
+        internalPath: 'nome',
+        apiField: '',
+        linkedVariable: 'wrong',
+        externalName: 'nome',
+        variableRefId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      }),
+    ];
+    const rows = mappingEntriesToBackendInputs(entries, () => 'should-not-use');
+    expect(rows[0].variable).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  });
+
+  it('task → entries preserves variable as variableRefId', () => {
+    const entries = backendInputsToMappingEntries(
+      [{ internalName: 'nome', apiParam: '', variable: 'gid-guid' }],
+      () => 'label'
+    );
+    expect(entries[0].variableRefId).toBe('gid-guid');
+    expect(entries[0].linkedVariable).toBe('label');
+  });
+
   it('entries → outputs uses apiField key', () => {
     const entries = [createMappingEntry({ internalPath: 'o', apiField: 'f', linkedVariable: '', externalName: 'o' })];
     const rows = mappingEntriesToBackendOutputs(entries, () => '');

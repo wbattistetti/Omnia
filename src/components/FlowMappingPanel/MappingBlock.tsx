@@ -52,6 +52,8 @@ export interface MappingBlockProps {
    * Renders data-* on the block root so elementFromPoint can detect Input/Output without removing the row.
    */
   flowDropTarget?: { flowCanvasId: string; zone: 'input' | 'output' };
+  /** Backend Call SEND/RECEIVE: pointer drop from canvas rows (useNodeDragDrop). */
+  backendMappingDropTarget?: { flowCanvasId: string; zone: 'send' | 'receive' };
   /** When true, tree body grows with the column (Interface double-column layout). */
   fillBodyHeight?: boolean;
 }
@@ -69,6 +71,7 @@ export function MappingBlock({
   headerExtra,
   children,
   flowDropTarget,
+  backendMappingDropTarget,
   fillBodyHeight = false,
 }: MappingBlockProps) {
   const { headerClass, borderClass, label } = ACCENT[accent];
@@ -86,6 +89,12 @@ export function MappingBlock({
         ? {
             'data-flow-interface-zone': flowDropTarget.zone,
             'data-flow-canvas-id': flowDropTarget.flowCanvasId,
+          }
+        : {})}
+      {...(backendMappingDropTarget
+        ? {
+            'data-omnia-backend-mapping': backendMappingDropTarget.zone,
+            'data-flow-canvas-id': backendMappingDropTarget.flowCanvasId,
           }
         : {})}
     >

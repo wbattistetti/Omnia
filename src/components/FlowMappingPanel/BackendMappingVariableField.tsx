@@ -1,8 +1,10 @@
 /**
  * Backend mapping "Variabile" column: SEND = pick existing only; RECEIVE = search/create + pick list.
+ * Dropdown list is portaled to document.body so parent overflow (e.g. SEND/RECEIVE frame) does not clip it.
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
 const mirror10 = 'text-[10px] px-2 py-1 font-normal';
@@ -18,6 +20,8 @@ export interface BackendMappingVariableFieldProps {
   /** RECEIVE: create variable when user confirms a new name (Invio). */
   onCreateVariable?: (displayName: string) => { id: string; label: string } | null;
   onVariableCreated?: () => void;
+  /** SEND: resolve GUID from picked label so persisted `variable` matches variable id. */
+  resolveVariableRefIdFromLabel?: (label: string) => string | undefined;
 }
 
 function filterOptions(options: string[], q: string): string[] {
@@ -25,6 +29,9 @@ function filterOptions(options: string[], q: string): string[] {
   if (!t) return options;
   return options.filter((o) => o.toLowerCase().includes(t));
 }
+
+const panelClassName =
+  'min-w-[12rem] max-w-[min(20rem,92vw)] rounded-md border border-amber-500/40 bg-slate-950 shadow-lg ring-1 ring-amber-500/25';
 
 export function BackendMappingVariableField({
   mode,
@@ -36,26 +43,54 @@ export function BackendMappingVariableField({
   onCommit,
   onCreateVariable,
   onVariableCreated,
+  resolveVariableRefIdFromLabel,
 }: BackendMappingVariableFieldProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const inputTopRef = useRef<HTMLInputElement>(null);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
+  /** Use `click` (not `mousedown`) so option `onClick` runs first and `onCommit` can update the field. */
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      const el = rootRef.current;
-      if (!el || el.contains(e.target as Node)) return;
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || panelRef.current?.contains(t)) return;
       setOpen(false);
     };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
   }, [open]);
 
   useLayoutEffect(() => {
-    if (open && mode === 'receive') {
+    if (!open) return;
+    const place = () => {
+      const r = rootRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const maxW = Math.min(320, window.innerWidth - 16);
+      const left = Math.max(8, Math.min(r.left, window.innerWidth - maxW - 8));
+      setPanelStyle({
+        position: 'fixed',
+        left,
+        top: r.bottom + 4,
+        width: maxW,
+        zIndex: 100000,
+      });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    if (mode === 'receive') {
       inputTopRef.current?.focus();
     }
   }, [open, mode]);
@@ -65,11 +100,12 @@ export function BackendMappingVariableField({
 
   const pickExisting = useCallback(
     (label: string) => {
-      onCommit({ linkedVariable: label });
+      const rid = resolveVariableRefIdFromLabel?.(label)?.trim();
+      onCommit(rid ? { linkedVariable: label, variableRefId: rid } : { linkedVariable: label });
       setOpen(false);
       setDraft('');
     },
-    [onCommit]
+    [onCommit, resolveVariableRefIdFromLabel]
   );
 
   const handleReceiveSubmit = useCallback(() => {
@@ -98,6 +134,70 @@ export function BackendMappingVariableField({
 
   const filtered = filterOptions(variableOptions, mode === 'receive' ? draft : draft);
 
+  const panel = open ? (
+    <div
+      ref={panelRef}
+      className={panelClassName}
+      style={panelStyle}
+      onPointerDownCapture={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {mode === 'receive' && (
+        <div className="border-b border-amber-500/20 p-1.5">
+          <input
+            ref={inputTopRef}
+            type="text"
+            className="w-full rounded border border-amber-400/40 bg-slate-900 px-2 py-1 text-[10px] text-amber-50 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-400/60"
+            placeholder="Cerca o crea variabile (Invio per creare)"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleReceiveSubmit();
+              }
+              if (e.key === 'Escape') setOpen(false);
+            }}
+          />
+        </div>
+      )}
+      {mode === 'send' && (
+        <div className="border-b border-amber-500/20 p-1.5">
+          <input
+            type="text"
+            className="w-full rounded border border-amber-400/40 bg-slate-900 px-2 py-1 text-[10px] text-amber-50 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-400/60"
+            placeholder="Filtra variabili…"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setOpen(false);
+            }}
+          />
+        </div>
+      )}
+      <ul className="max-h-48 overflow-y-auto py-0.5" role="listbox">
+        {filtered.length === 0 ? (
+          <li className="px-2 py-1.5 text-[10px] text-slate-500">Nessuna variabile</li>
+        ) : (
+          filtered.map((opt) => (
+            <li key={opt}>
+              <button
+                type="button"
+                className="w-full truncate px-2 py-1 text-left text-[10px] text-amber-100/95 hover:bg-amber-500/15"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  pickExisting(opt);
+                }}
+              >
+                {opt}
+              </button>
+            </li>
+          ))
+        )}
+      </ul>
+    </div>
+  ) : null;
+
   return (
     <div ref={rootRef} className={`relative inline-flex min-w-0 max-w-full group/vf ${mirror10}`}>
       <button
@@ -113,63 +213,7 @@ export function BackendMappingVariableField({
         <ChevronDown className="w-3 h-3 shrink-0 opacity-60" aria-hidden />
       </button>
 
-      {open && (
-        <div
-          ref={panelRef}
-          className="absolute left-0 top-full z-50 mt-0.5 min-w-[12rem] max-w-[min(20rem,92vw)] rounded-md border border-amber-500/40 bg-slate-950 shadow-lg ring-1 ring-amber-500/25"
-        >
-          {mode === 'receive' && (
-            <div className="border-b border-amber-500/20 p-1.5">
-              <input
-                ref={inputTopRef}
-                type="text"
-                className="w-full rounded border border-amber-400/40 bg-slate-900 px-2 py-1 text-[10px] text-amber-50 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-400/60"
-                placeholder="Cerca o crea variabile (Invio per creare)"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleReceiveSubmit();
-                  }
-                  if (e.key === 'Escape') setOpen(false);
-                }}
-              />
-            </div>
-          )}
-          {mode === 'send' && (
-            <div className="border-b border-amber-500/20 p-1.5">
-              <input
-                type="text"
-                className="w-full rounded border border-amber-400/40 bg-slate-900 px-2 py-1 text-[10px] text-amber-50 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-400/60"
-                placeholder="Filtra variabili…"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setOpen(false);
-                }}
-              />
-            </div>
-          )}
-          <ul className="max-h-48 overflow-y-auto py-0.5" role="listbox">
-            {filtered.length === 0 ? (
-              <li className="px-2 py-1.5 text-[10px] text-slate-500">Nessuna variabile</li>
-            ) : (
-              filtered.map((opt) => (
-                <li key={opt}>
-                  <button
-                    type="button"
-                    className="w-full truncate px-2 py-1 text-left text-[10px] text-amber-100/95 hover:bg-amber-500/15"
-                    onClick={() => pickExisting(opt)}
-                  >
-                    {opt}
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      )}
+      {typeof document !== 'undefined' && panel ? createPortal(panel, document.body) : null}
     </div>
   );
 }

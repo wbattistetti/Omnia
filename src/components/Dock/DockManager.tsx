@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { DockNode, DockRegion, DockTab, DockTabFlow, DockTabResponseEditor, DockTabNonInteractive, DockTabConditionEditor, DockTabTaskEditor, DockTabErrorReport } from '../../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { splitWithTab, addTabCenter, closeTab, activateTab, moveTab, getTab, removeTab } from '../../dock/ops';
 import { Workflow, FileText, Code2, GitBranch, MessageSquare, AlertCircle, Waypoints } from 'lucide-react';
@@ -300,6 +301,144 @@ function DockRenderer(props: {
   );
 }
 
+/** Toolbar dropdown (same contract as EditorHeader) for task/flow dock tabs. */
+function DockToolbarDropdownButton({
+  btn,
+  idx,
+  tabColor,
+}: {
+  btn: import('../../dock/types').ToolbarButton;
+  idx: number;
+  tabColor?: string;
+}) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const buttonElementRef = React.useRef<HTMLButtonElement | null>(null);
+  const [dropdownPosition, setDropdownPosition] = React.useState<{ top: number; left: number } | null>(null);
+
+  React.useEffect(() => {
+    if (isOpen && buttonElementRef.current) {
+      const rect = buttonElementRef.current.getBoundingClientRect();
+      const dropdownWidth = 260;
+      setDropdownPosition({
+        top: rect.bottom + window.scrollY + 4,
+        left: Math.max(8, rect.right + window.scrollX - dropdownWidth),
+      });
+    } else {
+      setDropdownPosition(null);
+    }
+  }, [isOpen]);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node) &&
+        buttonElementRef.current &&
+        !buttonElementRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  const fg = isOpen && tabColor ? '#ffffff' : '#0c4a6e';
+  const bg = '#ffffff';
+  const border = tabColor || '#38bdf8';
+
+  const buttonProps = {
+    ref: (el: HTMLButtonElement | null) => {
+      buttonElementRef.current = el;
+    },
+    onClick: (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setIsOpen((o) => !o);
+    },
+    disabled: btn.disabled,
+    style: {
+      display: btn.visible === false ? 'none' : 'flex',
+      alignItems: 'center',
+      gap: 4,
+      background: btn.primary ? '#0b1220' : btn.active ? 'rgba(255,255,255,0.2)' : 'transparent',
+      color: btn.primary ? '#ffffff' : fg,
+      border: btn.primary ? 'none' : '1px solid rgba(12,74,110,0.35)',
+      borderRadius: 6,
+      padding: btn.label ? '4px 8px' : '4px 6px',
+      cursor: btn.disabled ? 'not-allowed' : 'pointer',
+      opacity: btn.disabled ? 0.5 : 1,
+      fontSize: 11,
+      whiteSpace: 'nowrap' as const,
+    },
+  };
+
+  return (
+    <React.Fragment key={idx}>
+      <button {...buttonProps}>
+        {btn.icon}
+        {btn.label && <span>{btn.label}</span>}
+      </button>
+      {isOpen &&
+        btn.dropdownItems &&
+        btn.dropdownItems.length > 0 &&
+        dropdownPosition &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={{
+              position: 'fixed',
+              top: dropdownPosition.top,
+              left: dropdownPosition.left,
+              backgroundColor: bg,
+              border: `1px solid ${border}`,
+              borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+              zIndex: 99999,
+              minWidth: 220,
+              maxHeight: 320,
+              overflowY: 'auto',
+              padding: 4,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {btn.dropdownItems.map((item, j) => (
+              <button
+                key={j}
+                type="button"
+                onClick={() => {
+                  item.onClick();
+                  setIsOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#0c4a6e',
+                  cursor: 'pointer',
+                  borderRadius: 4,
+                  textAlign: 'left' as const,
+                  fontSize: 12,
+                }}
+              >
+                {item.icon && <span>{item.icon}</span>}
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
+    </React.Fragment>
+  );
+}
+
 /**
  * Renders a single toolbar button inside a dock tab strip.
  * Extracted to avoid duplicating the ref-cloning and tooltip logic.
@@ -357,6 +496,16 @@ function renderTabButton(btn: import('../../dock/types').ToolbarButton, idx: num
   ) : (
     <React.Fragment key={idx}>{buttonWithRef}</React.Fragment>
   );
+}
+
+function renderDockToolbarButton(btn: import('../../dock/types').ToolbarButton, idx: number, tabColor?: string) {
+  if (btn.visible === false) {
+    return null;
+  }
+  if (btn.dropdownItems && btn.dropdownItems.length > 0) {
+    return <DockToolbarDropdownButton key={`dtb-${idx}`} btn={btn} idx={idx} tabColor={tabColor} />;
+  }
+  return renderTabButton(btn, idx, tabColor);
 }
 
 function TabSet(props: {
@@ -496,7 +645,7 @@ function TabSet(props: {
               {/* title-suffix buttons: immediately after title, not pushed right */}
               {showToolbar && titleSuffixButtons.length > 0 && (
                 <div style={{ display: 'flex', gap: 4, marginLeft: 6, alignItems: 'center', flexShrink: 0 }}>
-                  {titleSuffixButtons.map((btn, idx) => renderTabButton(btn, idx, tabColor))}
+                  {titleSuffixButtons.map((btn, idx) => renderDockToolbarButton(btn, idx, tabColor))}
                 </div>
               )}
 
@@ -508,7 +657,7 @@ function TabSet(props: {
               {/* Right-aligned toolbar buttons */}
               {showToolbar && rightButtons.length > 0 && (
                 <div style={{ display: 'flex', gap: 4, marginLeft: 4, alignItems: 'center', flexShrink: 0 }}>
-                  {rightButtons.map((btn, idx) => renderTabButton(btn, idx + titleSuffixButtons.length, tabColor))}
+                  {rightButtons.map((btn, idx) => renderDockToolbarButton(btn, idx + titleSuffixButtons.length, tabColor))}
                 </div>
               )}
 

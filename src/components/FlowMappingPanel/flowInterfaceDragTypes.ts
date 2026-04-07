@@ -8,6 +8,16 @@ export const DND_FLOWROW_VAR = 'application/x-omnia-flowrow-var';
 /** CustomEvent from useNodeDragDrop when a row is released over INPUT/OUTPUT (row stays on node). */
 export const FLOW_INTERFACE_ROW_POINTER_DROP = 'flowInterfaceRowPointerDrop';
 
+/** CustomEvent: pointer release over Backend Call SEND/RECEIVE mapping (row stays on node). */
+export const FLOW_BACKEND_MAPPING_POINTER_DROP = 'flowBackendMappingPointerDrop';
+
+export type FlowBackendMappingPointerDropDetail = {
+  flowCanvasId: string;
+  zone: 'send' | 'receive';
+  variableRefId: string;
+  rowLabel: string;
+};
+
 /** Live preview while pointer-dragging a row over the Interface tree (drop position). */
 export const FLOW_INTERFACE_POINTER_PREVIEW = 'flowInterfacePointerPreview';
 
@@ -64,6 +74,31 @@ export function slugifyInternalPath(label: string): string {
   return s || 'field';
 }
 
+/**
+ * Unique dot-path segment for a new mapping row (e.g. drop da variabile): avoids collision with existing `internalPath`.
+ * Ignores the row being updated (`forEntryId`) so its old ephemeral path does not block the new slug.
+ */
+export function uniqueInternalPathFromLabel(
+  label: string,
+  entries: { id: string; internalPath: string }[],
+  forEntryId: string
+): string {
+  const base = slugifyInternalPath(label);
+  let candidate = base || 'field';
+  const used = new Set(
+    entries
+      .filter((e) => e.id !== forEntryId)
+      .map((e) => e.internalPath.trim())
+      .filter(Boolean)
+  );
+  let n = 0;
+  while (used.has(candidate)) {
+    n += 1;
+    candidate = `${base}_${n}`;
+  }
+  return candidate;
+}
+
 export function parseFlowInterfaceDropFromDataTransfer(dt: DataTransfer): FlowInterfaceDropPayload | null {
   const raw = dt.getData(DND_FLOWROW_VAR);
   if (raw?.trim()) {
@@ -91,6 +126,33 @@ export const DND_IFACE_REORDER = 'application/x-omnia-iface-reorder';
 /**
  * Hit-test stack (top-first) so Interface zones win over the flow canvas when overlays use pointer-events quirks.
  */
+/**
+ * Hit-test: Backend Call mapping panel (SEND/RECEIVE) for pointer drop from canvas rows.
+ */
+export function findBackendMappingZoneAtPoint(
+  clientX: number,
+  clientY: number,
+  flowCanvasId: string
+): 'send' | 'receive' | null {
+  let list: Element[];
+  try {
+    list = document.elementsFromPoint(clientX, clientY);
+  } catch {
+    return null;
+  }
+  for (const node of list) {
+    if (!(node instanceof HTMLElement)) continue;
+    const root = node.closest('[data-omnia-backend-mapping][data-flow-canvas-id]');
+    if (root instanceof HTMLElement) {
+      const fid = root.getAttribute('data-flow-canvas-id');
+      if (fid !== flowCanvasId) continue;
+      const zone = root.getAttribute('data-omnia-backend-mapping');
+      if (zone === 'send' || zone === 'receive') return zone;
+    }
+  }
+  return null;
+}
+
 export function findInterfaceZoneRootAtPoint(clientX: number, clientY: number, flowCanvasId: string): HTMLElement | null {
   let list: Element[];
   try {

@@ -5,13 +5,16 @@ import { useFlowActions } from '../../../../../context/FlowActionsContext';
 import { taskRepository } from '../../../../../services/TaskRepository';
 import { generateId } from '../../../../../utils/idGenerator';
 import {
-  FLOW_INTERFACE_POINTER_PREVIEW,
-  FLOW_INTERFACE_ROW_POINTER_DROP,
-  computeInterfacePointerPreview,
-  findInterfaceZoneRootAtPoint,
-  stableInterfacePathForVariable,
-  type FlowInterfacePointerPreviewDetail,
-  type FlowInterfaceRowPointerDropDetail,
+    FLOW_BACKEND_MAPPING_POINTER_DROP,
+    FLOW_INTERFACE_POINTER_PREVIEW,
+    FLOW_INTERFACE_ROW_POINTER_DROP,
+    computeInterfacePointerPreview,
+    findBackendMappingZoneAtPoint,
+    findInterfaceZoneRootAtPoint,
+    stableInterfacePathForVariable,
+    type FlowBackendMappingPointerDropDetail,
+    type FlowInterfacePointerPreviewDetail,
+    type FlowInterfaceRowPointerDropDetail,
 } from '../../../../FlowMappingPanel/flowInterfaceDragTypes';
 
 interface UseNodeDragDropProps {
@@ -373,6 +376,43 @@ export function useNodeDragDrop({
             if (flowCanvasId) {
                 const mx = mousePositionRef.current.x;
                 const my = mousePositionRef.current.y;
+
+                const backendZone = findBackendMappingZoneAtPoint(mx, my, flowCanvasId);
+                if (backendZone) {
+                    const rowDataToMove = draggedRowData || nodeRows.find((row) => row.id === draggedRowId);
+                    if (rowDataToMove) {
+                        let variableRefId = rowDataToMove.meta?.variableRefId?.trim();
+                        if (!variableRefId) {
+                            variableRefId = generateId();
+                            const nextRows = nodeRows.map((r) =>
+                                r.id === rowDataToMove.id
+                                    ? { ...r, meta: { ...r.meta, variableRefId } }
+                                    : r
+                            );
+                            setNodeRows(nextRows);
+                            if (flowActions?.updateNode) {
+                                flowActions.updateNode(nodeId, { rows: nextRows });
+                            } else if (data.onUpdate) {
+                                data.onUpdate({ rows: nextRows });
+                            }
+                        }
+                        const rowLabel = (rowDataToMove.text ?? '').trim() || 'field';
+                        const detail: FlowBackendMappingPointerDropDetail = {
+                            flowCanvasId,
+                            zone: backendZone,
+                            variableRefId,
+                            rowLabel,
+                        };
+                        window.dispatchEvent(
+                            new CustomEvent<FlowBackendMappingPointerDropDetail>(FLOW_BACKEND_MAPPING_POINTER_DROP, {
+                                detail,
+                            })
+                        );
+                        handledFlowInterface = true;
+                    }
+                }
+
+                if (!handledFlowInterface) {
                 const dropRoot = findInterfaceZoneRootAtPoint(mx, my, flowCanvasId);
                 if (dropRoot) {
                     const zone = dropRoot.getAttribute('data-flow-interface-zone') as 'input' | 'output' | null;
@@ -423,6 +463,7 @@ export function useNodeDragDrop({
                             handledFlowInterface = true;
                         }
                     }
+                }
                 }
             }
 

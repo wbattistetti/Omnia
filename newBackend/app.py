@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from newBackend.api.api_codegen import router as cond_router
 from newBackend.api.api_nlp import router as nlp_router
 from newBackend.api.api_proxy_express import router as proxy_router
+from newBackend.api.api_openapi_proxy import router as openapi_proxy_router
 from newBackend.api.api_nlp_config import router as nlp_config_router
 from newBackend.api.api_factory import router as factory_router
 from newBackend.api.api_tasks import router as tasks_router
@@ -144,6 +145,7 @@ def ping():
 app.include_router(cond_router)
 app.include_router(nlp_router)
 app.include_router(proxy_router)
+app.include_router(openapi_proxy_router)
 app.include_router(factory_router)
 app.include_router(nlp_config_router)
 

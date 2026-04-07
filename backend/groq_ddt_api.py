@@ -284,6 +284,14 @@ except Exception as embeddings_error:
     import traceback
     traceback.print_exc()
 
+try:
+    from newBackend.api.api_openapi_proxy import router as openapi_proxy_router
+
+    app.include_router(openapi_proxy_router)
+    print("[FASTAPI] ✅ openapi_proxy_router included (Read API / OpenAPI fetch)")
+except Exception as openapi_proxy_err:
+    print(f"[FASTAPI] ⚠️ openapi_proxy_router not loaded: {openapi_proxy_err}")
+
 # --- Condition: suggest minimal variables ---
 @app.post("/api/conditions/suggest-vars")
 def suggest_vars(body: dict = Body(...)):

@@ -3,11 +3,16 @@
  * Used by UnifiedFlowMappingPanel (demo) and BackendCallEditor (persisted task rows).
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Brackets } from 'lucide-react';
 import { MappingBlock } from './MappingBlock';
 import { FlowMappingTree, DND_NEW_BACKEND_PARAM, DND_TYPE } from './FlowMappingTree';
-import type { FlowInterfaceDropPayload } from './flowInterfaceDragTypes';
+import {
+  FLOW_BACKEND_MAPPING_POINTER_DROP,
+  type FlowBackendMappingPointerDropDetail,
+  type FlowInterfaceDropPayload,
+} from './flowInterfaceDragTypes';
+import { mergeBackendMappingVariableDrop } from './backendMappingVariableDrop';
 import type { FlowMappingVariant } from './types';
 import { createMappingEntry, type MappingEntry } from './mappingTypes';
 import {
@@ -116,6 +121,8 @@ export interface InterfaceMappingEditorProps {
   /** Backend RECEIVE: create variable from typed name (Invio). */
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
+  /** Backend SEND: nome variabile → GUID (persistenza mapping = stesso id della variabile). */
+  resolveVariableRefIdFromLabel?: (label: string) => string | undefined;
 }
 
 export function InterfaceMappingEditor({
@@ -142,6 +149,7 @@ export function InterfaceMappingEditor({
   showApiFields = true,
   onCreateOutputVariable,
   onOutputVariableCreated,
+  resolveVariableRefIdFromLabel,
   interfaceDragLabels = [],
   showInterfacePalette = true,
   showLayoutHint = true,
@@ -164,6 +172,41 @@ export function InterfaceMappingEditor({
   /** Backend SEND/RECEIVE: default alphabetical by internal path segment (nome interno). */
   const [sortBackendSendAlphabetical, setSortBackendSendAlphabetical] = useState(true);
   const [sortBackendReceiveAlphabetical, setSortBackendReceiveAlphabetical] = useState(true);
+
+  /** Pointer drop da riga nodo (useNodeDragDrop) su SEND/RECEIVE quando il canvas è noto. */
+  useEffect(() => {
+    if (variant !== 'backend' || !flowDropTarget?.flowCanvasId?.trim()) return;
+    const fid = flowDropTarget.flowCanvasId.trim();
+    const handler = (ev: Event) => {
+      const e = ev as CustomEvent<FlowBackendMappingPointerDropDetail>;
+      const d = e.detail;
+      if (!d || d.flowCanvasId !== fid) return;
+      const payload = { variableRefId: d.variableRefId, rowLabel: d.rowLabel };
+      if (d.zone === 'send') {
+        onBackendSendChange((prev) => {
+          const so = sortBackendSendAlphabetical ? 'alphabetical' : 'construction';
+          const r = mergeBackendMappingVariableDrop(prev, payload, projectId, fid, so);
+          return r ? r.merged : prev;
+        });
+      } else {
+        onBackendReceiveChange((prev) => {
+          const so = sortBackendReceiveAlphabetical ? 'alphabetical' : 'construction';
+          const r = mergeBackendMappingVariableDrop(prev, payload, projectId, fid, so);
+          return r ? r.merged : prev;
+        });
+      }
+    };
+    window.addEventListener(FLOW_BACKEND_MAPPING_POINTER_DROP, handler as EventListener);
+    return () => window.removeEventListener(FLOW_BACKEND_MAPPING_POINTER_DROP, handler as EventListener);
+  }, [
+    variant,
+    flowDropTarget?.flowCanvasId,
+    projectId,
+    sortBackendSendAlphabetical,
+    sortBackendReceiveAlphabetical,
+    onBackendSendChange,
+    onBackendReceiveChange,
+  ]);
 
   const setInterfaceInputWrapped = useCallback(
     (updater: React.SetStateAction<MappingEntry[]>) => {
@@ -341,6 +384,11 @@ export function InterfaceMappingEditor({
             <MappingBlock
               accent="send"
               rootClassName={mappingBlockRootClass}
+              backendMappingDropTarget={
+                flowDropTarget?.flowCanvasId
+                  ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'send' }
+                  : undefined
+              }
               headerExtra={
                 <BackendMappingHeaderToolbar
                   sortAlphabetical={sortBackendSendAlphabetical}
@@ -363,11 +411,17 @@ export function InterfaceMappingEditor({
                 backendColumn="send"
                 onCreateOutputVariable={onCreateOutputVariable}
                 onOutputVariableCreated={onOutputVariableCreated}
+                resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
               />
             </MappingBlock>
             <MappingBlock
               accent="receive"
               rootClassName={mappingBlockRootClass}
+              backendMappingDropTarget={
+                flowDropTarget?.flowCanvasId
+                  ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'receive' }
+                  : undefined
+              }
               headerExtra={
                 <BackendMappingHeaderToolbar
                   sortAlphabetical={sortBackendReceiveAlphabetical}
@@ -390,6 +444,7 @@ export function InterfaceMappingEditor({
                 backendColumn="receive"
                 onCreateOutputVariable={onCreateOutputVariable}
                 onOutputVariableCreated={onOutputVariableCreated}
+                resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
               />
             </MappingBlock>
           </div>

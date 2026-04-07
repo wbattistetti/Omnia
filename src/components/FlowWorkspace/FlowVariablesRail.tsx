@@ -35,6 +35,7 @@ import { useProjectTranslations } from '../../context/ProjectTranslationsContext
 import { resolveVariableStoreProjectId } from '../../utils/safeProjectId';
 import { getVariableLabel } from '../../utils/getVariableLabel';
 import { makeTranslationKey } from '../../utils/translationKeys';
+import { DND_FLOWROW_VAR, stableInterfacePathForVariable } from '../FlowMappingPanel/flowInterfaceDragTypes';
 
 export interface FlowVariablesRailProps {
   flowId: string;
@@ -148,6 +149,18 @@ function DataTreeVariableRow({
         e.dataTransfer.setData('text/plain', displayForDrag);
         e.dataTransfer.setData('application/x-omnia-varlabel', displayForDrag);
         e.dataTransfer.effectAllowed = 'copy';
+        try {
+          e.dataTransfer.setData(
+            DND_FLOWROW_VAR,
+            JSON.stringify({
+              variableRefId: instance.id,
+              suggestedInternalPath: stableInterfacePathForVariable(instance.id),
+              displayLabel: displayForDrag,
+            })
+          );
+        } catch {
+          /* ignore */
+        }
       }}
     >
       <Brackets className="h-3.5 w-3.5 shrink-0 text-amber-200/85" strokeWidth={2.2} aria-hidden />

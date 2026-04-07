@@ -29,16 +29,18 @@ export function backendInputsToMappingEntries(
   const list = inputs ?? [];
   return list
     .filter((row) => row.internalName?.trim())
-    .map((row) =>
-      createMappingEntry({
+    .map((row) => {
+      const vid = row.variable?.trim();
+      return createMappingEntry({
         internalPath: row.internalName.trim(),
         apiField: row.apiParam?.trim() ?? '',
         linkedVariable: getVarNameFromVarId(row.variable) ?? '',
         externalName: row.internalName.trim(),
+        ...(vid ? { variableRefId: vid } : {}),
         ...(row.fieldDescription !== undefined ? { fieldDescription: row.fieldDescription } : {}),
         ...(row.sampleValues !== undefined ? { sampleValues: row.sampleValues } : {}),
-      })
-    );
+      });
+    });
 }
 
 export function backendOutputsToMappingEntries(
@@ -48,16 +50,18 @@ export function backendOutputsToMappingEntries(
   const list = outputs ?? [];
   return list
     .filter((row) => row.internalName?.trim())
-    .map((row) =>
-      createMappingEntry({
+    .map((row) => {
+      const vid = row.variable?.trim();
+      return createMappingEntry({
         internalPath: row.internalName.trim(),
         apiField: row.apiField?.trim() ?? '',
         linkedVariable: getVarNameFromVarId(row.variable) ?? '',
         externalName: row.internalName.trim(),
+        ...(vid ? { variableRefId: vid } : {}),
         ...(row.fieldDescription !== undefined ? { fieldDescription: row.fieldDescription } : {}),
         ...(row.sampleValues !== undefined ? { sampleValues: row.sampleValues } : {}),
-      })
-    );
+      });
+    });
 }
 
 export function mappingEntriesToBackendInputs(
@@ -69,7 +73,7 @@ export function mappingEntriesToBackendInputs(
     .map((e) => ({
       internalName: e.internalPath.trim(),
       apiParam: e.apiField.trim(),
-      variable: resolveVarId(e.linkedVariable),
+      variable: e.variableRefId?.trim() || resolveVarId(e.linkedVariable),
       ...(e.fieldDescription !== undefined ? { fieldDescription: e.fieldDescription } : {}),
       ...(e.sampleValues !== undefined ? { sampleValues: e.sampleValues } : {}),
     }));
@@ -84,7 +88,7 @@ export function mappingEntriesToBackendOutputs(
     .map((e) => ({
       internalName: e.internalPath.trim(),
       apiField: e.apiField.trim(),
-      variable: resolveVarId(e.linkedVariable),
+      variable: e.variableRefId?.trim() || resolveVarId(e.linkedVariable),
       ...(e.fieldDescription !== undefined ? { fieldDescription: e.fieldDescription } : {}),
       ...(e.sampleValues !== undefined ? { sampleValues: e.sampleValues } : {}),
     }));

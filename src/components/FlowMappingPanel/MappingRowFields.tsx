@@ -27,6 +27,8 @@ export interface MappingRowFieldsProps {
   variableOptions: string[];
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
+  /** Backend SEND: map picked label → variable GUID for persisted binding. */
+  resolveVariableRefIdFromLabel?: (label: string) => string | undefined;
 }
 
 export function MappingRowFields({
@@ -44,6 +46,7 @@ export function MappingRowFields({
   variableOptions = [],
   onCreateOutputVariable,
   onOutputVariableCreated,
+  resolveVariableRefIdFromLabel,
 }: MappingRowFieldsProps) {
   if (variant === 'backend' && groupOnlyBackend) {
     return (
@@ -104,6 +107,7 @@ export function MappingRowFields({
             onCommit={(patch) => onPatch(patch)}
             onCreateVariable={varMode === 'receive' ? onCreateOutputVariable : undefined}
             onVariableCreated={varMode === 'receive' ? onOutputVariableCreated : undefined}
+            resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
           />
         )}
       </div>
