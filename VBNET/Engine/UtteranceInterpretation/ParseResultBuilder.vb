@@ -3,50 +3,45 @@ Option Explicit On
 
 Imports System.Collections.Generic
 
-Namespace UtteranceInterpretation
+''' <summary>
+''' Proietta <see cref="EngineResult"/> (estrazione NLP) nel <see cref="ParseResult"/> usato dal motore dialogo
+''' (slot values, conferme e validazioni restano responsabilità di <see cref="Parser"/> / executor).
+''' </summary>
+Public Module ParseResultBuilder
 
     ''' <summary>
-    ''' Costruisce ParseResult da UtteranceParseResult (liste uniformi). Nessun ParserExtraction, nessun leaf/composite.
+    ''' Costruisce <see cref="ParseResult"/> con <see cref="ParseResultType.Match"/> da un <see cref="EngineResult"/>.
     ''' </summary>
-    Public Module ParseResultBuilder
-
-        Public Function BuildParseResult(
-            raw As UtteranceParseResult,
+    Public Function BuildParseResultFromEngineResult(
+            engResult As EngineResult,
             fullUtteranceTrimmed As String,
             consumeMatched As Boolean
         ) As ParseResult
 
-            Dim conf = raw.Confidence
-            If conf <= 0R Then conf = 1.0R
+        If engResult Is Nothing OrElse Not engResult.Success Then
+            Return ParseResult.NoMatch(fullUtteranceTrimmed)
+        End If
 
-            Dim pr As New ParseResult() With {
-                .Result = ParseResultType.Match,
-                .Confidence = conf,
-                .MatchedText = If(raw.MatchedText, String.Empty)
-            }
+        Dim pr As New ParseResult() With {
+            .Result = ParseResultType.Match,
+            .Confidence = 1.0R,
+            .MatchedText = If(engResult.MatchedText, String.Empty)
+        }
 
-            Dim remainder = fullUtteranceTrimmed
-            If consumeMatched AndAlso Not String.IsNullOrEmpty(raw.MatchedText) Then
-                remainder = UtteranceRemainder.RemoveFirstMatchedPortion(fullUtteranceTrimmed, raw.MatchedText)
-            End If
-            pr.UnmatchedText = remainder
+        If consumeMatched Then
+            pr.UnmatchedText = If(engResult.UnmatchedText, String.Empty).Trim()
+        Else
+            pr.UnmatchedText = fullUtteranceTrimmed
+        End If
 
-            pr.ExtractedVariables = BuildExtractedVariables(raw.Extractions)
-            Return pr
-        End Function
-
-        Private Function BuildExtractedVariables(extractions As List(Of UniformExtraction)) As List(Of ExtractedVariable)
-            Dim list As New List(Of ExtractedVariable)()
-            If extractions Is Nothing OrElse extractions.Count = 0 Then
-                Return list
-            End If
-
-            For Each ex In extractions
-                list.Add(New ExtractedVariable(ex.TaskInstanceId, ex.NodeId, ex.SemanticValue))
+        If engResult.Matches IsNot Nothing Then
+            For Each m In engResult.Matches
+                If m Is Nothing OrElse String.IsNullOrEmpty(m.Guid) Then Continue For
+                pr.SlotValues(m.Guid) = m.Value
             Next
-            Return list
-        End Function
+        End If
 
-    End Module
+        Return pr
+    End Function
 
-End Namespace
+End Module

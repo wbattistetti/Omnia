@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { GrammarNode, NodeBinding } from '../../types/grammarTypes';
 import { validateSemanticBindingsVsNodeWords } from './semanticBindingsVsNodeWords';
 
@@ -23,7 +23,7 @@ export function createGrammarNode(
   bindings: NodeBinding[] = []
 ): GrammarNode {
   return {
-    id: uuidv4(),
+    id: generateSafeGuid(),
     label,
     synonyms: [],
     bindings,

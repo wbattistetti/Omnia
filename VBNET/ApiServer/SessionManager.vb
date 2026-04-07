@@ -17,7 +17,7 @@ Imports Common
 ''' </summary>
 Public Class OrchestratorSession
     Public Property SessionId As String
-    Public Property CompilationResult As FlowCompilationResult
+    Public Property CompilationResult As CompiledFlow
     Public Property Tasks As List(Of Object)
     ' ❌ RIMOSSO: DDTs property - non più usato, struttura costruita da template
     Public Property Translations As Dictionary(Of String, String)
@@ -34,7 +34,7 @@ Public Class OrchestratorSession
     Public Property IsOrchestratorRunning As Boolean = False
 
     ''' <summary>flowId → compilazione del subflow (persistita su Redis con la sessione).</summary>
-    Public Property SubflowCompilations As Dictionary(Of String, FlowCompilationResult)
+    Public Property SubflowCompilations As Dictionary(Of String, CompiledFlow)
 End Class
 
 ''' <summary>
@@ -348,7 +348,7 @@ Public Class SessionManager
     ''' </summary>
     Private Shared Sub ApplySubflowCompilationsToOrchestrator(
         orchestrator As FlowOrchestrator,
-        subflowCompilations As Dictionary(Of String, FlowCompilationResult)
+        subflowCompilations As Dictionary(Of String, CompiledFlow)
     )
         If orchestrator Is Nothing OrElse subflowCompilations Is Nothing OrElse subflowCompilations.Count = 0 Then
             Return
@@ -380,12 +380,12 @@ Public Class SessionManager
     ''' </summary>
     Public Shared Function CreateSession(
         sessionId As String,
-        compilationResult As FlowCompilationResult,
+        compilationResult As CompiledFlow,
         tasks As List(Of Object),
         translations As Dictionary(Of String, String),
         Optional projectId As String = Nothing,
         Optional locale As String = Nothing,
-        Optional subflowCompilations As Dictionary(Of String, FlowCompilationResult) = Nothing
+        Optional subflowCompilations As Dictionary(Of String, CompiledFlow) = Nothing
     ) As OrchestratorSession
         SyncLock _lock
             ' ✅ REMOVED: taskEngine (Motore) - FlowOrchestrator no longer requires it

@@ -24,7 +24,6 @@
     <!-- Types and Enums -->
     <Compile Include="Types\TaskTypes.vb" />
     <Compile Include="Types\Types.vb" />
-    <Compile Include="Types\ExtractedVariable.vb" />
     <Compile Include="Types\SubflowIoBinding.vb" />
 
     <!-- Interfaces -->
@@ -51,9 +50,11 @@
     <Compile Include="NLP\NLPEngine.vb" />
     <Compile Include="NLP\CompiledNlpContract.vb" />
     <Compile Include="NLP\SubDataMappingInfo.vb" />
-    <Compile Include="NLP\UtteranceInterpretation\IUtteranceInterpretationEngine.vb" />
-    <Compile Include="NLP\UtteranceInterpretation\UniformExtraction.vb" />
-    <Compile Include="NLP\UtteranceInterpretation\UtteranceParseResult.vb" />
+    <Compile Include="NLP\UtteranceInterpretation\IInterpretationEngine.vb" />
+    <Compile Include="NLP\UtteranceInterpretation\ParserMatch.vb" />
+    <Compile Include="NLP\UtteranceInterpretation\EngineResult.vb" />
+    <Compile Include="NLP\UtteranceInterpretation\EngineResultFactory.vb" />
+    <Compile Include="NLP\UtteranceInterpretation\IUteranceTask.vb" />
 
     <!-- Utilities -->
     <Compile Include="Utils\GlobalVariableContext.vb" />

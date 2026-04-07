@@ -58,7 +58,7 @@ Namespace ApiServer.SessionStorage
         ''' </summary>
         Private Class OrchestratorSessionData
             Public Property SessionId As String
-            Public Property CompilationResult As FlowCompilationResult
+            Public Property CompilationResult As CompiledFlow
             Public Property Tasks As List(Of Object)
             Public Property Translations As Dictionary(Of String, String)
             Public Property Messages As List(Of Object)
@@ -73,7 +73,7 @@ Namespace ApiServer.SessionStorage
             Public Property Locale As String
 
             ''' <summary>Stesso significato di <see cref="OrchestratorSession.SubflowCompilations"/>.</summary>
-            Public Property SubflowCompilations As Dictionary(Of String, FlowCompilationResult)
+            Public Property SubflowCompilations As Dictionary(Of String, CompiledFlow)
         End Class
 
         ''' <summary>

@@ -127,6 +127,19 @@ describe('errorReportTreeModel', () => {
     expect(lines[0].message).not.toContain('NullReference');
   });
 
+  it('humanIssuesForError uses parser copy when VB reports missing data contract', () => {
+    const e = err({
+      taskId: 't1',
+      message: '[main] Missing data contract (leaf node).',
+      severity: 'error',
+      category: 'TaskCompilationFailed',
+    });
+    const lines = humanIssuesForError(e, 'Row', null);
+    expect(lines.length).toBe(1);
+    expect(lines[0].message).toBe("Manca il parser per interpretare le risposte dell'utente.");
+    expect(lines[0].message).not.toContain('Missing data contract');
+  });
+
   it('buildErrorReportTree always includes main and groups by flow', () => {
     const flows: Record<string, Flow<Node<FlowNode>, Edge>> = {
       main: { id: 'main', title: 'Main', nodes: [], edges: [] },

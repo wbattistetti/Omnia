@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 // TODO: Add zod validation for constraints in the future.
 
 /**
@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 export function normalizeConstraint(c: any) {
   return {
     ...c,
-    id: c.id || uuidv4(),
+    id: c.id || generateSafeGuid(),
     label: c.label || c.type,
     payoff: c.payoff || '',
     prompts: Array.isArray(c.prompts) ? c.prompts : [],

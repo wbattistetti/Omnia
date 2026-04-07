@@ -21,15 +21,19 @@ Imports Compiler
 Public Class TaskAssembler
 
     ''' <summary>
-    ''' Verifica se una stringa è un GUID valido
+    ''' Verifica se una stringa è un GUID RFC oppure un id safe frontend (g_ + 32 hex, valido anche come nome gruppo regex).
     ''' </summary>
     Private Shared Function IsGuid(value As String) As Boolean
         If String.IsNullOrEmpty(value) Then
             Return False
         End If
+        Dim v = value.ToLowerInvariant()
         ' GUID format: 8-4-4-4-12 hex digits
         Dim guidPattern As String = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        Return System.Text.RegularExpressions.Regex.IsMatch(value.ToLower(), guidPattern)
+        If System.Text.RegularExpressions.Regex.IsMatch(v, guidPattern) Then Return True
+        ' Frontend generateSafeGuid: g_ + 32 lowercase hex
+        Dim safePattern As String = "^g_[0-9a-f]{32}$"
+        Return System.Text.RegularExpressions.Regex.IsMatch(v, safePattern)
     End Function
 
     ''' <summary>

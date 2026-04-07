@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { SemanticSlot, SemanticValue, SemanticSet } from '../../types/grammarTypes';
 
 /**
@@ -13,7 +13,7 @@ export function createSemanticSlot(
   type: SemanticSlot['type'] = 'string'
 ): SemanticSlot {
   return {
-    id: uuidv4(),
+    id: generateSafeGuid(),
     name,
     type,
   };
@@ -28,7 +28,7 @@ export function createSemanticValue(
   synonyms: string[] = []
 ): SemanticValue {
   return {
-    id: uuidv4(),
+    id: generateSafeGuid(),
     value,
     synonyms,
   };
@@ -43,7 +43,7 @@ export function createSemanticSet(
   values: SemanticValue[] = []
 ): SemanticSet {
   return {
-    id: uuidv4(),
+    id: generateSafeGuid(),
     name,
     values,
   };

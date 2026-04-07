@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { PlanRunResult } from './planRunner';
 
 export type ConstraintBucket = {
@@ -72,7 +72,7 @@ export function normalizePathSegment(segment: string): string {
 
 export function makeDDTIdFromLabel(label: string): string {
   const safe = (label || 'DDT').trim().replace(/\s+/g, '_');
-  return `${safe}_${uuidv4()}`;
+  return `${safe}_${generateSafeGuid()}`;
 }
 
 // Merge a delta store into a base store, without losing existing unrelated artifacts

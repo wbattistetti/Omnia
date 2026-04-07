@@ -76,19 +76,24 @@ Public Class Parser
         End If
 
         Dim corrected = UtteranceInterpretationParse.Parse(valueInput, utt)
-        If corrected.Result <> ParseResultType.Match OrElse corrected.ExtractedVariables Is Nothing OrElse corrected.ExtractedVariables.Count = 0 Then
+        If corrected.Result <> ParseResultType.Match OrElse corrected.SlotValues Is Nothing OrElse corrected.SlotValues.Count = 0 Then
             Return New ParseResult() With {.Result = ParseResultType.NoMatch}
         End If
 
         Dim extractedData As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
-        For Each ev In corrected.ExtractedVariables
-            extractedData(ev.NodeId) = ev.Value
+        For Each kvp In corrected.SlotValues
+            extractedData(kvp.Key) = kvp.Value
         Next
 
-        Return New ParseResult() With {
+        Dim slotCopy As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
+        For Each kvp In corrected.SlotValues
+            slotCopy(kvp.Key) = kvp.Value
+        Next
+
+        Return New ParseResult With {
             .Result = ParseResultType.Corrected,
             .ExtractedData = extractedData,
-            .ExtractedVariables = corrected.ExtractedVariables,
+            .SlotValues = slotCopy,
             .MatchedText = corrected.MatchedText,
             .UnmatchedText = corrected.UnmatchedText,
             .Confidence = corrected.Confidence

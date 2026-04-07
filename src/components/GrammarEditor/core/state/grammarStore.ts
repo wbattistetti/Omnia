@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { create } from 'zustand';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { Grammar, GrammarNode, GrammarEdge, SemanticSlot, SemanticSet } from '../../types/grammarTypes';
 import type { SelectionState, EditorState } from '../../types/uiTypes';
 
@@ -79,7 +79,7 @@ export const useGrammarStore = create<GrammarStore>((set, get) => ({
 
   createGrammar: (name) => {
     const newGrammar: Grammar = {
-      id: uuidv4(),
+      id: generateSafeGuid(),
       name,
       nodes: [],
       edges: [],

@@ -16,10 +16,11 @@ import { wizardResultToContextValue } from '@responseEditor/context/WizardContex
 import { WizardContext } from '@responseEditor/context/WizardContext';
 import { WizardMode } from '../../../../TaskBuilderAIWizard/types/WizardMode';
 import { useWizardModeTransition } from '@responseEditor/hooks/useWizardModeTransition';
-import { useTaskTreeFromStore, useTaskTreeVersion } from '@responseEditor/core/state';
+import { useTaskTreeFromStore, useTaskTreeStore, useTaskTreeVersion } from '@responseEditor/core/state';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 import { closeTab } from '@dock/ops';
 import { flushWizardToManualPipeline } from '@utils/wizard/flushWizardToManual';
+import { taskRepository } from '@services/TaskRepository';
 
 import type { TaskMeta } from '@taskEditor/EditorHost/types';
 import type { Task, TaskTree } from '@types/taskTypes';
@@ -335,6 +336,27 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     editor.setTaskWizardMode('full');
   }, [editor.setTaskWizardMode]);
 
+  const handleChooseAdaptTemplate = React.useCallback(() => {
+    const tid = editor.contextualizationTemplateId;
+    if (!task?.id || !tid) {
+      console.warn('[ResponseEditor] Adatta template: missing task id or contextualizationTemplateId');
+      return;
+    }
+    console.log('[ResponseEditor] Utente avvia wizard adattamento dal template suggerito', {
+      templateId: tid,
+    });
+    taskRepository.updateTask(
+      task.id,
+      {
+        taskWizardMode: 'adaptation',
+        contextualizationTemplateId: tid,
+      } as Partial<Task>,
+      currentProjectId || undefined
+    );
+    useTaskTreeStore.getState().incrementVersion();
+    editor.setTaskWizardMode('adaptation');
+  }, [task, editor.contextualizationTemplateId, editor.setTaskWizardMode, currentProjectId]);
+
   const handleSwitchToManual = React.useCallback(() => {
     void (async () => {
       try {
@@ -479,6 +501,9 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       needsTaskContextualization={editor.needsTaskContextualization}
       needsTaskBuilder={editor.needsTaskBuilder}
       contextualizationTemplateId={editor.contextualizationTemplateId}
+      contextualizationTemplateName={editor.contextualizationTemplateName}
+      embeddingSuggestionDismissed={editor.embeddingSuggestionDismissed}
+      dismissEmbeddingSuggestion={editor.dismissEmbeddingSuggestion}
       // ✅ REMOVED: taskLabel duplicate (already passed above)
       onTaskContextualizationComplete={editor.onTaskContextualizationComplete}
       onTaskBuilderComplete={editor.onTaskBuilderComplete}
@@ -490,6 +515,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       wizardIntegration={wizardIntegration}
       onStartWizard={handleStartWizard}
       onSwitchToManual={handleSwitchToManual}
+      onChooseAdaptTemplate={handleChooseAdaptTemplate}
       originalLabel={editor.headerTitle} // ✅ SINGLE SOURCE: Use headerTitle from editor (node row label)
       // ✅ FIX: Pass ref per il pulsante save-to-library
       saveToLibraryButtonRef={saveToLibraryButtonRef}

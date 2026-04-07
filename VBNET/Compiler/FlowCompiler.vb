@@ -232,7 +232,7 @@ Public Class FlowCompiler
     ''' Compiles flowchart into TaskGroups (uno per nodo)
     ''' Trasforma IDE.* → Runtime.*
     ''' </summary>
-    Public Function CompileFlow(flow As Flow, Optional variables As List(Of VariableInstance) = Nothing, Optional projectId As String = Nothing) As FlowCompilationResult
+    Public Function CompileFlow(flow As Flow, Optional variables As List(Of VariableInstance) = Nothing, Optional projectId As String = Nothing) As CompiledFlow
         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
         Console.WriteLine($"🔧 [COMPILER][FlowCompiler] Starting compilation...")
         System.Diagnostics.Debug.WriteLine($"🔧 [COMPILER][FlowCompiler] Starting compilation...")
@@ -274,7 +274,7 @@ Public Class FlowCompiler
                 .Category = "NoEntryNodes"
             })
             ' ✅ Return empty but valid result
-            Return New FlowCompilationResult() With {
+            Return New CompiledFlow() With {
                 .TaskGroups = New List(Of TaskGroup)(),
                 .Tasks = New List(Of CompiledTask)(),
                 .EntryTaskGroupId = Nothing,
@@ -620,7 +620,7 @@ Public Class FlowCompiler
         ' Convert VariableInstance to CompiledVariable
         Dim compiledVariables = ConvertVariablesToCompiled(variables)
 
-        Dim result = New FlowCompilationResult() With {
+        Dim result = New CompiledFlow() With {
             .TaskGroups = taskGroups,
             .EntryTaskGroupId = entryTaskGroupId,
             .Tasks = allTasks,

@@ -61,9 +61,9 @@ Public Module ContractExtractHandlers
 
             Dim pr = UtteranceInterpretationParse.Parse(request.Text.Trim(), task)
             Dim values As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
-            If pr.Result = ParseResultType.Match AndAlso pr.ExtractedVariables IsNot Nothing Then
-                For Each ev In pr.ExtractedVariables
-                    values(ev.NodeId) = ev.Value
+            If pr.Result = ParseResultType.Match AndAlso pr.SlotValues IsNot Nothing Then
+                For Each kvp In pr.SlotValues
+                    values(kvp.Key) = kvp.Value
                 Next
             End If
 

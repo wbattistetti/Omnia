@@ -3,8 +3,7 @@ import type { Task, TaskInstance } from '../types/taskTypes';
 import { TaskType } from '../types/taskTypes';
 import { taskRepository } from '../services/TaskRepository';
 // FASE 4: InstanceRepository import removed - TaskRepository handles synchronization internally
-import { generateId } from './idGenerator';
-import { v4 as uuidv4 } from 'uuid';
+import { generateId, generateSafeGuid } from './idGenerator';
 import {
   getSayMessageSyncedBody,
   trySeedSayMessageTranslation,
@@ -175,7 +174,7 @@ export function createRowWithTask(
   const sayMessageFields =
     taskType === TaskType.SayMessage
       ? (() => {
-          const textKey = makeTranslationKey('task', uuidv4());
+          const textKey = makeTranslationKey('task', generateSafeGuid());
           trySeedSayMessageTranslation(textKey, initialText || '');
           return { parameters: [{ parameterId: 'text', value: textKey }] };
         })()

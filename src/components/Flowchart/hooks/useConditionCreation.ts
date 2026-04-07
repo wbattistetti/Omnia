@@ -2,7 +2,7 @@
 import { useCallback } from 'react';
 import { useProjectDataUpdate, useProjectData } from '../../../context/ProjectDataContext';
 import { ProjectDataService } from '../../../services/ProjectDataService';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode, EdgeData } from '../types/flowTypes';
 
@@ -161,7 +161,7 @@ export function useConditionCreation(
             x: connectionMenuRef.current.position.x - 140,
             y: connectionMenuRef.current.position.y - 20
           });
-          const newEdgeId = uuidv4();
+          const newEdgeId = generateSafeGuid();
           const newNode: Node<FlowNode> = {
             id: newNodeId,
             type: 'custom',

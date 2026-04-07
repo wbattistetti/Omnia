@@ -32,9 +32,9 @@
     <Compile Include="TaskAssembler.vb" />
     <Compile Include="NlpContractCompiler.vb" />
     <Compile Include="InterpretationEngineBinding.vb" />
-    <Compile Include="UtteranceTaskEnginesRehydration.vb" />
-    <Compile Include="CompiledRegexUtteranceEngine.vb" />
-    <Compile Include="CompiledGrammarFlowUtteranceEngine.vb" />
+    <Compile Include="UtteranceEnginesMaterializer.vb" />
+    <Compile Include="CompiledRegexEngine.vb" />
+    <Compile Include="CompiledGrammarFlowEngine.vb" />
 
     <!-- Task Compiler (Polymorphic) -->
     <Compile Include="TaskCompiler\TaskCompilerBase.vb" />
@@ -98,12 +98,12 @@
     <Compile Include="DTO\Runtime\CompiledMockTable.vb" />
     <Compile Include="DTO\Runtime\CompiledTaskConverter.vb" />
     <Compile Include="DTO\Runtime\CompiledTaskListConverter.vb" />
-    <!-- ✅ Error handling - Must be compiled BEFORE FlowCompilationResult (which uses them) -->
+    <!-- ✅ Error handling - Must be compiled BEFORE CompiledFlow (which uses them) -->
     <Compile Include="DTO\Runtime\ErrorSeverity.vb" />
     <Compile Include="DTO\Runtime\CompilationError.vb" />
     <Compile Include="DTO\Runtime\CanonicalGuidTable.vb" />
     <Compile Include="DTO\Runtime\UtteranceTaskCompilationException.vb" />
-    <Compile Include="DTO\Runtime\FlowCompilationResult.vb" />
+    <Compile Include="DTO\Runtime\CompiledFlow.vb" />
     <Compile Include="DTO\Runtime\CompiledVariable.vb" />
     <Compile Include="DTO\Runtime\TaskGroup.vb" />
     <Compile Include="DTO\Runtime\TaskGroupExecCondition.vb" />

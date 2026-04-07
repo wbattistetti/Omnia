@@ -1,7 +1,7 @@
 import type { Task, MaterializedStep, TaskTreeNode } from '../types/taskTypes';
 import { DialogueTaskService } from '../services/DialogueTaskService';
 import { buildTaskTreeNodes, cloneTemplateSteps } from './taskUtils';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import { isUuidString, makeTranslationKey, parseTranslationKey } from './translationKeys';
 
 /**
@@ -437,10 +437,10 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
 
   const cloned = {
     ...escalation,
-    escalationId: escalation.escalationId ? `e_${uuidv4()}` : undefined,
+    escalationId: escalation.escalationId ? `e_${generateSafeGuid()}` : undefined,
     tasks: (escalation.tasks || []).map((task: any) => {
       const oldGuid = task.id;
-      const newGuid = uuidv4();
+      const newGuid = generateSafeGuid();
       if (oldGuid) {
         guidMapping.set(oldGuid, newGuid);
       }
@@ -464,13 +464,13 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
           }
           const parsed = parseTranslationKey(textValue);
           if (parsed?.kind === 'task') {
-            const newTextUuid = uuidv4();
+            const newTextUuid = generateSafeGuid();
             const newKey = makeTranslationKey('task', newTextUuid);
             guidMapping.set(textValue, newKey);
             return { ...param, value: newKey };
           }
           if (isUuidString(textValue)) {
-            const newTextUuid = uuidv4();
+            const newTextUuid = generateSafeGuid();
             const newKey = makeTranslationKey('task', newTextUuid);
             guidMapping.set(makeTranslationKey('task', textValue), newKey);
             return { ...param, value: newKey };

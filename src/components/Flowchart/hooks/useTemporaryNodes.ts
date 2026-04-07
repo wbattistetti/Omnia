@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
 import { Node, Edge } from 'reactflow';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { FlowNode, EdgeData } from '../types/flowTypes';
 import { DEFAULT_LINK_STYLE } from '../types/flowTypes';
 import { FlowStateBridge } from '../../../services/FlowStateBridge';
@@ -61,8 +61,8 @@ export function useTemporaryNodes(
     }
 
     try {
-      const tempNodeId = uuidv4();
-      const tempEdgeId = uuidv4();
+      const tempNodeId = generateSafeGuid();
+      const tempEdgeId = generateSafeGuid();
       const posFlow = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
       /** Stessa larghezza minima del CustomNode vuoto (useNodeRendering), altrimenti il centro visivo ≠ handle RF. */
@@ -143,7 +143,7 @@ export function useTemporaryNodes(
           isTemporary: true,
           hidden: true, // ✅ NODO INVISIBILE
           createdAt: Date.now(),
-          focusRowId: `${tempNodeId}-${uuidv4()}`,
+          focusRowId: `${tempNodeId}-${generateSafeGuid()}`,
           'data-is-temporary': 'true'
         },
       };

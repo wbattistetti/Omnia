@@ -1,10 +1,9 @@
 import { ProjectData, EntityType, Category, ProjectEntityItem, TaskTemplateItem, Macrotask, MacrotaskPayloadNode, MacrotaskPayloadEdge } from '../types/project';
-import { v4 as uuidv4 } from 'uuid';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 // import { getLabelColor } from '../utils/labelColor';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../components/Sidebar/sidebarTheme';
 import { modeStringToTaskType } from '../types/taskTypes'; // ✅ RINOMINATO: modeToType → modeStringToTaskType
-import { generateId } from '../utils/idGenerator';
+import { generateId, generateSafeGuid } from '../utils/idGenerator';
 
 // Import template data
 import agentActsEn from '../../data/templates/utility_gas/agent_acts/en.json';
@@ -52,13 +51,13 @@ const convertTaskTemplatesToCategories = <T extends TaskTemplateItem>(templateAr
     const categoryKey = categoryName.replace(/\s+/g, '_').toLowerCase();
     if (!categoriesMap[categoryKey]) {
       categoriesMap[categoryKey] = {
-        id: uuidv4(),
+        id: generateSafeGuid(),
         name: categoryName,
         items: []
       };
     }
     categoriesMap[categoryKey].items.push(({
-      id: item.id || uuidv4(),
+      id: item.id || generateSafeGuid(),
       name: item.label || item.shortLabel || item.name || 'Unnamed Item',
       description: item.description || item.label || item.shortLabel || item.name || '',
       userTasks: item.userTasks, // ✅ userTasks required
@@ -85,13 +84,13 @@ const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
     const categoryKey = categoryName.replace(/\s+/g, '_').toLowerCase();
     if (!categoriesMap[categoryKey]) {
       categoriesMap[categoryKey] = {
-        id: uuidv4(),
+        id: generateSafeGuid(),
         name: categoryName,
         items: []
       };
     }
     categoriesMap[categoryKey].items.push({
-      id: item.id || uuidv4(),
+      id: item.id || generateSafeGuid(),
       name: item.label || item.shortLabel || item.name || 'Unnamed Item',
       description: item.description || item.label || item.shortLabel || item.name || ''
     });
@@ -372,14 +371,14 @@ export const ProjectDataService = {
 
         if (!categoriesMap[key]) {
           categoriesMap[key] = {
-            id: uuidv4(),
+            id: generateSafeGuid(),
             name: categoryName,
             items: []
           };
         }
 
         const convertedItem = {
-          id: item._id || uuidv4(),
+          id: item._id || generateSafeGuid(),
           name: item.name?.it || item.name?.en || item.label || 'Unnamed',
           description: item.description?.it || item.description?.en || item.description || '',
           type: (item as any)?.type,
@@ -422,14 +421,14 @@ export const ProjectDataService = {
 
       if (!categoriesMap[key]) {
         categoriesMap[key] = {
-          id: uuidv4(),
+          id: generateSafeGuid(),
           name: categoryName,
           items: []
         };
       }
 
       const convertedItem: any = {
-        id: item._id || uuidv4(),
+        id: item._id || generateSafeGuid(),
         name: item.name || item.label || 'Unnamed',
         description: item.description || '',
         type: (item as any)?.type,
@@ -477,7 +476,7 @@ export const ProjectDataService = {
     meta?: { nodeIds?: string[]; edgeIds?: string[]; entryEdges?: string[]; exitEdges?: string[]; bounds?: { x: number; y: number; w: number; h: number } }): Promise<Macrotask> {
     const cat = findOrCreateMacrotaskCategory('Macrotasks');
     const macrotask: Macrotask = {
-      id: uuidv4(),
+      id: generateSafeGuid(),
       name,
       description,
       nodeIds: meta?.nodeIds || [],
@@ -603,7 +602,7 @@ export const ProjectDataService = {
   async addCategory(type: EntityType, name: string): Promise<Category> {
     await new Promise(resolve => setTimeout(resolve, 50));
     const newCategory: Category = {
-      id: uuidv4(),
+      id: generateSafeGuid(),
       name,
       items: []
     };
@@ -638,7 +637,7 @@ export const ProjectDataService = {
     if (!category) throw new Error('Category not found');
 
     const newItem: ProjectEntityItem = {
-      id: uuidv4(),
+      id: generateSafeGuid(),
       name,
       description
     };
@@ -869,7 +868,7 @@ function findOrCreateMacrotaskCategory(preferredName: string = 'Uncategorized'):
   const cats = ensureMacrotasksCategories();
   // If any category already exists, reuse the first one to avoid duplicate lists
   if (cats.length > 0) return cats[0];
-  const created: Category = { id: uuidv4(), name: preferredName, items: [] };
+  const created: Category = { id: generateSafeGuid(), name: preferredName, items: [] };
   cats.push(created);
   return created;
 }

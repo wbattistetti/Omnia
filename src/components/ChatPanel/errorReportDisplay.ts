@@ -85,6 +85,29 @@ export function findEdgeLabelInWorkspace(
 /**
  * Strip "in node …, row …" / UUID-heavy tails from backend compiler messages.
  */
+/**
+ * Utterance/listen senza contratto NLP: il compilatore VB segnala "Missing data contract (leaf node)."
+ * Messaggio unico per l'utente; il testo grezzo non va mostrato nel pannello tecnico.
+ */
+export function isMissingDataContractCompilationError(error: CompilationError): boolean {
+  const cat = (error.category ?? '').trim();
+  if (cat !== 'TaskCompilationFailed' && cat !== 'CompilationException') return false;
+  const { body } = splitFlowPrefixedMessage(error.message);
+  return /missing\s+data\s+contract/i.test(body);
+}
+
+export function humanMessageForTaskCompilationFailure(error: CompilationError): string {
+  if (isMissingDataContractCompilationError(error)) {
+    return "Manca il parser per interpretare le risposte dell'utente.";
+  }
+  return 'Questo task non può essere eseguito. Aprilo e controlla la configurazione.';
+}
+
+/** Errori da mostrare nel blocco "dettagli tecnici" (esclusi quelli già coperti dal messaggio umano sopra). */
+export function compilationErrorsForTechnicalDetailPanel(errors: CompilationError[]): CompilationError[] {
+  return errors.filter((e) => !isMissingDataContractCompilationError(e));
+}
+
 export function stripNodeRowReferences(message: string): string {
   let m = message;
   m = m.replace(/\s+in\s+node\s+[0-9a-fA-F-]+(?:\s*,\s*row\s+[0-9a-fA-F-]+)?/gi, '');
@@ -121,10 +144,7 @@ export function formatErrorMessageForReportPanel(
   }
 
   if (cat === 'TaskCompilationFailed' || cat === 'CompilationException') {
-    return withFlowPrefix(
-      flowTag,
-      'Questo task non può essere eseguito. Aprilo e controlla la configurazione.'
-    );
+    return withFlowPrefix(flowTag, humanMessageForTaskCompilationFailure(error));
   }
 
   if (cat === 'NoEntryNodes') {

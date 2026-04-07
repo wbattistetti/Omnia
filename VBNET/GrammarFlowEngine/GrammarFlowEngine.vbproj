@@ -49,6 +49,7 @@
     <Compile Include="Interpreter\CompiledNodeExtensions.vb" />
     <Compile Include="Interpreter\StringExtensions.vb" />
     <Compile Include="Interpreter\MatchResult.vb" />
+    <Compile Include="Interpreter\ParseEvents.vb" />
     <Compile Include="Interpreter\ParseResult.vb" />
     <Compile Include="Interpreter\RegexMatchResult.vb" />
     <Compile Include="Interpreter\GrammarEngine.vb" />

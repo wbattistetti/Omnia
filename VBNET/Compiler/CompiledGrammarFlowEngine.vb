@@ -5,23 +5,20 @@ Imports System.Linq
 Imports GrammarFlowEngine
 Imports Newtonsoft.Json
 Imports TaskEngine
-Imports TaskEngine.UtteranceInterpretation
 
 ''' <summary>
-''' Motore GrammarFlow da contratto NLP: stesso ordine logico del vecchio percorso, ma UniformExtraction + GUID canonici.
+''' Motore GrammarFlow: parse grafo → <see cref="EngineResult"/> (GUID canonici via CanonicalGuidTable).
 ''' </summary>
-Public NotInheritable Class CompiledGrammarFlowUtteranceEngine
-    Implements IUtteranceInterpretationEngine
+Public NotInheritable Class CompiledGrammarFlowEngine
+    Implements IInterpretationEngine
 
     Private ReadOnly _displayName As String
-    Private ReadOnly _task As CompiledUtteranceTask
     Private ReadOnly _contract As CompiledNlpContract
     Private ReadOnly _table As CanonicalGuidTable
     Private ReadOnly _grammarEngine As GrammarEngine
 
     Public Sub New(displayName As String, task As CompiledUtteranceTask, contract As CompiledNlpContract, table As CanonicalGuidTable, grammarFlow As Object)
         _displayName = displayName
-        _task = task
         _contract = contract
         _table = table
         If grammarFlow Is Nothing Then
@@ -35,26 +32,27 @@ Public NotInheritable Class CompiledGrammarFlowUtteranceEngine
         _grammarEngine = New GrammarEngine(grammar, useRegex:=True)
     End Sub
 
-    Public ReadOnly Property DisplayName As String Implements IUtteranceInterpretationEngine.DisplayName
+    Public ReadOnly Property DisplayName As String Implements IInterpretationEngine.DisplayName
         Get
             Return _displayName
         End Get
     End Property
 
-    Public Function Parse(utterance As String) As UtteranceParseResult Implements IUtteranceInterpretationEngine.Parse
-        If String.IsNullOrWhiteSpace(utterance) Then Return UtteranceParseResult.NoMatch()
+    Public Function Parse(utterance As String) As EngineResult Implements IInterpretationEngine.Parse
 
-        Dim input = utterance.Trim()
-        Dim parseResult = _grammarEngine.Parse(input)
-        If parseResult Is Nothing OrElse Not parseResult.Success Then
-            Return UtteranceParseResult.NoMatch()
+        Dim inputTrimmed = If(utterance, String.Empty).Trim()
+        Dim gf = _grammarEngine.Parse(inputTrimmed)
+
+        If gf Is Nothing OrElse gf.ParseEvent <> ParseEvents.Match Then
+            Return EngineResult.NoMatch(inputTrimmed)
         End If
-        If parseResult.Bindings Is Nothing OrElse parseResult.Bindings.Count = 0 Then
-            Return UtteranceParseResult.NoMatch()
+
+        If gf.Bindings Is Nothing OrElse gf.Bindings.Count = 0 Then
+            Return EngineResult.NoMatch(inputTrimmed)
         End If
 
         Dim merged As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
-        For Each binding In parseResult.Bindings.OrderBy(Function(k) k.Key, StringComparer.OrdinalIgnoreCase)
+        For Each binding In gf.Bindings
             Dim slotName = binding.Key
             Dim slotValue = binding.Value
             If slotValue Is Nothing Then Continue For
@@ -64,38 +62,28 @@ Public NotInheritable Class CompiledGrammarFlowUtteranceEngine
                 matchedSubId = slotName
             End If
 
-            Dim s = slotValue.ToString()
-            If merged.ContainsKey(matchedSubId) Then
-                Dim prev = merged(matchedSubId).ToString()
-                merged(matchedSubId) = prev & " " & s
-            Else
-                merged(matchedSubId) = slotValue
-            End If
+            merged(matchedSubId) = slotValue
         Next
 
-        If merged.Count = 0 Then Return UtteranceParseResult.NoMatch()
+        If merged.Count = 0 Then
+            Return EngineResult.NoMatch(inputTrimmed)
+        End If
 
-        Dim u As New UtteranceParseResult With {
-            .Success = True,
-            .MatchedText = input,
-            .Confidence = 1R
-        }
-
+        Dim matches As New List(Of ParserMatch)()
         For Each kv In merged.OrderBy(Function(k) k.Key, StringComparer.OrdinalIgnoreCase)
-            Dim guid = _table.TryResolveBySubMappingKey(kv.Key)
+            Dim guid = _table.TryResolveSlotBindingKey(kv.Key)
             If String.IsNullOrEmpty(guid) Then
                 guid = _table.MainNodeCanonicalGuid
             End If
             Dim valStr = kv.Value.ToString().Trim()
-            u.Extractions.Add(New UniformExtraction With {
-                .TaskInstanceId = _task.Id,
-                .NodeId = guid,
-                .SemanticValue = kv.Value,
-                .LinguisticSpan = valStr
+            matches.Add(New ParserMatch With {
+                .Guid = guid,
+                .Value = valStr,
+                .Linguistic = valStr
             })
         Next
 
-        Return u
+        Return EngineResultFactory.FromMatches(matches, inputTrimmed, inputTrimmed)
     End Function
 
 End Class

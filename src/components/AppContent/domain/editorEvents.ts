@@ -19,6 +19,8 @@ export interface TaskEditorOpenEvent {
   needsTaskBuilder?: boolean;
   needsTaskContextualization?: boolean;
   contextualizationTemplateId?: string;
+  /** Label of the suggested template (embedding match), for UI only. */
+  contextualizationTemplateName?: string;
   taskLabel?: string;
   taskTree?: TaskTree;
   templateId?: string;

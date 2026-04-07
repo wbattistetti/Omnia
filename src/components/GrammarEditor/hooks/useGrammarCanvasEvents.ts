@@ -6,7 +6,7 @@ import { useReactFlow } from 'reactflow';
 import type { NodeChange, Connection } from 'reactflow';
 import { useGrammarStore } from '../core/state/grammarStore';
 import { createGrammarNode, addBinding } from '../core/domain/node';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { GrammarEdge, NodeBinding } from '../types/grammarTypes';
 import { ESTIMATED_NODE_WIDTH, ESTIMATED_NODE_HEIGHT } from '../constants/nodeConstants';
 import { useDrag } from '../context/DragContext';
@@ -103,7 +103,7 @@ export function useGrammarCanvasEvents() {
       if (!connection.source || !connection.target || !grammar) return;
 
       const edge: GrammarEdge = {
-        id: uuidv4(),
+        id: generateSafeGuid(),
         source: connection.source,
         target: connection.target,
         type: 'sequential',
@@ -129,7 +129,7 @@ export function useGrammarCanvasEvents() {
       clearSelection(); // ✅ CRITICAL: Prevent React Flow from auto-selecting new node
 
       const edge: GrammarEdge = {
-        id: uuidv4(),
+        id: generateSafeGuid(),
         source: dragState.sourceNodeId,
         target: newNode.id,
         type: 'sequential',

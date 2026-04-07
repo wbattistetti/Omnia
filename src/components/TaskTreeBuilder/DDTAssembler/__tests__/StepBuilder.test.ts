@@ -1,7 +1,8 @@
 import { buildActionInstance, buildEscalation, buildStepGroup } from '../StepBuilder';
-import { v4 as uuidv4 } from 'uuid';
 
-jest.mock('uuid', () => ({ v4: () => 'mock-uuid' }));
+jest.mock('@utils/idGenerator', () => ({
+  generateSafeGuid: () => 'g_0123456789abcdef0123456789abcd',
+}));
 
 describe('StepBuilder', () => {
   const ddtId = 'ddt_test';
@@ -15,7 +16,7 @@ describe('StepBuilder', () => {
     it('should create a valid Action and translation for noMatch step', () => {
       const { action, translation } = buildActionInstance('noMatch', 'No match!', ddtId, 1, 2);
       expect(action.actionId).toBe('sayMessage');
-      expect(action.parameters[0].value).toContain('runtime.ddt_test.noMatch#2.sayMessage_2_3_mock-uuid.text');
+      expect(action.parameters[0].value).toContain('runtime.ddt_test.noMatch#2.sayMessage_2_3_g_0123456789abcdef0123456789abcd.text');
       expect(translation.value).toBe('No match!');
     });
   });

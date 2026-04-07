@@ -1,16 +1,27 @@
 /**
- * Center-screen choice when a new DDT task has no structure yet: manual build vs AI wizard.
+ * Center-screen choice when a new DDT task has no structure yet: manual build, AI wizard, or adapt from embedding suggestion.
  */
 
 import React from 'react';
-import { PenLine, Wand2 } from 'lucide-react';
+import { PenLine, Sparkles, Wand2 } from 'lucide-react';
 
 export type TaskCreationChoicePanelProps = {
   onChooseManual: () => void;
   onChooseWizard: () => void;
+  /** When set, show third action to start adaptation wizard for this template name. */
+  embeddingMatchTemplateName?: string | null;
+  onChooseAdaptTemplate?: () => void;
 };
 
-export function TaskCreationChoicePanel({ onChooseManual, onChooseWizard }: TaskCreationChoicePanelProps) {
+export function TaskCreationChoicePanel({
+  onChooseManual,
+  onChooseWizard,
+  embeddingMatchTemplateName,
+  onChooseAdaptTemplate,
+}: TaskCreationChoicePanelProps) {
+  const showAdapt =
+    Boolean(embeddingMatchTemplateName?.trim()) && typeof onChooseAdaptTemplate === 'function';
+
   return (
     <div
       style={{
@@ -69,7 +80,7 @@ export function TaskCreationChoicePanel({ onChooseManual, onChooseWizard }: Task
             }}
           >
             <PenLine size={18} color="#fbbf24" />
-            Crea il task manualmente
+            Crea manualmente
           </button>
           <button
             type="button"
@@ -92,6 +103,29 @@ export function TaskCreationChoicePanel({ onChooseManual, onChooseWizard }: Task
             <Wand2 size={18} color="#93c5fd" />
             Usa wizard
           </button>
+          {showAdapt ? (
+            <button
+              type="button"
+              onClick={onChooseAdaptTemplate}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                padding: '14px 18px',
+                borderRadius: 10,
+                border: '1px solid rgba(167, 243, 208, 0.35)',
+                background: 'rgba(16, 185, 129, 0.12)',
+                color: '#d1fae5',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <Sparkles size={18} color="#6ee7b7" />
+              Adatta template trovato ({embeddingMatchTemplateName!.trim()})
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

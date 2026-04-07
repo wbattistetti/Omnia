@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System.Collections.Generic
 Imports TaskEngine
 
 ''' <summary>
@@ -132,10 +133,9 @@ End Enum
 ''' </summary>
 Public Class DialogueState
     ''' <summary>
-    ''' ✅ ExtractedVariables: Triple esplicite (taskInstanceId, nodeId, value)
-    ''' Usato per memorizzare i valori estratti dalle variabili.
+    ''' Valori per GUID slot (CanonicalGuidTable / Match.Guid). Nuovo modello utterance.
     ''' </summary>
-    Public Property ExtractedVariables As List(Of ExtractedVariable)
+    Public Property VariablesBySlotGuid As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
 
     ''' <summary>
     ''' Counters: Escalation counters per node (nodeId -> Counters)
@@ -187,7 +187,6 @@ Public Class DialogueState
     Public Property Mode As DialogueMode
 
     Public Sub New()
-        ExtractedVariables = New List(Of ExtractedVariable)()
         Counters = New Dictionary(Of String, Counters)()
         TurnState = TurnState.Start
         Context = "CollectingMain"
@@ -198,6 +197,17 @@ Public Class DialogueState
         IsCompleted = False
         Mode = DialogueMode.ExecutingStep
     End Sub
+
+    Public Sub SetVariable(slotGuid As String, value As Object)
+        If String.IsNullOrEmpty(slotGuid) Then Throw New ArgumentException(NameOf(slotGuid))
+        VariablesBySlotGuid(slotGuid) = value
+    End Sub
+
+    Public Function GetVariable(slotGuid As String) As Object
+        Dim v As Object = Nothing
+        VariablesBySlotGuid.TryGetValue(slotGuid, v)
+        Return v
+    End Function
 End Class
 
 ''' <summary>

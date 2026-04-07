@@ -109,6 +109,8 @@ export interface ResponseEditorState {
   setIsContextualizing: React.Dispatch<React.SetStateAction<boolean>>;
   contextualizationTemplateId: string | null;
   setContextualizationTemplateId: React.Dispatch<React.SetStateAction<string | null>>;
+  contextualizationTemplateName: string | null;
+  setContextualizationTemplateName: React.Dispatch<React.SetStateAction<string | null>>;
   taskLabel: string;
   setTaskLabel: React.Dispatch<React.SetStateAction<string>>;
   wizardMode: 'library' | 'ai' | null;
@@ -180,6 +182,9 @@ export function useResponseEditorState(): ResponseEditorState {
   const [needsTaskBuilder, setNeedsTaskBuilder] = useState(false);
   const [isContextualizing, setIsContextualizing] = useState(false);
   const [contextualizationTemplateId, setContextualizationTemplateId] = useState<string | null>(null);
+  const [contextualizationTemplateName, setContextualizationTemplateName] = useState<string | null>(null);
+  /** After user picks manual creation, embedding suggestion must not override state (tab meta still has ids). */
+  const [embeddingSuggestionDismissed, setEmbeddingSuggestionDismissed] = useState(false);
   const [taskLabel, setTaskLabel] = useState('');
   const [wizardMode, setWizardMode] = useState<'library' | 'ai' | null>(null);
   const [contextualizationAbortController, setContextualizationAbortController] = useState<AbortController | null>(null);
@@ -253,6 +258,10 @@ export function useResponseEditorState(): ResponseEditorState {
     setIsContextualizing,
     contextualizationTemplateId,
     setContextualizationTemplateId,
+    contextualizationTemplateName,
+    setContextualizationTemplateName,
+    embeddingSuggestionDismissed,
+    setEmbeddingSuggestionDismissed,
     taskLabel,
     setTaskLabel,
     wizardMode,

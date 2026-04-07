@@ -1,14 +1,15 @@
 import { normalizeConstraint, enrichAndTranslateConstraints } from '../ConstraintBuilder';
-import { v4 as uuidv4 } from 'uuid';
 
-jest.mock('uuid', () => ({ v4: () => 'mock-uuid' }));
+jest.mock('@utils/idGenerator', () => ({
+  generateSafeGuid: () => 'g_0123456789abcdef0123456789abcd',
+}));
 
 describe('ConstraintBuilder', () => {
   describe('normalizeConstraint', () => {
     it('should fill missing fields', () => {
       const input = { type: 'required' };
       const norm = normalizeConstraint(input);
-      expect(norm.id).toBe('mock-uuid');
+      expect(norm.id).toBe('g_0123456789abcdef0123456789abcd');
       expect(norm.label).toBe('required');
       expect(norm.prompts).toEqual([]);
       expect(norm.validationScript).toBe('');
@@ -39,12 +40,12 @@ describe('ConstraintBuilder', () => {
       expect(enriched[1].prompts.length).toBe(1);
       // Check that translations were added
       expect(Object.keys(translations)).toEqual([
-        'runtime.ddt_test.constraint#mock-uuid.prompt#1',
-        'runtime.ddt_test.constraint#mock-uuid.prompt#2',
-        'runtime.ddt_test.constraint#mock-uuid.prompt#1'
+        'runtime.ddt_test.constraint#g_0123456789abcdef0123456789abcd.prompt#1',
+        'runtime.ddt_test.constraint#g_0123456789abcdef0123456789abcd.prompt#2',
+        'runtime.ddt_test.constraint#g_0123456789abcdef0123456789abcd.prompt#1'
       ]);
-      expect(translations['runtime.ddt_test.constraint#mock-uuid.prompt#1']).toBe('P3'); // last wins
-      expect(translations['runtime.ddt_test.constraint#mock-uuid.prompt#2']).toBe('P2');
+      expect(translations['runtime.ddt_test.constraint#g_0123456789abcdef0123456789abcd.prompt#1']).toBe('P3'); // last wins
+      expect(translations['runtime.ddt_test.constraint#g_0123456789abcdef0123456789abcd.prompt#2']).toBe('P2');
     });
   });
 });

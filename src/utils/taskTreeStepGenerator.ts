@@ -8,7 +8,7 @@ import { generateStepsSkipDetectType } from '../components/TaskTreeBuilder/orche
 import { buildDDT } from '../components/TaskTreeBuilder/DDTAssembler/DDTBuilder';
 import type { SchemaNode } from '../components/TaskTreeBuilder/TaskTreeWizard/types';
 import type { Step, StepResult } from '../components/TaskTreeBuilder/orchestrator/types';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 
 /**
  * Converte SchemaNode in DataNode per l'orchestrator
@@ -132,7 +132,7 @@ export async function generateAllTaskTreeStepsFromAI(
 
   // Costruisci il TaskTree finale usando buildDDT
   // buildDDT prende: taskTreeId, inputDataNode (singolo nodo), stepResults (array di StepResult)
-  const taskTreeId = uuidv4();
+  const taskTreeId = generateSafeGuid();
   const finalTaskTree = buildDDT(
     taskTreeId,
     mainDataNode, // Singolo nodo principale, non array

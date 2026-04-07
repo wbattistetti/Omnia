@@ -19,6 +19,7 @@ export interface TaskTreeOpenerDependencies {
       label: string;
       taskWizardMode?: 'none' | 'adaptation' | 'full' | 'pending';
       contextualizationTemplateId?: string;
+      contextualizationTemplateName?: string;
       taskLabel?: string;
     }) => void;
   };
@@ -262,6 +263,10 @@ export class TaskTreeOpener {
       this.isPristineStandaloneTask(taskForType as Task);
     const taskWizardModeForOpen = usePendingChoice ? 'pending' : 'none';
 
+    if (usePendingChoice) {
+      console.log('[ResponseEditor] Nessun embedding match — UI standard (manuale / wizard)');
+    }
+
     taskEditorCtx.open({
       id: row.id,  // ALWAYS equals task.id
       type: finalTaskType,
@@ -338,35 +343,29 @@ export class TaskTreeOpener {
       });
 
       if (template) {
-        console.log('[🔍 TaskTreeOpener] ✅ Template trovato, aprendo ResponseEditor in adaptation mode', {
-          templateId: metaTemplateId,
-          templateLabel: template.label || template.name,
-          rowId: row.id,
-          rowText: row.text
-        });
+        const templateDisplayName =
+          (template.label || template.name || metaTemplateId).trim();
+        console.log(
+          `[ResponseEditor] Embedding match trovato: ${templateDisplayName} — opzione adattamento disponibile`
+        );
 
-        // ✅ FIX: NON creare il task qui - lo farà il wizard quando l'utente clicca "Sì"
-        // ✅ FIX: NON clonare gli step qui - lo farà il wizard
-        // ✅ FIX: Solo aprire l'editor con i meta corretti, il wizard eseguirà la pipeline
-
-        // 1. Apri editor con adaptation mode - il wizard farà il resto
         taskEditorCtx.open({
           id: row.id,
           type: metaTaskType,
           label: row.text || '',
-          taskWizardMode: 'adaptation',
+          taskWizardMode: 'pending',
           contextualizationTemplateId: metaTemplateId,
+          contextualizationTemplateName: templateDisplayName,
           taskLabel: row.text || '',
         });
 
-        // 2. Emit event to open ResponseEditor tab
         this.dispatchTaskEditorOpenEvent({
           id: row.id,
           type: metaTaskType,
           label: row.text || '',
-          templateId: metaTemplateId,
-          taskWizardMode: 'adaptation',
+          taskWizardMode: 'pending',
           contextualizationTemplateId: metaTemplateId,
+          contextualizationTemplateName: templateDisplayName,
           taskLabel: row.text || '',
         });
 
@@ -511,6 +510,7 @@ export class TaskTreeOpener {
     templateId?: string;
     taskWizardMode?: 'none' | 'adaptation' | 'full' | 'pending';
     contextualizationTemplateId?: string;
+    contextualizationTemplateName?: string;
     taskLabel?: string;
   }): void {
     const flowId = String(this.deps.flowCanvasId ?? '').trim();

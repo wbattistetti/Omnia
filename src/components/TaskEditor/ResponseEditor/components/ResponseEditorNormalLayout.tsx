@@ -121,6 +121,8 @@ export interface ResponseEditorNormalLayoutProps {
 
   /** Starts full wizard (empty-task choice panel). */
   onStartWizard?: () => void;
+  /** User picked "Adatta template trovato" from pending panel. */
+  onChooseAdaptTemplate?: () => void;
 
   // ✅ NEW: Props per Wizard (quando mainViewMode === 'wizard')
   wizardProps?: {
@@ -217,6 +219,7 @@ export function ResponseEditorNormalLayout({
   viewMode,
   onViewModeChange,
   onStartWizard,
+  onChooseAdaptTemplate,
 }: ResponseEditorNormalLayoutProps) {
   // ✅ NEW: Get data from Context
   const { taskTree, taskMeta: task, currentProjectId } = useResponseEditorContext();
@@ -523,6 +526,7 @@ export function ResponseEditorNormalLayout({
           viewMode={viewMode}
           onViewModeChange={onViewModeChange}
           onStartWizard={onStartWizard}
+          onChooseAdaptTemplate={onChooseAdaptTemplate}
         />
         <PanelContainer
           leftPanelMode={leftPanelMode}

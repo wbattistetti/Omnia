@@ -22,6 +22,7 @@ import getIconComponent from '@components/TaskEditor/ResponseEditor/icons';
 import {
   splitFlowPrefixedMessage,
   findEdgeLabelInWorkspace,
+  humanMessageForTaskCompilationFailure,
   stripNodeRowReferences,
 } from './errorReportDisplay';
 import { compilationErrorFixKey } from '@utils/compilationErrorFix';
@@ -234,9 +235,7 @@ export function humanIssuesForError(
     }
     case 'TaskCompilationFailed':
     case 'CompilationException':
-      return bind([
-        'Questo task non può essere eseguito. Aprilo e controlla la configurazione.',
-      ]);
+      return bind([humanMessageForTaskCompilationFailure(error)]);
     case 'ConditionNotFound':
     case 'ConditionMissingScript':
     case 'ConditionHasNoScript':

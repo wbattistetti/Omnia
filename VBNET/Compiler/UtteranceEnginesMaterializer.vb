@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+
 Imports System.Collections.Generic
 Imports System.Linq
 Imports System.Text.RegularExpressions
@@ -7,41 +8,48 @@ Imports Compiler.DTO.IDE
 Imports TaskEngine
 
 ''' <summary>
-''' Dopo deserializzazione JSON, <see cref="CompiledUtteranceTask.Engines"/> è Nothing (<see cref="Newtonsoft.Json.JsonIgnore"/>).
-''' Ripopola i motori da NlpContract + CanonicalGuidTable come in fase di compilazione.
+''' Ricostruzione deterministica dei motori da <see cref="CompiledUtteranceTask.NlpContract"/> e
+''' <see cref="CompiledUtteranceTask.CanonicalGuidTable"/> (persistiti nel JSON). Nessun stato runtime esterno.
 ''' </summary>
-Public Module UtteranceTaskEnginesRehydration
+Public Module UtteranceEnginesMaterializer
 
-    ''' <summary>
-    ''' Idempotente: se <paramref name="Engines"/> è già valorizzato, non fa nulla. Ricorsivo su <see cref="CompiledUtteranceTask.SubTasks"/>.
-    ''' </summary>
-    Public Sub EnsureEngines(root As CompiledUtteranceTask)
+    Public Sub MaterializeTree(root As CompiledUtteranceTask)
         If root Is Nothing Then Return
-        EnsureEnginesRecursive(root)
+        MaterializeRecursive(root)
     End Sub
 
-    Private Sub EnsureEnginesRecursive(task As CompiledUtteranceTask)
-        If task.NlpContract Is Nothing Then Return
+    Private Sub MaterializeRecursive(task As CompiledUtteranceTask)
+        Materialize(task)
+        If task.SubTasks Is Nothing Then Return
+        For Each child As CompiledUtteranceTask In task.SubTasks
+            MaterializeRecursive(child)
+        Next
+    End Sub
 
-        If task.Engines Is Nothing OrElse task.Engines.Count = 0 Then
-            EnsureRegexCompiledForRuntime(task.NlpContract)
+    ''' <summary>Imposta <see cref="CompiledUtteranceTask._enginesRuntime"/> da solo contratto serializzato.</summary>
+    Public Sub Materialize(task As CompiledUtteranceTask)
+        If task Is Nothing Then Return
+        If task._enginesRuntime IsNot Nothing Then Return
 
-            Dim table = task.CanonicalGuidTable
-            If table Is Nothing Then
-                table = BuildDefaultCanonicalGuidTable(task)
-            End If
-
-            Dim ide = MirrorNlpContractFromCompiled(task.NlpContract)
-            If ide.Engines Is Nothing OrElse ide.Engines.Count = 0 Then Return
-
-            task.Engines = InterpretationEngineBinding.CreateEngines(task, task.NlpContract, ide, table)
+        If task.NlpContract Is Nothing Then
+            task._enginesRuntime = New List(Of IInterpretationEngine)()
+            Return
         End If
 
-        If task.SubTasks IsNot Nothing Then
-            For Each child As CompiledUtteranceTask In task.SubTasks
-                EnsureEnginesRecursive(child)
-            Next
+        CompileRegexFromSerializedPatterns(task.NlpContract)
+
+        Dim table = task.CanonicalGuidTable
+        If table Is Nothing Then
+            table = BuildDefaultCanonicalGuidTable(task)
         End If
+
+        Dim ide = MirrorNlpContractFromCompiled(task.NlpContract)
+        If ide.Engines Is Nothing OrElse ide.Engines.Count = 0 Then
+            task._enginesRuntime = New List(Of IInterpretationEngine)()
+            Return
+        End If
+
+        task._enginesRuntime = InterpretationEngineBinding.CreateEngines(task, task.NlpContract, ide, table)
     End Sub
 
     Private Function MirrorNlpContractFromCompiled(c As CompiledNlpContract) As NLPContract
@@ -54,9 +62,6 @@ Public Module UtteranceTaskEnginesRehydration
         }
     End Function
 
-    ''' <summary>
-    ''' Tabella canonica di fallback se il JSON non includeva <see cref="CompiledUtteranceTask.CanonicalGuidTable"/> (retrocompatibilità).
-    ''' </summary>
     Private Function BuildDefaultCanonicalGuidTable(task As CompiledUtteranceTask) As CanonicalGuidTable
         Dim mainId = If(Not String.IsNullOrEmpty(task.NodeId), task.NodeId, task.Id)
         Dim t As New CanonicalGuidTable With {.MainNodeCanonicalGuid = mainId}
@@ -73,10 +78,8 @@ Public Module UtteranceTaskEnginesRehydration
         Return t
     End Function
 
-    ''' <summary>
-    ''' Regex non serializzate nel JSON: ricompila da <see cref="NLPEngine.Patterns"/>.
-    ''' </summary>
-    Friend Sub EnsureRegexCompiledForRuntime(contract As CompiledNlpContract)
+    ''' <summary>Pattern regex nel JSON (<see cref="NLPEngine.Patterns"/>); oggetti <see cref="Regex"/> ricostruiti qui.</summary>
+    Public Sub CompileRegexFromSerializedPatterns(contract As CompiledNlpContract)
         If contract Is Nothing Then Return
         If contract.CompiledMainRegex IsNot Nothing Then Return
 

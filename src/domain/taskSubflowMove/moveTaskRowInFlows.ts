@@ -3,7 +3,7 @@
  * Updates ReactFlow node shape: node.data.rows[].
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { WorkspaceState } from '@flows/FlowTypes';
 import { logSubflowCanvasDebug } from '@utils/subflowCanvasDebug';
 
@@ -136,7 +136,7 @@ export function appendRowToFlowNode(
 
   if (nodesArr.length === 0) {
     const shell: Record<string, unknown> = {
-      id: uuidv4(),
+      id: generateSafeGuid(),
       type: 'custom',
       position: { x: 120, y: 120 },
       data: {

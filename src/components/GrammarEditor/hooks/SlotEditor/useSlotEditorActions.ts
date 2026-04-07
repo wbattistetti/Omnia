@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import { useGrammarStore } from '../../core/state/grammarStore';
 import {
   createSemanticSlot,
@@ -59,7 +59,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'add',
         entityType: 'slot',
         entityId: slot.id,
@@ -97,7 +97,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'update',
         entityType: 'slot',
         entityId: slotId,
@@ -128,7 +128,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'delete',
         entityType: 'slot',
         entityId: slotId,
@@ -162,7 +162,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'add',
         entityType: 'semantic-set',
         entityId: set.id,
@@ -200,7 +200,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'update',
         entityType: 'semantic-set',
         entityId: setId,
@@ -231,7 +231,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'delete',
         entityType: 'semantic-set',
         entityId: setId,
@@ -274,7 +274,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'update',
         entityType: 'semantic-set',
         entityId: setId,
@@ -325,7 +325,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'update',
         entityType: 'semantic-value',
         entityId: valueId,
@@ -374,7 +374,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'update',
         entityType: 'semantic-value',
         entityId: valueId,
@@ -412,7 +412,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'delete',
         entityType: 'semantic-value',
         entityId: valueId,
@@ -464,7 +464,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'update',
         entityType: 'linguistic-value',
         entityId: valueId,
@@ -507,7 +507,7 @@ export function useSlotEditorActions(
 
       // Record operation for undo
       recordOperation({
-        id: uuidv4(),
+        id: generateSafeGuid(),
         type: 'update',
         entityType: 'semantic-value',
         entityId: valueId,

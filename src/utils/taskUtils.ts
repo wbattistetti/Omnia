@@ -2,7 +2,7 @@ import type { Task, TaskTree, TaskTreeNode, MaterializedStep } from '../types/ta
 import { DialogueTaskService } from '../services/DialogueTaskService';
 import { TaskType, templateIdToTaskType } from '../types/taskTypes';
 import { StepType } from '../types/stepTypes';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import { isUuidString, makeTranslationKey, parseTranslationKey, translationKeyFromStoredValue } from './translationKeys';
 import { buildMinimalStandaloneTaskTree, buildStandaloneTaskTreeView } from './buildStandaloneTaskTreeView';
 import { hasValidTemplateIdRef } from './taskKind';
@@ -342,7 +342,7 @@ export async function ensureTemplateExists(
   }
 
   // ✅ Crea nuovo template nel progetto
-  const newTemplateId = uuidv4();
+  const newTemplateId = generateSafeGuid();
 
   // Costruisci struttura template da taskTree o da instance (legacy)
   // ✅ IMPORTANTE: Local Template NON deve avere campi Factory (dataContract, valueSchema, subTasksIds)
@@ -467,10 +467,10 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
 
   const cloned = {
     ...escalation,
-    escalationId: escalation.escalationId ? `e_${uuidv4()}` : undefined,
+    escalationId: escalation.escalationId ? `e_${generateSafeGuid()}` : undefined,
     tasks: (escalation.tasks || []).map((task: any) => {
       const oldGuid = task.id;
-      const newGuid = uuidv4();
+      const newGuid = generateSafeGuid();
       if (oldGuid) {
         guidMapping.set(oldGuid, newGuid);
       }
@@ -494,14 +494,14 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
           }
           const parsed = parseTranslationKey(textValue);
           if (parsed?.kind === 'task') {
-            const newTextUuid = uuidv4();
+            const newTextUuid = generateSafeGuid();
             const newKey = makeTranslationKey('task', newTextUuid);
             guidMapping.set(textValue, newKey);
             return { ...param, value: newKey };
           }
           const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           if (GUID_REGEX.test(textValue)) {
-            const newTextUuid = uuidv4();
+            const newTextUuid = generateSafeGuid();
             const newKey = makeTranslationKey('task', newTextUuid);
             guidMapping.set(makeTranslationKey('task', textValue), newKey);
             return { ...param, value: newKey };

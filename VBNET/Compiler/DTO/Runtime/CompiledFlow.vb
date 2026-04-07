@@ -7,7 +7,7 @@ Imports DTO.Runtime
 ''' Flow Compilation Result: Output of FlowCompiler
 ''' Tipi del mondo Runtime - usati durante l'esecuzione
 ''' </summary>
-Public Class FlowCompilationResult
+Public Class CompiledFlow
     ''' <summary>
     ''' List of TaskGroups (uno per nodo)
     ''' </summary>

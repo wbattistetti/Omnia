@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Connection, Node, Edge } from 'reactflow';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { FlowNode, EdgeData } from '../types/flowTypes';
 import { DEFAULT_LINK_STYLE } from '../types/flowTypes';
 import { FlowStateBridge } from '../../../services/FlowStateBridge';
@@ -31,7 +31,7 @@ export function useFlowConnect(
       return;
     }
 
-    const id = uuidv4();
+    const id = generateSafeGuid();
     setEdges((eds) => [...eds, {
       id,
       source,

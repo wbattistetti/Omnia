@@ -508,6 +508,8 @@ export default function TaskTreeHostAdapter({
         (taskMeta as any).taskWizardMode ??
         (baseTask as any).taskWizardMode,
       contextualizationTemplateId: (taskMeta as any).contextualizationTemplateId ?? (baseTask as any).contextualizationTemplateId,
+      contextualizationTemplateName:
+        (taskMeta as any).contextualizationTemplateName ?? (baseTask as any).contextualizationTemplateName,
       taskLabel: (taskMeta as any).taskLabel ?? (baseTask as any).taskLabel,
       needsTaskContextualization: (taskMeta as any).needsTaskContextualization ?? (baseTask as any).needsTaskContextualization,
       needsTaskBuilder: (taskMeta as any).needsTaskBuilder ?? (baseTask as any).needsTaskBuilder,

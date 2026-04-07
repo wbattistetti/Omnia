@@ -25,6 +25,8 @@ export type TaskMeta = {
   needsTaskContextualization?: boolean;
   needsTaskBuilder?: boolean;
   contextualizationTemplateId?: string;
+  /** Display name for "Adatta template trovato" (embedding suggestion only). */
+  contextualizationTemplateName?: string;
   taskLabel?: string;
 };
 

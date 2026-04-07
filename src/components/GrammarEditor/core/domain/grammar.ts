@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { Grammar, GrammarNode, GrammarEdge } from '../../types/grammarTypes';
 
 /**
@@ -10,7 +10,7 @@ import type { Grammar, GrammarNode, GrammarEdge } from '../../types/grammarTypes
  */
 export function createGrammar(name: string): Grammar {
   return {
-    id: uuidv4(),
+    id: generateSafeGuid(),
     name,
     nodes: [],
     edges: [],

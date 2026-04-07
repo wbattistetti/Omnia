@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { IntentMessages } from '@responseEditor/components/IntentMessagesBuilder';
 import { TaskType, templateIdToTaskType } from '@types/taskTypes';
 
@@ -39,7 +39,7 @@ export function saveIntentMessagesToTaskTree(
 
   // ✅ Assicurati che nodes[0] esista (per struttura dati)
   if (!Array.isArray(updated.nodes) || updated.nodes.length === 0) {
-    const firstMainId = uuidv4();
+    const firstMainId = generateSafeGuid();
     updated.nodes = [{
       id: firstMainId,
       templateId: firstMainId,
@@ -50,7 +50,7 @@ export function saveIntentMessagesToTaskTree(
   }
 
   const firstMain = updated.nodes[0];
-  const firstMainId = firstMain.id || uuidv4();
+  const firstMainId = firstMain.id || generateSafeGuid();
   if (!firstMain.id) {
     firstMain.id = firstMainId;
   }
@@ -66,8 +66,8 @@ export function saveIntentMessagesToTaskTree(
   // ✅ FASE 1.1: Helper per creare una escalation con un messaggio (GUID → traduzione)
   const createEscalation = (text: string): any => {
     // ✅ STEP 1: Genera GUID per la chiave di traduzione
-    const textKey = uuidv4();
-    const taskId = uuidv4();
+    const textKey = generateSafeGuid();
+    const taskId = generateSafeGuid();
     const templateId = 'sayMessage';
 
     // ✅ STEP 2: Salva traduzione
@@ -82,7 +82,7 @@ export function saveIntentMessagesToTaskTree(
     }
 
     return {
-      escalationId: uuidv4(),
+      escalationId: generateSafeGuid(),
       tasks: [
         {
           id: taskId,                 // ✅ Standard: id (GUID univoco)

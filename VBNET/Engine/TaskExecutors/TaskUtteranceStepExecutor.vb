@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System.Collections.Generic
 Imports Compiler
 Imports TaskEngine
 Imports Newtonsoft.Json
@@ -108,7 +109,8 @@ Public Class TaskUtteranceStepExecutor
 
             ' ✅ STATELESS: ProcessTurn è pura, non richiede resolveTranslation
             ' I TextKey verranno risolti da FlowOrchestrator.messageCallback (SINGLE POINT OF TRUTH)
-            result = TaskUtteranceStepExecutor.ProcessTurn(dialogueState, utterance)
+            Dim staticCluster = New List(Of CompiledUtteranceTask) From {utteranceTask}
+            result = TaskUtteranceStepExecutor.ProcessTurn(dialogueState, utterance, staticCluster, utteranceTask)
 
             ' ✅ Emit TextKey via messageCallback - FlowOrchestrator li risolverà
             If result.Messages IsNot Nothing AndAlso result.Messages.Count > 0 Then
@@ -193,7 +195,17 @@ Public Class TaskUtteranceStepExecutor
     ''' ✅ STATELESS: Non richiede resolveTranslation. Restituisce TextKey, non testo risolto.
     ''' La risoluzione avverrà nei chiamanti (FlowOrchestrator.messageCallback, TaskSessionHandlers).
     ''' </summary>
-    Public Shared Function ProcessTurn(state As DialogueState, utterance As String) As DialogueTurnResult
+    ''' <param name="staticCluster">Cluster statico (main + subflow, dedup); grafo compilato.</param>
+    ''' <param name="liveCompiledRoot">Radice compilata viva (motori); usata per risolvere il task corrente nell'albero.</param>
+    Public Shared Function ProcessTurn(
+        state As DialogueState,
+        utterance As String,
+        staticCluster As IReadOnlyList(Of CompiledUtteranceTask),
+        liveCompiledRoot As CompiledUtteranceTask
+    ) As DialogueTurnResult
+
+        If staticCluster Is Nothing Then Throw New ArgumentNullException(NameOf(staticCluster))
+        If liveCompiledRoot Is Nothing Then Throw New ArgumentNullException(NameOf(liveCompiledRoot))
 
         ' Cast CurrentTask and RootTask to CompiledUtteranceTask (they are Object in DialogueState to avoid Common -> Compiler dependency)
         Dim currentTask = DirectCast(state.CurrentTask, CompiledUtteranceTask)
@@ -207,12 +219,28 @@ Public Class TaskUtteranceStepExecutor
             Case DialogueMode.ExecutingStep
 
                 Dim stepObj = ProcessTurnHelpers.GetStep(currentTask, state.CurrentStepType)
-                If ProcessTurnHelpers.IsFilled(currentTask, state.ExtractedVariables) Then
-                    ' Step senza input → transizione immediata allo step successivo
-                    Dim nextStep = ProcessTurnHelpers.GetNextStep(currentTask, stepObj)  'OSSERVAZIONE: In realtà la navigazione Cioè la decisione del prossimo step è Implementata in questa funzione non è esternalizzata quindi questo gap forse non serve più
-
-                    state.CurrentStepType = nextStep.Type
-                    state.Mode = DialogueMode.ExecutingStep
+                If currentTask.IsFilled(state) Then
+                    ' Dati già soddisfatti (fill da turno precedente, mixed-initiative su altro task, o VariableStore).
+                    ' NON usare GetNextStep: oggi restituisce ancora lo stesso step (stub) e si crea un loop infinito
+                    ' che ripete il messaggio Start (es. "Cognome?") a ogni AutoAdvance.
+                    If state.CurrentStepType = DialogueStepType.Start Then
+                        If currentTask.StepExists(DialogueStepType.Confirmation) Then
+                            state.CurrentStepType = DialogueStepType.Confirmation
+                        ElseIf currentTask.StepExists(DialogueStepType.Success) Then
+                            state.CurrentStepType = DialogueStepType.Success
+                        Else
+                            state.IsCompleted = True
+                            state.Mode = DialogueMode.Completed
+                        End If
+                    Else
+                        Dim nextStep = ProcessTurnHelpers.GetNextStep(currentTask, stepObj)
+                        If nextStep IsNot Nothing Then
+                            state.CurrentStepType = nextStep.Type
+                        End If
+                    End If
+                    If state.Mode <> DialogueMode.Completed Then
+                        state.Mode = DialogueMode.ExecutingStep
+                    End If
                 Else
                     state.Mode = DialogueMode.WaitingForUtterance
                 End If
@@ -227,51 +255,45 @@ Public Class TaskUtteranceStepExecutor
                     state.Mode = DialogueMode.ExecutingStep
                 Else
                     ' Input ricevuto → parsing
-                    Dim parseResult = ProcessTurnHelpers.RunContractsInCascade(
-                            currentTask, utterance, state.CurrentStepType
-                        )
+                    If state.CurrentStepType = DialogueStepType.Confirmation Then
+                        Dim parseResult = ProcessTurnHelpers.RunContractsInCascade(
+                                currentTask, utterance, state.CurrentStepType
+                            )
 
-                    Select Case parseResult.Status
+                        Select Case parseResult.Status
 
-                        Case ParseStatus.Match
-                            ProcessTurnHelpers.FillTaskFromParseResult(parseResult, state)
+                            Case ParseStatus.Match
+                                ProcessTurnHelpers.FillTaskFromParseResult(parseResult, state)
+                                AdvanceUtteranceStateAfterExtractedData(state, currentTask, rootTask)
 
-                            'c'è stato un match potrebbe essere per il task corrente o per una altro task. quindi devo: se sono in subtask tornare altask parent e rivedere qua'è il porssimo da fillare se non c'è nente da fillare allora devo o conferemare o andare al success .
+                            Case ParseStatus.NoMatch
+                                EnsureCounter(state, currentTask.Id)
+                                state.Counters(currentTask.Id).NoMatch += 1
+                                state.CurrentStepType = DialogueStepType.NoMatch
+                                state.Mode = DialogueMode.ExecutingStep
 
-                            Dim mainTask = ProcessTurnHelpers.MainTask(currentTask, rootTask)
-                            If ProcessTurnHelpers.IsFilled(mainTask, state.ExtractedVariables) Then
-                                ' Main task completato → gestisci Confirmation o Success
-                                If currentTask.StepExists(DialogueStepType.Confirmation) Then
-                                    state.CurrentStepType = DialogueStepType.Confirmation
-                                ElseIf currentTask.StepExists(DialogueStepType.Success) Then
-                                    state.CurrentStepType = DialogueStepType.Success
-                                Else
-                                    ' Main task completato senza Confirmation/Success → completa
-                                    state.IsCompleted = True
-                                    state.Mode = DialogueMode.Completed
-                                End If
-                            Else
-                                ' Main task non ancora completato → vai al prossimo subtask non riempito
-                                SetStateToTheFirstUnfilledSubTask(state)
-                            End If
+                            Case ParseStatus.NoInput
+                                EnsureCounter(state, currentTask.Id)
+                                state.Counters(currentTask.Id).NoInput += 1
+                                state.CurrentStepType = DialogueStepType.NoInput
+                                state.Mode = DialogueMode.ExecutingStep
 
-                        Case ParseStatus.NoMatch
+                            Case ParseStatus.PartialMatch, ParseStatus.MatchedButInvalid
+                                state.Mode = DialogueMode.ExecutingStep
+
+                        End Select
+                    Else
+                        Dim activeCluster = MixedInitiativeCluster.GetActiveCluster(staticCluster, state, liveCompiledRoot, currentTask)
+                        Dim mi = MixedInitiative.Parse(utterance, state, activeCluster)
+                        If Not mi.HasMatches Then
                             EnsureCounter(state, currentTask.Id)
                             state.Counters(currentTask.Id).NoMatch += 1
                             state.CurrentStepType = DialogueStepType.NoMatch
                             state.Mode = DialogueMode.ExecutingStep
-
-                        Case ParseStatus.NoInput
-                            EnsureCounter(state, currentTask.Id)
-                            state.Counters(currentTask.Id).NoInput += 1
-                            state.CurrentStepType = DialogueStepType.NoInput
-                            state.Mode = DialogueMode.ExecutingStep
-
-                        Case ParseStatus.PartialMatch, ParseStatus.MatchedButInvalid
-                            ' Rimani nello stesso task/step, ma torna in ExecutingStep
-                            state.Mode = DialogueMode.ExecutingStep
-
-                    End Select
+                        Else
+                            AdvanceUtteranceStateAfterExtractedData(state, currentTask, rootTask)
+                        End If
+                    End If
                 End If
 
 
@@ -293,11 +315,11 @@ Public Class TaskUtteranceStepExecutor
             ' ✅ NEW: Se siamo in Success step e il task è filled, completa il task
             ' Success step non è interattivo, quindi dopo aver eseguito i task, completa immediatamente
             If state.CurrentStepType = DialogueStepType.Success AndAlso
-               ProcessTurnHelpers.IsFilled(currentTask, state.ExtractedVariables) Then
+               currentTask.IsFilled(state) Then
                 state.IsCompleted = True
                 state.Mode = DialogueMode.Completed
                 Console.WriteLine($"[ProcessTurn] ✅ Task {currentTask.Id} completed after Success step")
-            ElseIf Not ProcessTurnHelpers.IsFilled(currentTask, state.ExtractedVariables) OrElse
+            ElseIf Not currentTask.IsFilled(state) OrElse
                    state.CurrentStepType = DialogueStepType.Confirmation Then
                 state.Mode = DialogueMode.WaitingForUtterance
             End If
@@ -306,6 +328,25 @@ Public Class TaskUtteranceStepExecutor
         Return New DialogueTurnResult(renderedTasks, state)
 
     End Function
+
+    ''' <summary>
+    ''' Dopo un match (Fill classico o mixed-initiative), aggiorna Confirmation/Success/subtask.
+    ''' </summary>
+    Private Shared Sub AdvanceUtteranceStateAfterExtractedData(state As DialogueState, currentTask As CompiledUtteranceTask, rootTask As CompiledUtteranceTask)
+        Dim mainTask = ProcessTurnHelpers.MainTask(currentTask, rootTask)
+        If mainTask.IsFilled(state) Then
+            If currentTask.StepExists(DialogueStepType.Confirmation) Then
+                state.CurrentStepType = DialogueStepType.Confirmation
+            ElseIf currentTask.StepExists(DialogueStepType.Success) Then
+                state.CurrentStepType = DialogueStepType.Success
+            Else
+                state.IsCompleted = True
+                state.Mode = DialogueMode.Completed
+            End If
+        Else
+            SetStateToTheFirstUnfilledSubTask(state)
+        End If
+    End Sub
 
     ''' <summary>
     ''' Helper: Inizializza counter per un task se non esiste
@@ -326,7 +367,7 @@ Public Class TaskUtteranceStepExecutor
         Dim rootTask = DirectCast(state.RootTask, CompiledUtteranceTask)
         If rootTask Is Nothing Then Throw New InvalidOperationException("RootTask must be CompiledUtteranceTask")
 
-        Dim nextSubTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(rootTask, state.ExtractedVariables)
+        Dim nextSubTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(rootTask, state)
         If nextSubTask IsNot Nothing Then
             state.CurrentTask = nextSubTask
             state.CurrentStepType = DialogueStepType.Start

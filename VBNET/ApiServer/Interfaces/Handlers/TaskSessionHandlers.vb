@@ -377,7 +377,9 @@ Namespace ApiServer.Handlers
                     End If
 
                     ' ✅ STATELESS: ProcessTurn restituisce TextKey (non testo risolto)
-                    Dim result = TaskUtteranceStepExecutor.ProcessTurn(dialogueState, "")
+                    ' Chat task session: un solo task di riga compilato (TaskSession non ha FlowCompilationResult completo).
+                    Dim staticCluster As New List(Of CompiledUtteranceTask) From {compiledTask}
+                    Dim result = TaskUtteranceStepExecutor.ProcessTurn(dialogueState, "", staticCluster, compiledTask)
 
                     ' ✅ Emetti messaggi via SSE (risolvi TextKey qui)
                     Dim processTurnEmitter As EventEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
@@ -741,7 +743,7 @@ Namespace ApiServer.Handlers
                     If dialogueContext Is Nothing Then
                         dialogueContext = New TaskEngine.Orchestrator.DialogueContext() With {
                             .TaskId = compiledTask.Id,
-                            .dialogueState = dialogueState,
+                            .DialogueState = dialogueState,
                             .CurrentData = Nothing,
                             .LastTurnEvent = Nothing
                         }
@@ -770,7 +772,7 @@ Namespace ApiServer.Handlers
                                                                         ' ✅ MODELLO SEMPLICE: Leggi solo da Redis (dopo reset contiene solo sotto-grafo)
                                                                         If translationRepository IsNot Nothing Then
                                                                             Try
-                                                                        Dim translation = translationRepository.GetTranslation(session.ProjectId, session.Locale, textKey)
+                                                                                Dim translation = translationRepository.GetTranslation(session.ProjectId, session.Locale, textKey)
                                                                                 If Not String.IsNullOrEmpty(translation) Then
                                                                                     Console.WriteLine($"[TaskSessionHandlers] ✅ Using translation from REDIS for key '{textKey}': '{translation.Substring(0, Math.Min(50, translation.Length))}'")
                                                                                     Return translation
@@ -794,9 +796,12 @@ Namespace ApiServer.Handlers
 
                 ' ✅ STATELESS: Chiama ProcessTurn con l'input dell'utente (restituisce TextKey)
                 ' ✅ RIMOSSO: resolveTranslation - non più necessario (stateless)
+                Dim staticClusterInput As New List(Of CompiledUtteranceTask) From {compiledTask}
                 Dim processTurnResult = TaskUtteranceStepExecutor.ProcessTurn(
                     dialogueState,
-                    request.Input
+                    request.Input,
+                    staticClusterInput,
+                    compiledTask
                 )
 
                 ' ✅ Salva il nuovo DialogueState (SaveDialogueContext salva automaticamente su Redis)

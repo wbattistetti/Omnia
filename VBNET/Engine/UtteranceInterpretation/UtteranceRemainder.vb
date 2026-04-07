@@ -1,13 +1,11 @@
 Option Strict On
 Option Explicit On
 
-Namespace UtteranceInterpretation
-
-    ''' <summary>
-    ''' Consumo deterministico dell'utterance: rimuove la prima occorrenza di matchedText (case-sensitive al testo dato).
-    ''' Strategie alternative (regex, span) possono essere aggiunte in altre funzioni senza toccare il motore legacy.
-    ''' </summary>
-    Public Module UtteranceRemainder
+''' <summary>
+''' Consumo deterministico dell'utterance: rimuove la prima occorrenza di matchedText (case-sensitive al testo dato).
+''' Strategie alternative (regex, span) possono essere aggiunte in altre funzioni senza toccare il motore legacy.
+''' </summary>
+Public Module UtteranceRemainder
 
         ''' <summary>
         ''' Rimuove una sola occorrenza di matched dalla stringa full, poi Trim.
@@ -26,5 +24,3 @@ Namespace UtteranceInterpretation
         End Function
 
     End Module
-
-End Namespace

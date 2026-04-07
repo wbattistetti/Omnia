@@ -1,7 +1,7 @@
 import { buildStepGroup } from './StepBuilder';
 import { StepGroup } from './types';
 import { enrichAndTranslateConstraints } from './ConstraintBuilder';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import { buildStepsWithSubData, SubDataStepMessages } from './buildStepMessagesFromResults';
 import nlpTypesConfig from '../../../../config/nlp-types.json';
 import type { Kind } from '../../DialogueDataEngine/model/ddt.v2.types';
@@ -103,7 +103,7 @@ export function builddataNodeWithSubData(
     subData = dataNode.subData.map((sub: any) => {
       // Always set label and id for subData
       sub.label = sub.label || sub.variable || sub.name || 'Subdata';
-      sub.id = sub.id || uuidv4();
+      sub.id = sub.id || generateSafeGuid();
 
       // Get specific stepMessages for this subData
       const subDataName = (sub.name || sub.variable || sub.label || '').toLowerCase(); // Normalize to lowercase
@@ -139,7 +139,7 @@ export function builddataNodeWithSubData(
   };
   // Always set label, id, and icon for data
   data.label = dataNode.label || dataNode.variable || dataNode.name || 'Subdata';
-  data.id = dataNode.id || uuidv4();
+  data.id = dataNode.id || generateSafeGuid();
   if (dataNode.variable) data.variable = dataNode.variable;
   if (dataNode.icon) data.icon = dataNode.icon;  // ✅ Preserve icon from AI
 

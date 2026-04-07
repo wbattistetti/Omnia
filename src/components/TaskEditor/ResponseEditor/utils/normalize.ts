@@ -1,5 +1,5 @@
 import type { Task } from '@types/taskTypes';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 
 /** Factory palette entries use id as template reference when templateId is omitted */
 function resolveTemplateIdFromCatalogTask(task: any): string | null {
@@ -50,7 +50,7 @@ export const createTask = (item: any): Task => {
 
   // ✅ Use pre-generated id if provided (for idempotency), otherwise generate new one
   // The id identifies the specific task instance in the escalation
-  const id = item?._generatedTaskId || uuidv4();
+  const id = item?._generatedTaskId || generateSafeGuid();
 
   // ✅ For backward compatibility, store old format in params
   // But Task is now complete, not a lightweight reference

@@ -16,7 +16,7 @@ import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { useFontContext } from '@context/FontContext';
 import { useAIProvider } from '@context/AIProviderContext';
 import { useDDTTranslations } from '@hooks/useDDTTranslations';
-import { useTaskTreeVersion, useTaskTreeFromStore } from '@responseEditor/core/state';
+import { useTaskTreeStore, useTaskTreeVersion, useTaskTreeFromStore } from '@responseEditor/core/state';
 import { useResponseEditorState } from '@responseEditor/hooks/useResponseEditorState';
 import { useResponseEditorRefs } from '@responseEditor/hooks/useResponseEditorRefs';
 import { useNodeSelection, useNodeFinder, useNodeLoading } from '@responseEditor/features/node-editing/hooks';
@@ -161,6 +161,10 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     setIsContextualizing,
     contextualizationTemplateId,
     setContextualizationTemplateId,
+    contextualizationTemplateName,
+    setContextualizationTemplateName,
+    embeddingSuggestionDismissed,
+    setEmbeddingSuggestionDismissed,
     taskLabel,
     setTaskLabel,
     wizardMode,
@@ -204,6 +208,7 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     task?.type,
     (task as any)?.taskWizardMode,
     (task as any)?.contextualizationTemplateId,
+    (task as any)?.contextualizationTemplateName,
     (task as any)?.needsTaskContextualization,
     (task as any)?.needsTaskBuilder,
     (task as any)?.taskLabel,
@@ -235,10 +240,13 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
         setTaskWizardMode('none');
         setContextualizationTemplateId(null);
         setTaskLabel('');
+        setEmbeddingSuggestionDismissed(false);
         previousTaskIdRef.current = undefined;
       }
       return;
     }
+
+    setEmbeddingSuggestionDismissed(false);
 
     // ✅ Inizializza SOLO per nuovo task.id
     const taskMetaRaw = isTaskMeta(task) ? task : getTaskMeta(task);
@@ -250,15 +258,14 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
         ? { ...taskMetaRaw, taskWizardMode: (repoTask as { taskWizardMode: TaskWizardMode }).taskWizardMode }
         : taskMetaRaw;
 
-      // Wizard mode: adaptation auto-starts when a template is assigned;
-      // full mode is no longer auto-started — the user triggers it via the toolbar button.
-      // pending: empty DDT — user must pick manual vs wizard (center card).
+      // pending: empty DDT — user picks manual / wizard / (optional) adapt from embedding suggestion.
+      // adaptation: only after explicit user action (or persisted state).
       let wizardMode: TaskWizardMode = 'none';
       if (taskMeta.taskWizardMode === 'adaptation') {
         wizardMode = 'adaptation';
-      } else if ((taskMeta as any).needsTaskContextualization === true) {
-        wizardMode = 'adaptation';
       } else if (taskMeta.taskWizardMode === 'pending') {
+        wizardMode = 'pending';
+      } else if ((taskMeta as any).needsTaskContextualization === true) {
         wizardMode = 'pending';
       } else if (taskMeta.taskWizardMode === 'full') {
         wizardMode = 'full';
@@ -267,6 +274,8 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
       }
 
       const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;
+      const contextualizationTemplateNameFromMeta =
+        (taskMeta as any).contextualizationTemplateName || null;
       // ✅ SINGLE SOURCE OF TRUTH: Read taskLabel from taskMeta
       // Priority: taskMeta.taskLabel > taskMeta.label > empty string (temporary)
       const taskLabelFromMeta = (taskMeta as any).taskLabel || taskMeta.label || '';
@@ -274,6 +283,11 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
       // ✅ Set primary state
       setTaskWizardMode(wizardMode);
       setContextualizationTemplateId(contextualizationTemplateId);
+      setContextualizationTemplateName(
+        contextualizationTemplateNameFromMeta
+          ? String(contextualizationTemplateNameFromMeta).trim() || null
+          : null
+      );
       setTaskLabel(taskLabelFromMeta); // ✅ ALWAYS set - empty string if not available yet
 
       // ✅ DEPRECATED: Backward compatibility - sync boolean flags
@@ -288,6 +302,41 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     // ✅ Marca task.id come processato
     previousTaskIdRef.current = currentTaskId;
   }, [task?.id]); // ✅ SOLO task.id come dipendenza - NON taskMeta o altri campi
+
+  /**
+   * User chose manual authoring after an embedding suggested a catalogue template.
+   * Clears UI/meta suggestion, detaches task.templateId when it still points at that suggestion,
+   * so GrammarFlow and contracts resolve from the instance tree instead of the wrong template cache row.
+   */
+  const dismissEmbeddingSuggestion = React.useCallback(() => {
+    const taskId = task?.id;
+    if (!taskId?.trim()) {
+      return;
+    }
+    const suggestedId = contextualizationTemplateId;
+    const repo = taskRepository.getTask(taskId);
+    const updates: Partial<Task> = { taskWizardMode: 'none' };
+    if (suggestedId && repo?.templateId != null && String(repo.templateId).trim() === String(suggestedId).trim()) {
+      updates.templateId = null;
+    }
+    taskRepository.updateTask(taskId, updates, currentProjectId || undefined, {
+      allowClearTemplateId: true,
+      merge: true,
+    });
+    setEmbeddingSuggestionDismissed(true);
+    setContextualizationTemplateId(null);
+    setContextualizationTemplateName(null);
+    setTaskWizardMode('none');
+    useTaskTreeStore.getState().incrementVersion();
+  }, [
+    task?.id,
+    contextualizationTemplateId,
+    currentProjectId,
+    setEmbeddingSuggestionDismissed,
+    setContextualizationTemplateId,
+    setContextualizationTemplateName,
+    setTaskWizardMode,
+  ]);
 
   // Replace selected task tree
   const { replaceSelectedTaskTree: replaceSelectedTaskTreeFromContext } = useTaskTreeManager();
@@ -533,6 +582,9 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     needsTaskBuilder,
     isContextualizing,
     contextualizationTemplateId,
+    contextualizationTemplateName,
+    embeddingSuggestionDismissed,
+    dismissEmbeddingSuggestion,
     taskLabel,
     wizardMode,
     // ✅ NEW: View mode for Behaviour

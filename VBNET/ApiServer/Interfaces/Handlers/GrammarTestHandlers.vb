@@ -182,7 +182,7 @@ Public Module GrammarTestHandlers
                     Try
                         Console.WriteLine($"[GrammarTest] Testing phrase: '{phrase.Text}'")
                         Dim parseResult = interpreter.Parse(phrase.Text)
-                        Console.WriteLine($"[GrammarTest] Parse result: Success={parseResult.Success}, MatchTree={If(parseResult.MatchTree IsNot Nothing, "present", "null")}")
+                        Console.WriteLine($"[GrammarTest] Parse result: ParseEvent={parseResult.ParseEvent}, MatchTree={If(parseResult.MatchTree IsNot Nothing, "present", "null")}")
 
                         Dim testResult = MapParseResultToTestResult(parseResult, request.Grammar, phrase.Text)
                         Console.WriteLine($"[GrammarTest] Test result: Success={testResult.Success}, MatchDetails count={testResult.MatchDetails.Count}")
@@ -295,7 +295,7 @@ Public Module GrammarTestHandlers
             text As String
         ) As TestPhraseResult
             Dim result As New TestPhraseResult() With {
-                .Success = parseResult.Success,
+                .Success = (parseResult.ParseEvent = ParseEvents.Match),
                 .Bindings = parseResult.Bindings,
                 .ConsumedWords = parseResult.ConsumedWords,
                 .GarbageUsed = parseResult.GarbageUsed,
@@ -304,7 +304,7 @@ Public Module GrammarTestHandlers
 
             ' ✅ Costruisci MatchDetails dalla lista di match (no fake root)
             ' I match reali sono in MatchTree.Children, non nel root stesso
-            If parseResult.Success AndAlso parseResult.MatchTree IsNot Nothing AndAlso
+            If parseResult.ParseEvent = ParseEvents.Match AndAlso parseResult.MatchTree IsNot Nothing AndAlso
                parseResult.MatchTree.Children IsNot Nothing AndAlso parseResult.MatchTree.Children.Count > 0 Then
                 ' Process each match directly (no root)
                 Dim allDetails As New List(Of MatchDetail)()

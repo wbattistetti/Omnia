@@ -45,6 +45,24 @@ Public Class CanonicalGuidTable
         Return Nothing
     End Function
 
+    ''' <summary>
+    ''' Risolve una chiave di binding (nome gruppo / slot id) al GUID canonico:
+    ''' RegexGroupName, SubDataMappingKey, poi uguaglianza con CanonicalGuid.
+    ''' </summary>
+    Public Function TryResolveSlotBindingKey(bindingKey As String) As String
+        If String.IsNullOrEmpty(bindingKey) Then Return Nothing
+        Dim g = TryResolveByRegexGroupName(bindingKey)
+        If Not String.IsNullOrEmpty(g) Then Return g
+        g = TryResolveBySubMappingKey(bindingKey)
+        If Not String.IsNullOrEmpty(g) Then Return g
+        For Each row In Data
+            If String.Equals(row.CanonicalGuid, bindingKey, StringComparison.OrdinalIgnoreCase) Then
+                Return row.CanonicalGuid
+            End If
+        Next
+        Return Nothing
+    End Function
+
 End Class
 
 ''' <summary>

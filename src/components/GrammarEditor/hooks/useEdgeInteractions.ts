@@ -3,7 +3,7 @@
 
 import { useCallback } from 'react';
 import { useGrammarStore } from '../core/state/grammarStore';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { GrammarEdge } from '../types/grammarTypes';
 
 /**
@@ -27,7 +27,7 @@ export function useEdgeInteractions() {
     type: GrammarEdge['type'] = 'sequential'
   ) => {
     const newEdge: GrammarEdge = {
-      id: uuidv4(),
+      id: generateSafeGuid(),
       source,
       target,
       type,

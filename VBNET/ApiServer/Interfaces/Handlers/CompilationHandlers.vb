@@ -893,7 +893,7 @@ Public Module CompilationHandlers
                 Return Results.BadRequest(New With {.error = "CompiledUtteranceTask is null"})
             End If
 
-            UtteranceTaskEnginesRehydration.EnsureEngines(compiledTask)
+            Compiler.UtteranceEnginesMaterializer.MaterializeTree(compiledTask)
 
             ' Save to DialogRepository
             Try

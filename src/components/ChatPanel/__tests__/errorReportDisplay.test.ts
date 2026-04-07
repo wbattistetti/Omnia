@@ -96,6 +96,18 @@ describe('errorReportDisplay', () => {
     );
   });
 
+  it('formatErrorMessageForReportPanel uses parser copy for missing data contract', () => {
+    const e = err({
+      taskId: 't1',
+      message: '[main] Missing data contract (leaf node).',
+      severity: 'error',
+      category: 'TaskCompilationFailed',
+    });
+    expect(formatErrorMessageForReportPanel(e, null, null)).toBe(
+      "[main] Manca il parser per interpretare le risposte dell'utente."
+    );
+  });
+
   it('formatErrorLocationTitle prefers row text and avoids node ids', () => {
     const e = err({
       taskId: 't1',

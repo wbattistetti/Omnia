@@ -65,7 +65,6 @@ Namespace ApiServer.Repositories
             If _cache.TryGetValue(cacheKey, Nothing) Then
                 Dim cachedDialog = _cache(cacheKey)
                 If cachedDialog IsNot Nothing Then
-                    UtteranceTaskEnginesRehydration.EnsureEngines(cachedDialog)
                     Return cachedDialog
                 End If
             End If
@@ -103,8 +102,7 @@ Namespace ApiServer.Repositories
                     Return Nothing
                 End If
 
-                ' Engines non serializzati (JsonIgnore): ripristino dopo round-trip Redis/JSON
-                UtteranceTaskEnginesRehydration.EnsureEngines(compiledTask)
+                Compiler.UtteranceEnginesMaterializer.MaterializeTree(compiledTask)
 
                 ' ✅ STEP 5: Salva in cache in memoria
                 SyncLock _cacheLock

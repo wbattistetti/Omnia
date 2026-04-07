@@ -47,27 +47,22 @@ Public Module ProcessTurnHelpers
             Return New ParseResultWithStatus() With {
             .Status = status,
             .ExtractedData = parseResult.ExtractedData,
-            .ExtractedVariables = parseResult.ExtractedVariables,  ' ✅ NEW: Passa triple esplicite
+            .SlotValues = parseResult.SlotValues,
             .ConditionId = parseResult.ConditionId
         }
         End Function
 
     ''' <summary>
-    ''' Salva i dati estratti in state.ExtractedVariables (persistente)
-    ''' ✅ Usa solo ExtractedVariables (triple esplicite)
+    ''' Salva i dati estratti in <see cref="DialogueState.VariablesBySlotGuid"/> (GUID slot → valore).
     ''' </summary>
     Public Sub FillTaskFromParseResult(
         parseResult As ParseResultWithStatus,
         state As DialogueState
     )
-        ' ✅ Usa solo ExtractedVariables
-        If parseResult.ExtractedVariables IsNot Nothing AndAlso parseResult.ExtractedVariables.Count > 0 Then
-            If state.ExtractedVariables Is Nothing Then
-                state.ExtractedVariables = New List(Of ExtractedVariable)()
-            End If
-            ' ✅ Aggiungi tutte le triple estratte
-            state.ExtractedVariables.AddRange(parseResult.ExtractedVariables)
-        End If
+        If parseResult.SlotValues Is Nothing OrElse parseResult.SlotValues.Count = 0 Then Return
+        For Each kvp In parseResult.SlotValues
+            state.SetVariable(kvp.Key, kvp.Value)
+        Next
     End Sub
 
     ''' <summary>
@@ -140,53 +135,36 @@ Public Module ProcessTurnHelpers
     End Function
 
     ''' <summary>
-    ''' Verifica se il task è riempito (ha valore in ExtractedVariables o tutti i sub-task sono riempiti)
-    ''' ✅ Usa ExtractedVariables (triple esplicite) invece di Memory
+    ''' Verifica se il task è riempito (slot canonici in <see cref="DialogueState.VariablesBySlotGuid"/>).
     ''' </summary>
     <Extension>
-    Public Function IsFilled(task As CompiledUtteranceTask, extractedVariables As List(Of ExtractedVariable)) As Boolean
-        If task Is Nothing Then
-            Return False
-        End If
-
-        If task.SubTasks IsNot Nothing AndAlso task.SubTasks.Count > 0 Then
-            Return task.SubTasks.All(Function(st) IsFilled(st, extractedVariables))
-        End If
-
-        ' ✅ Cerca variabile con (taskInstanceId = task.Id, nodeId = task.NodeId)
-        If extractedVariables Is Nothing Then
-            Return False
-        End If
-
-        Return extractedVariables.Any(
-                Function(ev) ev.TaskInstanceId = task.Id AndAlso ev.NodeId = task.NodeId
-            )
+    Public Function IsFilled(task As CompiledUtteranceTask, state As DialogueState) As Boolean
+        If task Is Nothing OrElse state Is Nothing Then Return False
+        Return task.IsFilled(state)
     End Function
 
     ''' <summary>
     ''' Verifica se il task è parzialmente riempito (alcuni sub-task sono riempiti ma non tutti)
-    ''' ✅ Usa ExtractedVariables invece di Memory
     ''' </summary>
     <Extension>
-    Public Function IsPartiallyFilled(task As CompiledUtteranceTask, extractedVariables As List(Of ExtractedVariable)) As Boolean
+    Public Function IsPartiallyFilled(task As CompiledUtteranceTask, state As DialogueState) As Boolean
         If task Is Nothing OrElse task.SubTasks Is Nothing OrElse task.SubTasks.Count = 0 Then
             Return False
         End If
-        Dim filledCount = task.SubTasks.Where(Function(st) IsFilled(st, extractedVariables)).Count()
+        Dim filledCount = task.SubTasks.Where(Function(st) IsFilled(st, state)).Count()
         Return filledCount > 0 AndAlso filledCount < task.SubTasks.Count
     End Function
 
     ''' <summary>
     ''' Ottiene il primo sub-task non riempito
-    ''' ✅ Usa ExtractedVariables invece di Memory
     ''' </summary>
     <Extension>
-    Public Function GetFirstUnfilledSubTask(currentTask As CompiledUtteranceTask, extractedVariables As List(Of ExtractedVariable)) As CompiledUtteranceTask
+    Public Function GetFirstUnfilledSubTask(currentTask As CompiledUtteranceTask, state As DialogueState) As CompiledUtteranceTask
         If currentTask Is Nothing OrElse currentTask.SubTasks Is Nothing OrElse currentTask.SubTasks.Count = 0 Then
             Return Nothing
         End If
 
-        Return currentTask.SubTasks.FirstOrDefault(Function(st) Not IsFilled(st, extractedVariables))
+        Return currentTask.SubTasks.FirstOrDefault(Function(st) Not IsFilled(st, state))
     End Function
 
         ''' <summary>
@@ -346,11 +324,11 @@ End Module
 Public Class ParseResultWithStatus
     Public Property Status As ParseStatus
     Public Property ExtractedData As Dictionary(Of String, Object)
-    Public Property ExtractedVariables As List(Of ExtractedVariable)  ' ✅ NEW: Triple esplicite
+    Public Property SlotValues As Dictionary(Of String, Object)
     Public Property ConditionId As String
 
     Public Sub New()
         ExtractedData = New Dictionary(Of String, Object)()
-        ExtractedVariables = New List(Of ExtractedVariable)()
+        SlotValues = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
     End Sub
 End Class

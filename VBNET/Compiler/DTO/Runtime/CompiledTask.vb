@@ -115,11 +115,24 @@ Public Class CompiledUtteranceTask
     Public Property NodeId As String
 
     ''' <summary>
-    ''' Motori di interpretazione utterance (runtime). Non serializzati nel JSON del flusso.
-    ''' Tipi effettivi: TaskEngine.UtteranceInterpretation.IUtteranceInterpretationEngine.
+    ''' Motori runtime (non nel JSON). La fonte serializzata è <see cref="NlpContract"/> (engine chain + pattern) e <see cref="CanonicalGuidTable"/>.
     ''' </summary>
     <JsonIgnore>
-    Public Property Engines As List(Of Object)
+    Friend _enginesRuntime As List(Of IInterpretationEngine)
+
+    ''' <summary>Motori ricostruiti in modo deterministico da <see cref="NlpContract"/> e tabella GUID dopo deserializzazione o al primo accesso.</summary>
+    <JsonIgnore>
+    Public Property Engines As List(Of IInterpretationEngine)
+        Get
+            If _enginesRuntime Is Nothing Then
+                UtteranceEnginesMaterializer.Materialize(Me)
+            End If
+            Return _enginesRuntime
+        End Get
+        Set(value As List(Of IInterpretationEngine))
+            _enginesRuntime = value
+        End Set
+    End Property
 
     ''' <summary>
     ''' Tabella GUID canonici prodotta dal compilatore (persistita nel JSON dialogo).
@@ -185,6 +198,32 @@ Public Class CompiledUtteranceTask
 
     Private Function IParsableTask_HasSubTasks() As Boolean Implements TaskEngine.IParsableTask.HasSubTasks
         Return HasSubTasks()
+    End Function
+
+    ''' <summary>GUID slot principale: CanonicalGuidTable.MainNodeCanonicalGuid, altrimenti NodeId.</summary>
+    Public Function GetPrimarySlotCanonicalGuid() As String
+        If CanonicalGuidTable IsNot Nothing AndAlso Not String.IsNullOrEmpty(CanonicalGuidTable.MainNodeCanonicalGuid) Then
+            Return CanonicalGuidTable.MainNodeCanonicalGuid
+        End If
+        Return If(NodeId, String.Empty)
+    End Function
+
+    ''' <summary>True se gli slot canonici di questo task hanno valore in <see cref="DialogueState.VariablesBySlotGuid"/>.</summary>
+    Public Function IsFilled(state As DialogueState) As Boolean
+        If state Is Nothing Then Return False
+        If SubTasks IsNot Nothing AndAlso SubTasks.Count > 0 Then
+            Return SubTasks.All(Function(st) st.IsFilled(state))
+        End If
+        Dim g = GetPrimarySlotCanonicalGuid()
+        If String.IsNullOrEmpty(g) Then Return False
+        Return SlotValueIsPresent(state.GetVariable(g))
+    End Function
+
+    Private Shared Function SlotValueIsPresent(v As Object) As Boolean
+        If v Is Nothing Then Return False
+        Dim s = TryCast(v, String)
+        If s IsNot Nothing Then Return Not String.IsNullOrWhiteSpace(s)
+        Return True
     End Function
 End Class
 

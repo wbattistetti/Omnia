@@ -10,9 +10,9 @@ Imports Common.DSL
 Public Class FlowConditionLoader
     Implements IConditionLoader
 
-    Private ReadOnly _compilationResult As FlowCompilationResult
+    Private ReadOnly _compilationResult As CompiledFlow
 
-    Public Sub New(compilationResult As FlowCompilationResult)
+    Public Sub New(compilationResult As CompiledFlow)
         If compilationResult Is Nothing Then
             Throw New ArgumentNullException(NameOf(compilationResult))
         End If

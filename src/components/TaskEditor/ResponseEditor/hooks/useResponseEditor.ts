@@ -129,6 +129,9 @@ export interface UseResponseEditorResult {
   needsTaskBuilder: boolean;
   isContextualizing: boolean;
   contextualizationTemplateId: string | null;
+  contextualizationTemplateName: string | null;
+  embeddingSuggestionDismissed: boolean;
+  dismissEmbeddingSuggestion: () => void;
   taskLabel: string;
   wizardMode: 'library' | 'ai' | null;
 
@@ -219,6 +222,8 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     handleProfileUpdate,
     handleIntentMessagesComplete,
     updateSelectedNode,
+    dismissEmbeddingSuggestion,
+    embeddingSuggestionDismissed,
   } = core;
 
   const {
@@ -300,6 +305,7 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     needsTaskBuilder,
     isContextualizing,
     contextualizationTemplateId,
+    contextualizationTemplateName,
     taskLabel,
     wizardMode,
     setNeedsTaskBuilder,
@@ -441,6 +447,9 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     needsTaskBuilder,
     isContextualizing,
     contextualizationTemplateId,
+    contextualizationTemplateName,
+    embeddingSuggestionDismissed,
+    dismissEmbeddingSuggestion,
     taskLabel,
     wizardMode,
     // ✅ NEW: Expose onWizardComplete and setNeedsTaskBuilder

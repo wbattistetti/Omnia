@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { GrammarEdge } from '../types/grammarTypes';
 
 /**
@@ -13,7 +13,7 @@ export const edgeFactory = {
    */
   createSequentialEdge: (source: string, target: string, label?: string): GrammarEdge => {
     return {
-      id: uuidv4(),
+      id: generateSafeGuid(),
       source,
       target,
       type: 'sequential',
@@ -26,7 +26,7 @@ export const edgeFactory = {
    */
   createAlternativeEdge: (source: string, target: string, label?: string): GrammarEdge => {
     return {
-      id: uuidv4(),
+      id: generateSafeGuid(),
       source,
       target,
       type: 'alternative',
@@ -39,7 +39,7 @@ export const edgeFactory = {
    */
   createOptionalEdge: (source: string, target: string, label?: string): GrammarEdge => {
     return {
-      id: uuidv4(),
+      id: generateSafeGuid(),
       source,
       target,
       type: 'optional',

@@ -20,7 +20,6 @@ import { MainViewMode } from '@responseEditor/types/mainViewMode';
 import { getIsTesting } from '@responseEditor/testingState';
 import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { useWizardContext } from '@responseEditor/context/WizardContext';
-import type { Task } from '@types/taskTypes';
 import { TabContentContainer } from '@responseEditor/components/TabContentContainer';
 import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 import type { WizardTaskTreeNode, WizardStep, WizardModuleTemplate } from '../../../../../TaskBuilderAIWizard/types';
@@ -28,8 +27,6 @@ import { RightPanelMode } from '@responseEditor/RightPanel';
 import type { TaskTree } from '@types/taskTypes';
 import { logBehaviourSteps, summarizeStepsShape } from '@responseEditor/behaviour/behaviourStepsDebug';
 import { TaskCreationChoicePanel } from '@responseEditor/components/TaskCreationChoicePanel';
-import { taskRepository } from '@services/TaskRepository';
-import { useTaskTreeStore } from '@responseEditor/core/state';
 
 // ✅ Container styles estratti in costanti esterne (per pulizia)
 const BASE_CONTAINER_STYLE: React.CSSProperties = {
@@ -102,6 +99,8 @@ export interface MainContentAreaProps {
 
   /** Launches full wizard (ResponseEditor); used when user picks wizard from empty-task choice panel. */
   onStartWizard?: () => void;
+  /** Starts adaptation wizard for embedding-suggested template (user must click). */
+  onChooseAdaptTemplate?: () => void;
 
   // ✅ REMOVED: wizardProps - now from WizardContext
   // wizardProps?: { ... };
@@ -137,6 +136,7 @@ export function MainContentArea({
   viewMode,
   onViewModeChange,
   onStartWizard,
+  onChooseAdaptTemplate,
   // ✅ REMOVED: wizardProps - now from Context
 }: MainContentAreaProps) {
   // ✅ NEW: Get data from Context
@@ -145,7 +145,9 @@ export function MainContentArea({
     taskType,
     taskTree: taskTreeFromContext,
     taskWizardMode,
-    setTaskWizardMode,
+    contextualizationTemplateId,
+    contextualizationTemplateName,
+    dismissEmbeddingSuggestion,
   } = useResponseEditorContext();
   // ✅ Usa taskTree da props se disponibile, altrimenti da context
   const taskTree = taskTreeProp ?? taskTreeFromContext;
@@ -286,14 +288,21 @@ export function MainContentArea({
           <div style={DEFAULT_CONTAINER_STYLE}>
             <TaskCreationChoicePanel
               onChooseManual={() => {
-                const id = task?.id;
-                if (id) {
-                  taskRepository.updateTask(id, { taskWizardMode: 'none' } as Partial<Task>);
-                }
-                useTaskTreeStore.getState().incrementVersion();
-                setTaskWizardMode('none');
+                dismissEmbeddingSuggestion?.();
               }}
               onChooseWizard={() => onStartWizard?.()}
+              embeddingMatchTemplateName={
+                contextualizationTemplateId
+                  ? (contextualizationTemplateName?.trim() || contextualizationTemplateId)
+                  : null
+              }
+              onChooseAdaptTemplate={
+                contextualizationTemplateId && onChooseAdaptTemplate
+                  ? () => {
+                      onChooseAdaptTemplate();
+                    }
+                  : undefined
+              }
             />
           </div>
         );

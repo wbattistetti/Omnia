@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { SchemaNode } from './dataCollection';
 import { normalizeTaskTreeMainNodes } from './normalizeKinds';
 import type { ArtifactStore } from './artifactStore';
@@ -183,7 +183,7 @@ function resolveNodeId(node: SchemaNode, sourceTemplate: any | null, nodePath: s
   }
 
   // ✅ PRIORITY 3: Standalone node - genera nuovo ID
-  const newNodeId = uuidv4();
+  const newNodeId = generateSafeGuid();
   console.log('[resolveNodeId] ✅ Generated new ID (standalone node)', {
     nodeLabel: node.label,
     newNodeId: newNodeId.substring(0, 20) + '...'
@@ -234,7 +234,7 @@ type AssembleOptions = {
 };
 
 export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): Promise<AssembledTaskTree> {
-  const taskTreeId = `${rootLabel || 'TaskTree'}_${uuidv4()}`;
+  const taskTreeId = `${rootLabel || 'TaskTree'}_${generateSafeGuid()}`;
   const translations: Translations = { en: {}, it: {}, pt: {} };
   // Limit AI-driven re-asks to max 2
   const defaultEscalations = { noMatch: 2, noInput: 2, confirmation: 2 } as Record<string, number>;
@@ -387,7 +387,7 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
     // Constraints
     for (const c of node.constraints || []) {
       if (c.kind === 'required') continue;
-      const cId = uuidv4();
+      const cId = generateSafeGuid();
       const cPath = path;
       const bucket = store.byPath[cPath]?.constraints?.[c.kind];
       // i18n keys for title/payoff
@@ -425,17 +425,17 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
             type: `constraint.${c.kind}.r1`,
             escalations: [
               {
-                escalationId: `e_${uuidv4()}`,
+                escalationId: `e_${generateSafeGuid()}`,
                 tasks: [  // ✅ Renamed from actions
                   {
-                    id: uuidv4(),              // ✅ Standard: id (GUID univoco)
+                    id: generateSafeGuid(),              // ✅ Standard: id (GUID univoco)
                     templateId: 'sayMessage',  // ✅ Renamed from actionId
                     parameters: [{ parameterId: 'text', value: r1Key }]
                   }
                 ],
                 actions: [{  // ✅ Legacy alias for backward compatibility
                   actionId: 'sayMessage',
-                  actionInstanceId: uuidv4(),
+                  actionInstanceId: generateSafeGuid(),
                   parameters: [{ parameterId: 'text', value: r1Key }]
                 }]
               }
@@ -445,17 +445,17 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
             type: `constraint.${c.kind}.r2`,
             escalations: [
               {
-                escalationId: `e_${uuidv4()}`,
+                escalationId: `e_${generateSafeGuid()}`,
                 tasks: [  // ✅ Renamed from actions
                   {
-                    id: uuidv4(),              // ✅ Standard: id (GUID univoco)
+                    id: generateSafeGuid(),              // ✅ Standard: id (GUID univoco)
                     templateId: 'sayMessage',  // ✅ Renamed from actionId
                     parameters: [{ parameterId: 'text', value: r2Key }]
                   }
                 ],
                 actions: [{  // ✅ Legacy alias for backward compatibility
                   actionId: 'sayMessage',
-                  actionInstanceId: uuidv4(),
+                  actionInstanceId: generateSafeGuid(),
                   parameters: [{ parameterId: 'text', value: r2Key }]
                 }]
               }
@@ -476,17 +476,17 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
           type: `constraint.${c.kind}.r1`,
           escalations: [
             {
-              escalationId: `e_${uuidv4()}`,
+              escalationId: `e_${generateSafeGuid()}`,
               tasks: [  // ✅ Renamed from actions
                 {
-                  id: uuidv4(),              // ✅ Standard: id (GUID univoco)
+                  id: generateSafeGuid(),              // ✅ Standard: id (GUID univoco)
                   templateId: 'sayMessage',  // ✅ Renamed from actionId
                   parameters: [{ parameterId: 'text', value: r1Key }]
                 }
               ],
               actions: [{  // ✅ Legacy alias for backward compatibility
                 actionId: 'sayMessage',
-                actionInstanceId: uuidv4(),
+                actionInstanceId: generateSafeGuid(),
                 parameters: [{ parameterId: 'text', value: r1Key }]
               }]
             }
@@ -496,17 +496,17 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
           type: `constraint.${c.kind}.r2`,
           escalations: [
             {
-              escalationId: `e_${uuidv4()}`,
+              escalationId: `e_${generateSafeGuid()}`,
               tasks: [  // ✅ Renamed from actions
                 {
-                  id: uuidv4(),              // ✅ Standard: id (GUID univoco)
+                  id: generateSafeGuid(),              // ✅ Standard: id (GUID univoco)
                   templateId: 'sayMessage',  // ✅ Renamed from actionId
                   parameters: [{ parameterId: 'text', value: r2Key }]
                 }
               ],
               actions: [{  // ✅ Legacy alias for backward compatibility
                 actionId: 'sayMessage',
-                actionInstanceId: uuidv4(),
+                actionInstanceId: generateSafeGuid(),
                 parameters: [{ parameterId: 'text', value: r2Key }]
               }]
             }
@@ -565,17 +565,17 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
             type: 'invalid',
             escalations: [
               {
-                escalationId: `e_${uuidv4()}`,
+                escalationId: `e_${generateSafeGuid()}`,
                 tasks: [
                   {
-                    id: uuidv4(),
+                    id: generateSafeGuid(),
                     templateId: 'sayMessage',
                     parameters: [{ parameterId: 'text', value: invalidKey }]
                   }
                 ],
                 actions: [{
                   actionId: 'sayMessage',
-                  actionInstanceId: uuidv4(),
+                  actionInstanceId: generateSafeGuid(),
                   parameters: [{ parameterId: 'text', value: invalidKey }]
                 }]
               }
@@ -597,17 +597,17 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
           type: 'invalid',
           escalations: [
             {
-              escalationId: `e_${uuidv4()}`,
+              escalationId: `e_${generateSafeGuid()}`,
               tasks: [
                 {
-                  id: uuidv4(),
+                  id: generateSafeGuid(),
                   templateId: 'sayMessage',
                   parameters: [{ parameterId: 'text', value: invalidKey }]
                 }
               ],
               actions: [{
                 actionId: 'sayMessage',
-                actionInstanceId: uuidv4(),
+                actionInstanceId: generateSafeGuid(),
                 parameters: [{ parameterId: 'text', value: invalidKey }]
               }]
             }
@@ -777,7 +777,7 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
         // Store the template key to load translations later
         templateKeyForTranslation = nodesteps[stepKey][0];
         // Create a unique runtime key with GUID for this instance
-        chosenKey = `runtime.${taskTreeId}.${uuidv4()}.text`;
+        chosenKey = `runtime.${taskTreeId}.${generateSafeGuid()}.text`;
         console.log('[assembleFinalTaskTree] Using steps/steps key', {
           path,
           stepKey,
@@ -825,7 +825,7 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
         }
 
         // ✅ Generate new task id; translation store key is always canonical `task:<uuid>`
-        const actionInstanceId = uuidv4();
+        const actionInstanceId = generateSafeGuid();
         const textStoreKey = makeTranslationKey('task', actionInstanceId);
 
         // ✅ If we have a template key, copy translation from template to new runtime GUID
@@ -867,7 +867,7 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
         };
 
         const escalation = {
-          escalationId: `e_${uuidv4()}`,
+          escalationId: `e_${generateSafeGuid()}`,
           tasks: [{
             ...baseTask,
             parameters: [{ parameterId: 'text', value: textStoreKey }]

@@ -199,6 +199,11 @@ export interface ResponseEditorLayoutProps {
   needsTaskContextualization: boolean;
   needsTaskBuilder: boolean;
   contextualizationTemplateId: string | null;
+  contextualizationTemplateName: string | null;
+  /** True after user chose manual creation while an embedding template was suggested (suppress tab meta ids). */
+  embeddingSuggestionDismissed: boolean;
+  /** Clears embedding suggestion state and detaches catalogue templateId when appropriate. */
+  dismissEmbeddingSuggestion: () => void;
   // ✅ NOTE: taskLabel is still required for Context initialization
   // taskLabel: string; (moved to top level)
 
@@ -210,6 +215,8 @@ export interface ResponseEditorLayoutProps {
   // Toolbar wizard-mode toggle actions
   onStartWizard?: () => void;
   onSwitchToManual?: () => void;
+  /** User chose "Adatta template trovato" from the pending choice panel (embedding suggestion). */
+  onChooseAdaptTemplate?: () => void;
 
   // ✅ NEW: Toolbar update callback (for hideHeader === true mode)
   onToolbarUpdate?: (toolbar: any[], color: string) => void;
@@ -305,6 +312,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     needsTaskContextualization,
     needsTaskBuilder,
     contextualizationTemplateId,
+    contextualizationTemplateName,
+    embeddingSuggestionDismissed,
+    dismissEmbeddingSuggestion,
     // ✅ NOTE: taskLabel is still required for Context initialization
     onTaskContextualizationComplete,
     onTaskBuilderComplete,
@@ -312,6 +322,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     onToolbarUpdate,
     onStartWizard,
     onSwitchToManual,
+    onChooseAdaptTemplate,
     showSaveDialog: showSaveDialogProp,
     setShowSaveDialog: setShowSaveDialogProp,
     setSaveDecisionMade: setSaveDecisionMadeProp,
@@ -336,6 +347,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // No derives from taskMeta - use prop directly (which comes from state in useResponseEditorCore)
   // taskMeta.contextualizationTemplateId is still used as fallback for backward compatibility
   const contextualizationTemplateIdFromMeta = taskMeta?.contextualizationTemplateId;
+  const contextualizationTemplateNameFromMeta = (taskMeta as { contextualizationTemplateName?: string } | null)
+    ?.contextualizationTemplateName;
 
   // ✅ FIX RACE CONDITION: Use Zustand store as primary source for taskTree
   // The store is updated immediately when wizard completes, while props take longer to propagate
@@ -355,8 +368,14 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     // ✅ ARCHITECTURE: taskWizardMode is SINGLE SOURCE OF TRUTH - no derives, no fallbacks
     taskWizardMode: taskWizardMode, // ✅ Use prop directly (comes from state in useResponseEditorCore)
     setTaskWizardMode, // ✅ ARCHITECTURE: Setter for updating wizard mode (updates state in useResponseEditorCore)
-    contextualizationTemplateId: contextualizationTemplateIdFromMeta || contextualizationTemplateId || undefined,
-      }), [taskTreeFromStore, taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId]);
+    contextualizationTemplateId: embeddingSuggestionDismissed
+      ? undefined
+      : (contextualizationTemplateIdFromMeta || contextualizationTemplateId || undefined),
+    contextualizationTemplateName: embeddingSuggestionDismissed
+      ? undefined
+      : (contextualizationTemplateNameFromMeta ?? contextualizationTemplateName ?? undefined),
+    dismissEmbeddingSuggestion,
+      }), [taskTreeFromStore, taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId, contextualizationTemplateNameFromMeta, contextualizationTemplateName, embeddingSuggestionDismissed, dismissEmbeddingSuggestion]);
 
   // ✅ B1: WizardContext.Provider moved to ResponseEditorInner to avoid race condition
 
@@ -1106,6 +1125,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         viewMode={viewModeProp}
         onViewModeChange={onViewModeChangeProp}
         onStartWizard={onStartWizard}
+        onChooseAdaptTemplate={onChooseAdaptTemplate}
       />
     );
   }, [
@@ -1113,6 +1133,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     mainViewMode,
     wizardProps,
     onStartWizard,
+    onChooseAdaptTemplate,
     mainList,
     taskTree,
     taskMeta,

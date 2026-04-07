@@ -1,15 +1,11 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
 Imports Compiler
 
-Namespace UtteranceInterpretation
-
-    ''' <summary>
-    ''' Escalation motori → ParseResult. Single-task (mixed-initiative opzionale altrove).
-    ''' </summary>
-    Public NotInheritable Class UtteranceInterpretationOrchestrator
+''' <summary>
+''' Escalation motori → ParseResult / EngineResult.
+''' </summary>
+Public NotInheritable Class UtteranceInterpretationOrchestrator
 
         Private ReadOnly _consumeMatched As Boolean
 
@@ -17,54 +13,57 @@ Namespace UtteranceInterpretation
             _consumeMatched = consumeMatched
         End Sub
 
-        Public Function ParseSingleTask(
+    Public Function ParseSingleTask(
             utterance As String,
             current As CompiledUtteranceTask,
-            engines As IReadOnlyList(Of IUtteranceInterpretationEngine)
+            engines As IReadOnlyList(Of IInterpretationEngine)
         ) As ParseResult
 
-            Return ExtractTaskInfoFromUtterance(engines, utterance, current).RuntimeResult
-        End Function
+        Return ExtractTaskInfoFromUtterance(engines, utterance, current).RuntimeResult
+    End Function
 
-        Public Function ExtractTaskInfoFromUtterance(
-            engines As IReadOnlyList(Of IUtteranceInterpretationEngine),
+    Public Function ExtractTaskInfoFromUtterance(
+            engines As IReadOnlyList(Of IInterpretationEngine),
             utterance As String,
             current As CompiledUtteranceTask
-        ) As SingleTaskExtractionResult
+        ) As UtteranceEngineExtractionOutcome
 
-            Dim u = If(utterance, String.Empty).Trim()
+        Dim u = If(utterance, String.Empty).Trim()
 
-            Dim r As New SingleTaskExtractionResult With {
+        Dim r As New UtteranceEngineExtractionOutcome With {
                 .TaskId = current.Id,
                 .UtteranceAfterExtraction = u
             }
 
-            For i = 0 To engines.Count - 1
-                Dim parsed = engines(i).Parse(u)
+        For i = 0 To engines.Count - 1
+            Dim parsed = engines(i).Parse(u)
 
-                If parsed IsNot Nothing AndAlso parsed.Success Then
-                    r.Success = True
-                    r.EngineIndexUsed = i
-                    r.RuntimeResult = ParseResultBuilder.BuildParseResult(parsed, u, _consumeMatched)
+            If parsed IsNot Nothing AndAlso parsed.Success Then
+                r.Success = True
+                r.EngineIndexUsed = i
+                r.LastEngineResult = parsed
+                r.RuntimeResult = ParseResultBuilder.BuildParseResultFromEngineResult(parsed, u, _consumeMatched)
 
-                    If _consumeMatched AndAlso Not String.IsNullOrEmpty(parsed.MatchedText) Then
-                        r.UtteranceAfterExtraction = UtteranceRemainder.RemoveFirstMatchedPortion(u, parsed.MatchedText)
-                    End If
-
-                    Return r
+                If _consumeMatched Then
+                    r.UtteranceAfterExtraction = If(parsed.UnmatchedText, String.Empty).Trim()
+                Else
+                    r.UtteranceAfterExtraction = u
                 End If
-            Next
 
-            r.Success = False
-            r.EngineIndexUsed = -1
-            r.RuntimeResult = ParseResult.NoMatch(u)
-            Return r
-        End Function
+                Return r
+            End If
+        Next
 
-        ''' <summary>
-        ''' Mixed-initiative: applica main e altri task sul residuo progressivo (secondo order).
-        ''' </summary>
-        Public Function InterpretUtterance(
+        r.Success = False
+        r.EngineIndexUsed = -1
+        r.RuntimeResult = ParseResult.NoMatch(u)
+        Return r
+    End Function
+
+    ''' <summary>
+    ''' Mixed-initiative: applica main e altri task sul residuo progressivo (secondo order).
+    ''' </summary>
+    Public Function InterpretUtterance(
             main As TaskEngineBundle,
             otherTasks As IReadOnlyList(Of TaskEngineBundle),
             utterance As String,
@@ -114,6 +113,4 @@ Namespace UtteranceInterpretation
             Return u
         End Function
 
-    End Class
-
-End Namespace
+End Class

@@ -25,7 +25,7 @@
  * }
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 
 /**
  * Estrae le chiavi di traduzione da steps (formato nuovo) per un nodo specifico
@@ -101,7 +101,7 @@ export function convertstepsToSteps(
       // Crea escalations basate sul numero di chiavi in steps
       const escalations = stepsArray.map((translationKey: string) => {
         // Genera un GUID per ogni escalation
-        const taskId = uuidv4();
+        const taskId = generateSafeGuid();
 
         return {
           tasks: [{

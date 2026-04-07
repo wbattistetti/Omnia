@@ -3,6 +3,7 @@ Option Explicit On
 Imports Compiler
 Imports DTO.Runtime
 Imports TaskEngine
+Imports TaskEngine.UtteranceInterpretation
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports System.Linq
@@ -39,7 +40,7 @@ Public Class FlowOrchestrator
 
     ' ── Configurazione immutabile (passata nel costruttore) ───────────────────
     Private ReadOnly _compiledTasks As List(Of CompiledTask)
-    Private ReadOnly _compilationResult As FlowCompilationResult
+    Private ReadOnly _compilationResult As CompiledFlow
     Private ReadOnly _entryTaskGroupId As String
     Private ReadOnly _executionStateStorage As Object
     Private ReadOnly _sessionId As String
@@ -49,7 +50,7 @@ Public Class FlowOrchestrator
     Private ReadOnly _variables As List(Of CompiledVariable) ' ✅ NEW: Variables with values for runtime
 
     ''' <summary>FlowId (es. "main") → risultato compilazione. Estendibile con subflow senza cambiare il main.</summary>
-    Private ReadOnly _compilationByFlowId As Dictionary(Of String, FlowCompilationResult)
+    Private ReadOnly _compilationByFlowId As Dictionary(Of String, CompiledFlow)
 
     ' ── Stato runtime caricato da Redis ──────────────────────────────────────
     Private ReadOnly _state As ExecutionState
@@ -92,7 +93,7 @@ Public Class FlowOrchestrator
 
     ''' <summary>Costruttore principale (con storage Redis e risoluzione traduzioni).</summary>
     Public Sub New(
-        compilationResult As FlowCompilationResult,
+        compilationResult As CompiledFlow,
         Optional sessionId As String = Nothing,
         Optional executionStateStorage As Object = Nothing,
         Optional projectId As String = Nothing,
@@ -135,7 +136,7 @@ Public Class FlowOrchestrator
         ' Carica ExecutionState da Redis (o crea nuovo se non esiste)
         _state = LoadOrCreateState()
         _state.EnsureFlowStackMigrated()
-        _compilationByFlowId = New Dictionary(Of String, FlowCompilationResult) From {{"main", _compilationResult}}
+        _compilationByFlowId = New Dictionary(Of String, CompiledFlow) From {{"main", _compilationResult}}
     End Sub
 
     ' ─────────────────────────────────────────────────────────────────────────
@@ -150,7 +151,7 @@ Public Class FlowOrchestrator
     ''' Associa un FlowCompilationResult a un flowId (uguale a <see cref="CompiledSubflowTask.FlowId"/>).
     ''' Il ConditionLoader globale resta quello del main; per subflow con condizioni proprie servirà estensione futura.
     ''' </summary>
-    Public Sub RegisterSubflowCompilation(flowId As String, result As FlowCompilationResult)
+    Public Sub RegisterSubflowCompilation(flowId As String, result As CompiledFlow)
         If String.IsNullOrEmpty(flowId) Then
             Throw New ArgumentException("flowId is required.", NameOf(flowId))
         End If
@@ -373,7 +374,7 @@ Public Class FlowOrchestrator
     ''' <summary>
     ''' L1: prossimo TaskGroup per il flow e la compilazione indicati (senza cambiare la logica del main flow a profondità 1).
     ''' </summary>
-    Private Function GetNextTaskGroupFor(flow As ExecutionFlow, comp As FlowCompilationResult, conditionState As ExecutionState) As TaskGroup
+    Private Function GetNextTaskGroupFor(flow As ExecutionFlow, comp As CompiledFlow, conditionState As ExecutionState) As TaskGroup
         If comp Is Nothing OrElse comp.TaskGroups Is Nothing Then
             Return Nothing
         End If
@@ -548,28 +549,22 @@ Public Class FlowOrchestrator
     ''' Il loop RunUntilInput gestisce le iterazioni successive.
     ''' </summary>
     Private Function ProcessUtteranceTurn(rowTask As CompiledUtteranceTask) As RowTurnResult
-        Dim nav = ActiveFlow()
-        If nav.DialogueContexts Is Nothing Then
-            nav.DialogueContexts = New Dictionary(Of String, String)()
+        Dim flow = ActiveFlow()
+        If flow.DialogueContexts Is Nothing Then
+            flow.DialogueContexts = New Dictionary(Of String, String)()
         End If
 
         ' Carica o crea DialogueState per questa riga
-        Dim ds = LoadDialogueState(rowTask)
-
-        ' Engines ha JsonIgnore: dopo deserializzazione DialogueState, CurrentTask/RootTask possono essere copie senza motori.
-        Dim curUt = TryCast(ds.CurrentTask, CompiledUtteranceTask)
-        If curUt IsNot Nothing Then UtteranceTaskEnginesRehydration.EnsureEngines(curUt)
-        Dim rootUt = TryCast(ds.RootTask, CompiledUtteranceTask)
-        If rootUt IsNot Nothing Then UtteranceTaskEnginesRehydration.EnsureEngines(rootUt)
+        Dim dialogueState = LoadDialogueState(rowTask)
 
         ' Consuma PendingUtterance (input utente o stringa vuota per auto-advance)
-        Dim utterance As String = nav.PendingUtterance
-        nav.PendingUtterance = ""
+        Dim utterance As String = flow.PendingUtterance
+        flow.PendingUtterance = ""
 
         Console.WriteLine($"[FlowOrchestrator] ProcessUtteranceTurn task={rowTask.Id} utterance='{utterance}'")
 
-        ' UNA SOLA chiamata a ProcessTurn (primitiva pura)
-        Dim result = TaskUtteranceStepExecutor.ProcessTurn(ds, utterance)
+        Dim staticCluster = GetStaticClusterForMixedInitiative()
+        Dim result = TaskUtteranceStepExecutor.ProcessTurn(dialogueState, utterance, staticCluster, rowTask)
 
         ' Salva DialogueState aggiornato in ExecutionState.
         ' ✅ TypeNameHandling.Auto preserva CurrentTask/RootTask come CompiledUtteranceTask
@@ -577,40 +572,18 @@ Public Class FlowOrchestrator
         Dim updatedCtx = JsonConvert.SerializeObject(
             New With {.TaskId = rowTask.Id, .DialogueState = result.NewState},
             _dialogueStateSettings)
-        nav.DialogueContexts(rowTask.Id) = updatedCtx
+        flow.DialogueContexts(rowTask.Id) = updatedCtx
+
+        ' Mixed-initiative: slot di altri task utterance nello stesso cluster → VariableStore condiviso
+        ' così la riga successiva vede gli slot già riempiti e non riparte da zero.
+        SyncDialogueSlotValuesToFlowStore(flow, result.NewState)
 
         ' Mappa DialogueTurnResult → RowTurnResult
         If result.NewState.IsCompleted Then
-            ' ✅ NEW: Usa ExtractedVariables (triple esplicite) invece di Memory
-            '    Le triple contengono (taskInstanceId, nodeId, value) - nessuna assunzione necessaria.
-            If result.NewState.ExtractedVariables IsNot Nothing AndAlso result.NewState.ExtractedVariables.Count > 0 Then
-                If nav.VariableStore Is Nothing Then
-                    nav.VariableStore = New Dictionary(Of String, Object)()
-                End If
-
-                For Each extractedVar In result.NewState.ExtractedVariables
-                    ' ✅ Lookup diretto con dati espliciti (taskInstanceId, nodeId) → varId
-                    Dim var = _variables.SingleOrDefault(
-                        Function(v) v.TaskInstanceId = extractedVar.TaskInstanceId AndAlso
-                                   v.Id = extractedVar.NodeId
-                    )
-
-                    If var IsNot Nothing Then
-                        ' ✅ Aggiorna storico runtime
-                        var.Values.Add(extractedVar.Value)
-
-                        ' ✅ Aggiorna VariableStore per DSLInterpreter (chiave = variable id = node GUID)
-                        nav.VariableStore(var.Id) = extractedVar.Value
-                        Console.WriteLine($"[FlowOrchestrator] ✅ Updated: id={var.Id}, taskInstanceId={extractedVar.TaskInstanceId}, nodeId={extractedVar.NodeId}, value={extractedVar.Value}, historyCount={var.Values.Count}")
-                    Else
-                        ' ✅ Fail fast: variabile non trovata
-                        Dim errorMsg = $"Variable not found for taskInstanceId={extractedVar.TaskInstanceId}, nodeId={extractedVar.NodeId}. This indicates a configuration error: the variable was extracted but not registered during compilation."
-                        Console.WriteLine($"[FlowOrchestrator] ❌ {errorMsg}")
-                        Throw New InvalidOperationException(errorMsg)
-                    End If
-                Next
+            If result.NewState.VariablesBySlotGuid IsNot Nothing AndAlso result.NewState.VariablesBySlotGuid.Count > 0 Then
+                CommitDialogueVariablesToHistory(result.NewState)
             End If
-            nav.DialogueContexts.Remove(rowTask.Id)
+            flow.DialogueContexts.Remove(rowTask.Id)
             Return RowTurnResult.Completed(result.Messages)
         End If
 
@@ -725,15 +698,29 @@ Public Class FlowOrchestrator
     ' Helper privati
     ' ─────────────────────────────────────────────────────────────────────────
 
+    ''' <summary>Cluster statico MI: main + subflow, dedup per Id, ordine di merge.</summary>
+    Private Function GetStaticClusterForMixedInitiative() As List(Of CompiledUtteranceTask)
+        If _compilationResult Is Nothing Then
+            If _compiledTasks Is Nothing Then Return New List(Of CompiledUtteranceTask)()
+            Return _compiledTasks.OfType(Of CompiledUtteranceTask).ToList()
+        End If
+        Return MixedInitiativeCluster.GetStaticCluster(_compilationResult, _compilationByFlowId)
+    End Function
+
     ''' <summary>
     ''' Carica DialogueState dal contesto serializzato in ExecutionState,
     ''' oppure crea un nuovo stato iniziale per la prima esecuzione del task.
+    ''' Dopo il caricamento, applica i valori già noti nel VariableStore del flow (es. riempiti
+    ''' da mixed-initiative mentre era attivo un altro task utterance) così il task non viene
+    ''' rieseguito come se gli slot fossero vuoti.
     ''' </summary>
     Private Function LoadDialogueState(task As CompiledUtteranceTask) As DialogueState
         Dim nav = ActiveFlow()
         If nav.DialogueContexts Is Nothing Then
             nav.DialogueContexts = New Dictionary(Of String, String)()
         End If
+
+        Dim ds As DialogueState = Nothing
         If nav.DialogueContexts.ContainsKey(task.Id) Then
             Try
                 ' ✅ Deserializza con TypeNameHandling.Auto + ITaskConverter per ripristinare
@@ -742,7 +729,7 @@ Public Class FlowOrchestrator
                 '    roundtrip Redis, con conseguente reset errato al task radice.
                 Dim obj = JsonConvert.DeserializeObject(Of JObject)(nav.DialogueContexts(task.Id))
                 If obj?("DialogueState") IsNot Nothing Then
-                    Dim ds = obj("DialogueState").ToObject(Of DialogueState)(
+                    ds = obj("DialogueState").ToObject(Of DialogueState)(
                         JsonSerializer.CreateDefault(_dialogueStateSettings))
                     If ds IsNot Nothing Then
                         ' Fallback solo se il contesto era stato scritto senza TypeNameHandling
@@ -750,7 +737,6 @@ Public Class FlowOrchestrator
                         If ds.CurrentTask Is Nothing Then ds.CurrentTask = task
                         If ds.RootTask Is Nothing Then ds.RootTask = task
                         Console.WriteLine($"[FlowOrchestrator] ✅ Loaded DialogueState for task {task.Id}, Mode={ds.Mode}")
-                        Return ds
                     End If
                 End If
             Catch ex As Exception
@@ -758,15 +744,105 @@ Public Class FlowOrchestrator
             End Try
         End If
 
-        ' Prima esecuzione: crea nuovo DialogueState
-        Console.WriteLine($"[FlowOrchestrator] 🆕 Creating new DialogueState for task {task.Id}")
-        Return New DialogueState() With {
-            .CurrentTask = task,
-            .RootTask = task,
-            .CurrentStepType = DialogueStepType.Start,
-            .Mode = DialogueMode.ExecutingStep
-        }
+        If ds Is Nothing Then
+            ' Prima esecuzione: crea nuovo DialogueState
+            Console.WriteLine($"[FlowOrchestrator] 🆕 Creating new DialogueState for task {task.Id}")
+            ds = New DialogueState() With {
+                .CurrentTask = task,
+                .RootTask = task,
+                .CurrentStepType = DialogueStepType.Start,
+                .Mode = DialogueMode.ExecutingStep
+            }
+        End If
+
+        ApplyFlowStoreSlotsToDialogueState(task, ds, nav)
+        Return ds
     End Function
+
+    ''' <summary>
+    ''' Raccoglie i GUID slot foglia (subtask atomici) per un albero utterance.
+    ''' </summary>
+    Private Shared Sub CollectLeafSlotGuids(task As CompiledUtteranceTask, into As HashSet(Of String))
+        If task Is Nothing OrElse into Is Nothing Then Return
+        If task.HasSubTasks() Then
+            For Each st In task.SubTasks
+                CollectLeafSlotGuids(st, into)
+            Next
+        Else
+            Dim g = task.GetPrimarySlotCanonicalGuid()
+            If Not String.IsNullOrEmpty(g) Then into.Add(g)
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Copia nel DialogueState i valori già presenti nel VariableStore per gli slot di questo task
+    ''' (mixed-initiative può aver riempito altri task nello stesso turno; lo store è la fonte condivisa).
+    ''' </summary>
+    Private Sub ApplyFlowStoreSlotsToDialogueState(task As CompiledUtteranceTask, ds As DialogueState, flow As ExecutionFlow)
+        If ds Is Nothing OrElse flow Is Nothing Then Return
+        If flow.VariableStore Is Nothing OrElse flow.VariableStore.Count = 0 Then Return
+
+        Dim guids As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        CollectLeafSlotGuids(task, guids)
+        If guids.Count = 0 Then Return
+
+        For Each g In guids
+            Dim v As Object = Nothing
+            If flow.VariableStore.TryGetValue(g, v) AndAlso SlotValueIsPresentForFlowMerge(v) Then
+                ds.SetVariable(g, v)
+                Console.WriteLine($"[FlowOrchestrator] 🔗 MI/session: pre-filled slot {g} for task {task.Id} from VariableStore")
+            End If
+        Next
+    End Sub
+
+    Private Shared Function SlotValueIsPresentForFlowMerge(v As Object) As Boolean
+        If v Is Nothing Then Return False
+        Dim s = TryCast(v, String)
+        If s IsNot Nothing Then Return Not String.IsNullOrWhiteSpace(s)
+        Return True
+    End Function
+
+    ''' <summary>
+    ''' Scrive tutti gli slot del DialogueState nel VariableStore del flow dopo ogni turno,
+    ''' così i valori estratti con mixed-initiative restano disponibili per le righe utterance successive.
+    ''' Non aggiorna la cronologia Values (quella avviene al completamento task).
+    ''' </summary>
+    Private Sub SyncDialogueSlotValuesToFlowStore(flow As ExecutionFlow, ds As DialogueState)
+        If ds Is Nothing OrElse ds.VariablesBySlotGuid Is Nothing OrElse ds.VariablesBySlotGuid.Count = 0 Then Return
+        If flow.VariableStore Is Nothing Then
+            flow.VariableStore = New Dictionary(Of String, Object)()
+        End If
+
+        For Each kvp In ds.VariablesBySlotGuid
+            Dim slotGuid = kvp.Key
+            If String.IsNullOrEmpty(slotGuid) Then Continue For
+            flow.VariableStore(slotGuid) = kvp.Value
+        Next
+    End Sub
+
+    ''' <summary>Aggiorna la cronologia variabili (CompiledVariable.Values) quando un task utterance termina.</summary>
+    Private Sub CommitDialogueVariablesToHistory(ds As DialogueState)
+        If ds Is Nothing OrElse ds.VariablesBySlotGuid Is Nothing OrElse ds.VariablesBySlotGuid.Count = 0 Then Return
+        Dim flow = ActiveFlow()
+        If flow.VariableStore Is Nothing Then
+            flow.VariableStore = New Dictionary(Of String, Object)()
+        End If
+
+        For Each kvp In ds.VariablesBySlotGuid
+            Dim slotGuid = kvp.Key
+            Dim var = _variables.SingleOrDefault(Function(v) v.Id = slotGuid)
+
+            If var IsNot Nothing Then
+                var.Values.Add(kvp.Value)
+                flow.VariableStore(var.Id) = kvp.Value
+                Console.WriteLine($"[FlowOrchestrator] ✅ Updated: id={var.Id}, slotGuid={slotGuid}, value={kvp.Value}, historyCount={var.Values.Count}")
+            Else
+                Dim errorMsg = $"Variable not found for slotGuid={slotGuid}. The slot was filled but not registered during compilation."
+                Console.WriteLine($"[FlowOrchestrator] ❌ {errorMsg}")
+                Throw New InvalidOperationException(errorMsg)
+            End If
+        Next
+    End Sub
 
     ''' <summary>
     ''' Risolve un TextKey (GUID) nel testo tradotto.
@@ -848,7 +924,7 @@ Public Class FlowOrchestrator
     End Function
 
     ''' <summary>Compilazione del flow attivo (main o subflow registrato).</summary>
-    Private Function ActiveCompilation() As FlowCompilationResult
+    Private Function ActiveCompilation() As CompiledFlow
         If _compilationResult Is Nothing Then
             Return Nothing
         End If

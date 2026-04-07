@@ -4,21 +4,20 @@ Option Explicit On
 Imports System.Collections.Generic
 
 ''' <summary>
-''' Final result of parsing text with grammar
-''' Contains hierarchical match tree for UI display
+''' Esito del parse GrammarFlow (regex o navigazione). Solo NLP sul testo, non esito dialogo.
 ''' </summary>
 Public Class ParseResult
-        Public Property Success As Boolean
-        Public Property Bindings As Dictionary(Of String, Object) ' All extracted bindings
-        Public Property ConsumedWords As Integer ' Total words consumed
-        Public Property GarbageUsed As Integer ' Total garbage words used
-        Public Property ErrorMessage As String ' Error message if failed
 
-        ' ✅ NUOVO: Risultato gerarchico completo per ricostruire la struttura UI
-        Public Property MatchTree As MatchResult ' Albero completo del match
+    Public Property ParseEvent As ParseEvents
+    Public Property Bindings As Dictionary(Of String, Object)
+    Public Property ConsumedWords As Integer
+    Public Property GarbageUsed As Integer
+    Public Property ErrorMessage As String
+    Public Property MatchTree As MatchResult
 
-        Public Sub New()
-            Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
-            Success = False
-        End Sub
-    End Class
+    Public Sub New()
+        Bindings = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
+        ParseEvent = ParseEvents.NoMatch
+    End Sub
+
+End Class

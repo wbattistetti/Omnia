@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 
 /**
  * Estrae le escalations da un node per uno step specifico
@@ -73,7 +73,7 @@ export function updateStepEscalations(
       const nodeTemplateId = node.templateId ?? node.id;
       const templateStepId = `${nodeTemplateId}:${stepKey}`;
       const newStep = {
-        id: uuidv4(), // Nuovo GUID per l'istanza
+        id: generateSafeGuid(), // Nuovo GUID per l'istanza
         templateStepId, // Riferimento al template step
         escalations
       };

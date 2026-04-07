@@ -3,7 +3,7 @@
 
 import { useCallback } from 'react';
 import { Node, ReactFlowInstance } from 'reactflow';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import { FlowNode } from '../components/Flowchart/types/flowTypes';
 import { taskRepository } from '../services/TaskRepository';
 import { TaskType } from '../types/taskTypes';
@@ -111,7 +111,7 @@ export function useNodeActions(deps: UseNodeActionsDeps): UseNodeActionsResult {
    */
   const createNodeAt = useCallback((clientX: number, clientY: number, initialRow?: any) => {
     // Use UUID instead of counter to avoid conflicts
-    const newNodeId = uuidv4();
+    const newNodeId = generateSafeGuid();
 
     let x = 0, y = 0;
     if (reactFlowInstance) {

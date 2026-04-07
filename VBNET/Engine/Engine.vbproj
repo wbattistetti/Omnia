@@ -88,8 +88,13 @@
     <Compile Include="UtteranceInterpretation\UtteranceRemainder.vb" />
     <Compile Include="UtteranceInterpretation\TaskEngineBundle.vb" />
     <Compile Include="UtteranceInterpretation\MixedInitiativeOrder.vb" />
-    <Compile Include="UtteranceInterpretation\SingleTaskExtractionResult.vb" />
+    <Compile Include="UtteranceInterpretation\UtteranceEngineExtractionOutcome.vb" />
     <Compile Include="UtteranceInterpretation\UtteranceInterpretationSessionResult.vb" />
+    <Compile Include="UtteranceInterpretation\MixedInitiativeResult.vb" />
+    <Compile Include="UtteranceInterpretation\CompiledTaskAdapter.vb" />
+    <Compile Include="UtteranceInterpretation\CompiledUtteranceTaskTree.vb" />
+    <Compile Include="UtteranceInterpretation\MixedInitiativeCluster.vb" />
+    <Compile Include="UtteranceInterpretation\MixedInitiative.vb" />
     <Compile Include="UtteranceInterpretation\UtteranceInterpretationOrchestrator.vb" />
     <Compile Include="UtteranceInterpretation\LastWordUtteranceEngine.vb" />
     <Compile Include="UtteranceInterpretation\ParseResultBuilder.vb" />

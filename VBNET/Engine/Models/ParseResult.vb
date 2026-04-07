@@ -1,11 +1,14 @@
 ' ParseResult.vb
-' Rappresenta il risultato del parsing dell'input utente
+' Esito del parsing lato dialogo (turno): match/no match, conferme, validazioni, slot.
+' L'estrazione NLP pura usa EngineResult (Common); ParseResultBuilder proietta EngineResult in questo tipo.
 
 Option Strict On
 Option Explicit On
 
+Imports System.Collections.Generic
+
 ''' <summary>
-''' Rappresenta il risultato del parsing dell'input utente
+''' Risultato del parsing dell'input nel contesto del task (dialogo), non solo estrazione NLP.
 ''' </summary>
 Public Class ParseResult
     ''' <summary>
@@ -34,14 +37,12 @@ Public Class ParseResult
     Public Property CorrectedData As Dictionary(Of String, Object)
 
     ''' <summary>
-    ''' Dati estratti come triple (taskInstanceId, nodeId, value)
-    ''' ✅ NEW: Struttura esplicita per lookup runtime
+    ''' Valori estratti per GUID slot (CanonicalGuidTable / Match.Guid).
     ''' </summary>
-    Public Property ExtractedVariables As List(Of ExtractedVariable)
+    Public Property SlotValues As Dictionary(Of String, Object)
 
     ''' <summary>
     ''' Porzione di utterance considerata coperta dal match (UtteranceInterpretation / telemetria).
-    ''' Opzionale: il vecchio Parser non la imposta.
     ''' </summary>
     Public Property MatchedText As String
 
@@ -61,7 +62,7 @@ Public Class ParseResult
     Public Sub New()
         ExtractedData = New Dictionary(Of String, Object)()
         CorrectedData = New Dictionary(Of String, Object)()
-        ExtractedVariables = New List(Of ExtractedVariable)()
+        SlotValues = New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
         MatchedText = String.Empty
         UnmatchedText = String.Empty
         Confidence = 0R
@@ -78,4 +79,3 @@ Public Class ParseResult
         }
     End Function
 End Class
-

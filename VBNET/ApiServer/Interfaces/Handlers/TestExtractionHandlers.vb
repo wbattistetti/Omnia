@@ -140,13 +140,13 @@ Namespace ApiServer.Handlers
 
                 Console.WriteLine($"[TestExtraction] Calling UtteranceInterpretationParse with text: '{request.Text}'")
                 Dim pr = UtteranceInterpretationParse.Parse(request.Text.Trim(), task)
-                Dim hasMatch = pr.Result = ParseResultType.Match AndAlso pr.ExtractedVariables IsNot Nothing AndAlso pr.ExtractedVariables.Count > 0
+                Dim hasMatch = pr.Result = ParseResultType.Match AndAlso pr.SlotValues IsNot Nothing AndAlso pr.SlotValues.Count > 0
                 Console.WriteLine($"[TestExtraction] Parse result: {pr.Result}, hasMatch={hasMatch}")
 
                 Dim extractedValues As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
-                If hasMatch AndAlso pr.ExtractedVariables IsNot Nothing Then
-                    For Each ev In pr.ExtractedVariables
-                        extractedValues(ev.NodeId) = ev.Value
+                If hasMatch AndAlso pr.SlotValues IsNot Nothing Then
+                    For Each kvp In pr.SlotValues
+                        extractedValues(kvp.Key) = kvp.Value
                     Next
                 End If
 

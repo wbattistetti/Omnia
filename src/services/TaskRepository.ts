@@ -4,7 +4,7 @@ import { TaskType, TemplateSource } from '../types/taskTypes';
 import { StepType } from '../types/stepTypes';
 import { generateId } from '../utils/idGenerator';
 import { getTemplateId } from '../utils/taskHelpers';
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import { FEATURE_FLAGS } from '../config/featureFlags';
 import { isAiAgentDebugEnabled, summarizeAgentTaskFields } from '../components/TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDebug';
 import { inferTaskKind, isStandaloneMaterializedTaskRow } from '@utils/taskKind';
@@ -480,7 +480,7 @@ class TaskRepository {
               for (const [stepType, stepData] of Object.entries(stepsDict)) {
                 if (stepData && typeof stepData === 'object') {
                   materializedSteps.push({
-                    id: stepData.id || uuidv4(),
+                    id: stepData.id || generateSafeGuid(),
                     templateStepId: stepData.templateStepId || undefined, // ✅ Solo se step derivato
                     escalations: stepData.escalations || []
                   });

@@ -8,7 +8,6 @@ import { useFontContext } from '@context/FontContext';
 import { useMessageEditing } from '@responseEditor/ChatSimulator/hooks/useMessageEditing';
 import { useFlowModeChat } from '@responseEditor/ChatSimulator/hooks/useFlowModeChat';
 import DialogueTaskService from '@services/DialogueTaskService';
-import { v4 as uuidv4 } from 'uuid';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { taskRepository } from '@services/TaskRepository';
 import { buildTaskTreeFromRepository } from '@utils/taskUtils';

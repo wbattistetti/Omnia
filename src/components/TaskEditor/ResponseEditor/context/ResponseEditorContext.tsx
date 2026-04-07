@@ -22,6 +22,9 @@ export interface ResponseEditorContextValue {
   taskWizardMode: TaskWizardMode;
   setTaskWizardMode: (mode: TaskWizardMode) => void;
   contextualizationTemplateId?: string;
+  contextualizationTemplateName?: string | null;
+  /** Clears embedding-based template suggestion and detaches instance from that catalogue row when user picks manual. */
+  dismissEmbeddingSuggestion?: () => void;
 }
 
 export const ResponseEditorContext = createContext<ResponseEditorContextValue | null>(null);

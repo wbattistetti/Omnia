@@ -96,7 +96,7 @@ Public Module GrammarFlowExtractHandlers
             Dim engine As New GrammarEngine(request.Grammar, useRegex:=True)
             Dim parseResult = engine.Parse(request.Text)
 
-            If Not parseResult.Success Then
+            If parseResult.ParseEvent <> ParseEvents.Match Then
                 Console.WriteLine($"[GrammarFlowExtract] ❌ No match found: {parseResult.ErrorMessage}")
                 Return Results.Ok(New GrammarFlowExtractResponse() With {
                     .Success = False,

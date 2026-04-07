@@ -1,7 +1,11 @@
 /**
  * Canonical translation keys: `<kind>:<uuid>` — never use bare GUIDs as keys.
  * Kinds: slot | variable | task | flow | interface (interface only for autonomous entities).
+ *
+ * GUID part: RFC UUID **or** {@link SAFE_GUID_PATTERN} from `generateSafeGuid()` (g_ + 32 hex).
  */
+
+import { SAFE_GUID_PATTERN } from './idGenerator';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -10,9 +14,11 @@ export type TranslationKeyKind = 'slot' | 'variable' | 'task' | 'flow' | 'interf
 
 const KINDS = new Set<TranslationKeyKind>(['slot', 'variable', 'task', 'flow', 'interface']);
 
-/** Validates UUID format (strict). */
+/** Validates RFC UUID or frontend {@link SAFE_GUID_PATTERN} (regex-safe opaque id). */
 export function isUuidString(s: string): boolean {
-  return typeof s === 'string' && UUID_RE.test(s.trim());
+  if (typeof s !== 'string') return false;
+  const t = s.trim();
+  return UUID_RE.test(t) || SAFE_GUID_PATTERN.test(t);
 }
 
 /**

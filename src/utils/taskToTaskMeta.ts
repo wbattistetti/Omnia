@@ -26,6 +26,7 @@ export function taskToTaskMeta(task: Task | any): TaskMeta {
     // ✅ Preserve wizard-related properties if present
     taskWizardMode: (task as any).taskWizardMode,
     contextualizationTemplateId: (task as any).contextualizationTemplateId,
+    contextualizationTemplateName: (task as any).contextualizationTemplateName,
     taskLabel: (task as any).taskLabel,
     needsTaskContextualization: (task as any).needsTaskContextualization,
     needsTaskBuilder: (task as any).needsTaskBuilder,

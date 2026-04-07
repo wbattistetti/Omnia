@@ -148,7 +148,7 @@ export class TaskEditorEventHandler {
       if (event.needsTaskBuilder === true) {
         taskWizardMode = 'full';
       } else if (event.needsTaskContextualization === true) {
-        taskWizardMode = 'adaptation';
+        taskWizardMode = 'pending';
       } else {
         taskWizardMode = 'none';
       }
@@ -169,6 +169,7 @@ export class TaskEditorEventHandler {
       needsTaskContextualization: event.needsTaskContextualization === true,
       needsTaskBuilder: event.needsTaskBuilder === true,
       contextualizationTemplateId: event.contextualizationTemplateId || undefined,
+      contextualizationTemplateName: event.contextualizationTemplateName || undefined,
       taskLabel: event.taskLabel || event.label || event.name || undefined,
     };
 
@@ -205,6 +206,17 @@ export class TaskEditorEventHandler {
         templateId: taskMeta.contextualizationTemplateId
       });
       return null; // Il wizard creerà il task e clonerà gli step
+    }
+
+    if (
+      taskMeta.taskWizardMode === 'pending' &&
+      taskMeta.contextualizationTemplateId &&
+      !event.taskTree
+    ) {
+      console.log(
+        '[TaskEditorEventHandler] Pending + embedding suggestion: empty shell (no template materialization until user chooses "Adatta template")',
+        { instanceId, templateId: taskMeta.contextualizationTemplateId }
+      );
     }
 
     // Use TaskTree from event if present

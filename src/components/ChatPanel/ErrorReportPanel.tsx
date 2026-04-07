@@ -8,6 +8,7 @@ import { useFlowWorkspace } from '@flows/FlowStore';
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode } from '@components/Flowchart/types/flowTypes';
 import { normalizeSeverity } from '@utils/severityUtils';
+import { compilationErrorsForTechnicalDetailPanel } from './errorReportDisplay';
 import { buildErrorReportTree, errorMessageWithoutFlowPrefix } from './errorReportTreeModel';
 import { compilationErrorFixKey } from '@utils/compilationErrorFix';
 
@@ -131,6 +132,7 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
                   ) : (
                     flowRoot.rows.map((rowGroup) => {
                       const rowKey = `${flowRoot.flowId}::${rowGroup.rowKey}`;
+                      const technicalSources = compilationErrorsForTechnicalDetailPanel(rowGroup.sourceErrors);
                       const rowOpen = !collapsedRows.has(rowKey);
                       const RowIcon = rowGroup.visuals.Icon;
                       const rowBorder = rowGroup.hasBlockingError
@@ -182,7 +184,7 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
                                   </li>
                                 ))}
                               </ul>
-                              {rowGroup.sourceErrors.length > 0 && (
+                              {technicalSources.length > 0 && (
                                 <div className="px-2 pb-2 pl-8">
                                   <button
                                     type="button"
@@ -194,11 +196,11 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
                                   >
                                     {detailRows.has(rowKey)
                                       ? 'Nascondi dettagli tecnici'
-                                      : `Mostra dettagli tecnici (${rowGroup.sourceErrors.length})`}
+                                      : `Mostra dettagli tecnici (${technicalSources.length})`}
                                   </button>
                                   {detailRows.has(rowKey) && (
                                     <ul className="mt-2 space-y-1.5 rounded-md bg-gray-100 dark:bg-gray-900/90 px-2.5 py-2 text-[11px] leading-relaxed text-gray-800 dark:text-gray-200 border border-gray-200/80 dark:border-gray-700">
-                                      {rowGroup.sourceErrors.map((src, i) => (
+                                      {technicalSources.map((src, i) => (
                                         <li key={`${rowKey}-src-${i}`} className="break-words">
                                           {src.category && (
                                             <span className="font-semibold text-gray-600 dark:text-gray-400 mr-1">

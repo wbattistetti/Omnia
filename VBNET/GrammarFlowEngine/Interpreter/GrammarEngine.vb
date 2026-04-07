@@ -45,14 +45,14 @@ Public Class GrammarEngine
     Public Function Parse(text As String, Optional maxGarbage As Integer = 5) As ParseResult
         If String.IsNullOrEmpty(text) Then
             Return New ParseResult() With {
-                    .Success = False,
+                    .ParseEvent = ParseEvents.NoInput,
                     .ErrorMessage = "Input text is empty"
                 }
         End If
 
         If compiledGrammar.EntryNodes.Count = 0 Then
             Return New ParseResult() With {
-                    .Success = False,
+                    .ParseEvent = ParseEvents.InvalidGrammar,
                     .ErrorMessage = "Grammar has no entry nodes"
                 }
         End If
@@ -73,7 +73,7 @@ Public Class GrammarEngine
 
         If Not regexResult.Success Then
             Return New ParseResult() With {
-                .Success = False,
+                .ParseEvent = ParseEvents.NoMatch,
                 .ErrorMessage = "No match found"
             }
         End If
@@ -94,7 +94,7 @@ Public Class GrammarEngine
         }
 
         Return New ParseResult() With {
-            .Success = True,
+            .ParseEvent = ParseEvents.Match,
             .Bindings = regexResult.Bindings,
             .ConsumedWords = regexResult.ConsumedWords,
             .GarbageUsed = regexResult.GarbageUsed,
@@ -128,7 +128,7 @@ Public Class GrammarEngine
 
         If Not bestResults.Any() Then
             Return New ParseResult() With {
-                    .Success = False,
+                    .ParseEvent = ParseEvents.NoMatch,
                     .ErrorMessage = "No match found"
                 }
         End If
@@ -136,7 +136,7 @@ Public Class GrammarEngine
         ' Take the first best result (or merge if multiple)
         Dim bestResult = bestResults.First()
         Dim parseResult As New ParseResult() With {
-                .Success = True,
+                .ParseEvent = ParseEvents.Match,
                 .Bindings = bestResult.Bindings,
                 .ConsumedWords = bestResult.ConsumedWords,
                 .GarbageUsed = bestResult.GarbageUsed,

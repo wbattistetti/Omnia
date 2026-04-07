@@ -2,6 +2,7 @@
 // Part of hybrid DDT structure migration
 
 import type { StepGroup, Escalation } from '../components/TaskTreeBuilder/DDTAssembler/types';
+import { generateSafeGuid } from '@utils/idGenerator';
 import { StepType } from './stepTypes';
 
 /**
@@ -30,7 +31,6 @@ export interface DialogueStep {
  */
 export function extractStepsFromNested(data: any[]): DialogueStep[] {
   const dialogueSteps: DialogueStep[] = [];
-  const { v4: uuidv4 } = require('uuid');
 
   function extractFromNode(node: any, dataId: string) {
     if (!node || !node.steps) return;
@@ -40,7 +40,7 @@ export function extractStepsFromNested(data: any[]): DialogueStep[] {
       for (const step of node.steps) {
         if (step && step.type) {
           dialogueSteps.push({
-            id: step.id || uuidv4(),
+            id: step.id || generateSafeGuid(),
             dataId: dataId,
             type: step.type,
             escalations: step.escalations || []
@@ -54,7 +54,7 @@ export function extractStepsFromNested(data: any[]): DialogueStep[] {
         if (stepValue && typeof stepValue === 'object') {
           const step = stepValue as any;
           dialogueSteps.push({
-            id: step.id || uuidv4(),
+            id: step.id || generateSafeGuid(),
             dataId: dataId,
             type: stepType as StepGroup['type'],
             escalations: step.escalations || []

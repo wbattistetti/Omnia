@@ -3,7 +3,7 @@
  * under task.parameters (parameterId === 'text'). No task.text.
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { generateSafeGuid } from '@utils/idGenerator';
 import type { Task } from '@types/taskTypes';
 import { TaskType } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
@@ -65,7 +65,7 @@ export function applySayMessagePlainTextToTask(taskId: string, plainText: string
 
   if (!textKey || !isTaskTranslationStorageKey(textKey)) {
     textKey =
-      textKey && isUuidString(textKey) ? makeTranslationKey('task', textKey) : makeTranslationKey('task', uuidv4());
+      textKey && isUuidString(textKey) ? makeTranslationKey('task', textKey) : makeTranslationKey('task', generateSafeGuid());
     const next = (prevParams as any[]).filter((p) => p?.parameterId !== 'text');
     next.push({ parameterId: 'text', value: textKey });
     taskRepository.updateTask(taskId, { parameters: next } as Partial<Task>, projectId);

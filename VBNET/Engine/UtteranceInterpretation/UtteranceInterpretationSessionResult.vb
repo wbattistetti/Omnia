@@ -1,21 +1,16 @@
 Option Strict On
 Option Explicit On
 
-Imports System.Collections.Generic
 
-Namespace UtteranceInterpretation
-
-    ''' <summary>Esito completo di interpretUtterance (main + altri task).</summary>
-    Public NotInheritable Class UtteranceInterpretationSessionResult
+''' <summary>Esito interpretUtterance (main + altri task).</summary>
+Public NotInheritable Class UtteranceInterpretationSessionResult
 
         Public Property FinalUtteranceRemainder As String
-        Public Property PerTaskResults As List(Of SingleTaskExtractionResult)
+        Public Property PerTaskResults As List(Of UtteranceEngineExtractionOutcome)
 
         Public Sub New()
             FinalUtteranceRemainder = String.Empty
-            PerTaskResults = New List(Of SingleTaskExtractionResult)()
+            PerTaskResults = New List(Of UtteranceEngineExtractionOutcome)()
         End Sub
 
     End Class
-
-End Namespace

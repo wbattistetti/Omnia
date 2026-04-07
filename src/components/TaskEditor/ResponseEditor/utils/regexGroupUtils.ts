@@ -4,21 +4,18 @@
 import type { TaskTreeNode } from '@types/taskTypes';
 import { deriveSubTaskKey } from '@utils/taskUtils';
 import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
+import { generateSafeGuid, SAFE_GUID_PATTERN_LEGACY } from '@utils/idGenerator';
 
 /**
- * Generates a technical GUID-based regex group name.
- * Format: g_[a-f0-9]{12}
- * Neither semantic names (day, month, year, etc.) nor label must ever appear as a regex group name.
+ * Technical regex / contract group name: same as {@link generateSafeGuid} (g_ + 32 hex).
+ * Legacy 12-hex ids remain accepted for validation.
  */
 export function generateGroupName(): string {
-  const hex = Array.from(crypto.getRandomValues(new Uint8Array(6)))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `g_${hex}`;
+  return generateSafeGuid();
 }
 
-/** Regex that a valid GroupName must satisfy. */
-export const GROUP_NAME_PATTERN = /^g_[a-f0-9]{12}$/i;
+/** Valid SubDataMapping.groupName: new full ids or legacy short g_ ids. */
+export const GROUP_NAME_PATTERN = SAFE_GUID_PATTERN_LEGACY;
 
 /**
  * Get subTasks info (subTaskKey and label) from a node
@@ -168,7 +165,7 @@ export function validateGroupNames(
       result.valid = false;
       result.errors.push(
         `SubDataMapping entry '${subId}' has invalid groupName '${info.groupName}'. ` +
-        `Expected format: g_[a-f0-9]{12}.`
+        `Expected format: g_[a-f0-9]{12} (legacy) or g_[a-f0-9]{32} (canonical).`
       );
     }
   }

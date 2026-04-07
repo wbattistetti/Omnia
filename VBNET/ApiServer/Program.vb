@@ -469,7 +469,7 @@ Module Program
             Console.Out.Flush()
 
             ' ✅ STEP 3: Deserialize CompilationResult (+ subflow compilations con lo stesso schema)
-            Dim compilationResult As Compiler.FlowCompilationResult = Nothing
+            Dim compilationResult As Compiler.CompiledFlow = Nothing
             Dim serializerSettings As New JsonSerializerSettings() With {
                 .NullValueHandling = NullValueHandling.Ignore,
                 .MissingMemberHandling = MissingMemberHandling.Ignore
@@ -481,7 +481,7 @@ Module Program
                 ' Try to deserialize directly if it's already a JObject
                 If TypeOf request.CompilationResult Is JObject Then
                     Dim jObj = CType(request.CompilationResult, JObject)
-                    compilationResult = jObj.ToObject(Of Compiler.FlowCompilationResult)(compilationSerializer)
+                    compilationResult = jObj.ToObject(Of Compiler.CompiledFlow)(compilationSerializer)
                 Else
                     Throw New InvalidOperationException("CompilationResult must be a JObject. The session cannot start without a valid CompilationResult.")
                 End If
@@ -489,9 +489,9 @@ Module Program
                 Return ResponseHelpers.CreateErrorResponse($"Failed to deserialize CompilationResult: {deserializeEx.Message}", 400)
             End Try
 
-            Dim subflowCompilations As Dictionary(Of String, Compiler.FlowCompilationResult) = Nothing
+            Dim subflowCompilations As Dictionary(Of String, Compiler.CompiledFlow) = Nothing
             If request.SubflowCompilations IsNot Nothing AndAlso request.SubflowCompilations.Count > 0 Then
-                subflowCompilations = New Dictionary(Of String, Compiler.FlowCompilationResult)()
+                subflowCompilations = New Dictionary(Of String, Compiler.CompiledFlow)()
                 For Each kvp In request.SubflowCompilations
                     If String.IsNullOrEmpty(kvp.Key) Then
                         Continue For
@@ -502,7 +502,7 @@ Module Program
                         Continue For
                     End If
                     Try
-                        Dim subResult = subJ.ToObject(Of Compiler.FlowCompilationResult)(compilationSerializer)
+                        Dim subResult = subJ.ToObject(Of Compiler.CompiledFlow)(compilationSerializer)
                         If subResult IsNot Nothing Then
                             subflowCompilations(kvp.Key) = subResult
                         End If
