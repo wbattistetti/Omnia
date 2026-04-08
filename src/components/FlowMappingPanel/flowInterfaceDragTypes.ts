@@ -129,43 +129,60 @@ export const DND_IFACE_REORDER = 'application/x-omnia-iface-reorder';
 /**
  * Hit-test: Backend Call mapping panel (SEND/RECEIVE) for pointer drop from canvas rows.
  */
+/** Small offsets fix border/subpixel misses on repeated drops (Interface / Backend panels). */
+const HIT_PROBE_OFFSETS: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [-4, 0],
+  [4, 0],
+  [0, -4],
+  [0, 4],
+];
+
 export function findBackendMappingZoneAtPoint(
   clientX: number,
   clientY: number,
   flowCanvasId: string
 ): 'send' | 'receive' | null {
-  let list: Element[];
-  try {
-    list = document.elementsFromPoint(clientX, clientY);
-  } catch {
-    return null;
-  }
-  for (const node of list) {
-    if (!(node instanceof HTMLElement)) continue;
-    const root = node.closest('[data-omnia-backend-mapping][data-flow-canvas-id]');
-    if (root instanceof HTMLElement) {
-      const fid = root.getAttribute('data-flow-canvas-id');
-      if (fid !== flowCanvasId) continue;
-      const zone = root.getAttribute('data-omnia-backend-mapping');
-      if (zone === 'send' || zone === 'receive') return zone;
+  const want = String(flowCanvasId ?? '').trim();
+  if (!want) return null;
+  for (const [dx, dy] of HIT_PROBE_OFFSETS) {
+    let list: Element[];
+    try {
+      list = document.elementsFromPoint(clientX + dx, clientY + dy);
+    } catch {
+      continue;
+    }
+    for (const node of list) {
+      if (!(node instanceof HTMLElement)) continue;
+      const root = node.closest('[data-omnia-backend-mapping][data-flow-canvas-id]');
+      if (root instanceof HTMLElement) {
+        const fid = String(root.getAttribute('data-flow-canvas-id') ?? '').trim();
+        if (fid !== want) continue;
+        const zone = root.getAttribute('data-omnia-backend-mapping');
+        if (zone === 'send' || zone === 'receive') return zone;
+      }
     }
   }
   return null;
 }
 
 export function findInterfaceZoneRootAtPoint(clientX: number, clientY: number, flowCanvasId: string): HTMLElement | null {
-  let list: Element[];
-  try {
-    list = document.elementsFromPoint(clientX, clientY);
-  } catch {
-    return null;
-  }
-  for (const node of list) {
-    if (!(node instanceof HTMLElement)) continue;
-    const root = node.closest('[data-flow-interface-zone][data-flow-canvas-id]');
-    if (root instanceof HTMLElement) {
-      const fid = root.getAttribute('data-flow-canvas-id');
-      if (fid === flowCanvasId) return root;
+  const want = String(flowCanvasId ?? '').trim();
+  if (!want) return null;
+  for (const [dx, dy] of HIT_PROBE_OFFSETS) {
+    let list: Element[];
+    try {
+      list = document.elementsFromPoint(clientX + dx, clientY + dy);
+    } catch {
+      continue;
+    }
+    for (const node of list) {
+      if (!(node instanceof HTMLElement)) continue;
+      const root = node.closest('[data-flow-interface-zone][data-flow-canvas-id]');
+      if (root instanceof HTMLElement) {
+        const fid = String(root.getAttribute('data-flow-canvas-id') ?? '').trim();
+        if (fid === want) return root;
+      }
     }
   }
   return null;
@@ -180,11 +197,13 @@ export function computeInterfacePointerPreview(
   clientY: number,
   flowCanvasId: string
 ): FlowInterfacePointerPreviewDetail | null {
+  const want = String(flowCanvasId ?? '').trim();
+  if (!want) return null;
   const zoneRoot = findInterfaceZoneRootAtPoint(clientX, clientY, flowCanvasId);
   if (!zoneRoot) return null;
-  const fid = zoneRoot.getAttribute('data-flow-canvas-id');
+  const fid = String(zoneRoot.getAttribute('data-flow-canvas-id') ?? '').trim();
   const zone = zoneRoot.getAttribute('data-flow-interface-zone') as 'input' | 'output' | null;
-  if (fid !== flowCanvasId || zone !== 'output') return null;
+  if (fid !== want || zone !== 'output') return null;
 
   let row: HTMLElement | null = null;
   try {
@@ -242,5 +261,6 @@ export function computeInterfacePointerPreview(
     return { flowId: fid, zone, targetPathKey: null, placement: 'append' };
   }
 
-  return null;
+  // In OUTPUT zone (MappingBlock) but not over tree body (e.g. column header, padding): still append.
+  return { flowId: fid, zone: 'output', targetPathKey: null, placement: 'append' };
 }

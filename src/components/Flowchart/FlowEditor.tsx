@@ -873,6 +873,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       <div
         className="flex-1 h-full relative"
         ref={canvasRef}
+        data-omnia-flowchart-canvas-root={String(flowId ?? 'main').trim()}
         data-flow-canvas-id={String(flowId ?? 'main').trim()}
         onMouseLeave={() => setCursorTooltip(null)}
         onMouseDown={eventHandlers.onMouseDown}

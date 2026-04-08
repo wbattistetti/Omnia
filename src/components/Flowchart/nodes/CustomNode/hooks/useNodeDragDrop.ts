@@ -18,8 +18,8 @@ import {
 } from '../../../../FlowMappingPanel/flowInterfaceDragTypes';
 
 /**
- * Walks the hit-test stack at (x,y) to find which flow canvas received the drop.
- * Uses drop target, not the drag source — required when main + subflow are both mounted.
+ * Walks the hit-test stack at (x,y) to find which React Flow canvas root received the drop.
+ * Uses `data-omnia-flowchart-canvas-root` only — not `data-flow-canvas-id` (also on Interface MappingBlock).
  */
 function resolveFlowCanvasIdAtScreenPoint(clientX: number, clientY: number, fallback: string): string {
   const fb = String(fallback || 'main').trim() || 'main';
@@ -29,7 +29,7 @@ function resolveFlowCanvasIdAtScreenPoint(clientX: number, clientY: number, fall
       let cur: Element | null = top;
       while (cur) {
         if (cur instanceof HTMLElement) {
-          const id = cur.getAttribute('data-flow-canvas-id');
+          const id = cur.getAttribute('data-omnia-flowchart-canvas-root');
           if (id && String(id).trim()) {
             return String(id).trim();
           }
@@ -255,8 +255,9 @@ export function useNodeDragDrop({
             setTargetNodeId(null);
         }
 
-        if (flowCanvasId) {
-            const pv = computeInterfacePointerPreview(e.clientX, e.clientY, flowCanvasId);
+        const fcMove = String(flowCanvasId ?? 'main').trim() || 'main';
+        if (fcMove) {
+            const pv = computeInterfacePointerPreview(e.clientX, e.clientY, fcMove);
             const key = pv ? `${pv.flowId}|${pv.zone}|${pv.targetPathKey}|${pv.placement}` : 'null';
             if (key !== lastIfacePreviewKeyRef.current) {
                 lastIfacePreviewKeyRef.current = key;
@@ -273,7 +274,8 @@ export function useNodeDragDrop({
     const handleMouseUp = useCallback(() => {
         if (!isRowDragging || !draggedRowId || draggedRowIndex === null) return;
 
-        if (flowCanvasId) {
+        const fcUp = String(flowCanvasId ?? 'main').trim() || 'main';
+        if (fcUp) {
             lastIfacePreviewKeyRef.current = null;
             window.dispatchEvent(
                 new CustomEvent<FlowInterfacePointerPreviewDetail | null>(FLOW_INTERFACE_POINTER_PREVIEW, {
@@ -399,11 +401,17 @@ export function useNodeDragDrop({
         } else if (!targetNodeId) {
             // Drop on Flow Interface: row-acquired pointer drop is Output-only; Input cancels without canvas spawn.
             let handledFlowInterface = false;
-            if (flowCanvasId) {
+            // Drag clone sits on top (fixed, high z-index); hide it so elementsFromPoint hits Interface / canvas below.
+            if (dragElement) {
+                dragElement.style.pointerEvents = 'none';
+                dragElement.style.visibility = 'hidden';
+            }
+            const fc = String(flowCanvasId ?? 'main').trim() || 'main';
+            if (fc) {
                 const mx = mousePositionRef.current.x;
                 const my = mousePositionRef.current.y;
 
-                const backendZone = findBackendMappingZoneAtPoint(mx, my, flowCanvasId);
+                const backendZone = findBackendMappingZoneAtPoint(mx, my, fc);
                 if (backendZone) {
                     const rowDataToMove = draggedRowData || nodeRows.find((row) => row.id === draggedRowId);
                     if (rowDataToMove) {
@@ -424,7 +432,7 @@ export function useNodeDragDrop({
                         }
                         const rowLabel = (rowDataToMove.text ?? '').trim() || 'field';
                         const detail: FlowBackendMappingPointerDropDetail = {
-                            flowCanvasId,
+                            flowCanvasId: fc,
                             zone: backendZone,
                             variableRefId,
                             rowLabel,
@@ -439,11 +447,11 @@ export function useNodeDragDrop({
                 }
 
                 if (!handledFlowInterface) {
-                const dropRoot = findInterfaceZoneRootAtPoint(mx, my, flowCanvasId);
+                const dropRoot = findInterfaceZoneRootAtPoint(mx, my, fc);
                 if (dropRoot) {
                     const zone = dropRoot.getAttribute('data-flow-interface-zone') as 'input' | 'output' | null;
-                    const fid = dropRoot.getAttribute('data-flow-canvas-id');
-                    if (fid === flowCanvasId && zone) {
+                    const fid = String(dropRoot.getAttribute('data-flow-canvas-id') ?? '').trim();
+                    if (fid === fc && zone) {
                         if (zone === 'input') {
                             handledFlowInterface = true;
                         } else if (zone === 'output') {
@@ -466,7 +474,7 @@ export function useNodeDragDrop({
                                 }
                                 const rowLabel = (rowDataToMove.text ?? '').trim() || 'field';
                                 const internalPath = stableInterfacePathForVariable(variableRefId);
-                                const pv = computeInterfacePointerPreview(mx, my, flowCanvasId);
+                                const pv = computeInterfacePointerPreview(mx, my, fc);
                                 const insertTargetPathKey = pv?.targetPathKey ?? null;
                                 const insertPlacement = pv?.placement ?? 'append';
                                 const detail: FlowInterfaceRowPointerDropDetail = {
