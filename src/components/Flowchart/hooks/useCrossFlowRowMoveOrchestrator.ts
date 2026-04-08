@@ -4,14 +4,14 @@
  * workspace graph (node membership), not the active canvas under the pointer. Sets `detail._state.handled`
  * so bubble listeners and {@link useNodeDragDrop} skip legacy local updates.
  *
- * **Not mounted in FlowEditor yet:** {@link useNodeDragDrop} already removes the row from the source
- * and updates the graph optimistically; turning this on without skipping that path risks double
- * application of `moveTaskRow`. Wire it together with a single structural write path (refactor follow-up).
+ * **Coordination:** {@link useNodeDragDrop} dispatches `crossNodeRowMove` **synchronously** (capture
+ * handlers run first), then **always** removes the row from the source node via `updateNode` so the
+ * UI cannot stay out of sync when store commits are delayed or partial.
  */
 
 import { useEffect } from 'react';
 import { normalizeFlowCanvasId } from '@components/FlowMappingPanel/flowInterfaceDragTypes';
-import { findFlowIdContainingNode } from '@domain/taskSubflowMove/findFlowIdForNode';
+import { resolveFlowIdForNodeWithCanvasHint } from '@domain/taskSubflowMove/findFlowIdForNode';
 import { getSubflowSyncFlows } from '@domain/taskSubflowMove/subflowSyncFlowsRef';
 import {
   createDefaultStructuralOrchestratorContext,
@@ -49,13 +49,21 @@ export function useCrossFlowRowMoveOrchestrator(params: {
       if (!fromNode || !toNode || !rowId) return;
 
       const flows = getSubflowSyncFlows();
-      const fromByGraph = findFlowIdContainingNode(flows, fromNode);
-      const toByGraph = findFlowIdContainingNode(flows, toNode);
       const fromHint =
         normalizeFlowCanvasId(d.fromFlowId ?? d.fromFlowCanvasId ?? '').trim() || 'main';
       const toHint = normalizeFlowCanvasId(d.toFlowId ?? d.toFlowCanvasId ?? '').trim() || 'main';
-      const fromResolved = fromByGraph ?? fromHint;
-      const toResolved = toByGraph ?? toHint;
+
+      let fromResolved =
+        resolveFlowIdForNodeWithCanvasHint(flows, fromNode, d.fromFlowCanvasId ?? d.fromFlowId) ??
+        fromHint;
+      let toResolved =
+        resolveFlowIdForNodeWithCanvasHint(flows, toNode, d.toFlowCanvasId ?? d.toFlowId) ?? toHint;
+
+      /** Same canvas id on graph (e.g. duplicate node id in two slices) — trust drag hints. */
+      if (fromResolved === toResolved && fromHint !== toHint) {
+        fromResolved = fromHint;
+        toResolved = toHint;
+      }
 
       logTaskSubflowMove('crossFlow:detected', { fromFlowId: fromHint, toFlowId: toHint });
       logTaskSubflowMove('crossFlow:normalized', { fromFlowId: fromResolved, toFlowId: toResolved });

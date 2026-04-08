@@ -336,58 +336,46 @@ export function useNodeDragDrop({
 
             // ✅ VERIFY: Controlla che il task esista ancora dopo lo spostamento
             const taskId = rowDataToMove.id; // row.id === task.id
-            const task = taskRepository.getTask(taskId);
+            taskRepository.getTask(taskId);
 
-            console.log('[useNodeDragDrop] 🔍 CROSS-NODE MOVE - Task verification', {
-                rowId: rowDataToMove.id,
-                taskId: taskId,
-                taskExists: !!task,
-                taskType: task?.type,
+            const fromFc = String(flowCanvasId ?? 'main').trim() || 'main';
+            const crossNodeDetail: Record<string, unknown> = {
                 fromNodeId: nodeId,
                 toNodeId: targetNodeId,
-                rowData: {
-                    id: rowDataToMove.id,
-                    text: rowDataToMove.text,
-                    taskId: rowDataToMove.taskId,
-                    instanceId: rowDataToMove.instanceId
-                }
-            });
+                rowId: draggedRowId,
+                rowData: rowDataToMove,
+                originalIndex: draggedRowIndex,
+                mousePosition: { x: mousePositionRef.current.x, y: mousePositionRef.current.y },
+                fromFlowCanvasId: fromFc,
+                toFlowCanvasId: resolveFlowCanvasIdAtScreenPoint(
+                    mousePositionRef.current.x,
+                    mousePositionRef.current.y,
+                    fromFc
+                ),
+                _state: { handled: false },
+            };
+            const crossNodeEvent = new CustomEvent('crossNodeRowMove', { detail: crossNodeDetail });
+            window.dispatchEvent(crossNodeEvent);
 
-            // Dispatch evento per cross-node move
-            const crossNodeEvent = new CustomEvent('crossNodeRowMove', {
-                detail: {
-                    fromNodeId: nodeId,
-                    toNodeId: targetNodeId,
-                    rowId: draggedRowId,
-                    rowData: rowDataToMove, // ✅ Mantiene lo stesso row.id, quindi il task è ancora disponibile
-                    originalIndex: draggedRowIndex,
-                    mousePosition: { x: mousePositionRef.current.x, y: mousePositionRef.current.y },
-                    /** FlowEditor may set true when the row is routed into a child flow (Subflow portal). */
-                    _state: { handled: false },
-                }
-            });
+            if (targetNodeId) {
+                removeNodeHighlight(targetNodeId);
+            }
 
-            setTimeout(() => {
-                window.dispatchEvent(crossNodeEvent);
-            }, 10);
-
-            // Remove the row from current node
-            const updatedRows = nodeRows.filter(row => row.id !== draggedRowId);
+            /**
+             * Always remove the row from the source node immediately (same as pre-orchestrator behavior).
+             * Capture handlers may have already updated the workspace store; this write must stay
+             * idempotent. Skipping when `detail._state.handled` was true left the source canvas stale
+             * whenever the store slice did not reflect the removal (dual-pane / commit ordering).
+             */
+            const updatedRows = nodeRows.filter((row) => row.id !== draggedRowId);
             setNodeRows(updatedRows);
 
-            // Update node via context or fallback
             if (flowActions?.updateNode) {
                 flowActions.updateNode(nodeId, { rows: updatedRows });
             } else if (data.onUpdate) {
                 data.onUpdate({ rows: updatedRows });
             }
 
-            // Remove highlight from target node after timeout (cross-node)
-            if (targetNodeId) {
-                removeNodeHighlight(targetNodeId);
-            }
-
-            // If source node becomes empty after move, delete it
             if (updatedRows.length === 0) {
                 setTimeout(() => {
                     if (flowActions?.deleteNode) {
@@ -395,7 +383,7 @@ export function useNodeDragDrop({
                     } else if (data.onDelete) {
                         data.onDelete();
                     }
-                }, 50); // Small delay to allow target node creation/update
+                }, 50);
             }
 
         } else if (!targetNodeId) {

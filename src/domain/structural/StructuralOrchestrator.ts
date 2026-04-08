@@ -194,8 +194,15 @@ function runMoveTaskRow(ctx: StructuralOrchestratorContext, command: MoveTaskRow
     }
   }
 
-  logStructuralOrchestratorCommitSnapshot('runMoveTaskRow:subflowApply', result.flowsNext, [parentFlowId, childFlowId]);
-  ctx.commitFlowSlices(result.flowsNext, [parentFlowId, childFlowId]);
+  const sliceIdsForCommit = Array.from(
+    new Set(
+      [fromF, toF, parentFlowId, childFlowId]
+        .map((x) => String(x || '').trim())
+        .filter(Boolean)
+    )
+  );
+  logStructuralOrchestratorCommitSnapshot('runMoveTaskRow:subflowApply', result.flowsNext, sliceIdsForCommit);
+  ctx.commitFlowSlices(result.flowsNext, sliceIdsForCommit);
   logSubflowSliceMutation('AFTER', childFlowId, result.flowsNext);
   logPipeline('moveTaskRow:done', command);
   return result;

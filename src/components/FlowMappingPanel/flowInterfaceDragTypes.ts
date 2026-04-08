@@ -5,6 +5,12 @@
 
 export const DND_FLOWROW_VAR = 'application/x-omnia-flowrow-var';
 
+/** Trimmed flow canvas id for comparisons; empty → `'main'`. */
+export function normalizeFlowCanvasId(raw: string | undefined | null): string {
+  const s = String(raw ?? '').trim();
+  return s || 'main';
+}
+
 /** CustomEvent from useNodeDragDrop when a row is released over INPUT/OUTPUT (row stays on node). */
 export const FLOW_INTERFACE_ROW_POINTER_DROP = 'flowInterfaceRowPointerDrop';
 

@@ -60,3 +60,26 @@ export function summarizeFlowSlice(
     perNode,
   };
 }
+
+type FlowSliceLike = {
+  nodes?: unknown[];
+  title?: string;
+  hydrated?: boolean;
+  hasLocalChanges?: boolean;
+} | undefined;
+
+/**
+ * Dev-only tracing around structural commits (orchestrator / portal): one slice before/after mutation.
+ */
+export function logSubflowSliceMutation(
+  phase: 'BEFORE' | 'AFTER' | string,
+  flowId: string,
+  flows: Record<string, FlowSliceLike>
+): void {
+  if (!isSubflowCanvasDebugEnabled()) return;
+  const slice = flows[flowId];
+  logSubflowCanvasDebug(`sliceMutation:${phase}`, {
+    flowId,
+    ...summarizeFlowSlice(slice, { rowIdsSample: true }),
+  });
+}

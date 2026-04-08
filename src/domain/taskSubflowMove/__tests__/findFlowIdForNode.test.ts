@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findFlowIdContainingNode } from '../findFlowIdForNode';
+import { findFlowIdContainingNode, resolveFlowIdForNodeWithCanvasHint } from '../findFlowIdForNode';
 
 describe('findFlowIdContainingNode', () => {
   it('returns the flow id whose nodes array contains the node id', () => {
@@ -15,5 +15,16 @@ describe('findFlowIdContainingNode', () => {
     expect(findFlowIdContainingNode({}, 'n1')).toBeNull();
     expect(findFlowIdContainingNode(undefined, 'n1')).toBeNull();
     expect(findFlowIdContainingNode({ main: { nodes: [] } }, 'n1')).toBeNull();
+  });
+});
+
+describe('resolveFlowIdForNodeWithCanvasHint', () => {
+  it('prefers canvas hint when the same node id exists in two flow slices', () => {
+    const flows = {
+      main: { nodes: [{ id: 'dup' }] },
+      subflow_abc: { nodes: [{ id: 'dup' }] },
+    };
+    expect(resolveFlowIdForNodeWithCanvasHint(flows, 'dup', 'main')).toBe('main');
+    expect(resolveFlowIdForNodeWithCanvasHint(flows, 'dup', 'subflow_abc')).toBe('subflow_abc');
   });
 });

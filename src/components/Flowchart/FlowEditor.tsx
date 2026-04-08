@@ -52,6 +52,7 @@ import { ExecutionStateProvider } from './executionHighlight/ExecutionStateConte
 import { FlowStateBridge } from '../../services/FlowStateBridge';
 import { useCompilationErrors } from '../../context/CompilationErrorsContext';
 import { useFlowchartState } from '../../context/FlowchartStateContext';
+import { useCrossFlowRowMoveOrchestrator } from './hooks/useCrossFlowRowMoveOrchestrator';
 import { useCrossNodeSubflowPortalMove } from './hooks/useCrossNodeSubflowPortalMove';
 import { intellisenseAnchorFlowFromHandles, VHV_COLLINEAR_EPS_PX } from './edges/utils/edgeRouting';
 import { waitForHandleBounds } from './utils/waitForHandleBounds';
@@ -293,7 +294,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // ProjectData for condition creation
   const { data: projectData } = useProjectData();
+  const structuralProjectId =
+    (projectData as { id?: string; projectId?: string } | null)?.id ??
+    (projectData as { projectId?: string } | null)?.projectId;
 
+  /** Runs before {@link useCrossNodeSubflowPortalMove} (registration order → capture phase first). */
+  useCrossFlowRowMoveOrchestrator({ projectId: structuralProjectId, projectData });
   useCrossNodeSubflowPortalMove({ flowId, nodes });
 
   const nodeActions = useNodeActions({
