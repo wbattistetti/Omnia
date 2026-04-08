@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
+import { mergeExternalRowsFromStore, rowListsShallowEqual } from './nodeRowExternalSync';
 import { getTaskIdFromRow } from '../../../../../utils/taskHelpers';
 import { variableCreationService } from '../../../../../services/VariableCreationService';
 import { taskRepository } from '../../../../../services/TaskRepository';
@@ -38,6 +39,11 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     // Guardia per sopprimere exitEditing durante auto-append
     const autoAppendGuard = useRef(0);
     const inAutoAppend = () => autoAppendGuard.current > 0;
+
+    /** Latest rows for sync effect (avoids depending on `nodeRows` and clobbering pending edits). */
+    const nodeRowsRef = useRef(nodeRows);
+    nodeRowsRef.current = nodeRows;
+
     const beginAutoAppendGuard = () => {
         autoAppendGuard.current += 1;
         // Rilascio dopo due frame per coprire setState + focus programmato
@@ -53,6 +59,42 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     const computeIsEmpty = useCallback((rows: NodeRowData[]): boolean => {
         return rows.length === 0 || rows.every(r => !r.text || r.text.trim() === '');
     }, []);
+
+    /**
+     * Keep local row state aligned with store-driven props (`displayRows`).
+     * Portal / subflow moves update FlowStore and props while skipping CustomNode's optimistic
+     * `crossNodeRowMove` handler (`_state.handled`); without this sync, rows only reappear after remount.
+     *
+     * Conservative: when structure and ids match and nothing is being edited, do not replace local
+     * rows (avoids overwriting keystrokes before the parent re-renders). When the store adds/reorders
+     * rows or the user edits one row while siblings refresh, apply `mergeExternalRowsFromStore`.
+     */
+    useEffect(() => {
+        if (autoAppendGuard.current > 0) {
+            return;
+        }
+        const local = nodeRowsRef.current;
+        if (local.length > displayRows.length) {
+            return;
+        }
+
+        const merged = mergeExternalRowsFromStore(displayRows, local, editingRowId);
+        if (rowListsShallowEqual(local, merged)) {
+            return;
+        }
+
+        const localSig = local.map((r) => r.id).join('\0');
+        const displaySig = displayRows.map((r) => r.id).join('\0');
+        const structuralMismatch = localSig !== displaySig || displayRows.length !== local.length;
+        const storeHasNewRow = displayRows.some((r) => !local.some((nr) => nr.id === r.id));
+
+        if (!structuralMismatch && !storeHasNewRow && !editingRowId) {
+            return;
+        }
+
+        setNodeRows(merged);
+        setIsEmpty(computeIsEmpty(merged));
+    }, [displayRows, editingRowId, computeIsEmpty]);
 
     // Funzione per aggiungere una riga vuota
     // ✅ LAZY: Crea solo la riga, SENZA task (il task verrà creato solo quando si apre l'editor)
