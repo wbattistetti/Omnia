@@ -51,3 +51,36 @@ function stableRowJson(r: NodeRowData): string {
     factoryId: r.factoryId,
   });
 }
+
+/** Result of comparing store `displayRows` with local node row state. */
+export type ExternalRowSyncPlan = { shouldSync: false } | { shouldSync: true; nextRows: NodeRowData[] };
+
+/**
+ * Pure decision for whether to pull `displayRows` into local state (see useNodeRowManagement effect).
+ * Keeps editing keystrokes safe when structure is unchanged and no row is being edited.
+ */
+export function planExternalRowSync(
+  displayRows: NodeRowData[],
+  localRows: NodeRowData[],
+  editingRowId: string | null
+): ExternalRowSyncPlan {
+  if (localRows.length > displayRows.length) {
+    return { shouldSync: false };
+  }
+
+  const merged = mergeExternalRowsFromStore(displayRows, localRows, editingRowId);
+  if (rowListsShallowEqual(localRows, merged)) {
+    return { shouldSync: false };
+  }
+
+  const localSig = localRows.map((r) => r.id).join('\0');
+  const displaySig = displayRows.map((r) => r.id).join('\0');
+  const structuralMismatch = localSig !== displaySig || displayRows.length !== localRows.length;
+  const storeHasNewRow = displayRows.some((r) => !localRows.some((nr) => nr.id === r.id));
+
+  if (!structuralMismatch && !storeHasNewRow && !editingRowId) {
+    return { shouldSync: false };
+  }
+
+  return { shouldSync: true, nextRows: merged };
+}

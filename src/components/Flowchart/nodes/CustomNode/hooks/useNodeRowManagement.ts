@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
-import { mergeExternalRowsFromStore, rowListsShallowEqual } from './nodeRowExternalSync';
+import { planExternalRowSync } from './nodeRowExternalSync';
 import { getTaskIdFromRow } from '../../../../../utils/taskHelpers';
 import { variableCreationService } from '../../../../../services/VariableCreationService';
 import { taskRepository } from '../../../../../services/TaskRepository';
@@ -73,27 +73,12 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         if (autoAppendGuard.current > 0) {
             return;
         }
-        const local = nodeRowsRef.current;
-        if (local.length > displayRows.length) {
+        const plan = planExternalRowSync(displayRows, nodeRowsRef.current, editingRowId);
+        if (!plan.shouldSync) {
             return;
         }
-
-        const merged = mergeExternalRowsFromStore(displayRows, local, editingRowId);
-        if (rowListsShallowEqual(local, merged)) {
-            return;
-        }
-
-        const localSig = local.map((r) => r.id).join('\0');
-        const displaySig = displayRows.map((r) => r.id).join('\0');
-        const structuralMismatch = localSig !== displaySig || displayRows.length !== local.length;
-        const storeHasNewRow = displayRows.some((r) => !local.some((nr) => nr.id === r.id));
-
-        if (!structuralMismatch && !storeHasNewRow && !editingRowId) {
-            return;
-        }
-
-        setNodeRows(merged);
-        setIsEmpty(computeIsEmpty(merged));
+        setNodeRows(plan.nextRows);
+        setIsEmpty(computeIsEmpty(plan.nextRows));
     }, [displayRows, editingRowId, computeIsEmpty]);
 
     // Funzione per aggiungere una riga vuota

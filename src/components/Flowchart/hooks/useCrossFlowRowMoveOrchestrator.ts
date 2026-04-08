@@ -3,6 +3,10 @@
  * {@link FlowEditor} so it runs first on `crossNodeRowMove`. Resolves source/target flow ids from the
  * workspace graph (node membership), not the active canvas under the pointer. Sets `detail._state.handled`
  * so bubble listeners and {@link useNodeDragDrop} skip legacy local updates.
+ *
+ * **Not mounted in FlowEditor yet:** {@link useNodeDragDrop} already removes the row from the source
+ * and updates the graph optimistically; turning this on without skipping that path risks double
+ * application of `moveTaskRow`. Wire it together with a single structural write path (refactor follow-up).
  */
 
 import { useEffect } from 'react';
