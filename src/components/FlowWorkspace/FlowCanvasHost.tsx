@@ -4,6 +4,7 @@ import { loadFlow } from '../../flows/FlowPersistence';
 import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
 import { logFlowSaveDebug } from '../../utils/flowSaveDebug';
 import { logSubflowCanvasDebug, summarizeFlowSlice } from '../../utils/subflowCanvasDebug';
+import { logUpsertSubflowEmptyNodesCaller } from '../../utils/flowStructuralCommitDiagnostic';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
 import { FlowInterfaceBottomPanel } from './FlowInterfaceBottomPanel';
@@ -126,14 +127,16 @@ export const FlowCanvasHost: React.FC<Props> = ({
       setIsLoadingFlow(false);
       logFlowSaveDebug('FlowCanvasHost: skip load (no projectId)', { flowId });
       if (!flows[flowId]) {
-        upsertFlow({
+        const placeholder = {
           id: flowId,
           title: pickFlowTitle(flowId, flows[flowId]?.title),
           nodes: [],
           edges: [],
           hydrated: false,
           hasLocalChanges: false,
-        });
+        };
+        logUpsertSubflowEmptyNodesCaller('FlowCanvasHost:noProjectIdPlaceholder', placeholder);
+        upsertFlow(placeholder);
       }
       return;
     }
@@ -167,14 +170,16 @@ export const FlowCanvasHost: React.FC<Props> = ({
         } catch (e) {
           if (cancelled) return;
           console.error('[FlowCanvasHost] initial loadFlow failed', { projectId, flowId, e });
-          upsertFlow({
+          const failedLoad = {
             id: flowId,
             title: pickFlowTitle(flowId, flow?.title),
             nodes: [],
             edges: [],
             hydrated: false,
             hasLocalChanges: false,
-          });
+          };
+          logUpsertSubflowEmptyNodesCaller('FlowCanvasHost:initialLoadFlowFailed', failedLoad);
+          upsertFlow(failedLoad);
         } finally {
           if (!cancelled) {
             setIsLoadingFlow(false);

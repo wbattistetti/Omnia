@@ -2,6 +2,7 @@ import React, { createContext, useContext, useLayoutEffect, useMemo, useReducer 
 import { takeWorkspaceRestoreForProjectOnce } from '../services/project-save/flowSaveSnapshot';
 import { shouldKeepLocalGraphOnEmptyServerResponse } from './flowLoadMergePolicy';
 import { logFlowSaveDebug } from '../utils/flowSaveDebug';
+import { logTaskSubflowMove } from '../utils/taskSubflowMoveDebug';
 import { isSubflowCanvasDebugEnabled, logSubflowCanvasDebug, summarizeFlowSlice } from '../utils/subflowCanvasDebug';
 import type { Flow, FlowId, WorkspaceState } from './FlowTypes';
 
@@ -56,6 +57,11 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
           flowId: fid,
           preservedNodeCount: prev.nodes.length,
           preservedEdgeCount: Array.isArray(prev.edges) ? prev.edges.length : 0,
+        });
+        logTaskSubflowMove('FlowStore:UPSERT_FLOW:preservedEmptyIncomingSubflow', {
+          flowId: fid,
+          prevNodeCount: prev.nodes?.length ?? 0,
+          incNodeCount: Array.isArray(inc.nodes) ? inc.nodes.length : -1,
         });
       }
 

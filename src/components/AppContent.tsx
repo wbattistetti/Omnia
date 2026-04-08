@@ -69,6 +69,7 @@ import {
   setSubflowSyncTranslations,
   setSubflowSyncUpsertFlowSlice,
 } from '../domain/taskSubflowMove/subflowSyncFlowsRef';
+import { logUpsertFlowSliceInbound, logUpsertSubflowEmptyNodesCaller } from '../utils/flowStructuralCommitDiagnostic';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 import { provisionParentVariablesForSubflowTaskAsync } from '../services/subflowOutputProvisioning';
 import { getTemplateId } from '../utils/taskHelpers';
@@ -197,7 +198,10 @@ const DockManagerWithFlows: React.FC<{
   }, [projectIdForMigration, flowWorkspace.flows]);
 
   React.useEffect(() => {
-    setSubflowSyncUpsertFlowSlice((f) => flowActions.upsertFlow(f as any));
+    setSubflowSyncUpsertFlowSlice((f) => {
+      logUpsertFlowSliceInbound('DockManager_subflowSync', f as any);
+      flowActions.upsertFlow(f as any);
+    });
     return () => setSubflowSyncUpsertFlowSlice(null);
   }, [flowActions.upsertFlow]);
 
@@ -366,14 +370,16 @@ export const AppContent: React.FC<AppContentProps> = ({
                 title: tabTitle,
               } as any);
             } else {
-              upsertFlow({
+              const placeholder = {
                 id: flowId,
                 title: tabTitle,
                 nodes: [],
                 edges: [],
                 hydrated: false,
                 hasLocalChanges: false,
-              } as any);
+              } as any;
+              logUpsertSubflowEmptyNodesCaller('AppContent:openSubflowTabPlaceholder', placeholder);
+              upsertFlow(placeholder);
             }
             // Canonical: flowId in root; parameters = TaskDefinition array (never legacy object map).
             taskRepository.updateTask(taskId, {

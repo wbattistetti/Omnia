@@ -589,9 +589,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ Listener per creare un nodo dal canvas quando si rilascia una riga
   useEffect(() => {
     const handleCreateNodeFromRow = (event: CustomEvent) => {
-      const { rowData, cloneScreenPosition } = event.detail;
+      const detail = event.detail as {
+        rowData?: unknown;
+        cloneScreenPosition?: { x: number; y: number };
+        flowCanvasId?: string;
+      };
+      const { rowData, cloneScreenPosition, flowCanvasId: targetFlowId } = detail;
 
       if (!rowData || !cloneScreenPosition) {
+        return;
+      }
+
+      const selfFlowId = String(flowId ?? 'main').trim();
+      const target = String(targetFlowId ?? '').trim();
+      if (target !== selfFlowId) {
         return;
       }
 
@@ -603,7 +614,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     return () => {
       window.removeEventListener('createNodeFromRow', handleCreateNodeFromRow as EventListener);
     };
-  }, [createNodeAt]);
+  }, [createNodeAt, flowId]);
 
   // ✅ REMOVED: onPaneClick - now in useFlowEventHandlers
 
@@ -862,6 +873,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       <div
         className="flex-1 h-full relative"
         ref={canvasRef}
+        data-flow-canvas-id={String(flowId ?? 'main').trim()}
         onMouseLeave={() => setCursorTooltip(null)}
         onMouseDown={eventHandlers.onMouseDown}
       >

@@ -6,6 +6,7 @@ import { loadFlow, saveFlow } from '../../flows/FlowPersistence';
 import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
 import { dlog } from '../../utils/debug';
 import { logSubflowCanvasDebug, summarizeFlowSlice } from '../../utils/subflowCanvasDebug';
+import { logUpsertSubflowEmptyNodesCaller } from '../../utils/flowStructuralCommitDiagnostic';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
 import { FlowInterfaceBottomPanel } from './FlowInterfaceBottomPanel';
@@ -32,14 +33,16 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
     let cancelled = false;
     const flow = flows[activeFlowId];
     if (!flow) {
-      upsertFlow({
+      const placeholder = {
         id: activeFlowId,
         title: activeFlowId === 'main' ? 'Main' : activeFlowId,
         nodes: [],
         edges: [],
         hydrated: false,
         hasLocalChanges: false,
-      });
+      };
+      logUpsertSubflowEmptyNodesCaller('FlowWorkspace:activeTabMissingSlice', placeholder);
+      upsertFlow(placeholder);
       return;
     }
     const explain = explainShouldLoadFlowFromServer(projectId, flow);

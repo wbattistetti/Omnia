@@ -17,6 +17,32 @@ import {
     type FlowInterfaceRowPointerDropDetail,
 } from '../../../../FlowMappingPanel/flowInterfaceDragTypes';
 
+/**
+ * Walks the hit-test stack at (x,y) to find which flow canvas received the drop.
+ * Uses drop target, not the drag source — required when main + subflow are both mounted.
+ */
+function resolveFlowCanvasIdAtScreenPoint(clientX: number, clientY: number, fallback: string): string {
+  const fb = String(fallback || 'main').trim() || 'main';
+  try {
+    const stack = document.elementsFromPoint(clientX, clientY);
+    for (const top of stack) {
+      let cur: Element | null = top;
+      while (cur) {
+        if (cur instanceof HTMLElement) {
+          const id = cur.getAttribute('data-flow-canvas-id');
+          if (id && String(id).trim()) {
+            return String(id).trim();
+          }
+        }
+        cur = cur.parentElement;
+      }
+    }
+  } catch {
+    /* noop */
+  }
+  return fb;
+}
+
 interface UseNodeDragDropProps {
     nodeRows: NodeRowData[];
     setNodeRows: (rows: NodeRowData[]) => void;
@@ -518,13 +544,22 @@ export function useNodeDragDrop({
             const cloneScreenX = mousePositionRef.current.x + 10;
             const cloneScreenY = mousePositionRef.current.y - 10;
 
+            const sourceFlowFallback =
+                flowCanvasId != null && String(flowCanvasId).trim() !== '' ? String(flowCanvasId).trim() : 'main';
+            const dropTargetFlowId = resolveFlowCanvasIdAtScreenPoint(
+                mousePositionRef.current.x,
+                mousePositionRef.current.y,
+                sourceFlowFallback
+            );
+
             // Dispatch evento per creare un nuovo nodo sul canvas
             const createNodeEvent = new CustomEvent('createNodeFromRow', {
                 detail: {
                     fromNodeId: nodeId,
                     rowId: draggedRowId,
                     rowData: rowDataToMove,
-                    cloneScreenPosition: { x: cloneScreenX, y: cloneScreenY } // ✅ Posizione schermo del clone
+                    cloneScreenPosition: { x: cloneScreenX, y: cloneScreenY }, // ✅ Posizione schermo del clone
+                    flowCanvasId: dropTargetFlowId,
                 }
             });
 
