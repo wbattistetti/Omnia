@@ -1,10 +1,13 @@
 import type { Edge, Node } from 'reactflow';
 import type { EdgeData, FlowNode } from '../components/Flowchart/types/flowTypes';
+import type { Flow } from './FlowTypes';
 
 type SnapshotFlow = {
   nodes: Node<FlowNode>[];
   edges: Edge<EdgeData>[];
   title?: string;
+  /** Flow-local translations + interface (same as FlowStore slice); optional on snapshot. */
+  meta?: Flow['meta'];
 };
 
 /**

@@ -862,19 +862,15 @@ class VariableCreationService {
 
     const variables = this.store.get(key) ?? [];
 
-    const manualVariables = variables.filter(v => !v.taskInstanceId || v.taskInstanceId === '');
-    const taskVariables = variables.filter(v => v.taskInstanceId && v.taskInstanceId !== '');
-
     console.log('[VariableCreationService] 💾 saveToDatabase called', {
       projectId: key,
       totalVariablesInStore: variables.length,
-      manualVariables: manualVariables.length,
-      taskVariables: taskVariables.length,
       willSkip: variables.length === 0,
-      manualVarNames: manualVariables.map(v => v.varName),
-      varNamesSample: variables.slice(0, 10).map(v => ({
+      varNamesSample: variables.slice(0, 10).map((v) => ({
         varName: v.varName,
         id: v.id,
+        scope: v.scope,
+        scopeFlowId: v.scopeFlowId,
         taskInstanceId: v.taskInstanceId || '(empty)',
         dataPath: v.dataPath || '(empty)',
       })),
@@ -885,8 +881,24 @@ class VariableCreationService {
       return true;
     }
 
+    /** Flow-scoped rows are persisted only in FlowDocument.variables (PUT flow-document), not the global variables collection. */
+    const variablesForGlobalTable = variables.filter((v) => {
+      if (v.scope === 'flow' && String(v.scopeFlowId || '').trim()) {
+        return false;
+      }
+      return true;
+    });
+
+    if (variablesForGlobalTable.length === 0) {
+      console.log('[VariableCreationService] 💾 saveToDatabase: only flow-scoped variables (skipped global POST; in FlowDocument)');
+      return true;
+    }
+
+    const manualVariables = variablesForGlobalTable.filter((v) => !v.taskInstanceId || v.taskInstanceId === '');
+    const taskVariables = variablesForGlobalTable.filter((v) => v.taskInstanceId && v.taskInstanceId !== '');
+
     try {
-      const variablesToSave = variables.map(v => this.buildGuidCentricPersistPayload(v, key));
+      const variablesToSave = variablesForGlobalTable.map((v) => this.buildGuidCentricPersistPayload(v, key));
 
       let locale = 'pt';
       try {
@@ -1078,6 +1090,40 @@ class VariableCreationService {
       });
       this.store.set(key, []);
     }
+  }
+
+  /**
+   * FlowDocument load: remove variables owned by this flow (scope or task rows in document), then merge document rows.
+   */
+  ingestVariablesFromFlowDocument(
+    projectId: string | null | undefined,
+    flowCanvasId: string,
+    incoming: VariableInstance[],
+    documentTasks: { id: string }[]
+  ): void {
+    const key = this.projectKey(projectId);
+    const fid = String(flowCanvasId || '').trim();
+    if (!fid) return;
+    const taskIds = new Set(documentTasks.map((t) => String(t.id || '').trim()).filter(Boolean));
+    const incomingIds = new Set(incoming.map((v) => String(v.id || '').trim()).filter(Boolean));
+    const existing = this.store.get(key) ?? [];
+    const kept = existing.filter((v) => {
+      const id = String(v.id || '').trim();
+      if (incomingIds.has(id)) return false;
+      const tid = String(v.taskInstanceId || '').trim();
+      if (tid && taskIds.has(tid)) return false;
+      if (String(v.scopeFlowId || '').trim() === fid) return false;
+      return true;
+    });
+    const normalized = incoming.map((v) =>
+      normalizeVariableInstance({
+        ...v,
+        id: String(v.id || '').trim(),
+        scope: v.scope ?? 'flow',
+        scopeFlowId: v.scopeFlowId ?? fid,
+      })
+    );
+    this.store.set(key, [...kept, ...normalized]);
   }
 }
 

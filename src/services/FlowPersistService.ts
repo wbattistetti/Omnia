@@ -1,80 +1,37 @@
 import type { Node } from 'reactflow';
-import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
-import { transformNodesToSimplified, transformEdgesToSimplified } from '../flows/flowTransformers';
+import type { FlowNode } from '../components/Flowchart/types/flowTypes';
 
 let pendingPayload: { pid: string; flowId: string; nodes: Node<FlowNode>[]; edges: any[] } | null = null;
-let timer: any = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
 
 /**
- * Queue flow persistence - transforms ReactFlow nodes to simplified structure before saving
- * Receives: Node<FlowNode>[] with data wrapper (ReactFlow format)
- * Saves: { id, label, rows, ... } (simplified)
+ * Legacy debounce slot for graph edits. Flow persistence is atomic via FlowDocument
+ * (ProjectSaveOrchestrator / saveFlow); partial PUTs are not supported.
+ * flushFlowPersist is still invoked before orchestrated saves to clear any pending timer.
  */
-export function queueFlowPersist(pid: string, flowId: string, nodes: Node<FlowNode>[], edges: any[], delayMs: number = 120) {
+export function queueFlowPersist(
+  pid: string,
+  flowId: string,
+  nodes: Node<FlowNode>[],
+  edges: any[],
+  delayMs: number = 120
+) {
   pendingPayload = { pid, flowId, nodes, edges };
   if (timer) clearTimeout(timer);
-  try {
-    console.log('[Flow][Persist][queue]', {
-      pid,
-      flowId,
-      nodes: Array.isArray(nodes) ? nodes.length : 0,
-      edges: Array.isArray(edges) ? edges.length : 0,
-      delayMs
-    });
-  } catch {}
-  timer = setTimeout(async () => {
-    const p = pendingPayload;
+  timer = setTimeout(() => {
     pendingPayload = null;
     timer = null;
-    if (!p) return;
-    try {
-      // Transform from ReactFlow format to simplified structure
-      const simplifiedNodes = transformNodesToSimplified(p.nodes);
-      const simplifiedEdges = transformEdgesToSimplified(p.edges);
-
-      console.log('[Flow][Persist][send]', {
-        pid: p.pid,
-        flowId: p.flowId,
-        nodes: Array.isArray(p.nodes) ? p.nodes.length : 0,
-        edges: Array.isArray(p.edges) ? p.edges.length : 0
-      });
-      await fetch(`/api/projects/${encodeURIComponent(p.pid)}/flow?flowId=${encodeURIComponent(p.flowId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodes: simplifiedNodes, edges: simplifiedEdges })
-      });
-      try { console.log('[Flow][Persist][ok]', { pid: p.pid, flowId: p.flowId }); } catch {}
-    } catch (e) {
-      try { console.warn('[Flow][Persist][error]', e); } catch {}
-    }
   }, Math.max(0, delayMs | 0));
 }
 
-export function flushFlowPersist() {
+/**
+ * Clears debounced state. Does not call the network — full flow state is saved as FlowDocument elsewhere.
+ */
+export function flushFlowPersist(): Promise<void> {
   if (timer) {
     clearTimeout(timer);
     timer = null;
   }
-  const p = pendingPayload;
   pendingPayload = null;
-  if (!p) return Promise.resolve();
-  try {
-    console.log('[Flow][Persist][flush]', {
-      pid: p.pid,
-      flowId: p.flowId,
-      nodes: Array.isArray(p.nodes) ? p.nodes.length : 0,
-      edges: Array.isArray(p.edges) ? p.edges.length : 0
-    });
-  } catch {}
-
-  // Transform from ReactFlow format to simplified structure
-  const simplifiedNodes = transformNodesToSimplified(p.nodes);
-  const simplifiedEdges = transformEdgesToSimplified(p.edges);
-
-  return fetch(`/api/projects/${encodeURIComponent(p.pid)}/flow?flowId=${encodeURIComponent(p.flowId)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes: simplifiedNodes, edges: simplifiedEdges })
-  }).then(() => { try { console.log('[Flow][Persist][flush-ok]', { pid: p.pid, flowId: p.flowId }); } catch {} })
-    .catch((e) => { try { console.warn('[Flow][Persist][flush-error]', e); } catch {} });
+  return Promise.resolve();
 }

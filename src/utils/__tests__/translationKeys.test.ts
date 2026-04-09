@@ -37,7 +37,9 @@ describe('translationKeys', () => {
   it('isValidTranslationStoreKey', () => {
     expect(isValidTranslationStoreKey(`task:${SAMPLE}`)).toBe(true);
     expect(isValidTranslationStoreKey('runtime.slot.x')).toBe(true);
-    expect(isValidTranslationStoreKey(SAMPLE)).toBe(false);
+    expect(isValidTranslationStoreKey(SAMPLE)).toBe(true);
+    expect(isValidTranslationStoreKey('g_' + 'a'.repeat(32))).toBe(true);
+    expect(isValidTranslationStoreKey('hello')).toBe(false);
     expect(isValidTranslationStoreKey('')).toBe(false);
   });
 

@@ -1,102 +1,83 @@
 import type { Flow, FlowId } from './FlowTypes';
-import { stripLegacyVariablesFromFlowMeta } from './flowMetaSanitize';
+import type { WorkspaceState } from './FlowTypes';
 import type { Node } from 'reactflow';
-import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
-import { transformNodesToSimplified, transformEdgesToSimplified, transformNodesToReactFlow, transformEdgesToReactFlow } from './flowTransformers';
+import type { FlowNode } from '../components/Flowchart/types/flowTypes';
+import { transformNodesToReactFlow, transformEdgesToReactFlow } from './flowTransformers';
 import { logFlowSaveDebug } from '../utils/flowSaveDebug';
+import { loadFlowDocument, saveFlowDocument } from './flowDocumentPersistence';
+import { applyFlowDocumentToStores } from '../domain/flowDocument/applyFlowDocumentToStores';
+import { flowDocumentToFlowMeta } from '../domain/flowDocument/flowDocumentBridge';
+import { assertFlowDocument } from '../domain/flowDocument/validateFlowDocument';
+import { buildFlowDocumentFromFlowSlice } from '../domain/flowDocument/flowDocumentSerialize';
 
 export async function listFlows(projectId: string): Promise<{ id: FlowId; updatedAt?: string }[]> {
   if (!projectId || String(projectId).trim() === '') {
     return [];
   }
   const url = `/api/projects/${encodeURIComponent(projectId)}/flows`;
-  // RIMOSSO: console.log che causava loop infinito
   const res = await fetch(url);
   if (!res.ok) throw new Error('listFlows_failed');
   const json = await res.json();
   const items = Array.isArray(json?.items) ? json.items : [];
-  // RIMOSSO: console.log che causava loop infinito
   return items;
 }
 
-/**
- * Load flow from database and transform simplified structure to ReactFlow format
- * Database stores: { id, label, rows, ... } (simplified)
- * Returns: Node<FlowNode>[] with data wrapper (ReactFlow format)
- */
 export type FlowLoadResult = {
   nodes: Node<FlowNode>[];
   edges: any[];
   meta?: Flow['meta'];
 };
 
+/**
+ * Load one flow as FlowDocument (atomic); applies tasks/variables to stores; returns ReactFlow graph + meta.
+ */
 export async function loadFlow(projectId: string, flowId: FlowId): Promise<FlowLoadResult> {
   if (!projectId || String(projectId).trim() === '') {
     return { nodes: [], edges: [] };
   }
-  const url = `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`;
-  // Log rimosso: non essenziale per flusso motore
+  const doc = await loadFlowDocument(projectId, flowId);
+  assertFlowDocument(doc);
+  applyFlowDocumentToStores(doc);
+  const nodes = transformNodesToReactFlow(doc.nodes as any[]);
+  const edges = transformEdgesToReactFlow(doc.edges as any[]);
+  const meta = flowDocumentToFlowMeta(doc);
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('loadFlow_failed');
-  const json = await res.json();
-
-  // Database returns simplified structure: { id, label, rows, ... }
-  const simplifiedNodes = Array.isArray(json?.nodes) ? json.nodes : [];
-  const simplifiedEdges = Array.isArray(json?.edges) ? json.edges : [];
-  const meta =
-    json?.meta && typeof json.meta === 'object'
-      ? stripLegacyVariablesFromFlowMeta(json.meta)
-      : undefined;
-
-  logFlowSaveDebug('loadFlow: response from API (simplified counts before ReactFlow transform)', {
+  logFlowSaveDebug('loadFlow: FlowDocument applied', {
     projectId,
     flowId,
-    simplifiedNodeCount: simplifiedNodes.length,
-    simplifiedEdgeCount: simplifiedEdges.length,
+    simplifiedNodeCount: doc.nodes.length,
+    simplifiedEdgeCount: doc.edges.length,
     hasMeta: meta !== undefined,
   });
-
-  // Transform to ReactFlow format: { id, data: { label, rows, ... } }
-  const nodes = transformNodesToReactFlow(simplifiedNodes);
-  const edges = transformEdgesToReactFlow(simplifiedEdges);
 
   return { nodes, edges, meta };
 }
 
 /**
- * Save flow to database, transforming ReactFlow format to simplified structure
- * Receives: Node<FlowNode>[] with data wrapper (ReactFlow format)
- * Saves: { id, label, rows, ... } (simplified)
+ * Save one flow as a single FlowDocument (tasks, variables, interface, translations embedded).
  */
 export async function saveFlow(
   projectId: string,
   flowId: FlowId,
   nodes: Node<FlowNode>[],
   edges: any[],
-  meta?: Flow['meta']
+  flows: WorkspaceState['flows'],
+  metaPatch?: Flow['meta']
 ): Promise<void> {
   if (!projectId || String(projectId).trim() === '') {
     return;
   }
-  const url = `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`;
-
-  // Transform from ReactFlow format to simplified structure
-  const simplifiedNodes = transformNodesToSimplified(nodes);
-  const simplifiedEdges = transformEdgesToSimplified(edges);
-
-  const metaOut = meta !== undefined ? stripLegacyVariablesFromFlowMeta(meta) : undefined;
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      nodes: simplifiedNodes,
-      edges: simplifiedEdges,
-      ...(metaOut !== undefined ? { meta: metaOut } : {}),
-    }),
-  });
-  if (!res.ok) throw new Error('saveFlow_failed');
-
+  const base = flows[flowId];
+  if (!base) {
+    throw new Error(`saveFlow: missing flow slice ${flowId}`);
+  }
+  const mergedFlows: WorkspaceState['flows'] = {
+    ...flows,
+    [flowId]: {
+      ...base,
+      meta: metaPatch !== undefined ? { ...base.meta, ...metaPatch } : base.meta,
+    },
+  };
+  const doc = buildFlowDocumentFromFlowSlice(projectId, flowId, mergedFlows, nodes, edges);
+  await saveFlowDocument(doc);
 }
-
-

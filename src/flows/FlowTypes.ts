@@ -11,11 +11,14 @@ export type Flow<NodeT = any, EdgeT = any> = {
     createdAt?: string;
     updatedAt?: string;
     fromTaskId?: string;
-    /** Flow-as-task: exposed Input / Output wiring (solo vista in store; persistenza opzionale in flow_meta). */
+    /** Flow-local strings keyed by labelKey (FlowDocument.meta.translations). */
+    translations?: Record<string, string>;
+    /** Flow-as-task: Input / Output wiring (persisted; labels resolved via meta.translations[labelKey]). */
     flowInterface?: {
       input: MappingEntry[];
       output: MappingEntry[];
     };
+    settings?: Record<string, unknown>;
   };
   /**
    * Step 3: True after server data was applied for this flow (or after a successful project save sync).

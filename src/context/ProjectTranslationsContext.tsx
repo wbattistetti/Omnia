@@ -1,6 +1,8 @@
 /**
  * Global project translation map: load (factory+project merge from API), snapshot after load for
  * flow-key materialization, bulk save split by deterministic project vs factory classification.
+ * Keys present only in FlowDocument.meta.translations (workspace flow slices) are not written to
+ * the global translations API — they persist via PUT flow-document.
  */
 import React, { useState, useEffect, useRef, ReactNode, useCallback, useMemo } from 'react';
 import {
@@ -19,6 +21,7 @@ import { taskRepository } from '../services/TaskRepository';
 import { DialogueTaskService } from '../services/DialogueTaskService';
 import { TemplateSource } from '../types/taskTypes';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
+import { collectFlowLocalTranslationKeysFromWorkspace } from '../utils/flowLocalTranslationKeys';
 import type { FlowNode } from '../components/Flowchart/types/flowTypes';
 
 export type { ProjectTranslationsContextType } from './projectTranslationsContextInstance';
@@ -293,7 +296,12 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     const projectTranslationsToSave: Array<{ guid: string; language: string; text: string; type?: string }> = [];
     const factoryTranslationsToSave: Array<{ guid: string; language: string; text: string; type?: string }> = [];
 
+    const flowOnlyKeys = collectFlowLocalTranslationKeysFromWorkspace();
+
     for (const [guid, text] of Object.entries(base)) {
+      if (flowOnlyKeys.has(guid)) {
+        continue;
+      }
       const dest = classifyTranslationKeyDestination(guid);
       const row = {
         guid,

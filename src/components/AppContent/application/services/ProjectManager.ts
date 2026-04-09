@@ -352,116 +352,20 @@ export class ProjectManager {
         console.warn('[ProjectManager] ⚠️ Failed to start loading project embeddings:', e);
       }
 
-      // Load flow and variable mappings in parallel (tasks already loaded)
-      const parallelStart = performance.now();
+      // Variable rows (project store). Canvas loads FlowDocument via loadFlow / FlowWorkspace (atomic).
+      const mappingsStart = performance.now();
       if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] 🔄 START parallel load (flow, mappings)`);
+        console.log(`[PERF][${new Date().toISOString()}] 🔄 START load variable mappings`);
       }
-
-      const [flowResult, mappingsResult] = await Promise.allSettled([
-        (async () => {
-          try {
-            const flowRes = await fetch(`/api/projects/${encodeURIComponent(id)}/flow`);
-            if (flowRes.ok) {
-              const flow = await flowRes.json();
-
-              // ✅ Log edges with conditionId after loading (top-level)
-              const edgesWithCondition = (flow.edges || []).filter((e: any) => e.conditionId);
-              if (edgesWithCondition.length > 0) {
-                console.log(`[LOAD][ProjectManager] 📥 Edges with conditionId loaded`, {
-                  projectId: id,
-                  count: edgesWithCondition.length,
-                  edges: edgesWithCondition.map((e: any) => ({
-                    id: e.id,
-                    label: e.label,
-                    conditionId: e.conditionId  // ✅ Top-level
-                  }))
-                });
-              }
-
-              console.log(`[LOAD][ProjectManager] 📥 Flow received from backend`, {
-                projectId: id,
-                nodesCount: flow.nodes?.length || 0,
-                edgesCount: flow.edges?.length || 0,
-                edgesWithConditionCount: edgesWithCondition.length
-              });
-              return {
-                nodes: Array.isArray(flow.nodes) ? flow.nodes : [],
-                edges: Array.isArray(flow.edges) ? flow.edges : [],
-              };
-            }
-            return { nodes: [], edges: [] };
-          } catch (e) {
-            console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR load flow`, e);
-            return { nodes: [], edges: [] };
-          }
-        })(),
-        (async () => {
-          try {
-            await variableCreationService.loadFromDatabase(id);
-            return true;
-          } catch (e) {
-            console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR load variable mappings`, e);
-            return false;
-          }
-        })(),
-      ]);
-
+      try {
+        await variableCreationService.loadFromDatabase(id);
+      } catch (e) {
+        console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR load variable mappings`, e);
+      }
       if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] ✅ END parallel load`, {
-          duration: `${(performance.now() - parallelStart).toFixed(2)}ms`,
+        console.log(`[PERF][${new Date().toISOString()}] ✅ END load variable mappings`, {
+          duration: `${(performance.now() - mappingsStart).toFixed(2)}ms`,
         });
-      }
-
-      // ✅ NEW: Verifica se i row.id del flow corrispondono ai task caricati
-      if (flowResult.status === 'fulfilled' && flowResult.value) {
-        const flow = flowResult.value;
-        const allRowIds: string[] = [];
-
-        // ✅ FIX: Il flow è in formato ReactFlow, quindi i rows sono in node.data.rows
-        flow.nodes?.forEach((node: any) => {
-          const rows = node.data?.rows || node.rows || [];
-          rows.forEach((row: any) => {
-            if (row.id) {
-              allRowIds.push(row.id);
-            }
-          });
-        });
-
-        const allTaskIds = taskRepository.getAllTasks().map(t => t.id);
-        const matchingRowIds = allRowIds.filter(rowId => allTaskIds.includes(rowId));
-        const missingRowIds = allRowIds.filter(rowId => !allTaskIds.includes(rowId));
-
-        // ✅ EXPANDED LOGS: Mostra tutti i dati completi
-        console.log('[ProjectManager] 🔍 ROW-TO-TASK VERIFICATION - SUMMARY', {
-          projectId: id,
-          totalRowIds: allRowIds.length,
-          totalTaskIds: allTaskIds.length,
-          matchingRowIds: matchingRowIds.length,
-          missingRowIds: missingRowIds.length,
-        });
-
-        console.log('[ProjectManager] 🔍 ALL ROW IDs (from flow)', allRowIds);
-        console.log('[ProjectManager] 🔍 ALL TASK IDs (from repository)', allTaskIds);
-        console.log('[ProjectManager] 🔍 MATCHING ROW IDs (have task)', matchingRowIds);
-        console.log('[ProjectManager] 🔍 MISSING ROW IDs (no task found)', missingRowIds);
-
-        // ✅ NEW: Dettagli per ogni row mancante
-        if (missingRowIds.length > 0) {
-          console.log('[ProjectManager] 🔍 MISSING ROW DETAILS', missingRowIds.map(rowId => {
-            const node = flow.nodes?.find((n: any) => {
-              const rows = n.data?.rows || n.rows || [];
-              return rows.some((r: any) => r.id === rowId);
-            });
-            const row = node ? (node.data?.rows || node.rows || []).find((r: any) => r.id === rowId) : null;
-            return {
-              rowId,
-              rowText: row?.text || 'N/A',
-              nodeId: node?.id || 'N/A',
-              nodeLabel: node?.data?.label || node?.label || 'N/A',
-            };
-          }));
-        }
       }
 
       // ✅ Fonte primaria: project_meta (DB del progetto). Fallback: catalogo (per clientName/version se meta non li ha).

@@ -1626,184 +1626,124 @@ app.get('/api/projects/:pid/task-heuristics', async (req, res) => {
 });
 
 // -----------------------------
-// Endpoints: Flow (nodi/edge) per progetto
+// Flow-centric: atomic FlowDocument in `flows` collection (no global flow_nodes/edges/meta split)
 // -----------------------------
-app.get('/api/projects/:pid/flow', async (req, res) => {
+const FLOWS_COLLECTION = 'flows';
+
+function emptyFlowDocument(projectId, flowId) {
+  const fid = String(flowId || 'main');
+  return {
+    id: fid,
+    projectId: String(projectId || '').trim(),
+    version: 1,
+    meta: {
+      flowInterface: { input: [], output: [] },
+      translations: {},
+    },
+    nodes: [],
+    edges: [],
+    tasks: [],
+    variables: [],
+    bindings: [],
+  };
+}
+
+function sanitizeFlowDocumentRow(doc) {
+  if (!doc || typeof doc !== 'object') return emptyFlowDocument('', 'main');
+  const o = { ...doc };
+  delete o._id;
+  delete o.flowId;
+  delete o.updatedAt;
+  return o;
+}
+
+app.get('/api/projects/:pid/flow-document', async (req, res) => {
   const pid = req.params.pid;
   const flowId = String(req.query.flowId || 'main');
   const startTime = Date.now();
   const client = await getMongoClient();
   try {
     const db = await getProjectDb(client, pid);
-    const queryStart = Date.now();
-    const [nodes, edges] = await Promise.all([
-      db.collection('flow_nodes').find({ flowId }).toArray(),
-      db.collection('flow_edges').find({ flowId }).toArray()
-    ]);
-    const queryDuration = Date.now() - queryStart;
+    const row = await db.collection(FLOWS_COLLECTION).findOne({ flowId });
     const duration = Date.now() - startTime;
-
-    logInfo('Flow.get', { projectId: pid, flowId, nodesCount: nodes?.length || 0, edgesCount: edges?.length || 0, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
-    let meta = null;
-    try {
-      const metaDoc = await db.collection('flow_meta').findOne({ flowId });
-      if (metaDoc && metaDoc.meta && typeof metaDoc.meta === 'object') {
-        meta = metaDoc.meta;
-      }
-    } catch (_metaErr) {
-      // non-fatal: older DBs without flow_meta
+    if (!row) {
+      logInfo('FlowDocument.get', { projectId: pid, flowId, empty: true, duration: `${duration}ms` });
+      return res.json(emptyFlowDocument(pid, flowId));
     }
-    res.json({ nodes, edges, ...(meta ? { meta } : {}) });
+    const out = sanitizeFlowDocumentRow(row);
+    logInfo('FlowDocument.get', {
+      projectId: pid,
+      flowId,
+      nodes: Array.isArray(out.nodes) ? out.nodes.length : 0,
+      edges: Array.isArray(out.edges) ? out.edges.length : 0,
+      duration: `${duration}ms`,
+    });
+    res.json(out);
   } catch (e) {
     const duration = Date.now() - startTime;
-    logError('Flow.get', e, { projectId: pid, flowId, duration: `${duration}ms` });
+    logError('FlowDocument.get', e, { projectId: pid, flowId, duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
-app.put('/api/projects/:pid/flow', async (req, res) => {
+app.put('/api/projects/:pid/flow-document', async (req, res) => {
   const pid = req.params.pid;
-  const flowId = String(req.query.flowId || 'main');
-  const payload = req.body || {};
-  const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
-  const edges = Array.isArray(payload.edges) ? payload.edges : [];
-  const flowMetaPayload = payload.meta;
+  const qFlowId = String(req.query.flowId || 'main');
+  const body = req.body || {};
+  const bodyId = String(body.id || '').trim();
+  if (bodyId && bodyId !== qFlowId) {
+    return res.status(400).json({ error: 'flow_document_id_must_match_flowId_query' });
+  }
+  const flowId = bodyId || qFlowId;
+  const now = new Date();
 
   try {
     await withMongoClient(async (client) => {
       const db = await getProjectDb(client, pid);
-    const ncoll = db.collection('flow_nodes');
-    const ecoll = db.collection('flow_edges');
-    // Diff-only upsert per flowId: assume nodes/edges carry stable id fields
-    const now = new Date();
-    let nUpserts = 0, nDeletes = 0, eUpserts = 0, eDeletes = 0;
-    const existingNodes = await ncoll.find({ flowId }, { projection: { _id: 0, id: 1 } }).toArray();
-    const existingEdges = await ecoll.find({ flowId }, { projection: { _id: 0, id: 1 } }).toArray();
-    const existingNodeIds = new Set(existingNodes.map(d => d.id));
-    const existingEdgeIds = new Set(existingEdges.map(d => d.id));
-
-    // ✅ OPTIMIZATION: Use bulkWrite instead of sequential loops (much faster!)
-    // Prepare bulk operations for nodes
-    const nodeOps = [];
-    for (const n of nodes) {
-      if (!n || !n.id) continue;
-      const { _id: _nid, ...nset } = n || {};
-      nodeOps.push({
-        updateOne: {
-          filter: { id: n.id, flowId },
-          update: { $set: { ...nset, flowId, updatedAt: now } },
-          upsert: true
-        }
-      });
-      nUpserts++;
-      if (n.id) existingNodeIds.delete(n.id);
-    }
-    // Add delete operations for removed nodes
-    if (existingNodeIds.size) {
-      nodeOps.push({
-        deleteMany: {
-          filter: { id: { $in: Array.from(existingNodeIds) }, flowId }
-        }
-      });
-      nDeletes = existingNodeIds.size;
-    }
-
-    // Execute bulk write for nodes
-    if (nodeOps.length > 0) {
-      await ncoll.bulkWrite(nodeOps, { ordered: false });
-    }
-
-    // Prepare bulk operations for edges
-    const edgeOps = [];
-    for (const e of edges) {
-      if (!e || !e.id) continue;
-      const { _id: _eid, ...eset } = e || {};
-      edgeOps.push({
-        updateOne: {
-          filter: { id: e.id, flowId },
-          update: { $set: { ...eset, flowId, updatedAt: now } },
-          upsert: true
-        }
-      });
-      eUpserts++;
-      if (e.id) existingEdgeIds.delete(e.id);
-    }
-    // Add delete operations for removed edges
-    if (existingEdgeIds.size) {
-      edgeOps.push({
-        deleteMany: {
-          filter: { id: { $in: Array.from(existingEdgeIds) }, flowId }
-        }
-      });
-      eDeletes = existingEdgeIds.size;
-    }
-
-    // Execute bulk write for edges
-    if (edgeOps.length > 0) {
-      await ecoll.bulkWrite(edgeOps, { ordered: false });
-    }
-
-    // ✅ ARCHITECTURAL FIX: Cleanup degli orphan tasks RIMOSSO da qui
-    // Il cleanup deve essere eseguito SOLO alla fine, quando flow e tasks sono coerenti
-    // Vedi endpoint POST /api/projects/:pid/tasks/cleanup-orphans
-
-      // ✅ LOG: Traccia cosa viene salvato nel DB
-      console.log(`[SAVE][backend] 💾 Saving to DB`, {
+      const payload = {
+        ...body,
+        id: flowId,
+        projectId: String(body.projectId || pid).trim(),
+        flowId,
+        updatedAt: now,
+      };
+      delete payload._id;
+      await db.collection(FLOWS_COLLECTION).updateOne(
+        { flowId },
+        { $set: payload },
+        { upsert: true }
+      );
+      logInfo('FlowDocument.put', {
         projectId: pid,
         flowId,
-        nodesUpserts: nUpserts,
-        nodesDeletes: nDeletes,
-        edgesUpserts: eUpserts,
-        edgesDeletes: eDeletes,
-        nodes: nodes.map((n) => ({
-          id: n.id,
-          label: n.label,
-          rowsCount: n.rows?.length || 0,
-          rows: n.rows?.map((r) => ({
-            id: r.id,
-            text: r.text,
-            taskId: r.taskId,
-            hasTaskId: !!r.taskId
-          })) || []
-        }))
+        nodes: Array.isArray(body.nodes) ? body.nodes.length : 0,
+        edges: Array.isArray(body.edges) ? body.edges.length : 0,
+        tasks: Array.isArray(body.tasks) ? body.tasks.length : 0,
       });
-
-      logInfo('Flow.put', {
-        projectId: pid,
-        flowId,
-        payload: { nodes: nodes.length, edges: edges.length },
-        result: { upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } }
-      });
-
-      if (flowMetaPayload !== undefined) {
-        await db.collection('flow_meta').updateOne(
-          { flowId },
-          { $set: { flowId, meta: flowMetaPayload, updatedAt: now } },
-          { upsert: true }
-        );
-      }
-
-      res.json({ ok: true, nodes: nodes.length, edges: edges.length });
+      res.json({ ok: true, flowId });
     });
   } catch (e) {
-    logError('Flow.put', e, { projectId: pid, flowId, payloadNodes: nodes.length, payloadEdges: edges.length });
+    logError('FlowDocument.put', e, { projectId: pid, flowId });
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
-// List flows (by distinct flowId in flow_nodes)
+// List flows (from `flows` collection)
 app.get('/api/projects/:pid/flows', async (req, res) => {
   const pid = req.params.pid;
   const client = await getMongoClient();
   try {
     const db = await getProjectDb(client, pid);
-    const ncoll = db.collection('flow_nodes');
-    const list = await ncoll.aggregate([
-      { $group: { _id: '$flowId', updatedAt: { $max: '$updatedAt' } } },
-      { $project: { _id: 0, id: '$_id', updatedAt: 1 } },
-      { $sort: { updatedAt: -1 } }
-    ]).toArray();
-    res.json({ items: list });
+    const list = await db
+      .collection(FLOWS_COLLECTION)
+      .find({}, { projection: { _id: 0, flowId: 1, id: 1, updatedAt: 1 } })
+      .sort({ updatedAt: -1 })
+      .toArray();
+    const items = list.map((d) => ({
+      id: d.flowId || d.id,
+      updatedAt: d.updatedAt,
+    }));
+    res.json({ items });
   } catch (e) {
     logError('Flows.list', e, { projectId: pid });
     res.status(500).json({ error: String(e?.message || e) });

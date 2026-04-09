@@ -14,6 +14,7 @@ import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
 // Adapter: renderizza l'attuale FlowEditor per activeFlowId con nodes/edges del workspace
 const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const { activeFlowId, flows } = useFlowWorkspace();
+  const flowsForSave = flows;
   const { upsertFlow, updateFlowGraph, openFlow, openFlowBackground, applyFlowLoadResult, markFlowsPersisted } = useFlowActions();
 
   const flowSlice = flows[activeFlowId];
@@ -117,10 +118,20 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
               onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
                 dlog('flow', '[workspace.onCreateTaskFlow]', { newFlowId, title, nodes: nodes.length, edges: edges.length });
                 const derivedTitle = (title && String(title).trim()) || 'Task';
-                upsertFlow({ id: newFlowId, title: derivedTitle, nodes, edges });
+                const slice = {
+                  id: newFlowId,
+                  title: derivedTitle,
+                  nodes,
+                  edges,
+                  hydrated: false,
+                  variablesReady: false,
+                  hasLocalChanges: true,
+                };
+                upsertFlow(slice);
+                const flowsSnapshot = { ...flowsForSave, [newFlowId]: slice };
                 setTimeout(() => openFlowBackground(newFlowId), 0);
                 if (projectId && String(projectId).trim() !== '') {
-                  saveFlow(projectId, newFlowId, nodes, edges).then(
+                  saveFlow(projectId, newFlowId, nodes, edges, flowsSnapshot).then(
                     () => markFlowsPersisted([newFlowId]),
                     (e) => {
                       try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}

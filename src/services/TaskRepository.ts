@@ -1010,6 +1010,22 @@ class TaskRepository {
   getInternalTasksCount(): number {
     return this.tasks.size;
   }
+
+  /**
+   * FlowDocument load: upsert tasks that belong to this flow canvas into the in-memory store.
+   */
+  ingestTasksFromFlowDocument(flowCanvasId: string, tasks: Task[]): void {
+    const fid = String(flowCanvasId || '').trim();
+    if (!fid) return;
+    for (const t of tasks) {
+      const merged: Task = {
+        ...t,
+        authoringFlowCanvasId: fid,
+      };
+      this.tasks.set(t.id, merged);
+      this.pendingRemoteTaskDeletes.delete(t.id);
+    }
+  }
 }
 
 // Export singleton instance

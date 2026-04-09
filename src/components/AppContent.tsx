@@ -527,7 +527,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   );
 
   /**
-   * Persist full project state (flows, tasks, flow_nodes/edges via orchestrator).
+   * Persist full project state (flows as FlowDocument, tasks, variables via orchestrator).
    * Throws on failure. Caller sets isCreatingProject and cloneError around this.
    * Does not list setIsCreatingProject in deps (useState setter is stable; it is declared below this callback).
    */

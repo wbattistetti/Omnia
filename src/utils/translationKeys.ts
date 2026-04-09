@@ -75,7 +75,10 @@ export function isValidTranslationStoreKey(key: string): boolean {
   const k = String(key || '').trim();
   if (!k) return false;
   if (k.startsWith('runtime.')) return true;
-  return isCanonicalTranslationKey(k);
+  if (isCanonicalTranslationKey(k)) return true;
+  // Legacy DB rows and FlowDocument.meta.translations may use bare UUID / safe guid as labelKey
+  if (isUuidString(k)) return true;
+  return false;
 }
 
 /**

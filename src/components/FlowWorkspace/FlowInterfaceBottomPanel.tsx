@@ -38,12 +38,6 @@ import { useFlowInterfaceDockDrag } from './useFlowInterfaceDockDrag';
 import { syncSubflowChildInterfaceToAllParents } from '../../services/subflowProjectSync';
 import { invalidateChildFlowInterfaceCache } from '../../services/childFlowInterfaceService';
 import {
-  buildSubflowInterfaceView,
-  canBuildSubflowInterfaceFromFlowSlice,
-} from '../../domain/flowInterface/reconstructFlowInterfaceIfMissing';
-import { findSubflowParentContextForChild } from '../../domain/flowInterface/resolveSubflowParentContext';
-import { taskRepository } from '../../services/TaskRepository';
-import {
   validateRemovalOfInterfaceOutputRow,
   type ReferenceLocation,
 } from '../../services/subflowVariableReferenceScan';
@@ -113,53 +107,9 @@ export function FlowInterfaceBottomPanel({
   const iface = flow?.meta?.flowInterface ?? { input: [] as MappingEntry[], output: [] as MappingEntry[] };
   const flowTitle = (flow?.title && String(flow.title).trim()) || flowId;
 
-  const ifaceInCount = Array.isArray(flow?.meta?.flowInterface?.input)
-    ? flow.meta.flowInterface.input.length
-    : 0;
-  const ifaceOutCount = Array.isArray(flow?.meta?.flowInterface?.output)
-    ? flow.meta.flowInterface.output.length
-    : 0;
-
   const flowSliceExists = Boolean(flows[flowId]);
 
-  /**
-   * Vista interfaccia: solo dopo loadFlow (hydrated) e hydrateVariablesFromFlow (variablesReady).
-   * Nessun delay/retry: dipende solo dai flag nello slice + store variabili.
-   */
-  useEffect(() => {
-    const pid = String(projectId || '').trim();
-    if (!pid || !flowId || !flowSliceExists) return;
-    if (ifaceInCount > 0 || ifaceOutCount > 0) return;
-    if (!canBuildSubflowInterfaceFromFlowSlice(flow)) {
-      return;
-    }
-
-    const ctx = findSubflowParentContextForChild(flows as any, flowId, (tid) => taskRepository.getTask(tid));
-    try {
-      const built = buildSubflowInterfaceView({
-        projectId: pid,
-        childFlowId: flowId,
-        subflowTask: ctx?.subflowTask ?? { subflowBindings: [] },
-        translations,
-        workspaceFlows: flows as any,
-      });
-      updateFlowMeta(flowId, { flowInterface: built });
-      invalidateChildFlowInterfaceCache(pid, flowId);
-    } catch (e) {
-      console.error('[FlowInterfaceBottomPanel] buildSubflowInterfaceView failed', e);
-    }
-  }, [
-    projectId,
-    flowId,
-    flowSliceExists,
-    flow?.hydrated,
-    flow?.variablesReady,
-    ifaceInCount,
-    ifaceOutCount,
-    flows,
-    updateFlowMeta,
-    translations,
-  ]);
+  /** Interfaccia: solo dati persistiti in flow.meta (FlowDocument); nessuna ricostruzione da binding/variabili. */
 
   const listIdPrefix = useMemo(() => `flow-iface-${flowId.replace(/[^a-zA-Z0-9_-]/g, '_')}`, [flowId]);
 

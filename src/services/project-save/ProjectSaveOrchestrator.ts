@@ -13,6 +13,9 @@ import type {
   IFlowStateService,
 } from './SaveServiceInterfaces';
 import { logFlowSaveDebug } from '../../utils/flowSaveDebug';
+import type { WorkspaceState } from '../../flows/FlowTypes';
+import { buildFlowDocumentFromFlowSlice } from '../../domain/flowDocument/flowDocumentSerialize';
+import { saveFlowDocument } from '../../flows/flowDocumentPersistence';
 
 /**
  * ProjectSaveOrchestrator: Orchestrates project save flow
@@ -201,9 +204,9 @@ export class ProjectSaveOrchestrator {
       translationsContext?: ITranslationsContext;
       flowState?: IFlowStateService;
       /**
-       * Snapshot of all workspace flows (FlowStore): one PUT /flow?flowId= per key.
-       * When omitted, only `main` is saved (legacy behavior).
-       * Optional `meta` is persisted in flow_meta (flow variables interface).
+       * Snapshot of all workspace flows (FlowStore): one PUT /flow-document per flow id.
+       * When omitted, only `main` is saved.
+       * `meta` (flow interface, translations) is embedded in the FlowDocument.
        */
       flowsById?: Record<
         string,
@@ -299,6 +302,32 @@ export class ProjectSaveOrchestrator {
 
           const persistedFlowIds: string[] = [];
 
+          const flowsLike = {} as WorkspaceState['flows'];
+          for (const fid of flowIds) {
+            const e = snapshot?.[fid];
+            if (e && typeof e === 'object') {
+              flowsLike[fid] = {
+                id: fid,
+                title: String((e as { title?: string }).title || fid).trim() || fid,
+                nodes: (e as { nodes?: unknown[] }).nodes ?? [],
+                edges: (e as { edges?: unknown[] }).edges ?? [],
+                meta: (e as { meta?: unknown }).meta,
+                hydrated: (e as { hydrated?: boolean }).hydrated,
+                hasLocalChanges: (e as { hasLocalChanges?: boolean }).hasLocalChanges,
+              } as WorkspaceState['flows'][string];
+            } else if (fid === 'main') {
+              const mainFlow = fs.getFlowById('main');
+              if (mainFlow) {
+                flowsLike[fid] = {
+                  id: 'main',
+                  title: 'Main',
+                  nodes: mainFlow.nodes ?? [],
+                  edges: mainFlow.edges ?? [],
+                } as WorkspaceState['flows'][string];
+              }
+            }
+          }
+
           for (const flowId of flowIds) {
             let flowData: { nodes: any[]; edges: any[] };
             if (snapshot && Object.prototype.hasOwnProperty.call(snapshot, flowId)) {
@@ -336,41 +365,26 @@ export class ProjectSaveOrchestrator {
               continue;
             }
 
-            const simplifiedNodes = fs.transformNodesToSimplified(flowData.nodes);
-            const simplifiedEdges = fs.transformEdgesToSimplified(flowData.edges);
+            if (!flowsLike[flowId]) {
+              flowsLike[flowId] = {
+                id: flowId,
+                title: flowId,
+                nodes: flowData.nodes,
+                edges: flowData.edges,
+              } as WorkspaceState['flows'][string];
+            }
 
-            const flowMeta =
-              snapshot && Object.prototype.hasOwnProperty.call(snapshot, flowId)
-                ? snapshot[flowId]?.meta
-                : undefined;
+            const doc = buildFlowDocumentFromFlowSlice(projectId, flowId, flowsLike, flowData.nodes, flowData.edges);
 
-            logFlowSaveDebug('orchestrator: PUT /flow', {
+            logFlowSaveDebug('orchestrator: PUT /flow-document', {
               flowId,
               rawNodeCount: flowData.nodes?.length ?? 0,
               rawEdgeCount: flowData.edges?.length ?? 0,
-              simplifiedNodeCount: simplifiedNodes.length,
-              simplifiedEdgeCount: simplifiedEdges.length,
-              hasMeta: flowMeta !== undefined,
+              taskCount: doc.tasks.length,
+              variableCount: doc.variables.length,
             });
 
-            const response = await fetch(
-              `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`,
-              {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  nodes: simplifiedNodes,
-                  edges: simplifiedEdges,
-                  ...(flowMeta !== undefined ? { meta: flowMeta } : {}),
-                }),
-              }
-            );
-
-            if (!response.ok) {
-              throw new Error(
-                `Flow save failed for ${flowId}: ${response.status} ${response.statusText}`
-              );
-            }
+            await saveFlowDocument(doc);
             persistedFlowIds.push(flowId);
           }
 

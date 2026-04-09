@@ -28,7 +28,6 @@ import {
 import { resolveVariableMenuLabel } from '../../utils/variableDisplayLabel';
 import { getVariableLabel } from '../../utils/getVariableLabel';
 import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegistry';
-import { buildOutputMappingEntriesForChildFlow } from '../../domain/flowInterface/reconstructFlowInterfaceIfMissing';
 import { stripLegacyVariablesFromFlowMeta } from '../../flows/flowMetaSanitize';
 
 /** Optional overrides when building picker items (e.g. utterance labels from project translations). */
@@ -413,6 +412,7 @@ export type SubflowInterfaceAppendStats = {
  */
 function appendSubflowInterfaceOutputItems(
   projectId: string,
+  flows: WorkspaceState['flows'],
   activeFlowId: string,
   activeFlowForExpose: any,
   output: MappingEntry[],
@@ -533,16 +533,17 @@ function pushInterfaceItemsForInstance(
   if (!subflowTask) return;
 
   const tr = translationsByGuid ?? getProjectTranslationsTable();
-  const output: MappingEntry[] = buildOutputMappingEntriesForChildFlow(
-    projectId,
-    inst.flowId,
-    flows,
-    tr
-  );
+  const childMeta = childFlow.meta;
+  const flowLocalTr = childMeta && typeof childMeta === 'object' && 'translations' in childMeta
+    ? (childMeta as { translations?: Record<string, string> }).translations
+    : undefined;
+  const mergedTr = { ...tr, ...(flowLocalTr || {}) };
+  const output: MappingEntry[] = (childFlow.meta?.flowInterface?.output ?? []) as MappingEntry[];
 
   const ownerTitle = String(childFlow.title || inst.flowId).trim() || inst.flowId;
   appendSubflowInterfaceOutputItems(
     projectId,
+    flows,
     activeFlowId,
     activeFlowForExpose,
     output,
@@ -553,7 +554,7 @@ function pushInterfaceItemsForInstance(
     items,
     seen,
     stats,
-    translationsByGuid
+    mergedTr
   );
 }
 
@@ -808,8 +809,15 @@ export async function buildVariableMenuItemsAsync(
     const ownerTitle =
       String(resolvedChildTitle || slice?.title || childFlowId).trim() || childFlowId;
 
+    const childSlice = flows[childFlowId];
+    const flowLocalTr = childSlice?.meta?.translations;
+    const mergedTr = {
+      ...(options?.translationsByGuid ?? getProjectTranslationsTable()),
+      ...(flowLocalTr || {}),
+    };
     appendSubflowInterfaceOutputItems(
       projectId,
+      flows,
       activeFlowId,
       activeFlowForExpose,
       output,
@@ -820,7 +828,7 @@ export async function buildVariableMenuItemsAsync(
       items,
       seen,
       subflowAppendStats,
-      options?.translationsByGuid
+      mergedTr
     );
   }
 

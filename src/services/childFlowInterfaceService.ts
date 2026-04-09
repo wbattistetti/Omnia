@@ -1,12 +1,11 @@
 /**
- * Risoluzione OUTPUT interfaccia sottoflusso da variabili reali (scope flow), coerente con menu/condizioni.
+ * Child-flow interface OUTPUT: read only from persisted flow.meta.flowInterface (FlowDocument).
  */
+
 import type { FlowId, WorkspaceState } from '../flows/FlowTypes';
 import type { MappingEntry } from '../components/FlowMappingPanel/mappingTypes';
-import { buildOutputMappingEntriesForChildFlow } from '../domain/flowInterface/reconstructFlowInterfaceIfMissing';
-import { getProjectTranslationsTable } from '../utils/projectTranslationsRegistry';
 
-export type ChildFlowInterfaceSource = 'scope';
+export type ChildFlowInterfaceSource = 'persisted';
 
 export type ChildFlowInterfaceResult = {
   outputs: MappingEntry[];
@@ -21,7 +20,7 @@ function cacheKey(projectId: string, childFlowId: string): string {
 }
 
 /**
- * Clears cached child-flow interface data. Call when flow canvas or variable store changes materially.
+ * Clears cached child-flow interface data. Call when flow meta changes.
  */
 export function invalidateChildFlowInterfaceCache(projectId?: string, childFlowId?: string): void {
   const pid = String(projectId || '').trim();
@@ -43,7 +42,7 @@ export function invalidateChildFlowInterfaceCache(projectId?: string, childFlowI
 }
 
 /**
- * OUTPUT del child flow: sempre da {@link buildOutputMappingEntriesForChildFlow} (VariableCreationService + scope).
+ * OUTPUT del child flow: solo da meta.flowInterface.output persistito (nessuna ricostruzione da variabili).
  */
 export async function fetchChildFlowInterfaceOutputs(
   projectId: string,
@@ -53,18 +52,18 @@ export async function fetchChildFlowInterfaceOutputs(
   const pid = String(projectId || '').trim();
   const cid = String(childFlowId || '').trim();
   if (!pid || !cid) {
-    return { outputs: [], title: cid, source: 'scope' };
+    return { outputs: [], title: cid, source: 'persisted' };
   }
 
   const ck = cacheKey(pid, cid);
   if (cache.has(ck)) {
     const hit = cache.get(ck)!;
-    return { outputs: hit.outputs, title: hit.title, source: 'scope' };
+    return { outputs: hit.outputs, title: hit.title, source: 'persisted' };
   }
 
-  const tr = getProjectTranslationsTable();
-  const outputs = buildOutputMappingEntriesForChildFlow(pid, cid, (flows ?? {}) as Record<string, any>, tr);
-  const title = String(flows?.[cid]?.title || cid).trim() || cid;
+  const flow = flows?.[cid];
+  const outputs = (flow?.meta?.flowInterface?.output ?? []) as MappingEntry[];
+  const title = String(flow?.title || cid).trim() || cid;
   cache.set(ck, { outputs, title });
-  return { outputs, title, source: 'scope' };
+  return { outputs, title, source: 'persisted' };
 }

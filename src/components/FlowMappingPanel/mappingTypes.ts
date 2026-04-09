@@ -14,6 +14,8 @@ export interface MappingEntry {
   externalName: string;
   /** Promised variable GUID when wired from a flow row or wizard (stable for runtime). */
   variableRefId?: string;
+  /** Flow-local translation key; display string lives in FlowDocument.meta.translations[labelKey]. */
+  labelKey?: string;
   /** Backend: human description for tooltip / docs. */
   fieldDescription?: string;
   /** Backend: example or allowed values (shown in grid; first value may surface as hint). */

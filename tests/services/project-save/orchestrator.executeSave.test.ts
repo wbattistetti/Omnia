@@ -310,7 +310,7 @@ describe('ProjectSaveOrchestrator - executeSave Tests', () => {
     expect(typeof result.duration).toBe('number');
   });
 
-  it('should PUT every flow when flowsById lists multiple flows', async () => {
+  it('should PUT flow-document for every flow when flowsById lists multiple flows', async () => {
     const request: SaveProjectRequest = {
       version: '1.0',
       projectId: 'test-project',
@@ -342,7 +342,7 @@ describe('ProjectSaveOrchestrator - executeSave Tests', () => {
 
     expect(result.results.flow?.success).toBe(true);
     const flowPuts = mockFetch.mock.calls.filter(
-      (c) => typeof c[0] === 'string' && (c[0] as string).includes('/flow?flowId=')
+      (c) => typeof c[0] === 'string' && (c[0] as string).includes('/flow-document')
     );
     expect(flowPuts.length).toBeGreaterThanOrEqual(2);
     expect(flowPuts.some((c) => (c[0] as string).includes('flowId=main'))).toBe(true);
