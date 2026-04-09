@@ -1,11 +1,14 @@
 import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot, List, CheckCircle, Workflow } from 'lucide-react';
-import { SIDEBAR_TYPE_COLORS } from '../../Sidebar/sidebarTheme';
 import { taskRepository } from '../../../services/TaskRepository';
 import { getSayMessageSyncedBody } from '../../../utils/sayMessageTaskSync';
 import { TaskType, normalizeLegacyTaskTypeValue } from '../../../types/taskTypes';
 import { PRESET_CATEGORIES, getCurrentProjectLocale } from '../../../utils/categoryPresets';
 import getIconComponent from '../../TaskEditor/ResponseEditor/icons';
 import { getGlobalResolver } from '@domain/taskContent/TaskContentResolver.config';
+import {
+  FLOWCHART_INACTIVE_ICON_GRAY,
+  getFlowchartTaskTypeLabelColor,
+} from './flowchartTaskTypeColors';
 
 // ✅ Tipo per custom category (da TODO_NUOVO.md)
 export interface CustomCategory {
@@ -166,60 +169,38 @@ function hasTaskTreeLegacy(row: any): boolean {
  * Priorità: customCategory > preset category > base type
  */
 export function getTaskVisualsByType(type: TaskType, hasTaskTree: boolean) {
-  const green = '#22c55e';
-  const blue = '#3b82f6';
-  const indigo = '#6366f1';
-  const amber = '#f59e0b';
-  const cyan = '#06b6d4';
-  const gray = '#94a3b8';
-  const purple = '#a855f7';
+  const gray = FLOWCHART_INACTIVE_ICON_GRAY;
+  const labelColor = getFlowchartTaskTypeLabelColor(type);
 
   let Icon: any = Megaphone;
-  let labelColor = green;
-  let iconColor = gray;
-
   switch (type) {
     case TaskType.AIAgent:
       Icon = Bot;
-      labelColor = purple;
-      iconColor = hasTaskTree ? purple : gray;
       break;
     case TaskType.UtteranceInterpretation:
       Icon = Ear;
-      labelColor = blue;
-      iconColor = hasTaskTree ? blue : gray;
       break;
     case TaskType.ClassifyProblem:
       Icon = GitBranch;
-      labelColor = amber;
-      iconColor = hasTaskTree ? amber : gray;
       break;
     case TaskType.Summarizer:
       Icon = FileText;
-      labelColor = cyan;
-      iconColor = hasTaskTree ? cyan : gray;
       break;
     case TaskType.Negotiation:
       Icon = CheckCircle2;
-      labelColor = indigo;
-      iconColor = hasTaskTree ? indigo : gray;
       break;
     case TaskType.BackendCall:
       Icon = Server;
-      labelColor = green;
-      iconColor = hasTaskTree ? green : gray;
       break;
     case TaskType.Subflow:
       Icon = Workflow;
-      labelColor = '#0ea5e9';
-      iconColor = hasTaskTree ? '#0ea5e9' : gray;
       break;
     case TaskType.SayMessage:
     default:
       Icon = Megaphone;
-      labelColor = green;
-      iconColor = hasTaskTree ? green : gray;
   }
+
+  const iconColor = hasTaskTree ? labelColor : gray;
 
   return {
     Icon,

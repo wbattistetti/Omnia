@@ -10,7 +10,8 @@ import { localLabelForSubflowTaskVariable, normalizeSemanticTaskLabel } from '@d
 import { variableCreationService } from '@services/VariableCreationService';
 import type { VariableInstance } from '@types/variableTypes';
 import { getVariableLabel } from '@utils/getVariableLabel';
-import { getProjectTranslationsTable, mergeProjectTranslationEntry } from '@utils/projectTranslationsRegistry';
+import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
+import { publishVariableDisplayTranslation } from '@utils/variableTranslationBridge';
 import { makeTranslationKey } from '@utils/translationKeys';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
 
@@ -108,9 +109,9 @@ export function autoRenameParentVariablesForMovedTask(
     }
 
     try {
-      mergeProjectTranslationEntry(makeTranslationKey('variable', vid), nextName);
+      publishVariableDisplayTranslation(makeTranslationKey('variable', vid), nextName);
     } catch {
-      logTaskSubflowMove('autoRename:translationMergeFailed', { variableId: vid });
+      logTaskSubflowMove('autoRename:translationPublishFailed', { variableId: vid });
     }
 
     renamed.push({ id: vid, previousName: prevName, nextName });

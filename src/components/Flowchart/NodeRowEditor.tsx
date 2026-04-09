@@ -3,7 +3,7 @@ import { VoiceTextbox } from '../common/VoiceTextbox';
 import VariableTokenContextMenu from '../common/VariableTokenContextMenu';
 import { insertBracketTokenAtCaret } from '../../utils/variableTokenText';
 import { getActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
-import { useFlowActions, useFlowWorkspace } from '../../flows/FlowStore';
+import { useFlowWorkspace } from '../../flows/FlowStore';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
 import {
@@ -40,7 +40,6 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
 }) => {
   const [varsMenu, setVarsMenu] = React.useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
   const { flows } = useFlowWorkspace();
-  const { updateFlowMeta } = useFlowActions();
   const { data: projectData } = useProjectData();
   const pdUpdate = useProjectDataUpdate();
   const { translations } = useProjectTranslations();
@@ -280,16 +279,6 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
           );
           applyInsert(bound.tokenLabel);
           return;
-        }
-
-        const owner = (flows as any)?.[item.ownerFlowId];
-        if (projectId && owner) {
-          const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
-          const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
-          const nextVars = existing
-            ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v))
-            : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
-          updateFlowMeta(item.ownerFlowId, { variables: nextVars });
         }
 
         applyInsert(item.tokenLabel || item.varLabel);

@@ -13,7 +13,7 @@ import {
   convertDSLGUIDsToLabels,
 } from '../../../../utils/conditionCodeConverter';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
-import { useFlowActions, useFlowWorkspace } from '../../../../flows/FlowStore';
+import { useFlowWorkspace } from '../../../../flows/FlowStore';
 import {
   buildSubflowCompositeKeySet,
   buildVariableMenuItemsAsync,
@@ -38,7 +38,6 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [varsMenu, setVarsMenu] = useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
   const { flows } = useFlowWorkspace();
-  const { updateFlowMeta } = useFlowActions();
   const [variableMenuItems, setVariableMenuItems] = useState<VariableMenuItem[]>([]);
 
   const activeFlowId = getActiveFlowCanvasId();
@@ -235,16 +234,6 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
             );
             applyInsert(bound.tokenLabel);
             return;
-          }
-
-          const owner = (flows as any)?.[item.ownerFlowId];
-          if (projectId && owner) {
-            const prevVars = Array.isArray(owner?.meta?.variables) ? owner.meta.variables : [];
-            const existing = prevVars.find((v: any) => String(v?.id || '').trim() === item.id);
-            const nextVars = existing
-              ? prevVars.map((v: any) => (String(v?.id || '').trim() === item.id ? { ...v, visibility: 'output' } : v))
-              : [...prevVars, { id: item.id, label: item.varLabel, type: 'string', visibility: 'output' }];
-            updateFlowMeta(item.ownerFlowId, { variables: nextVars });
           }
 
           applyInsert(item.tokenLabel || item.varLabel);

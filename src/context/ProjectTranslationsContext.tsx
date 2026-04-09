@@ -2,11 +2,17 @@
  * Global project translation map: load (factory+project merge from API), snapshot after load for
  * flow-key materialization, bulk save split by deterministic project vs factory classification.
  */
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, ReactNode, useCallback, useMemo } from 'react';
+import {
+  ProjectTranslationsContext,
+  type ProjectTranslationsContextType,
+  isProjectTranslationsDebugEnabled,
+} from './projectTranslationsContextInstance';
 import { useProjectDataUpdate } from './ProjectDataContext';
 import { loadAllProjectTranslations, saveAllTranslationsBulk } from '../services/ProjectDataService';
 import { notifyTranslationAdded, notifyTranslationsAdded } from '../utils/translationTracker';
 import { setProjectTranslationsRegistry } from '../utils/projectTranslationsRegistry';
+import { registerVariableTranslationListener } from '../utils/variableTranslationBridge';
 import { isValidTranslationStoreKey, parseTranslationKey, translationKeyFromStoredValue } from '../utils/translationKeys';
 import { extractGUIDsFromDDT } from '../utils/ddtUtils';
 import { taskRepository } from '../services/TaskRepository';
@@ -15,29 +21,8 @@ import { TemplateSource } from '../types/taskTypes';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
 import type { FlowNode } from '../components/Flowchart/types/flowTypes';
 
-export interface ProjectTranslationsContextType {
-  translations: Record<string, string>;
-  addTranslation: (guid: string, text: string, templateId?: string) => void;
-  addTranslations: (translations: Record<string, string>, templateId?: string) => void;
-  getTranslation: (guid: string) => string | undefined;
-  loadAllTranslations: () => Promise<void>;
-  saveAllTranslations: () => Promise<void>;
-  /** Kept for API compatibility; persistence no longer uses dirty tracking (always false). */
-  isDirty: boolean;
-  isLoading: boolean;
-  isReady: boolean;
-  setCurrentTemplateId: (templateId: string | null) => void;
-}
-
-const ProjectTranslationsContext = createContext<ProjectTranslationsContextType | undefined>(undefined);
-
-export const useProjectTranslations = () => {
-  const context = useContext(ProjectTranslationsContext);
-  if (context === undefined) {
-    throw new Error('useProjectTranslations must be used within a ProjectTranslationsProvider');
-  }
-  return context;
-};
+export type { ProjectTranslationsContextType } from './projectTranslationsContextInstance';
+export { useProjectTranslations, isProjectTranslationsDebugEnabled } from './projectTranslationsContextInstance';
 
 interface ProjectTranslationsProviderProps {
   children: ReactNode;
@@ -148,6 +133,17 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   const snapshotAfterLoadRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
+    if (isProjectTranslationsDebugEnabled()) {
+      console.debug('[ProjectTranslations] Provider montato', { providerModuleUrl: import.meta.url });
+    }
+    return () => {
+      if (isProjectTranslationsDebugEnabled()) {
+        console.debug('[ProjectTranslations] Provider smontato');
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     translationsLiveRef.current = translations;
   }, [translations]);
 
@@ -223,6 +219,19 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   useEffect(() => {
     setProjectTranslationsRegistry(translations);
   }, [translations]);
+
+  /** Keep React translation map + live ref in sync when domain code publishes variable labels (subflow rename). */
+  useEffect(() => {
+    registerVariableTranslationListener((canonicalKey, text) => {
+      translationsLiveRef.current = { ...translationsLiveRef.current, [canonicalKey]: text };
+      setProjectTranslationsRegistry(translationsLiveRef.current);
+      setTranslations((prev) => {
+        if (prev[canonicalKey] === text) return prev;
+        return { ...prev, [canonicalKey]: text };
+      });
+    });
+    return () => registerVariableTranslationListener(null);
+  }, []);
 
   const loadAllTranslations = useCallback(async () => {
     if (!currentProjectId) {

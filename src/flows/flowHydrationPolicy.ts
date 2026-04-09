@@ -71,5 +71,5 @@ export function explainShouldLoadFlowFromServer(
 export type FlowLoadApplyPayload<NodeT = unknown, EdgeT = unknown> = {
   nodes: NodeT[];
   edges: EdgeT[];
-  meta?: { variables?: unknown[] };
+  meta?: Flow['meta'];
 };

@@ -6,6 +6,7 @@ import { TaskContext } from '../../../../types/taskContext';
 import { filterTasksByContext } from '../../../../utils/taskContextHelpers';
 import getIconComponent from '../../../TaskEditor/ResponseEditor/icons';
 import { ensureHexColor } from '../../../TaskEditor/ResponseEditor/utils/color';
+import { getFlowchartTaskTypeLabelColor } from '../../utils/flowchartTaskTypeColors';
 
 // ✅ Cache globale per i task "Other" - evita reload ogni volta
 let cachedOtherTasks: any[] | null = null;
@@ -15,14 +16,14 @@ let isLoadingCache = false;
 // ✅ Restituisce direttamente TaskType enum invece di stringhe semantiche
 // I 7 task principali
 const MAIN_TYPE_OPTIONS = [
-    { value: TaskType.SayMessage, label: 'Message', Icon: Megaphone, color: '#34d399' },
-    { value: TaskType.UtteranceInterpretation, label: 'Data', Icon: Ear, color: '#3b82f6' },
-    { value: TaskType.BackendCall, label: 'BackendCall', Icon: Server, color: '#94a3b8' },
-    { value: TaskType.ClassifyProblem, label: 'Problem', Icon: GitBranch, color: '#f59e0b' },
-    { value: TaskType.AIAgent, label: 'AI Agent', Icon: Bot, color: '#a855f7' },
-    { value: TaskType.Summarizer, label: 'Summarizer', Icon: FileText, color: '#06b6d4' },
-    { value: TaskType.Negotiation, label: 'Negotiation', Icon: CheckCircle2, color: '#6366f1' },
-    { value: TaskType.Subflow, label: 'Subflow', Icon: Workflow, color: '#0ea5e9' }
+    { value: TaskType.SayMessage, label: 'Message', Icon: Megaphone, color: getFlowchartTaskTypeLabelColor(TaskType.SayMessage) },
+    { value: TaskType.UtteranceInterpretation, label: 'Data', Icon: Ear, color: getFlowchartTaskTypeLabelColor(TaskType.UtteranceInterpretation) },
+    { value: TaskType.BackendCall, label: 'BackendCall', Icon: Server, color: getFlowchartTaskTypeLabelColor(TaskType.BackendCall) },
+    { value: TaskType.ClassifyProblem, label: 'Problem', Icon: GitBranch, color: getFlowchartTaskTypeLabelColor(TaskType.ClassifyProblem) },
+    { value: TaskType.AIAgent, label: 'AI Agent', Icon: Bot, color: getFlowchartTaskTypeLabelColor(TaskType.AIAgent) },
+    { value: TaskType.Summarizer, label: 'Summarizer', Icon: FileText, color: getFlowchartTaskTypeLabelColor(TaskType.Summarizer) },
+    { value: TaskType.Negotiation, label: 'Negotiation', Icon: CheckCircle2, color: getFlowchartTaskTypeLabelColor(TaskType.Negotiation) },
+    { value: TaskType.Subflow, label: 'Subflow', Icon: Workflow, color: getFlowchartTaskTypeLabelColor(TaskType.Subflow) }
 ];
 
 interface RowTypePickerToolbarProps {

@@ -376,6 +376,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 nodes: [],
                 edges: [],
                 hydrated: false,
+                variablesReady: false,
                 hasLocalChanges: false,
               } as any;
               logUpsertSubflowEmptyNodesCaller('AppContent:openSubflowTabPlaceholder', placeholder);

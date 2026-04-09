@@ -133,6 +133,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
           nodes: [],
           edges: [],
           hydrated: false,
+          variablesReady: false,
           hasLocalChanges: false,
         };
         logUpsertSubflowEmptyNodesCaller('FlowCanvasHost:noProjectIdPlaceholder', placeholder);
@@ -165,6 +166,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
             edges: data.edges,
             ...(data.meta !== undefined ? { meta: data.meta } : {}),
             hydrated: true,
+            variablesReady: false,
             hasLocalChanges: false,
           } as any);
         } catch (e) {
@@ -176,6 +178,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
             nodes: [],
             edges: [],
             hydrated: false,
+            variablesReady: false,
             hasLocalChanges: false,
           };
           logUpsertSubflowEmptyNodesCaller('FlowCanvasHost:initialLoadFlowFailed', failedLoad);
@@ -211,6 +214,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
         upsertFlow({
           ...flow,
           hydrated: true,
+          variablesReady: false,
           hasLocalChanges: true,
         });
       }

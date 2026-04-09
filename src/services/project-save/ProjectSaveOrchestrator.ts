@@ -210,7 +210,7 @@ export class ProjectSaveOrchestrator {
         {
           nodes?: unknown[];
           edges?: unknown[];
-          meta?: { variables?: unknown[] };
+          meta?: { flowInterface?: unknown; createdAt?: string; updatedAt?: string; fromTaskId?: string };
           /** Step 3: when explicitly false, skip PUT for this flow (no local graph changes). */
           hasLocalChanges?: boolean;
         }

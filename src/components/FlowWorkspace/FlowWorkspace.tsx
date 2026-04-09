@@ -39,6 +39,7 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
         nodes: [],
         edges: [],
         hydrated: false,
+        variablesReady: false,
         hasLocalChanges: false,
       };
       logUpsertSubflowEmptyNodesCaller('FlowWorkspace:activeTabMissingSlice', placeholder);
@@ -60,6 +61,7 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
         upsertFlow({
           ...flow,
           hydrated: true,
+          variablesReady: false,
           hasLocalChanges: true,
         });
       }

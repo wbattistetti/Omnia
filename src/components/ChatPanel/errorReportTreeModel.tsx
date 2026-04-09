@@ -17,6 +17,7 @@ import {
   hasTaskTree,
   resolveTaskType,
 } from '@components/Flowchart/utils/taskVisuals';
+import { getFlowchartTaskTypeLabelColor } from '@components/Flowchart/utils/flowchartTaskTypeColors';
 import { ensureHexColor } from '@responseEditor/utils/color';
 import getIconComponent from '@components/TaskEditor/ResponseEditor/icons';
 import {
@@ -78,8 +79,8 @@ function flowDisplayTitle(flowId: string, flows: Record<string, Flow<Node<FlowNo
 /** Visuals for node-level graph issues (e.g. ambiguous outgoing links). */
 const NODE_STRUCTURE_VISUALS: RowVisualMeta = {
   Icon: Workflow,
-  labelColor: '#0ea5e9',
-  iconColor: '#0ea5e9',
+  labelColor: getFlowchartTaskTypeLabelColor(TaskType.Subflow),
+  iconColor: getFlowchartTaskTypeLabelColor(TaskType.Subflow),
 };
 
 /**
@@ -198,7 +199,7 @@ export function getErrorRowVisuals(row: NodeRow | null, isEdgeFallback: boolean)
 export function getFlowRootVisuals(_flowId: string): FlowVisualMeta {
   return {
     Icon: Workflow,
-    color: '#0ea5e9',
+    color: getFlowchartTaskTypeLabelColor(TaskType.Subflow),
   };
 }
 

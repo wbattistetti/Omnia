@@ -6,6 +6,7 @@
 import { createMappingEntry, type MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 import { localLabelForSubflowTaskVariable } from '@domain/variableProxyNaming';
 import type { WorkspaceState } from '@flows/FlowTypes';
+import { stripLegacyVariablesFromFlowMeta } from '../../flows/flowMetaSanitize';
 import type { VariableInstance } from '@types/variableTypes';
 import { invalidateChildFlowInterfaceCache } from '@services/childFlowInterfaceService';
 import { taskRepository } from '@services/TaskRepository';
@@ -176,13 +177,13 @@ export function mergeChildFlowInterfaceOutputsForVariables(
 
   const nextFlow = {
     ...flow,
-    meta: {
+    meta: stripLegacyVariablesFromFlowMeta({
       ...meta,
       flowInterface: {
         input: Array.isArray(fi.input) ? fi.input : [],
         output: prev,
       },
-    },
+    }) as (typeof flow)['meta'],
     hasLocalChanges: true,
   };
   return { ...flows, [childFlowId]: nextFlow };

@@ -468,6 +468,15 @@ class VariableCreationService {
         hydratedTaskRows,
       });
     }
+
+    if (typeof document !== 'undefined') {
+      document.dispatchEvent(
+        new CustomEvent('omnia:flowVariablesHydrated', {
+          bubbles: true,
+          detail: { projectId: pid, flowIds: Object.keys(flows) },
+        })
+      );
+    }
   }
 
   /**
@@ -757,8 +766,14 @@ class VariableCreationService {
 
   /**
    * Variables visible when authoring conditions on a given flow canvas (globals + that flow only).
+   * When `workspaceFlows` is passed (React FlowStore), visibility matches that graph so the scope stays
+   * aligned when {@link FlowWorkspaceSnapshot} lags behind the store.
    */
-  getVariablesForFlowScope(projectId: string | null | undefined, flowCanvasId?: string): VariableInstance[] {
+  getVariablesForFlowScope(
+    projectId: string | null | undefined,
+    flowCanvasId?: string,
+    workspaceFlows?: WorkspaceState['flows'] | null
+  ): VariableInstance[] {
     const storeKey = this.projectKey(projectId);
     const flowId = flowCanvasId ?? getActiveFlowCanvasId();
     const flow = FlowWorkspaceSnapshot.getFlowById(flowId);
@@ -773,7 +788,7 @@ class VariableCreationService {
     }
 
     const all = this.store.get(storeKey) ?? [];
-    const filtered = all.filter((v) => isVariableVisibleInFlow(v, flowId));
+    const filtered = all.filter((v) => isVariableVisibleInFlow(v, flowId, workspaceFlows ?? undefined));
 
     logVariableScope('getVariablesForFlowScope', {
       projectId: storeKey,
@@ -784,6 +799,7 @@ class VariableCreationService {
       storeRowCount: all.length,
       visibleRowCount: filtered.length,
       visibleVarNames: filtered.map((v) => v.varName),
+      usedWorkspaceFlowsOverride: workspaceFlows != null,
     });
 
     return filtered;

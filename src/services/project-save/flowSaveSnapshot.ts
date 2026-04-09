@@ -1,6 +1,9 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
+import type { Flow } from '../../flows/FlowTypes';
+import { stripLegacyVariablesFromFlowMeta } from '../../flows/flowMetaSanitize';
+
 /**
  * Helpers for persisting workspace flows: cloning before draft commit (provider remount)
  * and mapping to the shape consumed by ProjectSaveOrchestrator.executeSave.
@@ -114,7 +117,7 @@ export type FlowsByIdForOrchestrator = Record<
   {
     nodes: unknown[];
     edges: unknown[];
-    meta?: { variables?: unknown[] };
+    meta?: Flow['meta'];
     hasLocalChanges?: boolean;
   }
 >;
@@ -137,12 +140,17 @@ export function buildFlowsByIdForOrchestrator(allFlows: WorkspaceFlowRecord): Fl
           ? Boolean(f.hasLocalChanges)
           : undefined;
 
+      const rawMeta = f?.meta;
+      const meta =
+        rawMeta !== undefined && typeof rawMeta === 'object'
+          ? stripLegacyVariablesFromFlowMeta(rawMeta)
+          : undefined;
       return [
         fid,
         {
           nodes,
           edges,
-          ...(f?.meta !== undefined ? { meta: f.meta as { variables?: unknown[] } } : {}),
+          ...(meta !== undefined ? { meta } : {}),
           ...(hasLocalChanges !== undefined ? { hasLocalChanges } : {}),
         },
       ];

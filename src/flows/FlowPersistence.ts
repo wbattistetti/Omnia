@@ -1,5 +1,5 @@
-import type { FlowId } from './FlowTypes';
-import type { FlowVariableDefinition } from './flowVariableTypes';
+import type { Flow, FlowId } from './FlowTypes';
+import { stripLegacyVariablesFromFlowMeta } from './flowMetaSanitize';
 import type { Node } from 'reactflow';
 import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
 import { transformNodesToSimplified, transformEdgesToSimplified, transformNodesToReactFlow, transformEdgesToReactFlow } from './flowTransformers';
@@ -27,7 +27,7 @@ export async function listFlows(projectId: string): Promise<{ id: FlowId; update
 export type FlowLoadResult = {
   nodes: Node<FlowNode>[];
   edges: any[];
-  meta?: { variables?: FlowVariableDefinition[] };
+  meta?: Flow['meta'];
 };
 
 export async function loadFlow(projectId: string, flowId: FlowId): Promise<FlowLoadResult> {
@@ -46,7 +46,7 @@ export async function loadFlow(projectId: string, flowId: FlowId): Promise<FlowL
   const simplifiedEdges = Array.isArray(json?.edges) ? json.edges : [];
   const meta =
     json?.meta && typeof json.meta === 'object'
-      ? (json.meta as { variables?: FlowVariableDefinition[] })
+      ? stripLegacyVariablesFromFlowMeta(json.meta)
       : undefined;
 
   logFlowSaveDebug('loadFlow: response from API (simplified counts before ReactFlow transform)', {
@@ -74,7 +74,7 @@ export async function saveFlow(
   flowId: FlowId,
   nodes: Node<FlowNode>[],
   edges: any[],
-  meta?: { variables?: FlowVariableDefinition[] }
+  meta?: Flow['meta']
 ): Promise<void> {
   if (!projectId || String(projectId).trim() === '') {
     return;
@@ -85,13 +85,14 @@ export async function saveFlow(
   const simplifiedNodes = transformNodesToSimplified(nodes);
   const simplifiedEdges = transformEdgesToSimplified(edges);
 
+  const metaOut = meta !== undefined ? stripLegacyVariablesFromFlowMeta(meta) : undefined;
   const res = await fetch(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       nodes: simplifiedNodes,
       edges: simplifiedEdges,
-      ...(meta !== undefined ? { meta } : {}),
+      ...(metaOut !== undefined ? { meta: metaOut } : {}),
     }),
   });
   if (!res.ok) throw new Error('saveFlow_failed');

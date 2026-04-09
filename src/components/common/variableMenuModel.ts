@@ -28,6 +28,8 @@ import {
 import { resolveVariableMenuLabel } from '../../utils/variableDisplayLabel';
 import { getVariableLabel } from '../../utils/getVariableLabel';
 import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegistry';
+import { buildOutputMappingEntriesForChildFlow } from '../../domain/flowInterface/reconstructFlowInterfaceIfMissing';
+import { stripLegacyVariablesFromFlowMeta } from '../../flows/flowMetaSanitize';
 
 /** Optional overrides when building picker items (e.g. utterance labels from project translations). */
 export type BuildVariableMenuItemsOptions = {
@@ -377,13 +379,25 @@ function syntheticInterfaceVarId(entryKey: string): string {
   return `iface:${String(entryKey || '').trim()}`;
 }
 
-function isExposedInFlow(flow: any, varId: string): boolean {
-  const vars = Array.isArray(flow?.meta?.variables) ? flow.meta.variables : [];
-  const v = vars.find((x: any) => String(x?.id || '').trim() === varId);
-  if (v && String(v?.visibility || 'internal') !== 'internal') return true;
+function isExposedInFlow(
+  flow: any,
+  varId: string,
+  projectId?: string,
+  workspaceFlows?: WorkspaceState['flows'] | null
+): boolean {
+  const vid = String(varId || '').trim();
+  if (!vid) return false;
   const ifaceIn = Array.isArray(flow?.meta?.flowInterface?.input) ? flow.meta.flowInterface.input : [];
   const ifaceOut = Array.isArray(flow?.meta?.flowInterface?.output) ? flow.meta.flowInterface.output : [];
-  return [...ifaceIn, ...ifaceOut].some((e: any) => String(e?.variableRefId || '').trim() === varId);
+  if ([...ifaceIn, ...ifaceOut].some((e: any) => String(e?.variableRefId || '').trim() === vid)) return true;
+  const pid = String(projectId || '').trim();
+  const fid = flow?.id != null ? String(flow.id).trim() : '';
+  if (pid && fid && workspaceFlows) {
+    const all = variableCreationService.getAllVariables(pid) ?? [];
+    const vis = all.filter((v) => isVariableVisibleInFlow(v, fid, workspaceFlows));
+    if (vis.some((v) => String(v.id).trim() === vid)) return true;
+  }
+  return false;
 }
 
 export type SubflowInterfaceAppendStats = {
@@ -461,7 +475,7 @@ function appendSubflowInterfaceOutputItems(
         tokenLabel: parentName,
         ownerFlowId: activeFlowId,
         ownerFlowTitle: String(activeFlowForExpose?.title || activeFlowId).trim() || activeFlowId,
-        isExposed: isExposedInFlow(activeFlowForExpose, toId),
+        isExposed: isExposedInFlow(activeFlowForExpose, toId, projectId, flows),
         isFromActiveFlow: true,
         sourceTaskRowLabel: cleanSourceLabel,
         subflowTaskId: inst.subflowTaskId,
@@ -518,9 +532,13 @@ function pushInterfaceItemsForInstance(
   const subflowTask = taskRepository.getTask(inst.subflowTaskId);
   if (!subflowTask) return;
 
-  const output: MappingEntry[] = Array.isArray(childFlow.meta?.flowInterface?.output)
-    ? childFlow.meta?.flowInterface?.output || []
-    : [];
+  const tr = translationsByGuid ?? getProjectTranslationsTable();
+  const output: MappingEntry[] = buildOutputMappingEntriesForChildFlow(
+    projectId,
+    inst.flowId,
+    flows,
+    tr
+  );
 
   const ownerTitle = String(childFlow.title || inst.flowId).trim() || inst.flowId;
   appendSubflowInterfaceOutputItems(
@@ -575,7 +593,7 @@ export function buildVariableMenuItems(
       tokenLabel: varLabel,
       ownerFlowId: activeFlowId,
       ownerFlowTitle: String(activeFlowForExpose?.title || activeFlowId).trim() || activeFlowId,
-      isExposed: isExposedInFlow(activeFlowForExpose, varId),
+      isExposed: isExposedInFlow(activeFlowForExpose, varId, projectId, flows),
       isFromActiveFlow: true,
       sourceTaskRowLabel: undefined,
     });
@@ -639,7 +657,9 @@ function mergeActiveFlowIntoFlowsForMenuScope(
       title,
       nodes,
       edges: Array.isArray(edges) ? edges : prev?.edges ?? [],
-      ...(loadedMeta != null && typeof loadedMeta === 'object' ? { meta: loadedMeta as object } : {}),
+      ...(loadedMeta != null && typeof loadedMeta === 'object'
+        ? { meta: stripLegacyVariablesFromFlowMeta(loadedMeta) as object }
+        : {}),
     } as any,
   };
 }
@@ -696,7 +716,7 @@ export async function buildVariableMenuItemsAsync(
   const items: VariableMenuItem[] = [];
   type SubflowBuildDiag = {
     childFlowId: string;
-    outputSource: 'store' | 'cache' | 'loadFlow' | 'empty';
+    outputSource: 'scope' | 'empty';
     outputEntryCount: number;
     taskOk: boolean;
   };
@@ -734,7 +754,7 @@ export async function buildVariableMenuItemsAsync(
       tokenLabel: varLabel,
       ownerFlowId: activeFlowId,
       ownerFlowTitle: String(activeFlowForExpose?.title || activeFlowId).trim() || activeFlowId,
-      isExposed: isExposedInFlow(activeFlowForExpose, varId),
+      isExposed: isExposedInFlow(activeFlowForExpose, varId, projectId, flows),
       isFromActiveFlow: true,
       sourceTaskRowLabel: undefined,
     });
@@ -755,7 +775,7 @@ export async function buildVariableMenuItemsAsync(
     if (!childFlowId) continue;
 
     let output: MappingEntry[] = [];
-    let outputSource: 'store' | 'cache' | 'api' | 'empty' = 'empty';
+    let outputSource: 'scope' | 'empty' = 'empty';
     let resolvedChildTitle = '';
     try {
       const resolved = await fetchChildFlowInterfaceOutputs(projectId, childFlowId, flows);

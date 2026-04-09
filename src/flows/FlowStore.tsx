@@ -1,15 +1,16 @@
-import React, { createContext, useContext, useLayoutEffect, useMemo, useReducer } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useReducer } from 'react';
 import { takeWorkspaceRestoreForProjectOnce } from '../services/project-save/flowSaveSnapshot';
 import { shouldKeepLocalGraphOnEmptyServerResponse } from './flowLoadMergePolicy';
 import { logFlowSaveDebug } from '../utils/flowSaveDebug';
 import { logTaskSubflowMove } from '../utils/taskSubflowMoveDebug';
 import { isSubflowCanvasDebugEnabled, logSubflowCanvasDebug, summarizeFlowSlice } from '../utils/subflowCanvasDebug';
 import type { Flow, FlowId, WorkspaceState } from './FlowTypes';
+import { stripLegacyVariablesFromFlowMeta } from './flowMetaSanitize';
 
 type ApplyFlowLoadPayload<NodeT, EdgeT> = {
   nodes: NodeT[];
   edges: EdgeT[];
-  meta?: { variables?: unknown[] };
+  meta?: Flow['meta'];
 };
 
 type Action<NodeT = any, EdgeT = any> =
@@ -17,6 +18,7 @@ type Action<NodeT = any, EdgeT = any> =
   | { type: 'UPDATE_FLOW_GRAPH'; flowId: FlowId; updater: (nodes: NodeT[], edges: EdgeT[]) => { nodes: NodeT[]; edges: EdgeT[] } }
   | { type: 'UPDATE_FLOW_META'; flowId: FlowId; patch: Record<string, unknown> }
   | { type: 'APPLY_FLOW_LOAD_RESULT'; flowId: FlowId; payload: ApplyFlowLoadPayload<NodeT, EdgeT> }
+  | { type: 'MARK_FLOWS_VARIABLES_READY'; flowIds: FlowId[] }
   | { type: 'MARK_FLOWS_PERSISTED'; flowIds: FlowId[] }
   | { type: 'OPEN_FLOW'; flowId: FlowId }
   | { type: 'OPEN_FLOW_BACKGROUND'; flowId: FlowId }
@@ -67,12 +69,20 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
 
       const nonEmpty =
         (incMerged.nodes?.length ?? 0) > 0 || (incMerged.edges?.length ?? 0) > 0;
+      const mergedForUpsert = { ...incMerged } as Flow<NodeT, EdgeT>;
+      if (mergedForUpsert.meta !== undefined) {
+        mergedForUpsert.meta = stripLegacyVariablesFromFlowMeta(mergedForUpsert.meta);
+      }
       const flow = {
-        ...incMerged,
-        hydrated: incMerged.hydrated !== undefined ? incMerged.hydrated : (prev?.hydrated ?? false),
+        ...mergedForUpsert,
+        hydrated: mergedForUpsert.hydrated !== undefined ? mergedForUpsert.hydrated : (prev?.hydrated ?? false),
+        variablesReady:
+          mergedForUpsert.variablesReady !== undefined
+            ? mergedForUpsert.variablesReady
+            : (prev?.variablesReady ?? false),
         hasLocalChanges:
-          incMerged.hasLocalChanges !== undefined
-            ? incMerged.hasLocalChanges
+          mergedForUpsert.hasLocalChanges !== undefined
+            ? mergedForUpsert.hasLocalChanges
             : prev !== undefined
               ? (prev.hasLocalChanges ?? false)
               : nonEmpty,
@@ -104,9 +114,11 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
       const curr = state.flows[action.flowId];
       if (!curr) return state;
       const prevMeta = (curr.meta && typeof curr.meta === 'object' ? curr.meta : {}) as Record<string, unknown>;
+      const patch = { ...action.patch } as Record<string, unknown>;
+      delete patch.variables;
       const flow = {
         ...curr,
-        meta: { ...prevMeta, ...action.patch } as Flow<NodeT, EdgeT>['meta'],
+        meta: stripLegacyVariablesFromFlowMeta({ ...prevMeta, ...patch }) as Flow<NodeT, EdgeT>['meta'],
         hasLocalChanges: true,
       } as Flow<NodeT, EdgeT>;
       return { ...state, flows: { ...state.flows, [action.flowId]: flow } };
@@ -142,14 +154,18 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
       });
       const nextNodes = keepLocalGraph ? (curr.nodes as any[]) : serverNodes;
       const nextEdges = keepLocalGraph ? (curr.edges as any[]) : serverEdges;
-      const mergedMeta =
-        p.meta !== undefined ? { ...curr.meta, ...p.meta } : curr.meta;
+      const mergedMeta = stripLegacyVariablesFromFlowMeta(
+        p.meta !== undefined
+          ? { ...(curr.meta && typeof curr.meta === 'object' ? curr.meta : {}), ...p.meta }
+          : curr.meta
+      );
       const flow = {
         ...curr,
         nodes: nextNodes as any,
         edges: nextEdges as any,
-        ...(mergedMeta !== undefined ? { meta: mergedMeta } : {}),
+        meta: mergedMeta,
         hydrated: true,
+        variablesReady: false,
         hasLocalChanges: keepLocalGraph ? true : false,
       } as Flow<NodeT, EdgeT>;
       if (keepLocalGraph) {
@@ -171,6 +187,15 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
         });
       }
       return { ...state, flows: { ...state.flows, [action.flowId]: flow } };
+    }
+    case 'MARK_FLOWS_VARIABLES_READY': {
+      const flows = { ...state.flows };
+      for (const flowId of action.flowIds) {
+        const f = flows[flowId];
+        if (!f || f.hydrated !== true) continue;
+        flows[flowId] = { ...f, variablesReady: true } as Flow<NodeT, EdgeT>;
+      }
+      return { ...state, flows };
     }
     case 'MARK_FLOWS_PERSISTED': {
       const flows = { ...state.flows };
@@ -234,6 +259,7 @@ export function FlowWorkspaceProvider({
           nodes: [],
           edges: [],
           hydrated: false,
+          variablesReady: false,
           hasLocalChanges: false,
         },
       },
@@ -244,6 +270,17 @@ export function FlowWorkspaceProvider({
   );
 
   const [state, dispatch] = useReducer(reducer as any, initial);
+
+  useEffect(() => {
+    const onHydrated = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ flowIds?: string[] }>).detail;
+      const flowIds = Array.isArray(detail?.flowIds) ? detail.flowIds : [];
+      if (flowIds.length === 0) return;
+      dispatch({ type: 'MARK_FLOWS_VARIABLES_READY', flowIds } as any);
+    };
+    document.addEventListener('omnia:flowVariablesHydrated', onHydrated);
+    return () => document.removeEventListener('omnia:flowVariablesHydrated', onHydrated);
+  }, []);
 
   useLayoutEffect(() => {
     const pid = workspaceProjectId != null ? String(workspaceProjectId).trim() : '';
@@ -270,6 +307,7 @@ export function FlowWorkspaceProvider({
           edges,
           ...(f?.meta !== undefined && typeof f.meta === 'object' ? { meta: f.meta } : {}),
           hydrated: true,
+          variablesReady: false,
           hasLocalChanges: true,
         },
       } as any);
@@ -313,6 +351,7 @@ export function useFlowActions<NodeT = any, EdgeT = any>() {
         dispatch({ type: 'UPDATE_FLOW_META', flowId, patch } as any),
       applyFlowLoadResult: (flowId: FlowId, payload: ApplyFlowLoadPayload<NodeT, EdgeT>) =>
         dispatch({ type: 'APPLY_FLOW_LOAD_RESULT', flowId, payload } as any),
+      markFlowsVariablesReady: (flowIds: FlowId[]) => dispatch({ type: 'MARK_FLOWS_VARIABLES_READY', flowIds } as any),
       markFlowsPersisted: (flowIds: FlowId[]) => dispatch({ type: 'MARK_FLOWS_PERSISTED', flowIds } as any),
       openFlow: (flowId: FlowId) => dispatch({ type: 'OPEN_FLOW', flowId } as any),
       openFlowBackground: (flowId: FlowId) => dispatch({ type: 'OPEN_FLOW_BACKGROUND', flowId } as any),
