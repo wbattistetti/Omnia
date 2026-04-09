@@ -575,8 +575,14 @@ class VariableCreationService {
 
   /**
    * Renames any variable row by id (manual or task-bound). Preserves id.
+   * @param options.userInitiatedRename When true, sets `subflowAutoRenameLocked` so automatic subflow parent renames skip this row.
    */
-  renameVariableRowById(projectId: string | null | undefined, id: string, newVarName: string): boolean {
+  renameVariableRowById(
+    projectId: string | null | undefined,
+    id: string,
+    newVarName: string,
+    options?: { userInitiatedRename?: boolean }
+  ): boolean {
     const trimmed = newVarName.trim();
     if (!trimmed) return false;
     const key = this.projectKey(projectId);
@@ -591,7 +597,35 @@ class VariableCreationService {
     if (dup) return false;
     this.store.set(
       key,
-      existing.map((x) => (x.id === id ? { ...x, varName: trimmed } : x))
+      existing.map((x) => {
+        if (x.id !== id) return x;
+        const next: VariableInstance = { ...x, varName: trimmed };
+        if (options?.userInitiatedRename === true) {
+          next.subflowAutoRenameLocked = true;
+        }
+        return next;
+      })
+    );
+    return true;
+  }
+
+  /**
+   * Locks or clears automatic subflow parent rename for a variable row (tests / explicit UI).
+   */
+  setSubflowAutoRenameLocked(projectId: string | null | undefined, id: string, locked: boolean): boolean {
+    const key = this.projectKey(projectId);
+    const existing = this.store.get(key) ?? [];
+    const target = existing.find((x) => x.id === id);
+    if (!target) return false;
+    this.store.set(
+      key,
+      existing.map((x) => {
+        if (x.id !== id) return x;
+        const next: VariableInstance = { ...x };
+        if (locked) next.subflowAutoRenameLocked = true;
+        else delete next.subflowAutoRenameLocked;
+        return next;
+      })
     );
     return true;
   }
@@ -656,15 +690,6 @@ class VariableCreationService {
         return updated.find(v => v.id === id)!;
       }
       return byId;
-    }
-
-    const byName = existing.find(
-      v =>
-        v.varName === normalizedName &&
-        sameVariableScopeBucket(v, scope, scope === 'flow' ? scopeFlowId : null)
-    );
-    if (byName) {
-      return byName;
     }
 
     const created: VariableInstance = {

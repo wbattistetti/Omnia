@@ -3,12 +3,12 @@
  * Prevents destructive `upsertFlow({ nodes: [], hydrated: false })` when the slice already exists
  * in FlowWorkspaceSnapshot or under an alternate flow id (e.g. task.flowId vs subflow_<taskId>).
  *
- * Debug: localStorage.setItem('omnia.subflowOpenTrace', '1')
+ * Debug: localStorage.setItem('omnia.subflowCanvasDebug', '1')
  */
 
 import type { Flow } from './FlowTypes';
 import { FlowWorkspaceSnapshot } from './FlowWorkspaceSnapshot';
-import { logSubflowOpenTrace } from '../utils/subflowCanvasDebug';
+import { logSubflowCanvasDebug as logSubflowOpenTrace } from '../utils/subflowCanvasDebug';
 
 export type FlowsRefLike = { current: Record<string, unknown> };
 

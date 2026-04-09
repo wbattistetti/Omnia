@@ -987,9 +987,8 @@ Public Class FlowOrchestrator
             .RequiresInput = False,
             .PendingUtterance = "",
             .WaitingTaskId = Nothing,
-            .SubflowOutputBindings = If(task.OutputBindings, New List(Of SubflowIoBinding)())
+            .SubflowBindings = If(task.SubflowBindings, New List(Of SubflowBinding)())
         }
-        SubflowTaskExecutor.ApplyInputMapping(parent.VariableStore, child.VariableStore, task.InputBindings)
         If _compilationByFlowId IsNot Nothing AndAlso _compilationByFlowId.ContainsKey(task.FlowId) Then
             Dim subComp = _compilationByFlowId(task.FlowId)
             If subComp.Variables IsNot Nothing Then
@@ -1000,6 +999,7 @@ Public Class FlowOrchestrator
                 Next
             End If
         End If
+        SubflowTaskExecutor.ApplyPushBindings(parent.VariableStore, child.VariableStore, task.SubflowBindings)
         _state.FlowStack.Add(child)
     End Sub
 
@@ -1009,8 +1009,8 @@ Public Class FlowOrchestrator
         End If
         Dim child = _state.FlowStack(_state.FlowStack.Count - 1)
         Dim parent = _state.FlowStack(_state.FlowStack.Count - 2)
-        If child.SubflowOutputBindings IsNot Nothing AndAlso child.SubflowOutputBindings.Count > 0 Then
-            SubflowTaskExecutor.ApplyOutputMapping(child.VariableStore, parent.VariableStore, child.SubflowOutputBindings)
+        If child.SubflowBindings IsNot Nothing AndAlso child.SubflowBindings.Count > 0 Then
+            SubflowTaskExecutor.ApplyPopBindings(child.VariableStore, parent.VariableStore, child.SubflowBindings)
         End If
         _state.FlowStack.RemoveAt(_state.FlowStack.Count - 1)
         ' La riga Subflow sul parent resta "in corso" fino al pop: ora avanza alla riga successiva.

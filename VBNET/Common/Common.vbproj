@@ -24,7 +24,7 @@
     <!-- Types and Enums -->
     <Compile Include="Types\TaskTypes.vb" />
     <Compile Include="Types\Types.vb" />
-    <Compile Include="Types\SubflowIoBinding.vb" />
+    <Compile Include="Types\SubflowBinding.vb" />
 
     <!-- Interfaces -->
     <Compile Include="Interfaces\ITranslationResolver.vb" />

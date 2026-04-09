@@ -8,6 +8,7 @@ Imports Microsoft.AspNetCore.Http
 Imports Microsoft.AspNetCore.Mvc
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports Compiler
 Imports GrammarFlowEngine
 Imports TaskEngine
 
@@ -130,7 +131,7 @@ Public Module GrammarFlowExtractHandlers
                         }
                     Next
                 End If
-                extractedValues = MapGrammarBindingsToCanonicalKeys(parseResult.Bindings, compiled)
+                extractedValues = MapGrammarBindingsToCanonicalKeys(parseResult.Bindings, compiled, request.Grammar)
                 For Each kvp In extractedValues
                     Console.WriteLine($"[GrammarFlowExtract] ✅ Mapped subId '{kvp.Key}' = {kvp.Value}")
                 Next
@@ -162,12 +163,14 @@ Public Module GrammarFlowExtractHandlers
     End Function
 
     ''' <summary>
-    ''' Per ogni chiave in SubDataMapping: legge il binding solo da chiave canonica o da GroupName (stesso nome gruppo GF).
-    ''' Nessun merge, nessun pass-through dei binding senza mapping.
+    ''' G2-first: <c>bindings</c> keys for slot captures are grammar slot ids; resolve via <c>slotBindings</c> to read the value.
+    ''' Regex contracts: when <see cref="SubDataMappingInfo.GroupName"/> is set (es. <c>s1</c>), match that binding key.
+    ''' No implicit identity between grammar graph node ids and slot ids.
     ''' </summary>
     Private Function MapGrammarBindingsToCanonicalKeys(
         bindings As Dictionary(Of String, Object),
-        contract As CompiledNlpContract
+        contract As CompiledNlpContract,
+        grammar As GrammarFlowEngine.Grammar
     ) As Dictionary(Of String, Object)
 
         Dim extracted As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
@@ -180,15 +183,18 @@ Public Module GrammarFlowExtractHandlers
             Dim subId = kvp.Key
             Dim groupName = kvp.Value?.GroupName
             Dim raw As Object = Nothing
-            If bindings.TryGetValue(subId, raw) Then
-            ElseIf Not String.IsNullOrEmpty(groupName) AndAlso bindings.TryGetValue(groupName, raw) Then
-            Else
-                Continue For
+            Dim gsId = NlpContractCompiler.TryGetGrammarSlotIdForFlowVariable(grammar, subId)
+            If Not String.IsNullOrEmpty(gsId) AndAlso bindings.TryGetValue(gsId, raw) Then
+                If raw IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(raw.ToString()) Then
+                    extracted(subId) = raw
+                    Continue For
+                End If
             End If
-            If raw Is Nothing Then Continue For
-            Dim s = raw.ToString()
-            If String.IsNullOrWhiteSpace(s) Then Continue For
-            extracted(subId) = raw
+            If Not String.IsNullOrEmpty(groupName) AndAlso bindings.TryGetValue(groupName, raw) Then
+                If raw IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(raw.ToString()) Then
+                    extracted(subId) = raw
+                End If
+            End If
         Next
 
         Return extracted

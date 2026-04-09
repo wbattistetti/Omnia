@@ -62,33 +62,31 @@ Contesto: flow parent (es. MAIN), sottoflusso creato, si sposta un intero task (
 13. Le variabili nel sottoflusso **mantengono gli stessi GUID** (`varId` invariati). Stesso dato, stesso task logico; cambia solo il flow.
 14. È valido e desiderabile che la **label** nel sottoflusso coincida con la precedente (es. `nome`): spazi di nomi distinti (flow diversi).
 
-### B) Flow parent
+### B) Flow parent (policy **S2** — mapping esplicito)
 
 15. Dopo lo spostamento, le variabili legate a quel task nel parent sono potenzialmente **orfane** rispetto al task, ma possono essere ancora **referenziate** ovunque nel parent (condizioni, messaggi, ecc.) oppure **no**.
-16. Se una variabile nel parent **non** è referenziate da nessuna parte → può essere **cancellata** dal parent.
-17. Se una variabile nel parent **è** referenziate → **non** va cancellata; va **collegata all’interfaccia del sottoflusso** e mantenuta come variabile di proxy nel parent.
+16. Se una variabile nel parent **non** è referenziata da nessuna parte → può essere **cancellata** dal parent.
+17. Se una variabile nel parent **è** referenziata → **non** va cancellata; va **collegata all’interfaccia del sottoflusso** tramite il task Subflow sul parent. **Non** si usano variabili «proxy» sintetiche: il wiring è solo **`subflowBindings`** sul task Subflow (`subflowBindingsSchemaVersion: 1`), voci `{ interfaceParameterId, parentVariableId }` con **`interfaceParameterId ≠ parentVariableId`** sempre.
 
-### C) Rinomina nel parent
+### C) Etichette nel parent
 
-18. La variabile nel parent che resta (perché referenziata) **mantiene lo stesso GUID**; la **label** deve riflettere che il valore arriva dal sottoflusso.
+18. Le variabili nel parent che restano (perché referenziate) **mantengono lo stesso GUID**; la **label** può riflettere che il valore arriva dal sottoflusso (convenzione di prodotto).
 19. Regola di naming consigliata: `{NomeSottoflusso}.{labelOriginaria}`  
    Esempio: sottoflusso «Chiedi dati personali», variabile originaria `nome` → `Chiedi dati personali.nome`.
 20. Il **GUID della variabile nel parent non cambia**.
 
-### D) Mapping parent ↔ sottoflusso
+### D) Mapping parent ↔ sottoflusso (S2)
 
-21–24. Mapping **1:1 sullo stesso GUID**:  
-`FlowParent.variable(guid)` ↔ `SubFlow.variable(guid)` con etichette eventualmente diverse.  
-L’identità di GUID uguale su entrambi i lati è **intenzionale** e semplifica binding e comprensione («stesso valore logico»).
+21–24. **Una sola tabella di binding** sul task Subflow: `interfaceParameterId` (parametro interfaccia del flusso figlio) ↔ `parentVariableId` (variabile nel parent). **Nessun** `outputBindings` legacy (`from`/`to`), **nessun** merge implicito in Pop; runtime **PushFlow** / **PopFlow** applica solo questo mapping.
 
 ### E) Algoritmo operativo (con uso di `variabiliReferenziate`)
 
 1. Calcolare **`variabiliReferenziate`** nel parent (scansione completa del flow parent).
 2. Per ogni variabile associata al task spostato (stessi `varId` dei dati):
    - se `varId ∉ variabiliReferenziate` → **rimuovere dal parent**;
-   - se `varId ∈ variabiliReferenziate` → **mantenere nel parent**, **rinominare** la label secondo §4C, **stesso GUID**, **collegare** all’interfaccia del sottoflusso.
+   - se `varId ∈ variabiliReferenziate` → **mantenere nel parent**, **rinominare** la label secondo §4C se serve, **stesso GUID**, e assicurare la riga corrispondente in **`subflowBindings`** (parametro interfaccia ↔ variabile parent).
 3. Nel sottoflusso: creare **tutte** le variabili dei dati del task e subtask, **stessi GUID**.
-4. Creare il **mapping** parent ↔ sottoflusso basato sul GUID (1:1).
+4. Allineare **1:1** gli stessi GUID tra dati figlio e voci di `subflowBindings` lato parent.
 
 ---
 
@@ -107,15 +105,22 @@ L’identità di GUID uguale su entrambi i lati è **intenzionale** e semplifica
 - D1 e D3 referenziate nel MAIN; D2 no.
 - Dopo spostamento in sottoflusso «Dati anagrafici»:
   - Sottoflusso: tre variabili `nome`, `cognome`, `eta` con GUID **D1, D2, D3** invariati.
-  - MAIN: restano solo proxy per **D1** e **D3** con label tipo `Dati anagrafici.nome`, `Dati anagrafici.eta`; **D2** rimossa dal MAIN se non referenziata.
-  - Mapping: **D1↔D1**, **D3↔D3** sul parent; **D2** solo nel sottoflusso se non serve nel parent.
+  - MAIN: restano **D1** e **D3** (variabili reali) con label tipo `Dati anagrafici.nome`, `Dati anagrafici.eta` se adottata la convenzione; **D2** rimossa dal MAIN se non referenziata.
+  - Il task Subflow sul MAIN ha **`subflowBindings`** che mappa i parametri di interfaccia del figlio (id dedicati) alle variabili parent **D1**, **D3**; **D2** resta solo lato sottoflusso se non serve nel parent.
 
 ---
 
-## 7. Riferimenti tipo nel codice (orientamento)
+## 7. GrammarFlow (G2)
+
+- Vedi **`docs/SEMANTICA_GRAMMAR_G2.md`**: slot grammaticali con id propri, **`slotBindings`** obbligatori verso variabili di flow (`taskId`), nessuna identità implicita con il task tree.
+
+---
+
+## 8. Riferimenti tipo nel codice (orientamento)
 
 - `TaskTreeNode` in `src/types/taskTypes.ts` (`id`, `taskId`, `subNodes`).
 - `VariableInstance` in `src/types/variableTypes.ts`.
+- Task Subflow: `subflowBindings`, `subflowBindingsSchemaVersion` in `taskTypes` / compiler VB.
 - Servizi variabili: `VariableCreationService`, utilità di scan riferimenti (da estendere/allineare allo standard di §3).
 
 Questo documento è la **fonte di verità** del modello; il repository va adeguato, non il contrario.

@@ -25,8 +25,8 @@ Public Class ExecutionFlow
     Public Property PendingUtterance As String
     Public Property WaitingTaskId As String
 
-    ''' <summary>Valorizzato solo sul flow figlio creato da PushFlow: binding per ApplyOutputMapping al PopFlow.</summary>
-    Public Property SubflowOutputBindings As List(Of SubflowIoBinding)
+    ''' <summary>Valorizzato solo sul flow figlio creato da PushFlow: binding S2 per ApplyPopBindings al PopFlow.</summary>
+    Public Property SubflowBindings As List(Of SubflowBinding)
 
     Public Sub New()
         FlowId = "main"

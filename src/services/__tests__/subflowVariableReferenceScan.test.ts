@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { taskRepository } from '../TaskRepository';
 import { TaskType } from '../../types/taskTypes';
 import {
-  collectParentProxyVarIdsForChildOutput,
+  collectParentVariableIdsForChildOutput,
   findParentVarGuidReferences,
   projectHasBracketReferenceToVarId,
   validateRemovalOfInterfaceOutputRow,
@@ -37,15 +37,19 @@ describe('projectHasBracketReferenceToVarId', () => {
 });
 
 describe('validateRemovalOfInterfaceOutputRow', () => {
-  it('blocks when a parent proxy var is referenced in a task', () => {
+  it('blocks when a parent var is referenced in a task (S2 subflowBindings)', () => {
     const childFlow = 'child_f';
-    const childVar = 'child-var-1';
-    const parentVar = 'parent-proxy-1';
+    const childVar = '10000000-0000-4000-8000-000000000001';
+    const parentVar = '20000000-0000-4000-8000-000000000002';
 
     taskRepository.createTask(
       TaskType.Subflow,
       null,
-      { flowId: childFlow, outputBindings: [{ fromVariable: childVar, toVariable: parentVar }] } as any,
+      {
+        flowId: childFlow,
+        subflowBindingsSchemaVersion: 1,
+        subflowBindings: [{ interfaceParameterId: childVar, parentVariableId: parentVar }],
+      } as any,
       'subflow_task_1'
     );
 
@@ -71,13 +75,17 @@ describe('validateRemovalOfInterfaceOutputRow', () => {
 
   it('blocks when reference exists only in translations (GUID token)', () => {
     const childFlow = 'child_tr';
-    const childVar = 'cv-tr';
-    const parentGuid = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    const childVar = '30000000-0000-4000-8000-000000000003';
+    const parentGuid = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb';
 
     taskRepository.createTask(
       TaskType.Subflow,
       null,
-      { flowId: childFlow, outputBindings: [{ fromVariable: childVar, toVariable: parentGuid }] } as any,
+      {
+        flowId: childFlow,
+        subflowBindingsSchemaVersion: 1,
+        subflowBindings: [{ interfaceParameterId: childVar, parentVariableId: parentGuid }],
+      } as any,
       'sf_tr_1'
     );
 
@@ -99,18 +107,22 @@ describe('validateRemovalOfInterfaceOutputRow', () => {
   });
 });
 
-describe('collectParentProxyVarIdsForChildOutput', () => {
-  it('returns parent proxy ids from outputBindings', () => {
+describe('collectParentVariableIdsForChildOutput', () => {
+  it('returns parent variable ids from subflowBindings', () => {
     const childFlow = 'cf2';
-    const childVar = 'cv2';
-    const parentVar = 'pv2';
+    const childVar = '40000000-0000-4000-8000-000000000004';
+    const parentVar = '50000000-0000-4000-8000-000000000005';
     taskRepository.createTask(
       TaskType.Subflow,
       null,
-      { flowId: childFlow, outputBindings: [{ fromVariable: childVar, toVariable: parentVar }] } as any,
+      {
+        flowId: childFlow,
+        subflowBindingsSchemaVersion: 1,
+        subflowBindings: [{ interfaceParameterId: childVar, parentVariableId: parentVar }],
+      } as any,
       'sf_t2'
     );
-    const ids = collectParentProxyVarIdsForChildOutput(childFlow, childVar, {
+    const ids = collectParentVariableIdsForChildOutput(childFlow, childVar, {
       main: { nodes: [{ data: { rows: [{ id: 'sf_t2' }] } }] },
     } as any);
     expect(ids).toContain(parentVar);

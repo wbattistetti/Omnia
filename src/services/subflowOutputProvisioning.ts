@@ -1,6 +1,6 @@
 /**
- * When a parent Subflow task is linked to a child flow, creates/updates all proxy variables
- * and outputBindings for that instance (delegates to subflowProjectSync).
+ * When a parent Subflow task is linked to a child flow, runs the post-link hook (S2).
+ * Bindings live on the Subflow task (`subflowBindings`); this hook is a no-op sync placeholder.
  */
 import { taskRepository } from './TaskRepository';
 import { TaskType } from '../types/taskTypes';
@@ -16,7 +16,7 @@ function resolveSubflowId(task: any): string | null {
 }
 
 /**
- * For each child interface output with `variableRefId`, ensures parent proxy vars and bindings exist.
+ * Invokes the async post-link sync for a single Subflow task (reserved; does not create variables).
  */
 export async function provisionParentVariablesForSubflowTaskAsync(
   projectId: string,

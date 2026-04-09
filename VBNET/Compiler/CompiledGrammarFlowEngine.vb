@@ -15,6 +15,7 @@ Public NotInheritable Class CompiledGrammarFlowEngine
     Private ReadOnly _displayName As String
     Private ReadOnly _contract As CompiledNlpContract
     Private ReadOnly _table As CanonicalGuidTable
+    Private ReadOnly _grammar As Grammar
     Private ReadOnly _grammarEngine As GrammarEngine
 
     Public Sub New(displayName As String, task As CompiledUtteranceTask, contract As CompiledNlpContract, table As CanonicalGuidTable, grammarFlow As Object)
@@ -29,6 +30,7 @@ Public NotInheritable Class CompiledGrammarFlowEngine
         If grammar Is Nothing Then
             Throw New InvalidOperationException("GrammarFlow deserialization returned Nothing.")
         End If
+        _grammar = grammar
         _grammarEngine = New GrammarEngine(grammar, useRegex:=True)
     End Sub
 
@@ -53,13 +55,19 @@ Public NotInheritable Class CompiledGrammarFlowEngine
 
         Dim merged As New Dictionary(Of String, Object)(StringComparer.OrdinalIgnoreCase)
         For Each binding In gf.Bindings
-            Dim slotName = binding.Key
+            Dim bindingKey = binding.Key
             Dim slotValue = binding.Value
             If slotValue Is Nothing Then Continue For
 
-            Dim matchedSubId = NlpContractCompiler.ResolveSubIdForSlot(slotName, _contract)
+            Dim matchedSubId As String = Nothing
+            Dim fv = NlpContractCompiler.TryGetFlowVariableIdForGrammarSlot(_grammar, bindingKey)
+            If Not String.IsNullOrEmpty(fv) Then
+                matchedSubId = NlpContractCompiler.ResolveGrammarSlotToSubMappingKey(bindingKey, _grammar, _contract)
+            Else
+                matchedSubId = NlpContractCompiler.ResolveSubIdForSlot(bindingKey, _contract)
+            End If
             If String.IsNullOrEmpty(matchedSubId) Then
-                matchedSubId = slotName
+                matchedSubId = bindingKey
             End If
 
             merged(matchedSubId) = slotValue

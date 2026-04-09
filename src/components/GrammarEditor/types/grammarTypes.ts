@@ -61,6 +61,10 @@ export interface Grammar {
   edges: GrammarEdge[];
   slots: SemanticSlot[];             // Available semantic slots
   semanticSets: SemanticSet[];        // Available semantic sets
+  /**
+   * G2: mandatory mapping grammarSlot.id → flow variable id (never implicit TaskTreeNode identity).
+   */
+  slotBindings?: Array<{ grammarSlotId: string; flowVariableId: string }>;
   metadata: {
     createdAt: number;
     updatedAt: number;

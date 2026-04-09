@@ -4,6 +4,7 @@
 import { create } from 'zustand';
 import { generateSafeGuid } from '@utils/idGenerator';
 import type { Grammar, GrammarNode, GrammarEdge, SemanticSlot, SemanticSet } from '../../types/grammarTypes';
+import { removeSlotBindingsForGrammarSlotId } from '../domain/grammar';
 import type { SelectionState, EditorState } from '../../types/uiTypes';
 
 interface GrammarStore {
@@ -271,6 +272,7 @@ export const useGrammarStore = create<GrammarStore>((set, get) => ({
       grammar: {
         ...state.grammar,
         slots: state.grammar.slots.filter((s) => s.id !== slotId),
+        slotBindings: removeSlotBindingsForGrammarSlotId(state.grammar.slotBindings, slotId),
         metadata: {
           ...state.grammar.metadata,
           updatedAt: Date.now(),

@@ -427,8 +427,8 @@ Public Class CompiledSubflowTask
 
     <JsonProperty("flowId")>
     Public Property FlowId As String
-    Public Property InputBindings As List(Of SubflowIoBinding)
-    Public Property OutputBindings As List(Of SubflowIoBinding)
+
+    Public Property SubflowBindings As List(Of SubflowBinding)
 
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
@@ -445,7 +445,6 @@ Public Class CompiledSubflowTask
     Public Sub New()
         MyBase.New()
         FlowId = ""
-        InputBindings = New List(Of SubflowIoBinding)()
-        OutputBindings = New List(Of SubflowIoBinding)()
+        SubflowBindings = New List(Of SubflowBinding)()
     End Sub
 End Class

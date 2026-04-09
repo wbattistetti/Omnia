@@ -1,5 +1,5 @@
 /**
- * Detects bracket-token references to a parent proxy variable GUID across the project.
+ * Detects bracket-token references to a parent variable GUID (Subflow binding target) across the project.
  * Only `[guid]` tokens count (not label-based legacy). Used before removing a Subflow interface output row.
  */
 
@@ -116,10 +116,9 @@ export function projectHasBracketReferenceToVarId(
 }
 
 /**
- * Collect parent proxy var ids (outputBindings toVariable) for a child interface output variableRefId
- * across all Subflow tasks that reference the given child flow.
+ * Collect parent variable ids (S2 subflowBindings parentVariableId) for a child interface output variableRefId.
  */
-export function collectParentProxyVarIdsForChildOutput(
+export function collectParentVariableIdsForChildOutput(
   childFlowId: string,
   childOutputVarId: string,
   flows: WorkspaceState['flows']
@@ -142,10 +141,12 @@ export function collectParentProxyVarIdsForChildOutput(
         const fromParam = params.find((p: any) => String(p?.parameterId || '').trim() === 'flowId');
         const fid = direct || String(fromParam?.value || '').trim();
         if (fid !== cf) continue;
-        const bindings = Array.isArray((task as any).outputBindings) ? (task as any).outputBindings : [];
-        const b = bindings.find((x: any) => String(x?.fromVariable || '').trim() === childVar);
-        const toId = b ? String(b?.toVariable || '').trim() : '';
-        if (toId) out.push(toId);
+        const bindings = Array.isArray((task as any).subflowBindings) ? (task as any).subflowBindings : [];
+        const b = bindings.find(
+          (x: any) => String(x?.interfaceParameterId || '').trim() === childVar
+        );
+        const parentId = b ? String(b?.parentVariableId || '').trim() : '';
+        if (parentId) out.push(parentId);
       }
     }
   }
@@ -153,7 +154,7 @@ export function collectParentProxyVarIdsForChildOutput(
 }
 
 /**
- * If removing this interface output would leave parent proxy vars referenced as `[guid]` in the project, returns block with locations.
+ * If removing this interface output would leave parent variables (S2 binding targets) referenced as `[guid]` in the project, returns block with locations.
  */
 export function validateRemovalOfInterfaceOutputRow(
   projectId: string,
@@ -167,7 +168,7 @@ export function validateRemovalOfInterfaceOutputRow(
   const cid = String(childOutputVariableRefId || '').trim();
   if (!pid || !cid) return { ok: true };
 
-  const parentIds = collectParentProxyVarIdsForChildOutput(childFlowId, cid, flows);
+  const parentIds = collectParentVariableIdsForChildOutput(childFlowId, cid, flows);
   if (parentIds.length === 0) return { ok: true };
 
   const merged = new Map<string, ReferenceLocation>();

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getVariableLabel } from '@utils/getVariableLabel';
 import {
@@ -14,7 +14,6 @@ import {
   migrateSubflowVariableProxyModel,
   restoreChildTaskBoundVariablesToLocalNames,
 } from '../subflowVariableProxyRestore';
-import * as subflowProjectSync from '@services/subflowProjectSync';
 
 describe('findParentFlowIdForSubflowTaskRow', () => {
   it('returns parent flow id containing the subflow task row', () => {
@@ -71,17 +70,7 @@ describe('restoreChildTaskBoundVariablesToLocalNames', () => {
 });
 
 describe('migrateSubflowVariableProxyModel', () => {
-  const syncSpy = vi.spyOn(subflowProjectSync, 'syncProxyBindingsForSubflowTask');
-
-  beforeEach(() => {
-    syncSpy.mockClear();
-  });
-
-  afterEach(() => {
-    syncSpy.mockRestore();
-  });
-
-  it('renames child slot vars referenced in outputBindings and invokes sync', () => {
+  it('renames child slot vars referenced in subflowBindings (interfaceParameterId)', () => {
     const projectId = `vitest_mig_${Math.random().toString(36).slice(2, 14)}`;
     const childFlowId = 'child_f1';
     const parentFlowId = 'parent_f1';
@@ -104,7 +93,8 @@ describe('migrateSubflowVariableProxyModel', () => {
     const childVarId = vars[0]!.id;
     variableCreationService.renameVariableRowById(projectId, childVarId, 'dati_personali.colore');
 
-    const parentProxy = variableCreationService.createManualVariable(projectId, 'dati_personali.colore', {
+    const parentVarId = 'c0000000-0000-4000-8000-0000000000c1';
+    variableCreationService.ensureManualVariableWithId(projectId, parentVarId, 'parent.colore', {
       scope: 'flow',
       scopeFlowId: parentFlowId,
     });
@@ -112,7 +102,8 @@ describe('migrateSubflowVariableProxyModel', () => {
     taskRepository.createTask(TaskType.Subflow, null, undefined, subflowTaskId, projectId);
     taskRepository.updateTask(subflowTaskId, {
       flowId: childFlowId,
-      outputBindings: [{ fromVariable: childVarId, toVariable: parentProxy.id }],
+      subflowBindingsSchemaVersion: 1,
+      subflowBindings: [{ interfaceParameterId: childVarId, parentVariableId: parentVarId }],
     } as any);
 
     const flows = {
@@ -143,7 +134,6 @@ describe('migrateSubflowVariableProxyModel', () => {
     expect(r.childRenames[0]!.id).toBe(childVarId);
     setProjectTranslationsRegistry({ [makeTranslationKey('variable', childVarId)]: 'colore' });
     expect(getVariableLabel(childVarId, getProjectTranslationsTable())).toBe('colore');
-    expect(r.syncCalls).toBe(1);
-    expect(syncSpy).toHaveBeenCalledTimes(1);
+    expect(r.syncCalls).toBe(0);
   });
 });

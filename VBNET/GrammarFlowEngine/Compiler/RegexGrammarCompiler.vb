@@ -120,7 +120,8 @@ Public Module RegexGrammarCompiler
                         If Not String.IsNullOrEmpty(groupInfo.SlotId) Then
                             Dim slot = compiledRegexGrammar.OriginalGrammar.Slots.GetValueOrDefault(groupInfo.SlotId)
                             If slot IsNot Nothing Then
-                                result.Bindings(slot.Name) = group.Value
+                                ' G2: keys use grammar slot id, not slot name (no implicit slotId === variable label).
+                                result.Bindings(slot.Id) = group.Value
                                 result.SlotValues(groupInfo.SlotId) = group.Value
                             End If
                         End If

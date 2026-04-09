@@ -38,6 +38,7 @@ describe('StructuralOrchestrator', () => {
       unreferencedVarIdsForMovedTask: [],
       guidMappingParentSubflow: [],
       renamed: [],
+      parentAutoRenames: [],
       removedUnreferencedVariableRows: 0,
       taskMaterialization: {
         ok: true,

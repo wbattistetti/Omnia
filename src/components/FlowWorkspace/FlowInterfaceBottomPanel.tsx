@@ -698,7 +698,7 @@ export function FlowInterfaceBottomPanel({
               Impossibile rimuovere questo output
             </h3>
             <p className="text-xs text-slate-400 mb-3">
-              La variabile proxy nel flow parent è ancora referenziata con token [GUID] nei punti seguenti.
+              La variabile nel flow parent (collegamento Subflow) è ancora referenziata con token [GUID] nei punti seguenti.
               Rimuovi quei riferimenti, poi riprova.
             </p>
             <ul className="text-xs max-h-52 overflow-y-auto space-y-1.5 border border-slate-700/80 rounded-md p-2 mb-4 bg-black/20">

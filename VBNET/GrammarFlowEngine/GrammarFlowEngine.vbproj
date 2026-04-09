@@ -33,6 +33,7 @@
     <Compile Include="Models\SemanticSlot.vb" />
     <Compile Include="Models\SemanticValue.vb" />
     <Compile Include="Models\SemanticSet.vb" />
+    <Compile Include="Models\GrammarSlotBinding.vb" />
     <Compile Include="Models\Grammar.vb" />
 
     <!-- Compiler: Compiles Grammar JSON to optimized structure -->

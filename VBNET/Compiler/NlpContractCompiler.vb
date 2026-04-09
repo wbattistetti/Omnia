@@ -194,21 +194,90 @@ Public Module NlpContractCompiler
             Return
         End If
 
+        ValidateGrammarSlotBindingsG2(grammar, baseContract, errors)
+
         For Each gnode As GrammarNode In grammar.Nodes
             If gnode.Bindings Is Nothing Then Continue For
             For Each b As NodeBinding In gnode.Bindings
                 If Not String.Equals(b.Type, "slot", StringComparison.OrdinalIgnoreCase) Then Continue For
                 If String.IsNullOrWhiteSpace(b.SlotId) Then Continue For
-                Dim resolved = ResolveSubIdForSlot(b.SlotId, baseContract)
+                Dim resolved = ResolveGrammarSlotToSubMappingKey(b.SlotId, grammar, baseContract)
                 If String.IsNullOrEmpty(resolved) Then
                     errors.Add(
-                        $"GrammarFlow slot '{b.SlotId}' cannot be resolved to SubDataMapping (template '{baseContract.TemplateName}').")
+                        $"GrammarFlow grammar slot '{b.SlotId}' cannot be resolved via slotBindings to SubDataMapping (template '{baseContract.TemplateName}').")
                 End If
             Next
         Next
     End Sub
 
-    ''' <summary>Stesse regole di ParserExtraction.ResolveSubIdForSlot (solo compilatore).</summary>
+    ''' <summary>G2: grammarSlotId → flowVariableId via <see cref="Grammar.SlotBindings"/>, then SubDataMapping key.</summary>
+    Private Sub ValidateGrammarSlotBindingsG2(grammar As Grammar, baseContract As NLPContract, errors As List(Of String))
+        If grammar.Slots Is Nothing OrElse grammar.Slots.Count = 0 Then Return
+        If grammar.SlotBindings Is Nothing OrElse grammar.SlotBindings.Count = 0 Then
+            errors.Add($"GrammarFlow declares slots but slotBindings is missing or empty (G2 required, template '{baseContract.TemplateName}').")
+            Return
+        End If
+
+        For Each slot In grammar.Slots
+            If slot Is Nothing OrElse String.IsNullOrWhiteSpace(slot.Id) Then Continue For
+            Dim flowVar = TryGetFlowVariableIdForGrammarSlot(grammar, slot.Id)
+            If String.IsNullOrWhiteSpace(flowVar) Then
+                errors.Add($"Grammar slot '{slot.Id}' has no slotBindings entry (grammarSlotId → flowVariableId).")
+                Continue For
+            End If
+            If String.IsNullOrEmpty(ResolveSubIdForSlotCore(flowVar.Trim(), baseContract.SubDataMapping)) Then
+                errors.Add(
+                    $"Grammar slotBindings flowVariableId '{flowVar}' for grammar slot '{slot.Id}' is not in SubDataMapping (template '{baseContract.TemplateName}').")
+            End If
+        Next
+    End Sub
+
+    ''' <summary>G2: maps grammar slot id to SubDataMapping key using slotBindings + flow variable id.</summary>
+    Friend Function ResolveGrammarSlotToSubMappingKey(grammarSlotId As String, grammar As Grammar, contract As NLPContract) As String
+        Dim fv = TryGetFlowVariableIdForGrammarSlot(grammar, grammarSlotId)
+        If String.IsNullOrWhiteSpace(fv) Then Return Nothing
+        Return ResolveSubIdForSlotCore(fv.Trim(), contract.SubDataMapping)
+    End Function
+
+    ''' <summary>G2: maps grammar slot id to SubDataMapping key using slotBindings + flow variable id.</summary>
+    Friend Function ResolveGrammarSlotToSubMappingKey(grammarSlotId As String, grammar As Grammar, contract As CompiledNlpContract) As String
+        Dim fv = TryGetFlowVariableIdForGrammarSlot(grammar, grammarSlotId)
+        If String.IsNullOrWhiteSpace(fv) Then Return Nothing
+        Return ResolveSubIdForSlotCore(fv.Trim(), contract.DataMapping)
+    End Function
+
+    Public Function TryGetFlowVariableIdForGrammarSlot(grammar As Grammar, grammarSlotId As String) As String
+        If grammar Is Nothing OrElse String.IsNullOrWhiteSpace(grammarSlotId) Then Return Nothing
+        If grammar.SlotBindings Is Nothing Then Return Nothing
+        Dim needle = grammarSlotId.Trim()
+        For Each row In grammar.SlotBindings
+            If row Is Nothing Then Continue For
+            Dim gsid = If(row.GrammarSlotId, String.Empty).Trim()
+            If String.Equals(gsid, needle, StringComparison.OrdinalIgnoreCase) Then
+                Dim fv = If(row.FlowVariableId, String.Empty).Trim()
+                Return If(String.IsNullOrEmpty(fv), Nothing, fv)
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>Inverse of <see cref="TryGetFlowVariableIdForGrammarSlot"/> for G2 extraction (flowVariableId → grammarSlotId).</summary>
+    Public Function TryGetGrammarSlotIdForFlowVariable(grammar As Grammar, flowVariableId As String) As String
+        If grammar Is Nothing OrElse String.IsNullOrWhiteSpace(flowVariableId) Then Return Nothing
+        If grammar.SlotBindings Is Nothing Then Return Nothing
+        Dim needle = flowVariableId.Trim()
+        For Each row In grammar.SlotBindings
+            If row Is Nothing Then Continue For
+            Dim fv = If(row.FlowVariableId, String.Empty).Trim()
+            If String.Equals(fv, needle, StringComparison.OrdinalIgnoreCase) Then
+                Dim gsid = If(row.GrammarSlotId, String.Empty).Trim()
+                Return If(String.IsNullOrEmpty(gsid), Nothing, gsid)
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>Resolve binding labels (e.g. <c>value</c>, semantic-set names, regex group aliases) to SubDataMapping keys.</summary>
     Friend Function ResolveSubIdForSlot(slotName As String, contract As NLPContract) As String
         Return ResolveSubIdForSlotCore(slotName, contract.SubDataMapping)
     End Function

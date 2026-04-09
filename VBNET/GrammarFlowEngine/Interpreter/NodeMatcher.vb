@@ -141,7 +141,7 @@ Public Module NodeMatcher
                         Dim slot = compiledGrammar.Slots.GetValueOrDefault(binding.SlotId)
                         If slot IsNot Nothing Then
                             Dim value = If(matchedValue IsNot Nothing, matchedValue.Value, matchedText)
-                            bindings(slot.Name) = value
+                            bindings(slot.Id) = value
                         End If
 
                     Case "semantic-set"

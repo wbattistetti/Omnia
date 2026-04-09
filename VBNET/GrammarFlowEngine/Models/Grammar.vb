@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 
 Imports System.Collections.Generic
+Imports Newtonsoft.Json
 
 ''' <summary>
 ''' Complete grammar structure
@@ -14,6 +15,9 @@ Public Class Grammar
         Public Property Edges As List(Of GrammarEdge)
         Public Property Slots As List(Of SemanticSlot) ' Available semantic slots
         Public Property SemanticSets As List(Of SemanticSet) ' Available semantic sets
+        ''' <summary>G2: grammarSlot.id → flowVariable.id (never implicit identity with grammar graph node id).</summary>
+        <JsonProperty("slotBindings")>
+        Public Property SlotBindings As List(Of GrammarSlotBinding)
         Public Property Metadata As GrammarMetadata
 
         Public Sub New()
@@ -21,6 +25,7 @@ Public Class Grammar
             Edges = New List(Of GrammarEdge)()
             Slots = New List(Of SemanticSlot)()
             SemanticSets = New List(Of SemanticSet)()
+            SlotBindings = New List(Of GrammarSlotBinding)()
             Metadata = New GrammarMetadata()
         End Sub
     End Class

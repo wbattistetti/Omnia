@@ -1,7 +1,7 @@
 /**
  * Opt-in tracing for the full task → subflow cycle:
  * structural move/append → hydrateVariablesFromFlow → apply:taskVariableRowsInStore → (optional) variableStore:updated → apply:secondPass:* → child flowInterface.output →
- * syncProxyBindings (child GUID → parent proxy) → materialize → upsert flows.
+ * materialize → upsert flows (S2: no proxy sync; bindings are explicit on the Subflow task).
  *
  * Enable in DevTools (dev only):
  *   localStorage.setItem('omnia.taskSubflowMoveDebug', '1')

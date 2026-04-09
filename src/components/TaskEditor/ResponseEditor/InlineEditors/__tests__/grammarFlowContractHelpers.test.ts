@@ -6,6 +6,8 @@ import {
   fingerprintTestPhrasesFromContract,
   mergeGrammarFlowIntoContract,
   getGrammarFlowFromContract,
+  getFlowVariableIdForGrammarSlot,
+  getGrammarSlotIdForFlowVariable,
 } from '../grammarFlowContractHelpers';
 
 describe('grammarFlowContractHelpers', () => {
@@ -37,5 +39,24 @@ describe('grammarFlowContractHelpers', () => {
     const out = mergeGrammarFlowIntoContract(null, grammar, ['p1']);
     expect(getGrammarFlowFromContract(out)?.id).toBe('x');
     expect(out.testPhrases).toEqual(['p1']);
+  });
+
+  it('G2: resolves grammarSlotId ↔ flowVariableId via slotBindings', () => {
+    const g = {
+      id: 'g',
+      nodes: [],
+      edges: [],
+      slots: [],
+      slotBindings: [
+        { grammarSlotId: '11111111-1111-4111-8111-111111111111', flowVariableId: '22222222-2222-4222-8222-222222222222' },
+      ],
+    } as Grammar;
+    expect(getFlowVariableIdForGrammarSlot(g, '11111111-1111-4111-8111-111111111111')).toBe(
+      '22222222-2222-4222-8222-222222222222'
+    );
+    expect(getGrammarSlotIdForFlowVariable(g, '22222222-2222-4222-8222-222222222222')).toBe(
+      '11111111-1111-4111-8111-111111111111'
+    );
+    expect(getFlowVariableIdForGrammarSlot(g, 'missing')).toBeUndefined();
   });
 });

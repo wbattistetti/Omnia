@@ -48,7 +48,7 @@ export type VariableMenuItem = {
   subflowTaskId?: string;
   /** Present when this item is a parent var resolved from a bound subflow output (still tagged with `subflowTaskId` for per-row menus). */
   resolvedFromSubflowOutputBinding?: boolean;
-  /** True when this row is an interface output not yet in outputBindings for this instance. */
+  /** Legacy: unbound child interface output; S2 move auto-fills `subflowBindings` for referenced vars. */
   isInterfaceUnbound?: boolean;
   /**
    * Interface row has no child variable GUID yet (`variableRefId` absent).
@@ -327,20 +327,20 @@ function collectLevelOneSubflowInstancesFromNodes(nodes: any[]): SubflowInstance
 
 function getBoundChildOutputVariableIds(subflowTask: any): Set<string> {
   const out = new Set<string>();
-  const bindings = Array.isArray(subflowTask?.outputBindings) ? subflowTask.outputBindings : [];
+  const bindings = Array.isArray(subflowTask?.subflowBindings) ? subflowTask.subflowBindings : [];
   for (const b of bindings) {
-    const from = String(b?.fromVariable || '').trim();
-    if (from) out.add(from);
+    const iface = String(b?.interfaceParameterId || '').trim();
+    if (iface) out.add(iface);
   }
   return out;
 }
 
-/** Parent variable GUID for a child output when `outputBindings` maps `fromVariable` → `toVariable`. */
+/** Parent variable GUID for a child output (S2 `subflowBindings`). */
 function findParentVariableIdForChildOutput(subflowTask: any, childVarId: string): string | null {
-  const bindings = Array.isArray(subflowTask?.outputBindings) ? subflowTask.outputBindings : [];
-  const b = bindings.find((x: any) => String(x?.fromVariable || '').trim() === childVarId);
-  const to = b ? String(b?.toVariable || '').trim() : '';
-  return to || null;
+  const bindings = Array.isArray(subflowTask?.subflowBindings) ? subflowTask.subflowBindings : [];
+  const b = bindings.find((x: any) => String(x?.interfaceParameterId || '').trim() === childVarId);
+  const parentId = b ? String(b?.parentVariableId || '').trim() : '';
+  return parentId || null;
 }
 
 /** Stable id for a MappingEntry row when `variableRefId` is missing. */
@@ -395,7 +395,7 @@ export type SubflowInterfaceAppendStats = {
 };
 
 /**
- * Appends Subflow interface rows: unbound child outputs, or parent variables when bindings exist.
+ * Appends Subflow interface rows: child outputs without a binding row, or parent-side variables when S2 bindings exist.
  */
 function appendSubflowInterfaceOutputItems(
   projectId: string,
@@ -494,7 +494,6 @@ function appendSubflowInterfaceOutputItems(
       isFromActiveFlow: false,
       sourceTaskRowLabel: cleanSourceLabel,
       subflowTaskId: inst.subflowTaskId,
-      isInterfaceUnbound: true,
       ...(missingRef ? { missingChildVariableRef: true } : {}),
     });
   }

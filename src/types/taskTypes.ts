@@ -456,6 +456,14 @@ export interface Task {
   subTasks?: TaskTreeNode[];
 
   /**
+   * Policy S2: explicit mapping child interface parameter id → parent flow variable id (GUIDs always differ).
+   * @see subflowBindings
+   */
+  subflowBindingsSchemaVersion?: number;
+  /** Each row: child `interfaceParameterId` ↔ parent `parentVariableId`. */
+  subflowBindings?: Array<{ interfaceParameterId: string; parentVariableId: string }>;
+
+  /**
    * Optional: flow canvas id (`main`, `subflow_*`) that owns authoring for this task row after moves.
    * TaskRepository remains global per project; this marks which canvas materialized the instance.
    */

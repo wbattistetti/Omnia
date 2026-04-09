@@ -1,6 +1,6 @@
 /**
- * Builds initial GrammarFlow semantic slots from the Response Editor data tree (mainList).
- * Only when there is exactly one root: multi-root behaviour is deferred.
+ * Builds GrammarFlow semantic slots from the Response Editor data tree (policy G2).
+ * Each slot has its own id; flow variables are linked only via `slotBindings`.
  */
 
 import { createGrammar } from '@components/GrammarEditor/core/domain/grammar';
@@ -8,6 +8,7 @@ import type { Grammar, SemanticSlot } from '@components/GrammarEditor/types/gram
 import { normalizeForComparison } from '@components/GrammarEditor/core/domain/slotEditor';
 import { getNodeLabel, getSubNodes } from '@responseEditor/core/domain';
 import type { TaskTreeNode } from '@types/taskTypes';
+import { generateSafeGuid } from '@utils/idGenerator';
 
 function mapNodeTypeToSlotType(nodeType: string | undefined): SemanticSlot['type'] {
   const t = (nodeType || '').toLowerCase();
@@ -25,14 +26,18 @@ function ensureSlotName(raw: string, fallback: string): string {
   return fallback.length >= 2 ? fallback : 'slot';
 }
 
+export type GrammarSlotBinding = { grammarSlotId: string; flowVariableId: string };
+
 /**
- * DFS over task-tree nodes: one semantic slot per node (root + descendants), in tree order.
+ * DFS over task-tree nodes: one semantic slot per node with a fresh grammar slot id (G2).
+ * Emits mandatory mappings grammarSlotId → TaskTreeNode-backed flow variable id.
  */
-export function buildSemanticSlotsFromSingleRootTree(
+export function buildSemanticSlotsAndBindingsFromSingleRootTree(
   root: TaskTreeNode,
   translations?: Record<string, string>
-): SemanticSlot[] {
+): { slots: SemanticSlot[]; slotBindings: GrammarSlotBinding[] } {
   const slots: SemanticSlot[] = [];
+  const slotBindings: GrammarSlotBinding[] = [];
   const usedNormalized = new Set<string>();
 
   const visit = (node: TaskTreeNode) => {
@@ -49,12 +54,18 @@ export function buildSemanticSlotsFromSingleRootTree(
     }
     usedNormalized.add(norm);
 
-    const id = node.taskId && node.taskId.length > 0 ? node.taskId : node.id;
+    const grammarSlotId = generateSafeGuid();
+    const flowVariableId =
+      node.taskId && String(node.taskId).trim().length > 0 ? String(node.taskId).trim() : String(node.id || '').trim();
+
     slots.push({
-      id,
+      id: grammarSlotId,
       name,
       type: mapNodeTypeToSlotType(node.type),
     });
+    if (flowVariableId) {
+      slotBindings.push({ grammarSlotId, flowVariableId });
+    }
 
     for (const child of getSubNodes(node)) {
       visit(child as TaskTreeNode);
@@ -62,12 +73,19 @@ export function buildSemanticSlotsFromSingleRootTree(
   };
 
   visit(root);
-  return slots;
+  return { slots, slotBindings };
+}
+
+/** @deprecated Use buildSemanticSlotsAndBindingsFromSingleRootTree; slots no longer share ids with tree nodes (G2). */
+export function buildSemanticSlotsFromSingleRootTree(
+  root: TaskTreeNode,
+  translations?: Record<string, string>
+): SemanticSlot[] {
+  return buildSemanticSlotsAndBindingsFromSingleRootTree(root, translations).slots;
 }
 
 /**
- * Returns a new grammar with slots pre-filled from `mainList` when there is exactly one root.
- * Otherwise returns null (caller should use empty `createGrammar` or existing contract grammar).
+ * Returns a new grammar with slots + slotBindings pre-filled when there is exactly one root.
  */
 export function buildNewGrammarWithSlotsFromMainList(
   mainList: unknown[] | null | undefined,
@@ -80,10 +98,11 @@ export function buildNewGrammarWithSlotsFromMainList(
   if (!root || typeof root !== 'object' || !root.id) {
     return null;
   }
-  const slots = buildSemanticSlotsFromSingleRootTree(root, translations);
+  const { slots, slotBindings } = buildSemanticSlotsAndBindingsFromSingleRootTree(root, translations);
   const base = createGrammar('New Grammar');
   return {
     ...base,
     slots,
+    slotBindings,
   };
 }

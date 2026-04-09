@@ -34,6 +34,7 @@ Public Module RegexGrammarCompilerTests
                 .Type = "string"
             }
             grammar.Slots.Add(slot)
+            grammar.SlotBindings.Add(New GrammarSlotBinding With {.GrammarSlotId = "slot-intent", .FlowVariableId = "flow-intent"})
 
             ' Create node with slot binding
             Dim node As New GrammarNode() With {
@@ -68,8 +69,8 @@ Public Module RegexGrammarCompilerTests
                 Return False
             End If
 
-            If Not result.Bindings.ContainsKey("intent") Then
-                Console.WriteLine("❌ TestSimpleGrammar: Missing 'intent' binding")
+            If Not result.Bindings.ContainsKey("slot-intent") Then
+                Console.WriteLine("❌ TestSimpleGrammar: Missing grammar slot id binding key")
                 Return False
             End If
 
@@ -260,6 +261,7 @@ Public Module RegexGrammarCompilerTests
                 .Type = "string"
             }
             grammar.Slots.Add(slot)
+            grammar.SlotBindings.Add(New GrammarSlotBinding With {.GrammarSlotId = "slot-risposta", .FlowVariableId = "flow-risposta"})
 
             ' Create node with slot and semantic-value binding
             Dim node As New GrammarNode() With {
@@ -307,8 +309,8 @@ Public Module RegexGrammarCompilerTests
                 Return False
             End If
 
-            If Not result.Bindings.ContainsKey("risposta") Then
-                Console.WriteLine("❌ TestSemanticValueGrammar: Missing 'risposta' binding")
+            If Not result.Bindings.ContainsKey("slot-risposta") Then
+                Console.WriteLine("❌ TestSemanticValueGrammar: Missing grammar slot id binding key")
                 Return False
             End If
 

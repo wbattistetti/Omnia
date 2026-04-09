@@ -77,27 +77,11 @@ export function useProfileState(
       }
     }
 
-    // ✅ DEBUG: Log testPhrases quando viene calcolato initial
-    if (testPhrasesFromContract || p.testPhrases) {
-      console.log('[useProfileState] Computing initial profile from node', {
-        nodeId: node?.id,
-        templateId: node ? catalogueLookupTemplateId(node as TaskTreeNode) : undefined,
-        hasNlpProfile: !!(node as any)?.nlpProfile,
-        nlpProfileKeys: (node as any)?.nlpProfile ? Object.keys((node as any).nlpProfile) : [],
-        hasTestPhrasesFromContract: !!testPhrasesFromContract,
-        testPhrasesFromContractCount: testPhrasesFromContract?.length || 0,
-        testPhrasesFromContract: testPhrasesFromContract?.slice(0, 3),
-        hasTestPhrasesFromProfile: !!p.testPhrases,
-        testPhrasesFromProfileCount: p.testPhrases?.length || 0,
-        hasTestNotes: !!(node as any)?.testNotes,
-        testNotesCount: (node as any)?.testNotes ? Object.keys((node as any).testNotes).length : 0
-      });
-    }
-
     const result = {
-      // After validation strict, node.id is always present
-      // Use id as slotId (deterministic, no fallback)
-      slotId: node ? getNodeIdStrict(node) : 'slot',
+      /** Flow variable identity (taskId); aligns with SubDataMapping / G2 slotBindings flowVariableId. */
+      slotId: node
+        ? (String((node as { taskId?: string }).taskId || '').trim() || getNodeIdStrict(node))
+        : 'slot',
       locale,
       kind: ((node?.kind && node.kind !== 'generic') ? node.kind : (p.kind && p.kind !== 'generic') ? p.kind : inferKindFromNode(node)) as string,
       synonyms: Array.isArray(p.synonyms)
@@ -379,7 +363,10 @@ export function useProfileState(
     const subNodes = getSubNodesStrict(node);
     const autoSubSlots = subNodes.length > 0
       ? subNodes.map((s: any) => ({
-        slotId: getNodeIdStrict(s) || String(getNodeLabelStrict(s) || '').toLowerCase().replace(/\s+/g, '_'),
+        slotId:
+          String(s?.taskId || '').trim() ||
+          getNodeIdStrict(s) ||
+          String(getNodeLabelStrict(s) || '').toLowerCase().replace(/\s+/g, '_'),
         label: getNodeLabelStrict(s)
       }))
       : undefined;

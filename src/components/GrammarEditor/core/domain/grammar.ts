@@ -16,6 +16,7 @@ export function createGrammar(name: string): Grammar {
     edges: [],
     slots: [],
     semanticSets: [],
+    slotBindings: [],
     metadata: {
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -197,6 +198,18 @@ export function getIncomingEdges(
   nodeId: string
 ): GrammarEdge[] {
   return grammar.edges.filter(e => e.target === nodeId);
+}
+
+/** G2: when a semantic slot is removed, drop its grammarSlotId → flowVariableId row. */
+export function removeSlotBindingsForGrammarSlotId(
+  slotBindings: Grammar['slotBindings'],
+  grammarSlotId: string
+): Array<{ grammarSlotId: string; flowVariableId: string }> {
+  const g = String(grammarSlotId || '').trim().toLowerCase();
+  if (!g || !slotBindings?.length) return slotBindings ? [...slotBindings] : [];
+  return slotBindings.filter(
+    (b) => String(b?.grammarSlotId || '').trim().toLowerCase() !== g
+  );
 }
 
 /**

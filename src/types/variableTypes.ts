@@ -57,6 +57,10 @@ export interface VariableInstance {
    */
   bindingFrom?: string;
   bindingTo?: string;
+  /**
+   * When true, task→subflow automatic parent rename must not change this row (user override).
+   */
+  subflowAutoRenameLocked?: boolean;
 }
 
 /**

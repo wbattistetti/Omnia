@@ -1,15 +1,12 @@
 /**
- * Ensures subflow child task-bound variables keep local names; parent FQ names live on
- * separate flow-scoped proxy rows (see syncProxyBindingsForSubflowTask).
+ * Ensures subflow child task-bound variables keep local names (S2: no proxy sync).
  */
 
 import { TaskType } from '@types/taskTypes';
 import type { WorkspaceState } from '@flows/FlowTypes';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
-import { syncProxyBindingsForSubflowTask } from '@services/subflowProjectSync';
 import { localLabelForSubflowTaskVariable } from '@domain/variableProxyNaming';
-import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 
 function resolveSubflowFlowId(task: { flowId?: string; parameters?: unknown[] } | null): string | null {
   const direct = String(task?.flowId || '').trim();
@@ -78,14 +75,12 @@ export function restoreChildTaskBoundVariablesToLocalNames(
 
 export type MigrateSubflowVariableProxyResult = {
   childRenames: ChildLocalRenameRecord[];
-  /** Number of syncProxyBindingsForSubflowTask calls executed. */
+  /** Reserved; proxy sync removed under S2. */
   syncCalls: number;
 };
 
 /**
- * One-shot migration for opened projects: strip FQ contamination on child slot varIds that
- * participate in Subflow outputBindings, then re-sync parent proxies and bindings.
- * Preserves varIds; only adjusts varName rows where needed.
+ * Strip FQ contamination on child slot varIds listed in Subflow `subflowBindings` (interfaceParameterId).
  */
 export function migrateSubflowVariableProxyModel(
   projectId: string,
@@ -96,20 +91,22 @@ export function migrateSubflowVariableProxyModel(
     return { childRenames: [], syncCalls: 0 };
   }
 
-  const fromIds = new Set<string>();
+  const ifaceIds = new Set<string>();
   for (const t of taskRepository.getAllTasks()) {
     if (t.type !== TaskType.Subflow) continue;
-    const bindings = Array.isArray((t as any).outputBindings) ? (t as any).outputBindings : [];
+    const bindings = Array.isArray((t as { subflowBindings?: unknown }).subflowBindings)
+      ? (t as { subflowBindings: Array<{ interfaceParameterId?: string }> }).subflowBindings
+      : [];
     for (const b of bindings) {
-      const f = String(b?.fromVariable || '').trim();
-      if (f) fromIds.add(f);
+      const id = String(b?.interfaceParameterId || '').trim();
+      if (id) ifaceIds.add(id);
     }
   }
 
   const childRenames: ChildLocalRenameRecord[] = [];
   const all = variableCreationService.getAllVariables(pid) ?? [];
 
-  for (const vid of fromIds) {
+  for (const vid of ifaceIds) {
     const v = all.find((x) => String(x.id || '').trim() === vid);
     if (!v || !String(v.taskInstanceId || '').trim()) continue;
 
@@ -123,23 +120,5 @@ export function migrateSubflowVariableProxyModel(
     }
   }
 
-  let syncCalls = 0;
-  for (const t of taskRepository.getAllTasks()) {
-    if (t.type !== TaskType.Subflow) continue;
-    const subflowTaskId = String(t.id || '').trim();
-    const childFlowId = resolveSubflowFlowId(t);
-    if (!subflowTaskId || !childFlowId) continue;
-
-    const parentFlowId = findParentFlowIdForSubflowTaskRow(subflowTaskId, flows);
-    if (!parentFlowId) continue;
-
-    const slice = flows[childFlowId] as any;
-    const rawOut = slice?.meta?.flowInterface?.output;
-    const outputs: MappingEntry[] = Array.isArray(rawOut) ? (rawOut as MappingEntry[]) : [];
-
-    syncProxyBindingsForSubflowTask(pid, parentFlowId, subflowTaskId, childFlowId, outputs, flows);
-    syncCalls += 1;
-  }
-
-  return { childRenames, syncCalls };
+  return { childRenames, syncCalls: 0 };
 }

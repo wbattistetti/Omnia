@@ -5,7 +5,7 @@ Imports Newtonsoft.Json
 Imports TaskEngine
 
 ''' <summary>
-''' Definizione IDE per task che esegue un sub-flow compilato (flowId del canvas + binding I/O).
+''' Definizione IDE per task che esegue un sub-flow compilato (flowId + binding S2 espliciti).
 ''' </summary>
 Public Class SubflowTaskDefinition
     Inherits TaskDefinition
@@ -13,9 +13,10 @@ Public Class SubflowTaskDefinition
     <JsonProperty("flowId")>
     Public Property FlowId As String
 
-    <JsonProperty("inputBindings")>
-    Public Property InputBindings As List(Of SubflowIoBinding)
+    ''' <summary>Versione schema binding; deve essere 1.</summary>
+    <JsonProperty("subflowBindingsSchemaVersion")>
+    Public Property SubflowBindingsSchemaVersion As Integer?
 
-    <JsonProperty("outputBindings")>
-    Public Property OutputBindings As List(Of SubflowIoBinding)
+    <JsonProperty("subflowBindings")>
+    Public Property SubflowBindings As List(Of SubflowBinding)
 End Class

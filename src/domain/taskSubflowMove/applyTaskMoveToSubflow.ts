@@ -1,10 +1,6 @@
 /**
- * Orchestrates child local variable names, child flow interface outputs, and Subflow outputBindings
- * when a task instance is moved to a subflow.
- *
- * Child task variables keep **local** `varName` (e.g. `colore`). Parent fully-qualified names
- * (`dati_personali.colore`) are created only on **separate** manual proxy rows via
- * `syncProxyBindingsForSubflowTask` (outputBindings: child varId → parent proxy varId).
+ * Orchestrates child local variable names and child flow interface outputs when a task moves to a subflow.
+ * Subflow wiring uses policy S2 (`subflowBindings` on the Subflow task); no proxy sync here.
  */
 
 import { createMappingEntry, type MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
@@ -13,10 +9,6 @@ import type { WorkspaceState } from '@flows/FlowTypes';
 import type { VariableInstance } from '@types/variableTypes';
 import { invalidateChildFlowInterfaceCache } from '@services/childFlowInterfaceService';
 import { taskRepository } from '@services/TaskRepository';
-import {
-  ensureSubflowOutputBindingsDisplayLabels,
-  syncProxyBindingsForSubflowTask,
-} from '@services/subflowProjectSync';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getVariableLabel } from '@utils/getVariableLabel';
 import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
@@ -31,6 +23,8 @@ import { compileTranslationsToInternalMap } from './referenceScanCompile';
 import { materializeMovedTaskForSubflow } from './materializeTaskInSubflow';
 import { appendRowToFlowNode, moveTaskRowBetweenFlows, removeRowByIdFromFlow } from './moveTaskRowInFlows';
 import { restoreChildTaskBoundVariablesToLocalNames } from './subflowVariableProxyRestore';
+import { autoFillSubflowBindingsForMovedTask } from './autoFillSubflowBindings';
+import { autoRenameParentVariablesForMovedTask } from './autoRenameParentVariables';
 
 export type ApplyTaskMoveToSubflowParams = {
   projectId: string;
@@ -38,9 +32,9 @@ export type ApplyTaskMoveToSubflowParams = {
   childFlowId: string;
   /** Task / row instance id being moved. */
   taskInstanceId: string;
-  /** Human title of the subflow for proxy naming (e.g. "Dati anagrafici"). */
+  /** Human title of the subflow for display naming / labels (e.g. "Dati anagrafici"). */
   subflowDisplayTitle: string;
-  /** Parent canvas row id of the Subflow task that targets `childFlowId` (for outputBindings sync). */
+  /** Parent canvas row id of the Subflow task that targets `childFlowId`. */
   parentSubflowTaskRowId: string;
   flows: WorkspaceState['flows'];
   conditions?: ProjectConditionLike[];
@@ -83,7 +77,7 @@ export type ApplyTaskMoveToSubflowParams = {
    */
   skipStructuralPhase?: boolean;
   /**
-   * When false, the task is moved to another flow without Subflow wiring (no child interface merge, no outputBindings sync).
+   * When false, the task is moved to another flow without Subflow wiring (no child interface merge).
    */
   isLinkedSubflowMove?: boolean;
   /**
@@ -105,14 +99,15 @@ export type MaterializeMovedTaskSummary = {
 export type ApplyTaskMoveToSubflowResult = {
   /** varIds of the moved task that appear anywhere in the parent reference corpus. */
   referencedVarIdsForMovedTask: string[];
-  /** Task varIds not found in the parent reference corpus (no parent proxy required). */
+  /** Task varIds not found in the parent reference corpus (no parent-side binding required for move logic). */
   unreferencedVarIdsForMovedTask: string[];
   /**
-   * GUID-stable child varIds that remain wired through the subflow interface into the parent
-   * (referenced). Parent-facing FQ names use separate proxy varIds (outputBindings).
+   * GUID-stable child varIds referenced in the parent (authoring); parent-facing tokens use S2 `subflowBindings`.
    */
   guidMappingParentSubflow: Array<{ id: string }>;
   renamed: Array<{ id: string; previousName: string; nextName: string }>;
+  /** Parent variable renames (`prefix.leaf`) after move when leaf labels matched the child interface. */
+  parentAutoRenames: Array<{ id: string; previousName: string; nextName: string }>;
   /** Count of rows removed when deleteUnreferencedTaskVariableRows was true. */
   removedUnreferencedVariableRows: number;
   /** Task row placement + TaskRepository snapshot after move (see materializeTaskInSubflow). */
@@ -124,7 +119,7 @@ export type ApplyTaskMoveToSubflowResult = {
 
 /**
  * Merges MappingEntry rows into the child flow's interface output for each task variable (stable GUID).
- * When `onlyVarIds` is set, only those varIds are exposed (proxy-backed outputs in the parent).
+ * When `onlyVarIds` is set, only those varIds are exposed on the child interface (parent wiring is via `subflowBindings`).
  * Uses local labels only for child interface (no parent FQ in paths). `variableRefId` stays the child slot GUID.
  */
 export function mergeChildFlowInterfaceOutputsForVariables(
@@ -236,6 +231,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       unreferencedVarIdsForMovedTask: [],
       guidMappingParentSubflow: [],
       renamed: [],
+      parentAutoRenames: [],
       removedUnreferencedVariableRows: 0,
       secondPassDisplayLabelUpdates: 0,
       taskMaterialization: {
@@ -387,6 +383,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
 
   let flowsNext: WorkspaceState['flows'] = { ...flowsWorking };
   let secondPassDisplayLabelUpdates = 0;
+  let parentAutoRenames: ApplyTaskMoveToSubflowResult['parentAutoRenames'] = [];
 
   if (linkedSubflow) {
     flowsNext = mergeChildFlowInterfaceOutputsForVariables(flowsNext, childFlowId, taskVarsAfterLocal, {
@@ -419,26 +416,35 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       });
     }
 
-    syncProxyBindingsForSubflowTask(
-      pid,
-      parentFlowId,
-      parentSubflowTaskRowId,
-      childFlowId,
-      outputs,
-      flowsNext,
-      { qualifiedSubflowTitle: subflowDisplayTitle }
-    );
-
-    if (secondPass && referencedForMovedTask.length > 0) {
-      secondPassDisplayLabelUpdates = ensureSubflowOutputBindingsDisplayLabels({
-        parentSubflowTaskRowId,
-        referencedChildVarIds: new Set(referencedForMovedTask),
-        qualifiedSubflowTitle: subflowDisplayTitle,
-        interfaceOutputs: outputs as MappingEntry[],
+    const portalRowId = String(parentSubflowTaskRowId || '').trim();
+    if (portalRowId) {
+      const ok = autoFillSubflowBindingsForMovedTask({
+        projectId: pid,
+        parentFlowId,
+        parentFlow: flowsNext[parentFlowId],
+        childFlow: flowsNext[childFlowId],
+        subflowTaskId: portalRowId,
+        referencedVarIds: referencedForMovedTask,
+      });
+      logTaskSubflowMove('apply:autoFillSubflowBindings', {
+        parentSubflowTaskRowId: portalRowId,
+        ok,
+        bindingCount: referencedForMovedTask.length,
       });
     }
 
-    logTaskSubflowMove('apply:syncProxyBindingsDone', {
+    const ar = autoRenameParentVariablesForMovedTask({
+      projectId: pid,
+      parentFlowId,
+      parentFlow: flowsNext[parentFlowId],
+      childFlow: flowsNext[childFlowId],
+      subflowDisplayTitle,
+      referencedVarIds: referencedForMovedTask,
+    });
+    parentAutoRenames = ar.renamed;
+    logTaskSubflowMove('apply:autoRenameParentVariables', { count: parentAutoRenames.length });
+
+    logTaskSubflowMove('apply:subflowS2Bindings', {
       parentSubflowTaskRowId,
       qualifiedSubflowTitle: subflowDisplayTitle,
     });
@@ -495,6 +501,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     unreferencedVarIdsForMovedTask: unreferencedForMovedTask,
     guidMappingCount: guidMappingParentSubflow.length,
     renamedCount: renamed.length,
+    parentAutoRenameCount: parentAutoRenames.length,
     secondPassDisplayLabelUpdates,
     removedUnreferencedVariableRows,
     taskMaterializationOk: taskMaterialization.ok,
@@ -505,6 +512,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     unreferencedVarIdsForMovedTask: unreferencedForMovedTask,
     guidMappingParentSubflow,
     renamed,
+    parentAutoRenames,
     removedUnreferencedVariableRows,
     taskMaterialization,
     secondPassDisplayLabelUpdates,

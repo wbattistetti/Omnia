@@ -95,10 +95,15 @@ class TaskRepository {
       throw new Error(`[TaskRepository] Cannot create task - type field is required`);
     }
 
+    const subflowDefaults =
+      type === TaskType.Subflow
+        ? { subflowBindingsSchemaVersion: 1 as const, subflowBindings: [] as Task['subflowBindings'] }
+        : {};
     const task: Task = {
       id: finalTaskId,
       type: type,                // ✅ Enum numerico (0-19) - REQUIRED - COMPORTAMENTO
       templateId: templateId,   // ✅ GUID reference to another Task (or null) - NOT related to type
+      ...subflowDefaults,
       ...(fields || {}),          // ✅ Campi diretti (niente wrapper value)
       createdAt: new Date(),
       updatedAt: new Date()

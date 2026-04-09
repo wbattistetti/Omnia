@@ -275,7 +275,7 @@ export function collectReferencedVarIdsForParentFlowWorkspace(
   }
 
   const taskJsonChunks = buildTaskJsonChunksForParentFlow(parentFlowId, params.flows);
-  /** Serialized flow A (outputBindings, meta, nodes) — appended as raw text; not parsed for referenceScanInternalText. */
+  /** Serialized flow A (subflowBindings, meta, nodes) — appended as raw text; not parsed for referenceScanInternalText. */
   const flowStructureChunk = JSON.stringify(parentFlow ?? null);
 
   const internalHaystack = buildInternalReferenceHaystackForParentFlow({
@@ -291,7 +291,7 @@ export function collectReferencedVarIdsForParentFlowWorkspace(
 
 /**
  * True iff `variableId` appears in the static reference corpus for flow A only
- * (conditions on edges of that flow, tasks on canvas, serialized flow JSON including outputBindings, translations slice).
+ * (conditions on edges of that flow, tasks on canvas, serialized flow JSON including subflowBindings, translations slice).
  */
 export function isVariableReferencedInFlow(
   variableId: string,

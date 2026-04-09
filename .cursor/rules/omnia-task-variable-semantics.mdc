@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Omnia: task, variabili e sottoflusso
 
-Fonte dettagliata: `docs/SEMANTICA_TASK_VARIABLES_E_SUBFLOW.md`.
+Fonti: `docs/SEMANTICA_TASK_VARIABLES_E_SUBFLOW.md`, `docs/SEMANTICA_GRAMMAR_G2.md` (GrammarFlow).
 
 ## Invarianti
 
@@ -14,6 +14,14 @@ Fonte dettagliata: `docs/SEMANTICA_TASK_VARIABLES_E_SUBFLOW.md`.
 - Dato e variabile: **stesso GUID** (`varId` = `dataId` = `taskId` del nodo).
 - Non usare il modello legacy «un solo task canvas con subcampi logici» come verità.
 
+## Sottoflusso (S2)
+
+- Mapping esplicito sul task Subflow: **`subflowBindings`** (`interfaceParameterId` ≠ `parentVariableId`), schema versione 1. Nessun proxy variabile, nessun `outputBindings` legacy.
+
+## GrammarFlow (G2)
+
+- **`grammarSlot.id` → `flowVariable.id`** tramite **`slotBindings`**; nessuna identità implicita `grammarSlot.id` = `TaskTreeNode.id`.
+
 ## Variabili referenziate
 
 Prima di cancellare/mantenere variabili nel parent dopo lo spostamento di un task, calcolare **`variabiliReferenziate`**: insieme di `varId` trovati con scansione statica del flow in **tutti** i punti che possono citare variabili (condizioni, script, messaggi/template, API, I/O sottoflusso, azioni, validazioni, transizioni, espressioni).
@@ -21,7 +29,7 @@ Prima di cancellare/mantenere variabili nel parent dopo lo spostamento di un tas
 ## Spostamento task → sottoflusso
 
 1. Sottoflusso: creare tutte le variabili dati/subtask, **stessi GUID**.
-2. Parent: per ogni `varId` del task spostato — se **non** in `variabiliReferenziate` → rimuovi dal parent; se **in** `variabiliReferenziate` → mantieni, **rinomina** label (`Sottoflusso.labelOriginale`), **stesso GUID**, collega interfaccia.
-3. Mapping parent ↔ sottoflusso **1:1 sullo stesso GUID**.
+2. Parent: per ogni `varId` del task spostato — se **non** in `variabiliReferenziate` → rimuovi dal parent; se **in** `variabiliReferenziate` → mantieni, **stesso GUID**, etichetta e **`subflowBindings`** come da policy S2.
+3. Allineamento dati parent ↔ figlio **1:1 sugli stessi GUID**; il wiring esplicito è in **`subflowBindings`**.
 
 Deviazioni nel codice = debito tecnico, non modello alternativo.

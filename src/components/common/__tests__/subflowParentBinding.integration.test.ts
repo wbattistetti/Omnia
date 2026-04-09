@@ -1,5 +1,5 @@
 /**
- * Integration tests: Subflow parent proxy binding, naming via variableProxyNaming, disambiguation.
+ * Integration tests: S2 subflowBindings resolution for parent-facing tokens.
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { taskRepository } from '../../../services/TaskRepository';
@@ -17,19 +17,35 @@ function pid(): string {
   return `vitest_subflow_bind_${Math.random().toString(36).slice(2, 14)}`;
 }
 
-describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
+describe('ensureParentVariableAndSubflowOutputBinding (S2)', () => {
   beforeEach(() => {
     setProjectTranslationsRegistry({});
   });
 
-  it('creates flow-scoped parent var with semantic proxy name and output binding', () => {
+  it('resolves parent var from subflowBindings', () => {
     const projectId = pid();
     const parentFlowId = 'flow_parent';
     const childFlowId = 'flow_child';
     const subflowTaskId = `task_sf_${Math.random().toString(36).slice(2, 10)}`;
-    const childVarId = `var_child_${Math.random().toString(36).slice(2, 10)}`;
+    const childVarId = crypto.randomUUID();
+    const parentVarId = crypto.randomUUID();
 
-    taskRepository.createTask(TaskType.Subflow, null, { flowId: childFlowId, outputBindings: [] }, subflowTaskId);
+    taskRepository.createTask(
+      TaskType.Subflow,
+      null,
+      {
+        flowId: childFlowId,
+        subflowBindingsSchemaVersion: 1,
+        subflowBindings: [{ interfaceParameterId: childVarId, parentVariableId: parentVarId }],
+      },
+      subflowTaskId
+    );
+
+    variableCreationService.ensureManualVariableWithId(projectId, parentVarId, 'parent.token', {
+      scope: 'flow',
+      scopeFlowId: parentFlowId,
+    });
+    setProjectTranslationsRegistry({ [makeTranslationKey('variable', parentVarId)]: 'parent.token' });
 
     const flows = {
       [parentFlowId]: {
@@ -46,104 +62,37 @@ describe('ensureParentVariableAndSubflowOutputBinding (full round)', () => {
       subflowTaskId,
     });
 
-    expect(out.tokenLabel).toBe('email.conferma');
-    setProjectTranslationsRegistry({ [makeTranslationKey('variable', out.parentVarId)]: out.tokenLabel });
-    expect(getVariableLabel(out.parentVarId, getProjectTranslationsTable())).toBe('email.conferma');
-
-    const t = taskRepository.getTask(subflowTaskId) as any;
-    expect(t?.outputBindings).toEqual([{ fromVariable: childVarId, toVariable: out.parentVarId }]);
+    expect(out.parentVarId).toBe(parentVarId);
+    expect(getVariableLabel(out.parentVarId, getProjectTranslationsTable())).toBe('parent.token');
   });
 
-  it('disambiguates when the semantic proxy name is already taken in flow scope', () => {
+  it('throws when no subflowBindings row for child var', () => {
     const projectId = pid();
     const parentFlowId = 'flow_parent_2';
     const childFlowId = 'flow_child_2';
     const subflowTaskId = `task_sf_${Math.random().toString(36).slice(2, 10)}`;
     const childVarId = `var_child_${Math.random().toString(36).slice(2, 10)}`;
 
-    variableCreationService.createManualVariable(projectId, 'email.conferma', {
-      scope: 'flow',
-      scopeFlowId: parentFlowId,
-    });
-
-    taskRepository.createTask(TaskType.Subflow, null, { flowId: childFlowId, outputBindings: [] }, subflowTaskId);
-
-    const flows = {
-      [parentFlowId]: {
-        nodes: [{ data: { rows: [{ id: subflowTaskId, text: 'chiedi email' }] } }],
-      },
-    };
-
-    const out = ensureParentVariableAndSubflowOutputBinding(projectId, parentFlowId, flows, {
-      isFromActiveFlow: false,
-      ownerFlowId: childFlowId,
-      id: childVarId,
-      varLabel: 'conferma',
-      sourceTaskRowLabel: 'chiedi email',
-      subflowTaskId,
-    });
-
-    expect(out.tokenLabel).toBe('email.conferma_2');
-    setProjectTranslationsRegistry({ [makeTranslationKey('variable', out.parentVarId)]: out.tokenLabel });
-    expect(getVariableLabel(out.parentVarId, getProjectTranslationsTable())).toBe('email.conferma_2');
-  });
-
-  it('returns existing parent token when output binding already maps child var', () => {
-    const projectId = pid();
-    const parentFlowId = 'flow_parent_3';
-    const childFlowId = 'flow_child_3';
-    const subflowTaskId = `task_sf_${Math.random().toString(36).slice(2, 10)}`;
-    const childVarId = `var_child_${Math.random().toString(36).slice(2, 10)}`;
-
-    const existing = variableCreationService.createManualVariable(projectId, 'already.bound', {
-      scope: 'flow',
-      scopeFlowId: parentFlowId,
-    });
-    setProjectTranslationsRegistry({ [makeTranslationKey('variable', existing.id)]: 'already.bound' });
-
     taskRepository.createTask(TaskType.Subflow, null, {
       flowId: childFlowId,
-      outputBindings: [{ fromVariable: childVarId, toVariable: existing.id }],
+      subflowBindingsSchemaVersion: 1,
+      subflowBindings: [],
     }, subflowTaskId);
-
-    const flows = { [parentFlowId]: { nodes: [] } };
-
-    const out = ensureParentVariableAndSubflowOutputBinding(projectId, parentFlowId, flows, {
-      isFromActiveFlow: false,
-      ownerFlowId: childFlowId,
-      id: childVarId,
-      varLabel: 'ignored',
-      subflowTaskId,
-    });
-
-    expect(out).toEqual({ tokenLabel: 'already.bound', parentVarId: existing.id });
-  });
-
-  it('resolves subflow task by normalized row label when subflowTaskId omitted', () => {
-    const projectId = pid();
-    const parentFlowId = 'flow_parent_4';
-    const childFlowId = 'flow_child_4';
-    const subflowTaskId = `task_sf_${Math.random().toString(36).slice(2, 10)}`;
-    const childVarId = `var_child_${Math.random().toString(36).slice(2, 10)}`;
-
-    taskRepository.createTask(TaskType.Subflow, null, { flowId: childFlowId, outputBindings: [] }, subflowTaskId);
 
     const flows = {
       [parentFlowId]: {
-        nodes: [{ data: { rows: [{ id: subflowTaskId, text: 'richiedi telefono' }] } }],
+        nodes: [{ data: { rows: [{ id: subflowTaskId, text: 'x' }] } }],
       },
     };
 
-    const out = ensureParentVariableAndSubflowOutputBinding(projectId, parentFlowId, flows, {
-      isFromActiveFlow: false,
-      ownerFlowId: childFlowId,
-      id: childVarId,
-      varLabel: 'ufficio',
-      sourceTaskRowLabel: 'richiedi telefono',
-    });
-
-    expect(out.tokenLabel).toBe('telefono.ufficio');
-    const t = taskRepository.getTask(subflowTaskId) as any;
-    expect(t?.outputBindings?.[0]?.fromVariable).toBe(childVarId);
+    expect(() =>
+      ensureParentVariableAndSubflowOutputBinding(projectId, parentFlowId, flows, {
+        isFromActiveFlow: false,
+        ownerFlowId: childFlowId,
+        id: childVarId,
+        varLabel: 'y',
+        subflowTaskId,
+      })
+    ).toThrow(/subflowBindings row/);
   });
 });
