@@ -4,7 +4,7 @@
 import type { Task, TaskTree, TaskTreeNode } from '@types/taskTypes';
 import type { DialogueTask } from '@services/DialogueTaskService';
 import type { EnsureManualVariableOptions, VariableInstance, VariableScope } from '@types/variableTypes';
-import type { WorkspaceState } from '../flows/FlowTypes';
+import type { Flow, WorkspaceState } from '../flows/FlowTypes';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
 import { taskRepository } from './TaskRepository';
@@ -26,6 +26,7 @@ import {
 } from '@utils/safeProjectId';
 import { logVariableHydration } from '../utils/variableMenuDebug';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { getSubflowSyncFlows, getSubflowSyncUpsertFlowSlice } from '@domain/taskSubflowMove/subflowSyncFlowsRef';
 import {
   MANUAL_VARIABLE_METADATA_TYPE,
   PROJECT_VARIABLE_METADATA_TYPE,
@@ -467,6 +468,16 @@ class VariableCreationService {
         variableStoreCountAfter: storeAfter,
         hydratedTaskRows,
       });
+    }
+
+    const upsertSlice = getSubflowSyncUpsertFlowSlice();
+    if (upsertSlice && flows) {
+      for (const flowCanvasId of Object.keys(flows)) {
+        const slice = flows[flowCanvasId];
+        if (!slice) continue;
+        const vars = this.getVariablesForFlowScope(pid, flowCanvasId, flows);
+        upsertSlice({ ...slice, variables: vars } as Flow);
+      }
     }
 
     if (typeof document !== 'undefined') {
@@ -1124,6 +1135,16 @@ class VariableCreationService {
       })
     );
     this.store.set(key, [...kept, ...normalized]);
+
+    const upsertSlice = getSubflowSyncUpsertFlowSlice();
+    if (upsertSlice) {
+      const flows = getSubflowSyncFlows();
+      const slice = flows[fid];
+      if (slice) {
+        const vars = this.getVariablesForFlowScope(key, fid, flows);
+        upsertSlice({ ...slice, variables: vars } as Flow);
+      }
+    }
   }
 }
 

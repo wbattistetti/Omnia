@@ -8,11 +8,13 @@ import { localLabelForSubflowTaskVariable } from '@domain/variableProxyNaming';
 import type { WorkspaceState } from '@flows/FlowTypes';
 import { stripLegacyVariablesFromFlowMeta } from '../../flows/flowMetaSanitize';
 import type { VariableInstance } from '@types/variableTypes';
+import { TaskType } from '@types/taskTypes';
 import { invalidateChildFlowInterfaceCache } from '@services/childFlowInterfaceService';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getVariableLabel } from '@utils/getVariableLabel';
 import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
+import { isUuidString, makeTranslationKey } from '@utils/translationKeys';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
 import type { NodeRowData } from '@types/project';
 
@@ -85,6 +87,11 @@ export type ApplyTaskMoveToSubflowParams = {
    * When true, logs apply:secondPass:* and indicates a wiring-only pass after variableStore is populated.
    */
   secondPass?: boolean;
+  /**
+   * When true, merges every task variable into child output (ignore parent reference scan filter).
+   * When false and the scan finds no referenced varIds, still merges all task variables (fallback).
+   */
+  exposeAllTaskVariablesInChildInterface?: boolean;
 };
 
 export type MaterializeMovedTaskSummary = {
@@ -132,14 +139,19 @@ export function mergeChildFlowInterfaceOutputsForVariables(
   const flow = flows[childFlowId];
   if (!flow) return flows;
   const only = options?.onlyVarIds;
+  /** Empty set from parent scan: expose all task variables (scan may miss GUID substrings). */
   const vars =
-    only !== undefined
-      ? only.size > 0
+    only === undefined
+      ? variables
+      : only.size > 0
         ? variables.filter((v) => only.has(String(v.id || '').trim()))
-        : []
-      : variables;
+        : variables;
   const meta = { ...(flow.meta || {}) } as {
     flowInterface?: { input?: unknown[]; output?: unknown[] };
+    translations?: Record<string, string>;
+  };
+  const tr: Record<string, string> = {
+    ...(typeof meta.translations === 'object' && meta.translations ? meta.translations : {}),
   };
   const fi = { ...(meta.flowInterface || {}) };
   const prev: unknown[] = Array.isArray(fi.output) ? [...fi.output] : [];
@@ -157,14 +169,26 @@ export function mergeChildFlowInterfaceOutputsForVariables(
     if (!rawName) rawName = vid;
     const local = localLabelForSubflowTaskVariable(rawName);
     const label = local || rawName;
+    let labelKey: string | undefined;
+    try {
+      if (isUuidString(vid)) {
+        labelKey = makeTranslationKey('interface', vid);
+      }
+    } catch {
+      labelKey = undefined;
+    }
     prev.push(
       createMappingEntry({
         internalPath: label,
         externalName: label,
         variableRefId: vid,
         linkedVariable: label,
+        ...(labelKey ? { labelKey } : {}),
       })
     );
+    if (labelKey) {
+      tr[labelKey] = label;
+    }
     seen.add(vid);
     logTaskSubflowMove('merge:interfaceOutputRow', {
       childFlowId,
@@ -179,6 +203,7 @@ export function mergeChildFlowInterfaceOutputsForVariables(
     ...flow,
     meta: stripLegacyVariablesFromFlowMeta({
       ...meta,
+      translations: tr,
       flowInterface: {
         input: Array.isArray(fi.input) ? fi.input : [],
         output: prev,
@@ -187,6 +212,92 @@ export function mergeChildFlowInterfaceOutputsForVariables(
     hasLocalChanges: true,
   };
   return { ...flows, [childFlowId]: nextFlow };
+}
+
+/**
+ * Populates child `flowInterface.input` from the parent Subflow portal task's `subflowBindings` (S2),
+ * so the child flow document lists expected parameters without deducing from the canvas.
+ */
+function mergeChildFlowInterfaceInputsFromSubflowPortal(
+  flows: WorkspaceState['flows'],
+  projectId: string,
+  childFlowId: string,
+  subflowTaskId: string
+): WorkspaceState['flows'] {
+  const pid = String(projectId || '').trim();
+  const cid = String(childFlowId || '').trim();
+  const sid = String(subflowTaskId || '').trim();
+  if (!pid || !cid || !sid) return flows;
+
+  const portal = taskRepository.getTask(sid);
+  const bindings = portal?.subflowBindings;
+  if (!portal || portal.type !== TaskType.Subflow || !Array.isArray(bindings) || bindings.length === 0) {
+    return flows;
+  }
+
+  const flow = flows[cid];
+  if (!flow) return flows;
+
+  const meta = { ...(flow.meta || {}) } as {
+    flowInterface?: { input?: unknown[]; output?: unknown[] };
+    translations?: Record<string, string>;
+  };
+  const fi = { ...(meta.flowInterface || {}) };
+  const prevIn: unknown[] = Array.isArray(fi.input) ? [...fi.input] : [];
+  const seen = new Set(
+    prevIn.map((e) => String((e as { variableRefId?: string }).variableRefId || '').trim()).filter(Boolean)
+  );
+  const tr: Record<string, string> = {
+    ...(typeof meta.translations === 'object' && meta.translations ? meta.translations : {}),
+  };
+
+  for (const b of bindings) {
+    const iid = String(b?.interfaceParameterId || '').trim();
+    if (!iid || seen.has(iid)) continue;
+
+    let rawName = String(
+      variableCreationService.getAllVariables(pid).find((v) => String(v.id) === iid)?.varName || ''
+    ).trim();
+    if (!rawName) rawName = getVariableLabel(iid, getProjectTranslationsTable());
+    if (!rawName) rawName = iid;
+    const local = localLabelForSubflowTaskVariable(rawName);
+    const label = local || rawName;
+    let labelKey: string | undefined;
+    try {
+      if (isUuidString(iid)) {
+        labelKey = makeTranslationKey('interface', iid);
+      }
+    } catch {
+      labelKey = undefined;
+    }
+    prevIn.push(
+      createMappingEntry({
+        internalPath: label,
+        externalName: label,
+        variableRefId: iid,
+        linkedVariable: label,
+        ...(labelKey ? { labelKey } : {}),
+      })
+    );
+    if (labelKey) {
+      tr[labelKey] = label;
+    }
+    seen.add(iid);
+  }
+
+  const nextFlow = {
+    ...flow,
+    meta: stripLegacyVariablesFromFlowMeta({
+      ...meta,
+      translations: tr,
+      flowInterface: {
+        input: prevIn,
+        output: Array.isArray(fi.output) ? fi.output : [],
+      },
+    }) as (typeof flow)['meta'],
+    hasLocalChanges: true,
+  };
+  return { ...flows, [cid]: nextFlow };
 }
 
 /**
@@ -213,7 +324,10 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     skipStructuralPhase,
     isLinkedSubflowMove,
     secondPass,
+    exposeAllTaskVariablesInChildInterface,
   } = params;
+
+  const exposeAll = !!exposeAllTaskVariablesInChildInterface;
 
   const linkedSubflow = isLinkedSubflowMove !== false;
   const shouldDeleteUnreferenced = deleteUnreferencedTaskVariableRows !== false;
@@ -298,14 +412,14 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     });
   }
 
-  if (!skipStructuralPhase) {
-    variableCreationService.hydrateVariablesFromFlow(pid, flowsWorking);
-    logTaskSubflowMove('apply:hydrateVariablesFromFlowAfterStructural', {
-      parentFlowId,
-      childFlowId,
-      taskInstanceId,
-    });
-  }
+  /** Always hydrate before reading task variables so merge sees rows even when structural phase was applied earlier (orchestrator pre-hydrates). */
+  variableCreationService.hydrateVariablesFromFlow(pid, flowsWorking);
+  logTaskSubflowMove('apply:hydrateVariablesFromFlowAfterStructural', {
+    parentFlowId,
+    childFlowId,
+    taskInstanceId,
+    skipStructuralPhase: !!skipStructuralPhase,
+  });
 
   const allVars = variableCreationService.getAllVariables(pid) ?? [];
   const translationsInternal = translations
@@ -387,8 +501,14 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
   let parentAutoRenames: ApplyTaskMoveToSubflowResult['parentAutoRenames'] = [];
 
   if (linkedSubflow) {
+    const mergeOnlyVarIds: ReadonlySet<string> | undefined = exposeAll
+      ? undefined
+      : refSet.size > 0
+        ? refSet
+        : undefined;
+
     flowsNext = mergeChildFlowInterfaceOutputsForVariables(flowsNext, childFlowId, taskVarsAfterLocal, {
-      onlyVarIds: refSet,
+      onlyVarIds: mergeOnlyVarIds,
       projectId: pid,
     });
 
@@ -405,7 +525,8 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
         variableRefIdsInOutput: outputs
           .map((o: { variableRefId?: string }) => String(o?.variableRefId || '').trim())
           .filter(Boolean),
-        onlyReferencedVarIds: [...refSet],
+        mergeFilter: exposeAll ? 'all' : mergeOnlyVarIds ? [...mergeOnlyVarIds] : 'all_fallback',
+        referencedInParentScan: [...refSet],
       });
     } else {
       logTaskSubflowMove('apply:mergeChildInterface', {
@@ -413,7 +534,8 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
         variableRefIdsInOutput: outputs
           .map((o: { variableRefId?: string }) => String(o?.variableRefId || '').trim())
           .filter(Boolean),
-        onlyReferencedVarIds: [...refSet],
+        mergeFilter: exposeAll ? 'all' : mergeOnlyVarIds ? [...mergeOnlyVarIds] : 'all_fallback',
+        referencedInParentScan: [...refSet],
       });
     }
 
@@ -432,6 +554,8 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
         ok,
         bindingCount: referencedForMovedTask.length,
       });
+
+      flowsNext = mergeChildFlowInterfaceInputsFromSubflowPortal(flowsNext, pid, childFlowId, portalRowId);
     }
 
     const ar = autoRenameParentVariablesForMovedTask({

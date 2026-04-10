@@ -67,9 +67,13 @@ export function buildFlowDocumentFromFlowSlice(
   const tr = flow.meta?.translations ?? {};
   const ifaceIn = (flow.meta?.flowInterface?.input ?? []) as MappingEntry[];
   const ifaceOut = (flow.meta?.flowInterface?.output ?? []) as MappingEntry[];
-  const tasks = collectTasksForFlow(fid, flows);
-  const variables = variableCreationService.getVariablesForFlowScope(pid, fid, flows);
-  const bindings = collectSubflowBindingsFromTasks(tasks);
+  const tasks = flow.tasks !== undefined ? flow.tasks : collectTasksForFlow(fid, flows);
+  const variables =
+    flow.variables !== undefined
+      ? flow.variables
+      : variableCreationService.getVariablesForFlowScope(pid, fid, flows);
+  const bindings =
+    flow.bindings !== undefined ? flow.bindings : collectSubflowBindingsFromTasks(tasks);
 
   return {
     id: fid,

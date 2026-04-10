@@ -295,16 +295,22 @@ export const AppContent: React.FC<AppContentProps> = ({
   const markFlowsPersistedRef = React.useRef<((flowIds: string[]) => void) | null>(null);
 
   // ✅ Get translations for chat panel (needed for ChatOrchestrator)
-  const { translations: globalTranslations, isReady: translationsReady, isLoading: translationsLoading, loadAllTranslations } = useProjectTranslations();
+  const {
+    translations: globalTranslations,
+    compiledTranslations,
+    isReady: translationsReady,
+    isLoading: translationsLoading,
+    loadAllTranslations,
+  } = useProjectTranslations();
 
   React.useEffect(() => {
-    setSubflowSyncTranslations(globalTranslations || {});
-  }, [globalTranslations]);
+    setSubflowSyncTranslations(compiledTranslations || {});
+  }, [compiledTranslations]);
 
   const chatOrchestrator = useChatOrchestrator({
     setDockTree,
     currentPid,
-    translations: globalTranslations,
+    translations: compiledTranslations,
     translationsReady,
     translationsLoading,
     loadAllTranslations,

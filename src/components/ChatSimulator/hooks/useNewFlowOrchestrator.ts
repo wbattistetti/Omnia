@@ -33,12 +33,17 @@ const useProjectTranslationsSafe = (): ProjectTranslationsContextType => {
     // This allows useNewFlowOrchestrator to work even when rendered outside the provider tree
     return {
       translations: {},
+      compiledTranslations: {},
+      flowTranslationRevision: 0,
       addTranslation: () => {},
       addTranslations: () => {},
       getTranslation: () => undefined,
       loadAllTranslations: async () => {},
       saveAllTranslations: async () => {},
-      isDirty: false
+      isDirty: false,
+      isLoading: false,
+      isReady: false,
+      setCurrentTemplateId: () => {},
     };
   }
 };
@@ -112,7 +117,7 @@ export function useNewFlowOrchestrator({
   }, [currentDDTState, nodes]);
 
   // ✅ Get global translations from context (safe - handles missing provider)
-  const { translations: globalTranslations } = useProjectTranslationsSafe();
+  const { compiledTranslations } = useProjectTranslationsSafe();
 
   // ✅ Load translations for current DDT from global table (for state tracking)
   const ddtTranslations = useDDTTranslations(currentDDTState);
@@ -235,7 +240,7 @@ export function useNewFlowOrchestrator({
     getTask,
     getDDT,
     onTaskExecute: handleTaskExecuteWithDDT,
-    translations: { ...globalTranslations, ...ddtTranslations }, // Pass merged translations to engine
+    translations: { ...compiledTranslations, ...ddtTranslations }, // Workspace merge + DDT-scoped overlay
     onMessage: (message) => {
       // Messages from backend orchestrator - forward to onMessage callback
       if (onMessage) {

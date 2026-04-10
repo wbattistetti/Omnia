@@ -5,6 +5,8 @@ import { FlowTabBar } from './FlowTabBar';
 import { loadFlow, saveFlow } from '../../flows/FlowPersistence';
 import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
 import { dlog } from '../../utils/debug';
+import { logFlowHydrationTrace } from '../../utils/flowHydrationTrace';
+import { formatUnknownError } from '../../utils/httpErrorFormatting';
 import { logSubflowCanvasDebug, summarizeFlowSlice } from '../../utils/subflowCanvasDebug';
 import { logUpsertSubflowEmptyNodesCaller } from '../../utils/flowStructuralCommitDiagnostic';
 import { FlowEditor } from '../Flowchart/FlowEditor';
@@ -48,6 +50,15 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
       return;
     }
     const explain = explainShouldLoadFlowFromServer(projectId, flow);
+    logFlowHydrationTrace('FlowWorkspace (second loader): hydration tick', {
+      activeFlowId,
+      projectId,
+      shouldLoad: explain.shouldLoad,
+      reason: explain.reason,
+      sliceNodeCount: flow.nodes?.length ?? 0,
+      sliceHydrated: flow.hydrated,
+      serverHydrationApplied: flow.serverHydrationApplied,
+    });
     logSubflowCanvasDebug('FlowWorkspace:active-tab hydration (second loader; can race FlowCanvasHost)', {
       activeFlowId,
       explainReason: explain.reason,
@@ -73,10 +84,22 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
       try {
         data = await loadFlow(projectId, activeFlowId);
       } catch (e) {
-        console.error('[FlowWorkspace] loadFlow failed', { projectId, activeFlowId, e });
+        const errText = formatUnknownError(e);
+        logFlowHydrationTrace('FlowWorkspace: loadFlow threw', {
+          projectId,
+          activeFlowId,
+          error: errText,
+        });
+        console.error(`[FlowWorkspace] loadFlow failed: ${errText}`, { projectId, activeFlowId, cause: e });
         return;
       }
       if (cancelled) return;
+      logFlowHydrationTrace('FlowWorkspace: applyFlowLoadResult (active tab)', {
+        activeFlowId,
+        projectId,
+        payloadNodeCount: data.nodes.length,
+        payloadEdgeCount: data.edges.length,
+      });
       logSubflowCanvasDebug('FlowWorkspace: applyFlowLoadResult (active tab)', {
         activeFlowId,
         serverNodeCount: data.nodes.length,
@@ -86,6 +109,9 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
         nodes: data.nodes,
         edges: data.edges,
         ...(data.meta !== undefined ? { meta: data.meta } : {}),
+        tasks: data.tasks,
+        variables: data.variables,
+        bindings: data.bindings,
       });
       dlog('flow', '[workspace.loaded]', { projectId, activeFlowId, nodes: data.nodes.length, edges: data.edges.length });
     })();

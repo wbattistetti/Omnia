@@ -10,7 +10,7 @@ import { FontProvider } from '@context/FontContext';
 
 export function GlobalTestPanel() {
   const { isOpen, context, close } = useGlobalTestPanel();
-  const { translations } = useProjectTranslations();
+  const { compiledTranslations } = useProjectTranslations();
 
   React.useEffect(() => {
     console.log('[GlobalTestPanel] State changed:', { isOpen, contextType: context?.type });
@@ -54,7 +54,7 @@ export function GlobalTestPanel() {
             <DDEBubbleChat
               task={context.task}
               projectId={context.projectId}
-              translations={translations}
+              translations={compiledTranslations}
               taskTree={context.taskTree}
               onUpdateTaskTree={() => {}}
               mode="interactive"

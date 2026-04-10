@@ -124,7 +124,9 @@ function extractGuidsFromSteps(
 }
 
 /**
- * Filtra le traduzioni per includere solo quelle runtime
+ * Filtra le traduzioni per includere solo quelle runtime.
+ * `allTranslations` must be the workspace **compiled** map (`compiledTranslations` from context:
+ * global + all `flows[*].meta.translations`), not global-only.
  * Runtime translations sono:
  * 1. Chiavi che iniziano con "runtime." (pattern: runtime.DDT_<ID>.<step>#<n>.<action>.text)
  * 2. GUID che sono referenziati nei step dell'ISTANZA (non del template!)

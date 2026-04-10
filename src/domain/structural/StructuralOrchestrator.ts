@@ -383,26 +383,6 @@ function runMoveTaskRowIntoSubflow(
     skipStructuralPhase: true,
   });
 
-  const taskRowId = command.rowId;
-  let flushed: ApplyTaskMoveToSubflowResult | null = null;
-  if (variableCreationService.getVariablesByTaskInstanceId(pid, taskRowId).length === 0) {
-    flushed = registerSubflowWiringSecondPass({
-      projectId: pid,
-      parentFlowId: command.parentFlowId,
-      childFlowId: command.childFlowId,
-      taskInstanceId: taskRowId,
-      subflowDisplayTitle: command.subflowDisplayTitle,
-      parentSubflowTaskRowId: command.parentSubflowTaskRowId,
-      conditions,
-      translations: translationsArg,
-      projectData: ctx.projectData,
-    });
-  }
-  if (flushed) {
-    result = flushed;
-    logTaskSubflowMove('orchestrator:secondPassFlush', { taskInstanceId: taskRowId });
-  }
-
   logPipeline('pipeline:9-invariants', command);
   for (const pair of affectedTaskFlowPairs(command)) {
     if (pair.flowId) {

@@ -1,9 +1,13 @@
 import type { Flow, FlowId } from './FlowTypes';
 import type { WorkspaceState } from './FlowTypes';
+import type { Task } from '../types/taskTypes';
+import type { VariableInstance } from '../types/variableTypes';
+import type { FlowSubflowBindingPersisted } from '../domain/flowDocument/FlowDocument';
 import type { Node } from 'reactflow';
 import type { FlowNode } from '../components/Flowchart/types/flowTypes';
 import { transformNodesToReactFlow, transformEdgesToReactFlow } from './flowTransformers';
 import { logFlowSaveDebug } from '../utils/flowSaveDebug';
+import { logFlowHydrationTrace } from '../utils/flowHydrationTrace';
 import { loadFlowDocument, saveFlowDocument } from './flowDocumentPersistence';
 import { applyFlowDocumentToStores } from '../domain/flowDocument/applyFlowDocumentToStores';
 import { flowDocumentToFlowMeta } from '../domain/flowDocument/flowDocumentBridge';
@@ -26,14 +30,18 @@ export type FlowLoadResult = {
   nodes: Node<FlowNode>[];
   edges: any[];
   meta?: Flow['meta'];
+  tasks: Task[];
+  variables: VariableInstance[];
+  bindings: FlowSubflowBindingPersisted[];
 };
 
 /**
  * Load one flow as FlowDocument (atomic); applies tasks/variables to stores; returns ReactFlow graph + meta.
+ * FLOW.SAVE-BULK REFACTOR — `meta` includes `translations` from FlowDocument (flow slice source of truth for labels).
  */
 export async function loadFlow(projectId: string, flowId: FlowId): Promise<FlowLoadResult> {
   if (!projectId || String(projectId).trim() === '') {
-    return { nodes: [], edges: [] };
+    return { nodes: [], edges: [], tasks: [], variables: [], bindings: [] };
   }
   const doc = await loadFlowDocument(projectId, flowId);
   assertFlowDocument(doc);
@@ -42,15 +50,37 @@ export async function loadFlow(projectId: string, flowId: FlowId): Promise<FlowL
   const edges = transformEdgesToReactFlow(doc.edges as any[]);
   const meta = flowDocumentToFlowMeta(doc);
 
+  logFlowHydrationTrace('loadFlow result (after transform to React Flow)', {
+    projectId,
+    flowId,
+    reactNodeCount: nodes.length,
+    reactEdgeCount: edges.length,
+    simplifiedNodeCount: doc.nodes.length,
+    simplifiedEdgeCount: doc.edges.length,
+    firstNodeRowSample:
+      nodes[0] && (nodes[0] as any).data?.rows
+        ? ((nodes[0] as any).data.rows as unknown[]).length
+        : null,
+  });
+
   logFlowSaveDebug('loadFlow: FlowDocument applied', {
     projectId,
     flowId,
     simplifiedNodeCount: doc.nodes.length,
     simplifiedEdgeCount: doc.edges.length,
     hasMeta: meta !== undefined,
+    taskCount: doc.tasks.length,
+    variableCount: doc.variables.length,
   });
 
-  return { nodes, edges, meta };
+  return {
+    nodes,
+    edges,
+    meta,
+    tasks: doc.tasks,
+    variables: doc.variables,
+    bindings: doc.bindings,
+  };
 }
 
 /**

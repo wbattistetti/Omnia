@@ -93,7 +93,13 @@ export function useResponseEditorToolbar({
   // ✅ NEW: Get global test panel and context data (MUST be at the top - hooks rule)
   const { isOpen: isGlobalTestPanelOpen, openWithTask, close: closeGlobalTestPanel } = useGlobalTestPanel();
   const editorContext = useResponseEditorContextSafe(); // ✅ Safe hook that returns null if not available
-  const { translations: globalTranslations, isReady: translationsReady, isLoading: translationsLoading, loadAllTranslations } = useProjectTranslations();
+  const {
+    translations: globalTranslations,
+    compiledTranslations,
+    isReady: translationsReady,
+    isLoading: translationsLoading,
+    loadAllTranslations,
+  } = useProjectTranslations();
 
   // ✅ Get task data from props (preferred) or context (fallback)
   const taskTree = taskTreeProp || editorContext?.taskTree;
@@ -228,8 +234,8 @@ export function useResponseEditorToolbar({
         return;
       }
 
-      // ✅ CRITICAL: Get translations from context (must be ready by now)
-      let allTranslations = globalTranslations || {};
+      // ✅ CRITICAL: Runtime map = global + flow meta (merged); do not use globalTranslations alone.
+      let allTranslations = compiledTranslations || {};
 
       // ✅ NO FALLBACK: Translations must be loaded by design
       // If translations are still empty after loading, this is a structural error
@@ -435,8 +441,8 @@ export function useResponseEditorToolbar({
           return;
         }
 
-        // ✅ CRITICAL: Get translations from context (must be ready by now)
-        const translations = globalTranslations || {};
+        // ✅ CRITICAL: Same merged map as dock chat tab (global + flow meta).
+        const translations = compiledTranslations || {};
 
         // ✅ NO FALLBACK: Translations must be loaded by design
         // If translations are still empty after loading, this is a structural error

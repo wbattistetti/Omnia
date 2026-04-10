@@ -45,7 +45,7 @@ describe('mergeChildFlowInterfaceOutputsForVariables', () => {
     expect(out[0].externalName).toBe('nome');
   });
 
-  it('adds nothing when onlyVarIds is empty', () => {
+  it('when onlyVarIds is empty Set, exposes all task variables (parent scan fallback)', () => {
     const flows = {
       sf: {
         id: 'sf',
@@ -69,7 +69,8 @@ describe('mergeChildFlowInterfaceOutputsForVariables', () => {
     });
 
     const out = (next.sf.meta as any).flowInterface.output;
-    expect(out.length).toBe(0);
+    expect(out.length).toBe(1);
+    expect(out[0].variableRefId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
   });
 
   it('child varName local (colore): OUTPUT shows only colore; internalPath is not parent FQ', () => {

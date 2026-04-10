@@ -190,9 +190,9 @@ export class ProjectSaveOrchestrator {
   /**
    * Executes save request by calling all backend endpoints.
    *
-   * Deterministic persistence: project template definitions are saved via DialogueTaskService
-   * (POST /templates) before task bulk, so the same Mongo `id` is never overwritten by a
-   * competing bulk payload. Catalog/flow/translations/variables/conditions still run in parallel.
+   * Deterministic persistence: global translation rows are saved first, then catalog/flow/
+   * variables/conditions in parallel; project template definitions via DialogueTaskService
+   * (POST /templates) before task bulk.
    *
    * @param request - Save request prepared by prepareSave()
    * @param uiState - Additional UI state needed for save (translations context, flow state, etc.)
@@ -232,7 +232,24 @@ export class ProjectSaveOrchestrator {
 
     console.log('[Save][Orchestrator] 🚀 START executeSave', { projectId });
 
-    // Phase 1: parallel — everything except tasks bulk and template save (see phase 2/3).
+    // FLOW.SAVE-BULK REFACTOR — Global translation rows before flow-document PUTs (deterministic ordering).
+    try {
+      if (uiState.translationsContext?.saveAllTranslations) {
+        await uiState.translationsContext.saveAllTranslations();
+        results.translations = { success: true };
+        console.log('[Save][Orchestrator][2-translations] ✅ DONE (before flow PUTs)');
+      } else {
+        results.translations = { success: false, error: 'Translations context not available' };
+        console.warn('[Save][Orchestrator][2-translations] ⚠️ Context not available');
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      errors.push(`Translations: ${errorMsg}`);
+      results.translations = { success: false, error: errorMsg };
+      console.error('[Save][Orchestrator][2-translations] ❌ ERROR', { error: errorMsg });
+    }
+
+    // Phase 1: parallel — catalog, flow, variables, conditions (translations already flushed above).
     const phase1Promises = await Promise.allSettled([
       // 1. Catalog timestamp update
       (async () => {
@@ -252,25 +269,6 @@ export class ProjectSaveOrchestrator {
           errors.push(`Catalog: ${errorMsg}`);
           results.catalog = { success: false, error: errorMsg };
           console.error('[Save][Orchestrator][1-catalog] ❌ ERROR', { error: errorMsg });
-        }
-      })(),
-
-      // 2. Translations
-      (async () => {
-        try {
-          if (uiState.translationsContext?.saveAllTranslations) {
-            await uiState.translationsContext.saveAllTranslations();
-            results.translations = { success: true };
-            console.log('[Save][Orchestrator][2-translations] ✅ DONE');
-          } else {
-            results.translations = { success: false, error: 'Translations context not available' };
-            console.warn('[Save][Orchestrator][2-translations] ⚠️ Context not available');
-          }
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          errors.push(`Translations: ${errorMsg}`);
-          results.translations = { success: false, error: errorMsg };
-          console.error('[Save][Orchestrator][2-translations] ❌ ERROR', { error: errorMsg });
         }
       })(),
 

@@ -32,6 +32,13 @@ if (isProjectTranslationsDebugEnabled()) {
 
 export interface ProjectTranslationsContextType {
   translations: Record<string, string>;
+  /**
+   * Single merged map for runtime (Test, Chat, orchestrator): global locale + all `flows[*].meta.translations`;
+   * flow keys override global on conflict. Prefer this over `translations` for execution paths.
+   */
+  compiledTranslations: Record<string, string>;
+  /** Increments when strings are written only to flow slice `meta.translations` (use with getTranslation). */
+  flowTranslationRevision: number;
   addTranslation: (guid: string, text: string, templateId?: string) => void;
   addTranslations: (translations: Record<string, string>, templateId?: string) => void;
   getTranslation: (guid: string) => string | undefined;

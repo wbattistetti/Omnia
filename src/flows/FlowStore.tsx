@@ -2,15 +2,22 @@ import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, 
 import { takeWorkspaceRestoreForProjectOnce } from '../services/project-save/flowSaveSnapshot';
 import { shouldKeepLocalGraphOnEmptyServerResponse } from './flowLoadMergePolicy';
 import { logFlowSaveDebug } from '../utils/flowSaveDebug';
+import { logFlowHydrationTrace } from '../utils/flowHydrationTrace';
 import { logTaskSubflowMove } from '../utils/taskSubflowMoveDebug';
 import { isSubflowCanvasDebugEnabled, logSubflowCanvasDebug, summarizeFlowSlice } from '../utils/subflowCanvasDebug';
 import type { Flow, FlowId, WorkspaceState } from './FlowTypes';
+import type { Task } from '../types/taskTypes';
+import type { VariableInstance } from '../types/variableTypes';
+import type { FlowSubflowBindingPersisted } from '../domain/flowDocument/FlowDocument';
 import { stripLegacyVariablesFromFlowMeta } from './flowMetaSanitize';
 
 type ApplyFlowLoadPayload<NodeT, EdgeT> = {
   nodes: NodeT[];
   edges: EdgeT[];
   meta?: Flow['meta'];
+  tasks?: Task[];
+  variables?: VariableInstance[];
+  bindings?: FlowSubflowBindingPersisted[];
 };
 
 type Action<NodeT = any, EdgeT = any> =
@@ -75,6 +82,9 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
       }
       const flow = {
         ...mergedForUpsert,
+        tasks: mergedForUpsert.tasks ?? prev?.tasks,
+        variables: mergedForUpsert.variables ?? prev?.variables,
+        bindings: mergedForUpsert.bindings ?? prev?.bindings,
         hydrated: mergedForUpsert.hydrated !== undefined ? mergedForUpsert.hydrated : (prev?.hydrated ?? false),
         variablesReady:
           mergedForUpsert.variablesReady !== undefined
@@ -86,6 +96,11 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
             : prev !== undefined
               ? (prev.hasLocalChanges ?? false)
               : nonEmpty,
+        // FIX-MAIN-EMPTY — preserve or set flag when upsert includes it (e.g. load path).
+        serverHydrationApplied:
+          mergedForUpsert.serverHydrationApplied !== undefined
+            ? mergedForUpsert.serverHydrationApplied
+            : (prev?.serverHydrationApplied ?? false),
       } as Flow<NodeT, EdgeT>;
       if (isSubflowCanvasDebugEnabled() && fid.startsWith('subflow_')) {
         logSubflowCanvasDebug('FlowStore:UPSERT_FLOW', {
@@ -126,6 +141,9 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
     case 'APPLY_FLOW_LOAD_RESULT': {
       const curr = state.flows[action.flowId];
       if (!curr) {
+        logFlowSaveDebug('FlowStore: FIX-MAIN-EMPTY APPLY_FLOW_LOAD_RESULT noop (missing slice)', {
+          flowId: action.flowId,
+        });
         if (isSubflowCanvasDebugEnabled()) {
           logSubflowCanvasDebug('FlowStore:APPLY_FLOW_LOAD_RESULT noop (missing slice)', {
             flowId: action.flowId,
@@ -133,14 +151,40 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
         }
         return state;
       }
-      if (curr.hydrated === true) {
+      const localNodeCountBefore = curr.nodes?.length ?? 0;
+      const localEdgeCountBefore = curr.edges?.length ?? 0;
+      const localGraphNonEmpty = localNodeCountBefore > 0 || localEdgeCountBefore > 0;
+      // FIX-MAIN-EMPTY — Ignore server only when hydrated AND local graph already has content; if local is empty, apply server payload.
+      if (curr.hydrated === true && localGraphNonEmpty) {
+        logFlowHydrationTrace('FlowStore APPLY_FLOW_LOAD_RESULT noop (hydrated + local graph non-empty)', {
+          flowId: action.flowId,
+          localNodeCountBefore,
+          localEdgeCountBefore,
+        });
+        logFlowSaveDebug('FlowStore: FIX-MAIN-EMPTY APPLY_FLOW_LOAD_RESULT noop (hydrated + non-empty local graph)', {
+          flowId: action.flowId,
+          localNodeCountBefore,
+          localEdgeCountBefore,
+        });
         if (isSubflowCanvasDebugEnabled()) {
-          logSubflowCanvasDebug('FlowStore:APPLY_FLOW_LOAD_RESULT noop (already hydrated)', {
+          logSubflowCanvasDebug('FlowStore:APPLY_FLOW_LOAD_RESULT noop (hydrated_with_graph)', {
             flowId: action.flowId,
             ...summarizeFlowSlice(curr as any, { rowIdsSample: true }),
           });
         }
         return state;
+      }
+      if (curr.hydrated === true && !localGraphNonEmpty) {
+        logFlowHydrationTrace('FlowStore: applying server payload (hydrated but local graph empty)', {
+          flowId: action.flowId,
+          hydrated: curr.hydrated,
+          serverHydrationAppliedBefore: curr.serverHydrationApplied ?? false,
+        });
+        logFlowSaveDebug('FlowStore: FIX-MAIN-EMPTY APPLY_FLOW_LOAD_RESULT apply server while local graph empty', {
+          flowId: action.flowId,
+          hydrated: curr.hydrated,
+          serverHydrationAppliedBefore: curr.serverHydrationApplied ?? false,
+        });
       }
       const p = action.payload;
       const serverNodes = (p.nodes as any[]) ?? [];
@@ -164,9 +208,14 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
         nodes: nextNodes as any,
         edges: nextEdges as any,
         meta: mergedMeta,
+        ...(Array.isArray(p.tasks) ? { tasks: p.tasks } : {}),
+        ...(Array.isArray(p.variables) ? { variables: p.variables } : {}),
+        ...(Array.isArray(p.bindings) ? { bindings: p.bindings } : {}),
         hydrated: true,
         variablesReady: false,
         hasLocalChanges: keepLocalGraph ? true : false,
+        // FIX-MAIN-EMPTY — Marks that server payload was merged (enables policy to stop refetch on legit empty projects).
+        serverHydrationApplied: true,
       } as Flow<NodeT, EdgeT>;
       if (keepLocalGraph) {
         logFlowSaveDebug('FlowStore: APPLY_FLOW_LOAD_RESULT kept local graph (server empty, local dirty)', {
@@ -175,6 +224,27 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
           serverNodeCount: serverNodes.length,
         });
       }
+      logFlowHydrationTrace('FlowStore APPLY_FLOW_LOAD_RESULT applied', {
+        flowId: action.flowId,
+        localNodeCountBefore,
+        localEdgeCountBefore,
+        localNodeCountAfter: (nextNodes as any[])?.length ?? 0,
+        localEdgeCountAfter: (nextEdges as any[])?.length ?? 0,
+        serverNodeCount: serverNodes.length,
+        serverEdgeCount: ((p.edges as any[]) ?? []).length,
+        keepLocalGraph,
+        serverHydrationApplied: true,
+      });
+      logFlowSaveDebug('FlowStore: FIX-MAIN-EMPTY APPLY_FLOW_LOAD_RESULT applied', {
+        flowId: action.flowId,
+        localNodeCountBefore,
+        localEdgeCountBefore,
+        localNodeCountAfter: (nextNodes as any[])?.length ?? 0,
+        localEdgeCountAfter: (nextEdges as any[])?.length ?? 0,
+        serverNodeCount: serverNodes.length,
+        serverEdgeCount: ((p.edges as any[]) ?? []).length,
+        keepLocalGraph,
+      });
       if (isSubflowCanvasDebugEnabled()) {
         logSubflowCanvasDebug('FlowStore:APPLY_FLOW_LOAD_RESULT', {
           flowId: action.flowId,

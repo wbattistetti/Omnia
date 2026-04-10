@@ -3,8 +3,11 @@
  * flow-key materialization, bulk save split by deterministic project vs factory classification.
  * Keys present only in FlowDocument.meta.translations (workspace flow slices) are not written to
  * the global translations API — they persist via PUT flow-document.
+ *
+ * `compiledTranslations` merges global state with all flow `meta.translations` (flow wins on conflict)
+ * and is the single map for runtime (Test, Chat, orchestrator) and `projectTranslationsRegistry`.
  */
-import React, { useState, useEffect, useRef, ReactNode, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, ReactNode, useCallback, useMemo, useSyncExternalStore } from 'react';
 import {
   ProjectTranslationsContext,
   type ProjectTranslationsContextType,
@@ -23,6 +26,17 @@ import { TemplateSource } from '../types/taskTypes';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
 import { collectFlowLocalTranslationKeysFromWorkspace } from '../utils/flowLocalTranslationKeys';
 import type { FlowNode } from '../components/Flowchart/types/flowTypes';
+import { writeTranslationToFlowSlice } from '../domain/flowDocument/writeTranslationToFlowSlice';
+import { subscribeFlowSliceTranslationsChanged } from '../domain/flowDocument/notifyFlowSliceTranslationsChanged';
+import {
+  compileWorkspaceTranslations,
+  flowWorkspaceMetaTranslationsFingerprint,
+} from '../utils/compileWorkspaceTranslations';
+// FLOW.SAVE-BULK REFACTOR — flow keys use active canvas / explicit flow: id; no TaskRepository/canvas heuristics.
+import {
+  getFlowIdForFlowScopedWrite,
+  shouldPersistTranslationToGlobalApi,
+} from '../domain/flowDocument/flowScopedTranslation';
 
 export type { ProjectTranslationsContextType } from './projectTranslationsContextInstance';
 export { useProjectTranslations, isProjectTranslationsDebugEnabled } from './projectTranslationsContextInstance';
@@ -134,6 +148,31 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   const translationsLiveRef = useRef<Record<string, string>>({});
   /** Copy of merged load result; used only to materialize missing flow keys before save. */
   const snapshotAfterLoadRef = useRef<Record<string, string>>({});
+  /** Bumps when a label is written only to flow.meta.translations (subscribers should use getTranslation). */
+  const [flowTranslationRevision, setFlowTranslationRevision] = useState(0);
+
+  /** Prefer active canvas (where the task is edited), then other flows. */
+  const readTranslationFromFlowSlices = useCallback((guid: string): string | undefined => {
+    const k = String(guid || '').trim();
+    if (!k) return undefined;
+    const readFromFlow = (fid: string): string | undefined => {
+      const tr = FlowWorkspaceSnapshot.getFlowById(fid)?.meta?.translations;
+      if (tr && typeof tr === 'object' && Object.prototype.hasOwnProperty.call(tr, k)) {
+        const v = (tr as Record<string, string>)[k];
+        if (v !== undefined) return String(v);
+      }
+      return undefined;
+    };
+    const activeId = FlowWorkspaceSnapshot.getActiveFlowId();
+    const fromActive = readFromFlow(activeId);
+    if (fromActive !== undefined) return fromActive;
+    for (const fid of FlowWorkspaceSnapshot.getAllFlowIds()) {
+      if (fid === activeId) continue;
+      const v = readFromFlow(fid);
+      if (v !== undefined) return v;
+    }
+    return undefined;
+  }, []);
 
   useEffect(() => {
     if (isProjectTranslationsDebugEnabled()) {
@@ -150,6 +189,30 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     translationsLiveRef.current = translations;
   }, [translations]);
 
+  /** FlowDocument load applies meta.translations to slices without going through addTranslation — refresh merged lookups. */
+  useEffect(() => {
+    return subscribeFlowSliceTranslationsChanged(() => {
+      setFlowTranslationRevision((n) => n + 1);
+    });
+  }, []);
+
+  /** Re-subscribe when any flow slice changes (AppContent mirrors FlowStore into FlowWorkspaceSnapshot). */
+  const flowMetaFingerprint = useSyncExternalStore(
+    (onStoreChange) => FlowWorkspaceSnapshot.subscribe(onStoreChange),
+    flowWorkspaceMetaTranslationsFingerprint,
+    flowWorkspaceMetaTranslationsFingerprint
+  );
+
+  const compiledTranslations = useMemo(
+    () => compileWorkspaceTranslations(translations),
+    [translations, flowTranslationRevision, flowMetaFingerprint]
+  );
+
+  /** Non-React readers (DSL, variable labels) see the same merged map as runtime. */
+  useEffect(() => {
+    setProjectTranslationsRegistry(compiledTranslations);
+  }, [compiledTranslations]);
+
   const setCurrentTemplateId = useCallback((templateId: string | null) => {
     setCurrentTemplateIdState(templateId);
   }, []);
@@ -161,6 +224,15 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
 
     const activeTemplateId = templateId || currentTemplateId;
+    const flowId = getFlowIdForFlowScopedWrite(guid);
+    if (flowId) {
+      writeTranslationToFlowSlice(flowId, guid, text);
+      setFlowTranslationRevision((n) => n + 1);
+      if (activeTemplateId) {
+        notifyTranslationAdded(activeTemplateId, guid);
+      }
+      return;
+    }
 
     translationsLiveRef.current = { ...translationsLiveRef.current, [guid]: text };
     setProjectTranslationsRegistry(translationsLiveRef.current);
@@ -184,20 +256,39 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       }
     });
 
-    translationsLiveRef.current = { ...translationsLiveRef.current, ...newTranslations };
-    setProjectTranslationsRegistry(translationsLiveRef.current);
+    const globalPatch: Record<string, string> = {};
+    let anyFlow = false;
+    for (const [guid, text] of Object.entries(newTranslations)) {
+      if (!guid) continue;
+      const flowId = getFlowIdForFlowScopedWrite(guid);
+      if (flowId) {
+        writeTranslationToFlowSlice(flowId, guid, text);
+        anyFlow = true;
+      } else {
+        globalPatch[guid] = text;
+      }
+    }
 
-    setTranslations((prev) => {
-      let hasChanges = false;
-      const updated = { ...prev };
-      Object.entries(newTranslations).forEach(([guid, text]) => {
-        if (guid && updated[guid] !== text) {
-          updated[guid] = text;
-          hasChanges = true;
-        }
+    if (anyFlow) {
+      setFlowTranslationRevision((n) => n + 1);
+    }
+
+    if (Object.keys(globalPatch).length > 0) {
+      translationsLiveRef.current = { ...translationsLiveRef.current, ...globalPatch };
+      setProjectTranslationsRegistry(translationsLiveRef.current);
+
+      setTranslations((prev) => {
+        let hasChanges = false;
+        const updated = { ...prev };
+        Object.entries(globalPatch).forEach(([guid, text]) => {
+          if (guid && updated[guid] !== text) {
+            updated[guid] = text;
+            hasChanges = true;
+          }
+        });
+        return hasChanges ? updated : prev;
       });
-      return hasChanges ? updated : prev;
-    });
+    }
 
     if (activeTemplateId) {
       notifyTranslationsAdded(activeTemplateId, Object.keys(newTranslations));
@@ -205,10 +296,12 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   }, [currentTemplateId]);
 
   const getTranslation = useCallback((guid: string): string | undefined => {
+    const fromFlow = readTranslationFromFlowSlices(guid);
+    if (fromFlow !== undefined) return fromFlow;
     const live = translationsLiveRef.current[guid];
     if (live !== undefined) return live;
     return translations[guid];
-  }, [translations]);
+  }, [translations, readTranslationFromFlowSlices]);
 
   const [loadingCompleted, setLoadingCompleted] = useState(false);
 
@@ -226,6 +319,12 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   /** Keep React translation map + live ref in sync when domain code publishes variable labels (subflow rename). */
   useEffect(() => {
     registerVariableTranslationListener((canonicalKey, text) => {
+      const flowId = getFlowIdForFlowScopedWrite(canonicalKey);
+      if (flowId) {
+        writeTranslationToFlowSlice(flowId, canonicalKey, text);
+        setFlowTranslationRevision((n) => n + 1);
+        return;
+      }
       translationsLiveRef.current = { ...translationsLiveRef.current, [canonicalKey]: text };
       setProjectTranslationsRegistry(translationsLiveRef.current);
       setTranslations((prev) => {
@@ -302,6 +401,10 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       if (flowOnlyKeys.has(guid)) {
         continue;
       }
+      // FLOW.SAVE-BULK REFACTOR — skip canonical flow keys and bare GUIDs; they persist on flow-document PUT.
+      if (!shouldPersistTranslationToGlobalApi(guid)) {
+        continue;
+      }
       const dest = classifyTranslationKeyDestination(guid);
       const row = {
         guid,
@@ -344,6 +447,8 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
 
   const value: ProjectTranslationsContextType = useMemo(() => ({
     translations,
+    compiledTranslations,
+    flowTranslationRevision,
     addTranslation,
     addTranslations,
     getTranslation,
@@ -353,7 +458,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     isLoading,
     isReady,
     setCurrentTemplateId
-  }), [translations, addTranslation, addTranslations, getTranslation, loadAllTranslations, saveAllTranslations, isLoading, isReady, setCurrentTemplateId]);
+  }), [translations, compiledTranslations, flowTranslationRevision, addTranslation, addTranslations, getTranslation, loadAllTranslations, saveAllTranslations, isLoading, isReady, setCurrentTemplateId]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

@@ -3,6 +3,8 @@ import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '@flows/
 import { loadFlow } from '../../flows/FlowPersistence';
 import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
 import { logFlowSaveDebug } from '../../utils/flowSaveDebug';
+import { logFlowHydrationTrace } from '../../utils/flowHydrationTrace';
+import { formatUnknownError } from '../../utils/httpErrorFormatting';
 import { logSubflowCanvasDebug, summarizeFlowSlice } from '../../utils/subflowCanvasDebug';
 import { logUpsertSubflowEmptyNodesCaller } from '../../utils/flowStructuralCommitDiagnostic';
 import { FlowEditor } from '../Flowchart/FlowEditor';
@@ -144,6 +146,10 @@ export const FlowCanvasHost: React.FC<Props> = ({
 
     const flow = flows[flowId];
     if (!flow) {
+      logFlowHydrationTrace('FlowCanvasHost: no flow slice — direct loadFlow + upsertFlow', {
+        flowId,
+        projectId,
+      });
       logFlowSaveDebug('FlowCanvasHost: flow slice missing; direct server load', { flowId, projectId });
       logSubflowCanvasDebug('FlowCanvasHost: no slice yet — will loadFlow then UPSERT (replaces entire slice)', {
         flowId,
@@ -159,19 +165,35 @@ export const FlowCanvasHost: React.FC<Props> = ({
             serverNodeCount: data.nodes.length,
             serverEdgeCount: data.edges.length,
           });
+          logFlowHydrationTrace('FlowCanvasHost: missing-slice upsertFlow after loadFlow', {
+            flowId,
+            projectId,
+            dataNodeCount: data.nodes.length,
+            dataEdgeCount: data.edges.length,
+          });
           upsertFlow({
             id: flowId,
             title: pickFlowTitle(flowId, flow?.title),
             nodes: data.nodes,
             edges: data.edges,
             ...(data.meta !== undefined ? { meta: data.meta } : {}),
+            tasks: data.tasks,
+            variables: data.variables,
+            bindings: data.bindings,
             hydrated: true,
             variablesReady: false,
             hasLocalChanges: false,
+            // FIX-MAIN-EMPTY — same semantics as APPLY_FLOW_LOAD_RESULT (policy stable-empty guard).
+            serverHydrationApplied: true,
           } as any);
         } catch (e) {
           if (cancelled) return;
-          console.error('[FlowCanvasHost] initial loadFlow failed', { projectId, flowId, e });
+          const errText = formatUnknownError(e);
+          console.error(`[FlowCanvasHost] initial loadFlow failed: ${errText}`, {
+            projectId,
+            flowId,
+            cause: e,
+          });
           const failedLoad = {
             id: flowId,
             title: pickFlowTitle(flowId, flow?.title),
@@ -193,6 +215,18 @@ export const FlowCanvasHost: React.FC<Props> = ({
     }
 
     const explain = explainShouldLoadFlowFromServer(projectId, flow);
+    logFlowHydrationTrace('FlowCanvasHost: hydration effect tick', {
+      flowId,
+      projectId,
+      flowPresent: true,
+      sliceNodeCount: flow.nodes?.length ?? 0,
+      sliceEdgeCount: flow.edges?.length ?? 0,
+      hydrated: flow.hydrated,
+      hasLocalChanges: flow.hasLocalChanges,
+      serverHydrationApplied: flow.serverHydrationApplied,
+      shouldLoad: explain.shouldLoad,
+      reason: explain.reason,
+    });
     logSubflowCanvasDebug('FlowCanvasHost: hydration effect tick', {
       flowId,
       explainReason: explain.reason,
@@ -201,6 +235,12 @@ export const FlowCanvasHost: React.FC<Props> = ({
     });
     if (!explain.shouldLoad) {
       setIsLoadingFlow(false);
+      logFlowHydrationTrace('FlowCanvasHost: skip server loadFlow (policy)', {
+        projectId,
+        flowId,
+        reason: explain.reason,
+        shouldLoad: explain.shouldLoad,
+      });
       logFlowSaveDebug('FlowCanvasHost: skip server loadFlow', {
         projectId,
         flowId,
@@ -236,10 +276,23 @@ export const FlowCanvasHost: React.FC<Props> = ({
         if (!cancelled) {
           setIsLoadingFlow(false);
         }
-        console.error('[FlowCanvasHost] loadFlow failed', { projectId, flowId, e });
+        const errText = formatUnknownError(e);
+        logFlowHydrationTrace('FlowCanvasHost: loadFlow threw', {
+          projectId,
+          flowId,
+          error: errText,
+        });
+        console.error(`[FlowCanvasHost] loadFlow failed: ${errText}`, { projectId, flowId, cause: e });
         return;
       }
       if (cancelled) return;
+      logFlowHydrationTrace('FlowCanvasHost: dispatching applyFlowLoadResult', {
+        projectId,
+        flowId,
+        payloadNodeCount: data.nodes.length,
+        payloadEdgeCount: data.edges.length,
+        hasMeta: data.meta !== undefined,
+      });
       logFlowSaveDebug('FlowCanvasHost: applyFlowLoadResult', {
         projectId,
         flowId,
@@ -258,6 +311,9 @@ export const FlowCanvasHost: React.FC<Props> = ({
         nodes: data.nodes,
         edges: data.edges,
         ...(data.meta !== undefined ? { meta: data.meta } : {}),
+        tasks: data.tasks,
+        variables: data.variables,
+        bindings: data.bindings,
       });
       setIsLoadingFlow(false);
     })();

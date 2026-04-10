@@ -10,6 +10,9 @@
  * - Wraps window.fetch to track requests to silent endpoints
  * - Intercepts console.error to filter 404 messages for those endpoints
  * - Maintains full REST semantics (404 is still returned, just not logged)
+ *
+ * Note: This wrapper does not parse error bodies. For API failures (e.g. 500 with `{ error: "..." }`),
+ * callers must read the response (see `readHttpErrorBody` in `httpErrorFormatting.ts`) before logging.
  */
 
 const SILENT_404_ENDPOINTS: string[] = [

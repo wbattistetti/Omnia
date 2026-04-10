@@ -30,6 +30,11 @@ export function setSubflowSyncUpsertFlowSlice(handler: ((flow: Flow) => void) | 
   upsertFlowSlice = handler;
 }
 
+/** Current upsert (from AppContent); null before React mounts. */
+export function getSubflowSyncUpsertFlowSlice(): ((flow: Flow) => void) | null {
+  return upsertFlowSlice;
+}
+
 /**
  * Pushes updated flow slices into FlowStore after subflow interface sync (parent + child).
  */

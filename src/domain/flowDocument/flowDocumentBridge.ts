@@ -8,6 +8,7 @@ import type { FlowNode } from '@components/Flowchart/types/flowTypes';
 import type { FlowDocument } from './FlowDocument';
 import { persistedRowsToMappingEntries } from './flowInterfaceAdapters';
 
+/** FLOW.SAVE-BULK REFACTOR — `translations` from document are the UI source after loadFlow. */
 export function flowDocumentToFlowMeta(doc: FlowDocument): Flow['meta'] {
   const tr = doc.meta.translations ?? {};
   const input = persistedRowsToMappingEntries(doc.meta.flowInterface.input, tr);

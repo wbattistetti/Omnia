@@ -1,10 +1,13 @@
 /**
- * Applies a loaded FlowDocument to TaskRepository and VariableCreationService (project-scoped memory).
- * FlowDocument is the source of truth; global stores receive a per-flow snapshot.
+ * Hydrates in-memory TaskRepository + VariableCreationService from a loaded FlowDocument
+ * so synchronous getters match the document before React applies the flow slice.
+ * Authoring authority for save is the FlowStore slice (tasks/variables) kept in sync via
+ * {@link syncTaskAuthoringIntoFlowSlice} and variable slice updates after hydration.
  */
 
 import type { FlowDocument } from './FlowDocument';
 import { assertFlowDocument, normalizeFlowDocumentVersion } from './validateFlowDocument';
+import { notifyFlowSliceTranslationsChanged } from './notifyFlowSliceTranslationsChanged';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
 
@@ -19,4 +22,5 @@ export function applyFlowDocumentToStores(doc: FlowDocument): void {
 
   taskRepository.ingestTasksFromFlowDocument(fid, normalized.tasks);
   variableCreationService.ingestVariablesFromFlowDocument(pid, fid, normalized.variables, normalized.tasks);
+  notifyFlowSliceTranslationsChanged();
 }

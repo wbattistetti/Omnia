@@ -44,6 +44,21 @@ import {
 import type { ToolbarButton } from '@dock/types';
 import { isUuidString, makeTranslationKey, translationKeyFromStoredValue } from '@utils/translationKeys';
 
+/** Serializable snapshot of dock toolbar buttons — avoids onToolbarUpdate loops when parent recreates the same array every render. */
+function dockToolbarConfigSignature(buttons: ToolbarButton[]): string {
+  return JSON.stringify(
+    buttons.map((b) => ({
+      label: b?.label,
+      title: typeof b?.title === 'string' ? b.title : '',
+      position: b?.position,
+      disabled: Boolean(b?.disabled),
+      primary: Boolean(b?.primary),
+      active: Boolean(b?.active),
+      buttonId: (b as { buttonId?: string })?.buttonId,
+    }))
+  );
+}
+
 /**
  * Internal component that wraps EditorHeader with dynamic injection support
  * ✅ ARCHITECTURE: Uses injected icon/title/toolbar from task editors, with fallback to props
@@ -1189,14 +1204,28 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ FIX: Usa il ref passato come prop (creato in ResponseEditorInner)
   const saveToLibraryButtonRef = saveToLibraryButtonRefProp || React.useRef<HTMLButtonElement>(null);
 
+  /** Last dock toolbar signature pushed to TabRenderer — `toolbarButtons` is a new array every render from useResponseEditorToolbar. */
+  const lastDockToolbarSigRef = React.useRef<string | null>(null);
+
   // Dock tab (hideHeader): task kind + promote, then main toolbar (Manuale/Wizard live in banner + center card).
   React.useEffect(() => {
-    if (hideHeader && onToolbarUpdate) {
-      const prefix = [taskKindDockToolbarItem, promoteDockToolbarItem].filter(
-        (b): b is ToolbarButton => b != null
-      );
-      onToolbarUpdate([...prefix, ...toolbarButtons], 'orange');
+    if (!hideHeader) {
+      lastDockToolbarSigRef.current = null;
+      return;
     }
+    if (!onToolbarUpdate) {
+      return;
+    }
+    const prefix = [taskKindDockToolbarItem, promoteDockToolbarItem].filter(
+      (b): b is ToolbarButton => b != null
+    );
+    const combined = [...prefix, ...toolbarButtons];
+    const sig = dockToolbarConfigSignature(combined);
+    if (lastDockToolbarSigRef.current === sig) {
+      return;
+    }
+    lastDockToolbarSigRef.current = sig;
+    onToolbarUpdate(combined, 'orange');
   }, [
     hideHeader,
     onToolbarUpdate,

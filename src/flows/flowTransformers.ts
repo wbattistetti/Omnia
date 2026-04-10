@@ -33,21 +33,54 @@ export interface SimplifiedEdge {
 }
 
 /**
+ * Resolves rows/label whether the canvas holds React Flow nodes (`data.rows`) or already-simplified
+ * snapshots (`rows` / `label` at top level). FLOW.SAVE-BULK: saving only `data.*` produced empty graphs
+ * when the store carried persisted simplified shapes — reload then showed an empty flow.
+ */
+function resolveRowsAndLabelForSave(node: Node<FlowNode>): { rows: any[]; label: string } {
+  const n = node as any;
+  const data = n.data && typeof n.data === 'object' ? n.data : null;
+  const dr = Array.isArray(data?.rows) ? data.rows : undefined;
+  const tr = Array.isArray(n.rows) ? n.rows : undefined;
+  let rows: any[];
+  if (dr && dr.length > 0) rows = dr;
+  else if (tr && tr.length > 0) rows = tr;
+  else if (dr) rows = dr;
+  else if (tr) rows = tr;
+  else rows = [];
+
+  const dl = data && typeof data.label === 'string' ? data.label : undefined;
+  const tl = typeof n.label === 'string' ? n.label : undefined;
+  const label = (dl && dl.length > 0) ? dl : (tl ?? dl ?? '');
+
+  return { rows, label };
+}
+
+/**
  * Transform ReactFlow Node to simplified structure (for saving/backend)
  * Extracts data.rows and data.label to top level
  */
 export function transformNodeToSimplified(node: Node<FlowNode>): SimplifiedNode {
+  const { rows, label } = resolveRowsAndLabelForSave(node);
   const simplified: SimplifiedNode = {
     id: node.id,
-    label: node.data?.label || '',
-    rows: node.data?.rows || [],
+    label,
+    rows,
     position: node.position,
     type: node.type,
   };
 
-  // Copy other properties from node (excluding data wrapper)
+  // Copy other properties from node (excluding data wrapper). Do not copy top-level `rows` / `label`:
+  // React Flow uses `data.*` only; stray top-level copies would overwrite resolved rows (FLOW.SAVE-BULK).
   Object.keys(node).forEach(key => {
-    if (key !== 'data' && key !== 'id' && key !== 'position' && key !== 'type') {
+    if (
+      key !== 'data' &&
+      key !== 'id' &&
+      key !== 'position' &&
+      key !== 'type' &&
+      key !== 'rows' &&
+      key !== 'label'
+    ) {
       (simplified as any)[key] = (node as any)[key];
     }
   });

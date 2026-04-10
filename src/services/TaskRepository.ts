@@ -16,6 +16,10 @@ import {
 import { isProjectTemplateDefinitionRowForTemplateEndpointOnly } from './project-save/projectBulkTaskRules';
 import { syncSubflowInterfaceAfterAuthoringCanvasChange } from '@domain/taskSubflowMove/syncSubflowInterfaceOnAuthoringChange';
 import { upsertFlowSlicesFromSubflowSync } from '@domain/taskSubflowMove/subflowSyncFlowsRef';
+import {
+  removeTaskIdFromFlowSlice,
+  syncTaskAuthoringIntoFlowSlice,
+} from '@domain/flowDocument/flowSliceDomainSync';
 
 /**
  * TaskRepository: Primary repository for Task data
@@ -113,6 +117,7 @@ class TaskRepository {
     // ✅ NO automatic database save - save only on explicit user action (project:save event)
     this.tasks.set(finalTaskId, task);
     this.pendingRemoteTaskDeletes.delete(finalTaskId);
+    syncTaskAuthoringIntoFlowSlice(task);
 
     return task;
   }
@@ -308,6 +313,8 @@ class TaskRepository {
       }
     }
 
+    syncTaskAuthoringIntoFlowSlice(updatedTask);
+
     return true;
   }
 
@@ -316,9 +323,12 @@ class TaskRepository {
    * MongoDB removal runs on the next successful `saveAllTasksToDatabase` (explicit project save).
    */
   async deleteTask(taskId: string, _projectId?: string): Promise<boolean> {
+    const existing = this.tasks.get(taskId);
+    const authoringFlow = existing ? String(existing.authoringFlowCanvasId ?? '').trim() : '';
     const deleted = this.tasks.delete(taskId);
     if (deleted) {
       this.pendingRemoteTaskDeletes.add(taskId);
+      removeTaskIdFromFlowSlice(taskId, authoringFlow || undefined);
     }
     return deleted;
   }

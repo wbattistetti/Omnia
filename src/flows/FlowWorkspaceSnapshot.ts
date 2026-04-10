@@ -1,6 +1,9 @@
 import type { Edge, Node } from 'reactflow';
 import type { EdgeData, FlowNode } from '../components/Flowchart/types/flowTypes';
 import type { Flow } from './FlowTypes';
+import type { Task } from '../types/taskTypes';
+import type { VariableInstance } from '../types/variableTypes';
+import type { FlowSubflowBindingPersisted } from '../domain/flowDocument/FlowDocument';
 
 type SnapshotFlow = {
   nodes: Node<FlowNode>[];
@@ -8,6 +11,9 @@ type SnapshotFlow = {
   title?: string;
   /** Flow-local translations + interface (same as FlowStore slice); optional on snapshot. */
   meta?: Flow['meta'];
+  tasks?: Task[];
+  variables?: VariableInstance[];
+  bindings?: FlowSubflowBindingPersisted[];
 };
 
 /**

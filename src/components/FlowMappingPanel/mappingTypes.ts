@@ -28,6 +28,7 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
       ? crypto.randomUUID()
       : `me_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const vid = partial.variableRefId?.trim();
+  const lk = partial.labelKey?.trim();
   return {
     id,
     internalPath: partial.internalPath.trim(),
@@ -37,5 +38,6 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
     ...(partial.fieldDescription != null ? { fieldDescription: partial.fieldDescription } : {}),
     ...(partial.sampleValues != null ? { sampleValues: partial.sampleValues } : {}),
     ...(vid ? { variableRefId: vid } : {}),
+    ...(lk ? { labelKey: lk } : {}),
   };
 }

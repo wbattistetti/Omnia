@@ -109,7 +109,7 @@ export function FlowInterfaceBottomPanel({
 
   const flowSliceExists = Boolean(flows[flowId]);
 
-  /** Interfaccia: solo dati persistiti in flow.meta (FlowDocument); nessuna ricostruzione da binding/variabili. */
+  /** Interfaccia: solo `flow.meta.flowInterface` + `meta.translations` persistiti (FlowDocument); nessuna deduzione da canvas/variabili. */
 
   const listIdPrefix = useMemo(() => `flow-iface-${flowId.replace(/[^a-zA-Z0-9_-]/g, '_')}`, [flowId]);
 
