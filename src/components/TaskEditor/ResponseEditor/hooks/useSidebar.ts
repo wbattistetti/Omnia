@@ -113,9 +113,7 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
         sync?.task &&
         (isUtteranceInterpretationTask(sync.task) || sync.task.type === TaskType.ClassifyProblem);
       if (tid && utteranceLike) {
-        variableCreationService.hydrateVariablesFromTaskTree(pid, sync?.flowId, tid, ensured, {
-          taskRowLabel: sync.taskLabel || undefined,
-        });
+        variableCreationService.hydrateVariablesFromTaskTree(pid, sync?.flowId, tid, ensured);
         const after = variableCreationService.getVariablesByTaskInstanceId(pid, tid);
         logVariableScope('useSidebar.commit', {
           projectId: pid,
@@ -123,7 +121,7 @@ export function useSidebar(params: UseSidebarParams): UseSidebarResult {
           taskLabel: sync.taskLabel || '',
           nodesCount: ensured.nodes?.length ?? 0,
           varRows: after.length,
-          varNames: after.map((v) => v.varName),
+          variableIds: after.map((v) => v.id),
         });
         try {
           document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));

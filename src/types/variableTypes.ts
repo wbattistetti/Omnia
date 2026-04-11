@@ -44,7 +44,6 @@ export interface EnsureManualVariableOptions {
  */
 export interface VariableInstance {
   id: string;
-  varName: string;
   taskInstanceId: string;
   dataPath: string;
   /** Manual/slot visibility. Omitted or 'project' = visible in every flow. */

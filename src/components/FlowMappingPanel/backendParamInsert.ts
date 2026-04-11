@@ -15,7 +15,7 @@ import {
 /** MIME type for dragging "new parameter" from SEND/RECEIVE headers. */
 export const DND_NEW_BACKEND_PARAM = 'application/x-omnia-new-backend-param';
 
-/** Internal path segment for rows not yet named (hidden in UI; user types real name). */
+/** Wire-key segment for rows not yet named (hidden in UI; user types real name). */
 export const EPHEMERAL_SEGMENT_PREFIX = '__omnia_n_';
 
 export type ParamDropPlacement = 'before' | 'after' | 'child';
@@ -38,7 +38,7 @@ export function isEphemeralNewSegment(segment: string): boolean {
 export function subtreeEntryIndices(entries: MappingEntry[], pathKey: string): number[] {
   const out: number[] = [];
   for (let i = 0; i < entries.length; i++) {
-    const ip = entries[i].internalPath;
+    const ip = entries[i].wireKey;
     if (ip === pathKey || ip.startsWith(`${pathKey}.`)) out.push(i);
   }
   return out;
@@ -48,7 +48,7 @@ export function subtreeEntryIndices(entries: MappingEntry[], pathKey: string): n
 function childSegmentsUnderParent(entries: MappingEntry[], parentPathKey: string): Set<string> {
   const set = new Set<string>();
   for (const e of entries) {
-    const p = e.internalPath;
+    const p = e.wireKey;
     if (parentPathKey.length === 0) {
       const seg = p.split('.')[0]?.trim();
       if (seg) set.add(seg);
@@ -83,21 +83,21 @@ export function uniqueSegmentUnderParent(entries: MappingEntry[], parentPathKey:
   return seg;
 }
 
-function internalPathForSibling(entries: MappingEntry[], targetPathKey: string): string {
+function wireKeyForSibling(entries: MappingEntry[], targetPathKey: string): string {
   const parent = parentPathKey(targetPathKey);
   const seg = uniqueSegmentUnderParent(entries, parent);
   return parent ? `${parent}.${seg}` : seg;
 }
 
-function internalPathForChild(entries: MappingEntry[], parentPathKey: string): string {
+function wireKeyForChild(entries: MappingEntry[], parentPathKey: string): string {
   const seg = uniqueSegmentUnderParent(entries, parentPathKey);
   return `${parentPathKey}.${seg}`;
 }
 
 /** Remove path prefixes from collapsed set so a new nested row is visible. */
-export function expandAncestorsOfPath(collapsed: Set<string>, internalPath: string): Set<string> {
+export function expandAncestorsOfPath(collapsed: Set<string>, wireKey: string): Set<string> {
   const next = new Set(collapsed);
-  const parts = internalPath
+  const parts = wireKey
     .split('.')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
@@ -116,7 +116,7 @@ function orderedSubtreeBounds(
   let start = -1;
   let end = -1;
   for (let i = 0; i < ordered.length; i++) {
-    const p = ordered[i].internalPath;
+    const p = ordered[i].wireKey;
     if (p === pathKey || p.startsWith(`${pathKey}.`)) {
       if (start < 0) start = i;
       end = i;
@@ -129,7 +129,7 @@ function orderedSubtreeBounds(
 function firstDescendantIndex(ordered: MappingEntry[], pathKey: string): number | null {
   const prefix = `${pathKey}.`;
   for (let i = 0; i < ordered.length; i++) {
-    if (ordered[i].internalPath.startsWith(prefix)) return i;
+    if (ordered[i].wireKey.startsWith(prefix)) return i;
   }
   return null;
 }
@@ -138,46 +138,46 @@ function computeInsertAtAndPath(
   entries: MappingEntry[],
   ordered: MappingEntry[],
   pos: ParamDropPosition
-): { insertAt: number; internalPath: string } {
+): { insertAt: number; wireKey: string } {
   const { targetPathKey, placement } = pos;
   const T = targetPathKey;
 
   if (T === '' && placement === 'after') {
-    const internalPath = uniqueSegmentUnderParent(entries, '');
-    return { insertAt: 0, internalPath };
+    const wireKey = uniqueSegmentUnderParent(entries, '');
+    return { insertAt: 0, wireKey };
   }
 
   if (placement === 'child') {
-    const internalPath = internalPathForChild(entries, T);
+    const wireKey = wireKeyForChild(entries, T);
     const fd = firstDescendantIndex(ordered, T);
     let insertAt: number;
     if (fd !== null) insertAt = fd;
     else {
-      const self = ordered.findIndex((e) => e.internalPath === T);
+      const self = ordered.findIndex((e) => e.wireKey === T);
       insertAt = self >= 0 ? self + 1 : ordered.length;
     }
-    return { insertAt, internalPath };
+    return { insertAt, wireKey };
   }
 
-  const internalPath = internalPathForSibling(entries, T);
+  const wireKey = wireKeyForSibling(entries, T);
   const bounds = orderedSubtreeBounds(ordered, T);
   if (!bounds) {
-    return { insertAt: ordered.length, internalPath };
+    return { insertAt: ordered.length, wireKey };
   }
   if (placement === 'before') {
-    return { insertAt: bounds.start, internalPath };
+    return { insertAt: bounds.start, wireKey };
   }
-  return { insertAt: bounds.end + 1, internalPath };
+  return { insertAt: bounds.end + 1, wireKey };
 }
 
 /**
- * Returns insertion index in **depth-first tree order** (see `entriesInDepthFirstOrder`) and the new internalPath.
+ * Returns insertion index in **depth-first tree order** (see `entriesInDepthFirstOrder`) and the new wireKey.
  */
 export function computeBackendParamInsert(
   entries: MappingEntry[],
   pos: ParamDropPosition,
   options?: ComputeBackendParamInsertOptions
-): { insertAt: number; internalPath: string } {
+): { insertAt: number; wireKey: string } {
   const siblingOrder = options?.siblingOrder ?? 'construction';
   const ordered = entriesInDepthFirstOrder(entries, siblingOrder);
   return computeInsertAtAndPath(entries, ordered, pos);
@@ -193,12 +193,10 @@ export function insertNewBackendParameter(
 ): { next: MappingEntry[]; newEntry: MappingEntry } {
   const siblingOrder = options?.siblingOrder ?? 'construction';
   const ordered = entriesInDepthFirstOrder(entries, siblingOrder);
-  const { insertAt, internalPath } = computeInsertAtAndPath(entries, ordered, pos);
+  const { insertAt, wireKey } = computeInsertAtAndPath(entries, ordered, pos);
   const newEntry = createMappingEntry({
-    internalPath,
+    wireKey,
     apiField: '',
-    linkedVariable: '',
-    externalName: '',
   });
   const next = [...ordered.slice(0, insertAt), newEntry, ...ordered.slice(insertAt)];
   return { next, newEntry };

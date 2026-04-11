@@ -7,10 +7,9 @@ import { autoRenameParentVariablesForMovedTask } from '@domain/taskSubflowMove/a
 import { variableCreationService } from '@services/VariableCreationService';
 import { getVariableLabel } from '@utils/getVariableLabel';
 import { makeTranslationKey } from '@utils/translationKeys';
-import {
-  getProjectTranslationsTable,
-  setProjectTranslationsRegistry,
-} from '@utils/projectTranslationsRegistry';
+import { setProjectTranslationsRegistry } from '@utils/projectTranslationsRegistry';
+import { getActiveFlowMetaTranslationsFlattened } from '@utils/activeFlowTranslations';
+import { FlowWorkspaceSnapshot } from '@flows/FlowWorkspaceSnapshot';
 
 const G_NOME = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const G_TEL = '1cee6a03-1907-4468-944e-f3599fc8a563';
@@ -28,7 +27,7 @@ describe('autoRenameParentVariablesForMovedTask', () => {
     });
 
     setProjectTranslationsRegistry({
-      [makeTranslationKey('variable', G_NOME)]: 'nome',
+      [makeTranslationKey('var', G_NOME)]: 'nome',
     });
 
     const childFlow = {
@@ -38,33 +37,38 @@ describe('autoRenameParentVariablesForMovedTask', () => {
           output: [
             {
               id: 'row-id-not-used',
-              internalPath: 'nome',
-              externalName: 'nome',
+              wireKey: 'nome',
               variableRefId: G_NOME,
-              linkedVariable: 'nome',
+              apiField: '',
             },
           ],
         },
       },
     } as any;
 
-    const { renamed } = autoRenameParentVariablesForMovedTask({
+    const flowsBase = {
+      parent_f: { id: 'parent_f', title: 'P', nodes: [], edges: [], meta: {} },
+    } as any;
+
+    const { renamed, flowsNext } = autoRenameParentVariablesForMovedTask({
       projectId,
       parentFlowId: 'parent_f',
       parentFlow: { id: 'parent_f' } as any,
       childFlow,
       subflowDisplayTitle: 'dati',
-      referencedVarIds: [G_NOME],
+      taskVariableIds: [G_NOME],
+      flows: flowsBase,
     });
 
     expect(renamed).toHaveLength(1);
     expect(renamed[0]?.nextName).toBe('dati.nome');
 
-    const v = variableCreationService.getAllVariables(projectId).find((x) => x.id === G_NOME);
-    expect(v?.varName).toBe('dati.nome');
-
-    const label = getVariableLabel(G_NOME, getProjectTranslationsTable() as Record<string, string>);
+    FlowWorkspaceSnapshot.setSnapshot(flowsNext as any, 'parent_f');
+    const label = getVariableLabel(G_NOME, getActiveFlowMetaTranslationsFlattened());
     expect(label).toBe('dati.nome');
+
+    const tr = (flowsNext.parent_f.meta as { translations?: Record<string, string> })?.translations;
+    expect(tr?.[makeTranslationKey('var', G_NOME)]).toBe('dati.nome');
   });
 
   it('does not rename when subflowAutoRenameLocked is set (user override)', () => {
@@ -80,28 +84,38 @@ describe('autoRenameParentVariablesForMovedTask', () => {
         flowInterface: {
           output: [
             {
-              internalPath: 'nome',
-              externalName: 'nome',
+              wireKey: 'nome',
               variableRefId: G_NOME,
-              linkedVariable: 'nome',
+              apiField: '',
             },
           ],
         },
       },
     } as any;
 
-    const { renamed } = autoRenameParentVariablesForMovedTask({
+    const { renamed, flowsNext } = autoRenameParentVariablesForMovedTask({
       projectId,
       parentFlowId: 'parent_f',
       parentFlow: {} as any,
       childFlow,
       subflowDisplayTitle: 'dati',
-      referencedVarIds: [G_NOME],
+      taskVariableIds: [G_NOME],
+      flows: { parent_f: { id: 'parent_f', meta: {} } } as any,
     });
 
     expect(renamed).toHaveLength(0);
-    const v = variableCreationService.getAllVariables(projectId).find((x) => x.id === G_NOME);
-    expect(v?.varName).toBe('nome');
+    FlowWorkspaceSnapshot.setSnapshot(
+      {
+        parent_f: {
+          id: 'parent_f',
+          meta: {
+            translations: { [makeTranslationKey('var', G_NOME)]: 'nome' },
+          },
+        },
+      } as any,
+      'parent_f'
+    );
+    expect(getVariableLabel(G_NOME, getActiveFlowMetaTranslationsFlattened())).toBe('nome');
   });
 
   it('telefono: prefix + leaf updates translation so UI does not show raw GUID', () => {
@@ -111,7 +125,7 @@ describe('autoRenameParentVariablesForMovedTask', () => {
       scopeFlowId: 'main',
     });
     setProjectTranslationsRegistry({
-      [makeTranslationKey('variable', G_TEL)]: 'telefono',
+      [makeTranslationKey('var', G_TEL)]: 'telefono',
     });
 
     const childFlow = {
@@ -120,26 +134,27 @@ describe('autoRenameParentVariablesForMovedTask', () => {
           output: [
             {
               id: 'mapping-row-uuid',
-              internalPath: 'telefono',
-              externalName: 'telefono',
+              wireKey: 'telefono',
               variableRefId: G_TEL,
-              linkedVariable: 'telefono',
+              apiField: '',
             },
           ],
         },
       },
     } as any;
 
-    autoRenameParentVariablesForMovedTask({
+    const { flowsNext } = autoRenameParentVariablesForMovedTask({
       projectId,
       parentFlowId: 'main',
       parentFlow: {} as any,
       childFlow,
       subflowDisplayTitle: 'dati',
-      referencedVarIds: [G_TEL],
+      taskVariableIds: [G_TEL],
+      flows: { main: { id: 'main', meta: {} } } as any,
     });
 
-    const label = getVariableLabel(G_TEL, getProjectTranslationsTable() as Record<string, string>);
+    FlowWorkspaceSnapshot.setSnapshot(flowsNext as any, 'main');
+    const label = getVariableLabel(G_TEL, getActiveFlowMetaTranslationsFlattened());
     expect(label).toBe('dati.telefono');
     expect(label).not.toMatch(/^[0-9a-f-]{36}$/i);
   });

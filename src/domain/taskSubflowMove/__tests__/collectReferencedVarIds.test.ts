@@ -75,8 +75,8 @@ describe('collectReferencedVarIds', () => {
 
   it('partitionVariablesByReference splits rows', () => {
     const vars = [
-      { id: d1, varName: 'a', taskInstanceId: 't', dataPath: 'p' },
-      { id: d2, varName: 'b', taskInstanceId: 't', dataPath: 'p2' },
+      { id: d1, taskInstanceId: 't', dataPath: 'p' },
+      { id: d2, taskInstanceId: 't', dataPath: 'p2' },
     ] as any[];
     const { referenced, notReferenced } = partitionVariablesByReference(vars, new Set([d1]));
     expect(referenced).toHaveLength(1);
@@ -110,9 +110,7 @@ describe('collectReferencedVarIdsForParentFlowWorkspace (internal haystack)', ()
     }) as any;
 
   it('finds varId from persisted referenceScanInternalText on task (scan does not parse UI labels)', () => {
-    getAllVariablesSpy.mockReturnValue([
-      { id: d1, varName: 'nome', taskInstanceId: taskId, dataPath: 'p' },
-    ] as any);
+    getAllVariablesSpy.mockReturnValue([{ id: d1, taskInstanceId: taskId, dataPath: 'p' }] as any);
     getTaskSpy.mockImplementation((id: string) => {
       if (id !== taskId) return null;
       return {
@@ -134,9 +132,7 @@ describe('collectReferencedVarIdsForParentFlowWorkspace (internal haystack)', ()
   });
 
   it('does not resolve raw UI task fields without referenceScanInternalText', () => {
-    getAllVariablesSpy.mockReturnValue([
-      { id: d1, varName: 'nome', taskInstanceId: taskId, dataPath: 'p' },
-    ] as any);
+    getAllVariablesSpy.mockReturnValue([{ id: d1, taskInstanceId: taskId, dataPath: 'p' }] as any);
     getTaskSpy.mockImplementation((id: string) => {
       if (id !== taskId) return null;
       return {
@@ -184,8 +180,8 @@ describe('collectReferencedVarIdsForParentFlowWorkspace (internal haystack)', ()
 
   it('ignores condition script when executable/internal present', () => {
     getAllVariablesSpy.mockReturnValue([
-      { id: d1, varName: 'x', taskInstanceId: 't', dataPath: 'p' },
-      { id: d2, varName: 'eta', taskInstanceId: 't', dataPath: 'p' },
+      { id: d1, taskInstanceId: 't', dataPath: 'p' },
+      { id: d2, taskInstanceId: 't', dataPath: 'p' },
     ] as any);
     getTaskSpy.mockReturnValue(null);
     const refs = collectReferencedVarIdsForParentFlowWorkspace({
@@ -207,9 +203,7 @@ describe('collectReferencedVarIdsForParentFlowWorkspace (internal haystack)', ()
   });
 
   it('finds varId from task referenceScanInternalText for API-shaped payload', () => {
-    getAllVariablesSpy.mockReturnValue([
-      { id: d1, varName: 'nome', taskInstanceId: taskId, dataPath: 'p' },
-    ] as any);
+    getAllVariablesSpy.mockReturnValue([{ id: d1, taskInstanceId: taskId, dataPath: 'p' }] as any);
     getTaskSpy.mockImplementation((id: string) => {
       if (id !== taskId) return null;
       return {
@@ -231,9 +225,7 @@ describe('collectReferencedVarIdsForParentFlowWorkspace (internal haystack)', ()
   });
 
   it('finds varId in serialized flow A JSON (e.g. meta / bindings)', () => {
-    getAllVariablesSpy.mockReturnValue([
-      { id: d1, varName: 'x', taskInstanceId: taskId, dataPath: 'p' },
-    ] as any);
+    getAllVariablesSpy.mockReturnValue([{ id: d1, taskInstanceId: taskId, dataPath: 'p' }] as any);
     getTaskSpy.mockReturnValue(null);
 
     const refs = collectReferencedVarIdsForParentFlowWorkspace({
@@ -252,9 +244,7 @@ describe('collectReferencedVarIdsForParentFlowWorkspace (internal haystack)', ()
   });
 
   it('isVariableReferencedInFlow matches collectReferencedVarIdsForParentFlowWorkspace', () => {
-    getAllVariablesSpy.mockReturnValue([
-      { id: d1, varName: 'x', taskInstanceId: taskId, dataPath: 'p' },
-    ] as any);
+    getAllVariablesSpy.mockReturnValue([{ id: d1, taskInstanceId: taskId, dataPath: 'p' }] as any);
     getTaskSpy.mockReturnValue(null);
 
     const params = {

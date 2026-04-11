@@ -3,12 +3,22 @@
  * Subflow wiring uses policy S2 (`subflowBindings` on the Subflow task); no proxy sync here.
  */
 
-import { createMappingEntry, type MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
-import { localLabelForSubflowTaskVariable } from '@domain/variableProxyNaming';
+import { uniqueWireKeyFromLabel } from '@components/FlowMappingPanel/flowInterfaceDragTypes';
+import {
+  createFlowInterfaceMappingEntry,
+  createMappingEntry,
+  type MappingEntry,
+} from '@components/FlowMappingPanel/mappingTypes';
+import type { VarId } from '@domain/guidModel/types';
+import { labelKey } from '@domain/guidModel/labelKey';
+import { childRequiredVariablesFromReferencedTaskVariablesAndTaskVariables } from '@domain/taskMove/ChildRequiredVariables';
+import { interfaceInputVarsFromChildRequiredVariables } from '@domain/taskMove/InterfaceInputVars';
+import { movedTaskReferenceCorpus } from '@domain/taskMove/movedTaskCorpus';
+import { referencedTaskVariablesFromMovedCorpus } from '@domain/taskMove/ReferencedTaskVariables';
+import { taskVariablesFromTaskVariableRows } from '@domain/taskMove/TaskVariables';
 import type { WorkspaceState } from '@flows/FlowTypes';
 import { stripLegacyVariablesFromFlowMeta } from '../../flows/flowMetaSanitize';
 import type { VariableInstance } from '@types/variableTypes';
-import { TaskType } from '@types/taskTypes';
 import { invalidateChildFlowInterfaceCache } from '@services/childFlowInterfaceService';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
@@ -16,6 +26,7 @@ import { getVariableLabel } from '@utils/getVariableLabel';
 import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
 import { isUuidString, makeTranslationKey } from '@utils/translationKeys';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logS2Diag } from '@utils/s2WiringDiagnostic';
 import type { NodeRowData } from '@types/project';
 
 import {
@@ -28,6 +39,10 @@ import { appendRowToFlowNode, moveTaskRowBetweenFlows, removeRowByIdFromFlow } f
 import { restoreChildTaskBoundVariablesToLocalNames } from './subflowVariableProxyRestore';
 import { autoFillSubflowBindingsForMovedTask } from './autoFillSubflowBindings';
 import { autoRenameParentVariablesForMovedTask } from './autoRenameParentVariables';
+import {
+  inferTaskVariableInstancesForSubflowInterfaceMerge,
+  mergeVariableRowsByIdPreferStore,
+} from './inferTaskVariableInstancesForSubflowMerge';
 
 export type ApplyTaskMoveToSubflowParams = {
   projectId: string;
@@ -48,9 +63,9 @@ export type ApplyTaskMoveToSubflowParams = {
    */
   projectData?: unknown;
   /**
-   * When true, removes in-memory VariableInstance rows for moved-task varIds that are not
-   * referenced in the parent corpus. Unsafe if the task template still needs those rows for
-   * authoring; default false. Prefer leaving rows and relying on flow-scoped visibility.
+   * When not `false`, removes in-memory VariableInstance rows for moved-task varIds that are not
+   * referenced in the parent corpus (linked subflow move). Set to `false` to keep orphan rows
+   * (e.g. tooling). Default: prune unreferenced for linked moves.
    */
   deleteUnreferencedTaskVariableRows?: boolean;
   /** Optional: move the row in the graph after variable + interface updates. */
@@ -88,8 +103,9 @@ export type ApplyTaskMoveToSubflowParams = {
    */
   secondPass?: boolean;
   /**
-   * When true, merges every task variable into child output (ignore parent reference scan filter).
-   * When false and the scan finds no referenced varIds, still merges all task variables (fallback).
+   * When true (e.g. resync): legacy S2 — merge child `flowInterface.output` for all task variables,
+   * no prune of unreferenced rows, parent rename for all task vars. Default false: referenced-only
+   * policy for interface, bindings, rename, and prune.
    */
   exposeAllTaskVariablesInChildInterface?: boolean;
 };
@@ -110,11 +126,11 @@ export type ApplyTaskMoveToSubflowResult = {
   /** Task varIds not found in the parent reference corpus (no parent-side binding required for move logic). */
   unreferencedVarIdsForMovedTask: string[];
   /**
-   * GUID-stable child varIds referenced in the parent (authoring); parent-facing tokens use S2 `subflowBindings`.
+   * GUID-stable variable ids wired parent↔child for this move (referenced task vars, or all when `exposeAll`).
    */
   guidMappingParentSubflow: Array<{ id: string }>;
   renamed: Array<{ id: string; previousName: string; nextName: string }>;
-  /** Parent variable renames (`prefix.leaf`) after move when leaf labels matched the child interface. */
+  /** Parent variable renames (`prefix.leaf`) for referenced task vars (or all when `exposeAllTaskVariablesInChildInterface`). */
   parentAutoRenames: Array<{ id: string; previousName: string; nextName: string }>;
   /** Count of rows removed when deleteUnreferencedTaskVariableRows was true. */
   removedUnreferencedVariableRows: number;
@@ -127,8 +143,9 @@ export type ApplyTaskMoveToSubflowResult = {
 
 /**
  * Merges MappingEntry rows into the child flow's interface output for each task variable (stable GUID).
- * When `onlyVarIds` is set, only those varIds are exposed on the child interface (parent wiring is via `subflowBindings`).
- * Uses local labels only for child interface (no parent FQ in paths). `variableRefId` stays the child slot GUID.
+ * When `onlyVarIds` is omitted, all `variables` are exposed. When set, only ids in the set are exposed;
+ * an **empty** set means explicitly no outputs (referenced scan found none).
+ * Uses local labels only for child interface (no parent FQ in paths). `variableRefId` stays the stable GUID.
  */
 export function mergeChildFlowInterfaceOutputsForVariables(
   flows: WorkspaceState['flows'],
@@ -137,15 +154,22 @@ export function mergeChildFlowInterfaceOutputsForVariables(
   options?: { onlyVarIds?: ReadonlySet<string>; projectId?: string }
 ): WorkspaceState['flows'] {
   const flow = flows[childFlowId];
-  if (!flow) return flows;
+  if (!flow) {
+    logS2Diag('mergeChildInterfaceOutput', 'SKIP: child flow slice mancante in flows', { childFlowId });
+    return flows;
+  }
+  if (variables.length === 0) {
+    logS2Diag('mergeChildInterfaceOutput', 'WARNING: variables[] vuoto — nessuna riga OUTPUT aggiunta', {
+      childFlowId,
+    });
+  }
   const only = options?.onlyVarIds;
-  /** Empty set from parent scan: expose all task variables (scan may miss GUID substrings). */
   const vars =
     only === undefined
       ? variables
       : only.size > 0
         ? variables.filter((v) => only.has(String(v.id || '').trim()))
-        : variables;
+        : [];
   const meta = { ...(flow.meta || {}) } as {
     flowInterface?: { input?: unknown[]; output?: unknown[] };
     translations?: Record<string, string>;
@@ -159,16 +183,20 @@ export function mergeChildFlowInterfaceOutputsForVariables(
     prev.map((e) => String((e as { variableRefId?: string }).variableRefId || '').trim()).filter(Boolean)
   );
 
+  /** Domain merge: use merged project registry so labels resolve during automated moves (tests + save pipeline). */
+  const trTable = getProjectTranslationsTable();
   for (const v of vars) {
     const vid = String(v.id || '').trim();
     if (!vid || seen.has(vid)) continue;
-    let rawName = String(v.varName || '').trim();
-    if (!rawName) {
-      rawName = getVariableLabel(vid, getProjectTranslationsTable());
-    }
-    if (!rawName) rawName = vid;
-    const local = localLabelForSubflowTaskVariable(rawName);
-    const label = local || rawName;
+    const labelText = getVariableLabel(vid, trTable);
+    const wireKey = uniqueWireKeyFromLabel(
+      labelText,
+      prev.map((row) => {
+        const r = row as { id?: string; wireKey?: string };
+        return { id: String(r.id || ''), wireKey: String(r.wireKey || '') };
+      }),
+      ''
+    );
     let labelKey: string | undefined;
     try {
       if (isUuidString(vid)) {
@@ -178,23 +206,20 @@ export function mergeChildFlowInterfaceOutputsForVariables(
       labelKey = undefined;
     }
     prev.push(
-      createMappingEntry({
-        internalPath: label,
-        externalName: label,
+      createFlowInterfaceMappingEntry({
         variableRefId: vid,
-        linkedVariable: label,
+        wireKey,
         ...(labelKey ? { labelKey } : {}),
       })
     );
     if (labelKey) {
-      tr[labelKey] = label;
+      tr[labelKey] = labelText;
     }
     seen.add(vid);
     logTaskSubflowMove('merge:interfaceOutputRow', {
       childFlowId,
       variableRefId: vid,
-      resolvedLabel: label,
-      rawNameSource: rawName,
+      resolvedLabel: labelText,
       onlyVarIdsMode: only !== undefined,
     });
   }
@@ -215,74 +240,71 @@ export function mergeChildFlowInterfaceOutputsForVariables(
 }
 
 /**
- * Populates child `flowInterface.input` from the parent Subflow portal task's `subflowBindings` (S2),
- * so the child flow document lists expected parameters without deducing from the canvas.
+ * Populates child `flowInterface.input` from {@link InterfaceInputVars} (GUID-centric):
+ * external VarIds cited by the moved task corpus that are not TaskVariables — not from `subflowBindings`
+ * (those describe parent↔child output wiring, not semantic inputs).
  */
-function mergeChildFlowInterfaceInputsFromSubflowPortal(
+function mergeChildFlowInterfaceInputsFromInterfaceInputVars(
   flows: WorkspaceState['flows'],
   projectId: string,
   childFlowId: string,
-  subflowTaskId: string
+  interfaceInputVars: readonly VarId[]
 ): WorkspaceState['flows'] {
   const pid = String(projectId || '').trim();
   const cid = String(childFlowId || '').trim();
-  const sid = String(subflowTaskId || '').trim();
-  if (!pid || !cid || !sid) return flows;
-
-  const portal = taskRepository.getTask(sid);
-  const bindings = portal?.subflowBindings;
-  if (!portal || portal.type !== TaskType.Subflow || !Array.isArray(bindings) || bindings.length === 0) {
-    return flows;
-  }
+  if (!pid || !cid) return flows;
 
   const flow = flows[cid];
-  if (!flow) return flows;
+  if (!flow) {
+    logS2Diag('mergeChildInterfaceInput', 'SKIP: child flow slice mancante', { childFlowId: cid });
+    return flows;
+  }
 
   const meta = { ...(flow.meta || {}) } as {
     flowInterface?: { input?: unknown[]; output?: unknown[] };
     translations?: Record<string, string>;
   };
   const fi = { ...(meta.flowInterface || {}) };
-  const prevIn: unknown[] = Array.isArray(fi.input) ? [...fi.input] : [];
-  const seen = new Set(
-    prevIn.map((e) => String((e as { variableRefId?: string }).variableRefId || '').trim()).filter(Boolean)
-  );
+  const prevOut = Array.isArray(fi.output) ? [...fi.output] : [];
   const tr: Record<string, string> = {
     ...(typeof meta.translations === 'object' && meta.translations ? meta.translations : {}),
   };
+  const prevIn: unknown[] = [];
+  const seen = new Set<string>();
+  const trTable = getProjectTranslationsTable();
 
-  for (const b of bindings) {
-    const iid = String(b?.interfaceParameterId || '').trim();
-    if (!iid || seen.has(iid)) continue;
+  for (const vidRaw of interfaceInputVars) {
+    const vid = String(vidRaw || '').trim();
+    if (!vid || seen.has(vid)) continue;
+    seen.add(vid);
 
-    let rawName = String(
-      variableCreationService.getAllVariables(pid).find((v) => String(v.id) === iid)?.varName || ''
-    ).trim();
-    if (!rawName) rawName = getVariableLabel(iid, getProjectTranslationsTable());
-    if (!rawName) rawName = iid;
-    const local = localLabelForSubflowTaskVariable(rawName);
-    const label = local || rawName;
-    let labelKey: string | undefined;
+    const labelText = getVariableLabel(vid, trTable);
+    const wireKey = uniqueWireKeyFromLabel(
+      labelText,
+      prevIn.map((row) => {
+        const r = row as { id?: string; wireKey?: string };
+        return { id: String(r.id || ''), wireKey: String(r.wireKey || '') };
+      }),
+      ''
+    );
+    let labelKeyStr: string | undefined;
     try {
-      if (isUuidString(iid)) {
-        labelKey = makeTranslationKey('interface', iid);
+      if (isUuidString(vid)) {
+        labelKeyStr = labelKey(vid as VarId);
       }
     } catch {
-      labelKey = undefined;
+      labelKeyStr = undefined;
     }
     prevIn.push(
-      createMappingEntry({
-        internalPath: label,
-        externalName: label,
-        variableRefId: iid,
-        linkedVariable: label,
-        ...(labelKey ? { labelKey } : {}),
+      createFlowInterfaceMappingEntry({
+        variableRefId: vid,
+        wireKey,
+        ...(labelKeyStr ? { labelKey: labelKeyStr } : {}),
       })
     );
-    if (labelKey) {
-      tr[labelKey] = label;
+    if (labelKeyStr) {
+      tr[labelKeyStr] = labelText;
     }
-    seen.add(iid);
   }
 
   const nextFlow = {
@@ -292,7 +314,7 @@ function mergeChildFlowInterfaceInputsFromSubflowPortal(
       translations: tr,
       flowInterface: {
         input: prevIn,
-        output: Array.isArray(fi.output) ? fi.output : [],
+        output: prevOut,
       },
     }) as (typeof flow)['meta'],
     hasLocalChanges: true,
@@ -301,9 +323,10 @@ function mergeChildFlowInterfaceInputsFromSubflowPortal(
 }
 
 /**
- * Pipeline (GUID-centric): optional structural move/append onto child flow →
- * VariableCreationService.hydrateVariablesFromFlow (utterance + task rows on canvas) →
- * parent reference scan (CASO A/B) → child interface merge + bindings (linked subflow only) → materialize.
+ * Pipeline: optional structural move/append → hydrate → S2 variable set (store ∪ infer) →
+ * reference scan → prune unreferenced (linked, default) → child interface OUTPUT (referenced-only) +
+ * child interface INPUT from {@link InterfaceInputVars} (external refs in moved task corpus, not subflowBindings) +
+ * subflowBindings + parent `prefix.leaf` rename → materialize.
  */
 export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): ApplyTaskMoveToSubflowResult {
   const {
@@ -327,14 +350,20 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     exposeAllTaskVariablesInChildInterface,
   } = params;
 
-  const exposeAll = !!exposeAllTaskVariablesInChildInterface;
-
   const linkedSubflow = isLinkedSubflowMove !== false;
-  const shouldDeleteUnreferenced = deleteUnreferencedTaskVariableRows !== false;
+  const exposeAll = exposeAllTaskVariablesInChildInterface === true;
+  /** Linked move: drop unreferenced task variable rows unless legacy `exposeAll` or explicit opt-out. */
+  const allowDeleteUnreferenced =
+    !exposeAll && deleteUnreferencedTaskVariableRows !== false;
 
   const pid = String(projectId || '').trim();
   const parentFlow = flows[parentFlowId];
   if (!pid || !parentFlow) {
+    logS2Diag('applyTaskMoveToSubflow', 'ABORT missing project or parent flow', {
+      projectId: pid || '(empty)',
+      parentFlowId,
+      hasParentFlow: !!parentFlow,
+    });
     logTaskSubflowMove('apply:abort', {
       reason: 'missing_project_or_parent_flow',
       projectId: pid || '(empty)',
@@ -379,13 +408,34 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     subflowDisplayTitle,
     parentSubflowTaskRowId,
     linkedSubflow,
-    shouldDeleteUnreferenced,
+    exposeAll,
+    allowDeleteUnreferenced,
     skipMaterialization: !!skipMaterialization,
     skipStructuralPhase: !!skipStructuralPhase,
     secondPass: !!secondPass,
     hasStructuralMove: !!structuralMove,
     hasStructuralAppend: !!structuralAppend,
     extraCorpusChunksCount: extraCorpusChunks.length,
+  });
+  logS2Diag('applyTaskMoveToSubflow', 'enter', {
+    projectId: pid,
+    parentFlowId,
+    childFlowId,
+    taskInstanceId,
+    parentSubflowTaskRowId: String(parentSubflowTaskRowId || '').trim() || '(EMPTY — binding/rename saltati)',
+    linkedSubflow,
+    exposeAll,
+    skipStructuralPhase: !!skipStructuralPhase,
+    skipMaterialization: !!skipMaterialization,
+    secondPass: !!secondPass,
+    structuralMove: structuralMove ?? null,
+    structuralAppend: structuralAppend
+      ? {
+          targetFlowId: structuralAppend.targetFlowId,
+          targetNodeId: structuralAppend.targetNodeId,
+          rowId: (structuralAppend.row as { id?: string })?.id,
+        }
+      : null,
   });
 
   let flowsWorking: WorkspaceState['flows'] = flows;
@@ -433,16 +483,46 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     projectVariableCount: allVars.length,
     rows: taskVars.map((v) => ({
       id: v.id,
-      varName: v.varName,
       scopeFlowId: v.scopeFlowId,
       taskInstanceId: v.taskInstanceId,
     })),
   });
 
-  if (secondPass && taskVars.length > 0) {
+  /** S2 full set: store ∪ inference (deterministic); store wins on id collision. */
+  const inferredForS2 = linkedSubflow
+    ? inferTaskVariableInstancesForSubflowInterfaceMerge(taskInstanceId, childFlowId, flowsWorking)
+    : [];
+  let taskVarsForS2Merge = mergeVariableRowsByIdPreferStore(taskVars, inferredForS2);
+  if (linkedSubflow && inferredForS2.length > 0 && taskVars.length < taskVarsForS2Merge.length) {
+    logTaskSubflowMove('apply:mergedInferWithStoreForS2', {
+      taskInstanceId,
+      storeCount: taskVars.length,
+      inferredCount: inferredForS2.length,
+      mergedCount: taskVarsForS2Merge.length,
+    });
+  }
+  if (linkedSubflow && taskVarsForS2Merge.length > 0) {
+    variableCreationService.replaceTaskVariableRowsForInstance(pid, taskInstanceId, taskVarsForS2Merge, flowsWorking);
+    taskVarsForS2Merge = variableCreationService.getVariablesByTaskInstanceId(pid, taskInstanceId);
+  }
+  logS2Diag('applyTaskMoveToSubflow', 'after S2 variable set (store ∪ infer, replace)', {
+    inferredCount: inferredForS2.length,
+    mergedCount: taskVarsForS2Merge.length,
+    s2VarIdsSample: taskVarsForS2Merge.slice(0, 8).map((v) => v.id),
+    childFlowSliceExists: !!flowsWorking[childFlowId],
+  });
+  if (linkedSubflow && taskVarsForS2Merge.length === 0) {
+    logS2Diag(
+      'applyTaskMoveToSubflow',
+      'WARNING: zero task variables for S2 — interfaccia OUTPUT sarà vuota; verifica tipo task (utterance/classify) o hydrate',
+      { taskInstanceId, childFlowId }
+    );
+  }
+
+  if (secondPass && taskVarsForS2Merge.length > 0) {
     logTaskSubflowMove('apply:secondPass:enter', {
       taskInstanceId,
-      taskVarCount: taskVars.length,
+      taskVarCount: taskVarsForS2Merge.length,
       childFlowId,
     });
   }
@@ -458,9 +538,10 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     extraCorpusChunks,
   });
 
-  const taskVarIdSet = new Set(taskVars.map((v) => String(v.id || '').trim()));
+  const taskVarIdSet = new Set(taskVarsForS2Merge.map((v) => String(v.id || '').trim()));
   const referencedForMovedTask = [...referencedInParent].filter((id) => taskVarIdSet.has(id));
   const refSet = new Set(referencedForMovedTask);
+  const referencedVarIdsSorted = [...referencedForMovedTask].sort();
   const unreferencedForMovedTask = [...taskVarIdSet].filter((id) => !refSet.has(id));
 
   logTaskSubflowMove('apply:referenceScan', {
@@ -472,7 +553,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
   });
 
   let removedUnreferencedVariableRows = 0;
-  if (shouldDeleteUnreferenced && unreferencedForMovedTask.length > 0) {
+  if (allowDeleteUnreferenced && unreferencedForMovedTask.length > 0) {
     removedUnreferencedVariableRows = variableCreationService.removeTaskVariableRowsForIds(
       pid,
       taskInstanceId,
@@ -484,13 +565,14 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     });
   }
 
-  const renamed = restoreChildTaskBoundVariablesToLocalNames(pid, taskInstanceId, refSet).map((r) => ({
+  const renamed = restoreChildTaskBoundVariablesToLocalNames(pid, taskInstanceId, taskVarIdSet).map((r) => ({
     id: r.id,
     previousName: r.previousName,
     nextName: r.nextName,
   }));
 
-  const taskVarsAfterLocal = variableCreationService.getVariablesByTaskInstanceId(pid, taskInstanceId);
+  const s2TaskVarIds = taskVarsForS2Merge.map((v) => String(v.id || '').trim()).filter(Boolean).sort();
+  const wiringVarIds = exposeAll ? s2TaskVarIds : referencedVarIdsSorted;
 
   if (renamed.length > 0) {
     logTaskSubflowMove('apply:childLocalRenames', { renamed });
@@ -501,14 +583,8 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
   let parentAutoRenames: ApplyTaskMoveToSubflowResult['parentAutoRenames'] = [];
 
   if (linkedSubflow) {
-    const mergeOnlyVarIds: ReadonlySet<string> | undefined = exposeAll
-      ? undefined
-      : refSet.size > 0
-        ? refSet
-        : undefined;
-
-    flowsNext = mergeChildFlowInterfaceOutputsForVariables(flowsNext, childFlowId, taskVarsAfterLocal, {
-      onlyVarIds: mergeOnlyVarIds,
+    flowsNext = mergeChildFlowInterfaceOutputsForVariables(flowsNext, childFlowId, taskVarsForS2Merge, {
+      onlyVarIds: exposeAll ? undefined : refSet,
       projectId: pid,
     });
 
@@ -519,14 +595,19 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       ? (outSlice!.flowInterface!.output as any[])
       : [];
 
+    const mergeFilterLabel = exposeAll ? 'all_task_variables_s2_legacy' : 'referenced_in_parent';
+
     if (secondPass) {
       logTaskSubflowMove('apply:secondPass:mergeChildInterface', {
         exposedOutputCount: outputs.length,
         variableRefIdsInOutput: outputs
           .map((o: { variableRefId?: string }) => String(o?.variableRefId || '').trim())
           .filter(Boolean),
-        mergeFilter: exposeAll ? 'all' : mergeOnlyVarIds ? [...mergeOnlyVarIds] : 'all_fallback',
-        referencedInParentScan: [...refSet],
+        mergeFilter: mergeFilterLabel,
+        referencedInParentScanDiagnostic: [...refSet],
+        s2TaskVarIds,
+        wiringVarIds,
+        exposeAll,
       });
     } else {
       logTaskSubflowMove('apply:mergeChildInterface', {
@@ -534,12 +615,22 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
         variableRefIdsInOutput: outputs
           .map((o: { variableRefId?: string }) => String(o?.variableRefId || '').trim())
           .filter(Boolean),
-        mergeFilter: exposeAll ? 'all' : mergeOnlyVarIds ? [...mergeOnlyVarIds] : 'all_fallback',
-        referencedInParentScan: [...refSet],
+        mergeFilter: mergeFilterLabel,
+        referencedInParentScanDiagnostic: [...refSet],
+        s2TaskVarIds,
+        wiringVarIds,
+        exposeAll,
       });
     }
 
     const portalRowId = String(parentSubflowTaskRowId || '').trim();
+    if (!portalRowId) {
+      logS2Diag(
+        'applyTaskMoveToSubflow',
+        'WARNING: parentSubflowTaskRowId vuoto — skip autoFill subflowBindings e merge INPUT da portale',
+        { parentFlowId, childFlowId, taskInstanceId }
+      );
+    }
     if (portalRowId) {
       const ok = autoFillSubflowBindingsForMovedTask({
         projectId: pid,
@@ -547,15 +638,54 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
         parentFlow: flowsNext[parentFlowId],
         childFlow: flowsNext[childFlowId],
         subflowTaskId: portalRowId,
-        referencedVarIds: referencedForMovedTask,
+        taskVariableIds: wiringVarIds,
       });
       logTaskSubflowMove('apply:autoFillSubflowBindings', {
         parentSubflowTaskRowId: portalRowId,
         ok,
-        bindingCount: referencedForMovedTask.length,
+        bindingCount: wiringVarIds.length,
+      });
+      logS2Diag('applyTaskMoveToSubflow', 'autoFillSubflowBindings result', {
+        portalRowId,
+        ok,
+        taskVariableIdsCount: wiringVarIds.length,
       });
 
-      flowsNext = mergeChildFlowInterfaceInputsFromSubflowPortal(flowsNext, pid, childFlowId, portalRowId);
+      const knownProjectVarIds = new Set(allVars.map((v) => String(v.id || '').trim()).filter(Boolean));
+      const taskVariables = taskVariablesFromTaskVariableRows(taskVarsForS2Merge);
+      const movedCorpus = movedTaskReferenceCorpus(taskInstanceId);
+      const referencedTaskVariables = referencedTaskVariablesFromMovedCorpus(movedCorpus, knownProjectVarIds);
+      const childRequiredVariables = childRequiredVariablesFromReferencedTaskVariablesAndTaskVariables(
+        referencedTaskVariables,
+        taskVariables
+      );
+      const stableOrderVarIds = (ids: Iterable<VarId>): VarId[] =>
+        [...ids].map((x) => String(x)).sort() as VarId[];
+      const interfaceInputVars = interfaceInputVarsFromChildRequiredVariables(
+        childRequiredVariables,
+        stableOrderVarIds
+      );
+
+      logTaskSubflowMove('apply:interfaceInputVarsDomain', {
+        childRequiredCount: childRequiredVariables.size,
+        interfaceInputVarIds: [...interfaceInputVars],
+      });
+
+      flowsNext = mergeChildFlowInterfaceInputsFromInterfaceInputVars(
+        flowsNext,
+        pid,
+        childFlowId,
+        interfaceInputVars
+      );
+      const inSlice = flowsNext[childFlowId]?.meta as { flowInterface?: { input?: unknown[] } } | undefined;
+      const inputLen = Array.isArray(inSlice?.flowInterface?.input) ? inSlice!.flowInterface!.input.length : 0;
+      logS2Diag('applyTaskMoveToSubflow', 'child flowInterface dopo merge OUTPUT+INPUT', {
+        childFlowId,
+        outputRows:
+          (flowsNext[childFlowId]?.meta as { flowInterface?: { output?: unknown[] } } | undefined)?.flowInterface
+            ?.output?.length ?? 0,
+        inputRows: inputLen,
+      });
     }
 
     const ar = autoRenameParentVariablesForMovedTask({
@@ -564,10 +694,16 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       parentFlow: flowsNext[parentFlowId],
       childFlow: flowsNext[childFlowId],
       subflowDisplayTitle,
-      referencedVarIds: referencedForMovedTask,
+      taskVariableIds: wiringVarIds,
+      flows: flowsNext,
     });
+    flowsNext = ar.flowsNext;
     parentAutoRenames = ar.renamed;
     logTaskSubflowMove('apply:autoRenameParentVariables', { count: parentAutoRenames.length });
+    logS2Diag('applyTaskMoveToSubflow', 'parent auto-rename (prefix.leaf)', {
+      count: parentAutoRenames.length,
+      renames: parentAutoRenames.map((r) => ({ id: r.id, prev: r.previousName, next: r.nextName })),
+    });
 
     logTaskSubflowMove('apply:subflowS2Bindings', {
       parentSubflowTaskRowId,
@@ -577,9 +713,13 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     invalidateChildFlowInterfaceCache(pid, childFlowId);
   } else {
     logTaskSubflowMove('apply:skipSubflowWiring', { reason: 'isLinkedSubflowMove false' });
+    logS2Diag('applyTaskMoveToSubflow', 'SKIP wiring S2 (isLinkedSubflowMove false) — niente merge interfaccia/binding/rename', {
+      taskInstanceId,
+      childFlowId,
+    });
   }
 
-  const guidMappingParentSubflow = referencedForMovedTask.map((id) => ({ id }));
+  const guidMappingParentSubflow = wiringVarIds.map((id) => ({ id }));
 
   let taskMaterialization: MaterializeMovedTaskSummary;
   if (skipMaterialization) {
@@ -619,6 +759,16 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       repositoryPatchApplied: mat.repositoryPatchApplied,
       errorMessage: mat.errorMessage,
     });
+    if (mat.errorMessage || !mat.ok) {
+      logS2Diag('applyTaskMoveToSubflow', 'materialize FAILED o parziale — riga su child/parent o TaskRepository', {
+        ok: mat.ok,
+        errorMessage: mat.errorMessage ?? null,
+        childFlowContainsRow: mat.childFlowContainsRow,
+        parentFlowContainsRowAfter: mat.parentFlowContainsRowAfter,
+        repositoryPatchApplied: mat.repositoryPatchApplied,
+        taskFoundInRepository: mat.taskFoundInRepository,
+      });
+    }
   }
 
   logTaskSubflowMove('apply:done', {
@@ -630,6 +780,15 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     secondPassDisplayLabelUpdates,
     removedUnreferencedVariableRows,
     taskMaterializationOk: taskMaterialization.ok,
+  });
+  logS2Diag('applyTaskMoveToSubflow', 'done (riepilogo)', {
+    taskInstanceId,
+    childFlowId,
+    parentFlowId,
+    s2OutputVarCount: s2TaskVarIds.length,
+    parentAutoRenames: parentAutoRenames.length,
+    materializeOk: taskMaterialization.ok,
+    materializeError: taskMaterialization.errorMessage ?? null,
   });
 
   return {

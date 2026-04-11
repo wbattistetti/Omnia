@@ -3,7 +3,7 @@
  * rinomina con matita al hover e conferma ✓/✗. Modalità dock: colonna flex (FlowCanvasHost).
  */
 
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Brackets,
   Check,
@@ -32,6 +32,9 @@ import {
 import { variableCreationService } from '../../services/VariableCreationService';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
+import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
+import { flowWorkspaceMetaTranslationsFingerprint } from '../../utils/compileWorkspaceTranslations';
+import { getFlowMetaTranslationsFlattened } from '../../utils/activeFlowTranslations';
 import { resolveVariableStoreProjectId } from '../../utils/safeProjectId';
 import { getVariableLabel } from '../../utils/getVariableLabel';
 import { makeTranslationKey } from '../../utils/translationKeys';
@@ -79,10 +82,9 @@ function DropPreviewLine({ indentPx = 0 }: { indentPx?: number }) {
 }
 
 function instanceToDef(v: VariableInstance, translations: Record<string, string>): FlowVariableDefinition {
-  const devFb = import.meta.env.DEV ? String(v.varName || '').trim() : undefined;
   return {
     id: v.id,
-    label: getVariableLabel(v.id, translations, devFb),
+    label: getVariableLabel(v.id, translations),
     type: 'string',
     visibility: 'internal',
   };
@@ -105,20 +107,19 @@ function DataTreeVariableRow({
   onRefresh: () => void;
 }) {
   const taskBound = String(instance.taskInstanceId ?? '').trim().length > 0;
-  const devFb = import.meta.env.DEV ? String(instance.varName || '').trim() : undefined;
-  const fullLabel = getVariableLabel(instance.id, translations, devFb);
+  const fullLabel = getVariableLabel(instance.id, translations);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(fullLabel);
 
   React.useEffect(() => {
-    setDraft(getVariableLabel(instance.id, translations, devFb));
-  }, [instance.id, translations, devFb]);
+    setDraft(getVariableLabel(instance.id, translations));
+  }, [instance.id, translations]);
 
   const commit = useCallback(() => {
     if (taskBound) return;
     const t = draft.trim();
-    const current = getVariableLabel(instance.id, translations, devFb);
+    const current = getVariableLabel(instance.id, translations);
     if (!t || t === current) {
       setDraft(current);
       setEditing(false);
@@ -126,20 +127,20 @@ function DataTreeVariableRow({
     }
     const ok = variableCreationService.renameVariableById(projectId, instance.id, t);
     if (ok) {
-      addTranslation(makeTranslationKey('variable', instance.id), t);
+      addTranslation(makeTranslationKey('var', instance.id), t);
       onRefresh();
     } else {
       setDraft(current);
     }
     setEditing(false);
-  }, [draft, instance.id, translations, devFb, projectId, taskBound, addTranslation, onRefresh]);
+  }, [draft, instance.id, translations, projectId, taskBound, addTranslation, onRefresh]);
 
   const cancel = useCallback(() => {
-    setDraft(getVariableLabel(instance.id, translations, devFb));
+    setDraft(getVariableLabel(instance.id, translations));
     setEditing(false);
-  }, [instance.id, translations, devFb]);
+  }, [instance.id, translations]);
 
-  const displayForDrag = getVariableLabel(instance.id, translations, devFb);
+  const displayForDrag = getVariableLabel(instance.id, translations);
 
   return (
     <div
@@ -154,7 +155,7 @@ function DataTreeVariableRow({
             DND_FLOWROW_VAR,
             JSON.stringify({
               variableRefId: instance.id,
-              suggestedInternalPath: stableInterfacePathForVariable(instance.id),
+              suggestedWireKey: stableInterfacePathForVariable(instance.id),
               displayLabel: displayForDrag,
             })
           );
@@ -449,7 +450,16 @@ export function FlowVariablesRail({
   const ignoreNextClickRef = useRef(false);
   const { data: projectData } = useProjectData();
   const pdUpdate = useProjectDataUpdate();
-  const { translations, addTranslation } = useProjectTranslations();
+  const { addTranslation, flowTranslationRevision } = useProjectTranslations();
+  const flowMetaFp = useSyncExternalStore(
+    (onStoreChange) => FlowWorkspaceSnapshot.subscribe(onStoreChange),
+    flowWorkspaceMetaTranslationsFingerprint,
+    flowWorkspaceMetaTranslationsFingerprint
+  );
+  const translations = useMemo(
+    () => getFlowMetaTranslationsFlattened(flowId),
+    [flowId, flowMetaFp, flowTranslationRevision]
+  );
 
   const projectId = useMemo(() => {
     const fromProp = projectIdProp?.trim();
@@ -482,24 +492,19 @@ export function FlowVariablesRail({
 
   const flatPathKeys = useMemo(() => flattenFlowVariablePathKeysDfs(tree), [tree]);
 
-  const varNames = useMemo(
-    () => instances.map((v) => String(v.varName || '').trim()).filter(Boolean),
-    [instances]
-  );
-
   const insertVariableAt = useCallback(
     (pos: { targetPathKey: string; placement: FlowVarDropPlacement }) => {
       if (!projectId) return;
-      const name = computeNewFlowVariableVarName(varNames, pos);
+      const name = computeNewFlowVariableVarName(flatPathKeys, pos);
       const base = variableCreationService.createManualVariable(projectId, name, {
         scope: 'flow',
         scopeFlowId: flowId,
       });
-      const label = String(base.varName || '').trim();
-      if (label) addTranslation(makeTranslationKey('variable', base.id), label);
+      const label = name.trim();
+      if (label) addTranslation(makeTranslationKey('var', base.id), label);
       refresh();
     },
-    [projectId, flowId, varNames, addTranslation]
+    [projectId, flowId, flatPathKeys, addTranslation]
   );
 
   const appendAtEnd = useCallback(() => {
@@ -599,8 +604,7 @@ export function FlowVariablesRail({
             {orphans.map((row) => {
               const inst = byVarId.get(row.id);
               if (!inst) return null;
-              const devFb = import.meta.env.DEV ? String(inst.varName || '').trim() : undefined;
-              const orphanLabel = getVariableLabel(inst.id, translations, devFb);
+              const orphanLabel = getVariableLabel(inst.id, translations);
               return (
                 <DataTreeVariableRow
                   key={row.id}

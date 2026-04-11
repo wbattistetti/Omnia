@@ -2,14 +2,17 @@
  * S2: after a task move into a linked subflow, writes `subflowBindings` on the parent Subflow task.
  * Each row maps child interface output (`variableRefId` = child store key) to a parent variable id.
  * Never uses MappingEntry.id — only `variableRefId` from `childFlow.meta.flowInterface.output`.
+ *
+ * Bindings are generated for each id in `taskVariableIds` that has a matching child interface output row
+ * (callers pass referenced-only ids for normal linked moves, or the full S2 set for legacy `exposeAll`).
  */
 
 import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 import type { WorkspaceState } from '@flows/FlowTypes';
 import { taskRepository } from '@services/TaskRepository';
-import { variableCreationService } from '@services/VariableCreationService';
 import { TaskType } from '@types/taskTypes';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logS2Diag } from '@utils/s2WiringDiagnostic';
 
 export type FlowDoc = NonNullable<WorkspaceState['flows'][string]>;
 
@@ -22,8 +25,11 @@ export type AutoFillSubflowBindingsParams = {
   childFlow: FlowDoc | undefined;
   /** Canvas row id of `TaskType.Subflow` on the parent (portal task). */
   subflowTaskId: string;
-  /** Parent corpus still references these variable GUIDs (task vars kept on parent). */
-  referencedVarIds: readonly string[];
+  /**
+   * All variable GUIDs for the moved task (S2 deterministic set). Bindings are created for each id
+   * that exists in the project store and has a matching child interface output row.
+   */
+  taskVariableIds: readonly string[];
 };
 
 export type SubflowBindingRow = { interfaceParameterId: string; parentVariableId: string };
@@ -57,33 +63,30 @@ function dedupeBindings(rows: SubflowBindingRow[]): SubflowBindingRow[] {
 }
 
 /**
- * Returns whether `parentVarId` is present in the in-memory project variable store (authoring).
- */
-function parentVariableExistsInProject(projectId: string, parentVarId: string): boolean {
-  const pid = String(projectId || '').trim();
-  const vid = String(parentVarId || '').trim();
-  if (!pid || !vid) return false;
-  return (variableCreationService.getAllVariables(pid) ?? []).some(
-    (v) => String(v.id || '').trim() === vid
-  );
-}
-
-/**
- * For each referenced parent var, finds the child interface output whose `variableRefId` equals that id
+ * For each task variable id, finds the child interface output whose `variableRefId` equals that id
  * (same GUID after move when task variables are preserved). Builds S2 rows and merges into the Subflow task.
  */
 export function autoFillSubflowBindingsForMovedTask(params: AutoFillSubflowBindingsParams): boolean {
   const pid = String(params.projectId || '').trim();
   const sid = String(params.subflowTaskId || '').trim();
   const parentFlowId = String(params.parentFlowId || '').trim();
-  if (!pid || !sid || !parentFlowId) return false;
+  if (!pid || !sid || !parentFlowId) {
+    logS2Diag('autoFillSubflowBindings', 'ABORT pid/sid/parentFlowId mancante', { pid, sid, parentFlowId });
+    return false;
+  }
 
   const task = taskRepository.getTask(sid);
-  if (!task || task.type !== TaskType.Subflow) return false;
+  if (!task || task.type !== TaskType.Subflow) {
+    logS2Diag('autoFillSubflowBindings', 'ABORT task Subflow non trovato o tipo errato', {
+      sid,
+      hasTask: !!task,
+      taskType: task?.type,
+    });
+    return false;
+  }
 
-  const refIds = params.referencedVarIds.map((x) => String(x || '').trim()).filter(Boolean);
-  const refSet = new Set(refIds);
-  if (refSet.size === 0) return true;
+  const taskVarIds = [...params.taskVariableIds].map((x) => String(x || '').trim()).filter(Boolean).sort();
+  const taskVarSet = new Set(taskVarIds);
 
   const childFlow = params.childFlow;
   const docParentId = String(params.parentFlow?.id || '').trim();
@@ -96,12 +99,7 @@ export function autoFillSubflowBindingsForMovedTask(params: AutoFillSubflowBindi
   const generated: SubflowBindingRow[] = [];
   const skipped: Array<{ parentVarId: string; reason: string }> = [];
 
-  for (const parentVarId of refSet) {
-    if (!parentVariableExistsInProject(pid, parentVarId)) {
-      skipped.push({ parentVarId, reason: 'parent_variable_not_in_project_store' });
-      continue;
-    }
-
+  for (const parentVarId of taskVarSet) {
     const entry = ifaceByVarRef.get(parentVarId);
     if (!entry) {
       skipped.push({ parentVarId, reason: 'no_child_interface_output_with_variableRefId' });
@@ -123,20 +121,29 @@ export function autoFillSubflowBindingsForMovedTask(params: AutoFillSubflowBindi
   if (skipped.length > 0) {
     logTaskSubflowMove('autoFill:skipped', { skipped, parentFlowId, childFlowId: String(childFlow?.id || '').trim() });
   }
+  logS2Diag('autoFillSubflowBindings', 'riepilogo', {
+    parentFlowId,
+    childFlowId: String(childFlow?.id || '').trim(),
+    taskVarIdsRequested: taskVarIds.length,
+    generatedBindings: generated.length,
+    skippedCount: skipped.length,
+    skippedReasons: skipped.slice(0, 12),
+    childInterfaceOutputRows: ifaceByVarRef.size,
+  });
 
   const childParamSet = new Set(generated.map((g) => g.interfaceParameterId));
   const existing = Array.isArray(task.subflowBindings) ? [...task.subflowBindings] : [];
   const withoutRefreshed = existing.filter((b) => {
     const p = String(b?.parentVariableId || '').trim();
     const c = String(b?.interfaceParameterId || '').trim();
-    if (refSet.has(p)) return false;
+    if (taskVarSet.has(p)) return false;
     if (childParamSet.has(c)) return false;
     return true;
   });
 
   const next = dedupeBindings([...withoutRefreshed, ...generated]);
 
-  return taskRepository.updateTask(
+  const updated = taskRepository.updateTask(
     sid,
     {
       subflowBindingsSchemaVersion: 1,
@@ -145,4 +152,10 @@ export function autoFillSubflowBindingsForMovedTask(params: AutoFillSubflowBindi
     pid,
     { merge: true, skipSubflowInterfaceSync: true }
   );
+  logS2Diag('autoFillSubflowBindings', 'taskRepository.updateTask(subflowBindings)', {
+    sid,
+    ok: updated,
+    finalBindingRowCount: next.length,
+  });
+  return updated;
 }

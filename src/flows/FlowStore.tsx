@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useReducer } from 'react';
 import { takeWorkspaceRestoreForProjectOnce } from '../services/project-save/flowSaveSnapshot';
-import { shouldKeepLocalGraphOnEmptyServerResponse } from './flowLoadMergePolicy';
+import { mergeFlowMetaOnServerLoad, shouldKeepLocalGraphOnEmptyServerResponse } from './flowLoadMergePolicy';
 import { logFlowSaveDebug } from '../utils/flowSaveDebug';
 import { logFlowHydrationTrace } from '../utils/flowHydrationTrace';
 import { logTaskSubflowMove } from '../utils/taskSubflowMoveDebug';
@@ -78,7 +78,17 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
         (incMerged.nodes?.length ?? 0) > 0 || (incMerged.edges?.length ?? 0) > 0;
       const mergedForUpsert = { ...incMerged } as Flow<NodeT, EdgeT>;
       if (mergedForUpsert.meta !== undefined) {
-        mergedForUpsert.meta = stripLegacyVariablesFromFlowMeta(mergedForUpsert.meta);
+        const metaAfterMerge =
+          prev !== undefined
+            ? mergeFlowMetaOnServerLoad({
+                flowId: action.flow.id,
+                localMeta: prev.meta,
+                serverMeta: mergedForUpsert.meta,
+                hasLocalChanges:
+                  prev.hasLocalChanges === true ? true : mergedForUpsert.hasLocalChanges,
+              })
+            : mergedForUpsert.meta;
+        mergedForUpsert.meta = stripLegacyVariablesFromFlowMeta(metaAfterMerge);
       }
       const flow = {
         ...mergedForUpsert,
@@ -199,9 +209,12 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
       const nextNodes = keepLocalGraph ? (curr.nodes as any[]) : serverNodes;
       const nextEdges = keepLocalGraph ? (curr.edges as any[]) : serverEdges;
       const mergedMeta = stripLegacyVariablesFromFlowMeta(
-        p.meta !== undefined
-          ? { ...(curr.meta && typeof curr.meta === 'object' ? curr.meta : {}), ...p.meta }
-          : curr.meta
+        mergeFlowMetaOnServerLoad({
+          flowId: action.flowId,
+          localMeta: curr.meta,
+          serverMeta: p.meta,
+          hasLocalChanges: curr.hasLocalChanges,
+        })
       );
       const flow = {
         ...curr,

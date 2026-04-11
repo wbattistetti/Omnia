@@ -4,6 +4,8 @@
  *
  * If `loadFlow` returns an empty graph while the slice already has nodes and `hasLocalChanges`,
  * `FlowStore` APPLY_FLOW_LOAD_RESULT keeps local nodes/edges (see `flowLoadMergePolicy`).
+ * `mergeFlowMetaOnServerLoad` preserves richer local `meta.flowInterface` on load/upsert when the
+ * server document is stale or empty there (subflow id or `hasLocalChanges`).
  *
  * When the slice is not hydrated but already has local nodes and `hasLocalChanges`, we skip
  * fetching so an empty API response cannot race ahead of persist (hosts then mark `hydrated`).

@@ -461,14 +461,14 @@ export function useNodeDragDrop({
                                     }
                                 }
                                 const rowLabel = (rowDataToMove.text ?? '').trim() || 'field';
-                                const internalPath = stableInterfacePathForVariable(variableRefId);
+                                const wireKey = stableInterfacePathForVariable(variableRefId);
                                 const pv = computeInterfacePointerPreview(mx, my, fc);
                                 const insertTargetPathKey = pv?.targetPathKey ?? null;
                                 const insertPlacement = pv?.placement ?? 'append';
                                 const detail: FlowInterfaceRowPointerDropDetail = {
                                     flowId: fid,
                                     zone: 'output',
-                                    internalPath,
+                                    wireKey,
                                     variableRefId,
                                     rowId: rowDataToMove.id,
                                     fromNodeId: nodeId,

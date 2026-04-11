@@ -49,7 +49,7 @@ export function useVariablePickerForFlow(
   const { flows } = useFlowWorkspace();
   const pdUpdate = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
-  const { translations } = useProjectTranslations();
+  const { compiledTranslations } = useProjectTranslations();
   const activeFlowId = getActiveFlowCanvasId();
   const [variableMenuItems, setVariableMenuItems] = useState<VariableMenuItem[]>([]);
 
@@ -69,7 +69,7 @@ export function useVariablePickerForFlow(
       return;
     }
     void buildVariableMenuItemsAsync(projectIdForMenu, activeFlowId, flows as any, {
-      translationsByGuid: translations,
+      translationsByGuid: compiledTranslations,
     })
       .then((items) => {
         if (!cancelled) setVariableMenuItems(items);
@@ -80,7 +80,7 @@ export function useVariablePickerForFlow(
     return () => {
       cancelled = true;
     };
-  }, [enabled, editing, projectIdForMenu, activeFlowId, variableMenuFingerprint, flows, translations]);
+  }, [enabled, editing, projectIdForMenu, activeFlowId, variableMenuFingerprint, flows, compiledTranslations]);
 
   useEffect(() => {
     if (!enabled || !editing) {

@@ -1,13 +1,13 @@
 /**
  * FLOW.SAVE-BULK REFACTOR — Deterministic routing of translation keys: flow `meta.translations`
  * (per FlowDocument) vs global translations API. Flow-scoped keys use the active canvas for
- * `task:` / `variable:` / `interface:` / `slot:` / bare GUID; `flow:<guid>` targets that flow id.
+ * `task:` / `var:` / `interface:` / `slot:` / bare GUID; `flow:<guid>` targets that flow id.
  */
 
 import { getActiveFlowCanvasId } from '@flows/activeFlowCanvas';
 import { isUuidString, parseTranslationKey } from '@utils/translationKeys';
 
-const FLOW_SCOPED_KINDS = new Set(['task', 'variable', 'interface', 'slot']);
+const FLOW_SCOPED_KINDS = new Set(['task', 'var', 'interface', 'slot']);
 
 /**
  * Returns the flow canvas id to write `key` into via `writeTranslationToFlowSlice`, or null when

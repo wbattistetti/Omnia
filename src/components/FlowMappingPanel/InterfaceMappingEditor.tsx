@@ -15,11 +15,7 @@ import {
 import { mergeBackendMappingVariableDrop } from './backendMappingVariableDrop';
 import type { FlowMappingVariant } from './types';
 import { createMappingEntry, type MappingEntry } from './mappingTypes';
-import {
-  computeInterfaceEntryLabels,
-  ensureFlowVariableBindingForInterfaceRow,
-  shouldSkipInterfaceDuplicate,
-} from './interfaceMappingLabels';
+import { ensureFlowVariableBindingForInterfaceRow, shouldSkipInterfaceDuplicate } from './interfaceMappingLabels';
 import { useContainerWidth } from './useContainerWidth';
 
 /** Draggable chip in SEND/RECEIVE headers: drop on tree to insert a new parameter. */
@@ -116,13 +112,10 @@ export interface InterfaceMappingEditorProps {
   >;
   /** Flow workspace: e.g. close button on the main “Interface · …” header (right). */
   interfaceShellHeaderExtra?: React.ReactNode;
-  /** Resolves human variable names for linkedVariable when saving drops. */
   projectId?: string;
   /** Backend RECEIVE: create variable from typed name (Invio). */
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
-  /** Backend SEND: nome variabile → GUID (persistenza mapping = stesso id della variabile). */
-  resolveVariableRefIdFromLabel?: (label: string) => string | undefined;
 }
 
 export function InterfaceMappingEditor({
@@ -149,7 +142,6 @@ export function InterfaceMappingEditor({
   showApiFields = true,
   onCreateOutputVariable,
   onOutputVariableCreated,
-  resolveVariableRefIdFromLabel,
   interfaceDragLabels = [],
   showInterfacePalette = true,
   showLayoutHint = true,
@@ -230,29 +222,14 @@ export function InterfaceMappingEditor({
     (payload: FlowInterfaceDropPayload) => {
       /** Row-acquired HTML5 drag carries variableRefId; pointer row-drop is Output-only. */
       if (payload.variableRefId) return;
-      const path = payload.internalPath.trim();
+      const path = payload.wireKey.trim();
       if (!path) return;
-      const rowText = (payload.rowLabel ?? '').trim();
       if (flowDropTarget?.flowCanvasId) {
-        ensureFlowVariableBindingForInterfaceRow(
-          projectId,
-          flowDropTarget.flowCanvasId,
-          payload.variableRefId,
-          rowText,
-          path
-        );
+        ensureFlowVariableBindingForInterfaceRow(projectId, flowDropTarget.flowCanvasId, payload.variableRefId);
       }
-      const { externalName, linkedVariable } = computeInterfaceEntryLabels(
-        projectId,
-        payload.variableRefId,
-        rowText,
-        path
-      );
       const newEntry = createMappingEntry({
-        internalPath: path,
-        externalName,
+        wireKey: path,
         variableRefId: payload.variableRefId,
-        linkedVariable,
       });
       if (shouldSkipInterfaceDuplicate(interfaceInput, newEntry)) return;
       onInterfaceInputChange([...interfaceInput, newEntry]);
@@ -262,29 +239,14 @@ export function InterfaceMappingEditor({
 
   const onIfaceOutDrop = useCallback(
     (payload: FlowInterfaceDropPayload) => {
-      const path = payload.internalPath.trim();
+      const path = payload.wireKey.trim();
       if (!path) return;
-      const rowText = (payload.rowLabel ?? '').trim();
       if (flowDropTarget?.flowCanvasId) {
-        ensureFlowVariableBindingForInterfaceRow(
-          projectId,
-          flowDropTarget.flowCanvasId,
-          payload.variableRefId,
-          rowText,
-          path
-        );
+        ensureFlowVariableBindingForInterfaceRow(projectId, flowDropTarget.flowCanvasId, payload.variableRefId);
       }
-      const { externalName, linkedVariable } = computeInterfaceEntryLabels(
-        projectId,
-        payload.variableRefId,
-        rowText,
-        path
-      );
       const newEntry = createMappingEntry({
-        internalPath: path,
-        externalName,
+        wireKey: path,
         variableRefId: payload.variableRefId,
-        linkedVariable,
       });
       if (shouldSkipInterfaceDuplicate(interfaceOutput, newEntry)) return;
       onInterfaceOutputChange([...interfaceOutput, newEntry]);
@@ -411,7 +373,6 @@ export function InterfaceMappingEditor({
                 backendColumn="send"
                 onCreateOutputVariable={onCreateOutputVariable}
                 onOutputVariableCreated={onOutputVariableCreated}
-                resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
               />
             </MappingBlock>
             <MappingBlock
@@ -444,7 +405,6 @@ export function InterfaceMappingEditor({
                 backendColumn="receive"
                 onCreateOutputVariable={onCreateOutputVariable}
                 onOutputVariableCreated={onOutputVariableCreated}
-                resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
               />
             </MappingBlock>
           </div>

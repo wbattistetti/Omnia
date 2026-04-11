@@ -7,8 +7,8 @@ import { TaskType } from '../types/taskTypes';
 import type { WorkspaceState } from '../flows/FlowTypes';
 import { loadFlow } from '../flows/FlowPersistence';
 import type { MappingEntry } from '../components/FlowMappingPanel/mappingTypes';
+import { getActiveFlowMetaTranslationsFlattened } from '../utils/activeFlowTranslations';
 import { getVariableLabel } from '../utils/getVariableLabel';
-import { getProjectTranslationsTable } from '../utils/projectTranslationsRegistry';
 
 function resolveSubflowId(task: { flowId?: string; parameters?: Array<{ parameterId?: string; value?: string }> }): string | null {
   const direct = String(task?.flowId || '').trim();
@@ -131,7 +131,7 @@ export function resolveChildOutputGuidToParentProxyLabelForFlow(
         if (String(b?.interfaceParameterId || '').trim() !== g) continue;
         const parentId = String(b?.parentVariableId || '').trim();
         if (!parentId) continue;
-        const lbl = getVariableLabel(parentId, getProjectTranslationsTable());
+        const lbl = getVariableLabel(parentId, getActiveFlowMetaTranslationsFlattened());
         return lbl || null;
       }
     }

@@ -34,7 +34,6 @@ export function normalizeVariableInstance(
 
   const base: VariableInstance = {
     id,
-    varName: typeof raw.varName === 'string' ? raw.varName.trim() : String(raw.varName ?? ''),
     taskInstanceId: raw.taskInstanceId ?? '',
     dataPath: raw.dataPath ?? '',
     scope,

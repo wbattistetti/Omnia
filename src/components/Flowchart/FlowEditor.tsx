@@ -1043,15 +1043,18 @@ export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
     [projectData, props.nodes, props.edges]
   );
 
-  /** Provider must wrap both FlowEditorContent and IntellisensePopover (siblings under ReactFlowProvider). */
+  /**
+   * Provider order is fixed: NodeRegistry → ReactFlow → Intellisense → canvas + popover.
+   * Intellisense must be inside ReactFlowProvider so consumers always have both contexts.
+   */
   return (
-    <IntellisenseProvider providers={intellisenseProviders}>
-      <NodeRegistryProvider>
-        <ReactFlowProvider>
+    <NodeRegistryProvider>
+      <ReactFlowProvider>
+        <IntellisenseProvider providers={intellisenseProviders}>
           <FlowEditorContent {...props} />
           <IntellisensePopover />
-        </ReactFlowProvider>
-      </NodeRegistryProvider>
-    </IntellisenseProvider>
+        </IntellisenseProvider>
+      </ReactFlowProvider>
+    </NodeRegistryProvider>
   );
 };

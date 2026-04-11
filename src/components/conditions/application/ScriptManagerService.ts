@@ -9,7 +9,7 @@ import { getActiveFlowCanvasId } from '../../../flows/activeFlowCanvas';
 import { variableCreationService } from '@services/VariableCreationService';
 import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
 import { getVariableLabel } from '@utils/getVariableLabel';
-import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
+import { getActiveFlowMetaTranslationsFlattened } from '@utils/activeFlowTranslations';
 
 export interface ScriptManagerServiceDependencies {
   projectData: any;
@@ -548,7 +548,7 @@ export class ScriptManagerService {
               if (fromDep != null && String(fromDep).trim() !== '') {
                 return fromDep;
               }
-              return getVariableLabel(String(guid), getProjectTranslationsTable()) || null;
+              return getVariableLabel(String(guid), getActiveFlowMetaTranslationsFlattened()) || null;
             },
           });
 

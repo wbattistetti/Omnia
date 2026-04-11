@@ -37,4 +37,13 @@ describe('convertDSLLabelsToGUIDs / resolveBracketLabelTokenToGuid', () => {
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
+
+  it('passes through bracket body that is already a GUID without a map entry (no warn)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const g = '545d8db5-4b70-4373-b9ec-c7b939742660';
+    const m = new Map<string, string>();
+    expect(convertDSLLabelsToGUIDs(`[${g}] == 1`, m)).toBe(`[${g}] == 1`);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });

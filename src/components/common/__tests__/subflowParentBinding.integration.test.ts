@@ -7,10 +7,9 @@ import { variableCreationService } from '../../../services/VariableCreationServi
 import { TaskType } from '../../../types/taskTypes';
 import { ensureParentVariableAndSubflowOutputBinding } from '../subflowParentBinding';
 import { getVariableLabel } from '../../../utils/getVariableLabel';
-import {
-  getProjectTranslationsTable,
-  setProjectTranslationsRegistry,
-} from '../../../utils/projectTranslationsRegistry';
+import { FlowWorkspaceSnapshot } from '../../../flows/FlowWorkspaceSnapshot';
+import { getActiveFlowMetaTranslationsFlattened } from '../../../utils/activeFlowTranslations';
+import { setProjectTranslationsRegistry } from '../../../utils/projectTranslationsRegistry';
 import { makeTranslationKey } from '../../../utils/translationKeys';
 
 function pid(): string {
@@ -45,7 +44,7 @@ describe('ensureParentVariableAndSubflowOutputBinding (S2)', () => {
       scope: 'flow',
       scopeFlowId: parentFlowId,
     });
-    setProjectTranslationsRegistry({ [makeTranslationKey('variable', parentVarId)]: 'parent.token' });
+    setProjectTranslationsRegistry({ [makeTranslationKey('var', parentVarId)]: 'parent.token' });
 
     const flows = {
       [parentFlowId]: {
@@ -63,7 +62,16 @@ describe('ensureParentVariableAndSubflowOutputBinding (S2)', () => {
     });
 
     expect(out.parentVarId).toBe(parentVarId);
-    expect(getVariableLabel(out.parentVarId, getProjectTranslationsTable())).toBe('parent.token');
+    FlowWorkspaceSnapshot.setSnapshot(
+      {
+        [parentFlowId]: {
+          nodes: [{ data: { rows: [{ id: subflowTaskId, text: 'chiedi email' }] } }],
+          meta: { translations: { [makeTranslationKey('var', parentVarId)]: 'parent.token' } },
+        },
+      } as any,
+      parentFlowId
+    );
+    expect(getVariableLabel(out.parentVarId, getActiveFlowMetaTranslationsFlattened())).toBe('parent.token');
   });
 
   it('throws when no subflowBindings row for child var', () => {

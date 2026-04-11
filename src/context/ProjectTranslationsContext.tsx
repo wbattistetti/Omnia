@@ -208,7 +208,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     [translations, flowTranslationRevision, flowMetaFingerprint]
   );
 
-  /** Non-React readers (DSL, variable labels) see the same merged map as runtime. */
+  /** Non-React readers (TaskContentResolver, flowchart) see the merged map (global + flow meta). */
   useEffect(() => {
     setProjectTranslationsRegistry(compiledTranslations);
   }, [compiledTranslations]);
@@ -235,7 +235,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
 
     translationsLiveRef.current = { ...translationsLiveRef.current, [guid]: text };
-    setProjectTranslationsRegistry(translationsLiveRef.current);
+    setProjectTranslationsRegistry(compileWorkspaceTranslations(translationsLiveRef.current));
 
     setTranslations((prev) => {
       if (prev[guid] === text) return prev;
@@ -275,7 +275,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
 
     if (Object.keys(globalPatch).length > 0) {
       translationsLiveRef.current = { ...translationsLiveRef.current, ...globalPatch };
-      setProjectTranslationsRegistry(translationsLiveRef.current);
+      setProjectTranslationsRegistry(compileWorkspaceTranslations(translationsLiveRef.current));
 
       setTranslations((prev) => {
         let hasChanges = false;
@@ -312,10 +312,6 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
   }, [loadingCompleted, isLoading]);
 
-  useEffect(() => {
-    setProjectTranslationsRegistry(translations);
-  }, [translations]);
-
   /** Keep React translation map + live ref in sync when domain code publishes variable labels (subflow rename). */
   useEffect(() => {
     registerVariableTranslationListener((canonicalKey, text) => {
@@ -326,7 +322,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
         return;
       }
       translationsLiveRef.current = { ...translationsLiveRef.current, [canonicalKey]: text };
-      setProjectTranslationsRegistry(translationsLiveRef.current);
+      setProjectTranslationsRegistry(compileWorkspaceTranslations(translationsLiveRef.current));
       setTranslations((prev) => {
         if (prev[canonicalKey] === text) return prev;
         return { ...prev, [canonicalKey]: text };
@@ -360,7 +356,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
 
       snapshotAfterLoadRef.current = { ...sanitized };
       translationsLiveRef.current = sanitized;
-      setProjectTranslationsRegistry(sanitized);
+      setProjectTranslationsRegistry(compileWorkspaceTranslations(sanitized));
       setTranslations(sanitized);
 
       setLoadingCompleted(true);
@@ -389,7 +385,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
 
     translationsLiveRef.current = base;
-    setProjectTranslationsRegistry(base);
+    setProjectTranslationsRegistry(compileWorkspaceTranslations(base));
     setTranslations(base);
 
     const projectTranslationsToSave: Array<{ guid: string; language: string; text: string; type?: string }> = [];

@@ -5,8 +5,8 @@
 import type { MappingEntry } from './mappingTypes';
 import { insertNewBackendParameter, type ParamDropPosition } from './backendParamInsert';
 import { entriesInDepthFirstOrder, type MappingTreeSiblingOrder } from './mappingTreeUtils';
-import { uniqueInternalPathFromLabel } from './flowInterfaceDragTypes';
-import { computeInterfaceEntryLabels, ensureFlowVariableBindingForInterfaceRow } from './interfaceMappingLabels';
+import { stableInterfacePathForVariable, uniqueWireKeyFromLabel } from './flowInterfaceDragTypes';
+import { ensureFlowVariableBindingForInterfaceRow } from './interfaceMappingLabels';
 
 export type BackendMappingVariablePayload = {
   variableRefId: string;
@@ -19,9 +19,7 @@ export type MergeBackendMappingVariableDropResult = {
 };
 
 /**
- * Inserts a mapping row bound to `variableRefId`, with internal path slug from the variable label.
- * If `explicitPos` is omitted, appends after the last row (depth-first order).
- * Returns null if invalid or duplicate variable id.
+ * Inserts a mapping row bound to `variableRefId`, with a stable wire key derived from the variable GUID.
  */
 export function mergeBackendMappingVariableDrop(
   entries: MappingEntry[],
@@ -42,29 +40,20 @@ export function mergeBackendMappingVariableDrop(
       : (() => {
           const ordered = entriesInDepthFirstOrder(entries, siblingOrder);
           const last = ordered[ordered.length - 1];
-          return { targetPathKey: last.internalPath, placement: 'after' as const };
+          return { targetPathKey: last.wireKey, placement: 'after' as const };
         })());
 
   const { next, newEntry } = insertNewBackendParameter(entries, pos, { siblingOrder });
-  const rowText = (payload.rowLabel ?? '').trim();
-  const { externalName, linkedVariable } = computeInterfaceEntryLabels(
-    projectId,
-    vid,
-    rowText,
-    newEntry.internalPath
-  );
-  const newInternalPath = uniqueInternalPathFromLabel(linkedVariable, next, newEntry.id);
+  const newWireKey = uniqueWireKeyFromLabel(stableInterfacePathForVariable(vid), next, newEntry.id);
   if (projectId && flowCanvasId) {
-    ensureFlowVariableBindingForInterfaceRow(projectId, flowCanvasId, vid, rowText, newInternalPath);
+    ensureFlowVariableBindingForInterfaceRow(projectId, flowCanvasId, vid);
   }
   const merged = next.map((entry) =>
     entry.id === newEntry.id
       ? {
           ...entry,
-          internalPath: newInternalPath,
+          wireKey: newWireKey,
           variableRefId: vid,
-          linkedVariable,
-          externalName,
         }
       : entry
   );

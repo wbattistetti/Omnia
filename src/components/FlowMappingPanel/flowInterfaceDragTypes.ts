@@ -39,7 +39,7 @@ export type FlowInterfaceRowPointerDropDetail = {
   flowId: string;
   zone: 'output';
   /** Stable single-segment path key (e.g. iface_<guid>). */
-  internalPath: string;
+  wireKey: string;
   variableRefId: string;
   rowId: string;
   fromNodeId: string;
@@ -54,13 +54,13 @@ export type FlowInterfaceRowPointerDropDetail = {
 export type FlowRowInterfaceDragPayload = {
   variableRefId: string;
   nodeId: string;
-  suggestedInternalPath: string;
+  suggestedWireKey: string;
   displayLabel: string;
 };
 
 /** Normalized drop target info for Interface trees (demo chips use path-only). */
 export type FlowInterfaceDropPayload = {
-  internalPath: string;
+  wireKey: string;
   variableRefId?: string;
   /** When set (e.g. row drag), shown as primary label instead of path slug. */
   rowLabel?: string;
@@ -81,12 +81,12 @@ export function slugifyInternalPath(label: string): string {
 }
 
 /**
- * Unique dot-path segment for a new mapping row (e.g. drop da variabile): avoids collision with existing `internalPath`.
+ * Unique dot-path segment for a new mapping row: avoids collision with existing `wireKey`.
  * Ignores the row being updated (`forEntryId`) so its old ephemeral path does not block the new slug.
  */
-export function uniqueInternalPathFromLabel(
+export function uniqueWireKeyFromLabel(
   label: string,
-  entries: { id: string; internalPath: string }[],
+  entries: { id: string; wireKey: string }[],
   forEntryId: string
 ): string {
   const base = slugifyInternalPath(label);
@@ -94,7 +94,7 @@ export function uniqueInternalPathFromLabel(
   const used = new Set(
     entries
       .filter((e) => e.id !== forEntryId)
-      .map((e) => e.internalPath.trim())
+      .map((e) => e.wireKey.trim())
       .filter(Boolean)
   );
   let n = 0;
@@ -110,11 +110,11 @@ export function parseFlowInterfaceDropFromDataTransfer(dt: DataTransfer): FlowIn
   if (raw?.trim()) {
     try {
       const p = JSON.parse(raw) as Partial<FlowRowInterfaceDragPayload>;
-      if (typeof p.variableRefId === 'string' && p.variableRefId.trim() && typeof p.suggestedInternalPath === 'string') {
+      if (typeof p.variableRefId === 'string' && p.variableRefId.trim() && typeof p.suggestedWireKey === 'string') {
         const display =
           typeof p.displayLabel === 'string' && p.displayLabel.trim() ? p.displayLabel.trim() : undefined;
         return {
-          internalPath: p.suggestedInternalPath.trim(),
+          wireKey: p.suggestedWireKey.trim(),
           variableRefId: p.variableRefId.trim(),
           ...(display ? { rowLabel: display } : {}),
         };

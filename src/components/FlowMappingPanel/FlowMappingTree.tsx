@@ -221,8 +221,6 @@ export interface FlowMappingTreeProps {
   /** Backend RECEIVE: crea variabile manuale da nome digitato. */
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
-  /** Backend SEND: label → var id when user picks from dropdown (persist same GUID as variable). */
-  resolveVariableRefIdFromLabel?: (label: string) => string | undefined;
 }
 
 function updateEntry(entries: MappingEntry[], id: string, patch: Partial<MappingEntry>): MappingEntry[] {
@@ -269,7 +267,6 @@ interface RowProps {
   variableOptions: string[];
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
-  resolveVariableRefIdFromLabel?: (label: string) => string | undefined;
 }
 
 function MappingTreeRow({
@@ -302,7 +299,6 @@ function MappingTreeRow({
   variableOptions,
   onCreateOutputVariable,
   onOutputVariableCreated,
-  resolveVariableRefIdFromLabel,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const labelEditRef = useRef<LabelWithPencilEditHandle>(null);
@@ -330,8 +326,7 @@ function MappingTreeRow({
       onEntriesChange(
         entries.map((e) => {
           if (e.id !== node.entry!.id) return e;
-          const ext = e.externalName.trim() === '' ? newSegment : e.externalName;
-          return { ...e, internalPath: nextPath, externalName: ext };
+          return { ...e, wireKey: nextPath };
         })
       );
     },
@@ -683,7 +678,6 @@ function MappingTreeRow({
             variableOptions={variableOptions}
             onCreateOutputVariable={onCreateOutputVariable}
             onOutputVariableCreated={onOutputVariableCreated}
-            resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
           />
         </div>
 
@@ -773,7 +767,6 @@ function MappingTreeRow({
               variableOptions={variableOptions}
               onCreateOutputVariable={onCreateOutputVariable}
               onOutputVariableCreated={onOutputVariableCreated}
-              resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
             />
           ))}
         </div>
@@ -807,7 +800,6 @@ export function FlowMappingTree({
   backendColumn,
   onCreateOutputVariable,
   onOutputVariableCreated,
-  resolveVariableRefIdFromLabel,
 }: FlowMappingTreeProps) {
   const tree = useMemo(
     () => buildMappingTree(entries, { siblingOrder }),
@@ -892,7 +884,7 @@ export function FlowMappingTree({
   const onInsertBackendParam = useCallback(
     (pos: ParamDropPosition) => {
       const { next, newEntry } = insertNewBackendParameter(entries, pos, { siblingOrder });
-      setCollapsed((prev) => expandAncestorsOfPath(prev, newEntry.internalPath));
+      setCollapsed((prev) => expandAncestorsOfPath(prev, newEntry.wireKey));
       setPendingLabelEditId(newEntry.id);
       setDropIndicator(null);
       setRootEdgeDrop(null);
@@ -920,7 +912,7 @@ export function FlowMappingTree({
       );
       if (!result) return;
       onEntriesChange(result.merged);
-      setCollapsed((prev) => expandAncestorsOfPath(prev, result.newEntry.internalPath));
+      setCollapsed((prev) => expandAncestorsOfPath(prev, result.newEntry.wireKey));
       setDropIndicator(null);
       setRootEdgeDrop(null);
       setPendingLabelEditId(result.newEntry.id);
@@ -954,7 +946,7 @@ export function FlowMappingTree({
       const label =
         e.dataTransfer.getData(DND_TYPE) || e.dataTransfer.getData('text/plain');
       if (label?.trim() && onDropVariable) {
-        onDropVariable({ internalPath: label.trim() });
+        onDropVariable({ wireKey: label.trim() });
       }
     },
     [onDropVariable]
@@ -1147,7 +1139,6 @@ export function FlowMappingTree({
           variableOptions={variableOptions}
           onCreateOutputVariable={onCreateOutputVariable}
           onOutputVariableCreated={onOutputVariableCreated}
-          resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
         />
       ))}
 

@@ -8,62 +8,49 @@ import {
 import { createMappingEntry } from '../mappingTypes';
 
 describe('backendCallMappingAdapter', () => {
-  const idToName = (id: string | undefined) => (id === 'gid1' ? 'foo' : null);
-
   it('skips empty internal names on task → entries', () => {
-    const entries = backendInputsToMappingEntries(
-      [{ internalName: '  ', apiParam: 'x', variable: '' }, { internalName: 'a', apiParam: 'p', variable: 'gid1' }],
-      idToName
-    );
+    const entries = backendInputsToMappingEntries([
+      { internalName: '  ', apiParam: 'x', variable: '' },
+      { internalName: 'a', apiParam: 'p', variable: 'gid1' },
+    ]);
     expect(entries).toHaveLength(1);
-    expect(entries[0].internalPath).toBe('a');
+    expect(entries[0].wireKey).toBe('a');
     expect(entries[0].apiField).toBe('p');
-    expect(entries[0].linkedVariable).toBe('foo');
+    expect(entries[0].variableRefId).toBe('gid1');
   });
 
-  it('maps outputs apiField and variable label', () => {
-    const entries = backendOutputsToMappingEntries(
-      [{ internalName: 'out1', apiField: 'apiX', variable: 'gid1' }],
-      idToName
-    );
+  it('maps outputs apiField and variable id', () => {
+    const entries = backendOutputsToMappingEntries([{ internalName: 'out1', apiField: 'apiX', variable: 'gid1' }]);
     expect(entries[0].apiField).toBe('apiX');
-    expect(entries[0].linkedVariable).toBe('foo');
+    expect(entries[0].variableRefId).toBe('gid1');
   });
 
-  it('entries → inputs uses resolveVarId', () => {
-    const entries = [
-      createMappingEntry({ internalPath: 'x.y', apiField: 'q', linkedVariable: 'varLabel', externalName: 'x.y' }),
-    ];
-    const rows = mappingEntriesToBackendInputs(entries, (name) => (name === 'varLabel' ? 'vid' : ''));
+  it('entries → inputs persists variableRefId', () => {
+    const entries = [createMappingEntry({ wireKey: 'x.y', apiField: 'q', variableRefId: 'vid' })];
+    const rows = mappingEntriesToBackendInputs(entries);
     expect(rows).toEqual([{ internalName: 'x.y', apiParam: 'q', variable: 'vid' }]);
   });
 
-  it('entries → inputs prefers variableRefId over resolveVarId', () => {
+  it('entries → inputs uses variableRefId guid', () => {
     const entries = [
       createMappingEntry({
-        internalPath: 'nome',
+        wireKey: 'nome',
         apiField: '',
-        linkedVariable: 'wrong',
-        externalName: 'nome',
         variableRefId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       }),
     ];
-    const rows = mappingEntriesToBackendInputs(entries, () => 'should-not-use');
+    const rows = mappingEntriesToBackendInputs(entries);
     expect(rows[0].variable).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
   });
 
   it('task → entries preserves variable as variableRefId', () => {
-    const entries = backendInputsToMappingEntries(
-      [{ internalName: 'nome', apiParam: '', variable: 'gid-guid' }],
-      () => 'label'
-    );
+    const entries = backendInputsToMappingEntries([{ internalName: 'nome', apiParam: '', variable: 'gid-guid' }]);
     expect(entries[0].variableRefId).toBe('gid-guid');
-    expect(entries[0].linkedVariable).toBe('label');
   });
 
   it('entries → outputs uses apiField key', () => {
-    const entries = [createMappingEntry({ internalPath: 'o', apiField: 'f', linkedVariable: '', externalName: 'o' })];
-    const rows = mappingEntriesToBackendOutputs(entries, () => '');
+    const entries = [createMappingEntry({ wireKey: 'o', apiField: 'f' })];
+    const rows = mappingEntriesToBackendOutputs(entries);
     expect(rows).toEqual([{ internalName: 'o', apiField: 'f', variable: '' }]);
   });
 });

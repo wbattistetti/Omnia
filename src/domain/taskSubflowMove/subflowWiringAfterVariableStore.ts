@@ -6,6 +6,7 @@
 
 import { variableCreationService } from '@services/VariableCreationService';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logS2Diag } from '@utils/s2WiringDiagnostic';
 import { applyTaskMoveToSubflow, type ApplyTaskMoveToSubflowResult } from './applyTaskMoveToSubflow';
 import type { ProjectConditionLike } from './collectReferencedVarIds';
 import { getSubflowSyncFlows, upsertFlowSlicesFromSubflowSync } from './subflowSyncFlowsRef';
@@ -20,6 +21,8 @@ export type SubflowWiringSecondPassRequest = {
   conditions?: ProjectConditionLike[];
   projectData?: unknown;
   translations?: Record<string, string>;
+  /** When true, same as {@link ApplyTaskMoveToSubflowParams.exposeAllTaskVariablesInChildInterface}. */
+  exposeAllTaskVariablesInChildInterface?: boolean;
 };
 
 const pending = new Map<string, SubflowWiringSecondPassRequest>();
@@ -77,7 +80,13 @@ export function tryFlushSubflowSecondPassForTask(
   if (flushing.has(tid)) return null;
 
   const vars = variableCreationService.getVariablesByTaskInstanceId(pid, tid);
-  if (vars.length === 0) return null;
+  if (vars.length === 0) {
+    logS2Diag('subflowSecondPass', 'tryFlush: SKIP — ancora zero righe variabile per task (aspetta variableStore:updated)', {
+      projectId: pid,
+      taskInstanceId: tid,
+    });
+    return null;
+  }
 
   const flows = getSubflowSyncFlows();
   if (!flows[req.parentFlowId] || !flows[req.childFlowId]) {
@@ -107,6 +116,7 @@ export function tryFlushSubflowSecondPassForTask(
       skipMaterialization: true,
       isLinkedSubflowMove: true,
       secondPass: true,
+      exposeAllTaskVariablesInChildInterface: req.exposeAllTaskVariablesInChildInterface,
     });
 
     upsertFlowSlicesFromSubflowSync(result.flowsNext, [req.parentFlowId, req.childFlowId]);

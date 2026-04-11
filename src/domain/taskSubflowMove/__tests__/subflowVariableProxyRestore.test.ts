@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getVariableLabel } from '@utils/getVariableLabel';
-import {
-  getProjectTranslationsTable,
-  setProjectTranslationsRegistry,
-} from '@utils/projectTranslationsRegistry';
+import { FlowWorkspaceSnapshot } from '@flows/FlowWorkspaceSnapshot';
+import { getActiveFlowMetaTranslationsFlattened } from '@utils/activeFlowTranslations';
+import { setProjectTranslationsRegistry } from '@utils/projectTranslationsRegistry';
 import { makeTranslationKey } from '@utils/translationKeys';
 import { taskRepository } from '@services/TaskRepository';
 import { TaskType } from '@types/taskTypes';
@@ -48,8 +47,9 @@ describe('restoreChildTaskBoundVariablesToLocalNames', () => {
       nodes: roots,
       steps: {},
     };
-    variableCreationService.hydrateVariablesFromTaskTree(projectId, 'main', taskId, taskTree, {
-      taskRowLabel: 'Ask field',
+    variableCreationService.hydrateVariablesFromTaskTree(projectId, 'main', taskId, taskTree);
+    setProjectTranslationsRegistry({
+      [makeTranslationKey('var', nodeId)]: 'campo',
     });
     const vars = variableCreationService.getVariablesByTaskInstanceId(projectId, taskId);
     expect(vars.length).toBeGreaterThan(0);
@@ -62,8 +62,18 @@ describe('restoreChildTaskBoundVariablesToLocalNames', () => {
     expect(renamed[0]!.previousName).toBe('dati_personali.colore');
     expect(renamed[0]!.nextName).toMatch(/colore/i);
 
-    setProjectTranslationsRegistry({ [makeTranslationKey('variable', vid)]: renamed[0]!.nextName });
-    const after = getVariableLabel(vid, getProjectTranslationsTable());
+    setProjectTranslationsRegistry({ [makeTranslationKey('var', vid)]: renamed[0]!.nextName });
+    FlowWorkspaceSnapshot.setSnapshot(
+      {
+        main: {
+          nodes: [],
+          edges: [],
+          meta: { translations: { [makeTranslationKey('var', vid)]: renamed[0]!.nextName } },
+        },
+      },
+      'main'
+    );
+    const after = getVariableLabel(vid, getActiveFlowMetaTranslationsFlattened());
     expect(after).toBe(renamed[0]!.nextName);
     expect(after?.includes('.')).toBe(false);
   });
@@ -86,8 +96,9 @@ describe('migrateSubflowVariableProxyModel', () => {
       nodes: roots,
       steps: {},
     };
-    variableCreationService.hydrateVariablesFromTaskTree(projectId, childFlowId, childTaskId, childTaskTree, {
-      taskRowLabel: 'Chiedi',
+    variableCreationService.hydrateVariablesFromTaskTree(projectId, childFlowId, childTaskId, childTaskTree);
+    setProjectTranslationsRegistry({
+      [makeTranslationKey('var', nodeIdB)]: 'colore',
     });
     const vars = variableCreationService.getVariablesByTaskInstanceId(projectId, childTaskId);
     const childVarId = vars[0]!.id;
@@ -117,10 +128,10 @@ describe('migrateSubflowVariableProxyModel', () => {
           flowInterface: {
             output: [
               {
+                id: 'iface-row-1',
+                wireKey: 'colore',
                 variableRefId: childVarId,
-                internalPath: 'colore',
-                externalName: 'colore',
-                linkedVariable: 'colore',
+                apiField: '',
               },
             ],
           },
@@ -132,8 +143,19 @@ describe('migrateSubflowVariableProxyModel', () => {
 
     expect(r.childRenames.length).toBe(1);
     expect(r.childRenames[0]!.id).toBe(childVarId);
-    setProjectTranslationsRegistry({ [makeTranslationKey('variable', childVarId)]: 'colore' });
-    expect(getVariableLabel(childVarId, getProjectTranslationsTable())).toBe('colore');
+    setProjectTranslationsRegistry({ [makeTranslationKey('var', childVarId)]: 'colore' });
+    FlowWorkspaceSnapshot.setSnapshot(
+      {
+        [childFlowId]: {
+          id: childFlowId,
+          meta: {
+            translations: { [makeTranslationKey('var', childVarId)]: 'colore' },
+          },
+        },
+      } as any,
+      childFlowId
+    );
+    expect(getVariableLabel(childVarId, getActiveFlowMetaTranslationsFlattened())).toBe('colore');
     expect(r.syncCalls).toBe(0);
   });
 });

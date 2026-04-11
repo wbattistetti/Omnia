@@ -8,25 +8,18 @@ import { createMappingEntry, type MappingEntry } from './mappingTypes';
 import { InterfaceMappingEditor } from './InterfaceMappingEditor';
 
 const MOCK_API_FIELDS = ['ticketId', 'status', 'birth', 'day', 'month', 'year', 'validationOk'];
-const MOCK_VARIABLES = ['Numero', 'stato ticket', 'data di nascita', 'data di nascita.giorno', 'esito.validazione'];
-
-const MOCK_DRAG_LABELS = [
-  'data di nascita',
-  'data di nascita.giorno',
-  'data di nascita.mese',
-  'data di nascita.anno',
-  'stato ticket',
-  'Numero',
-  'esito.validazione',
+const MOCK_VARIABLES = [
+  '11111111-1111-4111-8111-111111111101',
+  '22222222-2222-4222-8222-222222222202',
 ];
+
+const MOCK_DRAG_LABELS = ['demo', 'field'];
 
 function seedBackendSend(): MappingEntry[] {
   return [
     createMappingEntry({
-      internalPath: 'Numero',
+      wireKey: 'Numero',
       apiField: 'ticketId',
-      linkedVariable: 'Numero',
-      externalName: 'Numero',
     }),
   ];
 }
@@ -34,34 +27,24 @@ function seedBackendSend(): MappingEntry[] {
 function seedBackendReceive(): MappingEntry[] {
   return [
     createMappingEntry({
-      internalPath: 'stato',
+      wireKey: 'stato',
       apiField: 'status',
-      linkedVariable: 'stato ticket',
-      externalName: 'stato',
     }),
     createMappingEntry({
-      internalPath: 'data di nascita',
+      wireKey: 'data_di_nascita',
       apiField: 'birth',
-      linkedVariable: 'data di nascita',
-      externalName: 'data di nascita',
     }),
     createMappingEntry({
-      internalPath: 'data di nascita.giorno',
+      wireKey: 'data_di_nascita.giorno',
       apiField: 'day',
-      linkedVariable: 'data di nascita.giorno',
-      externalName: 'data di nascita.giorno',
     }),
     createMappingEntry({
-      internalPath: 'data di nascita.mese',
+      wireKey: 'data_di_nascita.mese',
       apiField: 'month',
-      linkedVariable: '',
-      externalName: 'data di nascita.mese',
     }),
     createMappingEntry({
-      internalPath: 'data di nascita.anno',
+      wireKey: 'data_di_nascita.anno',
       apiField: 'year',
-      linkedVariable: '',
-      externalName: 'data di nascita.anno',
     }),
   ];
 }

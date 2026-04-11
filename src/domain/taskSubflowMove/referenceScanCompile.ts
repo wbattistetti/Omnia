@@ -4,6 +4,8 @@
  */
 
 import type { VariableInstance } from '@types/variableTypes';
+import { getVariableLabel } from '@utils/getVariableLabel';
+import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
 import { convertDSLLabelsToGUIDs } from '@utils/conditionCodeConverter';
 import { REFERENCE_SCAN_INTERNAL_TEXT_KEY } from './internalReferenceHaystack';
 
@@ -14,11 +16,12 @@ const MAX_COMPILE_CHUNKS = 6000;
 const MAX_DEPTH = 48;
 
 export function buildVariableGuidToVarNameMap(variables: VariableInstance[]): Map<string, string> {
+  const tbl = getProjectTranslationsTable();
   const m = new Map<string, string>();
   for (const v of variables) {
     const id = String(v.id || '').trim();
-    const name = String(v.varName || '').trim();
-    if (id && name) m.set(id, name);
+    const name = getVariableLabel(id, tbl) || id;
+    if (id) m.set(id, name);
   }
   return m;
 }
@@ -33,11 +36,12 @@ type LabelIndex = {
 };
 
 function buildLabelToVarIdIndex(variables: VariableInstance[]): LabelIndex {
+  const tbl = getProjectTranslationsTable();
   const exact = new Map<string, string>();
   const lastSegment = new Map<string, string>();
   for (const v of variables) {
     const id = String(v.id || '').trim();
-    const name = String(v.varName || '').trim();
+    const name = getVariableLabel(id, tbl) || '';
     if (!id || !name) continue;
     const nk = normalizeLabelKey(name);
     if (!exact.has(nk)) exact.set(nk, id);

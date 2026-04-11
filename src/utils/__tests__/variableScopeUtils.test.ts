@@ -37,7 +37,6 @@ describe('variableScopeUtils', () => {
   it('task-bound variables are visible only on flows that contain that task row', () => {
     const v = normalizeVariableInstance({
       id: 'a',
-      varName: 'x',
       taskInstanceId: 'task-1',
       dataPath: 'd',
       scope: 'project',
@@ -51,7 +50,6 @@ describe('variableScopeUtils', () => {
     FlowWorkspaceSnapshot.setSnapshot({}, 'main');
     const v = normalizeVariableInstance({
       id: 'a',
-      varName: 'colore',
       taskInstanceId: 'task-1',
       dataPath: 'd',
       scope: 'project',
@@ -72,7 +70,6 @@ describe('variableScopeUtils', () => {
   it('project-scoped manual globals (no task) are visible on every flow canvas', () => {
     const v = normalizeVariableInstance({
       id: 'b',
-      varName: 'y',
       taskInstanceId: '',
       dataPath: '',
       scope: 'project',
@@ -84,7 +81,6 @@ describe('variableScopeUtils', () => {
   it('shows flow-scoped variables only on matching canvas', () => {
     const v = normalizeVariableInstance({
       id: 'c',
-      varName: 'z',
       taskInstanceId: '',
       dataPath: '',
       scope: 'flow',
@@ -97,7 +93,6 @@ describe('variableScopeUtils', () => {
   it('sameVariableScopeBucket distinguishes project vs flow', () => {
     const project = normalizeVariableInstance({
       id: 'd',
-      varName: 'p',
       taskInstanceId: '',
       dataPath: '',
       scope: 'project',
@@ -109,7 +104,6 @@ describe('variableScopeUtils', () => {
   it('downgrades invalid flow scope without flow id to project', () => {
     const v = normalizeVariableInstance({
       id: 'e',
-      varName: 'q',
       taskInstanceId: '',
       dataPath: '',
       scope: 'flow',

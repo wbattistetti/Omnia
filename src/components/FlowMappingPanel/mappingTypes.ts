@@ -1,20 +1,17 @@
 /**
  * Flat mapping rows stored in panel state; tree is derived via mappingTreeUtils.
+ * Display text for variables is never stored here — only `flow.meta.translations[var:<guid>]`.
  */
 
 export interface MappingEntry {
   id: string;
-  /** Dot path / internal name (e.g. data di nascita.giorno). */
-  internalPath: string;
+  /** Tree order + backend wire name (internalName); not a human label. */
+  wireKey: string;
   /** Backend: wire name (Swagger / free text). */
   apiField: string;
-  /** Backend: linked variable label or id display. */
-  linkedVariable: string;
-  /** Interface: exposed parameter name (defaults to internal when dropped). */
-  externalName: string;
   /** Promised variable GUID when wired from a flow row or wizard (stable for runtime). */
   variableRefId?: string;
-  /** Flow-local translation key; display string lives in FlowDocument.meta.translations[labelKey]. */
+  /** Optional key into `flow.meta.translations` (e.g. `interface:<uuid>`); else use `var:<variableRefId>`. */
   labelKey?: string;
   /** Backend: human description for tooltip / docs. */
   fieldDescription?: string;
@@ -22,7 +19,7 @@ export interface MappingEntry {
   sampleValues?: string[];
 }
 
-export function createMappingEntry(partial: Partial<MappingEntry> & Pick<MappingEntry, 'internalPath'>): MappingEntry {
+export function createMappingEntry(partial: Partial<MappingEntry> & Pick<MappingEntry, 'wireKey'>): MappingEntry {
   const id =
     typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
@@ -31,13 +28,47 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
   const lk = partial.labelKey?.trim();
   return {
     id,
-    internalPath: partial.internalPath.trim(),
+    wireKey: partial.wireKey.trim(),
     apiField: partial.apiField ?? '',
-    linkedVariable: partial.linkedVariable?.trim() ?? (vid ? vid : ''),
-    externalName: partial.externalName ?? partial.internalPath.trim(),
     ...(partial.fieldDescription != null ? { fieldDescription: partial.fieldDescription } : {}),
     ...(partial.sampleValues != null ? { sampleValues: partial.sampleValues } : {}),
     ...(vid ? { variableRefId: vid } : {}),
+    ...(lk ? { labelKey: lk } : {}),
+  };
+}
+
+/**
+ * Stable tree segment for interface rows when no explicit dot-path is provided.
+ * Must be non-empty so `buildMappingTree` does not drop the row.
+ */
+export function defaultWireKeyForInterfaceVariable(variableRefId: string): string {
+  const vid = String(variableRefId || '').trim();
+  if (!vid) return 'iface_unknown';
+  return `iface_${vid.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+}
+
+/**
+ * Flow / subflow interface row: identity is {@link MappingEntry.variableRefId}; human label from `flow.meta.translations` at render.
+ * `wireKey` is the trie path (optional; defaults to a stable slug per variable so the mapping tree always shows the row).
+ */
+export function createFlowInterfaceMappingEntry(partial: {
+  variableRefId: string;
+  labelKey?: string;
+  /** Dot path for the mapping tree; omit to use {@link defaultWireKeyForInterfaceVariable}. */
+  wireKey?: string;
+}): MappingEntry {
+  const id =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `me_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const vid = String(partial.variableRefId || '').trim();
+  const lk = partial.labelKey?.trim();
+  const wireKey = String(partial.wireKey ?? '').trim() || defaultWireKeyForInterfaceVariable(vid);
+  return {
+    id,
+    wireKey,
+    apiField: '',
+    variableRefId: vid,
     ...(lk ? { labelKey: lk } : {}),
   };
 }

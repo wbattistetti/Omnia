@@ -6,7 +6,7 @@ import { variableCreationService } from '@services/VariableCreationService';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 import { getSafeProjectId } from './safeProjectId';
 import { getVariableLabel } from './getVariableLabel';
-import { getProjectTranslationsTable } from './projectTranslationsRegistry';
+import { getFlowMetaTranslationsFlattened } from './activeFlowTranslations';
 
 /** Options for label ↔ stored-id bracket conversion (message DSL, conditions). */
 export type BracketVariableMappingOptions = {
@@ -58,7 +58,8 @@ export function resolveBracketLabelTokenToGuid(
   options?: BracketVariableMappingOptions
 ): string | null {
   if (!trimmed) return null;
-  if (GUID_TOKEN_IN_BRACKET.test(trimmed) && variableMappings.has(trimmed)) {
+  /** Internal DSL already stores canonical GUIDs in brackets; no map entry required. */
+  if (GUID_TOKEN_IN_BRACKET.test(trimmed)) {
     return trimmed;
   }
 
@@ -251,23 +252,21 @@ export function transformASTGuidsToLabels(
 }
 
 /**
- * Map&lt;variableGuid, display label&gt; for the active flow scope.
- * Labels come from project translations (registry); primary key is variable `id`.
+ * Map&lt;variableGuid, display label&gt; for the given flow canvas.
+ * Labels come only from that flow `meta.translations` (`var:<guid>` keys).
  */
 export function createVariableMappings(flowCanvasId?: string): Map<string, string> {
   const mappings = new Map<string, string>();
-  const tr = getProjectTranslationsTable();
 
   try {
     const projectId = getSafeProjectId();
     const fid = flowCanvasId ?? getActiveFlowCanvasId();
+    const tr = getFlowMetaTranslationsFlattened(fid);
     const instances = variableCreationService.getVariablesForFlowScope(projectId, fid) ?? [];
     for (const v of instances) {
       const vid = typeof v.id === 'string' ? v.id.trim() : '';
       if (!vid) continue;
-      const devFb =
-        import.meta.env.DEV && typeof v.varName === 'string' ? v.varName.trim() : undefined;
-      const label = getVariableLabel(vid, tr, devFb);
+      const label = getVariableLabel(vid, tr);
       if (!label) continue;
       mappings.set(vid, label);
     }

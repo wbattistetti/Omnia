@@ -19,6 +19,7 @@ import type { ApplyTaskMoveToSubflowResult } from '@domain/taskSubflowMove/apply
 import { registerSubflowWiringSecondPass } from '@domain/taskSubflowMove/subflowWiringAfterVariableStore';
 import { variableCreationService } from '@services/VariableCreationService';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logS2Diag } from '@utils/s2WiringDiagnostic';
 import { logSubflowCanvasDebug, summarizeFlowSlice } from '@utils/subflowCanvasDebug';
 import type { FlowNode } from '../types/flowTypes';
 import type { NodeRowData } from '@types/project';
@@ -61,6 +62,11 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
         toNodeId: d.toNodeId,
         rowId: d.rowData?.id,
       });
+      logS2Diag('crossNodePortal', 'event crossNodeRowMove', {
+        canvasFlowId: params.flowId?.trim() || 'main',
+        toNodeId: d.toNodeId,
+        rowId: d.rowData?.id,
+      });
 
       const canvasFlowId = params.flowId?.trim() || 'main';
       const toNode = nodesRef.current.find((n) => n.id === d.toNodeId);
@@ -92,6 +98,13 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
           parentFlowId,
           parentSubflowTaskRowId: portalRowId,
         });
+        logS2Diag('crossNodePortal', 'PATH: subflow shell (già su canvas subflow) — structuralAppend', {
+          childFlowId,
+          parentFlowId,
+          targetNodeId,
+          rowId: d.rowData.id,
+          portalRowId,
+        });
 
         const conditions = flattenProjectConditions(projectData);
 
@@ -110,6 +123,7 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
             targetNodeId,
             row: d.rowData,
           },
+          deleteUnreferencedTaskVariableRows: true,
         });
 
         const taskRowId = d.rowData.id;
@@ -203,6 +217,13 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
         targetNodeId,
         parentSubflowTaskRowId: portal.subflowTaskRowId,
       });
+      logS2Diag('crossNodePortal', 'PATH: drop su nodo con portal Subflow — structuralAppend', {
+        parentFlowId: canvasFlowId,
+        childFlowId: portal.childFlowId,
+        targetNodeId,
+        rowId: d.rowData.id,
+        portalRowId: portal.subflowTaskRowId,
+      });
 
       logSubflowCanvasDebug('portal:preApply child slice (workspace)', {
         childFlowId: portal.childFlowId,
@@ -233,6 +254,7 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
           targetNodeId,
           row: d.rowData,
         },
+        deleteUnreferencedTaskVariableRows: true,
       });
 
       const taskRowId = d.rowData.id;

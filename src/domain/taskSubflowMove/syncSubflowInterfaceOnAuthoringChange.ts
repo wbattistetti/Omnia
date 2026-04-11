@@ -131,6 +131,7 @@ export function syncSubflowInterfaceAfterAuthoringCanvasChange(
       translations: translationsArg,
       projectData,
       skipMaterialization: true,
+      deleteUnreferencedTaskVariableRows: true,
     });
 
     variableCreationService.hydrateVariablesFromFlow(pid, first.flowsNext);

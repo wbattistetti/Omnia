@@ -47,8 +47,8 @@ describe('shouldPersistTranslationToGlobalApi', () => {
     expect(shouldPersistTranslationToGlobalApi('550e8400-e29b-41d4-a716-446655440004')).toBe(false);
   });
 
-  it('excludes variable:, interface:, and slot: from global API', () => {
-    expect(shouldPersistTranslationToGlobalApi('variable:550e8400-e29b-41d4-a716-446655440010')).toBe(false);
+  it('excludes var:, interface:, and slot: from global API', () => {
+    expect(shouldPersistTranslationToGlobalApi('var:550e8400-e29b-41d4-a716-446655440010')).toBe(false);
     expect(shouldPersistTranslationToGlobalApi('interface:550e8400-e29b-41d4-a716-446655440011')).toBe(false);
     expect(shouldPersistTranslationToGlobalApi('slot:550e8400-e29b-41d4-a716-446655440012')).toBe(false);
   });
@@ -59,8 +59,8 @@ describe('getFlowIdForFlowScopedWrite (kinds)', () => {
     vi.mocked(getActiveFlowCanvasId).mockReturnValue('subflow_a');
   });
 
-  it('routes variable: and interface: to active canvas', () => {
-    expect(getFlowIdForFlowScopedWrite('variable:550e8400-e29b-41d4-a716-446655440020')).toBe('subflow_a');
+  it('routes var: and interface: to active canvas', () => {
+    expect(getFlowIdForFlowScopedWrite('var:550e8400-e29b-41d4-a716-446655440020')).toBe('subflow_a');
     expect(getFlowIdForFlowScopedWrite('interface:550e8400-e29b-41d4-a716-446655440021')).toBe('subflow_a');
     expect(getFlowIdForFlowScopedWrite('slot:550e8400-e29b-41d4-a716-446655440022')).toBe('subflow_a');
   });

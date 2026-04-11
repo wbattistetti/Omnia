@@ -25,7 +25,7 @@ describe('utteranceVariablePersistence', () => {
       metadata: { type: PROJECT_VARIABLE_METADATA_TYPE },
     });
     expect(v?.scope).toBe('project');
-    expect(v?.varName).toBe('');
+    expect(v?.id).toBe('a');
   });
 
   it('returns null for utterance (hydration path)', () => {

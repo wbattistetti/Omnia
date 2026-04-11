@@ -9,11 +9,7 @@ import { useInMemoryConditions } from '../../context/InMemoryConditionsContext';
 import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
 import { useFlowActions, useFlowWorkspace } from '@flows/FlowStore';
 import { InterfaceMappingEditor } from '../FlowMappingPanel/InterfaceMappingEditor';
-import {
-  computeInterfaceEntryLabels,
-  ensureFlowVariableBindingForInterfaceRow,
-  shouldSkipInterfaceDuplicate,
-} from '../FlowMappingPanel/interfaceMappingLabels';
+import { ensureFlowVariableBindingForInterfaceRow, shouldSkipInterfaceDuplicate } from '../FlowMappingPanel/interfaceMappingLabels';
 import {
   FLOW_INTERFACE_ROW_POINTER_DROP,
   type FlowInterfaceRowPointerDropDetail,
@@ -182,22 +178,13 @@ export function FlowInterfaceBottomPanel({
       const e = ev as CustomEvent<FlowInterfaceRowPointerDropDetail>;
       const d = e.detail;
       if (!d || d.flowId !== flowId) return;
-      const path = d.internalPath.trim();
+      const path = d.wireKey.trim();
       if (!path) return;
 
-      const rowText = (d.rowLabel ?? '').trim();
-      ensureFlowVariableBindingForInterfaceRow(projectId, flowId, d.variableRefId, rowText, path);
-      const { externalName, linkedVariable } = computeInterfaceEntryLabels(
-        projectId,
-        d.variableRefId,
-        rowText,
-        path
-      );
+      ensureFlowVariableBindingForInterfaceRow(projectId, flowId, d.variableRefId);
       const entry = createMappingEntry({
-        internalPath: path,
-        externalName,
+        wireKey: path,
         variableRefId: d.variableRefId,
-        linkedVariable,
       });
 
       const iface = flowsRef.current[flowId]?.meta?.flowInterface ?? {

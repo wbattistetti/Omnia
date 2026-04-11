@@ -4,8 +4,9 @@
  */
 
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
+import { resolveTranslationEntryValue } from './resolveTranslationEntry';
 
-/** Flatten `meta.translations` from every flow in the workspace snapshot; flow ids sorted for stable key order. */
+/** Flatten `meta.translations` from every flow; `var:<uuid>` values may be per-locale objects. */
 export function flattenFlowMetaTranslationsFromSnapshot(): Record<string, string> {
   const out: Record<string, string> = {};
   const ids = FlowWorkspaceSnapshot.getAllFlowIds().sort();
@@ -13,7 +14,8 @@ export function flattenFlowMetaTranslationsFromSnapshot(): Record<string, string
     const tr = FlowWorkspaceSnapshot.getFlowById(fid)?.meta?.translations;
     if (!tr || typeof tr !== 'object') continue;
     for (const [k, v] of Object.entries(tr)) {
-      if (k && v !== undefined) out[k] = String(v);
+      if (!k || v === undefined) continue;
+      out[k] = resolveTranslationEntryValue(v as string | Record<string, string>);
     }
   }
   return out;

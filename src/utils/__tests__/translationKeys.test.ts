@@ -17,7 +17,7 @@ describe('translationKeys', () => {
   });
 
   it('parseTranslationKey accepts canonical keys', () => {
-    expect(parseTranslationKey(`variable:${SAMPLE}`)).toEqual({ kind: 'variable', guid: SAMPLE });
+    expect(parseTranslationKey(`var:${SAMPLE}`)).toEqual({ kind: 'var', guid: SAMPLE });
     expect(parseTranslationKey('not-a-uuid')).toBeNull();
     expect(parseTranslationKey(SAMPLE)).toBeNull();
   });

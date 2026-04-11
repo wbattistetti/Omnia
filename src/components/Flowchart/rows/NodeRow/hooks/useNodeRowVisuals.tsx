@@ -3,7 +3,7 @@
 
 import { useMemo } from 'react';
 import { HelpCircle } from 'lucide-react';
-import { TaskType } from '@types/taskTypes';
+import { TaskType, normalizeLegacyTaskTypeValue } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
 import { getTaskVisuals, resolveTaskType, hasTaskTree } from '@components/Flowchart/utils/taskVisuals';
 import { getTaskIdFromRow } from '@utils/taskHelpers';
@@ -65,9 +65,8 @@ export function useNodeRowVisuals(props: UseNodeRowVisualsProps): UseNodeRowVisu
               labelTextColor = isUndefined ? '#94a3b8' : (taskColor || '#94a3b8');
               iconColor = isUndefined ? '#94a3b8' : (taskColor || '#94a3b8');
             } else {
-              // Use task.type (enum) directly for visuals instead of resolveTaskType
-              // This ensures visuals are always updated with the correct type
-              const taskTypeEnum = task.type;
+              // Align with VB enum + legacy persisted `9` → Subflow before visuals
+              const taskTypeEnum = normalizeLegacyTaskTypeValue(task.type as number);
               const has = hasTaskTree(row);
               // Use getTaskVisuals with support for categories
               // Read category from task.category OR from row.heuristics.inferredCategory (if task doesn't exist yet)
@@ -87,7 +86,7 @@ export function useNodeRowVisuals(props: UseNodeRowVisualsProps): UseNodeRowVisu
 
             // Set currentTypeForPicker with TaskType enum
             if (!isUndefined) {
-              currentTypeForPicker = task.type; // Use task.type (enum) directly
+              currentTypeForPicker = normalizeLegacyTaskTypeValue(task.type as number);
             }
           } else {
             // Task with UNDEFINED type - valid state (heuristic didn't determine type)

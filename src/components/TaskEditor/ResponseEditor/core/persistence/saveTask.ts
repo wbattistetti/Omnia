@@ -159,9 +159,7 @@ export async function saveTask(
           (refreshed as { label?: string }).label ||
           ''
       ).trim();
-      variableCreationService.hydrateVariablesFromTaskTree(pid, flowIdOption, key, taskTree, {
-        taskRowLabel: taskRowLabel || undefined,
-      });
+      variableCreationService.hydrateVariablesFromTaskTree(pid, flowIdOption, key, taskTree);
       const after = variableCreationService.getVariablesByTaskInstanceId(pid, key);
       logVariableScope('saveTask.hydrateUtterance', {
         projectId: pid,
@@ -169,7 +167,7 @@ export async function saveTask(
         taskRowLabel,
         rootsCount: roots.length,
         varRows: after.length,
-        varNames: after.map((v) => v.varName),
+        variableIds: after.map((v) => v.id),
       });
       try {
         document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));

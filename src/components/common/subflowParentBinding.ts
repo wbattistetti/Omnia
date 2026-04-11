@@ -6,7 +6,7 @@
 import { normalizeSemanticTaskLabel } from '../../domain/variableProxyNaming';
 import { taskRepository } from '../../services/TaskRepository';
 import { getVariableLabel } from '../../utils/getVariableLabel';
-import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegistry';
+import { getActiveFlowMetaTranslationsFlattened } from '../../utils/activeFlowTranslations';
 import { TaskType } from '../../types/taskTypes';
 
 type VariableMenuLikeItem = {
@@ -116,7 +116,7 @@ export function ensureParentVariableAndSubflowOutputBinding(
     );
   }
 
-  const name = getVariableLabel(parentId, getProjectTranslationsTable());
+  const name = getVariableLabel(parentId, getActiveFlowMetaTranslationsFlattened());
   if (!name) {
     throw new Error(
       `Subflow binding references parent variable '${parentId}' but it has no label in translations.`

@@ -4,23 +4,15 @@
 import { TaskContentResolver } from './TaskContentResolver';
 import { taskRepository } from '@services/TaskRepository';
 import type { TaskContentResolverConfig } from './TaskContentResolver.types';
+import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
 
 /**
- * Creates a resolver configured for production environment
- * Uses window.__projectTranslationsContext for translations
+ * Creates a resolver for the running app: same merged translation map as authoring/runtime
+ * (`compiledTranslations`), not only the global React slice on `window`.
  */
 export function createProductionResolver(): TaskContentResolver {
   const config: TaskContentResolverConfig = {
-    getTranslations: () => {
-      // Reads live translations map from the React-mounted project context
-      if (typeof window !== 'undefined') {
-        const context = (window as any).__projectTranslationsContext;
-        if (context && context.translations) {
-          return context.translations;
-        }
-      }
-      return {};
-    },
+    getTranslations: () => getProjectTranslationsTable(),
     getTask: (taskId: string) => taskRepository.getTask(taskId),
   };
 

@@ -4,6 +4,7 @@
 
 import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 import type { FlowInterfaceRowPersisted } from './FlowDocument';
+import { isUuidString, makeTranslationKey } from '@utils/translationKeys';
 
 function entryLabel(row: FlowInterfaceRowPersisted, translations: Record<string, string>): string {
   const t = translations[row.labelKey];
@@ -14,10 +15,13 @@ function entryLabel(row: FlowInterfaceRowPersisted, translations: Record<string,
 /** UI → persist (when saving FlowDocument). */
 export function mappingEntriesToPersistedInput(rows: MappingEntry[]): FlowInterfaceRowPersisted[] {
   return rows.map((m) => {
-    const labelKey = (m as MappingEntry & { labelKey?: string }).labelKey?.trim() || m.externalName?.trim() || m.id;
+    const vid = String(m.variableRefId || '').trim();
+    const labelKey =
+      (m as MappingEntry & { labelKey?: string }).labelKey?.trim() ||
+      (vid && isUuidString(vid) ? makeTranslationKey('var', vid) : m.id);
     return {
       id: m.id,
-      variableRefId: String(m.variableRefId || '').trim() || m.id,
+      variableRefId: vid || m.id,
       labelKey,
       direction: 'input' as const,
     };
@@ -26,17 +30,20 @@ export function mappingEntriesToPersistedInput(rows: MappingEntry[]): FlowInterf
 
 export function mappingEntriesToPersistedOutput(rows: MappingEntry[]): FlowInterfaceRowPersisted[] {
   return rows.map((m) => {
-    const labelKey = (m as MappingEntry & { labelKey?: string }).labelKey?.trim() || m.externalName?.trim() || m.id;
+    const vid = String(m.variableRefId || '').trim();
+    const labelKey =
+      (m as MappingEntry & { labelKey?: string }).labelKey?.trim() ||
+      (vid && isUuidString(vid) ? makeTranslationKey('var', vid) : m.id);
     return {
       id: m.id,
-      variableRefId: String(m.variableRefId || '').trim() || m.id,
+      variableRefId: vid || m.id,
       labelKey,
       direction: 'output' as const,
     };
   });
 }
 
-/** Persist → UI (labels from flow-local translations). */
+/** Persist → UI (labels from flow-local translations only at render time). */
 export function persistedRowsToMappingEntries(
   rows: FlowInterfaceRowPersisted[],
   translations: Record<string, string>
@@ -45,10 +52,8 @@ export function persistedRowsToMappingEntries(
     const label = entryLabel(row, translations);
     return {
       id: row.id,
-      internalPath: label,
+      wireKey: label,
       variableRefId: row.variableRefId,
-      externalName: label,
-      linkedVariable: label,
       apiField: '',
       labelKey: row.labelKey,
     } as MappingEntry & { labelKey: string };

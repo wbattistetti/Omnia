@@ -18,7 +18,6 @@ describe('childFlowInterfaceService', () => {
     vi.mocked(variableCreationService.getAllVariables).mockReturnValue([
       {
         id: 'v1',
-        varName: 'x',
         taskInstanceId: 'task1',
         dataPath: '',
         scope: 'flow',
@@ -38,7 +37,6 @@ describe('childFlowInterfaceService', () => {
     vi.mocked(variableCreationService.getAllVariables).mockReturnValue([
       {
         id: 'v2',
-        varName: 'y',
         taskInstanceId: 'task2',
         dataPath: '',
         scope: 'flow',

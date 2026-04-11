@@ -38,26 +38,25 @@ function GlobalVarRow({
   addTranslation: (guid: string, text: string) => void;
   onRefresh: () => void;
 }) {
-  const devFb = import.meta.env.DEV ? String(instance.varName || '').trim() : undefined;
-  const resolvedLabel = getVariableLabel(instance.id, translations, devFb);
+  const resolvedLabel = getVariableLabel(instance.id, translations) || instance.id;
   const [draft, setDraft] = React.useState(resolvedLabel);
 
   React.useEffect(() => {
-    setDraft(getVariableLabel(instance.id, translations, devFb));
-  }, [instance.id, translations, devFb]);
+    setDraft(getVariableLabel(instance.id, translations) || instance.id);
+  }, [instance.id, translations]);
 
   const commitRename = useCallback(() => {
     const t = draft.trim();
-    const current = getVariableLabel(instance.id, translations, devFb);
+    const current = getVariableLabel(instance.id, translations) || instance.id;
     if (!t || t === current) return;
     const ok = variableCreationService.renameVariableById(projectId, instance.id, t);
     if (ok) {
-      addTranslation(makeTranslationKey('variable', instance.id), t);
+      addTranslation(makeTranslationKey('var', instance.id), t);
       onRefresh();
     } else setDraft(current);
-  }, [draft, instance.id, translations, devFb, projectId, addTranslation, onRefresh]);
+  }, [draft, instance.id, translations, projectId, addTranslation, onRefresh]);
 
-  const displayForDrag = getVariableLabel(instance.id, translations, devFb);
+  const displayForDrag = getVariableLabel(instance.id, translations) || instance.id;
 
   return (
     <div
@@ -122,11 +121,11 @@ export function GlobalProjectDataPanel({ open, onClose, projectId: projectIdProp
   }, [projectId, refresh, projectData]);
 
   const addVariable = useCallback(() => {
-    const base = variableCreationService.createManualVariable(projectId, `var_${Date.now().toString(36)}`, {
+    const suggested = `var_${Date.now().toString(36)}`;
+    const base = variableCreationService.createManualVariable(projectId, suggested, {
       scope: 'project',
     });
-    const label = String(base.varName || '').trim();
-    if (label) addTranslation(makeTranslationKey('variable', base.id), label);
+    if (suggested.trim()) addTranslation(makeTranslationKey('var', base.id), suggested.trim());
     refresh();
   }, [projectId, addTranslation]);
 

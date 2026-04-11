@@ -39,17 +39,17 @@ describe('internalReferenceHaystack (scan-only)', () => {
     expect(hay).toContain(guidNome);
   });
 
-  it('buildInternalReferenceHaystackForParentFlow uses persisted task blob only', () => {
+  it('buildInternalReferenceHaystackForParentFlow includes referenceScanInternalText plus full task JSON (S2 raw scan)', () => {
+    const taskJson = JSON.stringify({
+      [REFERENCE_SCAN_INTERNAL_TEXT_KEY]: `only-${guidX}-blob`,
+      displayText: '{{nome}}',
+    });
     const hay = buildInternalReferenceHaystackForParentFlow({
       conditionInternalTexts: [],
-      taskJsonChunks: [
-        JSON.stringify({
-          [REFERENCE_SCAN_INTERNAL_TEXT_KEY]: `only-${guidX}-blob`,
-          displayText: '{{nome}}',
-        }),
-      ],
+      taskJsonChunks: [taskJson],
     });
     expect(hay).toContain(guidX);
-    expect(hay).not.toContain('nome');
+    expect(hay).toContain(`only-${guidX}-blob`);
+    expect(hay).toContain(taskJson);
   });
 });

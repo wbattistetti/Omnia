@@ -86,10 +86,10 @@ describe('syncSubflowInterfaceAfterAuthoringCanvasChange', () => {
   it('merges child OUTPUT for referenced task variables when moving onto subflow canvas', () => {
     taskRepository.createTask(TaskType.SayMessage, null, { label: 'Ask' }, taskId, 'p1');
     getAllVarsSpy.mockReturnValue([
-      { id: d1, varName: 'colore', taskInstanceId: taskId, dataPath: 'p' },
+      { id: d1, taskInstanceId: taskId, dataPath: 'p' },
     ] as any);
     getVarsByTaskSpy.mockReturnValue([
-      { id: d1, varName: 'colore', taskInstanceId: taskId, dataPath: 'p' },
+      { id: d1, taskInstanceId: taskId, dataPath: 'p' },
     ] as any);
 
     const flows = {

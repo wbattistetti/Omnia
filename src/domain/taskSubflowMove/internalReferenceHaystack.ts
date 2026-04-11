@@ -61,6 +61,8 @@ export function buildInternalReferenceHaystackForParentFlow(
       if (typeof persisted === 'string' && persisted.trim()) {
         parts.push(persisted);
       }
+      /** S2 scan reliability: full serialized task so GUID substrings (parameters, bodies) match known var ids. */
+      parts.push(json);
     } catch {
       /* invalid JSON — skip */
     }

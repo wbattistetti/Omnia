@@ -21,8 +21,8 @@ import {
   getVariableMenuRebuildFingerprint,
   type VariableMenuItem,
 } from '../../../common/variableMenuModel';
+import { useActiveFlowMetaTranslationsFlattened } from '../../../../hooks/useActiveFlowMetaTranslations';
 import { getVariableLabel } from '../../../../utils/getVariableLabel';
-import { getProjectTranslationsTable } from '../../../../utils/projectTranslationsRegistry';
 import { resolveChildOutputGuidToParentProxyLabelForFlow } from '../../../../services/subflowProjectSync';
 import { ensureParentVariableAndSubflowOutputBinding } from '../../../common/subflowParentBinding';
 import { useTextTranslationField } from './shared/useTextTranslationField';
@@ -34,7 +34,8 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
   const instanceId = taskMeta.instanceId || taskMeta.id;
   const pdUpdate = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
-  const { translations, addTranslation, getTranslation } = useProjectTranslations();
+  const { translations, compiledTranslations, addTranslation, getTranslation } = useProjectTranslations();
+  const flowTranslations = useActiveFlowMetaTranslationsFlattened();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [varsMenu, setVarsMenu] = useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
   const { flows } = useFlowWorkspace();
@@ -69,7 +70,7 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
   useEffect(() => {
     let cancelled = false;
     void buildVariableMenuItemsAsync(projectIdForMenu, menuFlowId, flows as any, {
-      translationsByGuid: translations,
+      translationsByGuid: compiledTranslations,
     })
       .then((items) => {
         if (!cancelled) setVariableMenuItems(items);
@@ -84,7 +85,7 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     return () => {
       cancelled = true;
     };
-  }, [projectIdForMenu, menuFlowId, variableMenuFingerprint, translations]);
+  }, [projectIdForMenu, menuFlowId, variableMenuFingerprint, compiledTranslations]);
 
   const variableMappings = React.useMemo(() => buildVariableMappingsFromMenu(variableMenuItems), [variableMenuItems]);
 
@@ -120,15 +121,11 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
             flows as any
           );
           if (viaSubflowBinding) return viaSubflowBinding;
-          return (
-            getVariableLabel(guid, translations) ||
-            getVariableLabel(guid, getProjectTranslationsTable()) ||
-            null
-          );
+          return getVariableLabel(guid, flowTranslations) || null;
         },
       });
     },
-    [variableMappings, translations, menuFlowId, flows]
+    [variableMappings, translations, menuFlowId, flows, flowTranslations]
   );
 
   const getTranslationForField = useCallback(

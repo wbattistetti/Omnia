@@ -1,33 +1,43 @@
 /**
- * Backend mapping "Variabile" column: SEND = pick existing only; RECEIVE = search/create + pick list.
- * Dropdown list is portaled to document.body so parent overflow (e.g. SEND/RECEIVE frame) does not clip it.
+ * Backend mapping "Variabile" column: pick variable by GUID; label from active flow `meta.translations` only.
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
+import { getVariableLabel } from '../../utils/getVariableLabel';
+import { isUuidString } from '../../utils/translationKeys';
+import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
 
 const mirror10 = 'text-[10px] px-2 py-1 font-normal';
 
 export interface BackendMappingVariableFieldProps {
   mode: 'send' | 'receive';
-  value: string;
+  /** Variable GUID when wired. */
   variableRefId?: string;
+  /** Sorted unique variable GUIDs (see {@link VariableCreationService.getAllVarNames}). */
   variableOptions: string[];
   placeholder?: string;
   accentClassName?: string;
-  onCommit: (patch: { linkedVariable: string; variableRefId?: string }) => void;
+  onCommit: (patch: { variableRefId?: string }) => void;
   /** RECEIVE: create variable when user confirms a new name (Invio). */
   onCreateVariable?: (displayName: string) => { id: string; label: string } | null;
   onVariableCreated?: () => void;
-  /** SEND: resolve GUID from picked label so persisted `variable` matches variable id. */
-  resolveVariableRefIdFromLabel?: (label: string) => string | undefined;
 }
 
-function filterOptions(options: string[], q: string): string[] {
+function filterOptions(
+  options: string[],
+  q: string,
+  flowTr: Record<string, string>
+): string[] {
   const t = q.trim().toLowerCase();
   if (!t) return options;
-  return options.filter((o) => o.toLowerCase().includes(t));
+  return options.filter((o) => {
+    const id = String(o || '').trim();
+    if (!id) return false;
+    if (id.toLowerCase().includes(t)) return true;
+    return getVariableLabel(id, flowTr).toLowerCase().includes(t);
+  });
 }
 
 const panelClassName =
@@ -35,16 +45,15 @@ const panelClassName =
 
 export function BackendMappingVariableField({
   mode,
-  value,
-  variableRefId: _variableRefId,
+  variableRefId,
   variableOptions,
   placeholder = 'Variabile',
   accentClassName = 'text-amber-100/95',
   onCommit,
   onCreateVariable,
   onVariableCreated,
-  resolveVariableRefIdFromLabel,
 }: BackendMappingVariableFieldProps) {
+  const flowTr = useActiveFlowMetaTranslationsFlattened();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
@@ -52,7 +61,8 @@ export function BackendMappingVariableField({
   const inputTopRef = useRef<HTMLInputElement>(null);
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
-  /** Use `click` (not `mousedown`) so option `onClick` runs first and `onCommit` can update the field. */
+  const displayText = variableRefId ? getVariableLabel(variableRefId, flowTr) : '';
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
@@ -95,17 +105,18 @@ export function BackendMappingVariableField({
     }
   }, [open, mode]);
 
-  const showEmpty = !value?.trim();
+  const showEmpty = !variableRefId?.trim();
   const emptyClass = 'text-slate-500 italic font-normal';
 
   const pickExisting = useCallback(
-    (label: string) => {
-      const rid = resolveVariableRefIdFromLabel?.(label)?.trim();
-      onCommit(rid ? { linkedVariable: label, variableRefId: rid } : { linkedVariable: label });
+    (varId: string) => {
+      const id = String(varId || '').trim();
+      if (!id || !isUuidString(id)) return;
+      onCommit({ variableRefId: id });
       setOpen(false);
       setDraft('');
     },
-    [onCommit, resolveVariableRefIdFromLabel]
+    [onCommit]
   );
 
   const handleReceiveSubmit = useCallback(() => {
@@ -124,7 +135,7 @@ export function BackendMappingVariableField({
     if (onCreateVariable) {
       const created = onCreateVariable(t);
       if (created) {
-        onCommit({ linkedVariable: created.label, variableRefId: created.id });
+        onCommit({ variableRefId: created.id });
         onVariableCreated?.();
       }
     }
@@ -132,7 +143,7 @@ export function BackendMappingVariableField({
     setDraft('');
   }, [draft, variableOptions, onCreateVariable, onCommit, onVariableCreated, pickExisting]);
 
-  const filtered = filterOptions(variableOptions, mode === 'receive' ? draft : draft);
+  const filtered = filterOptions(variableOptions, mode === 'receive' ? draft : draft, flowTr);
 
   const panel = open ? (
     <div
@@ -148,7 +159,7 @@ export function BackendMappingVariableField({
             ref={inputTopRef}
             type="text"
             className="w-full rounded border border-amber-400/40 bg-slate-900 px-2 py-1 text-[10px] text-amber-50 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-400/60"
-            placeholder="Cerca o crea variabile (Invio per creare)"
+            placeholder="Cerca per GUID o crea (Invio)"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -166,7 +177,7 @@ export function BackendMappingVariableField({
           <input
             type="text"
             className="w-full rounded border border-amber-400/40 bg-slate-900 px-2 py-1 text-[10px] text-amber-50 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-400/60"
-            placeholder="Filtra variabili…"
+            placeholder="Filtra per GUID…"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -189,7 +200,7 @@ export function BackendMappingVariableField({
                   pickExisting(opt);
                 }}
               >
-                {opt}
+                {getVariableLabel(opt, flowTr)}
               </button>
             </li>
           ))
@@ -207,9 +218,9 @@ export function BackendMappingVariableField({
           setOpen((o) => !o);
           setDraft('');
         }}
-        title={value || placeholder}
+        title={displayText || placeholder}
       >
-        <span className="truncate">{showEmpty ? placeholder : value}</span>
+        <span className="truncate">{showEmpty ? placeholder : displayText}</span>
         <ChevronDown className="w-3 h-3 shrink-0 opacity-60" aria-hidden />
       </button>
 

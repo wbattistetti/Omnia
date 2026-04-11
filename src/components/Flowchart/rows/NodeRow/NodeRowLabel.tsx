@@ -356,7 +356,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
 }) => {
   // ✅ ARCHITECTURAL: Use GlobalTestPanel context for testing
   const { openWithTask } = useGlobalTestPanel();
-  const { translations } = useProjectTranslations();
+  const { translations, compiledTranslations } = useProjectTranslations();
 
   // ✅ Check if task instance exists for this row
   const taskInstance = React.useMemo(() => {
@@ -377,7 +377,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       if (!activeFlowId?.trim() || !flows) return;
       try {
         const all = await buildVariableMenuItemsAsync(pid, activeFlowId, flows, {
-          translationsByGuid: translations,
+          translationsByGuid: compiledTranslations,
         });
         const filtered = all.filter((i) => i.subflowTaskId === row.id);
         const items: VariableMenuRowItem[] = filtered.map((i) => ({
@@ -398,7 +398,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
         console.error('[NodeRowLabel] Subflow interface menu', e);
       }
     },
-    [getProjectId, activeFlowId, flows, row.id, translations]
+    [getProjectId, activeFlowId, flows, row.id, compiledTranslations]
   );
 
   const handleTestTask = useCallback(async () => {

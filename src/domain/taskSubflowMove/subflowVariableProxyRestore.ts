@@ -4,9 +4,11 @@
 
 import { TaskType } from '@types/taskTypes';
 import type { WorkspaceState } from '@flows/FlowTypes';
+import { localLabelForSubflowTaskVariable } from '@domain/variableProxyNaming';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
-import { localLabelForSubflowTaskVariable } from '@domain/variableProxyNaming';
+import { getVariableLabel } from '@utils/getVariableLabel';
+import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
 
 function resolveSubflowFlowId(task: { flowId?: string; parameters?: unknown[] } | null): string | null {
   const direct = String(task?.flowId || '').trim();
@@ -43,7 +45,6 @@ export type ChildLocalRenameRecord = { id: string; previousName: string; nextNam
 
 /**
  * Renames task-bound variable rows from legacy fully-qualified names to local labels only.
- * Never applies FQ names; only strips to {@link localLabelForSubflowTaskVariable}.
  */
 export function restoreChildTaskBoundVariablesToLocalNames(
   projectId: string,
@@ -54,6 +55,7 @@ export function restoreChildTaskBoundVariablesToLocalNames(
   const tid = String(taskInstanceId || '').trim();
   if (!pid || !tid) return [];
 
+  const tbl = getProjectTranslationsTable();
   const taskVars = variableCreationService.getVariablesByTaskInstanceId(pid, tid);
   const renamed: ChildLocalRenameRecord[] = [];
 
@@ -61,12 +63,13 @@ export function restoreChildTaskBoundVariablesToLocalNames(
     const vid = String(v.id || '').trim();
     if (!vid || !candidateVarIds.has(vid)) continue;
 
-    const localName = localLabelForSubflowTaskVariable(v.varName || 'value');
-    if (!localName || localName === v.varName) continue;
+    const currentLabel = getVariableLabel(vid, tbl) || vid;
+    const localName = localLabelForSubflowTaskVariable(currentLabel);
+    if (!localName || localName === currentLabel) continue;
 
     const ok = variableCreationService.renameVariableRowById(pid, vid, localName);
     if (ok) {
-      renamed.push({ id: vid, previousName: v.varName, nextName: localName });
+      renamed.push({ id: vid, previousName: currentLabel, nextName: localName });
     }
   }
 
@@ -105,18 +108,19 @@ export function migrateSubflowVariableProxyModel(
 
   const childRenames: ChildLocalRenameRecord[] = [];
   const all = variableCreationService.getAllVariables(pid) ?? [];
+  const tbl = getProjectTranslationsTable();
 
   for (const vid of ifaceIds) {
     const v = all.find((x) => String(x.id || '').trim() === vid);
     if (!v || !String(v.taskInstanceId || '').trim()) continue;
 
-    const localName = localLabelForSubflowTaskVariable(v.varName || '');
-    if (!localName || localName === v.varName) continue;
+    const currentLabel = getVariableLabel(vid, tbl) || vid;
+    const localName = localLabelForSubflowTaskVariable(currentLabel);
+    if (!localName || localName === currentLabel) continue;
 
-    const prev = v.varName;
     const ok = variableCreationService.renameVariableRowById(pid, vid, localName);
     if (ok) {
-      childRenames.push({ id: vid, previousName: prev, nextName: localName });
+      childRenames.push({ id: vid, previousName: currentLabel, nextName: localName });
     }
   }
 

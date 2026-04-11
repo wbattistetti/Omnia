@@ -178,11 +178,11 @@ export interface EngineConfigDomainModel {
 /**
  * VariableDomainModel: Pure domain representation of a variable
  *
- * Maps from VariableInstance (id = TaskTreeNode GUID, varName, dataPath).
+ * Maps from VariableInstance (id = TaskTreeNode GUID, dataPath); display name from translations.
  */
 export interface VariableDomainModel {
   id: string;
-  name: string; // Maps from varName (human-readable)
+  name: string; // Human-readable label (from translations / UI)
   type?: string;
   description?: string;
   defaultValue?: any;

@@ -69,7 +69,6 @@ export function reconstructVariableInstanceFromMinimalDoc(doc: {
   if (t === PROJECT_VARIABLE_METADATA_TYPE) {
     return {
       id,
-      varName: '',
       taskInstanceId: '',
       dataPath: '',
       scope: 'project',
@@ -79,7 +78,6 @@ export function reconstructVariableInstanceFromMinimalDoc(doc: {
     const fid = String(m.flowCanvasId || '').trim();
     return {
       id,
-      varName: '',
       taskInstanceId: '',
       dataPath: '',
       scope: 'flow',
@@ -91,7 +89,6 @@ export function reconstructVariableInstanceFromMinimalDoc(doc: {
     const to = String(doc.to || m.to || '').trim();
     return {
       id,
-      varName: '',
       taskInstanceId: '',
       dataPath: '',
       scope: 'project',
@@ -102,7 +99,6 @@ export function reconstructVariableInstanceFromMinimalDoc(doc: {
   if (t === TASK_BOUND_VARIABLE_METADATA_TYPE) {
     return {
       id,
-      varName: '',
       taskInstanceId: String(m.taskInstanceId || ''),
       dataPath: String(m.dataPath || ''),
       scope: 'flow',

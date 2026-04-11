@@ -179,23 +179,36 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // ✅ FIX: useEffect invece di useMemo - pathRef.current è null durante il render
   // useEffect gira DOPO il render → pathRef.current è già popolato ✅
   const [edgeSegments, setEdgeSegments] = useState<PathSegment[]>([]);
+  /** Evita setState se i segmenti non sono cambiati (MutationObserver + re-render altrimenti = loop infinito). */
+  const edgeSegmentsKeyRef = useRef<string>('');
 
   const computeEdgeSegments = useCallback(() => {
     if (!pathRef.current) {
-      setEdgeSegments([]);
+      if (edgeSegmentsKeyRef.current !== '') {
+        edgeSegmentsKeyRef.current = '';
+        setEdgeSegments([]);
+      }
       return;
     }
 
     try {
       const pathLength = pathRef.current.getTotalLength();
       if (pathLength === 0) {
-        setEdgeSegments([]);
+        if (edgeSegmentsKeyRef.current !== '') {
+          edgeSegmentsKeyRef.current = '';
+          setEdgeSegments([]);
+        }
         return;
       }
 
-      setEdgeSegments(getPathSegments(pathRef.current));
+      const segs = getPathSegments(pathRef.current);
+      const key = JSON.stringify(segs);
+      if (key === edgeSegmentsKeyRef.current) return;
+      edgeSegmentsKeyRef.current = key;
+      setEdgeSegments(segs);
     } catch (e) {
       console.warn('[CustomEdge] Failed to compute edge segments:', e);
+      edgeSegmentsKeyRef.current = '';
       setEdgeSegments([]);
     }
   }, []); // pathRef è stabile, non serve nelle deps

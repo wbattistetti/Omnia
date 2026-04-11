@@ -57,7 +57,7 @@ export function buildMappingTree(
   const root = new Map<string, Mutable>();
 
   for (const entry of entries) {
-    const parts = splitPath(entry.internalPath);
+    const parts = splitPath(entry.wireKey);
     if (parts.length === 0) continue;
 
     let map = root;
@@ -84,7 +84,7 @@ export function buildMappingTree(
   function minIndexInSubtree(pathKey: string): number {
     let m = Number.POSITIVE_INFINITY;
     for (let i = 0; i < entries.length; i += 1) {
-      const p = entries[i].internalPath;
+      const p = entries[i].wireKey;
       if (p === pathKey || p.startsWith(`${pathKey}.`)) m = Math.min(m, i);
     }
     return m === Number.POSITIVE_INFINITY ? Number.MAX_SAFE_INTEGER : m;
@@ -166,7 +166,7 @@ export function insertInterfaceEntryAt(
   if (!targetPathKey) {
     return [...entries, entry];
   }
-  const idx = entries.findIndex((e) => e.internalPath === targetPathKey);
+  const idx = entries.findIndex((e) => e.wireKey === targetPathKey);
   if (idx < 0) return [...entries, entry];
   const insertAt = placement === 'before' ? idx : idx + 1;
   const next = [...entries];
@@ -184,7 +184,7 @@ export function reorderMappingEntries(
   const dragE = entries.find((e) => e.id === dragId);
   const targetE = entries.find((e) => e.id === targetId);
   if (!dragE || !targetE) return entries;
-  if (parentPathKey(dragE.internalPath) !== parentPathKey(targetE.internalPath)) return entries;
+  if (parentPathKey(dragE.wireKey) !== parentPathKey(targetE.wireKey)) return entries;
   const fromIdx = entries.findIndex((e) => e.id === dragId);
   const toIdx = entries.findIndex((e) => e.id === targetId);
   if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return entries;

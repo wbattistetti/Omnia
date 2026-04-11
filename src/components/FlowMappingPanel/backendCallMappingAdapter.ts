@@ -1,6 +1,6 @@
 /**
  * Converts Backend Call task rows (flat inputs/outputs) to MappingEntry[] for the unified tree UI and back.
- * Task stores variable as varId; MappingEntry uses linkedVariable as display name (label).
+ * Task stores variable as GUID only; labels are never duplicated in task rows.
  */
 
 import { createMappingEntry, type MappingEntry } from './mappingTypes';
@@ -22,20 +22,15 @@ export type BackendCallOutputRow = {
 };
 
 /** Task rows → tree entries (skips empty internal names). */
-export function backendInputsToMappingEntries(
-  inputs: BackendCallInputRow[] | undefined,
-  getVarNameFromVarId: (varId: string | undefined) => string | null
-): MappingEntry[] {
+export function backendInputsToMappingEntries(inputs: BackendCallInputRow[] | undefined): MappingEntry[] {
   const list = inputs ?? [];
   return list
     .filter((row) => row.internalName?.trim())
     .map((row) => {
       const vid = row.variable?.trim();
       return createMappingEntry({
-        internalPath: row.internalName.trim(),
+        wireKey: row.internalName.trim(),
         apiField: row.apiParam?.trim() ?? '',
-        linkedVariable: getVarNameFromVarId(row.variable) ?? '',
-        externalName: row.internalName.trim(),
         ...(vid ? { variableRefId: vid } : {}),
         ...(row.fieldDescription !== undefined ? { fieldDescription: row.fieldDescription } : {}),
         ...(row.sampleValues !== undefined ? { sampleValues: row.sampleValues } : {}),
@@ -43,20 +38,15 @@ export function backendInputsToMappingEntries(
     });
 }
 
-export function backendOutputsToMappingEntries(
-  outputs: BackendCallOutputRow[] | undefined,
-  getVarNameFromVarId: (varId: string | undefined) => string | null
-): MappingEntry[] {
+export function backendOutputsToMappingEntries(outputs: BackendCallOutputRow[] | undefined): MappingEntry[] {
   const list = outputs ?? [];
   return list
     .filter((row) => row.internalName?.trim())
     .map((row) => {
       const vid = row.variable?.trim();
       return createMappingEntry({
-        internalPath: row.internalName.trim(),
+        wireKey: row.internalName.trim(),
         apiField: row.apiField?.trim() ?? '',
-        linkedVariable: getVarNameFromVarId(row.variable) ?? '',
-        externalName: row.internalName.trim(),
         ...(vid ? { variableRefId: vid } : {}),
         ...(row.fieldDescription !== undefined ? { fieldDescription: row.fieldDescription } : {}),
         ...(row.sampleValues !== undefined ? { sampleValues: row.sampleValues } : {}),
@@ -64,31 +54,25 @@ export function backendOutputsToMappingEntries(
     });
 }
 
-export function mappingEntriesToBackendInputs(
-  entries: MappingEntry[],
-  resolveVarId: (varName: string) => string
-): BackendCallInputRow[] {
+export function mappingEntriesToBackendInputs(entries: MappingEntry[]): BackendCallInputRow[] {
   return entries
-    .filter((e) => e.internalPath.trim())
+    .filter((e) => e.wireKey.trim())
     .map((e) => ({
-      internalName: e.internalPath.trim(),
+      internalName: e.wireKey.trim(),
       apiParam: e.apiField.trim(),
-      variable: e.variableRefId?.trim() || resolveVarId(e.linkedVariable),
+      variable: e.variableRefId?.trim() ?? '',
       ...(e.fieldDescription !== undefined ? { fieldDescription: e.fieldDescription } : {}),
       ...(e.sampleValues !== undefined ? { sampleValues: e.sampleValues } : {}),
     }));
 }
 
-export function mappingEntriesToBackendOutputs(
-  entries: MappingEntry[],
-  resolveVarId: (varName: string) => string
-): BackendCallOutputRow[] {
+export function mappingEntriesToBackendOutputs(entries: MappingEntry[]): BackendCallOutputRow[] {
   return entries
-    .filter((e) => e.internalPath.trim())
+    .filter((e) => e.wireKey.trim())
     .map((e) => ({
-      internalName: e.internalPath.trim(),
+      internalName: e.wireKey.trim(),
       apiField: e.apiField.trim(),
-      variable: e.variableRefId?.trim() || resolveVarId(e.linkedVariable),
+      variable: e.variableRefId?.trim() ?? '',
       ...(e.fieldDescription !== undefined ? { fieldDescription: e.fieldDescription } : {}),
       ...(e.sampleValues !== undefined ? { sampleValues: e.sampleValues } : {}),
     }));

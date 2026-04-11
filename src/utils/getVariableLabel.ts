@@ -1,40 +1,28 @@
 /**
- * Single source of truth for variable display labels in the UI.
- * Labels come from project translations keyed by `variable:<uuid>`; never use varName/dataPath as label text.
+ * Display label for a variable GUID: only `var:<uuid>` in the provided translations map (active flow UI).
+ * Missing key → returns the GUID. No other fallbacks.
  */
 
 import { isUuidString, makeTranslationKey } from './translationKeys';
+import { resolveTranslationEntryValue, type TranslationEntryValue } from './resolveTranslationEntry';
 
-/**
- * Returns the display label for a variable GUID using the project translations map.
- *
- * @param id - Variable id (UUID).
- * @param translations - Project locale translation table `{ [variable:uuid]: text }`.
- * @param fallback - Optional debug/legacy fallback when the key is missing (omit in production paths).
- */
 export function getVariableLabel(
   id: string,
-  translations: Record<string, string> | null | undefined,
-  fallback?: string
+  translations: Record<string, TranslationEntryValue> | null | undefined
 ): string {
   const rawId = String(id || '').trim();
   if (!rawId) {
-    return fallback ?? '';
-  }
-  if (!isUuidString(rawId)) {
-    if (fallback != null && String(fallback).trim() !== '') {
-      return String(fallback).trim();
-    }
     return '';
   }
-  const translationKey = makeTranslationKey('variable', rawId);
+  if (!isUuidString(rawId)) {
+    return '';
+  }
+  const translationKey = makeTranslationKey('var', rawId);
   const table = translations && typeof translations === 'object' ? translations : {};
   const raw = table[translationKey];
-  if (raw != null && String(raw).trim() !== '') {
-    return String(raw).trim();
+  const resolved = resolveTranslationEntryValue(raw);
+  if (resolved !== '') {
+    return resolved;
   }
-  if (fallback != null && String(fallback).trim() !== '') {
-    return String(fallback).trim();
-  }
-  return '';
+  return rawId;
 }

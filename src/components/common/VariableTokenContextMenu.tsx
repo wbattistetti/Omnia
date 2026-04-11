@@ -179,7 +179,7 @@ function NativeDraggablePanel({ x, y, items, nodeId, onClose }: NativePanelProps
         DND_FLOWROW_VAR,
         JSON.stringify({
           variableRefId: item.id,
-          suggestedInternalPath: stableInterfacePathForVariable(item.id),
+          suggestedWireKey: stableInterfacePathForVariable(item.id),
           displayLabel: label,
           nodeId,
         })

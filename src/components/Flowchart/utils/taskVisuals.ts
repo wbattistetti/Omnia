@@ -2,7 +2,20 @@ import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot, List, C
 import { taskRepository } from '../../../services/TaskRepository';
 import { getSayMessageSyncedBody } from '../../../utils/sayMessageTaskSync';
 import { TaskType, normalizeLegacyTaskTypeValue } from '../../../types/taskTypes';
-import { PRESET_CATEGORIES, getCurrentProjectLocale } from '../../../utils/categoryPresets';
+import { PRESET_CATEGORIES } from '../../../utils/categoryPresets';
+
+/** Preset row categories must not recolor unrelated task types (e.g. Subflow vs SayMessage presets). */
+const SAY_MESSAGE_PRESET_IDS = new Set(['greeting', 'farewell', 'info-short', 'info-long']);
+const DATA_OR_CLASSIFY_PRESET_IDS = new Set(['problem-classification', 'choice', 'confirmation']);
+
+function isPresetCategoryApplicableToTaskType(category: string, type: TaskType): boolean {
+  if (!category || !PRESET_CATEGORIES[category]) return false;
+  if (SAY_MESSAGE_PRESET_IDS.has(category)) return type === TaskType.SayMessage;
+  if (DATA_OR_CLASSIFY_PRESET_IDS.has(category)) {
+    return type === TaskType.UtteranceInterpretation || type === TaskType.ClassifyProblem;
+  }
+  return false;
+}
 import getIconComponent from '../../TaskEditor/ResponseEditor/icons';
 import { getGlobalResolver } from '@domain/taskContent/TaskContentResolver.config';
 import {
@@ -64,9 +77,9 @@ export function resolveTaskType(row: any): TaskType {
     try {
       const task = taskRepository.getTask(taskId);
       if (task) {
-        // ✅ Usa direttamente task.type (TaskType enum) invece di convertire
+        // Persisted enum may use legacy `9` → Subflow (aligned with VB / useNodeRowVisuals)
         if (task.type !== undefined && task.type !== null) {
-          return task.type as TaskType;
+          return normalizeLegacyTaskTypeValue(task.type as number);
         }
 
         // ✅ Log solo se il task esiste ma non ha type
@@ -239,8 +252,8 @@ export function getTaskVisuals(
     };
   }
 
-  // ✅ Priorità 2: Preset category
-  if (category && PRESET_CATEGORIES[category]) {
+  // ✅ Priorità 2: Preset category (only when the preset matches the task type)
+  if (category && PRESET_CATEGORIES[category] && isPresetCategoryApplicableToTaskType(category, type)) {
     const preset = PRESET_CATEGORIES[category];
     // Usa l'icona Lucide direttamente (non getIconComponent per icone standard)
     let Icon: any;

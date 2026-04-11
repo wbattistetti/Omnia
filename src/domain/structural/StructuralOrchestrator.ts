@@ -16,6 +16,7 @@ import { registerSubflowWiringSecondPass } from '@domain/taskSubflowMove/subflow
 import { executeSubflowWiringSecondPassCore } from './subflowWiringSecondPassCore';
 import { variableCreationService } from '@services/VariableCreationService';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logS2Diag } from '@utils/s2WiringDiagnostic';
 import { logStructuralOrchestratorCommitSnapshot } from '@utils/flowStructuralCommitDiagnostic';
 import { logSubflowSliceMutation } from '@utils/subflowCanvasDebug';
 import { affectedTaskFlowPairs } from './affectedTasks';
@@ -168,6 +169,7 @@ function runMoveTaskRow(ctx: StructuralOrchestratorContext, command: MoveTaskRow
     projectData: ctx.projectData,
     skipStructuralPhase: true,
     isLinkedSubflowMove: true,
+    deleteUnreferencedTaskVariableRows: true,
   });
 
   if (variableCreationService.getVariablesByTaskInstanceId(pid, rowId).length === 0) {
@@ -290,6 +292,7 @@ function runMoveTaskRowToCanvas(ctx: StructuralOrchestratorContext, command: Mov
     projectData: ctx.projectData,
     skipStructuralPhase: true,
     isLinkedSubflowMove: true,
+    deleteUnreferencedTaskVariableRows: true,
   });
 
   if (variableCreationService.getVariablesByTaskInstanceId(pid, rowId).length === 0) {
@@ -369,6 +372,13 @@ function runMoveTaskRowIntoSubflow(
     translationsRaw && Object.keys(translationsRaw).length > 0 ? translationsRaw : undefined;
 
   logPipeline('pipeline:7-8-applyWiring', command);
+  logS2Diag('structuralOrchestrator', 'runMoveTaskRowIntoSubflow → applyTaskMoveToSubflow', {
+    rowId: command.rowId,
+    parentFlowId: command.parentFlowId,
+    childFlowId: command.childFlowId,
+    parentSubflowTaskRowId: command.parentSubflowTaskRowId,
+    targetNodeId: command.targetNodeId,
+  });
   let result = applyTaskMoveToSubflow({
     projectId: pid,
     parentFlowId: command.parentFlowId,
@@ -381,6 +391,41 @@ function runMoveTaskRowIntoSubflow(
     translations: translationsArg,
     projectData: ctx.projectData,
     skipStructuralPhase: true,
+    isLinkedSubflowMove: true,
+    deleteUnreferencedTaskVariableRows: true,
+  });
+
+  let subflowSecondPassRanSynchronously = false;
+  if (variableCreationService.getVariablesByTaskInstanceId(pid, command.rowId).length === 0) {
+    const flushed = registerSubflowWiringSecondPass({
+      projectId: pid,
+      parentFlowId: command.parentFlowId,
+      childFlowId: command.childFlowId,
+      taskInstanceId: command.rowId,
+      subflowDisplayTitle: command.subflowDisplayTitle,
+      parentSubflowTaskRowId: command.parentSubflowTaskRowId,
+      conditions,
+      translations: translationsArg,
+      projectData: ctx.projectData,
+    });
+    if (flushed) {
+      result = flushed;
+      subflowSecondPassRanSynchronously = true;
+    }
+  }
+
+  const childMeta = result.flowsNext[command.childFlowId]?.meta as
+    | { flowInterface?: { output?: unknown[]; input?: unknown[] } }
+    | undefined;
+  logS2Diag('structuralOrchestrator', 'dopo apply (+ eventuale second pass)', {
+    rowId: command.rowId,
+    outputInterfaceRows: childMeta?.flowInterface?.output?.length ?? 0,
+    inputInterfaceRows: childMeta?.flowInterface?.input?.length ?? 0,
+    parentAutoRenames: result.parentAutoRenames.length,
+    materializeOk: result.taskMaterialization.ok,
+    materializeError: result.taskMaterialization.errorMessage ?? null,
+    subflowSecondPassRanSynchronously,
+    variableRowsForTaskAfter: variableCreationService.getVariablesByTaskInstanceId(pid, command.rowId).length,
   });
 
   logPipeline('pipeline:9-invariants', command);

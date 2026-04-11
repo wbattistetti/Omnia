@@ -1,14 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { buildMappingTree, renameLeafSegment } from '../mappingTreeUtils';
-import type { MappingEntry } from '../mappingTypes';
+import { createFlowInterfaceMappingEntry, type MappingEntry } from '../mappingTypes';
 
 function e(path: string, id = path): MappingEntry {
   return {
     id,
-    internalPath: path,
+    wireKey: path,
     apiField: '',
-    linkedVariable: '',
-    externalName: path,
   };
 }
 
@@ -41,6 +39,16 @@ describe('buildMappingTree', () => {
       { siblingOrder: 'alphabetical' }
     );
     expect(tree.map((n) => n.segment)).toEqual(['zebra', '__omnia_n_abc', 'alfa']);
+  });
+
+  it('includes subflow interface rows (non-empty default wireKey)', () => {
+    const row = createFlowInterfaceMappingEntry({
+      variableRefId: '550e8400-e29b-41d4-a716-446655440000',
+    });
+    expect(row.wireKey.length).toBeGreaterThan(0);
+    const tree = buildMappingTree([row]);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].segment.startsWith('iface_')).toBe(true);
   });
 });
 

@@ -1,6 +1,10 @@
 /**
  * Synchronous read access to the current project translation map for non-React code
- * (DSL converters, services, variable label resolution). Updated from ProjectTranslationsContext.
+ * (DSL converters, services, variable label resolution, TaskContentResolver).
+ *
+ * The table is the **compiled** map: global project locale rows merged with every flow slice's
+ * `meta.translations` (same as `compiledTranslations` in ProjectTranslationsContext). Always read
+ * through `getProjectTranslationsTable` for domain checks (e.g. SayMessage "has content").
  */
 
 import { isValidTranslationStoreKey } from './translationKeys';
@@ -8,7 +12,7 @@ import { isValidTranslationStoreKey } from './translationKeys';
 let currentTable: Record<string, string> = {};
 
 /**
- * Replace the registry contents (typically the merged project locale map).
+ * Replace the registry contents (typically output of `compileWorkspaceTranslations`).
  */
 export function setProjectTranslationsRegistry(map: Record<string, string>): void {
   currentTable = map && typeof map === 'object' ? { ...map } : {};
@@ -31,7 +35,7 @@ export function mergeProjectTranslationEntry(guid: string, text: string): void {
 }
 
 /**
- * Returns a shallow copy of the current translation table for read-only use.
+ * Shallow copy of the merged global + flow-slice translation map (authoring/runtime consistent).
  */
 export function getProjectTranslationsTable(): Record<string, string> {
   return { ...currentTable };

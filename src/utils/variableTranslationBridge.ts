@@ -1,6 +1,6 @@
 /**
  * Bridges domain code (e.g. subflow auto-rename) to {@link ProjectTranslationsContext} so
- * `variable:uuid` labels are persisted on save and survive reload. Plain
+ * `var:uuid` labels are persisted on save and survive reload. Plain
  * {@link mergeProjectTranslationEntry} only updates the sync registry; React state must also update.
  */
 
@@ -16,7 +16,7 @@ export function registerVariableTranslationListener(fn: Listener | null): void {
 }
 
 /**
- * Writes a variable display string under a canonical translation key (e.g. `variable:uuid`)
+ * Writes a variable display string under a canonical translation key (e.g. `var:uuid`)
  * and notifies the React translation layer when registered.
  */
 export function publishVariableDisplayTranslation(canonicalKey: string, text: string): void {

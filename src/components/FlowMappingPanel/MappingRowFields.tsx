@@ -6,6 +6,8 @@ import React from 'react';
 import type { MappingEntry } from './mappingTypes';
 import { InlineFieldWithPencilEdit } from './InlineFieldWithPencilEdit';
 import { BackendMappingVariableField } from './BackendMappingVariableField';
+import { getVariableLabel } from '../../utils/getVariableLabel';
+import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
 
 export interface MappingRowFieldsProps {
   variant: 'backend' | 'interface';
@@ -27,8 +29,6 @@ export interface MappingRowFieldsProps {
   variableOptions: string[];
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
-  /** Backend SEND: map picked label → variable GUID for persisted binding. */
-  resolveVariableRefIdFromLabel?: (label: string) => string | undefined;
 }
 
 export function MappingRowFields({
@@ -46,8 +46,9 @@ export function MappingRowFields({
   variableOptions = [],
   onCreateOutputVariable,
   onOutputVariableCreated,
-  resolveVariableRefIdFromLabel,
 }: MappingRowFieldsProps) {
+  const flowTr = useActiveFlowMetaTranslationsFlattened();
+
   if (variant === 'backend' && groupOnlyBackend) {
     return (
       <div className="flex items-center gap-2 shrink-0 opacity-30 pointer-events-none" aria-hidden>
@@ -73,6 +74,7 @@ export function MappingRowFields({
 
   if (variant === 'backend') {
     const varMode = backendColumn === 'receive' ? 'receive' : 'send';
+    const varLabel = entry.variableRefId ? getVariableLabel(entry.variableRefId, flowTr) : '';
     return (
       <div className="flex items-center gap-2 shrink-0 min-w-0">
         {showApiFields ? (
@@ -89,25 +91,23 @@ export function MappingRowFields({
         ) : null}
         {secondaryFieldsLocked ? (
           <InlineFieldWithPencilEdit
-            value={entry.linkedVariable}
+            value={varLabel}
             placeholder="Variabile"
             ariaLabel="Variabile collegata"
             listId={datalistVarId}
             accent="amber"
             suppressFocus
             viewTabIndex={-1}
-            onCommit={(next) => onPatch({ linkedVariable: next })}
+            onCommit={() => {}}
           />
         ) : (
           <BackendMappingVariableField
             mode={varMode}
-            value={entry.linkedVariable}
             variableRefId={entry.variableRefId}
             variableOptions={variableOptions}
             onCommit={(patch) => onPatch(patch)}
             onCreateVariable={varMode === 'receive' ? onCreateOutputVariable : undefined}
             onVariableCreated={varMode === 'receive' ? onOutputVariableCreated : undefined}
-            resolveVariableRefIdFromLabel={resolveVariableRefIdFromLabel}
           />
         )}
       </div>

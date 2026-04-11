@@ -123,9 +123,7 @@ export default function TaskTreeHostAdapter({
       const label = String(
         ensured.labelKey ?? ensured.label ?? task.label ?? task.labelKey ?? taskMeta.label ?? ''
       ).trim();
-      variableCreationService.hydrateVariablesFromTaskTree(pid, authoringFlowCanvasId, taskId, ensured, {
-        taskRowLabel: label || undefined,
-      });
+      variableCreationService.hydrateVariablesFromTaskTree(pid, authoringFlowCanvasId, taskId, ensured);
       try {
         document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
       } catch {

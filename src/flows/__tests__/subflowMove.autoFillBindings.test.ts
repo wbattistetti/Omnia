@@ -13,6 +13,8 @@ import {
 } from '@domain/taskSubflowMove/autoFillSubflowBindings';
 import { applyTaskMoveToSubflow } from '@domain/taskSubflowMove/applyTaskMoveToSubflow';
 import * as collectReferenced from '@domain/taskSubflowMove/collectReferencedVarIds';
+import { makeTranslationKey } from '@utils/translationKeys';
+import { setProjectTranslationsRegistry } from '@utils/projectTranslationsRegistry';
 
 /** Mirrors VB `SubflowTaskExecutor.ApplyPopBindings` for tests. */
 function applyPopLikeRuntime(
@@ -64,10 +66,8 @@ describe('autoFillSubflowBindingsForMovedTask (S2)', () => {
           output: [
             {
               id: MAPPING_ENTRY_ROW_ID,
-              internalPath: 'telefono',
-              externalName: 'telefono',
+              wireKey: 'telefono',
               apiField: '',
-              linkedVariable: 'telefono',
               variableRefId: G_CHILD_TELEFONO,
             },
           ],
@@ -78,7 +78,6 @@ describe('autoFillSubflowBindingsForMovedTask (S2)', () => {
     vi.spyOn(variableCreationService, 'getAllVariables').mockReturnValue([
       {
         id: G_CHILD_TELEFONO,
-        varName: 'telefono',
         taskInstanceId: 'moved_task',
         dataPath: 'd',
         scope: 'flow',
@@ -92,7 +91,7 @@ describe('autoFillSubflowBindingsForMovedTask (S2)', () => {
       parentFlow: { id: 'parent_f', title: 'P', nodes: [], edges: [] } as any,
       childFlow: childFlow as any,
       subflowTaskId,
-      referencedVarIds: [G_CHILD_TELEFONO],
+      taskVariableIds: [G_CHILD_TELEFONO],
     });
 
     expect(ok).toBe(true);
@@ -112,7 +111,7 @@ describe('autoFillSubflowBindingsForMovedTask (S2)', () => {
             {
               id: MAPPING_ENTRY_ROW_ID,
               variableRefId: G_CHILD_TELEFONO,
-              internalPath: 'telefono',
+              wireKey: 'telefono',
             },
           ],
         },
@@ -162,7 +161,103 @@ describe('autoFillSubflowBindingsForMovedTask (S2)', () => {
 
     const taskVar: VariableInstance = {
       id: vid,
-      varName: 'telefono',
+      taskInstanceId: movedTaskId,
+      dataPath: 'd',
+      scope: 'flow',
+      scopeFlowId: childFlowId,
+    };
+
+    vi.spyOn(variableCreationService, 'getVariablesByTaskInstanceId').mockReturnValue([taskVar]);
+    const svc = variableCreationService as unknown as { projectKey: (p: string) => string; store: Map<string, VariableInstance[]> };
+    const storeKey = svc.projectKey(projectId);
+    svc.store.set(storeKey, [taskVar]);
+
+    const flows = {
+      [parentFlowId]: {
+        id: parentFlowId,
+        title: 'Main',
+        nodes: [],
+        edges: [],
+      },
+      [childFlowId]: {
+        id: childFlowId,
+        title: 'Sub',
+        nodes: [],
+        edges: [],
+        meta: {
+          flowInterface: {
+            input: [],
+            output: [],
+          },
+        },
+      },
+    } as any;
+
+    setProjectTranslationsRegistry({
+      [makeTranslationKey('var', vid)]: 'telefono',
+    });
+
+    const result = applyTaskMoveToSubflow({
+      projectId,
+      parentFlowId,
+      childFlowId,
+      taskInstanceId: movedTaskId,
+      subflowDisplayTitle: 'chiedi dati',
+      parentSubflowTaskRowId: subflowTaskId,
+      flows,
+      skipMaterialization: true,
+      skipStructuralPhase: true,
+    });
+
+    expect(result.guidMappingParentSubflow.some((g) => g.id === vid)).toBe(true);
+
+    const portal = taskRepository.getTask(subflowTaskId);
+    expect(portal?.subflowBindings?.length).toBeGreaterThan(0);
+    const b = portal?.subflowBindings ?? [];
+    for (const row of b) {
+      expect(String(row.interfaceParameterId)).toBe(vid);
+      expect(String(row.parentVariableId)).toBe(vid);
+    }
+
+    const outs = result.flowsNext[childFlowId]?.meta?.flowInterface?.output ?? [];
+    expect(Array.isArray(outs)).toBe(true);
+    const refIds = outs.map((o: any) => String(o?.variableRefId || '').trim()).filter(Boolean);
+    expect(refIds).toContain(vid);
+
+    const parent: Record<string, unknown> = {};
+    const child: Record<string, unknown> = { [vid]: 'telefono' };
+    applyPopLikeRuntime(child, parent, b);
+    expect(parent[vid]).toBe('telefono');
+
+    expect(result.parentAutoRenames.length).toBe(1);
+    expect(result.parentAutoRenames[0]?.nextName).toBe('dati.telefono');
+
+    const ptr = (result.flowsNext[parentFlowId]?.meta as { translations?: Record<string, string> } | undefined)
+      ?.translations;
+    expect(ptr?.[makeTranslationKey('var', vid)]).toBe('dati.telefono');
+  });
+
+  it('applyTaskMoveToSubflow: zero refs in parent → no interface rows, no bindings, no rename; unreferenced rows removed', () => {
+    const projectId = `proj_emptyscan_${Math.random().toString(36).slice(2, 10)}`;
+    const movedTaskId = `moved_${Math.random().toString(36).slice(2, 10)}`;
+    const subflowTaskId = `portal_${Math.random().toString(36).slice(2, 10)}`;
+    const parentFlowId = 'parent_flow';
+    const childFlowId = 'child_flow';
+    const vid = '44444444-4444-4444-8444-444444444444';
+
+    taskRepository.createTask(TaskType.SayMessage, null, {}, movedTaskId, projectId);
+    taskRepository.createTask(
+      TaskType.Subflow,
+      null,
+      { flowId: childFlowId, subflowBindingsSchemaVersion: 1, subflowBindings: [] },
+      subflowTaskId,
+      projectId
+    );
+
+    vi.spyOn(collectReferenced, 'collectReferencedVarIdsForParentFlowWorkspace').mockReturnValue(new Set());
+
+    const taskVar: VariableInstance = {
+      id: vid,
       taskInstanceId: movedTaskId,
       dataPath: 'd',
       scope: 'flow',
@@ -207,25 +302,17 @@ describe('autoFillSubflowBindingsForMovedTask (S2)', () => {
       skipStructuralPhase: true,
     });
 
+    expect(result.referencedVarIdsForMovedTask.length).toBe(0);
+    expect(result.guidMappingParentSubflow.length).toBe(0);
     const portal = taskRepository.getTask(subflowTaskId);
-    expect(portal?.subflowBindings?.length).toBeGreaterThan(0);
-    const b = portal?.subflowBindings ?? [];
-    for (const row of b) {
-      expect(String(row.interfaceParameterId)).toBe(vid);
-      expect(String(row.parentVariableId)).toBe(vid);
-    }
+    expect(portal?.subflowBindings?.length ?? 0).toBe(0);
+    expect(result.parentAutoRenames.length).toBe(0);
 
     const outs = result.flowsNext[childFlowId]?.meta?.flowInterface?.output ?? [];
     expect(Array.isArray(outs)).toBe(true);
-    const refIds = outs.map((o: any) => String(o?.variableRefId || '').trim()).filter(Boolean);
-    expect(refIds).toContain(vid);
+    expect(outs.length).toBe(0);
 
-    const parent: Record<string, unknown> = {};
-    const child: Record<string, unknown> = { [vid]: 'telefono' };
-    applyPopLikeRuntime(child, parent, b);
-    expect(parent[vid]).toBe('telefono');
-
-    expect(result.parentAutoRenames.length).toBe(1);
-    expect(result.parentAutoRenames[0]?.nextName).toBe('dati.telefono');
+    expect(result.removedUnreferencedVariableRows).toBeGreaterThanOrEqual(1);
+    expect(result.unreferencedVarIdsForMovedTask).toContain(vid);
   });
 });

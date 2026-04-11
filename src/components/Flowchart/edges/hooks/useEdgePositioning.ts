@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, RefObject } from 'react';
+import { useState, useEffect, useCallback, useRef, RefObject } from 'react';
 import { useReactFlow } from 'reactflow';
 import { CoordinateConverter } from '../utils/coordinateUtils';
 
@@ -24,6 +24,10 @@ export function useEdgePositioning(
   labelPositionAbsolute?: { x: number; y: number } | null // ✅ Absolute coordinates
 ): EdgePositioningResult {
   const reactFlowInstance = useReactFlow();
+  /** useReactFlow() identity can change every render — must not be in useCallback deps or effects re-run forever. */
+  const reactFlowRef = useRef(reactFlowInstance);
+  reactFlowRef.current = reactFlowInstance;
+
   const [positions, setPositions] = useState<EdgePositioningResult>({
     midPointSvg: { x: 0, y: 0 },
     midPointScreen: { x: 0, y: 0 },
@@ -39,7 +43,7 @@ export function useEdgePositioning(
     const pathLength = path.getTotalLength();
     if (pathLength === 0) return;
 
-    const converter = new CoordinateConverter(reactFlowInstance, pathRef);
+    const converter = new CoordinateConverter(reactFlowRef.current, pathRef);
 
     // Midpoint del path (per EdgeControls)
     const midPoint = path.getPointAtLength(pathLength / 2);
@@ -61,14 +65,28 @@ export function useEdgePositioning(
       labelScreenPos = midPointScreen;
     }
 
-    setPositions({
-      midPointSvg: { x: midPoint.x, y: midPoint.y },
-      midPointScreen,
-      labelScreenPosition: labelScreenPos,
-      labelSvgPosition: labelSvgPos, // ✅ Pass SVG coordinates to EdgeLabelRenderer
-      sourceScreenPosition: sourceScreen,
+    setPositions((prev) => {
+      const next: EdgePositioningResult = {
+        midPointSvg: { x: midPoint.x, y: midPoint.y },
+        midPointScreen,
+        labelScreenPosition: labelScreenPos,
+        labelSvgPosition: labelSvgPos,
+        sourceScreenPosition: sourceScreen,
+      };
+      const same =
+        prev.midPointSvg.x === next.midPointSvg.x &&
+        prev.midPointSvg.y === next.midPointSvg.y &&
+        prev.midPointScreen.x === next.midPointScreen.x &&
+        prev.midPointScreen.y === next.midPointScreen.y &&
+        prev.labelScreenPosition.x === next.labelScreenPosition.x &&
+        prev.labelScreenPosition.y === next.labelScreenPosition.y &&
+        prev.labelSvgPosition.x === next.labelSvgPosition.x &&
+        prev.labelSvgPosition.y === next.labelSvgPosition.y &&
+        prev.sourceScreenPosition.x === next.sourceScreenPosition.x &&
+        prev.sourceScreenPosition.y === next.sourceScreenPosition.y;
+      return same ? prev : next;
     });
-  }, [pathRef, sourceX, sourceY, targetX, targetY, labelPositionAbsolute, reactFlowInstance]);
+  }, [pathRef, sourceX, sourceY, targetX, targetY, labelPositionAbsolute]);
 
   // ✅ CRITICO: Aggiorna quando cambia il path (rileva cambiamenti del DOM)
   useEffect(() => {

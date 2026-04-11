@@ -24,8 +24,8 @@ export type Flow<NodeT = any, EdgeT = any> = {
     createdAt?: string;
     updatedAt?: string;
     fromTaskId?: string;
-    /** Flow-local strings keyed by labelKey (FlowDocument.meta.translations). */
-    translations?: Record<string, string>;
+    /** Flow-local strings; `var:<guid>` values may be `{ [locale]: text }`. */
+    translations?: Record<string, string | Record<string, string>>;
     /** Flow-as-task: Input / Output wiring (persisted; labels resolved via meta.translations[labelKey]). */
     flowInterface?: {
       input: MappingEntry[];

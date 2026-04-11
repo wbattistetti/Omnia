@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import { extractBracketTokens } from '../../utils/variableTokenText';
-import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
+import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
 import { getVariableLabel } from '../../utils/getVariableLabel';
 
 type Props = {
@@ -12,14 +12,13 @@ type Props = {
 };
 
 export default function VariableTokenText({ text, className }: Props) {
-  const { translations } = useProjectTranslations();
+  const translations = useActiveFlowMetaTranslationsFlattened();
 
   const resolveTokenLabel = React.useCallback(
     (rawValue: string): string => {
       const value = String(rawValue || '').trim();
       if (!value) return value;
-      const label = getVariableLabel(value, translations);
-      return label || value;
+      return getVariableLabel(value, translations);
     },
     [translations]
   );

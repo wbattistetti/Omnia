@@ -7,7 +7,7 @@ import { createMappingEntry } from '../mappingTypes';
 import { insertInterfaceEntryAt, reorderMappingEntries } from '../mappingTreeUtils';
 
 function entry(path: string) {
-  return createMappingEntry({ internalPath: path, externalName: path });
+  return createMappingEntry({ wireKey: path });
 }
 
 describe('insertInterfaceEntryAt', () => {
@@ -15,7 +15,7 @@ describe('insertInterfaceEntryAt', () => {
     const a = entry('a');
     const b = entry('b');
     const next = insertInterfaceEntryAt([a], b, 'a', 'append');
-    expect(next.map((e) => e.internalPath)).toEqual(['a', 'b']);
+    expect(next.map((e) => e.wireKey)).toEqual(['a', 'b']);
   });
 
   it('inserts before target path', () => {
@@ -23,7 +23,7 @@ describe('insertInterfaceEntryAt', () => {
     const b = entry('b');
     const c = entry('c');
     const next = insertInterfaceEntryAt([a, b], c, 'b', 'before');
-    expect(next.map((e) => e.internalPath)).toEqual(['a', 'c', 'b']);
+    expect(next.map((e) => e.wireKey)).toEqual(['a', 'c', 'b']);
   });
 
   it('inserts after target path', () => {
@@ -31,7 +31,7 @@ describe('insertInterfaceEntryAt', () => {
     const b = entry('b');
     const c = entry('c');
     const next = insertInterfaceEntryAt([a, b], c, 'a', 'after');
-    expect(next.map((e) => e.internalPath)).toEqual(['a', 'c', 'b']);
+    expect(next.map((e) => e.wireKey)).toEqual(['a', 'c', 'b']);
   });
 });
 
@@ -41,7 +41,7 @@ describe('reorderMappingEntries', () => {
     const b = entry('b');
     const c = entry('c');
     const next = reorderMappingEntries([a, b, c], c.id, a.id, false);
-    expect(next.map((e) => e.internalPath)).toEqual(['c', 'a', 'b']);
+    expect(next.map((e) => e.wireKey)).toEqual(['c', 'a', 'b']);
   });
 
   it('no-op when different parent paths', () => {

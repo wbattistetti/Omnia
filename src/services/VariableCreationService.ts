@@ -18,7 +18,11 @@ import {
   sameVariableScopeBucket,
 } from '@utils/variableScopeUtils';
 import { normalizeSemanticTaskLabel } from '../domain/variableProxyNaming';
-import { flattenUtteranceTaskTreeVariableRows } from '@utils/utteranceTaskVariableSync';
+import {
+  findTaskTreeNodeById,
+  flattenUtteranceTaskTreeVariableRows,
+  initialUtteranceLabelForNode,
+} from '@utils/utteranceTaskVariableSync';
 import { logVariableScope } from '@utils/debugVariableScope';
 import {
   isFallbackProjectBucket,
@@ -26,6 +30,7 @@ import {
 } from '@utils/safeProjectId';
 import { logVariableHydration } from '../utils/variableMenuDebug';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logS2Diag } from '@utils/s2WiringDiagnostic';
 import { getSubflowSyncFlows, getSubflowSyncUpsertFlowSlice } from '@domain/taskSubflowMove/subflowSyncFlowsRef';
 import {
   MANUAL_VARIABLE_METADATA_TYPE,
@@ -35,8 +40,10 @@ import {
   TASK_BOUND_VARIABLE_METADATA_TYPE,
   UTTERANCE_VARIABLE_METADATA_TYPE,
 } from '@utils/utteranceVariablePersistence';
+import { getActiveFlowMetaTranslationsFlattened } from '@utils/activeFlowTranslations';
 import { getVariableLabel } from '@utils/getVariableLabel';
-import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
+import { publishVariableDisplayTranslation } from '@utils/variableTranslationBridge';
+import { makeTranslationKey } from '@utils/translationKeys';
 
 interface CreateVariablesOptions {
   taskInstance: Task;
@@ -100,6 +107,23 @@ class VariableCreationService {
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
     });
+  }
+
+  /** Persists display label under `var:<guid>` (registry + React flow slice / global). */
+  private setVariableTranslationLabel(variableId: string, label: string): void {
+    const id = String(variableId || '').trim();
+    const text = String(label || '').trim();
+    if (!id || !text) return;
+    try {
+      const key = makeTranslationKey('var', id);
+      publishVariableDisplayTranslation(key, text);
+    } catch {
+      /* invalid id for key */
+    }
+  }
+
+  private displayLabelForVariable(id: string): string {
+    return getVariableLabel(String(id || '').trim(), getActiveFlowMetaTranslationsFlattened());
   }
 
   /**
@@ -214,7 +238,6 @@ class VariableCreationService {
 
       variables.push({
         id: nodeId,
-        varName: this.buildVarName(normalizedLabel, []),
         taskInstanceId: taskInstance.id,
         dataPath: `data[${mainIndex}]`,
         scope: 'flow',
@@ -238,7 +261,6 @@ class VariableCreationService {
 
         variables.push({
           id: subNodeId,
-          varName: this.buildVarName(normalizedLabel, [subLabel]),
           taskInstanceId: taskInstance.id,
           dataPath: `data[${mainIndex}].subData[${subIndex}]`,
           scope: 'flow',
@@ -257,7 +279,7 @@ class VariableCreationService {
       taskInstanceId: taskInstance.id,
       variablesCreated: variables.length,
       totalInStore: (this.store.get(projectId) ?? []).length,
-      varNames: variables.map(v => v.varName),
+      variableIds: variables.map((v) => v.id),
     });
 
     return variables;
@@ -271,7 +293,6 @@ class VariableCreationService {
     projectId: string | null | undefined,
     flowId: string | null | undefined,
     taskInstanceId: string,
-    taskRowLabel: string,
     roots: TaskTreeNode[] | null | undefined
   ): void {
     const pid = this.projectKey(projectId);
@@ -288,14 +309,13 @@ class VariableCreationService {
       fid = String(getActiveFlowCanvasId() || 'main').trim();
     }
 
-    const rows = flattenUtteranceTaskTreeVariableRows(taskRowLabel, roots);
+    const rows = flattenUtteranceTaskTreeVariableRows(roots);
     const all = this.store.get(pid) ?? [];
     const nextForTask: VariableInstance[] = [];
 
     for (const r of rows) {
       nextForTask.push({
         id: r.id,
-        varName: r.varName,
         taskInstanceId: tid,
         dataPath: r.dataPath,
         scope: 'flow',
@@ -306,15 +326,19 @@ class VariableCreationService {
     const others = all.filter((v) => String(v.taskInstanceId || '').trim() !== tid);
     this.store.set(pid, [...others, ...nextForTask]);
 
+    for (const r of rows) {
+      const node = findTaskTreeNodeById(roots, r.id);
+      const displayLabel = initialUtteranceLabelForNode(node);
+      this.setVariableTranslationLabel(r.id, displayLabel);
+    }
+
     logTaskSubflowMove('hydrate:utteranceReplace', {
       projectId: pid,
       flowCanvasId: fid,
       taskInstanceId: tid,
-      taskRowLabel,
       flattenedRowCount: rows.length,
       variableRows: nextForTask.map((v) => ({
         id: v.id,
-        varName: v.varName,
         dataPath: v.dataPath,
         scopeFlowId: v.scopeFlowId,
       })),
@@ -329,23 +353,10 @@ class VariableCreationService {
     projectId: string | null | undefined,
     flowCanvasId: string | null | undefined,
     taskRowId: string,
-    taskTree: TaskTree,
-    options?: { taskRowLabel?: string }
+    taskTree: TaskTree
   ): void {
-    const label = String(
-      options?.taskRowLabel ??
-        taskTree.labelKey ??
-        taskTree.label ??
-        'task'
-    ).trim();
     const roots = getMainNodes(taskTree);
-    this.replaceUtteranceVariablesForTaskInstanceFromRoots(
-      projectId,
-      flowCanvasId,
-      taskRowId,
-      label || 'task',
-      roots
-    );
+    this.replaceUtteranceVariablesForTaskInstanceFromRoots(projectId, flowCanvasId, taskRowId, roots);
   }
 
   /**
@@ -411,13 +422,7 @@ class VariableCreationService {
           ).trim();
           const tree = buildStandaloneTaskTreeView(task);
           if (!tree) {
-            this.replaceUtteranceVariablesForTaskInstanceFromRoots(
-              pid,
-              flowCanvasId,
-              taskId,
-              rowLabel || 'task',
-              []
-            );
+            this.replaceUtteranceVariablesForTaskInstanceFromRoots(pid, flowCanvasId, taskId, []);
             hydratedTaskRows.push({
               flowCanvasId,
               taskRowId: taskId,
@@ -426,9 +431,7 @@ class VariableCreationService {
             continue;
           }
           const mains = getMainNodes(tree);
-          this.hydrateVariablesFromTaskTree(pid, flowCanvasId, taskId, tree, {
-            taskRowLabel: rowLabel || undefined,
-          });
+          this.hydrateVariablesFromTaskTree(pid, flowCanvasId, taskId, tree);
           hydratedTaskRows.push({
             flowCanvasId,
             taskRowId: taskId,
@@ -439,10 +442,31 @@ class VariableCreationService {
     }
 
     const all = this.store.get(pid) ?? [];
+    /**
+     * Graph snapshots can briefly omit a row id while TaskRepository + variable rows already
+     * reflect the owning flow (`scopeFlowId` / `authoringFlowCanvasId`). Treat those as
+     * still on-canvas for utterance prune so we do not drop variables mid-orchestration.
+     */
+    const taskRowIdsForPrune = new Set<string>(taskRowIdsOnCanvas);
+    for (const v of all) {
+      const tid = String(v.taskInstanceId || '').trim();
+      const sf = String(v.scopeFlowId || '').trim();
+      if (!tid || !sf || !flows[sf]) continue;
+      const t = taskRepository.getTask(tid);
+      if (!t) continue;
+      const utterLike =
+        isUtteranceInterpretationTask(t) || t.type === TaskType.ClassifyProblem;
+      if (!utterLike) continue;
+      const auth = String((t as { authoringFlowCanvasId?: string | null }).authoringFlowCanvasId ?? '').trim();
+      if (!auth || auth === sf) {
+        taskRowIdsForPrune.add(tid);
+      }
+    }
+
     const pruned = all.filter((v) => {
       const tid = String(v.taskInstanceId || '').trim();
       if (!tid) return true;
-      if (taskRowIdsOnCanvas.has(tid)) return true;
+      if (taskRowIdsForPrune.has(tid)) return true;
       const t = taskRepository.getTask(tid);
       const utterLike =
         t && (isUtteranceInterpretationTask(t) || t.type === TaskType.ClassifyProblem);
@@ -532,6 +556,63 @@ class VariableCreationService {
   }
 
   /**
+   * S2: replaces all in-memory variable rows for one task instance with the given set (stable GUIDs).
+   * Syncs flow slice `variables` when `workspaceFlows` is provided.
+   */
+  replaceTaskVariableRowsForInstance(
+    projectId: string | null | undefined,
+    taskInstanceId: string,
+    rows: VariableInstance[],
+    workspaceFlows?: WorkspaceState['flows'] | null
+  ): void {
+    const pid = this.projectKey(projectId);
+    const tid = String(taskInstanceId || '').trim();
+    if (!tid) return;
+
+    const normalized: VariableInstance[] = rows
+      .map((v) => {
+        const id = String(v.id || '').trim();
+        if (!id) return null;
+        const scope = (v.scope ?? 'flow') as VariableScope;
+        return {
+          ...v,
+          id,
+          taskInstanceId: tid,
+          dataPath: String(v.dataPath || ''),
+          scope,
+          scopeFlowId: String(v.scopeFlowId || '').trim() || undefined,
+        } as VariableInstance;
+      })
+      .filter((v): v is VariableInstance => v != null);
+
+    const all = this.store.get(pid) ?? [];
+    const others = all.filter((v) => String(v.taskInstanceId || '').trim() !== tid);
+    this.store.set(pid, [...others, ...normalized]);
+
+    logTaskSubflowMove('store:replaceTaskVariableRowsForInstance', {
+      projectId: pid,
+      taskInstanceId: tid,
+      rowCount: normalized.length,
+    });
+    logS2Diag('variableStore', 'replaceTaskVariableRowsForInstance', {
+      projectId: pid,
+      taskInstanceId: tid,
+      rowCount: normalized.length,
+      idsSample: normalized.slice(0, 8).map((v) => v.id),
+    });
+
+    const upsertSlice = getSubflowSyncUpsertFlowSlice();
+    if (upsertSlice && workspaceFlows) {
+      for (const flowCanvasId of Object.keys(workspaceFlows)) {
+        const slice = workspaceFlows[flowCanvasId];
+        if (!slice) continue;
+        const vars = this.getVariablesForFlowScope(pid, flowCanvasId, workspaceFlows);
+        upsertSlice({ ...slice, variables: vars } as Flow);
+      }
+    }
+  }
+
+  /**
    * Create a manual variable (no task instance). Default scope is project (visible in all flows).
    * Use scope "flow" + scopeFlowId to bind to one flow canvas.
    */
@@ -549,23 +630,22 @@ class VariableCreationService {
 
     const trimmed = varName.trim();
     if (!trimmed) {
-      throw new Error('[VariableCreationService] createManualVariable: varName must be non-empty');
+      throw new Error('[VariableCreationService] createManualVariable: display label must be non-empty');
     }
 
     const existing = this.store.get(key) ?? [];
 
-    const existingVar = existing.find(
-      v =>
-        v.varName === trimmed &&
-        sameVariableScopeBucket(v, scope, scope === 'flow' ? scopeFlowId : null)
-    );
+    const existingVar = existing.find((v) => {
+      if (String(v.taskInstanceId || '').trim()) return false;
+      if (!sameVariableScopeBucket(v, scope, scope === 'flow' ? scopeFlowId : null)) return false;
+      return this.displayLabelForVariable(v.id) === trimmed;
+    });
     if (existingVar) {
       return existingVar;
     }
 
     const newVariable: VariableInstance = {
       id: this.generateGuid(),
-      varName: trimmed,
       taskInstanceId: '',
       dataPath: '',
       scope,
@@ -573,6 +653,7 @@ class VariableCreationService {
     };
 
     this.store.set(key, [...existing, newVariable]);
+    this.setVariableTranslationLabel(newVariable.id, trimmed);
     return newVariable;
   }
 
@@ -612,14 +693,15 @@ class VariableCreationService {
     const sameTask = (a: VariableInstance, b: VariableInstance) =>
       String(a.taskInstanceId ?? '').trim() === String(b.taskInstanceId ?? '').trim();
     const dup = existing.some(
-      (x) => x.id !== id && x.varName === trimmed && sameTask(x, target)
+      (x) => x.id !== id && this.displayLabelForVariable(x.id) === trimmed && sameTask(x, target)
     );
     if (dup) return false;
+    this.setVariableTranslationLabel(id, trimmed);
     this.store.set(
       key,
       existing.map((x) => {
         if (x.id !== id) return x;
-        const next: VariableInstance = { ...x, varName: trimmed };
+        const next: VariableInstance = { ...x };
         if (options?.userInitiatedRename === true) {
           next.subflowAutoRenameLocked = true;
         }
@@ -668,17 +750,14 @@ class VariableCreationService {
     const bucketFlowId = scope === 'flow' ? String(v.scopeFlowId ?? '').trim() : null;
 
     const dup = existing.some(
-      x =>
+      (x) =>
         x.id !== id &&
-        x.varName === trimmed &&
+        this.displayLabelForVariable(x.id) === trimmed &&
         sameVariableScopeBucket(x, scope, bucketFlowId)
     );
     if (dup) return false;
 
-    this.store.set(
-      key,
-      existing.map(x => (x.id === id ? { ...x, varName: trimmed } : x))
-    );
+    this.setVariableTranslationLabel(id, trimmed);
     return true;
   }
 
@@ -704,23 +783,23 @@ class VariableCreationService {
 
     const byId = existing.find(v => v.id === id);
     if (byId) {
-      if (normalizedName && byId.varName !== normalizedName) {
-        const updated = existing.map(v => (v.id === id ? { ...v, varName: normalizedName } : v));
-        this.store.set(key, updated);
-        return updated.find(v => v.id === id)!;
+      if (normalizedName && this.displayLabelForVariable(id) !== normalizedName) {
+        this.setVariableTranslationLabel(id, normalizedName);
       }
       return byId;
     }
 
     const created: VariableInstance = {
       id,
-      varName: normalizedName,
       taskInstanceId: '',
       dataPath: '',
       scope,
       scopeFlowId: scope === 'flow' ? scopeFlowId : undefined,
     };
     this.store.set(key, [...existing, created]);
+    if (normalizedName) {
+      this.setVariableTranslationLabel(id, normalizedName);
+    }
     return created;
   }
 
@@ -739,15 +818,18 @@ class VariableCreationService {
   ): string | null {
     const key = this.projectKey(projectId);
     const all = this.store.get(key) ?? [];
+    const want = String(varName || '').trim();
+    if (!want) return null;
     if (taskInstanceId !== undefined) {
       const match = all.find(
-        v => v.varName === varName && v.taskInstanceId === taskInstanceId
+        (v) =>
+          v.taskInstanceId === taskInstanceId && this.displayLabelForVariable(v.id) === want
       );
       return match?.id ?? null;
     }
     const flowId = flowCanvasId ?? getActiveFlowCanvasId();
-    const visible = all.filter(v => isVariableVisibleInFlow(v, flowId));
-    const match = visible.find(v => v.varName === varName);
+    const visible = all.filter((v) => isVariableVisibleInFlow(v, flowId));
+    const match = visible.find((v) => this.displayLabelForVariable(v.id) === want);
     return match?.id ?? null;
   }
 
@@ -768,11 +850,11 @@ class VariableCreationService {
   }
 
   /**
-   * Return all variable names visible on the given flow canvas (same rules as {@link getVariablesForFlowScope}).
+   * Sorted unique variable GUIDs visible on the given flow canvas (same rules as {@link getVariablesForFlowScope}).
    */
   getAllVarNames(projectId: string | null | undefined, flowCanvasId?: string): string[] {
     const instances = this.getVariablesForFlowScope(projectId, flowCanvasId);
-    return [...new Set(instances.map((v) => v.varName).filter(Boolean))].sort();
+    return [...new Set(instances.map((v) => String(v.id).trim()).filter(Boolean))].sort();
   }
 
   /**
@@ -809,7 +891,7 @@ class VariableCreationService {
       taskRowIdsOnCanvas: [...localTaskIds],
       storeRowCount: all.length,
       visibleRowCount: filtered.length,
-      visibleVarNames: filtered.map((v) => v.varName),
+      visibleVarLabels: filtered.map((v) => this.displayLabelForVariable(v.id)),
       usedWorkspaceFlowsOverride: workspaceFlows != null,
     });
 
@@ -826,7 +908,9 @@ class VariableCreationService {
   ): VariableInstance | undefined {
     const trimmed = String(varName || '').trim();
     if (!trimmed) return undefined;
-    return this.getVariablesForFlowScope(projectId, flowCanvasId).find((v) => v.varName === trimmed);
+    return this.getVariablesForFlowScope(projectId, flowCanvasId).find(
+      (v) => this.displayLabelForVariable(v.id) === trimmed
+    );
   }
 
   /**
@@ -835,7 +919,7 @@ class VariableCreationService {
    */
   getVarNameById(projectId: string | null | undefined, id: string): string | null {
     void this.projectKey(projectId);
-    const label = getVariableLabel(String(id), getProjectTranslationsTable());
+    const label = getVariableLabel(String(id), getActiveFlowMetaTranslationsFlattened());
     return label || null;
   }
 
@@ -877,9 +961,9 @@ class VariableCreationService {
       projectId: key,
       totalVariablesInStore: variables.length,
       willSkip: variables.length === 0,
-      varNamesSample: variables.slice(0, 10).map((v) => ({
-        varName: v.varName,
+      variableSample: variables.slice(0, 10).map((v) => ({
         id: v.id,
+        label: this.displayLabelForVariable(v.id),
         scope: v.scope,
         scopeFlowId: v.scopeFlowId,
         taskInstanceId: v.taskInstanceId || '(empty)',
@@ -951,7 +1035,7 @@ class VariableCreationService {
         modified: result.modifiedCount || 0,
         manualVariablesSaved: manualVariables.length,
         taskVariablesSaved: taskVariables.length,
-        manualVarNames: manualVariables.map(v => v.varName),
+        manualVariableIds: manualVariables.map((v) => v.id),
       });
       return true;
     } catch (error) {
@@ -1050,17 +1134,18 @@ class VariableCreationService {
           continue;
         }
 
-        const legacy = doc as VariableInstance & { ddtPath?: string; varId?: string };
+        const full = doc as VariableInstance & { ddtPath?: string; varId?: string };
         byId.set(
           rawId,
           normalizeVariableInstance({
-            ...doc,
             id: rawId,
-            varName: typeof doc.varName === 'string' ? doc.varName.trim() : String(doc.varName ?? ''),
             taskInstanceId: doc.taskInstanceId ?? '',
-            dataPath: legacy.dataPath ?? legacy.ddtPath ?? '',
+            dataPath: full.dataPath ?? full.ddtPath ?? '',
             scope: doc.scope,
             scopeFlowId: doc.scopeFlowId,
+            bindingFrom: (doc as VariableInstance).bindingFrom,
+            bindingTo: (doc as VariableInstance).bindingTo,
+            subflowAutoRenameLocked: (doc as VariableInstance).subflowAutoRenameLocked,
           })
         );
       }
@@ -1092,7 +1177,7 @@ class VariableCreationService {
         manualVariables: finalManualVariables.length,
         taskVariables: finalTaskVariables.length,
         duplicatesRemovedById: variables.length - deduplicated.length,
-        manualVarNames: finalManualVariables.map(v => v.varName),
+        manualLabelsSample: finalManualVariables.slice(0, 8).map((v) => this.displayLabelForVariable(v.id)),
       });
     } catch (error) {
       console.warn('[VariableCreationService] ❌ Error loading variables', {

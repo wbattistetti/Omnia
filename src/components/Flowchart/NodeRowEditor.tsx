@@ -42,7 +42,7 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
   const { flows } = useFlowWorkspace();
   const { data: projectData } = useProjectData();
   const pdUpdate = useProjectDataUpdate();
-  const { translations } = useProjectTranslations();
+  const { compiledTranslations } = useProjectTranslations();
   const DEBUG_FOCUS = (() => { try { return localStorage.getItem('debug.focus') === '1'; } catch { return false; } })();
   const log = (...args: any[]) => { if (DEBUG_FOCUS) { try { console.log('[Focus][RowEditor]', ...args); } catch {} } };
   const activeFlowId = getActiveFlowCanvasId();
@@ -58,7 +58,7 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
   React.useEffect(() => {
     let cancelled = false;
     void buildVariableMenuItemsAsync(projectIdForMenu, activeFlowId, flows as any, {
-      translationsByGuid: translations,
+      translationsByGuid: compiledTranslations,
     }).then((items) => {
       if (!cancelled) setVariableMenuItems(items);
     }).catch(() => {
@@ -67,7 +67,7 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [projectIdForMenu, activeFlowId, variableMenuFingerprint, translations]);
+  }, [projectIdForMenu, activeFlowId, variableMenuFingerprint, compiledTranslations]);
 
   // ✅ Calcola e aggiorna la larghezza usando scrollWidth (Regola 1)
   const updateWidth = useCallback(() => {

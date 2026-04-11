@@ -4,6 +4,7 @@ import { taskRepository } from '../../../../services/TaskRepository';
 import { TaskType } from '../../../../types/taskTypes';
 import { useProjectDataUpdate, useProjectData } from '../../../../context/ProjectDataContext';
 import { useProjectTranslations } from '../../../../context/ProjectTranslationsContext';
+import { useActiveFlowMetaTranslationsFlattened } from '../../../../hooks/useActiveFlowMetaTranslations';
 import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
 import { Server, Eye, EyeOff, Table2, RefreshCw, BookOpen, FlaskConical, ListPlus } from 'lucide-react';
@@ -106,7 +107,8 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
   const instanceId = task.instanceId || task.id; // ✅ RINOMINATO: act → task
   const pdUpdate = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
-  const { translations } = useProjectTranslations();
+  useProjectTranslations();
+  const activeFlowTranslations = useActiveFlowMetaTranslationsFlattened();
   const projectId = pdUpdate?.getCurrentProjectId() || undefined;
   const variableStoreProjectId = React.useMemo(
     () => resolveVariableStoreProjectId(projectId),
@@ -148,19 +150,6 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
       }
     }
   }, [projectData, variablesRefreshKey]); // ✅ Include variablesRefreshKey to force re-render
-
-  // ✅ Helper: Convert varId to varName for display
-  const getVarNameFromVarId = React.useCallback((varId: string | undefined): string | null => {
-    if (!varId) return null;
-    const label = getVariableLabel(varId, translations);
-    return label || null;
-  }, [translations]);
-
-  // ✅ Helper: Get varId from varName for saving
-  const getVarIdFromVarName = React.useCallback((varName: string | undefined): string | null => {
-    if (!varName || !projectId) return null;
-    return variableCreationService.getIdByVarName(projectId, varName, undefined, getActiveFlowCanvasId());
-  }, [projectId]);
 
   // ─────────────────────────────────────────────────────────
   // Config state must be declared before hooks that read `config` (Swagger / missing fields).
@@ -513,42 +502,14 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
     [instanceId]
   );
 
-  /** Persist variable names in mapping rows: resolve label → varId, create manual variable if missing. */
-  const resolveVarIdForLinkedName = React.useCallback(
-    (linkedName: string): string => {
-      const t = linkedName.trim();
-      if (!t) return '';
-      const id = getVarIdFromVarName(t);
-      if (id) return id;
-      try {
-        const nv = variableCreationService.createManualVariable(variableStoreProjectId, t);
-        setVariablesRefreshKey((k) => k + 1);
-        return nv.id;
-      } catch {
-        return '';
-      }
-    },
-    [getVarIdFromVarName, variableStoreProjectId]
-  );
-
-  /** SEND: only link existing variables — never create new ids when saving. */
-  const resolveVarIdForInputMapping = React.useCallback(
-    (linkedName: string): string => {
-      const t = linkedName.trim();
-      if (!t) return '';
-      return getVarIdFromVarName(t) ?? '';
-    },
-    [getVarIdFromVarName]
-  );
-
   const mappingSend = React.useMemo(
-    () => backendInputsToMappingEntries(config.inputs, getVarNameFromVarId),
-    [config.inputs, getVarNameFromVarId]
+    () => backendInputsToMappingEntries(config.inputs),
+    [config.inputs]
   );
 
   const mappingReceive = React.useMemo(
-    () => backendOutputsToMappingEntries(config.outputs, getVarNameFromVarId),
-    [config.outputs, getVarNameFromVarId]
+    () => backendOutputsToMappingEntries(config.outputs),
+    [config.outputs]
   );
 
   type MappingEntriesUpdater = MappingEntry[] | ((prev: MappingEntry[]) => MappingEntry[]);
@@ -556,31 +517,31 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
   const handleBackendSendChange = React.useCallback(
     (entriesOrUpdater: MappingEntriesUpdater) => {
       setConfig((prev) => {
-        const currentMapping = backendInputsToMappingEntries(prev.inputs, getVarNameFromVarId);
+        const currentMapping = backendInputsToMappingEntries(prev.inputs);
         const nextEntries =
           typeof entriesOrUpdater === 'function' ? entriesOrUpdater(currentMapping) : entriesOrUpdater;
         return {
           ...prev,
-          inputs: mappingEntriesToBackendInputs(nextEntries, resolveVarIdForInputMapping),
+          inputs: mappingEntriesToBackendInputs(nextEntries),
         };
       });
     },
-    [getVarNameFromVarId, resolveVarIdForInputMapping]
+    []
   );
 
   const handleBackendReceiveChange = React.useCallback(
     (entriesOrUpdater: MappingEntriesUpdater) => {
       setConfig((prev) => {
-        const currentMapping = backendOutputsToMappingEntries(prev.outputs, getVarNameFromVarId);
+        const currentMapping = backendOutputsToMappingEntries(prev.outputs);
         const nextEntries =
           typeof entriesOrUpdater === 'function' ? entriesOrUpdater(currentMapping) : entriesOrUpdater;
         return {
           ...prev,
-          outputs: mappingEntriesToBackendOutputs(nextEntries, resolveVarIdForLinkedName),
+          outputs: mappingEntriesToBackendOutputs(nextEntries),
         };
       });
     },
-    [getVarNameFromVarId, resolveVarIdForLinkedName]
+    []
   );
 
   const handleCreateOutputVariable = React.useCallback(
@@ -589,7 +550,7 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
       if (!t) return null;
       try {
         const nv = variableCreationService.createManualVariable(variableStoreProjectId, t);
-        return { id: nv.id, label: nv.varName };
+        return { id: nv.id, label: t };
       } catch {
         return null;
       }
@@ -755,11 +716,11 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
             <TableEditor
               inputs={(config.inputs || []).map(input => ({
               ...input,
-                variable: input.variable ? getVarNameFromVarId(input.variable) || undefined : undefined
+                variable: input.variable ? getVariableLabel(input.variable, activeFlowTranslations) || undefined : undefined
               }))}
               outputs={(config.outputs || []).map(output => ({
                 ...output,
-                variable: output.variable ? getVarNameFromVarId(output.variable) || undefined : undefined
+                variable: output.variable ? getVariableLabel(output.variable, activeFlowTranslations) || undefined : undefined
               }))}
               rows={config.mockTable || []}
               columns={config.mockTableColumns}
@@ -785,7 +746,6 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
             showApiFields={showApiColumn}
             onCreateOutputVariable={handleCreateOutputVariable}
             onOutputVariableCreated={handleOutputVariableCreated}
-            resolveVariableRefIdFromLabel={(label) => getVarIdFromVarName(label) ?? undefined}
             showInterfacePalette={false}
             className="bg-slate-900"
             innerClassName="!p-2"

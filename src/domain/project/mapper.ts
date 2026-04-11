@@ -5,6 +5,11 @@ import type { ProjectDomainModel, TaskDomainModel, FlowDomainModel, ConditionDom
 import type { Task } from '@types/taskTypes';
 import type { Flow } from '@flows/FlowTypes';
 import { isAiAgentDebugEnabled } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDebug';
+import { getVariableLabel } from '@utils/getVariableLabel';
+import {
+  flattenFlowMetaTranslations,
+  mergeFlowMetaTranslationsFromFlows,
+} from '@utils/activeFlowTranslations';
 
 /**
  * UI State structure (as used in AppContent.tsx)
@@ -36,6 +41,20 @@ interface UIState {
  * @param uiState - Current UI state (from AppContent.tsx, TaskRepository, etc.)
  * @returns Stable domain model
  */
+/** `var:<guid>` labels for domain export: flow-scoped rows use that flow meta; project scope uses merged flow metas. */
+function variableLabelTableForInstance(
+  variable: { scope?: string; scopeFlowId?: string | null },
+  flows: UIState['flows']
+): Record<string, string> {
+  const flowsMap = flows || {};
+  const scope = variable.scope;
+  const fid = String(variable.scopeFlowId || '').trim();
+  if (scope === 'flow' && fid && flowsMap[fid]) {
+    return flattenFlowMetaTranslations(flowsMap[fid]);
+  }
+  return mergeFlowMetaTranslationsFromFlows(flowsMap);
+}
+
 export function mapUIStateToDomain(uiState: UIState): ProjectDomainModel {
   // Extract referenced task IDs from flows (to identify orphans)
   const referencedTaskIds = new Set<string>();
@@ -81,7 +100,7 @@ export function mapUIStateToDomain(uiState: UIState): ProjectDomainModel {
 
   // Map variables
   const variables: VariableDomainModel[] = (uiState.variables || []).map((variable) =>
-    mapVariableToDomain(variable)
+    mapVariableToDomain(variable, uiState.flows)
   );
 
   return {
@@ -219,11 +238,14 @@ function mapTemplateToDomain(template: any): TemplateDomainModel {
 /**
  * Maps a VariableInstance (UI type) to VariableDomainModel
  */
-function mapVariableToDomain(variable: any): VariableDomainModel {
+function mapVariableToDomain(variable: any, flows: UIState['flows']): VariableDomainModel {
   const legacy = variable as { ddtPath?: string; varId?: string };
+  const id = variable.id || legacy.varId || variable._id;
+  const labelTable = variableLabelTableForInstance(variable, flows);
+  const name = getVariableLabel(String(id || ''), labelTable) || String(id || '');
   return {
-    id: variable.id || legacy.varId || variable._id,
-    name: variable.varName || variable.name || '',
+    id,
+    name,
     type: variable.type || 'string',
     description: variable.description,
     defaultValue: variable.defaultValue,

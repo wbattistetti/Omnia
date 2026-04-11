@@ -7,6 +7,7 @@ import { generateSafeGuid } from '@utils/idGenerator';
 import type { Task } from '@types/taskTypes';
 import { TaskType } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
+import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
 import { isCanonicalTranslationKey, isUuidString, makeTranslationKey, parseTranslationKey } from './translationKeys';
 
 function isTaskTranslationStorageKey(s: string): boolean {
@@ -22,16 +23,16 @@ export function trySeedSayMessageTranslation(textKey: string, plaintext: string)
   ctx?.addTranslation?.(textKey, plaintext);
 }
 
-function readTranslationFromWindow(textKey: string): string {
-  if (!textKey || typeof window === 'undefined') return '';
-  const map = (window as unknown as { __projectTranslationsContext?: { translations?: Record<string, string> } })
-    .__projectTranslationsContext?.translations;
+/** Resolves text from the same merged map as TaskContentResolver and flowchart "has content" checks. */
+function readSayMessageTranslation(textKey: string): string {
+  if (!textKey) return '';
+  const map = getProjectTranslationsTable();
   if (map && typeof map[textKey] === 'string') return map[textKey];
   return '';
 }
 
 /**
- * Resolved message body: translation by canonical key from window context; legacy `runtime.*` keys;
+ * Resolved message body: translation by canonical key from merged project registry; legacy `runtime.*` keys;
  * non-key strings treated as inline literal only when not a bare UUID.
  */
 export function getSayMessageSyncedBody(task: Task | null | undefined): string {
@@ -41,7 +42,7 @@ export function getSayMessageSyncedBody(task: Task | null | undefined): string {
   const key = typeof param?.value === 'string' ? param.value.trim() : '';
   if (!key) return '';
   if (isUuidString(key)) return '';
-  const fromStore = readTranslationFromWindow(key);
+  const fromStore = readSayMessageTranslation(key);
   if (fromStore) return fromStore;
   if (isCanonicalTranslationKey(key) || key.startsWith('runtime.')) return '';
   return key;
