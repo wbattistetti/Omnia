@@ -25,8 +25,9 @@ import {
   getTaskInstanceIdsOnFlowCanvasFromFlows,
   isVariableVisibleInFlow,
 } from '../../utils/variableScopeUtils';
-import { getVariableLabel } from '../../utils/getVariableLabel';
 import { getActiveFlowMetaTranslationsFlattened } from '../../utils/activeFlowTranslations';
+import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegistry';
+import { resolveVariableDisplayName } from '../../utils/resolveVariableDisplayName';
 import { stripLegacyVariablesFromFlowMeta } from '../../flows/flowMetaSanitize';
 
 /**
@@ -158,6 +159,18 @@ function filterLocalVariablesForActiveFlow(
  * Dev / opt-in: explains utterance branch of {@link filterLocalVariablesForActiveFlow}
  * (guidSet ∩ store vs rest with isVariableVisibleInFlow).
  */
+/** Merged map for menu-style resolution (project registry + active flow meta). */
+function menuMergedTranslations(): Record<string, string> {
+  return { ...getProjectTranslationsTable(), ...getActiveFlowMetaTranslationsFlattened() };
+}
+
+function menuResolvedLabel(guid: string, merged: Record<string, string>): string {
+  return resolveVariableDisplayName(guid, 'menuVariables', {
+    compiledTranslations: merged,
+    flowMetaTranslations: merged,
+  });
+}
+
 function logUtteranceFilterStep(
   projectId: string,
   menuFlowId: string,
@@ -173,6 +186,7 @@ function logUtteranceFilterStep(
   const utteranceFromStore = allVars.filter((v) =>
     utteranceGuidSet.has(String((v as VariableInstance).id || '').trim())
   );
+  const dbgTr = menuMergedTranslations();
 
   const fullPayload = {
     projectId,
@@ -185,7 +199,7 @@ function logUtteranceFilterStep(
       return {
         id,
         taskInstanceId: String((v as VariableInstance).taskInstanceId || '').trim(),
-        displayLabel: getVariableLabel(id, getActiveFlowMetaTranslationsFlattened()),
+        displayLabel: menuResolvedLabel(id, dbgTr),
         scopeFlowId: String((v as VariableInstance).scopeFlowId || '').trim(),
       };
     }),
@@ -196,7 +210,7 @@ function logUtteranceFilterStep(
       const id = String((v as VariableInstance).id || '').trim();
       return {
         id,
-        displayLabel: getVariableLabel(id, getActiveFlowMetaTranslationsFlattened()),
+        displayLabel: menuResolvedLabel(id, dbgTr),
       };
     }),
     localVarsAfterFilter: localVars.length,
@@ -362,7 +376,7 @@ function stableInterfaceEntryKey(entry: MappingEntry): string {
   return 'unknown';
 }
 
-/** Label for the picker: translation for wired GUID, else interface entry fields (not varName/dataPath). */
+/** Label for the picker: {@link resolveVariableDisplayName} `menuVariables` on merged flow/project maps. */
 function resolveInterfaceOutputEntryLabel(
   entry: MappingEntry,
   variableRefId: string | undefined,
@@ -371,7 +385,7 @@ function resolveInterfaceOutputEntryLabel(
   const vid = variableRefId?.trim();
   const tr = translationsByGuid ?? getActiveFlowMetaTranslationsFlattened();
   if (vid) {
-    return getVariableLabel(vid, tr);
+    return menuResolvedLabel(vid, tr);
   }
   return String(entry?.wireKey || '').trim();
 }
@@ -448,7 +462,7 @@ function appendSubflowInterfaceOutputItems(
         continue;
       }
       seen.add(dedupeKey);
-      const parentName = getVariableLabel(toId, trMap);
+      const parentName = menuResolvedLabel(toId, trMap);
       if (!parentName) {
         stats.dbgSubflowSkipNoVarLabel += 1;
         continue;
@@ -583,7 +597,7 @@ export function buildVariableMenuItems(
   const tblMenu = { ...getActiveFlowMetaTranslationsFlattened(), ...(options?.translationsByGuid || {}) };
   for (const v of localVars) {
     const varId = String((v as VariableInstance).id || '').trim();
-    const varLabel = getVariableLabel(varId, tblMenu) || varId;
+    const varLabel = menuResolvedLabel(varId, tblMenu) || varId;
     if (!varId) continue;
     const key = `${activeFlowId}::${varId}`;
     if (seen.has(key)) continue;
@@ -741,7 +755,7 @@ export async function buildVariableMenuItemsAsync(
   const tblMenuAsync = { ...getActiveFlowMetaTranslationsFlattened(), ...(options?.translationsByGuid || {}) };
   for (const v of localVars) {
     const varId = String((v as VariableInstance).id || '').trim();
-    const varLabel = getVariableLabel(varId, tblMenuAsync) || varId;
+    const varLabel = menuResolvedLabel(varId, tblMenuAsync) || varId;
     if (!varId) continue;
     const key = `${activeFlowId}::${varId}`;
     if (seen.has(key)) continue;

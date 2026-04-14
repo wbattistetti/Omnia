@@ -1,25 +1,26 @@
 /**
- * Interface row display: only `flow.meta.translations` for the active canvas (flattened), then GUID.
+ * Interface row display: unified policy — leaf labels on this canvas (`flowInterfaceOutput`).
  */
 
+import type { WorkspaceState } from '@flows/FlowTypes';
 import { variableCreationService } from '../../services/VariableCreationService';
 import { getActiveFlowMetaTranslationsFlattened } from '../../utils/activeFlowTranslations';
-import { getVariableLabel } from '../../utils/getVariableLabel';
+import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegistry';
+import { interfaceOutputLeafDisplayName, resolveVariableDisplayName } from '../../utils/resolveVariableDisplayName';
 import type { MappingEntry } from './mappingTypes';
 
-/** Single label for Interface tree rows: flow translation by labelKey, else `var:<guid>`, else GUID. */
-export function getInterfaceLeafDisplayName(entry: MappingEntry, _projectId: string | undefined): string {
+/** Single label for Interface tree rows: translations + optional live `flows` / task row fallback. */
+export function getInterfaceLeafDisplayName(
+  entry: MappingEntry,
+  _projectId: string | undefined,
+  opts?: { flowCanvasId?: string; flows?: WorkspaceState['flows'] }
+): string {
   void _projectId;
   const vid = entry.variableRefId?.trim();
   if (!vid) {
     return '';
   }
-  const tbl = getActiveFlowMetaTranslationsFlattened();
-  const lk = entry.labelKey?.trim();
-  if (lk && tbl[lk] != null && String(tbl[lk]).trim() !== '') {
-    return String(tbl[lk]).trim();
-  }
-  return getVariableLabel(vid, tbl);
+  return interfaceOutputLeafDisplayName(vid, opts?.flowCanvasId, opts?.flows, getProjectTranslationsTable());
 }
 
 /**
@@ -35,7 +36,10 @@ export function ensureFlowVariableBindingForInterfaceRow(
   const vid = variableRefId?.trim();
   if (!pid || !fid || !vid) return;
   const tbl = getActiveFlowMetaTranslationsFlattened();
-  const clean = getVariableLabel(vid, tbl);
+  const clean = resolveVariableDisplayName(vid, 'flowCanvasToken', {
+    flowMetaTranslations: tbl,
+    compiledTranslations: getProjectTranslationsTable(),
+  });
   variableCreationService.ensureManualVariableWithId(pid, vid, clean, {
     scope: 'flow',
     scopeFlowId: fid,

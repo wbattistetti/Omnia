@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, beforeEach } from 'vitest';
-import { autoRenameParentVariablesForMovedTask } from '@domain/taskSubflowMove/autoRenameParentVariables';
+import { autoRenameReferencedVariablesForMovedTask } from '@domain/taskSubflowMove/autoRenameParentVariables';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getVariableLabel } from '@utils/getVariableLabel';
 import { makeTranslationKey } from '@utils/translationKeys';
@@ -14,7 +14,7 @@ import { FlowWorkspaceSnapshot } from '@flows/FlowWorkspaceSnapshot';
 const G_NOME = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const G_TEL = '1cee6a03-1907-4468-944e-f3599fc8a563';
 
-describe('autoRenameParentVariablesForMovedTask', () => {
+describe('autoRenameReferencedVariablesForMovedTask', () => {
   beforeEach(() => {
     setProjectTranslationsRegistry({});
   });
@@ -50,7 +50,7 @@ describe('autoRenameParentVariablesForMovedTask', () => {
       parent_f: { id: 'parent_f', title: 'P', nodes: [], edges: [], meta: {} },
     } as any;
 
-    const { renamed, flowsNext } = autoRenameParentVariablesForMovedTask({
+    const { renamed, flowsNext } = autoRenameReferencedVariablesForMovedTask({
       projectId,
       parentFlowId: 'parent_f',
       parentFlow: { id: 'parent_f' } as any,
@@ -93,7 +93,7 @@ describe('autoRenameParentVariablesForMovedTask', () => {
       },
     } as any;
 
-    const { renamed, flowsNext } = autoRenameParentVariablesForMovedTask({
+    const { renamed, flowsNext } = autoRenameReferencedVariablesForMovedTask({
       projectId,
       parentFlowId: 'parent_f',
       parentFlow: {} as any,
@@ -143,7 +143,7 @@ describe('autoRenameParentVariablesForMovedTask', () => {
       },
     } as any;
 
-    const { flowsNext } = autoRenameParentVariablesForMovedTask({
+    const { flowsNext } = autoRenameReferencedVariablesForMovedTask({
       projectId,
       parentFlowId: 'main',
       parentFlow: {} as any,
@@ -157,5 +157,55 @@ describe('autoRenameParentVariablesForMovedTask', () => {
     const label = getVariableLabel(G_TEL, getActiveFlowMetaTranslationsFlattened());
     expect(label).toBe('dati.telefono');
     expect(label).not.toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  it('renames correctly even when label is only in parent flow meta (project registry stale/empty)', () => {
+    const projectId = `p_${Math.random().toString(36).slice(2, 10)}`;
+    variableCreationService.ensureManualVariableWithId(projectId, G_NOME, 'nome', {
+      scope: 'flow',
+      scopeFlowId: 'parent_f',
+    });
+
+    // Simulate stale registry: reset to empty AFTER variable creation
+    // (e.g. React context recompiled with a snapshot that didn't include the flow slice yet)
+    setProjectTranslationsRegistry({});
+
+    const childFlow = {
+      id: 'child',
+      meta: {
+        translations: { [makeTranslationKey('var', G_NOME)]: 'nome' }, // cloned from parent by pipeline
+        flowInterface: {
+          output: [{ id: 'r', wireKey: 'nome', variableRefId: G_NOME, apiField: '' }],
+        },
+      },
+    } as any;
+
+    const parentFlow = {
+      id: 'parent_f',
+      meta: {
+        translations: { [makeTranslationKey('var', G_NOME)]: 'nome' }, // original label in flow meta
+      },
+    } as any;
+
+    const flowsBase = {
+      parent_f: { id: 'parent_f', title: 'P', nodes: [], edges: [], meta: {} },
+    } as any;
+
+    const { renamed, flowsNext } = autoRenameReferencedVariablesForMovedTask({
+      projectId,
+      parentFlowId: 'parent_f',
+      parentFlow,
+      childFlow,
+      subflowDisplayTitle: 'dati',
+      taskVariableIds: [G_NOME],
+      flows: flowsBase,
+    });
+
+    expect(renamed).toHaveLength(1);
+    expect(renamed[0]?.nextName).toBe('dati.nome');
+
+    FlowWorkspaceSnapshot.setSnapshot(flowsNext as any, 'parent_f');
+    const label = getVariableLabel(G_NOME, getActiveFlowMetaTranslationsFlattened());
+    expect(label).toBe('dati.nome');
   });
 });

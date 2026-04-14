@@ -39,8 +39,8 @@ import { taskRepository } from '@services/TaskRepository';
 export type StructuralOrchestratorContext = {
   projectId: string;
   getFlows: () => WorkspaceState['flows'];
-  /** Push updated slices into FlowStore */
-  commitFlowSlices: (flowsNext: WorkspaceState['flows'], flowIds: string[]) => void;
+  /** Push updated slices into FlowStore; returns false if upsert handler missing or slice absent. */
+  commitFlowSlices: (flowsNext: WorkspaceState['flows'], flowIds: string[]) => boolean;
   projectData?: unknown;
   getTranslations?: () => Record<string, string> | undefined;
 };
@@ -77,7 +77,8 @@ function logPipeline(step: string, command: StructuralCommand): void {
 
 function buildMinimalStructuralApplyResult(
   flowsNext: WorkspaceState['flows'],
-  taskInstanceId: string
+  taskInstanceId: string,
+  opts?: { flowStoreCommitOk?: boolean }
 ): ApplyTaskMoveToSubflowResult {
   const tid = String(taskInstanceId || '').trim();
   return {
@@ -97,6 +98,7 @@ function buildMinimalStructuralApplyResult(
     },
     secondPassDisplayLabelUpdates: 0,
     flowsNext,
+    ...(opts?.flowStoreCommitOk !== undefined ? { flowStoreCommitOk: opts.flowStoreCommitOk } : {}),
   };
 }
 
@@ -112,7 +114,7 @@ function runMoveTaskRow(ctx: StructuralOrchestratorContext, command: MoveTaskRow
 
   if (!pid || !rowId || !fromF || !toF || !fromN || !toN) {
     logTaskSubflowMove('orchestrator:moveTaskRow:abort', { reason: 'missing_ids', command });
-    return buildMinimalStructuralApplyResult(ctx.getFlows(), rowId);
+    return buildMinimalStructuralApplyResult(ctx.getFlows(), rowId, { flowStoreCommitOk: false });
   }
 
   const flows0 = ctx.getFlows();
@@ -128,23 +130,24 @@ function runMoveTaskRow(ctx: StructuralOrchestratorContext, command: MoveTaskRow
   reconcileUtteranceVariableStoreWithFlowGraph(pid, flowsWorking);
   emitVariableStoreUpdated();
 
-  const needsLinkedSubflowApply = toF.startsWith('subflow_');
+  /** Linked S2 apply only when the row crosses **into** a subflow slice from another flow. */
+  const needsLinkedSubflowApply = toF.startsWith('subflow_') && fromF !== toF;
 
   if (!needsLinkedSubflowApply) {
     const ids = Array.from(new Set([fromF, toF].filter(Boolean)));
     logStructuralOrchestratorCommitSnapshot('runMoveTaskRow:doneNoSubflowApply', flowsWorking, ids);
-    ctx.commitFlowSlices(flowsWorking, ids);
+    const committed = ctx.commitFlowSlices(flowsWorking, ids);
     logPipeline('moveTaskRow:doneNoSubflowApply', command);
-    return buildMinimalStructuralApplyResult(flowsWorking, rowId);
+    return buildMinimalStructuralApplyResult(flowsWorking, rowId, { flowStoreCommitOk: committed });
   }
 
   const childFlowId = toF;
   const portalRowId = parseSubflowTaskRowIdFromChildCanvasId(childFlowId);
   if (!portalRowId) {
     logStructuralOrchestratorCommitSnapshot('runMoveTaskRow:noPortalRowId', flowsWorking, [fromF, toF]);
-    ctx.commitFlowSlices(flowsWorking, [fromF, toF]);
+    const committed = ctx.commitFlowSlices(flowsWorking, [fromF, toF]);
     logTaskSubflowMove('orchestrator:moveTaskRow:noPortalRowId', { childFlowId });
-    return buildMinimalStructuralApplyResult(flowsWorking, rowId);
+    return buildMinimalStructuralApplyResult(flowsWorking, rowId, { flowStoreCommitOk: committed });
   }
 
   const parentFlowId = findParentFlowIdContainingSubflowRow(flowsWorking, portalRowId) || 'main';
@@ -205,10 +208,10 @@ function runMoveTaskRow(ctx: StructuralOrchestratorContext, command: MoveTaskRow
     )
   );
   logStructuralOrchestratorCommitSnapshot('runMoveTaskRow:subflowApply', result.flowsNext, sliceIdsForCommit);
-  ctx.commitFlowSlices(result.flowsNext, sliceIdsForCommit);
+  const committed = ctx.commitFlowSlices(result.flowsNext, sliceIdsForCommit);
   logSubflowSliceMutation('AFTER', childFlowId, result.flowsNext);
   logPipeline('moveTaskRow:done', command);
-  return result;
+  return { ...result, flowStoreCommitOk: committed };
 }
 
 function runMoveTaskRowToCanvas(ctx: StructuralOrchestratorContext, command: MoveTaskRowToCanvasCommand): ApplyTaskMoveToSubflowResult {
@@ -234,7 +237,7 @@ function runMoveTaskRowToCanvas(ctx: StructuralOrchestratorContext, command: Mov
     typeof pos.y !== 'number'
   ) {
     logTaskSubflowMove('orchestrator:moveTaskRowToCanvas:abort', { reason: 'missing_ids', command });
-    return buildMinimalStructuralApplyResult(ctx.getFlows(), rowId);
+    return buildMinimalStructuralApplyResult(ctx.getFlows(), rowId, { flowStoreCommitOk: false });
   }
 
   const flows0 = ctx.getFlows();
@@ -251,23 +254,23 @@ function runMoveTaskRowToCanvas(ctx: StructuralOrchestratorContext, command: Mov
   reconcileUtteranceVariableStoreWithFlowGraph(pid, flowsWorking);
   emitVariableStoreUpdated();
 
-  const needsLinkedSubflowApply = toF.startsWith('subflow_');
+  const needsLinkedSubflowApply = toF.startsWith('subflow_') && fromF !== toF;
 
   if (!needsLinkedSubflowApply) {
     const ids = Array.from(new Set([fromF, toF].filter(Boolean)));
     logStructuralOrchestratorCommitSnapshot('runMoveTaskRowToCanvas:doneNoSubflowApply', flowsWorking, ids);
-    ctx.commitFlowSlices(flowsWorking, ids);
+    const committed = ctx.commitFlowSlices(flowsWorking, ids);
     logPipeline('moveTaskRowToCanvas:doneNoSubflowApply', command);
-    return buildMinimalStructuralApplyResult(flowsWorking, rowId);
+    return buildMinimalStructuralApplyResult(flowsWorking, rowId, { flowStoreCommitOk: committed });
   }
 
   const childFlowId = toF;
   const portalRowId = parseSubflowTaskRowIdFromChildCanvasId(childFlowId);
   if (!portalRowId) {
     logStructuralOrchestratorCommitSnapshot('runMoveTaskRowToCanvas:noPortalRowId', flowsWorking, [fromF, toF]);
-    ctx.commitFlowSlices(flowsWorking, [fromF, toF]);
+    const committed = ctx.commitFlowSlices(flowsWorking, [fromF, toF]);
     logTaskSubflowMove('orchestrator:moveTaskRowToCanvas:noPortalRowId', { childFlowId });
-    return buildMinimalStructuralApplyResult(flowsWorking, rowId);
+    return buildMinimalStructuralApplyResult(flowsWorking, rowId, { flowStoreCommitOk: committed });
   }
 
   const parentFlowId = findParentFlowIdContainingSubflowRow(flowsWorking, portalRowId) || 'main';
@@ -321,10 +324,10 @@ function runMoveTaskRowToCanvas(ctx: StructuralOrchestratorContext, command: Mov
   }
 
   logStructuralOrchestratorCommitSnapshot('runMoveTaskRowToCanvas:subflowApply', result.flowsNext, [parentFlowId, childFlowId]);
-  ctx.commitFlowSlices(result.flowsNext, [parentFlowId, childFlowId]);
+  const committed = ctx.commitFlowSlices(result.flowsNext, [parentFlowId, childFlowId]);
   logSubflowSliceMutation('AFTER', childFlowId, result.flowsNext);
   logPipeline('moveTaskRowToCanvas:done', command);
-  return result;
+  return { ...result, flowStoreCommitOk: committed };
 }
 
 /**
@@ -440,10 +443,10 @@ function runMoveTaskRowIntoSubflow(
   }
 
   logStructuralOrchestratorCommitSnapshot('runMoveTaskRowIntoSubflow', result.flowsNext, [command.parentFlowId, command.childFlowId]);
-  ctx.commitFlowSlices(result.flowsNext, [command.parentFlowId, command.childFlowId]);
+  const committed = ctx.commitFlowSlices(result.flowsNext, [command.parentFlowId, command.childFlowId]);
   logPipeline('pipeline:10-finalize', command);
   logSubflowSliceMutation('AFTER', command.childFlowId, result.flowsNext);
-  return result;
+  return { ...result, flowStoreCommitOk: committed };
 }
 
 function runResyncSubflowInterface(
@@ -511,9 +514,9 @@ function runResyncSubflowInterface(
   });
   const out = flushed ?? first;
   logStructuralOrchestratorCommitSnapshot('runResyncSubflowInterface', out.flowsNext, [parentFlowId, childFlowId]);
-  ctx.commitFlowSlices(out.flowsNext, [parentFlowId, childFlowId]);
+  const committed = ctx.commitFlowSlices(out.flowsNext, [parentFlowId, childFlowId]);
   logSubflowSliceMutation('AFTER', childFlowId, out.flowsNext);
-  return { ...out, parentFlowId, childFlowId };
+  return { ...out, parentFlowId, childFlowId, flowStoreCommitOk: committed };
 }
 
 function runSubflowWiringSecondPass(

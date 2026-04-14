@@ -2,10 +2,11 @@
  * Backend mapping "Variabile" column: pick variable by GUID; label from active flow `meta.translations` only.
  */
 
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
-import { getVariableLabel } from '../../utils/getVariableLabel';
+import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegistry';
+import { resolveVariableDisplayName } from '../../utils/resolveVariableDisplayName';
 import { isUuidString } from '../../utils/translationKeys';
 import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
 
@@ -28,7 +29,7 @@ export interface BackendMappingVariableFieldProps {
 function filterOptions(
   options: string[],
   q: string,
-  flowTr: Record<string, string>
+  mergedTr: Record<string, string>
 ): string[] {
   const t = q.trim().toLowerCase();
   if (!t) return options;
@@ -36,7 +37,12 @@ function filterOptions(
     const id = String(o || '').trim();
     if (!id) return false;
     if (id.toLowerCase().includes(t)) return true;
-    return getVariableLabel(id, flowTr).toLowerCase().includes(t);
+    return resolveVariableDisplayName(id, 'menuVariables', {
+      compiledTranslations: mergedTr,
+      flowMetaTranslations: mergedTr,
+    })
+      .toLowerCase()
+      .includes(t);
   });
 }
 
@@ -54,6 +60,18 @@ export function BackendMappingVariableField({
   onVariableCreated,
 }: BackendMappingVariableFieldProps) {
   const flowTr = useActiveFlowMetaTranslationsFlattened();
+  const mergedTr = useMemo(
+    () => ({ ...getProjectTranslationsTable(), ...flowTr }),
+    [flowTr]
+  );
+  const menuLabel = useCallback(
+    (guid: string) =>
+      resolveVariableDisplayName(guid, 'menuVariables', {
+        compiledTranslations: mergedTr,
+        flowMetaTranslations: mergedTr,
+      }),
+    [mergedTr]
+  );
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
@@ -61,7 +79,7 @@ export function BackendMappingVariableField({
   const inputTopRef = useRef<HTMLInputElement>(null);
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
-  const displayText = variableRefId ? getVariableLabel(variableRefId, flowTr) : '';
+  const displayText = variableRefId ? menuLabel(variableRefId) : '';
 
   useEffect(() => {
     if (!open) return;
@@ -143,7 +161,7 @@ export function BackendMappingVariableField({
     setDraft('');
   }, [draft, variableOptions, onCreateVariable, onCommit, onVariableCreated, pickExisting]);
 
-  const filtered = filterOptions(variableOptions, mode === 'receive' ? draft : draft, flowTr);
+  const filtered = filterOptions(variableOptions, mode === 'receive' ? draft : draft, mergedTr);
 
   const panel = open ? (
     <div
@@ -200,7 +218,7 @@ export function BackendMappingVariableField({
                   pickExisting(opt);
                 }}
               >
-                {getVariableLabel(opt, flowTr)}
+                {menuLabel(opt)}
               </button>
             </li>
           ))

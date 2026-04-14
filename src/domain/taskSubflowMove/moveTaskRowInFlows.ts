@@ -31,7 +31,41 @@ export function moveTaskRowBetweenFlows(
 
   const srcFlow = flows[sourceFlowId];
   const tgtFlow = flows[targetFlowId];
-  if (!srcFlow?.nodes || !tgtFlow?.nodes) return flows;
+  /** Source must have nodes; target slice must exist (nodes may be [] or omitted — handled in cross-flow branch). */
+  if (!srcFlow?.nodes || tgtFlow == null) return flows;
+
+  /** Same flow slice: must remove then append on one `nodes` array (two spreads with same key overwrote removal). */
+  if (sourceFlowId === targetFlowId) {
+    let removed: Record<string, unknown> | null = null;
+    const afterRemove = (srcFlow.nodes as any[]).map((node) => {
+      const nid = nodeId(node);
+      if (nid !== sourceNodeId) return node;
+      const data = node.data ?? {};
+      const rows: any[] = Array.isArray(data.rows) ? data.rows : [];
+      const idx = rows.findIndex((r) => String(r?.id || '').trim() === rid);
+      if (idx < 0) return node;
+      removed = rows[idx] as Record<string, unknown>;
+      const nextRows = [...rows.slice(0, idx), ...rows.slice(idx + 1)];
+      return { ...node, data: { ...data, rows: nextRows } };
+    });
+    if (!removed) return flows;
+
+    const finalNodes = afterRemove.map((node) => {
+      const nid = nodeId(node);
+      if (nid !== targetNodeId) return node;
+      const data = node.data ?? {};
+      const rows: any[] = Array.isArray(data.rows) ? data.rows : [];
+      if (rows.some((r) => String((r as { id?: string })?.id || '').trim() === rid)) {
+        return node;
+      }
+      return { ...node, data: { ...data, rows: [...rows, removed] } };
+    });
+
+    return {
+      ...flows,
+      [sourceFlowId]: { ...srcFlow, nodes: finalNodes as any, hasLocalChanges: true },
+    };
+  }
 
   let removed: Record<string, unknown> | null = null;
 
@@ -49,7 +83,8 @@ export function moveTaskRowBetweenFlows(
 
   if (!removed) return flows;
 
-  const tgtNodes = (tgtFlow.nodes as any[]).map((node) => {
+  const tgtNodesRaw = Array.isArray(tgtFlow.nodes) ? tgtFlow.nodes : [];
+  const tgtNodes = (tgtNodesRaw as any[]).map((node) => {
     const nid = nodeId(node);
     if (nid !== targetNodeId) return node;
     const data = node.data ?? {};
@@ -57,11 +92,27 @@ export function moveTaskRowBetweenFlows(
     return { ...node, data: { ...data, rows: [...rows, removed] } };
   });
 
-  return {
+  const flowsAfterCross = {
     ...flows,
     [sourceFlowId]: { ...srcFlow, nodes: srcNodes as any, hasLocalChanges: true },
     [targetFlowId]: { ...tgtFlow, nodes: tgtNodes as any, hasLocalChanges: true },
   };
+
+  const landedInTarget = (flowsAfterCross[targetFlowId]?.nodes as any[])?.some((node) => {
+    const rows = Array.isArray(node?.data?.rows) ? node.data.rows : [];
+    return rows.some((r: any) => String(r?.id || '').trim() === rid);
+  });
+
+  /** Empty target canvas, unknown targetNodeId, or stale slice: ensure row is materialized via shared append helper. */
+  if (!landedInTarget) {
+    return appendRowToFlowNode(flowsAfterCross, {
+      targetFlowId,
+      targetNodeId,
+      row: removed,
+    });
+  }
+
+  return flowsAfterCross;
 }
 
 /**

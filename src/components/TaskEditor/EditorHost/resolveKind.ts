@@ -17,7 +17,16 @@ export function resolveEditorKind(task: TaskMeta): EditorKind { // ✅ RINOMINAT
   // Non serve più il mapping 'problem' → 'intent' perché ClassifyProblem è unificato con DataRequest
 
   // ✅ Fallback: se editorKind non è nel tipo EditorKind, usa 'simple'
-  if (editorKind !== 'message' && editorKind !== 'ddt' && editorKind !== 'intent' && editorKind !== 'backend' && editorKind !== 'aiagent' && editorKind !== 'summarizer' && editorKind !== 'negotiation') {
+  if (
+    editorKind !== 'message' &&
+    editorKind !== 'ddt' &&
+    editorKind !== 'intent' &&
+    editorKind !== 'backend' &&
+    editorKind !== 'aiagent' &&
+    editorKind !== 'summarizer' &&
+    editorKind !== 'negotiation' &&
+    editorKind !== 'faqanswering'
+  ) {
     return 'simple';
   }
 

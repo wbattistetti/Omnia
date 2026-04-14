@@ -1,6 +1,7 @@
 /**
- * Compute dotted varName for a new flow-scoped manual variable from a drop position.
- * Mirrors backend mapping "before / after / child" behaviour; sibling order follows lexicographic segment order.
+ * Computes a **tree path string** for inserting a new manual variable row in the flow variables rail
+ * (before/after/child), not a variable identity. Identity is always the variable GUID; labels live in
+ * `flow.meta.translations`. Collision avoidance uses these path strings only within the rail UI.
  */
 
 export const DND_NEW_FLOW_DATA = 'application/x-omnia-new-flow-data';

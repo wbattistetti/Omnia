@@ -2,11 +2,12 @@
  * Per-row field strip: backend (API + variable) as label → edit in place. Interface: no extra fields.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { MappingEntry } from './mappingTypes';
 import { InlineFieldWithPencilEdit } from './InlineFieldWithPencilEdit';
 import { BackendMappingVariableField } from './BackendMappingVariableField';
-import { getVariableLabel } from '../../utils/getVariableLabel';
+import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegistry';
+import { resolveVariableDisplayName } from '../../utils/resolveVariableDisplayName';
 import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
 
 export interface MappingRowFieldsProps {
@@ -48,6 +49,7 @@ export function MappingRowFields({
   onOutputVariableCreated,
 }: MappingRowFieldsProps) {
   const flowTr = useActiveFlowMetaTranslationsFlattened();
+  const mergedTr = useMemo(() => ({ ...getProjectTranslationsTable(), ...flowTr }), [flowTr]);
 
   if (variant === 'backend' && groupOnlyBackend) {
     return (
@@ -74,7 +76,12 @@ export function MappingRowFields({
 
   if (variant === 'backend') {
     const varMode = backendColumn === 'receive' ? 'receive' : 'send';
-    const varLabel = entry.variableRefId ? getVariableLabel(entry.variableRefId, flowTr) : '';
+    const varLabel = entry.variableRefId
+      ? resolveVariableDisplayName(entry.variableRefId, 'menuVariables', {
+          compiledTranslations: mergedTr,
+          flowMetaTranslations: mergedTr,
+        })
+      : '';
     return (
       <div className="flex items-center gap-2 shrink-0 min-w-0">
         {showApiFields ? (

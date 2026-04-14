@@ -1,6 +1,16 @@
 import { TaskType } from '../../../types/taskTypes'; // ✅ Import TaskType enum
 
-export type EditorKind = 'message' | 'ddt' | 'intent' | 'backend' | 'problem' | 'simple' | 'aiagent' | 'summarizer' | 'negotiation';
+export type EditorKind =
+  | 'message'
+  | 'ddt'
+  | 'intent'
+  | 'backend'
+  | 'problem'
+  | 'simple'
+  | 'aiagent'
+  | 'summarizer'
+  | 'negotiation'
+  | 'faqanswering';
 
 /**
  * TaskWizardMode: Enum che definisce lo stato del wizard nel ResponseEditor

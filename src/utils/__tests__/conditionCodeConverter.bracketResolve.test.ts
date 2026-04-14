@@ -17,12 +17,17 @@ describe('convertDSLLabelsToGUIDs / resolveBracketLabelTokenToGuid', () => {
     expect(out).toBe(`[${g1}] == 1`);
   });
 
-  it('matches last segment: dati.colore vs [colore]', () => {
+  it('requires full label match when stored label is dotted (no legacy last-segment shortcut)', () => {
     const m = new Map<string, string>([
       [g2, 'dati.colore'],
     ]);
     const out = convertDSLLabelsToGUIDs('[colore] > 0', m);
-    expect(out).toContain(g2);
+    expect(out).toBe('[colore] > 0');
+  });
+
+  it('resolves when bracket text equals full stored label', () => {
+    const m = new Map<string, string>([[g2, 'dati.colore']]);
+    expect(convertDSLLabelsToGUIDs('[dati.colore] > 0', m)).toBe(`[${g2}] > 0`);
   });
 
   it('resolveBracketLabelTokenToGuid returns guid for normalized match', () => {

@@ -10,7 +10,7 @@ describe('StructuralOrchestrator', () => {
     const ctx = {
       projectId: 'p1',
       getFlows: () => ({}),
-      commitFlowSlices: vi.fn(),
+      commitFlowSlices: vi.fn(() => true),
     };
     const out = runStructuralCommandSync(ctx, {
       type: 'moveTaskRow',
@@ -71,7 +71,7 @@ describe('StructuralOrchestrator', () => {
             meta: { flowInterface: { input: [], output: [] } },
           },
         }),
-        commitFlowSlices: vi.fn(),
+        commitFlowSlices: vi.fn(() => true),
         projectData: {},
         getTranslations: () => ({}),
       };

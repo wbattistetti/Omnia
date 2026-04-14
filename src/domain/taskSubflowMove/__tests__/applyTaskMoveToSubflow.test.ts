@@ -23,7 +23,14 @@ describe('mergeChildFlowInterfaceOutputsForVariables', () => {
       sf: {
         id: 'sf',
         title: 'Sub',
-        nodes: [],
+        nodes: [
+          {
+            id: 'n1',
+            data: {
+              rows: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', text: 'nome' }],
+            },
+          },
+        ],
         edges: [],
         meta: { flowInterface: { input: [], output: [] } },
       },
@@ -54,8 +61,8 @@ describe('mergeChildFlowInterfaceOutputsForVariables', () => {
     const tr = (next.sf.meta as any).translations as Record<string, string>;
     expect(out.length).toBe(1);
     expect(out[0].variableRefId).toBe(vid);
-    expect(out[0].labelKey).toBe(makeTranslationKey('interface', vid));
-    expect(tr[makeTranslationKey('interface', vid)]).toBe('nome');
+    expect(out[0].labelKey).toBe(makeTranslationKey('var', vid));
+    expect(tr[makeTranslationKey('var', vid)]).toBe('nome');
   });
 
   it('when onlyVarIds is empty Set, exposes no outputs (explicit referenced-only scan empty)', () => {
@@ -89,7 +96,14 @@ describe('mergeChildFlowInterfaceOutputsForVariables', () => {
       sf: {
         id: 'sf',
         title: 'Sub',
-        nodes: [],
+        nodes: [
+          {
+            id: 'n1',
+            data: {
+              rows: [{ id: '5802a057-bb1a-4c93-9e86-2000bc770f47', text: 'colore' }],
+            },
+          },
+        ],
         edges: [],
         meta: { flowInterface: { input: [], output: [] } },
       },
@@ -117,8 +131,8 @@ describe('mergeChildFlowInterfaceOutputsForVariables', () => {
     expect(out.length).toBe(1);
     expect(out[0].variableRefId).toBe(vid);
     expect(out[0].wireKey ?? '').toBe('colore');
-    expect(out[0].labelKey).toBe(makeTranslationKey('interface', vid));
-    expect(tr[makeTranslationKey('interface', vid)]).toBe('colore');
+    expect(out[0].labelKey).toBe(makeTranslationKey('var', vid));
+    expect(tr[makeTranslationKey('var', vid)]).toBe('colore');
   });
 });
 

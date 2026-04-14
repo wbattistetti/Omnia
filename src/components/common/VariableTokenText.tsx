@@ -1,10 +1,11 @@
 /**
- * Renders text containing `[variableId]` tokens; bracket bodies are GUIDs resolved via {@link getVariableLabel}.
+ * Renders text containing `[variableId]` tokens; bracket bodies are GUIDs resolved via {@link resolveVariableDisplayName} (`flowCanvasToken`).
  */
 import React from 'react';
 import { extractBracketTokens } from '../../utils/variableTokenText';
 import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
-import { getVariableLabel } from '../../utils/getVariableLabel';
+import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
+import { resolveVariableDisplayName } from '../../utils/resolveVariableDisplayName';
 
 type Props = {
   text: string;
@@ -12,15 +13,19 @@ type Props = {
 };
 
 export default function VariableTokenText({ text, className }: Props) {
-  const translations = useActiveFlowMetaTranslationsFlattened();
+  const flowMetaTranslations = useActiveFlowMetaTranslationsFlattened();
+  const { compiledTranslations } = useProjectTranslations();
 
   const resolveTokenLabel = React.useCallback(
     (rawValue: string): string => {
       const value = String(rawValue || '').trim();
       if (!value) return value;
-      return getVariableLabel(value, translations);
+      return resolveVariableDisplayName(value, 'flowCanvasToken', {
+        flowMetaTranslations,
+        compiledTranslations,
+      });
     },
-    [translations]
+    [flowMetaTranslations, compiledTranslations]
   );
 
   const tokens = extractBracketTokens(text);

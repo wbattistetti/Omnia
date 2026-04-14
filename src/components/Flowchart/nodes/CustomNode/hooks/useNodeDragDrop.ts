@@ -357,23 +357,26 @@ export function useNodeDragDrop({
             const crossNodeEvent = new CustomEvent('crossNodeRowMove', { detail: crossNodeDetail });
             window.dispatchEvent(crossNodeEvent);
 
+            const storeHandled =
+                (crossNodeDetail._state as { handled?: boolean } | undefined)?.handled === true;
+
             if (targetNodeId) {
                 removeNodeHighlight(targetNodeId);
             }
 
             /**
-             * Always remove the row from the source node immediately (same as pre-orchestrator behavior).
-             * Capture handlers may have already updated the workspace store; this write must stay
-             * idempotent. Skipping when `detail._state.handled` was true left the source canvas stale
-             * whenever the store slice did not reflect the removal (dual-pane / commit ordering).
+             * Always refresh local source rows immediately. When the orchestrator committed to FlowStore
+             * (`handled`), skip `updateNode` so we do not race a second graph write on top of UPSERT.
              */
             const updatedRows = nodeRows.filter((row) => row.id !== draggedRowId);
             setNodeRows(updatedRows);
 
-            if (flowActions?.updateNode) {
-                flowActions.updateNode(nodeId, { rows: updatedRows });
-            } else if (data.onUpdate) {
-                data.onUpdate({ rows: updatedRows });
+            if (!storeHandled) {
+                if (flowActions?.updateNode) {
+                    flowActions.updateNode(nodeId, { rows: updatedRows });
+                } else if (data.onUpdate) {
+                    data.onUpdate({ rows: updatedRows });
+                }
             }
 
             if (updatedRows.length === 0) {

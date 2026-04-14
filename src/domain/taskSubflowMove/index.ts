@@ -10,6 +10,8 @@ export * from './findSubflowPortal';
 export * from './moveTaskRowInFlows';
 export * from './materializeTaskInSubflow';
 export * from './applyTaskMoveToSubflow';
+export * from './taskMoveTranslationPipeline';
+export { collectSayMessageTranslationKeysFromTask } from './collectSayMessageTranslationKeys';
 export {
   registerSubflowWiringSecondPass,
   tryFlushSubflowSecondPassForTask,

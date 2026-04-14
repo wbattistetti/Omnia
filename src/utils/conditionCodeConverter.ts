@@ -30,11 +30,6 @@ function normalizeBracketLabelKey(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function lastSegmentOfVarName(label: string): string {
-  const parts = label.split('.').map((p) => p.trim()).filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1]! : label.trim();
-}
-
 function pickPreferredGuid(
   pairs: Array<[string, string]>,
   options?: BracketVariableMappingOptions
@@ -49,8 +44,8 @@ function pickPreferredGuid(
 }
 
 /**
- * Resolves a single [token] body to a variable GUID: exact varName, then case-insensitive full name,
- * then case-insensitive match on the last segment (e.g. dati.colore ↔ [colore]).
+ * Resolves a single [token] body to a variable GUID: bracket UUID passthrough, then exact label,
+ * then case-insensitive full label match against the mapping (GUID → display label from flow translations).
  */
 export function resolveBracketLabelTokenToGuid(
   trimmed: string,
@@ -75,16 +70,7 @@ export function resolveBracketLabelTokenToGuid(
   for (const [guid, label] of variableMappings.entries()) {
     if (normalizeBracketLabelKey(label) === nt) normFull.push([guid, label]);
   }
-  const normPick = pickPreferredGuid(normFull, options);
-  if (normPick) return normPick;
-
-  const bySeg: Array<[string, string]> = [];
-  for (const [guid, label] of variableMappings.entries()) {
-    if (normalizeBracketLabelKey(lastSegmentOfVarName(label)) === nt) {
-      bySeg.push([guid, label]);
-    }
-  }
-  return pickPreferredGuid(bySeg, options);
+  return pickPreferredGuid(normFull, options);
 }
 
 /**

@@ -5,6 +5,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { WorkspaceState } from '@flows/FlowTypes';
+import { useFlowWorkspaceOptional } from '@flows/FlowStore';
 import {
   ChevronDown,
   ChevronRight,
@@ -257,6 +259,8 @@ interface RowProps {
   onBackendFlowVariableDrop?: (e: React.DragEvent, pos: ParamDropPosition) => void;
   projectId?: string;
   flowCanvasId?: string;
+  /** Live workspace flows (Interface leaf labels + task row fallback). */
+  workspaceFlows?: WorkspaceState['flows'];
   ifacePointerPreview: FlowInterfacePointerPreviewDetail | null;
   enableRowReorder: boolean;
   ifaceReorderDrag: { targetPathKey: string; placement: 'before' | 'after' } | null;
@@ -289,6 +293,7 @@ function MappingTreeRow({
   onBackendFlowVariableDrop,
   projectId,
   flowCanvasId,
+  workspaceFlows,
   ifacePointerPreview,
   enableRowReorder,
   ifaceReorderDrag,
@@ -643,7 +648,10 @@ function MappingTreeRow({
             segment={node.segment}
             displayLabel={
               variant === 'interface' && node.entry
-                ? getInterfaceLeafDisplayName(node.entry, projectId)
+                ? getInterfaceLeafDisplayName(node.entry, projectId, {
+                    flowCanvasId,
+                    flows: workspaceFlows,
+                  })
                 : undefined
             }
             editable={leafLabelEditable}
@@ -757,6 +765,7 @@ function MappingTreeRow({
               onBackendFlowVariableDrop={onBackendFlowVariableDrop}
               projectId={projectId}
               flowCanvasId={flowCanvasId}
+              workspaceFlows={workspaceFlows}
               ifacePointerPreview={ifacePointerPreview}
               enableRowReorder={enableRowReorder}
               ifaceReorderDrag={ifaceReorderDrag}
@@ -801,6 +810,9 @@ export function FlowMappingTree({
   onCreateOutputVariable,
   onOutputVariableCreated,
 }: FlowMappingTreeProps) {
+  const workspaceState = useFlowWorkspaceOptional();
+  const workspaceFlows = variant === 'interface' ? workspaceState?.flows : undefined;
+
   const tree = useMemo(
     () => buildMappingTree(entries, { siblingOrder }),
     [entries, siblingOrder]
@@ -1129,6 +1141,7 @@ export function FlowMappingTree({
           }
           projectId={projectId}
           flowCanvasId={flowCanvasId}
+          workspaceFlows={workspaceFlows}
           ifacePointerPreview={ifacePointerPreview}
           enableRowReorder={enableRowReorder}
           ifaceReorderDrag={ifaceReorderDrag}

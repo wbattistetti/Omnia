@@ -43,7 +43,16 @@ export default function TaskEditorHost({
 
   // DDTEditor, IntentEditor, TextMessageEditor e BackendCallEditor sono importati direttamente, quindi non hanno bisogno di Suspense
   // Gli altri editori (problem, simple, aiagent, summarizer, negotiation) usano lazy loading, quindi hanno bisogno di Suspense
-  const isLazy = kind !== 'ddt' && kind !== 'intent' && kind !== 'message' && kind !== 'backend' && kind !== 'problem' && kind !== 'aiagent' && kind !== 'summarizer' && kind !== 'negotiation';
+  const isLazy =
+    kind !== 'ddt' &&
+    kind !== 'intent' &&
+    kind !== 'message' &&
+    kind !== 'backend' &&
+    kind !== 'problem' &&
+    kind !== 'aiagent' &&
+    kind !== 'summarizer' &&
+    kind !== 'negotiation' &&
+    kind !== 'faqanswering';
 
   // Prefer dock tab id when docked: avoids remount + key collision when task is briefly empty during dock layout updates.
   const editorInstanceKey = dockTabId ?? task?.id ?? 'unknown';

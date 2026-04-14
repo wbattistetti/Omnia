@@ -1,5 +1,20 @@
 import React from 'react';
-import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Check, Bot, ChevronRight, ChevronDown, MoreHorizontal, Tag, Workflow } from 'lucide-react';
+import {
+  Ear,
+  CheckCircle2,
+  Megaphone,
+  GitBranch,
+  FileText,
+  Server,
+  Check,
+  Bot,
+  ChevronRight,
+  ChevronDown,
+  MoreHorizontal,
+  Tag,
+  Workflow,
+  MessageCircleQuestion,
+} from 'lucide-react';
 import { useFontContext } from '../../../../context/FontContext';
 import { TaskType } from '../../../../types/taskTypes';
 import { TaskContext } from '../../../../types/taskContext';
@@ -23,6 +38,7 @@ const MAIN_TYPE_OPTIONS = [
     { value: TaskType.AIAgent, label: 'AI Agent', Icon: Bot, color: getFlowchartTaskTypeLabelColor(TaskType.AIAgent) },
     { value: TaskType.Summarizer, label: 'Summarizer', Icon: FileText, color: getFlowchartTaskTypeLabelColor(TaskType.Summarizer) },
     { value: TaskType.Negotiation, label: 'Negotiation', Icon: CheckCircle2, color: getFlowchartTaskTypeLabelColor(TaskType.Negotiation) },
+    { value: TaskType.FaqAnswering, label: 'Faq Answering', Icon: MessageCircleQuestion, color: getFlowchartTaskTypeLabelColor(TaskType.FaqAnswering) },
     { value: TaskType.Subflow, label: 'Subflow', Icon: Workflow, color: getFlowchartTaskTypeLabelColor(TaskType.Subflow) }
 ];
 
@@ -39,7 +55,7 @@ interface RowTypePickerToolbarProps {
 /**
  * Type picker toolbar for selecting agent act type
  * Keyboard navigable with arrow keys, Enter to confirm, Escape to close
- * Supports keyboard shortcuts: a=AI Agent, m=Message, d=Data, n=Negotiation, p=Problem, s=Summarizer, b=BackendCall
+ * Supports keyboard shortcuts: a=AI Agent, m=Message, d=Data, f=Faq Answering, n=Negotiation, p=Problem, s=Summarizer, b=BackendCall
  */
 export function RowTypePickerToolbar({
     left,
@@ -141,6 +157,7 @@ export function RowTypePickerToolbar({
                 a: TaskType.AIAgent,
                 m: TaskType.SayMessage,
                 d: TaskType.UtteranceInterpretation,
+                f: TaskType.FaqAnswering,
                 n: TaskType.Negotiation,
                 p: TaskType.ClassifyProblem,
                 s: TaskType.Summarizer,

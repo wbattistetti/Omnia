@@ -422,6 +422,11 @@ export function useFlowWorkspace<NodeT = any, EdgeT = any>(): WorkspaceState<Nod
   return ctx as any;
 }
 
+/** Like {@link useFlowWorkspace} but returns `undefined` outside {@link FlowWorkspaceProvider} (demo / isolated editors). */
+export function useFlowWorkspaceOptional<NodeT = any, EdgeT = any>(): WorkspaceState<NodeT, EdgeT> | undefined {
+  return useContext(WorkspaceContext) as WorkspaceState<NodeT, EdgeT> | undefined;
+}
+
 export function useFlowActions<NodeT = any, EdgeT = any>() {
   const dispatch = useContext(WorkspaceDispatchContext);
   if (!dispatch) throw new Error('useFlowActions must be used within FlowWorkspaceProvider');

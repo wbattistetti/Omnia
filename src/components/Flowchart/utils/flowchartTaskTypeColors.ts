@@ -15,6 +15,7 @@ const LABEL_BY_TYPE: Partial<Record<TaskType, string>> = {
   [TaskType.ClassifyProblem]: '#f59e0b',
   [TaskType.Summarizer]: '#06b6d4',
   [TaskType.Negotiation]: '#6366f1',
+  [TaskType.FaqAnswering]: '#f59e0b',
   [TaskType.BackendCall]: '#22c55e',
   [TaskType.Subflow]: sidebarTheme.tasks.color,
   [TaskType.SayMessage]: '#22c55e',

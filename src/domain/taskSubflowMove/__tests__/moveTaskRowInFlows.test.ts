@@ -36,6 +36,91 @@ describe('moveTaskRowBetweenFlows', () => {
     expect(next.main.hasLocalChanges).toBe(true);
     expect(next.sf.hasLocalChanges).toBe(true);
   });
+
+  it('moves a row between two nodes in the same flow (single slice)', () => {
+    const row = { id: 'row-move', text: 'X' };
+    const flows = {
+      main: {
+        id: 'main',
+        nodes: [
+          { id: 'a', data: { rows: [row] } },
+          { id: 'b', data: { rows: [{ id: 'keep', text: 'k' }] } },
+        ],
+        edges: [],
+      },
+    } as any;
+
+    const next = moveTaskRowBetweenFlows(flows, {
+      sourceFlowId: 'main',
+      targetFlowId: 'main',
+      sourceNodeId: 'a',
+      targetNodeId: 'b',
+      rowId: 'row-move',
+    });
+
+    const nodeA = next.main.nodes.find((n: any) => n.id === 'a');
+    const nodeB = next.main.nodes.find((n: any) => n.id === 'b');
+    expect(nodeA.data.rows.some((r: any) => r.id === 'row-move')).toBe(false);
+    expect(nodeB.data.rows.some((r: any) => r.id === 'row-move')).toBe(true);
+  });
+
+  it('cross-flow: when target flow has no nodes yet, appends row via shell node', () => {
+    const row = { id: 'r-empty-tgt', text: 'Moved' };
+    const flows = {
+      main: {
+        id: 'main',
+        nodes: [{ id: 'n1', data: { rows: [row] } }],
+        edges: [],
+      },
+      sf: {
+        id: 'sf',
+        title: 'B',
+        nodes: [],
+        edges: [],
+      },
+    } as any;
+
+    const next = moveTaskRowBetweenFlows(flows, {
+      sourceFlowId: 'main',
+      targetFlowId: 'sf',
+      sourceNodeId: 'n1',
+      targetNodeId: 'any',
+      rowId: 'r-empty-tgt',
+    });
+
+    expect(next.main.nodes[0].data.rows.some((r: any) => r.id === 'r-empty-tgt')).toBe(false);
+    expect(next.sf.nodes.length).toBeGreaterThan(0);
+    expect(
+      next.sf.nodes.some((n: any) => (n.data?.rows || []).some((r: any) => r.id === 'r-empty-tgt'))
+    ).toBe(true);
+  });
+
+  it('cross-flow: when targetNodeId is missing from slice, row still lands on first node', () => {
+    const row = { id: 'r-fallback', text: 'X' };
+    const flows = {
+      main: {
+        id: 'main',
+        nodes: [{ id: 'n1', data: { rows: [row] } }],
+        edges: [],
+      },
+      sf: {
+        id: 'sf',
+        nodes: [{ id: 'real-node', data: { rows: [] } }],
+        edges: [],
+      },
+    } as any;
+
+    const next = moveTaskRowBetweenFlows(flows, {
+      sourceFlowId: 'main',
+      targetFlowId: 'sf',
+      sourceNodeId: 'n1',
+      targetNodeId: 'wrong-id',
+      rowId: 'r-fallback',
+    });
+
+    const real = next.sf.nodes.find((n: any) => n.id === 'real-node');
+    expect(real?.data?.rows?.some((r: any) => r.id === 'r-fallback')).toBe(true);
+  });
 });
 
 describe('removeRowByIdFromFlow', () => {

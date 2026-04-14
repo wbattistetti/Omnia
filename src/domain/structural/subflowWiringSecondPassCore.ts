@@ -33,7 +33,7 @@ export type SubflowWiringSecondPassCoreParams = {
 
 export function executeSubflowWiringSecondPassCore(
   flows: WorkspaceState['flows'],
-  commitFlowSlices: (flowsNext: WorkspaceState['flows'], flowIds: string[]) => void,
+  commitFlowSlices: (flowsNext: WorkspaceState['flows'], flowIds: string[]) => boolean,
   params: SubflowWiringSecondPassCoreParams
 ): ApplyTaskMoveToSubflowResult | null {
   const pid = String(params.projectId || '').trim();
@@ -72,6 +72,6 @@ export function executeSubflowWiringSecondPassCore(
     params.parentFlowId,
     params.childFlowId,
   ]);
-  commitFlowSlices(result.flowsNext, [params.parentFlowId, params.childFlowId]);
-  return result;
+  const committed = commitFlowSlices(result.flowsNext, [params.parentFlowId, params.childFlowId]);
+  return { ...result, flowStoreCommitOk: committed };
 }

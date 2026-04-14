@@ -6,6 +6,13 @@
  *
  * `taskVariableIds` is the set to rename — for a normal linked DnD move, callers pass only varIds
  * referenced in the parent; legacy resync may pass the full task variable id list.
+ *
+ * Label resolution priority for the leaf:
+ *   1. Child flow `meta.translations` (in-progress, already has cloned `var:` labels)
+ *   2. Parent flow `meta.translations` (still has the pre-rename label at this point)
+ *   3. Global project translations registry (may be stale; used as last resort)
+ * Using in-progress flow meta avoids race conditions where `getProjectTranslationsTable()` has not
+ * yet been updated by React context during the synchronous move pipeline.
  */
 
 import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
@@ -19,6 +26,7 @@ import { publishVariableDisplayTranslation } from '@utils/variableTranslationBri
 import { makeTranslationKey } from '@utils/translationKeys';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
 import { logS2Diag } from '@utils/s2WiringDiagnostic';
+import { flattenFlowMetaTranslations } from '@utils/activeFlowTranslations';
 
 import { extractInterfaceOutputsByVariableRefId } from './autoFillSubflowBindings';
 import { mergeVariableDisplayLabelIntoParentFlowSlice } from './subflowParentFlowTranslations';
@@ -39,6 +47,27 @@ export type AutoRenameParentVariablesParams = {
 };
 
 export type ParentAutoRenameRecord = { id: string; previousName: string; nextName: string };
+
+/**
+ * Builds the translations lookup used for leaf computation during the rename.
+ *
+ * Priority (last write wins):
+ *   1. Child flow `meta.translations` — may contain cloned `var:` labels (in-progress)
+ *   2. Parent flow `meta.translations` — holds the original (pre-rename) labels
+ *   3. Global compiled registry — wins over flow meta (authoritative when available)
+ *
+ * This order means: global always wins; parent/child fill keys that are absent in the stale
+ * registry (e.g. labels written only to flow meta and not yet propagated to `ProjectTranslationsContext`).
+ */
+function buildRenameTranslations(
+  parentFlow: FlowDoc | undefined,
+  childFlow: FlowDoc | undefined
+): Record<string, string> {
+  const global = getProjectTranslationsTable();
+  const parent = flattenFlowMetaTranslations(parentFlow);
+  const child = flattenFlowMetaTranslations(childFlow);
+  return { ...child, ...parent, ...global };
+}
 
 function interfaceParamLabel(entry: MappingEntry | undefined, translations: Record<string, string>): string {
   if (!entry) return '';
@@ -83,7 +112,7 @@ function computeLeafForS2Rename(
  * Applies `prefix.leaf` rename for each id in `taskVariableIds`, updates parent flow
  * translations in `flows`, and publishes `var:<uuid>` globally.
  */
-export function autoRenameParentVariablesForMovedTask(params: AutoRenameParentVariablesParams): {
+export function autoRenameReferencedVariablesForMovedTask(params: AutoRenameParentVariablesParams): {
   renamed: ParentAutoRenameRecord[];
   flowsNext: WorkspaceState['flows'];
 } {
@@ -111,7 +140,7 @@ export function autoRenameParentVariablesForMovedTask(params: AutoRenameParentVa
   }
 
   const ifaceByVarRef = extractInterfaceOutputsByVariableRefId(params.childFlow);
-  const translations = getProjectTranslationsTable();
+  const translations = buildRenameTranslations(params.parentFlow, params.childFlow);
   const all = variableCreationService.getAllVariables(pid) ?? [];
 
   const renamed: ParentAutoRenameRecord[] = [];

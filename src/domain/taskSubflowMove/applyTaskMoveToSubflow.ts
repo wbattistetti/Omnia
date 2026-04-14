@@ -22,23 +22,30 @@ import type { VariableInstance } from '@types/variableTypes';
 import { invalidateChildFlowInterfaceCache } from '@services/childFlowInterfaceService';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
-import { getVariableLabel } from '@utils/getVariableLabel';
-import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
+import { leafLabelForNewInterfaceOutputRow } from '@utils/resolveVariableDisplayName';
 import { isUuidString, makeTranslationKey } from '@utils/translationKeys';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
 import { logS2Diag } from '@utils/s2WiringDiagnostic';
 import type { NodeRowData } from '@types/project';
 
+import { collectSayMessageTranslationKeysFromTask } from './collectSayMessageTranslationKeys';
 import {
   collectReferencedVarIdsForParentFlowWorkspace,
   type ProjectConditionLike,
 } from './collectReferencedVarIds';
+import {
+  CloneTranslationsCollisionError,
+  buildTranslationKeysForTaskMove,
+  cloneTranslationsToChild,
+  removeTranslationKeysFromFlowSlice,
+  varTranslationKeysForIds,
+} from './taskMoveTranslationPipeline';
 import { compileTranslationsToInternalMap } from './referenceScanCompile';
 import { materializeMovedTaskForSubflow } from './materializeTaskInSubflow';
 import { appendRowToFlowNode, moveTaskRowBetweenFlows, removeRowByIdFromFlow } from './moveTaskRowInFlows';
 import { restoreChildTaskBoundVariablesToLocalNames } from './subflowVariableProxyRestore';
 import { autoFillSubflowBindingsForMovedTask } from './autoFillSubflowBindings';
-import { autoRenameParentVariablesForMovedTask } from './autoRenameParentVariables';
+import { autoRenameReferencedVariablesForMovedTask } from './autoRenameParentVariables';
 import {
   inferTaskVariableInstancesForSubflowInterfaceMerge,
   mergeVariableRowsByIdPreferStore,
@@ -139,6 +146,11 @@ export type ApplyTaskMoveToSubflowResult = {
   /** Parent/child GUID → FQ label entries written in the second pass (subflow proxy display). */
   secondPassDisplayLabelUpdates: number;
   flowsNext: WorkspaceState['flows'];
+  /**
+   * When set by structural commands, indicates FlowStore upsert ran (handler registered).
+   * DnD orchestrator uses this so `handled` is not set without a real store commit.
+   */
+  flowStoreCommitOk?: boolean;
 };
 
 /**
@@ -183,12 +195,10 @@ export function mergeChildFlowInterfaceOutputsForVariables(
     prev.map((e) => String((e as { variableRefId?: string }).variableRefId || '').trim()).filter(Boolean)
   );
 
-  /** Domain merge: use merged project registry so labels resolve during automated moves (tests + save pipeline). */
-  const trTable = getProjectTranslationsTable();
   for (const v of vars) {
     const vid = String(v.id || '').trim();
     if (!vid || seen.has(vid)) continue;
-    const labelText = getVariableLabel(vid, trTable);
+    const labelText = leafLabelForNewInterfaceOutputRow(vid, childFlowId, flows, tr);
     const wireKey = uniqueWireKeyFromLabel(
       labelText,
       prev.map((row) => {
@@ -197,14 +207,7 @@ export function mergeChildFlowInterfaceOutputsForVariables(
       }),
       ''
     );
-    let labelKey: string | undefined;
-    try {
-      if (isUuidString(vid)) {
-        labelKey = makeTranslationKey('interface', vid);
-      }
-    } catch {
-      labelKey = undefined;
-    }
+    const labelKey = isUuidString(vid) ? makeTranslationKey('var', vid) : undefined;
     prev.push(
       createFlowInterfaceMappingEntry({
         variableRefId: vid,
@@ -271,14 +274,13 @@ function mergeChildFlowInterfaceInputsFromInterfaceInputVars(
   };
   const prevIn: unknown[] = [];
   const seen = new Set<string>();
-  const trTable = getProjectTranslationsTable();
 
   for (const vidRaw of interfaceInputVars) {
     const vid = String(vidRaw || '').trim();
     if (!vid || seen.has(vid)) continue;
     seen.add(vid);
 
-    const labelText = getVariableLabel(vid, trTable);
+    const labelText = leafLabelForNewInterfaceOutputRow(vid, cid, flows, tr);
     const wireKey = uniqueWireKeyFromLabel(
       labelText,
       prevIn.map((row) => {
@@ -287,14 +289,7 @@ function mergeChildFlowInterfaceInputsFromInterfaceInputVars(
       }),
       ''
     );
-    let labelKeyStr: string | undefined;
-    try {
-      if (isUuidString(vid)) {
-        labelKeyStr = labelKey(vid as VarId);
-      }
-    } catch {
-      labelKeyStr = undefined;
-    }
+    const labelKeyStr = isUuidString(vid) ? labelKey(vid as VarId) : undefined;
     prevIn.push(
       createFlowInterfaceMappingEntry({
         variableRefId: vid,
@@ -487,6 +482,34 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       taskInstanceId: v.taskInstanceId,
     })),
   });
+
+  /**
+   * Clone `meta.translations` entries from parent slice → child slice (SayMessage keys + `var:` for task vars).
+   * Runs before S2 merge so child labels resolve from copied `var:` entries. Second pass skips (already cloned).
+   */
+  if (linkedSubflow && !secondPass && parentFlowId !== childFlowId) {
+    const logical = buildTranslationKeysForTaskMove(movedTask ?? undefined, taskVars);
+    if (logical.size > 0) {
+      try {
+        flowsWorking = cloneTranslationsToChild(flowsWorking, parentFlowId, childFlowId, logical);
+        logTaskSubflowMove('apply:cloneTranslationsToChild', {
+          parentFlowId,
+          childFlowId,
+          keyCount: logical.size,
+          messageKeyCount: collectSayMessageTranslationKeysFromTask(movedTask ?? undefined).length,
+          varKeyCount: varTranslationKeysForIds(taskVars.map((v) => String(v.id || '').trim())).length,
+        });
+      } catch (e) {
+        if (e instanceof CloneTranslationsCollisionError) {
+          logTaskSubflowMove('apply:cloneTranslationsToChild:collision', {
+            childFlowId: e.childFlowId,
+            keys: e.keys,
+          });
+        }
+        throw e;
+      }
+    }
+  }
 
   /** S2 full set: store ∪ inference (deterministic); store wins on id collision. */
   const inferredForS2 = linkedSubflow
@@ -688,7 +711,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       });
     }
 
-    const ar = autoRenameParentVariablesForMovedTask({
+    const ar = autoRenameReferencedVariablesForMovedTask({
       projectId: pid,
       parentFlowId,
       parentFlow: flowsNext[parentFlowId],
@@ -704,6 +727,22 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       count: parentAutoRenames.length,
       renames: parentAutoRenames.map((r) => ({ id: r.id, prev: r.previousName, next: r.nextName })),
     });
+
+    /** Drop cloned message keys + unreferenced `var:` from parent meta (referenced vars kept + renamed above). */
+    const sayKeysForRemoval = collectSayMessageTranslationKeysFromTask(movedTask ?? undefined);
+    const removeKeys = new Set<string>([
+      ...varTranslationKeysForIds(unreferencedForMovedTask),
+      ...sayKeysForRemoval,
+    ]);
+    if (removeKeys.size > 0) {
+      flowsNext = removeTranslationKeysFromFlowSlice(flowsNext, parentFlowId, removeKeys);
+      logTaskSubflowMove('apply:removeTranslationKeysFromParent', {
+        parentFlowId,
+        keyCount: removeKeys.size,
+        unreferencedVarCount: unreferencedForMovedTask.length,
+        sayKeyCount: sayKeysForRemoval.length,
+      });
+    }
 
     logTaskSubflowMove('apply:subflowS2Bindings', {
       parentSubflowTaskRowId,

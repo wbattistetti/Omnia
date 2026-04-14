@@ -44,8 +44,14 @@ class FlowWorkspaceSnapshotStore {
   }
 
   setSnapshot(flowsById: Record<string, SnapshotFlow>, activeFlowId: string): void {
-    this.flowsById = flowsById || {};
-    this.activeFlowId = activeFlowId || 'main';
+    const next = flowsById || {};
+    const nextActive = activeFlowId || 'main';
+    // Avoid notifying subscribers when nothing changed (callers may sync every render).
+    if (this.flowsById === next && this.activeFlowId === nextActive) {
+      return;
+    }
+    this.flowsById = next;
+    this.activeFlowId = nextActive;
     this.emit();
   }
 

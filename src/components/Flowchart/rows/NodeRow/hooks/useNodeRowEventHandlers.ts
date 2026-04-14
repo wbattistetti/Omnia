@@ -343,6 +343,8 @@ export function useNodeRowEventHandlers(
                       ? 'Summarizer'
                       : result.taskType === TaskType.Negotiation
                         ? 'Negotiation'
+                        : result.taskType === TaskType.FaqAnswering
+                          ? 'FaqAnswering'
                         : result.taskType === TaskType.Subflow
                           ? 'Subflow'
                           : isTaskObject && selectedTask

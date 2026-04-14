@@ -11,7 +11,7 @@ export interface MappingEntry {
   apiField: string;
   /** Promised variable GUID when wired from a flow row or wizard (stable for runtime). */
   variableRefId?: string;
-  /** Optional key into `flow.meta.translations` (e.g. `interface:<uuid>`); else use `var:<variableRefId>`. */
+  /** Optional key into `flow.meta.translations` — canonical `var:<uuid>` for variable-linked rows. */
   labelKey?: string;
   /** Backend: human description for tooltip / docs. */
   fieldDescription?: string;

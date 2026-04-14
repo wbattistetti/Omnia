@@ -1,4 +1,16 @@
-import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot, List, CheckCircle, Workflow } from 'lucide-react';
+import {
+  Ear,
+  CheckCircle2,
+  Megaphone,
+  GitBranch,
+  FileText,
+  Server,
+  Bot,
+  List,
+  CheckCircle,
+  Workflow,
+  MessageCircleQuestion,
+} from 'lucide-react';
 import { taskRepository } from '../../../services/TaskRepository';
 import { getSayMessageSyncedBody } from '../../../utils/sayMessageTaskSync';
 import { TaskType, normalizeLegacyTaskTypeValue } from '../../../types/taskTypes';
@@ -64,6 +76,7 @@ export function resolveTaskType(row: any): TaskType {
         'AIAgent': TaskType.AIAgent,
         'Summarizer': TaskType.Summarizer,
         'Negotiation': TaskType.Negotiation,
+        'FaqAnswering': TaskType.FaqAnswering,
         'Flow': TaskType.Subflow,
         'Subflow': TaskType.Subflow
       };
@@ -201,6 +214,9 @@ export function getTaskVisualsByType(type: TaskType, hasTaskTree: boolean) {
       break;
     case TaskType.Negotiation:
       Icon = CheckCircle2;
+      break;
+    case TaskType.FaqAnswering:
+      Icon = MessageCircleQuestion;
       break;
     case TaskType.BackendCall:
       Icon = Server;

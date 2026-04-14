@@ -21,7 +21,7 @@ export enum TemplateSource {
 
 /**
  * TaskType: allineato a VB.NET `Common/Types/TaskTypes.vb` (0–7 identici).
- * 8–9 = solo client (Summarizer/Negotiation non ancora in VB).
+ * 8–10 = solo client (Summarizer/Negotiation/FaqAnswering; allineare VB quando serve).
  */
 export enum TaskType {
   UNDEFINED = -1,
@@ -34,7 +34,8 @@ export enum TaskType {
   AIAgent = 6,
   Subflow = 7,
   Summarizer = 8,
-  Negotiation = 9
+  Negotiation = 9,
+  FaqAnswering = 10
 }
 
 /** Prima dell’allineamento, `Flow` era enum 9 → usare `normalizeLegacyTaskTypeValue` in lettura. */
@@ -62,6 +63,7 @@ export function taskTypeToTemplateId(type: TaskType): string | null {
     case TaskType.Subflow: return 'Subflow';
     case TaskType.Summarizer: return 'Summarizer';
     case TaskType.Negotiation: return 'Negotiation';
+    case TaskType.FaqAnswering: return 'FaqAnswering';
     case TaskType.UNDEFINED: return 'UNDEFINED';
     default: return null;
   }
@@ -85,6 +87,7 @@ export function templateIdToTaskType(templateId: string | null | undefined): Tas
     case 'subflow': return TaskType.Subflow;
     case 'summarizer': return TaskType.Summarizer;
     case 'negotiation': return TaskType.Negotiation;
+    case 'faqanswering': return TaskType.FaqAnswering;
     case 'flow': return TaskType.Subflow;
     case 'undefined': return TaskType.UNDEFINED;
     default: return TaskType.UNDEFINED;
@@ -115,6 +118,7 @@ export function taskIdToTaskType(taskId: string): TaskType { // ✅ RINOMINATO: 
     case 'aiagent': return TaskType.AIAgent;
     case 'summarizer': return TaskType.Summarizer;
     case 'negotiation': return TaskType.Negotiation;
+    case 'faqanswering': return TaskType.FaqAnswering;
     case 'subflow': return TaskType.Subflow;
     case 'flow': return TaskType.Subflow;
     case 'undefined': return TaskType.UNDEFINED;
@@ -157,7 +161,7 @@ export function taskTypeToHeuristicString(type: TaskType): string | null {
 /**
  * Helper: Deriva il tipo di editor da TaskType
  */
-export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'problem' | 'backend' | 'simple' | 'aiagent' | 'summarizer' | 'negotiation' | 'flow' {
+export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'problem' | 'backend' | 'simple' | 'aiagent' | 'summarizer' | 'negotiation' | 'faqanswering' | 'flow' {
   switch (type) {
     case TaskType.Subflow:
       return 'flow'; // Opens subflow tab, no task editor
@@ -173,6 +177,8 @@ export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'prob
       return 'summarizer';
     case TaskType.Negotiation:
       return 'negotiation';
+    case TaskType.FaqAnswering:
+      return 'faqanswering';
     case TaskType.ClassifyProblem:
       return 'ddt'; // ✅ UNIFICATO: ClassifyProblem ora usa ResponseEditor (DDT) come UtteranceInterpretation
     case TaskType.BackendCall:
@@ -475,6 +481,11 @@ export interface Task {
    * reconstructs from task JSON.
    */
   referenceScanInternalText?: string;
+
+  /** FaqAnswering: ontology document title (embedded tree name). */
+  faqAnsweringTreeName?: string;
+  /** FaqAnswering: root ontology nodes (single JSON document on the task). */
+  faqAnsweringRoot?: import('./faqOntology').OntologyNode[];
 
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
   // category?: string;              // ID categoria (preset o custom)

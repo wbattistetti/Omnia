@@ -13,7 +13,7 @@ import { useProjectTranslations } from '../context/ProjectTranslationsContext';
 import { Node, Edge } from 'reactflow';
 import { FlowNode, EdgeData } from './Flowchart/types/flowTypes';
 import { ProjectInfo } from '../types/project';
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { ProjectService } from '../services/ProjectService';
 import { ProjectData } from '../types/project';
 import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
@@ -108,6 +108,17 @@ const DockManagerWithFlows: React.FC<{
   const flowActions = useFlowActions<Node<FlowNode>, Edge<EdgeData>>();
   const projectIdForMigration = projectDataCtx?.data?.id != null ? String(projectDataCtx.data.id).trim() : '';
   const subflowProxyMigrateKeyRef = React.useRef<string>('');
+  const upsertFlowRef = useRef(flowActions.upsertFlow);
+  upsertFlowRef.current = flowActions.upsertFlow;
+
+  /**
+   * Register FlowStore upsert **during render** so `upsertFlowSlicesFromSubflowSync` is never null
+   * between first paint and useEffect (structural DnD runs synchronously on mouseup).
+   */
+  setSubflowSyncUpsertFlowSlice((f) => {
+    logUpsertFlowSliceInbound('DockManager_subflowSync', f as any);
+    upsertFlowRef.current(f as any);
+  });
 
   /** Canvas row ids + inclusion flags — when this changes, re-hydrate utterance vars from TaskRepository. */
   const utteranceFlowHydrationFingerprint = React.useMemo(
@@ -147,15 +158,10 @@ const DockManagerWithFlows: React.FC<{
   // (portal upsert → syncSubflowInterfaceAfterAuthoringCanvasChange in same tick used empty child).
   setSubflowSyncFlows(flowWorkspace.flows);
 
-  // ✅ Also update in useEffect for safety (in case flows change during render)
-  React.useEffect(() => {
-    flowsRef.current = flowWorkspace.flows;
-    FlowWorkspaceSnapshot.setSnapshot(flowWorkspace.flows as any, flowWorkspace.activeFlowId);
-  }, [flowWorkspace.flows]);
-
-  React.useEffect(() => {
-    FlowWorkspaceSnapshot.setSnapshot(flowWorkspace.flows as any, flowWorkspace.activeFlowId);
-  }, [flowWorkspace.activeFlowId, flowWorkspace.flows]);
+  // ✅ Same-frame: FlowWorkspaceSnapshot must match FlowStore before children render.
+  // useEffect-only updates caused Interface OUTPUT / riepilogo to show raw GUIDs on first paint
+  // (getActiveFlowMetaTranslationsFlattened read stale snapshot until effect ran).
+  FlowWorkspaceSnapshot.setSnapshot(flowWorkspace.flows as any, flowWorkspace.activeFlowId);
 
   React.useEffect(() => {
     markFlowsPersistedRef.current = flowActions.markFlowsPersisted;
@@ -197,13 +203,9 @@ const DockManagerWithFlows: React.FC<{
     };
   }, [projectIdForMigration, flowWorkspace.flows]);
 
-  React.useEffect(() => {
-    setSubflowSyncUpsertFlowSlice((f) => {
-      logUpsertFlowSliceInbound('DockManager_subflowSync', f as any);
-      flowActions.upsertFlow(f as any);
-    });
+  useLayoutEffect(() => {
     return () => setSubflowSyncUpsertFlowSlice(null);
-  }, [flowActions.upsertFlow]);
+  }, []);
 
   // ✅ Adapt setRoot to match DockManager's expected signature
   const adaptedSetRoot = React.useCallback((n: DockNode | ((prev: DockNode) => DockNode)) => {

@@ -7,6 +7,7 @@ import BackendCallEditor from './editors/BackendCallEditor';
 import AIAgentEditor from './editors/AIAgentEditor';
 import SummarizerEditor from './editors/SummarizerEditor';
 import NegotiationEditor from './editors/NegotiationEditor';
+import FaqAnsweringEditor from './editors/FaqAnsweringEditor';
 
 type LazyComp = React.LazyExoticComponent<React.ComponentType<EditorProps>>;
 type DirectComp = React.ComponentType<EditorProps>;
@@ -34,6 +35,7 @@ export const registry: Record<EditorKind, LazyComp | DirectComp> = {
   aiagent: AIAgentEditor, // ✅ Editor dedicato per AIAgent
   summarizer: SummarizerEditor, // ✅ Editor dedicato per Summarizer
   negotiation: NegotiationEditor, // ✅ Editor dedicato per Negotiation
+  faqanswering: FaqAnsweringEditor,
   simple: SimpleEditor, // ✅ Fallback editor per tipi non supportati
 };
 
