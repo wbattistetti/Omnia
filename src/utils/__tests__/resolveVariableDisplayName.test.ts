@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { makeTranslationKey } from '../translationKeys';
 import {
   interfaceOutputLeafDisplayName,
   leafFromQualifiedDisplayName,
   leafLabelForNewInterfaceOutputRow,
   resolveVariableDisplayName,
 } from '../resolveVariableDisplayName';
-import { makeTranslationKey } from '../translationKeys';
 
 const VID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
@@ -64,6 +64,40 @@ describe('leafLabelForNewInterfaceOutputRow', () => {
       },
     } as any;
     expect(leafLabelForNewInterfaceOutputRow(VID, 'sf', flows, {})).toBe('chiedi età');
+  });
+
+  it('uses short fallback when no var: translation and no row text (§4C)', () => {
+    const flows = { sf: { id: 'sf', nodes: [] } } as any;
+    const label = leafLabelForNewInterfaceOutputRow(VID, 'sf', flows, {});
+    expect(label).toBe('Variable (aaaaaa)');
+    expect(label).not.toBe(VID);
+  });
+
+  it('uses parent flow task row when child has no nodes', () => {
+    const flows = {
+      child: { id: 'child', nodes: [] },
+      parent: {
+        id: 'parent',
+        nodes: [{ id: 'n1', data: { rows: [{ id: VID, text: 'chiedi nome' }] } }],
+      },
+    } as any;
+    expect(
+      leafLabelForNewInterfaceOutputRow(VID, 'child', flows, {}, { parentFlowId: 'parent' })
+    ).toBe('chiedi nome');
+  });
+
+  it('uses compiled project var: when child and parent rows are missing', () => {
+    const flows = {
+      child: { id: 'child', nodes: [] },
+      parent: { id: 'parent', nodes: [] },
+    } as any;
+    const varKey = makeTranslationKey('var', VID);
+    expect(
+      leafLabelForNewInterfaceOutputRow(VID, 'child', flows, {}, {
+        parentFlowId: 'parent',
+        compiledProjectTranslations: { [varKey]: 'dati.nomeCampo' },
+      })
+    ).toBe('nomeCampo');
   });
 });
 

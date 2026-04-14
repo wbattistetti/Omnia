@@ -1176,7 +1176,7 @@ class VariableCreationService {
         totalCount: deduplicated.length,
         manualVariables: finalManualVariables.length,
         taskVariables: finalTaskVariables.length,
-        duplicatesRemovedById: variables.length - deduplicated.length,
+        duplicatesRemovedById: rawRows.length - deduplicated.length,
         manualLabelsSample: finalManualVariables.slice(0, 8).map((v) => this.displayLabelForVariable(v.id)),
       });
     } catch (error) {

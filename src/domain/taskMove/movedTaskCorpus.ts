@@ -1,5 +1,6 @@
 /**
- * Builds a searchable corpus for the moved task (TaskRepository snapshot) for reference scanning.
+ * Legacy: serializes the moved task for ad-hoc scans.
+ * Prefer {@link referencedTaskVariablesForMovedTask} in `ReferencedTaskVariables.ts` for §3 structural extraction.
  */
 
 import { taskRepository } from '../../services/TaskRepository';

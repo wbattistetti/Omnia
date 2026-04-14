@@ -24,6 +24,8 @@ class FlowWorkspaceSnapshotStore {
   private flowsById: Record<string, SnapshotFlow> = {};
   private activeFlowId: string = 'main';
   private readonly listeners = new Set<() => void>();
+  /** Coalesce subscriber notifications so we never run them during React render (e.g. DockManagerWithFlows syncs snapshot each paint). */
+  private emitMicrotaskScheduled = false;
 
   /** Re-render subscribers (e.g. app Toolbar) when workspace snapshot changes. */
   subscribe(listener: () => void): () => void {
@@ -43,6 +45,16 @@ class FlowWorkspaceSnapshotStore {
     });
   }
 
+  /** Defer listener runs to after the current call stack / React render (avoids "Cannot update during render"). */
+  private scheduleEmit(): void {
+    if (this.emitMicrotaskScheduled) return;
+    this.emitMicrotaskScheduled = true;
+    queueMicrotask(() => {
+      this.emitMicrotaskScheduled = false;
+      this.emit();
+    });
+  }
+
   setSnapshot(flowsById: Record<string, SnapshotFlow>, activeFlowId: string): void {
     const next = flowsById || {};
     const nextActive = activeFlowId || 'main';
@@ -52,7 +64,7 @@ class FlowWorkspaceSnapshotStore {
     }
     this.flowsById = next;
     this.activeFlowId = nextActive;
-    this.emit();
+    this.scheduleEmit();
   }
 
   getActiveFlowId(): string {

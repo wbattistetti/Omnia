@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { childRequiredVariablesFromReferencedTaskVariablesAndTaskVariables } from '../ChildRequiredVariables';
+import {
+  childFlowExistingVarIdsFromProjectVariables,
+  childRequiredVariablesFromReferencedTaskVariablesAndTaskVariables,
+} from '../ChildRequiredVariables';
 import { deletableOriginVariablesFromTaskVariablesAndVarsReferencedInOrigin } from '../DeletableOriginVariables';
 import { interfaceInputVarsFromChildRequiredVariables } from '../InterfaceInputVars';
 import { referencedTaskVariablesFromMovedCorpus } from '../ReferencedTaskVariables';
@@ -18,7 +21,7 @@ describe('domain-centric sets (GUID)', () => {
     expect(tv.has(a)).toBe(true);
   });
 
-  it('referencedTaskVariablesFromMovedCorpus finds GUID substring', () => {
+  it('referencedTaskVariablesFromMovedCorpus finds RFC UUID tokens in corpus', () => {
     const known = new Set([a, b].map(String));
     const corpus = `hello "${a}" and ${b} end`;
     const r = referencedTaskVariablesFromMovedCorpus(corpus, known);
@@ -32,6 +35,27 @@ describe('domain-centric sets (GUID)', () => {
     const childReq = childRequiredVariablesFromReferencedTaskVariablesAndTaskVariables(ref, taskVars);
     expect(childReq.size).toBe(1);
     expect(childReq.has(c)).toBe(true);
+  });
+
+  it('childRequired excludes vars already present in child flow (nome/cognome sibling case)', () => {
+    const nome = '11111111-1111-4111-8111-111111111111' as VarId;
+    const cognome = '22222222-2222-4222-8222-222222222222' as VarId;
+    const taskVars = new Set<VarId>([cognome]);
+    const ref = new Set<VarId>([nome, cognome]);
+    const childFlowIds = new Set<VarId>([nome]);
+    const childReq = childRequiredVariablesFromReferencedTaskVariablesAndTaskVariables(ref, taskVars, childFlowIds);
+    expect(childReq.size).toBe(0);
+  });
+
+  it('childFlowExistingVarIdsFromProjectVariables filters by scopeFlowId', () => {
+    const childFlowId = 'subflow_sf1';
+    const rows = [
+      { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', scopeFlowId: childFlowId },
+      { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', scopeFlowId: 'main' },
+    ];
+    const s = childFlowExistingVarIdsFromProjectVariables(rows, childFlowId);
+    expect(s.size).toBe(1);
+    expect(s.has('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' as VarId)).toBe(true);
   });
 
   it('varsReferencedInOriginFromTaskVariablesAndParentReferences intersects', () => {

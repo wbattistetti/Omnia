@@ -39,7 +39,7 @@ describe('internalReferenceHaystack (scan-only)', () => {
     expect(hay).toContain(guidNome);
   });
 
-  it('buildInternalReferenceHaystackForParentFlow includes referenceScanInternalText plus full task JSON (S2 raw scan)', () => {
+  it('buildInternalReferenceHaystackForParentFlow includes referenceScanInternalText from task JSON (no full-task JSON blob)', () => {
     const taskJson = JSON.stringify({
       [REFERENCE_SCAN_INTERNAL_TEXT_KEY]: `only-${guidX}-blob`,
       displayText: '{{nome}}',
@@ -50,6 +50,6 @@ describe('internalReferenceHaystack (scan-only)', () => {
     });
     expect(hay).toContain(guidX);
     expect(hay).toContain(`only-${guidX}-blob`);
-    expect(hay).toContain(taskJson);
+    expect(hay).not.toContain('displayText');
   });
 });

@@ -1,6 +1,6 @@
 /**
- * Reference scan haystack: concatenates only persisted GUID-based text (no label resolution here).
- * Label → GUID happens at edit save / compile time (see referenceScanCompile.ts).
+ * Legacy haystack builder for condition/task chunks (used by older helpers).
+ * Parent-flow §3 reference scan uses {@link collectReferencedVarIdsForParentFlowWorkspace} + structural walks.
  */
 
 /** Persisted corpus on Task / serialized task JSON in extra chunks. */
@@ -29,6 +29,27 @@ export function conditionExpressionTextForReferenceScan(
   const exec = String(ex.executableCode || '').trim();
   if (exec) return exec;
   return '';
+}
+
+/**
+ * For §3 variable reference scan: same priority as {@link conditionExpressionTextForReferenceScan},
+ * but if no internal/compiled/executable text exists, falls back to `script` and extracts RFC UUID
+ * tokens only (no label-based false positives from raw script).
+ */
+export function conditionExpressionTextForParentReferenceScan(
+  ex:
+    | {
+        internalReferenceText?: string;
+        compiledCode?: string;
+        compiledText?: string;
+        executableCode?: string;
+        script?: string;
+      }
+    | undefined
+): string {
+  const primary = conditionExpressionTextForReferenceScan(ex);
+  if (primary) return primary;
+  return String(ex?.script || '').trim();
 }
 
 export type BuildInternalReferenceHaystackParams = {
@@ -61,8 +82,7 @@ export function buildInternalReferenceHaystackForParentFlow(
       if (typeof persisted === 'string' && persisted.trim()) {
         parts.push(persisted);
       }
-      /** S2 scan reliability: full serialized task so GUID substrings (parameters, bodies) match known var ids. */
-      parts.push(json);
+      /** Structural task walk in {@link collectReferencedVarIdsForParentFlowWorkspace} replaces full JSON scan. */
     } catch {
       /* invalid JSON — skip */
     }

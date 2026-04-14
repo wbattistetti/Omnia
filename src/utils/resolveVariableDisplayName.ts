@@ -156,15 +156,24 @@ export function interfaceOutputLeafDisplayName(
   return id;
 }
 
+/** Optional sources when the child flow slice has no canvas row or `var:` yet (first move into subflow). */
+export type LeafLabelForNewInterfaceRowOptions = {
+  /** Parent flow id: same taskId row text is read when the child canvas is still empty in the snapshot. */
+  parentFlowId?: string;
+  /** Compiled project map (`var:<guid>`); callers typically pass `getProjectTranslationsTable()`. */
+  compiledProjectTranslations?: Record<string, string> | null;
+};
+
 /**
- * Leaf label for a new Interface OUTPUT/INPUT row: flow-local `var:` first, then task row text on the child canvas, else GUID.
- * Does **not** use the global project registry (avoids writing FQ names into `flow.meta.translations`).
+ * Leaf label for a new Interface OUTPUT/INPUT row: child `var:` in `existingFlowTranslations`, then task row on the
+ * child canvas, then parent canvas row, then compiled project `var:`, else §4C short fallback (not raw GUID).
  */
 export function leafLabelForNewInterfaceOutputRow(
   vid: string,
   childFlowId: string,
   flows: WorkspaceState['flows'],
-  existingFlowTranslations: Record<string, string>
+  existingFlowTranslations: Record<string, string>,
+  options?: LeafLabelForNewInterfaceRowOptions
 ): string {
   const id = String(vid || '').trim();
   if (!id || !isUuidString(id)) return id;
@@ -175,12 +184,42 @@ export function leafLabelForNewInterfaceOutputRow(
     return leafFromQualifiedDisplayName(resolvedString(existing as TranslationEntryValue));
   }
 
-  const rowText = findTaskRowTextForTaskId(flows[childFlowId], id);
-  if (rowText) {
-    return leafFromQualifiedDisplayName(rowText);
+  const rowTextChild = findTaskRowTextForTaskId(flows[childFlowId], id);
+  if (rowTextChild) {
+    return leafFromQualifiedDisplayName(rowTextChild);
   }
 
-  return id;
+  const parentFid = String(options?.parentFlowId || '').trim();
+  if (parentFid && parentFid !== String(childFlowId || '').trim()) {
+    const rowTextParent = findTaskRowTextForTaskId(flows[parentFid], id);
+    if (rowTextParent) {
+      return leafFromQualifiedDisplayName(rowTextParent);
+    }
+  }
+
+  const compiled = options?.compiledProjectTranslations ?? null;
+  if (compiled && typeof compiled === 'object') {
+    const fromProject = resolveVariableDisplayName(id, 'flowInterfaceOutput', {
+      flowMetaTranslations: {},
+      compiledTranslations: compiled,
+    });
+    if (fromProject !== id) {
+      return leafFromQualifiedDisplayName(fromProject);
+    }
+  }
+
+  return leafLabelFallbackWithoutRawGuid(id);
+}
+
+/**
+ * §4C: interface rows should not use the full RFC UUID as the sole visible label when no translation/row text exists.
+ */
+export function leafLabelFallbackWithoutRawGuid(guid: string): string {
+  const id = String(guid || '').trim();
+  if (!id) return '';
+  const compact = id.replace(/-/g, '');
+  const tail = compact.slice(-6);
+  return `Variable (${tail})`;
 }
 
 function findTaskRowTextForTaskId(

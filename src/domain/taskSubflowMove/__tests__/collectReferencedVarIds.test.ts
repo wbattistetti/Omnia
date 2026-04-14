@@ -19,7 +19,7 @@ describe('collectReferencedVarIds', () => {
   const d2 = '22222222-2222-4222-8222-222222222222';
   const known = new Set([d1, d2]);
 
-  it('extractReferencedVarIdsFromText finds known ids by substring', () => {
+  it('extractReferencedVarIdsFromText finds known ids by RFC UUID token scan', () => {
     const text = `condition [${d1}] and plain ${d2} noise`;
     const out = extractReferencedVarIdsFromText(text, known);
     expect(out.has(d1)).toBe(true);
@@ -126,6 +126,7 @@ describe('collectReferencedVarIdsForParentFlowWorkspace (internal haystack)', ()
       projectId: 'proj1',
       parentFlowId: 'main',
       flows: { main: minimalFlow(taskId) } as any,
+      movedTaskInstanceIdForReferenceScan: taskId,
     });
 
     expect(refs.has(d1)).toBe(true);
@@ -147,6 +148,7 @@ describe('collectReferencedVarIdsForParentFlowWorkspace (internal haystack)', ()
       projectId: 'proj1',
       parentFlowId: 'main',
       flows: { main: minimalFlow(taskId) } as any,
+      movedTaskInstanceIdForReferenceScan: taskId,
     });
 
     expect(refs.has(d1)).toBe(false);

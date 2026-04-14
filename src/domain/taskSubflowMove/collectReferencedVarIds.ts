@@ -1,36 +1,38 @@
 /**
- * Computes which project variable GUIDs (varIds) are referenced from a parent flow's
- * linked tasks, conditions, and translations via an internal haystack (GUID substring match).
- * Used for task→subflow moves per docs/SEMANTICA_TASK_VARIABLES_E_SUBFLOW.md.
+ * `variabiliReferenziate` for a parent flow (§3): structural walks of flow / tasks / conditions
+ * plus RFC UUID token extraction in expression and template strings — no per-id haystack.includes.
+ * @see docs/SEMANTICA_TASK_VARIABLES_E_SUBFLOW.md §3
  */
 
 import type { WorkspaceState } from '@flows/FlowTypes';
 import type { VariableInstance } from '@types/variableTypes';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
+import { conditionExpressionTextForParentReferenceScan } from './internalReferenceHaystack';
 import {
-  buildInternalReferenceHaystackForParentFlow,
-  conditionExpressionTextForReferenceScan,
-} from './internalReferenceHaystack';
+  buildLowercaseToCanonicalVarIdMap,
+  extractKnownVarIdsFromText,
+  extractReferencedVarIdsFromExtraCorpusChunks,
+  extractReferencedVarIdsFromParentFlowStructure,
+  extractReferencedVarIdsFromTaskObject,
+  extractReferencedVarIdsFromTranslationsInternal,
+} from './referenceScanStructural';
 
-/**
- * Extracts which known varIds appear in `text` (substring match per id).
- * Restricting to `knownVarIds` avoids treating arbitrary node/edge UUIDs as variables.
- */
-export function extractReferencedVarIdsFromText(text: string, knownVarIds: ReadonlySet<string>): Set<string> {
-  const out = new Set<string>();
-  if (!text || knownVarIds.size === 0) return out;
-  const haystack = String(text);
-  for (const id of knownVarIds) {
-    const vid = String(id || '').trim();
-    if (!vid) continue;
-    if (haystack.includes(vid)) out.add(vid);
-  }
-  return out;
+function mergeInto(target: Set<string>, source: Iterable<string>): void {
+  for (const x of source) target.add(x);
 }
 
 /**
- * Builds a searchable text corpus for the parent flow: serialized flow + optional task JSON blobs + condition scripts.
+ * Extracts known project variable ids appearing as RFC UUID tokens in `text`.
+ * Replaces legacy O(n vars × text length) substring checks.
+ */
+export function extractReferencedVarIdsFromText(text: string, knownVarIds: ReadonlySet<string>): Set<string> {
+  const map = buildLowercaseToCanonicalVarIdMap(knownVarIds);
+  return extractKnownVarIdsFromText(text, map);
+}
+
+/**
+ * Builds a searchable text corpus (legacy helpers / tests). Prefer structural APIs for new code.
  */
 export function buildParentFlowReferenceCorpus(params: {
   flowJson: unknown;
@@ -75,7 +77,7 @@ export type ProjectConditionLike = {
   };
 };
 
-function conditionInternalTextsForIds(
+function conditionInternalTextsForParentScan(
   conditionIds: string[],
   conditions: ProjectConditionLike[] | undefined
 ): string[] {
@@ -84,26 +86,34 @@ function conditionInternalTextsForIds(
   const out: string[] = [];
   for (const id of conditionIds) {
     const c = byId.get(id);
-    const t = conditionExpressionTextForReferenceScan(c?.expression);
+    const t = conditionExpressionTextForParentReferenceScan(c?.expression);
     if (t) out.push(t);
   }
   return out;
 }
 
 /**
- * One internal expression text per condition item (all categories), for reference scanning.
+ * One expression text per condition item (all categories), for §3 variable reference scanning.
  */
-export function collectAllProjectConditionInternalExpressionTexts(projectData: unknown): string[] {
+export function collectAllProjectConditionExpressionTextsForParentScan(projectData: unknown): string[] {
   const conditions = (projectData as { conditions?: Array<{ items?: unknown[] }> })?.conditions;
   if (!Array.isArray(conditions)) return [];
   const out: string[] = [];
   for (const cat of conditions) {
     for (const item of (cat?.items || []) as Array<{ expression?: ProjectConditionLike['expression'] }>) {
-      const t = conditionExpressionTextForReferenceScan(item?.expression);
+      const t = conditionExpressionTextForParentReferenceScan(item?.expression);
       if (t) out.push(t);
     }
   }
   return out;
+}
+
+/**
+ * @deprecated Use {@link collectAllProjectConditionExpressionTextsForParentScan} for reference scan.
+ * Legacy: concatenates compiled/script chunks without script-only fallback priority used for §3.
+ */
+export function collectAllProjectConditionInternalExpressionTexts(projectData: unknown): string[] {
+  return collectAllProjectConditionExpressionTextsForParentScan(projectData);
 }
 
 /**
@@ -129,7 +139,6 @@ export function conditionTextsForIds(
 
 /**
  * Collects expression text from every condition item in project data (all categories).
- * Use for reference scanning so varIds referenced only from off-edge conditions are still found.
  */
 export function collectAllProjectConditionExpressionChunks(projectData: unknown): string[] {
   const conditions = (projectData as { conditions?: Array<{ items?: unknown[] }> })?.conditions;
@@ -149,7 +158,7 @@ export function collectAllProjectConditionExpressionChunks(projectData: unknown)
 const DEEP_STRING_MAX_NODES = 8000;
 
 /**
- * Collects string leaf values from JSON-like structures (extra pass for varId substring matching).
+ * Collects string leaf values from JSON-like structures (legacy helpers).
  */
 export function collectDeepStringLeavesFromUnknown(value: unknown, maxNodes = DEEP_STRING_MAX_NODES): string[] {
   const out: string[] = [];
@@ -205,27 +214,6 @@ export function partitionVariablesByReference(
   return { referenced, notReferenced };
 }
 
-/**
- * Serializes tasks for every canvas row in the given flow (for expression / parameter scanning).
- */
-export function buildTaskJsonChunksForParentFlow(
-  parentFlowId: string,
-  flows: WorkspaceState['flows']
-): string[] {
-  const flow = flows[parentFlowId];
-  const chunks: string[] = [];
-  for (const node of (flow?.nodes as any[]) || []) {
-    const rows: any[] = Array.isArray(node?.data?.rows) ? node.data.rows : [];
-    for (const row of rows) {
-      const tid = String(row?.id || '').trim();
-      if (!tid) continue;
-      const t = taskRepository.getTask(tid);
-      if (t) chunks.push(JSON.stringify(t));
-    }
-  }
-  return chunks;
-}
-
 export type CollectReferencedWorkspaceParams = {
   projectId: string;
   parentFlowId: string;
@@ -233,7 +221,6 @@ export type CollectReferencedWorkspaceParams = {
   conditions?: ProjectConditionLike[];
   /**
    * Precompiled translation strings (GUID form). Omit if translations are not part of this scan.
-   * UI translations are compiled at project save, not inside the scan.
    */
   translationsInternal?: Record<string, string>;
   /** When set, all condition expressions from project data are scanned (not only edge-linked). */
@@ -243,12 +230,17 @@ export type CollectReferencedWorkspaceParams = {
    * Default behavior for task moves is **false**: only conditions attached to edges of `parentFlowId` (flow A).
    */
   useAllProjectConditionsForReferenceScan?: boolean;
-  /** Extra text blobs (e.g. serialized moved task) — only `referenceScanInternalText` is read if JSON. */
+  /** Extra blobs: JSON objects use `referenceScanInternalText` + structural walk (legacy; prefer `movedTaskInstanceIdForReferenceScan`). */
   extraCorpusChunks?: string[];
+  /**
+   * Task row id for the moved task: after structural move it may not appear on the parent canvas,
+   * but must still be scanned for §3 references (conditions, messages, API params, subflowBindings, …).
+   */
+  movedTaskInstanceIdForReferenceScan?: string;
 };
 
 /**
- * Full pipeline: known project varIds × concatenated persisted GUID-only text (no label resolution here).
+ * §3 structural reference scan for the parent flow workspace slice.
  */
 export function collectReferencedVarIdsForParentFlowWorkspace(
   params: CollectReferencedWorkspaceParams
@@ -266,32 +258,38 @@ export function collectReferencedVarIdsForParentFlowWorkspace(
   const parentFlow = params.flows[parentFlowId];
   if (!parentFlow) return new Set();
 
+  const lowercaseToCanonical = buildLowercaseToCanonicalVarIdMap(knownVarIds);
+  const refs = new Set<string>();
+
+  mergeInto(refs, extractReferencedVarIdsFromParentFlowStructure(parentFlowId, params.flows, lowercaseToCanonical));
+
   const conditionIds = collectConditionIdsFromFlowEdges(parentFlow as { edges?: Array<{ conditionId?: string }> });
-  let conditionInternalTexts: string[];
-  if (params.useAllProjectConditionsForReferenceScan && params.projectData !== undefined) {
-    conditionInternalTexts = collectAllProjectConditionInternalExpressionTexts(params.projectData);
-  } else {
-    conditionInternalTexts = conditionInternalTextsForIds(conditionIds, params.conditions);
+  const conditionTexts =
+    params.useAllProjectConditionsForReferenceScan && params.projectData !== undefined
+      ? collectAllProjectConditionExpressionTextsForParentScan(params.projectData)
+      : conditionInternalTextsForParentScan(conditionIds, params.conditions);
+
+  for (const t of conditionTexts) {
+    mergeInto(refs, extractKnownVarIdsFromText(t, lowercaseToCanonical));
   }
 
-  const taskJsonChunks = buildTaskJsonChunksForParentFlow(parentFlowId, params.flows);
-  /** Serialized flow A (subflowBindings, meta, nodes) — appended as raw text; not parsed for referenceScanInternalText. */
-  const flowStructureChunk = JSON.stringify(parentFlow ?? null);
+  mergeInto(refs, extractReferencedVarIdsFromTranslationsInternal(params.translationsInternal, lowercaseToCanonical));
 
-  const internalHaystack = buildInternalReferenceHaystackForParentFlow({
-    conditionInternalTexts,
-    taskJsonChunks,
-    translationsInternal: params.translationsInternal,
-    extraCorpusChunks: params.extraCorpusChunks,
-  });
+  const movedTid = String(params.movedTaskInstanceIdForReferenceScan || '').trim();
+  if (movedTid) {
+    const movedTask = taskRepository.getTask(movedTid);
+    if (movedTask) {
+      mergeInto(refs, extractReferencedVarIdsFromTaskObject(movedTask, lowercaseToCanonical));
+    }
+  }
 
-  const haystack = `${internalHaystack}\n${flowStructureChunk}`;
-  return extractReferencedVarIdsFromText(haystack, knownVarIds);
+  mergeInto(refs, extractReferencedVarIdsFromExtraCorpusChunks(params.extraCorpusChunks, lowercaseToCanonical));
+
+  return refs;
 }
 
 /**
- * True iff `variableId` appears in the static reference corpus for flow A only
- * (conditions on edges of that flow, tasks on canvas, serialized flow JSON including subflowBindings, translations slice).
+ * True iff `variableId` appears in the §3 structural reference scan for flow A.
  */
 export function isVariableReferencedInFlow(
   variableId: string,
