@@ -3,7 +3,16 @@
  * Uses a dedicated MIME type so drops resolve the promised variable GUID, not row label text.
  */
 
+import type { DragEvent } from 'react';
+
 export const DND_FLOWROW_VAR = 'application/x-omnia-flowrow-var';
+
+/** HTML5 drag from a flow variable row (Data rail or Interface list). */
+export function hasFlowRowVarDrag(e: Pick<DragEvent, 'dataTransfer'>): boolean {
+  const types = e.dataTransfer.types;
+  if (types.includes(DND_FLOWROW_VAR)) return true;
+  return Array.from(types).some((t) => t.toLowerCase() === DND_FLOWROW_VAR.toLowerCase());
+}
 
 /** Trimmed flow canvas id for comparisons; empty → `'main'`. */
 export function normalizeFlowCanvasId(raw: string | undefined | null): string {
@@ -37,15 +46,18 @@ export type FlowInterfacePointerPreviewDetail = {
 
 export type FlowInterfaceRowPointerDropDetail = {
   flowId: string;
-  zone: 'output';
-  /** Stable single-segment path key (e.g. iface_<guid>). */
+  zone: 'input' | 'output';
+  /** Stable single-segment path key (e.g. iface_<guid>) — primary entry when `variableRefIds` has one item. */
   wireKey: string;
+  /** Single variable (legacy) or first of batch. */
   variableRefId: string;
+  /** When set (e.g. Utterance row), add all these variables to the target zone in order. */
+  variableRefIds?: string[];
   rowId: string;
   fromNodeId: string;
   /** Row label text from the node (shown in UI). */
   rowLabel: string;
-  /** Where to insert in the flat list (Output). */
+  /** Where to insert in the flat list. */
   insertTargetPathKey: string | null;
   insertPlacement: 'before' | 'after' | 'append';
 };
@@ -195,8 +207,7 @@ export function findInterfaceZoneRootAtPoint(clientX: number, clientY: number, f
 }
 
 /**
- * Hit-test for pointer-drag preview over the Output Interface tree (row drag from canvas).
- * Only `zone === 'output'` is returned (Input ignores row-acquired drops).
+ * Hit-test for pointer-drag preview over the Input/Output Interface tree (row drag from canvas).
  */
 export function computeInterfacePointerPreview(
   clientX: number,
@@ -209,7 +220,7 @@ export function computeInterfacePointerPreview(
   if (!zoneRoot) return null;
   const fid = String(zoneRoot.getAttribute('data-flow-canvas-id') ?? '').trim();
   const zone = zoneRoot.getAttribute('data-flow-interface-zone') as 'input' | 'output' | null;
-  if (fid !== want || zone !== 'output') return null;
+  if (fid !== want || (zone !== 'output' && zone !== 'input')) return null;
 
   let row: HTMLElement | null = null;
   try {
@@ -267,6 +278,6 @@ export function computeInterfacePointerPreview(
     return { flowId: fid, zone, targetPathKey: null, placement: 'append' };
   }
 
-  // In OUTPUT zone (MappingBlock) but not over tree body (e.g. column header, padding): still append.
-  return { flowId: fid, zone: 'output', targetPathKey: null, placement: 'append' };
+  // In INPUT/OUTPUT zone (MappingBlock) but not over tree body (e.g. column header, padding): still append.
+  return { flowId: fid, zone, targetPathKey: null, placement: 'append' };
 }

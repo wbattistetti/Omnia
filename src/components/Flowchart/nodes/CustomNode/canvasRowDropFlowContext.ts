@@ -1,5 +1,5 @@
 /**
- * Row pointer-drop flow semantics (see useNodeDragDrop + FlowInterfaceBottomPanel).
+ * Row pointer-drop flow semantics (see useNodeDragDrop + FlowInterfaceSideSections).
  *
  * - Source flow: canvas that owns the dragged row (`normalizeFlowCanvasId(flowCanvasId)` on the node).
  * - Target flow: DOM under the pointer (`data-flow-canvas-id` on Interface OUTPUT / Backend mapping).

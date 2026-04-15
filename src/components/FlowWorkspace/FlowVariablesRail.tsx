@@ -1,7 +1,6 @@
 /**
- * Pannello laterale unico del flow: sezione Data (variabili in scope via getVariablesForFlowScope) e
- * sezione Subdialogs (righe Subflow sul canvas).
- * In dock i toggle stanno sulla toolbar del tab; in workspace standalone compaiono nell’header del pannello.
+ * Pannello laterale unico del flow: opzionalmente Input/Output (subflow), poi Variabili e Sottodialoghi.
+ * In dock i toggle Data/Subdialogs stanno sulla toolbar del tab; in workspace standalone nell’header del pannello.
  */
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
@@ -41,9 +40,28 @@ import { getFlowMetaTranslationsFlattened } from '../../utils/activeFlowTranslat
 import { resolveVariableStoreProjectId } from '../../utils/safeProjectId';
 import { getVariableLabel } from '../../utils/getVariableLabel';
 import { makeTranslationKey } from '../../utils/translationKeys';
-import { DND_FLOWROW_VAR, stableInterfacePathForVariable } from '../FlowMappingPanel/flowInterfaceDragTypes';
+import {
+  DND_FLOWROW_VAR,
+  hasFlowRowVarDrag,
+  parseFlowInterfaceDropFromDataTransfer,
+  stableInterfacePathForVariable,
+} from '../FlowMappingPanel/flowInterfaceDragTypes';
+import { useFlowActions } from '@flows/FlowStore';
+import { useInMemoryConditions } from '../../context/InMemoryConditionsContext';
+import {
+  findParentVarGuidReferences,
+  type ReferenceLocation,
+} from '../../services/subflowVariableReferenceScan';
+import {
+  collectFlowInterfaceBoundVariableIds,
+  tryRemoveVariableRefFromFlowInterface,
+} from './flowInterfaceBindingHelpers';
+import { invalidateChildFlowInterfaceCache } from '../../services/childFlowInterfaceService';
+import { syncSubflowChildInterfaceToAllParents } from '../../services/subflowProjectSync';
 import { getSubflowOpenArgsFromTaskAndRowText } from '@utils/getSubflowOpenArgsFromTaskAndRowText';
 import { collectSubflowPortalRows, type SubflowPortalRow } from './collectSubflowPortalRows';
+import { CollapsiblePanelSection } from './CollapsiblePanelSection';
+import { FlowInterfaceSideSections } from './FlowInterfaceSideSections';
 
 export interface FlowVariablesRailProps {
   flowId: string;
@@ -80,6 +98,11 @@ export interface FlowVariablesRailProps {
     rowLabel: string,
     canvasNodeId: string
   ) => void;
+  /**
+   * Subflow canvas: mostra Input/Output (flowInterface) in cima al pannello, con Variabili e Sottodialoghi sotto.
+   * Il flow `main` non usa questa modalità.
+   */
+  flowInterfaceSectionsEnabled?: boolean;
 }
 
 const ROW_DEPTH_INDENT_PX = 16;
@@ -131,6 +154,7 @@ function DataTreeVariableRow({
   translations,
   addTranslation,
   onRefresh,
+  onRequestDelete,
 }: {
   segment: string;
   instance: VariableInstance;
@@ -138,6 +162,8 @@ function DataTreeVariableRow({
   translations: Record<string, string>;
   addTranslation: (guid: string, text: string) => void;
   onRefresh: () => void;
+  /** Se impostato, sostituisce la rimozione diretta (es. controllo riferimenti [guid]). */
+  onRequestDelete?: (variableId: string) => void;
 }) {
   const taskBound = String(instance.taskInstanceId ?? '').trim().length > 0;
   const fullLabel = getVariableLabel(instance.id, translations);
@@ -261,6 +287,10 @@ function DataTreeVariableRow({
                 className="shrink-0 rounded p-0.5 text-slate-600 opacity-0 hover:bg-slate-700 hover:text-red-400 group-hover/row:opacity-100"
                 aria-label="Rimuovi variabile"
                 onClick={() => {
+                  if (onRequestDelete) {
+                    onRequestDelete(instance.id);
+                    return;
+                  }
                   variableCreationService.removeVariableById(projectId, instance.id);
                   onRefresh();
                 }}
@@ -283,6 +313,7 @@ interface TreeNodesProps {
   translations: Record<string, string>;
   addTranslation: (guid: string, text: string) => void;
   onRefresh: () => void;
+  onRequestDeleteVariable?: (variableId: string) => void;
   dropIndicator: { targetPathKey: string; placement: FlowVarDropPlacement } | null;
   setDropIndicator: React.Dispatch<
     React.SetStateAction<{ targetPathKey: string; placement: FlowVarDropPlacement } | null>
@@ -299,6 +330,7 @@ function FlowVariableTreeNodes(props: TreeNodesProps) {
     translations,
     addTranslation,
     onRefresh,
+    onRequestDeleteVariable,
     dropIndicator,
     setDropIndicator,
     onInsertAt,
@@ -315,6 +347,7 @@ function FlowVariableTreeNodes(props: TreeNodesProps) {
           translations={translations}
           addTranslation={addTranslation}
           onRefresh={onRefresh}
+          onRequestDeleteVariable={onRequestDeleteVariable}
           dropIndicator={dropIndicator}
           setDropIndicator={setDropIndicator}
           onInsertAt={onInsertAt}
@@ -332,6 +365,7 @@ function FlowVariableTreeBranch({
   translations,
   addTranslation,
   onRefresh,
+  onRequestDeleteVariable,
   dropIndicator,
   setDropIndicator,
   onInsertAt,
@@ -419,6 +453,7 @@ function FlowVariableTreeBranch({
                   translations={translations}
                   addTranslation={addTranslation}
                   onRefresh={onRefresh}
+                  onRequestDelete={onRequestDeleteVariable}
                 />
               ) : node.variable ? (
                 <div className="flex items-center gap-1.5 py-0.5 text-slate-500">
@@ -440,6 +475,7 @@ function FlowVariableTreeBranch({
                 translations={translations}
                 addTranslation={addTranslation}
                 onRefresh={onRefresh}
+                onRequestDeleteVariable={onRequestDeleteVariable}
                 dropIndicator={dropIndicator}
                 setDropIndicator={setDropIndicator}
                 onInsertAt={onInsertAt}
@@ -531,6 +567,7 @@ export function FlowVariablesRail({
   panelTitle: panelTitleProp,
   subflowPortalRows: subflowPortalRowsProp,
   onOpenSubflowPortalGear,
+  flowInterfaceSectionsEnabled = false,
 }: FlowVariablesRailProps) {
   const [internalOpen, setInternalOpen] = React.useState(false);
   const isControlled = openControlled !== undefined;
@@ -555,7 +592,7 @@ export function FlowVariablesRail({
   const ignoreNextClickRef = useRef(false);
   const { data: projectData } = useProjectData();
   const pdUpdate = useProjectDataUpdate();
-  const { addTranslation, flowTranslationRevision } = useProjectTranslations();
+  const { addTranslation, flowTranslationRevision, translations: projectTranslationsTable } = useProjectTranslations();
   const flowMetaFp = useSyncExternalStore(
     (onStoreChange) => FlowWorkspaceSnapshot.subscribe(onStoreChange),
     flowWorkspaceMetaTranslationsFingerprint,
@@ -586,6 +623,33 @@ export function FlowVariablesRail({
   const instances = useMemo(() => {
     return variableCreationService.getVariablesForFlowScope(projectId, flowId, workspaceFlows);
   }, [projectId, flowId, workspaceFlows, refresh, projectData]);
+
+  const { updateFlowMeta } = useFlowActions();
+  const flowsRef = useRef(workspaceFlows);
+  flowsRef.current = workspaceFlows;
+  const { conditions } = useInMemoryConditions();
+  const conditionPayloads = useMemo(
+    () =>
+      conditions.map((c) => ({
+        id: c.id,
+        label: c.label || c.name || c.id,
+        text: JSON.stringify(c),
+      })),
+    [conditions]
+  );
+  const interfaceBoundIds = useMemo(() => {
+    if (!flowInterfaceSectionsEnabled) return new Set<string>();
+    const iface = workspaceFlows[flowId]?.meta?.flowInterface;
+    return collectFlowInterfaceBoundVariableIds(iface);
+  }, [flowInterfaceSectionsEnabled, workspaceFlows, flowId]);
+
+  const instancesVisible = useMemo(() => {
+    if (!flowInterfaceSectionsEnabled) return instances;
+    return instances.filter((v) => !interfaceBoundIds.has(v.id));
+  }, [instances, flowInterfaceSectionsEnabled, interfaceBoundIds]);
+
+  const [dataDeleteBlockRefs, setDataDeleteBlockRefs] = useState<ReferenceLocation[] | null>(null);
+  const [interfaceUnbindBlockRefs, setInterfaceUnbindBlockRefs] = useState<ReferenceLocation[] | null>(null);
 
   const hasDataAvailable = useMemo(() => {
     if (dockSectionTogglesInToolbar && hasDataAvailableProp !== undefined) {
@@ -637,16 +701,18 @@ export function FlowVariablesRail({
 
   const showDataBlock = dataSectionOn && hasDataAvailable;
   const showSubdialogsBlock = subdialogsSectionOn && hasSubdialogsAvailable;
+  /** Con flow interface: sezioni Variabili/Sottodialoghi come blocchi collassabili (ordine sotto Input/Output). */
+  const collapsibleDataSubdialogs = flowInterfaceSectionsEnabled;
 
   const byVarId = useMemo(() => {
     const m = new Map<string, VariableInstance>();
-    instances.forEach((v) => m.set(v.id, v));
+    instancesVisible.forEach((v) => m.set(v.id, v));
     return m;
-  }, [instances]);
+  }, [instancesVisible]);
 
   const defs = useMemo(
-    () => instances.map((v) => instanceToDef(v, translations)),
-    [instances, translations]
+    () => instancesVisible.map((v) => instanceToDef(v, translations)),
+    [instancesVisible, translations]
   );
   const orphans = useMemo(() => flowVariablesWithoutPath(defs), [defs]);
   const tree = useMemo(() => buildFlowVariableTree(defs), [defs]);
@@ -676,6 +742,89 @@ export function FlowVariablesRail({
     }
   }, [flatPathKeys, insertVariableAt]);
 
+  const handleDataDeleteRequest = useCallback(
+    (variableId: string) => {
+      if (!projectId) return;
+      const refs = findParentVarGuidReferences(variableId, workspaceFlows, {
+        translations: projectTranslationsTable,
+        conditionPayloads,
+      });
+      if (refs.length > 0) {
+        setDataDeleteBlockRefs(refs);
+        return;
+      }
+      if (!variableCreationService.removeVariableById(projectId, variableId)) {
+        return;
+      }
+      refresh();
+    },
+    [projectId, workspaceFlows, projectTranslationsTable, conditionPayloads, refresh]
+  );
+
+  const onDropVariableFromInterfaceOnData = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!flowInterfaceSectionsEnabled || !projectId) return;
+      if (!hasFlowRowVarDrag(e)) return;
+      const payload = parseFlowInterfaceDropFromDataTransfer(e.dataTransfer);
+      const vid = String(payload?.variableRefId || '').trim();
+      if (!vid) return;
+      const result = tryRemoveVariableRefFromFlowInterface(
+        flowsRef.current,
+        flowId,
+        vid,
+        projectId,
+        translations,
+        conditionPayloads
+      );
+      if (!result.ok) {
+        setInterfaceUnbindBlockRefs(result.references);
+        return;
+      }
+      updateFlowMeta(flowId, {
+        flowInterface: { input: result.nextInput, output: result.nextOutput },
+      });
+      const pid = String(projectId).trim();
+      if (pid) {
+        const shell = flowsRef.current[flowId];
+        const merged = {
+          ...flowsRef.current,
+          [flowId]: {
+            ...shell,
+            meta: {
+              ...(typeof shell?.meta === 'object' && shell?.meta ? shell.meta : {}),
+              flowInterface: { input: result.nextInput, output: result.nextOutput },
+            },
+          },
+        } as typeof flowsRef.current;
+        invalidateChildFlowInterfaceCache(pid, flowId);
+        void syncSubflowChildInterfaceToAllParents(pid, flowId, merged as any);
+      }
+      refresh();
+    },
+    [
+      flowInterfaceSectionsEnabled,
+      projectId,
+      flowId,
+      translations,
+      conditionPayloads,
+      updateFlowMeta,
+      refresh,
+    ]
+  );
+
+  const onDataZoneDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!flowInterfaceSectionsEnabled) return;
+      if (!hasFlowRowVarDrag(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+    },
+    [flowInterfaceSectionsEnabled]
+  );
+
   useEffect(() => {
     const clear = () => {
       setDropIndicator(null);
@@ -684,6 +833,167 @@ export function FlowVariablesRail({
     window.addEventListener('dragend', clear);
     return () => window.removeEventListener('dragend', clear);
   }, []);
+
+  const allVariablesBoundToInterface =
+    flowInterfaceSectionsEnabled && instances.length > 0 && instancesVisible.length === 0;
+
+  const dataVariablesTreeContent = (
+    <>
+      {projectId && allVariablesBoundToInterface ? (
+        <p className="rounded border border-slate-700/50 bg-slate-950/40 px-2 py-2 text-[11px] text-slate-400">
+          Tutte le variabili di questo flow sono in Input/Output. Trascina una riga dall&apos;interfaccia qui per
+          riportarla nella sezione Variabili, oppure usa il cestino sulla riga Interface per scollegarla.
+        </p>
+      ) : null}
+
+      {projectId && tree.length === 0 && orphans.length === 0 && !allVariablesBoundToInterface ? (
+        <div
+          className="min-h-[3.5rem] rounded border border-dashed border-slate-600/45 px-2 py-3 text-center"
+          onDragOver={(e) => {
+            if (!hasNewFlowDataDrag(e)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+          }}
+          onDrop={(e) => {
+            if (!hasNewFlowDataDrag(e)) return;
+            e.preventDefault();
+            insertVariableAt({ targetPathKey: '', placement: 'after' });
+          }}
+        >
+          <p className="text-[11px] text-slate-500">
+            Trascina qui il pulsante &quot;Aggiungi dato&quot; oppure cliccalo per il primo dato in coda.
+          </p>
+        </div>
+      ) : null}
+
+      {orphans.length > 0 && (
+        <div className="space-y-1">
+          {orphans.map((row) => {
+            const inst = byVarId.get(row.id);
+            if (!inst) return null;
+            const orphanLabel = getVariableLabel(inst.id, translations);
+            return (
+              <DataTreeVariableRow
+                key={row.id}
+                segment={orphanLabel.trim() || '—'}
+                instance={inst}
+                projectId={projectId}
+                translations={translations}
+                addTranslation={addTranslation}
+                onRefresh={refresh}
+                onRequestDelete={flowInterfaceSectionsEnabled ? handleDataDeleteRequest : undefined}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {tree.length > 0 && (
+        <>
+          <div
+            className="h-2 -mx-0.5 shrink-0 rounded-sm"
+            onDragOver={(e) => {
+              if (!hasNewFlowDataDrag(e)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = 'copy';
+              setRootEdgeDrop('top');
+              setDropIndicator(null);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootEdgeDrop(null);
+            }}
+            onDrop={(e) => {
+              if (!hasNewFlowDataDrag(e)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setRootEdgeDrop(null);
+              insertVariableAt({ targetPathKey: tree[0].pathKey, placement: 'before' });
+            }}
+          >
+            {rootEdgeDrop === 'top' && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
+          </div>
+          <FlowVariableTreeNodes
+            nodes={tree}
+            depth={0}
+            byVarId={byVarId}
+            projectId={projectId}
+            translations={translations}
+            addTranslation={addTranslation}
+            onRefresh={refresh}
+            onRequestDeleteVariable={flowInterfaceSectionsEnabled ? handleDataDeleteRequest : undefined}
+            dropIndicator={dropIndicator}
+            setDropIndicator={setDropIndicator}
+            onInsertAt={insertVariableAt}
+          />
+          <div
+            className="mt-0.5 h-2 -mx-0.5 shrink-0 rounded-sm"
+            onDragOver={(e) => {
+              if (!hasNewFlowDataDrag(e)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = 'copy';
+              setRootEdgeDrop('bottom');
+              setDropIndicator(null);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootEdgeDrop(null);
+            }}
+            onDrop={(e) => {
+              if (!hasNewFlowDataDrag(e)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setRootEdgeDrop(null);
+              const last = flatPathKeys[flatPathKeys.length - 1];
+              if (last) {
+                insertVariableAt({ targetPathKey: last, placement: 'after' });
+              }
+            }}
+          >
+            {rootEdgeDrop === 'bottom' && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  const addDataButtonRow = (
+    <div
+      className={
+        collapsibleDataSubdialogs
+          ? 'flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-slate-800/60 px-2 py-2'
+          : 'flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-slate-800/80 px-3 py-2'
+      }
+    >
+      <button
+        type="button"
+        draggable
+        onDragStart={(e) => {
+          ignoreNextClickRef.current = true;
+          e.dataTransfer.setData(DND_NEW_FLOW_DATA, '1');
+          e.dataTransfer.effectAllowed = 'copy';
+        }}
+        onDragEnd={() => {
+          window.setTimeout(() => {
+            ignoreNextClickRef.current = false;
+          }, 0);
+        }}
+        onClick={() => {
+          if (ignoreNextClickRef.current) {
+            ignoreNextClickRef.current = false;
+            return;
+          }
+          appendAtEnd();
+        }}
+        disabled={!projectId}
+        title="Clic: aggiungi in coda. Trascina sull'albero per inserire con anteprima."
+        className="inline-flex shrink-0 cursor-grab items-center gap-1 rounded-md bg-slate-700/80 px-2 py-1 text-xs font-medium text-slate-100 hover:bg-slate-600 active:cursor-grabbing disabled:opacity-40"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Aggiungi dato
+      </button>
+    </div>
+  );
 
   const panelBody = (
     <>
@@ -723,39 +1033,17 @@ export function FlowVariablesRail({
         </div>
       ) : null}
 
-      {showDataBlock ? (
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-slate-800/80 px-3 py-2">
-          <button
-            type="button"
-            draggable
-            onDragStart={(e) => {
-              ignoreNextClickRef.current = true;
-              e.dataTransfer.setData(DND_NEW_FLOW_DATA, '1');
-              e.dataTransfer.effectAllowed = 'copy';
-            }}
-            onDragEnd={() => {
-              window.setTimeout(() => {
-                ignoreNextClickRef.current = false;
-              }, 0);
-            }}
-            onClick={() => {
-              if (ignoreNextClickRef.current) {
-                ignoreNextClickRef.current = false;
-                return;
-              }
-              appendAtEnd();
-            }}
-            disabled={!projectId}
-            title="Clic: aggiungi in coda. Trascina sull'albero per inserire con anteprima."
-            className="inline-flex shrink-0 cursor-grab items-center gap-1 rounded-md bg-slate-700/80 px-2 py-1 text-xs font-medium text-slate-100 hover:bg-slate-600 active:cursor-grabbing disabled:opacity-40"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Aggiungi dato
-          </button>
-        </div>
-      ) : null}
+      {!collapsibleDataSubdialogs && showDataBlock ? addDataButtonRow : null}
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-2">
+      <div
+        className={`min-h-0 flex-1 overflow-y-auto px-2 py-2 ${
+          collapsibleDataSubdialogs ? 'space-y-2' : 'space-y-3'
+        }`}
+      >
+        {flowInterfaceSectionsEnabled ? (
+          <FlowInterfaceSideSections flowId={flowId} projectId={projectId} onVariableMetadataChange={refresh} />
+        ) : null}
+
         {!projectId && (
           <p className="px-1 text-xs text-amber-500/90">Apri o salva un progetto per vedere i dati.</p>
         )}
@@ -767,141 +1055,149 @@ export function FlowVariablesRail({
         {projectId &&
         (hasDataAvailable || hasSubdialogsAvailable) &&
         !showDataBlock &&
-        !showSubdialogsBlock ? (
+        !showSubdialogsBlock &&
+        !collapsibleDataSubdialogs ? (
           <p className="px-1 text-xs text-slate-500">Attiva Data o Subdialogs con i pulsanti sopra.</p>
         ) : null}
 
-        {showDataBlock ? (
-          <div className="space-y-2">
-            <h3 className="px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Data</h3>
-            {projectId && tree.length === 0 && orphans.length === 0 ? (
-              <div
-                className="min-h-[3.5rem] rounded border border-dashed border-slate-600/45 px-2 py-3 text-center"
-                onDragOver={(e) => {
-                  if (!hasNewFlowDataDrag(e)) return;
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = 'copy';
-                }}
-                onDrop={(e) => {
-                  if (!hasNewFlowDataDrag(e)) return;
-                  e.preventDefault();
-                  insertVariableAt({ targetPathKey: '', placement: 'after' });
-                }}
+        {collapsibleDataSubdialogs ? (
+          <>
+            {showDataBlock ? (
+              <CollapsiblePanelSection
+                title="Variabili"
+                defaultOpen
+                className="min-h-0 shrink-0"
+                contentClassName="min-h-0 flex flex-col overflow-hidden"
               >
-                <p className="text-[11px] text-slate-500">
-                  Trascina qui il pulsante &quot;Aggiungi dato&quot; oppure cliccalo per il primo dato in coda.
-                </p>
+                {addDataButtonRow}
+                <div
+                  className="min-h-0 flex-1 space-y-2 overflow-y-auto px-1 pb-2"
+                  onDragOver={flowInterfaceSectionsEnabled ? onDataZoneDragOver : undefined}
+                  onDrop={flowInterfaceSectionsEnabled ? onDropVariableFromInterfaceOnData : undefined}
+                >
+                  {dataVariablesTreeContent}
+                </div>
+              </CollapsiblePanelSection>
+            ) : null}
+            {showSubdialogsBlock ? (
+              <CollapsiblePanelSection
+                title="Sottodialoghi"
+                defaultOpen
+                className="min-h-0 shrink-0"
+                contentClassName="min-h-0 overflow-y-auto px-1 pb-2"
+              >
+                <SubflowPortalRowsList
+                  rows={subflowPortalRows}
+                  onGearLikeCanvas={(r) => {
+                    if (!onOpenSubflowPortalGear) return;
+                    const args = getSubflowOpenArgsFromTaskAndRowText(r.taskId, r.canvasNodeId, r.rowLabel);
+                    onOpenSubflowPortalGear(args.taskId, args.existingFlowId, args.rowLabel, args.canvasNodeId);
+                  }}
+                />
+              </CollapsiblePanelSection>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {showDataBlock ? (
+              <div
+                className="space-y-2"
+                onDragOver={flowInterfaceSectionsEnabled ? onDataZoneDragOver : undefined}
+                onDrop={flowInterfaceSectionsEnabled ? onDropVariableFromInterfaceOnData : undefined}
+              >
+                <h3 className="px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Data</h3>
+                {dataVariablesTreeContent}
               </div>
             ) : null}
 
-            {orphans.length > 0 && (
-              <div className="space-y-1">
-                {orphans.map((row) => {
-                  const inst = byVarId.get(row.id);
-                  if (!inst) return null;
-                  const orphanLabel = getVariableLabel(inst.id, translations);
-                  return (
-                    <DataTreeVariableRow
-                      key={row.id}
-                      segment={orphanLabel.trim() || '—'}
-                      instance={inst}
-                      projectId={projectId}
-                      translations={translations}
-                      addTranslation={addTranslation}
-                      onRefresh={refresh}
-                    />
-                  );
-                })}
-              </div>
-            )}
-
-            {tree.length > 0 && (
-              <>
-                <div
-                  className="h-2 -mx-0.5 shrink-0 rounded-sm"
-                  onDragOver={(e) => {
-                    if (!hasNewFlowDataDrag(e)) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.dataTransfer.dropEffect = 'copy';
-                    setRootEdgeDrop('top');
-                    setDropIndicator(null);
+            {showSubdialogsBlock ? (
+              <div className={`space-y-2 ${showDataBlock ? 'border-t border-slate-800/60 pt-2' : ''}`}>
+                <h3 className="px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Subdialogs</h3>
+                <SubflowPortalRowsList
+                  rows={subflowPortalRows}
+                  onGearLikeCanvas={(r) => {
+                    if (!onOpenSubflowPortalGear) return;
+                    const args = getSubflowOpenArgsFromTaskAndRowText(r.taskId, r.canvasNodeId, r.rowLabel);
+                    onOpenSubflowPortalGear(args.taskId, args.existingFlowId, args.rowLabel, args.canvasNodeId);
                   }}
-                  onDragLeave={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootEdgeDrop(null);
-                  }}
-                  onDrop={(e) => {
-                    if (!hasNewFlowDataDrag(e)) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setRootEdgeDrop(null);
-                    insertVariableAt({ targetPathKey: tree[0].pathKey, placement: 'before' });
-                  }}
-                >
-                  {rootEdgeDrop === 'top' && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
-                </div>
-                <FlowVariableTreeNodes
-                  nodes={tree}
-                  depth={0}
-                  byVarId={byVarId}
-                  projectId={projectId}
-                  translations={translations}
-                  addTranslation={addTranslation}
-                  onRefresh={refresh}
-                  dropIndicator={dropIndicator}
-                  setDropIndicator={setDropIndicator}
-                  onInsertAt={insertVariableAt}
                 />
-                <div
-                  className="mt-0.5 h-2 -mx-0.5 shrink-0 rounded-sm"
-                  onDragOver={(e) => {
-                    if (!hasNewFlowDataDrag(e)) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.dataTransfer.dropEffect = 'copy';
-                    setRootEdgeDrop('bottom');
-                    setDropIndicator(null);
-                  }}
-                  onDragLeave={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootEdgeDrop(null);
-                  }}
-                  onDrop={(e) => {
-                    if (!hasNewFlowDataDrag(e)) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setRootEdgeDrop(null);
-                    const last = flatPathKeys[flatPathKeys.length - 1];
-                    if (last) {
-                      insertVariableAt({ targetPathKey: last, placement: 'after' });
-                    }
-                  }}
-                >
-                  {rootEdgeDrop === 'bottom' && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
-                </div>
-              </>
-            )}
-          </div>
-        ) : null}
-
-        {showSubdialogsBlock ? (
-          <div className={`space-y-2 ${showDataBlock ? 'border-t border-slate-800/60 pt-2' : ''}`}>
-            <h3 className="px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Subdialogs</h3>
-            <SubflowPortalRowsList
-              rows={subflowPortalRows}
-              onGearLikeCanvas={(r) => {
-                if (!onOpenSubflowPortalGear) return;
-                const args = getSubflowOpenArgsFromTaskAndRowText(r.taskId, r.canvasNodeId, r.rowLabel);
-                onOpenSubflowPortalGear(args.taskId, args.existingFlowId, args.rowLabel, args.canvasNodeId);
-              }}
-            />
-          </div>
-        ) : null}
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
     </>
   );
 
   return (
     <>
+      {dataDeleteBlockRefs !== null ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4 pointer-events-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="data-delete-block-title"
+        >
+          <div className="max-w-md w-full rounded-lg border border-amber-500/35 bg-[#0f1218] p-4 shadow-xl text-slate-100">
+            <h3 id="data-delete-block-title" className="text-sm font-semibold mb-2">
+              Impossibile eliminare questa variabile
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              È ancora referenziata con token [GUID] nei punti seguenti. Rimuovi quei riferimenti, poi riprova.
+            </p>
+            <ul className="text-xs max-h-52 overflow-y-auto space-y-1.5 border border-slate-700/80 rounded-md p-2 mb-4 bg-black/20">
+              {dataDeleteBlockRefs.map((r) => (
+                <li key={`${r.kind}:${r.id}`} className="flex flex-col gap-0.5">
+                  <span className="text-[10px] uppercase tracking-wide text-slate-500">{r.kind}</span>
+                  <span className="font-mono text-amber-200/95 break-all">{r.label}</span>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="rounded-md bg-amber-600/90 hover:bg-amber-500 px-3 py-1.5 text-xs font-medium text-white"
+              onClick={() => setDataDeleteBlockRefs(null)}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {interfaceUnbindBlockRefs !== null ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4 pointer-events-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="iface-unbind-block-title"
+        >
+          <div className="max-w-md w-full rounded-lg border border-violet-500/35 bg-[#0f1218] p-4 shadow-xl text-slate-100">
+            <h3 id="iface-unbind-block-title" className="text-sm font-semibold mb-2">
+              Impossibile scollegare dalla interfaccia
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              La variabile è ancora referenziata con token [GUID] nei punti seguenti. Rimuovi quei riferimenti, poi
+              riprova.
+            </p>
+            <ul className="text-xs max-h-52 overflow-y-auto space-y-1.5 border border-slate-700/80 rounded-md p-2 mb-4 bg-black/20">
+              {interfaceUnbindBlockRefs.map((r) => (
+                <li key={`${r.kind}:${r.id}`} className="flex flex-col gap-0.5">
+                  <span className="text-[10px] uppercase tracking-wide text-slate-500">{r.kind}</span>
+                  <span className="font-mono text-violet-200/95 break-all">{r.label}</span>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="rounded-md bg-violet-600/90 hover:bg-violet-500 px-3 py-1.5 text-xs font-medium text-white"
+              onClick={() => setInterfaceUnbindBlockRefs(null)}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!hideEdgeToggle ? (
         <button
           type="button"

@@ -11,7 +11,6 @@ import { logSubflowCanvasDebug, summarizeFlowSlice } from '../../utils/subflowCa
 import { logUpsertSubflowEmptyNodesCaller } from '../../utils/flowStructuralCommitDiagnostic';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
-import { FlowInterfaceBottomPanel } from './FlowInterfaceBottomPanel';
 import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
 // Adapter: renderizza l'attuale FlowEditor per activeFlowId con nodes/edges del workspace
 const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
@@ -168,10 +167,12 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
               }}
             />
           </div>
-          {isFlowInterfacePanelEnabled(activeFlowId) ? (
-            <FlowInterfaceBottomPanel flowId={activeFlowId} projectId={projectId} />
-          ) : null}
-          <FlowVariablesRail flowId={activeFlowId} projectId={projectId} workspaceFlows={flows} />
+          <FlowVariablesRail
+            flowId={activeFlowId}
+            projectId={projectId}
+            workspaceFlows={flows}
+            flowInterfaceSectionsEnabled={isFlowInterfacePanelEnabled(activeFlowId)}
+          />
         </div>
       </div>
     </div>

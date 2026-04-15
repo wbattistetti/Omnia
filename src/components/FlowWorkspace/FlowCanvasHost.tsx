@@ -9,7 +9,6 @@ import { logSubflowCanvasDebug, summarizeFlowSlice } from '../../utils/subflowCa
 import { logUpsertSubflowEmptyNodesCaller } from '../../utils/flowStructuralCommitDiagnostic';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
-import { FlowInterfaceBottomPanel } from './FlowInterfaceBottomPanel';
 import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
 import { FlowTestProvider } from '../../context/FlowTestContext';
 import { FlowActionsProvider } from '../../context/FlowActionsContext';
@@ -19,19 +18,22 @@ import { variableCreationService } from '../../services/VariableCreationService'
 import { resolveVariableStoreProjectId, isFallbackProjectBucket } from '../../utils/safeProjectId';
 import { buildFlowCanvasRowFingerprint } from '../../utils/flowWorkspaceUtteranceFingerprint';
 import type { ToolbarButton } from '@dock/types';
-import { ArrowUpFromLine, Database, Workflow } from 'lucide-react';
+import { Database, Play, Workflow } from 'lucide-react';
 import { collectSubflowPortalRows } from './collectSubflowPortalRows';
+import { resolveFlowTabDisplayTitle } from '@utils/resolveFlowTabDisplayTitle';
 
-function getDefaultFlowTitle(flowId: string): string {
-  return flowId === 'main' ? 'MAIN' : 'Subflow';
-}
-
-function pickFlowTitle(flowId: string, currentTitle: string | undefined): string {
-  const title = (currentTitle || '').trim();
-  if (title.length > 0) {
-    return title;
-  }
-  return getDefaultFlowTitle(flowId);
+/**
+ * Title persisted on the flow slice: keep non-empty server/local titles; otherwise resolve from
+ * Subflow task name (avoids freezing the generic "Subflow" placeholder in the store).
+ */
+function flowSliceTitle(
+  flowId: string,
+  storedTitle: string | undefined,
+  flows: Record<string, { title?: string } | undefined>
+): string {
+  const t = (storedTitle || '').trim();
+  if (t.length > 0) return t;
+  return resolveFlowTabDisplayTitle(flowId, flows);
 }
 
 type Props = {
@@ -43,8 +45,10 @@ type Props = {
   onOpenTaskFlow?: (flowId: string, title: string) => void;
   /** Opens a subflow tab for a Flow-type row (taskId, optional existingFlowId, optional title, optional canvas node id for pan-after-split) */
   onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string, canvasNodeId?: string) => void;
-  /** When set (AppContent dock), Variables/Interfaces toggles are shown on the dock tab bar instead of edge handles. */
+  /** When set (AppContent dock), Data/Subdialogs toggles are shown on the dock tab bar instead of edge handles. */
   onToolbarUpdate?: (toolbar: ToolbarButton[], headerColor: string) => void;
+  /** Run this flow canvas in the global debugger panel (AppContent). */
+  onRunFlowInDebugger?: (flowId: string) => void;
 };
 
 /** Teal header bar for flow dock tab (full-width strip, readable with white labels). */
@@ -58,21 +62,21 @@ export const FlowCanvasHost: React.FC<Props> = ({
   onOpenTaskFlow,
   onOpenSubflowForTask,
   onToolbarUpdate,
+  onRunFlowInDebugger,
 }) => {
   const { data: projectData } = useProjectData();
   const { flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph, applyFlowLoadResult } = useFlowStoreActions();
   const [isLoadingFlow, setIsLoadingFlow] = React.useState(false);
   const [variablesPanelOpen, setVariablesPanelOpen] = React.useState(false);
-  const [interfacePanelOpen, setInterfacePanelOpen] = React.useState(false);
   const [dataSectionOn, setDataSectionOn] = React.useState(true);
   const [subdialogsSectionOn, setSubdialogsSectionOn] = React.useState(true);
 
   const entityCreation = useEntityCreation();
 
   const flowDisplayName = useMemo(
-    () => pickFlowTitle(flowId, flows[flowId]?.title),
-    [flowId, flows[flowId]?.title]
+    () => flowSliceTitle(flowId, flows[flowId]?.title, flows as Record<string, { title?: string } | undefined>),
+    [flowId, flows, flows[flowId]?.title]
   );
 
   const resolvedProjectId = useMemo(() => resolveVariableStoreProjectId(projectId), [projectId]);
@@ -109,8 +113,16 @@ export const FlowCanvasHost: React.FC<Props> = ({
   useEffect(() => {
     if (!onToolbarUpdate) return;
     const iconClass = 'w-3.5 h-3.5 shrink-0 opacity-95';
-    const outputTitle = `Mostra i dati che ${flowDisplayName} può fornire all'esterno.`;
     const buttons: ToolbarButton[] = [];
+    if (onRunFlowInDebugger) {
+      buttons.push({
+        icon: <Play className={iconClass} strokeWidth={2} aria-hidden />,
+        label: 'Run',
+        title: `Esegui debug su questo flusso (${flowDisplayName})`,
+        active: false,
+        onClick: () => onRunFlowInDebugger(flowId),
+      });
+    }
     if (hasDataForToolbar) {
       buttons.push({
         icon: <Database className={iconClass} strokeWidth={2} aria-hidden />,
@@ -141,21 +153,12 @@ export const FlowCanvasHost: React.FC<Props> = ({
         },
       });
     }
-    if (isFlowInterfacePanelEnabled(flowId)) {
-      buttons.push({
-        icon: <ArrowUpFromLine className={iconClass} strokeWidth={2} aria-hidden />,
-        label: 'Output',
-        title: outputTitle,
-        active: interfacePanelOpen,
-        onClick: () => setInterfacePanelOpen((o) => !o),
-      });
-    }
     onToolbarUpdate(buttons, FLOW_DOCK_HEADER_COLOR);
   }, [
     onToolbarUpdate,
+    onRunFlowInDebugger,
     flowDisplayName,
     flowId,
-    interfacePanelOpen,
     hasDataForToolbar,
     hasSubdialogsForToolbar,
     dataSectionOn,
@@ -195,7 +198,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
       if (!flows[flowId]) {
         const placeholder = {
           id: flowId,
-          title: pickFlowTitle(flowId, flows[flowId]?.title),
+          title: flowSliceTitle(flowId, flows[flowId]?.title, flows as Record<string, { title?: string } | undefined>),
           nodes: [],
           edges: [],
           hydrated: false,
@@ -237,7 +240,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
           });
           upsertFlow({
             id: flowId,
-            title: pickFlowTitle(flowId, flow?.title),
+            title: flowSliceTitle(flowId, flow?.title, flows as Record<string, { title?: string } | undefined>),
             nodes: data.nodes,
             edges: data.edges,
             ...(data.meta !== undefined ? { meta: data.meta } : {}),
@@ -260,7 +263,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
           });
           const failedLoad = {
             id: flowId,
-            title: pickFlowTitle(flowId, flow?.title),
+            title: flowSliceTitle(flowId, flow?.title, flows as Record<string, { title?: string } | undefined>),
             nodes: [],
             edges: [],
             hydrated: false,
@@ -445,15 +448,6 @@ export const FlowCanvasHost: React.FC<Props> = ({
                 Loading flow...
               </div>
             ) : null}
-            {isFlowInterfacePanelEnabled(flowId) ? (
-              <FlowInterfaceBottomPanel
-                flowId={flowId}
-                projectId={projectId}
-                open={interfacePanelOpen}
-                onOpenChange={setInterfacePanelOpen}
-                hideEdgeToggle
-              />
-            ) : null}
           </div>
           <FlowVariablesRail
             flowId={flowId}
@@ -476,6 +470,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
             hasSubdialogsAvailable={hasSubdialogsForToolbar}
             panelTitle={flowSidePanelTitle}
             subflowPortalRows={subflowPortalRowsDock}
+            flowInterfaceSectionsEnabled={isFlowInterfacePanelEnabled(flowId)}
             onOpenSubflowPortalGear={
               onOpenSubflowForTask
                 ? (taskId, existingFlowId, rowLabel, canvasNodeId) =>
@@ -492,13 +487,11 @@ export const FlowCanvasHost: React.FC<Props> = ({
               Loading flow...
             </div>
           ) : null}
-          {isFlowInterfacePanelEnabled(flowId) ? (
-            <FlowInterfaceBottomPanel flowId={flowId} projectId={projectId} />
-          ) : null}
           <FlowVariablesRail
             flowId={flowId}
             projectId={projectId}
             workspaceFlows={flows}
+            flowInterfaceSectionsEnabled={isFlowInterfacePanelEnabled(flowId)}
             onOpenSubflowPortalGear={
               onOpenSubflowForTask
                 ? (taskId, existingFlowId, rowLabel, canvasNodeId) =>

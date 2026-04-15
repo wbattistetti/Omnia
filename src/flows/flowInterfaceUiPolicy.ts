@@ -1,6 +1,6 @@
 /**
- * Whether the Flow Interface panel (Input/Output) is shown for this flow canvas.
- * The outermost project flow (`main`) has no subflow-style interface; subflows do.
+ * Whether Input/Output (flowInterface) sections appear in the side rail for this flow.
+ * The project root flow (`main`) has no subflow-style interface; child/subflow canvases do.
  */
 
 export function isFlowInterfacePanelEnabled(flowId: string | undefined): boolean {

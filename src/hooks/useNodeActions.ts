@@ -8,33 +8,7 @@ import { FlowNode } from '../components/Flowchart/types/flowTypes';
 import { taskRepository } from '../services/TaskRepository';
 import { TaskType } from '../types/taskTypes';
 import { getTaskIdFromRow } from '../utils/taskHelpers';
-import { getSubflowSyncFlows } from '@domain/taskSubflowMove/subflowSyncFlowsRef';
-
-/** Child flow id stored on a Subflow task (same as findSubflowPortal). */
-function getChildFlowIdFromSubflowTask(task: { flowId?: string; parameters?: Array<{ parameterId?: string; value?: unknown }> } | null): string | null {
-  if (!task) return null;
-  const direct = String(task.flowId || '').trim();
-  if (direct) return direct;
-  const params = Array.isArray(task.parameters) ? task.parameters : [];
-  const p = params.find((x) => String(x?.parameterId || '').trim() === 'flowId');
-  return String(p?.value || '').trim() || null;
-}
-
-/** True if the active canvas is the child flow targeted by this Subflow task (recursive self-call). */
-function isSubflowTaskDroppedOnOwnChildCanvas(flowCanvasId: string, childFlowId: string): boolean {
-  const c = String(flowCanvasId || '').trim();
-  const cf = String(childFlowId || '').trim();
-  if (!cf) return false;
-  if (c === cf) return true;
-  try {
-    const slice = getSubflowSyncFlows()[c] as { id?: string } | undefined;
-    const sid = String(slice?.id || '').trim();
-    if (sid && sid === cf) return true;
-  } catch {
-    /* noop */
-  }
-  return false;
-}
+import { canAcceptSubflowPortalRowDrop } from '@domain/taskSubflowMove/subflowRowDropPolicy';
 
 /**
  * useNodeActions - Phase 3 Refactoring
@@ -170,11 +144,12 @@ export function useNodeActions(deps: UseNodeActionsDeps): UseNodeActionsResult {
 
       const canvasId = String(flowCanvasId || 'main').trim() || 'main';
 
-      if (task && task.type === TaskType.Subflow) {
-        const childFlowId = getChildFlowIdFromSubflowTask(task as any);
-        if (childFlowId && isSubflowTaskDroppedOnOwnChildCanvas(canvasId, childFlowId)) {
-          return;
-        }
+      if (
+        task &&
+        task.type === TaskType.Subflow &&
+        !canAcceptSubflowPortalRowDrop(task, canvasId, { sameFlowCrossNodeDrop: false })
+      ) {
+        return;
       }
 
       if (

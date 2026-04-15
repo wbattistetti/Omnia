@@ -17,6 +17,7 @@ import type { FlowMappingVariant } from './types';
 import { createMappingEntry, type MappingEntry } from './mappingTypes';
 import { ensureFlowVariableBindingForInterfaceRow, shouldSkipInterfaceDuplicate } from './interfaceMappingLabels';
 import { useContainerWidth } from './useContainerWidth';
+import { CollapsiblePanelSection } from '../FlowWorkspace/CollapsiblePanelSection';
 
 /** Draggable chip in SEND/RECEIVE headers: drop on tree to insert a new parameter. */
 export function BackendParameterDragChip() {
@@ -105,6 +106,8 @@ export interface InterfaceMappingEditorProps {
   flowDropTarget?: { flowCanvasId: string };
   /** Subflow: single full-width bar above both columns: "Interface · {name}". */
   interfaceFlowTitle?: string;
+  /** When true with variant interface, Input/Output are each in a collapsible section. */
+  collapsibleInterfaceBlocks?: boolean;
   /** Flow workspace: drag the title bar to move the Interface dock to another screen edge. */
   interfaceTitleBarDockDragHandlers?: Pick<
     React.HTMLAttributes<HTMLElement>,
@@ -152,6 +155,7 @@ export function InterfaceMappingEditor({
   interfaceTitleBarDockDragHandlers,
   interfaceShellHeaderExtra,
   projectId,
+  collapsibleInterfaceBlocks = false,
 }: InterfaceMappingEditorProps) {
   const interfaceInput = interfaceInputProp ?? [];
   const interfaceOutput = interfaceOutputProp ?? [];
@@ -220,16 +224,16 @@ export function InterfaceMappingEditor({
 
   const onIfaceInDrop = useCallback(
     (payload: FlowInterfaceDropPayload) => {
-      /** Row-acquired HTML5 drag carries variableRefId; pointer row-drop is Output-only. */
-      if (payload.variableRefId) return;
+      const vid = String(payload.variableRefId || '').trim();
+      if (!vid) return;
       const path = payload.wireKey.trim();
       if (!path) return;
       if (flowDropTarget?.flowCanvasId) {
-        ensureFlowVariableBindingForInterfaceRow(projectId, flowDropTarget.flowCanvasId, payload.variableRefId);
+        ensureFlowVariableBindingForInterfaceRow(projectId, flowDropTarget.flowCanvasId, vid);
       }
       const newEntry = createMappingEntry({
         wireKey: path,
-        variableRefId: payload.variableRefId,
+        variableRefId: vid,
       });
       if (shouldSkipInterfaceDuplicate(interfaceInput, newEntry)) return;
       onInterfaceInputChange([...interfaceInput, newEntry]);
@@ -436,55 +440,120 @@ export function InterfaceMappingEditor({
                     <div className="shrink-0 flex items-center justify-end">{interfaceShellHeaderExtra}</div>
                   ) : null}
                 </header>
-                <div className={`${blocksClass} p-2 pt-3`}>
-                  <MappingBlock
-                    accent="input"
-                    fillBodyHeight
-                    rootClassName={ifaceShellColumnClass}
-                    flowDropTarget={
-                      flowDropTarget
-                        ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'input' }
-                        : undefined
-                    }
-                  >
-                    <FlowMappingTree
-                      variant="interface"
-                      entries={interfaceInput}
-                      onEntriesChange={setInterfaceInputWrapped}
-                      apiOptions={[]}
-                      variableOptions={[]}
-                      listIdPrefix={inPrefix}
-                      showDropZone
-                      onDropVariable={onIfaceInDrop}
-                      projectId={projectId}
-                      flowCanvasId={flowDropTarget?.flowCanvasId}
-                      interfaceZone="input"
-                    />
-                  </MappingBlock>
-                  <MappingBlock
-                    accent="output"
-                    fillBodyHeight
-                    rootClassName={ifaceShellColumnClass}
-                    flowDropTarget={
-                      flowDropTarget
-                        ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'output' }
-                        : undefined
-                    }
-                  >
-                    <FlowMappingTree
-                      variant="interface"
-                      entries={interfaceOutput}
-                      onEntriesChange={setInterfaceOutputWrapped}
-                      apiOptions={[]}
-                      variableOptions={[]}
-                      listIdPrefix={outPrefix}
-                      showDropZone
-                      onDropVariable={onIfaceOutDrop}
-                      projectId={projectId}
-                      flowCanvasId={flowDropTarget?.flowCanvasId}
-                      interfaceZone="output"
-                    />
-                  </MappingBlock>
+                <div
+                  className={
+                    collapsibleInterfaceBlocks
+                      ? 'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2 pt-3'
+                      : `${blocksClass} p-2 pt-3`
+                  }
+                >
+                  {collapsibleInterfaceBlocks ? (
+                    <>
+                      <CollapsiblePanelSection title="Input" className="min-h-0 flex-1" defaultOpen>
+                        <MappingBlock
+                          accent="input"
+                          fillBodyHeight
+                          rootClassName="flex min-h-0 min-w-0 flex-1 flex-col"
+                          flowDropTarget={
+                            flowDropTarget
+                              ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'input' }
+                              : undefined
+                          }
+                        >
+                          <FlowMappingTree
+                            variant="interface"
+                            entries={interfaceInput}
+                            onEntriesChange={setInterfaceInputWrapped}
+                            apiOptions={[]}
+                            variableOptions={[]}
+                            listIdPrefix={inPrefix}
+                            showDropZone
+                            onDropVariable={onIfaceInDrop}
+                            projectId={projectId}
+                            flowCanvasId={flowDropTarget?.flowCanvasId}
+                            interfaceZone="input"
+                          />
+                        </MappingBlock>
+                      </CollapsiblePanelSection>
+                      <CollapsiblePanelSection title="Output" className="min-h-0 flex-1" defaultOpen>
+                        <MappingBlock
+                          accent="output"
+                          fillBodyHeight
+                          rootClassName="flex min-h-0 min-w-0 flex-1 flex-col"
+                          flowDropTarget={
+                            flowDropTarget
+                              ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'output' }
+                              : undefined
+                          }
+                        >
+                          <FlowMappingTree
+                            variant="interface"
+                            entries={interfaceOutput}
+                            onEntriesChange={setInterfaceOutputWrapped}
+                            apiOptions={[]}
+                            variableOptions={[]}
+                            listIdPrefix={outPrefix}
+                            showDropZone
+                            onDropVariable={onIfaceOutDrop}
+                            projectId={projectId}
+                            flowCanvasId={flowDropTarget?.flowCanvasId}
+                            interfaceZone="output"
+                          />
+                        </MappingBlock>
+                      </CollapsiblePanelSection>
+                    </>
+                  ) : (
+                    <>
+                      <MappingBlock
+                        accent="input"
+                        fillBodyHeight
+                        rootClassName={ifaceShellColumnClass}
+                        flowDropTarget={
+                          flowDropTarget
+                            ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'input' }
+                            : undefined
+                        }
+                      >
+                        <FlowMappingTree
+                          variant="interface"
+                          entries={interfaceInput}
+                          onEntriesChange={setInterfaceInputWrapped}
+                          apiOptions={[]}
+                          variableOptions={[]}
+                          listIdPrefix={inPrefix}
+                          showDropZone
+                          onDropVariable={onIfaceInDrop}
+                          projectId={projectId}
+                          flowCanvasId={flowDropTarget?.flowCanvasId}
+                          interfaceZone="input"
+                        />
+                      </MappingBlock>
+                      <MappingBlock
+                        accent="output"
+                        fillBodyHeight
+                        rootClassName={ifaceShellColumnClass}
+                        flowDropTarget={
+                          flowDropTarget
+                            ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'output' }
+                            : undefined
+                        }
+                      >
+                        <FlowMappingTree
+                          variant="interface"
+                          entries={interfaceOutput}
+                          onEntriesChange={setInterfaceOutputWrapped}
+                          apiOptions={[]}
+                          variableOptions={[]}
+                          listIdPrefix={outPrefix}
+                          showDropZone
+                          onDropVariable={onIfaceOutDrop}
+                          projectId={projectId}
+                          flowCanvasId={flowDropTarget?.flowCanvasId}
+                          interfaceZone="output"
+                        />
+                      </MappingBlock>
+                    </>
+                  )}
                 </div>
               </div>
             ) : (

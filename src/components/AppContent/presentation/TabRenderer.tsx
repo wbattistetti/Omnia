@@ -48,6 +48,8 @@ export interface TabRendererProps {
     canvasNodeId?: string,
     sourceFlowId?: string
   ) => void;
+  /** Opens the global flow debugger for this canvas (toolbar Run). */
+  onRunFlowInDebugger?: (flowId: string) => void;
 }
 
 /**
@@ -109,6 +111,7 @@ const FlowTabWithDockToolbar: React.FC<{
   onFlowCreateTaskFlow?: TabRendererProps['onFlowCreateTaskFlow'];
   onFlowOpenTaskFlow?: TabRendererProps['onFlowOpenTaskFlow'];
   onOpenSubflowForTask?: TabRendererProps['onOpenSubflowForTask'];
+  onRunFlowInDebugger?: TabRendererProps['onRunFlowInDebugger'];
 }> = ({
   tab,
   currentPid,
@@ -117,6 +120,7 @@ const FlowTabWithDockToolbar: React.FC<{
   onFlowCreateTaskFlow,
   onFlowOpenTaskFlow,
   onOpenSubflowForTask,
+  onRunFlowInDebugger,
 }) => {
   const onToolbarUpdate = useCallback(
     (toolbar: ToolbarButton[], color: string) => {
@@ -160,6 +164,7 @@ const FlowTabWithDockToolbar: React.FC<{
               onOpenSubflowForTask(tab.id, taskId, existingFlowId, title, canvasNodeId, tab.flowId)
           : undefined
       }
+      onRunFlowInDebugger={onRunFlowInDebugger}
     />
   );
 };
@@ -292,7 +297,7 @@ const ConditionEditorDockTab: React.FC<{
 };
 
 export const TabRenderer: React.FC<TabRendererProps> = React.memo(
-  ({ tab, currentPid, isDraft: _isDraft, setDockTree, editorCloseRefsMap, pdUpdate, testSingleNode, onFlowCreateTaskFlow, onFlowOpenTaskFlow, onOpenSubflowForTask }) => {
+  ({ tab, currentPid, isDraft: _isDraft, setDockTree, editorCloseRefsMap, pdUpdate, testSingleNode, onFlowCreateTaskFlow, onFlowOpenTaskFlow, onOpenSubflowForTask, onRunFlowInDebugger }) => {
     // Flow tab - FlowCanvasHost handles useFlowActions internally
     if (tab.type === 'flow') {
       return (
@@ -304,6 +309,7 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
           onFlowCreateTaskFlow={onFlowCreateTaskFlow}
           onFlowOpenTaskFlow={onFlowOpenTaskFlow}
           onOpenSubflowForTask={onOpenSubflowForTask}
+          onRunFlowInDebugger={onRunFlowInDebugger}
         />
       );
     }

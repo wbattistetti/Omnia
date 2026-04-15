@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useReducer } from 'react';
-import { Home, Save, Settings, Loader2, CheckCircle, AlertCircle, X, Upload, Copy, ChevronDown, Database } from 'lucide-react';
+import { Home, Save, Settings, Loader2, CheckCircle, AlertCircle, X, Upload, Copy, ChevronDown, Database, BookOpen } from 'lucide-react';
 import { ProjectData } from '../types/project';
 import { useAIProvider, AI_PROVIDERS } from '../context/AIProviderContext';
 import { useFontStore } from '../state/fontStore';
@@ -63,6 +63,8 @@ export interface ToolbarProps {
   /** Pannello variabili globali di progetto (toolbar principale). */
   globalDataOpen?: boolean;
   onGlobalDataToggle?: () => void;
+  /** Apre la sidebar Library (template / libreria task). */
+  onOpenLibrary?: () => void;
 }
 
 export function Toolbar({
@@ -85,6 +87,7 @@ export function Toolbar({
   existingProjectsForSaveAs = [],
   globalDataOpen = false,
   onGlobalDataToggle,
+  onOpenLibrary,
 }: ToolbarProps) {
   // ✅ DEBUG: Log component mount and props (log removed to reduce noise)
   // React.useEffect(() => {
@@ -253,6 +256,18 @@ export function Toolbar({
           >
             <X className="w-4 h-4 flex-shrink-0" />
             <span>Chiudi</span>
+          </button>
+        )}
+        {currentProjectId && onOpenLibrary && (
+          <button
+            type="button"
+            onClick={onOpenLibrary}
+            className={`${BTN_BASE} ${BTN_SECONDARY} flex-shrink-0`}
+            title="Apri Library"
+            aria-label="Apri Library"
+          >
+            <BookOpen className="w-4 h-4 flex-shrink-0" strokeWidth={2} aria-hidden />
+            <span>Library</span>
           </button>
         )}
         {currentProjectId && onGlobalDataToggle && (

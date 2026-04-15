@@ -6,7 +6,6 @@ import { GlobalProjectDataPanel } from './GlobalProjectDataPanel';
 import { useFontClasses } from '../hooks/useFontClasses';
 import { NewProjectModal } from './NewProjectModal';
 import Sidebar from './Sidebar/Sidebar';
-import LibraryLabel from './Sidebar/LibraryLabel';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
 import { useProjectTranslations } from '../context/ProjectTranslationsContext';
@@ -49,6 +48,7 @@ import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ 
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import { useChatOrchestrator } from '../hooks/useChatOrchestrator';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
+import { resolveFlowTabDisplayTitle } from '@utils/resolveFlowTabDisplayTitle';
 import { variableCreationService } from '../services/VariableCreationService';
 import { logVariableHydration } from '../utils/variableMenuDebug';
 import { buildFlowCanvasRowFingerprint } from '../utils/flowWorkspaceUtteranceFingerprint';
@@ -59,6 +59,7 @@ import ResizableTaskEditorHost from './TaskEditor/EditorHost/ResizableTaskEditor
 import { useTaskEditor } from './TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
 import ConditionEditor from './conditions/ConditionEditor';
 import DDEBubbleChat from './TaskEditor/ResponseEditor/ChatSimulator/DDEBubbleChat';
+import { FontProvider } from '../context/FontContext';
 import { useTaskTreeContext } from '../context/DDTContext';
 // ✅ REMOVED: Imports moved to handlers (SIDEBAR_TYPE_COLORS, flowchartVariablesService, getNodesWithFallback)
 // FASE 2: InstanceRepository import removed - using TaskRepository instead
@@ -273,7 +274,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const pdUpdate = useProjectDataUpdate();
   const currentPid = (() => { try { return pdUpdate.getCurrentProjectId(); } catch { return undefined; } })();
 
-  // Dock tree: main flow tabset only (per-flow Interface is on canvas via FlowInterfaceBottomPanel).
+  // Dock tree: main flow tabset only (per-flow Input/Output + Data è nel FlowVariablesRail laterale).
   const [dockTree, setDockTree] = useState<DockNode>(() => createDefaultDockTree());
 
   /** Reset dock when switching or closing project so tabs from project A never leak into B. */
@@ -302,6 +303,9 @@ export const AppContent: React.FC<AppContentProps> = ({
   // ✅ ARCHITECTURAL FIX: Ref per accedere ai flows dal FlowWorkspaceProvider
   // Popolato da DockManagerWithFlows che è dentro FlowWorkspaceProvider
   const flowsRef = React.useRef<Record<string, any>>({});
+
+  /** Opens global DDEBubbleChat for a specific flow id (dock toolbar Run); set after debugger state mounts. */
+  const openGlobalDebuggerForFlowRef = React.useRef<(flowId: string) => void>(() => {});
 
   /** Step 3: reset hasLocalChanges after orchestrator persisted flows (set by DockManagerWithFlows). */
   const markFlowsPersistedRef = React.useRef<((flowIds: string[]) => void) | null>(null);
@@ -443,6 +447,7 @@ export const AppContent: React.FC<AppContentProps> = ({
               });
             }
           }}
+          onRunFlowInDebugger={(flowId) => openGlobalDebuggerForFlowRef.current(flowId)}
         />
       );
     },
@@ -783,8 +788,7 @@ export const AppContent: React.FC<AppContentProps> = ({
     return () => document.removeEventListener('taskEditor:open', h as any);
   }, [editorCoordinator]);
 
-  // Note: nodes/edges are read directly from window.__flowNodes by DDEBubbleChat in flow mode
-  // No local state needed to avoid flickering and synchronization issues
+  // Global flow debugger passes nodes/edges/tasks via props (FlowWorkspaceSnapshot); FontProvider wraps DDEBubbleChat.
   // Stato per feedback salvataggio
   // const [isSaving, setIsSaving] = useState(false);
   // const [saveSuccess, setSaveSuccess] = useState(false);
@@ -826,8 +830,25 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [showBackendBuilder, setShowBackendBuilder] = useState(false);
   const [globalDataPanelOpen, setGlobalDataPanelOpen] = useState(false);
   const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
+  /** When set, global debugger runs this flow; when null, uses {@link FlowWorkspaceSnapshot.getActiveFlowId}. */
+  const [debuggerTargetFlowId, setDebuggerTargetFlowId] = useState<string | null>(null);
+  const [debuggerLaunchKey, setDebuggerLaunchKey] = useState(0);
+  const [debuggerSnapshotTick, setDebuggerSnapshotTick] = useState(0);
   const [debuggerWidth, setDebuggerWidth] = useState(380); // Larghezza dinamica invece di fissa
   const [isResizing, setIsResizing] = useState(false);
+
+  React.useEffect(() => {
+    openGlobalDebuggerForFlowRef.current = (flowId: string) => {
+      setDebuggerTargetFlowId(flowId);
+      setShowGlobalDebugger(true);
+      setDebuggerLaunchKey((k) => k + 1);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!showGlobalDebugger) return;
+    return FlowWorkspaceSnapshot.subscribe(() => setDebuggerSnapshotTick((t) => t + 1));
+  }, [showGlobalDebugger]);
 
   // Handler per il resize del pannello di debug
   const handleResizeStart = React.useCallback((e: React.MouseEvent) => {
@@ -838,7 +859,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const handleResize = React.useCallback((e: MouseEvent) => {
     if (!isResizing) return;
 
-    const container = document.getElementById('flow-canvas-host');
+    const container = document.getElementById('flow-workspace-debugger-row');
     if (!container) return;
 
     const rect = container.getBoundingClientRect();
@@ -875,12 +896,14 @@ export const AppContent: React.FC<AppContentProps> = ({
   // }, [handleTestSingleNode]);
 
   const handleRunFlow = React.useCallback(() => {
-    console.log('[AppContent] handleRunFlow -> delegating to ChatOrchestrator');
+    console.log('[AppContent] handleRunFlow -> global flow debugger');
     void import('../context/CompilationErrorsContext').then(({ clearCompilationErrorsGlobal }) => {
       clearCompilationErrorsGlobal();
     });
-    chatOrchestrator.openFlowChat();
-  }, [chatOrchestrator]);
+    setDebuggerTargetFlowId(null);
+    setShowGlobalDebugger(true);
+    setDebuggerLaunchKey((k) => k + 1);
+  }, []);
 
   // Listen to Sidebar wrench
   React.useEffect(() => {
@@ -1123,6 +1146,26 @@ export const AppContent: React.FC<AppContentProps> = ({
   // ✅ Applica font globali dallo store
   const { combinedClass } = useFontClasses();
 
+  const globalDebuggerFlowProps = React.useMemo(() => {
+    if (!showGlobalDebugger) return null;
+    void debuggerSnapshotTick;
+    const fid = debuggerTargetFlowId ?? FlowWorkspaceSnapshot.getActiveFlowId();
+    const slice = FlowWorkspaceSnapshot.getFlowById(fid);
+    const flowsTitleMap: Record<string, { title?: string }> = {};
+    for (const id of FlowWorkspaceSnapshot.getAllFlowIds()) {
+      const s = FlowWorkspaceSnapshot.getFlowById(id);
+      if (s) flowsTitleMap[id] = { title: (s as { title?: string }).title };
+    }
+    const executionFlowName = resolveFlowTabDisplayTitle(fid, flowsTitleMap);
+    return {
+      flowId: fid,
+      nodes: slice?.nodes ?? [],
+      edges: slice?.edges ?? [],
+      tasks: (slice as { tasks?: unknown[] } | null)?.tasks ?? [],
+      executionFlowName,
+    };
+  }, [showGlobalDebugger, debuggerTargetFlowId, debuggerLaunchKey, debuggerSnapshotTick]);
+
   return (
     <div className={`h-screen overflow-hidden ${combinedClass}`} style={{ position: 'relative' }}>
       {/* overlay ricarico rimosso per test */}
@@ -1253,6 +1296,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             onSettings={() => setShowBackendBuilder(true)}
             globalDataOpen={globalDataPanelOpen}
             onGlobalDataToggle={() => setGlobalDataPanelOpen((v) => !v)}
+            onOpenLibrary={() => setIsSidebarCollapsed(false)}
           />
 
           <GlobalProjectDataPanel
@@ -1261,13 +1305,8 @@ export const AppContent: React.FC<AppContentProps> = ({
             projectId={currentPid}
           />
 
-          {/* Area principale: Library Label + Sidebar + Canvas */}
+          {/* Area principale: Sidebar + Canvas */}
           <div className="flex flex-1 relative overflow-hidden">
-            {/* Library Label quando sidebar chiusa */}
-            {isSidebarCollapsed && (
-              <LibraryLabel onOpen={() => setIsSidebarCollapsed(false)} />
-            )}
-
             {/* Sidebar con animazione slide */}
             <div
               className={`
@@ -1284,23 +1323,45 @@ export const AppContent: React.FC<AppContentProps> = ({
               </SidebarThemeProvider>
             </div>
 
-            {/* Canvas */}
+            {/* Canvas: workspace flow in #flow-canvas-host; debugger globale sibling in #flow-workspace-debugger-row */}
             <div className="flex-1 flex flex-col min-w-0" style={{ minHeight: 0 }}>
-              <div id="flow-canvas-host" style={{
-                flex: 1,
-                minHeight: 0,
-                display: 'flex',
-                flexDirection: showGlobalDebugger ? 'row' : 'column',
-                position: 'relative'
-              }}>
-                {showBackendBuilder ? (
-                  <div style={{ flex: 1, minHeight: 0 }}>
-                    <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
-                  </div>
-                ) : (
-                  <>
-                    {/* Canvas - occupa tutto lo spazio disponibile */}
-                    <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <div
+                id="flow-workspace-debugger-row"
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  minWidth: 0,
+                  display: 'flex',
+                  flexDirection: 'row',
+                  position: 'relative',
+                }}
+              >
+                <div
+                  id="flow-canvas-host"
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    position: 'relative',
+                  }}
+                >
+                  {showBackendBuilder ? (
+                    <div style={{ flex: 1, minHeight: 0 }}>
+                      <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        position: 'relative',
+                        flex: 1,
+                        minHeight: 0,
+                        minWidth: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                      }}
+                    >
                       <FlowWorkspaceProvider
                         key={currentPid ?? '__no_project__'}
                         workspaceProjectId={currentPid ?? null}
@@ -1321,11 +1382,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                         />
                       </FlowWorkspaceProvider>
                     </div>
-                  </>
-                )}
-                {showGlobalDebugger && (
+                  )}
+                </div>
+                {showGlobalDebugger && globalDebuggerFlowProps && (
                   <>
-                    {/* Resizer verticale */}
                     <div
                       onMouseDown={handleResizeStart}
                       style={{
@@ -1334,7 +1394,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                         backgroundColor: isResizing ? '#3b82f6' : 'transparent',
                         zIndex: 10,
                         userSelect: 'none',
-                        flexShrink: 0
+                        flexShrink: 0,
                       }}
                       onMouseEnter={(e) => {
                         if (!isResizing) {
@@ -1347,8 +1407,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                         }
                       }}
                     />
-
-                    {/* Pannello di debug */}
                     <div
                       style={{
                         width: `${debuggerWidth}px`,
@@ -1356,18 +1414,32 @@ export const AppContent: React.FC<AppContentProps> = ({
                         overflowY: 'auto',
                         overflowX: 'hidden',
                         borderLeft: '1px solid #e5e7eb',
-                        flexShrink: 0
+                        flexShrink: 0,
                       }}
                     >
-                      <DDEBubbleChat
-                        mode="flow"
-                      // nodes and edges are read directly from window.__flowNodes in flow mode
-                      />
+                      <FontProvider>
+                        <DDEBubbleChat
+                          key={`global-dbg-${globalDebuggerFlowProps.flowId}-${debuggerLaunchKey}`}
+                          task={null}
+                          projectId={currentPid ?? null}
+                          translations={compiledTranslations || {}}
+                          taskTree={null}
+                          mode="interactive"
+                          flowNodes={globalDebuggerFlowProps.nodes}
+                          flowEdges={globalDebuggerFlowProps.edges}
+                          flowTasks={globalDebuggerFlowProps.tasks}
+                          executionFlowName={globalDebuggerFlowProps.executionFlowName}
+                          executionLaunchType="flow"
+                          onClosePanel={() => {
+                            setShowGlobalDebugger(false);
+                            setDebuggerTargetFlowId(null);
+                          }}
+                        />
+                      </FontProvider>
                     </div>
                   </>
                 )}
               </div>
-
             </div>
           </div>
         </div>

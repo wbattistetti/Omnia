@@ -1,4 +1,4 @@
-import { DockNode, DockRegion, DockTab } from './types';
+import { DockNode, DockRegion, DockTab, isLockedMainFlowTab } from './types';
 
 let idCounter = 0;
 const newId = () => `dock_${++idCounter}`;
@@ -44,6 +44,10 @@ export function splitWithTab(tree: DockNode, targetId: string, region: DockRegio
 }
 
 export function closeTab(tree: DockNode, tabId: string): DockNode {
+  const tab = getTab(tree, tabId);
+  if (isLockedMainFlowTab(tab)) {
+    return tree;
+  }
   const pruned = mapNode(tree, n => {
     if (n.kind === 'tabset') {
       const idx = n.tabs.findIndex(t => t.id === tabId);

@@ -120,6 +120,12 @@ export type DockTabFlowMapping = DockTabBase & {
 // Union type for all tab types
 export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor | DockTabChat | DockTabErrorReport | DockTabFlowMapping; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 
+/** Primary workspace flow (`flowId === 'main'`) must stay open; no dock close button / closeTab. */
+export function isLockedMainFlowTab(tab: DockTab | null | undefined): boolean {
+  if (!tab || tab.type !== 'flow') return false;
+  return String((tab as DockTabFlow).flowId || '').trim() === 'main';
+}
+
 export type SplitNode = {
   kind: 'split';
   id: string;

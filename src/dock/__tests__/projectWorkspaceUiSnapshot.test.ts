@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createDefaultDockTree,
   filterSnapshotToExistingFlows,
+  getFlowIdsFromWorkspaceSnapshot,
   serializeDockTreeToSnapshot,
   snapshotFlowIdsAreLoaded,
   type WorkspaceUiSnapshotV1,
@@ -28,6 +29,22 @@ describe('projectWorkspaceUiSnapshot', () => {
       kind: 'tabset',
       tabs: [{ flowId: 'main' }],
     });
+  });
+
+  it('getFlowIdsFromWorkspaceSnapshot collects flow tab ids', () => {
+    const snap: WorkspaceUiSnapshotV1 = {
+      version: 1,
+      root: {
+        kind: 'tabset',
+        id: 'ts',
+        tabs: [
+          { id: 't1', title: 'M', type: 'flow', flowId: 'main' },
+          { id: 't2', title: 'S', type: 'flow', flowId: 'sub_abc' },
+        ],
+        active: 1,
+      },
+    };
+    expect(getFlowIdsFromWorkspaceSnapshot(snap).sort()).toEqual(['main', 'sub_abc']);
   });
 
   it('snapshotFlowIdsAreLoaded is false until all flows exist', () => {

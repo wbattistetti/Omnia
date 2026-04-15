@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { DockNode, DockRegion, DockTab, DockTabFlow, DockTabResponseEditor, DockTabNonInteractive, DockTabConditionEditor, DockTabTaskEditor, DockTabErrorReport } from '../../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
+import { DockNode, DockRegion, DockTab, DockTabFlow, DockTabResponseEditor, DockTabNonInteractive, DockTabConditionEditor, DockTabTaskEditor, DockTabErrorReport, isLockedMainFlowTab } from '../../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { splitWithTab, addTabCenter, closeTab, activateTab, moveTab, getTab, removeTab } from '../../dock/ops';
 import { Workflow, FileText, Code2, GitBranch, MessageSquare, AlertCircle, Waypoints } from 'lucide-react';
 import SmartTooltip from '../SmartTooltip';
@@ -261,6 +261,11 @@ function DockRenderer(props: {
         }
       }}
       onClose={async (tabId) => {
+        const tabPre = getTab(props.rootNode, tabId);
+        if (isLockedMainFlowTab(tabPre)) {
+          return;
+        }
+
         let shouldClose = true;
 
         // ✅ PRIORITY 1: Use editorCloseRefsMap directly (no state-update delay, always current)
@@ -574,10 +579,11 @@ function TabSet(props: {
           ((activeDockTab as DockTabFlow).toolbarButtons?.length ?? 0) > 0;
         const stripHeight = tallFlowDockHeader ? 44 : 40;
         return (
-        <div className="flex items-center gap-1 px-2 border-b flex-shrink-0 w-full min-w-0"
-          style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', minHeight: stripHeight, height: stripHeight }}>
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-1 px-2 py-1 border-b flex-shrink-0 w-full min-w-0"
+          style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', minHeight: stripHeight }}>
           {props.tabs.map((t, i) => {
           const isActive = props.active === i;
+          const lockedMainFlow = isLockedMainFlowTab(t);
           const isFlowTab = t.type === 'flow';
           const isResponseEditor = t.type === 'responseEditor';
           const isTaskEditor = t.type === 'taskEditor'; // ✅ RINOMINATO: isActEditor → isTaskEditor, 'actEditor' → 'taskEditor'
@@ -612,9 +618,14 @@ function TabSet(props: {
                 props.onDragTabEnd();
               }}
               onClick={() => props.setActive(i)}
-              className="px-2 py-0.5 text-xs rounded border cursor-grab flex items-center gap-1 min-w-0"
+              className="px-2 py-0.5 text-xs rounded border cursor-grab flex gap-1 min-w-0"
               style={{
                 flex: tabFlexGrow,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                alignContent: 'center',
+                rowGap: 6,
+                columnGap: 4,
                 minWidth: flowToolbarExpanded ? 0 : (isFlowTab ? 'auto' : (isActive ? 0 : 'auto')),
                 maxWidth: flowToolbarExpanded ? undefined : (isFlowTab ? 280 : undefined),
                 backgroundColor: isActive
@@ -644,7 +655,7 @@ function TabSet(props: {
 
               {/* title-suffix buttons: immediately after title, not pushed right */}
               {showToolbar && titleSuffixButtons.length > 0 && (
-                <div style={{ display: 'flex', gap: 4, marginLeft: 6, alignItems: 'center', flexShrink: 0 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginLeft: 6, alignItems: 'center', minWidth: 0 }}>
                   {titleSuffixButtons.map((btn, idx) => renderDockToolbarButton(btn, idx, tabColor))}
                 </div>
               )}
@@ -656,12 +667,25 @@ function TabSet(props: {
 
               {/* Right-aligned toolbar buttons */}
               {showToolbar && rightButtons.length > 0 && (
-                <div style={{ display: 'flex', gap: 4, marginLeft: 4, alignItems: 'center', flexShrink: 0 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 4,
+                    marginLeft: 4,
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    minWidth: 0,
+                    flex: isActive && (isResponseEditor || isTaskEditor || (isFlowTab && showToolbar)) ? '1 1 auto' : undefined,
+                  }}
+                >
                   {rightButtons.map((btn, idx) => renderDockToolbarButton(btn, idx + titleSuffixButtons.length, tabColor))}
                 </div>
               )}
 
-              <button className="ml-1 shrink-0" style={{ color: isActive && tabColor ? '#ffffff' : '#0c4a6e' }} onClick={async (e) => { e.stopPropagation(); await props.onClose(t.id); }}>×</button>
+              {!lockedMainFlow && (
+                <button className="ml-1 shrink-0" style={{ color: isActive && tabColor ? '#ffffff' : '#0c4a6e' }} onClick={async (e) => { e.stopPropagation(); await props.onClose(t.id); }}>×</button>
+              )}
               </div>
             );
           })}

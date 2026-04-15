@@ -95,6 +95,13 @@ function collectFlowIdsFromSnapshot(node: SerializableDockNode, out: Set<string>
   for (const c of node.children) collectFlowIdsFromSnapshot(c, out);
 }
 
+/** All flow ids referenced by flow tabs in a persisted workspace snapshot (deduped). */
+export function getFlowIdsFromWorkspaceSnapshot(snapshot: WorkspaceUiSnapshotV1): string[] {
+  const out = new Set<string>();
+  collectFlowIdsFromSnapshot(snapshot.root, out);
+  return Array.from(out);
+}
+
 /** True when every flow id in the snapshot exists in the loaded workspace. */
 export function snapshotFlowIdsAreLoaded(snapshot: WorkspaceUiSnapshotV1, flowIds: Set<string>): boolean {
   const need = new Set<string>();

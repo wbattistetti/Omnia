@@ -1,7 +1,7 @@
 /**
  * Persists dock layout + open flow tabs per project (localStorage) and restores after flows load.
  * Lives under FlowWorkspaceProvider so it can read flows and sync activeFlowId.
- * Refreshes flow-tab titles from Subflow task names after task store hydration.
+ * Refreshes flow-tab titles when flows or tasks change; prefetches open-tab flow documents after snapshot ids exist in the workspace.
  */
 
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
@@ -12,9 +12,12 @@ import {
   applyFlowTabDisplayTitles,
   buildDockTreeFromSnapshotForFlows,
   getLastActiveFlowIdFromDock,
+  getFlowIdsFromWorkspaceSnapshot,
   loadWorkspaceUiSnapshot,
   saveWorkspaceUiSnapshot,
+  snapshotFlowIdsAreLoaded,
 } from './projectWorkspaceUiSnapshot';
+import { prefetchHydratedFlowSlicesFromServer } from './prefetchSnapshotFlowSlices';
 
 export type WorkspaceDockLifecycleProps = {
   projectId: string | undefined;
@@ -31,7 +34,7 @@ export function WorkspaceDockLifecycle({
   setDockTree,
 }: WorkspaceDockLifecycleProps): null {
   const { flows } = useFlowWorkspace();
-  const { setActiveFlow, renameFlow } = useFlowActions();
+  const { setActiveFlow, renameFlow, upsertFlow } = useFlowActions();
   const flowsRef = useRef(flows);
   flowsRef.current = flows;
   const restoredRef = useRef<string | null>(null);
@@ -107,11 +110,45 @@ export function WorkspaceDockLifecycle({
 
     run();
     document.addEventListener('variableStore:updated', debounced as EventListener);
+    window.addEventListener('tasks:loaded', debounced as EventListener);
     return () => {
       document.removeEventListener('variableStore:updated', debounced as EventListener);
+      window.removeEventListener('tasks:loaded', debounced as EventListener);
       window.clearTimeout(titleSyncTimerRef.current);
     };
-  }, [projectId, skipPersist, setDockTree, renameFlow]);
+  }, [projectId, skipPersist, flowIdsKey, setDockTree, renameFlow]);
+
+  const prefetchGenRef = useRef(0);
+
+  /** Hydrate open-tab flow slices from API as soon as snapshot flow ids exist in the workspace (before child hosts mount). */
+  useEffect(() => {
+    const pid = projectId?.trim();
+    if (!pid || skipPersist) return;
+    const snap = loadWorkspaceUiSnapshot(pid);
+    if (!snap) return;
+    const ids = new Set(Object.keys(flowsRef.current ?? {}));
+    if (!snapshotFlowIdsAreLoaded(snap, ids)) return;
+
+    const flowIds = getFlowIdsFromWorkspaceSnapshot(snap);
+    const gen = ++prefetchGenRef.current;
+    let cancelled = false;
+
+    void prefetchHydratedFlowSlicesFromServer(pid, flowIds, {
+      getFlows: () => flowsRef.current as any,
+      upsertFlow: upsertFlow as any,
+    }).then(() => {
+      if (cancelled || gen !== prefetchGenRef.current) return;
+      try {
+        document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
+      } catch {
+        /* noop */
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, skipPersist, flowIdsKey, upsertFlow]);
 
   return null;
 }
