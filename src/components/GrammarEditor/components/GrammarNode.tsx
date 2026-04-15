@@ -9,7 +9,7 @@ import { useNodeEditingState } from '../hooks/useNodeEditingState';
 import { useNodeEditing } from '../features/node-editing/useNodeEditing';
 import { useNodeCreation } from '../features/node-creation/useNodeCreation';
 import { useEdgeInteractions } from '../hooks/useEdgeInteractions';
-import { useGrammarStore } from '../core/state/grammarStore';
+import { useGrammarStore, useGrammarStoreApi } from '../core/state/grammarStoreContext';
 import { isFloatingNode } from '../core/domain/grammar';
 import { NODE_PLACEHOLDER, NODE_FONT, NODE_PADDING_H, NODE_MIN_WIDTH } from '../constants/nodeConstants';
 import { measureText, calculateNodeWidth } from '../utils/nodeGeometry';
@@ -43,6 +43,7 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
   const { node } = data;
   const { editNodeLabel } = useNodeEditing();
   const { deleteNode, getSlot, getNode, grammar } = useGrammarStore();
+  const grammarStoreApi = useGrammarStoreApi();
 
   const visibleCaption = React.useMemo(
     () => getGrammarNodeDisplayCaption(node, grammar),
@@ -93,7 +94,7 @@ export function GrammarNode({ data, selected }: NodeProps<GrammarNodeData>) {
 
     // ✅ SYNCHRONOUS: Check immediately if floating (before edge is created)
     // This ensures the node is still "floating" when we check, since we create edge atomically
-    const updatedGrammar = useGrammarStore.getState().grammar;
+    const updatedGrammar = grammarStoreApi.getState().grammar;
     const currentNode = updatedGrammar ? updatedGrammar.nodes.find(n => n.id === node.id) : undefined;
 
     if (updatedGrammar && currentNode) {

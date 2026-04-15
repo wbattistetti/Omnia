@@ -19,7 +19,8 @@ import { variableCreationService } from '../../services/VariableCreationService'
 import { resolveVariableStoreProjectId, isFallbackProjectBucket } from '../../utils/safeProjectId';
 import { buildFlowCanvasRowFingerprint } from '../../utils/flowWorkspaceUtteranceFingerprint';
 import type { ToolbarButton } from '@dock/types';
-import { ArrowUpFromLine, Database } from 'lucide-react';
+import { ArrowUpFromLine, Database, Workflow } from 'lucide-react';
+import { collectSubflowPortalRows } from './collectSubflowPortalRows';
 
 function getDefaultFlowTitle(flowId: string): string {
   return flowId === 'main' ? 'MAIN' : 'Subflow';
@@ -64,6 +65,8 @@ export const FlowCanvasHost: React.FC<Props> = ({
   const [isLoadingFlow, setIsLoadingFlow] = React.useState(false);
   const [variablesPanelOpen, setVariablesPanelOpen] = React.useState(false);
   const [interfacePanelOpen, setInterfacePanelOpen] = React.useState(false);
+  const [dataSectionOn, setDataSectionOn] = React.useState(true);
+  const [subdialogsSectionOn, setSubdialogsSectionOn] = React.useState(true);
 
   const entityCreation = useEntityCreation();
 
@@ -72,20 +75,72 @@ export const FlowCanvasHost: React.FC<Props> = ({
     [flowId, flows[flowId]?.title]
   );
 
+  const resolvedProjectId = useMemo(() => resolveVariableStoreProjectId(projectId), [projectId]);
+
+  const hasDataForToolbar = useMemo(() => {
+    if (!resolvedProjectId || isFallbackProjectBucket(resolvedProjectId)) return false;
+    return variableCreationService.getVariablesForFlowScope(resolvedProjectId, flowId, flows).length > 0;
+  }, [resolvedProjectId, flowId, flows, projectData]);
+
+  const subflowPortalRowsDock = useMemo(() => collectSubflowPortalRows(flows, flowId), [flows, flowId]);
+  const hasSubdialogsForToolbar = subflowPortalRowsDock.length > 0;
+
+  const flowSidePanelTitle = useMemo(() => {
+    const d = dataSectionOn && hasDataForToolbar;
+    const s = subdialogsSectionOn && hasSubdialogsForToolbar;
+    if (d && s) return 'Data & Subdialogs';
+    if (d) return 'Data';
+    if (s) return 'Subdialogs';
+    return 'Flow';
+  }, [dataSectionOn, subdialogsSectionOn, hasDataForToolbar, hasSubdialogsForToolbar]);
+
+  useEffect(() => {
+    if (!hasDataForToolbar) setDataSectionOn(false);
+  }, [hasDataForToolbar]);
+
+  useEffect(() => {
+    if (!hasSubdialogsForToolbar) setSubdialogsSectionOn(false);
+  }, [hasSubdialogsForToolbar]);
+
+  useEffect(() => {
+    if (!dataSectionOn && !subdialogsSectionOn) setVariablesPanelOpen(false);
+  }, [dataSectionOn, subdialogsSectionOn]);
+
   useEffect(() => {
     if (!onToolbarUpdate) return;
     const iconClass = 'w-3.5 h-3.5 shrink-0 opacity-95';
-    const dataTitle = `Mostra tutti i dati interni a ${flowDisplayName}.`;
     const outputTitle = `Mostra i dati che ${flowDisplayName} può fornire all'esterno.`;
-    const buttons: ToolbarButton[] = [
-      {
+    const buttons: ToolbarButton[] = [];
+    if (hasDataForToolbar) {
+      buttons.push({
         icon: <Database className={iconClass} strokeWidth={2} aria-hidden />,
         label: 'Data',
-        title: dataTitle,
-        active: variablesPanelOpen,
-        onClick: () => setVariablesPanelOpen((o) => !o),
-      },
-    ];
+        title: `Sezione Data per ${flowDisplayName}`,
+        active: dataSectionOn,
+        onClick: () => {
+          setDataSectionOn((v) => {
+            const next = !v;
+            if (next) setVariablesPanelOpen(true);
+            return next;
+          });
+        },
+      });
+    }
+    if (hasSubdialogsForToolbar) {
+      buttons.push({
+        icon: <Workflow className={iconClass} strokeWidth={2} aria-hidden />,
+        label: 'Subdialogs',
+        title: `Subdialog (Subflow) nel canvas di ${flowDisplayName}`,
+        active: subdialogsSectionOn,
+        onClick: () => {
+          setSubdialogsSectionOn((v) => {
+            const next = !v;
+            if (next) setVariablesPanelOpen(true);
+            return next;
+          });
+        },
+      });
+    }
     if (isFlowInterfacePanelEnabled(flowId)) {
       buttons.push({
         icon: <ArrowUpFromLine className={iconClass} strokeWidth={2} aria-hidden />,
@@ -96,7 +151,16 @@ export const FlowCanvasHost: React.FC<Props> = ({
       });
     }
     onToolbarUpdate(buttons, FLOW_DOCK_HEADER_COLOR);
-  }, [onToolbarUpdate, variablesPanelOpen, interfacePanelOpen, flowId, flowDisplayName]);
+  }, [
+    onToolbarUpdate,
+    flowDisplayName,
+    flowId,
+    interfacePanelOpen,
+    hasDataForToolbar,
+    hasSubdialogsForToolbar,
+    dataSectionOn,
+    subdialogsSectionOn,
+  ]);
 
   const flowSlice = flows[flowId];
   const flowPresent = flowSlice !== undefined;
@@ -395,9 +459,29 @@ export const FlowCanvasHost: React.FC<Props> = ({
             flowId={flowId}
             projectId={projectId}
             open={variablesPanelOpen}
-            onOpenChange={setVariablesPanelOpen}
+            onOpenChange={(next) => {
+              setVariablesPanelOpen(next);
+              if (next) {
+                if (hasDataForToolbar) setDataSectionOn(true);
+                if (hasSubdialogsForToolbar) setSubdialogsSectionOn(true);
+              }
+            }}
             hideEdgeToggle
             dockAsColumn
+            workspaceFlows={flows}
+            dockSectionTogglesInToolbar
+            dataSectionOn={dataSectionOn}
+            subdialogsSectionOn={subdialogsSectionOn}
+            hasDataAvailable={hasDataForToolbar}
+            hasSubdialogsAvailable={hasSubdialogsForToolbar}
+            panelTitle={flowSidePanelTitle}
+            subflowPortalRows={subflowPortalRowsDock}
+            onOpenSubflowPortalGear={
+              onOpenSubflowForTask
+                ? (taskId, existingFlowId, rowLabel, canvasNodeId) =>
+                    onOpenSubflowForTask(taskId, existingFlowId, rowLabel, canvasNodeId)
+                : undefined
+            }
           />
         </div>
       ) : (
@@ -411,7 +495,17 @@ export const FlowCanvasHost: React.FC<Props> = ({
           {isFlowInterfacePanelEnabled(flowId) ? (
             <FlowInterfaceBottomPanel flowId={flowId} projectId={projectId} />
           ) : null}
-          <FlowVariablesRail flowId={flowId} projectId={projectId} />
+          <FlowVariablesRail
+            flowId={flowId}
+            projectId={projectId}
+            workspaceFlows={flows}
+            onOpenSubflowPortalGear={
+              onOpenSubflowForTask
+                ? (taskId, existingFlowId, rowLabel, canvasNodeId) =>
+                    onOpenSubflowForTask(taskId, existingFlowId, rowLabel, canvasNodeId)
+                : undefined
+            }
+          />
         </div>
       )}
     </FlowActionsProvider>

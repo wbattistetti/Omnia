@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useMemo } from 'react';
-import { useGrammarStore } from '../../core/state/grammarStore';
+import { useGrammarStore } from '../../core/state/grammarStoreContext';
 import { useUndoRedo } from './useUndoRedo';
 import { useSlotEditorActions } from './useSlotEditorActions';
 import { buildTreeStructure } from '../../core/domain/slotEditor';

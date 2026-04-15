@@ -5,7 +5,7 @@ import React from 'react';
 import { ArrowRight, Box, Pencil, Trash2 } from 'lucide-react';
 import type { NodeBinding } from '../types/grammarTypes';
 import { getBindingIconColor } from '../utils/nodeStyles';
-import { useGrammarStore } from '../core/state/grammarStore';
+import { useGrammarStore } from '../core/state/grammarStoreContext';
 import { useNodeEditing } from '../features/node-editing/useNodeEditing';
 
 interface BindingTooltipProps {

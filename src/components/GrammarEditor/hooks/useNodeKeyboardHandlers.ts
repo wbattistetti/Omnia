@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { useNodeEditing } from '../features/node-editing/useNodeEditing';
 import { useNodeCreation } from '../features/node-creation/useNodeCreation';
 import { useEdgeInteractions } from './useEdgeInteractions';
-import { useGrammarStore } from '../core/state/grammarStore';
+import { useGrammarStore } from '../core/state/grammarStoreContext';
 import { isFloatingNode } from '../core/domain/grammar';
 
 interface UseNodeKeyboardHandlersParams {

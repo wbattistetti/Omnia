@@ -1,13 +1,17 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { create } from 'zustand';
+/**
+ * Grammar editor state: one vanilla Zustand store per editor instance (see GrammarStoreProvider).
+ */
+import { createStore } from 'zustand/vanilla';
+import type { StoreApi } from 'zustand/vanilla';
 import { generateSafeGuid } from '@utils/idGenerator';
 import type { Grammar, GrammarNode, GrammarEdge, SemanticSlot, SemanticSet } from '../../types/grammarTypes';
 import { removeSlotBindingsForGrammarSlotId } from '../domain/grammar';
 import type { SelectionState, EditorState } from '../../types/uiTypes';
 
-interface GrammarStore {
+export interface GrammarStore {
   // State
   grammar: Grammar | null;
   selection: SelectionState;
@@ -56,6 +60,8 @@ interface GrammarStore {
   hasGrammar: () => boolean;
 }
 
+export type GrammarStoreApi = StoreApi<GrammarStore>;
+
 const initialState = {
   grammar: null as Grammar | null,
   selection: {
@@ -71,7 +77,8 @@ const initialState = {
   } as EditorState,
 };
 
-export const useGrammarStore = create<GrammarStore>((set, get) => ({
+export function createGrammarStore(): GrammarStoreApi {
+  return createStore<GrammarStore>((set, get) => ({
   // Initial state
   ...initialState,
 
@@ -401,3 +408,4 @@ export const useGrammarStore = create<GrammarStore>((set, get) => ({
     return state.grammar !== null;
   },
 }));
+}

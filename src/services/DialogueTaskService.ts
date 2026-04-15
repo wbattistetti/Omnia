@@ -564,20 +564,7 @@ export class DialogueTaskService {
    */
   static async saveAllGrammarFlowFromStore(): Promise<{ saved: number; failed: number }> {
     try {
-      // Import useGrammarStore dynamically to avoid circular dependencies
-      const { useGrammarStore } = await import('../components/GrammarEditor/core/state/grammarStore');
-      const currentGrammar = useGrammarStore.getState().grammar;
-
-      if (!currentGrammar) {
-        console.log('[DialogueTaskService] ✅ No grammar in store to save');
-        return { saved: 0, failed: 0 };
-      }
-
-      console.log('[DialogueTaskService] 🔄 Saving grammarFlow from store', {
-        grammarId: currentGrammar.id,
-        nodesCount: currentGrammar.nodes?.length || 0,
-        edgesCount: currentGrammar.edges?.length || 0,
-      });
+      const { getGrammarSnapshotForOpenTemplate } = await import('../utils/grammarFlowEditorSnapshotRegistry');
 
       // ✅ Get templates that have grammarFlow editor open (registered in window.__grammarFlowEditors)
       const grammarFlowEditors = (globalThis as any).__grammarFlowEditors as Map<string, boolean> | undefined;
@@ -593,12 +580,25 @@ export class DialogueTaskService {
         return { saved: 0, failed: 0 };
       }
 
-      // Update each template with the current grammar from store
+      // Update each template with the in-memory grammar for that editor instance (per-template Zustand store)
       let saved = 0;
       let failed = 0;
 
       for (const templateId of openTemplateIds) {
         try {
+          const currentGrammar = getGrammarSnapshotForOpenTemplate(templateId);
+          if (!currentGrammar) {
+            console.log('[DialogueTaskService] ⏭️ No in-memory grammar for open editor', { templateId });
+            continue;
+          }
+
+          console.log('[DialogueTaskService] 🔄 Saving grammarFlow from editor snapshot', {
+            templateId,
+            grammarId: currentGrammar.id,
+            nodesCount: currentGrammar.nodes?.length || 0,
+            edgesCount: currentGrammar.edges?.length || 0,
+          });
+
           const template = this.getTemplate(templateId);
           if (!template) {
             console.warn('[DialogueTaskService] ⚠️ Template not found for grammarFlow save', {

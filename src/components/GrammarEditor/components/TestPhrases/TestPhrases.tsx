@@ -3,7 +3,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Play, Plus, X } from 'lucide-react';
-import { useGrammarStore } from '../../core/state/grammarStore';
+import { useGrammarStore } from '../../core/state/grammarStoreContext';
 import { TestPhraseList } from './TestPhraseList';
 import { TestPhraseDetails } from './TestPhraseDetails';
 import { TestPhraseStats } from './TestPhraseStats';

@@ -34,7 +34,13 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
   const instanceId = taskMeta.instanceId || taskMeta.id;
   const pdUpdate = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
-  const { translations, compiledTranslations, addTranslation, getTranslation } = useProjectTranslations();
+  const {
+    translations,
+    compiledTranslations,
+    flowTranslationRevision,
+    addTranslation,
+    getTranslation,
+  } = useProjectTranslations();
   const flowTranslations = useActiveFlowMetaTranslationsFlattened();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [varsMenu, setVarsMenu] = useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
@@ -133,6 +139,20 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     [getTranslation]
   );
 
+  const workspaceFlowIdsKey = useMemo(
+    () =>
+      Object.keys(flows ?? {})
+        .sort()
+        .join('\x1e'),
+    [flows]
+  );
+
+  const decodeContextKey = useMemo(
+    () =>
+      `${variableMappingFingerprint}|ftRev:${flowTranslationRevision}|wf:${workspaceFlowIdsKey}`,
+    [variableMappingFingerprint, flowTranslationRevision, workspaceFlowIdsKey]
+  );
+
   const { text, setText, flushNow } = useTextTranslationField({
     instanceId,
     fallbackTaskType: taskMeta.type ?? TaskType.SayMessage,
@@ -142,7 +162,7 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     encode: labelsToGuids,
     decode: guidsToLabels,
     reloadToken: translations,
-    decodeContextKey: variableMappingFingerprint,
+    decodeContextKey,
     debounceMs: 500,
   });
 

@@ -3,7 +3,7 @@
 
 import { useCallback } from 'react';
 import { generateSafeGuid } from '@utils/idGenerator';
-import { useGrammarStore } from '../../core/state/grammarStore';
+import { useGrammarStore } from '../../core/state/grammarStoreContext';
 import {
   createSemanticSlot,
   createSemanticSet,

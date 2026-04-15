@@ -47,14 +47,9 @@ import SemanticValuesEditorPanel from './SemanticValuesEditorPanel';
 import { useFlowWorkspace } from '@flows/FlowStore';
 import { useFlowCanvasId } from '../../context/FlowCanvasContext';
 import { fetchChildFlowInterfaceOutputs } from '@services/childFlowInterfaceService';
-
-function resolveChildFlowId(task: any): string | null {
-  const direct = String(task?.flowId || '').trim();
-  if (direct) return direct;
-  const params = Array.isArray(task?.parameters) ? task.parameters : [];
-  const fromParam = params.find((p: any) => String(p?.parameterId || '').trim() === 'flowId');
-  return String(fromParam?.value || '').trim() || null;
-}
+import { resolveChildFlowIdFromCanvasRow, resolveChildFlowIdFromTask } from '@utils/resolveSubflowChildFlowId';
+import { getSubflowOpenArgsFromTaskAndRowText } from '@utils/getSubflowOpenArgsFromTaskAndRowText';
+import { isSubflowChildFlowLinkedAndNonEmpty } from '@utils/subflowChildFlowStatus';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -125,7 +120,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const subflowMeta = useMemo(() => {
     const task = taskRepository.getTask(row.id);
     if (!task || task.type !== TaskType.Subflow) return null;
-    const cf = resolveChildFlowId(task);
+    const cf = resolveChildFlowIdFromTask(task);
     if (!cf) return { childFlowId: '' as const };
     return { childFlowId: cf };
   }, [row.id]);
@@ -689,6 +684,33 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     instanceUpdateTrigger,
   });
 
+  const subflowPortalVisuallyReady = useMemo(() => {
+    if (resolveTaskType(row) !== TaskType.Subflow) return true;
+    const task = taskRepository.getTask(row.id);
+    let cf: string | null = null;
+    if (task?.type === TaskType.Subflow) {
+      cf = resolveChildFlowIdFromTask(task);
+    }
+    if (!cf) {
+      cf = resolveChildFlowIdFromCanvasRow(row);
+    }
+    return isSubflowChildFlowLinkedAndNonEmpty(flows, cf);
+  }, [row, flows, instanceUpdateTrigger]);
+
+  const rowIconColorForLabel = useMemo(() => {
+    if (resolveTaskType(row) === TaskType.Subflow && !subflowPortalVisuallyReady) {
+      return '#94a3b8';
+    }
+    return iconColor;
+  }, [row, iconColor, subflowPortalVisuallyReady]);
+
+  const hasTaskTreeForRowChrome = useMemo(() => {
+    if (resolveTaskType(row) === TaskType.Subflow) {
+      return subflowPortalVisuallyReady;
+    }
+    return isUndefined ? false : hasTaskTree(row);
+  }, [row, subflowPortalVisuallyReady, isUndefined, instanceUpdateTrigger]);
+
   const isDataRequestRow = resolveTaskType(row) === TaskType.UtteranceInterpretation;
 
   const semanticValuesCount = React.useMemo(() => {
@@ -819,8 +841,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               setIsEditing={setIsEditing}
               bgColor="transparent"
               labelTextColor={labelTextColor}
-              iconColor={iconColor}
-              hasTaskTree={isUndefined ? false : hasTaskTree(row)} // ✅ Usa hasTaskTree senza actFound
+              iconColor={rowIconColorForLabel}
+              hasTaskTree={hasTaskTreeForRowChrome} // Subflow: colored gear/icon when child flow has nodes
               gearColor={isUndefined ? '#94a3b8' : labelTextColor} // Se undefined, gear grigio
               // ✅ Disabilita ingranaggio se tipo UNDEFINED e non c'è template match (nessun TaskTree salvato)
               // ✅ Per DataRequest, sempre abilitato (può essere creato un TaskTree vuoto)
@@ -836,10 +858,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                 // Flow type: open subflow in new tab (no task editor)
                 if (taskType === TaskType.Subflow && onOpenSubflowForTask) {
                   return () => {
-                    const task = taskRepository.getTask(row.id) ?? null;
-                    const existingFlowId = task?.parameters?.flowId ?? (task as any)?.flowId;
-                    const rowLabel = (row.text || '').trim() || task?.name || 'Subflow';
-                    onOpenSubflowForTask(row.id, existingFlowId, rowLabel, nodeId);
+                    const args = getSubflowOpenArgsFromTaskAndRowText(row.id, nodeId, row.text || '');
+                    onOpenSubflowForTask(args.taskId, args.existingFlowId, args.rowLabel, args.canvasNodeId);
                   };
                 }
                 // ✅ REFACTOR: Use TaskTreeOpener service for other types

@@ -4,7 +4,9 @@
 import React, { useEffect, useCallback, useRef, useMemo } from 'react';
 import { GrammarEditor } from '@components/GrammarEditor';
 import type { Grammar } from '@components/GrammarEditor/types/grammarTypes';
-import { useGrammarStore } from '@components/GrammarEditor/core/state/grammarStore';
+import { createGrammarStore } from '@components/GrammarEditor/core/state/grammarStore';
+import { GrammarStoreProvider } from '@components/GrammarEditor/core/state/grammarStoreContext';
+import { registerGrammarFlowSnapshotGetter } from '@utils/grammarFlowEditorSnapshotRegistry';
 import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
 import { taskRepository } from '@services/TaskRepository';
 import {
@@ -79,6 +81,14 @@ export default function GrammarFlowInlineEditor({
 
   const displayGrammar = grammar ?? grammarSeededFromDataTree ?? undefined;
 
+  const grammarKey = useNodeContractOnly
+    ? `grammarflow-editor-node-${node?.id || 'no-node'}`
+    : `grammarflow-editor-${effectiveTemplateLookupId || 'no-template'}-${displayGrammar?.id || 'no-grammar'}`;
+
+  const grammarStore = useMemo(() => createGrammarStore(), [grammarKey]);
+  const grammarStoreRef = useRef(grammarStore);
+  grammarStoreRef.current = grammarStore;
+
   const useNodeContractOnlyRef = useRef(useNodeContractOnly);
   useNodeContractOnlyRef.current = useNodeContractOnly;
 
@@ -128,7 +138,7 @@ export default function GrammarFlowInlineEditor({
   const closedExplicitlyRef = useRef(false);
 
   const handleCloseClick = useCallback(() => {
-    const { grammar: currentGrammar } = useGrammarStore.getState();
+    const currentGrammar = grammarStoreRef.current.getState().grammar;
     if (currentGrammar) {
       if (useNodeContractOnlyRef.current) {
         persistStandaloneRef.current(currentGrammar, testPhrasesRef.current);
@@ -148,7 +158,12 @@ export default function GrammarFlowInlineEditor({
     grammarFlowEditors.set(effectiveTemplateLookupId, true);
     (window as any).__grammarFlowEditors = grammarFlowEditors;
 
+    const unregisterGetter = registerGrammarFlowSnapshotGetter(effectiveTemplateLookupId, () =>
+      grammarStoreRef.current.getState().grammar
+    );
+
     return () => {
+      unregisterGetter();
       const g = (window as any).__grammarFlowEditors;
       if (g) {
         g.delete(effectiveTemplateLookupId);
@@ -163,7 +178,7 @@ export default function GrammarFlowInlineEditor({
       if (closedExplicitlyRef.current) {
         return;
       }
-      const { grammar: currentGrammar } = useGrammarStore.getState();
+      const currentGrammar = grammarStoreRef.current.getState().grammar;
       if (!currentGrammar) {
         return;
       }
@@ -232,11 +247,8 @@ export default function GrammarFlowInlineEditor({
     ]
   );
 
-  const grammarKey = useNodeContractOnly
-    ? `grammarflow-editor-node-${node?.id || 'no-node'}`
-    : `grammarflow-editor-${effectiveTemplateLookupId || 'no-template'}-${displayGrammar?.id || 'no-grammar'}`;
-
   return (
+    <GrammarStoreProvider store={grammarStore}>
     <div
       style={{
         display: 'flex',
@@ -288,5 +300,6 @@ export default function GrammarFlowInlineEditor({
         />
       </div>
     </div>
+    </GrammarStoreProvider>
   );
 }

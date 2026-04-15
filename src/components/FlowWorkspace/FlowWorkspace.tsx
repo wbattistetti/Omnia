@@ -17,7 +17,8 @@ import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
 const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const { activeFlowId, flows } = useFlowWorkspace();
   const flowsForSave = flows;
-  const { upsertFlow, updateFlowGraph, openFlow, openFlowBackground, applyFlowLoadResult, markFlowsPersisted } = useFlowActions();
+  const { upsertFlow, updateFlowGraph, openFlow, openFlowBackground, applyFlowLoadResult, markFlowsPersisted } =
+    useFlowActions();
 
   const flowSlice = flows[activeFlowId];
   const flowPresent = flowSlice !== undefined;
@@ -170,7 +171,7 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
           {isFlowInterfacePanelEnabled(activeFlowId) ? (
             <FlowInterfaceBottomPanel flowId={activeFlowId} projectId={projectId} />
           ) : null}
-          <FlowVariablesRail flowId={activeFlowId} projectId={projectId} />
+          <FlowVariablesRail flowId={activeFlowId} projectId={projectId} workspaceFlows={flows} />
         </div>
       </div>
     </div>

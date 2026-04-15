@@ -4,7 +4,7 @@
 import React, { useCallback } from 'react';
 import { useReactFlow } from 'reactflow';
 import type { NodeChange, Connection } from 'reactflow';
-import { useGrammarStore } from '../core/state/grammarStore';
+import { useGrammarStore } from '../core/state/grammarStoreContext';
 import { createGrammarNode, addBinding } from '../core/domain/node';
 import { generateSafeGuid } from '@utils/idGenerator';
 import type { GrammarEdge, NodeBinding } from '../types/grammarTypes';

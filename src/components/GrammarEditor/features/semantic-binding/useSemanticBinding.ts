@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { useGrammarStore } from '../../core/state/grammarStore';
+import { useGrammarStore } from '../../core/state/grammarStoreContext';
 import { addBinding } from '../../core/domain/node';
 import type { NodeBinding } from '../../types/grammarTypes';
 

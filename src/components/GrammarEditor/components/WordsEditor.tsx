@@ -5,7 +5,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { X, Plus } from 'lucide-react';
 import { useNodeEditing } from '../features/node-editing/useNodeEditing';
-import { useGrammarStore } from '../core/state/grammarStore';
+import { useGrammarStore } from '../core/state/grammarStoreContext';
 import { hasSemanticSetOrValueBinding } from '../core/domain/semanticBindingsVsNodeWords';
 
 interface WordsEditorProps {

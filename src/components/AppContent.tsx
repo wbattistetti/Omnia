@@ -22,6 +22,8 @@ import { DockManager } from './Dock/DockManager';
 import { DockNode, DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabChat, ToolbarButton } from '../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { FlowWorkspaceProvider, useFlowWorkspace, useFlowActions } from '@flows/FlowStore';
 import { upsertAddNextTo, closeTab, activateTab, upsertFlowTabInDualPane } from '../dock/ops';
+import { createDefaultDockTree } from '../dock/projectWorkspaceUiSnapshot';
+import { WorkspaceDockLifecycle } from '../dock/WorkspaceDockLifecycle';
 import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
 import { openBottomDockedTab } from './AppContent/infrastructure/docking/DockingHelpers';
 import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
@@ -272,12 +274,20 @@ export const AppContent: React.FC<AppContentProps> = ({
   const currentPid = (() => { try { return pdUpdate.getCurrentProjectId(); } catch { return undefined; } })();
 
   // Dock tree: main flow tabset only (per-flow Interface is on canvas via FlowInterfaceBottomPanel).
-  const [dockTree, setDockTree] = useState<DockNode>({
-    kind: 'tabset',
-    id: 'ts_main',
-    tabs: [{ id: 'tab_main', title: 'Main', type: 'flow', flowId: 'main' }],
-    active: 0,
-  });
+  const [dockTree, setDockTree] = useState<DockNode>(() => createDefaultDockTree());
+
+  /** Reset dock when switching or closing project so tabs from project A never leak into B. */
+  const prevProjectIdForDockRef = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const prev = prevProjectIdForDockRef.current;
+    const cur = currentPid?.trim() || undefined;
+    if (cur === undefined && prev !== undefined) {
+      setDockTree(createDefaultDockTree());
+    } else if (prev !== undefined && cur !== undefined && prev !== cur) {
+      setDockTree(createDefaultDockTree());
+    }
+    prevProjectIdForDockRef.current = cur;
+  }, [currentPid]);
 
   // ✅ Initialize ErrorReportPanelService
   React.useEffect(() => {
@@ -397,9 +407,11 @@ export const AppContent: React.FC<AppContentProps> = ({
             } as Partial<Task>);
             const pid = currentPid || '';
             if (pid) {
+              const parentFlowId =
+                String(sourceFlowId || '').trim() || getActiveFlowCanvasId();
               void provisionParentVariablesForSubflowTaskAsync(
                 pid,
-                getActiveFlowCanvasId(),
+                parentFlowId,
                 taskId,
                 flowsRef.current as Record<string, unknown>
               );
@@ -1293,6 +1305,12 @@ export const AppContent: React.FC<AppContentProps> = ({
                         key={currentPid ?? '__no_project__'}
                         workspaceProjectId={currentPid ?? null}
                       >
+                        <WorkspaceDockLifecycle
+                          projectId={currentPid}
+                          skipPersist={Boolean(currentProject && isDraftProjectId(currentProject.id))}
+                          dockTree={dockTree}
+                          setDockTree={setDockTree}
+                        />
                         <DockManagerWithFlows
                           root={dockTree}
                           setRoot={setDockTree}

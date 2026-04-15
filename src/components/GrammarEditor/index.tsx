@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import React, { useEffect } from 'react';
-import { useGrammarStore } from './core/state/grammarStore';
+import { useGrammarStore, useGrammarStoreApi } from './core/state/grammarStoreContext';
 import { isGrammarEditorDebugEnabled, storeLooksAheadOfInitialProp } from './grammarEditorLoadPolicy';
 import { grammarStructuralFingerprint } from './grammarStructureFingerprint';
 import { GrammarCanvas } from './components/GrammarCanvas';
@@ -29,7 +29,7 @@ export interface GrammarEditorProps {
  * Composes toolbar, canvas, and semantic panel.
  *
  * Sync rule: `initialGrammar` from the parent contract is the source of truth. On each change of
- * structural fingerprint, reset the global store and load the prop (deterministic reopen).
+ * structural fingerprint, reset this instance's store and load the prop (deterministic reopen).
  * If the in-memory store is strictly ahead of the prop (user edits not yet reflected upstream),
  * skip applying the prop so local work is not wiped.
  */
@@ -45,6 +45,7 @@ export function GrammarEditor({
   onTestPhrasesChange,
 }: GrammarEditorProps) {
   const { loadGrammar, createGrammar, grammar: currentGrammar, reset } = useGrammarStore();
+  const storeApi = useGrammarStoreApi();
 
   // ✅ State for SemanticPanel width
   const [semanticPanelWidth, setSemanticPanelWidth] = React.useState(300);
@@ -135,13 +136,13 @@ export function GrammarEditor({
 
   useEffect(() => {
     if (!initialGrammar) {
-      if (!useGrammarStore.getState().grammar) {
+      if (!storeApi.getState().grammar) {
         createGrammar('New Grammar');
       }
       return;
     }
 
-    const stored = useGrammarStore.getState().grammar;
+    const stored = storeApi.getState().grammar;
     if (stored && storeLooksAheadOfInitialProp(initialGrammar, stored)) {
       if (dbg) {
         console.log('[GrammarEditor] skip sync (store ahead of prop — parent not updated yet)', {
@@ -159,7 +160,7 @@ export function GrammarEditor({
     }
     reset();
     loadGrammar(initialGrammar);
-  }, [fpFromProp, initialGrammar, loadGrammar, createGrammar, reset, dbg]);
+  }, [fpFromProp, initialGrammar, loadGrammar, createGrammar, reset, dbg, storeApi]);
 
   React.useEffect(() => {
     if (!dbg) return;

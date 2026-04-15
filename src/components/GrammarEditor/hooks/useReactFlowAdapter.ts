@@ -4,7 +4,7 @@
 import React, { useMemo } from 'react';
 import type { Node, Edge } from 'reactflow';
 import { MarkerType } from 'reactflow';
-import { useGrammarStore } from '../core/state/grammarStore';
+import { useGrammarStore } from '../core/state/grammarStoreContext';
 import { isGrammarEditorDebugEnabled } from '../grammarEditorLoadPolicy';
 
 /**

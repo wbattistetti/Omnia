@@ -1,6 +1,7 @@
 /**
- * Pannello Data (variabili di scope flow): albero compatto per segmento, icone variabile vs gruppo,
- * rinomina con matita al hover e conferma ✓/✗. Modalità dock: colonna flex (FlowCanvasHost).
+ * Pannello laterale unico del flow: sezione Data (variabili in scope via getVariablesForFlowScope) e
+ * sezione Subdialogs (righe Subflow sul canvas).
+ * In dock i toggle stanno sulla toolbar del tab; in workspace standalone compaiono nell’header del pannello.
  */
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
@@ -13,8 +14,10 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Workflow,
   X,
 } from 'lucide-react';
+import type { WorkspaceState } from '@flows/FlowTypes';
 import type { VariableInstance } from '@types/variableTypes';
 import type { FlowVariableDefinition } from '../../flows/flowVariableTypes';
 import {
@@ -39,6 +42,8 @@ import { resolveVariableStoreProjectId } from '../../utils/safeProjectId';
 import { getVariableLabel } from '../../utils/getVariableLabel';
 import { makeTranslationKey } from '../../utils/translationKeys';
 import { DND_FLOWROW_VAR, stableInterfacePathForVariable } from '../FlowMappingPanel/flowInterfaceDragTypes';
+import { getSubflowOpenArgsFromTaskAndRowText } from '@utils/getSubflowOpenArgsFromTaskAndRowText';
+import { collectSubflowPortalRows, type SubflowPortalRow } from './collectSubflowPortalRows';
 
 export interface FlowVariablesRailProps {
   flowId: string;
@@ -47,6 +52,34 @@ export interface FlowVariablesRailProps {
   onOpenChange?: (open: boolean) => void;
   hideEdgeToggle?: boolean;
   dockAsColumn?: boolean;
+  /** Live workspace graph — required so task variables match the canvas (not a stale snapshot). */
+  workspaceFlows: WorkspaceState['flows'];
+  /**
+   * When true, Data / Subdialogs section toggles live in the dock tab toolbar only.
+   * When false (standalone workspace), toggles render in this panel header.
+   */
+  dockSectionTogglesInToolbar?: boolean;
+  /** Dock mode: controlled section visibility. */
+  dataSectionOn?: boolean;
+  subdialogsSectionOn?: boolean;
+  onDataSectionToggle?: () => void;
+  onSubdialogsSectionToggle?: () => void;
+  /** Dock mode: whether each section has content (toolbar toggle visibility). */
+  hasDataAvailable?: boolean;
+  hasSubdialogsAvailable?: boolean;
+  /** Dock mode: dynamic panel title. */
+  panelTitle?: string;
+  subflowPortalRows?: SubflowPortalRow[];
+  /**
+   * Same behavior as the row gear for Subflow: open subflow tab / editor wiring.
+   * Signature matches {@link FlowCanvasHostProps.onOpenSubflowForTask}.
+   */
+  onOpenSubflowPortalGear?: (
+    taskId: string,
+    existingFlowId: string | undefined,
+    rowLabel: string,
+    canvasNodeId: string
+  ) => void;
 }
 
 const ROW_DEPTH_INDENT_PX = 16;
@@ -419,6 +452,67 @@ function FlowVariableTreeBranch({
   );
 }
 
+function SectionToggleChip({
+  label,
+  pressed,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  pressed: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={pressed}
+      disabled={disabled}
+      onClick={onClick}
+      className={`rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+        pressed
+          ? 'border-amber-500/60 bg-amber-500/15 text-amber-100'
+          : 'border-slate-600/60 bg-slate-800/50 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+      } disabled:cursor-not-allowed disabled:opacity-40`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SubflowPortalRowsList({
+  rows,
+  onGearLikeCanvas,
+}: {
+  rows: SubflowPortalRow[];
+  onGearLikeCanvas?: (r: SubflowPortalRow) => void;
+}) {
+  return (
+    <ul className="space-y-1" role="list">
+      {rows.map((r) => (
+        <li key={r.taskId}>
+          <button
+            type="button"
+            className="group flex w-full min-w-0 items-center gap-1.5 rounded px-1 py-1.5 text-left hover:bg-slate-800/60"
+            onClick={() => onGearLikeCanvas?.(r)}
+          >
+            <Workflow
+              className={`h-3.5 w-3.5 shrink-0 stroke-[2.2] ${
+                r.isChildFlowActive ? 'text-amber-200/85' : 'text-slate-500'
+              }`}
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1 truncate text-[11px] text-slate-100" title={r.rowLabel}>
+              {r.rowLabel}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function FlowVariablesRail({
   flowId,
   projectId: projectIdProp,
@@ -426,6 +520,17 @@ export function FlowVariablesRail({
   onOpenChange,
   hideEdgeToggle = false,
   dockAsColumn = false,
+  workspaceFlows,
+  dockSectionTogglesInToolbar = false,
+  dataSectionOn: dataSectionOnProp,
+  subdialogsSectionOn: subdialogsSectionOnProp,
+  onDataSectionToggle,
+  onSubdialogsSectionToggle,
+  hasDataAvailable: hasDataAvailableProp,
+  hasSubdialogsAvailable: hasSubdialogsAvailableProp,
+  panelTitle: panelTitleProp,
+  subflowPortalRows: subflowPortalRowsProp,
+  onOpenSubflowPortalGear,
 }: FlowVariablesRailProps) {
   const [internalOpen, setInternalOpen] = React.useState(false);
   const isControlled = openControlled !== undefined;
@@ -473,9 +578,65 @@ export function FlowVariablesRail({
     return resolveVariableStoreProjectId(fromProp || fromCtx || fromStorage || undefined);
   }, [projectIdProp, pdUpdate, projectData, refresh]);
 
+  const subflowRowsLocal = useMemo(
+    () => collectSubflowPortalRows(workspaceFlows, flowId),
+    [workspaceFlows, flowId]
+  );
+
   const instances = useMemo(() => {
-    return variableCreationService.getVariablesForFlowScope(projectId, flowId);
-  }, [projectId, flowId, refresh, projectData]);
+    return variableCreationService.getVariablesForFlowScope(projectId, flowId, workspaceFlows);
+  }, [projectId, flowId, workspaceFlows, refresh, projectData]);
+
+  const hasDataAvailable = useMemo(() => {
+    if (dockSectionTogglesInToolbar && hasDataAvailableProp !== undefined) {
+      return hasDataAvailableProp;
+    }
+    return instances.length > 0;
+  }, [dockSectionTogglesInToolbar, hasDataAvailableProp, instances.length]);
+
+  const hasSubdialogsAvailable = useMemo(() => {
+    if (dockSectionTogglesInToolbar && hasSubdialogsAvailableProp !== undefined) {
+      return hasSubdialogsAvailableProp;
+    }
+    return subflowRowsLocal.length > 0;
+  }, [dockSectionTogglesInToolbar, hasSubdialogsAvailableProp, subflowRowsLocal.length]);
+
+  const subflowPortalRows = subflowPortalRowsProp ?? subflowRowsLocal;
+
+  const [internalDataOn, setInternalDataOn] = React.useState(true);
+  const [internalSubOn, setInternalSubOn] = React.useState(true);
+
+  const dataSectionOn = dockSectionTogglesInToolbar ? Boolean(dataSectionOnProp) : internalDataOn;
+  const subdialogsSectionOn = dockSectionTogglesInToolbar ? Boolean(subdialogsSectionOnProp) : internalSubOn;
+
+  useEffect(() => {
+    if (dockSectionTogglesInToolbar) return;
+    if (!hasDataAvailable) setInternalDataOn(false);
+  }, [hasDataAvailable, dockSectionTogglesInToolbar]);
+
+  useEffect(() => {
+    if (dockSectionTogglesInToolbar) return;
+    if (!hasSubdialogsAvailable) setInternalSubOn(false);
+  }, [hasSubdialogsAvailable, dockSectionTogglesInToolbar]);
+
+  const panelTitle = useMemo(() => {
+    if (panelTitleProp) return panelTitleProp;
+    const d = dataSectionOn && hasDataAvailable;
+    const s = subdialogsSectionOn && hasSubdialogsAvailable;
+    if (d && s) return 'Data & Subdialogs';
+    if (d) return 'Data';
+    if (s) return 'Subdialogs';
+    return 'Flow';
+  }, [
+    panelTitleProp,
+    dataSectionOn,
+    subdialogsSectionOn,
+    hasDataAvailable,
+    hasSubdialogsAvailable,
+  ]);
+
+  const showDataBlock = dataSectionOn && hasDataAvailable;
+  const showSubdialogsBlock = subdialogsSectionOn && hasSubdialogsAvailable;
 
   const byVarId = useMemo(() => {
     const m = new Map<string, VariableInstance>();
@@ -527,13 +688,15 @@ export function FlowVariablesRail({
   const panelBody = (
     <>
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-700/80 px-3 py-2">
-        <h2 className="text-sm font-semibold text-slate-100">Data</h2>
+        <h2 className="min-w-0 truncate text-sm font-semibold text-slate-100" title={panelTitle}>
+          {panelTitle}
+        </h2>
         {hideEdgeToggle ? (
           <button
             type="button"
             className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
             title="Chiudi"
-            aria-label="Chiudi pannello dati"
+            aria-label="Chiudi pannello"
             onClick={() => setOpen(false)}
           >
             <X className="h-4 w-4" strokeWidth={2} />
@@ -541,150 +704,198 @@ export function FlowVariablesRail({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-slate-800/80 px-3 py-2">
-        <button
-          type="button"
-          draggable
-          onDragStart={(e) => {
-            ignoreNextClickRef.current = true;
-            e.dataTransfer.setData(DND_NEW_FLOW_DATA, '1');
-            e.dataTransfer.effectAllowed = 'copy';
-          }}
-          onDragEnd={() => {
-            window.setTimeout(() => {
-              ignoreNextClickRef.current = false;
-            }, 0);
-          }}
-          onClick={() => {
-            if (ignoreNextClickRef.current) {
-              ignoreNextClickRef.current = false;
-              return;
-            }
-            appendAtEnd();
-          }}
-          disabled={!projectId}
-          title="Clic: aggiungi in coda. Trascina sull'albero per inserire con anteprima."
-          className="inline-flex shrink-0 cursor-grab items-center gap-1 rounded-md bg-slate-700/80 px-2 py-1 text-xs font-medium text-slate-100 hover:bg-slate-600 active:cursor-grabbing disabled:opacity-40"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Aggiungi dato
-        </button>
-      </div>
+      {!dockSectionTogglesInToolbar && (hasDataAvailable || hasSubdialogsAvailable) ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-800/80 px-3 py-2">
+          {hasDataAvailable ? (
+            <SectionToggleChip
+              label="Data"
+              pressed={internalDataOn}
+              onClick={() => setInternalDataOn((v) => !v)}
+            />
+          ) : null}
+          {hasSubdialogsAvailable ? (
+            <SectionToggleChip
+              label="Subdialogs"
+              pressed={internalSubOn}
+              onClick={() => setInternalSubOn((v) => !v)}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 py-2">
+      {showDataBlock ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-slate-800/80 px-3 py-2">
+          <button
+            type="button"
+            draggable
+            onDragStart={(e) => {
+              ignoreNextClickRef.current = true;
+              e.dataTransfer.setData(DND_NEW_FLOW_DATA, '1');
+              e.dataTransfer.effectAllowed = 'copy';
+            }}
+            onDragEnd={() => {
+              window.setTimeout(() => {
+                ignoreNextClickRef.current = false;
+              }, 0);
+            }}
+            onClick={() => {
+              if (ignoreNextClickRef.current) {
+                ignoreNextClickRef.current = false;
+                return;
+              }
+              appendAtEnd();
+            }}
+            disabled={!projectId}
+            title="Clic: aggiungi in coda. Trascina sull'albero per inserire con anteprima."
+            className="inline-flex shrink-0 cursor-grab items-center gap-1 rounded-md bg-slate-700/80 px-2 py-1 text-xs font-medium text-slate-100 hover:bg-slate-600 active:cursor-grabbing disabled:opacity-40"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Aggiungi dato
+          </button>
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-2">
         {!projectId && (
           <p className="px-1 text-xs text-amber-500/90">Apri o salva un progetto per vedere i dati.</p>
         )}
-        {projectId && instances.length === 0 && (
-          <p className="px-1 text-xs text-slate-500">Nessun dato. Usa Aggiungi dato o creane dai task.</p>
-        )}
 
-        {projectId && tree.length === 0 && (
-          <div
-            className="min-h-[3.5rem] rounded border border-dashed border-slate-600/45 px-2 py-3 text-center"
-            onDragOver={(e) => {
-              if (!hasNewFlowDataDrag(e)) return;
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'copy';
-            }}
-            onDrop={(e) => {
-              if (!hasNewFlowDataDrag(e)) return;
-              e.preventDefault();
-              insertVariableAt({ targetPathKey: '', placement: 'after' });
-            }}
-          >
-            <p className="text-[11px] text-slate-500">
-              Trascina qui il pulsante &quot;Aggiungi dato&quot; oppure cliccalo per il primo dato in coda.
-            </p>
-          </div>
-        )}
+        {projectId && !hasDataAvailable && !hasSubdialogsAvailable ? (
+          <p className="px-1 text-xs text-slate-500">Nessuna variabile visibile e nessun subdialog nel flow.</p>
+        ) : null}
 
-        {orphans.length > 0 && (
-          <div className="space-y-1">
-            {orphans.map((row) => {
-              const inst = byVarId.get(row.id);
-              if (!inst) return null;
-              const orphanLabel = getVariableLabel(inst.id, translations);
-              return (
-                <DataTreeVariableRow
-                  key={row.id}
-                  segment={orphanLabel.trim() || '—'}
-                  instance={inst}
+        {projectId &&
+        (hasDataAvailable || hasSubdialogsAvailable) &&
+        !showDataBlock &&
+        !showSubdialogsBlock ? (
+          <p className="px-1 text-xs text-slate-500">Attiva Data o Subdialogs con i pulsanti sopra.</p>
+        ) : null}
+
+        {showDataBlock ? (
+          <div className="space-y-2">
+            <h3 className="px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Data</h3>
+            {projectId && tree.length === 0 && orphans.length === 0 ? (
+              <div
+                className="min-h-[3.5rem] rounded border border-dashed border-slate-600/45 px-2 py-3 text-center"
+                onDragOver={(e) => {
+                  if (!hasNewFlowDataDrag(e)) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'copy';
+                }}
+                onDrop={(e) => {
+                  if (!hasNewFlowDataDrag(e)) return;
+                  e.preventDefault();
+                  insertVariableAt({ targetPathKey: '', placement: 'after' });
+                }}
+              >
+                <p className="text-[11px] text-slate-500">
+                  Trascina qui il pulsante &quot;Aggiungi dato&quot; oppure cliccalo per il primo dato in coda.
+                </p>
+              </div>
+            ) : null}
+
+            {orphans.length > 0 && (
+              <div className="space-y-1">
+                {orphans.map((row) => {
+                  const inst = byVarId.get(row.id);
+                  if (!inst) return null;
+                  const orphanLabel = getVariableLabel(inst.id, translations);
+                  return (
+                    <DataTreeVariableRow
+                      key={row.id}
+                      segment={orphanLabel.trim() || '—'}
+                      instance={inst}
+                      projectId={projectId}
+                      translations={translations}
+                      addTranslation={addTranslation}
+                      onRefresh={refresh}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {tree.length > 0 && (
+              <>
+                <div
+                  className="h-2 -mx-0.5 shrink-0 rounded-sm"
+                  onDragOver={(e) => {
+                    if (!hasNewFlowDataDrag(e)) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.dataTransfer.dropEffect = 'copy';
+                    setRootEdgeDrop('top');
+                    setDropIndicator(null);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootEdgeDrop(null);
+                  }}
+                  onDrop={(e) => {
+                    if (!hasNewFlowDataDrag(e)) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setRootEdgeDrop(null);
+                    insertVariableAt({ targetPathKey: tree[0].pathKey, placement: 'before' });
+                  }}
+                >
+                  {rootEdgeDrop === 'top' && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
+                </div>
+                <FlowVariableTreeNodes
+                  nodes={tree}
+                  depth={0}
+                  byVarId={byVarId}
                   projectId={projectId}
                   translations={translations}
                   addTranslation={addTranslation}
                   onRefresh={refresh}
+                  dropIndicator={dropIndicator}
+                  setDropIndicator={setDropIndicator}
+                  onInsertAt={insertVariableAt}
                 />
-              );
-            })}
+                <div
+                  className="mt-0.5 h-2 -mx-0.5 shrink-0 rounded-sm"
+                  onDragOver={(e) => {
+                    if (!hasNewFlowDataDrag(e)) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.dataTransfer.dropEffect = 'copy';
+                    setRootEdgeDrop('bottom');
+                    setDropIndicator(null);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootEdgeDrop(null);
+                  }}
+                  onDrop={(e) => {
+                    if (!hasNewFlowDataDrag(e)) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setRootEdgeDrop(null);
+                    const last = flatPathKeys[flatPathKeys.length - 1];
+                    if (last) {
+                      insertVariableAt({ targetPathKey: last, placement: 'after' });
+                    }
+                  }}
+                >
+                  {rootEdgeDrop === 'bottom' && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
+                </div>
+              </>
+            )}
           </div>
-        )}
+        ) : null}
 
-        {tree.length > 0 && (
-          <>
-            <div
-              className="h-2 -mx-0.5 shrink-0 rounded-sm"
-              onDragOver={(e) => {
-                if (!hasNewFlowDataDrag(e)) return;
-                e.preventDefault();
-                e.stopPropagation();
-                e.dataTransfer.dropEffect = 'copy';
-                setRootEdgeDrop('top');
-                setDropIndicator(null);
+        {showSubdialogsBlock ? (
+          <div className={`space-y-2 ${showDataBlock ? 'border-t border-slate-800/60 pt-2' : ''}`}>
+            <h3 className="px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Subdialogs</h3>
+            <SubflowPortalRowsList
+              rows={subflowPortalRows}
+              onGearLikeCanvas={(r) => {
+                if (!onOpenSubflowPortalGear) return;
+                const args = getSubflowOpenArgsFromTaskAndRowText(r.taskId, r.canvasNodeId, r.rowLabel);
+                onOpenSubflowPortalGear(args.taskId, args.existingFlowId, args.rowLabel, args.canvasNodeId);
               }}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootEdgeDrop(null);
-              }}
-              onDrop={(e) => {
-                if (!hasNewFlowDataDrag(e)) return;
-                e.preventDefault();
-                e.stopPropagation();
-                setRootEdgeDrop(null);
-                insertVariableAt({ targetPathKey: tree[0].pathKey, placement: 'before' });
-              }}
-            >
-              {rootEdgeDrop === 'top' && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
-            </div>
-            <FlowVariableTreeNodes
-              nodes={tree}
-              depth={0}
-              byVarId={byVarId}
-              projectId={projectId}
-              translations={translations}
-              addTranslation={addTranslation}
-              onRefresh={refresh}
-              dropIndicator={dropIndicator}
-              setDropIndicator={setDropIndicator}
-              onInsertAt={insertVariableAt}
             />
-            <div
-              className="mt-0.5 h-2 -mx-0.5 shrink-0 rounded-sm"
-              onDragOver={(e) => {
-                if (!hasNewFlowDataDrag(e)) return;
-                e.preventDefault();
-                e.stopPropagation();
-                e.dataTransfer.dropEffect = 'copy';
-                setRootEdgeDrop('bottom');
-                setDropIndicator(null);
-              }}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootEdgeDrop(null);
-              }}
-              onDrop={(e) => {
-                if (!hasNewFlowDataDrag(e)) return;
-                e.preventDefault();
-                e.stopPropagation();
-                setRootEdgeDrop(null);
-                const last = flatPathKeys[flatPathKeys.length - 1];
-                if (last) {
-                  insertVariableAt({ targetPathKey: last, placement: 'after' });
-                }
-              }}
-            >
-              {rootEdgeDrop === 'bottom' && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
-            </div>
-          </>
-        )}
+          </div>
+        ) : null}
       </div>
     </>
   );
