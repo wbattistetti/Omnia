@@ -1,7 +1,6 @@
 /**
  * Flow debugger header actions: Play (idle only), Clear, Restart — order is deterministic by state.
  */
-import React from 'react';
 import { Eraser, Play, RotateCcw } from 'lucide-react';
 import type { DebuggerSessionState } from './DebuggerStateMachine';
 

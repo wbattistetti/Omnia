@@ -19,6 +19,8 @@ interface UseDialogueEngineOptions {
   onMessage?: (message: { id: string; text: string; stepType?: string; escalationNumber?: number; taskId?: string }) => void;
   onDDTStart?: (data: { ddt: any; taskId: string }) => void;
   onWaitingForInput?: (data: { taskId: string; nodeId?: string; taskLabel?: string; nodeLabel?: string }) => void;
+  /** Fired on each orchestrator state update (SSE), after internal execution state is applied. */
+  onExecutionStateUpdate?: (state: ExecutionState) => void;
   translations?: Record<string, string>; // Add translations support
   /** `main` = always compile/run from main + nested subflows; `active` = root = focused canvas + its nested subflows. Override with localStorage `flow.orchestratorRoot`. */
   orchestratorRoot?: 'main' | 'active';
@@ -414,6 +416,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
               const newStore = (state?.variableStore || {}) as Record<string, unknown>;
               runtimeVariableStoreRef.current = newStore;
               setExecutionState(state);
+              optionsRef.current.onExecutionStateUpdate?.(state);
 
               // Flush messages that arrived before the store was populated
               const pending = pendingMessagesRef.current.splice(0);

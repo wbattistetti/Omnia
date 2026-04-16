@@ -4,6 +4,29 @@
 import type { CompilationResult } from '../FlowCompiler/types';
 import type { ExecutionState } from '../FlowCompiler/types';
 
+/**
+ * Newtonsoft (VB) serializza spesso PascalCase; il frontend usa camelCase.
+ * Senza questo merge, `variableStore` risulta {} e NLU/debug restano vuoti.
+ */
+/** @internal exported for unit tests */
+export function parseSseExecutionStatePayload(raw: Record<string, unknown>): ExecutionState {
+  const vs = raw.variableStore ?? raw.VariableStore;
+  const store =
+    vs != null && typeof vs === 'object' && !Array.isArray(vs)
+      ? (vs as Record<string, unknown>)
+      : {};
+  const execIds = raw.executedTaskIds ?? raw.ExecutedTaskIds;
+  const ids = Array.isArray(execIds) ? execIds.map((x) => String(x)) : [];
+  const retrieval = raw.retrievalState ?? raw.RetrievalState;
+  return {
+    executedTaskIds: new Set(ids),
+    variableStore: store,
+    retrievalState: (typeof retrieval === 'string' ? retrieval : 'empty') as ExecutionState['retrievalState'],
+    currentNodeId: (raw.currentNodeId ?? raw.CurrentNodeId ?? null) as string | null,
+    currentRowIndex: Number(raw.currentRowIndex ?? raw.CurrentRowIndex ?? 0),
+  };
+}
+
 export interface OrchestratorCallbacks {
   onMessage?: (message: { id: string; text: string; stepType?: string; escalationNumber?: number; taskId?: string }) => void;
   onDDTStart?: (data: { ddt: any; taskId: string }) => void;
@@ -207,22 +230,14 @@ export async function executeOrchestratorBackend(
 
     sse.addEventListener('stateUpdate', (e: MessageEvent) => {
       try {
-        const state = JSON.parse(e.data);
+        const parsed = JSON.parse(e.data) as Record<string, unknown>;
+        const executionState = parseSseExecutionStatePayload(parsed);
         console.log('[ORCHESTRATOR] SSE Event: stateUpdate', {
-          currentNodeId: state.currentNodeId,
-          executedCount: state.executedTaskIds?.length || 0
+          currentNodeId: executionState.currentNodeId,
+          executedCount: executionState.executedTaskIds.size,
+          variableStoreKeys: Object.keys(executionState.variableStore || {}).length
         });
-        if (callbacks.onStateUpdate) {
-          // Convert executedTaskIds array back to Set
-          const executionState: ExecutionState = {
-            executedTaskIds: new Set(state.executedTaskIds || []),
-            variableStore: state.variableStore || {},
-            retrievalState: state.retrievalState || 'empty',
-            currentNodeId: state.currentNodeId || null,
-            currentRowIndex: state.currentRowIndex || 0
-          };
-          callbacks.onStateUpdate(executionState);
-        }
+        callbacks.onStateUpdate?.(executionState);
       } catch (error) {
         console.error('[ORCHESTRATOR] Error parsing stateUpdate event', error);
       }

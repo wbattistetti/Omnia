@@ -1,11 +1,13 @@
 // Hook for calculating edge/link execution highlight
 import { useMemo, useEffect, useRef } from 'react';
+import { FlowStateBridge } from '../../../services/FlowStateBridge';
 import { useExecutionState } from './ExecutionStateContext';
 import { Highlight } from './executionHighlightConstants';
 import type { Edge } from 'reactflow';
 import type { EdgeData } from '../types/flowTypes';
 import { evaluateCondition } from '../../DialogueEngine/conditionEvaluator';
 import { FlowWorkspaceSnapshot } from '../../../flows/FlowWorkspaceSnapshot';
+import { useDebuggerFlowHighlightVersion } from './useDebuggerFlowHighlightVersion';
 
 /**
  * Hook to get execution highlight styles for an edge/link
@@ -21,11 +23,35 @@ export function useEdgeExecutionHighlight(
   isError: boolean; // true if multiple valid links (logical error)
 } {
   const execState = useExecutionState();
+  const dbgVersion = useDebuggerFlowHighlightVersion();
   const errorReportedRef = useRef<Set<string>>(new Set());
 
   const edges = allEdges || FlowWorkspaceSnapshot.getEdges();
 
   const highlightResult = useMemo(() => {
+    const dbg = FlowStateBridge.getDebuggerFlowHighlight();
+    if (dbg) {
+      if (dbg.activeEdgeId && edge.id === dbg.activeEdgeId) {
+        return {
+          stroke: Highlight.Edge.validCondition,
+          strokeWidth: Highlight.Edge.validConditionStrokeWidth,
+          isError: false
+        };
+      }
+      if (dbg.activeEdgeId) {
+        return {
+          stroke: '#94a3b8',
+          strokeWidth: 1.5,
+          isError: false
+        };
+      }
+      return {
+        stroke: edge.style?.stroke || '#8b5cf6',
+        strokeWidth: 1.5,
+        isError: false
+      };
+    }
+
     if (!execState || !execState.isRunning || !execState.executionState) {
       return {
         stroke: edge.style?.stroke || '#8b5cf6',
@@ -136,7 +162,7 @@ export function useEdgeExecutionHighlight(
       sourceNodeId: edge.source,
       validEdgesCount: 0
     };
-  }, [execState, edge, edges]);
+  }, [execState, edge, edges, dbgVersion]);
 
   // ✅ Send error message to chat when multiple valid links are detected
   useEffect(() => {

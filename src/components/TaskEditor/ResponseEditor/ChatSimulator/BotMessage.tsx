@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, X as XIcon, Pencil, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Bot, Check, X as XIcon, Pencil, AlertTriangle, AlertCircle } from 'lucide-react';
 import { getStepIcon } from '@responseEditor/ChatSimulator/chatSimulatorUtils';
 import type { Message } from '@components/ChatSimulator/UserMessage';
 import { useFontContext } from '@context/FontContext';
@@ -88,27 +88,32 @@ const BotMessage: React.FC<BotMessageProps> = ({
           ) : (
             <>
               <div className={`flex items-start gap-2 ${combinedClass}`}>
-                {message.stepType && (
-                  <div className={`mt-0.5 flex items-center gap-1 ${combinedClass}`} style={{ color: message.color }}>
-                    {message.escalationNumber !== undefined && message.escalationNumber > 0 && (
-                      <span className={`font-medium ${combinedClass}`} style={{ color: message.color }}>
-                        {message.escalationNumber}°
-                      </span>
-                    )}
-                    {getStepIcon(message.stepType, message.color)}
+                <span className="flex-shrink-0 mt-0.5 inline-flex" title="Agente">
+                  <Bot size={18} className="text-slate-600" aria-hidden />
+                </span>
+                <div className={`flex items-start gap-2 flex-1 min-w-0 ${combinedClass}`}>
+                  {message.stepType && (
+                    <div className={`mt-0.5 flex items-center gap-1 shrink-0 ${combinedClass}`} style={{ color: message.color }}>
+                      {message.escalationNumber !== undefined && message.escalationNumber > 0 && (
+                        <span className={`font-medium ${combinedClass}`} style={{ color: message.color }}>
+                          {message.escalationNumber}°
+                        </span>
+                      )}
+                      {getStepIcon(message.stepType, message.color)}
+                    </div>
+                  )}
+                  <div
+                    className={`cursor-pointer flex-1 min-w-0 ${combinedClass}`}
+                    title={message.textKey ? 'Click to edit' : undefined}
+                    onClick={() => {
+                      if (message.textKey) {
+                        onEdit(message.id, message.text);
+                      }
+                    }}
+                    style={fontStyle}
+                  >
+                    {message.text}
                   </div>
-                )}
-                <div
-                  className={`cursor-pointer flex-1 ${combinedClass}`}
-                  title={message.textKey ? 'Click to edit' : undefined}
-                  onClick={() => {
-                    if (message.textKey) {
-                      onEdit(message.id, message.text);
-                    }
-                  }}
-                  style={fontStyle}
-                >
-                  {message.text}
                 </div>
               </div>
               {message.textKey && hoveredId === message.id && (

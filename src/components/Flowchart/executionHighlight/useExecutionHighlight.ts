@@ -1,8 +1,10 @@
 // Hook for calculating execution highlight styles
 import { useMemo } from 'react';
+import { FlowStateBridge } from '../../../services/FlowStateBridge';
 import { useExecutionState } from './ExecutionStateContext';
 import { Highlight, StepColor } from './executionHighlightConstants';
 import type { NodeRowData } from '../../../types/project';
+import { useDebuggerFlowHighlightVersion } from './useDebuggerFlowHighlightVersion';
 
 export interface ExecutionHighlightStyles {
   nodeBorder: string;
@@ -15,8 +17,26 @@ export interface ExecutionHighlightStyles {
  */
 export function useNodeExecutionHighlight(nodeId: string, rows: NodeRowData[]): ExecutionHighlightStyles {
   const execState = useExecutionState();
+  const dbgVersion = useDebuggerFlowHighlightVersion();
 
   return useMemo(() => {
+    const dbg = FlowStateBridge.getDebuggerFlowHighlight();
+    if (dbg) {
+      const white = '#ffffff';
+      const green = Highlight.FlowNode.borderColor;
+      const red = StepColor.NoMatch;
+      if (dbg.noMatchNodeIds.includes(nodeId)) {
+        return { nodeBorder: red, nodeBorderWidth: Highlight.FlowNode.executingBorderWidth };
+      }
+      if (dbg.activeNodeId === nodeId) {
+        return { nodeBorder: white, nodeBorderWidth: Highlight.FlowNode.executingBorderWidth };
+      }
+      if (dbg.passedNodeIds.includes(nodeId)) {
+        return { nodeBorder: green, nodeBorderWidth: Highlight.FlowNode.executedBorderWidth };
+      }
+      return { nodeBorder: 'transparent', nodeBorderWidth: 1 };
+    }
+
     if (!execState || !execState.isRunning) {
       return {
         nodeBorder: 'transparent',
@@ -76,7 +96,7 @@ export function useNodeExecutionHighlight(nodeId: string, rows: NodeRowData[]): 
       nodeBorder: 'transparent',
       nodeBorderWidth: 1
     };
-  }, [execState, nodeId, rows]);
+  }, [execState, nodeId, rows, dbgVersion]);
 }
 
 /**

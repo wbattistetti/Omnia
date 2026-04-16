@@ -1,9 +1,9 @@
 /**
  * Orchestrates debugger toolbar actions: play (start session), clear (soft reset), restart (hard reset + run).
  */
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { DebuggerSessionState } from './DebuggerStateMachine';
 import { FlowHighlighter } from './FlowHighlighter';
-import { DebuggerLog } from './DebuggerLog';
 import type { Message } from '@components/ChatSimulator/UserMessage';
 
 export interface DebuggerActionsDeps {
@@ -68,7 +68,7 @@ export type DebuggerActions = ReturnType<typeof createDebuggerActions>;
 
 /** Used by DebuggerLog typings without importing React namespace in every consumer. */
 export type DebuggerLogClearArgs = {
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
-  messagesRef: React.MutableRefObject<Message[]>;
+  setMessages: Dispatch<SetStateAction<Message[]>>;
+  messagesRef: MutableRefObject<Message[]>;
   resetMessageIdCounter: () => void;
 };

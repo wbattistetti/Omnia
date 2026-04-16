@@ -1,9 +1,37 @@
 import React from 'react';
 import { useDialogueEngine } from '@components/DialogueEngine/useDialogueEngine';
+import type { ExecutionState } from '@components/FlowCompiler/types';
 import { looksLikeTechnicalTranslationOrId } from '@utils/translationKeys';
 import type { Message } from '@components/ChatSimulator/UserMessage';
+import { FlowHighlighter } from '../../../../../features/debugger/FlowHighlighter';
+import { buildDebuggerStepFromTurn } from '../../../../../features/debugger/core/buildDebuggerStepFromTurn';
+import { extractNluFromVariableStore } from '../../../../../features/debugger/core/extractNluFromVariableStore';
+import type { DebuggerStep } from '../../../../../features/debugger/core/DebuggerStep';
+import {
+  clearDebuggerConversation,
+  loadDebuggerConversation,
+  saveDebuggerConversation,
+} from '../../../../../features/debugger/persistence/debuggerConversationPersistence';
 
 const DBG = '[DebuggerFlow]';
+
+/** Map compiled task ids to React Flow node ids (rows on canvas). */
+function buildTaskIdToNodeIdMap(nodes: any[], tasks: any[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const n of nodes || []) {
+    const rows = (n?.data as { rows?: Array<{ taskId?: string; id?: string }> })?.rows ?? [];
+    for (const row of rows) {
+      const tid = String(row?.taskId || row?.id || '').trim();
+      if (tid) m.set(tid, String(n.id));
+    }
+  }
+  for (const t of tasks || []) {
+    const tid = String(t?.id || '').trim();
+    const nodeId = t?.nodeId != null ? String(t.nodeId).trim() : '';
+    if (tid && nodeId) m.set(tid, nodeId);
+  }
+  return m;
+}
 
 /** Optional debugger lifecycle hooks + auto-start (default: manual Play only). */
 export type UseFlowModeChatOptions = {
@@ -14,6 +42,9 @@ export type UseFlowModeChatOptions = {
   onOrchestratorEnded?: () => void;
   /** Primary flow id for compile/session (subflow canvas when debugging a sub-dialog in isolation). */
   orchestratorCompileRootFlowId?: string | null;
+  /** Persist debugger steps (same key as compile root when isolating a subflow). */
+  projectId?: string | null;
+  flowId?: string | null;
 };
 
 /**
@@ -112,6 +143,153 @@ export function useFlowModeChat(
     setErrorRef.current = setError;
   }, [setIsWaitingForInput, setError]);
 
+  const nodesRef = React.useRef(nodes);
+  const tasksRef = React.useRef(tasks);
+  React.useEffect(() => {
+    nodesRef.current = nodes;
+    tasksRef.current = tasks;
+  }, [nodes, tasks]);
+
+  const projectIdRef = React.useRef(options?.projectId ?? null);
+  const flowIdRef = React.useRef(options?.flowId ?? null);
+  React.useEffect(() => {
+    projectIdRef.current = options?.projectId ?? null;
+    flowIdRef.current = options?.flowId ?? null;
+  }, [options?.projectId, options?.flowId]);
+
+  const pendingDebuggerUtteranceRef = React.useRef<{ text: string; clientMessageId: string } | null>(null);
+  const latestExecutionStateRef = React.useRef<ExecutionState | null>(null);
+  const [debuggerSteps, setDebuggerSteps] = React.useState<DebuggerStep[]>([]);
+  const debuggerFlushTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    const pid = String(options?.projectId ?? '').trim();
+    const fid = String(options?.flowId ?? '').trim();
+    if (!pid || !fid) return;
+    const loaded = loadDebuggerConversation(pid, fid);
+    if (loaded && loaded.length > 0) {
+      setDebuggerSteps(loaded);
+    }
+  }, [options?.projectId, options?.flowId]);
+
+  const resetDebuggerSessionArtifacts = React.useCallback(() => {
+    setDebuggerSteps([]);
+    pendingDebuggerUtteranceRef.current = null;
+    latestExecutionStateRef.current = null;
+    if (debuggerFlushTimerRef.current) {
+      clearTimeout(debuggerFlushTimerRef.current);
+      debuggerFlushTimerRef.current = null;
+    }
+    const pid = String(projectIdRef.current || '').trim();
+    const fid = String(flowIdRef.current || '').trim();
+    if (pid && fid) {
+      clearDebuggerConversation(pid, fid);
+    }
+    FlowHighlighter.reset();
+  }, []);
+
+  const flushDebuggerStepFromOrchestratorState = React.useCallback(() => {
+    const pending = pendingDebuggerUtteranceRef.current;
+    const state = latestExecutionStateRef.current;
+    if (!pending?.text || !state) return;
+
+    const utterance = pending.text;
+    const clientMessageId = pending.clientMessageId || '';
+
+    pendingDebuggerUtteranceRef.current = null;
+    if (debuggerFlushTimerRef.current) {
+      clearTimeout(debuggerFlushTimerRef.current);
+      debuggerFlushTimerRef.current = null;
+    }
+
+    const taskToNode = buildTaskIdToNodeIdMap(nodesRef.current, tasksRef.current);
+    const activeNodeId = state.currentNodeId || '';
+    const st = state as unknown as { executedTaskIds?: string[] | Set<string> };
+    const executed =
+      st.executedTaskIds instanceof Set
+        ? Array.from(st.executedTaskIds)
+        : Array.isArray(st.executedTaskIds)
+          ? st.executedTaskIds
+          : [];
+    const passedNodeIdsSet = new Set<string>();
+    for (const tid of executed) {
+      const nid = taskToNode.get(String(tid));
+      if (nid) passedNodeIdsSet.add(nid);
+    }
+    const priorPassedNodeIds = [...passedNodeIdsSet].filter((id) => id !== activeNodeId);
+
+    const slotLabel =
+      resolveNodeLabel(activeNodeId).trim() ||
+      (activeNodeId ? String(activeNodeId) : '');
+
+    const store = (state.variableStore || {}) as Record<string, unknown>;
+    const nlu = extractNluFromVariableStore(store, utterance);
+
+    const step = buildDebuggerStepFromTurn({
+      utterance,
+      semanticValue: nlu.semantic,
+      linguisticValue: nlu.linguistic,
+      grammarType: 'orchestrator',
+      grammarContract: 'GrammarFlow',
+      elapsedMs: 0,
+      slotLabel: slotLabel || undefined,
+      activeNodeId,
+      priorPassedNodeIds,
+      noMatchNodeIds: [],
+      activeEdgeId: '',
+      clientMessageId: clientMessageId || undefined,
+    });
+
+    FlowHighlighter.apply(step);
+    setDebuggerSteps((prev) => {
+      const next = [...prev, step];
+      const pid = String(projectIdRef.current || '').trim();
+      const fid = String(flowIdRef.current || '').trim();
+      if (pid && fid) {
+        saveDebuggerConversation(pid, fid, next);
+      }
+      return next;
+    });
+  }, [resolveNodeLabel]);
+
+  const scheduleDebuggerStepFlush = React.useCallback(() => {
+    if (debuggerFlushTimerRef.current) clearTimeout(debuggerFlushTimerRef.current);
+    debuggerFlushTimerRef.current = setTimeout(() => {
+      debuggerFlushTimerRef.current = null;
+      flushDebuggerStepFromOrchestratorState();
+    }, 120);
+  }, [flushDebuggerStepFromOrchestratorState]);
+
+  /** Se il VariableStore si popola dopo il flush, aggiorna semantic/linguistic sull’ultimo step. */
+  const patchLastDebuggerStepWithNlu = React.useCallback((state: ExecutionState) => {
+    setDebuggerSteps((prev) => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      const store = (state.variableStore || {}) as Record<string, unknown>;
+      const nlu = extractNluFromVariableStore(store, last.utterance);
+      if (last.semanticValue === nlu.semantic && last.linguisticValue === nlu.linguistic) return prev;
+      if (!nlu.semantic && !nlu.linguistic) return prev;
+      const patched: DebuggerStep = {
+        ...last,
+        semanticValue: nlu.semantic || last.semanticValue,
+        linguisticValue: nlu.linguistic || last.linguisticValue,
+      };
+      const next = [...prev.slice(0, -1), patched];
+      const pid = String(projectIdRef.current || '').trim();
+      const fid = String(flowIdRef.current || '').trim();
+      if (pid && fid) {
+        saveDebuggerConversation(pid, fid, next);
+      }
+      return next;
+    });
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      if (debuggerFlushTimerRef.current) clearTimeout(debuggerFlushTimerRef.current);
+    };
+  }, []);
+
   React.useEffect(() => {
     if (stateRef.current.isWaitingForInput !== isWaitingForInput) {
       setIsWaitingForInputState(stateRef.current.isWaitingForInput);
@@ -133,15 +311,25 @@ export function useFlowModeChat(
       },
       onTaskExecute: async (_task: unknown) => ({ success: true }),
       translations: translations || {},
-      onMessage: (message: { text?: string }) => {
-        const messageId = `msg_${messageIdCounter.current++}`;
+      onMessage: (message: {
+        text?: string;
+        textKey?: string;
+        stepType?: string;
+        taskId?: string;
+        id?: string;
+      }) => {
+        const messageId =
+          message.id != null && String(message.id) !== ''
+            ? String(message.id)
+            : `msg_${messageIdCounter.current++}`;
         if (sentMessageIds.current.has(messageId)) return;
         sentMessageIds.current.add(messageId);
         const newMessage: Message = {
           id: messageId,
           text: message.text || '',
           type: 'bot',
-          timestamp: new Date(),
+          textKey: message.textKey,
+          stepType: message.stepType,
         };
         const currentOnMessage = onMessageRef.current;
         if (currentOnMessage) currentOnMessage(newMessage);
@@ -183,8 +371,27 @@ export function useFlowModeChat(
         console.info(`${DBG} waitingForInput`, { taskId: data?.taskId, nodeId: data?.nodeId });
         lifecycleRef.current.onOrchestratorWaiting?.();
       },
+      onExecutionStateUpdate: (state: ExecutionState) => {
+        latestExecutionStateRef.current = state;
+        if (pendingDebuggerUtteranceRef.current) {
+          scheduleDebuggerStepFlush();
+        }
+        patchLastDebuggerStepWithNlu(state);
+      },
     }),
-    [nodes, edges, tasks, translations, executionFlowName, resolveTaskLabel, resolveNodeLabel, toReadableLabel, options?.orchestratorCompileRootFlowId]
+    [
+      nodes,
+      edges,
+      tasks,
+      translations,
+      executionFlowName,
+      resolveTaskLabel,
+      resolveNodeLabel,
+      toReadableLabel,
+      options?.orchestratorCompileRootFlowId,
+      scheduleDebuggerStepFlush,
+      patchLastDebuggerStepWithNlu,
+    ]
   );
 
   const flowEngine = useDialogueEngine(engineOptions);
@@ -273,8 +480,17 @@ export function useFlowModeChat(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, translationsKey, flowEngine, executeStart, options?.autoStart]);
 
+  const waitUntilWaitingForInput = React.useCallback(async (timeoutMs: number): Promise<void> => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+      if (stateRef.current.isWaitingForInput) return;
+      await new Promise<void>((r) => setTimeout(r, 70));
+    }
+    throw new Error('Timeout waiting for orchestrator to accept input.');
+  }, []);
+
   const handleUserInput = React.useCallback(
-    async (input: string) => {
+    async (input: string, clientMessageId: string) => {
       const engine = flowEngineRef.current;
       if (!engine) {
         console.warn(`${DBG} provideInput: no engine`);
@@ -287,9 +503,18 @@ export function useFlowModeChat(
         waitingUI: stateRef.current.isWaitingForInput,
       });
       try {
+        pendingDebuggerUtteranceRef.current = {
+          text: String(input || '').trim(),
+          clientMessageId: String(clientMessageId || ''),
+        };
         await engine.provideInput(input);
         console.info(`${DBG} provideInput OK`, { sessionId: sid });
       } catch (err) {
+        pendingDebuggerUtteranceRef.current = null;
+        if (debuggerFlushTimerRef.current) {
+          clearTimeout(debuggerFlushTimerRef.current);
+          debuggerFlushTimerRef.current = null;
+        }
         console.error(`${DBG} provideInput error`, err);
         if (setErrorRef.current) {
           setErrorRef.current(err instanceof Error ? err.message : 'Error providing input');
@@ -297,6 +522,56 @@ export function useFlowModeChat(
       }
     },
     [getOrchestratorSessionId]
+  );
+
+  const replayUserInputs = React.useCallback(
+    async (
+      turns: readonly { text: string; clientMessageId: string }[],
+      onUserTurnAppended?: (t: { text: string; clientMessageId: string }) => void
+    ) => {
+      const engine = flowEngineRef.current as { provideInput: (s: string) => Promise<void>; reset: () => Promise<void> } | null;
+      if (!engine?.provideInput || !engine?.reset) {
+        throw new Error('Flow engine is not available for replay.');
+      }
+      if (turns.length === 0) return;
+
+      sentMessageIds.current.clear();
+      setDebuggerSteps([]);
+      pendingDebuggerUtteranceRef.current = null;
+      if (debuggerFlushTimerRef.current) {
+        clearTimeout(debuggerFlushTimerRef.current);
+        debuggerFlushTimerRef.current = null;
+      }
+      const pid = String(projectIdRef.current || '').trim();
+      const fid = String(flowIdRef.current || '').trim();
+      if (pid && fid) {
+        clearDebuggerConversation(pid, fid);
+      }
+      FlowHighlighter.reset();
+
+      await engine.reset();
+      hasStartedRef.current = false;
+      startInFlightRef.current = null;
+      await executeStart();
+
+      for (let i = 0; i < turns.length; i++) {
+        const t = turns[i];
+        onUserTurnAppended?.(t);
+        pendingDebuggerUtteranceRef.current = {
+          text: String(t.text || '').trim(),
+          clientMessageId: String(t.clientMessageId || ''),
+        };
+        await engine.provideInput(t.text);
+        if (i < turns.length - 1) {
+          try {
+            await waitUntilWaitingForInput(25000);
+          } catch {
+            /* ultimo turno o flusso terminato prima del prossimo input */
+          }
+        }
+      }
+    },
+    [executeStart, waitUntilWaitingForInput]
   );
 
   const clearMessages = React.useCallback(() => {
@@ -308,6 +583,7 @@ export function useFlowModeChat(
 
   const clearSession = React.useCallback(async () => {
     console.info(`${DBG} clearSession (soft) begin`, { sessionId: getOrchestratorSessionId() });
+    resetDebuggerSessionArtifacts();
     suppressAutoStartAfterClearRef.current = true;
     startInFlightRef.current = null;
     hasStartedRef.current = false;
@@ -325,7 +601,7 @@ export function useFlowModeChat(
       await engine.reset();
     }
     console.info(`${DBG} clearSession (soft) done`);
-  }, [getOrchestratorSessionId]);
+  }, [getOrchestratorSessionId, resetDebuggerSessionArtifacts]);
 
   const restartFlow = React.useCallback(async () => {
     if (isRestartingRef.current) {
@@ -334,6 +610,7 @@ export function useFlowModeChat(
     }
     console.info(`${DBG} restartFlow (hard) begin`, { sessionId: getOrchestratorSessionId() });
     suppressAutoStartAfterClearRef.current = false;
+    resetDebuggerSessionArtifacts();
 
     try {
       const { clearCompilationErrorsGlobal } = await import('@context/CompilationErrorsContext');
@@ -372,7 +649,23 @@ export function useFlowModeChat(
       isRestartingRef.current = false;
       setIsRestarting(false);
     }
-  }, [executeStart, getOrchestratorSessionId]);
+  }, [executeStart, getOrchestratorSessionId, resetDebuggerSessionArtifacts]);
+
+  const updateDebuggerStep = React.useCallback((id: string, patch: Partial<DebuggerStep>) => {
+    setDebuggerSteps((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, ...patch } : s));
+      const pid = String(projectIdRef.current || '').trim();
+      const fid = String(flowIdRef.current || '').trim();
+      if (pid && fid) {
+        saveDebuggerConversation(pid, fid, next);
+      }
+      return next;
+    });
+  }, []);
+
+  const replayDebuggerHighlight = React.useCallback((step: DebuggerStep) => {
+    FlowHighlighter.apply(step);
+  }, []);
 
   return {
     isWaitingForInput,
@@ -387,5 +680,10 @@ export function useFlowModeChat(
     clearSession,
     restartFlow,
     getOrchestratorSessionId,
+    debuggerSteps,
+    updateDebuggerStep,
+    replayDebuggerHighlight,
+    replayUserInputs,
+    waitUntilWaitingForInput,
   };
 }

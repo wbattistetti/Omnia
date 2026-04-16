@@ -15,6 +15,7 @@
 
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
+import type { DebuggerFlowHighlightPayload } from '../features/debugger/highlight/debuggerHighlightPayload';
 
 // Type definitions for callback functions
 type SetNodesFunction = (updater: Node<FlowNode>[] | ((nodes: Node<FlowNode>[]) => Node<FlowNode>[])) => void;
@@ -48,6 +49,9 @@ interface FlowWindowGlobals {
   __executionState?: any;
   __currentTask?: any;
   __isRunning?: boolean;
+
+  /** Debugger-driven flow overlay (node/edge colours); null = use engine execution highlight only. */
+  __debuggerFlowHighlight?: DebuggerFlowHighlightPayload | null;
 
   // Connection/interaction state
   __isConnecting?: boolean;
@@ -439,6 +443,26 @@ class FlowStateBridgeClass {
   setIsRunning(running: boolean): void {
     if (typeof window === 'undefined') return;
     (window as any).__isRunning = running;
+  }
+
+  /**
+   * Debugger overlay for flow nodes/edges (driven by FlowHighlighter.apply(DebuggerStep)).
+   */
+  setDebuggerFlowHighlight(payload: DebuggerFlowHighlightPayload | null): void {
+    if (typeof window === 'undefined') return;
+    try {
+      (window as any).__debuggerFlowHighlight = payload;
+      if (typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('debugger-flow-highlight-change'));
+      }
+    } catch (e) {
+      console.warn('[FlowStateBridge] setDebuggerFlowHighlight failed:', e);
+    }
+  }
+
+  getDebuggerFlowHighlight(): DebuggerFlowHighlightPayload | null {
+    if (typeof window === 'undefined') return null;
+    return (window as any).__debuggerFlowHighlight ?? null;
   }
 
   // ========== CONNECTION/INTERACTION STATE ==========

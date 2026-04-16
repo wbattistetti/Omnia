@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Task, TaskTree } from '@types/taskTypes';
+import type { Task, TaskTree } from 'types/taskTypes';
 import { AlertTriangle, Workflow, RotateCcw, Save, X } from 'lucide-react';
 import UserMessage, { type Message } from '@components/ChatSimulator/UserMessage';
 import BotMessage from '@responseEditor/ChatSimulator/BotMessage';
@@ -14,12 +14,13 @@ import {
   createDebuggerActions,
   DebuggerLog,
   DebuggerStateMachine,
+  FlowBotTurnLabel,
+  UserTurnCard,
   DebuggerToolbar,
   type DebuggerSessionState,
+  type DebuggerStep,
 } from '../../../../features/debugger';
 import DialogueTaskService from '@services/DialogueTaskService';
-import { useProjectTranslations } from '@context/ProjectTranslationsContext';
-import { taskRepository } from '@services/TaskRepository';
 import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 import { translationKeyFromStoredValue } from '@utils/translationKeys';
 import type { DebuggerRuntimeBridge } from '../../../../features/useCases/runtime/DebuggerRuntimeBridge';
@@ -84,11 +85,12 @@ function extractGuidsFromSteps(
     }
 
     // ✅ Itera su ogni tipo di step (start, noMatch, noInput, ecc.)
-    for (const [stepType, step] of Object.entries(stepDict)) {
-      if (!step || typeof step !== 'object') {
+    for (const [stepType, stepRaw] of Object.entries(stepDict)) {
+      if (!stepRaw || typeof stepRaw !== 'object') {
         debugInfo.push({ templateId, stepType, reason: 'step is null or not object' });
         continue;
       }
+      const step = stepRaw as { escalations?: unknown };
 
       // ✅ Estrai GUID dalle escalation
       if (step.escalations && Array.isArray(step.escalations)) {
@@ -132,8 +134,6 @@ function extractGuidsFromSteps(
       debugInfo: debugInfo.slice(0, 20)
     });
   }
-
-  return { guids, extractedCount };
 }
 
 /**
@@ -160,7 +160,7 @@ function extractGuidsFromSteps(
 function filterRuntimeTranslations(
   allTranslations: Record<string, string>,
   materializedTree: TaskTree, // ✅ CAMBIATO: Accetta TaskTree invece di Task
-  referencedTemplates: any[] // ⚠️ Mantenuto per retrocompatibilità ma NON più usato
+  _referencedTemplates: any[] // ⚠️ Mantenuto per retrocompatibilità ma NON più usato
 ): Record<string, string> {
   const runtimeTranslations: Record<string, string> = {};
 
@@ -274,7 +274,7 @@ export default function DDEBubbleChat({
   onRuntimeBridgeReady?: (bridge: DebuggerRuntimeBridge | null) => void;
   onMessagesSnapshotChange?: (messages: Message[]) => void;
 }) {
-  const { combinedClass, fontSize } = useFontContext();
+  const { combinedClass } = useFontContext();
   const [messages, setMessages] = React.useState<Message[]>([]);
   const messagesRef = React.useRef<Message[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
@@ -344,7 +344,43 @@ export default function DDEBubbleChat({
       ...flowDebuggerHookOpts,
       orchestratorCompileRootFlowId: orchestratorCompileRootFlowId ?? undefined,
       autoStart: flowAutoStart === true,
+      projectId: projectId ?? null,
+      flowId: orchestratorCompileRootFlowId ?? null,
     }
+  );
+
+  const [flowExpandedUserId, setFlowExpandedUserId] = React.useState<string | null>(null);
+
+  const handleFlowUserEditResponse = React.useCallback(
+    async (messageId: string, newText: string) => {
+      const trimmed = newText.trim();
+      if (!trimmed) return;
+      const userMsgs = messagesRef.current.filter((m) => m.type === 'user');
+      const editIdx = userMsgs.findIndex((m) => m.id === messageId);
+      if (editIdx < 0) return;
+      const turns = userMsgs.slice(0, editIdx + 1).map((m, i) => ({
+        text: i === editIdx ? trimmed : m.text,
+        clientMessageId: m.id,
+      }));
+      setFlowExpandedUserId(null);
+      setMessages([]);
+      try {
+        await flowModeChat.replayUserInputs(turns, (t) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: t.clientMessageId,
+              type: 'user',
+              text: t.text,
+              matchStatus: 'match',
+            },
+          ]);
+        });
+      } catch (e) {
+        setBackendError(e instanceof Error ? e.message : 'Replay fallito');
+      }
+    },
+    [flowModeChat]
   );
 
   const debuggerActions = React.useMemo(
@@ -417,7 +453,7 @@ export default function DDEBubbleChat({
   React.useEffect(() => {
     effectiveWaitingForInputRef.current = effectiveIsWaitingForInput;
   }, [effectiveIsWaitingForInput]);
-  const effectiveError = isFlowMode ? flowModeChat.error : backendError;
+  const effectiveError = isFlowMode ? flowModeChat.error || backendError : backendError;
   const displayChatError = React.useMemo(
     () => userFacingChatErrorMessage(effectiveError),
     [effectiveError],
@@ -668,11 +704,6 @@ export default function DDEBubbleChat({
         // L'istanza in memoria è la fonte di verità, non il database
         // ✅ CRITICAL: Steps è già dictionary: { "templateId": { "start": {...}, "noMatch": {...} } }
         // Il backend VB.NET si aspetta questa struttura (stessa del database)
-        const stepsDict = taskTree.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
-          ? taskTree.steps
-          : {};  // ✅ Se non è dictionary, usa vuoto (legacy format)
-
-        // ✅ Log rimosso: troppo verboso
 
         // ✅ STATELESS: STEP 2: Compila e salva il dialogo nel repository
         // Il dialogo deve essere compilato e salvato prima di avviare la sessione
@@ -833,7 +864,7 @@ export default function DDEBubbleChat({
               }
               filteredSteps[nodeId] = filteredNodeSteps;
             } else {
-              filteredSteps[nodeId] = nodeSteps;
+              filteredSteps[nodeId] = nodeSteps as Record<string, unknown>;
             }
           }
           return filteredSteps;
@@ -1337,7 +1368,7 @@ export default function DDEBubbleChat({
         // Handle waiting for input
         eventSource.addEventListener('waitingForInput', (e: MessageEvent) => {
           try {
-            const data = JSON.parse(e.data);
+            void JSON.parse(e.data);
             console.log('[MOTORE] ⏳ Waiting for input');
             setIsWaitingForInput(true);
           } catch (error) {
@@ -1380,10 +1411,15 @@ export default function DDEBubbleChat({
               // ✅ CRITICAL: Aggiorna SOLO se ci sono dati estratti E sono diversi da quelli esistenti
               if (extractedValues.length > 0) {
                 setMessages((prev) => {
-                  // Trova l'ultimo messaggio utente
-                  const lastUserIndex = prev.findLastIndex(m =>
-                    m.type === 'user' && m.text === sentTextRef.current
-                  );
+                  // Trova l'ultimo messaggio utente (compat ES2020: niente findLastIndex)
+                  let lastUserIndex = -1;
+                  for (let i = prev.length - 1; i >= 0; i--) {
+                    const m = prev[i];
+                    if (m.type === 'user' && m.text === sentTextRef.current) {
+                      lastUserIndex = i;
+                      break;
+                    }
+                  }
 
                   if (lastUserIndex === -1) {
                     console.log('[DDEBubbleChat] ⚠️ No matching user message found');
@@ -1564,17 +1600,20 @@ export default function DDEBubbleChat({
       return;
     }
 
-    // ✅ Flow mode: use dedicated hook handler
+    // ✅ Flow mode: use dedicated hook handler (id stabile per DebuggerStep.clientMessageId)
     if (isFlowMode) {
-      // Add user message immediately
-      setMessages((prev) => [...prev, {
-        id: generateMessageId('user'),
-        type: 'user',
-        text: trimmed,
-        matchStatus: 'match'
-      }]);
+      const userId = generateMessageId('user');
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: userId,
+          type: 'user',
+          text: trimmed,
+          matchStatus: 'match',
+        },
+      ]);
       sentTextRef.current = trimmed;
-      await flowModeChat.handleUserInput(trimmed);
+      await flowModeChat.handleUserInput(trimmed, userId);
       return;
     }
 
@@ -1880,6 +1919,28 @@ export default function DDEBubbleChat({
 
       <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${combinedClass}`} ref={scrollContainerRef}>
         {displayMessages.map((m) => {
+          if (isFlowMode && m.type === 'user') {
+            const step =
+              flowModeChat.debuggerSteps.find((s) => s.clientMessageId === m.id) ??
+              [...flowModeChat.debuggerSteps].reverse().find((s) => s.utterance === m.text);
+            return (
+              <UserTurnCard
+                key={m.id}
+                message={m}
+                step={step}
+                expanded={flowExpandedUserId === m.id}
+                onToggleExpand={() => setFlowExpandedUserId((prev) => (prev === m.id ? null : m.id))}
+                onStepNoteChange={(stepId: string, note: string) =>
+                  flowModeChat.updateDebuggerStep(stepId, { note })
+                }
+                onReplayHighlight={(step: DebuggerStep) => flowModeChat.replayDebuggerHighlight(step)}
+                onEditResponse={handleFlowUserEditResponse}
+              />
+            );
+          }
+          if (isFlowMode && m.type === 'bot') {
+            return <FlowBotTurnLabel key={m.id} message={m} onEditTranslation={handleEdit} />;
+          }
           if (m.type === 'user') {
             return (
               <UserMessage
@@ -1922,47 +1983,50 @@ export default function DDEBubbleChat({
 
           return null;
         })}
-        {/* ✅ NEW: Input field - hidden in preview mode */}
-        {mode === 'interactive' && (
+        {mode === 'interactive' && (!isFlowMode || effectiveIsWaitingForInput) && (
           <div className={`bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3 ${combinedClass}`}>
-          <style dangerouslySetInnerHTML={{
-            __html: `
+            <style dangerouslySetInnerHTML={{
+              __html: `
             .chat-simulator-input-placeholder::placeholder {
               font-family: inherit !important;
               font-size: inherit !important;
             }
           `}} />
-          <input
-            type="text"
-            className={`chat-simulator-input-placeholder w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500 ${combinedClass}`}
-            style={{
-              fontFamily: 'inherit',
-              fontSize: 'inherit'
-            }}
-            ref={inlineInputRef}
-            onFocus={() => {
-              try { inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { }
-            }}
-            placeholder={
-              isFlowMode && dbgToolbarState === 'idle'
-                ? 'Premi Play nella toolbar per avviare il debugger…'
-                : effectiveIsWaitingForInput
-                  ? 'Type response...'
-                  : 'Waiting for backend...'
-            }
-            value={inlineDraft}
-            onChange={(e) => setInlineDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && effectiveIsWaitingForInput) {
-                const v = inlineDraft.trim();
-                if (!v) return;
-                sentTextRef.current = v;
-                void handleSend(v);
+            <input
+              type="text"
+              className={`chat-simulator-input-placeholder w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500 ${combinedClass}`}
+              style={{
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+              }}
+              ref={inlineInputRef}
+              onFocus={() => {
+                try {
+                  inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } catch {
+                  /* noop */
+                }
+              }}
+              placeholder={
+                isFlowMode && dbgToolbarState === 'idle'
+                  ? 'Premi Play nella toolbar per avviare il debugger…'
+                  : effectiveIsWaitingForInput
+                    ? 'Type response...'
+                    : 'Waiting for backend...'
               }
-            }}
-            disabled={!effectiveIsWaitingForInput}
-            autoFocus
-          />
+              value={inlineDraft}
+              onChange={(e) => setInlineDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && effectiveIsWaitingForInput) {
+                  const v = inlineDraft.trim();
+                  if (!v) return;
+                  sentTextRef.current = v;
+                  void handleSend(v);
+                }
+              }}
+              disabled={!effectiveIsWaitingForInput}
+              autoFocus
+            />
           </div>
         )}
       </div>
