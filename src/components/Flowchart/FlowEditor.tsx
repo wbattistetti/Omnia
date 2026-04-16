@@ -841,43 +841,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ REMOVED: Viewport initialization and scroll-to-node logic
   // All moved to useFlowViewport hook
 
-  // ✅ SOLUZIONE DEFINITIVA: Forza la griglia a coprire tutto il canvas con CSS semplice
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.id = 'flowchart-grid-fix';
-    style.textContent = `
-      .react-flow__node[draggable="true"] * {
-        border: 2px solid red !important;
-      }
-      /* ✅ Forza la griglia a coprire infinito in tutte le direzioni con position fixed */
-      .react-flow__background {
-        position: fixed !important;
-        top: -50% !important;
-        left: -50% !important;
-        width: 200% !important;
-        height: 200% !important;
-        pointer-events: none !important;
-        z-index: 0 !important;
-      }
-      .react-flow__background svg {
-        width: 100% !important;
-        height: 100% !important;
-      }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      const existing = document.getElementById('flowchart-grid-fix');
-      if (existing) document.head.removeChild(existing);
-    };
-  }, []);
-
   const subflowContextValue = useMemo(() => ({ onOpenSubflowForTask }), [onOpenSubflowForTask]);
 
   return (
     <FlowSubflowProvider value={subflowContextValue}>
       <FlowCanvasProvider flowId={flowId ?? 'main'}>
       <div
-        className="flex-1 h-full relative"
+        className="relative flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden"
         ref={canvasRef}
         data-omnia-flowchart-canvas-root={String(flowId ?? 'main').trim()}
         data-flow-canvas-id={String(flowId ?? 'main').trim()}
@@ -891,6 +861,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         isRunning={propIsRunning ?? FlowStateBridge.isRunning()}
       >
         <FlowchartWrapper
+          className="flex min-h-0 w-full flex-1 flex-col"
           nodes={nodes}
           edges={edges}
           padding={400}
@@ -927,8 +898,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             onNodeDoubleClick={eventHandlers.onNodeDoubleClick}
             defaultViewport={{ x: 0, y: 0, zoom: 1 }}
             maxZoom={4}
-            className="bg-white"
-            style={{ backgroundColor: '#ffffff', width: '100%', height: '100%' }}
+            className="min-h-0 flex-1 bg-white"
+            style={{ backgroundColor: '#ffffff', width: '100%', height: '100%', minHeight: 0 }}
             selectionOnDrag={true}
             onSelectionChange={eventHandlers.onSelectionChange}
             panOnDrag={[2]}
@@ -1000,8 +971,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       {/* Messaggio istruzione in alto a sinistra, solo se canvas vuoto */}
       {nodes.length === 0 && (
         <div
-          className="pointer-events-none absolute z-10 text-[10px]"
-          style={{ position: 'fixed' as any }}
+          className="pointer-events-none absolute left-2 top-2 text-[10px]"
         >
 
         </div>

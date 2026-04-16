@@ -3,8 +3,8 @@
  * senza MappingBlock / FlowMappingTree. Persistenza: meta.flowInterface.
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
-import { Brackets, Check, Pencil, Trash2, X } from 'lucide-react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, Brackets, Check, Lock, Pencil, Trash2, X } from 'lucide-react';
 import type { WorkspaceState } from '@flows/FlowTypes';
 import {
   DND_FLOWROW_VAR,
@@ -19,7 +19,10 @@ import {
   shouldSkipInterfaceDuplicate,
 } from '../FlowMappingPanel/interfaceMappingLabels';
 import { CollapsiblePanelSection } from './CollapsiblePanelSection';
+import { SidebarPortalTooltip, useSidebarHoverPortal } from './flowSidebarPortalTooltip';
 import { variableCreationService } from '../../services/VariableCreationService';
+import type { ParentInterfaceBindingSite } from '../../services/childFlowInterfaceParentBindings';
+import type { ReferenceLocation } from '../../services/subflowVariableReferenceScan';
 import { getVariableLabel } from '../../utils/getVariableLabel';
 import { makeTranslationKey } from '../../utils/translationKeys';
 
@@ -48,6 +51,11 @@ export interface FlowInterfaceSimpleListsProps {
   onInterfaceInputChange: (next: MappingEntry[]) => void;
   onInterfaceOutputChange: (next: MappingEntry[]) => void;
   onVariableMetadataChange?: () => void;
+  /** Output: variabile → riferimenti [GUID] che bloccano la rimozione (UI: cestino disabilitato + tooltip). */
+  outputRemovalBlockedByVarId: Map<string, ReferenceLocation[]>;
+  /** Variabile → siti parent con subflowBindings S2 attivi. */
+  parentBindingSitesByVarId: Map<string, ParentInterfaceBindingSite[]>;
+  onNavigateToParentBindingSite: (site: ParentInterfaceBindingSite) => void;
 }
 
 export function FlowInterfaceSimpleLists({
@@ -61,6 +69,9 @@ export function FlowInterfaceSimpleLists({
   onInterfaceInputChange,
   onInterfaceOutputChange,
   onVariableMetadataChange,
+  outputRemovalBlockedByVarId,
+  parentBindingSitesByVarId,
+  onNavigateToParentBindingSite,
 }: FlowInterfaceSimpleListsProps) {
   const [, bump] = React.useReducer((n: number) => n + 1, 0);
 
@@ -142,7 +153,6 @@ export function FlowInterfaceSimpleLists({
         zone="input"
         flowId={flowId}
         entries={sortedIn}
-        hint="Parametri in ingresso. Trascina variabili dalla sezione Variabili o righe dal canvas (la riga resta sul nodo)."
         onDragOver={onDragOver}
         onDrop={makeDrop(onDropVariableInput)}
         onRemoveEntry={removeInput}
@@ -151,13 +161,15 @@ export function FlowInterfaceSimpleLists({
         flowMetaTranslations={flowMetaTranslations}
         addTranslation={addTranslation}
         onRenamed={refresh}
+        outputRemovalBlockedByVarId={outputRemovalBlockedByVarId}
+        parentBindingSitesByVarId={parentBindingSitesByVarId}
+        onNavigateToParentBindingSite={onNavigateToParentBindingSite}
       />
       <InterfaceZoneCollapsible
         title="Output"
         zone="output"
         flowId={flowId}
         entries={sortedOut}
-        hint="Valori esposti in uscita. Stesso trascinamento della sezione Input."
         onDragOver={onDragOver}
         onDrop={makeDrop(onDropVariableOutput)}
         onRemoveEntry={removeOutput}
@@ -166,6 +178,9 @@ export function FlowInterfaceSimpleLists({
         flowMetaTranslations={flowMetaTranslations}
         addTranslation={addTranslation}
         onRenamed={refresh}
+        outputRemovalBlockedByVarId={outputRemovalBlockedByVarId}
+        parentBindingSitesByVarId={parentBindingSitesByVarId}
+        onNavigateToParentBindingSite={onNavigateToParentBindingSite}
       />
     </div>
   );
@@ -176,7 +191,6 @@ function InterfaceZoneCollapsible({
   zone,
   flowId,
   entries,
-  hint,
   onDragOver,
   onDrop,
   onRemoveEntry,
@@ -185,12 +199,14 @@ function InterfaceZoneCollapsible({
   flowMetaTranslations,
   addTranslation,
   onRenamed,
+  outputRemovalBlockedByVarId,
+  parentBindingSitesByVarId,
+  onNavigateToParentBindingSite,
 }: {
   title: string;
   zone: 'input' | 'output';
   flowId: string;
   entries: MappingEntry[];
-  hint: string;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
   onRemoveEntry: (entryId: string) => void;
@@ -199,17 +215,32 @@ function InterfaceZoneCollapsible({
   flowMetaTranslations: Record<string, string>;
   addTranslation: (key: string, text: string) => void;
   onRenamed: () => void;
+  outputRemovalBlockedByVarId: Map<string, ReferenceLocation[]>;
+  parentBindingSitesByVarId: Map<string, ParentInterfaceBindingSite[]>;
+  onNavigateToParentBindingSite: (site: ParentInterfaceBindingSite) => void;
 }) {
   const borderAccent = zone === 'input' ? 'border-sky-600/35' : 'border-violet-600/35';
+  const headerTone = zone === 'input' ? 'sky' : 'violet';
+  const directionIcon =
+    zone === 'input' ? (
+      <ArrowLeft className="h-3.5 w-3.5 shrink-0 text-sky-400/90" aria-hidden />
+    ) : (
+      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-violet-400/90" aria-hidden />
+    );
 
   return (
     <CollapsiblePanelSection
-      title={title}
+      title={
+        <span className="flex items-center gap-2 normal-case tracking-normal">
+          {directionIcon}
+          <span>{title}</span>
+        </span>
+      }
+      headerTone={headerTone}
       defaultOpen
       className="min-h-0 shrink-0"
       contentClassName="min-h-0 flex flex-col gap-2 overflow-hidden px-1 pb-2"
     >
-      <p className="px-0.5 text-[10px] leading-snug text-slate-500">{hint}</p>
       <div
         className={`min-h-[2.5rem] rounded-md border ${borderAccent} bg-[#080a0d]/80`}
         data-flow-interface-zone={zone}
@@ -231,6 +262,7 @@ function InterfaceZoneCollapsible({
               return (
                 <InterfaceVariableRow
                   key={entry.id}
+                  zone={zone}
                   displayLabel={label}
                   variableRefId={vid}
                   wireKey={entry.wireKey}
@@ -240,6 +272,9 @@ function InterfaceZoneCollapsible({
                   onRemove={() => onRemoveEntry(entry.id)}
                   addTranslation={addTranslation}
                   onRenamed={onRenamed}
+                  parentBindingSites={parentBindingSitesByVarId.get(vid) ?? []}
+                  outputRemovalBlockedRefs={outputRemovalBlockedByVarId.get(vid)}
+                  onNavigateToParentBindingSite={onNavigateToParentBindingSite}
                 />
               );
             })}
@@ -250,7 +285,94 @@ function InterfaceZoneCollapsible({
   );
 }
 
+function LockTooltipBody({
+  sites,
+  onNavigate,
+}: {
+  sites: ParentInterfaceBindingSite[];
+  onNavigate: (site: ParentInterfaceBindingSite) => void;
+}) {
+  if (sites.length === 0) return null;
+  return (
+    <>
+      <p className="mb-1.5 text-[10px] font-medium text-slate-300">Legata in (flow parent):</p>
+      <ul className="max-h-40 space-y-1 overflow-y-auto text-[10px]">
+        {sites.map((s) => (
+          <li key={`${s.parentFlowId}:${s.canvasNodeId}:${s.subflowTaskId}`}>
+            <button
+              type="button"
+              className="w-full rounded px-1 py-0.5 text-left font-mono text-[10px] text-sky-300/95 underline-offset-2 hover:bg-slate-800/80 hover:underline"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onNavigate(s);
+              }}
+            >
+              {s.parentFlowTitle}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function TrashBlockedTooltipBody({
+  trashDisabledByGuidRefs,
+  trashDisabledByParentInput,
+  blockedRefs,
+  parentSites,
+  onNavigate,
+}: {
+  trashDisabledByGuidRefs: boolean;
+  trashDisabledByParentInput: boolean;
+  blockedRefs: ReferenceLocation[] | undefined;
+  parentSites: ParentInterfaceBindingSite[];
+  onNavigate: (site: ParentInterfaceBindingSite) => void;
+}) {
+  return (
+    <>
+      {trashDisabledByGuidRefs && blockedRefs && blockedRefs.length > 0 ? (
+        <>
+          <p className="mb-2 text-[10px] leading-snug text-slate-400">
+            Non puoi scollegare: la variabile nel flow parent è ancora usata con token [GUID] qui:
+          </p>
+          <ul className="max-h-44 space-y-1.5 overflow-y-auto border border-slate-700/70 rounded bg-black/25 p-1.5 text-[10px]">
+            {blockedRefs.map((r) => (
+              <li key={`${r.kind}:${r.id}`} className="flex flex-col gap-0.5">
+                <span className="text-[9px] uppercase tracking-wide text-slate-500">{r.kind}</span>
+                <span className="font-mono text-violet-200/95 break-all">{r.label}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {trashDisabledByParentInput && parentSites.length > 0 ? (
+        <>
+          <p className="mb-2 text-[10px] leading-snug text-slate-400">
+            Rimuovi prima i collegamenti Subflow nei flow parent, oppure apri:
+          </p>
+          <ul className="max-h-44 space-y-1 overflow-y-auto text-[10px]">
+            {parentSites.map((s) => (
+              <li key={`${s.parentFlowId}:${s.canvasNodeId}:${s.subflowTaskId}`}>
+                <button
+                  type="button"
+                  className="w-full rounded px-1 py-0.5 text-left font-mono text-[10px] text-sky-300/95 hover:bg-slate-800/80"
+                  onClick={() => onNavigate(s)}
+                >
+                  {s.parentFlowTitle}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 function InterfaceVariableRow({
+  zone,
   displayLabel,
   variableRefId,
   wireKey,
@@ -260,7 +382,11 @@ function InterfaceVariableRow({
   onRemove,
   addTranslation,
   onRenamed,
+  parentBindingSites,
+  outputRemovalBlockedRefs,
+  onNavigateToParentBindingSite,
 }: {
+  zone: 'input' | 'output';
   displayLabel: string;
   variableRefId: string;
   wireKey: string;
@@ -270,10 +396,25 @@ function InterfaceVariableRow({
   onRemove: () => void;
   addTranslation: (key: string, text: string) => void;
   onRenamed: () => void;
+  parentBindingSites: ParentInterfaceBindingSite[];
+  outputRemovalBlockedRefs: ReferenceLocation[] | undefined;
+  onNavigateToParentBindingSite: (site: ParentInterfaceBindingSite) => void;
 }) {
   const fullLabel = getVariableLabel(variableRefId, flowMetaTranslations);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(fullLabel);
+  const lockRef = useRef<HTMLButtonElement>(null);
+  const trashRef = useRef<HTMLButtonElement>(null);
+  const lockHover = useSidebarHoverPortal();
+  const trashHover = useSidebarHoverPortal();
+
+  const trashDisabledByGuidRefs =
+    zone === 'output' &&
+    outputRemovalBlockedRefs !== undefined &&
+    outputRemovalBlockedRefs.length > 0;
+  const trashDisabledByParentInput = zone === 'input' && parentBindingSites.length > 0;
+  const trashDisabled = trashDisabledByGuidRefs || trashDisabledByParentInput;
+  const showLock = parentBindingSites.length > 0;
 
   React.useEffect(() => {
     setDraft(getVariableLabel(variableRefId, flowMetaTranslations));
@@ -328,6 +469,29 @@ function InterfaceVariableRow({
       }}
     >
       <Brackets className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
+      {showLock ? (
+        <>
+          <button
+            ref={lockRef}
+            type="button"
+            className="shrink-0 rounded p-0.5 text-amber-300/90 hover:bg-slate-800/80"
+            aria-label="Legata nei flow parent — passa il mouse per i dettagli"
+            onMouseEnter={lockHover.anchorEnter}
+            onMouseLeave={lockHover.anchorLeave}
+          >
+            <Lock className="h-3 w-3" strokeWidth={2.2} aria-hidden />
+          </button>
+          <SidebarPortalTooltip
+            anchorRef={lockRef}
+            active={lockHover.active}
+            panelEnter={lockHover.panelEnter}
+            panelLeave={lockHover.panelLeave}
+            className="border-amber-500/35"
+          >
+            <LockTooltipBody sites={parentBindingSites} onNavigate={onNavigateToParentBindingSite} />
+          </SidebarPortalTooltip>
+        </>
+      ) : null}
       {editing ? (
         <div className="flex min-w-0 flex-1 items-center gap-0.5">
           <input
@@ -383,15 +547,47 @@ function InterfaceVariableRow({
           >
             <Pencil className="h-3 w-3" strokeWidth={2} />
           </button>
-          <button
-            type="button"
-            className="shrink-0 rounded p-0.5 text-slate-600 opacity-0 hover:bg-slate-700 hover:text-red-400 group-hover/iface-row:opacity-100"
-            title="Rimuovi dall'interfaccia"
-            aria-label={`Rimuovi ${displayLabel}`}
-            onClick={onRemove}
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
+          <div className="relative shrink-0">
+            {trashDisabled ? (
+              <>
+                <button
+                  ref={trashRef}
+                  type="button"
+                  className="shrink-0 rounded p-0.5 text-slate-500 opacity-50 cursor-not-allowed group-hover/iface-row:opacity-100"
+                  aria-label={`Non è possibile rimuovere ${displayLabel} dall'interfaccia. Passa il mouse per i dettagli.`}
+                  onMouseEnter={trashHover.anchorEnter}
+                  onMouseLeave={trashHover.anchorLeave}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+                <SidebarPortalTooltip
+                  anchorRef={trashRef}
+                  active={trashHover.active}
+                  panelEnter={trashHover.panelEnter}
+                  panelLeave={trashHover.panelLeave}
+                  className="border-violet-500/40"
+                >
+                  <TrashBlockedTooltipBody
+                    trashDisabledByGuidRefs={trashDisabledByGuidRefs}
+                    trashDisabledByParentInput={trashDisabledByParentInput}
+                    blockedRefs={outputRemovalBlockedRefs}
+                    parentSites={parentBindingSites}
+                    onNavigate={onNavigateToParentBindingSite}
+                  />
+                </SidebarPortalTooltip>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="shrink-0 rounded p-0.5 text-slate-600 opacity-0 hover:bg-slate-700 hover:text-red-400 group-hover/iface-row:opacity-100"
+                title="Rimuovi dall'interfaccia"
+                aria-label={`Rimuovi ${displayLabel}`}
+                onClick={onRemove}
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            )}
+          </div>
         </>
       )}
     </li>

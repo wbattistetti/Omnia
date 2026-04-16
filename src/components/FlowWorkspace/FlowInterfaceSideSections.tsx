@@ -3,13 +3,17 @@
  * Gestisce drop da canvas, validazione rimozione output e sync subflow parent.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useInMemoryConditions } from '../../context/InMemoryConditionsContext';
 import { useProjectTranslations } from '../../context/ProjectTranslationsContext';
 import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
 import { flowWorkspaceMetaTranslationsFingerprint } from '../../utils/compileWorkspaceTranslations';
 import { getFlowMetaTranslationsFlattened } from '../../utils/activeFlowTranslations';
 import { useFlowActions, useFlowWorkspace } from '@flows/FlowStore';
+import {
+  collectParentBindingSitesForChildInterfaceVariable,
+  type ParentInterfaceBindingSite,
+} from '../../services/childFlowInterfaceParentBindings';
 import { ensureFlowVariableBindingForInterfaceRow, shouldSkipInterfaceDuplicate } from '../FlowMappingPanel/interfaceMappingLabels';
 import { FlowInterfaceSimpleLists } from './FlowInterfaceSimpleLists';
 import {
@@ -48,8 +52,7 @@ export function FlowInterfaceSideSections({ flowId, projectId, onVariableMetadat
   const { conditions } = useInMemoryConditions();
   const flowsRef = useRef(flows);
   flowsRef.current = flows;
-  const { updateFlowMeta } = useFlowActions();
-  const [removalBlockRefs, setRemovalBlockRefs] = useState<ReferenceLocation[] | null>(null);
+  const { updateFlowMeta, setActiveFlow } = useFlowActions();
 
   const flow = flows[flowId];
   const iface = flow?.meta?.flowInterface ?? { input: [] as MappingEntry[], output: [] as MappingEntry[] };
@@ -62,6 +65,67 @@ export function FlowInterfaceSideSections({ flowId, projectId, onVariableMetadat
         text: JSON.stringify(c),
       })),
     [conditions]
+  );
+
+  const outputRemovalBlockedByVarId = useMemo(() => {
+    const m = new Map<string, ReferenceLocation[]>();
+    const pid = String(projectId || '').trim();
+    if (!pid) return m;
+    for (const e of iface.output) {
+      const vid = String(e.variableRefId || '').trim();
+      if (!vid) continue;
+      const v = validateRemovalOfInterfaceOutputRow(
+        pid,
+        flowId,
+        vid,
+        flows as any,
+        translations,
+        conditionPayloads
+      );
+      if (!v.ok) m.set(vid, v.references);
+    }
+    return m;
+  }, [projectId, flowId, flows, iface.output, translations, conditionPayloads]);
+
+  const parentBindingSitesByVarId = useMemo(() => {
+    const m = new Map<string, ParentInterfaceBindingSite[]>();
+    const ids = new Set<string>();
+    for (const e of iface.input) {
+      const v = String(e.variableRefId || '').trim();
+      if (v) ids.add(v);
+    }
+    for (const e of iface.output) {
+      const v = String(e.variableRefId || '').trim();
+      if (v) ids.add(v);
+    }
+    for (const vid of ids) {
+      m.set(vid, collectParentBindingSitesForChildInterfaceVariable(flowId, vid, flows as any));
+    }
+    return m;
+  }, [flowId, flows, iface.input, iface.output]);
+
+  const navigateToParentBindingSite = useCallback(
+    (site: ParentInterfaceBindingSite) => {
+      const fid = String(site.parentFlowId || '').trim();
+      const nid = String(site.canvasNodeId || '').trim();
+      if (!fid || !nid) return;
+      setActiveFlow(fid);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try {
+            document.dispatchEvent(
+              new CustomEvent('flowchart:centerViewportOnNode', {
+                bubbles: true,
+                detail: { flowId: fid, nodeId: nid },
+              })
+            );
+          } catch {
+            /* noop */
+          }
+        });
+      });
+    },
+    [setActiveFlow]
   );
 
   const setInput = useCallback(
@@ -91,7 +155,6 @@ export function FlowInterfaceSideSections({ flowId, projectId, onVariableMetadat
               conditionPayloads
             );
             if (!v.ok) {
-              setRemovalBlockRefs(v.references);
               return;
             }
           }
@@ -181,55 +244,22 @@ export function FlowInterfaceSideSections({ flowId, projectId, onVariableMetadat
   }, [flowId, projectId, updateFlowMeta]);
 
   return (
-    <>
-      {removalBlockRefs !== null ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4 pointer-events-auto"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="iface-removal-block-title"
-        >
-          <div className="max-w-md w-full rounded-lg border border-violet-500/35 bg-[#0f1218] p-4 shadow-xl text-slate-100">
-            <h3 id="iface-removal-block-title" className="text-sm font-semibold mb-2">
-              Impossibile rimuovere questo output
-            </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              La variabile nel flow parent (collegamento Subflow) è ancora referenziata con token [GUID] nei punti seguenti.
-              Rimuovi quei riferimenti, poi riprova.
-            </p>
-            <ul className="text-xs max-h-52 overflow-y-auto space-y-1.5 border border-slate-700/80 rounded-md p-2 mb-4 bg-black/20">
-              {removalBlockRefs.map((r) => (
-                <li key={`${r.kind}:${r.id}`} className="flex flex-col gap-0.5">
-                  <span className="text-[10px] uppercase tracking-wide text-slate-500">{r.kind}</span>
-                  <span className="font-mono text-violet-200/95 break-all">{r.label}</span>
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              className="rounded-md bg-violet-600/90 hover:bg-violet-500 px-3 py-1.5 text-xs font-medium text-white"
-              onClick={() => setRemovalBlockRefs(null)}
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="pointer-events-auto flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden">
-        <FlowInterfaceSimpleLists
-          flowId={flowId}
-          projectId={projectId}
-          flowMetaTranslations={flowMetaTranslations}
-          addTranslation={addTranslation}
-          workspaceFlows={flows}
-          interfaceInput={iface.input}
-          interfaceOutput={iface.output}
-          onInterfaceInputChange={setInput}
-          onInterfaceOutputChange={setOutput}
-          onVariableMetadataChange={onVariableMetadataChange}
-        />
-      </div>
-    </>
+    <div className="pointer-events-auto flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden">
+      <FlowInterfaceSimpleLists
+        flowId={flowId}
+        projectId={projectId}
+        flowMetaTranslations={flowMetaTranslations}
+        addTranslation={addTranslation}
+        workspaceFlows={flows}
+        interfaceInput={iface.input}
+        interfaceOutput={iface.output}
+        onInterfaceInputChange={setInput}
+        onInterfaceOutputChange={setOutput}
+        onVariableMetadataChange={onVariableMetadataChange}
+        outputRemovalBlockedByVarId={outputRemovalBlockedByVarId}
+        parentBindingSitesByVarId={parentBindingSitesByVarId}
+        onNavigateToParentBindingSite={navigateToParentBindingSite}
+      />
+    </div>
   );
 }

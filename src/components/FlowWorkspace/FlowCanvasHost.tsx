@@ -9,6 +9,7 @@ import { logSubflowCanvasDebug, summarizeFlowSlice } from '../../utils/subflowCa
 import { logUpsertSubflowEmptyNodesCaller } from '../../utils/flowStructuralCommitDiagnostic';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
+import { FlowCanvasDockRow } from './FlowCanvasDockRow';
 import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
 import { FlowTestProvider } from '../../context/FlowTestContext';
 import { FlowActionsProvider } from '../../context/FlowActionsContext';
@@ -430,6 +431,56 @@ export const FlowCanvasHost: React.FC<Props> = ({
     />
   );
 
+  const canvasSlot = (
+    <div className="relative flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <div className="h-full w-full min-h-0 min-w-0">{flowEditor}</div>
+      {isLoadingFlow ? (
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px] text-sm font-medium text-slate-700"
+          role="status"
+          aria-live="polite"
+        >
+          Loading flow...
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const variablesRail = (
+    <FlowVariablesRail
+      flowId={flowId}
+      projectId={projectId}
+      workspaceFlows={flows}
+      flowInterfaceSectionsEnabled={isFlowInterfacePanelEnabled(flowId)}
+      onOpenSubflowPortalGear={
+        onOpenSubflowForTask
+          ? (taskId, existingFlowId, rowLabel, canvasNodeId) =>
+              onOpenSubflowForTask(taskId, existingFlowId, rowLabel, canvasNodeId)
+          : undefined
+      }
+      {...(onToolbarUpdate
+        ? {
+            open: variablesPanelOpen,
+            onOpenChange: (next: boolean) => {
+              setVariablesPanelOpen(next);
+              if (next) {
+                if (hasDataForToolbar) setDataSectionOn(true);
+                if (hasSubdialogsForToolbar) setSubdialogsSectionOn(true);
+              }
+            },
+            hideEdgeToggle: true,
+            dockSectionTogglesInToolbar: true,
+            dataSectionOn,
+            subdialogsSectionOn,
+            hasDataAvailable: hasDataForToolbar,
+            hasSubdialogsAvailable: hasSubdialogsForToolbar,
+            panelTitle: flowSidePanelTitle,
+            subflowPortalRows: subflowPortalRowsDock,
+          }
+        : {})}
+    />
+  );
+
   const withFlowActions = (
     <FlowActionsProvider
       setNodes={setNodes}
@@ -439,68 +490,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
       createTask={entityCreation.createTask}
       createCondition={entityCreation.createCondition}
     >
-      {onToolbarUpdate ? (
-        <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-row overflow-hidden">
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <div className="absolute inset-0 z-0 min-h-0 min-w-0">{flowEditor}</div>
-            {isLoadingFlow ? (
-              <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-[1px] text-sm font-medium text-slate-700">
-                Loading flow...
-              </div>
-            ) : null}
-          </div>
-          <FlowVariablesRail
-            flowId={flowId}
-            projectId={projectId}
-            open={variablesPanelOpen}
-            onOpenChange={(next) => {
-              setVariablesPanelOpen(next);
-              if (next) {
-                if (hasDataForToolbar) setDataSectionOn(true);
-                if (hasSubdialogsForToolbar) setSubdialogsSectionOn(true);
-              }
-            }}
-            hideEdgeToggle
-            dockAsColumn
-            workspaceFlows={flows}
-            dockSectionTogglesInToolbar
-            dataSectionOn={dataSectionOn}
-            subdialogsSectionOn={subdialogsSectionOn}
-            hasDataAvailable={hasDataForToolbar}
-            hasSubdialogsAvailable={hasSubdialogsForToolbar}
-            panelTitle={flowSidePanelTitle}
-            subflowPortalRows={subflowPortalRowsDock}
-            flowInterfaceSectionsEnabled={isFlowInterfacePanelEnabled(flowId)}
-            onOpenSubflowPortalGear={
-              onOpenSubflowForTask
-                ? (taskId, existingFlowId, rowLabel, canvasNodeId) =>
-                    onOpenSubflowForTask(taskId, existingFlowId, rowLabel, canvasNodeId)
-                : undefined
-            }
-          />
-        </div>
-      ) : (
-        <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="absolute inset-0 z-0 min-h-0 min-w-0">{flowEditor}</div>
-          {isLoadingFlow ? (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-[1px] text-sm font-medium text-slate-700">
-              Loading flow...
-            </div>
-          ) : null}
-          <FlowVariablesRail
-            flowId={flowId}
-            projectId={projectId}
-            workspaceFlows={flows}
-            flowInterfaceSectionsEnabled={isFlowInterfacePanelEnabled(flowId)}
-            onOpenSubflowPortalGear={
-              onOpenSubflowForTask
-                ? (taskId, existingFlowId, rowLabel, canvasNodeId) =>
-                    onOpenSubflowForTask(taskId, existingFlowId, rowLabel, canvasNodeId)
-                : undefined
-            }
-          />
-        </div>
-      )}
+      <FlowCanvasDockRow canvas={canvasSlot} sidePanel={variablesRail} />
     </FlowActionsProvider>
   );
 

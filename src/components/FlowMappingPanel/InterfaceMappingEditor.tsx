@@ -449,7 +449,7 @@ export function InterfaceMappingEditor({
                 >
                   {collapsibleInterfaceBlocks ? (
                     <>
-                      <CollapsiblePanelSection title="Input" className="min-h-0 flex-1" defaultOpen>
+                      <CollapsiblePanelSection title="Input" headerTone="sky" className="min-h-0 flex-1" defaultOpen>
                         <MappingBlock
                           accent="input"
                           fillBodyHeight
@@ -475,7 +475,7 @@ export function InterfaceMappingEditor({
                           />
                         </MappingBlock>
                       </CollapsiblePanelSection>
-                      <CollapsiblePanelSection title="Output" className="min-h-0 flex-1" defaultOpen>
+                      <CollapsiblePanelSection title="Output" headerTone="violet" className="min-h-0 flex-1" defaultOpen>
                         <MappingBlock
                           accent="output"
                           fillBodyHeight

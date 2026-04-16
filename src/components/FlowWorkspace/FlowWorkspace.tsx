@@ -11,6 +11,7 @@ import { logSubflowCanvasDebug, summarizeFlowSlice } from '../../utils/subflowCa
 import { logUpsertSubflowEmptyNodesCaller } from '../../utils/flowStructuralCommitDiagnostic';
 import { FlowEditor } from '../Flowchart/FlowEditor';
 import { FlowVariablesRail } from './FlowVariablesRail';
+import { FlowCanvasDockRow } from './FlowCanvasDockRow';
 import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
 // Adapter: renderizza l'attuale FlowEditor per activeFlowId con nodes/edges del workspace
 const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
@@ -126,54 +127,58 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
     <div className="flex-1 h-full flex flex-col">
       <FlowTabBar />
       <div className="flex-1 min-h-0 relative flex flex-col min-w-0">
-        <div className="relative flex flex-1 min-h-0 w-full min-w-0 overflow-hidden">
-          <div className="absolute inset-0 z-0 min-h-0 min-w-0">
-            <FlowEditor
+        <FlowCanvasDockRow
+          canvas={
+            <div className="h-full w-full min-h-0 min-w-0">
+              <FlowEditor
+                flowId={activeFlowId}
+                nodes={flow?.nodes || []}
+                edges={flow?.edges || []}
+                setNodes={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: typeof updater === 'function' ? updater(ns) : updater, edges: es }))}
+                setEdges={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: ns, edges: typeof updater === 'function' ? updater(es) : updater }))}
+                currentProject={{ id: projectId, name: 'Project' } as any}
+                setCurrentProject={() => {}}
+                testPanelOpen={false}
+                setTestPanelOpen={() => {}}
+                testNodeId={null}
+                setTestNodeId={() => {}}
+                onPlayNode={() => {}}
+                onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
+                  dlog('flow', '[workspace.onCreateTaskFlow]', { newFlowId, title, nodes: nodes.length, edges: edges.length });
+                  const derivedTitle = (title && String(title).trim()) || 'Task';
+                  const slice = {
+                    id: newFlowId,
+                    title: derivedTitle,
+                    nodes,
+                    edges,
+                    hydrated: false,
+                    variablesReady: false,
+                    hasLocalChanges: true,
+                  };
+                  upsertFlow(slice);
+                  const flowsSnapshot = { ...flowsForSave, [newFlowId]: slice };
+                  setTimeout(() => openFlowBackground(newFlowId), 0);
+                  if (projectId && String(projectId).trim() !== '') {
+                    saveFlow(projectId, newFlowId, nodes, edges, flowsSnapshot).then(
+                      () => markFlowsPersisted([newFlowId]),
+                      (e) => {
+                        try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
+                      }
+                    );
+                  }
+                }}
+              />
+            </div>
+          }
+          sidePanel={
+            <FlowVariablesRail
               flowId={activeFlowId}
-              nodes={flow?.nodes || []}
-              edges={flow?.edges || []}
-              setNodes={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: typeof updater === 'function' ? updater(ns) : updater, edges: es }))}
-              setEdges={(updater: any) => updateFlowGraph(activeFlowId, (ns, es) => ({ nodes: ns, edges: typeof updater === 'function' ? updater(es) : updater }))}
-              currentProject={{ id: projectId, name: 'Project' } as any}
-              setCurrentProject={() => {}}
-              testPanelOpen={false}
-              setTestPanelOpen={() => {}}
-              testNodeId={null}
-              setTestNodeId={() => {}}
-              onPlayNode={() => {}}
-              onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
-                dlog('flow', '[workspace.onCreateTaskFlow]', { newFlowId, title, nodes: nodes.length, edges: edges.length });
-                const derivedTitle = (title && String(title).trim()) || 'Task';
-                const slice = {
-                  id: newFlowId,
-                  title: derivedTitle,
-                  nodes,
-                  edges,
-                  hydrated: false,
-                  variablesReady: false,
-                  hasLocalChanges: true,
-                };
-                upsertFlow(slice);
-                const flowsSnapshot = { ...flowsForSave, [newFlowId]: slice };
-                setTimeout(() => openFlowBackground(newFlowId), 0);
-                if (projectId && String(projectId).trim() !== '') {
-                  saveFlow(projectId, newFlowId, nodes, edges, flowsSnapshot).then(
-                    () => markFlowsPersisted([newFlowId]),
-                    (e) => {
-                      try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
-                    }
-                  );
-                }
-              }}
+              projectId={projectId}
+              workspaceFlows={flows}
+              flowInterfaceSectionsEnabled={isFlowInterfacePanelEnabled(activeFlowId)}
             />
-          </div>
-          <FlowVariablesRail
-            flowId={activeFlowId}
-            projectId={projectId}
-            workspaceFlows={flows}
-            flowInterfaceSectionsEnabled={isFlowInterfacePanelEnabled(activeFlowId)}
-          />
-        </div>
+          }
+        />
       </div>
     </div>
   );

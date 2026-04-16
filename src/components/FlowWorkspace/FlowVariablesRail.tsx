@@ -1,9 +1,12 @@
 /**
  * Pannello laterale unico del flow: opzionalmente Input/Output (subflow), poi Variabili e Sottodialoghi.
+ * Rendering: colonna flex a destra (larghezza animata); il canvas va incapsulato in {@link FlowCanvasDockRow}
+ * così l’area del flow si restringe senza overlay.
  * In dock i toggle Data/Subdialogs stanno sulla toolbar del tab; in workspace standalone nell’header del pannello.
  */
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Brackets,
   Check,
@@ -69,7 +72,6 @@ export interface FlowVariablesRailProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   hideEdgeToggle?: boolean;
-  dockAsColumn?: boolean;
   /** Live workspace graph — required so task variables match the canvas (not a stale snapshot). */
   workspaceFlows: WorkspaceState['flows'];
   /**
@@ -104,6 +106,15 @@ export interface FlowVariablesRailProps {
    */
   flowInterfaceSectionsEnabled?: boolean;
 }
+
+/**
+ * Rail width policy for dock split:
+ * - preferred width = 22rem (352px)
+ * - keep at least MIN_CANVAS_WIDTH_PX for the canvas column
+ * - if the pane is too narrow, rail shrinks instead of collapsing canvas to zero
+ */
+const FLOW_RAIL_PREFERRED_WIDTH_PX = 352;
+const FLOW_RAIL_MIN_CANVAS_WIDTH_PX = 320;
 
 const ROW_DEPTH_INDENT_PX = 16;
 const ROW_ICON_LINE_OFFSET_PX = 24;
@@ -555,7 +566,6 @@ export function FlowVariablesRail({
   open: openControlled,
   onOpenChange,
   hideEdgeToggle = false,
-  dockAsColumn = false,
   workspaceFlows,
   dockSectionTogglesInToolbar = false,
   dataSectionOn: dataSectionOnProp,
@@ -649,7 +659,8 @@ export function FlowVariablesRail({
   }, [instances, flowInterfaceSectionsEnabled, interfaceBoundIds]);
 
   const [dataDeleteBlockRefs, setDataDeleteBlockRefs] = useState<ReferenceLocation[] | null>(null);
-  const [interfaceUnbindBlockRefs, setInterfaceUnbindBlockRefs] = useState<ReferenceLocation[] | null>(null);
+  /** Drop Variabili ← Interface bloccato: banner compatto (non modale). */
+  const [interfaceUnbindBannerRefs, setInterfaceUnbindBannerRefs] = useState<ReferenceLocation[] | null>(null);
 
   const hasDataAvailable = useMemo(() => {
     if (dockSectionTogglesInToolbar && hasDataAvailableProp !== undefined) {
@@ -779,7 +790,7 @@ export function FlowVariablesRail({
         conditionPayloads
       );
       if (!result.ok) {
-        setInterfaceUnbindBlockRefs(result.references);
+        setInterfaceUnbindBannerRefs(result.references);
         return;
       }
       updateFlowMeta(flowId, {
@@ -1041,7 +1052,37 @@ export function FlowVariablesRail({
         }`}
       >
         {flowInterfaceSectionsEnabled ? (
-          <FlowInterfaceSideSections flowId={flowId} projectId={projectId} onVariableMetadataChange={refresh} />
+          <>
+            {interfaceUnbindBannerRefs !== null && interfaceUnbindBannerRefs.length > 0 ? (
+              <div
+                className="mx-1 mb-2 rounded-md border border-violet-500/40 bg-[#0f1218] p-2 text-[10px] text-slate-300 shadow-md"
+                role="status"
+              >
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <p className="leading-snug text-slate-400">
+                    Impossibile scollegare dalla interfaccia: ancora referenziata con [GUID] nei punti seguenti.
+                  </p>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+                    aria-label="Chiudi"
+                    onClick={() => setInterfaceUnbindBannerRefs(null)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <ul className="max-h-32 space-y-1 overflow-y-auto border border-slate-700/60 rounded bg-black/20 p-1.5 font-mono text-[9px] text-violet-200/90">
+                  {interfaceUnbindBannerRefs.map((r) => (
+                    <li key={`${r.kind}:${r.id}`}>
+                      <span className="text-slate-500">{r.kind}: </span>
+                      {r.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <FlowInterfaceSideSections flowId={flowId} projectId={projectId} onVariableMetadataChange={refresh} />
+          </>
         ) : null}
 
         {!projectId && (
@@ -1065,6 +1106,7 @@ export function FlowVariablesRail({
             {showDataBlock ? (
               <CollapsiblePanelSection
                 title="Variabili"
+                headerTone="amber"
                 defaultOpen
                 className="min-h-0 shrink-0"
                 contentClassName="min-h-0 flex flex-col overflow-hidden"
@@ -1082,6 +1124,7 @@ export function FlowVariablesRail({
             {showSubdialogsBlock ? (
               <CollapsiblePanelSection
                 title="Sottodialoghi"
+                headerTone="emerald"
                 defaultOpen
                 className="min-h-0 shrink-0"
                 contentClassName="min-h-0 overflow-y-auto px-1 pb-2"
@@ -1129,116 +1172,87 @@ export function FlowVariablesRail({
     </>
   );
 
+  const dataDeleteModal =
+    dataDeleteBlockRefs !== null ? (
+      <div
+        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4 pointer-events-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="data-delete-block-title"
+      >
+        <div className="max-w-md w-full rounded-lg border border-amber-500/35 bg-[#0f1218] p-4 shadow-xl text-slate-100">
+          <h3 id="data-delete-block-title" className="text-sm font-semibold mb-2">
+            Impossibile eliminare questa variabile
+          </h3>
+          <p className="text-xs text-slate-400 mb-3">
+            È ancora referenziata con token [GUID] nei punti seguenti. Rimuovi quei riferimenti, poi riprova.
+          </p>
+          <ul className="text-xs max-h-52 overflow-y-auto space-y-1.5 border border-slate-700/80 rounded-md p-2 mb-4 bg-black/20">
+            {dataDeleteBlockRefs.map((r) => (
+              <li key={`${r.kind}:${r.id}`} className="flex flex-col gap-0.5">
+                <span className="text-[10px] uppercase tracking-wide text-slate-500">{r.kind}</span>
+                <span className="font-mono text-amber-200/95 break-all">{r.label}</span>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="rounded-md bg-amber-600/90 hover:bg-amber-500 px-3 py-1.5 text-xs font-medium text-white"
+            onClick={() => setDataDeleteBlockRefs(null)}
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    ) : null;
+
+  const railOpenWidth = `min(${FLOW_RAIL_PREFERRED_WIDTH_PX}px, max(0px, calc(100% - ${FLOW_RAIL_MIN_CANVAS_WIDTH_PX}px)))`;
+  const railWidth = open ? railOpenWidth : '0px';
+
   return (
     <>
-      {dataDeleteBlockRefs !== null ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4 pointer-events-auto"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="data-delete-block-title"
-        >
-          <div className="max-w-md w-full rounded-lg border border-amber-500/35 bg-[#0f1218] p-4 shadow-xl text-slate-100">
-            <h3 id="data-delete-block-title" className="text-sm font-semibold mb-2">
-              Impossibile eliminare questa variabile
-            </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              È ancora referenziata con token [GUID] nei punti seguenti. Rimuovi quei riferimenti, poi riprova.
-            </p>
-            <ul className="text-xs max-h-52 overflow-y-auto space-y-1.5 border border-slate-700/80 rounded-md p-2 mb-4 bg-black/20">
-              {dataDeleteBlockRefs.map((r) => (
-                <li key={`${r.kind}:${r.id}`} className="flex flex-col gap-0.5">
-                  <span className="text-[10px] uppercase tracking-wide text-slate-500">{r.kind}</span>
-                  <span className="font-mono text-amber-200/95 break-all">{r.label}</span>
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              className="rounded-md bg-amber-600/90 hover:bg-amber-500 px-3 py-1.5 text-xs font-medium text-white"
-              onClick={() => setDataDeleteBlockRefs(null)}
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {typeof document !== 'undefined' && dataDeleteModal ? createPortal(dataDeleteModal, document.body) : null}
 
-      {interfaceUnbindBlockRefs !== null ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4 pointer-events-auto"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="iface-unbind-block-title"
-        >
-          <div className="max-w-md w-full rounded-lg border border-violet-500/35 bg-[#0f1218] p-4 shadow-xl text-slate-100">
-            <h3 id="iface-unbind-block-title" className="text-sm font-semibold mb-2">
-              Impossibile scollegare dalla interfaccia
-            </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              La variabile è ancora referenziata con token [GUID] nei punti seguenti. Rimuovi quei riferimenti, poi
-              riprova.
-            </p>
-            <ul className="text-xs max-h-52 overflow-y-auto space-y-1.5 border border-slate-700/80 rounded-md p-2 mb-4 bg-black/20">
-              {interfaceUnbindBlockRefs.map((r) => (
-                <li key={`${r.kind}:${r.id}`} className="flex flex-col gap-0.5">
-                  <span className="text-[10px] uppercase tracking-wide text-slate-500">{r.kind}</span>
-                  <span className="font-mono text-violet-200/95 break-all">{r.label}</span>
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              className="rounded-md bg-violet-600/90 hover:bg-violet-500 px-3 py-1.5 text-xs font-medium text-white"
-              onClick={() => setInterfaceUnbindBlockRefs(null)}
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {/*
+        Flex item diretto accanto al canvas in FlowCanvasDockRow.
+        La larghezza è sull'elemento shell stesso (non su un figlio) così il canvas
+        col flex-1 può calcolare correttamente lo spazio residuo.
+        Niente Fragment multi-radice; modale → createPortal su body.
+      */}
+      <div
+        className="relative flex h-full min-h-0 shrink-0 flex-col"
+        style={{ width: railWidth, transition: 'width 0.25s ease' }}
+        data-flow-variables-rail-shell=""
+      >
+        {!hideEdgeToggle ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="absolute right-0 top-1/2 -translate-y-1/2 cursor-pointer rounded-l-lg border-l-2 border-slate-600/50 bg-slate-800/40 px-2 py-8 shadow-lg backdrop-blur-sm transition-all duration-300 ease-in-out hover:border-slate-500/70 hover:bg-slate-800/70 hover:shadow-xl group"
+            title={open ? 'Chiudi dati' : 'Apri dati del flow'}
+            aria-expanded={open}
+            aria-label="Dati del flow"
+          >
+            <div className="flex flex-col items-center gap-2">
+              <Brackets className="h-5 w-5 text-slate-300/70 transition-colors group-hover:text-slate-200" />
+              <span
+                className="text-sm font-semibold tracking-wider text-slate-300/70 transition-colors duration-300 group-hover:text-slate-200"
+                style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+              >
+                Data
+              </span>
+            </div>
+          </button>
+        ) : null}
 
-      {!hideEdgeToggle ? (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="fixed right-0 top-1/2 z-50 -translate-y-1/2 cursor-pointer rounded-l-lg border-l-2 border-slate-600/50 bg-slate-800/40 px-2 py-8 shadow-lg backdrop-blur-sm transition-all duration-300 ease-in-out hover:border-slate-500/70 hover:bg-slate-800/70 hover:shadow-xl group"
-          title={open ? 'Chiudi dati' : 'Apri dati del flow'}
-          aria-expanded={open}
-          aria-label="Dati del flow"
-        >
-          <div className="flex flex-col items-center gap-2">
-            <Brackets className="h-5 w-5 text-slate-300/70 transition-colors group-hover:text-slate-200" />
-            <span
-              className="text-sm font-semibold tracking-wider text-slate-300/70 transition-colors duration-300 group-hover:text-slate-200"
-              style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-            >
-              Data
-            </span>
-          </div>
-        </button>
-      ) : null}
-
-      {dockAsColumn ? (
         <div
-          className={`flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-slate-600/60 bg-slate-900/95 shadow-xl transition-[width] duration-300 ease-in-out ${
-            open ? 'w-[min(22rem,100%)] border-l' : 'w-0 border-0'
+          className={`flex h-full min-h-0 w-full flex-col overflow-hidden border-slate-600/60 bg-slate-900/95 shadow-xl ${
+            open ? 'border-l' : 'border-0'
           }`}
         >
-          {open ? (
-            <div className="flex h-full min-h-0 w-[min(22rem,100vw)] max-w-[100vw] flex-col">{panelBody}</div>
-          ) : null}
+          {open ? <div className="h-full w-full min-h-0 min-w-0">{panelBody}</div> : null}
         </div>
-      ) : (
-        <div
-          className={`absolute right-0 top-0 bottom-0 z-30 flex flex-col border-l border-slate-600/60 bg-slate-900/95 shadow-2xl backdrop-blur-md transition-transform duration-300 ease-in-out ${
-            open ? 'translate-x-0' : 'translate-x-full'
-          } w-[min(100vw,22rem)] max-w-[100vw]`}
-          aria-hidden={!open}
-        >
-          {panelBody}
-        </div>
-      )}
+      </div>
     </>
   );
 }
