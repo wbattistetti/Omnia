@@ -1739,6 +1739,8 @@ export const AppContent: React.FC<AppContentProps> = ({
                           flowEdges={globalDebuggerFlowProps.edges}
                           flowTasks={globalDebuggerFlowProps.tasks}
                           executionFlowName={globalDebuggerFlowProps.executionFlowName}
+                          orchestratorCompileRootFlowId={globalDebuggerFlowProps.flowId}
+                          flowAutoStart
                           executionLaunchType="flow"
                           onToggleUseCasePanel={() => setShowUseCasePanel((v) => !v)}
                           onSaveUseCase={saveUseCaseFromDebugger}

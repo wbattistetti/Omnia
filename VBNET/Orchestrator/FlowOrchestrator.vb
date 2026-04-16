@@ -830,7 +830,7 @@ Public Class FlowOrchestrator
 
         For Each kvp In ds.VariablesBySlotGuid
             Dim slotGuid = kvp.Key
-            Dim var = _variables.SingleOrDefault(Function(v) v.Id = slotGuid)
+            Dim var = TryResolveCompiledVariableForSlot(slotGuid)
 
             If var IsNot Nothing Then
                 var.Values.Add(kvp.Value)
@@ -940,6 +940,25 @@ Public Class FlowOrchestrator
             Return _compilationResult
         End If
         Throw New InvalidOperationException($"No compilation registered for flow '{id}'.")
+    End Function
+
+    ''' <summary>
+    ''' Risolve <see cref="CompiledVariable"/> per uno slot GUID: prima nel <see cref="CompiledFlow"/> attivo
+    ''' (main o subflow in cima allo stack), poi nella lista del costruttore (main). Necessario perché
+    ''' <c>_variables</c> è popolato solo dal main <see cref="CompiledFlow"/> mentre i turni in subflow
+    ''' riempiono slot definiti nella compilazione del subflow.
+    ''' </summary>
+    Private Function TryResolveCompiledVariableForSlot(slotGuid As String) As CompiledVariable
+        If String.IsNullOrEmpty(slotGuid) Then Return Nothing
+        Dim ac = ActiveCompilation()
+        If ac IsNot Nothing AndAlso ac.Variables IsNot Nothing Then
+            Dim fromActive = ac.Variables.FirstOrDefault(
+                Function(x) x IsNot Nothing AndAlso String.Equals(x.Id, slotGuid, StringComparison.OrdinalIgnoreCase))
+            If fromActive IsNot Nothing Then Return fromActive
+        End If
+        If _variables Is Nothing Then Return Nothing
+        Return _variables.FirstOrDefault(
+            Function(x) x IsNot Nothing AndAlso String.Equals(x.Id, slotGuid, StringComparison.OrdinalIgnoreCase))
     End Function
 
     Private Function ConditionStateForFlow(flow As ExecutionFlow) As ExecutionState

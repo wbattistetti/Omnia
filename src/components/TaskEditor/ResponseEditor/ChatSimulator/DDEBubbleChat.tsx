@@ -235,6 +235,8 @@ export default function DDEBubbleChat({
   // ✅ NEW: Backend materialization flag
   useBackendMaterialization = false,
   executionFlowName,
+  orchestratorCompileRootFlowId,
+  flowAutoStart = false,
   executionLaunchType,
   executionLaunchLabel,
   onClosePanel,
@@ -260,6 +262,10 @@ export default function DDEBubbleChat({
   // ✅ NEW: Backend materialization flag
   useBackendMaterialization?: boolean;
   executionFlowName?: string;
+  /** When set, orchestrator compile/session uses this canvas as primary root (required for isolated sub-dialog runs). */
+  orchestratorCompileRootFlowId?: string | null;
+  /** When true (e.g. global Run): start orchestrator automatically; after Clear, user must press Play. */
+  flowAutoStart?: boolean;
   executionLaunchType?: 'flow' | 'rowTask' | 'node';
   executionLaunchLabel?: string;
   onClosePanel?: () => void;
@@ -334,7 +340,11 @@ export default function DDEBubbleChat({
     translations,
     onFlowModeMessage,
     executionFlowName,
-    flowDebuggerHookOpts
+    {
+      ...flowDebuggerHookOpts,
+      orchestratorCompileRootFlowId: orchestratorCompileRootFlowId ?? undefined,
+      autoStart: flowAutoStart === true,
+    }
   );
 
   const debuggerActions = React.useMemo(

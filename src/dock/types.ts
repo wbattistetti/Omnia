@@ -102,6 +102,9 @@ export type DockTabChat = DockTabBase & {
   flowEdges?: any[]; // Edge<EdgeData>[] - using any[] to avoid circular dependency
   flowTasks?: any[];
   executionFlowName?: string;
+  /** Align orchestrator primary compile root with the canvas being run (see useDialogueEngine). */
+  orchestratorCompileRootFlowId?: string | null;
+  flowAutoStart?: boolean;
   executionLaunchType?: 'flow' | 'rowTask' | 'node';
   executionLaunchLabel?: string;
 };

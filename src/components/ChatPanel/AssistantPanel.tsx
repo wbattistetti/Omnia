@@ -25,6 +25,8 @@ export interface AssistantPanelProps {
   flowTasks?: any[];
   useBackendMaterialization?: boolean;
   executionFlowName?: string;
+  orchestratorCompileRootFlowId?: string | null;
+  flowAutoStart?: boolean;
   executionLaunchType?: 'flow' | 'rowTask' | 'node';
   executionLaunchLabel?: string;
   onClosePanel?: () => void;
@@ -59,6 +61,8 @@ export function AssistantPanel(props: AssistantPanelProps) {
           flowTasks={props.flowTasks}
           useBackendMaterialization={props.useBackendMaterialization || false}
           executionFlowName={props.executionFlowName}
+          orchestratorCompileRootFlowId={props.orchestratorCompileRootFlowId}
+          flowAutoStart={props.flowAutoStart}
           executionLaunchType={props.executionLaunchType}
           executionLaunchLabel={props.executionLaunchLabel}
           onClosePanel={props.onClosePanel}

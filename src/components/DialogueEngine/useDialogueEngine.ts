@@ -22,6 +22,11 @@ interface UseDialogueEngineOptions {
   translations?: Record<string, string>; // Add translations support
   /** `main` = always compile/run from main + nested subflows; `active` = root = focused canvas + its nested subflows. Override with localStorage `flow.orchestratorRoot`. */
   orchestratorRoot?: 'main' | 'active';
+  /**
+   * When set (e.g. global debugger on a subflow canvas), compile/session use this flow id as the primary graph root
+   * instead of always using `main` or the active tab heuristic. Isolated sub-dialog runs must not include parent nodes.
+   */
+  orchestratorCompileRootFlowId?: string | null;
   projectId?: string;
 }
 
@@ -194,7 +199,13 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           return 'main';
         })();
 
-      const rootFlowId = orchestratorRoot === 'main' ? 'main' : FlowWorkspaceSnapshot.getActiveFlowId();
+      const explicitCompileRoot = String(currentOptions.orchestratorCompileRootFlowId || '').trim();
+      const rootFlowId =
+        explicitCompileRoot.length > 0
+          ? explicitCompileRoot
+          : orchestratorRoot === 'main'
+            ? 'main'
+            : FlowWorkspaceSnapshot.getActiveFlowId();
 
       const workspaceResult = await compileWorkspaceForOrchestratorSession({
         rootFlowId,

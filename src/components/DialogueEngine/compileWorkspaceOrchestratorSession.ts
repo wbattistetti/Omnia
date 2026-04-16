@@ -68,9 +68,16 @@ export async function compileWorkspaceForOrchestratorSession(
   let nodes = snap?.nodes;
   let edges = snap?.edges ?? [];
 
-  if (!nodes?.length && fallback && FlowWorkspaceSnapshot.getActiveFlowId() === rootFlowId) {
-    nodes = fallback.nodes;
-    edges = fallback.edges ?? [];
+  if (!nodes?.length && fallback?.nodes?.length) {
+    const activeId = FlowWorkspaceSnapshot.getActiveFlowId();
+    if (activeId === rootFlowId) {
+      nodes = fallback.nodes;
+      edges = fallback.edges ?? [];
+    } else if (!snap?.nodes?.length) {
+      // Snapshot missing this canvas (e.g. debugger props for a non-active subflow) — use caller fallback.
+      nodes = fallback.nodes;
+      edges = fallback.edges ?? [];
+    }
   }
 
   if (!nodes?.length) {

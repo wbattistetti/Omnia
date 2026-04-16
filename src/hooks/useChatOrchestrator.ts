@@ -95,6 +95,8 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
     edges: any[];
     tasks: any[];
     executionFlowName?: string;
+    orchestratorCompileRootFlowId?: string | null;
+    flowAutoStart?: boolean;
     executionLaunchType?: 'flow' | 'rowTask' | 'node';
     executionLaunchLabel?: string;
   }): DockTabChat => {
@@ -111,6 +113,8 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
       flowEdges: options.edges,
       flowTasks: options.tasks,
       executionFlowName: options.executionFlowName,
+      orchestratorCompileRootFlowId: options.orchestratorCompileRootFlowId,
+      flowAutoStart: options.flowAutoStart,
       executionLaunchType: options.executionLaunchType,
       executionLaunchLabel: options.executionLaunchLabel,
     };
@@ -195,6 +199,8 @@ export function useChatOrchestrator(deps: ChatOrchestratorDeps): ChatOrchestrato
       edges,
       tasks,
       executionFlowName: runLabel,
+      orchestratorCompileRootFlowId: FlowWorkspaceSnapshot.getActiveFlowId(),
+      flowAutoStart: true,
       executionLaunchType: 'flow',
     });
 

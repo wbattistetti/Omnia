@@ -12,6 +12,8 @@ export type UseFlowModeChatOptions = {
   onSessionStarted?: () => void;
   onOrchestratorWaiting?: () => void;
   onOrchestratorEnded?: () => void;
+  /** Primary flow id for compile/session (subflow canvas when debugging a sub-dialog in isolation). */
+  orchestratorCompileRootFlowId?: string | null;
 };
 
 /**
@@ -54,6 +56,8 @@ export function useFlowModeChat(
   const startInFlightRef = React.useRef<Promise<void> | null>(null);
   const previousNodesKeyRef = React.useRef<string>('');
   const isRestartingRef = React.useRef(false);
+  /** After toolbar Clear (gomma), block auto-start until the user clicks Play. Restart clears this. */
+  const suppressAutoStartAfterClearRef = React.useRef(false);
 
   const stateRef = React.useRef<{
     isWaitingForInput: boolean;
@@ -158,6 +162,7 @@ export function useFlowModeChat(
         setSessionActive(false);
         lifecycleRef.current.onOrchestratorEnded?.();
       },
+      orchestratorCompileRootFlowId: options?.orchestratorCompileRootFlowId ?? null,
       onWaitingForInput: (data?: {
         taskId: string;
         nodeId?: string;
@@ -179,7 +184,7 @@ export function useFlowModeChat(
         lifecycleRef.current.onOrchestratorWaiting?.();
       },
     }),
-    [nodes, edges, tasks, translations, executionFlowName, resolveTaskLabel, resolveNodeLabel, toReadableLabel]
+    [nodes, edges, tasks, translations, executionFlowName, resolveTaskLabel, resolveNodeLabel, toReadableLabel, options?.orchestratorCompileRootFlowId]
   );
 
   const flowEngine = useDialogueEngine(engineOptions);
@@ -241,6 +246,7 @@ export function useFlowModeChat(
   React.useEffect(() => {
     if (options?.autoStart !== true) return;
     if (isRestartingRef.current) return;
+    if (suppressAutoStartAfterClearRef.current) return;
 
     const nodesKey = nodes.map((n) => n.id).sort().join(',');
     if (nodesKey !== previousNodesKeyRef.current) {
@@ -302,6 +308,7 @@ export function useFlowModeChat(
 
   const clearSession = React.useCallback(async () => {
     console.info(`${DBG} clearSession (soft) begin`, { sessionId: getOrchestratorSessionId() });
+    suppressAutoStartAfterClearRef.current = true;
     startInFlightRef.current = null;
     hasStartedRef.current = false;
     setSessionActive(false);
@@ -326,6 +333,7 @@ export function useFlowModeChat(
       return;
     }
     console.info(`${DBG} restartFlow (hard) begin`, { sessionId: getOrchestratorSessionId() });
+    suppressAutoStartAfterClearRef.current = false;
 
     try {
       const { clearCompilationErrorsGlobal } = await import('@context/CompilationErrorsContext');

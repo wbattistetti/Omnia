@@ -602,6 +602,8 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
           flowTasks={chatTab.flowTasks}
           useBackendMaterialization={chatTab.useBackendMaterialization || false}
           executionFlowName={chatTab.executionFlowName}
+          orchestratorCompileRootFlowId={chatTab.orchestratorCompileRootFlowId}
+          flowAutoStart={chatTab.flowAutoStart}
           executionLaunchType={chatTab.executionLaunchType}
           executionLaunchLabel={chatTab.executionLaunchLabel}
           onClosePanel={() => {
