@@ -318,6 +318,25 @@ export async function executeOrchestratorBackend(
 }
 
 /**
+ * Maps ASP.NET ProblemDetails / plain JSON error bodies to a single user-facing string.
+ */
+function orchestratorErrorMessageFromBody(status: number, rawText: string, parsed: unknown): string {
+  if (parsed && typeof parsed === 'object') {
+    const o = parsed as Record<string, unknown>;
+    const pick = (k: string) => (typeof o[k] === 'string' ? (o[k] as string).trim() : '');
+    const detail = pick('detail');
+    const title = pick('title');
+    const err = pick('error');
+    const msg = pick('message');
+    const first = [detail, title, err, msg].find((s) => s.length > 0);
+    if (first) return first;
+  }
+  const t = rawText.trim();
+  if (t.length > 0 && t.length < 2000) return t;
+  return `Input orchestrator fallito (HTTP ${status})`;
+}
+
+/**
  * Provides user input to backend orchestrator session
  */
 export async function provideOrchestratorInput(
@@ -345,11 +364,25 @@ export async function provideOrchestratorInput(
     );
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      return { success: false, error: errorData.error || errorData.message || 'Failed to provide input' };
+      const rawText = await response.text();
+      let parsed: unknown = null;
+      try {
+        parsed = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        parsed = null;
+      }
+      const message = orchestratorErrorMessageFromBody(response.status, rawText, parsed);
+      console.error('[ORCHESTRATOR] ❌ provideInput failed', {
+        status: response.status,
+        statusText: response.statusText,
+        sessionId,
+        message,
+        bodyPreview: rawText.slice(0, 500),
+      });
+      return { success: false, error: message };
     }
 
-    const result = await response.json();
+    await response.json().catch(() => ({}));
     console.log('[ORCHESTRATOR] ✅ Input successfully provided to backend');
     return { success: true };
   } catch (error) {

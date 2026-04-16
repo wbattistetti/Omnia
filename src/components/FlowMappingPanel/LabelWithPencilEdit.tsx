@@ -22,6 +22,8 @@ export interface LabelWithPencilEditProps {
   onAbandonEphemeral?: () => void;
   inlinePencil?: boolean;
   viewTitle?: string;
+  /** Fired when inline rename mode starts or ends (e.g. to hide sibling toolbars). */
+  onEditingChange?: (editing: boolean) => void;
 }
 
 export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWithPencilEditProps>(
@@ -37,6 +39,7 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
       onAbandonEphemeral,
       inlinePencil = true,
       viewTitle,
+      onEditingChange,
     },
     ref
   ) {
@@ -54,6 +57,13 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
       }),
       [editable]
     );
+
+    useEffect(() => {
+      onEditingChange?.(editing);
+      return () => {
+        if (editing) onEditingChange?.(false);
+      };
+    }, [editing, onEditingChange]);
 
     useEffect(() => {
       if (!editable) return;

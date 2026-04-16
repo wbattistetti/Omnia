@@ -3,30 +3,28 @@ import { useDialogueEngine } from '@components/DialogueEngine/useDialogueEngine'
 import { looksLikeTechnicalTranslationOrId } from '@utils/translationKeys';
 import type { Message } from '@components/ChatSimulator/UserMessage';
 
+const DBG = '[DebuggerFlow]';
+
+/** Optional debugger lifecycle hooks + auto-start (default: manual Play only). */
+export type UseFlowModeChatOptions = {
+  /** When true: auto-start when nodes/translations/engine are ready (legacy). */
+  autoStart?: boolean;
+  onSessionStarted?: () => void;
+  onOrchestratorWaiting?: () => void;
+  onOrchestratorEnded?: () => void;
+};
+
 /**
- * Hook dedicated to flow mode chat functionality
- * ✅ ARCHITECTURAL: Stable state pattern (same as useDialogueEngine)
- *
- * This hook maintains stable state across React Strict Mode remounts by:
- * 1. Storing critical state (isWaitingForInput, error) in refs
- * 2. Using useState only for triggering re-renders
- * 3. Stabilizing all callbacks with refs
- * 4. Ensuring state survives remounts
- *
- * @param nodes - Flow nodes (from props, not window)
- * @param edges - Flow edges (from props, not window)
- * @param tasks - Flow tasks (from props, not window)
- * @param translations - Translations for the flow
- * @param onMessage - Callback when a new message is received
- * @returns Flow mode chat state and handlers
+ * Hook dedicated to flow mode chat (orchestrator SSE + input).
  */
 export function useFlowModeChat(
-  nodes: any[], // Node<FlowNode>[] - using any[] to avoid circular dependency
-  edges: any[], // Edge<EdgeData>[] - using any[] to avoid circular dependency
+  nodes: any[],
+  edges: any[],
   tasks: any[],
   translations: Record<string, string> | undefined,
   onMessage?: (message: Message) => void,
-  executionFlowName?: string
+  executionFlowName?: string,
+  options?: UseFlowModeChatOptions
 ) {
   const toReadableLabel = React.useCallback((value: unknown): string => {
     const text = String(value || '').trim();
@@ -36,23 +34,27 @@ export function useFlowModeChat(
     return text;
   }, []);
 
-  // ✅ CRITICAL: Store onMessage in ref for stable access
   const onMessageRef = React.useRef(onMessage);
   React.useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
+
+  const lifecycleRef = React.useRef({
+    onSessionStarted: undefined as (() => void) | undefined,
+    onOrchestratorWaiting: undefined as (() => void) | undefined,
+    onOrchestratorEnded: undefined as (() => void) | undefined,
+  });
+  lifecycleRef.current.onSessionStarted = options?.onSessionStarted;
+  lifecycleRef.current.onOrchestratorWaiting = options?.onOrchestratorWaiting;
+  lifecycleRef.current.onOrchestratorEnded = options?.onOrchestratorEnded;
 
   const messageIdCounter = React.useRef(0);
   const sentMessageIds = React.useRef<Set<string>>(new Set());
   const hasStartedRef = React.useRef(false);
   const startInFlightRef = React.useRef<Promise<void> | null>(null);
   const previousNodesKeyRef = React.useRef<string>('');
-  // Ref-based flag: blocks auto-start useEffect while restart protocol is in flight.
-  // Using a ref (not state) ensures the useEffect guard is synchronously visible
-  // without triggering an extra render cycle.
   const isRestartingRef = React.useRef(false);
 
-  // ✅ CRITICAL: Store critical state in ref (survives remount)
   const stateRef = React.useRef<{
     isWaitingForInput: boolean;
     error: string | null;
@@ -61,162 +63,135 @@ export function useFlowModeChat(
     error: null,
   });
 
-  // ✅ STATE: UI-reactive state (triggers re-renders)
-  // These are synchronized with stateRef via wrapper functions
   const [isWaitingForInput, setIsWaitingForInputState] = React.useState(false);
   const [error, setErrorState] = React.useState<string | null>(null);
   const [isRestarting, setIsRestarting] = React.useState(false);
+  const [sessionActive, setSessionActive] = React.useState(false);
   const [currentExecutionLabel, setCurrentExecutionLabel] = React.useState<string>('');
   const [currentExecutionType, setCurrentExecutionType] = React.useState<'flow' | 'rowTask' | 'node'>('flow');
-  const resolveTaskLabel = React.useCallback((taskId?: string) => {
-    if (!taskId) return '';
-    const task = tasks.find((t: any) => t?.id === taskId);
-    return toReadableLabel(task?.label || task?.title);
-  }, [tasks, toReadableLabel]);
 
-  const resolveNodeLabel = React.useCallback((nodeId?: string) => {
-    if (!nodeId) return '';
-    const node = nodes.find((n: any) => n?.id === nodeId);
-    return toReadableLabel(node?.data?.label || node?.label || node?.title);
-  }, [nodes, toReadableLabel]);
+  const resolveTaskLabel = React.useCallback(
+    (taskId?: string) => {
+      if (!taskId) return '';
+      const task = tasks.find((t: any) => t?.id === taskId);
+      return toReadableLabel(task?.label || task?.title);
+    },
+    [tasks, toReadableLabel]
+  );
 
+  const resolveNodeLabel = React.useCallback(
+    (nodeId?: string) => {
+      if (!nodeId) return '';
+      const node = nodes.find((n: any) => n?.id === nodeId);
+      return toReadableLabel(node?.data?.label || node?.label || node?.title);
+    },
+    [nodes, toReadableLabel]
+  );
 
-  // ✅ STABLE: Wrapper functions that update both ref and state
-  // This ensures state survives remounts AND triggers re-renders
   const setIsWaitingForInput = React.useCallback((value: boolean | ((prev: boolean) => boolean)) => {
-    const newValue = typeof value === 'function'
-      ? value(stateRef.current.isWaitingForInput)
-      : value;
-
-    // ✅ Update ref first (survives remount)
+    const newValue =
+      typeof value === 'function' ? value(stateRef.current.isWaitingForInput) : value;
     stateRef.current.isWaitingForInput = newValue;
-
-    // ✅ Update state (triggers re-render)
     setIsWaitingForInputState(newValue);
   }, []);
 
   const setError = React.useCallback((value: string | null) => {
-    // ✅ Update ref first (survives remount)
     stateRef.current.error = value;
-
-    // ✅ Update state (triggers re-render)
     setErrorState(value);
   }, []);
 
-  // ✅ CRITICAL: Store setter refs for use in callbacks
-  // These refs are stable and don't change between renders
   const setIsWaitingForInputRef = React.useRef(setIsWaitingForInput);
   const setErrorRef = React.useRef(setError);
 
-  // ✅ Update setter refs when they change
   React.useEffect(() => {
     setIsWaitingForInputRef.current = setIsWaitingForInput;
     setErrorRef.current = setError;
   }, [setIsWaitingForInput, setError]);
 
-  // ✅ STABLE: Restore state from ref on mount (handles remount)
   React.useEffect(() => {
-    // ✅ On mount/remount, restore state from ref
     if (stateRef.current.isWaitingForInput !== isWaitingForInput) {
       setIsWaitingForInputState(stateRef.current.isWaitingForInput);
     }
     if (stateRef.current.error !== error) {
       setErrorState(stateRef.current.error);
     }
-  }, []); // ✅ Empty deps - only run on mount
+  }, []);
 
-  // ✅ ARCHITECTURAL: Memoize engine options with stable callbacks
-  const engineOptions = React.useMemo(() => ({
-    nodes,
-    edges,
-    getTask: (taskId: string) => {
-      return tasks.find((t: any) => t.id === taskId) || null;
-    },
-    getDDT: (taskId: string) => {
-      const task = tasks.find((t: any) => t.id === taskId);
-      if (!task || task.templateId !== 'GetData') return null;
-      return task.data ? { label: task.label, data: task.data, steps: task.steps } : null;
-    },
-    onTaskExecute: async (task) => {
-      return { success: true };
-    },
-    translations: translations || {},
-    onMessage: (message) => {
-      const messageId = `msg_${messageIdCounter.current++}`;
+  const engineOptions = React.useMemo(
+    () => ({
+      nodes,
+      edges,
+      getTask: (taskId: string) => tasks.find((t: any) => t.id === taskId) || null,
+      getDDT: (taskId: string) => {
+        const task = tasks.find((t: any) => t.id === taskId);
+        if (!task || task.templateId !== 'GetData') return null;
+        return task.data ? { label: task.label, data: task.data, steps: task.steps } : null;
+      },
+      onTaskExecute: async (_task: unknown) => ({ success: true }),
+      translations: translations || {},
+      onMessage: (message: { text?: string }) => {
+        const messageId = `msg_${messageIdCounter.current++}`;
+        if (sentMessageIds.current.has(messageId)) return;
+        sentMessageIds.current.add(messageId);
+        const newMessage: Message = {
+          id: messageId,
+          text: message.text || '',
+          type: 'bot',
+          timestamp: new Date(),
+        };
+        const currentOnMessage = onMessageRef.current;
+        if (currentOnMessage) currentOnMessage(newMessage);
+        else console.warn('[useFlowModeChat] onMessage prop not provided');
+      },
+      onDDTStart: () => {},
+      onDDTComplete: () => {},
+      onComplete: () => {
+        if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(false);
+        setSessionActive(false);
+        console.info(`${DBG} orchestrator onComplete → session inactive`);
+        lifecycleRef.current.onOrchestratorEnded?.();
+      },
+      onError: (err: Error) => {
+        console.error(`${DBG} orchestrator onError`, err.message);
+        if (setErrorRef.current) setErrorRef.current(err.message || 'Flow execution error');
+        if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(false);
+        setSessionActive(false);
+        lifecycleRef.current.onOrchestratorEnded?.();
+      },
+      onWaitingForInput: (data?: {
+        taskId: string;
+        nodeId?: string;
+        taskLabel?: string;
+        nodeLabel?: string;
+      }) => {
+        if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(true);
+        const flowName = (executionFlowName || 'MAIN').trim() || 'MAIN';
+        const taskLabel = toReadableLabel(data?.taskLabel) || resolveTaskLabel(data?.taskId);
+        const nodeLabel = toReadableLabel(data?.nodeLabel) || resolveNodeLabel(data?.nodeId);
+        if (taskLabel) {
+          setCurrentExecutionType('rowTask');
+          setCurrentExecutionLabel(`${flowName}: ${taskLabel}`);
+        } else if (nodeLabel) {
+          setCurrentExecutionType('node');
+          setCurrentExecutionLabel(`${flowName}: Nodo(${nodeLabel})`);
+        }
+        console.info(`${DBG} waitingForInput`, { taskId: data?.taskId, nodeId: data?.nodeId });
+        lifecycleRef.current.onOrchestratorWaiting?.();
+      },
+    }),
+    [nodes, edges, tasks, translations, executionFlowName, resolveTaskLabel, resolveNodeLabel, toReadableLabel]
+  );
 
-      // Avoid duplicates
-      if (sentMessageIds.current.has(messageId)) {
-        return;
-      }
-      sentMessageIds.current.add(messageId);
-
-      const newMessage: Message = {
-        id: messageId,
-        text: message.text || '',
-        type: 'bot',
-        timestamp: new Date(),
-      };
-
-      // ✅ Use ref for stable access
-      const currentOnMessage = onMessageRef.current;
-      if (currentOnMessage) {
-        currentOnMessage(newMessage);
-      } else {
-        console.warn('[useFlowModeChat] ⚠️ onMessage prop not provided!');
-      }
-    },
-    onDDTStart: () => {
-      // DDT started - no log needed
-    },
-    onDDTComplete: () => {
-      // DDT completed - no log needed
-    },
-    onComplete: () => {
-      // ✅ Use ref for stable setter
-      if (setIsWaitingForInputRef.current) {
-        setIsWaitingForInputRef.current(false);
-      }
-    },
-    onError: (error) => {
-      console.error('[useFlowModeChat] Flow error', error);
-      // ✅ Use ref for stable setter
-      if (setErrorRef.current) {
-        setErrorRef.current(error.message || 'Flow execution error');
-      }
-      if (setIsWaitingForInputRef.current) {
-        setIsWaitingForInputRef.current(false);
-      }
-    },
-    onWaitingForInput: (data?: { taskId: string; nodeId?: string; taskLabel?: string; nodeLabel?: string }) => {
-      // ✅ CRITICAL: Use ref for stable setter (survives remount)
-      if (setIsWaitingForInputRef.current) {
-        setIsWaitingForInputRef.current(true);
-      } else {
-        console.error('[useFlowModeChat] ❌ setIsWaitingForInputRef.current is null!');
-      }
-
-      const flowName = (executionFlowName || 'MAIN').trim() || 'MAIN';
-      const taskLabel = toReadableLabel(data?.taskLabel) || resolveTaskLabel(data?.taskId);
-      const nodeLabel = toReadableLabel(data?.nodeLabel) || resolveNodeLabel(data?.nodeId);
-      if (taskLabel) {
-        setCurrentExecutionType('rowTask');
-        setCurrentExecutionLabel(`${flowName}: ${taskLabel}`);
-      } else if (nodeLabel) {
-        setCurrentExecutionType('node');
-        setCurrentExecutionLabel(`${flowName}: Nodo(${nodeLabel})`);
-      } else {
-        // Keep previous launch/runtime label instead of replacing it with generic flow text.
-      }
-    },
-  }), [nodes, edges, tasks, translations, executionFlowName, resolveTaskLabel, resolveNodeLabel, toReadableLabel]); // ✅ No callbacks in deps - use refs
-
-  // ✅ ARCHITECTURAL: Call hook at top level (not inside useMemo)
-  // This respects React's Rules of Hooks
   const flowEngine = useDialogueEngine(engineOptions);
   const flowEngineRef = React.useRef(flowEngine);
   React.useEffect(() => {
     flowEngineRef.current = flowEngine;
   }, [flowEngine]);
+
+  const getOrchestratorSessionId = React.useCallback((): string | null => {
+    const engine = flowEngineRef.current as { getSessionId?: () => string | null } | null;
+    return engine?.getSessionId?.() ?? null;
+  }, []);
 
   const executeStart = React.useCallback(async () => {
     const engine = flowEngineRef.current;
@@ -224,6 +199,7 @@ export function useFlowModeChat(
       throw new Error('Flow engine is not available.');
     }
     if (hasStartedRef.current) {
+      console.info(`${DBG} executeStart skipped (already started)`);
       return;
     }
     if (startInFlightRef.current) {
@@ -234,10 +210,16 @@ export function useFlowModeChat(
     const startPromise = (async () => {
       hasStartedRef.current = true;
       try {
+        console.info(`${DBG} executeStart → engine.start()`);
         await engine.start();
-      } catch (error) {
+        setSessionActive(true);
+        console.info(`${DBG} executeStart OK`, { sessionId: getOrchestratorSessionId() });
+        lifecycleRef.current.onSessionStarted?.();
+      } catch (err) {
         hasStartedRef.current = false;
-        throw error;
+        setSessionActive(false);
+        console.error(`${DBG} executeStart failed`, err);
+        throw err;
       } finally {
         startInFlightRef.current = null;
       }
@@ -245,93 +227,105 @@ export function useFlowModeChat(
 
     startInFlightRef.current = startPromise;
     await startPromise;
-  }, []);
+  }, [getOrchestratorSessionId]);
 
-  // ✅ ARCHITECTURAL: Start when data is ready
+  const startSession = React.useCallback(async () => {
+    await executeStart();
+  }, [executeStart]);
+
   const translationsKey = React.useMemo(() => {
     if (!translations) return '';
     return Object.keys(translations).sort().join(',');
   }, [translations]);
 
   React.useEffect(() => {
-    // Block auto-start while restart protocol is in flight to prevent concurrent sessions.
-    if (isRestartingRef.current) {
-      return;
-    }
+    if (options?.autoStart !== true) return;
+    if (isRestartingRef.current) return;
 
-    // Create stable key based on node IDs to detect actual flow changes.
-    const nodesKey = nodes.map(n => n.id).sort().join(',');
-
-    // Reset guard when nodes actually change.
+    const nodesKey = nodes.map((n) => n.id).sort().join(',');
     if (nodesKey !== previousNodesKeyRef.current) {
       hasStartedRef.current = false;
       previousNodesKeyRef.current = nodesKey;
     }
-
     if (hasStartedRef.current && nodes.length === 0) {
       hasStartedRef.current = false;
       previousNodesKeyRef.current = '';
     }
-
-    if (hasStartedRef.current) {
-      return;
-    }
-
+    if (hasStartedRef.current) return;
     if (nodes.length === 0) {
+      if (setErrorRef.current) setErrorRef.current('Cannot start flow: no nodes found');
+      return;
+    }
+    if (!translations || Object.keys(translations).length === 0) return;
+    if (!flowEngine || typeof flowEngine.start !== 'function') return;
+
+    void executeStart().catch((err) => {
       if (setErrorRef.current) {
-        setErrorRef.current('Cannot start flow: no nodes found');
-      }
-      return;
-    }
-
-    if (!translations || Object.keys(translations).length === 0) {
-      return;
-    }
-
-    if (!flowEngine || typeof flowEngine.start !== 'function') {
-      return;
-    }
-
-    void executeStart().catch((error) => {
-      if (setErrorRef.current) {
-        setErrorRef.current(error.message || 'Failed to start flow orchestrator');
+        setErrorRef.current(err instanceof Error ? err.message : 'Failed to start flow orchestrator');
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, translationsKey, flowEngine, executeStart]);
+  }, [nodes, translationsKey, flowEngine, executeStart, options?.autoStart]);
 
-  // ✅ Handle user input in flow mode
-  const handleUserInput = React.useCallback(async (input: string) => {
-    const engine = flowEngineRef.current;
-    if (!engine) return;
-
-    try {
-      await engine.provideInput(input);
-    } catch (error) {
-      console.error('[useFlowModeChat] Error providing input to flow engine', error);
-      if (setErrorRef.current) {
-        setErrorRef.current(error instanceof Error ? error.message : 'Error providing input');
+  const handleUserInput = React.useCallback(
+    async (input: string) => {
+      const engine = flowEngineRef.current;
+      if (!engine) {
+        console.warn(`${DBG} provideInput: no engine`);
+        return;
       }
-    }
-  }, []);
+      const sid = getOrchestratorSessionId();
+      console.info(`${DBG} provideInput`, {
+        sessionId: sid,
+        inputLength: input.length,
+        waitingUI: stateRef.current.isWaitingForInput,
+      });
+      try {
+        await engine.provideInput(input);
+        console.info(`${DBG} provideInput OK`, { sessionId: sid });
+      } catch (err) {
+        console.error(`${DBG} provideInput error`, err);
+        if (setErrorRef.current) {
+          setErrorRef.current(err instanceof Error ? err.message : 'Error providing input');
+        }
+      }
+    },
+    [getOrchestratorSessionId]
+  );
 
-  // ✅ Clear state when needed
   const clearMessages = React.useCallback(() => {
     messageIdCounter.current = 0;
     sentMessageIds.current.clear();
-    if (setIsWaitingForInputRef.current) {
-      setIsWaitingForInputRef.current(false);
-    }
-    if (setErrorRef.current) {
-      setErrorRef.current(null);
-    }
+    if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(false);
+    if (setErrorRef.current) setErrorRef.current(null);
   }, []);
 
+  const clearSession = React.useCallback(async () => {
+    console.info(`${DBG} clearSession (soft) begin`, { sessionId: getOrchestratorSessionId() });
+    startInFlightRef.current = null;
+    hasStartedRef.current = false;
+    setSessionActive(false);
+    messageIdCounter.current = 0;
+    sentMessageIds.current.clear();
+    setCurrentExecutionLabel('');
+    setCurrentExecutionType('flow');
+    if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(false);
+    if (setErrorRef.current) setErrorRef.current(null);
+    lifecycleRef.current.onOrchestratorEnded?.();
+
+    const engine = flowEngineRef.current;
+    if (engine && typeof engine.reset === 'function') {
+      await engine.reset();
+    }
+    console.info(`${DBG} clearSession (soft) done`);
+  }, [getOrchestratorSessionId]);
+
   const restartFlow = React.useCallback(async () => {
-    // Guard against concurrent restarts via both ref (sync) and state (UI).
     if (isRestartingRef.current) {
+      console.info(`${DBG} restartFlow skipped (already restarting)`);
       return;
     }
+    console.info(`${DBG} restartFlow (hard) begin`, { sessionId: getOrchestratorSessionId() });
 
     try {
       const { clearCompilationErrorsGlobal } = await import('@context/CompilationErrorsContext');
@@ -340,57 +334,50 @@ export function useFlowModeChat(
       /* noop */
     }
 
-    // Step 1: Raise the restart flag SYNCHRONOUSLY so useEffect auto-start
-    // is blocked for the entire duration of this protocol.
     isRestartingRef.current = true;
     setIsRestarting(true);
-
-    // Step 2: Clear in-flight start promise so executeStart can run fresh.
     startInFlightRef.current = null;
     hasStartedRef.current = false;
-
-    // Step 3: Reset local chat state.
+    setSessionActive(false);
     messageIdCounter.current = 0;
     sentMessageIds.current.clear();
     setCurrentExecutionLabel('');
     setCurrentExecutionType('flow');
-    if (setIsWaitingForInputRef.current) {
-      setIsWaitingForInputRef.current(false);
-    }
-    if (setErrorRef.current) {
-      setErrorRef.current(null);
-    }
+    if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(false);
+    if (setErrorRef.current) setErrorRef.current(null);
 
     try {
-      // Step 4: Stop existing engine session (closes SSE, deletes backend session).
-      // Must complete before starting a new one to avoid two live SSE streams.
       const engine = flowEngineRef.current;
       if (engine && typeof engine.reset === 'function') {
         await engine.reset();
       }
-
-      // Step 5: Start new session now that the old one is fully gone.
       await executeStart();
-    } catch (error) {
+      console.info(`${DBG} restartFlow (hard) done`, { sessionId: getOrchestratorSessionId() });
+    } catch (err) {
       hasStartedRef.current = false;
+      setSessionActive(false);
+      console.error(`${DBG} restartFlow failed`, err);
       if (setErrorRef.current) {
-        setErrorRef.current(error instanceof Error ? error.message : 'Failed to restart flow execution');
+        setErrorRef.current(err instanceof Error ? err.message : 'Failed to restart flow execution');
       }
     } finally {
-      // Step 6: Lower the restart flag so auto-start useEffect can fire normally again.
       isRestartingRef.current = false;
       setIsRestarting(false);
     }
-  }, [executeStart]);
+  }, [executeStart, getOrchestratorSessionId]);
 
   return {
     isWaitingForInput,
     error,
+    sessionActive,
     currentExecutionLabel,
     currentExecutionType,
     isRestarting,
     handleUserInput,
     clearMessages,
+    startSession,
+    clearSession,
     restartFlow,
+    getOrchestratorSessionId,
   };
 }

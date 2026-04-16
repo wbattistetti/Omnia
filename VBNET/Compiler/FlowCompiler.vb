@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System
 Imports System.Collections.Generic
 Imports System.Linq
 Imports TaskEngine
@@ -246,9 +247,6 @@ Public Class FlowCompiler
         Dim taskGroups As New List(Of TaskGroup)()
         Dim allTasks As New List(Of CompiledTask)()
         Dim errors As New List(Of CompilationError)()
-
-        ' ✅ NOTE: Variables will be built automatically from compiled tasks after compilation
-        ' Manual variables (with empty taskInstanceId/nodeId) will be merged later
 
         ' NOTE: flow.Tasks should contain ONLY tasks referenced in node rows
         ' (not all tasks from repository). Frontend filters before sending.
@@ -615,10 +613,11 @@ Public Class FlowCompiler
         End If
         Console.WriteLine($"   Conditions available at runtime: {conditionsDict.Count}")
 
-        ' ✅ Variables are created by frontend when tasks are created
-        ' Backend only uses variables passed as parameter (from database)
-        ' Convert VariableInstance to CompiledVariable
-        Dim compiledVariables = ConvertVariablesToCompiled(variables)
+        ' VariableInstance rows come dal frontend; in più garantiamo una CompiledVariable per ogni
+        ' GUID slot che i task utterance possono riempire (CanonicalGuidTable / subtask), così
+        ' FlowOrchestrator.CommitDialogueVariablesToHistory non va in errore se manca una riga in-memory.
+        Dim compiledVariables = MergeCompiledVariablesForSlotCoverage(allTasks, ConvertVariablesToCompiled(variables))
+        Console.WriteLine($"[FlowCompiler][VARIABLES] Final count after slot coverage merge: {compiledVariables.Count}")
 
         Dim result = New CompiledFlow() With {
             .TaskGroups = taskGroups,
@@ -626,7 +625,7 @@ Public Class FlowCompiler
             .Tasks = allTasks,
             .Edges = If(flow.Edges, New List(Of FlowEdge)()), ' ✅ FASE 2.4: Topologia separata
             .Conditions = conditionsDict, ' ✅ NEW: Conditions for runtime evaluation
-            .Variables = compiledVariables, ' ✅ Variables from frontend/DB (single source of truth)
+            .Variables = compiledVariables, ' ✅ Frontend variables + compiler-emitted slot GUIDs
             .Errors = errors ' ✅ Add errors to result
         }
 
@@ -660,6 +659,70 @@ Public Class FlowCompiler
 
         Console.WriteLine($"[FlowCompiler][VARIABLES] ✅ Converted {compiledVariables.Count} variables")
         Return compiledVariables
+    End Function
+
+    ''' <summary>
+    ''' Raccoglie tutti i GUID slot che un task utterance (e sottotask) può scrivere in DialogueState,
+    ''' allineati a <see cref="CompiledUtteranceTask.GetPrimarySlotCanonicalGuid"/> e <see cref="CanonicalGuidTable"/>.
+    ''' </summary>
+    Private Shared Sub CollectUtteranceSlotGuidsRecursive(task As CompiledUtteranceTask, guids As HashSet(Of String))
+        If task Is Nothing OrElse guids Is Nothing Then Return
+        Dim primary = task.GetPrimarySlotCanonicalGuid()
+        If Not String.IsNullOrEmpty(primary) Then
+            guids.Add(primary)
+        End If
+        Dim table = task.CanonicalGuidTable
+        If table IsNot Nothing AndAlso table.Data IsNot Nothing Then
+            For Each row In table.Data
+                If row Is Nothing Then Continue For
+                If Not String.IsNullOrEmpty(row.CanonicalGuid) Then
+                    guids.Add(row.CanonicalGuid)
+                End If
+            Next
+        End If
+        If task.SubTasks Is Nothing Then Return
+        For Each st In task.SubTasks
+            CollectUtteranceSlotGuidsRecursive(st, guids)
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' Unisce le variabili passate dal frontend con entry <see cref="CompiledVariable"/> per ogni GUID
+    ''' slot referenziato dai task compilati, così l'orchestrator ha sempre una riga per CommitDialogueVariablesToHistory.
+    ''' </summary>
+    Private Shared Function MergeCompiledVariablesForSlotCoverage(
+        allTasks As List(Of CompiledTask),
+        baseVars As List(Of CompiledVariable)
+    ) As List(Of CompiledVariable)
+        Dim merged As New List(Of CompiledVariable)()
+        Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        If baseVars IsNot Nothing Then
+            For Each v In baseVars
+                If v Is Nothing OrElse String.IsNullOrEmpty(v.Id) Then Continue For
+                If Not seen.Add(v.Id) Then Continue For
+                merged.Add(v)
+            Next
+        End If
+        Dim slotGuids As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        If allTasks IsNot Nothing Then
+            For Each t In allTasks
+                Dim ut = TryCast(t, CompiledUtteranceTask)
+                If ut IsNot Nothing Then
+                    CollectUtteranceSlotGuidsRecursive(ut, slotGuids)
+                End If
+            Next
+        End If
+        For Each g In slotGuids
+            If seen.Contains(g) Then Continue For
+            merged.Add(New CompiledVariable() With {
+                .Id = g,
+                .TaskInstanceId = "",
+                .Values = New List(Of Object)()
+            })
+            seen.Add(g)
+            Console.WriteLine($"[FlowCompiler][VARIABLES] ➕ Slot coverage: added CompiledVariable id={g} (missing from frontend list)")
+        Next
+        Return merged
     End Function
 End Class
 

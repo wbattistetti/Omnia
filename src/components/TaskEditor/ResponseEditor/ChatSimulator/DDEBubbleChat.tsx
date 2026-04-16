@@ -1,24 +1,37 @@
 import React from 'react';
 import type { Task, TaskTree } from '@types/taskTypes';
-import { AlertTriangle, Workflow, CircleDot, Equal, RotateCcw, ChevronRight, X } from 'lucide-react';
+import { AlertTriangle, Workflow, RotateCcw, Save, X } from 'lucide-react';
 import UserMessage, { type Message } from '@components/ChatSimulator/UserMessage';
 import BotMessage from '@responseEditor/ChatSimulator/BotMessage';
 import { getStepColor } from '@responseEditor/ChatSimulator/chatSimulatorUtils';
 import { useFontContext } from '@context/FontContext';
 import { useMessageEditing } from '@responseEditor/ChatSimulator/hooks/useMessageEditing';
-import { useFlowModeChat } from '@responseEditor/ChatSimulator/hooks/useFlowModeChat';
+import {
+  useFlowModeChat,
+  type UseFlowModeChatOptions,
+} from '@responseEditor/ChatSimulator/hooks/useFlowModeChat';
+import {
+  createDebuggerActions,
+  DebuggerLog,
+  DebuggerStateMachine,
+  DebuggerToolbar,
+  type DebuggerSessionState,
+} from '../../../../features/debugger';
 import DialogueTaskService from '@services/DialogueTaskService';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { taskRepository } from '@services/TaskRepository';
 import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 import { translationKeyFromStoredValue } from '@utils/translationKeys';
+import type { DebuggerRuntimeBridge } from '../../../../features/useCases/runtime/DebuggerRuntimeBridge';
+import { UseCasesPanelIcon } from '../../../../features/useCases/ui/UseCaseIcons';
 
 /** Maps browser/network error messages to user-facing Italian copy for the chat simulator header. */
 function userFacingChatErrorMessage(raw: string | null | undefined): string | null {
   if (raw == null || raw === '') return null;
   const t = raw.trim();
   if (/^failed to fetch$/i.test(t)) return 'Il motore non è disponibile';
-  return raw;
+  /** Orchestrator/ProblemDetails messages are already user-oriented */
+  return t;
 }
 
 /**
@@ -225,6 +238,10 @@ export default function DDEBubbleChat({
   executionLaunchType,
   executionLaunchLabel,
   onClosePanel,
+  onToggleUseCasePanel,
+  onSaveUseCase,
+  onRuntimeBridgeReady,
+  onMessagesSnapshotChange,
 }: {
   task: Task | null;
   projectId: string | null;
@@ -246,9 +263,14 @@ export default function DDEBubbleChat({
   executionLaunchType?: 'flow' | 'rowTask' | 'node';
   executionLaunchLabel?: string;
   onClosePanel?: () => void;
+  onToggleUseCasePanel?: () => void;
+  onSaveUseCase?: (payload: { suggestedKey: string; messages: Message[] }) => void;
+  onRuntimeBridgeReady?: (bridge: DebuggerRuntimeBridge | null) => void;
+  onMessagesSnapshotChange?: (messages: Message[]) => void;
 }) {
   const { combinedClass, fontSize } = useFontContext();
   const [messages, setMessages] = React.useState<Message[]>([]);
+  const messagesRef = React.useRef<Message[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [backendError, setBackendError] = React.useState<string | null>(null);
   const [isWaitingForInput, setIsWaitingForInput] = React.useState(false);
@@ -266,20 +288,95 @@ export default function DDEBubbleChat({
     });
   }, []);
 
+  React.useEffect(() => {
+    messagesRef.current = messages;
+    onMessagesSnapshotChange?.([...messages]);
+  }, [messages, onMessagesSnapshotChange]);
+
+  const messageIdCounter = React.useRef(0);
+  const generateMessageId = (prefix: string = 'msg') => {
+    messageIdCounter.current += 1;
+    return `${prefix}-${Date.now()}-${messageIdCounter.current}`;
+  };
+
   // ✅ ARCHITECTURAL: Detect flow mode explicitly
   const isFlowMode = !task && !taskTree && mode === 'interactive';
 
-  // ✅ Log rimosso dal render - troppo rumoroso, solo nei punti critici
+  const [dbgToolbarState, setDbgToolbarState] = React.useState<DebuggerSessionState>('idle');
+  const debuggerMachineRef = React.useRef<DebuggerStateMachine | null>(null);
+  if (!debuggerMachineRef.current) {
+    debuggerMachineRef.current = new DebuggerStateMachine(setDbgToolbarState);
+  }
 
-  // ✅ ARCHITECTURAL: Use dedicated hook for flow mode (receives data as props, not from window)
+  const flowDebuggerHookOpts = React.useMemo<UseFlowModeChatOptions>(
+    () => ({
+      onSessionStarted: () => {
+        console.info('[DebuggerFlow] lifecycle sessionStarted → running');
+        debuggerMachineRef.current?.setState('running');
+      },
+      onOrchestratorWaiting: () => {
+        console.info('[DebuggerFlow] lifecycle waitingForInput');
+        debuggerMachineRef.current?.setState('waitingForInput');
+      },
+      onOrchestratorEnded: () => {
+        console.info('[DebuggerFlow] lifecycle ended → idle');
+        debuggerMachineRef.current?.setState('idle');
+      },
+    }),
+    []
+  );
+
+  // ✅ ARCHITECTURAL: Flow orchestrator (manual Play by default — no autoStart)
   const flowModeChat = useFlowModeChat(
     flowNodes || [],
     flowEdges || [],
     flowTasks || [],
     translations,
     onFlowModeMessage,
-    executionFlowName
+    executionFlowName,
+    flowDebuggerHookOpts
   );
+
+  const debuggerActions = React.useMemo(
+    () =>
+      createDebuggerActions({
+        machine: debuggerMachineRef.current!,
+        flow: {
+          startSession: () => flowModeChat.startSession(),
+          clearSession: () => flowModeChat.clearSession(),
+          restartFlow: async () => {
+            setMessages([]);
+            messageIdCounter.current = 0;
+            await flowModeChat.restartFlow();
+          },
+        },
+        ui: {
+          clearChatLog: () => {
+            DebuggerLog.clear({
+              setMessages,
+              messagesRef,
+              resetMessageIdCounter: () => {
+                messageIdCounter.current = 0;
+              },
+            });
+          },
+        },
+      }),
+    [flowModeChat.startSession, flowModeChat.clearSession, flowModeChat.restartFlow]
+  );
+
+  React.useEffect(() => {
+    if (!isFlowMode) return;
+    console.info('[DebuggerFlow] toolbarState', dbgToolbarState, {
+      sessionId: flowModeChat.getOrchestratorSessionId(),
+      waiting: flowModeChat.isWaitingForInput,
+    });
+  }, [
+    isFlowMode,
+    dbgToolbarState,
+    flowModeChat.isWaitingForInput,
+    flowModeChat.getOrchestratorSessionId,
+  ]);
   const launchExecutionLabel = React.useMemo(() => {
     const flowName = (executionFlowName || 'MAIN').trim() || 'MAIN';
     const launchLabel = (executionLaunchLabel || '').trim();
@@ -294,9 +391,6 @@ export default function DDEBubbleChat({
   const executionLabel = isFlowMode
     ? (flowModeChat.currentExecutionLabel || launchExecutionLabel)
     : '';
-  const executionType = isFlowMode
-    ? (flowModeChat.currentExecutionLabel ? flowModeChat.currentExecutionType : (executionLaunchType || 'flow'))
-    : 'flow';
   const executionParts = React.useMemo(() => {
     const raw = executionLabel || launchExecutionLabel;
     const idx = raw.indexOf(':');
@@ -309,18 +403,15 @@ export default function DDEBubbleChat({
 
   // ✅ ARCHITECTURAL: Merge flow mode state with component state
   const effectiveIsWaitingForInput = isFlowMode ? flowModeChat.isWaitingForInput : isWaitingForInput;
+  const effectiveWaitingForInputRef = React.useRef(effectiveIsWaitingForInput);
+  React.useEffect(() => {
+    effectiveWaitingForInputRef.current = effectiveIsWaitingForInput;
+  }, [effectiveIsWaitingForInput]);
   const effectiveError = isFlowMode ? flowModeChat.error : backendError;
   const displayChatError = React.useMemo(
     () => userFacingChatErrorMessage(effectiveError),
     [effectiveError],
   );
-
-  // Message ID generator
-  const messageIdCounter = React.useRef(0);
-  const generateMessageId = (prefix: string = 'msg') => {
-    messageIdCounter.current += 1;
-    return `${prefix}-${Date.now()}-${messageIdCounter.current}`;
-  };
 
   // Message editing state and handlers
   // TODO: Update useMessageEditing to work with TaskTree instead of AssembledDDT
@@ -1553,12 +1644,9 @@ export default function DDEBubbleChat({
 
   // Reset function - restart session with same task
   const handleReset = async () => {
-    // ✅ Flow mode: clear messages FIRST (sync), then restart engine
-    // Order is critical: UI must be clean before new SSE events start arriving
+    // ✅ Flow mode: hard restart via toolbar actions (same as Restart button)
     if (isFlowMode) {
-      setMessages([]);
-      messageIdCounter.current = 0;
-      await flowModeChat.restartFlow();
+      await debuggerActions.restart();
       return;
     }
 
@@ -1595,45 +1683,146 @@ export default function DDEBubbleChat({
     // Session will be restarted automatically by useEffect when resetCounter changes
   };
 
+  const waitForNextBotMessage = React.useCallback(
+    async (afterBotCount: number, timeoutMs = 12000): Promise<Message | null> => {
+      const startedAt = Date.now();
+      const poll = async (): Promise<Message | null> => {
+        const bots = messagesRef.current.filter((m) => m.type === 'bot');
+        if (bots.length > afterBotCount) {
+          return bots[bots.length - 1] || null;
+        }
+        if (Date.now() - startedAt >= timeoutMs) {
+          return null;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        return poll();
+      };
+      return poll();
+    },
+    []
+  );
+
+  const sendRef = React.useRef<(text: string) => Promise<void>>(async () => {});
+  const resetRef = React.useRef<() => Promise<void>>(async () => {});
+  sendRef.current = handleSend;
+  resetRef.current = handleReset;
+
+  React.useEffect(() => {
+    if (!onRuntimeBridgeReady) return;
+    const bridge: DebuggerRuntimeBridge = {
+      restart: async () => {
+        await resetRef.current();
+      },
+      waitUntilWaitingForInput: async (timeoutMs = 20000) => {
+        const startedAt = Date.now();
+        const pollMs = 50;
+        while (Date.now() - startedAt < timeoutMs) {
+          if (effectiveWaitingForInputRef.current) return;
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, pollMs);
+          });
+        }
+        throw new Error(
+          'Timeout waiting for session to accept input (waitingForInput not observed).',
+        );
+      },
+      sendUserInput: async (input: string) => {
+        await sendRef.current(input);
+      },
+      getMessages: () => [...messagesRef.current],
+      waitForNextBotMessage,
+    };
+    onRuntimeBridgeReady(bridge);
+    return () => onRuntimeBridgeReady(null);
+  }, [onRuntimeBridgeReady, waitForNextBotMessage]);
+
   return (
     <div className={`h-full flex flex-col bg-white ${combinedClass}`}>
-      <div className="border-b border-lime-800/60 px-3 py-2 bg-lime-400/95 text-slate-900">
+      <div className="border-b border-lime-800/60 px-3 py-2 pr-10 bg-lime-400/95 text-slate-900 relative">
+        {onClosePanel && (
+          <button
+            type="button"
+            onClick={onClosePanel}
+            className="absolute top-1.5 right-2 z-10 p-0.5 rounded text-slate-900 hover:bg-lime-500/50 transition-colors"
+            title="Chiudi pannello"
+            aria-label="Chiudi pannello"
+          >
+            <X size={20} strokeWidth={2.25} />
+          </button>
+        )}
         <div className="flex items-start justify-between gap-3">
           {isFlowMode ? (
-            <div className="min-w-0 flex-1 flex items-start gap-2 text-sm font-semibold leading-5">
-            <Workflow size={15} className="text-sky-800 flex-shrink-0" />
-            <span className="break-words whitespace-normal">{executionParts.flowName}</span>
-            {executionType !== 'flow' && executionParts.target && (
+            <div className="min-w-0 flex-1 flex items-center gap-2 text-sm font-semibold leading-5">
+              <Workflow size={15} className="text-sky-800 flex-shrink-0" />
+              <span className="break-words whitespace-normal">{executionParts.flowName}</span>
+            </div>
+          ) : (
+            <div />
+          )}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {isFlowMode ? (
               <>
-                <ChevronRight size={14} className="text-slate-400 flex-shrink-0" />
-                {executionType === 'rowTask' ? (
-                  <Equal size={15} className="text-amber-700 flex-shrink-0" />
-                ) : (
-                  <CircleDot size={15} className="text-indigo-700 flex-shrink-0" />
-                )}
-                <span className="break-words whitespace-normal" title={executionParts.target}>{executionParts.target}</span>
+                <DebuggerToolbar
+                  state={dbgToolbarState}
+                  isRestarting={flowModeChat.isRestarting}
+                  onPlay={() => {
+                    void debuggerActions.play();
+                  }}
+                  onClear={() => {
+                    void debuggerActions.clear();
+                  }}
+                  onRestart={() => {
+                    void debuggerActions.restart();
+                  }}
+                />
+                <span className="inline-block w-3 shrink-0" aria-hidden />
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleReset();
+                  }}
+                  disabled={false}
+                  className="p-1.5 rounded bg-slate-900 text-lime-300 hover:bg-slate-800 transition-colors"
+                  title="Riavvia esecuzione"
+                  aria-label="Riavvia esecuzione"
+                >
+                  <RotateCcw size={16} />
+                </button>
+                <span className="inline-block w-3 shrink-0" aria-hidden />
               </>
             )}
-            </div>
-          ) : <div />}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={() => { void handleReset(); }}
-              disabled={isFlowMode ? flowModeChat.isRestarting : false}
-              className="p-1.5 rounded bg-slate-900 text-lime-300 hover:bg-slate-800 transition-colors"
-              title="Riavvia esecuzione"
-              aria-label="Riavvia esecuzione"
-            >
-              <RotateCcw size={16} />
-            </button>
-            {onClosePanel && (
+            {onToggleUseCasePanel && (
               <button
-                onClick={onClosePanel}
+                type="button"
+                onClick={onToggleUseCasePanel}
                 className="p-1.5 rounded bg-slate-900 text-lime-300 hover:bg-slate-800 transition-colors"
-                title="Chiudi pannello"
-                aria-label="Chiudi pannello"
+                title="Show/Hide Use Cases"
+                aria-label="Show/Hide Use Cases"
               >
-                <X size={16} />
+                <UseCasesPanelIcon size={16} className="text-lime-300" />
+              </button>
+            )}
+            {onSaveUseCase && (
+              <button
+                type="button"
+                onClick={() => {
+                  const suggestedKey = String(executionParts.flowName || executionFlowName || '')
+                    .trim()
+                    .toLowerCase()
+                    .replace(/\s+/g, '.');
+                  onSaveUseCase({
+                    suggestedKey,
+                    messages: [...messagesRef.current],
+                  });
+                }}
+                className="p-1.5 rounded bg-slate-900 text-lime-300 hover:bg-slate-800 transition-colors ml-1"
+                title="Salva conversazione come use case"
+                aria-label="Salva conversazione come use case"
+              >
+                <Save size={16} />
               </button>
             )}
           </div>
@@ -1744,7 +1933,13 @@ export default function DDEBubbleChat({
             onFocus={() => {
               try { inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { }
             }}
-            placeholder={effectiveIsWaitingForInput ? "Type response..." : "Waiting for backend..."}
+            placeholder={
+              isFlowMode && dbgToolbarState === 'idle'
+                ? 'Premi Play nella toolbar per avviare il debugger…'
+                : effectiveIsWaitingForInput
+                  ? 'Type response...'
+                  : 'Waiting for backend...'
+            }
             value={inlineDraft}
             onChange={(e) => setInlineDraft(e.target.value)}
             onKeyDown={(e) => {

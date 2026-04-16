@@ -652,6 +652,56 @@ app.get('/api/projects/:id/meta', async (req, res) => {
   }
 });
 
+// GET /api/projects/:id/debugger-use-cases — regression use cases (debugger) stored in project_meta
+app.get('/api/projects/:id/debugger-use-cases', async (req, res) => {
+  const projectId = req.params.id;
+  if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+  try {
+    const client = await getMongoClient();
+    const projDb = await getProjectDb(client, projectId);
+    const meta = await projDb.collection('project_meta').findOne({ _id: 'meta' });
+    const useCases = Array.isArray(meta?.debuggerRegressionUseCases) ? meta.debuggerRegressionUseCases : [];
+    res.json({ useCases });
+  } catch (e) {
+    console.error('[Projects.debugger-use-cases GET]', e?.message);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// PUT /api/projects/:id/debugger-use-cases
+app.put('/api/projects/:id/debugger-use-cases', async (req, res) => {
+  const projectId = req.params.id;
+  if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+  const body = req.body || {};
+  if (!Array.isArray(body.useCases)) {
+    return res.status(400).json({ error: 'useCases_array_required' });
+  }
+  try {
+    const client = await getMongoClient();
+    const projDb = await getProjectDb(client, projectId);
+    const now = new Date();
+    await projDb.collection('project_meta').updateOne(
+      { _id: 'meta' },
+      {
+        $set: {
+          debuggerRegressionUseCases: body.useCases,
+          updatedAt: now,
+        },
+        $setOnInsert: {
+          _id: 'meta',
+          projectId,
+          createdAt: now,
+        },
+      },
+      { upsert: true }
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[Projects.debugger-use-cases PUT]', e?.message);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 // Endpoint: Get unique clients from catalog
 // ✅ Test endpoints
 app.get('/api/ping', (req, res) => {

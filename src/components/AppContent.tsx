@@ -59,8 +59,20 @@ import ResizableTaskEditorHost from './TaskEditor/EditorHost/ResizableTaskEditor
 import { useTaskEditor } from './TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
 import ConditionEditor from './conditions/ConditionEditor';
 import DDEBubbleChat from './TaskEditor/ResponseEditor/ChatSimulator/DDEBubbleChat';
+import type { Message } from '@components/ChatSimulator/UserMessage';
 import { FontProvider } from '../context/FontContext';
 import { useTaskTreeContext } from '../context/DDTContext';
+import type { DebuggerRuntimeBridge } from '../features/useCases/runtime/DebuggerRuntimeBridge';
+import type { UseCase, UseCaseRunResult, UseCaseRuntimePort } from '../features/useCases/model';
+import { runUseCase } from '../features/useCases/runner/UseCaseRunner';
+import { buildUseCaseFromDebuggerMessages } from '../features/useCases/debugger/debuggerUseCaseSnapshot';
+import {
+  moveUseCaseKeyToFolder,
+  renameFolderPrefix,
+  withUseCaseKey,
+} from '../features/useCases/tree/useCaseTreeModel';
+import { UseCaseEditorPanel } from '../features/useCases/ui/UseCaseEditorPanel';
+import { UseCaseNoteManager } from '../features/useCases/notes/UseCaseNoteManager';
 // ✅ REMOVED: Imports moved to handlers (SIDEBAR_TYPE_COLORS, flowchartVariablesService, getNodesWithFallback)
 // FASE 2: InstanceRepository import removed - using TaskRepository instead
 // TaskRepository automatically syncs with InstanceRepository for backward compatibility
@@ -303,6 +315,9 @@ export const AppContent: React.FC<AppContentProps> = ({
   // ✅ ARCHITECTURAL FIX: Ref per accedere ai flows dal FlowWorkspaceProvider
   // Popolato da DockManagerWithFlows che è dentro FlowWorkspaceProvider
   const flowsRef = React.useRef<Record<string, any>>({});
+
+  /** Latest debugger regression use cases for inclusion in project save (ref avoids stale closure in runProjectSave). */
+  const debuggerUseCasesRef = React.useRef<UseCase[]>([]);
 
   /** Opens global DDEBubbleChat for a specific flow id (dock toolbar Run); set after debugger state mounts. */
   const openGlobalDebuggerForFlowRef = React.useRef<(flowId: string) => void>(() => {});
@@ -743,6 +758,15 @@ export const AppContent: React.FC<AppContentProps> = ({
         projectId: pid,
         duration: saveResult.duration,
       });
+      try {
+        const { saveDebuggerUseCasesToProject } = await import(
+          '../features/useCases/persistence/projectDebuggerUseCasesApi'
+        );
+        await saveDebuggerUseCasesToProject(pid, debuggerUseCasesRef.current);
+      } catch (e) {
+        console.error('[Save] Failed to persist debugger use cases', e);
+        throw e instanceof Error ? e : new Error(String(e));
+      }
     } else {
       console.error('[Save][Orchestrator] ❌ Save completed with errors', {
         projectId: pid,
@@ -830,12 +854,25 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [showBackendBuilder, setShowBackendBuilder] = useState(false);
   const [globalDataPanelOpen, setGlobalDataPanelOpen] = useState(false);
   const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
+  const [showUseCasePanel, setShowUseCasePanel] = useState(false);
   /** When set, global debugger runs this flow; when null, uses {@link FlowWorkspaceSnapshot.getActiveFlowId}. */
   const [debuggerTargetFlowId, setDebuggerTargetFlowId] = useState<string | null>(null);
   const [debuggerLaunchKey, setDebuggerLaunchKey] = useState(0);
   const [debuggerSnapshotTick, setDebuggerSnapshotTick] = useState(0);
   const [debuggerWidth, setDebuggerWidth] = useState(380); // Larghezza dinamica invece di fissa
+  const [useCasePanelWidth, setUseCasePanelWidth] = useState(340);
   const [isResizing, setIsResizing] = useState(false);
+  const [isResizingUseCase, setIsResizingUseCase] = useState(false);
+  const [runtimeMessagesSnapshot, setRuntimeMessagesSnapshot] = useState<Message[]>([]);
+  const runtimeBridgeRef = React.useRef<DebuggerRuntimeBridge | null>(null);
+  const [useCases, setUseCases] = useState<UseCase[]>([]);
+  const [selectedUseCaseId, setSelectedUseCaseId] = useState<string | null>(null);
+  const [useCaseRunResults, setUseCaseRunResults] = useState<UseCaseRunResult[]>([]);
+  const [editIntentUseCaseId, setEditIntentUseCaseId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    debuggerUseCasesRef.current = useCases;
+  }, [useCases]);
 
   React.useEffect(() => {
     openGlobalDebuggerForFlowRef.current = (flowId: string) => {
@@ -844,6 +881,13 @@ export const AppContent: React.FC<AppContentProps> = ({
       setDebuggerLaunchKey((k) => k + 1);
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!showGlobalDebugger) {
+      setShowUseCasePanel(false);
+      runtimeBridgeRef.current = null;
+    }
+  }, [showGlobalDebugger]);
 
   React.useEffect(() => {
     if (!showGlobalDebugger) return;
@@ -884,6 +928,272 @@ export const AppContent: React.FC<AppContentProps> = ({
       };
     }
   }, [isResizing, handleResize, handleResizeEnd]);
+
+  const handleUseCaseResizeStart = React.useCallback((e: React.MouseEvent) => {
+    setIsResizingUseCase(true);
+    e.preventDefault();
+  }, []);
+
+  const handleUseCaseResize = React.useCallback((e: MouseEvent) => {
+    if (!isResizingUseCase) return;
+    const container = document.getElementById('flow-workspace-debugger-row');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const anchorX = rect.right - debuggerWidth;
+    const next = e.clientX - anchorX;
+    const clamped = Math.max(260, Math.min(620, next));
+    setUseCasePanelWidth(clamped);
+  }, [isResizingUseCase, debuggerWidth]);
+
+  const handleUseCaseResizeEnd = React.useCallback(() => {
+    setIsResizingUseCase(false);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isResizingUseCase) return;
+    document.addEventListener('mousemove', handleUseCaseResize);
+    document.addEventListener('mouseup', handleUseCaseResizeEnd);
+    return () => {
+      document.removeEventListener('mousemove', handleUseCaseResize);
+      document.removeEventListener('mouseup', handleUseCaseResizeEnd);
+    };
+  }, [isResizingUseCase, handleUseCaseResize, handleUseCaseResizeEnd]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const pid = String(currentPid || '').trim();
+    if (!pid) {
+      setUseCases([]);
+      setSelectedUseCaseId(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const { loadDebuggerUseCasesFromProject } = await import(
+          '../features/useCases/persistence/projectDebuggerUseCasesApi'
+        );
+        const loaded = await loadDebuggerUseCasesFromProject(pid);
+        if (cancelled) return;
+        setUseCases(loaded);
+        if (loaded.length > 0) {
+          setSelectedUseCaseId((prev) =>
+            prev && loaded.some((x) => x.id === prev) ? prev : loaded[0].id
+          );
+        } else {
+          setSelectedUseCaseId(null);
+        }
+      } catch (e) {
+        console.error('[UseCases] load from project failed', e);
+        if (!cancelled) setUseCases([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPid]);
+
+  /** In-memory only until project save (persisted via project_meta.debuggerRegressionUseCases). */
+  const persistUseCases = React.useCallback((next: UseCase[]) => {
+    setUseCases(next);
+  }, []);
+
+  const createEmptyUseCase = React.useCallback(() => {
+    const id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `uc-${Date.now()}`;
+    const keyBase = 'newUseCase';
+    const existingKeys = new Set(useCases.map((x) => x.key));
+    let key = keyBase;
+    let i = 1;
+    while (existingKeys.has(key)) {
+      key = `${keyBase}.${i}`;
+      i += 1;
+    }
+    const uc: UseCase = { id, key, label: `Usecase:${key}`, steps: [] };
+    const next = [...useCases, uc];
+    persistUseCases(next);
+    setSelectedUseCaseId(id);
+    setEditIntentUseCaseId(id);
+  }, [useCases, persistUseCases]);
+
+  /**
+   * Saves current debugger conversation as a new use case: opens panel, appends use case, starts rename edit.
+   */
+  const saveUseCaseFromDebugger = React.useCallback(
+    (payload: { suggestedKey: string; messages: Message[] }) => {
+      setShowUseCasePanel(true);
+      const rawBase = String(payload.suggestedKey || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '.')
+        .replace(/^\.+|\.+$/g, '');
+      const base = rawBase || 'scenario';
+      const existingKeys = new Set(useCases.map((x) => x.key));
+      let dotKey = base;
+      let n = 0;
+      while (existingKeys.has(dotKey)) {
+        n += 1;
+        dotKey = `${base}.${n}`;
+      }
+      const id =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `uc-${Date.now()}`;
+      const created = buildUseCaseFromDebuggerMessages({
+        id,
+        key: dotKey,
+        label: `Usecase:${dotKey}`,
+        messages: payload.messages,
+      });
+      persistUseCases([...useCases, created]);
+      setSelectedUseCaseId(created.id);
+      setEditIntentUseCaseId(created.id);
+    },
+    [useCases, persistUseCases]
+  );
+
+  const runtimePort = React.useMemo<UseCaseRuntimePort | null>(() => {
+    if (!runtimeBridgeRef.current) return null;
+    return {
+      restart: async () => {
+        const bridge = runtimeBridgeRef.current;
+        if (!bridge) throw new Error('Runtime bridge is not available.');
+        await bridge.restart();
+      },
+      executeUtterance: async (utterance: string) => {
+        const bridge = runtimeBridgeRef.current;
+        if (!bridge) throw new Error('Runtime bridge is not available.');
+        await bridge.waitUntilWaitingForInput(20000);
+        const before = bridge.getMessages().filter((m) => m.type === 'bot').length;
+        await bridge.sendUserInput(utterance);
+        const bot = await bridge.waitForNextBotMessage(before, 12000);
+        const all = bridge.getMessages();
+        const latestUser = [...all].reverse().find((m) => m.type === 'user' && m.text === utterance);
+        const semanticValue = (latestUser?.extractedValues || [])
+          .map((x) => `${x.variable}:${String(x.semanticValue ?? '')}`)
+          .join('|');
+        const linguisticValue = (latestUser?.extractedValues || [])
+          .map((x) => `${x.variable}:${String(x.linguisticValue ?? '')}`)
+          .join('|');
+        return {
+          semanticValue,
+          linguisticValue,
+          grammarUsed: {
+            type: String(bot?.stepType || ''),
+            contract: String(bot?.textKey || ''),
+          },
+          botResponse: String(bot?.text || ''),
+        };
+      },
+    };
+  }, [runtimeMessagesSnapshot]);
+
+  const runUseCaseById = React.useCallback(async (id: string) => {
+    const selected = useCases.find((x) => x.id === id);
+    if (!selected) return;
+    if (!runtimePort) {
+      alert('Open the debugger runtime before running a use case.');
+      return;
+    }
+    const results = await runUseCase(selected, runtimePort);
+    setSelectedUseCaseId(id);
+    setUseCaseRunResults(results);
+  }, [useCases, runtimePort]);
+
+  const renameUseCase = React.useCallback((id: string, nextKey: string) => {
+    const next = useCases.map((x) => (x.id === id ? withUseCaseKey(x, nextKey) : x));
+    persistUseCases(next);
+  }, [useCases, persistUseCases]);
+
+  const renameFolder = React.useCallback((folderPath: string, nextSegment: string) => {
+    const next = renameFolderPrefix(useCases, folderPath, nextSegment);
+    persistUseCases(next);
+  }, [useCases, persistUseCases]);
+
+  const deleteUseCaseNode = React.useCallback((fullPath: string, useCaseId?: string) => {
+    const fp = String(fullPath || '').trim();
+    if (!fp) return;
+    if (useCaseId) {
+      const next = useCases.filter((x) => x.id !== useCaseId);
+      persistUseCases(next);
+      setSelectedUseCaseId((prev) => (prev === useCaseId ? (next[0]?.id || null) : prev));
+      return;
+    }
+    const prefix = `${fp}.`;
+    const next = useCases.filter((x) => x.key !== fp && !x.key.startsWith(prefix));
+    persistUseCases(next);
+    setSelectedUseCaseId((prev) =>
+      prev && next.some((x) => x.id === prev) ? prev : (next[0]?.id ?? null)
+    );
+  }, [useCases, persistUseCases]);
+
+  const saveUseCaseNote = React.useCallback(
+    (id: string, note: string) => {
+      const next = UseCaseNoteManager.setNote(useCases, id, note);
+      persistUseCases(next);
+    },
+    [useCases, persistUseCases]
+  );
+
+  const moveUseCaseToFolder = React.useCallback((id: string, folderPath: string) => {
+    const next = useCases.map((x) => (x.id === id ? moveUseCaseKeyToFolder(x, folderPath) : x));
+    persistUseCases(next);
+  }, [useCases, persistUseCases]);
+
+  const createRelativeUseCase = React.useCallback(
+    (targetPath: string, mode: 'before' | 'after' | 'child') => {
+      const normalizedTarget = String(targetPath || '').trim();
+      if (!normalizedTarget) return;
+      const targetParts = normalizedTarget.split('.').filter(Boolean);
+      if (targetParts.length === 0) return;
+
+      const siblingParent = targetParts.slice(0, -1).join('.');
+      const basePrefix = mode === 'child' ? normalizedTarget : siblingParent;
+      const existing = new Set(useCases.map((x) => x.key));
+      const leafBase = 'untitled';
+      let leaf = leafBase;
+      let i = 1;
+      const composeKey = () => (basePrefix ? `${basePrefix}.${leaf}` : leaf);
+      while (existing.has(composeKey())) {
+        leaf = `${leafBase}${i}`;
+        i += 1;
+      }
+      const nextKey = composeKey();
+
+      const id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `uc-${Date.now()}`;
+      const created: UseCase = {
+        id,
+        key: nextKey,
+        label: `Usecase:${nextKey}`,
+        steps: [],
+      };
+
+      let insertAt = useCases.length;
+      if (mode !== 'child') {
+        const idxByExact = useCases.findIndex((x) => x.key === normalizedTarget);
+        if (idxByExact >= 0) {
+          insertAt = mode === 'before' ? idxByExact : idxByExact + 1;
+        } else {
+          const siblingPrefix = siblingParent ? `${siblingParent}.` : '';
+          const siblingStart = useCases.findIndex((x) =>
+            siblingPrefix ? x.key.startsWith(siblingPrefix) && x.key.split('.').length === targetParts.length : !x.key.includes('.')
+          );
+          if (siblingStart >= 0) {
+            insertAt = siblingStart;
+          }
+        }
+      }
+
+      const next = [...useCases];
+      next.splice(Math.max(0, Math.min(insertAt, next.length)), 0, created);
+      persistUseCases(next);
+      setSelectedUseCaseId(created.id);
+      setEditIntentUseCaseId(created.id);
+    },
+    [useCases, persistUseCases]
+  );
 
   // ✅ REMOVED: Duplicate handleTestSingleNode definition - already defined before renderTabContent
 
@@ -1430,13 +1740,66 @@ export const AppContent: React.FC<AppContentProps> = ({
                           flowTasks={globalDebuggerFlowProps.tasks}
                           executionFlowName={globalDebuggerFlowProps.executionFlowName}
                           executionLaunchType="flow"
+                          onToggleUseCasePanel={() => setShowUseCasePanel((v) => !v)}
+                          onSaveUseCase={saveUseCaseFromDebugger}
+                          onRuntimeBridgeReady={(bridge) => {
+                            runtimeBridgeRef.current = bridge;
+                            setRuntimeMessagesSnapshot(bridge?.getMessages() || []);
+                          }}
+                          onMessagesSnapshotChange={setRuntimeMessagesSnapshot}
                           onClosePanel={() => {
                             setShowGlobalDebugger(false);
                             setDebuggerTargetFlowId(null);
+                            setShowUseCasePanel(false);
                           }}
                         />
                       </FontProvider>
                     </div>
+                    {showUseCasePanel && (
+                      <>
+                        <div
+                          onMouseDown={handleUseCaseResizeStart}
+                          style={{
+                            width: '8px',
+                            cursor: 'col-resize',
+                            backgroundColor: isResizingUseCase ? '#3b82f6' : 'transparent',
+                            zIndex: 10,
+                            userSelect: 'none',
+                            flexShrink: 0,
+                          }}
+                        />
+                        <div
+                          style={{
+                            width: `${useCasePanelWidth}px`,
+                            position: 'relative',
+                            overflowY: 'auto',
+                            overflowX: 'hidden',
+                            borderLeft: '1px solid #1f2937',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <UseCaseEditorPanel
+                            useCases={useCases}
+                            selectedUseCaseId={selectedUseCaseId}
+                            onSelectUseCase={setSelectedUseCaseId}
+                            onCreateUseCase={createEmptyUseCase}
+                            onRenameUseCase={renameUseCase}
+                            onRenameFolder={renameFolder}
+                            onDeleteNode={deleteUseCaseNode}
+                            onSaveNote={saveUseCaseNote}
+                            onMoveUseCaseToFolder={moveUseCaseToFolder}
+                            onCreateRelativeUseCase={createRelativeUseCase}
+                            editIntentUseCaseId={editIntentUseCaseId}
+                            onConsumeEditIntentUseCaseId={() => setEditIntentUseCaseId(null)}
+                            onRunUseCase={(id) => {
+                              void runUseCaseById(id);
+                            }}
+                            runResults={useCaseRunResults}
+                            onClosePanel={() => setShowUseCasePanel(false)}
+                          />
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
