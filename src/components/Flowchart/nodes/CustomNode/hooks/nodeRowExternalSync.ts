@@ -6,20 +6,34 @@
 
 import type { NodeRowData } from '../../../../../types/project';
 
+/**
+ * When props and local state both have the same row id, prefer local `text` if it differs.
+ * React Flow `data.rows` can lag one frame behind `onUpdate` commits; without this, a sync
+ * triggered by reorder/new rows would re-apply stale labels from props.
+ */
+function overlayLocalTextOntoDisplayRow(dr: NodeRowData, nodeRows: NodeRowData[]): NodeRowData {
+  const loc = nodeRows.find((r) => r.id === dr.id);
+  if (!loc || loc.text === dr.text) {
+    return dr;
+  }
+  return { ...dr, text: loc.text };
+}
+
 /** Merge store rows with the locally edited row so external adds/reorders still apply. */
 export function mergeExternalRowsFromStore(
   displayRows: NodeRowData[],
   nodeRows: NodeRowData[],
   editingRowId: string | null
 ): NodeRowData[] {
-  if (!editingRowId) {
-    return displayRows;
+  if (editingRowId) {
+    const localEditing = nodeRows.find((r) => r.id === editingRowId);
+    if (!localEditing) {
+      return displayRows;
+    }
+    // Editing row: full local row. Siblings: store wins (external portal updates while typing).
+    return displayRows.map((dr) => (dr.id === editingRowId ? localEditing : dr));
   }
-  const localEditing = nodeRows.find((r) => r.id === editingRowId);
-  if (!localEditing) {
-    return displayRows;
-  }
-  return displayRows.map((dr) => (dr.id === editingRowId ? localEditing : dr));
+  return displayRows.map((dr) => overlayLocalTextOntoDisplayRow(dr, nodeRows));
 }
 
 /** True if sync should skip setState (avoids loops and caret jumps). */

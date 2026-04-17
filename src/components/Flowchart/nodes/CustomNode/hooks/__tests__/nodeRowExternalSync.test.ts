@@ -11,10 +11,13 @@ function row(id: string, text: string): NodeRowData {
 }
 
 describe('mergeExternalRowsFromStore', () => {
-  it('returns displayRows when not editing', () => {
+  it('when not editing, overlays local text onto display rows for matching ids (props can lag)', () => {
     const display = [row('a', '1'), row('b', '2')];
     const local = [row('a', 'x')];
-    expect(mergeExternalRowsFromStore(display, local, null)).toEqual(display);
+    expect(mergeExternalRowsFromStore(display, local, null)).toEqual([
+      row('a', 'x'),
+      row('b', '2'),
+    ]);
   });
 
   it('preserves local row when editing that id', () => {

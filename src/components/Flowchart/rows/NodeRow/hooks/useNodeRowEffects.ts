@@ -19,8 +19,6 @@ export interface UseNodeRowEffectsProps {
   setIconPos: (pos: { top: number; left: number } | null) => void;
   hasEverBeenEditing: boolean;
   setHasEverBeenEditing: (value: boolean) => void;
-  currentText: string;
-  setCurrentText: (text: string) => void;
   forceEditing: boolean;
   suppressIntellisenseRef: React.MutableRefObject<boolean>;
   inputRef: React.RefObject<HTMLTextAreaElement>;
@@ -61,8 +59,6 @@ export function useNodeRowEffects(props: UseNodeRowEffectsProps): void {
     setIconPos,
     hasEverBeenEditing,
     setHasEverBeenEditing,
-    currentText,
-    setCurrentText,
     forceEditing,
     suppressIntellisenseRef,
     inputRef,
@@ -197,7 +193,11 @@ export function useNodeRowEffects(props: UseNodeRowEffectsProps): void {
     }
   }, [isEditing, hasEverBeenEditing, row.id, onEditingEnd]);
 
-  // Canvas click = ESC semantics: close intellisense if open, otherwise end editing without deleting
+  /**
+   * Canvas click: dismiss intellisense or exit edit mode.
+   * Row text is already committed on each keystroke; do not reset local draft (none exists).
+   * Parent `onEditingEnd` runs from the effect below when `isEditing` becomes false.
+   */
   useEffect(() => {
     const handleCanvasClick = () => {
       if (!isEditing) return;
@@ -206,16 +206,11 @@ export function useNodeRowEffects(props: UseNodeRowEffectsProps): void {
         setIntellisenseQuery('');
         return;
       }
-      // End editing gracefully, keep the row/node even if empty
-      setCurrentText(row.text);
       setIsEditing(false);
       setShowIntellisense(false);
       setIntellisenseQuery('');
-      if (typeof onEditingEnd === 'function') {
-        onEditingEnd(row.id);
-      }
     };
     window.addEventListener('flow:canvas:click', handleCanvasClick as any, { capture: false } as any);
     return () => window.removeEventListener('flow:canvas:click', handleCanvasClick as any);
-  }, [isEditing, showIntellisense, row.text, onEditingEnd, setCurrentText, setIsEditing, setShowIntellisense, setIntellisenseQuery]);
+  }, [isEditing, showIntellisense, setIsEditing, setShowIntellisense, setIntellisenseQuery]);
 }

@@ -7,14 +7,14 @@ interface UseRowStateProps {
 }
 
 /**
- * Manages all local state for a NodeRow component
- * Extracts state management to simplify the main component
+ * Manages local UI state for a NodeRow.
+ * Row label text is not duplicated here: the textarea is controlled by {@link NodeRowData.text}
+ * from the parent (CustomNode) so draft and persisted value cannot diverge.
  */
 export function useRowState({ row, forceEditing = false }: UseRowStateProps) {
     // Editing state
     const [isEditing, setIsEditing] = useState(forceEditing);
     const [hasEverBeenEditing, setHasEverBeenEditing] = useState(forceEditing);
-    const [currentText, setCurrentText] = useState(row.text);
 
     // Inclusion state
     const [included, setIncluded] = useState(row.included !== false); // default true
@@ -66,19 +66,12 @@ export function useRowState({ row, forceEditing = false }: UseRowStateProps) {
         if (isEditing) setShowIcons(false);
     }, [isEditing]);
 
-    // Sync currentText with row.text when row changes
-    useEffect(() => {
-        setCurrentText(row.text);
-    }, [row.text]);
-
     return {
         // Editing state
         isEditing,
         setIsEditing,
         hasEverBeenEditing,
         setHasEverBeenEditing,
-        currentText,
-        setCurrentText,
 
         // Inclusion state
         included,

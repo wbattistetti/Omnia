@@ -101,7 +101,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const {
     isEditing, setIsEditing,
     hasEverBeenEditing, setHasEverBeenEditing,
-    currentText, setCurrentText,
     included, setIncluded,
     showIntellisense, setShowIntellisense,
     intellisenseQuery, setIntellisenseQuery,
@@ -319,7 +318,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // ✅ REFACTOR: Extract event handlers to custom hook
   const {
-    handleSave,
     handleCancel,
     handleKeyDownInternal,
     handleTextChange,
@@ -330,8 +328,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     enterEditing,
   } = useNodeRowEventHandlers({
     row,
-    currentText,
-    setCurrentText,
     isEditing,
     setIsEditing,
     showIntellisense,
@@ -374,8 +370,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     setIconPos,
     hasEverBeenEditing,
     setHasEverBeenEditing,
-    currentText,
-    setCurrentText,
     forceEditing,
     suppressIntellisenseRef,
     inputRef,
@@ -664,11 +658,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     };
   }, [instanceId, row.id]);
 
-  // LOG: stampa id, forceEditing, isEditing
-  useEffect(() => {
-    // console.log(`[NodeRow] render row.id=${row.id} forceEditing=${forceEditing} isEditing=${isEditing}`);
-  });
-
   // Editor host context (for opening the right editor per ActType) - host is always present
   const taskEditorCtx = useTaskEditor();
 
@@ -808,7 +797,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               }}
             >
               <NodeRowEditor
-                value={currentText}
+                value={row.text ?? ''}
                 onChange={handleTextChange}
                 onKeyDown={handleKeyDownInternal}
                 inputRef={inputRef}

@@ -97,17 +97,6 @@ export function useNodeRowVisuals(props: UseNodeRowVisualsProps): UseNodeRowVisu
             labelTextColor = '#94a3b8';
             iconColor = '#94a3b8';
           }
-        } else {
-          // Task not found - this is a real problem, but log only if necessary
-          // (e.g., if row.id exists but task is not in repository)
-          if (row.id && process.env.NODE_ENV === 'development') {
-            // Only in dev and only if there's a row.id that should exist
-            console.debug('[🎨 NODEROW] Task not found in repository', {
-              taskId: taskId,
-              rowId: row.id,
-              hasRowId: !!row.id
-            });
-          }
         }
       } catch (err) {
         console.error('[🎨 NODEROW] Error', { taskId, rowId: row.id, error: err });

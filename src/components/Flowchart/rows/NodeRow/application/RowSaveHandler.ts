@@ -4,7 +4,7 @@
 import { TaskType } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
 import { createRowWithTask, getTaskIdFromRow } from '@utils/taskHelpers';
-import { applySayMessagePlainTextToTask, getSayMessageSyncedBody } from '@utils/sayMessageTaskSync';
+import { applySayMessagePlainTextToTask } from '@utils/sayMessageTaskSync';
 import type { Row } from '@types/NodeRowTypes';
 
 export interface RowSaveHandlerDependencies {
@@ -40,7 +40,6 @@ export class RowSaveHandler {
    */
   public async saveRow(label: string): Promise<RowSaveResult> {
     try {
-      // Get project ID
       let projectId: string | undefined = undefined;
       try {
         projectId = this.getCurrentProjectId?.() || this.getProjectId?.() || undefined;
@@ -48,95 +47,38 @@ export class RowSaveHandler {
         // Ignore errors getting project ID
       }
 
-      // Only save task for Message type rows
       if (projectId && ((this.row as any)?.mode === 'Message' || !(this.row as any)?.mode)) {
-        // ✅ UNIFIED MODEL: row.id === task.id ALWAYS
         const instanceId = this.row.id;
 
-        console.log('[RowSaveHandler][SAVE][START]', {
-          rowId: this.row.id,
-          instanceId: instanceId, // ✅ row.id === task.id ALWAYS
-          label,
-          labelLength: label.length,
-          projectId,
-          rowMode: (this.row as any)?.mode,
-        });
-
-        // Ensure task exists in memory before saving
         const task = taskRepository.getTask(instanceId);
-        console.log('[RowSaveHandler][SAVE][MEMORY_CHECK]', {
-          instanceId,
-          taskExists: !!task,
-          taskMessage: task?.value?.text || 'N/A',
-        });
 
         if (!task) {
-          // Create task in memory if it doesn't exist
-          console.log('[RowSaveHandler][SAVE][CREATE_IN_MEMORY]', { instanceId });
-
-          // Check if task exists in repository (row.id === task.id ALWAYS)
           const existingTask = taskRepository.getTask(this.row.id);
           if (!existingTask) {
-            // Create Task for this row (default to Message type)
-            const newTask = createRowWithTask(instanceId, TaskType.SayMessage, label, projectId);
-            // Architectural rule: task.id = row.id (newTask.id === instanceId === row.id)
-            console.log('[RowSaveHandler][SAVE][CREATED_AND_UPDATED]', {
-              instanceId,
-              taskId: this.row.id, // ✅ row.id === task.id ALWAYS
-              messageText: label.substring(0, 50),
-            });
+            createRowWithTask(instanceId, TaskType.SayMessage, label, projectId);
           } else {
-            // Row already has Task, update it
             applySayMessagePlainTextToTask(this.row.id, label, projectId);
-            console.log('[RowSaveHandler][SAVE][UPDATED_EXISTING]', {
-              instanceId,
-              taskId: this.row.id, // ✅ row.id === task.id ALWAYS
-              messageText: label.substring(0, 50),
-            });
           }
         } else {
-          // Update existing task
-          console.log('[RowSaveHandler][SAVE][UPDATE_IN_MEMORY]', {
-            instanceId,
-            oldText: getSayMessageSyncedBody(task).substring(0, 50) || 'N/A',
-            newText: label.substring(0, 50),
-          });
-
           const taskId = getTaskIdFromRow(this.row);
           if (taskId) {
             applySayMessagePlainTextToTask(taskId, label, projectId);
           }
         }
 
-        // Verify after update
-        const taskAfter = taskRepository.getTask(instanceId);
-        console.log('[RowSaveHandler][SAVE][MEMORY_AFTER_UPDATE]', {
-          instanceId,
-          taskExists: !!taskAfter,
-          messageText: taskAfter ? getSayMessageSyncedBody(taskAfter).substring(0, 50) || 'N/A' : 'N/A',
-        });
-
         return {
           success: true,
           taskId: instanceId,
         };
-      } else {
-        console.log('[RowSaveHandler][SAVE][SKIPPED]', {
-          hasProjectId: !!projectId,
-          rowMode: (this.row as any)?.mode,
-          rowInstanceId: (this.row as any)?.instanceId,
-          reason: !projectId ? 'NO_PROJECT_ID' : 'NOT_MESSAGE_MODE',
-        });
-
-        return {
-          success: true, // Not an error, just skipped
-        };
       }
+
+      return {
+        success: true,
+      };
     } catch (error) {
-      console.error('[RowSaveHandler][SAVE][ERROR]', {
+      console.error('[RowSaveHandler] saveRow failed', {
         error: String(error),
         rowId: this.row.id,
-        label: label.substring(0, 50),
       });
 
       return {

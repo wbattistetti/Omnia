@@ -5,6 +5,7 @@ import { getTaskIdFromRow } from '../../../../../utils/taskHelpers';
 import { variableCreationService } from '../../../../../services/VariableCreationService';
 import { taskRepository } from '../../../../../services/TaskRepository';
 import { TaskType } from '../../../../../types/taskTypes'; // ✅ Per TaskType enum
+import { logNodeRowEdit } from '../../../rows/NodeRow/nodeRowEditDebug';
 
 // ✅ Traccia il contenuto originale quando inizi a editare una riga esistente
 interface RowOriginalContent {
@@ -67,7 +68,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
      *
      * Conservative: when structure and ids match and nothing is being edited, do not replace local
      * rows (avoids overwriting keystrokes before the parent re-renders). When the store adds/reorders
-     * rows or the user edits one row while siblings refresh, apply `mergeExternalRowsFromStore`.
+     * rows or the user edits one row while siblings refresh, apply `mergeExternalRowsFromStore`
+     * (when not editing, store rows are merged with local `text` per row id so props cannot revive stale labels).
      */
     useEffect(() => {
         if (autoAppendGuard.current > 0) {
@@ -259,7 +261,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
 
                 if (projectId) {
                     await taskRepository.deleteTask(taskId, projectId);
-                    console.log(`[useNodeRowManagement] Deleted task ${taskId} for row ${rowId}`);
 
                     // ✅ Emit event to close Response Editor if open for this task
                     document.dispatchEvent(new CustomEvent('taskEditor:closeIfOpen', {
@@ -410,6 +411,13 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         const isEmpty = !currentText || currentText.trim() === '';
         const originalContent = originalContentRef.current;
 
+        logNodeRowEdit('canvas.handleExitEditing', {
+            rowId: rowIdToCheck,
+            textLength: currentText.length,
+            isEmpty,
+            wasNew: Boolean(originalContent?.wasNew),
+        });
+
         // ✅ CASO 1: Riga NUOVA (mai riempita)
         if (originalContent?.wasNew) {
             if (isEmpty) {
@@ -427,26 +435,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             }
         }
 
-        // ✅ CASO 2: Riga ESISTENTE (già riempita)
-        // Blur = ESC → RIPRISTINA contenuto originale
-        if (originalContent && originalContent.originalText !== currentText) {
-
-            // Ripristina il contenuto originale
-            setNodeRows(prev => prev.map(r =>
-                r.id === rowIdToCheck
-                    ? { ...r, text: originalContent.originalText }
-                    : r
-            ));
-
-            // Aggiorna anche il parent
-            const updatedRows = nodeRows.map(r =>
-                r.id === rowIdToCheck
-                    ? { ...r, text: originalContent.originalText }
-                    : r
-            );
-            normalizedData.onUpdate?.({ rows: updatedRows });
-        }
-
+        // Live label edits are committed on each keystroke (NodeRow → handleUpdateRow); no implicit rollback.
         setEditingRowId(null);
         setIsEmpty(computeIsEmpty(nodeRows));
         originalContentRef.current = null;

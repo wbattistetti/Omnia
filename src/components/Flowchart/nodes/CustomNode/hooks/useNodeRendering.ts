@@ -141,13 +141,9 @@ export function useNodeRendering({
         fullWidth: true,
         isToolbarDrag,
         onDragStart: () => {
-            console.log('🎯 [CustomNode] onDragStart from Move button', {
-                isDragging,
-                isToolbarDrag
-            });
-            // Questi setter verranno passati dal componente padre
+            /* drag wiring lives on parent */
         }
-    }), [setIsEditingNode, handleDeleteNode, isToolbarDrag, isDragging]);
+    }), [setIsEditingNode, handleDeleteNode, isToolbarDrag]);
 
     // Props per NodeDragHeader (header drag)
     const dragHeaderProps = useMemo(() => ({
@@ -158,13 +154,9 @@ export function useNodeRendering({
         fullWidth: true,
         isToolbarDrag,
         onDragStart: () => {
-            console.log('🎯 [CustomNode] onDragStart from Move button', {
-                isDragging,
-                isToolbarDrag
-            });
-            // Questi setter verranno passati dal componente padre
+            /* drag wiring lives on parent */
         }
-    }), [setIsEditingNode, handleDeleteNode, isToolbarDrag, isDragging]);
+    }), [setIsEditingNode, handleDeleteNode, isToolbarDrag]);
 
     // Props per IntellisenseMenu
     const intellisenseProps = useMemo(() => ({
@@ -174,7 +166,6 @@ export function useNodeRendering({
         referenceElement: null,
         onSelect: handleIntellisenseSelectItem,
         onClose: () => {
-            console.log("🎯 [CustomNode] ROW INTELLISENSE CLOSED", { nodeId: id });
             closeIntellisense();
         },
         filterCategoryTypes: ['taskTemplates', 'userActs', 'backendActions']

@@ -43,28 +43,13 @@ export class FactoryTaskCreator {
     selectedTaskType: TaskType | null
   ): Promise<FactoryTaskCreationResult> {
     try {
-      const { row, getProjectId, onCreateFactoryTask, onUpdate, onUpdateWithCategory, onStateUpdate } = this.deps;
+      const { row, onCreateFactoryTask } = this.deps;
 
-      // Determine the key from selectedTaskType
       const key = selectedTaskType !== null ? taskTypeToTemplateId(selectedTaskType) || '' : '';
 
-      console.log('🎯 [FactoryTaskCreator][CALLING_CREATE_FACTORY_TASK]', {
-        label,
-        taskType: selectedTaskType,
-        key,
-        timestamp: Date.now()
-      });
-
-      // Create the factory task with the row name and inferred type
-      // The callback onRowUpdate is called immediately by EntityCreationService
       onCreateFactoryTask(label, (createdItem: any) => {
         this.handleFactoryTaskCreated(createdItem, label, key);
       }, 'industry', undefined, key);
-
-      console.log('🎯 [FactoryTaskCreator][AFTER_CALLING_CREATE_FACTORY_TASK]', {
-        label,
-        timestamp: Date.now()
-      });
 
       return { success: true };
     } catch (err) {
@@ -88,38 +73,14 @@ export class FactoryTaskCreator {
   ): void {
     const { row, getProjectId, onUpdate, onUpdateWithCategory, onStateUpdate } = this.deps;
 
-    console.log('🎯 [FactoryTaskCreator][CALLBACK_START]', {
-      label,
-      createdItem,
-      hasCreatedItem: !!createdItem,
-      id: createdItem?.id,
-      type: createdItem?.type,
-      mode: createdItem?.mode,
-      timestamp: Date.now()
-    });
-
-    const createdItemId = createdItem?.id;
-    console.log('🎯 [FactoryTaskCreator] Factory task created:', {
-      label,
-      id: createdItemId,
-      type: createdItem?.type,
-      mode: createdItem?.mode
-    });
-
-    // Update row with template metadata
     const instanceId = row.id;
     const projectId = getProjectId?.() || undefined;
 
-    // Migration: Create or update Task
-    // Convert key (string from Intellisense) to TaskType enum
     const taskType = taskIdToTaskType(key);
-    // Check if task exists in repository (row.id === task.id ALWAYS)
     const existingTask = taskRepository.getTask(row.id);
     if (!existingTask) {
-      // Create Task for this row
       createRowWithTask(instanceId, taskType, '', projectId);
     } else {
-      // Update Task type
       updateRowTaskType(row, taskType, projectId);
     }
 
@@ -132,63 +93,16 @@ export class FactoryTaskCreator {
       isUndefined: false
     };
 
-    console.log('🎯 [FactoryTaskCreator][BEFORE_UPDATE]', {
-      rowId: row.id,
-      rowTextBefore: row.text,
-      label,
-      updateMeta,
-      hasOnUpdateWithCategory: !!onUpdateWithCategory,
-      hasOnUpdate: !!onUpdate,
-      timestamp: Date.now()
-    });
-
     if (onUpdateWithCategory) {
-      console.log('🎯 [FactoryTaskCreator][CALLING_ON_UPDATE_WITH_CATEGORY]', {
-        rowId: row.id,
-        label,
-        categoryType: 'taskTemplates',
-        meta: updateMeta
-      });
       (onUpdateWithCategory as any)(row, label, 'taskTemplates', updateMeta);
-      console.log('🎯 [FactoryTaskCreator][AFTER_ON_UPDATE_WITH_CATEGORY]', {
-        rowId: row.id,
-        label,
-        timestamp: Date.now()
-      });
     } else {
-      console.log('🎯 [FactoryTaskCreator][CALLING_ON_UPDATE]', {
-        rowId: row.id,
-        label,
-        wasUndefined: (row as any)?.isUndefined
-      });
       onUpdate({ ...row, isUndefined: false } as any, label);
-      console.log('🎯 [FactoryTaskCreator][AFTER_ON_UPDATE]', {
-        rowId: row.id,
-        label,
-        timestamp: Date.now()
-      });
     }
 
-    // Close row after saving text
-    console.log('🎯 [FactoryTaskCreator][CLOSING_ROW]', {
-      rowId: row.id,
-      timestamp: Date.now()
-    });
     onStateUpdate.setIsEditing(false);
     onStateUpdate.setShowIntellisense(false);
     onStateUpdate.setIntellisenseQuery('');
     onStateUpdate.closePicker();
-
-    // Log final state after a brief delay
-    setTimeout(() => {
-      console.log('🎯 [FactoryTaskCreator][FINAL_STATE_CHECK]', {
-        rowId: row.id,
-        rowTextAfter: row.text,
-        label,
-        textsMatch: row.text === label,
-        timestamp: Date.now()
-      });
-    }, 100);
 
     try {
       emitSidebarRefresh();

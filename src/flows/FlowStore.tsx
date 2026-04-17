@@ -10,6 +10,7 @@ import type { Task } from '../types/taskTypes';
 import type { VariableInstance } from '../types/variableTypes';
 import type { FlowSubflowBindingPersisted } from '../domain/flowDocument/FlowDocument';
 import { stripLegacyVariablesFromFlowMeta } from './flowMetaSanitize';
+import { mergeUpsertNodesPreserveLocalRowText } from './mergeUpsertFlowNodesPreserveLocalRowText';
 
 type ApplyFlowLoadPayload<NodeT, EdgeT> = {
   nodes: NodeT[];
@@ -72,6 +73,13 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
           prevNodeCount: prev.nodes?.length ?? 0,
           incNodeCount: Array.isArray(inc.nodes) ? inc.nodes.length : -1,
         });
+      }
+
+      if (prev && Array.isArray(incMerged.nodes)) {
+        const withLocalRows = mergeUpsertNodesPreserveLocalRowText(prev, incMerged.nodes as unknown[]);
+        if (withLocalRows !== undefined) {
+          incMerged = { ...incMerged, nodes: withLocalRows as any } as typeof incMerged;
+        }
       }
 
       const nonEmpty =

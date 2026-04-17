@@ -85,6 +85,7 @@ import {
   setSubflowSyncUpsertFlowSlice,
 } from '../domain/taskSubflowMove/subflowSyncFlowsRef';
 import { logUpsertFlowSliceInbound, logUpsertSubflowEmptyNodesCaller } from '../utils/flowStructuralCommitDiagnostic';
+import { overlayInboundFlowRowsWithAuthoritativeSlice } from '../flows/overlayInboundFlowRowsWithAuthoritativeSlice';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 import { provisionParentVariablesForSubflowTaskAsync } from '../services/subflowOutputProvisioning';
 import { getTemplateId } from '../utils/taskHelpers';
@@ -122,6 +123,45 @@ function flowGraphSignature(flow: { id?: string; nodes?: any[]; edges?: any[] } 
   return `${id}#n${nodes.length}[${nodeSig}]#e${edges.length}[${edgeSig}]`;
 }
 
+/** Counts for logging / coarse dedup segment (tasks/vars length). */
+function flowMetadataFingerprint(
+  flow: { meta?: { translations?: Record<string, unknown> }; tasks?: unknown[]; variables?: unknown[] } | null | undefined
+): string {
+  if (!flow) return 'meta:none';
+  const trCount = flow.meta?.translations ? Object.keys(flow.meta.translations).length : 0;
+  return `tr:${trCount},t:${flow.tasks?.length ?? 0},v:${flow.variables?.length ?? 0}`;
+}
+
+/** Stable hash so inbound dedup differs when the same key count updates a value (e.g. two translation edits). */
+function stableTranslationsContentHash(tr: Record<string, unknown> | undefined): string {
+  if (!tr || typeof tr !== 'object') return '0';
+  const keys = Object.keys(tr).sort();
+  let h = 5381;
+  for (const k of keys) {
+    const v = tr[k];
+    const part = `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`;
+    for (let i = 0; i < part.length; i++) {
+      h = ((h << 5) + h) ^ part.charCodeAt(i);
+    }
+  }
+  return String(h >>> 0);
+}
+
+/** Cheap stable hash for tasks/variables arrays so dedup keys differ when length matches but content changes. */
+function stableJsonSliceHash(value: unknown): string {
+  if (value === undefined || value === null) return '0';
+  try {
+    const s = JSON.stringify(value);
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) {
+      h = ((h << 5) + h) ^ s.charCodeAt(i);
+    }
+    return String(h >>> 0);
+  } catch {
+    return 'x';
+  }
+}
+
 // ✅ ARCHITECTURAL FIX: Component that accesses FlowWorkspaceProvider and populates flowsRef
 // This allows handleSaveProject to access flows without using window.__flows
 const DockManagerWithFlows: React.FC<{
@@ -148,21 +188,39 @@ const DockManagerWithFlows: React.FC<{
    * between first paint and useEffect (structural DnD runs synchronously on mouseup).
    */
   setSubflowSyncUpsertFlowSlice((f) => {
-    logUpsertFlowSliceInbound('DockManager_subflowSync', f as any);
     const incoming = f as any;
     const flowId = String(incoming?.id || '').trim();
     if (!flowId) return;
 
     const current = (flowsSnapshotRef.current as any)?.[flowId];
-    const currentSig = flowGraphSignature(current as any);
-    const incomingSig = flowGraphSignature(incoming as any);
-    const inboundSig = `${flowId}|${incomingSig}`;
+    const nodesAligned = overlayInboundFlowRowsWithAuthoritativeSlice(current, incoming);
+    const reconciled =
+      nodesAligned !== undefined && nodesAligned !== incoming.nodes
+        ? { ...incoming, nodes: nodesAligned }
+        : incoming;
 
-    if (currentSig === incomingSig || lastInboundUpsertSignatureRef.current === inboundSig) {
+    const currentGraphSig = flowGraphSignature(current as any);
+    const incomingGraphSig = flowGraphSignature(reconciled as any);
+    const rec = reconciled as any;
+    // O(1) identity: writeTranslationToFlowSlice / syncTaskAuthoringIntoFlowSlice /
+    // replaceTaskVariableRowsForInstance always allocate new meta.translations / tasks / variables.
+    const sliceUnchanged =
+      currentGraphSig === incomingGraphSig &&
+      current?.meta?.translations === rec?.meta?.translations &&
+      current?.tasks === rec?.tasks &&
+      current?.variables === rec?.variables;
+    const metaFp = flowMetadataFingerprint(rec);
+    const trHash = stableTranslationsContentHash(rec?.meta?.translations as Record<string, unknown> | undefined);
+    const tasksHash = stableJsonSliceHash(rec?.tasks);
+    const varsHash = stableJsonSliceHash(rec?.variables);
+    const inboundSig = `${flowId}|${incomingGraphSig}|${metaFp}|${trHash}|${tasksHash}|${varsHash}`;
+
+    if (sliceUnchanged || lastInboundUpsertSignatureRef.current === inboundSig) {
       return;
     }
     lastInboundUpsertSignatureRef.current = inboundSig;
-    upsertFlowRef.current(incoming);
+    logUpsertFlowSliceInbound('DockManager_subflowSync', reconciled as any);
+    upsertFlowRef.current(reconciled);
   });
 
   /** Canvas row ids + inclusion flags — when this changes, re-hydrate utterance vars from TaskRepository. */

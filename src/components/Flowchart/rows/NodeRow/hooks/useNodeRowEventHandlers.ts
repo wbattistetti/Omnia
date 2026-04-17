@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { TaskType } from '@types/taskTypes';
 import { EntityCreationService } from '@services/EntityCreationService';
 import { emitSidebarRefresh } from '@ui/events';
@@ -14,14 +14,10 @@ import { IntellisenseSelectionHandler } from '../application/IntellisenseSelecti
 import { taskTypeToTemplateId } from '@types/taskTypes';
 import type { Row } from '@types/NodeRowTypes';
 import { taskRepository } from '@services/TaskRepository';
-import { useFlowWorkspace } from '@flows/FlowStore';
-import { getActiveFlowCanvasId } from '@flows/activeFlowCanvas';
-import { findDuplicateNormalizedSubflowRowLabel } from '@components/Flowchart/utils/subflowRowLabelValidation';
+import { logNodeRowEdit } from '../nodeRowEditDebug';
 
 export interface UseNodeRowEventHandlersProps {
   row: Row;
-  currentText: string;
-  setCurrentText: (text: string) => void;
   isEditing: boolean;
   setIsEditing: (value: boolean) => void;
   showIntellisense: boolean;
@@ -42,7 +38,7 @@ export interface UseNodeRowEventHandlersProps {
   onUpdateWithCategory?: (row: Row, label: string, categoryType?: string, meta?: any) => void;
   onDelete: (row: Row) => void;
   onKeyDown?: (e: React.KeyboardEvent) => void;
-  onEditingEnd?: () => void;
+  onEditingEnd?: (rowId?: string) => void;
   onCreateFactoryTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string, type?: string) => void;
   getProjectId?: () => string | undefined;
   toolbarSM: {
@@ -54,7 +50,6 @@ export interface UseNodeRowEventHandlersProps {
 }
 
 export interface UseNodeRowEventHandlersReturn {
-  handleSave: () => Promise<void>;
   handleCancel: () => void;
   handleKeyDownInternal: (e: React.KeyboardEvent) => Promise<void>;
   handleTextChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -75,8 +70,6 @@ export function useNodeRowEventHandlers(
 ): UseNodeRowEventHandlersReturn {
   const {
     row,
-    currentText,
-    setCurrentText,
     isEditing,
     setIsEditing,
     showIntellisense,
@@ -103,79 +96,66 @@ export function useNodeRowEventHandlers(
     toolbarSM,
   } = props;
 
-  const { flows } = useFlowWorkspace();
-  const activeFlowId = getActiveFlowCanvasId();
-
   const enterEditing = useCallback(() => {
     setIsEditing(true);
     setShowCreatePicker(false);
     setAllowCreatePicker(false);
   }, [setIsEditing, setShowCreatePicker, setAllowCreatePicker]);
 
-  const handleSave = useCallback(async () => {
-    const label = currentText.trim() || row.text;
-    onUpdate(row, label);
-    try {
-      if (onUpdateWithCategory) {
-        (onUpdateWithCategory as any)(row, label, (row as any)?.categoryType, { message: { text: label } });
-      }
-    } catch {
-      // Ignore errors
+  /**
+   * When leaving edit mode, persist task/message side effects once.
+   * Label text is already committed on each change via {@link handleTextChange} → `onUpdate`.
+   */
+  const prevIsEditingRef = useRef(isEditing);
+  useEffect(() => {
+    const wasEditing = prevIsEditingRef.current;
+    prevIsEditingRef.current = isEditing;
+    if (!wasEditing || isEditing) {
+      return;
     }
-    setIsEditing(false);
-    setShowIntellisense(false);
-    setIntellisenseQuery('');
-
-    try {
-      let getCurrentProjectId: (() => string | undefined) | undefined = undefined;
+    const label = row.text ?? '';
+    logNodeRowEdit('exitEditing.persist', {
+      rowId: row.id,
+      labelLength: label.length,
+      labelEmpty: label.trim() === '',
+    });
+    void (async () => {
       try {
-        const runtime = require('../../state/runtime') as any;
-        getCurrentProjectId = runtime.getCurrentProjectId;
+        if (onUpdateWithCategory) {
+          (onUpdateWithCategory as any)(row, label, (row as any)?.categoryType, { message: { text: label } });
+        }
       } catch {
-        // Ignore if runtime module is not available
+        /* ignore */
       }
-
-      const saveHandler = new RowSaveHandler({
-        row,
-        getProjectId,
-        getCurrentProjectId,
-      });
-
-      await saveHandler.saveRow(label);
-    } catch (err) {
-      console.error('[NodeRow][handleSave] Error saving row:', err);
-    }
-
-    if (typeof onEditingEnd === 'function') {
-      onEditingEnd();
-    }
-  }, [
-    currentText,
-    row,
-    onUpdate,
-    onUpdateWithCategory,
-    setIsEditing,
-    setShowIntellisense,
-    setIntellisenseQuery,
-    getProjectId,
-    onEditingEnd,
-    activeFlowId,
-    flows,
-  ]);
+      try {
+        let getCurrentProjectId: (() => string | undefined) | undefined = undefined;
+        try {
+          const runtime = require('../../state/runtime') as any;
+          getCurrentProjectId = runtime.getCurrentProjectId;
+        } catch {
+          /* ignore */
+        }
+        const saveHandler = new RowSaveHandler({
+          row,
+          getProjectId,
+          getCurrentProjectId,
+        });
+        await saveHandler.saveRow(label);
+      } catch (err) {
+        console.error('[NodeRow] persist on exit editing', err);
+      }
+    })();
+  }, [isEditing, row, getProjectId, onUpdateWithCategory]);
 
   const handleCancel = useCallback(() => {
-    if (currentText.trim() === '') {
+    if ((row.text || '').trim() === '') {
       onDelete(row);
     } else {
-      setCurrentText(row.text);
       setIsEditing(false);
       setShowIntellisense(false);
       setIntellisenseQuery('');
-      if (typeof onEditingEnd === 'function') {
-        onEditingEnd(row.id);
-      }
     }
-  }, [currentText, row, setCurrentText, setIsEditing, setShowIntellisense, setIntellisenseQuery, onDelete, onEditingEnd]);
+  }, [row, setIsEditing, setShowIntellisense, setIntellisenseQuery, onDelete]);
 
   const handleKeyDownInternal = useCallback(async (e: React.KeyboardEvent) => {
     const dbg = (() => { try { return Boolean(localStorage.getItem('debug.picker')); } catch { return false; } })();
@@ -196,18 +176,15 @@ export function useNodeRowEventHandlers(
       }
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const q = (currentText || '').trim();
+      const q = (row.text || '').trim();
 
       // ✅ Se la riga è vuota, cancellala immediatamente invece di processare Enter
       if (q === '') {
-        console.log('[NodeRow][handleKeyDownInternal] Empty row on Enter - deleting immediately');
+        logNodeRowEdit('key.enter.emptyDelete', { rowId: row.id });
         onDelete(row);
         setIsEditing(false);
         setShowIntellisense(false);
         setIntellisenseQuery('');
-        if (typeof onEditingEnd === 'function') {
-          onEditingEnd();
-        }
         return;
       }
 
@@ -279,11 +256,16 @@ export function useNodeRowEventHandlers(
         return;
       }
     }
-  }, [currentText, showIntellisense, row, projectData, onUpdate, onUpdateWithCategory, onKeyDown, handleCancel, setIsEditing, setShowIntellisense, setIntellisenseQuery, setShowCreatePicker, setAllowCreatePicker, inputRef, onDelete, onEditingEnd]);
+  }, [showIntellisense, row, projectData, onUpdate, onUpdateWithCategory, onKeyDown, handleCancel, setIsEditing, setShowIntellisense, setIntellisenseQuery, setShowCreatePicker, setAllowCreatePicker, inputRef, onDelete]);
 
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
-    setCurrentText(newText);
+    onUpdate(row, newText);
+    logNodeRowEdit('commit.change', {
+      rowId: row.id,
+      length: newText.length,
+      isEmpty: newText.trim() === '',
+    });
     const q = newText.trim();
     setAllowCreatePicker(false);
     setShowCreatePicker(false);
@@ -302,7 +284,7 @@ export function useNodeRowEventHandlers(
       setShowIntellisense(false);
       setIntellisenseQuery('');
     }
-  }, [setCurrentText, setAllowCreatePicker, setShowCreatePicker, setShowIntellisense, setIntellisenseQuery, intellisenseTimerRef, suppressIntellisenseRef]);
+  }, [row, onUpdate, setAllowCreatePicker, setShowCreatePicker, setShowIntellisense, setIntellisenseQuery, intellisenseTimerRef, suppressIntellisenseRef]);
 
   const handlePickType = useCallback(async (selectedTaskTypeOrTask: TaskType | { task: any }) => {
     const isTaskObject = typeof selectedTaskTypeOrTask === 'object' && 'task' in selectedTaskTypeOrTask;
@@ -312,7 +294,7 @@ export function useNodeRowEventHandlers(
     setShowCreatePicker(false);
     setAllowCreatePicker(false);
     setShowIntellisense(false);
-    const label = (currentText || '').trim();
+    const label = (row.text || '').trim();
 
     if (!label) {
       setIsEditing(false);
@@ -482,10 +464,9 @@ export function useNodeRowEventHandlers(
         // Ignore errors
       }
     }
-  }, [currentText, isEditing, onCreateFactoryTask, onUpdate, onUpdateWithCategory, row, getProjectId, toolbarSM, setIsEditing, setShowIntellisense, setIntellisenseQuery, setShowCreatePicker, setAllowCreatePicker]);
+  }, [isEditing, onCreateFactoryTask, onUpdate, onUpdateWithCategory, row, getProjectId, toolbarSM, setIsEditing, setShowIntellisense, setIntellisenseQuery, setShowCreatePicker, setAllowCreatePicker]);
 
   const handleIntellisenseSelect = useCallback(async (item: IntellisenseItem) => {
-    setCurrentText(item.name);
     setShowIntellisense(false);
     setIntellisenseQuery('');
 
@@ -543,7 +524,7 @@ export function useNodeRowEventHandlers(
 
     setIsEditing(false);
     setShowCreatePicker(false);
-  }, [row, getProjectId, onUpdate, onUpdateWithCategory, setCurrentText, setShowIntellisense, setIntellisenseQuery, setIsEditing, setShowCreatePicker]);
+  }, [row, getProjectId, onUpdate, onUpdateWithCategory, setShowIntellisense, setIntellisenseQuery, setIsEditing, setShowCreatePicker]);
 
   const handleIntellisenseClose = useCallback(() => {
     setShowIntellisense(false);
@@ -560,7 +541,6 @@ export function useNodeRowEventHandlers(
   }, [enterEditing]);
 
   return {
-    handleSave,
     handleCancel,
     handleKeyDownInternal,
     handleTextChange,
