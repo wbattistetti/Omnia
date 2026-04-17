@@ -62,123 +62,27 @@ export class TaskTreeOpener {
       const taskType = resolveTaskType(row);
       const projectId = getProjectId?.() || undefined;
 
-      // ✅ VERIFY: Log esplicito quando si apre l'editor dopo spostamento riga
+      // Hot-path trace is opt-in only; detailed payload allocation is expensive.
       const taskId = row.id; // row.id === task.id
-      const task = taskRepository.getTask(taskId);
-
-      console.log('[TaskTreeOpener] 🔍 OPEN EDITOR - Task verification', {
-        rowId: row.id,
-        taskId: taskId,
-        taskExists: !!task,
-        taskType: task?.type,
-        rowText: row.text,
-        projectId: projectId,
-        action: 'opening editor after row move',
-        timestamp: new Date().toISOString()
-      });
-
-      // ✅ CRITICAL: Log repository state and check if instance should exist
-      const allTasksBefore = taskRepository.getAllTasks();
-      const taskInRepository = taskRepository.getTask(row.id);
-      const matchingTask = allTasksBefore.find(t => t.id === row.id);
-
-      console.log('[TaskTreeOpener] 🔍 CHECKING FOR INSTANCE', {
-        projectId,
-        rowId: row.id,
-        rowIdLength: row.id.length,
-        rowText: row.text,
-        repositorySize: allTasksBefore.length,
-        allTaskIds: allTasksBefore.map(t => t.id),
-        matchingTaskFound: !!matchingTask,
-        matchingTaskDetails: matchingTask ? {
-          id: matchingTask.id,
-          idLength: matchingTask.id.length,
-          templateId: matchingTask.templateId,
-          type: matchingTask.type,
-          hasSteps: matchingTask.steps ? Object.keys(matchingTask.steps).length > 0 : false,
-          label: matchingTask.label,
-        } : null,
-        timestamp: new Date().toISOString(),
-      });
-
-      // ✅ LOG: OPEN TRACE - START
-      console.log('[TaskTreeOpener] 🔍 OPEN TRACE - START - SUMMARY', {
-        rowId: row.id,
-        rowText: row.text,
-        taskType: taskType,
-        projectId: projectId,
-        foundTask: !!taskInRepository,
-        foundMatchingTask: !!matchingTask,
-        totalTasksInRepository: allTasksBefore.length,
-        rowIdInTaskIds: allTasksBefore.some(t => t.id === row.id),
-        timestamp: new Date().toISOString(),
-      });
-
-      // ✅ EXPANDED LOGS: Mostra tutti i dati completi
-      console.log('[TaskTreeOpener] 🔍 ROW DETAILS', {
-        rowId: row.id,
-        rowText: row.text,
-        rowIdLength: row.id.length,
-      });
-
-      console.log('[TaskTreeOpener] 🔍 TASK IN REPOSITORY (by row.id)', taskInRepository ? {
-        id: taskInRepository.id,
-        idLength: taskInRepository.id.length,
-        templateId: taskInRepository.templateId,
-        type: taskInRepository.type,
-        hasSteps: taskInRepository.steps ? Object.keys(taskInRepository.steps).length > 0 : false,
-        stepsKeys: taskInRepository.steps ? Object.keys(taskInRepository.steps) : [],
-        label: taskInRepository.label || taskInRepository.value?.label,
-        idsMatch: taskInRepository.id === row.id,
-      } : null);
-
-      console.log('[TaskTreeOpener] 🔍 ALL TASK IDs IN REPOSITORY', allTasksBefore.map(t => t.id));
-      console.log('[TaskTreeOpener] 🔍 ALL TASK DETAILS IN REPOSITORY', allTasksBefore.map(t => ({
-        id: t.id,
-        idLength: t.id.length,
-        templateId: t.templateId,
-        type: t.type,
-        label: t.label || t.value?.label,
-        idMatchesRowId: t.id === row.id,
-        idEqualsRowId: t.id === row.id,
-        idStartsWithRowId: t.id.startsWith(row.id.split('-')[0]),
-      })));
-
-      if (matchingTask) {
-        console.log('[TaskTreeOpener] 🔍 MATCHING TASK FOUND', {
-          id: matchingTask.id,
-          idLength: matchingTask.id.length,
-          templateId: matchingTask.templateId,
-          type: matchingTask.type,
-          label: matchingTask.label || matchingTask.value?.label,
-          hasSteps: matchingTask.steps ? Object.keys(matchingTask.steps).length > 0 : false,
-          idsMatch: matchingTask.id === row.id,
+      const existingTask = taskRepository.getTask(taskId);
+      const traceOpen =
+        import.meta.env.DEV &&
+        (() => {
+          try {
+            return typeof localStorage !== 'undefined' && localStorage.getItem('omnia:traceTaskTreeOpen') === '1';
+          } catch {
+            return false;
+          }
+        })();
+      if (traceOpen) {
+        console.info('[TaskTreeOpener] open', {
+          rowId: row.id,
+          rowText: row.text,
+          projectId,
+          taskType,
+          taskExists: !!existingTask,
+          templateId: existingTask?.templateId ?? null,
         });
-      } else {
-        console.log('[TaskTreeOpener] 🔍 NO MATCHING TASK FOUND - Searching for similar IDs...');
-        // Cerca task con ID simili (per debugging)
-        const similarTasks = allTasksBefore.filter(t => {
-          const rowIdBase = row.id.split('-')[0];
-          const taskIdBase = t.id.split('-')[0];
-          return rowIdBase === taskIdBase || t.id.includes(rowIdBase) || row.id.includes(taskIdBase);
-        });
-        if (similarTasks.length > 0) {
-          console.log('[TaskTreeOpener] 🔍 SIMILAR TASK IDs FOUND', similarTasks.map(t => ({
-            id: t.id,
-            idLength: t.id.length,
-            templateId: t.templateId,
-            type: t.type,
-            label: t.label || t.value?.label,
-            rowIdBase: row.id.split('-')[0],
-            taskIdBase: t.id.split('-')[0],
-          })));
-        } else {
-          console.log('[TaskTreeOpener] 🔍 NO SIMILAR TASK IDs FOUND', {
-            rowId: row.id,
-            rowIdBase: row.id.split('-')[0],
-            allTaskIdBases: allTasksBefore.map(t => t.id.split('-')[0]),
-          });
-        }
       }
 
       // Only handle UtteranceInterpretation (DataRequest) for now

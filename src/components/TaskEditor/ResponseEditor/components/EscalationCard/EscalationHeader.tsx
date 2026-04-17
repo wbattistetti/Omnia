@@ -57,7 +57,12 @@ export function EscalationHeader({
       >
         {onDelete && (
           <button
-            onClick={onDelete}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onDelete();
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',

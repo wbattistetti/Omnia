@@ -16,8 +16,18 @@ export type { DebuggerStep, PersistedDebuggerStep, DebuggerConversationSnapshot 
 export { DEBUGGER_STEP_SCHEMA_VERSION, createStepId } from './core/DebuggerStep';
 export { buildDebuggerStepFromTurn, type TurnBuildInput } from './core/buildDebuggerStepFromTurn';
 export {
-  saveDebuggerConversation,
+  scheduleSaveDebuggerConversation,
+  cancelPendingDebuggerSave,
+  flushPendingDebuggerSave,
   loadDebuggerConversation,
-  clearDebuggerConversation,
+  removeDebuggerSnapshot,
 } from './persistence/debuggerConversationPersistence';
 export type { DebuggerFlowHighlightPayload } from './highlight/debuggerHighlightPayload';
+
+/** Aggregate session + event-driven runtime (Phase 2). */
+export type { DebuggerAggregateSessionState } from './session/DebuggerSessionState';
+export { createInitialDebuggerSessionState } from './session/DebuggerSessionState';
+export type { DebuggerEvent, BotMessagePayload, NluPatch, UserTurnRef } from './events/DebuggerEvent';
+export { applyDebuggerEvent } from './reducer/applyDebuggerEvent';
+export { DebuggerController, type DebuggerControllerDeps } from './controller/DebuggerController';
+export { useDebuggerSession, type UseDebuggerSessionResult } from './useDebuggerSession';

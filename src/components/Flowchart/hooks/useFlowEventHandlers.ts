@@ -4,6 +4,7 @@ import type { FlowNode, EdgeData } from '@components/Flowchart/types/flowTypes';
 import type { Edge } from 'reactflow';
 import { dlog } from '@utils/debug';
 import { FlowStateBridge } from '../../../services/FlowStateBridge';
+import { getFlowFocusManager } from '@features/focus';
 
 /**
  * Hook for managing Flow Editor event handlers
@@ -76,6 +77,7 @@ export function useFlowEventHandlers(
    */
   const onPaneClick = useCallback((event: React.MouseEvent) => {
     setSelectedEdgeId(null);
+    getFlowFocusManager().requestFocus('canvas');
 
     try {
       const ev = new CustomEvent('flow:canvas:click', { bubbles: true });

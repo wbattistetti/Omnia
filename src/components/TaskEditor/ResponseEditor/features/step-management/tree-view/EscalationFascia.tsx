@@ -122,6 +122,8 @@ export function EscalationFascia({
               transition: 'background 0.15s, opacity 0.15s',
               opacity: isHovered ? 1 : 0,
               pointerEvents: isHovered ? 'auto' : 'none',
+              position: 'relative',
+              zIndex: 2,
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = '#ef444420';
@@ -146,6 +148,8 @@ export function EscalationFascia({
               alignItems: 'center',
               justifyContent: 'center',
               transition: 'opacity 0.2s',
+              /* Sopra al cestino nello stack: senza questo i click finiscono sul chevron e il cestino non riceve l’evento */
+              pointerEvents: 'none',
             }}
           >
             {isCollapsed ? (

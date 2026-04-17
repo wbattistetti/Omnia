@@ -108,6 +108,20 @@ function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
   return res;
 }
 
+function flowGraphSignature(flow: { id?: string; nodes?: any[]; edges?: any[] } | null | undefined): string {
+  if (!flow) return 'none';
+  const id = String(flow.id || '');
+  const nodes = Array.isArray(flow.nodes) ? flow.nodes : [];
+  const edges = Array.isArray(flow.edges) ? flow.edges : [];
+  const nodeSig = nodes
+    .map((n) => `${String(n?.id || '')}@${Number(n?.position?.x ?? 0)},${Number(n?.position?.y ?? 0)}`)
+    .join('|');
+  const edgeSig = edges
+    .map((e) => `${String(e?.id || '')}:${String(e?.source || '')}>${String(e?.target || '')}`)
+    .join('|');
+  return `${id}#n${nodes.length}[${nodeSig}]#e${edges.length}[${edgeSig}]`;
+}
+
 // ✅ ARCHITECTURAL FIX: Component that accesses FlowWorkspaceProvider and populates flowsRef
 // This allows handleSaveProject to access flows without using window.__flows
 const DockManagerWithFlows: React.FC<{
@@ -124,7 +138,10 @@ const DockManagerWithFlows: React.FC<{
   const projectIdForMigration = projectDataCtx?.data?.id != null ? String(projectDataCtx.data.id).trim() : '';
   const subflowProxyMigrateKeyRef = React.useRef<string>('');
   const upsertFlowRef = useRef(flowActions.upsertFlow);
+  const flowsSnapshotRef = useRef(flowWorkspace.flows);
+  const lastInboundUpsertSignatureRef = useRef<string>('');
   upsertFlowRef.current = flowActions.upsertFlow;
+  flowsSnapshotRef.current = flowWorkspace.flows;
 
   /**
    * Register FlowStore upsert **during render** so `upsertFlowSlicesFromSubflowSync` is never null
@@ -132,7 +149,20 @@ const DockManagerWithFlows: React.FC<{
    */
   setSubflowSyncUpsertFlowSlice((f) => {
     logUpsertFlowSliceInbound('DockManager_subflowSync', f as any);
-    upsertFlowRef.current(f as any);
+    const incoming = f as any;
+    const flowId = String(incoming?.id || '').trim();
+    if (!flowId) return;
+
+    const current = (flowsSnapshotRef.current as any)?.[flowId];
+    const currentSig = flowGraphSignature(current as any);
+    const incomingSig = flowGraphSignature(incoming as any);
+    const inboundSig = `${flowId}|${incomingSig}`;
+
+    if (currentSig === incomingSig || lastInboundUpsertSignatureRef.current === inboundSig) {
+      return;
+    }
+    lastInboundUpsertSignatureRef.current = inboundSig;
+    upsertFlowRef.current(incoming);
   });
 
   /** Canvas row ids + inclusion flags — when this changes, re-hydrate utterance vars from TaskRepository. */
@@ -787,6 +817,8 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Listen for TaskEditor open events (open as docking tab)
   React.useEffect(() => {
+    let lastOpenKey = '';
+    let lastOpenAt = 0;
     const h = async (e: any) => {
       try {
         const d = (e && e.detail) || {};
@@ -794,6 +826,13 @@ export const AppContent: React.FC<AppContentProps> = ({
         if (!d || !d.id || (d.type === undefined || d.type === null)) {
           return;
         }
+        const eventKey = `${String(d.id)}|${String(d.type)}|${String(d.flowId ?? '')}`;
+        const now = Date.now();
+        if (eventKey === lastOpenKey && now - lastOpenAt < 250) {
+          return;
+        }
+        lastOpenKey = eventKey;
+        lastOpenAt = now;
 
         // ✅ REFACTOR: Use EditorCoordinator (async)
         setDockTree(prev => {

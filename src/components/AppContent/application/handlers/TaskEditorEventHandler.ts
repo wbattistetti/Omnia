@@ -42,6 +42,15 @@ function getDefaultTitle(editorKind: string): string {
   return titles[editorKind] || 'Editor';
 }
 
+function shouldTraceTaskEditorOpen(): boolean {
+  if (!import.meta.env.DEV) return false;
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('omnia:traceTaskEditorOpen') === '1';
+  } catch {
+    return false;
+  }
+}
+
 export interface TaskEditorEventHandlerParams {
   currentProjectId?: string;
   pdUpdate: any;
@@ -138,11 +147,13 @@ export class TaskEditorEventHandler {
         event.taskWizardMode === 'pending')
     ) {
       taskWizardMode = event.taskWizardMode;
-      console.log('[TaskEditorEventHandler] ✅ taskWizardMode esplicito dall\'evento', {
-        eventId: event.id,
-        taskWizardMode: event.taskWizardMode,
-        wizardMode: taskWizardMode
-      });
+      if (shouldTraceTaskEditorOpen()) {
+        console.info('[TaskEditorEventHandler] explicitTaskWizardMode', {
+          eventId: event.id,
+          taskWizardMode: event.taskWizardMode,
+          wizardMode: taskWizardMode,
+        });
+      }
     } else {
       // Backward compatibility: derive from boolean flags
       if (event.needsTaskBuilder === true) {
@@ -152,12 +163,14 @@ export class TaskEditorEventHandler {
       } else {
         taskWizardMode = 'none';
       }
-      console.log('[TaskEditorEventHandler] 📊 taskWizardMode derivato da boolean flags', {
-        eventId: event.id,
-        needsTaskBuilder: event.needsTaskBuilder,
-        needsTaskContextualization: event.needsTaskContextualization,
-        wizardMode: taskWizardMode
-      });
+      if (shouldTraceTaskEditorOpen()) {
+        console.info('[TaskEditorEventHandler] derivedTaskWizardMode', {
+          eventId: event.id,
+          needsTaskBuilder: event.needsTaskBuilder,
+          needsTaskContextualization: event.needsTaskContextualization,
+          wizardMode: taskWizardMode,
+        });
+      }
     }
 
     const taskMeta: TaskMeta = {
@@ -173,14 +186,15 @@ export class TaskEditorEventHandler {
       taskLabel: event.taskLabel || event.label || event.name || undefined,
     };
 
-    console.log('[TaskEditorEventHandler] 📋 TaskMeta costruito', {
-      taskMetaId: taskMeta.id,
-      taskMetaType: taskMeta.type,
-      taskWizardMode: taskMeta.taskWizardMode,
-      contextualizationTemplateId: taskMeta.contextualizationTemplateId,
-      taskLabel: taskMeta.taskLabel,
-      taskMetaKeys: Object.keys(taskMeta)
-    });
+    if (shouldTraceTaskEditorOpen()) {
+      console.info('[TaskEditorEventHandler] taskMeta', {
+        taskMetaId: taskMeta.id,
+        taskMetaType: taskMeta.type,
+        taskWizardMode: taskMeta.taskWizardMode,
+        contextualizationTemplateId: taskMeta.contextualizationTemplateId,
+        taskLabel: taskMeta.taskLabel,
+      });
+    }
 
     return taskMeta;
   }

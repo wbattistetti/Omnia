@@ -58,6 +58,7 @@ import { intellisenseAnchorFlowFromHandles, VHV_COLLINEAR_EPS_PX } from './edges
 import { waitForHandleBounds } from './utils/waitForHandleBounds';
 import { diagFlowLink } from './utils/flowTempLinkDiag';
 import { computeLinkMidScreenFromConnection } from './utils/computeLinkMidScreenFromConnection';
+import { incrementEditorOpenMetric } from '@features/performance';
 
 // Edge types stabile per evitare warning React Flow
 const edgeTypes = { custom: CustomEdge };
@@ -470,15 +471,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       return; // No edges need initialization
     }
 
-    console.log('[FlowEditor][useEffect] 🔧 Initializing missing edge callbacks', {
-      totalEdges: edges.length,
-      edgesNeedingInit: edgesNeedingInit.length
-    });
+    const edgeIdsNeedingInit = new Set(edgesNeedingInit.map((e) => e.id));
 
     setEdges(eds => {
       let hasChanges = false;
       const updatedEdges = eds.map(e => {
-        if (e.type === 'custom' && edgesNeedingInit.some(ne => ne.id === e.id)) {
+        if (e.type === 'custom' && edgeIdsNeedingInit.has(e.id)) {
           const existingData = e.data || {};
           const needsOnUpdate = !existingData.onUpdate;
           const needsOnDeleteEdge = !existingData.onDeleteEdge;
@@ -486,13 +484,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           if (needsOnUpdate || needsOnDeleteEdge) {
             hasChanges = true;
             initializedEdgeIdsRef.current.add(e.id); // Mark as initialized
-
-            console.log('[FlowEditor][useEffect] 🔧 Adding missing callbacks to edge', {
-              edgeId: e.id,
-              needsOnUpdate,
-              needsOnDeleteEdge,
-              existingDataKeys: Object.keys(existingData)
-            });
 
             return {
               ...e,
@@ -511,14 +502,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     });
   }, [edges, setEdges]); // Depend on edges array, but use refs to track which ones we've processed
 
-  // Forza tutti gli edge a solidi dopo il mount o ogni volta che edges cambiano
+  // Normalize dashed edges only when needed (avoid unconditional full-array churn).
   useEffect(() => {
     setEdges((eds) =>
-      eds.map(e =>
-        e.style && e.style.strokeDasharray
-          ? { ...e, style: { ...e.style, strokeDasharray: undefined } }
-          : e
-      )
+      {
+        let changed = false;
+        const next = eds.map(e => {
+          if (e.style && e.style.strokeDasharray) {
+            changed = true;
+            return { ...e, style: { ...e.style, strokeDasharray: undefined } };
+          }
+          return e;
+        });
+        return changed ? next : eds;
+      }
     );
   }, [setEdges]);
 
@@ -842,6 +839,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // All moved to useFlowViewport hook
 
   const subflowContextValue = useMemo(() => ({ onOpenSubflowForTask }), [onOpenSubflowForTask]);
+  const edgesWithSelection = useMemo(
+    () => edges.map((e) => ({ ...e, selected: e.id === selectedEdgeId })),
+    [edges, selectedEdgeId]
+  );
+  const onNodesChange = useCallback((changes: any) => {
+    const nextNodes = applyNodeChanges(changes, nodesRef.current);
+    setNodes(nextNodes);
+    try {
+      const selected = nextNodes.filter((n: any) => !!n?.selected).map((n: any) => n.id);
+      setSelectedNodeIds(selected);
+    } catch {
+      /* noop */
+    }
+  }, [setNodes, setSelectedNodeIds]);
 
   return (
     <FlowSubflowProvider value={subflowContextValue}>
@@ -870,17 +881,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         >
           <ReactFlow
             nodes={nodes}
-            edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
-            onNodesChange={changes => {
-              setNodes(nds => applyNodeChanges(changes, nds));
-              // Track selected node ids for grouping
-              try {
-                const selected = new Set<string>();
-                const draft = applyNodeChanges(changes, nodes);
-                draft.forEach(n => { if ((n as any).selected) selected.add(n.id); });
-                setSelectedNodeIds(Array.from(selected));
-              } catch { }
-            }}
+            edges={edgesWithSelection}
+            onNodesChange={onNodesChange}
             onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
@@ -1001,7 +1003,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 };
 
 export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
-  console.debug('[FlowEditor] Component mounted');
+  useEffect(() => {
+    incrementEditorOpenMetric('flowEditor.mount');
+  }, []);
 
   const { data: projectData } = useProjectData();
   const intellisenseProviders = useMemo(

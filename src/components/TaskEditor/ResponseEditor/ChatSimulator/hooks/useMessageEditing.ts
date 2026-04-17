@@ -3,6 +3,7 @@ import type { Message } from '@components/ChatSimulator/UserMessage';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import type { AssembledTaskTree } from '@components/TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import { updateActionTextInDDT } from '@responseEditor/ChatSimulator/utils/updateActionText';
+import { chatFocusDebug, describeElement } from '@responseEditor/ChatSimulator/utils/chatFocusDebug';
 
 interface UseMessageEditingProps {
   messages: Message[];
@@ -24,17 +25,42 @@ export function useMessageEditing({ messages, setMessages, currentDDT, onUpdateD
   const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
   const inlineInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  // Ensure inline input gets focus (with retry logic for React 18+)
-  const ensureInlineFocus = React.useCallback((retries: number = 8) => {
-    const attempt = (i: number) => {
+  const isNeutralDocumentFocus = (active: Element | null): boolean =>
+    active == null || active === document.body || active === document.documentElement;
+
+  /**
+   * Single attempt: focus only if the user has not moved focus to another
+   * control (canvas, gear, editor, ecc.).
+   */
+  const ensureInlineFocus = React.useCallback(() => {
+    requestAnimationFrame(() => {
       const el = inlineInputRef.current;
-      if (!el) return;
-      try { el.focus({ preventScroll: true } as any); } catch { }
-      if (document.activeElement !== el && i < retries) {
-        setTimeout(() => attempt(i + 1), 50);
+      if (!el) {
+        chatFocusDebug('ensureInlineFocus:skip', { reason: 'noRef' });
+        return;
       }
-    };
-    requestAnimationFrame(() => attempt(0));
+      if (el.disabled) {
+        chatFocusDebug('ensureInlineFocus:skip', { reason: 'disabled' });
+        return;
+      }
+      const active = document.activeElement;
+      if (active === el) {
+        return;
+      }
+      if (active != null && !isNeutralDocumentFocus(active) && active !== el) {
+        chatFocusDebug('ensureInlineFocus:skip', {
+          reason: 'focusElsewhere',
+          active: describeElement(active),
+        });
+        return;
+      }
+      try {
+        el.focus({ preventScroll: true });
+        chatFocusDebug('ensureInlineFocus:applied', { activeAfter: describeElement(document.activeElement) });
+      } catch {
+        chatFocusDebug('ensureInlineFocus:error', { message: 'focus threw' });
+      }
+    });
   }, []);
 
   // Handlers for editing messages

@@ -24,17 +24,23 @@ export function useMessageEditing({ messages, setMessages, currentDDT, onUpdateD
   const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
   const inlineInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  // Ensure inline input gets focus (with retry logic for React 18+)
-  const ensureInlineFocus = React.useCallback((retries: number = 8) => {
-    const attempt = (i: number) => {
+  const isNeutralDocumentFocus = (active: Element | null): boolean =>
+    active == null || active === document.body || active === document.documentElement;
+
+  /** Allineato a ResponseEditor/ChatSimulator: niente retry che rubano il focus. */
+  const ensureInlineFocus = React.useCallback(() => {
+    requestAnimationFrame(() => {
       const el = inlineInputRef.current;
-      if (!el) return;
-      try { el.focus({ preventScroll: true } as any); } catch { }
-      if (document.activeElement !== el && i < retries) {
-        setTimeout(() => attempt(i + 1), 50);
+      if (!el || el.disabled) return;
+      const active = document.activeElement;
+      if (active === el) return;
+      if (active != null && !isNeutralDocumentFocus(active) && active !== el) return;
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        /* noop */
       }
-    };
-    requestAnimationFrame(() => attempt(0));
+    });
   }, []);
 
   // Handlers for editing messages

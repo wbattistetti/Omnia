@@ -25,6 +25,8 @@ import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 import { translationKeyFromStoredValue } from '@utils/translationKeys';
 import type { DebuggerRuntimeBridge } from '../../../../features/useCases/runtime/DebuggerRuntimeBridge';
 import { UseCasesPanelIcon } from '../../../../features/useCases/ui/UseCaseIcons';
+import { chatFocusDebug, describeElement } from '@responseEditor/ChatSimulator/utils/chatFocusDebug';
+import { getFlowFocusManager } from '@features/focus';
 
 /** Maps browser/network error messages to user-facing Italian copy for the chat simulator header. */
 function userFacingChatErrorMessage(raw: string | null | undefined): string | null {
@@ -33,6 +35,19 @@ function userFacingChatErrorMessage(raw: string | null | undefined): string | nu
   if (/^failed to fetch$/i.test(t)) return 'Il motore non è disponibile';
   /** Orchestrator/ProblemDetails messages are already user-oriented */
   return t;
+}
+
+/** Clicks inside portaled dialogs/menus should not count as "outside chat" for focus policy. */
+function isLikelyModalOrPortalTarget(node: Node): boolean {
+  const el = node instanceof Element ? node : node.parentElement;
+  if (!el) return false;
+  return (
+    !!el.closest('[role="dialog"]') ||
+    !!el.closest('[role="menu"]') ||
+    !!el.closest('[role="listbox"]') ||
+    !!el.closest('[data-radix-popper-content-wrapper]') ||
+    !!el.closest('[data-radix-portal]')
+  );
 }
 
 /**
@@ -481,56 +496,52 @@ export default function DDEBubbleChat({
     onUpdateDDT: onUpdateTaskTree as any // TODO: Update when useMessageEditing is updated
   });
 
-  // ✅ Focus input quando diventa disponibile per l'input
-  React.useEffect(() => {
-    console.log('[DDEBubbleChat] 🔍 Focus useEffect triggered:', {
-      effectiveIsWaitingForInput,
-      hasInputRef: !!inlineInputRef.current,
-      inputDisabled: inlineInputRef.current?.disabled,
-    });
+  const chatInteractionRootRef = React.useRef<HTMLDivElement | null>(null);
+  const flowFocusWaitTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    if (effectiveIsWaitingForInput && inlineInputRef.current) {
-      console.log('[DDEBubbleChat] 🔍 About to focus input');
-      // ✅ UNIFIED: Usa requestAnimationFrame + setTimeout per assicurarsi che:
-      // 1. React abbia aggiornato il DOM (input non più disabled)
-      // 2. Il browser abbia applicato gli stili
-      // 3. L'input sia effettivamente focusabile
-      const focusInput = () => {
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            try {
-              const input = inlineInputRef.current;
-              console.log('[DDEBubbleChat] 🔍 Attempting to focus input:', {
-                hasInput: !!input,
-                inputDisabled: input?.disabled,
-                inputType: input?.type,
-              });
-              if (input && !input.disabled) {
-                input.focus();
-                input.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                console.log('[DDEBubbleChat] ✅ Input focused successfully');
-                console.log('[DDEBubbleChat] 🔍 Input is now focused:', document.activeElement === input);
-              } else {
-                console.warn('[DDEBubbleChat] ⚠️ Cannot focus input:', {
-                  hasInput: !!input,
-                  inputDisabled: input?.disabled,
-                  inputType: input?.type,
-                });
-              }
-            } catch (error) {
-              console.error('[DDEBubbleChat] ❌ Error focusing input:', error);
-            }
-          }, 150);
-        });
-      };
-      focusInput();
-    } else {
-      console.log('[DDEBubbleChat] ⚠️ Focus conditions not met:', {
-        effectiveIsWaitingForInput,
-        hasInputRef: !!inlineInputRef.current,
-      });
+  /** Flow mode: pointer outside chat panel → FlowFocusManager (canvas/editor priority). */
+  React.useEffect(() => {
+    if (!isFlowMode) return;
+    const onPointerDownCapture = (e: MouseEvent) => {
+      const root = chatInteractionRootRef.current;
+      if (!root) return;
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      if (root.contains(t)) return;
+      if (isLikelyModalOrPortalTarget(t)) return;
+      getFlowFocusManager().notifyPointerDownOutsideChatRoot();
+    };
+    document.addEventListener('mousedown', onPointerDownCapture, true);
+    return () => document.removeEventListener('mousedown', onPointerDownCapture, true);
+  }, [isFlowMode]);
+
+  /**
+   * Flow mode: when orchestrator accepts input, attempt focus only via FlowFocusManager
+   * (no direct input.focus() here).
+   */
+  React.useEffect(() => {
+    if (!isFlowMode) return;
+    if (flowFocusWaitTimerRef.current) {
+      clearTimeout(flowFocusWaitTimerRef.current);
+      flowFocusWaitTimerRef.current = null;
     }
-  }, [effectiveIsWaitingForInput, inlineInputRef]);
+    if (!effectiveIsWaitingForInput) return;
+
+    getFlowFocusManager().notifyOrchestratorWaitingForInput();
+
+    flowFocusWaitTimerRef.current = setTimeout(() => {
+      flowFocusWaitTimerRef.current = null;
+      if (!effectiveWaitingForInputRef.current) return;
+      getFlowFocusManager().tryFocusChatInput(inlineInputRef.current);
+    }, 80);
+
+    return () => {
+      if (flowFocusWaitTimerRef.current) {
+        clearTimeout(flowFocusWaitTimerRef.current);
+        flowFocusWaitTimerRef.current = null;
+      }
+    };
+  }, [effectiveIsWaitingForInput, isFlowMode]);
 
   // ✅ NEW: In preview mode, use previewMessages instead of SSE
   const displayMessages = mode === 'preview' && previewMessages ? previewMessages : messages;
@@ -1575,21 +1586,35 @@ export default function DDEBubbleChat({
       if (matchingMessage) {
         setInlineDraft('');
         sentTextRef.current = '';
-        requestAnimationFrame(() => ensureInlineFocus());
+        if (isFlowMode) {
+          requestAnimationFrame(() => {
+            getFlowFocusManager().tryFocusChatInput(inlineInputRef.current);
+          });
+        } else {
+          chatFocusDebug('clearSentDraft:matched', {
+            messagesLen: messages.length,
+            active: describeElement(document.activeElement),
+          });
+          requestAnimationFrame(() => ensureInlineFocus());
+        }
       }
     }
-  }, [messages, setInlineDraft, ensureInlineFocus]);
+  }, [messages, setInlineDraft, ensureInlineFocus, isFlowMode]);
 
-  // Keep the inline input in view
+  // Task mode: scroll input into view on new messages. Flow mode: no scrollIntoView on input (orchestrator scrolls only when tryFocusChatInput runs).
   React.useEffect(() => {
+    if (isFlowMode) return;
     const rafId = requestAnimationFrame(() => {
+      chatFocusDebug('messagesScroll:raf', {
+        messagesLength: messages.length,
+        activeBefore: describeElement(document.activeElement),
+      });
       try {
         inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } catch { }
-      try { ensureInlineFocus(); } catch { }
     });
     return () => cancelAnimationFrame(rafId);
-  }, [messages.length, ensureInlineFocus]);
+  }, [messages.length, isFlowMode]);
 
   // ✅ ARCHITECTURAL: Handle user input - branch by mode
   const handleSend = async (text: string) => {
@@ -1786,7 +1811,7 @@ export default function DDEBubbleChat({
   }, [onRuntimeBridgeReady, waitForNextBotMessage]);
 
   return (
-    <div className={`h-full flex flex-col bg-white ${combinedClass}`}>
+    <div ref={chatInteractionRootRef} className={`h-full flex flex-col bg-white ${combinedClass}`}>
       <div className="border-b border-lime-800/60 px-3 py-2 pr-10 bg-lime-400/95 text-slate-900 relative">
         {onClosePanel && (
           <button
@@ -2001,6 +2026,16 @@ export default function DDEBubbleChat({
               }}
               ref={inlineInputRef}
               onFocus={() => {
+                if (isFlowMode) {
+                  getFlowFocusManager().requestFocus('chat');
+                  chatFocusDebug('inlineInput:onFocus', {
+                    active: describeElement(document.activeElement),
+                  });
+                  return;
+                }
+                chatFocusDebug('inlineInput:onFocus', {
+                  active: describeElement(document.activeElement),
+                });
                 try {
                   inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 } catch {
@@ -2015,7 +2050,12 @@ export default function DDEBubbleChat({
                     : 'Waiting for backend...'
               }
               value={inlineDraft}
-              onChange={(e) => setInlineDraft(e.target.value)}
+              onChange={(e) => {
+                if (isFlowMode) {
+                  getFlowFocusManager().requestFocus('chat');
+                }
+                setInlineDraft(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && effectiveIsWaitingForInput) {
                   const v = inlineDraft.trim();
@@ -2025,7 +2065,6 @@ export default function DDEBubbleChat({
                 }
               }}
               disabled={!effectiveIsWaitingForInput}
-              autoFocus
             />
           </div>
         )}

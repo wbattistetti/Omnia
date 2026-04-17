@@ -7,6 +7,7 @@ import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 import { getSafeProjectId } from './safeProjectId';
 import { getVariableLabel } from './getVariableLabel';
 import { getFlowMetaTranslationsFlattened } from './activeFlowTranslations';
+import { incrementEditorOpenMetric, measureEditorOpenMetric } from '@features/performance';
 
 /** Options for label ↔ stored-id bracket conversion (message DSL, conditions). */
 export type BracketVariableMappingOptions = {
@@ -25,6 +26,25 @@ export type BracketVariableMappingOptions = {
 };
 
 const GUID_TOKEN_IN_BRACKET = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const BRACKET_CONTENT_REGEX = /\[\s*([^\[\]]+?)\s*\]/g;
+const BRACKET_GENERIC_REGEX = /\[\s*([^\]]+)\s*\]/g;
+const warnedMissingVariables = new Set<string>();
+const warnedMissingGuids = new Set<string>();
+
+function warnMissingVariableOnce(label: string, mappingSize: number): void {
+  const key = `${label.trim().toLowerCase()}|m:${mappingSize}`;
+  if (warnedMissingVariables.has(key)) return;
+  warnedMissingVariables.add(key);
+  incrementEditorOpenMetric('conditionCodeConverter.labelsToGuids.missingVariable');
+  console.warn(`[ConditionCodeConverter] Variable [${label}] not found in mappings`);
+}
+
+function warnMissingGuidOnce(guid: string, mappingSize: number): void {
+  const key = `${guid.trim().toLowerCase()}|m:${mappingSize}`;
+  if (warnedMissingGuids.has(key)) return;
+  warnedMissingGuids.add(key);
+  console.warn(`[ConditionCodeConverter] GUID [${guid}] not found in mappings`);
+}
 
 function normalizeBracketLabelKey(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -83,21 +103,27 @@ export function convertDSLLabelsToGUIDs(
   variableMappings: Map<string, string>, // Map<guid, label>
   options?: BracketVariableMappingOptions
 ): string {
-  if (!readableCode || typeof readableCode !== 'string') {
-    return readableCode;
-  }
-
-  // Replace [label] with [guid] in DSL
-  // Pattern matches [label] or [label.subpath] including Unicode characters (à, è, ì, etc.)
-  // ✅ FIX: Use [^\[\]]+? to match any content except brackets (supports Unicode)
-  return readableCode.replace(/\[\s*([^\[\]]+?)\s*\]/g, (match, label) => {
-    const trimmed = String(label).trim();
-    const guid = resolveBracketLabelTokenToGuid(trimmed, variableMappings, options);
-    if (!guid) {
-      console.warn(`[ConditionCodeConverter] Variable [${label}] not found in mappings`);
-      return match;
+  return measureEditorOpenMetric('conditionCodeConverter.labelsToGuids', () => {
+    if (!readableCode || typeof readableCode !== 'string') {
+      return readableCode;
     }
-    return `[${guid}]`;
+    if (!readableCode.includes('[') || !readableCode.includes(']')) {
+      return readableCode;
+    }
+    if (variableMappings.size === 0) {
+      return readableCode;
+    }
+
+    // Replace [label] with [guid] in DSL.
+    return readableCode.replace(BRACKET_CONTENT_REGEX, (match, label) => {
+      const trimmed = String(label).trim();
+      const guid = resolveBracketLabelTokenToGuid(trimmed, variableMappings, options);
+      if (!guid) {
+        warnMissingVariableOnce(String(label), variableMappings.size);
+        return match;
+      }
+      return `[${guid}]`;
+    });
   });
 }
 
@@ -112,39 +138,41 @@ export function convertDSLGUIDsToLabels(
   variableMappings: Map<string, string>, // Map<guid, label>
   options?: BracketVariableMappingOptions
 ): string {
-  if (!executableCode || typeof executableCode !== 'string') {
-    return executableCode;
-  }
-
-  // Replace [guid] with [label] in DSL
-  // Pattern matches GUID format: [xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx]
-  const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-  return executableCode.replace(/\[\s*([^\]]+)\s*\]/g, (match, content) => {
-    const trimmed = content.trim();
-
-    // Check if content is a GUID
-    if (GUID_PATTERN.test(trimmed)) {
-      let label: string | undefined;
-      if (options?.resolveUnknownGuidToLabel) {
-        const r = options.resolveUnknownGuidToLabel(trimmed);
-        if (r != null && String(r).trim() !== '') {
-          label = String(r).trim();
-        }
-      }
-      if (!label) {
-        label = variableMappings.get(trimmed);
-      }
-
-      if (label) {
-        return `[${label}]`;
-      }
-      console.warn(`[ConditionCodeConverter] GUID [${trimmed}] not found in mappings`);
-      return match;
+  return measureEditorOpenMetric('conditionCodeConverter.guidsToLabels', () => {
+    if (!executableCode || typeof executableCode !== 'string') {
+      return executableCode;
+    }
+    if (!executableCode.includes('[') || !executableCode.includes(']')) {
+      return executableCode;
     }
 
-    // Not a GUID, keep as is (might be a literal or other content)
-    return match;
+    // Replace [guid] with [label] in DSL
+    const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    return executableCode.replace(BRACKET_GENERIC_REGEX, (match, content) => {
+      const trimmed = content.trim();
+
+      if (GUID_PATTERN.test(trimmed)) {
+        let label: string | undefined;
+        if (options?.resolveUnknownGuidToLabel) {
+          const r = options.resolveUnknownGuidToLabel(trimmed);
+          if (r != null && String(r).trim() !== '') {
+            label = String(r).trim();
+          }
+        }
+        if (!label) {
+          label = variableMappings.get(trimmed);
+        }
+
+        if (label) {
+          return `[${label}]`;
+        }
+        warnMissingGuidOnce(trimmed, variableMappings.size);
+        return match;
+      }
+
+      return match;
+    });
   });
 }
 

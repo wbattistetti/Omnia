@@ -1,4 +1,5 @@
 import React from 'react';
+import { getFlowFocusManager } from '@features/focus';
 // Use the NEW Response Editor (purple header) exported by index.tsx
 import ResponseEditor from './index';
 import ResizeHandle from '@components/common/ResizeHandle';
@@ -17,6 +18,13 @@ const ResizableResponseEditor: React.FC<ResizableResponseEditorProps> = ({
   lang,
   onClose
 }) => {
+  React.useEffect(() => {
+    getFlowFocusManager().requestFocus('editor');
+    return () => {
+      getFlowFocusManager().releaseFocus('editor');
+    };
+  }, []);
+
   const { size, handleResize, style } = useResizablePanel({
     initialSize: 400,
     min: 200,

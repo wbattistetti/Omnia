@@ -44,6 +44,7 @@ import { getActiveFlowMetaTranslationsFlattened } from '@utils/activeFlowTransla
 import { getVariableLabel } from '@utils/getVariableLabel';
 import { publishVariableDisplayTranslation } from '@utils/variableTranslationBridge';
 import { makeTranslationKey } from '@utils/translationKeys';
+import { incrementEditorOpenMetric, measureEditorOpenMetric } from '@features/performance';
 
 interface CreateVariablesOptions {
   taskInstance: Task;
@@ -369,6 +370,7 @@ class VariableCreationService {
     projectId: string | null | undefined,
     flows: WorkspaceState['flows'] | null | undefined
   ): void {
+    measureEditorOpenMetric('variableCreationService.hydrateVariablesFromFlow', () => {
     const pid = this.projectKey(projectId);
     if (isFallbackProjectBucket(pid)) {
       logVariableHydration('hydrateVariablesFromFlow:skip', { reason: 'fallback_project_bucket', pid });
@@ -500,6 +502,16 @@ class VariableCreationService {
         const slice = flows[flowCanvasId];
         if (!slice) continue;
         const vars = this.getVariablesForFlowScope(pid, flowCanvasId, flows);
+        const currentVars = Array.isArray((slice as { variables?: unknown[] }).variables)
+          ? ((slice as { variables?: VariableInstance[] }).variables ?? [])
+          : [];
+        const unchanged =
+          currentVars.length === vars.length &&
+          currentVars.every((v, i) => String(v?.id || '') === String(vars[i]?.id || ''));
+        if (unchanged) {
+          continue;
+        }
+        incrementEditorOpenMetric('flowCanvasHost.upsertFlow');
         upsertSlice({ ...slice, variables: vars } as Flow);
       }
     }
@@ -512,6 +524,7 @@ class VariableCreationService {
         })
       );
     }
+    });
   }
 
   /**

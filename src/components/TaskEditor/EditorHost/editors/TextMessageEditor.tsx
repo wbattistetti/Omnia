@@ -35,7 +35,6 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
   const pdUpdate = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
   const {
-    translations,
     compiledTranslations,
     flowTranslationRevision,
     addTranslation,
@@ -46,6 +45,14 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
   const [varsMenu, setVarsMenu] = useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
   const { flows } = useFlowWorkspace();
   const [variableMenuItems, setVariableMenuItems] = useState<VariableMenuItem[]>([]);
+  const menuItemsFingerprintRef = useRef<string>('');
+
+  const buildMenuItemsFingerprint = useCallback((items: VariableMenuItem[]): string => {
+    if (!items.length) return 'empty';
+    return items
+      .map((i) => `${String(i.id || '')}|${String(i.tokenLabel || i.varLabel || '')}|${i.isFromActiveFlow === false ? 'x' : 'a'}`)
+      .join('\x1f');
+  }, []);
 
   const activeFlowId = getActiveFlowCanvasId();
   const menuFlowId = useMemo(() => {
@@ -79,19 +86,28 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
       translationsByGuid: compiledTranslations,
     })
       .then((items) => {
-        if (!cancelled) setVariableMenuItems(items);
+        if (cancelled) return;
+        const nextFingerprint = buildMenuItemsFingerprint(items);
+        if (nextFingerprint === menuItemsFingerprintRef.current) {
+          return;
+        }
+        menuItemsFingerprintRef.current = nextFingerprint;
+        setVariableMenuItems(items);
       })
       .catch((err) => {
         logVariableMenuDebug('variableMenu:buildFailed', {
           menuFlowId,
           error: err instanceof Error ? err.message : String(err),
         });
-        if (!cancelled) setVariableMenuItems([]);
+        if (!cancelled) {
+          menuItemsFingerprintRef.current = 'error-empty';
+          setVariableMenuItems([]);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [projectIdForMenu, menuFlowId, variableMenuFingerprint, compiledTranslations]);
+  }, [projectIdForMenu, menuFlowId, variableMenuFingerprint, compiledTranslations, buildMenuItemsFingerprint]);
 
   const variableMappings = React.useMemo(() => buildVariableMappingsFromMenu(variableMenuItems), [variableMenuItems]);
 
@@ -131,7 +147,7 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
         },
       });
     },
-    [variableMappings, translations, menuFlowId, flows, flowTranslations]
+    [variableMappings, menuFlowId, flows, flowTranslations]
   );
 
   const getTranslationForField = useCallback(
@@ -161,7 +177,8 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     addTranslation,
     encode: labelsToGuids,
     decode: guidsToLabels,
-    reloadToken: translations,
+    // Keep reload trigger scalar to avoid expensive decode cycles on large object identity churn.
+    reloadToken: flowTranslationRevision,
     decodeContextKey,
     debounceMs: 500,
   });

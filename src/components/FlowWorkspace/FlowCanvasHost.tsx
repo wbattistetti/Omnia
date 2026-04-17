@@ -22,6 +22,8 @@ import type { ToolbarButton } from '@dock/types';
 import { Database, Play, Workflow } from 'lucide-react';
 import { collectSubflowPortalRows } from './collectSubflowPortalRows';
 import { resolveFlowTabDisplayTitle } from '@utils/resolveFlowTabDisplayTitle';
+import { getFlowFocusManager } from '@features/focus';
+import { incrementEditorOpenMetric, measureEditorOpenMetric } from '@features/performance';
 
 /**
  * Title persisted on the flow slice: keep non-empty server/local titles; otherwise resolve from
@@ -72,6 +74,8 @@ export const FlowCanvasHost: React.FC<Props> = ({
   const [variablesPanelOpen, setVariablesPanelOpen] = React.useState(false);
   const [dataSectionOn, setDataSectionOn] = React.useState(true);
   const [subdialogsSectionOn, setSubdialogsSectionOn] = React.useState(true);
+  const lastHydrationKeyRef = React.useRef<string>('');
+  const inFlightLoadKeysRef = React.useRef<Set<string>>(new Set());
 
   const entityCreation = useEntityCreation();
 
@@ -183,7 +187,13 @@ export const FlowCanvasHost: React.FC<Props> = ({
     const pid = resolveVariableStoreProjectId(projectId);
     if (!pid || isFallbackProjectBucket(pid)) return;
     if (!flows || Object.keys(flows).length === 0) return;
-    variableCreationService.hydrateVariablesFromFlow(pid, flows as any);
+    const hydrationKey = `${pid}|${utteranceHydrationFingerprint}`;
+    if (hydrationKey === lastHydrationKeyRef.current) return;
+    lastHydrationKeyRef.current = hydrationKey;
+
+    measureEditorOpenMetric('flowCanvasHost.hydrateVariablesFromFlow.effect', () => {
+      variableCreationService.hydrateVariablesFromFlow(pid, flows as any);
+    });
     try {
       document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));
     } catch {
@@ -207,6 +217,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
           hasLocalChanges: false,
         };
         logUpsertSubflowEmptyNodesCaller('FlowCanvasHost:noProjectIdPlaceholder', placeholder);
+        incrementEditorOpenMetric('flowCanvasHost.upsertFlow');
         upsertFlow(placeholder);
       }
       return;
@@ -223,7 +234,19 @@ export const FlowCanvasHost: React.FC<Props> = ({
         flowId,
         projectId,
       });
+      const loadKey = `${String(projectId || '').trim()}|${String(flowId || '').trim()}`;
+      if (inFlightLoadKeysRef.current.has(loadKey)) {
+        logFlowSaveDebug('FlowCanvasHost: skip duplicate loadFlow (in-flight)', {
+          projectId,
+          flowId,
+          loadKey,
+        });
+        return;
+      }
+      inFlightLoadKeysRef.current.add(loadKey);
       setIsLoadingFlow(true);
+      getFlowFocusManager().suspendFocus('chat');
+      getFlowFocusManager().setFlowRemounting(true);
       (async () => {
         try {
           const data = await loadFlow(projectId, flowId);
@@ -254,6 +277,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
             // FIX-MAIN-EMPTY — same semantics as APPLY_FLOW_LOAD_RESULT (policy stable-empty guard).
             serverHydrationApplied: true,
           } as any);
+          incrementEditorOpenMetric('flowCanvasHost.upsertFlow');
         } catch (e) {
           if (cancelled) return;
           const errText = formatUnknownError(e);
@@ -272,11 +296,15 @@ export const FlowCanvasHost: React.FC<Props> = ({
             hasLocalChanges: false,
           };
           logUpsertSubflowEmptyNodesCaller('FlowCanvasHost:initialLoadFlowFailed', failedLoad);
+          incrementEditorOpenMetric('flowCanvasHost.upsertFlow');
           upsertFlow(failedLoad);
         } finally {
           if (!cancelled) {
             setIsLoadingFlow(false);
           }
+          inFlightLoadKeysRef.current.delete(loadKey);
+          getFlowFocusManager().resumeFocus('chat');
+          getFlowFocusManager().setFlowRemounting(false);
         }
       })();
       return;
@@ -319,6 +347,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
           flowId,
           sliceBeforeUpsert: summarizeFlowSlice(flow as any, { rowIdsSample: true }),
         });
+        incrementEditorOpenMetric('flowCanvasHost.upsertFlow');
         upsertFlow({
           ...flow,
           hydrated: true,
@@ -334,7 +363,19 @@ export const FlowCanvasHost: React.FC<Props> = ({
       flowId,
       ...explain,
     });
+    const loadKey = `${String(projectId || '').trim()}|${String(flowId || '').trim()}`;
+    if (inFlightLoadKeysRef.current.has(loadKey)) {
+      logFlowSaveDebug('FlowCanvasHost: skip duplicate loadFlow (in-flight)', {
+        projectId,
+        flowId,
+        loadKey,
+      });
+      return;
+    }
+    inFlightLoadKeysRef.current.add(loadKey);
     setIsLoadingFlow(true);
+    getFlowFocusManager().suspendFocus('chat');
+    getFlowFocusManager().setFlowRemounting(true);
 
     (async () => {
       let data: Awaited<ReturnType<typeof loadFlow>>;
@@ -344,6 +385,9 @@ export const FlowCanvasHost: React.FC<Props> = ({
         if (!cancelled) {
           setIsLoadingFlow(false);
         }
+        inFlightLoadKeysRef.current.delete(loadKey);
+        getFlowFocusManager().resumeFocus('chat');
+        getFlowFocusManager().setFlowRemounting(false);
         const errText = formatUnknownError(e);
         logFlowHydrationTrace('FlowCanvasHost: loadFlow threw', {
           projectId,
@@ -353,7 +397,12 @@ export const FlowCanvasHost: React.FC<Props> = ({
         console.error(`[FlowCanvasHost] loadFlow failed: ${errText}`, { projectId, flowId, cause: e });
         return;
       }
-      if (cancelled) return;
+      if (cancelled) {
+        inFlightLoadKeysRef.current.delete(loadKey);
+        getFlowFocusManager().resumeFocus('chat');
+        getFlowFocusManager().setFlowRemounting(false);
+        return;
+      }
       logFlowHydrationTrace('FlowCanvasHost: dispatching applyFlowLoadResult', {
         projectId,
         flowId,
@@ -383,11 +432,16 @@ export const FlowCanvasHost: React.FC<Props> = ({
         variables: data.variables,
         bindings: data.bindings,
       });
+      incrementEditorOpenMetric('flowCanvasHost.applyFlowLoadResult');
       setIsLoadingFlow(false);
+      getFlowFocusManager().resumeFocus('chat');
+      getFlowFocusManager().setFlowRemounting(false);
+      inFlightLoadKeysRef.current.delete(loadKey);
     })();
 
     return () => {
       cancelled = true;
+      inFlightLoadKeysRef.current.delete(loadKey);
     };
   }, [projectId, flowId, flowPresent, hydrated, hasLocalChanges, nodeCount, edgeCount, upsertFlow, applyFlowLoadResult]);
 
