@@ -25,6 +25,13 @@ import {
     getVariableRefIdsBoundToTaskRow,
     taskRowAllowsInterfaceVariableExpansionFromRow,
 } from '../../../../FlowMappingPanel/interfaceNodeRowDrop';
+import type { NodeRowsCommitOptions } from './useNodeRowManagement';
+import { resolveCrossNodeDropHitTest } from '../../../utils/crossNodeRowDropHitTest';
+import {
+    buildCrossNodeRowMoveDetail,
+    inferDndRowCommandKind,
+    warnLocalGraphMutation,
+} from '@domain/flowGraph';
 
 /**
  * Walks the hit-test stack at (x,y) to find which React Flow canvas root received the drop.
@@ -69,9 +76,43 @@ function resolveFlowCanvasIdAtScreenPoint(clientX: number, clientY: number, fall
   return fb;
 }
 
+/**
+ * Insert index for cross-node drops: same half-row logic as same-node reorder (see mouseup branch).
+ * Returns undefined if the target RF node is not in the DOM (structural move still appends).
+ */
+function computeTargetRowInsertIndexFromDom(targetNodeId: string, clientY: number): number | undefined {
+  let root: HTMLElement | null = null;
+  try {
+    root = document.querySelector(`[data-id="${CSS.escape(targetNodeId)}"]`) as HTMLElement | null;
+  } catch {
+    root = document.querySelector(`[data-id="${targetNodeId}"]`) as HTMLElement | null;
+  }
+  if (!root) return undefined;
+  const elements = Array.from(root.querySelectorAll('.node-row-outer')) as HTMLElement[];
+  if (elements.length === 0) return 0;
+
+  const rects = elements.map((el) => ({
+    idx: Number(el.dataset.index),
+    top: el.getBoundingClientRect().top,
+    height: el.getBoundingClientRect().height,
+  }));
+  rects.sort((a, b) => a.idx - b.idx);
+
+  let targetIndex = 0;
+  for (const r of rects) {
+    if (Number.isNaN(r.idx)) continue;
+    if (clientY < r.top + r.height / 2) {
+      targetIndex = r.idx;
+      break;
+    }
+    targetIndex = r.idx + 1;
+  }
+  return targetIndex;
+}
+
 interface UseNodeDragDropProps {
     nodeRows: NodeRowData[];
-    setNodeRows: (rows: NodeRowData[]) => void;
+    setNodeRows: (rows: NodeRowData[], options?: NodeRowsCommitOptions) => void;
     data: any;
     rowsContainerRef: React.RefObject<HTMLElement>;
     nodeId: string;
@@ -112,7 +153,8 @@ export function useNodeDragDrop({
     const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
     /** Last pointer position during row drag (ref avoids stale closure on mouseup). */
     const mousePositionRef = useRef({ x: 0, y: 0 });
-    const [dragElement, setDragElement] = useState<HTMLElement | null>(null);
+    /** Drag preview clone appended to `document.body` — ref avoids re-subscribing mouseup/move on each setState during drag. */
+    const dragCloneRef = useRef<HTMLElement | null>(null);
     const [draggedRowData, setDraggedRowData] = useState<NodeRowData | null>(null);
     const [targetNodeId, setTargetNodeId] = useState<string | null>(null);
     const [textOffsetInClone, setTextOffsetInClone] = useState<{ x: number; y: number; nodeOffset?: { x: number; y: number } } | null>(null);
@@ -212,7 +254,7 @@ export function useNodeDragDrop({
         setDraggedRowIndex(index);
         const pos = { x: clientX, y: clientY };
         mousePositionRef.current = pos;
-        setDragElement(clone);
+        dragCloneRef.current = clone;
         setDraggedRowData(rowData || null);
         setTargetNodeId(null);
         lastIfacePreviewKeyRef.current = null;
@@ -225,11 +267,12 @@ export function useNodeDragDrop({
 
     // Gestione movimento del mouse
     const handleMouseMove = useCallback((e: MouseEvent) => {
-        if (!isRowDragging || !dragElement) return;
+        const cloneEl = dragCloneRef.current;
+        if (!isRowDragging || !cloneEl) return;
 
         mousePositionRef.current = { x: e.clientX, y: e.clientY };
-        dragElement.style.left = e.clientX + 10 + 'px';
-        dragElement.style.top = e.clientY - 10 + 'px';
+        cloneEl.style.left = e.clientX + 10 + 'px';
+        cloneEl.style.top = e.clientY - 10 + 'px';
 
         // Trova il nodo sotto il mouse per cross-node drag
         const elementUnderMouse = document.elementFromPoint(e.clientX, e.clientY);
@@ -342,16 +385,18 @@ export function useNodeDragDrop({
                 );
             }
         }
-    }, [isRowDragging, dragElement, nodeId, rowsContainerRef, flowCanvasId]);
+    }, [isRowDragging, nodeId, rowsContainerRef, flowCanvasId]);
 
     // Gestione rilascio del mouse - VERSIONE SEMPLIFICATA
     const handleMouseUp = useCallback(() => {
         if (!isRowDragging || !draggedRowId || draggedRowIndex === null) return;
 
         const cleanupRowDragWithoutMutation = () => {
-            if (dragElement) {
-                document.body.removeChild(dragElement);
+            const cloneEl = dragCloneRef.current;
+            if (cloneEl?.parentNode) {
+                cloneEl.parentNode.removeChild(cloneEl);
             }
+            dragCloneRef.current = null;
             const originalRowComponent = getRowComponent(draggedRowId);
             if (originalRowComponent) {
                 originalRowComponent.normal();
@@ -359,7 +404,6 @@ export function useNodeDragDrop({
             setIsRowDragging(false);
             setDraggedRowId(null);
             setDraggedRowIndex(null);
-            setDragElement(null);
             setDraggedRowData(null);
             setTargetNodeId(null);
             document.body.style.cursor = '';
@@ -420,79 +464,144 @@ export function useNodeDragDrop({
             }, 300); // 300ms di feedback visivo
         };
 
+        /**
+         * Remove the empty React Flow shell after the last row left this node (cross-node / pane drop).
+         *
+         * **Must use only `flowActions.deleteNode` (graph filter)** — never `data.onDelete` /
+         * `deleteNodeWithLog` here: right after structural commit / DnD, RF `nodes` can still be **stale** and list
+         * rows whose tasks were already moved. `deleteNodeWithLog` would then call `taskRepository.deleteTask`
+         * for those rows and destroy live tasks on the destination.
+         */
+        const scheduleRemoveEmptySourceNode = () => {
+            queueMicrotask(() => {
+                try {
+                    flowActions?.deleteNode?.(nodeId);
+                } catch (e) {
+                    console.error('[useNodeDragDrop] Failed to remove empty source node from graph', e);
+                }
+            });
+        };
+
         if (targetNodeId && targetNodeId !== nodeId) {
             // CROSS-NODE DROP: Sposta la riga a un altro nodo
             const rowDataToMove = draggedRowData || nodeRows.find(row => row.id === draggedRowId);
 
             if (!rowDataToMove) {
+                cleanupRowDragWithoutMutation();
                 return;
             }
 
             const mx = mousePositionRef.current.x;
             const my = mousePositionRef.current.y;
-            const ev = evaluateSubflowPortalRowDropAtPointer({
-                task: draggedRowTaskRef.current,
-                sourceFlowCanvasId: flowCanvasId,
-                sourceNodeId: nodeId,
-                targetNodeIdAttr: targetNodeId,
-                clientX: mx,
-                clientY: my,
-                resolveFlowCanvasId: resolveFlowCanvasIdAtScreenPoint,
-            });
 
-            if (!ev.allowed) {
-                if (targetNodeId) removeNodeHighlight(targetNodeId);
-            } else {
-            const crossNodeDetail: Record<string, unknown> = {
-                fromNodeId: nodeId,
-                toNodeId: targetNodeId,
-                rowId: draggedRowId,
-                rowData: rowDataToMove,
-                originalIndex: draggedRowIndex,
-                mousePosition: { x: mx, y: my },
-                fromFlowCanvasId: ev.sourceFlowCanvasId,
-                toFlowCanvasId: ev.targetFlowCanvasId,
-                _state: { handled: false },
-            };
-            const crossNodeEvent = new CustomEvent('crossNodeRowMove', { detail: crossNodeDetail });
-            window.dispatchEvent(crossNodeEvent);
-
-            const storeHandled =
-                (crossNodeDetail._state as { handled?: boolean } | undefined)?.handled === true;
-
-            if (targetNodeId) {
-                removeNodeHighlight(targetNodeId);
+            /** Drag clone sits above the canvas; hide so `elementsFromPoint` / hit-test see the target node (same as canvas-drop branch). */
+            let dragPrevPointerEvents = '';
+            let dragPrevVisibility = '';
+            const cloneForCrossNode = dragCloneRef.current;
+            if (cloneForCrossNode) {
+                dragPrevPointerEvents = cloneForCrossNode.style.pointerEvents;
+                dragPrevVisibility = cloneForCrossNode.style.visibility;
+                cloneForCrossNode.style.pointerEvents = 'none';
+                cloneForCrossNode.style.visibility = 'hidden';
             }
 
-            /**
-             * Remove the row from the source node only when the structural orchestrator committed
-             * (`handled`). If the drop was a no-op (e.g. same-flow Subflow portal skip, cross-flow
-             * rejected), leaving the row avoids removing it from the origin when nothing was added
-             * on the destination.
-             */
-            if (storeHandled) {
-                const updatedRows = nodeRows.filter((row) => row.id !== draggedRowId);
-                setNodeRows(updatedRows);
+            try {
+                const ev = evaluateSubflowPortalRowDropAtPointer({
+                    task: draggedRowTaskRef.current,
+                    sourceFlowCanvasId: flowCanvasId,
+                    sourceNodeId: nodeId,
+                    targetNodeIdAttr: targetNodeId,
+                    clientX: mx,
+                    clientY: my,
+                    resolveFlowCanvasId: resolveFlowCanvasIdAtScreenPoint,
+                });
 
-                if (updatedRows.length === 0) {
-                    setTimeout(() => {
-                        if (flowActions?.deleteNode) {
-                            flowActions.deleteNode(nodeId);
-                        } else if (data.onDelete) {
-                            data.onDelete();
+                if (!ev.allowed) {
+                    if (targetNodeId) removeNodeHighlight(targetNodeId);
+                } else {
+                    const insertIdx = computeTargetRowInsertIndexFromDom(targetNodeId, my);
+                    const hit = resolveCrossNodeDropHitTest(mx, my, targetNodeId);
+                    const crossNodeDetail = buildCrossNodeRowMoveDetail({
+                        fromNodeId: nodeId,
+                        toNodeId: targetNodeId!,
+                        draggedRowId: draggedRowId!,
+                        rowData: rowDataToMove,
+                        draggedRowIndex: draggedRowIndex,
+                        mousePosition: { x: mx, y: my },
+                        fromFlowCanvasId: ev.sourceFlowCanvasId,
+                        toFlowCanvasId: ev.targetFlowCanvasId,
+                        targetRowId: hit.targetRowId,
+                        targetRegion: hit.targetRegion,
+                        portalRowIdOnTargetNode: hit.portalRowIdOnTargetNode,
+                        ...(insertIdx !== undefined ? { targetRowInsertIndex: insertIdx } : {}),
+                    }) as Record<string, unknown>;
+
+                    if (import.meta.env.DEV) {
+                        try {
+                            const kind = inferDndRowCommandKind({
+                                operation: 'move',
+                                rowId: draggedRowId!,
+                                rowData: rowDataToMove,
+                                sourceFlowId: flowCanvasId ?? 'main',
+                                sourceNodeId: nodeId,
+                                sourceIndex: draggedRowIndex ?? 0,
+                                targetFlowId: ev.targetFlowCanvasId,
+                                targetNodeId: targetNodeId,
+                                targetRowId: hit.targetRowId,
+                                targetRegion: hit.targetRegion,
+                                ...(insertIdx !== undefined ? { targetRowInsertIndex: insertIdx } : {}),
+                            });
+                            console.log('[FlowGraph:dnd] cross-node command kind:', kind);
+                        } catch {
+                            /* noop */
                         }
-                    }, 50);
+                    }
+                    const crossNodeEvent = new CustomEvent('crossNodeRowMove', { detail: crossNodeDetail });
+                    window.dispatchEvent(crossNodeEvent);
+
+                    const storeHandled =
+                        (crossNodeDetail._state as { handled?: boolean } | undefined)?.handled === true;
+
+                    if (targetNodeId) {
+                        removeNodeHighlight(targetNodeId);
+                    }
+
+                    /**
+                     * Remove the row from the source node only when the structural orchestrator committed
+                     * (`handled`). If the drop was a no-op (e.g. cross-flow rejected, or portal drop pending
+                     * another handler), leaving the row avoids removing it from the origin when nothing was added
+                     * on the destination.
+                     */
+                    if (storeHandled) {
+                        warnLocalGraphMutation('useNodeDragDrop:crossNodeRemoveRowLocal', {
+                            nodeId,
+                            draggedRowId,
+                            note: 'notifyParent:false — awaiting FlowStore-led removal of local mirror',
+                        });
+                        const updatedRows = nodeRows.filter((row) => row.id !== draggedRowId);
+                        setNodeRows(updatedRows, { notifyParent: false });
+
+                        if (updatedRows.length === 0) {
+                            scheduleRemoveEmptySourceNode();
+                        }
+                    }
                 }
-            }
+            } finally {
+                const c = dragCloneRef.current;
+                if (c) {
+                    c.style.pointerEvents = dragPrevPointerEvents;
+                    c.style.visibility = dragPrevVisibility;
+                }
             }
 
         } else if (!targetNodeId) {
             // Drop on Flow Interface: semantic binding only — never remove or mutate node rows here.
             let handledFlowInterface = false;
             // Drag clone sits on top (fixed, high z-index); hide it so elementsFromPoint hits Interface / canvas below.
-            if (dragElement) {
-                dragElement.style.pointerEvents = 'none';
-                dragElement.style.visibility = 'hidden';
+            const cloneForIface = dragCloneRef.current;
+            if (cloneForIface) {
+                cloneForIface.style.pointerEvents = 'none';
+                cloneForIface.style.visibility = 'hidden';
             }
             const fc = String(flowCanvasId ?? 'main').trim() || 'main';
             if (fc) {
@@ -512,11 +621,6 @@ export function useNodeDragDrop({
                                     : r
                             );
                             setNodeRows(nextRows);
-                            if (flowActions?.updateNode) {
-                                flowActions.updateNode(nodeId, { rows: nextRows });
-                            } else if (data.onUpdate) {
-                                data.onUpdate({ rows: nextRows });
-                            }
                         }
                         const rowLabel = (rowDataToMove.text ?? '').trim() || 'field';
                         const detail: FlowBackendMappingPointerDropDetail = {
@@ -586,9 +690,11 @@ export function useNodeDragDrop({
             }
 
             if (handledFlowInterface) {
-                if (dragElement) {
-                    document.body.removeChild(dragElement);
+                const ifaceClone = dragCloneRef.current;
+                if (ifaceClone?.parentNode) {
+                    ifaceClone.parentNode.removeChild(ifaceClone);
                 }
+                dragCloneRef.current = null;
                 const originalRowComponent = getRowComponent(draggedRowId);
                 if (originalRowComponent) {
                     originalRowComponent.normal();
@@ -596,7 +702,6 @@ export function useNodeDragDrop({
                 setIsRowDragging(false);
                 setDraggedRowId(null);
                 setDraggedRowIndex(null);
-                setDragElement(null);
                 setDraggedRowData(null);
                 setTargetNodeId(null);
                 document.body.style.cursor = '';
@@ -610,6 +715,7 @@ export function useNodeDragDrop({
             const rowDataToMove = draggedRowData || nodeRows.find(row => row.id === draggedRowId);
 
             if (!rowDataToMove) {
+                cleanupRowDragWithoutMutation();
                 return;
             }
 
@@ -633,15 +739,9 @@ export function useNodeDragDrop({
             const sourceFlowFallback = ev.sourceFlowCanvasId;
 
             /**
-             * Same-flow pane drop (no target node under pointer): treat as cancel — do not remove the row,
-             * do not spawn `createNodeFromRow` (avoids deleting the source node and creating a duplicate).
-             * Cross-flow pane drop still creates a node on the destination canvas.
+             * Cross-canvas portal or regular pane drop: create a new node on the destination canvas.
+             * Subflow-specific guards (recursive nesting) are handled by `ev.allowed` below.
              */
-            if (String(dropTargetFlowId).trim() === String(sourceFlowFallback).trim()) {
-                cleanupRowDragWithoutMutation();
-                return;
-            }
-
             if (!ev.allowed) {
                 cleanupRowDragWithoutMutation();
                 return;
@@ -666,22 +766,9 @@ export function useNodeDragDrop({
             const updatedRows = nodeRows.filter(row => row.id !== draggedRowId);
             setNodeRows(updatedRows);
 
-            // Update node via context or fallback
-            if (flowActions?.updateNode) {
-                flowActions.updateNode(nodeId, { rows: updatedRows });
-            } else if (data.onUpdate) {
-                data.onUpdate({ rows: updatedRows });
-            }
-
             // If source node becomes empty after move, delete it
             if (updatedRows.length === 0) {
-                setTimeout(() => {
-                    if (flowActions?.deleteNode) {
-                        flowActions.deleteNode(nodeId);
-                    } else if (data.onDelete) {
-                        data.onDelete();
-                    }
-                }, 50); // Small delay to allow new node creation
+                scheduleRemoveEmptySourceNode();
             }
 
         } else {
@@ -731,13 +818,6 @@ export function useNodeDragDrop({
 
                 setNodeRows(updatedRows);
 
-                // Update node via context or fallback
-                if (flowActions?.updateNode) {
-                    flowActions.updateNode(nodeId, { rows: updatedRows });
-                } else if (data.onUpdate) {
-                    data.onUpdate({ rows: updatedRows });
-                }
-
                 // Highlight row immediately after drop
                 // Usa requestAnimationFrame per assicurarsi che il DOM sia aggiornato
                 requestAnimationFrame(() => {
@@ -765,10 +845,12 @@ export function useNodeDragDrop({
             initialRowPositionRef.current = null;
         }
 
-        // Cleanup
-        if (dragElement) {
-            document.body.removeChild(dragElement);
+        // Cleanup (guard: flow-interface branch may have removed the clone already)
+        const cloneAtEnd = dragCloneRef.current;
+        if (cloneAtEnd?.parentNode) {
+            cloneAtEnd.parentNode.removeChild(cloneAtEnd);
         }
+        dragCloneRef.current = null;
 
         // Ripristina lo stato normale della riga originale
         const originalRowComponent = getRowComponent(draggedRowId);
@@ -779,14 +861,13 @@ export function useNodeDragDrop({
         setIsRowDragging(false);
         setDraggedRowId(null);
         setDraggedRowIndex(null);
-        setDragElement(null);
         setDraggedRowData(null);
         setTargetNodeId(null);
         draggedRowTaskRef.current = undefined;
 
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-    }, [isRowDragging, draggedRowId, draggedRowIndex, nodeRows, setNodeRows, data, dragElement, rowsContainerRef, targetNodeId, nodeId, draggedRowData, getRowComponent, flowCanvasId, flowActions, onSameNodeRowsReordered]);
+    }, [isRowDragging, draggedRowId, draggedRowIndex, nodeRows, setNodeRows, data, rowsContainerRef, targetNodeId, nodeId, draggedRowData, getRowComponent, flowCanvasId, flowActions, onSameNodeRowsReordered]);
 
     // Event listeners
     useEffect(() => {

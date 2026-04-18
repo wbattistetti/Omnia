@@ -1,11 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
-import { planExternalRowSync } from './nodeRowExternalSync';
+import { deriveSyncedNodeRows, rowListsShallowEqual } from './nodeRowExternalSync';
+import { makePendingLocalRowId } from '../utils/localRowIds';
 import { getTaskIdFromRow } from '../../../../../utils/taskHelpers';
 import { variableCreationService } from '../../../../../services/VariableCreationService';
 import { taskRepository } from '../../../../../services/TaskRepository';
 import { TaskType } from '../../../../../types/taskTypes'; // ✅ Per TaskType enum
 import { logNodeRowEdit } from '../../../rows/NodeRow/nodeRowEditDebug';
+import { warnLocalGraphMutation } from '@domain/flowGraph';
 
 // ✅ Traccia il contenuto originale quando inizi a editare una riga esistente
 interface RowOriginalContent {
@@ -20,13 +22,23 @@ interface UseNodeRowManagementProps {
     displayRows: NodeRowData[];
 }
 
+/** Options for {@link useNodeRowManagement}'s row commit (FlowStore / parent notification). */
+export type NodeRowsCommitOptions = {
+    /** When false, only updates local row state (store already committed elsewhere). Default true. */
+    notifyParent?: boolean;
+    /** Extra fields merged into `normalizedData.onUpdate` with `rows`. */
+    patch?: Record<string, unknown>;
+};
+
 /**
- * Hook per gestire tutte le operazioni sulle righe del nodo
- * Centralizza la logica di CRUD delle righe e la gestione dello stato isEmpty
+ * Hook per gestire tutte le operazioni sulle righe del nodo.
+ *
+ * Verità strutturale: `displayRows` (props / FlowStore). Righe locali sono derivate con
+ * {@link deriveSyncedNodeRows}: overlay di testo, id in attesa di hydrate dopo `onUpdate`, riga in edit.
  */
 export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: UseNodeRowManagementProps) {
     // Stato delle righe
-    const [nodeRows, setNodeRows] = useState<NodeRowData[]>(() => displayRows);
+    const [nodeRows, setNodeRowsInternal] = useState<NodeRowData[]>(() => displayRows);
     const [editingRowId, setEditingRowId] = useState<string | null>(null);
 
     // Stato isEmpty per auto-append
@@ -45,6 +57,16 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     const nodeRowsRef = useRef(nodeRows);
     nodeRowsRef.current = nodeRows;
 
+    /** Authoritative props snapshot — ids newly committed via parent get tracked until props catch up. */
+    const displayRowsRef = useRef(displayRows);
+    displayRowsRef.current = displayRows;
+
+    /** Row ids introduced in optimistic commits not yet reflected in `displayRows`. */
+    const pendingHydrationIdsRef = useRef<Set<string>>(new Set());
+
+    /** Row ids removed locally before `displayRows` props drop them (stale props must not revive rows). */
+    const pendingStructuralRemovalIdsRef = useRef<Set<string>>(new Set());
+
     const beginAutoAppendGuard = () => {
         autoAppendGuard.current += 1;
         // Rilascio dopo due frame per coprire setState + focus programmato
@@ -52,9 +74,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     };
 
     // Funzione per generare ID righe
-    const makeRowId = useCallback(() => {
-        return `${nodeId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    }, [nodeId]);
+    const makeRowId = useCallback(() => makePendingLocalRowId(nodeId), [nodeId]);
 
     // Funzione per calcolare isEmpty
     const computeIsEmpty = useCallback((rows: NodeRowData[]): boolean => {
@@ -62,25 +82,83 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     }, []);
 
     /**
-     * Keep local row state aligned with store-driven props (`displayRows`).
-     * Portal / subflow moves update FlowStore and props while skipping CustomNode's optimistic
-     * `crossNodeRowMove` handler (`_state.handled`); without this sync, rows only reappear after remount.
-     *
-     * Conservative: when structure and ids match and nothing is being edited, do not replace local
-     * rows (avoids overwriting keystrokes before the parent re-renders). When the store adds/reorders
-     * rows or the user edits one row while siblings refresh, apply `mergeExternalRowsFromStore`
-     * (when not editing, store rows are merged with local `text` per row id so props cannot revive stale labels).
+     * Commit structural row changes upward and record new row ids until props hydrate.
+     */
+    const commitRowsToParent = useCallback(
+        (nextRows: NodeRowData[], options?: NodeRowsCommitOptions) => {
+            const prevDisp = displayRowsRef.current;
+            const prevDispIds = new Set(prevDisp.map((r) => r.id));
+            const nextIds = new Set(nextRows.map((r) => r.id));
+
+            for (const r of nextRows) {
+                if (!prevDispIds.has(r.id)) {
+                    pendingHydrationIdsRef.current.add(r.id);
+                }
+            }
+            for (const id of prevDispIds) {
+                if (!nextIds.has(id)) {
+                    pendingHydrationIdsRef.current.delete(id);
+                    pendingStructuralRemovalIdsRef.current.add(id);
+                }
+            }
+
+            setNodeRowsInternal(nextRows);
+            setIsEmpty(computeIsEmpty(nextRows));
+
+            if (options?.notifyParent !== false) {
+                const dispIds = [...displayRowsRef.current.map((r) => r.id)].sort().join('\u0001');
+                const committedIds = [...nextRows.map((r) => r.id)].sort().join('\u0001');
+                if (dispIds !== committedIds) {
+                    warnLocalGraphMutation('useNodeRowManagement:commitRowsToParent', {
+                        nodeId,
+                        rowCount: nextRows.length,
+                        structuralRowIdChange: true,
+                    });
+                }
+                normalizedData.onUpdate?.({
+                    rows: nextRows,
+                    isTemporary: normalizedData.isTemporary,
+                    ...(options?.patch ?? {}),
+                });
+            }
+        },
+        [normalizedData, computeIsEmpty]
+    );
+
+    /** Hydration: clear pending-add once props include the id; clear pending-removal once props omit the id. */
+    useEffect(() => {
+        const dispIds = new Set(displayRows.map((r) => r.id));
+        pendingHydrationIdsRef.current.forEach((id) => {
+            if (dispIds.has(id)) {
+                pendingHydrationIdsRef.current.delete(id);
+            }
+        });
+        pendingStructuralRemovalIdsRef.current.forEach((id) => {
+            if (!dispIds.has(id)) {
+                pendingStructuralRemovalIdsRef.current.delete(id);
+            }
+        });
+    }, [displayRows]);
+
+    /**
+     * Pull structural updates from props (`displayRows`) without lazy-id heuristics:
+     * derive uses explicit pending ids + editing overlay only.
      */
     useEffect(() => {
         if (autoAppendGuard.current > 0) {
             return;
         }
-        const plan = planExternalRowSync(displayRows, nodeRowsRef.current, editingRowId);
-        if (!plan.shouldSync) {
-            return;
+        const next = deriveSyncedNodeRows({
+            displayRows,
+            previousLocal: nodeRowsRef.current,
+            editingRowId,
+            pendingHydrationIds: pendingHydrationIdsRef.current,
+            pendingStructuralRemovalIds: pendingStructuralRemovalIdsRef.current,
+        });
+        if (!rowListsShallowEqual(nodeRowsRef.current, next)) {
+            setNodeRowsInternal(next);
+            setIsEmpty(computeIsEmpty(next));
         }
-        setNodeRows(plan.nextRows);
-        setIsEmpty(computeIsEmpty(plan.nextRows));
     }, [displayRows, editingRowId, computeIsEmpty]);
 
     // Funzione per aggiungere una riga vuota
@@ -111,11 +189,9 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         };
         const cleaned = rows.filter(isValidRow);
         if (cleaned.length !== rows.length) {
-            setNodeRows(cleaned);
-            setIsEmpty(computeIsEmpty(cleaned));
-            normalizedData.onUpdate?.({ rows: cleaned, isTemporary: normalizedData.isTemporary });
+            commitRowsToParent(cleaned);
         }
-    }, [normalizedData, computeIsEmpty]);
+    }, [commitRowsToParent]);
 
     // ✅ Salva il contenuto originale quando inizi a editare una riga
     // Deve essere definito prima di essere usato in altri callback
@@ -193,20 +269,17 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             originalContentRef.current.wasNew = false;
         }
 
-        setNodeRows(updatedRows);
-
-        const finalRow = updatedRows.find(r => r.id === rowId);
+        commitRowsToParent(updatedRows);
 
         // row.text is the label shown on the flow row; SayMessage body lives in
         // task.parameters (text GUID) + project translations (see sayMessageTaskSync).
 
         // setIsEmpty viene aggiornato solo quando esci dall'editing (ESC, click fuori, blur esterno)
-        normalizedData.onUpdate?.({ rows: updatedRows, isTemporary: normalizedData.isTemporary });
 
         // ✅ LAZY: NON aggiorniamo/creiamo task qui - solo memorizziamo metadati nella riga
         // ✅ Il task verrà creato solo quando si apre l'editor (cliccando sul gear)
         // ✅ L'euristica 2 viene eseguita in NodeRow.tsx quando l'utente preme Enter
-    }, [nodeRows, normalizedData]);
+    }, [nodeRows, commitRowsToParent]);
 
     // Gestione eliminazione riga
     const handleDeleteRow = useCallback(async (rowId: string) => {
@@ -215,10 +288,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         const taskId = rowToDelete?.taskId || getTaskIdFromRow(rowToDelete || { id: rowId } as NodeRowData);
 
         const updatedRows = nodeRows.filter(row => row.id !== rowId);
-        setNodeRows(updatedRows);
-        // ✅ Aggiorna isEmpty: se tutte le righe sono vuote dopo la cancellazione, torna isEmpty=true
-        setIsEmpty(computeIsEmpty(updatedRows));
-        normalizedData.onUpdate?.({ rows: updatedRows });
+        pendingHydrationIdsRef.current.delete(rowId);
+        commitRowsToParent(updatedRows);
 
         // ✅ NEW: Delete task from database when row is deleted
         if (taskId) {
@@ -261,7 +332,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         if (updatedRows.length === 0 && normalizedData.isTemporary) {
             normalizedData.onDelete?.();
         }
-    }, [nodeRows, computeIsEmpty, normalizedData]);
+    }, [nodeRows, commitRowsToParent, normalizedData]);
 
     // Gestione inserimento riga
     // Migration: Now creates Task in TaskRepository (dual mode)
@@ -331,12 +402,10 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         (newRow as any).isNew = true; // Preserve isNew flag
 
         updatedRows.splice(adjustedIndex, 0, newRow);
-        setNodeRows(updatedRows);
-        // ✅ Salva come "nuova" quando inizia l'editing della riga inserita
         saveOriginalContent(newRow.id);
         setEditingRowId(newRow.id);
-        normalizedData.onUpdate?.({ rows: updatedRows });
-    }, [nodeRows, makeRowId, normalizedData, saveOriginalContent]);
+        commitRowsToParent(updatedRows);
+    }, [nodeRows, makeRowId, commitRowsToParent, saveOriginalContent]);
 
     /**
      * Immutable row updates for the whole node (used by semantic draft / meta).
@@ -344,14 +413,9 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     const updateNodeRows = useCallback(
         (mutate: (rows: NodeRowData[]) => NodeRowData[]) => {
             const nextRows = mutate(nodeRows.map((r) => ({ ...r })));
-            setNodeRows(nextRows);
-            setIsEmpty(computeIsEmpty(nextRows));
-            normalizedData.onUpdate?.({
-                rows: nextRows,
-                isTemporary: normalizedData.isTemporary,
-            });
+            commitRowsToParent(nextRows);
         },
-        [nodeRows, normalizedData, computeIsEmpty]
+        [nodeRows, commitRowsToParent]
     );
 
     /**
@@ -371,15 +435,10 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             }
             beginAutoAppendGuard();
             const { nextRows } = appendEmptyRow(rows);
-            setNodeRows(nextRows);
-            setIsEmpty(computeIsEmpty(nextRows));
-            normalizedData.onUpdate?.({
-                rows: nextRows,
-                isTemporary: normalizedData.isTemporary,
-            });
+            commitRowsToParent(nextRows);
             return true;
         },
-        [appendEmptyRow, computeIsEmpty, normalizedData]
+        [appendEmptyRow, commitRowsToParent]
     );
 
     // Gestione exit editing
@@ -465,7 +524,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     return {
         // State
         nodeRows,
-        setNodeRows,
+        /** Commits rows to parent + tracks hydration ids (replaces raw duplicate state). */
+        setNodeRows: commitRowsToParent,
         editingRowId,
         setEditingRowId: setEditingRowIdWithOriginal,
         isEmpty,
@@ -480,6 +540,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         validateRows,
         computeIsEmpty,
         makeRowId,
+
+        commitRowsToParent,
 
         // Utilities
         inAutoAppend,

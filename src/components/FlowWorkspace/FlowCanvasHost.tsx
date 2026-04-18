@@ -1,3 +1,8 @@
+/**
+ * Flow slice host for the workspace editor. Cross-node row drop routing (portal row vs sibling row)
+ * is resolved inside FlowEditor via DOM hit-test (`crossNodeRowDropHitTest`) and orchestrators;
+ * nothing here forwards `targetRowId` — the payload is carried on `crossNodeRowMove` from CustomNode DnD.
+ */
 import React, { useEffect, useCallback, useMemo } from 'react';
 import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '@flows/FlowStore';
 import { loadFlow } from '../../flows/FlowPersistence';
@@ -24,6 +29,14 @@ import { collectSubflowPortalRows } from './collectSubflowPortalRows';
 import { resolveFlowTabDisplayTitle } from '@utils/resolveFlowTabDisplayTitle';
 import { getFlowFocusManager } from '@features/focus';
 import { incrementEditorOpenMetric, measureEditorOpenMetric } from '@features/performance';
+import type { Node } from 'reactflow';
+import type { FlowNode } from '../Flowchart/types/flowTypes';
+import {
+  COMMITTED_FLOW_NODE_ROWS_SYNC_EVENT,
+  findNodeIdInSliceOwningTaskRow,
+  type CommittedFlowNodeRowsDetail,
+} from '@utils/committedFlowSliceNodeRows';
+import { FLOW_GRAPH_MIGRATION } from '@domain/flowGraph/flowGraphMigrationConfig';
 
 /**
  * Title persisted on the flow slice: keep non-empty server/local titles; otherwise resolve from
@@ -464,6 +477,70 @@ export const FlowCanvasHost: React.FC<Props> = ({
     })),
     [flowId, updateFlowGraph]
   );
+
+  /** When structural commit updated FlowStore but RF kept stale node.data.rows, orchestrator dispatches sync — only if slice already contained the row. */
+  useEffect(() => {
+    if (FLOW_GRAPH_MIGRATION.DISABLE_COMMITTED_FLOW_NODE_ROWS_LISTENER) {
+      return;
+    }
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<CommittedFlowNodeRowsDetail>).detail;
+      if (!detail || String(detail.flowCanvasId).trim() !== String(flowId).trim()) return;
+      let nodeId = String(detail.nodeId || '').trim();
+      const rowId = String(detail.rowId || '').trim();
+      const rowsIn = detail.rows;
+      if (!Array.isArray(rowsIn)) return;
+
+      setNodes((nds: Node<FlowNode>[]) => {
+        const patchRows = rowsIn.map((r) => ({ ...r })) as FlowNode['rows'];
+        const applyToId = (target: string) =>
+          nds.map((n) =>
+            String(n.id) === target
+              ? {
+                  ...n,
+                  data: {
+                    ...(n.data as FlowNode),
+                    rows: patchRows,
+                  },
+                }
+              : n
+          );
+
+        if (nodeId && nds.some((n) => String(n.id) === nodeId)) {
+          return applyToId(nodeId);
+        }
+
+        /** Slice node id may still diverge from mounted RF ids — resolve via row id on current nodes. */
+        if (rowId) {
+          const holder = nds.find(
+            (n) =>
+              Array.isArray((n.data as FlowNode)?.rows) &&
+              (n.data as FlowNode).rows.some((r) => String(r?.id || '').trim() === rowId)
+          );
+          if (holder) {
+            return applyToId(String(holder.id));
+          }
+        }
+
+        const syntheticSlice = {
+          [flowId]: {
+            nodes: nds.map((n) => ({
+              id: n.id,
+              data: { rows: (n.data as FlowNode)?.rows ?? [] },
+            })),
+          },
+        };
+        const liveId = findNodeIdInSliceOwningTaskRow(syntheticSlice as any, flowId, rowId);
+        if (liveId && nds.some((n) => String(n.id) === liveId)) {
+          return applyToId(liveId);
+        }
+
+        return nds;
+      });
+    };
+    window.addEventListener(COMMITTED_FLOW_NODE_ROWS_SYNC_EVENT, handler);
+    return () => window.removeEventListener(COMMITTED_FLOW_NODE_ROWS_SYNC_EVENT, handler);
+  }, [flowId, setNodes]);
 
   // FlowEditor wraps IntellisenseProvider + ReactFlowProvider (see FlowEditor.tsx)
   const flowEditor = (

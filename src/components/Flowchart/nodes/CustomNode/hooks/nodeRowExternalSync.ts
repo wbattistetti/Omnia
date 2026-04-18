@@ -1,10 +1,19 @@
 /**
- * Reconciles React Flow node row props (store-driven `displayRows`) with local `nodeRows` state.
- * When structural updates come only from the workspace (e.g. subflow portal path sets `_state.handled`),
- * local state must follow props without dropping in-progress edits on the active row.
+ * Reconciles React Flow node row props (store-driven `displayRows`) with transient `nodeRows` used by CustomNode.
+ *
+ * Structural truth lives in `displayRows` (FlowStore → RF props). Local rows follow props, with explicit exceptions:
+ * - Text overlay while props lag one frame ({@link mergeExternalRowsFromStore})
+ * - Row ids optimistically committed via `onUpdate` but not yet in props ({@link pendingHydrationIds})
+ * - Row ids removed locally before props catch up ({@link pendingStructuralRemovalIds})
+ * - Active editing row not yet materialized in props (new lazy row while `editingRowId` matches)
+ *
+ * No lazy-id pattern heuristics: pending rows are tracked only through explicit hydration ids.
  */
 
 import type { NodeRowData } from '../../../../../types/project';
+import { warnLocalGraphMutation } from '@domain/flowGraph';
+
+let deriveSyncedNodeRowsWarnOnce = false;
 
 /**
  * When props and local state both have the same row id, prefer local `text` if it differs.
@@ -30,7 +39,6 @@ export function mergeExternalRowsFromStore(
     if (!localEditing) {
       return displayRows;
     }
-    // Editing row: full local row. Siblings: store wins (external portal updates while typing).
     return displayRows.map((dr) => (dr.id === editingRowId ? localEditing : dr));
   }
   return displayRows.map((dr) => overlayLocalTextOntoDisplayRow(dr, nodeRows));
@@ -66,35 +74,45 @@ function stableRowJson(r: NodeRowData): string {
   });
 }
 
-/** Result of comparing store `displayRows` with local node row state. */
-export type ExternalRowSyncPlan = { shouldSync: false } | { shouldSync: true; nextRows: NodeRowData[] };
+/** Inputs for deriving the next local row list from authoritative props + optimistic state. */
+export type SyncedNodeRowsInput = {
+  displayRows: NodeRowData[];
+  previousLocal: NodeRowData[];
+  editingRowId: string | null;
+  /** Ids introduced in the last parent commit and not yet visible in `displayRows`. */
+  pendingHydrationIds: ReadonlySet<string>;
+  /**
+   * Ids removed in a local commit while `displayRows` may still list them until the next paint /
+   * store round-trip (e.g. drag row to canvas — must not resurrect the row from stale props).
+   */
+  pendingStructuralRemovalIds: ReadonlySet<string>;
+};
 
 /**
- * Pure decision for whether to pull `displayRows` into local state (see useNodeRowManagement effect).
- * Keeps editing keystrokes safe when structure is unchanged and no row is being edited.
+ * Derives `nodeRows` aligned with store props while preserving in-flight UX:
+ * overlays typing, pending commits, and the row currently being edited if absent from props.
  */
-export function planExternalRowSync(
-  displayRows: NodeRowData[],
-  localRows: NodeRowData[],
-  editingRowId: string | null
-): ExternalRowSyncPlan {
-  if (localRows.length > displayRows.length) {
-    return { shouldSync: false };
+export function deriveSyncedNodeRows(input: SyncedNodeRowsInput): NodeRowData[] {
+  if (!deriveSyncedNodeRowsWarnOnce) {
+    deriveSyncedNodeRowsWarnOnce = true;
+    warnLocalGraphMutation('nodeRowExternalSync:deriveSyncedNodeRows', {
+      note: 'Local/store row merge — replace with RF viewer + FlowStore-only rows when migration completes.',
+    });
   }
+  const { displayRows, previousLocal, editingRowId, pendingHydrationIds, pendingStructuralRemovalIds } =
+    input;
+  const structuralDisplay = displayRows.filter((r) => !pendingStructuralRemovalIds.has(r.id));
+  const displayIds = new Set(structuralDisplay.map((r) => r.id));
+  const merged = mergeExternalRowsFromStore(structuralDisplay, previousLocal, editingRowId);
 
-  const merged = mergeExternalRowsFromStore(displayRows, localRows, editingRowId);
-  if (rowListsShallowEqual(localRows, merged)) {
-    return { shouldSync: false };
-  }
+  const extras = previousLocal.filter((r) => {
+    if (displayIds.has(r.id)) {
+      return false;
+    }
+    return pendingHydrationIds.has(r.id) || r.id === editingRowId;
+  });
 
-  const localSig = localRows.map((r) => r.id).join('\0');
-  const displaySig = displayRows.map((r) => r.id).join('\0');
-  const structuralMismatch = localSig !== displaySig || displayRows.length !== localRows.length;
-  const storeHasNewRow = displayRows.some((r) => !localRows.some((nr) => nr.id === r.id));
-
-  if (!structuralMismatch && !storeHasNewRow && !editingRowId) {
-    return { shouldSync: false };
-  }
-
-  return { shouldSync: true, nextRows: merged };
+  const mergedIds = new Set(merged.map((r) => r.id));
+  const tail = extras.filter((r) => !mergedIds.has(r.id));
+  return [...merged, ...tail];
 }

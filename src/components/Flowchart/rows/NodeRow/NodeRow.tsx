@@ -124,6 +124,20 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     return { childFlowId: cf };
   }, [row.id]);
 
+  /**
+   * DnD: mark portal row in DOM even when `taskRepository.getTask` lags (factory / hydrate).
+   * Prefer resolved task child flow; then persisted meta; then Subflow heuristics.
+   */
+  const isSubflowPortalRowForDnD = useMemo(() => {
+    if (subflowMeta != null && String(subflowMeta.childFlowId ?? '').trim().length > 0) return true;
+    if (String(row.meta?.subflowChildFlowId ?? '').trim().length > 0) return true;
+    if (row.heuristics?.type === TaskType.Subflow) return true;
+    const legacyType = (row as { type?: unknown }).type;
+    if (legacyType === TaskType.Subflow) return true;
+    if (String(legacyType ?? '').trim().toLowerCase() === 'subflow') return true;
+    return false;
+  }, [subflowMeta, row.meta?.subflowChildFlowId, row.heuristics?.type]);
+
   const [subflowIfaceToolbarState, setSubflowIfaceToolbarState] = useState<{
     hasOutputs: boolean;
     loading: boolean;
@@ -776,6 +790,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         data-index={index}
         data-being-dragged={isBeingDragged ? 'true' : 'false'}
         data-row-id={row.id}
+        data-omnia-flow-row-id={row.id}
+        data-omnia-subflow-portal-row={isSubflowPortalRowForDnD ? 'true' : 'false'}
         draggable={false}
         onDragStart={(e) => e.preventDefault()}
         {...(onMouseEnter ? { onMouseEnter } : {})}

@@ -22,7 +22,6 @@ import { useNodeExecutionHighlight } from '../../executionHighlight/useExecution
 import { FlowStateBridge } from '../../../../services/FlowStateBridge';
 import { useFlowActions } from '../../../../context/FlowActionsContext';
 import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
-import { taskRepository } from '../../../../services/TaskRepository';
 import { useFlowSubflow } from '../../context/FlowSubflowContext';
 import { SEMANTIC_DRAFT_FLUSH_EVENT } from '../../../../utils/semanticValuesRowState';
 import { useProjectData, useProjectDataUpdate } from '../../../../context/ProjectDataContext';
@@ -33,6 +32,7 @@ import { LinkStyle, type EdgeData } from '../../types/flowTypes';
 import { getDescendantNodeIds, translateNodes } from '../../../../flow/utils/graphTransforms';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { useFlowCanvasId } from '../../context/FlowCanvasContext';
+import { FLOW_GRAPH_MIGRATION, warnLocalGraphMutation } from '@domain/flowGraph';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -769,107 +769,104 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       if (!nodeRows.some((r) => r.id === detail.rowId)) return;
       const nextRows = nodeRows.map((r) => (r.id === detail.rowId ? detail.nextRow : r));
       setNodeRows(nextRows);
-      queueMicrotask(() => {
-        normalizedData.onUpdate?.({
-          rows: nextRows,
-          isTemporary: normalizedData.isTemporary,
-        });
-      });
     };
     window.addEventListener(SEMANTIC_DRAFT_FLUSH_EVENT, onFlush as EventListener);
     return () => window.removeEventListener(SEMANTIC_DRAFT_FLUSH_EVENT, onFlush as EventListener);
   }, [nodeRows, normalizedData, setNodeRows]);
 
-  // ✅ CROSS-NODE DRAG: Listen for cross-node row moves - VERSIONE SEMPLIFICATA
+  // ✅ CROSS-NODE DRAG: merge row into this node when it is the drop target.
+  // When the structural orchestrator already committed (`_state.handled`), props may still lag;
+  // merge optimistically here and skip `onUpdate` to avoid double-writing the FlowStore.
   React.useEffect(() => {
     const handleCrossNodeMove = (event: CustomEvent) => {
-      const detail = event.detail as { toNodeId?: string; rowData?: unknown; mousePosition?: { x: number; y: number }; _state?: { handled: boolean } };
-      if (detail._state?.handled) {
-        return;
-      }
+      const detail = event.detail as {
+        toNodeId?: string;
+        rowData?: NodeRowData;
+        mousePosition?: { x: number; y: number };
+        _state?: { handled: boolean };
+        targetRowInsertIndex?: number;
+        targetRowId?: string | null;
+        targetRegion?: 'portal' | 'row' | 'node';
+      };
       const { toNodeId, rowData, mousePosition } = detail;
 
-      if (toNodeId === id && rowData) {
+      if (toNodeId === id && import.meta.env.DEV) {
+        console.log('DnD target:', { targetRegion: detail.targetRegion, targetRowId: detail.targetRowId });
+      }
 
-        // ✅ VERIFY: Controlla che il task esista quando la riga arriva nel nuovo nodo
-        const taskId = rowData.id; // row.id === task.id
-        const task = taskRepository.getTask(taskId);
+      if (toNodeId !== id || !rowData) {
+        return;
+      }
 
-        console.log('[CustomNode] 🔍 CROSS-NODE MOVE RECEIVED - Task verification', {
-            rowId: rowData.id,
-            taskId: taskId,
-            taskExists: !!task,
-            taskType: task?.type,
-            toNodeId: id,
-            rowData: {
-                id: rowData.id,
-                text: rowData.text,
-                taskId: rowData.taskId,
-                instanceId: rowData.instanceId
-            }
-        });
+      const rowId = String(rowData.id || '').trim();
+      if (!rowId) {
+        return;
+      }
 
-        // Verifica che la riga non esista già
-        const existingRow = nodeRows.find(row => row.id === rowData.id);
-        if (!existingRow) {
-          // Calcola la posizione di inserimento basata sul mouse
-          const elements = Array.from(rowsContainerRef.current?.querySelectorAll('.node-row-outer') || []) as HTMLElement[];
-          const rects = elements.map((el) => ({
-            idx: Number(el.dataset.index),
-            top: el.getBoundingClientRect().top,
-            height: el.getBoundingClientRect().height
-          }));
+      if (nodeRows.some((row) => row.id === rowId)) {
+        return;
+      }
 
-          let targetIndex = nodeRows.length; // Default: alla fine
-          if (mousePosition) {
-            for (const r of rects) {
-              if (mousePosition.y < r.top + r.height / 2) {
-                targetIndex = r.idx;
-                break;
-              }
-              targetIndex = r.idx + 1;
-            }
+      let targetIndex = nodeRows.length;
+      const domIdx = detail.targetRowInsertIndex;
+      if (typeof domIdx === 'number' && !Number.isNaN(domIdx)) {
+        targetIndex = Math.max(0, Math.min(Math.floor(domIdx), nodeRows.length));
+      } else if (mousePosition && rowsContainerRef.current) {
+        const elements = Array.from(
+          rowsContainerRef.current.querySelectorAll('.node-row-outer')
+        ) as HTMLElement[];
+        const rects = elements.map((el) => ({
+          idx: Number(el.dataset.index),
+          top: el.getBoundingClientRect().top,
+          height: el.getBoundingClientRect().height,
+        }));
+
+        targetIndex = nodeRows.length;
+        for (const r of rects) {
+          if (mousePosition.y < r.top + r.height / 2) {
+            targetIndex = r.idx;
+            break;
           }
-
-          // Insert at correct position
-          const updatedRows = [...nodeRows];
-          updatedRows.splice(targetIndex, 0, rowData);
-          setNodeRows(updatedRows);
-
-          // Update via context or fallback
-          if (flowActions?.updateNode) {
-            flowActions.updateNode(id, { rows: updatedRows });
-          } else if (data.onUpdate) {
-            data.onUpdate({ rows: updatedRows });
-          }
-
-          // Highlight row immediately after drop
-          // Usa requestAnimationFrame per essere il più veloce possibile
-          requestAnimationFrame(() => {
-            const rowComponent = getRowComponent(rowData.id);
-            if (rowComponent) {
-              rowComponent.highlight();
-            } else {
-              // Fallback: se il componente non è ancora renderizzato, riprova dopo un frame
-              requestAnimationFrame(() => {
-                const rowComponentRetry = getRowComponent(rowData.id);
-                if (rowComponentRetry) {
-                  rowComponentRetry.highlight();
-                }
-              });
-            }
-          });
-        } else {
-          // Row already exists, skipping
+          targetIndex = r.idx + 1;
         }
       }
+
+      const storeHandled = Boolean(detail._state?.handled);
+      const skipOptimisticMerge =
+        FLOW_GRAPH_MIGRATION.DISABLE_OPTIMISTIC_CROSS_NODE_MERGE && storeHandled;
+
+      if (skipOptimisticMerge) {
+        warnLocalGraphMutation('CustomNode:crossNodeRowMove skipped optimistic merge (flag)', {
+          targetNodeId: id,
+          rowId,
+          storeHandled,
+        });
+      } else {
+        const updatedRows = [...nodeRows];
+        updatedRows.splice(targetIndex, 0, rowData);
+        setNodeRows(updatedRows, { notifyParent: !storeHandled });
+      }
+
+      requestAnimationFrame(() => {
+        const rowComponent = getRowComponent(rowId);
+        if (rowComponent) {
+          rowComponent.highlight();
+        } else {
+          requestAnimationFrame(() => {
+            const rowComponentRetry = getRowComponent(rowId);
+            if (rowComponentRetry) {
+              rowComponentRetry.highlight();
+            }
+          });
+        }
+      });
     };
 
     window.addEventListener('crossNodeRowMove', handleCrossNodeMove as EventListener);
     return () => {
       window.removeEventListener('crossNodeRowMove', handleCrossNodeMove as EventListener);
     };
-  }, [id, nodeRows, setNodeRows, data, rowsContainerRef, getRowComponent]);
+  }, [id, nodeRows, setNodeRows, rowsContainerRef, getRowComponent]);
 
   // Ref per il wrapper esterno (per calcolare posizione toolbar)
   const wrapperRef = useRef<HTMLDivElement>(null);

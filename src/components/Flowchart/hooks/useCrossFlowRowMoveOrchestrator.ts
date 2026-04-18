@@ -23,7 +23,10 @@ import {
 } from '@domain/structural/StructuralOrchestrator';
 import { newCommandId } from '@domain/structural/commands';
 import { resolveStructuralProjectId } from '@domain/structural/resolveStructuralProjectId';
+import { scheduleCommittedFlowNodeRowsSync } from '@utils/committedFlowSliceNodeRows';
+import { FLOW_GRAPH_MIGRATION } from '@domain/flowGraph/flowGraphMigrationConfig';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { dropTargetsSubflowPortalRow } from '@components/Flowchart/utils/crossNodeRowDropHitTest';
 
 type CrossNodeDetail = {
   fromNodeId?: string;
@@ -33,8 +36,22 @@ type CrossNodeDetail = {
   toFlowId?: string;
   fromFlowCanvasId?: string;
   toFlowCanvasId?: string;
+  /** Drop position in target node's rows (from DOM hit-test); omit = append. */
+  targetRowInsertIndex?: number;
+  /**
+   * From {@link resolveCrossNodeDropHitTest}: row under pointer, region (portal vs normal row vs chrome).
+   * Portal drops defer to {@link useCrossNodeSubflowPortalMove}; other hits use structural move on parent.
+   */
+  targetRowId?: string | null;
+  targetRegion?: 'portal' | 'row' | 'node';
   _state?: { handled: boolean };
 };
+
+function parseTargetRowInsertIndex(d: CrossNodeDetail): number | undefined {
+  const v = d.targetRowInsertIndex;
+  if (typeof v !== 'number' || Number.isNaN(v)) return undefined;
+  return Math.floor(v);
+}
 
 export function useCrossFlowRowMoveOrchestrator(params: {
   projectId?: string | undefined;
@@ -44,13 +61,17 @@ export function useCrossFlowRowMoveOrchestrator(params: {
   useEffect(() => {
     const handler = (e: Event) => {
       const ev = e as CustomEvent<CrossNodeDetail>;
-      const d = ev.detail;
+      const d = ev.detail as CrossNodeDetail;
       if (!d?._state || d._state.handled) return;
 
       const fromNode = String(d.fromNodeId || '').trim();
       const toNode = String(d.toNodeId || '').trim();
       const rowId = String(d.rowData?.id || '').trim();
       if (!fromNode || !toNode || !rowId) return;
+
+      if (import.meta.env.DEV) {
+        console.log('DnD target:', { targetRegion: d.targetRegion, targetRowId: d.targetRowId });
+      }
 
       const flows = getSubflowSyncFlows();
       const fromHint =
@@ -72,13 +93,25 @@ export function useCrossFlowRowMoveOrchestrator(params: {
       logTaskSubflowMove('crossFlow:detected', { fromFlowId: fromHint, toFlowId: toHint });
       logTaskSubflowMove('crossFlow:normalized', { fromFlowId: fromResolved, toFlowId: toResolved });
 
-      /** Same flow: cross-node row move must use structural graph mutation (not only CustomNode merge). */
+      /** Same flow: cross-node row move uses structural graph mutation unless the drop targets the portal row. */
       if (fromResolved === toResolved) {
         if (fromNode === toNode) return;
         const flowSlice = flows[fromResolved];
-        const targetRfNode = flowSlice?.nodes?.find((n: { id?: string }) => String(n?.id || '').trim() === toNode);
-        if (targetRfNode && findFirstSubflowPortalInNode(targetRfNode as { data?: { rows?: unknown[] } })) {
-          logTaskSubflowMove('orchestrator:sameFlowSkipForSubflowPortal', { toNodeId: toNode });
+        const targetRfNode = flowSlice?.nodes?.find(
+          (n: { id?: string }) => String(n?.id || '').trim() === toNode
+        );
+        const portalOnTarget = targetRfNode
+          ? findFirstSubflowPortalInNode(targetRfNode as { data?: { rows?: unknown[] } })
+          : null;
+        if (
+          portalOnTarget &&
+          dropTargetsSubflowPortalRow({
+            targetRegion: d.targetRegion,
+            targetRowId: d.targetRowId,
+            portalTaskRowId: portalOnTarget.subflowTaskRowId,
+          })
+        ) {
+          logTaskSubflowMove('orchestrator:sameFlowDeferToPortalHandler', { toNodeId: toNode });
           return;
         }
       }
@@ -96,6 +129,7 @@ export function useCrossFlowRowMoveOrchestrator(params: {
           projectData: projectData !== undefined ? projectData : base.projectData,
         };
 
+        const insertIdx = parseTargetRowInsertIndex(d);
         const out = runStructuralCommandSync(ctx, {
           type: 'moveTaskRow',
           commandId: newCommandId(),
@@ -105,10 +139,14 @@ export function useCrossFlowRowMoveOrchestrator(params: {
           toFlowId: toResolved,
           fromNodeId: fromNode,
           toNodeId: toNode,
+          ...(insertIdx !== undefined ? { targetRowInsertIndex: insertIdx } : {}),
         }) as ApplyTaskMoveToSubflowResult | void;
 
         if (out?.flowStoreCommitOk === true) {
           d._state.handled = true;
+          if (out.flowsNext && !FLOW_GRAPH_MIGRATION.DISABLE_SCHEDULE_COMMITTED_FLOW_NODE_ROWS_SYNC) {
+            scheduleCommittedFlowNodeRowsSync(out.flowsNext, fromResolved, rowId);
+          }
           logTaskSubflowMove('orchestrator:sameFlowCrossNodeHandled', {
             rowId,
             flowId: fromResolved,
@@ -137,6 +175,7 @@ export function useCrossFlowRowMoveOrchestrator(params: {
         projectData: projectData !== undefined ? projectData : base.projectData,
       };
 
+      const insertIdx = parseTargetRowInsertIndex(d);
       const out = runStructuralCommandSync(ctx, {
         type: 'moveTaskRow',
         commandId: newCommandId(),
@@ -146,10 +185,14 @@ export function useCrossFlowRowMoveOrchestrator(params: {
         toFlowId: toResolved,
         fromNodeId: fromNode,
         toNodeId: toNode,
+        ...(insertIdx !== undefined ? { targetRowInsertIndex: insertIdx } : {}),
       }) as ApplyTaskMoveToSubflowResult | void;
 
       if (out?.flowStoreCommitOk === true) {
         d._state.handled = true;
+        if (out.flowsNext && !FLOW_GRAPH_MIGRATION.DISABLE_SCHEDULE_COMMITTED_FLOW_NODE_ROWS_SYNC) {
+          scheduleCommittedFlowNodeRowsSync(out.flowsNext, toResolved, rowId);
+        }
         logTaskSubflowMove('orchestrator:crossFlowRowMoveHandled', {
           rowId,
           fromFlowId: fromResolved,
