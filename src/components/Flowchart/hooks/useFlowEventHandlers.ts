@@ -5,6 +5,7 @@ import type { Edge } from 'reactflow';
 import { dlog } from '@utils/debug';
 import { FlowStateBridge } from '../../../services/FlowStateBridge';
 import { getFlowFocusManager } from '@features/focus';
+import { getDescendantNodeIds, translateNodes } from '../../../flow/utils/graphTransforms';
 
 /**
  * Hook for managing Flow Editor event handlers
@@ -28,16 +29,13 @@ export function useFlowEventHandlers(
   selectedNodeIds: string[],
   onOpenTaskFlow?: (flowId: string, title: string) => void
 ) {
-  // Rigid drag context for dragging nodes with descendants
+  // Rigid drag context: translateIds = nodes that receive incremental translation (never the dragged root)
   const rigidDragCtxRef = useRef<null | {
     rootId: string;
-    ids: Set<string>;
-    startPositions: Map<string, { x: number; y: number }>;
-    rootStart: { x: number; y: number };
+    translateIds: Set<string>;
     rootLast: { x: number; y: number };
   }>(null);
 
-  // Helper functions for rigid drag logic
   const applyRigidDragMovement = useCallback((ctx: any, draggedNode: Node, setNodes: any) => {
     if (draggedNode.id !== ctx.rootId) return;
     const curX = (draggedNode.position as any).x;
@@ -46,12 +44,10 @@ export function useFlowEventHandlers(
     const incDy = curY - ctx.rootLast.y;
     if (incDx === 0 && incDy === 0) return;
 
-    setNodes((nds: Node<FlowNode>[]) => nds.map(n => {
-      if (!ctx.ids.has(n.id)) return n;
-      if (n.id === draggedNode.id) return draggedNode;
-      const pos = n.position as any;
-      return { ...n, position: { x: pos.x + incDx, y: pos.y + incDy } } as any;
-    }));
+    setNodes((nds: Node<FlowNode>[]) => {
+      const moved = translateNodes(nds, ctx.translateIds, incDx, incDy);
+      return moved.map((n) => (n.id === draggedNode.id ? (draggedNode as any) : n)) as Node<FlowNode>[];
+    });
 
     ctx.rootLast = { x: curX, y: curY };
   }, []);
@@ -62,12 +58,9 @@ export function useFlowEventHandlers(
       const finalDx = (rootNow.position as any).x - ctx.rootLast.x;
       const finalDy = (rootNow.position as any).y - ctx.rootLast.y;
       if (finalDx !== 0 || finalDy !== 0) {
-        setNodes((nds: Node<FlowNode>[]) => nds.map(n => {
-          if (!ctx.ids.has(n.id)) return n;
-          if (n.id === ctx.rootId) return n;
-          const pos = n.position as any;
-          return { ...n, position: { x: pos.x + finalDx, y: pos.y + finalDy } } as any;
-        }));
+        setNodes((nds: Node<FlowNode>[]) =>
+          translateNodes(nds, ctx.translateIds, finalDx, finalDy) as Node<FlowNode>[]
+        );
       }
     }
   }, []);
@@ -176,17 +169,11 @@ export function useFlowEventHandlers(
     // If dragging a node inside a multi-selection, move the whole selection rigidly.
     // This is the primary behavior for group manipulation.
     if (canDragSelectedGroup) {
-      const startPositions = new Map<string, { x: number; y: number }>();
-      nodes.forEach(n => {
-        if (selectedSet.has(n.id)) {
-          startPositions.set(n.id, { x: (n.position as any).x, y: (n.position as any).y });
-        }
-      });
+      const translateIds = new Set(selectedSet);
+      translateIds.delete(node.id);
       rigidDragCtxRef.current = {
         rootId: node.id,
-        ids: selectedSet,
-        startPositions,
-        rootStart: { x: (node.position as any).x, y: (node.position as any).y },
+        translateIds,
         rootLast: { x: (node.position as any).x, y: (node.position as any).y },
       };
       return;
@@ -195,29 +182,9 @@ export function useFlowEventHandlers(
     // Fallback: rigid drag from anchor keeps existing descendants behavior.
     if (FlowStateBridge.isRigidDrag() || isAnchor) {
       const rootId = node.id;
-      // BFS su edges per raccogliere tutti i discendenti
-      const visited = new Set<string>();
-      const q: string[] = [rootId];
-      visited.add(rootId);
-      while (q.length) {
-        const cur = q.shift() as string;
-        edges.forEach(e => {
-          if (e.source === cur && !visited.has(e.target)) {
-            visited.add(e.target);
-            q.push(e.target);
-          }
-        });
-      }
-      // Mappa posizioni iniziali
-      const startPositions = new Map<string, { x: number; y: number }>();
-      nodes.forEach(n => {
-        if (visited.has(n.id)) startPositions.set(n.id, { x: (n.position as any).x, y: (n.position as any).y });
-      });
       rigidDragCtxRef.current = {
         rootId,
-        ids: visited,
-        startPositions,
-        rootStart: { x: (node.position as any).x, y: (node.position as any).y },
+        translateIds: getDescendantNodeIds(rootId, edges),
         rootLast: { x: (node.position as any).x, y: (node.position as any).y },
       };
     } else {

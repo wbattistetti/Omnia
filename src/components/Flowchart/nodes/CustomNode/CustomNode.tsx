@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { NodeProps, useReactFlow, NodeToolbar, Position } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
 import { NodeDragHeader } from '../shared/NodeDragHeader';
@@ -29,6 +30,7 @@ import { ProjectDataService } from '../../../../services/ProjectDataService';
 import { generateId } from '../../../../utils/idGenerator';
 import { TaskType, type SemanticValue } from '../../../../types/taskTypes';
 import { LinkStyle, type EdgeData } from '../../types/flowTypes';
+import { getDescendantNodeIds, translateNodes } from '../../../../flow/utils/graphTransforms';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { useFlowCanvasId } from '../../context/FlowCanvasContext';
 
@@ -78,9 +80,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [nodeWidth, setNodeWidth] = useState<number | null>(null);
   const nodeWidthRef = useRef<number | null>(null);
 
-  // ✅ MEASURE NODE HEIGHT: Track node height to adjust descendants when rows change
+  // ✅ MEASURE NODE HEIGHT: baseline for first paint (toolbar / layout)
   const nodeHeightRef = useRef<number | null>(null);
-  const previousRowsCountRef = useRef<number>(0);
+  /** Last width×height used to shift descendants when this node resizes (ResizeObserver). */
+  const descendantShiftBaselineRef = useRef<{ width: number; height: number } | null>(null);
 
   // ✅ ROW MANAGEMENT: Manage all row operations
   const rowManagement = useNodeRowManagement({ nodeId: id, normalizedData, displayRows });
@@ -95,13 +98,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   const editingRowIdRef = useRef(editingRowId);
   editingRowIdRef.current = editingRowId;
-
-  // ✅ Initialize previousRowsCountRef after nodeRows is available (safety net if nodeHeightRef initialization doesn't run)
-  useEffect(() => {
-    if (nodeHeightRef.current === null && previousRowsCountRef.current === 0) {
-      previousRowsCountRef.current = nodeRows.length;
-    }
-  }, [nodeRows.length]);
 
   // ✅ INTELLISENSE: Manage intellisense functionality
   const intellisense = useNodeIntellisense({
@@ -124,77 +120,76 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // ✅ CORREZIONE 6: Ref per il container del nodo (dichiarato prima dell'uso)
   const nodeContainerRef = useRef<HTMLDivElement>(null);
 
-  // ✅ NODE DRAG: Hook per accedere a React Flow per aggiornare posizione nodo (deve essere prima di findAllDescendants)
+  // ✅ NODE DRAG: Hook per accedere a React Flow per aggiornare posizione nodo
   const { getNode, setNodes, setEdges, getViewport, getEdges, updateNodeInternals } = useReactFlow();
 
-  // ✅ Funzione per trovare tutti i discendenti di un nodo (ricorsivo) - deve essere prima del useEffect che la usa
-  const findAllDescendants = useCallback((nodeId: string, visited: Set<string> = new Set()): string[] => {
-    if (visited.has(nodeId)) return []; // Evita cicli
-    visited.add(nodeId);
+  /** Fresh id/edges for ResizeObserver (avoid stale closure vs graph updates). */
+  const descendantShiftNodeIdRef = useRef(id);
+  descendantShiftNodeIdRef.current = id;
+  const getEdgesForDescendantShiftRef = useRef(getEdges);
+  getEdgesForDescendantShiftRef.current = getEdges;
 
-    const edges = getEdges();
-    const descendants: string[] = [];
+  /**
+   * When this node's DOM size changes, translate descendants by (Δw/2, Δh) so edges stay aligned
+   * under the parent's horizontal center and bottom growth. Root position is unchanged.
+   * Uses flushSync so child positions commit before the next paint (reduces flicker).
+   */
+  const applyDescendantShiftIfSizeChanged = useCallback(() => {
+    const el = nodeContainerRef.current;
+    if (!el) return;
 
-    // Trova tutti i nodi raggiungibili da questo nodo
-    edges.forEach(edge => {
-      if (edge.source === nodeId) {
-        const targetId = edge.target;
-        if (!visited.has(targetId)) {
-          descendants.push(targetId);
-          // Ricorsivamente trova i discendenti del target
-          const nestedDescendants = findAllDescendants(targetId, visited);
-          descendants.push(...nestedDescendants);
-        }
-      }
+    const rect = el.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    const baseline = descendantShiftBaselineRef.current;
+
+    if (baseline === null) {
+      descendantShiftBaselineRef.current = { width: w, height: h };
+      return;
+    }
+
+    const widthDelta = w - baseline.width;
+    const heightDelta = h - baseline.height;
+
+    if (Math.abs(widthDelta) <= 1 && Math.abs(heightDelta) <= 1) {
+      descendantShiftBaselineRef.current = { width: w, height: h };
+      return;
+    }
+
+    const ids = getDescendantNodeIds(
+      descendantShiftNodeIdRef.current,
+      getEdgesForDescendantShiftRef.current()
+    );
+
+    if (ids.size === 0) {
+      descendantShiftBaselineRef.current = { width: w, height: h };
+      return;
+    }
+
+    const dx = widthDelta / 2;
+    const dy = heightDelta;
+
+    flushSync(() => {
+      setNodes((nds) => translateNodes(nds, ids, dx, dy));
     });
 
-    return descendants;
-  }, [getEdges]);
+    descendantShiftBaselineRef.current = { width: w, height: h };
+  }, [setNodes]);
 
-  // ✅ Effect per spostare i discendenti quando cambia l'altezza del nodo
-  useEffect(() => {
-    // Aspetta che il DOM sia aggiornato
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (!nodeContainerRef.current) return;
+  // ✅ ResizeObserver: sync callback (no rAF) + layout effect so updates align with paint
+  useLayoutEffect(() => {
+    const el = nodeContainerRef.current;
+    if (!el) return;
 
-        const currentHeight = nodeContainerRef.current.getBoundingClientRect().height;
-        const previousHeight = nodeHeightRef.current;
-        const previousRowsCount = previousRowsCountRef.current;
-        const currentRowsCount = nodeRows.length;
-
-        // ✅ Solo se il numero di righe è cambiato (non durante editing)
-        if (previousRowsCount !== currentRowsCount && previousHeight !== null) {
-          const heightDelta = currentHeight - previousHeight;
-
-          // ✅ Se l'altezza è cambiata, sposta i discendenti rigidamente
-          if (Math.abs(heightDelta) > 1) { // Tolleranza di 1px per evitare micro-movimenti
-            const descendants = findAllDescendants(id);
-
-            if (descendants.length > 0) {
-              // Sposta tutti i discendenti della stessa quantità
-              setNodes((nds) => nds.map((n) => {
-                if (descendants.includes(n.id)) {
-                  return {
-                    ...n,
-                    position: {
-                      x: n.position.x,
-                      y: n.position.y + heightDelta
-                    }
-                  };
-                }
-                return n;
-              }));
-            }
-          }
-        }
-
-        // ✅ Aggiorna l'altezza e il conteggio delle righe
-        nodeHeightRef.current = currentHeight;
-        previousRowsCountRef.current = currentRowsCount;
-      });
+    const ro = new ResizeObserver(() => {
+      applyDescendantShiftIfSizeChanged();
     });
-  }, [nodeRows.length, id, findAllDescendants, setNodes]);
+    ro.observe(el, { box: 'border-box' });
+    applyDescendantShiftIfSizeChanged();
+    return () => {
+      ro.disconnect();
+    };
+  }, [applyDescendantShiftIfSizeChanged]);
 
   // ✅ Handler per aggiornare la larghezza del nodo (Regola 2: SOLO quando aumenta)
   const handleRowWidthChange = useCallback((width: number) => {
@@ -278,7 +273,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             nodeWidthRef.current = width;
             if (nodeHeightRef.current === null) {
               nodeHeightRef.current = height;
-              previousRowsCountRef.current = nodeRows.length;
             }
           });
         });
@@ -343,8 +337,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     nodeStartX: number;
     nodeStartY: number;
     isActive: boolean;
-    // ✅ Salva le posizioni relative dei discendenti per drag rigido
-    descendantOffsets?: Map<string, { offsetX: number; offsetY: number }>;
   } | null>(null);
 
   // ✅ NODE DRAG: Cleanup listener quando il componente viene smontato
@@ -1049,32 +1041,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               const nodeRect = nodeEl.getBoundingClientRect();
               const viewport = getViewport();
 
-              // Check if this is a rigid drag (anchor) or normal (move)
               const isRigidDrag = FlowStateBridge.isRigidDrag();
-
-              // ✅ Se è drag rigido, calcola le posizioni relative dei discendenti
-              let descendantOffsets: Map<string, { offsetX: number; offsetY: number }> | undefined;
-              if (isRigidDrag) {
-                const descendants = findAllDescendants(id);
-                descendantOffsets = new Map();
-
-                descendants.forEach(descendantId => {
-                  const descNode = getNode(descendantId);
-                  if (descNode) {
-                    descendantOffsets!.set(descendantId, {
-                      offsetX: descNode.position.x - currentNode.position.x,
-                      offsetY: descNode.position.y - currentNode.position.y
-                    });
-                  }
-                });
-
-                console.log('🔗 [RIGID_DRAG] Trovati discendenti', {
-                  nodeId: id,
-                  descendantsCount: descendants.length,
-                  descendantIds: descendants,
-                  timestamp: Date.now()
-                });
-              }
+              const rigidDescendantIds = isRigidDrag ? getDescendantNodeIds(id, getEdges()) : null;
+              let lastRootPos = { x: currentNode.position.x, y: currentNode.position.y };
 
               nodeDragStateRef.current = {
                 startX: nodeRect.left,
@@ -1082,7 +1051,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 nodeStartX: currentNode.position.x,
                 nodeStartY: currentNode.position.y,
                 isActive: true,
-                descendantOffsets
               };
 
               // Set flag and state
@@ -1111,37 +1079,25 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 const flowDeltaX = deltaX / viewport.zoom;
                 const flowDeltaY = deltaY / viewport.zoom;
 
-                // Aggiorna posizione del nodo
                 const newPosition = {
                   x: nodeDragStateRef.current.nodeStartX + flowDeltaX,
                   y: nodeDragStateRef.current.nodeStartY + flowDeltaY
                 };
 
-                // If rigid drag, also move all descendants maintaining relative positions
-                const isRigidDrag = FlowStateBridge.isRigidDrag();
-                if (isRigidDrag && nodeDragStateRef.current.descendantOffsets) {
-                  setNodes((nds) => nds.map((n) => {
-                    if (n.id === id) {
-                      return { ...n, position: newPosition };
-                    }
-                    // ✅ Sposta i discendenti mantenendo l'offset relativo
-                    const offset = nodeDragStateRef.current.descendantOffsets!.get(n.id);
-                    if (offset) {
-                      return {
-                        ...n,
-                        position: {
-                          x: newPosition.x + offset.offsetX,
-                          y: newPosition.y + offset.offsetY
-                        }
-                      };
-                    }
-                    return n;
-                  }));
+                const isRigidMove = FlowStateBridge.isRigidDrag();
+                const incDx = newPosition.x - lastRootPos.x;
+                const incDy = newPosition.y - lastRootPos.y;
+                lastRootPos = { x: newPosition.x, y: newPosition.y };
+
+                if (isRigidMove && rigidDescendantIds && rigidDescendantIds.size > 0 && (incDx !== 0 || incDy !== 0)) {
+                  setNodes((nds) => {
+                    const moved = translateNodes(nds, rigidDescendantIds, incDx, incDy);
+                    return moved.map((n) => (n.id === id ? { ...n, position: newPosition } : n));
+                  });
                 } else {
-                  // ✅ Drag normale: sposta solo il nodo
-                  setNodes((nds) => nds.map((n) =>
-                    n.id === id ? { ...n, position: newPosition } : n
-                  ));
+                  setNodes((nds) =>
+                    nds.map((n) => (n.id === id ? { ...n, position: newPosition } : n))
+                  );
                 }
 
                 // ✅ NodeToolbar si aggiorna automaticamente durante il drag
