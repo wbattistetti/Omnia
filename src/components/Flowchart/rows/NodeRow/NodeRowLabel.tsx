@@ -464,7 +464,10 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           onLabelDragStart(e);
         }
       }}
-      onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onDragStart={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
       onMouseEnter={() => onLabelHoverChange && onLabelHoverChange(true)}
       onMouseLeave={() => onLabelHoverChange && onLabelHoverChange(false)}
     >

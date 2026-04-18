@@ -106,7 +106,6 @@ export default function TaskEditorHost({
   );
 
   // ✅ ARCHITECTURE: Provide HeaderToolbarContext for editors that need to inject header content
-  // Note: This is only for editors opened via TaskEditorHost (not ResponseEditorLayout which already has the provider)
   return (
     <HeaderToolbarProvider>
       {editorContent}

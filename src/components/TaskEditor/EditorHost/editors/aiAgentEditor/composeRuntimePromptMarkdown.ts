@@ -1,7 +1,9 @@
 /**
- * Assembles the read-only runtime agent prompt (Markdown) from structured section texts.
+ * Assembles the read-only composed agent prompt (IR Markdown) from structured section texts.
+ * Delegates to domain {@link composeOmniaIrMarkdown} so order/headings stay aligned with compilation.
  */
 
+import { buildAgentStructuredSections, composeOmniaIrMarkdown } from '@domain/agentPrompt';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import {
   AGENT_STRUCTURED_SECTION_IDS,
@@ -9,29 +11,25 @@ import {
   AGENT_STRUCTURED_SECTION_PROMPT_HEADINGS,
 } from './agentStructuredSectionIds';
 
-const SECTION_ORDER_FOR_PROMPT: AgentStructuredSectionId[] = [
-  'goal',
-  'operational_sequence',
-  'context',
-  'constraints',
-  'personality',
-  'tone',
-];
-
 /**
- * Builds Markdown with ### headers per section. Omits Context when empty (whitespace).
+ * Builds Markdown with ### headers per section. Omits empty Context and Examples (whitespace-only).
  */
 export function composeRuntimePromptMarkdown(
   effectiveBySection: Record<AgentStructuredSectionId, string>
 ): string {
-  const chunks: string[] = [];
-  for (const id of SECTION_ORDER_FOR_PROMPT) {
-    const body = (effectiveBySection[id] ?? '').trim();
-    if (id === 'context' && !body) continue;
-    const title = AGENT_STRUCTURED_SECTION_PROMPT_HEADINGS[id];
-    chunks.push(`### ${title}\n\n${body.length > 0 ? body : '—'}`);
-  }
-  return chunks.join('\n\n').trim();
+  const ir = buildAgentStructuredSections(
+    {
+      goal: effectiveBySection.goal ?? '',
+      operational_sequence: effectiveBySection.operational_sequence ?? '',
+      context: effectiveBySection.context ?? '',
+      constraints: effectiveBySection.constraints ?? '',
+      personality: effectiveBySection.personality ?? '',
+      tone: effectiveBySection.tone ?? '',
+      examples: effectiveBySection.examples ?? '',
+    },
+    []
+  );
+  return composeOmniaIrMarkdown(ir);
 }
 
 /**

@@ -21,7 +21,7 @@ export type ToolbarButton = {
   // ✅ NEW: Support for select dropdown
   type?: 'button' | 'select';
   value?: string;
-  options?: Array<{ value: string; label: string }>;
+  options?: Array<{ value: string; label: string; disabled?: boolean }>;
   onChange?: (value: string) => void;
   // ✅ NEW: Support for dropdown items (existing)
   dropdownItems?: Array<{ label: string; onClick: () => void; icon?: React.ReactNode }>;

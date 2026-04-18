@@ -146,7 +146,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             return;
         }
 
-        const wasEmpty = !(prev[idx].text || '').trim();
         const nowFilled = (newText || '').trim().length > 0;
 
         let updatedRows = prev.map(row => {
@@ -189,39 +188,9 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             return updatedRow;
         });
 
-        const isLast = idx === prev.length - 1;
-
         // ✅ Se una riga nuova viene riempita, aggiorna originalContentRef per marcarla come "non nuova"
         if (nowFilled && originalContentRef.current?.rowId === rowId && originalContentRef.current.wasNew) {
             originalContentRef.current.wasNew = false;
-        }
-
-        // ✅ Logica migliorata: auto-append se stai editando l'ultima riga, era vuota e ora è piena
-        // Questo permette di continuare l'auto-append anche dopo la prima riga
-        // Non serve più verificare isEmpty perché vogliamo continuare finché editiamo l'ultima riga vuota
-        // Quando aggiungiamo una nuova riga vuota, quella diventa l'ultima, quindi l'auto-append continua
-        const shouldAutoAppend = isLast && wasEmpty && nowFilled;
-
-        if (shouldAutoAppend) {
-
-            // ✅ AVVIA GUARD PRIMA del batch (fondamentale!)
-            beginAutoAppendGuard();
-
-            const { nextRows, newRowId } = appendEmptyRow(updatedRows);
-            updatedRows = nextRows;
-            // ✅ Salva come "nuova" quando inizia l'editing della riga auto-appendata
-            saveOriginalContent(newRowId);
-            setEditingRowId(newRowId);
-
-            // ✅ Focus robusto dopo il render con requestAnimationFrame
-            requestAnimationFrame(() => {
-                const textareas = document.querySelectorAll('.node-row-input');
-                const newTextarea = textareas[textareas.length - 1] as HTMLTextAreaElement;
-                if (newTextarea) {
-                    newTextarea.focus();
-                    newTextarea.select();
-                }
-            });
         }
 
         setNodeRows(updatedRows);
@@ -237,7 +206,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         // ✅ LAZY: NON aggiorniamo/creiamo task qui - solo memorizziamo metadati nella riga
         // ✅ Il task verrà creato solo quando si apre l'editor (cliccando sul gear)
         // ✅ L'euristica 2 viene eseguita in NodeRow.tsx quando l'utente preme Enter
-    }, [nodeRows, isEmpty, nodeId, appendEmptyRow, normalizedData, saveOriginalContent]);
+    }, [nodeRows, normalizedData]);
 
     // Gestione eliminazione riga
     const handleDeleteRow = useCallback(async (rowId: string) => {
@@ -385,6 +354,34 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         [nodeRows, normalizedData, computeIsEmpty]
     );
 
+    /**
+     * Dopo commit (Enter o blur), se l'ultima riga ha testo non vuoto aggiunge una riga vuota finale.
+     * Non sposta il focus: evita il bug del primo carattere che appendeva e rubava il focus durante la digitazione.
+     */
+    const appendTrailingEmptyRowIfLastFilled = useCallback(
+        (editedRowId: string): boolean => {
+            const rows = nodeRowsRef.current;
+            const idx = rows.findIndex((r) => r.id === editedRowId);
+            if (idx === -1 || idx !== rows.length - 1) {
+                return false;
+            }
+            const text = (rows[idx].text || '').trim();
+            if (!text) {
+                return false;
+            }
+            beginAutoAppendGuard();
+            const { nextRows } = appendEmptyRow(rows);
+            setNodeRows(nextRows);
+            setIsEmpty(computeIsEmpty(nextRows));
+            normalizedData.onUpdate?.({
+                rows: nextRows,
+                isTemporary: normalizedData.isTemporary,
+            });
+            return true;
+        },
+        [appendEmptyRow, computeIsEmpty, normalizedData]
+    );
+
     // Gestione exit editing
     const handleExitEditing = useCallback((rowIdToCheck?: string | null) => {
         if (inAutoAppend()) {
@@ -429,17 +426,29 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 // Riga nuova con contenuto + blur = ENTER → CONFERMA
                 // La riga è già stata aggiornata da handleUpdateRow, quindi basta uscire
                 setEditingRowId(null);
-                setIsEmpty(computeIsEmpty(nodeRows));
                 originalContentRef.current = null;
+                const appended = appendTrailingEmptyRowIfLastFilled(rowIdToCheck);
+                if (!appended) {
+                    setIsEmpty(computeIsEmpty(nodeRows));
+                }
                 return;
             }
         }
 
         // Live label edits are committed on each keystroke (NodeRow → handleUpdateRow); no implicit rollback.
         setEditingRowId(null);
-        setIsEmpty(computeIsEmpty(nodeRows));
         originalContentRef.current = null;
-    }, [nodeRows, computeIsEmpty, inAutoAppend, handleDeleteRow, normalizedData]);
+        const appended = appendTrailingEmptyRowIfLastFilled(rowIdToCheck);
+        if (!appended) {
+            setIsEmpty(computeIsEmpty(nodeRows));
+        }
+    }, [
+        nodeRows,
+        computeIsEmpty,
+        inAutoAppend,
+        handleDeleteRow,
+        appendTrailingEmptyRowIfLastFilled,
+    ]);
 
     // ✅ Wrapper per setEditingRowId che salva il contenuto originale
     const setEditingRowIdWithOriginal = useCallback((rowId: string | null) => {

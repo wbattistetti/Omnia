@@ -1,26 +1,13 @@
 /**
- * Persists AI Agent compile/runtime `rules` mode (distilled compact vs rich Markdown) for dialogue debug.
- * Shared via localStorage so DialogueEngine compile matches the toolbar selection without prop drilling.
+ * Compile/runtime `rules` for AI Agent tasks: always distilled (`runtime_compact` join).
+ * Legacy UI toggled distilled vs rich; product policy now fixes distilled in code.
  */
 
-export type AiAgentRuntimeRulesVariant = 'distilled' | 'rich';
-
-const STORAGE_KEY = 'omnia.aiAgent.runtimeRulesVariant';
+export type AiAgentRuntimeRulesVariant = 'distilled';
 
 export function readAiAgentRuntimeRulesVariant(): AiAgentRuntimeRulesVariant {
-  try {
-    if (typeof localStorage === 'undefined') return 'distilled';
-    const v = localStorage.getItem(STORAGE_KEY);
-    return v === 'rich' ? 'rich' : 'distilled';
-  } catch {
-    return 'distilled';
-  }
+  return 'distilled';
 }
 
-export function writeAiAgentRuntimeRulesVariant(v: AiAgentRuntimeRulesVariant): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, v);
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
+/** @deprecated No-op: variant is no longer user-configurable. */
+export function writeAiAgentRuntimeRulesVariant(_v: AiAgentRuntimeRulesVariant): void {}

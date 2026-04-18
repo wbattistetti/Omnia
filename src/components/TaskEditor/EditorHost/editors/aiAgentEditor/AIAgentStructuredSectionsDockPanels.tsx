@@ -6,15 +6,15 @@ import React from 'react';
 import type { IDockviewPanelProps } from 'dockview';
 import { AIAgentRevisionEditorShell } from './AIAgentRevisionEditorShell';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
-import { AIAgentEditorDockContext } from './AIAgentEditorDockContext';
+import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useAgentStructuredDockSlice } from './useAgentStructuredDockSlice';
 import { parseAgentRuntimeCompactJson } from './composeRuntimeRulesFromCompact';
 import {
   buildAiAgentRuntimeExperimentPayload,
   buildDistilledRulesString,
-  buildRichRulesString,
   stringifyExperimentPayload,
 } from './aiAgentRuntimeExperimentJson';
+import { PlatformEditorView } from '@components/platform-editors';
 export function AgentSectionDockPanel(
   props: IDockviewPanelProps<{ sectionId?: AgentStructuredSectionId }>
 ) {
@@ -30,6 +30,7 @@ export function AgentSectionDockPanel(
     iaRevisionDiffBySection,
     onDismissIaRevisionForSection,
   } = useAgentStructuredDockSlice();
+  const editorCtx = useOptionalAIAgentEditorDock();
 
   const sectionId = props.params?.sectionId;
   if (!sectionId) {
@@ -67,6 +68,12 @@ export function AgentSectionDockPanel(
           }
           onUndoRequest={() => onUndoSection(sectionId)}
           onRedoRequest={() => onRedoSection(sectionId)}
+          onInsertBackendPathAtCaret={
+            readOnly || !editorCtx
+              ? undefined
+              : (path, rangeStart, rangeEnd) =>
+                  editorCtx.insertBackendPathAtSection(sectionId, path, rangeStart, rangeEnd)
+          }
         />
       </div>
     </div>
@@ -75,7 +82,7 @@ export function AgentSectionDockPanel(
 
 export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
   const { runtimeMarkdown } = useAgentStructuredDockSlice();
-  const editorCtx = React.useContext(AIAgentEditorDockContext);
+  const editorCtx = useOptionalAIAgentEditorDock();
 
   const parsedInitialState = React.useMemo(() => {
     const src = editorCtx?.initialStateTemplateJson;
@@ -117,18 +124,9 @@ export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
   }, [editorCtx, runtimeExamples]);
 
   const rulesForPreview = React.useMemo(() => {
-    const variant = editorCtx?.runtimeRulesVariant ?? 'distilled';
     const compactJson = editorCtx?.agentRuntimeCompactJson ?? '';
-    if (variant === 'rich') {
-      return buildRichRulesString(runtimeMarkdown, compactParsed);
-    }
     return buildDistilledRulesString(compactJson, runtimeMarkdown);
-  }, [
-    editorCtx?.runtimeRulesVariant,
-    editorCtx?.agentRuntimeCompactJson,
-    runtimeMarkdown,
-    compactParsed,
-  ]);
+  }, [editorCtx?.agentRuntimeCompactJson, runtimeMarkdown]);
 
   const condensedRuntimeJson = React.useMemo(
     () =>
@@ -143,7 +141,24 @@ export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
   );
 
   return (
-    <div className="h-full min-h-0 flex flex-col p-2 overflow-hidden bg-slate-950/80">
+    <div className="h-full min-h-0 flex flex-col p-2 overflow-hidden bg-slate-950/80 gap-2">
+      {editorCtx ? (
+        <div className="flex min-h-[200px] shrink-0 flex-col gap-2 space-y-1">
+          <div className="min-h-[160px] flex-1 overflow-hidden">
+            <PlatformEditorView output={editorCtx.compiledPlatformOutput} />
+          </div>
+          <details className="text-[10px] text-slate-500">
+            <summary className="cursor-pointer select-none text-slate-400">Prompt compilato (testo unico)</summary>
+            <textarea
+              readOnly
+              value={editorCtx.compiledPromptForTargetPlatform}
+              aria-label="Compiled prompt flattened"
+              className="mt-1 w-full min-h-[80px] rounded-md border border-slate-800 bg-[#070b10] p-2 font-mono text-[10px] text-slate-400"
+              spellCheck={false}
+            />
+          </details>
+        </div>
+      ) : null}
       <textarea
         readOnly
         value={condensedRuntimeJson}

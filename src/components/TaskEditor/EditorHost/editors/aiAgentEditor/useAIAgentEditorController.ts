@@ -42,6 +42,16 @@ import { buildRefineUserDescFromSections } from './composeRuntimePromptMarkdown'
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { AGENT_STRUCTURED_SECTION_IDS } from './agentStructuredSectionIds';
 import {
+  type AgentPromptPlatformId,
+  type BackendPlaceholderInstance,
+  type PlatformPromptOutput,
+  buildAgentStructuredSections,
+  compilePromptFromStructuredSections,
+  formatBackendDisplayToken,
+  formatPlatformPromptOutput,
+  normalizeAgentPromptPlatformId,
+} from '@domain/agentPrompt';
+import {
   parsePersistedStructuredSectionsJson,
   serializePersistedStructuredSections,
   persistedFromCleanSectionBases,
@@ -51,7 +61,12 @@ import { isStructuredSectionsOtEnabled } from './structuredOtFlag';
 import { useStructuredAgentSectionsRevision } from './useStructuredAgentSectionsRevision';
 import type { OtOp } from './otTypes';
 import type { IaSectionDiffPair } from './AIAgentStructuredSectionsPanel';
-import type { RevisionBatchOp } from './textRevisionLinear';
+import {
+  buildLinearDocument,
+  linearEditToBatchOps,
+  type RevisionBatchOp,
+} from './textRevisionLinear';
+import { diffToOps } from './otDiffToOps';
 import {
   logAiAgentDebug,
   logAiAgentPersistUseCases,
@@ -59,11 +74,6 @@ import {
   summarizeUseCasesForPersistLog,
 } from './aiAgentDebug';
 import { registerAiAgentProjectSaveFlush } from './aiAgentProjectSaveFlush';
-import {
-  readAiAgentRuntimeRulesVariant,
-  writeAiAgentRuntimeRulesVariant,
-  type AiAgentRuntimeRulesVariant,
-} from './aiAgentRuntimeRulesVariant';
 
 export interface UseAIAgentEditorControllerParams {
   instanceId: string | undefined;
@@ -98,15 +108,9 @@ export function useAIAgentEditorController({
   const [useCases, setUseCases] = React.useState<AIAgentUseCase[]>([]);
   const [useCaseComposerBusy, setUseCaseComposerBusy] = React.useState(false);
   const [useCaseComposerError, setUseCaseComposerError] = React.useState<string | null>(null);
-
-  const [runtimeRulesVariant, setRuntimeRulesVariantState] = React.useState<AiAgentRuntimeRulesVariant>(
-    () => readAiAgentRuntimeRulesVariant()
-  );
-
-  const setRuntimeRulesVariant = React.useCallback((v: AiAgentRuntimeRulesVariant) => {
-    setRuntimeRulesVariantState(v);
-    writeAiAgentRuntimeRulesVariant(v);
-  }, []);
+  const [backendPlaceholders, setBackendPlaceholders] = React.useState<BackendPlaceholderInstance[]>([]);
+  const [agentPromptTargetPlatform, setAgentPromptTargetPlatformState] =
+    React.useState<AgentPromptPlatformId>(() => normalizeAgentPromptPlatformId(undefined));
 
   /** True only after `loadFromRepository` has applied repo data for this mount / reload. */
   const [hydrated, setHydrated] = React.useState(false);
@@ -127,8 +131,33 @@ export function useAIAgentEditorController({
 
   const agentPrompt = structuredRev.composedRuntimeMarkdown;
   const agentStructuredSectionsJson = React.useMemo(
-    () => serializePersistedStructuredSections(revisionStateToPersisted(structuredRev.sectionsState)),
-    [structuredRev.sectionsState]
+    () =>
+      serializePersistedStructuredSections(revisionStateToPersisted(structuredRev.sectionsState), {
+        backendPlaceholders,
+      }),
+    [structuredRev.sectionsState, backendPlaceholders]
+  );
+
+  const compiledPlatformOutput = React.useMemo((): PlatformPromptOutput => {
+    const e = structuredRev.effectiveBySection;
+    const ir = buildAgentStructuredSections(
+      {
+        goal: e.goal ?? '',
+        operational_sequence: e.operational_sequence ?? '',
+        context: e.context ?? '',
+        constraints: e.constraints ?? '',
+        personality: e.personality ?? '',
+        tone: e.tone ?? '',
+        examples: e.examples ?? '',
+      },
+      backendPlaceholders
+    );
+    return compilePromptFromStructuredSections(ir, normalizeAgentPromptPlatformId(agentPromptTargetPlatform));
+  }, [structuredRev.effectiveBySection, backendPlaceholders, agentPromptTargetPlatform]);
+
+  const compiledPromptForTargetPlatform = React.useMemo(
+    () => formatPlatformPromptOutput(compiledPlatformOutput),
+    [compiledPlatformOutput]
   );
 
   const setDesignDescriptionUser = React.useCallback((v: React.SetStateAction<string>) => {
@@ -178,6 +207,68 @@ export function useAIAgentEditorController({
     setPreviewStyleIdState(id);
   }, []);
 
+  const setAgentPromptTargetPlatform = React.useCallback((v: AgentPromptPlatformId) => {
+    setDirty(true);
+    setAgentPromptTargetPlatformState(normalizeAgentPromptPlatformId(v));
+  }, []);
+
+  const insertBackendPathAtSection = React.useCallback(
+    (sectionId: AgentStructuredSectionId, path: string, rangeStart: number, rangeEnd?: number) => {
+      const trimmed = String(path ?? '').trim();
+      if (!trimmed) return;
+      const token = formatBackendDisplayToken(trimmed);
+      const id =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `bp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      setDirty(true);
+      const eff = structuredRev.effectiveBySection[sectionId] ?? '';
+      const s = Math.max(0, Math.min(Math.floor(rangeStart), eff.length));
+      const e =
+        rangeEnd === undefined ? s : Math.max(s, Math.min(Math.floor(rangeEnd), eff.length));
+      const nextEff = eff.slice(0, s) + token + eff.slice(e);
+
+      const slice = structuredRev.sectionsState[sectionId];
+
+      if (structuredOtEnabled && slice.storageMode === 'ot' && slice.ot) {
+        const ops = diffToOps(eff, nextEff);
+        if (ops.length > 0) structuredRev.applyOtCommit(sectionId, ops);
+      } else {
+        const prevDoc = buildLinearDocument(slice.promptBaseText, slice.deletedMask, slice.inserts);
+        const batchOps = linearEditToBatchOps(
+          prevDoc.linear,
+          nextEff,
+          prevDoc.meta,
+          slice.promptBaseText,
+          slice.deletedMask,
+          slice.inserts
+        );
+        if (batchOps.length > 0) structuredRev.applyRevisionOps(sectionId, batchOps);
+      }
+      setBackendPlaceholders((prev) => [...prev, { id, definitionId: trimmed }]);
+    },
+    [structuredRev, structuredOtEnabled]
+  );
+
+  const insertBackendPathInDesign = React.useCallback((path: string, rangeStart: number, rangeEnd?: number) => {
+    const trimmed = String(path ?? '').trim();
+    if (!trimmed) return;
+    const token = formatBackendDisplayToken(trimmed);
+    const id =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `bp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    setDirty(true);
+    setDesignDescription((prev) => {
+      const p = String(prev ?? '');
+      const s = Math.max(0, Math.min(Math.floor(rangeStart), p.length));
+      const e =
+        rangeEnd === undefined ? s : Math.max(s, Math.min(Math.floor(rangeEnd), p.length));
+      return p.slice(0, s) + token + p.slice(e);
+    });
+    setBackendPlaceholders((prev) => [...prev, { id, definitionId: trimmed }]);
+  }, []);
+
   const loadFromRepository = React.useCallback(() => {
     if (!instanceId) return;
     const raw = taskRepository.getTask(instanceId);
@@ -185,8 +276,12 @@ export function useAIAgentEditorController({
     const b = buildTaskSnapshotFromRaw(raw);
     setDesignDescription(b.agentDesignDescription);
     const parsed = parsePersistedStructuredSectionsJson(b.agentStructuredSectionsJson, b.agentPrompt);
-    loadFromPersisted(parsed);
-    committedStructuredJsonRef.current = serializePersistedStructuredSections(parsed);
+    loadFromPersisted(parsed.sections);
+    setBackendPlaceholders(parsed.backendPlaceholders);
+    committedStructuredJsonRef.current = serializePersistedStructuredSections(parsed.sections, {
+      backendPlaceholders: parsed.backendPlaceholders,
+    });
+    setAgentPromptTargetPlatformState(normalizeAgentPromptPlatformId(b.agentPromptTargetPlatform));
     setCommittedDesignDescription(b.agentDesignDescription);
     setOutputVariableMappings(b.outputVariableMappings);
     setProposedFields(
@@ -228,6 +323,7 @@ export function useAIAgentEditorController({
     const patch = buildAIAgentTaskPersistPatch({
       designDescription,
       agentPrompt,
+      agentPromptTargetPlatform: normalizeAgentPromptPlatformId(agentPromptTargetPlatform),
       agentStructuredSectionsJson,
       outputVariableMappings,
       proposedFields,
@@ -263,6 +359,7 @@ export function useAIAgentEditorController({
     projectId,
     designDescription,
     agentPrompt,
+    agentPromptTargetPlatform,
     agentStructuredSectionsJson,
     outputVariableMappings,
     proposedFields,
@@ -407,7 +504,9 @@ export function useAIAgentEditorController({
       const nextPersist = persistedFromCleanSectionBases(applied.sectionBases, {
         structuredOt: structuredOtEnabled,
       });
-      committedStructuredJsonRef.current = serializePersistedStructuredSections(nextPersist);
+      committedStructuredJsonRef.current = serializePersistedStructuredSections(nextPersist, {
+        backendPlaceholders,
+      });
       setPreviewByStyle(applied.previewByStyle);
       setInitialStateTemplateJson(applied.initialStateTemplateJson);
       setAgentRuntimeCompactJson(applied.agentRuntimeCompactJson);
@@ -432,7 +531,7 @@ export function useAIAgentEditorController({
     } finally {
       setGenerating(false);
     }
-  }, [hasAgentGeneration, designDescription, provider, model, structuredRev, structuredOtEnabled]);
+  }, [hasAgentGeneration, designDescription, provider, model, structuredRev, structuredOtEnabled, backendPlaceholders]);
 
   const updateProposedField = React.useCallback(
     (slotId: string, patch: Partial<AIAgentProposedVariable>) => {
@@ -594,7 +693,12 @@ export function useAIAgentEditorController({
     clearUseCaseComposerError,
     handleGenerateUseCaseBundle,
     handleRegenerateUseCase,
-    runtimeRulesVariant,
-    setRuntimeRulesVariant,
+    backendPlaceholders,
+    insertBackendPathAtSection,
+    insertBackendPathInDesign,
+    agentPromptTargetPlatform,
+    setAgentPromptTargetPlatform,
+    compiledPlatformOutput,
+    compiledPromptForTargetPlatform,
   };
 }

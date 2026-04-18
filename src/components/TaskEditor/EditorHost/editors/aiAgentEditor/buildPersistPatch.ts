@@ -9,6 +9,7 @@ import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 export interface AIAgentPersistState {
   designDescription: string;
   agentPrompt: string;
+  agentPromptTargetPlatform: string;
   /** Serialized `PersistedStructuredSections`. */
   agentStructuredSectionsJson: string;
   outputVariableMappings: Record<string, string>;
@@ -31,6 +32,7 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
   return {
     agentDesignDescription: state.designDescription,
     agentPrompt: state.agentPrompt,
+    agentPromptTargetPlatform: state.agentPromptTargetPlatform,
     agentStructuredSectionsJson: state.agentStructuredSectionsJson,
     outputVariableMappings: { ...state.outputVariableMappings },
     agentProposedFields: state.proposedFields,

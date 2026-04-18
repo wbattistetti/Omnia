@@ -5,6 +5,8 @@
 import React from 'react';
 import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { AIAgentRevisionEditorShell } from './AIAgentRevisionEditorShell';
+import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
+import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import type { InsertOp } from './effectiveFromRevisionMask';
 import type { RevisionBatchOp } from './textRevisionLinear';
 
@@ -24,6 +26,10 @@ export interface AIAgentUnifiedPromptFieldProps {
   deletedMask: readonly boolean[];
   inserts: readonly InsertOp[];
   onApplyRevisionOps: (ops: readonly RevisionBatchOp[]) => void;
+  /**
+   * Task description: right-click → insert `🗄️ path` at caret / selection (overrides optional dock context).
+   */
+  insertBackendPathInDesign?: (path: string, rangeStart: number, rangeEnd?: number) => void;
 }
 
 export function AIAgentUnifiedPromptField({
@@ -39,7 +45,26 @@ export function AIAgentUnifiedPromptField({
   deletedMask,
   inserts,
   onApplyRevisionOps,
+  insertBackendPathInDesign: insertBackendPathInDesignProp,
 }: AIAgentUnifiedPromptFieldProps) {
+  const dock = useOptionalAIAgentEditorDock();
+  const insertBackendPathInDesign = insertBackendPathInDesignProp ?? dock?.insertBackendPathInDesign;
+  const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
+
+  const onDesignInsert = React.useCallback(
+    (path: string, s: number, e: number) => {
+      insertBackendPathInDesign?.(path, s, e);
+    },
+    [insertBackendPathInDesign]
+  );
+
+  const { onContextMenu, backendPathMenu } = useBackendPathInsertMenu({
+    enabled: Boolean(insertBackendPathInDesign),
+    readOnly,
+    inputRef: descriptionRef,
+    onInsert: onDesignInsert,
+  });
+
   return (
     <section>
       {mode === 'description' ? (
@@ -66,17 +91,22 @@ export function AIAgentUnifiedPromptField({
           onDismissIaRevisionDiff={onDismissIaRevisionDiff}
         />
       ) : (
-        <textarea
-          className="w-full min-h-[200px] lg:min-h-[280px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
-          placeholder={AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER}
-          aria-label="Descrizione"
-          value={value}
-          onChange={(e) => {
-            onChange(e.target.value);
-          }}
-          readOnly={readOnly}
-          spellCheck
-        />
+        <>
+          <textarea
+            ref={descriptionRef}
+            className="w-full min-h-[200px] lg:min-h-[280px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
+            placeholder={AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER}
+            aria-label="Descrizione"
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+            }}
+            readOnly={readOnly}
+            spellCheck
+            onContextMenu={onContextMenu}
+          />
+          {backendPathMenu}
+        </>
       )}
     </section>
   );

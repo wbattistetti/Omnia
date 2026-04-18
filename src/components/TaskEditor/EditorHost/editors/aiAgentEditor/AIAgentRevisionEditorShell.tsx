@@ -2,7 +2,6 @@
  * IA read-only diff overlay + dual-layer textarea revision editor (base + insert/delete patch ops).
  */
 
-import React from 'react';
 import { AIAgentIaRevisionOverlay } from './AIAgentIaRevisionOverlay';
 import { TextDualLayerRevisionEditor } from './TextDualLayerRevisionEditor';
 import type { InsertOp } from './effectiveFromRevisionMask';
@@ -24,6 +23,8 @@ export interface AIAgentRevisionEditorShellProps {
   onApplyOtCommit?: (ops: readonly OtOp[]) => void;
   onUndoRequest?: () => void;
   onRedoRequest?: () => void;
+  /** Right-click: insert BackendCall path token at caret / selection in section text. */
+  onInsertBackendPathAtCaret?: (backendPath: string, rangeStart: number, rangeEnd?: number) => void;
 }
 
 export function AIAgentRevisionEditorShell({
@@ -40,6 +41,7 @@ export function AIAgentRevisionEditorShell({
   onApplyOtCommit,
   onUndoRequest,
   onRedoRequest,
+  onInsertBackendPathAtCaret,
 }: AIAgentRevisionEditorShellProps) {
   const suffix = instanceId || 'default';
 
@@ -64,6 +66,7 @@ export function AIAgentRevisionEditorShell({
         onApplyOtCommit={onApplyOtCommit}
         onUndoRequest={onUndoRequest}
         onRedoRequest={onRedoRequest}
+        onInsertBackendPathAtCaret={onInsertBackendPathAtCaret}
       />
     </div>
   );

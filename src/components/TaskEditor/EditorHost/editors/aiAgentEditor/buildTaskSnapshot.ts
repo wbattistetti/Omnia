@@ -13,6 +13,7 @@ import { EMPTY_OUTPUT_MAPPINGS } from './constants';
 export interface AIAgentTaskSnapshot {
   agentDesignDescription: string;
   agentPrompt: string;
+  agentPromptTargetPlatform: string;
   /** JSON string: per-section revision snapshots (canonical base + mask + inserts). */
   agentStructuredSectionsJson: string;
   outputVariableMappings: Record<string, string>;
@@ -36,6 +37,7 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
   return {
     agentDesignDescription: String(r?.agentDesignDescription ?? ''),
     agentPrompt: String(r?.agentPrompt ?? ''),
+    agentPromptTargetPlatform: String(r?.agentPromptTargetPlatform ?? ''),
     agentStructuredSectionsJson: String(r?.agentStructuredSectionsJson ?? ''),
     outputVariableMappings:
       mappings && typeof mappings === 'object' && !Array.isArray(mappings)

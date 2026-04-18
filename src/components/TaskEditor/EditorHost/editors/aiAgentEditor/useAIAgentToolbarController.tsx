@@ -94,6 +94,7 @@ export function useAIAgentToolbarController({
   const headerContext = useHeaderToolbarContext();
   const setHeaderIcon = headerContext?.setIcon;
   const setHeaderTitle = headerContext?.setTitle;
+
   React.useEffect(() => {
     if (!setHeaderIcon || !setHeaderTitle) return;
     setHeaderIcon(<Bot size={18} style={{ color: headerColor }} />);

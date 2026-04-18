@@ -56,6 +56,7 @@ export interface GenerateDesignApplyResult {
 export function sectionTextsFromDesignPayload(
   design: AIAgentDesignPayload
 ): Record<AgentStructuredSectionId, string> {
+  const ex = typeof design.examples === 'string' ? design.examples.trim() : '';
   return {
     goal: design.goal.trim(),
     operational_sequence: formatOperationalSequenceNewlines(design.operational_sequence),
@@ -63,6 +64,7 @@ export function sectionTextsFromDesignPayload(
     constraints: design.constraints.trim(),
     personality: design.personality.trim(),
     tone: design.tone.trim(),
+    examples: ex,
   };
 }
 

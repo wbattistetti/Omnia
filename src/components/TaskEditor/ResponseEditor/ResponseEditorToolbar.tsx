@@ -8,7 +8,8 @@ import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { openLateralChatPanel } from '@components/AppContent/infrastructure/docking/DockingHelpers';
 import { scheduleDockLayoutRefresh } from '@utils/scheduleDockLayoutRefresh';
 import { isCanonicalTranslationKey, translationKeyFromStoredValue } from '@utils/translationKeys';
-import type { DockTabChat } from '@dock/types';
+import type { DockTabChat, ToolbarButton } from '@dock/types';
+import type { TaskTreeNode } from '@types/taskTypes';
 
 interface ResponseEditorToolbarProps {
   rightMode: RightPanelMode; // Per compatibilità
@@ -44,6 +45,7 @@ interface ResponseEditorToolbarProps {
   // ✅ NEW: View mode for Behaviour (tabs or tree)
   viewMode?: 'tabs' | 'tree';
   onViewModeChange?: (mode: 'tabs' | 'tree') => void;
+  selectedTaskTreeNode?: TaskTreeNode | null;
 }
 
 /**
@@ -83,6 +85,7 @@ export function useResponseEditorToolbar({
   // ✅ NEW: View mode for Behaviour
   viewMode: externalViewMode,
   onViewModeChange,
+  selectedTaskTreeNode: selectedTaskTreeNodeProp,
 }: ResponseEditorToolbarProps) {
   // ✅ View mode: usa esterno se fornito, altrimenti stato interno
   const [internalViewMode, setInternalViewMode] = React.useState<'tabs' | 'tree'>('tabs');
@@ -105,6 +108,7 @@ export function useResponseEditorToolbar({
   const taskTree = taskTreeProp || editorContext?.taskTree;
   const taskMeta = taskMetaProp || editorContext?.taskMeta;
   const currentProjectId = currentProjectIdProp || editorContext?.currentProjectId;
+  const selectedTaskTreeNode = selectedTaskTreeNodeProp ?? editorContext?.selectedTaskTreeNode;
 
   const projectLocale = React.useMemo(() => {
     // Extract locale from project or default to 'it-IT'

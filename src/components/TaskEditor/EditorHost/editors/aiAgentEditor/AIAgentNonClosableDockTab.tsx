@@ -5,9 +5,16 @@
 
 import React from 'react';
 import { DockviewDefaultTab, type IDockviewDefaultTabProps } from 'dockview';
+import {
+  AGENT_PROMPT_PLATFORM_SELECT_SEPARATOR_VALUE,
+  getAgentPromptPlatformSelectOptions,
+  normalizeAgentPromptPlatformId,
+} from '@domain/agentPrompt';
 import { getAiAgentDockTabPresentation } from './aiAgentDockTabIcons';
 import { isAiAgentDockPanelContentFilled } from './aiAgentDockTabFillState';
 import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
+
+const PROMPT_FINALE_PANEL_ID = 'prompt_finale';
 
 function usePanelTitle(api: IDockviewDefaultTabProps['api']): string {
   const [title, setTitle] = React.useState(api.title);
@@ -84,6 +91,8 @@ export function AIAgentNonClosableDockTab(props: IDockviewDefaultTabProps) {
   );
 
   if (presentation) {
+    const platformInTab = api.id === PROMPT_FINALE_PANEL_ID && dockCtx;
+
     return (
       <div
         data-testid="dockview-dv-default-tab"
@@ -92,11 +101,38 @@ export function AIAgentNonClosableDockTab(props: IDockviewDefaultTabProps) {
         onPointerDown={_onPointerDown}
         onPointerUp={_onPointerUp}
         onPointerLeave={_onPointerLeave}
-        className="dv-default-tab"
+        className={['dv-default-tab', presentation.tabContainerClassName].filter(Boolean).join(' ')}
       >
-        <span className="dv-default-tab-content inline-flex items-center gap-1.5 min-w-0 max-w-full">
+        <span className="dv-default-tab-content inline-flex items-center gap-1 min-w-0 max-w-full flex-wrap">
           {presentation.icon}
-          <span className={`truncate ${presentation.titleClassName}`}>{title}</span>
+          {platformInTab ? (
+            <>
+              <span className={`shrink-0 whitespace-nowrap text-[11px] leading-none ${presentation.titleClassName}`}>
+                Prompt per
+              </span>
+              <select
+                value={normalizeAgentPromptPlatformId(dockCtx.agentPromptTargetPlatform)}
+                title={presentation.nativeTitle}
+                aria-label="Piattaforma destinazione prompt"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === AGENT_PROMPT_PLATFORM_SELECT_SEPARATOR_VALUE) return;
+                  dockCtx.setAgentPromptTargetPlatform(normalizeAgentPromptPlatformId(v));
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="max-w-[min(200px,42vw)] shrink rounded border border-emerald-600/50 bg-slate-900/95 px-1 py-0.5 text-[10px] leading-tight text-slate-100 outline-none focus:ring-1 focus:ring-emerald-500/40"
+              >
+                {getAgentPromptPlatformSelectOptions().map((opt) => (
+                  <option key={opt.value} value={opt.value} disabled={opt.disabled}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <span className={`truncate ${presentation.titleClassName}`}>{title}</span>
+          )}
         </span>
       </div>
     );

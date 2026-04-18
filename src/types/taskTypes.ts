@@ -450,6 +450,8 @@ export interface Task {
   agentDesignFrozen?: boolean;
   /** True dopo almeno una generazione LLM riuscita (etichetta Create vs Refine). */
   agentDesignHasGeneration?: boolean;
+  /** Target platform id for deterministic prompt compilation previews (`@domain/agentPrompt`). */
+  agentPromptTargetPlatform?: string;
   /** JSON array: logical steps for use case composer (design-time). */
   agentLogicalStepsJson?: string;
   /** JSON array: use cases tree + dialogue (design-time). */

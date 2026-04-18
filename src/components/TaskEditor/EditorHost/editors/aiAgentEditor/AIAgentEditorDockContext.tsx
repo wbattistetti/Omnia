@@ -11,7 +11,7 @@ import type { OtOp } from './otTypes';
 import type { StructuredSectionsRevisionState } from './structuredSectionsRevisionReducer';
 import type { IaSectionDiffPair } from './iaSectionDiffTypes';
 import type { RevisionBatchOp } from './textRevisionLinear';
-import type { AiAgentRuntimeRulesVariant } from './aiAgentRuntimeRulesVariant';
+import type { AgentPromptPlatformId, BackendPlaceholderInstance, PlatformPromptOutput } from '@domain/agentPrompt';
 
 export interface AIAgentEditorDockContextValue {
   instanceId: string | undefined;
@@ -59,9 +59,24 @@ export interface AIAgentEditorDockContextValue {
   agentRuntimeCompactJson: string;
   /** Optional style-indexed preview turns that can be projected into runtime examples. */
   previewByStyle: Record<string, AIAgentPreviewTurn[]>;
-  /** Compile/debug: `rules` = compact join vs rich Markdown (persisted in localStorage for DialogueEngine). */
-  runtimeRulesVariant: AiAgentRuntimeRulesVariant;
-  setRuntimeRulesVariant: (v: AiAgentRuntimeRulesVariant) => void;
+  /** Declared backend placeholder rows (tokens live in section text). */
+  backendPlaceholders: readonly BackendPlaceholderInstance[];
+  /** Insert `🗄️ path` at caret / replace selection in IR section + register instance. */
+  insertBackendPathAtSection: (
+    sectionId: AgentStructuredSectionId,
+    backendPath: string,
+    rangeStart: number,
+    rangeEnd?: number
+  ) => void;
+  /** Insert `🗄️ path` at caret / replace selection in task description. */
+  insertBackendPathInDesign: (backendPath: string, rangeStart: number, rangeEnd?: number) => void;
+  /** Persisted target platform for deterministic compile preview. */
+  agentPromptTargetPlatform: AgentPromptPlatformId;
+  setAgentPromptTargetPlatform: (v: AgentPromptPlatformId) => void;
+  /** Structured compile for {@link agentPromptTargetPlatform} (derived views + debugger). */
+  compiledPlatformOutput: PlatformPromptOutput;
+  /** Flattened preview string (same information as structured compile). */
+  compiledPromptForTargetPlatform: string;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

@@ -7,7 +7,7 @@ import { useResponseEditorWizard } from '@responseEditor/hooks/useResponseEditor
 import { useResponseEditorToolbar } from '@responseEditor/ResponseEditorToolbar';
 import { usePanelModes } from '@responseEditor/hooks/usePanelModes';
 import { taskRepository } from '@services/TaskRepository';
-import type { Task, TaskTree, TaskMeta } from '@types/taskTypes';
+import type { Task, TaskTree, TaskMeta, TaskTreeNode } from '@types/taskTypes';
 import type { RightPanelMode } from '@responseEditor/RightPanel';
 
 export interface UseResponseEditorInitializationParams {
@@ -50,6 +50,8 @@ export interface UseResponseEditorInitializationParams {
   // ✅ NEW: View mode for Behaviour (tabs or tree)
   viewMode?: 'tabs' | 'tree';
   onViewModeChange?: (mode: 'tabs' | 'tree') => void;
+  /** Selected sidebar node — used for AI Agent prompt platform toolbar when row is AIAgent. */
+  selectedTaskTreeNode?: TaskTreeNode | null;
 }
 
 export interface UseResponseEditorInitializationResult {
@@ -217,6 +219,7 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     // ✅ NEW: Pass view mode for Behaviour
     viewMode: params.viewMode,
     onViewModeChange: params.onViewModeChange,
+    selectedTaskTreeNode: params.selectedTaskTreeNode,
   });
 
   return {

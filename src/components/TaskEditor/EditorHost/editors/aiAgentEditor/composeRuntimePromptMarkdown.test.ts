@@ -13,6 +13,7 @@ const sample = (): Record<AgentStructuredSectionId, string> => ({
   constraints: 'Must:\n\nM\n\nMust not:\n\nN',
   personality: 'P',
   tone: 'Tone: neutral\n\nT',
+  examples: '',
 });
 
 describe('composeRuntimePromptMarkdown', () => {

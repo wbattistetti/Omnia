@@ -482,6 +482,7 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     // ✅ NEW: View mode for Behaviour
     viewMode,
     onViewModeChange: setViewMode,
+    selectedTaskTreeNode: selectedNode,
   });
   const {
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,

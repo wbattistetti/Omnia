@@ -44,6 +44,8 @@ export interface AIAgentStructuredSectionTexts {
   personality: string;
   /** First line `Tone: <token>` — see aiAgentStructuredSectionEnums. */
   tone: string;
+  /** Optional few-shot / style examples (optional in LLM JSON). */
+  examples?: string;
 }
 
 /**

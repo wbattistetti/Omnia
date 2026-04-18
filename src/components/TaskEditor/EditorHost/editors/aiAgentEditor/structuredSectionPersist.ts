@@ -2,6 +2,7 @@
  * Serialization of per-section revision state for TaskRepository persistence.
  */
 
+import type { BackendPlaceholderInstance } from '@domain/agentPrompt';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { AGENT_STRUCTURED_SECTION_IDS } from './agentStructuredSectionIds';
 import {
@@ -31,6 +32,27 @@ export interface PersistedSectionSnapshotV2 {
 export type PersistedSectionSnapshot = PersistedSectionSnapshotV1 | PersistedSectionSnapshotV2;
 
 export type PersistedStructuredSections = Record<AgentStructuredSectionId, PersistedSectionSnapshot>;
+
+const IR_ROOT_KEY = '__ir';
+
+export interface ParsedStructuredSectionsBundle {
+  sections: PersistedStructuredSections;
+  backendPlaceholders: BackendPlaceholderInstance[];
+}
+
+function normalizeBackendPlaceholders(raw: unknown): BackendPlaceholderInstance[] {
+  if (!Array.isArray(raw)) return [];
+  const out: BackendPlaceholderInstance[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const id = typeof o.id === 'string' ? o.id.trim() : '';
+    const definitionId = typeof o.definitionId === 'string' ? o.definitionId.trim() : '';
+    if (!id || !definitionId) continue;
+    out.push({ id, definitionId });
+  }
+  return out;
+}
 
 const LEGACY_PLACEHOLDER =
   '(Contenuto da definire — usa Refine comportamento o rigenera le sezioni.)';
@@ -101,6 +123,8 @@ export function migrateLegacyAgentPromptToPersisted(agentPrompt: string): Persis
       out[id] = emptySnapshot(DEFAULT_PERSONALITY_SECTION_TEXT);
     } else if (id === 'tone') {
       out[id] = emptySnapshot(DEFAULT_TONE_SECTION_TEXT);
+    } else if (id === 'examples') {
+      out[id] = emptySnapshot('');
     } else {
       out[id] = emptySnapshot(LEGACY_PLACEHOLDER);
     }
@@ -139,6 +163,9 @@ function migratePersistedStructuredSectionsRoot(parsed: Record<string, unknown>)
     delete p.constraints_forbidden;
     delete p.correction_rules;
     delete p.conversational_state;
+    if (!p.examples) {
+      p.examples = emptySnapshot('');
+    }
     return p;
   }
 
@@ -193,6 +220,7 @@ function migratePersistedStructuredSectionsRoot(parsed: Record<string, unknown>)
     constraints: emptySnapshot(consText),
     personality: emptySnapshot(persText),
     tone: emptySnapshot(toneText),
+    examples: emptySnapshot(''),
   };
 }
 
@@ -202,17 +230,30 @@ function migratePersistedStructuredSectionsRoot(parsed: Record<string, unknown>)
 export function parsePersistedStructuredSectionsJson(
   raw: unknown,
   fallbackAgentPrompt: string
-): PersistedStructuredSections {
+): ParsedStructuredSectionsBundle {
   if (typeof raw !== 'string' || !raw.trim()) {
-    return migrateLegacyAgentPromptToPersisted(fallbackAgentPrompt);
+    return {
+      sections: migrateLegacyAgentPromptToPersisted(fallbackAgentPrompt),
+      backendPlaceholders: [],
+    };
   }
   try {
-    const parsed = migratePersistedStructuredSectionsRoot(JSON.parse(raw) as Record<string, unknown>);
+    const root = JSON.parse(raw) as Record<string, unknown>;
+    const irRaw = root[IR_ROOT_KEY];
+    const backendPlaceholders = normalizeBackendPlaceholders(
+      irRaw && typeof irRaw === 'object' && !Array.isArray(irRaw)
+        ? (irRaw as Record<string, unknown>).backendPlaceholders
+        : undefined
+    );
+    const { [IR_ROOT_KEY]: _drop, ...withoutIr } = root;
+    const parsed = migratePersistedStructuredSectionsRoot(withoutIr);
     const out = {} as PersistedStructuredSections;
     for (const id of AGENT_STRUCTURED_SECTION_IDS) {
       const row = parsed[id];
       if (!row || typeof row !== 'object' || Array.isArray(row)) {
         if (id === 'context') {
+          out[id] = emptySnapshot('');
+        } else if (id === 'examples') {
           out[id] = emptySnapshot('');
         } else if (id === 'personality') {
           out[id] = emptySnapshot(DEFAULT_PERSONALITY_SECTION_TEXT);
@@ -256,14 +297,24 @@ export function parsePersistedStructuredSectionsJson(
       if (dm.length > base.length) dm.length = base.length;
       out[id] = { base, deletedMask: dm, inserts };
     }
-    return out;
+    return { sections: out, backendPlaceholders };
   } catch {
-    return migrateLegacyAgentPromptToPersisted(fallbackAgentPrompt);
+    return {
+      sections: migrateLegacyAgentPromptToPersisted(fallbackAgentPrompt),
+      backendPlaceholders: [],
+    };
   }
 }
 
-export function serializePersistedStructuredSections(p: PersistedStructuredSections): string {
-  return JSON.stringify(p);
+export function serializePersistedStructuredSections(
+  p: PersistedStructuredSections,
+  ir?: { backendPlaceholders: BackendPlaceholderInstance[] }
+): string {
+  const base = { ...p } as Record<string, unknown>;
+  if (ir && ir.backendPlaceholders.length > 0) {
+    base[IR_ROOT_KEY] = { schemaVersion: 1, backendPlaceholders: ir.backendPlaceholders };
+  }
+  return JSON.stringify(base);
 }
 
 /**

@@ -18,6 +18,7 @@ function baseSnapshot(over: Partial<AIAgentTaskSnapshot>): AIAgentTaskSnapshot {
   return {
     agentDesignDescription: '',
     agentPrompt: '',
+    agentPromptTargetPlatform: '',
     agentStructuredSectionsJson: '',
     outputVariableMappings: {},
     agentProposedFields: [],

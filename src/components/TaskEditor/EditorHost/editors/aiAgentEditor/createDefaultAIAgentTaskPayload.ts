@@ -3,6 +3,7 @@
  * Single source for: flow row type picker ({@link RowTypeHandler}), gear lazy-open ({@link TaskTreeOpener}), editor bootstrap.
  */
 
+import { DEFAULT_AGENT_PROMPT_PLATFORM } from '@domain/agentPrompt';
 import { AI_AGENT_DEFAULT_PREVIEW_STYLE_ID } from '@types/aiAgentPreview';
 import { EMPTY_OUTPUT_MAPPINGS } from './constants';
 
@@ -25,5 +26,6 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentDesignHasGeneration: false,
     agentLogicalStepsJson: '[]',
     agentUseCasesJson: '[]',
+    agentPromptTargetPlatform: DEFAULT_AGENT_PROMPT_PLATFORM,
   };
 }

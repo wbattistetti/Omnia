@@ -503,9 +503,60 @@ function renderTabButton(btn: import('../../dock/types').ToolbarButton, idx: num
   );
 }
 
+function renderDockToolbarSelect(
+  btn: import('../../dock/types').ToolbarButton,
+  idx: number,
+  tabColor?: string
+) {
+  if (btn.type !== 'select' || !btn.options?.length) {
+    return null;
+  }
+  const fg = tabColor ? '#ffffff' : '#0c4a6e';
+  const border = '1px solid rgba(255,255,255,0.35)';
+  return (
+    <div
+      key={`dock-select-${idx}`}
+      style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {btn.label ? (
+        <span style={{ fontSize: 11, color: fg, whiteSpace: 'nowrap', flexShrink: 0 }}>{btn.label}</span>
+      ) : null}
+      <select
+        value={btn.value || ''}
+        onChange={(e) => btn.onChange?.(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'rgba(255,255,255,0.12)',
+          color: fg,
+          border,
+          borderRadius: 6,
+          padding: '4px 8px',
+          fontSize: 11,
+          cursor: 'pointer',
+          outline: 'none',
+          maxWidth: 'min(320px, 42vw)',
+          minWidth: 0,
+        }}
+        title={btn.title}
+        aria-label={btn.title || btn.label}
+      >
+        {btn.options.map((opt) => (
+          <option key={opt.value} value={opt.value} disabled={opt.disabled}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function renderDockToolbarButton(btn: import('../../dock/types').ToolbarButton, idx: number, tabColor?: string) {
   if (btn.visible === false) {
     return null;
+  }
+  if (btn.type === 'select' && btn.options && btn.options.length > 0) {
+    return renderDockToolbarSelect(btn, idx, tabColor);
   }
   if (btn.dropdownItems && btn.dropdownItems.length > 0) {
     return <DockToolbarDropdownButton key={`dtb-${idx}`} btn={btn} idx={idx} tabColor={tabColor} />;

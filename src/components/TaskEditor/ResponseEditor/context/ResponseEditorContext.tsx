@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import React, { createContext, useContext } from 'react';
-import type { TaskTree, TaskMeta } from '@types/taskTypes';
+import type { TaskTree, TaskMeta, TaskTreeNode } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 export interface ResponseEditorContextValue {
@@ -25,6 +25,8 @@ export interface ResponseEditorContextValue {
   contextualizationTemplateName?: string | null;
   /** Clears embedding-based template suggestion and detaches instance from that catalogue row when user picks manual. */
   dismissEmbeddingSuggestion?: () => void;
+  /** Current Behaviour tree selection (for toolbar affordances e.g. AI Agent prompt platform). */
+  selectedTaskTreeNode?: TaskTreeNode | null;
 }
 
 export const ResponseEditorContext = createContext<ResponseEditorContextValue | null>(null);

@@ -25,6 +25,7 @@ import {
   truncateForRevisioningLog,
 } from './revisioningDebug';
 import { buildRevisionMirrorNodes } from './revisionMirrorRuns';
+import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 
 type LastLinearDoc = { linear: string } | ReturnType<typeof buildLinearDocument>;
 
@@ -42,6 +43,8 @@ export interface TextDualLayerRevisionEditorProps {
   /** Applicative undo/redo (Ctrl+Z / Ctrl+Y); not browser native. */
   onUndoRequest?: () => void;
   onRedoRequest?: () => void;
+  /** Right-click → insert `🗄️ path` at caret / selection (from BackendCall labels on active flow). */
+  onInsertBackendPathAtCaret?: (backendPath: string, rangeStart: number, rangeEnd?: number) => void;
 }
 
 export function TextDualLayerRevisionEditor({
@@ -56,6 +59,7 @@ export function TextDualLayerRevisionEditor({
   onApplyOtCommit,
   onUndoRequest,
   onRedoRequest,
+  onInsertBackendPathAtCaret,
 }: TextDualLayerRevisionEditorProps) {
   const taRef = React.useRef<HTMLTextAreaElement | null>(null);
   const composingRef = React.useRef(false);
@@ -69,6 +73,20 @@ export function TextDualLayerRevisionEditor({
   /** After a local edit, caret/selection end in the synced linear string (multi-hunk safe). */
   const pendingCaretRef = React.useRef<number | null>(null);
   const [editError, setEditError] = React.useState<string | null>(null);
+
+  const onBackendInsert = React.useCallback(
+    (path: string, s: number, e: number) => {
+      onInsertBackendPathAtCaret?.(path, s, e);
+    },
+    [onInsertBackendPathAtCaret]
+  );
+
+  const { onContextMenu, backendPathMenu } = useBackendPathInsertMenu({
+    enabled: Boolean(onInsertBackendPathAtCaret),
+    readOnly,
+    inputRef: taRef,
+    onInsert: onBackendInsert,
+  });
 
   const isOt = Boolean(otMode && onApplyOtCommit && otCurrentText !== undefined);
 
@@ -310,9 +328,11 @@ export function TextDualLayerRevisionEditor({
             onKeyDown={onKeyDown}
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}
+            onContextMenu={onContextMenu}
           />
         </div>
       </div>
+      {backendPathMenu}
     </div>
   );
 }

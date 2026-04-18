@@ -61,6 +61,10 @@
   --sidebar-content-bg: #fff;
   --sidebar-content-text: #1f2937;
   --sidebar-border: #d1d5db;
+  /* Backend 🗄️ pill (AI Agent mirror + editors) */
+  --backend-badge-bg: rgba(124, 58, 237, 0.32);
+  --backend-badge-border: rgba(91, 33, 182, 0.95);
+  --backend-badge-text: #4c1d95;
 }
 
 [data-theme='dark'] {
@@ -70,6 +74,9 @@
   --sidebar-content-bg: #18181b;
   --sidebar-content-text: #f1f5f9;
   --sidebar-border: #334155;
+  --backend-badge-bg: rgba(139, 92, 246, 0.45);
+  --backend-badge-border: rgba(196, 181, 253, 0.92);
+  --backend-badge-text: #f3e8ff;
 }
 
 /* Theme Edit Mode Styles */
@@ -167,4 +174,31 @@
 }
 .omnia-text-rev-base {
   color: inherit;
+}
+
+/* Backend path token (read-only mirror in IR editor) — storage is plain `🗄️ path` in the textarea. */
+.omnia-backend-token-badge {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: baseline;
+  margin: 0 1px;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid var(--backend-badge-border);
+  background: var(--backend-badge-bg);
+  color: var(--backend-badge-text);
+  font-weight: 600;
+  font-size: 0.92em;
+  line-height: 1.35;
+  gap: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Badge stays violet even when parent span is insert (green) or delete (red) */
+.omnia-text-rev-insert .omnia-backend-token-badge,
+.omnia-text-rev-delete .omnia-backend-token-badge,
+.omnia-text-rev-base .omnia-backend-token-badge {
+  color: var(--backend-badge-text);
+  text-decoration: none;
 }

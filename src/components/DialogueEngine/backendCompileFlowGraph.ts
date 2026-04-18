@@ -11,7 +11,6 @@ import { DialogueTaskService } from '../../services/DialogueTaskService';
 import { taskTemplateService } from '../../services/TaskTemplateService';
 import { templateIdToTaskType, TaskType } from '../../types/taskTypes';
 import { buildMinimalAiAgentCompileTask } from '../TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
-import { readAiAgentRuntimeRulesVariant } from '../TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentRuntimeRulesVariant';
 import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
 
 const VB_COMPILE_URL = 'http://localhost:5000/api/runtime/compile';
@@ -222,7 +221,7 @@ export async function backendCompileFlowGraph(
   }
 
   const allTasksWithTemplates = [...referencedInstances, ...referencedTemplates];
-  const aiAgentRulesVariant = readAiAgentRuntimeRulesVariant();
+  const aiAgentRulesVariant = 'distilled';
   const tasksForCompile = allTasksWithTemplates.map((t: Record<string, unknown>) => {
     if (t.type === TaskType.AIAgent) {
       return buildMinimalAiAgentCompileTask(t as Parameters<typeof buildMinimalAiAgentCompileTask>[0], {

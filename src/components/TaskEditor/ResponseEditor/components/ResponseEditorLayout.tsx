@@ -390,7 +390,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       ? undefined
       : (contextualizationTemplateNameFromMeta ?? contextualizationTemplateName ?? undefined),
     dismissEmbeddingSuggestion,
-      }), [taskTreeFromStore, taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId, contextualizationTemplateNameFromMeta, contextualizationTemplateName, embeddingSuggestionDismissed, dismissEmbeddingSuggestion]);
+    selectedTaskTreeNode: selectedNode ?? null,
+      }), [taskTreeFromStore, taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId, contextualizationTemplateNameFromMeta, contextualizationTemplateName, embeddingSuggestionDismissed, dismissEmbeddingSuggestion, selectedNode]);
 
   // ✅ B1: WizardContext.Provider moved to ResponseEditorInner to avoid race condition
 

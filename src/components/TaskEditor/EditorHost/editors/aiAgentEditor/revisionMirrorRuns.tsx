@@ -8,6 +8,30 @@ import type { RevisionCharMeta } from './textRevisionLinear';
 
 type RevisionMirrorClass = 'omnia-text-rev-base' | 'omnia-text-rev-insert' | 'omnia-text-rev-delete';
 
+/** Full inline display `🗄️ path` (aligned with compile expansion). */
+const BACKEND_DISPLAY_FULL_RE = /🗄️\s+[A-Za-z0-9_.]+/gu;
+
+function splitBackendDisplayFragments(text: string): Array<{ kind: 'plain' | 'backend'; text: string }> {
+  const out: Array<{ kind: 'plain' | 'backend'; text: string }> = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const re = new RegExp(BACKEND_DISPLAY_FULL_RE.source, 'gu');
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) {
+      out.push({ kind: 'plain', text: text.slice(last, m.index) });
+    }
+    out.push({ kind: 'backend', text: m[0] });
+    last = re.lastIndex;
+  }
+  if (last < text.length) {
+    out.push({ kind: 'plain', text: text.slice(last) });
+  }
+  if (out.length === 0 && text.length > 0) {
+    out.push({ kind: 'plain', text });
+  }
+  return out;
+}
+
 function mirrorClassForIndex(
   meta: readonly RevisionCharMeta[],
   deletedMask: readonly boolean[],
@@ -41,9 +65,19 @@ export function buildRevisionMirrorNodes(
       j++;
     }
     const key = `${i}-${cls}-${j}`;
+    const sliceText = linear.slice(i, j);
+    const fragments = splitBackendDisplayFragments(sliceText);
     out.push(
       <span key={key} className={cls}>
-        {linear.slice(i, j)}
+        {fragments.map((frag, fi) =>
+          frag.kind === 'backend' ? (
+            <span key={`${key}-fr-${fi}`} className="omnia-backend-token-badge">
+              {frag.text}
+            </span>
+          ) : (
+            <React.Fragment key={`${key}-fr-${fi}`}>{frag.text}</React.Fragment>
+          )
+        )}
       </span>
     );
     i = j;

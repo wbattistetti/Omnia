@@ -9,9 +9,16 @@ import { AIAgentProposedFieldsTable } from './AIAgentProposedFieldsTable';
 import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
 import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
+import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 
 export function EditorUnifiedDescriptionPanel(_props: IDockviewPanelProps) {
-  const { instanceId, designDescription, setDesignDescription, generating } = useAIAgentEditorDock();
+  const {
+    instanceId,
+    designDescription,
+    setDesignDescription,
+    generating,
+    insertBackendPathInDesign,
+  } = useAIAgentEditorDock();
 
   return (
     <div className="h-full min-h-0 overflow-y-auto p-3 space-y-3 bg-teal-950/25 border-l-4 border-teal-500/55">
@@ -20,6 +27,7 @@ export function EditorUnifiedDescriptionPanel(_props: IDockviewPanelProps) {
         value={designDescription}
         onChange={setDesignDescription}
         readOnly={generating}
+        insertBackendPathInDesign={insertBackendPathInDesign}
         instanceId={instanceId}
         iaRevisionDiff={null}
         onDismissIaRevisionDiff={() => {}}
@@ -33,11 +41,28 @@ export function EditorUnifiedDescriptionPanel(_props: IDockviewPanelProps) {
 }
 
 export function EditorTaskDescriptionPanel(_props: IDockviewPanelProps) {
-  const { designDescription, setDesignDescription, generating } = useAIAgentEditorDock();
+  const { designDescription, setDesignDescription, generating, insertBackendPathInDesign } =
+    useAIAgentEditorDock();
+  const descRef = React.useRef<HTMLTextAreaElement | null>(null);
+
+  const onInsert = React.useCallback(
+    (path: string, s: number, e: number) => {
+      insertBackendPathInDesign(path, s, e);
+    },
+    [insertBackendPathInDesign]
+  );
+
+  const { onContextMenu, backendPathMenu } = useBackendPathInsertMenu({
+    enabled: true,
+    readOnly: generating,
+    inputRef: descRef,
+    onInsert,
+  });
 
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-teal-950/25 border-l-4 border-teal-500/55 space-y-2">
       <textarea
+        ref={descRef}
         className="w-full flex-1 min-h-[200px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed resize-none"
         placeholder={AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER}
         aria-label="Descrizione"
@@ -45,7 +70,9 @@ export function EditorTaskDescriptionPanel(_props: IDockviewPanelProps) {
         onChange={(e) => setDesignDescription(e.target.value)}
         readOnly={generating}
         spellCheck
+        onContextMenu={onContextMenu}
       />
+      {backendPathMenu}
     </div>
   );
 }

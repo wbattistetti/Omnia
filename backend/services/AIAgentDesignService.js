@@ -49,6 +49,7 @@ const STRUCTURED_SECTION_IDS = [
   'constraints',
   'personality',
   'tone',
+  'examples',
 ];
 
 const TONE_TOKENS = [
@@ -68,6 +69,28 @@ const REQUIRED_NONEMPTY_SECTION_KEYS = [
   'tone',
 ];
 
+/**
+ * The model sometimes leaves a required section blank on the first Generate/Refine; a second refine fixes it.
+ * Fill minimal valid placeholders so the request succeeds and the editor can show content instead of a hard error.
+ * @param {Record<string, unknown>} parsed
+ */
+function coalesceEmptyRequiredSections(parsed) {
+  const defaults = {
+    goal: 'Define the agent goal in a follow-up refinement if needed.',
+    operational_sequence: 'Describe operational steps in a follow-up refinement if needed.',
+    constraints:
+      'Must:\nFollow user intent and applicable platform rules.\n\nMust not:\nHarm users or mishandle data.',
+    personality: 'Helpful and clear.',
+    tone: 'Tone: neutral\n\nRefine to set voice details.',
+  };
+  for (const key of REQUIRED_NONEMPTY_SECTION_KEYS) {
+    const v = parsed[key];
+    if (typeof v !== 'string' || !String(v).trim()) {
+      parsed[key] = defaults[key];
+    }
+  }
+}
+
 const SECTION_MARKDOWN_TITLES = {
   goal: 'Goal',
   operational_sequence: 'Operational sequence',
@@ -75,6 +98,7 @@ const SECTION_MARKDOWN_TITLES = {
   constraints: 'Guardrails',
   personality: 'Personality',
   tone: 'Tone',
+  examples: 'Examples',
 };
 
 /**
@@ -89,11 +113,13 @@ function composeRuntimePromptMarkdownFromSections(sections) {
     'constraints',
     'personality',
     'tone',
+    'examples',
   ];
   const chunks = [];
   for (const id of order) {
     const body = String(sections[id] ?? '').trim();
     if (id === 'context' && !body) continue;
+    if (id === 'examples' && !body) continue;
     const title = SECTION_MARKDOWN_TITLES[id];
     chunks.push(`### ${title}\n\n${body.length > 0 ? body : '—'}`);
   }
@@ -446,6 +472,8 @@ function validateDesignPayload(parsed) {
     throw new Error('Invalid JSON: initial_state_template must be an object');
   }
 
+  coalesceEmptyRequiredSections(parsed);
+
   const sectionTexts = {};
   for (const key of REQUIRED_NONEMPTY_SECTION_KEYS) {
     if (typeof parsed[key] !== 'string' || !parsed[key].trim()) {
@@ -455,6 +483,9 @@ function validateDesignPayload(parsed) {
   }
   const ctx = typeof parsed.context === 'string' ? parsed.context : '';
   sectionTexts.context = ctx.trim();
+
+  const ex = typeof parsed.examples === 'string' ? parsed.examples.trim() : '';
+  sectionTexts.examples = ex;
 
   const toneTok = parseToneTokenFromSection(sectionTexts.tone);
   if (!toneTok || !TONE_TOKENS.includes(toneTok)) {
@@ -495,6 +526,7 @@ function validateDesignPayload(parsed) {
     constraints: sectionTexts.constraints,
     personality: sectionTexts.personality,
     tone: sectionTexts.tone,
+    examples: sectionTexts.examples || '',
     agent_prompt: agentPromptComposed,
     sample_dialogue: sd,
     design_notes: typeof parsed.design_notes === 'string' ? parsed.design_notes : '',

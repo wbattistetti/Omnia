@@ -37,6 +37,7 @@ const AI_AGENT_INSTANCE_FIELD_KEYS = [
   'agentDesignHasGeneration',
   'agentLogicalStepsJson',
   'agentUseCasesJson',
+  'agentPromptTargetPlatform',
 ];
 
 /**

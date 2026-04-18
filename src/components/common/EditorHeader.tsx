@@ -11,9 +11,9 @@ export type ToolbarDropdownItem = {
 };
 
 type ToolbarButton = {
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   label?: string;
-  onClick: () => void;
+  onClick?: () => void;
   title?: string;
   active?: boolean;
   primary?: boolean;
@@ -22,6 +22,12 @@ type ToolbarButton = {
   buttonId?: string; // For identifying specific buttons
   dropdownItems?: ToolbarDropdownItem[]; // ✅ NEW: Support for dropdown menu
   visible?: boolean; // ✅ NEW: Control visibility instead of adding/removing dynamically
+  type?: 'select' | 'button';
+  value?: string;
+  options?: Array<{ value: string; label: string; disabled?: boolean }>;
+  onChange?: (value: string) => void;
+  /** When set, control is rendered next to the title (still visible if dynamicToolbarSlot replaces the main toolbar). */
+  position?: 'title-suffix';
 };
 
 type EditorHeaderProps = {
@@ -200,8 +206,102 @@ function ToolbarDropdownButton({
   );
 }
 
+function renderEditorHeaderToolbarControl(
+  btn: ToolbarButton,
+  i: number,
+  theme: { bg: string; fg: string; border: string; accent?: string }
+): React.ReactNode {
+  const buttonRef = btn.buttonRef && 'current' in btn.buttonRef
+    ? btn.buttonRef as React.RefObject<HTMLButtonElement>
+    : null;
+
+  if (btn.type === 'select' && btn.options) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {btn.label ? <span style={{ fontSize: 12, color: theme.fg, marginRight: 4 }}>{btn.label}</span> : null}
+        <select
+          value={btn.value || ''}
+          onChange={(e) => btn.onChange?.(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            background: 'rgba(255,255,255,0.1)',
+            color: theme.fg,
+            border: '1px solid rgba(255,255,255,0.3)',
+            borderRadius: 6,
+            padding: '6px 10px',
+            fontSize: 12,
+            cursor: 'pointer',
+            outline: 'none',
+            maxWidth: 'min(360px, 50vw)',
+          }}
+          title={btn.title}
+        >
+          {btn.options.map((opt) => (
+            <option key={opt.value} value={opt.value} disabled={opt.disabled}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  if (btn.dropdownItems && btn.dropdownItems.length > 0) {
+    return <ToolbarDropdownButton btn={btn} buttonRef={buttonRef} theme={theme} />;
+  }
+
+  const buttonProps = {
+    ref: buttonRef,
+    onClick: (e: React.MouseEvent) => {
+      e.stopPropagation();
+      btn.onClick?.();
+    },
+    disabled: btn.disabled,
+    'data-button-id': btn.buttonId,
+    style: {
+      display: btn.visible === false ? 'none' : 'flex',
+      alignItems: 'center',
+      gap: 6,
+      background: btn.primary ? '#0b1220' : (btn.active ? '#fff' : 'transparent'),
+      color: btn.primary ? '#fff' : (btn.active ? theme.bg : theme.fg),
+      border: btn.primary ? 'none' : `1px solid rgba(255,255,255,0.3)`,
+      borderRadius: 8,
+      padding: btn.label ? '8px 14px' : '6px 10px',
+      cursor: btn.disabled ? 'not-allowed' : 'pointer',
+      opacity: btn.disabled ? 0.5 : 1,
+      fontWeight: btn.primary ? 600 : 400,
+      whiteSpace: 'nowrap' as const,
+    },
+  };
+
+  const button = (
+    <button {...buttonProps} type="button">
+      {btn.icon}
+      {btn.label ? <span>{btn.label}</span> : null}
+    </button>
+  );
+
+  return btn.title ? (
+    <SmartTooltip text={btn.title} tutorId={`toolbar_btn_${i}_help`} placement="bottom">
+      {buttonRef
+        ? React.cloneElement(button, {
+            ref: (el: HTMLButtonElement | null) => {
+              if (buttonRef && 'current' in buttonRef) {
+                (buttonRef as React.MutableRefObject<HTMLButtonElement | null>).current = el;
+              }
+            },
+          })
+        : button}
+    </SmartTooltip>
+  ) : (
+    button
+  );
+}
+
 export function EditorHeader({ icon, title, subtitle, titleBadge, titleActions, toolbarButtons = [], dynamicToolbarSlot, rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
   const theme = THEMES[color] || THEMES.orange;
+  const titleSuffixToolbarButtons = toolbarButtons.filter((b) => b.position === 'title-suffix');
+  const mainToolbarButtons = toolbarButtons.filter((b) => b.position !== 'title-suffix');
   let combinedClass = '';
   try {
     const context = useFontContext();
@@ -252,6 +352,23 @@ export function EditorHeader({ icon, title, subtitle, titleBadge, titleActions, 
               {title}
             </span>
             {titleBadge ? <span style={{ flexShrink: 0 }}>{titleBadge}</span> : null}
+            {titleSuffixToolbarButtons.length > 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  flexShrink: 0,
+                  marginLeft: 4,
+                }}
+              >
+                {titleSuffixToolbarButtons.map((btn, i) => (
+                  <React.Fragment key={`header-title-suffix-${i}`}>
+                    {renderEditorHeaderToolbarControl(btn, i, theme)}
+                  </React.Fragment>
+                ))}
+              </div>
+            ) : null}
           </div>
           {subtitle ? <div style={{ opacity: 0.8 }}>{subtitle}</div> : null}
         </div>
@@ -273,103 +390,14 @@ export function EditorHeader({ icon, title, subtitle, titleBadge, titleActions, 
             {dynamicToolbarSlot}
           </div>
         ) : (
-          /* Toolbar (auto-hidden if empty) */
-          toolbarButtons.length > 0 && (
+          /* Toolbar (auto-hidden if empty); title-suffix controls live next to the title */
+          mainToolbarButtons.length > 0 && (
           <>
-            {toolbarButtons.map((btn, i) => {
-              // ✅ FIX: Monta sempre il pulsante, controlla visibilità con CSS
-              // NON usare return null - il pulsante deve essere sempre montato per il ref
-
-              // ✅ FIX: Usa il ref passato dalla prop se disponibile, altrimenti null
-              const buttonRef = btn.buttonRef && 'current' in btn.buttonRef
-                ? btn.buttonRef as React.RefObject<HTMLButtonElement>
-                : null;
-
-              // ✅ NEW: Support for select dropdown
-              if (btn.type === 'select' && btn.options) {
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {btn.label && <span style={{ fontSize: 12, color: theme.fg, marginRight: 4 }}>{btn.label}:</span>}
-                    <select
-                      value={btn.value || ''}
-                      onChange={(e) => btn.onChange?.(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        background: 'rgba(255,255,255,0.1)',
-                        color: theme.fg,
-                        border: '1px solid rgba(255,255,255,0.3)',
-                        borderRadius: 6,
-                        padding: '6px 10px',
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        outline: 'none',
-                      }}
-                      title={btn.title}
-                    >
-                      {btn.options.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              }
-
-              // ✅ NEW: Support for dropdown buttons
-              if (btn.dropdownItems && btn.dropdownItems.length > 0) {
-                return <ToolbarDropdownButton key={i} btn={btn} buttonRef={buttonRef} theme={theme} />;
-              }
-
-              const buttonProps = {
-                ref: buttonRef, // ✅ Usa direttamente il ref passato (può essere null)
-                onClick: btn.onClick,
-                disabled: btn.disabled,
-                'data-button-id': btn.buttonId,
-                style: {
-                  display: btn.visible === false ? 'none' : 'flex', // ✅ FIX: Usa display invece di return null
-                  alignItems: 'center',
-                  gap: 6,
-                  background: btn.primary ? '#0b1220' : (btn.active ? '#fff' : 'transparent'),
-                  color: btn.primary ? '#fff' : (btn.active ? theme.bg : theme.fg),
-                  border: btn.primary ? 'none' : `1px solid rgba(255,255,255,0.3)`,
-                  borderRadius: 8,
-                  padding: btn.label ? '8px 14px' : '6px 10px',
-                  cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                  opacity: btn.disabled ? 0.5 : 1,
-                  fontWeight: btn.primary ? 600 : 400,
-                  whiteSpace: 'nowrap' as const,
-                },
-              };
-
-              const button = (
-                <button {...buttonProps}>
-                  {btn.icon}
-                  {btn.label && <span>{btn.label}</span>}
-                </button>
-              );
-
-              return btn.title ? (
-                <SmartTooltip key={i} text={btn.title} tutorId={`toolbar_btn_${i}_help`} placement="bottom">
-                  {buttonRef ? React.cloneElement(button, {
-                    ref: (el: HTMLButtonElement | null) => {
-                      // ✅ DEBUG: Log solo quando il ref viene assegnato per la prima volta
-                      if (btn.buttonId === 'save-to-library' && el) {
-                        console.log('[EditorHeader] 🎯 Ref assigned for save-to-library button', {
-                          tagName: el?.tagName,
-                          dataButtonId: el?.getAttribute('data-button-id')
-                        });
-                      }
-                      if (buttonRef && 'current' in buttonRef) {
-                        (buttonRef as React.MutableRefObject<HTMLButtonElement | null>).current = el;
-                      }
-                    }
-                  }) : button}
-                </SmartTooltip>
-              ) : (
-                <React.Fragment key={i}>{button}</React.Fragment>
-              );
-            })}
+            {mainToolbarButtons.map((btn, i) => (
+              <React.Fragment key={`header-main-tb-${i}`}>
+                {renderEditorHeaderToolbarControl(btn, i, theme)}
+              </React.Fragment>
+            ))}
           </>
           )
         )}
