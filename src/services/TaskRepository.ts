@@ -1022,6 +1022,34 @@ class TaskRepository {
   }
 
   /**
+   * Replaces an in-memory task document by id (S2 reverse pipeline GUID substitution).
+   * Keeps stable id and runs {@link syncTaskAuthoringIntoFlowSlice}.
+   */
+  overwriteTaskDocument(taskId: string, task: Task): boolean {
+    const tid = String(taskId || '').trim();
+    if (!tid || !this.tasks.has(tid)) return false;
+    const normalized: Task = { ...task, id: tid };
+    this.tasks.set(tid, normalized);
+    syncTaskAuthoringIntoFlowSlice(normalized);
+    return true;
+  }
+
+  /**
+   * Removes S2 `subflowBindings` fields from a Subflow portal task (reverse pipeline cleanup).
+   */
+  clearSubflowS2BindingFields(taskId: string): boolean {
+    const tid = String(taskId || '').trim();
+    const existing = this.tasks.get(tid);
+    if (!existing) return false;
+    const next: Task = { ...existing };
+    delete next.subflowBindings;
+    delete next.subflowBindingsSchemaVersion;
+    this.tasks.set(tid, next);
+    syncTaskAuthoringIntoFlowSlice(next);
+    return true;
+  }
+
+  /**
    * FlowDocument load: upsert tasks that belong to this flow canvas into the in-memory store.
    */
   ingestTasksFromFlowDocument(flowCanvasId: string, tasks: Task[]): void {

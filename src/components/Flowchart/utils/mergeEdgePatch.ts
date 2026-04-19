@@ -22,7 +22,7 @@ function normalizeLabelInput(v: unknown): string | undefined {
 }
 
 /**
- * Applies a partial update to one edge. Callers: FlowActionsContext, useEdgeDataManager, services.
+ * Applies a partial update to one edge. Callers: FlowActionsContext, services.
  */
 export function mergeEdgePatch(edge: Edge<EdgeData>, updates: Record<string, any>): Edge<EdgeData> {
   const next: Edge<EdgeData> = {

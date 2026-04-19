@@ -38,7 +38,8 @@
     "verify:imports": "node scripts/verify-imports.js",
     "verify:features": "node scripts/verify-features.js",
     "verify:no-fallbacks": "node scripts/verify-no-fallbacks.js",
-    "verify:architecture": "npm run verify:domain-purity && npm run verify:imports && npm run verify:features && npm run verify:no-fallbacks"
+    "verify:architecture": "npm run verify:domain-purity && npm run verify:imports && npm run verify:features && npm run verify:no-fallbacks",
+    "verify:legacy-writers": "node scripts/verify-legacy-writers.js"
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",

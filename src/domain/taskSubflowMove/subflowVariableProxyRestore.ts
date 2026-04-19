@@ -4,11 +4,15 @@
 
 import { TaskType } from '@types/taskTypes';
 import type { WorkspaceState } from '@flows/FlowTypes';
-import { localLabelForSubflowTaskVariable } from '@domain/variableProxyNaming';
+import {
+  localLabelForSubflowTaskVariable,
+  normalizeSemanticTaskLabel,
+} from '@domain/variableProxyNaming';
 import { taskRepository } from '@services/TaskRepository';
 import { variableCreationService } from '@services/VariableCreationService';
 import { getVariableLabel } from '@utils/getVariableLabel';
 import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
+import { isDndOperationInstrumentEnabled } from '@utils/dndOperationInstrument';
 
 function resolveSubflowFlowId(task: { flowId?: string; parameters?: unknown[] } | null): string | null {
   const direct = String(task?.flowId || '').trim();
@@ -49,11 +53,14 @@ export type ChildLocalRenameRecord = { id: string; previousName: string; nextNam
 export function restoreChildTaskBoundVariablesToLocalNames(
   projectId: string,
   taskInstanceId: string,
-  candidateVarIds: ReadonlySet<string>
+  candidateVarIds: ReadonlySet<string>,
+  trace?: { operationId?: string; /** Subflow row title — used to skip restore when label already matches `prefix.leaf` from autoRename. */ subflowDisplayTitle?: string }
 ): ChildLocalRenameRecord[] {
   const pid = String(projectId || '').trim();
   const tid = String(taskInstanceId || '').trim();
   if (!pid || !tid) return [];
+
+  const operationId = String(trace?.operationId || '').trim();
 
   const tbl = getProjectTranslationsTable();
   const taskVars = variableCreationService.getVariablesByTaskInstanceId(pid, tid);
@@ -65,9 +72,48 @@ export function restoreChildTaskBoundVariablesToLocalNames(
 
     const currentLabel = getVariableLabel(vid, tbl) || vid;
     const localName = localLabelForSubflowTaskVariable(currentLabel);
-    if (!localName || localName === currentLabel) continue;
+    if (!localName || localName === currentLabel) {
+      if (isDndOperationInstrumentEnabled()) {
+        console.log('[Restore] result', {
+          operationId: operationId || undefined,
+          varId: vid,
+          currentLabel,
+          localLabel: localName || currentLabel,
+          result: 'skip' as const,
+        });
+      }
+      continue;
+    }
+
+    /** Idempotent S2: skip shortening when the label already matches autoRename `prefix.leaf` (avoids restore → rename oscillation). */
+    const titleRaw = String(trace?.subflowDisplayTitle || '').trim();
+    if (titleRaw) {
+      const prefix = normalizeSemanticTaskLabel(titleRaw) || titleRaw;
+      const expectedQualified = `${prefix}.${localName}`;
+      if (currentLabel.trim() === expectedQualified.trim()) {
+        if (isDndOperationInstrumentEnabled()) {
+          console.log('[Restore] result', {
+            operationId: operationId || undefined,
+            varId: vid,
+            currentLabel,
+            localLabel: localName,
+            result: 'skipAlreadyQualified' as const,
+          });
+        }
+        continue;
+      }
+    }
 
     const ok = variableCreationService.renameVariableRowById(pid, vid, localName);
+    if (isDndOperationInstrumentEnabled()) {
+      console.log('[Restore] result', {
+        operationId: operationId || undefined,
+        varId: vid,
+        currentLabel,
+        localLabel: localName,
+        result: ok ? ('restored' as const) : ('skip' as const),
+      });
+    }
     if (ok) {
       renamed.push({ id: vid, previousName: currentLabel, nextName: localName });
     }

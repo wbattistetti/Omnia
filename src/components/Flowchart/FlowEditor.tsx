@@ -40,7 +40,6 @@ import { NodeRegistryProvider } from '../../context/NodeRegistryContext';
 import { IntellisensePopover } from '../Intellisense/IntellisensePopover';
 import { SelectionMenu } from './components/SelectionMenu';
 import { useConditionCreation } from './hooks/useConditionCreation';
-import { useEdgeDataManager } from './hooks/useEdgeDataManager';
 import { useFlowEventHandlers } from './hooks/useFlowEventHandlers';
 import { useFlowViewport } from './hooks/useFlowViewport';
 import { useCursorTooltip } from './hooks/useCursorTooltip';
@@ -59,6 +58,7 @@ import { waitForHandleBounds } from './utils/waitForHandleBounds';
 import { diagFlowLink } from './utils/flowTempLinkDiag';
 import { computeLinkMidScreenFromConnection } from './utils/computeLinkMidScreenFromConnection';
 import { incrementEditorOpenMetric } from '@features/performance';
+import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
 
 // Edge types stabile per evitare warning React Flow
 const edgeTypes = { custom: CustomEdge };
@@ -176,23 +176,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     if (edgeId) deleteEdgeManaged(edgeId);
   }, [deleteEdgeManaged]);
 
-  // ✅ Use Edge Data Manager hook for safe edge data updates
-  const { createOnUpdate } = useEdgeDataManager(setEdges, onDeleteEdge);
-
-  // Store callbacks in refs to avoid dependency issues in useEffect
-  const createOnUpdateRef = useRef(createOnUpdate);
-  const onDeleteEdgeRef = useRef(onDeleteEdge);
-  useEffect(() => {
-    createOnUpdateRef.current = createOnUpdate;
-    onDeleteEdgeRef.current = onDeleteEdge;
-  }, [createOnUpdate, onDeleteEdge]);
-
-  // Export createOnUpdate for edge initialization
-  useEffect(() => {
-    FlowStateBridge.setCreateOnUpdate(createOnUpdate);
-    return () => FlowStateBridge.setCreateOnUpdate(undefined);
-  }, [createOnUpdate]);
-
   // Deferred apply for labels on just-created edges (avoids race with RF state)
   const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler({
     edgesRef,
@@ -295,9 +278,17 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // ProjectData for condition creation
   const { data: projectData } = useProjectData();
-  const structuralProjectId =
-    (projectData as { id?: string; projectId?: string } | null)?.id ??
-    (projectData as { projectId?: string } | null)?.projectId;
+  const structuralProjectId = useMemo(
+    () =>
+      resolveVariableStoreProjectId(
+        String(
+          (projectData as { id?: string; projectId?: string } | null)?.id ??
+            (projectData as { projectId?: string } | null)?.projectId ??
+            ''
+        ).trim() || undefined
+      ),
+    [projectData]
+  );
 
   /** Runs before {@link useCrossNodeSubflowPortalMove} (registration order → capture phase first). */
   useCrossFlowRowMoveOrchestrator({ projectId: structuralProjectId, projectData });
@@ -309,7 +300,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     addNodeAtPosition,
     updateNode,
     reactFlowInstance,
-    projectId: (projectData as { id?: string; projectId?: string } | null)?.id ?? (projectData as { projectId?: string } | null)?.projectId,
+    projectId: structuralProjectId,
     flowCanvasId: flowId,
   });
   const { deleteNodeWithLog } = nodeActions;
@@ -350,14 +341,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setEdges,
     nodesRef,
     closeMenu,
-    onDeleteEdge,
     deleteNodeWithLog,
     updateNode,
     createFactoryTaskAdapter,
     createBackendCallAdapter,
     createTaskAdapter,
     nodeIdCounterRef,
-    createOnUpdate,
     onAfterConnect
   );
 
@@ -420,87 +409,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   useEffect(() => {
     patchEdges();
   }, [patchEdges]);
-
-  // LEGACY: Node callback injection - Components now primarily use FlowActionsContext
-  // These callbacks are injected as fallback for components that don't have context access
-  useEffect(() => {
-    if (nodes.length > 0) {
-      setNodes((nds) => {
-        return nds.map((node) => ({
-          ...node,
-          data: {
-            ...node.data,
-            // Fallback callbacks - components prefer FlowActionsContext when available
-            onDelete: () => deleteNodeWithLog(node.id),
-            onUpdate: (updates: any) => updateNode(node.id, updates),
-            // Entity creation callbacks
-            onCreateFactoryTask: createFactoryTask,
-            onCreateBackendCall: createBackendCall,
-            onCreateTask: createTask,
-            onCreateCondition: createCondition,
-          },
-        }));
-      });
-    }
-  }, [deleteNodeWithLog, updateNode, setNodes, createFactoryTask, createBackendCall, createTask, nodes.length]);
-
-  // LEGACY: Edge callback injection - CustomEdge now uses FlowActionsContext with fallback
-  // These callbacks are injected for edges loaded from saved projects that don't have callbacks
-  // Use a ref to track which edges have been initialized to prevent infinite loops
-  const initializedEdgeIdsRef = useRef<Set<string>>(new Set());
-  const previousEdgeIdsRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    // Create a set of current edge IDs
-    const currentEdgeIds = new Set(edges.map(e => e.id));
-
-    // Check if any new edges were added (not just re-renders)
-    const newEdgeIds = new Set([...currentEdgeIds].filter(id => !previousEdgeIdsRef.current.has(id)));
-
-    // Update previous edge IDs for next comparison
-    previousEdgeIdsRef.current = currentEdgeIds;
-
-    // Only check edges that are new OR haven't been initialized yet
-    const edgesNeedingInit = edges.filter(e =>
-      e.type === 'custom' &&
-      (newEdgeIds.has(e.id) || !initializedEdgeIdsRef.current.has(e.id)) &&
-      (!e.data?.onUpdate || !e.data?.onDeleteEdge)
-    );
-
-    if (edgesNeedingInit.length === 0) {
-      return; // No edges need initialization
-    }
-
-    const edgeIdsNeedingInit = new Set(edgesNeedingInit.map((e) => e.id));
-
-    setEdges(eds => {
-      let hasChanges = false;
-      const updatedEdges = eds.map(e => {
-        if (e.type === 'custom' && edgeIdsNeedingInit.has(e.id)) {
-          const existingData = e.data || {};
-          const needsOnUpdate = !existingData.onUpdate;
-          const needsOnDeleteEdge = !existingData.onDeleteEdge;
-
-          if (needsOnUpdate || needsOnDeleteEdge) {
-            hasChanges = true;
-            initializedEdgeIdsRef.current.add(e.id); // Mark as initialized
-
-            return {
-              ...e,
-              data: {
-                ...existingData, // Preserve ALL existing data (linkStyle, labelPositionSvg, controlPoints, etc.)
-                ...(needsOnUpdate && { onUpdate: createOnUpdateRef.current(e.id) }),
-                ...(needsOnDeleteEdge && { onDeleteEdge: onDeleteEdgeRef.current })
-              }
-            };
-          }
-        }
-        return e;
-      });
-
-      return hasChanges ? updatedEdges : eds; // Only return new array if there were changes
-    });
-  }, [edges, setEdges]); // Depend on edges array, but use refs to track which ones we've processed
 
   // Normalize dashed edges only when needed (avoid unconditional full-array churn).
   useEffect(() => {
@@ -596,6 +504,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         rowData?: unknown;
         cloneScreenPosition?: { x: number; y: number };
         flowCanvasId?: string;
+        operationId?: string;
+        dndTraceId?: string;
       };
       const { rowData, cloneScreenPosition, flowCanvasId: targetFlowId } = detail;
 
@@ -609,8 +519,15 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         return;
       }
 
+      const traceOp = String(detail.operationId || detail.dndTraceId || '').trim();
+
       // ✅ Crea il nodo posizionandolo esattamente dove è il clone (coordinate schermo convertite in flow)
-      createNodeAt(cloneScreenPosition.x, cloneScreenPosition.y, rowData);
+      createNodeAt(
+        cloneScreenPosition.x,
+        cloneScreenPosition.y,
+        rowData,
+        traceOp ? { operationId: traceOp, dndTraceId: traceOp } : undefined
+      );
     };
 
     window.addEventListener('createNodeFromRow', handleCreateNodeFromRow as EventListener);
@@ -633,10 +550,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     reactFlowInstance,
     storeApi,
     connectionMenuRef,
-    onDeleteEdge,
     setNodesWithLog,
-    isCreatingTempNode,
-    createOnUpdate
+    isCreatingTempNode
   );
 
   // Export cleanup for Intellisense

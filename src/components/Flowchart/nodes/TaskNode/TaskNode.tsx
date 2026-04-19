@@ -4,7 +4,7 @@ import { NodeHandles } from '../../NodeHandles';
 import { NodeHeader } from '../CustomNode/NodeHeader';
 import { CheckSquare } from 'lucide-react';
 import { dlog } from '../../../../utils/debug';
-import { useFlowActions } from '../../../../context/FlowActionsContext';
+import { useFlowActionsStrict } from '../../../../context/FlowActionsContext';
 
 // Debug gate for TaskNode focus/keys
 const taskDbg = () => {
@@ -21,7 +21,7 @@ export interface TaskNodeData {
 }
 
 export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ id, data, selected, isConnectable }) => {
-  const flowActions = useFlowActions();
+  const flowActions = useFlowActionsStrict();
   const [title, setTitle] = React.useState<string>(data?.label ?? '');
   const [editing, setEditing] = React.useState<boolean>(Boolean(data?.editOnMount));
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -45,24 +45,14 @@ export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ id, data, selected
     const next = (v || '').trim() || 'Task';
     tlog('commit()', { id, next });
     setEditing(false);
-    // Update via context or fallback - remove editingToken so it won't edit on reload
-    if (flowActions?.updateNode) {
-      flowActions.updateNode(id, { label: next, editOnMount: false, editingToken: undefined, showGuide: false });
-    } else if (typeof data?.onUpdate === 'function') {
-      data.onUpdate({ label: next, editOnMount: false, editingToken: undefined, showGuide: false });
-    }
+    flowActions.updateNode(id, { label: next, editOnMount: false, editingToken: undefined, showGuide: false });
     try { (data as any)?.onCommitTitle?.(next); } catch { }
   };
 
   const cancel = () => {
     tlog('cancel()', { id });
     setEditing(false);
-    // Clear on cancel as well (e.g., ESC)
-    if (flowActions?.updateNode) {
-      flowActions.updateNode(id, { editOnMount: false, editingToken: undefined });
-    } else if (typeof data?.onUpdate === 'function') {
-      data.onUpdate({ editOnMount: false, editingToken: undefined });
-    }
+    flowActions.updateNode(id, { editOnMount: false, editingToken: undefined });
     try { (data as any)?.onCancelTitle?.(); } catch { }
   };
 

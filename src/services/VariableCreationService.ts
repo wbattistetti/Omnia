@@ -45,6 +45,8 @@ import { getVariableLabel } from '@utils/getVariableLabel';
 import { publishVariableDisplayTranslation } from '@utils/variableTranslationBridge';
 import { makeTranslationKey } from '@utils/translationKeys';
 import { incrementEditorOpenMetric, measureEditorOpenMetric } from '@features/performance';
+import { mergeWorkspaceFlowsPreferRicherGraph } from '@utils/mergeWorkspaceFlowsPreferRicherGraph';
+import { flowContainsTaskRow } from '@domain/taskSubflowMove/moveTaskRowInFlows';
 
 interface CreateVariablesOptions {
   taskInstance: Task;
@@ -66,6 +68,13 @@ interface CreateVariablesOptions {
  * For utterance tasks, `id` equals `TaskTreeNode.id`. Utterance rows are hydrated via
  * {@link hydrateVariablesFromTaskTree} / {@link hydrateVariablesFromFlow} only — not from the variable menu.
  */
+
+/** Options for {@link VariableCreationService.hydrateVariablesFromFlow}. */
+export type HydrateVariablesFromFlowOptions = {
+  /** When true, use only the passed `flows` snapshot (do not merge with `getSubflowSyncFlows()`). */
+  skipGlobalMerge?: boolean;
+};
+
 class VariableCreationService {
   /** In-memory store: projectId → VariableInstance[] */
   private store: Map<string, VariableInstance[]> = new Map();
@@ -368,7 +377,8 @@ class VariableCreationService {
    */
   hydrateVariablesFromFlow(
     projectId: string | null | undefined,
-    flows: WorkspaceState['flows'] | null | undefined
+    flows: WorkspaceState['flows'] | null | undefined,
+    options?: HydrateVariablesFromFlowOptions
   ): void {
     measureEditorOpenMetric('variableCreationService.hydrateVariablesFromFlow', () => {
     const pid = this.projectKey(projectId);
@@ -381,13 +391,23 @@ class VariableCreationService {
       return;
     }
 
+    const skipGlobalMerge = options?.skipGlobalMerge === true;
+    /**
+     * Bootstrap / Dock: merge with `getSubflowSyncFlows()` so the richer live slice wins.
+     * Structural pipeline: pass `skipGlobalMerge: true` so the orchestrator snapshot is not contaminated
+     * by a stale ref (subflow empty vs full race).
+     */
+    const flowsMerged = skipGlobalMerge
+      ? flows
+      : mergeWorkspaceFlowsPreferRicherGraph(flows, getSubflowSyncFlows());
+
     const storeBefore = (this.store.get(pid) ?? []).length;
     const hydratedTaskRows: { flowCanvasId: string; taskRowId: string; nodeCount: number }[] = [];
 
     /** Every task row id currently on an included canvas row (any flow). */
     const taskRowIdsOnCanvas = new Set<string>();
-    for (const flowCanvasId of Object.keys(flows)) {
-      const slice = flows[flowCanvasId];
+    for (const flowCanvasId of Object.keys(flowsMerged)) {
+      const slice = flowsMerged[flowCanvasId];
       if (!slice?.nodes?.length) continue;
       for (const graphNode of slice.nodes || []) {
         const rows = (graphNode as { data?: { rows?: unknown[] } })?.data?.rows;
@@ -400,8 +420,8 @@ class VariableCreationService {
       }
     }
 
-    for (const flowCanvasId of Object.keys(flows)) {
-      const slice = flows[flowCanvasId];
+    for (const flowCanvasId of Object.keys(flowsMerged)) {
+      const slice = flowsMerged[flowCanvasId];
       if (!slice?.nodes?.length) continue;
 
       for (const graphNode of slice.nodes || []) {
@@ -453,7 +473,7 @@ class VariableCreationService {
     for (const v of all) {
       const tid = String(v.taskInstanceId || '').trim();
       const sf = String(v.scopeFlowId || '').trim();
-      if (!tid || !sf || !flows[sf]) continue;
+      if (!tid || !sf || !flowsMerged[sf]) continue;
       const t = taskRepository.getTask(tid);
       if (!t) continue;
       const utterLike =
@@ -461,6 +481,10 @@ class VariableCreationService {
       if (!utterLike) continue;
       const auth = String((t as { authoringFlowCanvasId?: string | null }).authoringFlowCanvasId ?? '').trim();
       if (!auth || auth === sf) {
+        taskRowIdsForPrune.add(tid);
+        continue;
+      }
+      if (auth && flowContainsTaskRow(flowsMerged, auth, tid)) {
         taskRowIdsForPrune.add(tid);
       }
     }
@@ -481,7 +505,7 @@ class VariableCreationService {
     const storeAfter = (this.store.get(pid) ?? []).length;
     logVariableHydration('hydrateVariablesFromFlow:done', {
       projectId: pid,
-      flowIdsInWorkspace: Object.keys(flows),
+      flowIdsInWorkspace: Object.keys(flowsMerged),
       utteranceRowsHydrated: hydratedTaskRows.length,
       hydratedTaskRows,
       variableStoreCountBefore: storeBefore,
@@ -497,11 +521,11 @@ class VariableCreationService {
     }
 
     const upsertSlice = getSubflowSyncUpsertFlowSlice();
-    if (upsertSlice && flows) {
-      for (const flowCanvasId of Object.keys(flows)) {
-        const slice = flows[flowCanvasId];
+    if (upsertSlice && flowsMerged) {
+      for (const flowCanvasId of Object.keys(flowsMerged)) {
+        const slice = flowsMerged[flowCanvasId];
         if (!slice) continue;
-        const vars = this.getVariablesForFlowScope(pid, flowCanvasId, flows);
+        const vars = this.getVariablesForFlowScope(pid, flowCanvasId, flowsMerged);
         const currentVars = Array.isArray((slice as { variables?: unknown[] }).variables)
           ? ((slice as { variables?: VariableInstance[] }).variables ?? [])
           : [];
@@ -520,7 +544,7 @@ class VariableCreationService {
       document.dispatchEvent(
         new CustomEvent('omnia:flowVariablesHydrated', {
           bubbles: true,
-          detail: { projectId: pid, flowIds: Object.keys(flows) },
+          detail: { projectId: pid, flowIds: Object.keys(flowsMerged) },
         })
       );
     }
@@ -668,6 +692,61 @@ class VariableCreationService {
     this.store.set(key, [...existing, newVariable]);
     this.setVariableTranslationLabel(newVariable.id, trimmed);
     return newVariable;
+  }
+
+  /**
+   * Removes variable rows by GUID regardless of task binding (S2 reverse merge: drop parent proxy A).
+   */
+  removeVariableRowsByGuids(projectId: string | null | undefined, guids: readonly string[]): number {
+    const remove = new Set(guids.map((g) => String(g || '').trim()).filter(Boolean));
+    if (remove.size === 0) return 0;
+    const key = this.projectKey(projectId);
+    const existing = this.store.get(key) ?? [];
+    let n = 0;
+    const next = existing.filter((v) => {
+      const id = String(v.id || '').trim();
+      if (remove.has(id)) {
+        n += 1;
+        return false;
+      }
+      return true;
+    });
+    if (n > 0) {
+      this.store.set(key, next);
+    }
+    return n;
+  }
+
+  /**
+   * Updates `scopeFlowId` and optional `taskInstanceId` for a variable row (promote child var to parent canvas).
+   */
+  retargetVariableRowScope(
+    projectId: string | null | undefined,
+    variableId: string,
+    opts: { scopeFlowId: string; taskInstanceId?: string; clearSubflowAutoRenameLock?: boolean }
+  ): boolean {
+    const vid = String(variableId || '').trim();
+    const sf = String(opts.scopeFlowId || '').trim();
+    const key = this.projectKey(projectId);
+    const existing = this.store.get(key) ?? [];
+    const idx = existing.findIndex((x) => String(x.id || '').trim() === vid);
+    if (idx < 0) return false;
+    const row = existing[idx];
+    const nextRow: VariableInstance = {
+      ...row,
+      scope: 'flow',
+      scopeFlowId: sf,
+      ...(opts.taskInstanceId !== undefined
+        ? { taskInstanceId: String(opts.taskInstanceId || '').trim() }
+        : {}),
+    };
+    if (opts.clearSubflowAutoRenameLock === true) {
+      delete nextRow.subflowAutoRenameLocked;
+    }
+    const next = [...existing];
+    next[idx] = nextRow;
+    this.store.set(key, next);
+    return true;
   }
 
   /**

@@ -14,6 +14,7 @@ import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
 import VariableTokenContextMenu, {
   type VariableMenuRowItem,
 } from '@components/common/VariableTokenContextMenu';
+import { formatFlowchartRowTextForViewer } from '@utils/flowchartRowTextDisplay';
 
 // Component to render checkbox with dynamic size based on font
 const CheckboxButton: React.FC<{
@@ -364,6 +365,12 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
     return taskRepository.getTask(row.id);
   }, [row?.id]);
 
+  /** Viewer-only: resolve `[guid]` / short segments via flow `meta.translations` (`var:<guid>`). */
+  const displayRowLabelText = React.useMemo(() => {
+    if (isEditing) return row.text ?? '';
+    return formatFlowchartRowTextForViewer(row.text, activeFlowId);
+  }, [isEditing, row.text, activeFlowId]);
+
   // ✅ Handle test task - opens GlobalTestPanel with task instance
   const [subflowIfaceMenu, setSubflowIfaceMenu] = useState<{
     x: number;
@@ -487,7 +494,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
         );
       })()}
       {/* Gear icon intentionally omitted next to label; shown only in the external actions strip */}
-      {row.text}
+      {displayRowLabelText}
       {!suppressFloatingChrome &&
         createPortal(
           <EmptySpaceOverlay

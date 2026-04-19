@@ -13,6 +13,7 @@ import { applyTaskMoveToSubflow } from './applyTaskMoveToSubflow';
 import type { ProjectConditionLike } from './collectReferencedVarIds';
 import { registerSubflowWiringSecondPass } from './subflowWiringAfterVariableStore';
 import { getSubflowSyncFlows, getSubflowSyncTranslations } from './subflowSyncFlowsRef';
+import { getActiveDndOperationId } from '@utils/dndOperationInstrument';
 
 const SUBFLOW_PREFIX = 'subflow_';
 
@@ -119,6 +120,7 @@ export function syncSubflowInterfaceAfterAuthoringCanvasChange(
   if (syncInFlight) return null;
   syncInFlight = true;
   try {
+    const gestureTrace = getActiveDndOperationId();
     const first = applyTaskMoveToSubflow({
       projectId: pid,
       parentFlowId,
@@ -132,9 +134,10 @@ export function syncSubflowInterfaceAfterAuthoringCanvasChange(
       projectData,
       skipMaterialization: true,
       deleteUnreferencedTaskVariableRows: true,
+      ...(gestureTrace ? { dndTraceId: gestureTrace, operationId: gestureTrace } : {}),
     });
 
-    variableCreationService.hydrateVariablesFromFlow(pid, first.flowsNext);
+    variableCreationService.hydrateVariablesFromFlow(pid, first.flowsNext, { skipGlobalMerge: true });
     variableCreationService.hydrateVariablesFromFlow(pid, getSubflowSyncFlows());
 
     const flushed = registerSubflowWiringSecondPass({
@@ -147,6 +150,8 @@ export function syncSubflowInterfaceAfterAuthoringCanvasChange(
       conditions,
       translations: translationsArg,
       projectData,
+      flowsSnapshotAfterStructuralApply: first.flowsNext,
+      ...(gestureTrace ? { dndTraceId: gestureTrace, operationId: gestureTrace } : {}),
     });
     const out = flushed ?? first;
     return { ...out, parentFlowId, childFlowId };

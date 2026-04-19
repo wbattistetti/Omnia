@@ -24,6 +24,7 @@ Impostare in `.env.local` (`1` = attivo):
 | Variabile | Effetto |
 |-----------|---------|
 | `VITE_FLOW_GRAPH_SILENCE_LOCAL_WARNINGS=1` | Sopprime i warning Phase 1 (`[FlowGraph:migration]`) |
+| `VITE_FLOW_GRAPH_DND_ROUTING_LOG=1` | Abilita log di routing DnD (`[FlowGraph:dnd]`, default off in dev) |
 | `VITE_FLOW_GRAPH_DISABLE_OPTIMISTIC_MERGE` | Non fa merge ottimistico su target in `CustomNode` dopo drop |
 | `VITE_FLOW_GRAPH_DISABLE_SCHEDULE_COMMITTED_SYNC` | Orchestratore non schedula `scheduleCommittedFlowNodeRowsSync` |
 | `VITE_FLOW_GRAPH_DISABLE_COMMITTED_ROWS_LISTENER` | `FlowCanvasHost` ignora evento righe committed |

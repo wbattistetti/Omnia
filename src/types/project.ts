@@ -139,6 +139,8 @@ export interface RowMeta {
   semanticValuesDraft?: SemanticValue[] | null;
   /** Stable promised variable GUID used by conditions, interface exposure, and utterance variable materialization. */
   variableRefId?: string;
+  /** Subflow portal: child flow id when TaskRepository has not hydrated the Subflow task yet (DnD DOM markers). */
+  subflowChildFlowId?: string;
 }
 
 /**

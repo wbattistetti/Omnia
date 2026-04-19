@@ -146,21 +146,8 @@ export const FlowActionsProvider: React.FC<FlowActionsProviderProps> = ({
 };
 
 /**
- * Hook to access flow actions from context.
- *
- * IMPORTANT: This hook returns null if used outside FlowActionsProvider.
- * Components should handle this case and fall back to data.onDelete/data.onUpdate.
- *
- * @example
- * const actions = useFlowActions();
- * // With fallback:
- * const handleDelete = () => {
- *   if (actions?.deleteNode) {
- *     actions.deleteNode(nodeId);
- *   } else if (data.onDelete) {
- *     data.onDelete();
- *   }
- * };
+ * Hook to access flow actions from context (nullable).
+ * Prefer {@link useFlowActionsStrict} under {@link FlowActionsProvider}; graph edits must not use `data.onUpdate`.
  */
 export function useFlowActions(): FlowActionsContextValue | null {
   return useContext(FlowActionsContext);

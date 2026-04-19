@@ -34,6 +34,10 @@ export type ApplyTaskMoveToSubflowParams = {
   isLinkedSubflowMove?: boolean;
   secondPass?: boolean;
   exposeAllTaskVariablesInChildInterface?: boolean;
+  /** Optional: correlates portal DnD → apply → rename (`crossNodeRowMove` detail `dndTraceId`). */
+  dndTraceId?: string;
+  /** Same uuid as `dndTraceId` when set from row DnD — explicit key for `[Subflow:*]` logs. */
+  operationId?: string;
 };
 
 export type MaterializeMovedTaskSummary = {

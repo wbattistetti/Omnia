@@ -4,9 +4,11 @@
  * after FlowCanvasHost / VariableCreationService hydrate) and taskInstanceId has variable rows.
  */
 
+import type { WorkspaceState } from '@flows/FlowTypes';
 import { variableCreationService } from '@services/VariableCreationService';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
 import { logS2Diag } from '@utils/s2WiringDiagnostic';
+import { mergeWorkspaceFlowsPreferRicherGraph } from '@utils/mergeWorkspaceFlowsPreferRicherGraph';
 import { applyTaskMoveToSubflow, type ApplyTaskMoveToSubflowResult } from './applyTaskMoveToSubflow';
 import type { ProjectConditionLike } from './collectReferencedVarIds';
 import { getSubflowSyncFlows, upsertFlowSlicesFromSubflowSync } from './subflowSyncFlowsRef';
@@ -23,6 +25,13 @@ export type SubflowWiringSecondPassRequest = {
   translations?: Record<string, string>;
   /** When true, same as {@link ApplyTaskMoveToSubflowParams.exposeAllTaskVariablesInChildInterface}. */
   exposeAllTaskVariablesInChildInterface?: boolean;
+  dndTraceId?: string;
+  operationId?: string;
+  /**
+   * Flow snapshot from the structural first pass (parent + child). Merged with live ref so second pass
+   * does not skip when `getSubflowSyncFlows()` is stale before the next React render.
+   */
+  flowsSnapshotAfterStructuralApply?: WorkspaceState['flows'];
 };
 
 const pending = new Map<string, SubflowWiringSecondPassRequest>();
@@ -88,19 +97,26 @@ export function tryFlushSubflowSecondPassForTask(
     return null;
   }
 
-  const flows = getSubflowSyncFlows();
+  const live = getSubflowSyncFlows();
+  const snap = req.flowsSnapshotAfterStructuralApply;
+  const flows = snap ? mergeWorkspaceFlowsPreferRicherGraph(snap, live) : live;
   if (!flows[req.parentFlowId] || !flows[req.childFlowId]) {
     logTaskSubflowMove('subflowSecondPass:flushSkipped', {
       reason: 'missing_flow_slices',
       taskInstanceId: tid,
       hasParent: !!flows[req.parentFlowId],
       hasChild: !!flows[req.childFlowId],
+      usedStructuralSnapshot: !!snap,
     });
     return null;
   }
 
   flushing.add(tid);
   try {
+    const trace =
+      String(req.operationId || '').trim() ||
+      String(req.dndTraceId || '').trim() ||
+      undefined;
     const result = applyTaskMoveToSubflow({
       projectId: pid,
       parentFlowId: req.parentFlowId,
@@ -117,6 +133,7 @@ export function tryFlushSubflowSecondPassForTask(
       isLinkedSubflowMove: true,
       secondPass: true,
       exposeAllTaskVariablesInChildInterface: req.exposeAllTaskVariablesInChildInterface,
+      ...(trace ? { dndTraceId: trace, operationId: trace } : {}),
     });
 
     upsertFlowSlicesFromSubflowSync(result.flowsNext, [req.parentFlowId, req.childFlowId]);

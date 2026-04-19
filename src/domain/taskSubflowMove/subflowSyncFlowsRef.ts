@@ -49,6 +49,7 @@ export function upsertFlowSlicesFromSubflowSync(flowsNext: WorkspaceState['flows
     return false;
   }
   let ok = true;
+  const merged = { ...latestFlows };
   for (const id of flowIds) {
     const slice = flowsNext[id];
     if (!slice) {
@@ -56,8 +57,10 @@ export function upsertFlowSlicesFromSubflowSync(flowsNext: WorkspaceState['flows
       ok = false;
       continue;
     }
+    merged[id] = slice as Flow;
     upsertFlowSlice(slice as Flow);
   }
+  latestFlows = merged;
   logTaskSubflowMove('subflowSync:upsertFlowSlices:done', { flowIds: [...flowIds], ok });
   return ok;
 }

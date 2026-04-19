@@ -10,13 +10,17 @@
  */
 
 import type { WorkspaceState } from '@flows/FlowTypes';
+import type { HydrateVariablesFromFlowOptions } from '@services/VariableCreationService';
 import { variableCreationService } from '@services/VariableCreationService';
+
+export type ReconcileUtteranceVariableStoreOptions = HydrateVariablesFromFlowOptions;
 
 export function reconcileUtteranceVariableStoreWithFlowGraph(
   projectId: string | null | undefined,
-  flows: WorkspaceState['flows'] | null | undefined
+  flows: WorkspaceState['flows'] | null | undefined,
+  options?: ReconcileUtteranceVariableStoreOptions
 ): void {
-  variableCreationService.hydrateVariablesFromFlow(projectId, flows);
+  variableCreationService.hydrateVariablesFromFlow(projectId, flows, options);
 }
 
 /** Initial / fingerprint-driven hydration when the workspace loads or the canvas graph changes. */

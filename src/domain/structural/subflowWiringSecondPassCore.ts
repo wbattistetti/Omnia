@@ -44,7 +44,7 @@ export function executeSubflowWiringSecondPassCore(
   const vars = variableCreationService.getVariablesByTaskInstanceId(pid, tid);
   if (vars.length === 0) return null;
 
-  reconcileUtteranceVariableStoreWithFlowGraph(pid, flows);
+  reconcileUtteranceVariableStoreWithFlowGraph(pid, flows, { skipGlobalMerge: true });
   emitVariableStoreUpdated();
 
   const translationsArg =

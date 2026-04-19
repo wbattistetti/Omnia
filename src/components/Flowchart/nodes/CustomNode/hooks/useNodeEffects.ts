@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { NodeRowData } from '../../../../../types/project';
+import type { NodeRowsCommitOptions } from './useNodeRowManagement';
 
 interface UseNodeEffectsProps {
     // State
@@ -19,7 +20,7 @@ interface UseNodeEffectsProps {
     // Setters
     setIsHoverHeader: (hovered: boolean) => void;
     setIsHoveredNode: (hovered: boolean) => void;
-    setNodeRows: (rows: NodeRowData[]) => void;
+    setNodeRows: (rows: NodeRowData[], options?: NodeRowsCommitOptions) => void;
     setIsEmpty: (empty: boolean) => void;
     setEditingRowId: (id: string | null) => void;
 
@@ -178,10 +179,6 @@ export function useNodeEffects({
                 return r;
             });
             setNodeRows(next);
-            // Schedule parent update outside render/setState to avoid warnings
-            try {
-                Promise.resolve().then(() => normalizedData.onUpdate?.({ rows: next }));
-            } catch { }
         };
         document.addEventListener('rowMessage:update', handler as any);
         return () => document.removeEventListener('rowMessage:update', handler as any);
@@ -195,8 +192,6 @@ export function useNodeEffects({
             if (emptyRows.length > 0) {
                 const cleanedRows = nodeRows.filter(row => row.text && row.text.trim().length > 0);
                 setNodeRows(cleanedRows);
-                setIsEmpty(computeIsEmpty(cleanedRows));
-                normalizedData.onUpdate?.({ rows: cleanedRows });
             }
 
             // Esci dall'editing e stabilizza il nodo se è temporaneo

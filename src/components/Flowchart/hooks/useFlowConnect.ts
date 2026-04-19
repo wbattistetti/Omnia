@@ -12,14 +12,12 @@ export function useFlowConnect(
   setEdges: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>,
   nodesRef: React.MutableRefObject<Node<FlowNode>[]>,
   closeMenu: () => void,
-  onDeleteEdge: (edgeId?: string) => void,
   deleteNodeWithLog: (nodeId: string) => void,
   updateNode: (nodeId: string, updates: Partial<FlowNode>) => void,
   createFactoryTask: () => void,
   createBackendCall: () => void,
   createTask: () => void,
   nodeIdCounter: React.MutableRefObject<number>,
-  createOnUpdate: (edgeId: string) => (updates: any) => void,
   /** Dopo aver aggiunto l’edge tra nodi esistenti: stesso picker condizioni del drop su pane. */
   onAfterConnect?: (edgeId: string, connection: Connection) => void
 ) {
@@ -41,14 +39,12 @@ export function useFlowConnect(
       style: { stroke: '#8b5cf6' },
       type: 'custom',
       data: {
-        onDeleteEdge,
-        onUpdate: createOnUpdate(id),
-        linkStyle: DEFAULT_LINK_STYLE
+        linkStyle: DEFAULT_LINK_STYLE,
       },
       markerEnd: 'arrowhead'
     }]);
     onAfterConnect?.(id, connection);
-  }, [setEdges, onDeleteEdge, createOnUpdate, onAfterConnect]);
+  }, [setEdges, onAfterConnect]);
 
   // Handle connection start
   const onConnectStart = useCallback((event: any, params: any) => {
@@ -95,8 +91,6 @@ export function useFlowConnect(
       data: {
         label: '',
         rows: [],
-        onDelete: () => deleteNodeWithLog(newNodeId),
-        onUpdate: (updates: any) => updateNode(newNodeId, updates),
         onCreateFactoryTask: createFactoryTask,
         onCreateBackendCall: createBackendCall,
         onCreateTask: createTask,
@@ -115,9 +109,7 @@ export function useFlowConnect(
       style: { stroke: '#8b5cf6' },
       type: 'custom',
       data: {
-        onDeleteEdge,
-        onUpdate: createOnUpdate(edgeId),
-        linkStyle: DEFAULT_LINK_STYLE
+        linkStyle: DEFAULT_LINK_STYLE,
       },
       markerEnd: 'arrowhead'
     };
@@ -127,9 +119,8 @@ export function useFlowConnect(
     closeMenu();
   }, [
     reactFlowInstance, connectionMenuRef, setNodes, setEdges,
-    closeMenu, onDeleteEdge, deleteNodeWithLog, updateNode,
+    closeMenu, deleteNodeWithLog, updateNode,
     createFactoryTask, createBackendCall, createTask, nodeIdCounter,
-    createOnUpdate
   ]);
 
   return {

@@ -88,14 +88,6 @@ export function useTaskCreationFromSelection({
         label: '', // Empty at start, will be edited by user
         flowId: newFlowId,
         editingToken, // Immutable token to trigger immediate editing
-        onUpdate: (updates: any) => {
-          console.log('🎯 [TASK_UPDATE] Task node data updated:', updates);
-          setNodes((nds) =>
-            nds.map((n) =>
-              n.id === taskNodeId ? { ...n, data: { ...n.data, ...updates } } : n
-            )
-          );
-        },
         onCancelTitle: () => {
           console.log('🎯 [TASK_CANCEL] Task creation cancelled, restoring original selection');
 

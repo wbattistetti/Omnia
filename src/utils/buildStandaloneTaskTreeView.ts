@@ -5,7 +5,7 @@
 
 import type { Task, TaskTree, TaskTreeNode } from '@types/taskTypes';
 import { inferTaskKind } from '@utils/taskKind';
-import { logContractPersist, summarizeSubTasksForDebug } from '@utils/contractPersistDebug';
+import { isContractPersistMaterializeVerboseEnabled, summarizeSubTasksForDebug } from '@utils/contractPersistDebug';
 import { mergeInstanceNodeStepsIntoTreeSteps } from '@utils/instanceNodeStepsFlatten';
 
 /**
@@ -54,12 +54,14 @@ export function buildStandaloneTaskTreeView(task: Task | null | undefined): Task
 
   const labelKey = task.labelKey ?? task.label ?? 'standalone_task';
 
-  logContractPersist('materialize', 'buildStandaloneTaskTreeView (subTasks for editor)', {
-    taskId: task.id,
-    inferredKind: inferTaskKind(task),
-    templateId: task.templateId ?? null,
-    ...summarizeSubTasksForDebug(nodes),
-  });
+  if (isContractPersistMaterializeVerboseEnabled()) {
+    console.info('[ContractPersist:materialize] buildStandaloneTaskTreeView (subTasks for editor)', {
+      taskId: task.id,
+      inferredKind: inferTaskKind(task),
+      templateId: task.templateId ?? null,
+      ...summarizeSubTasksForDebug(nodes),
+    });
+  }
 
   return {
     labelKey: typeof labelKey === 'string' ? labelKey : 'standalone_task',

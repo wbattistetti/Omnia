@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildCrossNodeRowMoveDetail, inferDndRowCommandKind } from '../dndRowCommandDispatch';
+import {
+  buildCrossNodeRowMoveDetail,
+  buildCreateNodeFromRowDetail,
+  buildDragPayloadCanvasExtract,
+  inferDndRowCommandKind,
+} from '../dndRowCommandDispatch';
 import type { DragRowPayload } from '../dndRowPayloadTypes';
 
 describe('buildCrossNodeRowMoveDetail', () => {
@@ -20,6 +25,23 @@ describe('buildCrossNodeRowMoveDetail', () => {
     expect(d.rowId).toBe('row1');
     expect((d._state as { handled: boolean }).handled).toBe(false);
     expect(d.targetRowInsertIndex).toBe(1);
+  });
+
+  it('includes dndTraceId when provided', () => {
+    const d = buildCrossNodeRowMoveDetail({
+      fromNodeId: 'a',
+      toNodeId: 'b',
+      draggedRowId: 'row1',
+      rowData: { id: 'row1', text: 'x' },
+      draggedRowIndex: 0,
+      mousePosition: { x: 1, y: 2 },
+      fromFlowCanvasId: 'main',
+      toFlowCanvasId: 'main',
+      targetRowId: null,
+      targetRegion: 'node',
+      dndTraceId: 'trace-test-uuid',
+    });
+    expect(d.dndTraceId).toBe('trace-test-uuid');
   });
 });
 
@@ -54,5 +76,31 @@ describe('inferDndRowCommandKind', () => {
       targetRegion: 'row',
     } as DragRowPayload;
     expect(inferDndRowCommandKind(p)).toBe('MoveRowToNode');
+  });
+
+  it('returns MoveRowToCanvas when targetNodeId is null', () => {
+    const p = buildDragPayloadCanvasExtract({
+      flowCanvasId: 'main',
+      sourceNodeId: 'n1',
+      rowId: 'r',
+      rowData: { id: 'r', text: '' },
+      sourceIndex: 0,
+      targetFlowCanvasId: 'main',
+    });
+    expect(inferDndRowCommandKind(p)).toBe('MoveRowToCanvas');
+  });
+});
+
+describe('buildCreateNodeFromRowDetail', () => {
+  it('normalizes flow canvas id', () => {
+    const d = buildCreateNodeFromRowDetail({
+      fromNodeId: 'a',
+      rowId: 'r1',
+      rowData: { id: 'r1', text: 'x' },
+      cloneScreenPosition: { x: 10, y: 20 },
+      flowCanvasId: 'main',
+    });
+    expect(d.flowCanvasId).toBe('main');
+    expect(d.cloneScreenPosition.x).toBe(10);
   });
 });

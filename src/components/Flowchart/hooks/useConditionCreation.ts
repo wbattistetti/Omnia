@@ -77,7 +77,7 @@ export function useConditionCreation(
 
         // Se avevamo un edge esistente, attacca ora il conditionId e chiudi
         if (attachToEdgeId) {
-          setEdges((eds: any) => eds.map((e: any) => e.id === attachToEdgeId ? { ...e, data: { ...(e.data || {}), onDeleteEdge, conditionId }, label: name } : e));
+          setEdges((eds: any) => eds.map((e: any) => e.id === attachToEdgeId ? { ...e, data: { ...(e.data || {}), conditionId }, label: name } : e));
           closeMenu();
           return;
         }
@@ -150,7 +150,7 @@ export function useConditionCreation(
             ...e,
             style: { stroke: '#8b5cf6' },
             label: name,
-            data: { ...(e.data || {}), onDeleteEdge, conditionId }
+            data: { ...(e.data || {}), conditionId }
           } : e));
           // azzera i ref temporanei per evitare doppie creazioni successive
           connectionMenuRef.current.tempNodeId = null as any;
@@ -169,13 +169,7 @@ export function useConditionCreation(
             data: {
               label: '',
               rows: [],
-              onDelete: () => deleteNodeWithLog(newNodeId),
-              onUpdate: (updates: any) => updateNode(newNodeId, updates),
-              onCreateFactoryTask: createFactoryTask,
-              onCreateBackendCall: createBackendCall,
-              onCreateTask: createTask,
-              onCreateCondition: createCondition,
-              focusRowId: '1'
+              focusRowId: '1',
             },
           };
           const targetHandle = getTargetHandle(connectionMenuRef.current.sourceHandleId || '');
@@ -188,7 +182,7 @@ export function useConditionCreation(
             style: { stroke: '#8b5cf6' },
             label: name,
             type: 'custom',
-            data: { onDeleteEdge },
+            data: {},
             markerEnd: 'arrowhead',
           };
           setNodes((nds: any) => nds);
@@ -210,7 +204,7 @@ export function useConditionCreation(
     } catch (error) {
       try { console.error('[CondFlow] error', error); } catch {}
     }
-  }, [projectData, addItem, addCategory, setEdges, setSelectedEdgeId, pendingEdgeIdRef, closeMenu, nodeIdCounter, reactFlowInstance, connectionMenuRef, deleteNodeWithLog, updateNode, onDeleteEdge, setNodes, nodesRef, setNodeIdCounter, createFactoryTask, createBackendCall, createTask, createCondition, tempFlags, setNodesWithLog, removeAllTempEdges, edges]);
+  }, [projectData, addItem, addCategory, setEdges, setSelectedEdgeId, pendingEdgeIdRef, closeMenu, nodeIdCounter, reactFlowInstance, connectionMenuRef, setNodes, nodesRef, setNodeIdCounter, tempFlags, setNodesWithLog, removeAllTempEdges, edges]);
 
   return { handleCreateCondition };
 }

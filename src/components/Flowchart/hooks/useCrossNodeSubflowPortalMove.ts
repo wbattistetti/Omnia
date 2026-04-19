@@ -18,11 +18,14 @@ import {
 import type { ApplyTaskMoveToSubflowResult } from '@domain/taskSubflowMove/applyTaskMoveToSubflow';
 import { registerSubflowWiringSecondPass } from '@domain/taskSubflowMove/subflowWiringAfterVariableStore';
 import { variableCreationService } from '@services/VariableCreationService';
-import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logTaskSubflowMove, logTaskSubflowMoveTrace } from '@utils/taskSubflowMoveDebug';
 import { logS2Diag } from '@utils/s2WiringDiagnostic';
 import { logSubflowCanvasDebug, summarizeFlowSlice } from '@utils/subflowCanvasDebug';
+import { dropTargetsSubflowPortalRow } from '@components/Flowchart/utils/crossNodeRowDropHitTest';
 import type { FlowNode } from '../types/flowTypes';
+import type { Flow } from '@flows/FlowTypes';
 import type { NodeRowData } from '@types/project';
+import { logDndRouting } from '@domain/flowGraph';
 
 function flattenProjectConditions(projectData: unknown): ProjectConditionLike[] {
   const conditions = (projectData as { conditions?: Array<{ items?: unknown[] }> })?.conditions || [];
@@ -39,7 +42,7 @@ function flattenProjectConditions(projectData: unknown): ProjectConditionLike[] 
 
 export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefined; nodes: Node<FlowNode>[] }) {
   const { flows } = useFlowWorkspace();
-  const { upsertFlow } = useFlowActions();
+  const { applyWorkspaceMachineEvent } = useFlowActions();
   const { data: projectData } = useProjectData();
   const { getCurrentProjectId } = useProjectDataUpdate();
   const flowsRef = useRef(flows);
@@ -52,10 +55,33 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
       const ev = e as CustomEvent<{
         toNodeId: string;
         rowData: NodeRowData;
+        targetRowId?: string | null;
+        targetRegion?: 'portal' | 'row' | 'node';
         _state?: { handled: boolean };
+        dndTraceId?: string;
+        operationId?: string;
       }>;
       const d = ev.detail;
       if (!d?._state || d._state.handled) return;
+
+      const traceOrOp = String(d.operationId || d.dndTraceId || '').trim();
+
+      logTaskSubflowMoveTrace('portal:handler', {
+        dndTraceId: traceOrOp || undefined,
+        operationId: traceOrOp || undefined,
+        canvasFlowId: params.flowId?.trim() || 'main',
+        toNodeId: d.toNodeId,
+        rowId: d.rowData?.id,
+        targetRegion: d.targetRegion,
+      });
+
+      logDndRouting('portal:crossNodeRowMove', {
+        targetRegion: d.targetRegion,
+        targetRowId: d.targetRowId,
+        toNodeId: d.toNodeId,
+        dndTraceId: traceOrOp || undefined,
+        operationId: traceOrOp || undefined,
+      });
 
       logSubflowCanvasDebug('portal:crossNodeRowMove received', {
         canvasFlowId: params.flowId?.trim() || 'main',
@@ -124,6 +150,8 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
             row: d.rowData,
           },
           deleteUnreferencedTaskVariableRows: true,
+          dndTraceId: traceOrOp || undefined,
+          operationId: traceOrOp || undefined,
         });
 
         const taskRowId = d.rowData.id;
@@ -138,6 +166,9 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
             parentSubflowTaskRowId: portalRowId,
             conditions,
             projectData,
+            flowsSnapshotAfterStructuralApply: result.flowsNext,
+            dndTraceId: traceOrOp || undefined,
+            operationId: traceOrOp || undefined,
           });
         }
         if (flushed) {
@@ -162,8 +193,12 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
           parentSummary: summarizeFlowSlice(parentNext as any, { rowIdsSample: true }),
         });
 
-        if (parentNext) upsertFlow(parentNext as any);
-        if (childNext) upsertFlow(childNext as any);
+        const portalSlices: Flow[] = [];
+        if (parentNext) portalSlices.push(parentNext as Flow);
+        if (childNext) portalSlices.push(childNext as Flow);
+        if (portalSlices.length > 0) {
+          applyWorkspaceMachineEvent({ type: 'upsertFlows', flows: portalSlices });
+        }
 
         logTaskSubflowMove('portal:upsertFlows', {
           updatedParent: !!parentNext,
@@ -189,6 +224,24 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
         logSubflowCanvasDebug('portal:skip (no subflow portal on target node)', {
           toNodeId: d.toNodeId,
           canvasFlowId,
+        });
+        return;
+      }
+
+      const dropOnPortalRow = dropTargetsSubflowPortalRow({
+        targetRegion: d.targetRegion,
+        targetRowId: d.targetRowId,
+        portalTaskRowId: portal.subflowTaskRowId,
+      });
+
+      if (!dropOnPortalRow) {
+        logTaskSubflowMove('portal:skip', {
+          reason: 'dropNotOnPortalRow',
+          toNodeId: d.toNodeId,
+          canvasFlowId,
+          targetRegion: d.targetRegion,
+          targetRowId: d.targetRowId,
+          portalRowId: portal.subflowTaskRowId,
         });
         return;
       }
@@ -255,6 +308,8 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
           row: d.rowData,
         },
         deleteUnreferencedTaskVariableRows: true,
+        dndTraceId: traceOrOp || undefined,
+        operationId: traceOrOp || undefined,
       });
 
       const taskRowId = d.rowData.id;
@@ -269,6 +324,9 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
           parentSubflowTaskRowId: portal.subflowTaskRowId,
           conditions,
           projectData,
+          flowsSnapshotAfterStructuralApply: result.flowsNext,
+          dndTraceId: traceOrOp || undefined,
+          operationId: traceOrOp || undefined,
         });
       }
       if (flushed) {
@@ -293,8 +351,12 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
         parentSummary: summarizeFlowSlice(parentNext as any, { rowIdsSample: true }),
       });
 
-      if (parentNext) upsertFlow(parentNext as any);
-      if (childNext) upsertFlow(childNext as any);
+      const portalSlicesMain: Flow[] = [];
+      if (parentNext) portalSlicesMain.push(parentNext as Flow);
+      if (childNext) portalSlicesMain.push(childNext as Flow);
+      if (portalSlicesMain.length > 0) {
+        applyWorkspaceMachineEvent({ type: 'upsertFlows', flows: portalSlicesMain });
+      }
 
       logTaskSubflowMove('portal:upsertFlows', {
         updatedParent: !!parentNext,
@@ -314,5 +376,5 @@ export function useCrossNodeSubflowPortalMove(params: { flowId: string | undefin
 
     window.addEventListener('crossNodeRowMove', handler, true);
     return () => window.removeEventListener('crossNodeRowMove', handler, true);
-  }, [params.flowId, projectData, getCurrentProjectId, upsertFlow]);
+  }, [params.flowId, projectData, getCurrentProjectId, applyWorkspaceMachineEvent]);
 }

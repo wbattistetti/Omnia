@@ -16,10 +16,8 @@ export function useTemporaryNodes(
   reactFlowInstance: any,
   storeApi: ReactFlowStoreLike,
   connectionMenuRef: React.MutableRefObject<any>,
-  onDeleteEdge: () => void,
   setNodesWithLog: (updater: any) => void,
-  isCreatingTempNode: React.MutableRefObject<boolean> | undefined,
-  createOnUpdate: (edgeId: string) => (updates: any) => void
+  isCreatingTempNode: React.MutableRefObject<boolean> | undefined
 ) {
   const fontSizes = useDynamicFontSizes();
 
@@ -156,8 +154,6 @@ export function useTemporaryNodes(
         style: { stroke: '#8b5cf6' },
         type: 'custom',
         data: {
-          onDeleteEdge,
-          onUpdate: createOnUpdate(tempEdgeId),
           linkStyle: DEFAULT_LINK_STYLE,
         },
         markerEnd: 'arrowhead',
@@ -204,10 +200,8 @@ export function useTemporaryNodes(
     storeApi,
     setNodesWithLog,
     setEdges,
-    onDeleteEdge,
     connectionMenuRef,
     isCreatingTempNode,
-    createOnUpdate,
     fontSizes.nodeRow,
   ]);
 

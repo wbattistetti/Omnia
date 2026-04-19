@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
 import { NodeRowData } from '../../../../../types/project';
+import type { NodeRowsCommitOptions } from './useNodeRowManagement';
 import { IntellisenseItem } from '../../../../Intellisense/IntellisenseTypes';
 
 interface UseNodeIntellisenseProps {
     nodeRows: NodeRowData[];
-    setNodeRows: (rows: NodeRowData[]) => void;
+    setNodeRows: (rows: NodeRowData[], options?: NodeRowsCommitOptions) => void;
     editingRowId: string | null;
     normalizedData: any;
 }
@@ -41,8 +42,9 @@ export function useNodeIntellisense({
                     }
                     : row
             );
-            setNodeRows(baseRows);
-            normalizedData.onUpdate?.({ rows: baseRows, focusRowId: undefined, isTemporary: normalizedData.isTemporary });
+            setNodeRows(baseRows, {
+                patch: { focusRowId: undefined },
+            });
         }
         setShowIntellisense(false);
     }, [editingRowId, nodeRows, setNodeRows, normalizedData]);

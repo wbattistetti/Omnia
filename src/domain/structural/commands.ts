@@ -21,6 +21,12 @@ export type MoveTaskRowCommand = StructuralCommandBase & {
   toFlowId: string;
   fromNodeId: string;
   toNodeId: string;
+  /** Position in target node's rows (0 = before first); omit = append (legacy). */
+  targetRowInsertIndex?: number;
+  /** From `crossNodeRowMove` detail (`dndTraceId`); correlates structural apply/rename logs. */
+  dndTraceId?: string;
+  /** Same uuid as `dndTraceId` when present — explicit key for `[DnD:*]` / `[Subflow:*]` logs. */
+  operationId?: string;
 };
 
 /** Cross-flow canvas drop: create target node in-domain and move row in one atomic graph write (no empty UI node). */
@@ -32,6 +38,8 @@ export type MoveTaskRowToCanvasCommand = StructuralCommandBase & {
   fromNodeId: string;
   newNodeId: string;
   position: { x: number; y: number };
+  dndTraceId?: string;
+  operationId?: string;
 };
 
 /** Portal / drag-into-subflow: append row to child flow after removing from parent. */

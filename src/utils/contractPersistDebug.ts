@@ -3,14 +3,29 @@
  *
  * Enable in DevTools: localStorage.setItem('debug.contractPersist', '1') then reload the app.
  * Disable (stops all [ContractPersist:*] logs): localStorage.removeItem('debug.contractPersist') then reload.
+ *
+ * High-frequency materialize logs (`buildStandaloneTaskTreeView` on every hydrate): opt in with
+ *   localStorage.setItem('debug.contractPersist.materialize', '1')
+ * They do **not** require `debug.contractPersist` (that flag alone no longer spams this path).
  */
 
 const STORAGE_KEY = 'debug.contractPersist';
+const STORAGE_KEY_MATERIALIZE_VERBOSE = 'debug.contractPersist.materialize';
 
 export function isContractPersistDebugEnabled(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     return window.localStorage.getItem(STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Per-call logs from `buildStandaloneTaskTreeView` (can run dozens of times per interaction). */
+export function isContractPersistMaterializeVerboseEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(STORAGE_KEY_MATERIALIZE_VERBOSE) === '1';
   } catch {
     return false;
   }

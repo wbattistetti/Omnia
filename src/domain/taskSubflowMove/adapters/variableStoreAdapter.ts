@@ -4,10 +4,15 @@
 
 import type { WorkspaceState } from '@flows/FlowTypes';
 import type { VariableInstance } from '@types/variableTypes';
+import type { HydrateVariablesFromFlowOptions } from '@services/VariableCreationService';
 import { variableCreationService } from '@services/VariableCreationService';
 
 export type VariableStoreAdapter = {
-  hydrateVariablesFromFlow(projectId: string, flows: WorkspaceState['flows']): void;
+  hydrateVariablesFromFlow(
+    projectId: string,
+    flows: WorkspaceState['flows'],
+    options?: HydrateVariablesFromFlowOptions
+  ): void;
   getAllVariables(projectId: string): VariableInstance[];
   getVariablesByTaskInstanceId(projectId: string, taskInstanceId: string): VariableInstance[];
   replaceTaskVariableRowsForInstance(
@@ -25,7 +30,8 @@ export type VariableStoreAdapter = {
 
 export function createDefaultVariableStoreAdapter(): VariableStoreAdapter {
   return {
-    hydrateVariablesFromFlow: (projectId, flows) => variableCreationService.hydrateVariablesFromFlow(projectId, flows),
+    hydrateVariablesFromFlow: (projectId, flows, options) =>
+      variableCreationService.hydrateVariablesFromFlow(projectId, flows, options),
     getAllVariables: (projectId) => variableCreationService.getAllVariables(projectId) ?? [],
     getVariablesByTaskInstanceId: (projectId, taskInstanceId) =>
       variableCreationService.getVariablesByTaskInstanceId(projectId, taskInstanceId),

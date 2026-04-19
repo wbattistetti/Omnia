@@ -34,7 +34,6 @@ import {
   type ProjectConditionLike,
 } from './collectReferencedVarIds';
 import {
-  CloneTranslationsCollisionError,
   buildTranslationKeysForTaskMove,
   cloneTranslationsToChild,
   removeTranslationKeysFromFlowSlice,
@@ -191,7 +190,7 @@ export function applyTaskMoveToSubflowLegacy(params: ApplyTaskMoveToSubflowParam
     });
   }
 
-  variableCreationService.hydrateVariablesFromFlow(pid, flowsWorking);
+  variableCreationService.hydrateVariablesFromFlow(pid, flowsWorking, { skipGlobalMerge: true });
   logTaskSubflowMove('apply:hydrateVariablesFromFlowAfterStructural', {
     parentFlowId,
     childFlowId,
@@ -219,24 +218,14 @@ export function applyTaskMoveToSubflowLegacy(params: ApplyTaskMoveToSubflowParam
   if (linkedSubflow && !secondPass && parentFlowId !== childFlowId) {
     const logical = buildTranslationKeysForTaskMove(movedTask ?? undefined, taskVars);
     if (logical.size > 0) {
-      try {
-        flowsWorking = cloneTranslationsToChild(flowsWorking, parentFlowId, childFlowId, logical);
-        logTaskSubflowMove('apply:cloneTranslationsToChild', {
-          parentFlowId,
-          childFlowId,
-          keyCount: logical.size,
-          messageKeyCount: collectSayMessageTranslationKeysFromTask(movedTask ?? undefined).length,
-          varKeyCount: varTranslationKeysForIds(taskVars.map((v) => String(v.id || '').trim())).length,
-        });
-      } catch (e) {
-        if (e instanceof CloneTranslationsCollisionError) {
-          logTaskSubflowMove('apply:cloneTranslationsToChild:collision', {
-            childFlowId: e.childFlowId,
-            keys: e.keys,
-          });
-        }
-        throw e;
-      }
+      flowsWorking = cloneTranslationsToChild(flowsWorking, parentFlowId, childFlowId, logical);
+      logTaskSubflowMove('apply:cloneTranslationsToChild', {
+        parentFlowId,
+        childFlowId,
+        keyCount: logical.size,
+        messageKeyCount: collectSayMessageTranslationKeysFromTask(movedTask ?? undefined).length,
+        varKeyCount: varTranslationKeysForIds(taskVars.map((v) => String(v.id || '').trim())).length,
+      });
     }
   }
 
@@ -317,7 +306,9 @@ export function applyTaskMoveToSubflowLegacy(params: ApplyTaskMoveToSubflowParam
     });
   }
 
-  const renamed = restoreChildTaskBoundVariablesToLocalNames(pid, taskInstanceId, taskVarIdSet).map((r) => ({
+  const renamed = restoreChildTaskBoundVariablesToLocalNames(pid, taskInstanceId, taskVarIdSet, {
+    subflowDisplayTitle,
+  }).map((r) => ({
     id: r.id,
     previousName: r.previousName,
     nextName: r.nextName,

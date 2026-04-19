@@ -32,6 +32,7 @@ import {
   compileWorkspaceTranslations,
   flowWorkspaceMetaTranslationsFingerprint,
 } from '../utils/compileWorkspaceTranslations';
+import { resolveTranslationEntryValue } from '../utils/resolveTranslationEntry';
 // FLOW.SAVE-BULK REFACTOR — flow keys use active canvas / explicit flow: id; no TaskRepository/canvas heuristics.
 import {
   getFlowIdForFlowScopedWrite,
@@ -158,8 +159,10 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     const readFromFlow = (fid: string): string | undefined => {
       const tr = FlowWorkspaceSnapshot.getFlowById(fid)?.meta?.translations;
       if (tr && typeof tr === 'object' && Object.prototype.hasOwnProperty.call(tr, k)) {
-        const v = (tr as Record<string, string>)[k];
-        if (v !== undefined) return String(v);
+        const v = (tr as Record<string, string | Record<string, string>>)[k];
+        if (v !== undefined) {
+          return resolveTranslationEntryValue(v as string | Record<string, string>) || undefined;
+        }
       }
       return undefined;
     };

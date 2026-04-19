@@ -20,7 +20,8 @@ import { useNodeExitEditing } from './hooks/useNodeExitEditing';
 import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
 import { useNodeExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
 import { FlowStateBridge } from '../../../../services/FlowStateBridge';
-import { useFlowActions } from '../../../../context/FlowActionsContext';
+import { useFlowActionsStrict } from '../../../../context/FlowActionsContext';
+import { useFlowActions as useWorkspaceMachineActions } from '@flows/FlowStore';
 import { useCompilationErrors } from '../../../../context/CompilationErrorsContext';
 import { useFlowSubflow } from '../../context/FlowSubflowContext';
 import { SEMANTIC_DRAFT_FLUSH_EVENT } from '../../../../utils/semanticValuesRowState';
@@ -32,7 +33,12 @@ import { LinkStyle, type EdgeData } from '../../types/flowTypes';
 import { getDescendantNodeIds, translateNodes } from '../../../../flow/utils/graphTransforms';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { useFlowCanvasId } from '../../context/FlowCanvasContext';
-import { FLOW_GRAPH_MIGRATION, warnLocalGraphMutation } from '@domain/flowGraph';
+import { FLOW_GRAPH_MIGRATION, warnLocalGraphMutation, logDndRouting } from '@domain/flowGraph';
+import { findFirstSubflowPortalInNode } from '@domain/taskSubflowMove/findSubflowPortal';
+import { dropTargetsSubflowPortalRow } from '@components/Flowchart/utils/crossNodeRowDropHitTest';
+import { newCommandId } from '@domain/structural/commands';
+import { generateSafeGuid } from '@utils/idGenerator';
+import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -67,14 +73,37 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const flowCanvasId = useFlowCanvasId();
   const { data: projectData } = useProjectData();
   const { addItem, addCategory, updateDataDirectly } = useProjectDataUpdate();
-  // Context for node operations (with fallback to legacy)
-  const flowActions = useFlowActions();
+  const flowActions = useFlowActionsStrict();
+  const workspaceMachine = useWorkspaceMachineActions();
 
   // REGISTRY: Register node with NodeRegistry
   const nodeRegistryRef = useRegisterAsNode(id);
 
   // INITIALIZATION: Initialize node data and rows
   const { displayRows, normalizedData } = useNodeInitialization(id, data);
+
+  const commitNodeRowsToWorkspace = useCallback(
+    (params: { nextRows: NodeRowData[]; patch?: Record<string, unknown> }) => {
+      const fid = String(flowCanvasId || '').trim();
+      if (!fid) return;
+      workspaceMachine.updateFlowGraph(fid, (nodes, edges) => ({
+        nodes: nodes.map((n) => {
+          if (String(n.id) !== id) return n;
+          const d = n.data as Record<string, unknown>;
+          return {
+            ...n,
+            data: {
+              ...d,
+              rows: params.nextRows,
+              ...(params.patch ?? {}),
+            },
+          };
+        }),
+        edges,
+      }));
+    },
+    [flowCanvasId, id, workspaceMachine],
+  );
 
   // ✅ MEASURE NODE WIDTH: Track node width to prevent shrinking when editing
   const [nodeWidth, setNodeWidth] = useState<number | null>(null);
@@ -86,7 +115,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const descendantShiftBaselineRef = useRef<{ width: number; height: number } | null>(null);
 
   // ✅ ROW MANAGEMENT: Manage all row operations
-  const rowManagement = useNodeRowManagement({ nodeId: id, normalizedData, displayRows });
+  const rowManagement = useNodeRowManagement({
+    nodeId: id,
+    normalizedData,
+    displayRows,
+    commitNodeRowsToWorkspace,
+  });
   const {
     nodeRows, setNodeRows,
     editingRowId, setEditingRowId,
@@ -121,7 +155,52 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const nodeContainerRef = useRef<HTMLDivElement>(null);
 
   // ✅ NODE DRAG: Hook per accedere a React Flow per aggiornare posizione nodo
-  const { getNode, setNodes, setEdges, getViewport, getEdges, updateNodeInternals } = useReactFlow();
+  const { getNode, setNodes, setEdges, getViewport, getEdges, updateNodeInternals, screenToFlowPosition } =
+    useReactFlow();
+
+  const applyCanvasRowExtractStructural = useCallback(
+    (args: {
+      screenPosition: { x: number; y: number };
+      fromFlowId: string;
+      toFlowId: string;
+      rowId: string;
+      operationId: string;
+    }) => {
+      /** Prefer catalog id on project JSON; otherwise runtime `getCurrentProjectId` (same as loadFlow/saveFlow). */
+      const explicitPid = String(
+        (projectData as { id?: string; projectId?: string } | undefined)?.id ??
+          (projectData as { projectId?: string } | undefined)?.projectId ??
+          ''
+      ).trim();
+      const pid = resolveVariableStoreProjectId(explicitPid || undefined);
+      /** Cross-canvas: this node's RF instance is the source canvas — use stable spawn coords for the target slice. */
+      const flowPos =
+        args.fromFlowId === args.toFlowId
+          ? screenToFlowPosition(args.screenPosition)
+          : { x: 160, y: 120 };
+      const newNodeId = generateSafeGuid();
+      const out = workspaceMachine.applyStructuralWorkspaceMachineEvent({
+        type: 'structuralCommand',
+        projectId: pid,
+        ...(projectData !== undefined ? { projectData } : {}),
+        command: {
+          type: 'moveTaskRowToCanvas',
+          commandId: newCommandId(),
+          source: 'dnd',
+          rowId: args.rowId,
+          fromFlowId: args.fromFlowId,
+          toFlowId: args.toFlowId,
+          fromNodeId: id,
+          newNodeId,
+          position: { x: flowPos.x, y: flowPos.y },
+          dndTraceId: args.operationId,
+          operationId: args.operationId,
+        },
+      });
+      return out.structural?.flowStoreCommitOk === true;
+    },
+    [id, projectData, screenToFlowPosition, workspaceMachine],
+  );
 
   /** Fresh id/edges for ResizeObserver (avoid stale closure vs graph updates). */
   const descendantShiftNodeIdRef = useRef(id);
@@ -296,9 +375,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     [nodeRows]
   );
 
+  /**
+   * Row reorder/DnD/content changes — remeasure via ref only (avoid depending on `measureNodeWidthFromContent`,
+   * whose identity can change every render via React Flow → maximum update depth exceeded).
+   */
   useLayoutEffect(() => {
-    measureNodeWidthFromContent();
-  }, [rowOrderSignature, editingRowId, measureNodeWidthFromContent]);
+    measureNodeWidthFromContentRef.current();
+  }, [rowOrderSignature, editingRowId]);
 
   useEffect(() => {
     const inner = rowsContainerRef.current;
@@ -325,7 +408,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       }
       ro.disconnect();
     };
-  }, [editingRowId, measureNodeWidthFromContent, rowsContainerRef]);
+  }, [editingRowId]);
 
   // ✅ TOOLBAR: Ref per l'elemento toolbar (dichiarato prima dell'uso)
   const toolbarElementRef = useRef<HTMLDivElement>(null);
@@ -358,6 +441,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     rowsContainerRef,
     nodeId: id,
     flowCanvasId: flowCanvasId,
+    applyCanvasRowExtractStructural,
     onSameNodeRowsReordered: () => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -606,11 +690,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               },
             },
           ],
-          onDelete: () => flowActions?.deleteNode?.(childNodeId),
-          onUpdate: (updates: any) => flowActions?.updateNode?.(childNodeId, updates),
-          onCreateFactoryTask: data.onCreateFactoryTask,
-          onCreateBackendCall: data.onCreateBackendCall,
-          onCreateTask: data.onCreateTask,
           focusRowId: childRowId,
         },
       });
@@ -645,9 +724,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     }
   }, [
     id,
-    data.onCreateFactoryTask,
-    data.onCreateBackendCall,
-    data.onCreateTask,
     flowActions,
     getNode,
     getEdges,
@@ -747,13 +823,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     const newShowUnchecked = !showUnchecked;
     setShowUnchecked(newShowUnchecked);
 
-    // Update the node data via context or fallback
-    if (flowActions?.updateNode) {
-      flowActions.updateNode(id, { hideUncheckedRows: !newShowUnchecked });
-    } else if (typeof data.onUpdate === 'function') {
-      data.onUpdate({ hideUncheckedRows: !newShowUnchecked });
-    }
-  }, [showUnchecked, setShowUnchecked, id, data, flowActions]);
+    flowActions.updateNode(id, { hideUncheckedRows: !newShowUnchecked });
+  }, [showUnchecked, setShowUnchecked, id, flowActions]);
 
   // ✅ CHECK FOR UNCHECKED ROWS: Calculate if there are any unchecked rows
   const hasUncheckedRows = nodeRows.some(row => row.included === false);
@@ -790,8 +861,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       };
       const { toNodeId, rowData, mousePosition } = detail;
 
-      if (toNodeId === id && import.meta.env.DEV) {
-        console.log('DnD target:', { targetRegion: detail.targetRegion, targetRowId: detail.targetRowId });
+      if (toNodeId === id) {
+        logDndRouting('CustomNode:crossNodeRowMove', {
+          targetRegion: detail.targetRegion,
+          targetRowId: detail.targetRowId,
+          toNodeId: id,
+        });
       }
 
       if (toNodeId !== id || !rowData) {
@@ -800,6 +875,18 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
       const rowId = String(rowData.id || '').trim();
       if (!rowId) {
+        return;
+      }
+
+      /** Subflow portal drops move the task into the child flow — never mirror as a sibling row on the parent node. */
+      const portalOnSelf = findFirstSubflowPortalInNode({ data: normalizedData });
+      if (
+        dropTargetsSubflowPortalRow({
+          targetRegion: detail.targetRegion,
+          targetRowId: detail.targetRowId ?? null,
+          portalTaskRowId: portalOnSelf?.subflowTaskRowId ?? null,
+        })
+      ) {
         return;
       }
 
@@ -866,7 +953,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     return () => {
       window.removeEventListener('crossNodeRowMove', handleCrossNodeMove as EventListener);
     };
-  }, [id, nodeRows, setNodeRows, rowsContainerRef, getRowComponent]);
+  }, [id, nodeRows, normalizedData, setNodeRows, rowsContainerRef, getRowComponent]);
 
   // Ref per il wrapper esterno (per calcolare posizione toolbar)
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -1283,11 +1370,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 hasUnchecked={nodeRows.some(r => r.included === false)}
                 hideUnchecked={(data as any)?.hideUncheckedRows === true}
                 onToggleHideUnchecked={() => {
-                  if (flowActions?.updateNode) {
-                    flowActions.updateNode(id, { hideUncheckedRows: !(data as any)?.hideUncheckedRows });
-                  } else if (typeof data.onUpdate === 'function') {
-                    data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
-                  }
+                  flowActions.updateNode(id, { hideUncheckedRows: !(data as any)?.hideUncheckedRows });
                 }}
               />
             </div>
@@ -1308,11 +1391,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 } else if (e.key === 'Escape') {
                   const singleEmpty = nodeRows.length === 1 && nodeRows[0].text.trim() === '';
                   if (singleEmpty) {
-                    if (flowActions?.deleteNode) {
-                      flowActions.deleteNode(id);
-                    } else {
-                      data.onDelete?.();
-                    }
+                    flowActions.deleteNode(id);
                   } else {
                     exitEditing();
                   }
@@ -1320,9 +1399,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               }}
               canDelete={() => nodeRows.length > 1}
               totalRows={nodeRows.length}
-              onCreateFactoryTask={data.onCreateFactoryTask}
-              onCreateBackendCall={data.onCreateBackendCall}
-              onCreateTask={data.onCreateTask}
+              onCreateFactoryTask={flowActions.createFactoryTask}
+              onCreateBackendCall={flowActions.createBackendCall}
+              onCreateTask={flowActions.createTask}
               onOpenSubflowForTask={onOpenSubflowForTask}
               getProjectId={() => {
                 try { return (window as any).__omniaRuntime?.getCurrentProjectId?.() || null; } catch { return null; }

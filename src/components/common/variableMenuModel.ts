@@ -219,15 +219,6 @@ function logUtteranceFilterStep(
 
   if (isVariableMenuDebugEnabled()) {
     logVariableMenuDebug('variableMenu:utteranceFilter', fullPayload);
-  } else if (import.meta.env.DEV && utteranceGuidSet.size > 0) {
-    console.log('[Omnia][variableMenu] utteranceFilter (summary)', {
-      projectId,
-      menuFlowId,
-      storeVarCount: allVars.length,
-      utteranceGuidSet: guidList,
-      expectedGuidsNotInStore: missingInStore,
-      localVarsAfterFilter: localVars.length,
-    });
   }
 
   const allExpectedMissing =
@@ -590,7 +581,7 @@ export function buildVariableMenuItems(
   const seen = new Set<string>();
   const activeFlowForExpose = flows[activeFlowId];
   const localVars = filterLocalVariablesForActiveFlow(allVars, activeFlowId, flows, utteranceGuidSet);
-  if (isVariableMenuDebugEnabled() || (import.meta.env.DEV && utteranceGuidSet.size > 0)) {
+  if (isVariableMenuDebugEnabled()) {
     logUtteranceFilterStep(projectId, activeFlowId, allVars, utteranceGuidSet, localVars);
   }
 
@@ -743,7 +734,7 @@ export async function buildVariableMenuItemsAsync(
     flowsForScope,
     utteranceGuidSet
   );
-  if (isVariableMenuDebugEnabled() || (import.meta.env.DEV && utteranceGuidSet.size > 0)) {
+  if (isVariableMenuDebugEnabled()) {
     logUtteranceFilterStep(projectId, activeFlowId, allVars, utteranceGuidSet, localVars);
   }
 

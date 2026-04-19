@@ -33,7 +33,7 @@ export const FLOW_GRAPH_MIGRATION = {
     'VITE_FLOW_GRAPH_DISABLE_COMMITTED_ROWS_LISTENER'
   ),
 
-  /** Phase 4 — deriveSyncedNodeRows overlay (dangerous to disable until RF is viewer-only). */
+  /** Reserved: local row-list overlay (disabled; canvas uses store + `updateFlowGraph` in viewer-only). */
   DISABLE_NODE_ROW_EXTERNAL_SYNC_DERIVE: viteFlag(
     'VITE_FLOW_GRAPH_DISABLE_EXTERNAL_ROW_DERIVE'
   ),
@@ -49,4 +49,17 @@ export function warnLocalGraphMutation(site: string, detail?: Record<string, unk
     `[FlowGraph:migration] Non-central graph write path (${site}). Target: FlowStore + structural commands only.`,
     detail ?? {}
   );
+}
+
+/**
+ * Opt-in routing diagnostics for DnD → command kind (default off; enable `VITE_FLOW_GRAPH_DND_ROUTING_LOG=1`).
+ */
+export function logDndRouting(label: string, payload?: Record<string, unknown>): void {
+  if (!import.meta.env.DEV) return;
+  if (!viteFlag('VITE_FLOW_GRAPH_DND_ROUTING_LOG')) return;
+  if (payload !== undefined) {
+    console.log(`[FlowGraph:dnd] ${label}`, payload);
+  } else {
+    console.log(`[FlowGraph:dnd] ${label}`);
+  }
 }

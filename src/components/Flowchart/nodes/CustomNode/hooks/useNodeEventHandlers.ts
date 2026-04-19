@@ -1,5 +1,5 @@
 import { CustomNodeData } from '../CustomNode';
-import { useFlowActions } from '../../../../../context/FlowActionsContext';
+import { useFlowActionsStrict } from '../../../../../context/FlowActionsContext';
 import { FlowStateBridge } from '../../../../../services/FlowStateBridge';
 
 interface NodeEventHandlersProps {
@@ -27,7 +27,7 @@ export function useNodeEventHandlers({
   setIsHoveredNode,
   toolbarElementRef
 }: NodeEventHandlersProps) {
-  const flowActions = useFlowActions();
+  const flowActions = useFlowActionsStrict();
 
   const handleEndTitleEditing = () => {
     setIsEditingNode(false);
@@ -50,19 +50,11 @@ export function useNodeEventHandlers({
 
   const handleTitleUpdate = (newTitle: string) => {
     setNodeTitle(newTitle);
-    if (flowActions?.updateNode) {
-      flowActions.updateNode(nodeId, { label: newTitle });
-    } else if (typeof data.onUpdate === 'function') {
-      data.onUpdate({ label: newTitle });
-    }
+    flowActions.updateNode(nodeId, { label: newTitle });
   };
 
   const handleDeleteNode = () => {
-    if (flowActions?.deleteNode) {
-      flowActions.deleteNode(nodeId);
-    } else if (typeof data.onDelete === 'function') {
-      data.onDelete();
-    }
+    flowActions.deleteNode(nodeId);
   };
 
   const handleNodeMouseEnter = () => {

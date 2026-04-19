@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CloneTranslationsCollisionError,
   cloneTranslationsToChild,
   getTranslationsForKeys,
   removeTranslationKeysFromFlowSlice,
@@ -57,7 +56,7 @@ describe('taskMoveTranslationPipeline', () => {
     expect(next.child.hasLocalChanges).not.toBe(true);
   });
 
-  it('cloneTranslationsToChild throws CloneTranslationsCollisionError if key exists on child with different value', () => {
+  it('cloneTranslationsToChild overwrites child when same key exists with different value (origin wins)', () => {
     const varKey = `var:${VID}`;
     const flows = {
       parent: {
@@ -75,9 +74,9 @@ describe('taskMoveTranslationPipeline', () => {
         meta: { translations: { [varKey]: 'b' } },
       },
     } as any;
-    expect(() => cloneTranslationsToChild(flows, 'parent', 'child', new Set([varKey]))).toThrow(
-      CloneTranslationsCollisionError
-    );
+    const next = cloneTranslationsToChild(flows, 'parent', 'child', new Set([varKey]));
+    expect((next.child.meta!.translations as any)[varKey]).toBe('a');
+    expect(next.child.hasLocalChanges).toBe(true);
   });
 
   it('removeTranslationKeysFromFlowSlice removes listed keys', () => {

@@ -22,9 +22,8 @@ import { ControlPointRelative } from './types/edgeTypes';
 import { isLegacyControlPoint, migrateControlPoints } from './utils/dataMigration';
 import { useReactFlow } from 'reactflow';
 import { CoordinateConverter } from './utils/coordinateUtils';
-import { FlowStateBridge } from '../../../services/FlowStateBridge';
 import { useFlowCanvasId } from '../context/FlowCanvasContext';
-import { useFlowActions } from '../../../context/FlowActionsContext';
+import { useFlowActionsStrict } from '../../../context/FlowActionsContext';
 import { getPathSegments, PathSegment } from './utils/pathUtils';
 import { computeAbsoluteFromRelative } from './utils/labelPositionUtils';
 import {
@@ -34,9 +33,7 @@ import {
   buildClearEdgeConditionUpdates,
 } from '../utils/edgeConditionState';
 
-export type CustomEdgeProps = EdgeProps & {
-  onDeleteEdge?: (edgeId: string) => void;
-};
+export type CustomEdgeProps = EdgeProps;
 
 export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const {
@@ -51,7 +48,6 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     targetPosition,
     style = {},
     markerEnd,
-    onDeleteEdge,
     data,
   } = props;
 
@@ -84,32 +80,14 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const pathRef = useRef<SVGPathElement>(null);
   const hoverRefs = useEdgeHoverRefs();
 
-  // Context for edge operations (with fallback to legacy)
-  const flowActions = useFlowActions();
-  const onUpdateRef = useRef<((updates: any) => void) | null>(null);
+  const flowActions = useFlowActionsStrict();
 
-  // Stable update function that uses context or fallback
-  const updateEdgeData = useCallback((updates: any) => {
-    // Priority 1: Use context if available
-    if (flowActions?.updateEdge) {
+  const updateEdgeData = useCallback(
+    (updates: any) => {
       flowActions.updateEdge(id, updates);
-      return true;
-    }
-    // Priority 2: Use onUpdateRef (legacy)
-    if (onUpdateRef.current) {
-      onUpdateRef.current(updates);
-      return true;
-    }
-    // Priority 3: Try to initialize from FlowStateBridge
-    const createOnUpdate = FlowStateBridge.getCreateOnUpdate();
-    if (typeof createOnUpdate === 'function') {
-      const onUpdate = createOnUpdate(id);
-      onUpdateRef.current = onUpdate;
-      onUpdate(updates);
-      return true;
-    }
-    return false;
-  }, [id, flowActions]);
+    },
+    [id, flowActions]
+  );
 
   // ✅ Get persistent fields from top-level (NOT from data)
   const linkStyle = (props as any).linkStyle ?? (data as any)?.linkStyle ?? DEFAULT_LINK_STYLE;
@@ -302,40 +280,6 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       .filter((p): p is { x: number; y: number } => p !== null);
   }, [controlPointsRelative, pathRef, reactFlowInstance, sourceX, sourceY, targetX, targetY]);
 
-  // Initialize onUpdate immediately (from props or via FlowStateBridge)
-  useEffect(() => {
-    // If onUpdate is already available in props.data, use it
-    if (props.data?.onUpdate && typeof props.data.onUpdate === 'function') {
-      onUpdateRef.current = props.data.onUpdate;
-      return;
-    }
-
-    // Otherwise, create it using FlowStateBridge
-    const createOnUpdate = FlowStateBridge.getCreateOnUpdate();
-    if (typeof createOnUpdate === 'function') {
-      const onUpdate = createOnUpdate(id);
-      onUpdateRef.current = onUpdate;
-
-      // Also update the edge with onUpdate for consistency
-      reactFlowInstance.setEdges((eds) =>
-        eds.map((e) =>
-          e.id === id && !e.data?.onUpdate
-            ? {
-              ...e,
-              data: {
-                ...(e.data || {}),
-                onUpdate,
-              },
-            }
-            : e
-        )
-      );
-      console.log('[CustomEdge] onUpdate inizializzato per edge:', id);
-    } else {
-      console.warn('[CustomEdge] createOnUpdate non disponibile per edge:', id);
-    }
-  }, [id, props.data?.onUpdate, reactFlowInstance]);
-
   // ✅ ARCHITECTURE PRINCIPLE #3: Single point that writes position
   // This is the ONLY place that saves labelPositionRelative
   const handleLabelPositionChange = useCallback((labelPositionRelative: { t: number; offset: number }) => {
@@ -502,11 +446,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   };
 
   const handleDelete = (edgeId: string) => {
-    if (data && typeof data.onDeleteEdge === 'function') {
-      data.onDeleteEdge(edgeId);
-    } else if (onDeleteEdge) {
-      onDeleteEdge(edgeId);
-    }
+    flowActions.deleteEdge(edgeId);
   };
 
   const handlePencilClick = (e: React.MouseEvent) => {

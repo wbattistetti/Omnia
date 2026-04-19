@@ -12,30 +12,12 @@ import type { Task } from '@types/taskTypes';
 import type { WorkspaceState } from '@flows/FlowTypes';
 import { taskRepository } from '@services/TaskRepository';
 import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
-import { removeRowByIdFromFlow } from './moveTaskRowInFlows';
+import { flowContainsTaskRow, removeRowByIdFromFlow } from './moveTaskRowInFlows';
+
+export { flowContainsTaskRow } from './moveTaskRowInFlows';
 
 /** Key aligned with {@link Task.authoringFlowCanvasId}. */
 export const TASK_AUTHORING_FLOW_CANVAS_ID = 'authoringFlowCanvasId' as const;
-
-/**
- * Returns true if any node in the flow slice has a row whose id equals `rowId`.
- */
-export function flowContainsTaskRow(
-  flows: WorkspaceState['flows'],
-  flowId: string,
-  rowId: string
-): boolean {
-  const flow = flows[flowId];
-  const rid = String(rowId || '').trim();
-  if (!flow?.nodes || !rid) return false;
-  for (const node of flow.nodes as Array<{ data?: { rows?: unknown[] } }>) {
-    const rows = Array.isArray(node?.data?.rows) ? node.data.rows : [];
-    if (rows.some((r) => String((r as { id?: string })?.id || '').trim() === rid)) {
-      return true;
-    }
-  }
-  return false;
-}
 
 export type MaterializeMovedTaskResult = {
   flowsNext: WorkspaceState['flows'];

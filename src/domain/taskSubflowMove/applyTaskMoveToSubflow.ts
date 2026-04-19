@@ -12,8 +12,9 @@ import { interfaceInputVarsFromChildRequiredVariables } from '@domain/taskMove/I
 import { referencedTaskVariablesForMovedTask } from '@domain/taskMove/ReferencedTaskVariables';
 import { taskVariablesFromTaskVariableRows } from '@domain/taskMove/TaskVariables';
 import type { WorkspaceState } from '@flows/FlowTypes';
-import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logTaskSubflowMove, logTaskSubflowMoveTrace } from '@utils/taskSubflowMoveDebug';
 import { logS2Diag } from '@utils/s2WiringDiagnostic';
+import { getActiveDndOperationId, isDndOperationInstrumentEnabled } from '@utils/dndOperationInstrument';
 
 import { createDefaultCacheAdapter } from './adapters/cacheAdapter';
 import { createDefaultTaskRepositoryAdapter } from './adapters/taskRepositoryAdapter';
@@ -53,10 +54,7 @@ import {
   partitionMovedTaskVariableIdsByParentReference,
   wiringVariableIdsForSubflow,
 } from './subflowMoveParentPolicy';
-import {
-  CloneTranslationsCollisionError,
-  varTranslationKeysForIds,
-} from './taskMoveTranslationPipeline';
+import { varTranslationKeysForIds } from './taskMoveTranslationPipeline';
 
 export type { ApplyTaskMoveToSubflowParams, ApplyTaskMoveToSubflowResult, MaterializeMovedTaskSummary } from './applyTaskMoveToSubflowParams';
 
@@ -88,7 +86,13 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     isLinkedSubflowMove,
     secondPass,
     exposeAllTaskVariablesInChildInterface,
+    dndTraceId: dndTraceIdParam,
+    operationId: operationIdParam,
   } = params;
+
+  const traceId = String(dndTraceIdParam || '').trim();
+  const operationIdForLog =
+    String(operationIdParam || '').trim() || traceId || String(getActiveDndOperationId() || '').trim();
 
   const variableStore = createDefaultVariableStoreAdapter();
   const taskRepo = createDefaultTaskRepositoryAdapter();
@@ -101,6 +105,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
 
   const pid = String(projectId || '').trim();
   const parentFlow = flows[parentFlowId];
+
   if (!pid || !parentFlow) {
     logS2Diag('applyTaskMoveToSubflow', 'ABORT missing project or parent flow', {
       projectId: pid || '(empty)',
@@ -133,6 +138,20 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       flowsNext: flows,
     };
   }
+
+  logTaskSubflowMoveTrace('apply:enter', {
+    dndTraceId: traceId || undefined,
+    operationId: operationIdForLog || undefined,
+    projectId: pid,
+    parentFlowId,
+    childFlowId,
+    taskInstanceId,
+    linkedSubflow,
+    skipStructuralPhase: !!skipStructuralPhase,
+    hasStructuralAppend: !!structuralAppend,
+    hasStructuralMove: !!structuralMove,
+  });
+
   if (structuralMove && structuralAppend) {
     throw new Error('applyTaskMoveToSubflow: use either structuralMove or structuralAppend, not both.');
   }
@@ -205,7 +224,7 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     });
   }
 
-  variableStore.hydrateVariablesFromFlow(pid, flowsWorking);
+  variableStore.hydrateVariablesFromFlow(pid, flowsWorking, { skipGlobalMerge: true });
   logTaskSubflowMove('apply:hydrateVariablesFromFlowAfterStructural', {
     parentFlowId,
     childFlowId,
@@ -236,29 +255,19 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
   if (linkedSubflow && !secondPass && parentFlowId !== childFlowId) {
     const logical = GetTranslations({ movedTask, taskVariableRows: taskVars });
     if (logical.size > 0) {
-      try {
-        flowsWorking = CloneTranslations({
-          flows: flowsWorking,
-          parentFlowId,
-          childFlowId,
-          logicalKeys: logical,
-        });
-        logTaskSubflowMove('apply:cloneTranslationsToChild', {
-          parentFlowId,
-          childFlowId,
-          keyCount: logical.size,
-          messageKeyCount: collectSayMessageTranslationKeysFromTask(movedTask ?? undefined).length,
-          varKeyCount: varTranslationKeysForIds(taskVars.map((v) => String(v.id || '').trim())).length,
-        });
-      } catch (e) {
-        if (e instanceof CloneTranslationsCollisionError) {
-          logTaskSubflowMove('apply:cloneTranslationsToChild:collision', {
-            childFlowId: e.childFlowId,
-            keys: e.keys,
-          });
-        }
-        throw e;
-      }
+      flowsWorking = CloneTranslations({
+        flows: flowsWorking,
+        parentFlowId,
+        childFlowId,
+        logicalKeys: logical,
+      });
+      logTaskSubflowMove('apply:cloneTranslationsToChild', {
+        parentFlowId,
+        childFlowId,
+        keyCount: logical.size,
+        messageKeyCount: collectSayMessageTranslationKeysFromTask(movedTask ?? undefined).length,
+        varKeyCount: varTranslationKeysForIds(taskVars.map((v) => String(v.id || '').trim())).length,
+      });
     }
   }
 
@@ -290,6 +299,14 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       taskInstanceId,
       taskVarCount: taskVarsForS2Merge.length,
       childFlowId,
+    });
+  }
+
+  if (secondPass && isDndOperationInstrumentEnabled()) {
+    console.log('[SecondPass]', {
+      operationId: operationIdForLog || undefined,
+      skipStructuralPhase: !!skipStructuralPhase,
+      taskVariableRowsInStore: taskVars.length,
     });
   }
 
@@ -335,7 +352,10 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
     });
   }
 
-  const renamed = restoreChildTaskBoundVariablesToLocalNames(pid, taskInstanceId, taskVarIdSet).map((r) => ({
+  const renamed = restoreChildTaskBoundVariablesToLocalNames(pid, taskInstanceId, taskVarIdSet, {
+    operationId: operationIdForLog || traceId || undefined,
+    subflowDisplayTitle: subflowDisplayTitle,
+  }).map((r) => ({
     id: r.id,
     previousName: r.previousName,
     nextName: r.nextName,
@@ -343,6 +363,32 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
 
   const s2TaskVarIds = taskVarsForS2Merge.map((v) => String(v.id || '').trim()).filter(Boolean).sort();
   const wiringVarIds = wiringVariableIdsForSubflow(s2TaskVarIds, referencedVarIdsSorted, exposeAll);
+
+  if (isDndOperationInstrumentEnabled()) {
+    console.log('[Subflow:referenceScan]', {
+      operationId: operationIdForLog || undefined,
+      referencedVarIdsSorted,
+      s2TaskVarIds,
+      exposeAll,
+    });
+    console.log('[Subflow:wiringVarIds]', {
+      operationId: operationIdForLog || undefined,
+      wiringVarIds,
+    });
+  }
+
+  logTaskSubflowMoveTrace('apply:wiringPolicy', {
+    dndTraceId: traceId || undefined,
+    parentFlowId,
+    taskInstanceId,
+    exposeAll,
+    s2TaskVarIds,
+    referencedVarIdsSorted,
+    referencedInParentCount: referencedVarIdsSorted.length,
+    wiringVarIds,
+    wiringVarCount: wiringVarIds.length,
+    renamedFromChildLocalRestore: renamed.map((r) => ({ id: r.id, prev: r.previousName, next: r.nextName })),
+  });
 
   if (renamed.length > 0) {
     logTaskSubflowMove('apply:childLocalRenames', { renamed });
@@ -475,6 +521,8 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       subflowDisplayTitle,
       taskVariableIds: wiringVarIds,
       flows: flowsNext,
+      dndTraceId: traceId || undefined,
+      operationId: operationIdForLog || traceId || undefined,
     });
     flowsNext = ar.flowsNext;
     parentAutoRenames = ar.renamed;
@@ -568,6 +616,21 @@ export function applyTaskMoveToSubflow(params: ApplyTaskMoveToSubflowParams): Ap
       });
     }
   }
+
+  logTaskSubflowMoveTrace('apply:summary', {
+    dndTraceId: traceId || undefined,
+    taskInstanceId,
+    parentFlowId,
+    childFlowId,
+    referencedVarIdsForMovedTask: referencedVarIdsSorted,
+    wiringVarIds,
+    parentAutoRenames: parentAutoRenames.map((r) => ({
+      id: r.id,
+      previousName: r.previousName,
+      nextName: r.nextName,
+    })),
+    childLocalRenames: renamed,
+  });
 
   logTaskSubflowMove('apply:done', {
     referencedVarIdsForMovedTask: referencedVarIdsSorted,

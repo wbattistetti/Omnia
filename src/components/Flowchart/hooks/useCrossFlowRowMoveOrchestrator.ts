@@ -8,25 +8,21 @@
  *
  * **Coordination:** {@link useNodeDragDrop} dispatches `crossNodeRowMove` **synchronously** (capture
  * handlers run first), then updates local source rows; `updateNode` on the source is skipped when
- * `flowStoreCommitOk` so the store remains authoritative after a successful upsert.
+ * `flowStoreCommitOk` (structural path via `applyStructuralWorkspaceMachineEvent`) so the store remains authoritative after a successful commit.
  */
 
 import { useEffect } from 'react';
-import type { ApplyTaskMoveToSubflowResult } from '@domain/taskSubflowMove/applyTaskMoveToSubflow';
 import { normalizeFlowCanvasId } from '@components/FlowMappingPanel/flowInterfaceDragTypes';
 import { resolveFlowIdForNodeWithCanvasHint } from '@domain/taskSubflowMove/findFlowIdForNode';
 import { findFirstSubflowPortalInNode } from '@domain/taskSubflowMove/findSubflowPortal';
 import { getSubflowSyncFlows } from '@domain/taskSubflowMove/subflowSyncFlowsRef';
-import {
-  createDefaultStructuralOrchestratorContext,
-  runStructuralCommandSync,
-} from '@domain/structural/StructuralOrchestrator';
 import { newCommandId } from '@domain/structural/commands';
 import { resolveStructuralProjectId } from '@domain/structural/resolveStructuralProjectId';
 import { scheduleCommittedFlowNodeRowsSync } from '@utils/committedFlowSliceNodeRows';
-import { FLOW_GRAPH_MIGRATION } from '@domain/flowGraph/flowGraphMigrationConfig';
-import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { FLOW_GRAPH_MIGRATION, logDndRouting } from '@domain/flowGraph';
+import { logTaskSubflowMove, logTaskSubflowMoveTrace } from '@utils/taskSubflowMoveDebug';
 import { dropTargetsSubflowPortalRow } from '@components/Flowchart/utils/crossNodeRowDropHitTest';
+import { useFlowActions } from '@flows/FlowStore';
 
 type CrossNodeDetail = {
   fromNodeId?: string;
@@ -45,6 +41,8 @@ type CrossNodeDetail = {
   targetRowId?: string | null;
   targetRegion?: 'portal' | 'row' | 'node';
   _state?: { handled: boolean };
+  dndTraceId?: string;
+  operationId?: string;
 };
 
 function parseTargetRowInsertIndex(d: CrossNodeDetail): number | undefined {
@@ -58,6 +56,7 @@ export function useCrossFlowRowMoveOrchestrator(params: {
   projectData?: unknown;
 }) {
   const { projectId, projectData } = params;
+  const { applyStructuralWorkspaceMachineEvent } = useFlowActions();
   useEffect(() => {
     const handler = (e: Event) => {
       const ev = e as CustomEvent<CrossNodeDetail>;
@@ -69,9 +68,17 @@ export function useCrossFlowRowMoveOrchestrator(params: {
       const rowId = String(d.rowData?.id || '').trim();
       if (!fromNode || !toNode || !rowId) return;
 
-      if (import.meta.env.DEV) {
-        console.log('DnD target:', { targetRegion: d.targetRegion, targetRowId: d.targetRowId });
-      }
+      const traceOrOp = String(d.operationId || d.dndTraceId || '').trim();
+
+      logDndRouting('orchestrator:crossNodeRowMove', {
+        targetRegion: d.targetRegion,
+        targetRowId: d.targetRowId,
+        fromNode,
+        toNode,
+        rowId,
+        dndTraceId: traceOrOp || undefined,
+        operationId: traceOrOp || undefined,
+      });
 
       const flows = getSubflowSyncFlows();
       const fromHint =
@@ -93,9 +100,12 @@ export function useCrossFlowRowMoveOrchestrator(params: {
       logTaskSubflowMove('crossFlow:detected', { fromFlowId: fromHint, toFlowId: toHint });
       logTaskSubflowMove('crossFlow:normalized', { fromFlowId: fromResolved, toFlowId: toResolved });
 
-      /** Same flow: cross-node row move uses structural graph mutation unless the drop targets the portal row. */
-      if (fromResolved === toResolved) {
-        if (fromNode === toNode) return;
+      /**
+       * Same flow, different node: cross-node move defers to the portal handler when the drop
+       * targets the subflow portal row. Same-node reorder uses the same `moveTaskRow` path (from
+       * and to node id match) and must not return early here.
+       */
+      if (fromResolved === toResolved && fromNode !== toNode) {
         const flowSlice = flows[fromResolved];
         const targetRfNode = flowSlice?.nodes?.find(
           (n: { id?: string }) => String(n?.id || '').trim() === toNode
@@ -112,6 +122,14 @@ export function useCrossFlowRowMoveOrchestrator(params: {
           })
         ) {
           logTaskSubflowMove('orchestrator:sameFlowDeferToPortalHandler', { toNodeId: toNode });
+          logTaskSubflowMoveTrace('orchestrator:deferToPortal', {
+            dndTraceId: traceOrOp || undefined,
+            operationId: traceOrOp || undefined,
+            fromNode,
+            toNode,
+            rowId,
+            fromFlowId: fromResolved,
+          });
           return;
         }
       }
@@ -123,28 +141,29 @@ export function useCrossFlowRowMoveOrchestrator(params: {
           return;
         }
 
-        const base = createDefaultStructuralOrchestratorContext(pid);
-        const ctx = {
-          ...base,
-          projectData: projectData !== undefined ? projectData : base.projectData,
-        };
-
         const insertIdx = parseTargetRowInsertIndex(d);
-        const out = runStructuralCommandSync(ctx, {
-          type: 'moveTaskRow',
-          commandId: newCommandId(),
-          source: 'dnd',
-          rowId,
-          fromFlowId: fromResolved,
-          toFlowId: toResolved,
-          fromNodeId: fromNode,
-          toNodeId: toNode,
-          ...(insertIdx !== undefined ? { targetRowInsertIndex: insertIdx } : {}),
-        }) as ApplyTaskMoveToSubflowResult | void;
+        const outcome = applyStructuralWorkspaceMachineEvent({
+          type: 'structuralCommand',
+          projectId: pid,
+          ...(projectData !== undefined ? { projectData } : {}),
+          command: {
+            type: 'moveTaskRow',
+            commandId: newCommandId(),
+            source: 'dnd',
+            rowId,
+            fromFlowId: fromResolved,
+            toFlowId: toResolved,
+            fromNodeId: fromNode,
+            toNodeId: toNode,
+            ...(insertIdx !== undefined ? { targetRowInsertIndex: insertIdx } : {}),
+            ...(traceOrOp ? { dndTraceId: traceOrOp, operationId: traceOrOp } : {}),
+          },
+        });
+        const out = outcome.structural ?? null;
 
-        if (out?.flowStoreCommitOk === true) {
+        if (out?.flowStoreCommitOk === true && out.flowsNext) {
           d._state.handled = true;
-          if (out.flowsNext && !FLOW_GRAPH_MIGRATION.DISABLE_SCHEDULE_COMMITTED_FLOW_NODE_ROWS_SYNC) {
+          if (!FLOW_GRAPH_MIGRATION.DISABLE_SCHEDULE_COMMITTED_FLOW_NODE_ROWS_SYNC) {
             scheduleCommittedFlowNodeRowsSync(out.flowsNext, fromResolved, rowId);
           }
           logTaskSubflowMove('orchestrator:sameFlowCrossNodeHandled', {
@@ -153,11 +172,27 @@ export function useCrossFlowRowMoveOrchestrator(params: {
             fromNodeId: fromNode,
             toNodeId: toNode,
           });
+          logTaskSubflowMoveTrace('orchestrator:structuralCommitOk', {
+            dndTraceId: traceOrOp || undefined,
+            operationId: traceOrOp || undefined,
+            scope: 'sameFlow',
+            fromFlowId: fromResolved,
+            fromNode,
+            toNode,
+            rowId,
+            parentAutoRenameSample: out.parentAutoRenames?.slice(0, 5),
+          });
         } else {
           logTaskSubflowMove('orchestrator:sameFlowCrossNodeNotHandled', {
             reason: 'flowStoreCommitMissing',
             rowId,
             flowId: fromResolved,
+          });
+          logTaskSubflowMoveTrace('orchestrator:structuralCommitFail', {
+            dndTraceId: traceOrOp || undefined,
+            operationId: traceOrOp || undefined,
+            scope: 'sameFlow',
+            rowId,
           });
         }
         return;
@@ -169,34 +204,46 @@ export function useCrossFlowRowMoveOrchestrator(params: {
         return;
       }
 
-      const base = createDefaultStructuralOrchestratorContext(pid);
-      const ctx = {
-        ...base,
-        projectData: projectData !== undefined ? projectData : base.projectData,
-      };
-
       const insertIdx = parseTargetRowInsertIndex(d);
-      const out = runStructuralCommandSync(ctx, {
-        type: 'moveTaskRow',
-        commandId: newCommandId(),
-        source: 'dnd',
-        rowId,
-        fromFlowId: fromResolved,
-        toFlowId: toResolved,
-        fromNodeId: fromNode,
-        toNodeId: toNode,
-        ...(insertIdx !== undefined ? { targetRowInsertIndex: insertIdx } : {}),
-      }) as ApplyTaskMoveToSubflowResult | void;
+      const outcome = applyStructuralWorkspaceMachineEvent({
+        type: 'structuralCommand',
+        projectId: pid,
+        ...(projectData !== undefined ? { projectData } : {}),
+        command: {
+          type: 'moveTaskRow',
+          commandId: newCommandId(),
+          source: 'dnd',
+          rowId,
+          fromFlowId: fromResolved,
+          toFlowId: toResolved,
+          fromNodeId: fromNode,
+          toNodeId: toNode,
+          ...(insertIdx !== undefined ? { targetRowInsertIndex: insertIdx } : {}),
+          ...(traceOrOp ? { dndTraceId: traceOrOp, operationId: traceOrOp } : {}),
+        },
+      });
+      const out = outcome.structural ?? null;
 
-      if (out?.flowStoreCommitOk === true) {
+      if (out?.flowStoreCommitOk === true && out.flowsNext) {
         d._state.handled = true;
-        if (out.flowsNext && !FLOW_GRAPH_MIGRATION.DISABLE_SCHEDULE_COMMITTED_FLOW_NODE_ROWS_SYNC) {
+        if (!FLOW_GRAPH_MIGRATION.DISABLE_SCHEDULE_COMMITTED_FLOW_NODE_ROWS_SYNC) {
           scheduleCommittedFlowNodeRowsSync(out.flowsNext, toResolved, rowId);
         }
         logTaskSubflowMove('orchestrator:crossFlowRowMoveHandled', {
           rowId,
           fromFlowId: fromResolved,
           toFlowId: toResolved,
+        });
+        logTaskSubflowMoveTrace('orchestrator:structuralCommitOk', {
+          dndTraceId: traceOrOp || undefined,
+          operationId: traceOrOp || undefined,
+          scope: 'crossFlow',
+          fromFlowId: fromResolved,
+          toFlowId: toResolved,
+          fromNode,
+          toNode,
+          rowId,
+          parentAutoRenameSample: out.parentAutoRenames?.slice(0, 5),
         });
       } else {
         logTaskSubflowMove('orchestrator:crossFlowRowMoveNotHandled', {
@@ -205,10 +252,16 @@ export function useCrossFlowRowMoveOrchestrator(params: {
           fromFlowId: fromResolved,
           toFlowId: toResolved,
         });
+        logTaskSubflowMoveTrace('orchestrator:structuralCommitFail', {
+          dndTraceId: traceOrOp || undefined,
+          operationId: traceOrOp || undefined,
+          scope: 'crossFlow',
+          rowId,
+        });
       }
     };
 
     window.addEventListener('crossNodeRowMove', handler, true);
     return () => window.removeEventListener('crossNodeRowMove', handler, true);
-  }, [projectId, projectData]);
+  }, [projectId, projectData, applyStructuralWorkspaceMachineEvent]);
 }

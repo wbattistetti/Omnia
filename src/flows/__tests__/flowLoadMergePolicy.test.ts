@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { mergeFlowMetaOnServerLoad, shouldKeepLocalGraphOnEmptyServerResponse } from '../flowLoadMergePolicy';
+import {
+  mergeFlowMetaOnServerLoad,
+  mergeMetaTranslationTables,
+  shouldKeepLocalGraphOnEmptyServerResponse,
+} from '../flowLoadMergePolicy';
 
 describe('shouldKeepLocalGraphOnEmptyServerResponse', () => {
   it('returns true when server is empty, local has nodes, and slice is dirty', () => {
@@ -104,5 +108,63 @@ describe('mergeFlowMetaOnServerLoad', () => {
       hasLocalChanges: false,
     });
     expect(out).toEqual(localRich);
+  });
+
+  it('union-merges translations so local-only var keys survive stale inbound upserts', () => {
+    const localMeta = {
+      translations: {
+        'var:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee': 'Nuovo nome',
+      },
+    } as any;
+    const serverMeta = {
+      translations: {},
+    } as any;
+    const out = mergeFlowMetaOnServerLoad({
+      flowId: 'main',
+      localMeta,
+      serverMeta,
+      hasLocalChanges: true,
+    });
+    expect(out?.translations?.['var:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee']).toBe('Nuovo nome');
+  });
+
+  it('on same key prefers server translations when slice is dirty', () => {
+    const vid = 'var:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const out = mergeFlowMetaOnServerLoad({
+      flowId: 'main',
+      localMeta: { translations: { [vid]: 'Local' } } as any,
+      serverMeta: { translations: { [vid]: 'Server' } } as any,
+      hasLocalChanges: true,
+    });
+    expect(out?.translations?.[vid]).toBe('Server');
+  });
+
+  it('on same key prefers server translations when slice is clean', () => {
+    const vid = 'var:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const out = mergeFlowMetaOnServerLoad({
+      flowId: 'main',
+      localMeta: { translations: { [vid]: 'Local' } } as any,
+      serverMeta: { translations: { [vid]: 'Server' } } as any,
+      hasLocalChanges: false,
+    });
+    expect(out?.translations?.[vid]).toBe('Server');
+  });
+});
+
+describe('mergeMetaTranslationTables', () => {
+  it('keeps keys present only on the local table', () => {
+    const out = mergeMetaTranslationTables(
+      { 'var:a': 'L' } as any,
+      {} as any
+    );
+    expect(out?.['var:a']).toBe('L');
+  });
+
+  it('incoming wins on conflict', () => {
+    const out = mergeMetaTranslationTables(
+      { 'var:a': 'old' } as any,
+      { 'var:a': 'new' } as any
+    );
+    expect(out?.['var:a']).toBe('new');
   });
 });

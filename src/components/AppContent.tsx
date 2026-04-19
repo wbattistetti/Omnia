@@ -84,8 +84,13 @@ import {
   setSubflowSyncTranslations,
   setSubflowSyncUpsertFlowSlice,
 } from '../domain/taskSubflowMove/subflowSyncFlowsRef';
+import { isStructuralOperationInProgress } from '../domain/structural/structuralOperationLock';
 import { logUpsertFlowSliceInbound, logUpsertSubflowEmptyNodesCaller } from '../utils/flowStructuralCommitDiagnostic';
-import { overlayInboundFlowRowsWithAuthoritativeSlice } from '../flows/overlayInboundFlowRowsWithAuthoritativeSlice';
+import {
+  mergeDockInboundLayoutOnly,
+  shouldSkipDockInboundBareEmptySlice,
+  shouldSkipDockInboundEmptySubflowGraph,
+} from './AppContent/dockInboundFlowSlicePolicy';
 import { getActiveFlowCanvasId } from '../flows/activeFlowCanvas';
 import { provisionParentVariablesForSubflowTaskAsync } from '../services/subflowOutputProvisioning';
 import { getTemplateId } from '../utils/taskHelpers';
@@ -188,16 +193,31 @@ const DockManagerWithFlows: React.FC<{
    * between first paint and useEffect (structural DnD runs synchronously on mouseup).
    */
   setSubflowSyncUpsertFlowSlice((f) => {
+    if (isStructuralOperationInProgress()) {
+      return;
+    }
     const incoming = f as any;
     const flowId = String(incoming?.id || '').trim();
     if (!flowId) return;
 
+    if (shouldSkipDockInboundBareEmptySlice(incoming)) {
+      return;
+    }
+
     const current = (flowsSnapshotRef.current as any)?.[flowId];
-    const nodesAligned = overlayInboundFlowRowsWithAuthoritativeSlice(current, incoming);
-    const reconciled =
-      nodesAligned !== undefined && nodesAligned !== incoming.nodes
-        ? { ...incoming, nodes: nodesAligned }
-        : incoming;
+
+    if (
+      shouldSkipDockInboundEmptySubflowGraph({
+        flowId,
+        incomingNodes: incoming?.nodes,
+        currentNodes: current?.nodes,
+      })
+    ) {
+      return;
+    }
+
+    /** Dock: layout-only merge — rows, meta.translations, tasks, variables stay store-authoritative. */
+    const reconciled = mergeDockInboundLayoutOnly(incoming, current);
 
     const currentGraphSig = flowGraphSignature(current as any);
     const incomingGraphSig = flowGraphSignature(reconciled as any);

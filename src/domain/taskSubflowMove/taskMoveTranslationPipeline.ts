@@ -71,6 +71,10 @@ export function getTranslationsForKeys(
   return out;
 }
 
+/**
+ * @deprecated `cloneTranslationsToChild` overwrites conflicting child keys from the origin slice
+ * instead of throwing. Kept for any external `instanceof` checks.
+ */
 export class CloneTranslationsCollisionError extends Error {
   constructor(
     public readonly childFlowId: string,
@@ -106,10 +110,17 @@ export function buildTranslationKeysForTaskMove(
   return new Set<string>([...messageKeys, ...varKeys]);
 }
 
+function copyTranslationEntryFromSource(v: unknown): TranslationEntry {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+    ? { ...(v as Record<string, string>) }
+    : String(v ?? '');
+}
+
 /**
  * Copies translation entries from origin flow slice to child slice 1:1.
  * If a key already exists on the child with the **same** value, the copy is skipped (idempotent).
- * Throws {@link CloneTranslationsCollisionError} only when the same key exists with a **different** value.
+ * If the child has a **different** value (e.g. stale copy after moving the task back and forth),
+ * the origin slice wins — avoids aborting {@link applyTaskMoveToSubflow} mid-flight.
  */
 export function cloneTranslationsToChild(
   flows: WorkspaceState['flows'],
@@ -145,33 +156,24 @@ export function cloneTranslationsToChild(
   }
   const unique = [...new Set(resolvedKeysToCopy)];
 
-  const mismatch: string[] = [];
+  let changed = false;
   for (const rk of unique) {
-    if (!Object.prototype.hasOwnProperty.call(prevChildTr, rk)) continue;
+    if (!Object.prototype.hasOwnProperty.call(srcTr, rk)) continue;
     const fromOrigin = (srcTr as Record<string, unknown>)[rk];
-    const onChild = prevChildTr[rk];
-    if (!translationEntryEqual(onChild, fromOrigin)) {
-      mismatch.push(rk);
-    }
-  }
-  if (mismatch.length > 0) {
-    throw new CloneTranslationsCollisionError(cId, mismatch);
-  }
+    const onChild = Object.prototype.hasOwnProperty.call(prevChildTr, rk) ? prevChildTr[rk] : undefined;
 
-  let addedAny = false;
-  for (const rk of unique) {
-    if (Object.prototype.hasOwnProperty.call(prevChildTr, rk)) {
+    if (!Object.prototype.hasOwnProperty.call(prevChildTr, rk)) {
+      prevChildTr[rk] = copyTranslationEntryFromSource(fromOrigin);
+      changed = true;
       continue;
     }
-    addedAny = true;
-    const v = (srcTr as Record<string, unknown>)[rk];
-    prevChildTr[rk] =
-      typeof v === 'object' && v !== null && !Array.isArray(v)
-        ? { ...(v as Record<string, string>) }
-        : String(v ?? '');
+    if (!translationEntryEqual(onChild, fromOrigin)) {
+      prevChildTr[rk] = copyTranslationEntryFromSource(fromOrigin);
+      changed = true;
+    }
   }
 
-  if (!addedAny) {
+  if (!changed) {
     return flows;
   }
 

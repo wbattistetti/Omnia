@@ -15,7 +15,7 @@ import { getSubflowSyncFlows, getSubflowSyncTranslations, upsertFlowSlicesFromSu
 import { registerSubflowWiringSecondPass } from '@domain/taskSubflowMove/subflowWiringAfterVariableStore';
 import { executeSubflowWiringSecondPassCore } from './subflowWiringSecondPassCore';
 import { variableCreationService } from '@services/VariableCreationService';
-import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logTaskSubflowMove, logTaskSubflowMoveTrace } from '@utils/taskSubflowMoveDebug';
 import { logS2Diag } from '@utils/s2WiringDiagnostic';
 import { logStructuralOrchestratorCommitSnapshot } from '@utils/flowStructuralCommitDiagnostic';
 import { logSubflowSliceMutation } from '@utils/subflowCanvasDebug';
@@ -33,8 +33,15 @@ import type {
   StructuralCommand,
   SubflowWiringSecondPassCommand,
 } from './commands';
-import { moveTaskRowBetweenFlows } from './planGraphMutation';
 import { taskRepository } from '@services/TaskRepository';
+import { applyReverseSubflowPipeline, isReverseSubflowMove } from '@domain/taskSubflowMove/applyReverseSubflowPipeline';
+import {
+  flowContainsTaskRow,
+  healOrphanMoveTaskRowToCanvas,
+  moveTaskRowBetweenFlows,
+  resolveSourceNodeIdForRowMove,
+} from '@domain/taskSubflowMove/moveTaskRowInFlows';
+import { runWithStructuralOperationLock } from './structuralOperationLock';
 
 export type StructuralOrchestratorContext = {
   projectId: string;
@@ -73,6 +80,19 @@ function logPipeline(step: string, command: StructuralCommand): void {
     commandId: command.commandId,
     source: command.source,
   });
+}
+
+/** Prefer drag `operationId` / `dndTraceId`; fallback to structural `commandId` for apply/rename correlation. */
+function applyTraceFromMoveCommand(command: {
+  commandId: string;
+  dndTraceId?: string;
+  operationId?: string;
+}): string | undefined {
+  const fromOp = String(command.operationId || '').trim();
+  if (fromOp) return fromOp;
+  const fromDnd = String(command.dndTraceId || '').trim();
+  if (fromDnd) return fromDnd;
+  return String(command.commandId || '').trim() || undefined;
 }
 
 function buildMinimalStructuralApplyResult(
@@ -118,16 +138,44 @@ function runMoveTaskRow(ctx: StructuralOrchestratorContext, command: MoveTaskRow
   }
 
   const flows0 = ctx.getFlows();
-  const flowsWorking = moveTaskRowBetweenFlows(flows0, {
+  if (!flowContainsTaskRow(flows0, fromF, rowId)) {
+    logTaskSubflowMove('orchestrator:moveTaskRow:abort', {
+      reason: 'source_flow_missing_task_row',
+      fromFlowId: fromF,
+      rowId,
+      fromNodeId: fromN,
+    });
+    return buildMinimalStructuralApplyResult(flows0, rowId, { flowStoreCommitOk: false });
+  }
+  const effectiveFromN =
+    resolveSourceNodeIdForRowMove(flows0, fromF, rowId, fromN) ?? fromN;
+
+  let flowsWorking = moveTaskRowBetweenFlows(flows0, {
     sourceFlowId: fromF,
     targetFlowId: toF,
-    sourceNodeId: fromN,
+    sourceNodeId: effectiveFromN,
     targetNodeId: toN,
     rowId,
+    ...(typeof command.targetRowInsertIndex === 'number' &&
+    !Number.isNaN(command.targetRowInsertIndex)
+      ? { targetRowInsertIndex: command.targetRowInsertIndex }
+      : {}),
   });
 
+  if (isReverseSubflowMove(fromF, toF)) {
+    flowsWorking = applyReverseSubflowPipeline({
+      projectId: pid,
+      flows: flowsWorking,
+      fromFlowId: fromF,
+      toFlowId: toF,
+      movedTaskId: rowId,
+      projectData: ctx.projectData,
+      dndTraceId: applyTraceFromMoveCommand(command),
+    }).flowsNext;
+  }
+
   emptyRepositoryPlan();
-  reconcileUtteranceVariableStoreWithFlowGraph(pid, flowsWorking);
+  reconcileUtteranceVariableStoreWithFlowGraph(pid, flowsWorking, { skipGlobalMerge: true });
   emitVariableStoreUpdated();
 
   /** Linked S2 apply only when the row crosses **into** a subflow slice from another flow. */
@@ -159,6 +207,7 @@ function runMoveTaskRow(ctx: StructuralOrchestratorContext, command: MoveTaskRow
   const translationsArg =
     translationsRaw && Object.keys(translationsRaw).length > 0 ? translationsRaw : undefined;
 
+  const moveRowTrace = applyTraceFromMoveCommand(command);
   let result = applyTaskMoveToSubflow({
     projectId: pid,
     parentFlowId,
@@ -173,6 +222,8 @@ function runMoveTaskRow(ctx: StructuralOrchestratorContext, command: MoveTaskRow
     skipStructuralPhase: true,
     isLinkedSubflowMove: true,
     deleteUnreferencedTaskVariableRows: true,
+    dndTraceId: moveRowTrace,
+    operationId: moveRowTrace,
   });
 
   if (variableCreationService.getVariablesByTaskInstanceId(pid, rowId).length === 0) {
@@ -186,9 +237,21 @@ function runMoveTaskRow(ctx: StructuralOrchestratorContext, command: MoveTaskRow
       conditions,
       translations: translationsArg,
       projectData: ctx.projectData,
+      dndTraceId: moveRowTrace,
+      operationId: moveRowTrace,
+      flowsSnapshotAfterStructuralApply: result.flowsNext,
     });
     if (flushed) result = flushed;
   }
+
+  logTaskSubflowMoveTrace('orchestrator:afterApplyTaskMoveToSubflow', {
+    dndTraceId: moveRowTrace,
+    path: 'runMoveTaskRow',
+    parentFlowId,
+    childFlowId,
+    rowId,
+    parentAutoRenameCount: result.parentAutoRenames?.length ?? 0,
+  });
 
   for (const pair of affectedTaskFlowPairs(command)) {
     if (pair.flowId) {
@@ -241,20 +304,56 @@ function runMoveTaskRowToCanvas(ctx: StructuralOrchestratorContext, command: Mov
   }
 
   const flows0 = ctx.getFlows();
-  const flowsWorking = moveTaskRowBetweenFlows(flows0, {
+  if (!flowContainsTaskRow(flows0, fromF, rowId)) {
+    logTaskSubflowMove('orchestrator:moveTaskRowToCanvas:abort', {
+      reason: 'source_flow_missing_task_row',
+      fromFlowId: fromF,
+      rowId,
+      fromNodeId: fromN,
+    });
+    return buildMinimalStructuralApplyResult(flows0, rowId, { flowStoreCommitOk: false });
+  }
+  const effectiveFromN =
+    resolveSourceNodeIdForRowMove(flows0, fromF, rowId, fromN) ?? fromN;
+
+  let flowsWorking = moveTaskRowBetweenFlows(flows0, {
     sourceFlowId: fromF,
     targetFlowId: toF,
-    sourceNodeId: fromN,
+    sourceNodeId: effectiveFromN,
     targetNodeId: newNodeId,
     rowId,
     createTargetNodeIfMissing: { x: pos.x, y: pos.y },
   });
 
-  emptyRepositoryPlan();
-  reconcileUtteranceVariableStoreWithFlowGraph(pid, flowsWorking);
-  emitVariableStoreUpdated();
+  if (isReverseSubflowMove(fromF, toF)) {
+    flowsWorking = applyReverseSubflowPipeline({
+      projectId: pid,
+      flows: flowsWorking,
+      fromFlowId: fromF,
+      toFlowId: toF,
+      movedTaskId: rowId,
+      projectData: ctx.projectData,
+      dndTraceId: applyTraceFromMoveCommand(command),
+    }).flowsNext;
+  }
 
   const needsLinkedSubflowApply = toF.startsWith('subflow_') && fromF !== toF;
+  if (needsLinkedSubflowApply) {
+    flowsWorking = healOrphanMoveTaskRowToCanvas({
+      flowsBeforeMove: flows0,
+      flowsAfterMove: flowsWorking,
+      sourceFlowId: fromF,
+      sourceNodeId: effectiveFromN,
+      targetFlowId: toF,
+      rowId,
+      newNodeId,
+      position: pos,
+    });
+  }
+
+  emptyRepositoryPlan();
+  reconcileUtteranceVariableStoreWithFlowGraph(pid, flowsWorking, { skipGlobalMerge: true });
+  emitVariableStoreUpdated();
 
   if (!needsLinkedSubflowApply) {
     const ids = Array.from(new Set([fromF, toF].filter(Boolean)));
@@ -282,6 +381,7 @@ function runMoveTaskRowToCanvas(ctx: StructuralOrchestratorContext, command: Mov
   const translationsArg =
     translationsRaw && Object.keys(translationsRaw).length > 0 ? translationsRaw : undefined;
 
+  const toCanvasTrace = applyTraceFromMoveCommand(command);
   let result = applyTaskMoveToSubflow({
     projectId: pid,
     parentFlowId,
@@ -296,6 +396,8 @@ function runMoveTaskRowToCanvas(ctx: StructuralOrchestratorContext, command: Mov
     skipStructuralPhase: true,
     isLinkedSubflowMove: true,
     deleteUnreferencedTaskVariableRows: true,
+    dndTraceId: toCanvasTrace,
+    operationId: toCanvasTrace,
   });
 
   if (variableCreationService.getVariablesByTaskInstanceId(pid, rowId).length === 0) {
@@ -309,9 +411,21 @@ function runMoveTaskRowToCanvas(ctx: StructuralOrchestratorContext, command: Mov
       conditions,
       translations: translationsArg,
       projectData: ctx.projectData,
+      dndTraceId: toCanvasTrace,
+      operationId: toCanvasTrace,
+      flowsSnapshotAfterStructuralApply: result.flowsNext,
     });
     if (flushed) result = flushed;
   }
+
+  logTaskSubflowMoveTrace('orchestrator:afterApplyTaskMoveToSubflow', {
+    dndTraceId: toCanvasTrace,
+    path: 'runMoveTaskRowToCanvas',
+    parentFlowId,
+    childFlowId,
+    rowId,
+    parentAutoRenameCount: result.parentAutoRenames?.length ?? 0,
+  });
 
   for (const pair of affectedTaskFlowPairs(command)) {
     if (pair.flowId) {
@@ -366,7 +480,7 @@ function runMoveTaskRowIntoSubflow(
   emptyRepositoryPlan();
 
   logPipeline('pipeline:6-reconcileVariables', command);
-  reconcileUtteranceVariableStoreWithFlowGraph(pid, flowsWorking);
+  reconcileUtteranceVariableStoreWithFlowGraph(pid, flowsWorking, { skipGlobalMerge: true });
   emitVariableStoreUpdated();
 
   const conditions = flattenProjectConditions(ctx.projectData);
@@ -382,6 +496,7 @@ function runMoveTaskRowIntoSubflow(
     parentSubflowTaskRowId: command.parentSubflowTaskRowId,
     targetNodeId: command.targetNodeId,
   });
+  const intoSfTrace = applyTraceFromMoveCommand(command);
   let result = applyTaskMoveToSubflow({
     projectId: pid,
     parentFlowId: command.parentFlowId,
@@ -396,6 +511,8 @@ function runMoveTaskRowIntoSubflow(
     skipStructuralPhase: true,
     isLinkedSubflowMove: true,
     deleteUnreferencedTaskVariableRows: true,
+    dndTraceId: intoSfTrace,
+    operationId: intoSfTrace,
   });
 
   let subflowSecondPassRanSynchronously = false;
@@ -410,6 +527,9 @@ function runMoveTaskRowIntoSubflow(
       conditions,
       translations: translationsArg,
       projectData: ctx.projectData,
+      dndTraceId: intoSfTrace,
+      operationId: intoSfTrace,
+      flowsSnapshotAfterStructuralApply: result.flowsNext,
     });
     if (flushed) {
       result = flushed;
@@ -479,9 +599,10 @@ function runResyncSubflowInterface(
   const exposeAll = !!command.exposeAllTaskVariablesInChildInterface;
 
   logSubflowSliceMutation('BEFORE', childFlowId, flows);
-  reconcileUtteranceVariableStoreWithFlowGraph(pid, flows);
+  reconcileUtteranceVariableStoreWithFlowGraph(pid, flows, { skipGlobalMerge: true });
   emitVariableStoreUpdated();
 
+  const resyncTrace = applyTraceFromMoveCommand(command);
   const first = applyTaskMoveToSubflow({
     projectId: pid,
     parentFlowId,
@@ -495,9 +616,11 @@ function runResyncSubflowInterface(
     projectData: ctx.projectData,
     skipMaterialization: true,
     exposeAllTaskVariablesInChildInterface: exposeAll,
+    dndTraceId: resyncTrace,
+    operationId: resyncTrace,
   });
 
-  reconcileUtteranceVariableStoreWithFlowGraph(pid, first.flowsNext);
+  reconcileUtteranceVariableStoreWithFlowGraph(pid, first.flowsNext, { skipGlobalMerge: true });
   emitVariableStoreUpdated();
 
   const flushed = registerSubflowWiringSecondPass({
@@ -511,6 +634,9 @@ function runResyncSubflowInterface(
     translations: translationsArg,
     projectData: ctx.projectData,
     exposeAllTaskVariablesInChildInterface: exposeAll,
+    dndTraceId: resyncTrace,
+    operationId: resyncTrace,
+    flowsSnapshotAfterStructuralApply: first.flowsNext,
   });
   const out = flushed ?? first;
   logStructuralOrchestratorCommitSnapshot('runResyncSubflowInterface', out.flowsNext, [parentFlowId, childFlowId]);
@@ -557,15 +683,15 @@ function executeStructuralCommandImpl(
   try {
     switch (command.type) {
       case 'moveTaskRowIntoSubflow':
-        return runMoveTaskRowIntoSubflow(ctx, command);
+        return runWithStructuralOperationLock(() => runMoveTaskRowIntoSubflow(ctx, command));
       case 'resyncSubflowInterface':
-        return runResyncSubflowInterface(ctx, command);
+        return runWithStructuralOperationLock(() => runResyncSubflowInterface(ctx, command));
       case 'subflowWiringSecondPass':
-        return runSubflowWiringSecondPass(ctx, command);
+        return runWithStructuralOperationLock(() => runSubflowWiringSecondPass(ctx, command));
       case 'moveTaskRow':
-        return runMoveTaskRow(ctx, command);
+        return runWithStructuralOperationLock(() => runMoveTaskRow(ctx, command));
       case 'moveTaskRowToCanvas':
-        return runMoveTaskRowToCanvas(ctx, command);
+        return runWithStructuralOperationLock(() => runMoveTaskRowToCanvas(ctx, command));
       case 'createSubflow':
       case 'duplicateTask':
       case 'switchAuthoringCanvas':

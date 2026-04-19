@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { ControlPointAbsolute } from '../types/edgeTypes';
 import { CoordinateConverter } from '../utils/coordinateUtils';
 import { useReactFlow } from 'reactflow';
@@ -30,7 +30,11 @@ export const EdgeControlPoints: React.FC<EdgeControlPointsProps> = ({
   showDistance = 10,
 }) => {
   const reactFlowInstance = useReactFlow();
-  const converter = new CoordinateConverter(reactFlowInstance, pathRef);
+  /** Stable reference — a new CoordinateConverter each render made `converter` a new object → visibility effect ran every frame → infinite updates. */
+  const converter = useMemo(
+    () => new CoordinateConverter(reactFlowInstance, pathRef),
+    [reactFlowInstance, pathRef]
+  );
 
   const [visiblePoints, setVisiblePoints] = useState<Set<string>>(new Set());
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);

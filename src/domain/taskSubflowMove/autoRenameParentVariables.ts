@@ -24,8 +24,9 @@ import { getVariableLabel } from '@utils/getVariableLabel';
 import { getProjectTranslationsTable } from '@utils/projectTranslationsRegistry';
 import { publishVariableDisplayTranslation } from '@utils/variableTranslationBridge';
 import { makeTranslationKey } from '@utils/translationKeys';
-import { logTaskSubflowMove } from '@utils/taskSubflowMoveDebug';
+import { logTaskSubflowMove, logTaskSubflowMoveTrace } from '@utils/taskSubflowMoveDebug';
 import { logS2Diag } from '@utils/s2WiringDiagnostic';
+import { isDndOperationInstrumentEnabled } from '@utils/dndOperationInstrument';
 import { flattenFlowMetaTranslations } from '@utils/activeFlowTranslations';
 
 import { extractInterfaceOutputsByVariableRefId } from './autoFillSubflowBindings';
@@ -44,6 +45,10 @@ export type AutoRenameParentVariablesParams = {
   taskVariableIds: readonly string[];
   /** Current workspace flows; updated copy returned with parent slice translations merged. */
   flows: WorkspaceState['flows'];
+  /** Optional: correlates with `applyTaskMoveToSubflow` / DnD. */
+  dndTraceId?: string;
+  /** Explicit gesture id for `[Subflow:autoRename]` logs (often same as `dndTraceId`). */
+  operationId?: string;
 };
 
 export type ParentAutoRenameRecord = { id: string; previousName: string; nextName: string };
@@ -118,9 +123,12 @@ export function autoRenameReferencedVariablesForMovedTask(params: AutoRenamePare
 } {
   const pid = String(params.projectId || '').trim();
   const parentFlowId = String(params.parentFlowId || '').trim();
+  const traceId = String(params.dndTraceId || '').trim();
+  const operationId = String(params.operationId || '').trim() || traceId;
   let flowsNext = params.flows;
   if (!pid || !parentFlowId) {
     logS2Diag('autoRenameParent', 'ABORT pid/parentFlowId mancante', { pid, parentFlowId });
+    logTaskSubflowMoveTrace('autoRename:abortMissingPidOrParent', { dndTraceId: traceId || undefined, pid, parentFlowId });
     return { renamed: [], flowsNext };
   }
 
@@ -130,14 +138,28 @@ export function autoRenameReferencedVariablesForMovedTask(params: AutoRenamePare
   if (!prefix) {
     logTaskSubflowMove('autoRename:skip', { reason: 'empty_subflow_title' });
     logS2Diag('autoRenameParent', 'SKIP: subflowDisplayTitle vuoto → nessun prefix.leaf', {});
+    logTaskSubflowMoveTrace('autoRename:skipEmptyPrefix', { dndTraceId: traceId || undefined, parentFlowId });
     return { renamed: [], flowsNext };
   }
 
   const taskVarSet = new Set(params.taskVariableIds.map((x) => String(x || '').trim()).filter(Boolean));
   if (taskVarSet.size === 0) {
     logS2Diag('autoRenameParent', 'SKIP: taskVariableIds vuoto', { parentFlowId });
+    logTaskSubflowMoveTrace('autoRename:skipEmptyTaskVariableIds', {
+      dndTraceId: traceId || undefined,
+      parentFlowId,
+      prefix,
+    });
     return { renamed: [], flowsNext };
   }
+
+  logTaskSubflowMoveTrace('autoRename:enter', {
+    dndTraceId: traceId || undefined,
+    parentFlowId,
+    prefix,
+    candidateVarCount: taskVarSet.size,
+    candidateVarIds: [...taskVarSet].sort(),
+  });
 
   const ifaceByVarRef = extractInterfaceOutputsByVariableRefId(params.childFlow);
   const translations = buildRenameTranslations(params.parentFlow, params.childFlow);
@@ -153,10 +175,35 @@ export function autoRenameReferencedVariablesForMovedTask(params: AutoRenamePare
         parentFlowId,
         storeRowCount: all.length,
       });
+      logTaskSubflowMoveTrace('autoRename:skipNotInStore', {
+        dndTraceId: traceId || undefined,
+        variableId: vid,
+        parentFlowId,
+      });
+      if (isDndOperationInstrumentEnabled()) {
+        console.log('[Rename] result', {
+          operationId: operationId || undefined,
+          varId: vid,
+          prevName: '',
+          nextName: '',
+          result: 'skipEmpty' as const,
+        });
+      }
       continue;
     }
     if (v.subflowAutoRenameLocked === true) {
       logTaskSubflowMove('autoRename:skipLocked', { variableId: vid });
+      logTaskSubflowMoveTrace('autoRename:skipLocked', { dndTraceId: traceId || undefined, variableId: vid });
+      if (isDndOperationInstrumentEnabled()) {
+        const prevName = getVariableLabel(vid, translations) || vid;
+        console.log('[Rename] result', {
+          operationId: operationId || undefined,
+          varId: vid,
+          prevName,
+          nextName: prevName,
+          result: 'skipLocked' as const,
+        });
+      }
       continue;
     }
 
@@ -164,16 +211,58 @@ export function autoRenameReferencedVariablesForMovedTask(params: AutoRenamePare
     const leaf = computeLeafForS2Rename(v, entry, translations);
     if (!leaf) {
       logTaskSubflowMove('autoRename:skipEmptyLeaf', { variableId: vid });
+      logTaskSubflowMoveTrace('autoRename:skipEmptyLeaf', { dndTraceId: traceId || undefined, variableId: vid });
+      if (isDndOperationInstrumentEnabled()) {
+        const prevName = getVariableLabel(vid, translations) || vid;
+        console.log('[Rename] result', {
+          operationId: operationId || undefined,
+          varId: vid,
+          prevName,
+          nextName: '',
+          result: 'skipEmpty' as const,
+        });
+      }
       continue;
     }
 
     const nextName = `${prefix}.${leaf}`;
     const prevName = getVariableLabel(vid, translations) || vid;
-    if (prevName === nextName) continue;
+    if (prevName === nextName) {
+      logTaskSubflowMoveTrace('autoRename:skipAlreadyQualified', {
+        dndTraceId: traceId || undefined,
+        variableId: vid,
+        prevName,
+        nextName,
+      });
+      if (isDndOperationInstrumentEnabled()) {
+        console.log('[Rename] result', {
+          operationId: operationId || undefined,
+          varId: vid,
+          prevName,
+          nextName,
+          result: 'skipSame' as const,
+        });
+      }
+      continue;
+    }
 
     const ok = variableCreationService.renameVariableRowById(pid, vid, nextName);
     if (!ok) {
       logTaskSubflowMove('autoRename:renameFailed', { variableId: vid, nextName });
+      logTaskSubflowMoveTrace('autoRename:renameFailed', {
+        dndTraceId: traceId || undefined,
+        variableId: vid,
+        nextName,
+      });
+      if (isDndOperationInstrumentEnabled()) {
+        console.log('[Rename] result', {
+          operationId: operationId || undefined,
+          varId: vid,
+          prevName,
+          nextName,
+          result: 'renameFailed' as const,
+        });
+      }
       continue;
     }
 
@@ -186,11 +275,32 @@ export function autoRenameReferencedVariablesForMovedTask(params: AutoRenamePare
     }
 
     renamed.push({ id: vid, previousName: prevName, nextName });
+    logTaskSubflowMoveTrace('autoRename:renamedOne', {
+      dndTraceId: traceId || undefined,
+      variableId: vid,
+      previousName: prevName,
+      nextName,
+    });
+    if (isDndOperationInstrumentEnabled()) {
+      console.log('[Rename] result', {
+        operationId: operationId || undefined,
+        varId: vid,
+        prevName,
+        nextName,
+        result: 'done' as const,
+      });
+    }
   }
 
   if (renamed.length > 0) {
     logTaskSubflowMove('autoRename:done', { count: renamed.length, parentFlowId });
   }
+  logTaskSubflowMoveTrace('autoRename:exit', {
+    dndTraceId: traceId || undefined,
+    parentFlowId,
+    renamedCount: renamed.length,
+    renamedIds: renamed.map((r) => r.id),
+  });
 
   return { renamed, flowsNext };
 }

@@ -9,6 +9,7 @@ import { taskRepository } from '../services/TaskRepository';
 import { TaskType } from '../types/taskTypes';
 import { getTaskIdFromRow } from '../utils/taskHelpers';
 import { canAcceptSubflowPortalRowDrop } from '@domain/taskSubflowMove/subflowRowDropPolicy';
+import { isDndOperationInstrumentEnabled } from '@utils/dndOperationInstrument';
 
 /**
  * useNodeActions - Phase 3 Refactoring
@@ -48,8 +49,16 @@ export interface UseNodeActionsDeps {
 export interface UseNodeActionsResult {
   /** Delete node with task cleanup */
   deleteNodeWithLog: (nodeId: string) => Promise<void>;
-  /** Create node at screen position */
-  createNodeAt: (clientX: number, clientY: number, initialRow?: any) => void;
+  /**
+   * Create node at screen position.
+   * @param trace optional DnD correlation from `createNodeFromRow` (same `operationId` as drag end).
+   */
+  createNodeAt: (
+    clientX: number,
+    clientY: number,
+    initialRow?: any,
+    trace?: { operationId?: string; dndTraceId?: string }
+  ) => void;
 }
 
 /**
@@ -110,7 +119,7 @@ export function useNodeActions(deps: UseNodeActionsDeps): UseNodeActionsResult {
    * Create node at screen position.
    * Converts screen coordinates to flow coordinates and creates a new node.
    */
-  const createNodeAt = useCallback((clientX: number, clientY: number, initialRow?: any) => {
+  const createNodeAt = useCallback((clientX: number, clientY: number, initialRow?: any, trace?: { operationId?: string; dndTraceId?: string }) => {
     // Use UUID instead of counter to avoid conflicts
     const newNodeId = generateSafeGuid();
 
@@ -126,6 +135,15 @@ export function useNodeActions(deps: UseNodeActionsDeps): UseNodeActionsResult {
     if (initialRow && initialRow.id) {
       const taskId = initialRow.id; // row.id === task.id
       const task = taskRepository.getTask(taskId);
+
+      const op = String(trace?.operationId || trace?.dndTraceId || '').trim();
+      if (op && isDndOperationInstrumentEnabled()) {
+        console.log('[DnD:createNodeFromRow]', {
+          operationId: op,
+          dndTraceId: String(trace?.dndTraceId || '').trim() || op,
+          newNodeId,
+        });
+      }
 
       console.log('[useNodeActions] 🔍 CREATE NODE FROM ROW - Task verification', {
         rowId: initialRow.id,
