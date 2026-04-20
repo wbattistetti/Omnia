@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { flushSync } from 'react-dom';
 import type { CompilationError } from '@components/FlowCompiler/types';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { Flow } from '@flows/FlowTypes';
@@ -12,6 +13,7 @@ import type { FlowNode } from '@components/Flowchart/types/flowTypes';
 import { buildErrorReportTree } from '@components/ChatPanel/errorReportTreeModel';
 import { compilationErrorFixKey } from '@utils/compilationErrorFix';
 import { executeNavigationIntent, resolveNavigationIntent } from '@domain/compileErrors';
+import { useErrorReportFocusOptional } from '@context/ErrorReportFocusContext';
 
 function formatErrorWarningCounts(errors: number, warnings: number): string {
   const parts: string[] = [];
@@ -36,6 +38,48 @@ export function DebuggerErrorList({ errors, flows, className = '' }: DebuggerErr
 
   const [collapsedFlows, setCollapsedFlows] = React.useState<Set<string>>(() => new Set());
   const [collapsedRows, setCollapsedRows] = React.useState<Set<string>>(() => new Set());
+
+  const focusCtx = useErrorReportFocusOptional();
+  const focusedCardKey = focusCtx?.focusedDebuggerErrorCardKey ?? null;
+  const hoveredCardKey = focusCtx?.hoveredDebuggerErrorCardKey ?? null;
+
+  const cardElByKeyRef = React.useRef<Map<string, HTMLElement>>(new Map());
+
+  const expandAndScrollCard = React.useCallback((cardKey: string | null) => {
+    if (!cardKey) return;
+
+    const flowHeaderId = cardKey.split('::')[0];
+    flushSync(() => {
+      setCollapsedFlows((prev) => {
+        const next = new Set(prev);
+        next.delete(flowHeaderId);
+        return next;
+      });
+      setCollapsedRows((prev) => {
+        const next = new Set(prev);
+        next.delete(cardKey);
+        return next;
+      });
+    });
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = cardElByKeyRef.current.get(cardKey);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    });
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (!focusedCardKey) return;
+    expandAndScrollCard(focusedCardKey);
+  }, [focusedCardKey, expandAndScrollCard]);
+
+  /** Hover on flow row: bring matching card into view (does not run when hover clears). */
+  React.useLayoutEffect(() => {
+    if (!hoveredCardKey) return;
+    expandAndScrollCard(hoveredCardKey);
+  }, [hoveredCardKey, expandAndScrollCard]);
 
   const toggleFlow = React.useCallback((flowId: string) => {
     setCollapsedFlows((prev) => {
@@ -111,14 +155,36 @@ export function DebuggerErrorList({ errors, flows, className = '' }: DebuggerErr
                       const rowKey = `${flowRoot.flowId}::${rowGroup.rowKey}`;
                       const rowOpen = !collapsedRows.has(rowKey);
                       const RowIcon = rowGroup.visuals.Icon;
-                      const rowBorder = rowGroup.hasBlockingError
-                        ? 'border-l-red-500 dark:border-l-red-500'
-                        : 'border-l-amber-500 dark:border-l-amber-500';
+                      const isFocused = Boolean(focusedCardKey && focusedCardKey === rowKey);
+                      const isHovered = Boolean(hoveredCardKey && hoveredCardKey === rowKey);
+
+                      /** Bordo perimetrale: rosso se c’è errore bloccante, altrimenti ambra; hover/focus stesso tint, più spesso. */
+                      const severityIsError = rowGroup.hasBlockingError;
+                      const baseTint = severityIsError
+                        ? 'border border-red-500/45 dark:border-red-400/55'
+                        : 'border border-amber-500/45 dark:border-amber-400/55';
+
+                      let cardOutline = baseTint;
+                      if (isFocused) {
+                        cardOutline = severityIsError
+                          ? 'border-2 border-red-500 dark:border-red-400 shadow-[0_0_0_3px_rgba(239,68,68,0.38)] dark:shadow-[0_0_12px_rgba(248,113,113,0.36)]'
+                          : 'border-2 border-amber-500 dark:border-amber-400 shadow-[0_0_0_3px_rgba(245,158,11,0.4)] dark:shadow-[0_0_12px_rgba(251,191,36,0.36)]';
+                      } else if (isHovered) {
+                        cardOutline = severityIsError
+                          ? 'border-[3px] border-red-500 dark:border-red-400 shadow-[0_0_0_2px_rgba(239,68,68,0.48)] dark:shadow-[0_0_14px_rgba(248,113,113,0.42)]'
+                          : 'border-[3px] border-amber-500 dark:border-amber-400 shadow-[0_0_0_2px_rgba(245,158,11,0.48)] dark:shadow-[0_0_14px_rgba(251,191,36,0.42)]';
+                      }
 
                       return (
                         <div
                           key={rowKey}
-                          className={`rounded-md border border-gray-200 dark:border-gray-800 border-l-4 ${rowBorder} bg-white dark:bg-gray-950 shadow-sm`}
+                          ref={(el) => {
+                            const m = cardElByKeyRef.current;
+                            if (el) m.set(rowKey, el);
+                            else m.delete(rowKey);
+                          }}
+                          data-debugger-error-card={rowKey}
+                          className={`rounded-md bg-white dark:bg-gray-950 transition-[border-color,box-shadow,border-width] duration-150 ease-out ${cardOutline}`}
                         >
                           <button
                             type="button"

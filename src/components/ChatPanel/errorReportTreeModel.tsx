@@ -325,8 +325,26 @@ export function uxReportGroupKey(
 }
 
 /**
- * Card title for a row-level error: backend rowLabel, then that row's display text, then node label heuristic.
+ * DOM/card key aligned with {@link DebuggerErrorList}: `{flowId}::{uxReportGroupKey}` per row card.
  */
+export function debuggerErrorListRowCardDomKey(
+  flows: Record<string, Flow<Node<FlowNode>, Edge>>,
+  flowId: string,
+  rowId: string | undefined
+): string | null {
+  const rid = (rowId ?? '').trim();
+  if (!rid) return null;
+  const synthetic: CompilationError = {
+    taskId: rid,
+    rowId: rid,
+    message: '',
+    severity: 'error',
+    fixTarget: { type: 'task', taskId: rid },
+  };
+  const gk = uxReportGroupKey(flows, flowId, synthetic);
+  return `${flowId}::${gk}`;
+}
+
 /**
  * Flatten order of rows on the canvas: `flow.nodes` order, then each node's `rows` order.
  * Missing ids sort last so unknown rows stay stable behind canvas-known rows.
@@ -349,6 +367,7 @@ export function canvasRowOrderRankInFlow(
   return Number.MAX_SAFE_INTEGER - 1;
 }
 
+/** Card title for a row-level error: backend rowLabel, row text, then node label heuristic. */
 function rowTitleForUxCard(
   error: CompilationError,
   flows: Record<string, Flow<Node<FlowNode>, Edge>>,

@@ -15,6 +15,7 @@ import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
 import { AIProviderProvider } from '../context/AIProviderContext';
 import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext';
 import { CompilationErrorsProvider } from '../context/CompilationErrorsContext';
+import { ErrorReportFocusProvider } from '../context/ErrorReportFocusContext';
 import { FlowchartStateProvider } from '../context/FlowchartStateContext';
 import { TypeTemplateService } from '../services/TypeTemplateService';
 import { taskTemplateService } from '../services/TaskTemplateService';
@@ -164,9 +165,11 @@ export default function App() {
                       <TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
                         <InMemoryConditionsProvider>
                             <CompilationErrorsProvider>
-                              <FlowchartStateProvider>
-                                <AppInner />
-                              </FlowchartStateProvider>
+                              <ErrorReportFocusProvider>
+                                <FlowchartStateProvider>
+                                  <AppInner />
+                                </FlowchartStateProvider>
+                              </ErrorReportFocusProvider>
                             </CompilationErrorsProvider>
                         </InMemoryConditionsProvider>
                       </TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}

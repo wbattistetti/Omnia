@@ -276,18 +276,6 @@ interface NodeRowLabelProps {
   buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
   overlayRef?: React.RefObject<HTMLDivElement>;
   getProjectId?: () => string | undefined; // Project ID getter for testing
-  // ✅ Compilation errors props
-  rowErrors?: import('../../hooks/useRowErrors').RowErrorsResult;
-  onErrorClick?: (e: React.MouseEvent) => void;
-  errorIconRef?: React.RefObject<HTMLButtonElement>;
-  showErrorPopover?: boolean;
-  onCloseErrorPopover?: () => void;
-  /** Keep popover open while moving pointer from the warning icon onto the card. */
-  onErrorIconMouseEnter?: () => void;
-  onErrorIconMouseLeave?: () => void;
-  onErrorPopoverMouseEnter?: () => void;
-  onErrorPopoverMouseLeave?: () => void;
-  onErrorFix?: (error: import('../../../../FlowCompiler/types').CompilationError) => void;
   onOpenSemanticValuesEditor?: () => void;
   hasSemanticValues?: boolean;
   semanticValuesAnchorRef?: React.RefObject<HTMLButtonElement | null>;
@@ -336,16 +324,6 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   buttonCloseTimeoutRef,
   overlayRef,
   getProjectId,
-  rowErrors,
-  onErrorClick,
-  errorIconRef,
-  showErrorPopover,
-  onCloseErrorPopover,
-  onErrorIconMouseEnter,
-  onErrorIconMouseLeave,
-  onErrorPopoverMouseEnter,
-  onErrorPopoverMouseLeave,
-  onErrorFix,
   onOpenSemanticValuesEditor,
   hasSemanticValues,
   semanticValuesAnchorRef,
@@ -522,16 +500,6 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           gearColor={gearColor || labelTextColor}
           onOpenTaskTree={onOpenTaskTree}
           isCondition={String((row as any)?.categoryType || '').toLowerCase() === 'conditions'}
-          rowErrors={rowErrors}
-          onErrorClick={onErrorClick}
-          errorIconRef={errorIconRef}
-          showErrorPopover={showErrorPopover}
-          onCloseErrorPopover={onCloseErrorPopover}
-          onErrorIconMouseEnter={onErrorIconMouseEnter}
-          onErrorIconMouseLeave={onErrorIconMouseLeave}
-          onErrorPopoverMouseEnter={onErrorPopoverMouseEnter}
-          onErrorPopoverMouseLeave={onErrorPopoverMouseLeave}
-          onErrorFix={onErrorFix}
           onWrenchClick={async () => {
             try {
               const variables = (window as any).__omniaVars || {};

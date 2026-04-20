@@ -21,7 +21,8 @@ import {
   type DebuggerSessionState,
   type DebuggerStep,
 } from '../../../../features/debugger';
-import { useCompilationErrors } from '@context/CompilationErrorsContext';
+import { clearCompilationErrorsGlobal, useCompilationErrors } from '@context/CompilationErrorsContext';
+import { useErrorReportFocusOptional } from '@context/ErrorReportFocusContext';
 import { useFlowWorkspaceOptional } from '@flows/FlowStore';
 import type { Flow } from '@flows/FlowTypes';
 import { FlowWorkspaceSnapshot } from '@flows/FlowWorkspaceSnapshot';
@@ -319,6 +320,7 @@ export default function DDEBubbleChat({
 }) {
   const { combinedClass } = useFontContext();
   const { errors: compilationErrors } = useCompilationErrors();
+  const errorReportFocus = useErrorReportFocusOptional();
   const workspaceOptional = useFlowWorkspaceOptional<Node<FlowNode>, Edge>();
   const [workspaceSnapshotTick, setWorkspaceSnapshotTick] = React.useState(0);
   React.useEffect(() => FlowWorkspaceSnapshot.subscribe(() => setWorkspaceSnapshotTick((n) => n + 1)), []);
@@ -352,6 +354,13 @@ export default function DDEBubbleChat({
       return [...prev, message];
     });
   }, []);
+
+  const handleClosePanelClick = React.useCallback(() => {
+    clearCompilationErrorsGlobal();
+    errorReportFocus?.setFocusedDebuggerErrorCardKey(null);
+    errorReportFocus?.setHoveredDebuggerErrorCardKey(null);
+    onClosePanel?.();
+  }, [onClosePanel, errorReportFocus]);
 
   React.useEffect(() => {
     messagesRef.current = messages;
@@ -1863,7 +1872,7 @@ export default function DDEBubbleChat({
         {onClosePanel && (
           <button
             type="button"
-            onClick={onClosePanel}
+            onClick={handleClosePanelClick}
             className="absolute top-1.5 right-2 z-10 p-0.5 rounded text-slate-900 hover:bg-lime-500/50 transition-colors"
             title="Chiudi pannello"
             aria-label="Chiudi pannello"

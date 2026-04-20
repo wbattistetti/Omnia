@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import {
   Trash2,
   Edit3,
@@ -6,15 +6,11 @@ import {
   Wrench,
   Check,
   Play,
-  AlertTriangle,
   Info,
   Layers,
   Loader2,
 } from 'lucide-react';
 import SmartTooltip from '../../../SmartTooltip';
-import { ErrorTooltip } from '../../components/ErrorTooltip';
-import type { RowErrorsResult } from '../../hooks/useRowErrors';
-import type { CompilationError } from '../../../../FlowCompiler/types';
 
 interface NodeRowActionsOverlayProps {
   iconPos: { top: number; left: number };
@@ -45,17 +41,6 @@ interface NodeRowActionsOverlayProps {
   setIncluded?: (val: boolean) => void;
   // Test task button
   onTestTask?: () => void; // Callback to test the task instance
-  // ✅ Compilation errors props
-  rowErrors?: RowErrorsResult;
-  onErrorClick?: (e: React.MouseEvent) => void;
-  errorIconRef?: React.RefObject<HTMLButtonElement>;
-  showErrorPopover?: boolean;
-  onCloseErrorPopover?: () => void;
-  onErrorIconMouseEnter?: () => void;
-  onErrorIconMouseLeave?: () => void;
-  onErrorPopoverMouseEnter?: () => void;
-  onErrorPopoverMouseLeave?: () => void;
-  onErrorFix?: (error: CompilationError) => void;
   onOpenSemanticValuesEditor?: () => void;
   hasSemanticValues?: boolean;
   semanticValuesAnchorRef?: React.RefObject<HTMLButtonElement | null>;
@@ -96,22 +81,12 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   included,
   setIncluded,
   onTestTask,
-  rowErrors,
-  onErrorClick,
-  errorIconRef,
-  showErrorPopover,
-  onCloseErrorPopover,
-  onErrorIconMouseEnter,
-  onErrorIconMouseLeave,
-  onErrorPopoverMouseEnter,
-  onErrorPopoverMouseLeave,
-  onErrorFix,
   onOpenSemanticValuesEditor,
   hasSemanticValues,
   semanticValuesAnchorRef,
   subflowInterface
 }) => {
-  // ✅ Toolbar appears only on hover (showIcons), error icon is added at the end if errors exist
+  // ✅ Toolbar appears only on hover (showIcons)
   if (!showIcons || !iconPos) return null;
   // Calculate icon size based on font size (same as primary icons) - 119% of font size
   const size = typeof iconSize === 'number' ? iconSize : (labelRef.current ? (() => {
@@ -532,137 +507,6 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           </button>
         </SmartTooltip>
       )}
-      {/* ✅ Error Icon - Added at the end of toolbar, only visible when toolbar is shown (on hover) */}
-      {rowErrors && (rowErrors.hasError || rowErrors.hasWarning) && (
-        <div style={{ position: 'relative' }}>
-          <button
-            ref={errorIconRef}
-            onClick={onErrorClick}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            className="nodrag"
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: 2,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: size,
-              height: size,
-              opacity: 0.9,
-              transition: 'opacity 120ms linear, transform 120ms ease'
-            }}
-            onMouseEnter={() => {
-              onRequestClosePicker?.();
-              onErrorIconMouseEnter?.();
-            }}
-            onMouseLeave={() => onErrorIconMouseLeave?.()}
-          >
-            <AlertTriangle
-              style={{
-                width: size,
-                height: size,
-                color: rowErrors.hasError ? '#ef4444' : '#f59e0b' // Red for error, orange for warning
-              }}
-            />
-          </button>
-          {/* Error popover: hover or click on icon; pointer can move into the card before close */}
-          {showErrorPopover && errorIconRef.current && rowErrors.errors.length > 0 && (
-            <ErrorPopover
-              errors={rowErrors.errors}
-              anchorRef={errorIconRef}
-              onClose={onCloseErrorPopover}
-              onFix={onErrorFix}
-              onPopoverMouseEnter={onErrorPopoverMouseEnter}
-              onPopoverMouseLeave={onErrorPopoverMouseLeave}
-            />
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ✅ Error Popover Component
-interface ErrorPopoverProps {
-  errors: CompilationError[];
-  anchorRef: React.RefObject<HTMLElement>;
-  onClose: () => void;
-  onFix?: (error: CompilationError) => void;
-  onPopoverMouseEnter?: () => void;
-  onPopoverMouseLeave?: () => void;
-}
-
-const ErrorPopover: React.FC<ErrorPopoverProps> = ({
-  errors,
-  anchorRef,
-  onClose,
-  onFix,
-  onPopoverMouseEnter,
-  onPopoverMouseLeave,
-}) => {
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
-
-  useEffect(() => {
-    if (!anchorRef.current) return;
-
-    const updatePosition = () => {
-      if (anchorRef.current) {
-        const rect = anchorRef.current.getBoundingClientRect();
-        setPosition({
-          top: rect.bottom + 8,
-          left: rect.left
-        });
-      }
-    };
-
-    updatePosition();
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
-
-    // Close on outside click
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(e.target as Node) &&
-        anchorRef.current &&
-        !anchorRef.current.contains(e.target as Node)
-      ) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-
-    return () => {
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [anchorRef, onClose]);
-
-  if (!position) return null;
-
-  return (
-    <div
-      ref={popoverRef}
-      style={{
-        position: 'fixed',
-        top: position.top,
-        left: position.left,
-        zIndex: 10000,
-        pointerEvents: 'auto'
-      }}
-      onClick={(e) => e.stopPropagation()}
-      onMouseEnter={onPopoverMouseEnter}
-      onMouseLeave={onPopoverMouseLeave}
-    >
-      <ErrorTooltip errors={errors} onFix={onFix} onClose={onClose} />
     </div>
   );
 };

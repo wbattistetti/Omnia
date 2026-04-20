@@ -45,6 +45,11 @@ import { RowTypeHandler } from './application/RowTypeHandler';
 import { FactoryTaskCreator } from './application/FactoryTaskCreator';
 import SemanticValuesEditorPanel from './SemanticValuesEditorPanel';
 import { useFlowWorkspace } from '@flows/FlowStore';
+import type { Flow } from '@flows/FlowTypes';
+import type { Node as RFNode, Edge as RFEdge } from 'reactflow';
+import type { FlowNode as ChartFlowNode } from '@components/Flowchart/types/flowTypes';
+import { debuggerErrorListRowCardDomKey } from '@components/ChatPanel/errorReportTreeModel';
+import { useErrorReportFocusOptional } from '@context/ErrorReportFocusContext';
 import { useFlowCanvasId } from '../../context/FlowCanvasContext';
 import { fetchChildFlowInterfaceOutputs } from '@services/childFlowInterfaceService';
 import { resolveChildFlowIdFromCanvasRow, resolveChildFlowIdFromTask } from '@utils/resolveSubflowChildFlowId';
@@ -72,8 +77,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     isPlaceholder = false,
     style,
     forceEditing = false,
-    onMouseEnter,
-    onMouseLeave,
     onMouseMove,
     bgColor: propBgColor,
     textColor: propTextColor,
@@ -597,57 +600,100 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const taskId = getTaskIdFromRow(row);
   const rowErrors = useRowErrors(row.id, taskId || undefined, compilationErrors);
 
-  // ✅ Error popover: open on hover/click; delayed close so pointer can move onto the card (Fix button).
-  const [showErrorPopover, setShowErrorPopover] = React.useState(false);
-  const errorIconRef = React.useRef<HTMLButtonElement>(null);
-  const errorPopoverCloseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const ERROR_POPOVER_HOVER_CLOSE_MS = 220;
+  const errorFocusOpt = useErrorReportFocusOptional();
 
-  const cancelErrorPopoverClose = React.useCallback(() => {
-    if (errorPopoverCloseTimerRef.current) {
-      clearTimeout(errorPopoverCloseTimerRef.current);
-      errorPopoverCloseTimerRef.current = null;
+  const pendingErrorReportHoverClearRef = React.useRef<number | null>(null);
+
+  const cancelPendingErrorReportHoverClear = React.useCallback(() => {
+    const id = pendingErrorReportHoverClearRef.current;
+    if (id != null) {
+      cancelAnimationFrame(id);
+      pendingErrorReportHoverClearRef.current = null;
     }
   }, []);
 
-  const closeErrorPopoverNow = React.useCallback(() => {
-    cancelErrorPopoverClose();
-    setShowErrorPopover(false);
-  }, [cancelErrorPopoverClose]);
+  /** Sets Error Report card hover immediately (also cancels a pending deferred clear — e.g. crossing onto portaled overlays). */
+  const applyErrorReportHoverNow = React.useCallback(() => {
+    if (!(rowErrors.hasError || rowErrors.hasWarning)) return;
+    cancelPendingErrorReportHoverClear();
+    const fid = (flowCanvasId || 'main').trim();
+    const key = debuggerErrorListRowCardDomKey(
+      flows as Record<string, Flow<RFNode<ChartFlowNode>, RFEdge>>,
+      fid,
+      row.id
+    );
+    if (key) errorFocusOpt?.setHoveredDebuggerErrorCardKey(key);
+  }, [
+    cancelPendingErrorReportHoverClear,
+    rowErrors.hasError,
+    rowErrors.hasWarning,
+    flows,
+    flowCanvasId,
+    row.id,
+    errorFocusOpt,
+  ]);
 
-  const openErrorPopover = React.useCallback(() => {
-    cancelErrorPopoverClose();
-    setShowErrorPopover(true);
-  }, [cancelErrorPopoverClose]);
+  /** Defers clearing hover so pointer can move onto body-portaled overlays without flashing off. */
+  const scheduleErrorReportHoverClear = React.useCallback(() => {
+    cancelPendingErrorReportHoverClear();
+    pendingErrorReportHoverClearRef.current = requestAnimationFrame(() => {
+      pendingErrorReportHoverClearRef.current = null;
+      errorFocusOpt?.setHoveredDebuggerErrorCardKey(null);
+    });
+  }, [cancelPendingErrorReportHoverClear, errorFocusOpt]);
 
-  const scheduleErrorPopoverClose = React.useCallback(() => {
-    cancelErrorPopoverClose();
-    errorPopoverCloseTimerRef.current = setTimeout(() => {
-      setShowErrorPopover(false);
-      errorPopoverCloseTimerRef.current = null;
-    }, ERROR_POPOVER_HOVER_CLOSE_MS);
-  }, [cancelErrorPopoverClose]);
+  React.useEffect(() => () => cancelPendingErrorReportHoverClear(), [cancelPendingErrorReportHoverClear]);
 
-  React.useEffect(
-    () => () => {
-      if (errorPopoverCloseTimerRef.current) clearTimeout(errorPopoverCloseTimerRef.current);
+  /** Click row surface (no toolbar/buttons): highlight matching card in debugger Error Report + scroll. */
+  const handleRowSurfaceClickNavigateErrorReport = React.useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!(rowErrors.hasError || rowErrors.hasWarning)) return;
+      const setter = errorFocusOpt?.setFocusedDebuggerErrorCardKey;
+      if (!setter) return;
+      const tgt = e.target as HTMLElement;
+      if (tgt.closest('button, a, [role="button"], input, textarea, select')) return;
+
+      const fid = (flowCanvasId || 'main').trim();
+      const key = debuggerErrorListRowCardDomKey(
+        flows as Record<string, Flow<RFNode<ChartFlowNode>, RFEdge>>,
+        fid,
+        row.id
+      );
+      if (key) setter(key);
     },
-    []
+    [
+      errorFocusOpt,
+      rowErrors.hasError,
+      rowErrors.hasWarning,
+      flows,
+      flowCanvasId,
+      row.id,
+    ]
   );
 
-  const handleErrorClick = React.useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openErrorPopover();
-  }, [openErrorPopover]);
+  /**
+   * Error Report hover uses `mouseover`/`mouseout` + `relatedTarget` on the row shell, plus the same
+   * hover signals as the row toolbar (`onLabelHoverChange` / icons / body-portaled empty strip).
+   * Portaled overlays are not DOM descendants of `.node-row-outer`, so shell `mouseout` defers clear
+   * one frame; `applyErrorReportHoverNow` cancels that when the pointer lands on an overlay.
+   */
+  const handleRowMouseOverForErrorReport = React.useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rt = e.relatedTarget as Node | null;
+      if (rt && e.currentTarget.contains(rt)) return;
+      applyErrorReportHoverNow();
+    },
+    [applyErrorReportHoverNow]
+  );
 
-  const handleErrorFix = React.useCallback(async (error: import('../../../../FlowCompiler/types').CompilationError) => {
-    closeErrorPopoverNow();
-
-    // ✅ Use central error fix handler
-    const { handleErrorFix: handleErrorFixCentral } = await import('../../../../utils/handleErrorFix');
-    await handleErrorFixCentral(error);
-  }, [closeErrorPopoverNow]);
+  const handleRowMouseOutForErrorReport = React.useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rt = e.relatedTarget as Node | null;
+      if (rt && e.currentTarget.contains(rt)) return;
+      scheduleErrorReportHoverClear();
+    },
+    [scheduleErrorReportHoverClear]
+  );
 
   // FASE 4: Listen for instance updates to force re-render and update icon color
   // Note: TaskRepository doesn't emit events yet, but InstanceRepository still does
@@ -780,7 +826,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     <>
       <div
         ref={nodeContainerRef}
-        className={`node-row-outer nodrag flex flex-col group ${conditionalClasses} ${!isBeingDragged && visualState !== 'highlight' ? 'node-row-hover-target' : ''}`}
+        className={`node-row-outer nodrag flex flex-col group w-full min-w-0 ${conditionalClasses} ${!isBeingDragged && visualState !== 'highlight' ? 'node-row-hover-target' : ''}`}
         style={{
           ...conditionalStyles,
           ...checkboxStyles,
@@ -794,9 +840,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         data-omnia-subflow-portal-row={isSubflowPortalRowForDnD ? 'true' : 'false'}
         draggable={false}
         onDragStart={(e) => e.preventDefault()}
-        {...(onMouseEnter ? { onMouseEnter } : {})}
-        {...(onMouseLeave ? { onMouseLeave } : {})}
+        onMouseOver={handleRowMouseOverForErrorReport}
+        onMouseOut={handleRowMouseOutForErrorReport}
         {...(onMouseMove ? { onMouseMove } : {})}
+        onClick={handleRowSurfaceClickNavigateErrorReport}
       >
         <div className="flex items-center w-full min-w-0">
           {isEditing ? (
@@ -903,8 +950,20 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                 };
               })()}
               onDoubleClick={handleDoubleClick}
-              onIconsHoverChange={(v: boolean) => { v ? toolbarSM.overlay.onEnter() : toolbarSM.overlay.onLeave(); }}
-              onLabelHoverChange={(v: boolean) => { v ? toolbarSM.row.onEnter() : toolbarSM.row.onLeave({ relatedTarget: null } as any); }}
+              onIconsHoverChange={(v: boolean) => {
+                v ? toolbarSM.overlay.onEnter() : toolbarSM.overlay.onLeave();
+                if (rowErrors.hasError || rowErrors.hasWarning) {
+                  if (v) applyErrorReportHoverNow();
+                  else scheduleErrorReportHoverClear();
+                }
+              }}
+              onLabelHoverChange={(v: boolean) => {
+                v ? toolbarSM.row.onEnter() : toolbarSM.row.onLeave({ relatedTarget: null } as any);
+                if (rowErrors.hasError || rowErrors.hasWarning) {
+                  if (v) applyErrorReportHoverNow();
+                  else scheduleErrorReportHoverClear();
+                }
+              }}
               onTypeChangeRequest={(anchor) => openTypePickerFromIcon(anchor, currentTypeForPicker)}
               onRequestClosePicker={() => {
                 if (buttonCloseTimeoutRef.current) {
@@ -916,16 +975,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               buttonCloseTimeoutRef={buttonCloseTimeoutRef}
               overlayRef={overlayRef}
               getProjectId={getProjectId}
-              rowErrors={rowErrors}
-              onErrorClick={handleErrorClick}
-              errorIconRef={errorIconRef}
-              showErrorPopover={showErrorPopover}
-              onCloseErrorPopover={closeErrorPopoverNow}
-              onErrorIconMouseEnter={openErrorPopover}
-              onErrorIconMouseLeave={scheduleErrorPopoverClose}
-              onErrorPopoverMouseEnter={cancelErrorPopoverClose}
-              onErrorPopoverMouseLeave={scheduleErrorPopoverClose}
-              onErrorFix={handleErrorFix}
               onOpenSemanticValuesEditor={
                 isDataRequestRow ? handleToggleSemanticValuesEditor : undefined
               }
