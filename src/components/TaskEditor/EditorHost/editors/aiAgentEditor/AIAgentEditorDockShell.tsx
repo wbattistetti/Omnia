@@ -8,7 +8,7 @@ import React from 'react';
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent } from 'dockview';
 import 'dockview/dist/styles/dockview.css';
 import { AIAgentNonClosableDockTab } from './AIAgentNonClosableDockTab';
-import { AGENT_STRUCTURED_SECTION_IDS, AGENT_STRUCTURED_SECTION_LABELS } from './agentStructuredSectionIds';
+import { AGENT_STRUCTURED_DOCK_TAB_IDS, AGENT_STRUCTURED_SECTION_LABELS } from './agentStructuredSectionIds';
 import { AgentSectionDockPanel, PromptFinaleDockPanel } from './AIAgentStructuredSectionsDockPanels';
 import { AIAgentEditorDockProvider, type AIAgentEditorDockContextValue } from './AIAgentEditorDockContext';
 import {
@@ -46,7 +46,7 @@ function addLeftDesignTabGroup(api: DockviewApi): string {
   });
 
   let nextIndex = 1;
-  for (const sectionId of AGENT_STRUCTURED_SECTION_IDS) {
+  for (const sectionId of AGENT_STRUCTURED_DOCK_TAB_IDS) {
     api.addPanel({
       id: sectionId,
       component: 'agentSection',
@@ -133,7 +133,7 @@ export function AIAgentEditorDockShell({
 
   return (
     <AIAgentEditorDockProvider value={value}>
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden ai-agent-editor-dock-shell">
         <div
           className="dockview-theme-dark flex-1 min-h-0 flex flex-col rounded-none border-0 overflow-hidden"
           style={

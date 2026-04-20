@@ -8,7 +8,7 @@ import { DockviewReact, type DockviewApi, type DockviewReadyEvent } from 'dockvi
 import 'dockview/dist/styles/dockview.css';
 import { AIAgentNonClosableDockTab } from './AIAgentNonClosableDockTab';
 import {
-  AGENT_STRUCTURED_SECTION_IDS,
+  AGENT_STRUCTURED_DOCK_TAB_IDS,
   AGENT_STRUCTURED_SECTION_LABELS,
   type AgentStructuredSectionId,
 } from './agentStructuredSectionIds';
@@ -24,7 +24,7 @@ type DockPanelDef = {
 };
 
 function buildPanelDefinitions(): DockPanelDef[] {
-  const sections: DockPanelDef[] = AGENT_STRUCTURED_SECTION_IDS.map((sectionId) => ({
+  const sections: DockPanelDef[] = AGENT_STRUCTURED_DOCK_TAB_IDS.map((sectionId) => ({
     id: sectionId,
     component: 'agentSection',
     title: AGENT_STRUCTURED_SECTION_LABELS[sectionId],

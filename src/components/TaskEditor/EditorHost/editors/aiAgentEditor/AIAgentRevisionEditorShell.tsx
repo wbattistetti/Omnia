@@ -46,28 +46,32 @@ export function AIAgentRevisionEditorShell({
   const suffix = instanceId || 'default';
 
   return (
-    <div className="space-y-2">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2">
       {iaRevisionDiff ? (
-        <AIAgentIaRevisionOverlay
-          modelUriSuffix={`${suffix}-ia`}
-          oldIaPrompt={iaRevisionDiff.oldIaPrompt}
-          newIaPrompt={iaRevisionDiff.newIaPrompt}
-          onDismiss={onDismissIaRevisionDiff}
-        />
+        <div className="shrink-0">
+          <AIAgentIaRevisionOverlay
+            modelUriSuffix={`${suffix}-ia`}
+            oldIaPrompt={iaRevisionDiff.oldIaPrompt}
+            newIaPrompt={iaRevisionDiff.newIaPrompt}
+            onDismiss={onDismissIaRevisionDiff}
+          />
+        </div>
       ) : null}
-      <TextDualLayerRevisionEditor
-        baseText={promptBaseText}
-        deletedMask={deletedMask}
-        inserts={inserts}
-        readOnly={readOnly}
-        onApplyRevisionOps={onApplyRevisionOps}
-        otMode={otMode}
-        otCurrentText={otCurrentText}
-        onApplyOtCommit={onApplyOtCommit}
-        onUndoRequest={onUndoRequest}
-        onRedoRequest={onRedoRequest}
-        onInsertBackendPathAtCaret={onInsertBackendPathAtCaret}
-      />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <TextDualLayerRevisionEditor
+          baseText={promptBaseText}
+          deletedMask={deletedMask}
+          inserts={inserts}
+          readOnly={readOnly}
+          onApplyRevisionOps={onApplyRevisionOps}
+          otMode={otMode}
+          otCurrentText={otCurrentText}
+          onApplyOtCommit={onApplyOtCommit}
+          onUndoRequest={onUndoRequest}
+          onRedoRequest={onRedoRequest}
+          onInsertBackendPathAtCaret={onInsertBackendPathAtCaret}
+        />
+      </div>
     </div>
   );
 }

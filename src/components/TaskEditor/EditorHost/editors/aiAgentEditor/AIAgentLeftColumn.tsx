@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
-import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
+import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER, LABEL_GENERATING_IA_AGENT } from './constants';
 import { AIAgentUnifiedPromptField } from './AIAgentUnifiedPromptField';
 import { AIAgentStructuredSectionsPanel } from './AIAgentStructuredSectionsPanel';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
@@ -55,7 +55,7 @@ export function AIAgentLeftColumn({
       className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-sm font-medium"
     >
       {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-      {generating ? 'Generating…' : primaryAgentActionLabel}
+      {generating ? LABEL_GENERATING_IA_AGENT : primaryAgentActionLabel}
     </button>
   ) : null;
 

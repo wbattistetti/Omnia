@@ -12,6 +12,7 @@ import {
   LABEL_CREATE_AGENT,
   LABEL_REFINE_AGENT,
   LABEL_GENERATE_USE_CASES,
+  LABEL_GENERATING_IA_AGENT,
   AI_AGENT_HEADER_COLOR,
 } from './constants';
 
@@ -53,7 +54,7 @@ export function useAIAgentToolbarController({
     if (showPrimaryAgentAction) {
       buttons.push({
         icon: generating ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Sparkles size={16} aria-hidden />,
-        label: generating ? 'Generating…' : primaryAgentActionLabel,
+        label: generating ? LABEL_GENERATING_IA_AGENT : primaryAgentActionLabel,
         onClick: () => onPrimaryAgentAction(),
         disabled: generating,
         primary: true,

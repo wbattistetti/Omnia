@@ -202,3 +202,82 @@
   color: var(--backend-badge-text);
   text-decoration: none;
 }
+
+/*
+ * Dockview sets .dv-tabs-and-actions-container height to --dv-tabs-and-actions-container-height (35px)
+ * with border-box — vertical padding below eats all inner space and clips tab labels/icons.
+ * Bump the theme variable only inside the AI Agent shell so padding + tab row fit.
+ */
+.ai-agent-editor-dock-shell {
+  --dv-tabs-and-actions-container-height: calc(35px + 24px);
+  --ai-agent-ir-tab-group-border: rgba(148, 163, 184, 0.38);
+  --ai-agent-ir-tab-group-fill: rgba(148, 163, 184, 0.09);
+  --ai-agent-ir-tab-group-fill-active: rgba(148, 163, 184, 0.18);
+}
+
+/*
+ * Strip container: layout only — the visible “frame” around IR sections lives on tabs Scopo…Tono (see below).
+ */
+.ai-agent-editor-dock-shell .dv-groupview .dv-tabs-and-actions-container {
+  padding: 12px 16px;
+  margin: 8px 0 16px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  box-sizing: border-box;
+  align-items: center;
+}
+
+/*
+ * Single low-saturation rectangle around contiguous IR tabs (goal … tone), not around Descrizione or Prompt finale.
+ * Dockview paints each .dv-tab with its own panel background — we unify fill + merge borders (:has requires a modern browser).
+ */
+.ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-structured-section='true']).dv-active-tab,
+.ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-structured-section='true']).dv-inactive-tab {
+  background-color: var(--ai-agent-ir-tab-group-fill) !important;
+}
+
+.ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-structured-section='true']).dv-active-tab {
+  background-color: var(--ai-agent-ir-tab-group-fill-active) !important;
+}
+
+.ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-panel='goal']) {
+  border-radius: 8px 0 0 8px;
+  border: 1px solid var(--ai-agent-ir-tab-group-border);
+  border-right: none;
+}
+
+.ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-panel='tone']) {
+  border-radius: 0 8px 8px 0;
+  border: 1px solid var(--ai-agent-ir-tab-group-border);
+  border-left: none;
+}
+
+.ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-panel='operational_sequence']),
+.ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-panel='context']),
+.ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-panel='constraints']),
+.ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-panel='personality']) {
+  border-top: 1px solid var(--ai-agent-ir-tab-group-border);
+  border-bottom: 1px solid var(--ai-agent-ir-tab-group-border);
+}
+
+/* Hide Dockview vertical hairlines between tabs inside the IR block (divider before 2nd…6th section tab). */
+.ai-agent-editor-dock-shell .dv-tabs-container .dv-tab:has([data-ai-agent-panel='operational_sequence'])::before,
+.ai-agent-editor-dock-shell .dv-tabs-container .dv-tab:has([data-ai-agent-panel='context'])::before,
+.ai-agent-editor-dock-shell .dv-tabs-container .dv-tab:has([data-ai-agent-panel='constraints'])::before,
+.ai-agent-editor-dock-shell .dv-tabs-container .dv-tab:has([data-ai-agent-panel='personality'])::before,
+.ai-agent-editor-dock-shell .dv-tabs-container .dv-tab:has([data-ai-agent-panel='tone'])::before {
+  display: none !important;
+}
+
+/* Native select: shrink to selected label (not widest option); options stay one line in the menu. */
+.ai-agent-prompt-platform-select {
+  width: auto;
+  min-width: 0;
+  max-width: min(480px, 60vw);
+  field-sizing: content;
+}
+
+.ai-agent-prompt-platform-select option {
+  white-space: nowrap;
+}

@@ -77,6 +77,9 @@ export interface AIAgentEditorDockContextValue {
   compiledPlatformOutput: PlatformPromptOutput;
   /** Flattened preview string (same information as structured compile). */
   compiledPromptForTargetPlatform: string;
+  /** Prompt Finale panel: mutually exclusive textual IR preview vs readonly JS/JSON bundle. */
+  promptFinaleJsMode: boolean;
+  setPromptFinaleJsMode: (value: boolean) => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

@@ -40,7 +40,7 @@ export function OpenAIEditor({ output }: { output: PlatformPromptOpenAI }) {
         readOnly
         value={text}
         aria-label={active.label}
-        className="min-h-[120px] flex-1 resize-y rounded-md border border-slate-700 bg-[#0a1018] p-2 text-xs font-mono text-slate-200"
+        className="min-h-0 flex-1 resize-y rounded-md border border-slate-700 bg-[#0a1018] p-2 text-xs font-mono text-slate-200"
         spellCheck={false}
       />
     </div>

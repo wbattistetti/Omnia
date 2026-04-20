@@ -16,10 +16,18 @@ export const AGENT_STRUCTURED_SECTION_IDS = [
 
 export type AgentStructuredSectionId = (typeof AGENT_STRUCTURED_SECTION_IDS)[number];
 
+/**
+ * Tabs shown in the Dockview strip (persisted IR still includes {@link AGENT_STRUCTURED_SECTION_IDS}
+ * — e.g. examples may exist in saved tasks but are edited only via exported flow, not a dock tab).
+ */
+export const AGENT_STRUCTURED_DOCK_TAB_IDS = AGENT_STRUCTURED_SECTION_IDS.filter(
+  (id): id is Exclude<AgentStructuredSectionId, 'examples'> => id !== 'examples'
+);
+
 /** UI labels (Italian) for section tabs. */
 export const AGENT_STRUCTURED_SECTION_LABELS: Record<AgentStructuredSectionId, string> = {
   goal: 'Scopo',
-  operational_sequence: 'Sequenza operativa',
+  operational_sequence: 'Sequenza',
   context: 'Contesto',
   constraints: 'Vincoli',
   personality: 'Personalità',

@@ -7,7 +7,7 @@ import type { EditorProps } from '../types';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { useAIProvider } from '@context/AIProviderContext';
 import { Bot, Loader2, Sparkles } from 'lucide-react';
-import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES } from './aiAgentEditor/constants';
+import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES, LABEL_GENERATING_IA_AGENT } from './aiAgentEditor/constants';
 import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEditorDockContext';
 import { AIAgentEditorDockShell } from './aiAgentEditor/AIAgentEditorDockShell';
 import { useAIAgentEditorController } from './aiAgentEditor/useAIAgentEditorController';
@@ -26,6 +26,17 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     model,
   });
 
+  /** Stable refs — inline `() => c.handleX()` in render made `primaryToolbarButtons` new every frame → toolbar useEffect → onToolbarUpdate loop. */
+  const onPrimaryAgentAction = React.useCallback(() => {
+    void c.handleGenerate();
+  }, [c.handleGenerate]);
+
+  const onGenerateUseCaseBundleAction = React.useCallback(() => {
+    void c.handleGenerateUseCaseBundle();
+  }, [c.handleGenerateUseCaseBundle]);
+
+  const [promptFinaleJsMode, setPromptFinaleJsMode] = React.useState(false);
+
   const showRightPanel =
     c.hasAgentGeneration ||
     c.proposedFields.length > 0 ||
@@ -40,8 +51,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     showPrimaryAgentAction: c.showPrimaryAgentAction,
     generating: c.generating,
     useCaseComposerBusy: c.useCaseComposerBusy,
-    onPrimaryAgentAction: () => void c.handleGenerate(),
-    onGenerateUseCaseBundle: () => void c.handleGenerateUseCaseBundle(),
+    onPrimaryAgentAction,
+    onGenerateUseCaseBundle: onGenerateUseCaseBundleAction,
   });
 
   const headerColor = AI_AGENT_HEADER_COLOR;
@@ -54,7 +65,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-sm font-medium"
     >
       {c.generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-      {c.generating ? 'Generating…' : primaryAgentActionLabel}
+      {c.generating ? LABEL_GENERATING_IA_AGENT : primaryAgentActionLabel}
     </button>
   ) : null;
 
@@ -102,9 +113,15 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setAgentPromptTargetPlatform: c.setAgentPromptTargetPlatform,
     compiledPlatformOutput: c.compiledPlatformOutput,
     compiledPromptForTargetPlatform: c.compiledPromptForTargetPlatform,
+    promptFinaleJsMode,
+    setPromptFinaleJsMode,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;
+
+  React.useEffect(() => {
+    setPromptFinaleJsMode(false);
+  }, [dockLayoutKey]);
 
   const hasOtSections = React.useMemo(
     () => Object.values(c.structuredSectionsState).some((s) => s.storageMode === 'ot'),

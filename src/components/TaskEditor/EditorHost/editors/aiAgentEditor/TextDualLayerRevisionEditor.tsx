@@ -287,10 +287,10 @@ export function TextDualLayerRevisionEditor({
   );
 
   return (
-    <div className="space-y-1">
+    <div className="flex min-h-0 flex-1 flex-col gap-1">
       {editError ? (
         <div
-          className="rounded border border-amber-700/60 bg-amber-950/40 px-2 py-1 text-xs text-amber-100 flex gap-2 items-start"
+          className="rounded border border-amber-700/60 bg-amber-950/40 px-2 py-1 text-xs text-amber-100 flex gap-2 items-start shrink-0"
           role="alert"
         >
           <span className="min-w-0 flex-1">{editError}</span>
@@ -304,11 +304,11 @@ export function TextDualLayerRevisionEditor({
         </div>
       ) : null}
       <div
-        className="w-full rounded-md border border-slate-600/60 overflow-auto bg-slate-900"
-        style={{ minHeight: minHeightPx, maxHeight: 'min(70vh, 560px)' }}
+        className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-auto rounded-md border border-slate-600/60 bg-slate-900"
+        style={{ minHeight: minHeightPx }}
       >
         <div
-          className="grid [grid-template-areas:'stack'] min-w-0"
+          className="grid min-h-full min-w-0 [grid-template-areas:'stack']"
           style={{ minHeight: Math.max(minHeightPx - 16, 200) }}
         >
           <pre

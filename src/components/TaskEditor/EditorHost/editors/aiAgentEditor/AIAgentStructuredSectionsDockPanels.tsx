@@ -14,7 +14,7 @@ import {
   buildDistilledRulesString,
   stringifyExperimentPayload,
 } from './aiAgentRuntimeExperimentJson';
-import { PlatformEditorView } from '@components/platform-editors';
+import { PlatformEditorView, ReadOnlyPlatformBanner } from '@components/platform-editors';
 export function AgentSectionDockPanel(
   props: IDockviewPanelProps<{ sectionId?: AgentStructuredSectionId }>
 ) {
@@ -83,6 +83,7 @@ export function AgentSectionDockPanel(
 export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
   const { runtimeMarkdown } = useAgentStructuredDockSlice();
   const editorCtx = useOptionalAIAgentEditorDock();
+  const jsMode = Boolean(editorCtx?.promptFinaleJsMode);
 
   const parsedInitialState = React.useMemo(() => {
     const src = editorCtx?.initialStateTemplateJson;
@@ -108,7 +109,7 @@ export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
       .filter((t) => t.content.length > 0);
   }, [editorCtx]);
 
-  const { examplesForPreview, compactParsed } = React.useMemo(() => {
+  const { examplesForPreview } = React.useMemo(() => {
     const compact = editorCtx?.agentRuntimeCompactJson
       ? parseAgentRuntimeCompactJson(editorCtx.agentRuntimeCompactJson)
       : null;
@@ -117,10 +118,9 @@ export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
     if (useCompact && compact) {
       return {
         examplesForPreview: compact.examples_compact,
-        compactParsed: compact,
       };
     }
-    return { examplesForPreview: runtimeExamples, compactParsed: compact };
+    return { examplesForPreview: runtimeExamples };
   }, [editorCtx, runtimeExamples]);
 
   const rulesForPreview = React.useMemo(() => {
@@ -142,30 +142,22 @@ export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
 
   return (
     <div className="h-full min-h-0 flex flex-col p-2 overflow-hidden bg-slate-950/80 gap-2">
-      {editorCtx ? (
-        <div className="flex min-h-[200px] shrink-0 flex-col gap-2 space-y-1">
-          <div className="min-h-[160px] flex-1 overflow-hidden">
-            <PlatformEditorView output={editorCtx.compiledPlatformOutput} />
-          </div>
-          <details className="text-[10px] text-slate-500">
-            <summary className="cursor-pointer select-none text-slate-400">Prompt compilato (testo unico)</summary>
-            <textarea
-              readOnly
-              value={editorCtx.compiledPromptForTargetPlatform}
-              aria-label="Compiled prompt flattened"
-              className="mt-1 w-full min-h-[80px] rounded-md border border-slate-800 bg-[#070b10] p-2 font-mono text-[10px] text-slate-400"
-              spellCheck={false}
-            />
-          </details>
+      {!editorCtx ? null : jsMode ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          <ReadOnlyPlatformBanner />
+          <textarea
+            readOnly
+            value={condensedRuntimeJson}
+            aria-label="Payload JSON runtime (sola lettura)"
+            className="w-full min-h-0 flex-1 rounded-md border border-slate-700 bg-[#0c1222] p-3 text-sm font-mono text-slate-200 resize-none focus:outline-none cursor-default"
+            spellCheck={false}
+          />
         </div>
-      ) : null}
-      <textarea
-        readOnly
-        value={condensedRuntimeJson}
-        aria-label="JSON runtime (sola lettura)"
-        className="w-full flex-1 min-h-[120px] rounded-md border border-slate-700 bg-[#0c1222] p-3 text-sm font-mono text-slate-200 resize-none focus:outline-none focus:ring-2 focus:ring-amber-600/40 cursor-default"
-        spellCheck={false}
-      />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <PlatformEditorView output={editorCtx.compiledPlatformOutput} />
+        </div>
+      )}
     </div>
   );
 }
