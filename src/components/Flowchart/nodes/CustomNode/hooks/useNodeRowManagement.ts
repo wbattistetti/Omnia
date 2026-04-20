@@ -7,6 +7,7 @@ import { getTaskIdFromRow } from '../../../../../utils/taskHelpers';
 import { variableCreationService } from '../../../../../services/VariableCreationService';
 import { taskRepository } from '../../../../../services/TaskRepository';
 import { TaskType } from '../../../../../types/taskTypes'; // ✅ Per TaskType enum
+import { resolveTaskType } from '@components/Flowchart/utils/taskVisuals';
 import { logNodeRowEdit } from '../../../rows/NodeRow/nodeRowEditDebug';
 import { useFlowActionsStrict } from '../../../../../context/FlowActionsContext';
 
@@ -126,8 +127,20 @@ export function useNodeRowManagement({
         const authoritativeRows = dedupeNodeRowsByIdWithDevLog(displayRows, 'props sync', nodeId);
         const localRow =
             editingRowId != null ? nodeRowsRef.current.find((r) => r.id === editingRowId) : undefined;
+        const authHasEditing =
+            editingRowId != null && authoritativeRows.some((r) => r.id === editingRowId);
+
+        /**
+         * Se abbiamo appena inserito/commitato una riga, lo snapshot da parent può arrivare un tick dopo.
+         * Il vecchio merge (`map` solo sugli id in `authoritativeRows`) **droppava** righe presenti solo in locale,
+         * causando flicker (nodo lungo → corto) e perdita di `forceEditing`/focus.
+         */
+        if (editingRowId != null && localRow && !authHasEditing) {
+            return;
+        }
+
         const next =
-            editingRowId != null && localRow
+            editingRowId != null && localRow && authHasEditing
                 ? authoritativeRows.map((r) => (r.id === editingRowId ? localRow : r))
                 : authoritativeRows;
         if (!rowListsShallowEqual(nodeRowsRef.current, next)) {
@@ -168,21 +181,25 @@ export function useNodeRowManagement({
         }
     }, [commitRowsToWorkspace]);
 
-    // ✅ Salva il contenuto originale quando inizi a editare una riga
-    // Deve essere definito prima di essere usato in altri callback
-    const saveOriginalContent = useCallback((rowId: string) => {
-        const row = nodeRows.find(r => r.id === rowId);
-        if (!row) return;
-
+    // ✅ Salva il contenuto originale quando inizi a editare una riga (anche riga appena creata, non ancora in `nodeRows`)
+    const saveOriginalContentFromRow = useCallback((row: NodeRowData) => {
         const originalText = row.text || '';
-        const wasNew = !originalText || originalText.trim() === ''; // Riga nuova se vuota
-
+        const wasNew = !originalText || originalText.trim() === '';
         originalContentRef.current = {
-            rowId,
+            rowId: row.id,
             originalText,
             wasNew
         };
-    }, [nodeRows]);
+    }, []);
+
+    const saveOriginalContent = useCallback(
+        (rowId: string) => {
+            const row = nodeRows.find((r) => r.id === rowId);
+            if (!row) return;
+            saveOriginalContentFromRow(row);
+        },
+        [nodeRows, saveOriginalContentFromRow]
+    );
 
     // Gestione aggiornamento riga
     const handleUpdateRow = useCallback((
@@ -352,10 +369,13 @@ export function useNodeRowManagement({
             }
         }
 
-        // Inserisci una riga solo se l'ultima riga è valida (non vuota e con tipo)
-        // ✅ Questo controllo ora è dopo l'eliminazione della riga vuota
+        // Inserisci una riga solo se l'ultima riga è valida (testo non vuoto e tipo risolto).
+        // Usa resolveTaskType (heuristics.type, task repo, legacy row.type) — non `(row as any).type`.
         const last = updatedRows[updatedRows.length - 1];
-        const lastValid = last ? Boolean((last.text || '').trim().length > 0 && (last as any).type) : true; // ✅ type (TaskType enum) only, no mode
+        const lastHasText = Boolean(last && (last.text || '').trim().length > 0);
+        const lastResolvedType = last ? resolveTaskType(last) : TaskType.UNDEFINED;
+        const lastHasConcreteType = lastResolvedType !== TaskType.UNDEFINED;
+        const lastValid = !last || (lastHasText && lastHasConcreteType);
         if (!lastValid && updatedRows.length > 0) return;
 
         const newRowId = makeRowId();
@@ -376,10 +396,10 @@ export function useNodeRowManagement({
         (newRow as any).isNew = true; // Preserve isNew flag
 
         updatedRows.splice(adjustedIndex, 0, newRow);
-        saveOriginalContent(newRow.id);
+        saveOriginalContentFromRow(newRow);
         setEditingRowId(newRow.id);
         commitRowsToWorkspace(updatedRows);
-    }, [nodeRows, makeRowId, commitRowsToWorkspace, saveOriginalContent]);
+    }, [nodeRows, makeRowId, commitRowsToWorkspace, saveOriginalContentFromRow]);
 
     /**
      * Immutable row updates for the whole node (used by semantic draft / meta).
