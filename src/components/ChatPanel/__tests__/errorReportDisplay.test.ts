@@ -23,6 +23,10 @@ function err(partial: Partial<CompilationError> & Pick<CompilationError, 'taskId
     rowId: partial.rowId,
     edgeId: partial.edgeId,
     category: partial.category,
+    detailCode: partial.detailCode,
+    code: partial.code,
+    stepKey: partial.stepKey,
+    escalationIndex: partial.escalationIndex,
   };
 }
 
@@ -71,41 +75,24 @@ describe('errorReportDisplay', () => {
     expect(findRowTextInWorkspace(flows, e1)).toBe('Saluta utente');
   });
 
-  it('formatErrorMessageForReportPanel uses row label for TaskNotFound', () => {
+  it('formatErrorMessageForReportPanel maps ParserMissing', () => {
     const e = err({
       taskId: 't1',
-      rowId: 't1',
-      message: 'Referenced task does not exist.',
+      message: '',
       severity: 'error',
-      category: 'TaskNotFound',
+      code: 'ParserMissing',
     });
-    expect(formatErrorMessageForReportPanel(e, 'My row label', null)).toBe(
-      'Non hai specificato cosa deve fare «My row label».'
-    );
+    expect(formatErrorMessageForReportPanel(e, null, null)).toBe('Manca il parser.');
   });
 
-  it('formatErrorMessageForReportPanel preserves flow prefix for TaskNotFound', () => {
+  it('formatErrorMessageForReportPanel preserves optional flow prefix', () => {
     const e = err({
       taskId: 't1',
-      message: '[sub] Task not found: x',
+      message: '[sub] ',
       severity: 'error',
-      category: 'TaskNotFound',
+      code: 'ParserMissing',
     });
-    expect(formatErrorMessageForReportPanel(e, 'R1', null)).toBe(
-      '[sub] Non hai specificato cosa deve fare «R1».'
-    );
-  });
-
-  it('formatErrorMessageForReportPanel uses parser copy for missing data contract', () => {
-    const e = err({
-      taskId: 't1',
-      message: '[main] Missing data contract (leaf node).',
-      severity: 'error',
-      category: 'TaskCompilationFailed',
-    });
-    expect(formatErrorMessageForReportPanel(e, null, null)).toBe(
-      "[main] Manca il parser per interpretare le risposte dell'utente."
-    );
+    expect(formatErrorMessageForReportPanel(e, null, null)).toBe('[sub] Manca il parser.');
   });
 
   it('formatErrorLocationTitle prefers row text and avoids node ids', () => {

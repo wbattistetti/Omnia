@@ -423,6 +423,12 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
   // ✅ ARCHITECTURE: Pass only necessary props (no monolithic editor object)
   // ✅ B1: Wrap ResponseEditorLayout with WizardContext.Provider to avoid race condition
+  const onNavigateToRecognition = React.useCallback(() => {
+    editor.setShowMessageReview(false);
+    editor.setLeftPanelMode('none');
+    editor.setShowSynonyms(true);
+  }, [editor.setShowMessageReview, editor.setLeftPanelMode, editor.setShowSynonyms]);
+
   const layoutContent = (
     <ResponseEditorLayout
       combinedClass={combinedClass}
@@ -522,6 +528,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       // ✅ NEW: Pass viewMode for Behaviour
       viewMode={editor.viewMode}
       onViewModeChange={editor.onViewModeChange}
+      onNavigateToRecognition={onNavigateToRecognition}
     />
   );
 

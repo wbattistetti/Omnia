@@ -1,16 +1,17 @@
-// Error Report Panel: hierarchical flow → row cards → human issues + FIX (aligned with flowchart visuals).
+/**
+ * Compile error tree for the flow debugger: flows → row groups → UX messages + FIX.
+ * Uses `buildErrorReportTree` from `@components/ChatPanel/errorReportTreeModel`.
+ */
 
 import React from 'react';
-import { useCompilationErrors } from '@context/CompilationErrorsContext';
-import { runCompilationErrorFix } from '@utils/compilationErrorFix';
-import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
-import { useFlowWorkspace } from '@flows/FlowStore';
+import type { CompilationError } from '@components/FlowCompiler/types';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import type { Flow } from '@flows/FlowTypes';
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode } from '@components/Flowchart/types/flowTypes';
-import { normalizeSeverity } from '@utils/severityUtils';
-import { compilationErrorsForTechnicalDetailPanel } from './errorReportDisplay';
-import { buildErrorReportTree, errorMessageWithoutFlowPrefix } from './errorReportTreeModel';
+import { buildErrorReportTree } from '@components/ChatPanel/errorReportTreeModel';
 import { compilationErrorFixKey } from '@utils/compilationErrorFix';
+import { executeNavigationIntent, resolveNavigationIntent } from '@domain/compileErrors';
 
 function formatErrorWarningCounts(errors: number, warnings: number): string {
   const parts: string[] = [];
@@ -20,23 +21,21 @@ function formatErrorWarningCounts(errors: number, warnings: number): string {
   if (warnings > 0) {
     parts.push(`${warnings} ${warnings === 1 ? 'avviso' : 'avvisi'}`);
   }
-  if (parts.length === 0) return 'Nessun problema';
+  if (parts.length === 0) return '';
   return parts.join(', ');
 }
 
-export interface ErrorReportPanelProps {
-  onClose?: () => void;
+export interface DebuggerErrorListProps {
+  errors: CompilationError[];
+  flows: Record<string, Flow<Node<FlowNode>, Edge>>;
+  className?: string;
 }
 
-export function ErrorReportPanel(_props: ErrorReportPanelProps) {
-  const { errors } = useCompilationErrors();
-  const { flows } = useFlowWorkspace<Node<FlowNode>, Edge>();
-
+export function DebuggerErrorList({ errors, flows, className = '' }: DebuggerErrorListProps) {
   const tree = React.useMemo(() => buildErrorReportTree(errors, flows), [errors, flows]);
 
   const [collapsedFlows, setCollapsedFlows] = React.useState<Set<string>>(() => new Set());
   const [collapsedRows, setCollapsedRows] = React.useState<Set<string>>(() => new Set());
-  const [detailRows, setDetailRows] = React.useState<Set<string>>(() => new Set());
 
   const toggleFlow = React.useCallback((flowId: string) => {
     setCollapsedFlows((prev) => {
@@ -56,50 +55,28 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
     });
   }, []);
 
-  const toggleRowDetail = React.useCallback((key: string) => {
-    setDetailRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
-
-  const onFix = React.useCallback(async (e: React.MouseEvent, err: Parameters<typeof runCompilationErrorFix>[0]) => {
+  const onFix = React.useCallback(async (e: React.MouseEvent, err: CompilationError) => {
     e.stopPropagation();
     try {
-      await runCompilationErrorFix(err);
+      await executeNavigationIntent(resolveNavigationIntent(err));
     } catch (errx) {
-      console.error('[ErrorReportPanel] FIX failed:', errx);
+      console.error('[DebuggerErrorList] FIX failed:', errx);
     }
   }, []);
 
   if (errors.length === 0) {
     return (
-      <div className="w-full h-full flex flex-col bg-white dark:bg-gray-950">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center text-gray-500 dark:text-gray-400">
-            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-            <p className="text-sm">Nessun errore di compilazione</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Tutti i controlli sono ok</p>
-          </div>
+      <div className={`flex flex-col flex-1 min-h-0 ${className}`}>
+        <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400 text-sm">
+          Nessun errore da mostrare.
         </div>
       </div>
     );
   }
 
-  const totalErrors = errors.filter((e) => normalizeSeverity(e.severity) === 'error').length;
-  const totalWarnings = errors.filter((e) => normalizeSeverity(e.severity) === 'warning').length;
-
   return (
-    <div className="w-full h-full bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-gray-800 flex flex-col text-gray-900 dark:text-gray-100">
-      <div className="flex-shrink-0 px-3 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
-        <div className="text-xs text-gray-600 dark:text-gray-400">
-          {formatErrorWarningCounts(totalErrors, totalWarnings)}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+    <div className={`flex flex-col flex-1 min-h-0 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 ${className}`}>
+      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
         {tree.map((flowRoot) => {
           const flowOpen = !collapsedFlows.has(flowRoot.flowId);
           const FlowIcon = flowRoot.flowVisuals.Icon;
@@ -132,7 +109,6 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
                   ) : (
                     flowRoot.rows.map((rowGroup) => {
                       const rowKey = `${flowRoot.flowId}::${rowGroup.rowKey}`;
-                      const technicalSources = compilationErrorsForTechnicalDetailPanel(rowGroup.sourceErrors);
                       const rowOpen = !collapsedRows.has(rowKey);
                       const RowIcon = rowGroup.visuals.Icon;
                       const rowBorder = rowGroup.hasBlockingError
@@ -184,39 +160,6 @@ export function ErrorReportPanel(_props: ErrorReportPanelProps) {
                                   </li>
                                 ))}
                               </ul>
-                              {technicalSources.length > 0 && (
-                                <div className="px-2 pb-2 pl-8">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleRowDetail(rowKey);
-                                    }}
-                                    className="text-[11px] text-sky-600 dark:text-sky-400 hover:underline font-medium"
-                                  >
-                                    {detailRows.has(rowKey)
-                                      ? 'Nascondi dettagli tecnici'
-                                      : `Mostra dettagli tecnici (${technicalSources.length})`}
-                                  </button>
-                                  {detailRows.has(rowKey) && (
-                                    <ul className="mt-2 space-y-1.5 rounded-md bg-gray-100 dark:bg-gray-900/90 px-2.5 py-2 text-[11px] leading-relaxed text-gray-800 dark:text-gray-200 border border-gray-200/80 dark:border-gray-700">
-                                      {technicalSources.map((src, i) => (
-                                        <li key={`${rowKey}-src-${i}`} className="break-words">
-                                          {src.category && (
-                                            <span className="font-semibold text-gray-600 dark:text-gray-400 mr-1">
-                                              [{src.category}]
-                                            </span>
-                                          )}
-                                          <span className="font-mono text-[10px] sm:text-[11px]">
-                                            {(src as { technicalDetail?: string }).technicalDetail?.trim() ||
-                                              errorMessageWithoutFlowPrefix(src)}
-                                          </span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </div>
-                              )}
                             </div>
                           )}
                         </div>

@@ -1,15 +1,19 @@
 /**
- * Pure helpers to present compilation errors in ErrorReportPanel:
- * resolve row/edge labels from workspace flows and rewrite technical messages.
+ * Pure helpers to present compilation errors in the debugger error list:
+ * resolve row/edge labels from workspace flows; UX copy lives in `@domain/compileErrors`.
  */
 
 import type { CompilationError } from '@components/FlowCompiler/types';
 import type { Flow } from '@flows/FlowTypes';
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode, NodeRow } from '@components/Flowchart/types/flowTypes';
+import { resolveCompileUxMessage } from '@domain/compileErrors/compileUxMessages';
+import { splitFlowPrefixedMessage, withFlowPrefix } from '@utils/flowPrefixedMessage';
 
 const UUID_RE =
   /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?:[-_][a-zA-Z0-9]+)?/g;
+
+export { splitFlowPrefixedMessage, withFlowPrefix } from '@utils/flowPrefixedMessage';
 
 export function truncateDisplayLabel(text: string, maxLen = 64): string {
   const t = text.trim();
@@ -17,23 +21,6 @@ export function truncateDisplayLabel(text: string, maxLen = 64): string {
   return `${t.slice(0, Math.max(1, maxLen - 1))}…`;
 }
 
-/** Split optional `[flowId] message` prefix from merged multi-flow compile errors. */
-export function splitFlowPrefixedMessage(message: string): { flowTag: string | null; body: string } {
-  const m = message.match(/^\[([^\]]+)]\s*(.*)$/s);
-  if (m) {
-    return { flowTag: m[1].trim() || null, body: m[2] ?? '' };
-  }
-  return { flowTag: null, body: message };
-}
-
-function withFlowPrefix(flowTag: string | null, body: string): string {
-  if (!flowTag) return body;
-  return `[${flowTag}] ${body}`;
-}
-
-/**
- * Finds row display text (NodeRow.text) across all open flows for this error.
- */
 export function findRowTextInWorkspace(
   flows: Record<string, Flow<Node<FlowNode>, Edge>>,
   error: CompilationError
@@ -58,9 +45,6 @@ export function findRowTextInWorkspace(
   return null;
 }
 
-/**
- * Best-effort edge label for error cards (React Flow edge id + optional label).
- */
 export function findEdgeLabelInWorkspace(
   flows: Record<string, Flow<Node<FlowNode>, Edge>>,
   edgeId: string | undefined
@@ -82,30 +66,12 @@ export function findEdgeLabelInWorkspace(
   return null;
 }
 
-/**
- * Strip "in node …, row …" / UUID-heavy tails from backend compiler messages.
- */
-/**
- * Utterance/listen senza contratto NLP: il compilatore VB segnala "Missing data contract (leaf node)."
- * Messaggio unico per l'utente; il testo grezzo non va mostrato nel pannello tecnico.
- */
+/** @deprecated Prefer `shouldSuppressTechnicalDetailForError` from `@domain/compileErrors`. */
 export function isMissingDataContractCompilationError(error: CompilationError): boolean {
   const cat = (error.category ?? '').trim();
   if (cat !== 'TaskCompilationFailed' && cat !== 'CompilationException') return false;
   const { body } = splitFlowPrefixedMessage(error.message);
   return /missing\s+data\s+contract/i.test(body);
-}
-
-export function humanMessageForTaskCompilationFailure(error: CompilationError): string {
-  if (isMissingDataContractCompilationError(error)) {
-    return "Manca il parser per interpretare le risposte dell'utente.";
-  }
-  return 'Questo task non può essere eseguito. Aprilo e controlla la configurazione.';
-}
-
-/** Errori da mostrare nel blocco "dettagli tecnici" (esclusi quelli già coperti dal messaggio umano sopra). */
-export function compilationErrorsForTechnicalDetailPanel(errors: CompilationError[]): CompilationError[] {
-  return errors.filter((e) => !isMissingDataContractCompilationError(e));
 }
 
 export function stripNodeRowReferences(message: string): string {
@@ -119,58 +85,21 @@ export function stripNodeRowReferences(message: string): string {
 }
 
 /**
- * User-visible error body for the panel (keeps optional [flowId] prefix).
+ * User-visible error body for the panel (optional [flowId] prefix when message carries it).
  */
 export function formatErrorMessageForReportPanel(
   error: CompilationError,
-  rowText: string | null,
-  edgeLabel: string | null
+  _rowText: string | null,
+  _edgeLabel: string | null
 ): string {
-  const { flowTag, body } = splitFlowPrefixedMessage(error.message);
-  const cat = error.category ?? '';
-  const rowLabel = (error as { rowLabel?: string }).rowLabel?.trim();
-
-  if (cat === 'MissingOrInvalidTask' || cat === 'TaskNotFound' || cat === 'MissingTaskId') {
-    const label = rowLabel || rowText?.trim() || 'questa riga';
-    return withFlowPrefix(
-      flowTag,
-      `Non hai specificato cosa deve fare «${truncateDisplayLabel(label, 200)}».`
-    );
-  }
-
-  if (cat === 'TaskTypeInvalidOrMissing' || cat === 'MissingTaskType' || cat === 'InvalidTaskType') {
-    const label = rowLabel || rowText?.trim() || 'questa riga';
-    return withFlowPrefix(flowTag, `Scegli il tipo di task per «${truncateDisplayLabel(label, 200)}».`);
-  }
-
-  if (cat === 'TaskCompilationFailed' || cat === 'CompilationException') {
-    return withFlowPrefix(flowTag, humanMessageForTaskCompilationFailure(error));
-  }
-
-  if (cat === 'NoEntryNodes') {
-    return withFlowPrefix(flowTag, 'Il flusso non ha un nodo di start definito.');
-  }
-
-  if (cat === 'MultipleEntryNodes') {
-    return withFlowPrefix(
-      flowTag,
-      'Il flusso ha più nodi di start. Lascia solo quello da cui vuoi iniziare.'
-    );
-  }
-
-  let out = body;
-
-  out = stripNodeRowReferences(out);
-  if (!out || out.length < 4) {
-    out = cat || 'Compilation issue';
-  }
-
-  return withFlowPrefix(flowTag, out);
+  void _rowText;
+  void _edgeLabel;
+  const ux = resolveCompileUxMessage(error);
+  if (!ux) return '';
+  const { flowTag } = splitFlowPrefixedMessage(error.message);
+  return withFlowPrefix(flowTag, ux);
 }
 
-/**
- * Bold title line for an error card: row label, edge label, or neutral fallback (no node id).
- */
 export function formatErrorLocationTitle(
   error: CompilationError,
   rowText: string | null,

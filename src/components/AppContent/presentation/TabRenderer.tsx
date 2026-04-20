@@ -9,7 +9,6 @@ import type {
   DockTabTaskEditor,
   DockTabConditionEditor,
   DockTabChat,
-  DockTabErrorReport,
   DockTabFlowMapping,
   ToolbarButton,
 } from '@dock/types';
@@ -25,7 +24,6 @@ import ConditionEditor from '../../conditions/ConditionEditor';
 import { mergeConditionEditorVariablesWithLiveFlowchart } from '../../conditions/conditionEditorLiveVariables';
 import TaskEditorHost from '../../TaskEditor/EditorHost/TaskEditorHost';
 import { AssistantPanel } from '@components/ChatPanel/AssistantPanel';
-import { ErrorReportPanel } from '@components/ChatPanel/ErrorReportPanel';
 import { UnifiedFlowMappingPanel } from '@components/FlowMappingPanel';
 
 export interface TabRendererProps {
@@ -607,17 +605,6 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
           executionLaunchType={chatTab.executionLaunchType}
           executionLaunchLabel={chatTab.executionLaunchLabel}
           onClosePanel={() => {
-            setDockTree(prev => closeTab(prev, tab.id));
-          }}
-        />
-      );
-    }
-
-    // Error Report Panel tab
-    if (tab.type === 'errorReport') {
-      return (
-        <ErrorReportPanel
-          onClose={() => {
             setDockTree(prev => closeTab(prev, tab.id));
           }}
         />

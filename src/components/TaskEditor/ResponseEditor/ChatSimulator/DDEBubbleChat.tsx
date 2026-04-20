@@ -17,9 +17,17 @@ import {
   FlowBotTurnLabel,
   UserTurnCard,
   DebuggerToolbar,
+  DebuggerErrorList,
   type DebuggerSessionState,
   type DebuggerStep,
 } from '../../../../features/debugger';
+import { useCompilationErrors } from '@context/CompilationErrorsContext';
+import { useFlowWorkspaceOptional } from '@flows/FlowStore';
+import type { Flow } from '@flows/FlowTypes';
+import { FlowWorkspaceSnapshot } from '@flows/FlowWorkspaceSnapshot';
+import type { Node, Edge } from 'reactflow';
+import type { FlowNode } from '@components/Flowchart/types/flowTypes';
+import { isCompileErrorReportUxCode } from '@domain/compileErrors/compileUxMessages';
 import DialogueTaskService from '@services/DialogueTaskService';
 import { buildTaskTreeFromRepository } from '@utils/taskUtils';
 import { translationKeyFromStoredValue } from '@utils/translationKeys';
@@ -27,6 +35,26 @@ import type { DebuggerRuntimeBridge } from '../../../../features/useCases/runtim
 import { UseCasesPanelIcon } from '../../../../features/useCases/ui/UseCaseIcons';
 import { chatFocusDebug, describeElement } from '@responseEditor/ChatSimulator/utils/chatFocusDebug';
 import { getFlowFocusManager } from '@features/focus';
+
+/** Flow graph for error grouping when DDEBubbleChat is outside FlowWorkspaceProvider (global debugger). */
+function buildFlowsRecordFromWorkspaceSnapshot(): Record<string, Flow<Node<FlowNode>, Edge>> {
+  const out: Record<string, Flow<Node<FlowNode>, Edge>> = {};
+  for (const fid of FlowWorkspaceSnapshot.getAllFlowIds()) {
+    const s = FlowWorkspaceSnapshot.getFlowById(fid);
+    if (!s) continue;
+    out[fid] = {
+      id: fid,
+      title: typeof s.title === 'string' && s.title.trim() ? s.title.trim() : fid,
+      nodes: (s.nodes ?? []) as Node<FlowNode>[],
+      edges: (s.edges ?? []) as Edge[],
+      ...(s.tasks !== undefined ? { tasks: s.tasks } : {}),
+      ...(s.meta !== undefined ? { meta: s.meta } : {}),
+      ...(s.variables !== undefined ? { variables: s.variables } : {}),
+      ...(s.bindings !== undefined ? { bindings: s.bindings } : {}),
+    };
+  }
+  return out;
+}
 
 /** Maps browser/network error messages to user-facing Italian copy for the chat simulator header. */
 function userFacingChatErrorMessage(raw: string | null | undefined): string | null {
@@ -290,6 +318,22 @@ export default function DDEBubbleChat({
   onMessagesSnapshotChange?: (messages: Message[]) => void;
 }) {
   const { combinedClass } = useFontContext();
+  const { errors: compilationErrors } = useCompilationErrors();
+  const workspaceOptional = useFlowWorkspaceOptional<Node<FlowNode>, Edge>();
+  const [workspaceSnapshotTick, setWorkspaceSnapshotTick] = React.useState(0);
+  React.useEffect(() => FlowWorkspaceSnapshot.subscribe(() => setWorkspaceSnapshotTick((n) => n + 1)), []);
+
+  const workspaceFlows = React.useMemo((): Record<string, Flow<Node<FlowNode>, Edge>> => {
+    if (workspaceOptional != null) {
+      return workspaceOptional.flows as Record<string, Flow<Node<FlowNode>, Edge>>;
+    }
+    return buildFlowsRecordFromWorkspaceSnapshot();
+  }, [workspaceOptional, workspaceSnapshotTick]);
+
+  const reportCompileErrors = React.useMemo(
+    () => compilationErrors.filter((e) => isCompileErrorReportUxCode(e.code)),
+    [compilationErrors]
+  );
   const [messages, setMessages] = React.useState<Message[]>([]);
   const messagesRef = React.useRef<Message[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
@@ -322,6 +366,9 @@ export default function DDEBubbleChat({
 
   // ✅ ARCHITECTURAL: Detect flow mode explicitly
   const isFlowMode = !task && !taskTree && mode === 'interactive';
+
+  const debuggerBlockedByCompile =
+    isFlowMode && reportCompileErrors.length > 0;
 
   const [dbgToolbarState, setDbgToolbarState] = React.useState<DebuggerSessionState>('idle');
   const debuggerMachineRef = React.useRef<DebuggerStateMachine | null>(null);
@@ -358,7 +405,7 @@ export default function DDEBubbleChat({
     {
       ...flowDebuggerHookOpts,
       orchestratorCompileRootFlowId: orchestratorCompileRootFlowId ?? undefined,
-      autoStart: flowAutoStart === true,
+      autoStart: flowAutoStart === true && reportCompileErrors.length === 0,
       projectId: projectId ?? null,
       flowId: orchestratorCompileRootFlowId ?? null,
     }
@@ -1839,6 +1886,7 @@ export default function DDEBubbleChat({
                 <DebuggerToolbar
                   state={dbgToolbarState}
                   isRestarting={flowModeChat.isRestarting}
+                  playDisabled={debuggerBlockedByCompile}
                   onPlay={() => {
                     void debuggerActions.play();
                   }}
@@ -1901,7 +1949,7 @@ export default function DDEBubbleChat({
             )}
           </div>
         </div>
-        {displayChatError && (
+        {displayChatError && !(isFlowMode && debuggerBlockedByCompile) && (
           <div className="mt-1 flex items-center gap-2 text-red-900 text-xs min-w-0">
             <AlertTriangle size={14} className="flex-shrink-0" />
             <span className="break-words whitespace-normal">{displayChatError}</span>
@@ -1942,6 +1990,10 @@ export default function DDEBubbleChat({
         </div>
       )}
 
+      {isFlowMode && debuggerBlockedByCompile ? (
+        <DebuggerErrorList errors={reportCompileErrors} flows={workspaceFlows} className="flex-1 min-h-0" />
+      ) : (
+      <>
       <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${combinedClass}`} ref={scrollContainerRef}>
         {displayMessages.map((m) => {
           if (isFlowMode && m.type === 'user') {
@@ -2008,7 +2060,9 @@ export default function DDEBubbleChat({
 
           return null;
         })}
-        {mode === 'interactive' && (!isFlowMode || effectiveIsWaitingForInput) && (
+        {mode === 'interactive' &&
+          (!isFlowMode || effectiveIsWaitingForInput) &&
+          !(isFlowMode && debuggerBlockedByCompile) && (
           <div className={`bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3 ${combinedClass}`}>
             <style dangerouslySetInnerHTML={{
               __html: `
@@ -2069,6 +2123,8 @@ export default function DDEBubbleChat({
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

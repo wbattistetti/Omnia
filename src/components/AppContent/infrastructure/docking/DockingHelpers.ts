@@ -1,7 +1,7 @@
 // Infrastructure layer: Docking helper functions
 // Uses domain layer and dock/ops utilities
 
-import type { DockNode, DockTabChat, DockTabErrorReport } from '@dock/types';
+import type { DockNode, DockTabChat } from '@dock/types';
 import { findRootTabset, type OpenBottomDockedTabRequest } from '../../domain/dockTree';
 import { activateTab, splitWithTab, getTab, upsertAddCenter, addTabCenter, updateTab } from '@dock/ops';
 
@@ -434,88 +434,4 @@ function findLateralTabsetInSplit(
   }
 
   return null;
-}
-
-/**
- * Opens Error Report Panel as a lateral docked tab (right side by default)
- * Similar to openLateralChatPanel but for ErrorReportPanel
- */
-export interface OpenErrorReportPanelRequest {
-  tabId: string;
-  newTab: DockTabErrorReport;
-  position?: 'left' | 'right';
-  onExisting?: (tree: DockNode, tabId: string) => DockNode;
-}
-
-export function openErrorReportPanel(
-  prev: DockNode,
-  options: OpenErrorReportPanelRequest
-): DockNode {
-  const { tabId, newTab, position = 'right', onExisting } = options;
-
-  // Check if tab already exists
-  const existing = getTab(prev, tabId);
-  if (existing) {
-    if (onExisting) {
-      return onExisting(prev, tabId);
-    }
-    return activateTab(prev, tabId);
-  }
-
-  // Check if a lateral tabset already exists at the desired position
-  const existingLateralTabset = findLateralTabset(prev, position);
-  if (existingLateralTabset) {
-    return upsertAddCenter(prev, existingLateralTabset, newTab);
-  }
-
-  // Create new split at root level (reuse same logic as openLateralChatPanel)
-  const sizes = position === 'left' ? [0.25, 0.75] : [0.75, 0.25];
-
-  const newTabSet: DockNode = {
-    kind: 'tabset',
-    id: `ts_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    tabs: [newTab],
-    active: 0
-  };
-
-  // If root is already a horizontal split (row), add panel to it
-  if (prev.kind === 'split' && prev.orientation === 'row') {
-    const mainContentIndex = position === 'left' ? prev.children.length - 1 : 0;
-    const mainContent = prev.children[mainContentIndex];
-
-    if (mainContent.kind === 'tabset') {
-      return splitWithTab(prev, mainContent.id, position, newTab, sizes);
-    }
-
-    // Wrap main content
-    const wrappedMainContent = {
-      kind: 'split' as const,
-      id: `split_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      orientation: 'row' as const,
-      children: position === 'left'
-        ? [newTabSet, mainContent]
-        : [mainContent, newTabSet],
-      sizes
-    };
-
-    const newChildren = [...prev.children];
-    newChildren[mainContentIndex] = wrappedMainContent;
-    return {
-      ...prev,
-      children: newChildren
-    };
-  }
-
-  // Wrap root in horizontal split
-  const children = position === 'left'
-    ? [newTabSet, prev]
-    : [prev, newTabSet];
-
-  return {
-    kind: 'split',
-    id: `split_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    orientation: 'row',
-    children,
-    sizes
-  };
 }

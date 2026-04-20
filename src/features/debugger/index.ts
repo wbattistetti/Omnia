@@ -6,6 +6,7 @@ export { FlowHighlighter } from './FlowHighlighter';
 export { DebuggerLog } from './DebuggerLog';
 export { createDebuggerActions, type DebuggerActions, type DebuggerActionsDeps } from './DebuggerActions';
 export { DebuggerToolbar } from './DebuggerToolbar';
+export { DebuggerErrorList } from './ui/DebuggerErrorList';
 export { DebuggerStepsPanel } from './ui/DebuggerStepsPanel';
 export { FlowDebuggerUtteranceStrip } from './ui/FlowDebuggerUtteranceStrip';
 export { FlowBotTurnLabel } from './ui/FlowBotTurnLabel';

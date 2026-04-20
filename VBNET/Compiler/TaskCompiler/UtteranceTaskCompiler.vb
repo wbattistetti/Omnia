@@ -99,12 +99,63 @@ Public Class UtteranceTaskCompiler
     End Function
 
     ''' <summary>
+    ''' Builds IDE task trees for escalation diagnostics when full compile failed (skips leaf dataContract validation).
+    ''' Returns Nothing if the tree cannot be built (same failures as compile merge).
+    ''' </summary>
+    Public Shared Function TryGetTaskTreeNodesForEscalationScan(
+        instance As UtteranceTaskDefinition,
+        taskId As String,
+        allTemplates As List(Of TaskDefinition)
+    ) As List(Of TaskNode)
+        If instance Is Nothing Then
+            Return Nothing
+        End If
+        Try
+            Dim c As New UtteranceTaskCompiler()
+            If Not String.IsNullOrEmpty(instance.TemplateId) Then
+                Dim matching = allTemplates.Where(Function(t As TaskDefinition) t.Id = instance.TemplateId).ToList()
+                If matching.Count <> 1 Then
+                    Return Nothing
+                End If
+                Dim template = TryCast(matching.Single(), UtteranceTaskDefinition)
+                If template Is Nothing Then
+                    Return Nothing
+                End If
+                Dim expanded = c.BuildTaskTreeExpanded(template, instance, allTemplates)
+                Return expanded.Nodes
+            End If
+            Dim embeddedExpanded = c.BuildTaskTreeExpandedFromEmbeddedPayloadWithoutLeafContractValidation(instance, taskId)
+            Return embeddedExpanded.Nodes
+        Catch
+            Return Nothing
+        End Try
+    End Function
+
+    ''' <summary>
     ''' Costruisce TaskTreeExpanded dal task senza templateId: subTasks (JSON) e/o dataContract root incorporati sulla riga.
     ''' </summary>
     Private Function BuildTaskTreeExpandedFromEmbeddedPayload(
         instance As UtteranceTaskDefinition,
         taskId As String
     ) As TaskTreeExpanded
+        Dim nodes = BuildEmbeddedTaskNodeList(instance, taskId)
+        Dim expanded = FinishEmbeddedExpandedWithStepOverrides(instance, taskId, nodes)
+        ValidateStandaloneNodesHaveContracts(expanded.Nodes)
+        Return expanded
+    End Function
+
+    ''' <summary>
+    ''' Embedded tree with instance step overrides, without standalone leaf dataContract validation (for designer error aggregation).
+    ''' </summary>
+    Private Function BuildTaskTreeExpandedFromEmbeddedPayloadWithoutLeafContractValidation(
+        instance As UtteranceTaskDefinition,
+        taskId As String
+    ) As TaskTreeExpanded
+        Dim nodes = BuildEmbeddedTaskNodeList(instance, taskId)
+        Return FinishEmbeddedExpandedWithStepOverrides(instance, taskId, nodes)
+    End Function
+
+    Private Function BuildEmbeddedTaskNodeList(instance As UtteranceTaskDefinition, taskId As String) As List(Of TaskNode)
         If instance Is Nothing Then
             Throw New ArgumentNullException(NameOf(instance))
         End If
@@ -143,8 +194,14 @@ Public Class UtteranceTaskCompiler
             Throw New InvalidOperationException("Embedded task payload produced no task nodes.")
         End If
 
-        ValidateStandaloneNodesHaveContracts(nodes)
+        Return nodes
+    End Function
 
+    Private Function FinishEmbeddedExpandedWithStepOverrides(
+        instance As UtteranceTaskDefinition,
+        taskId As String,
+        nodes As List(Of TaskNode)
+    ) As TaskTreeExpanded
         Dim expanded As New TaskTreeExpanded() With {
             .TaskInstanceId = If(String.IsNullOrEmpty(instance.Id), taskId, instance.Id),
             .Label = instance.Label,

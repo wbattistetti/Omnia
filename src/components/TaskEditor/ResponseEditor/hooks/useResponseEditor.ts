@@ -103,7 +103,9 @@ export interface UseResponseEditorResult {
   sidebarManualWidth: number;
   isDraggingSidebar: boolean;
   showMessageReview: boolean;
+  setShowMessageReview: React.Dispatch<React.SetStateAction<boolean>>;
   showSynonyms: boolean;
+  setShowSynonyms: React.Dispatch<React.SetStateAction<boolean>>;
   selectedIntentIdForTraining: string | null;
   setSelectedIntentIdForTraining: (id: string | null) => void;
   pendingEditorOpen: boolean;
@@ -286,7 +288,9 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     sidebarManualWidth,
     isDraggingSidebar,
     showMessageReview,
+    setShowMessageReview,
     showSynonyms,
+    setShowSynonyms,
     selectedIntentIdForTraining,
     setSelectedIntentIdForTraining,
     pendingEditorOpen,
@@ -424,7 +428,9 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     sidebarManualWidth,
     isDraggingSidebar,
     showMessageReview,
+    setShowMessageReview,
     showSynonyms,
+    setShowSynonyms,
     selectedIntentIdForTraining,
     setSelectedIntentIdForTraining,
     pendingEditorOpen,

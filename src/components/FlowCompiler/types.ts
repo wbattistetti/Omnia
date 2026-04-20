@@ -95,8 +95,14 @@ export interface CompilationError {
   nodeId?: string;
   rowId?: string;
   edgeId?: string;
+  /** Transport payload; optional legacy English/diagnostic text if backend still sends it. */
   message: string;
   severity: ErrorSeverity;
+  /**
+   * Canonical error code (align with VB `CompilationErrorCode` JSON name).
+   * When set, UX copy is resolved on the client from this code, not from `category`/`message`.
+   */
+  code?: string;
   /** Stable code from compiler (e.g. MissingOrInvalidTask, AmbiguousLink, TaskCompilationFailed). */
   category?: string;
   /** Populated client-side when missing (see enrichCompilationError). */

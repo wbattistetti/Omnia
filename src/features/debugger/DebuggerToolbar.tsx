@@ -10,12 +10,22 @@ export function DebuggerToolbar(props: {
   onPlay: () => void;
   onClear: () => void;
   onRestart: () => void;
+  /** When true, Play is hidden/disabled (e.g. compile errors block execution). */
+  playDisabled?: boolean;
 }) {
-  const { state, isRestarting, onPlay, onClear, onRestart } = props;
-  const showPlay = state === 'idle';
+  const { state, isRestarting, onPlay, onClear, onRestart, playDisabled } = props;
+  const showPlay = state === 'idle' && !playDisabled;
 
   return (
     <div className="flex items-center gap-1 flex-shrink-0">
+      {state === 'idle' && playDisabled ? (
+        <span
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-amber-900 bg-amber-200/90 dark:bg-amber-900/40 dark:text-amber-100"
+          title="Correggi gli errori di compilazione per avviare il debugger"
+        >
+          Bloccato
+        </span>
+      ) : null}
       {showPlay ? (
         <button
           type="button"

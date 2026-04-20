@@ -109,11 +109,6 @@ export type DockTabChat = DockTabBase & {
   executionLaunchLabel?: string;
 };
 
-// Error Report Panel tab - for compilation errors display
-export type DockTabErrorReport = DockTabBase & {
-  type: 'errorReport';
-};
-
 /** Unified mapping preview: backend API mapping vs subflow interface (demo / editor shell). */
 export type DockTabFlowMapping = DockTabBase & {
   type: 'flowMapping';
@@ -121,7 +116,7 @@ export type DockTabFlowMapping = DockTabBase & {
 };
 
 // Union type for all tab types
-export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor | DockTabChat | DockTabErrorReport | DockTabFlowMapping; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
+export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor | DockTabChat | DockTabFlowMapping; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 
 /** Primary workspace flow (`flowId === 'main'`) must stay open; no dock close button / closeTab. */
 export function isLockedMainFlowTab(tab: DockTab | null | undefined): boolean {

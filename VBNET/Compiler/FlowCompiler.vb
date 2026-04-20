@@ -30,10 +30,32 @@ Public Class FlowCompiler
         ' ✅ Null-safe: flow.Tasks è sempre inizializzato nel costruttore, ma per sicurezza
         Dim allTemplates = If(flow.Tasks IsNot Nothing, flow.Tasks, New List(Of TaskDefinition)())
 
-        Try
-            Dim result = compiler.Compile(task, taskId, allTemplates)
+        Dim compileSucceeded As Boolean = False
+        Dim result As CompiledTask = Nothing
+        Dim escalationIssuesAdded As Integer = 0
 
-            ' ✅ Aggiungi metadata del flowchart dopo la compilazione
+        Try
+            result = compiler.Compile(task, taskId, allTemplates)
+            compileSucceeded = True
+            Console.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
+            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
+        Catch ex As Exception
+            Dim detail = InferTaskCompilationDetailCode(ex)
+            errors.Add(New CompilationError() With {
+                .TaskId = taskId,
+                .NodeId = node.Id,
+                .RowId = row.Id,
+                .RowLabel = FormatRowUserLabel(row),
+                .Message = String.Empty,
+                .Code = CompilationErrorCanonicalMapping.CodeFromInferDetail(detail),
+                .Severity = ErrorSeverity.Error,
+                .Category = "TaskCompilationFailed",
+                .DetailCode = detail,
+                .TaskType = CInt(taskType)
+            })
+        End Try
+
+        If compileSucceeded AndAlso result IsNot Nothing Then
             result.Id = row.Id
             result.Debug = New TaskDebugInfo() With {
                 .SourceType = TaskSourceType.Flowchart,
@@ -42,35 +64,37 @@ Public Class FlowCompiler
                 .OriginalTaskId = taskId
             }
 
-            Console.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
-            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
-
             Dim utteranceResult = TryCast(result, CompiledUtteranceTask)
             If utteranceResult IsNot Nothing Then
-                Dim escalationErrors = UtteranceEscalationValidation.AppendEmptyEscalationErrors(utteranceResult, taskId, node, row, errors, taskType)
-                If escalationErrors > 0 Then
-                    Return Nothing
+                escalationIssuesAdded += UtteranceEscalationValidation.AppendEmptyEscalationErrors(
+                    utteranceResult, taskId, node, row, errors, taskType)
+            End If
+        End If
+
+        Dim needIdeEscalationScan =
+            taskType = TaskTypes.UtteranceInterpretation AndAlso
+            Not (compileSucceeded AndAlso result IsNot Nothing AndAlso TryCast(result, CompiledUtteranceTask) IsNot Nothing)
+
+        If needIdeEscalationScan Then
+            Dim utDef = TryCast(task, UtteranceTaskDefinition)
+            If utDef IsNot Nothing Then
+                Dim roots = UtteranceTaskCompiler.TryGetTaskTreeNodesForEscalationScan(utDef, taskId, allTemplates)
+                If roots IsNot Nothing Then
+                    escalationIssuesAdded += UtteranceEscalationValidation.AppendEmptyEscalationErrorsFromIdeTaskNodes(
+                        roots, taskId, node, row, errors, taskType)
                 End If
             End If
+        End If
 
-            Return result
-
-        Catch ex As Exception
-            Dim detail = InferTaskCompilationDetailCode(ex)
-            errors.Add(New CompilationError() With {
-                .TaskId = taskId,
-                .NodeId = node.Id,
-                .RowId = row.Id,
-                .RowLabel = FormatRowUserLabel(row),
-                .Message = "Task compilation failed.",
-                .Severity = ErrorSeverity.Error,
-                .Category = "TaskCompilationFailed",
-                .DetailCode = detail,
-                .TechnicalDetail = ex.Message,
-                .TaskType = CInt(taskType)
-            })
+        If Not compileSucceeded OrElse result Is Nothing Then
             Return Nothing
-        End Try
+        End If
+
+        If TryCast(result, CompiledUtteranceTask) IsNot Nothing AndAlso escalationIssuesAdded > 0 Then
+            Return Nothing
+        End If
+
+        Return result
     End Function
 
     ''' <summary>
@@ -84,6 +108,10 @@ Public Class FlowCompiler
         If msg.IndexOf("not found in allTemplates", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
             (msg.IndexOf("Template", StringComparison.OrdinalIgnoreCase) >= 0 AndAlso msg.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0) Then
             Return "TemplateNotFound"
+        End If
+        If msg.IndexOf("missing data contract", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            (msg.IndexOf("data contract", StringComparison.OrdinalIgnoreCase) >= 0 AndAlso msg.IndexOf("leaf node", StringComparison.OrdinalIgnoreCase) >= 0) Then
+            Return "LeafContractMissing"
         End If
         If msg.IndexOf("dataContract", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
             msg.IndexOf("missing dataContract", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
@@ -153,7 +181,8 @@ Public Class FlowCompiler
                         .RowId = Nothing,
                         .EdgeId = edge.Id,
                         .ConditionId = conditionId,
-                        .Message = "Edge references a condition that was not found.",
+                        .Message = String.Empty,
+                        .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("ConditionNotFound"),
                         .Severity = ErrorSeverity.Error,
                         .Category = "ConditionNotFound"
                     })
@@ -168,7 +197,8 @@ Public Class FlowCompiler
                             .RowId = Nothing,
                             .EdgeId = edge.Id,
                             .ConditionId = conditionId,
-                            .Message = "Condition has no executable rule.",
+                            .Message = String.Empty,
+                            .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("ConditionMissingScript"),
                             .Severity = ErrorSeverity.Error,
                             .Category = "ConditionMissingScript"
                         })
@@ -182,7 +212,8 @@ Public Class FlowCompiler
                         .RowId = Nothing,
                         .EdgeId = edge.Id,
                         .ConditionId = conditionId,
-                        .Message = "Condition has no expression block.",
+                        .Message = String.Empty,
+                        .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("ConditionMissingScript"),
                         .Severity = ErrorSeverity.Error,
                         .Category = "ConditionMissingScript"
                     })
@@ -202,7 +233,8 @@ Public Class FlowCompiler
                     .RowId = Nothing,
                     .EdgeId = edge.Id,
                     .SiblingEdgeIds = siblings,
-                    .Message = "Labeled edge without routing rule on multi-exit node.",
+                    .Message = String.Empty,
+                    .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("LinkMissingCondition"),
                     .Severity = ErrorSeverity.Error,
                     .Category = "LinkMissingCondition"
                 })
@@ -267,7 +299,8 @@ Public Class FlowCompiler
                 .TaskId = "SYSTEM",
                 .NodeId = Nothing,
                 .RowId = Nothing,
-                .Message = "No entry node defined for this flow.",
+                .Message = String.Empty,
+                .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("NoEntryNodes"),
                 .Severity = ErrorSeverity.Error,
                 .Category = "NoEntryNodes"
             })
@@ -291,7 +324,8 @@ Public Class FlowCompiler
                 .TaskId = "SYSTEM",
                 .NodeId = Nothing,
                 .RowId = Nothing,
-                .Message = "Multiple entry nodes found.",
+                .Message = String.Empty,
+                .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("MultipleEntryNodes"),
                 .Severity = ErrorSeverity.Warning,
                 .Category = "MultipleEntryNodes",
                 .EntryNodeIds = entryNodes.Select(Function(n) n.Id).Where(Function(id) Not String.IsNullOrEmpty(id)).ToList()
@@ -343,7 +377,8 @@ Public Class FlowCompiler
                         .RowTaskRef = "",
                         .MissingTaskRef = True,
                         .ResolvedTaskId = "",
-                        .Message = "Row has no task reference.",
+                        .Message = String.Empty,
+                        .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("MissingOrInvalidTask"),
                         .Severity = ErrorSeverity.Error,
                         .Category = "MissingOrInvalidTask"
                     })
@@ -380,7 +415,8 @@ Public Class FlowCompiler
                         .RowTaskRef = taskId,
                         .MissingTaskRef = False,
                         .ResolvedTaskId = "",
-                        .Message = "Referenced task does not exist in this flow.",
+                        .Message = String.Empty,
+                        .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("MissingOrInvalidTask"),
                         .Severity = ErrorSeverity.Error,
                         .Category = "MissingOrInvalidTask"
                     })
@@ -405,7 +441,8 @@ Public Class FlowCompiler
                         .RowLabel = FormatRowUserLabel(row),
                         .RowTaskRef = taskId,
                         .ResolvedTaskId = If(task.Id, ""),
-                        .Message = "Task type is not set.",
+                        .Message = String.Empty,
+                        .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("TaskTypeInvalidOrMissing"),
                         .Severity = ErrorSeverity.Error,
                         .Category = "TaskTypeInvalidOrMissing"
                     })
@@ -428,7 +465,8 @@ Public Class FlowCompiler
                         .RowTaskRef = taskId,
                         .ResolvedTaskId = If(task.Id, ""),
                         .InvalidType = typeValue,
-                        .Message = "Task type value is invalid.",
+                        .Message = String.Empty,
+                        .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("TaskTypeInvalidOrMissing"),
                         .Severity = ErrorSeverity.Error,
                         .Category = "TaskTypeInvalidOrMissing"
                     })
@@ -516,7 +554,8 @@ Public Class FlowCompiler
                         .EdgeId = primaryId,
                         .Reason = "missingConditionInMultiExit",
                         .ConflictsWith = conflicts,
-                        .Message = "Ambiguous outgoing links (missing routing rule on multi-exit).",
+                        .Message = String.Empty,
+                        .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("AmbiguousLink", "missingConditionInMultiExit"),
                         .Severity = ErrorSeverity.Error,
                         .Category = "AmbiguousLink"
                     })
@@ -537,7 +576,8 @@ Public Class FlowCompiler
                         .EdgeId = ids(0),
                         .Reason = "sameLabel",
                         .ConflictsWith = ids.Skip(1).ToList(),
-                        .Message = "Duplicate outgoing edge labels.",
+                        .Message = String.Empty,
+                        .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("AmbiguousLink", "sameLabel"),
                         .Severity = ErrorSeverity.Error,
                         .Category = "AmbiguousLink"
                     })
@@ -560,7 +600,8 @@ Public Class FlowCompiler
                             .EdgeId = ids(0),
                             .Reason = "sameCondition",
                             .ConflictsWith = ids.Skip(1).ToList(),
-                            .Message = "Duplicate condition on multiple outgoing links.",
+                            .Message = String.Empty,
+                            .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("AmbiguousLink", "sameCondition"),
                             .Severity = ErrorSeverity.Error,
                             .Category = "AmbiguousLink"
                         })
@@ -587,7 +628,8 @@ Public Class FlowCompiler
                             .EdgeId = idList(0),
                             .Reason = "overlappingConditions",
                             .ConflictsWith = idList.Skip(1).ToList(),
-                            .Message = "Identical condition script on multiple outgoing links.",
+                            .Message = String.Empty,
+                            .Code = CompilationErrorCanonicalMapping.CodeFromLegacyCategory("AmbiguousLink", "overlappingConditions"),
                             .Severity = ErrorSeverity.Error,
                             .Category = "AmbiguousLink"
                         })

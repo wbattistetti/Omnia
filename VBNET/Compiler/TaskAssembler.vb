@@ -181,9 +181,10 @@ Public Class TaskAssembler
                 New List(Of CompilationError) From {
                     New CompilationError With {
                         .NodeId = ideNode.Id,
-                        .Category = "MissingDataContract",
-                        .DetailCode = "DataContractRequired",
-                        .Message = "Utterance task with dialogue steps must declare a dataContract (NLP contract)."
+                        .Category = String.Empty,
+                        .DetailCode = String.Empty,
+                        .Message = String.Empty,
+                        .Code = CompilationErrorCanonicalMapping.CanonicalCode(CompilationErrorCode.ParserMissing)
                     }
                 })
         End If
@@ -197,17 +198,19 @@ Public Class TaskAssembler
                     For Each ve As String In task.NlpContract.ValidationErrors
                         errList.Add(New CompilationError With {
                             .NodeId = ideNode.Id,
-                            .Category = "NlpContractInvalid",
-                            .DetailCode = "ValidationFailed",
-                            .Message = ve
+                            .Category = String.Empty,
+                            .DetailCode = String.Empty,
+                            .Message = String.Empty,
+                            .Code = CompilationErrorCanonicalMapping.CanonicalCode(CompilationErrorCode.ParserMissing)
                         })
                     Next
                 Else
                     errList.Add(New CompilationError With {
                         .NodeId = ideNode.Id,
-                        .Category = "NlpContractInvalid",
-                        .DetailCode = "ValidationFailed",
-                        .Message = "NLP contract compilation failed."
+                        .Category = String.Empty,
+                        .DetailCode = String.Empty,
+                        .Message = String.Empty,
+                        .Code = CompilationErrorCanonicalMapping.CanonicalCode(CompilationErrorCode.ParserMissing)
                     })
                 End If
                 Throw New UtteranceTaskCompilationException("NLP contract validation failed.", errList)
@@ -221,9 +224,10 @@ Public Class TaskAssembler
                     New List(Of CompilationError) From {
                         New CompilationError With {
                             .NodeId = ideNode.Id,
-                            .Category = "EmptyInterpretationEngines",
-                            .DetailCode = "NoEnginesBound",
-                            .Message = "At least one enabled NLP engine (regex and/or grammarflow) must be present and valid."
+                            .Category = String.Empty,
+                            .DetailCode = String.Empty,
+                            .Message = String.Empty,
+                            .Code = CompilationErrorCanonicalMapping.CanonicalCode(CompilationErrorCode.ParserMissing)
                         }
                     })
             End If
@@ -567,9 +571,10 @@ Public Class TaskAssembler
                         New List(Of CompilationError) From {
                             New CompilationError With {
                                 .NodeId = ideNode.Id,
-                                .Category = "CanonicalGuidResolution",
-                                .DetailCode = "SubMappingKeyNotResolved",
-                                .Message = $"SubDataMapping key '{kvp.Key}' must match a subTask node id or be a valid GUID."
+                                .Category = String.Empty,
+                                .DetailCode = String.Empty,
+                                .Message = String.Empty,
+                                .Code = CompilationErrorCanonicalMapping.CanonicalCode(CompilationErrorCode.ParserMissing)
                             }
                         })
                 End If

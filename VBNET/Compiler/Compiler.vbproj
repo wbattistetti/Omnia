@@ -100,6 +100,8 @@
     <Compile Include="DTO\Runtime\CompiledTaskListConverter.vb" />
     <!-- ✅ Error handling - Must be compiled BEFORE CompiledFlow (which uses them) -->
     <Compile Include="DTO\Runtime\ErrorSeverity.vb" />
+    <Compile Include="DTO\Runtime\CompilationErrorCode.vb" />
+    <Compile Include="DTO\Runtime\CompilationErrorCanonicalMapping.vb" />
     <Compile Include="DTO\Runtime\CompilationError.vb" />
     <Compile Include="DTO\Runtime\CanonicalGuidTable.vb" />
     <Compile Include="DTO\Runtime\UtteranceTaskCompilationException.vb" />

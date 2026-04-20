@@ -10,6 +10,8 @@ import { enrichRowsWithTaskId } from '../../utils/taskHelpers';
 import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
 import { backendCompileFlowGraph, discoverSubflowCanvasIdsTransitively } from './backendCompileFlowGraph';
 import { loadFlow } from '../../flows/FlowPersistence';
+import { collectSubflowWorkspaceCompileErrors } from '../../domain/compileErrors/collectSubflowWorkspaceCompileErrors';
+import { normalizeSeverity } from '../../utils/severityUtils';
 
 export type CompileWorkspaceOrchestratorParams = {
   rootFlowId: string;
@@ -33,6 +35,20 @@ function enrichFlowNodes(nodes: Node<FlowNode>[]): Node<FlowNode>[] {
       rows: enrichRowsWithTaskId(node.data?.rows || []),
     },
   }));
+}
+
+function mergeCompileJsonGuardErrors(
+  compileJson: Record<string, unknown>,
+  guards: Record<string, unknown>[]
+): void {
+  if (!guards.length) return;
+  const cur = (compileJson.errors as unknown[]) ?? [];
+  const merged = [...cur, ...guards];
+  compileJson.errors = merged;
+  const hasBlocking = merged.some(
+    (e) => normalizeSeverity((e as { severity?: string })?.severity) === 'error'
+  );
+  compileJson.hasErrors = hasBlocking || compileJson.hasErrors === true;
 }
 
 function mergeTasksById(existing: unknown[], more: unknown[]): void {
@@ -91,6 +107,11 @@ export async function compileWorkspaceForOrchestratorSession(
 
   const rootArtifacts = await backendCompileFlowGraph(enrichedRoot, edges, ctx);
   const primaryCompileJson = rootArtifacts.compileJson;
+  const rootSubflowGuards = await collectSubflowWorkspaceCompileErrors({
+    enrichedNodes: enrichedRoot,
+    projectId,
+  });
+  mergeCompileJsonGuardErrors(primaryCompileJson, rootSubflowGuards);
   const mergedTasks = [...rootArtifacts.allTasksWithTemplates];
   const mergedDDTs = [...rootArtifacts.allDDTs];
   const subflowCompilations: Record<string, Record<string, unknown>> = {};
@@ -121,13 +142,16 @@ export async function compileWorkspaceForOrchestratorSession(
     }
 
     if (!sfNodes.length) {
-      throw new Error(
-        `Cannot compile subflow "${sfId}": missing or empty both in snapshot and persisted flow data.`
-      );
+      continue;
     }
 
     const en = enrichFlowNodes(sfNodes);
+    const nestedGuards = await collectSubflowWorkspaceCompileErrors({
+      enrichedNodes: en,
+      projectId,
+    });
     const art = await backendCompileFlowGraph(en, sfEdges || [], ctx);
+    mergeCompileJsonGuardErrors(art.compileJson, nestedGuards);
     subflowCompilations[sfId] = art.compileJson;
     mergeTasksById(mergedTasks, art.allTasksWithTemplates);
     mergedDDTs.push(...art.allDDTs);

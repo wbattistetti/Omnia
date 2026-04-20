@@ -52,7 +52,6 @@ import { resolveFlowTabDisplayTitle } from '@utils/resolveFlowTabDisplayTitle';
 import { variableCreationService } from '../services/VariableCreationService';
 import { logVariableHydration } from '../utils/variableMenuDebug';
 import { buildFlowCanvasRowFingerprint } from '../utils/flowWorkspaceUtteranceFingerprint';
-import { initializeErrorReportPanelService } from '../services/ErrorReportPanelService';
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableNonInteractiveEditor from './TaskEditor/ResponseEditor/ResizableNonInteractiveEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import ResizableTaskEditorHost from './TaskEditor/EditorHost/ResizableTaskEditorHost'; // ✅ RINOMINATO: ActEditor → TaskEditor, ResizableActEditorHost → ResizableTaskEditorHost
@@ -409,11 +408,6 @@ export const AppContent: React.FC<AppContentProps> = ({
     }
     prevProjectIdForDockRef.current = cur;
   }, [currentPid]);
-
-  // ✅ Initialize ErrorReportPanelService
-  React.useEffect(() => {
-    initializeErrorReportPanelService(setDockTree);
-  }, []);
 
   // ✅ REFACTOR: Map globale per tenere traccia di tutti i refs di chiusura per tutti i tab
   // Questo risolve il problema delle closure stale: quando tab.onClose viene chiamato,
@@ -982,6 +976,10 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [isResizingUseCase, setIsResizingUseCase] = useState(false);
   const [runtimeMessagesSnapshot, setRuntimeMessagesSnapshot] = useState<Message[]>([]);
   const runtimeBridgeRef = React.useRef<DebuggerRuntimeBridge | null>(null);
+  const handleGlobalDebuggerRuntimeBridgeReady = useCallback((bridge: DebuggerRuntimeBridge | null) => {
+    runtimeBridgeRef.current = bridge;
+    setRuntimeMessagesSnapshot(bridge?.getMessages() ?? []);
+  }, []);
   const [useCases, setUseCases] = useState<UseCase[]>([]);
   const [selectedUseCaseId, setSelectedUseCaseId] = useState<string | null>(null);
   const [useCaseRunResults, setUseCaseRunResults] = useState<UseCaseRunResult[]>([]);
@@ -1861,10 +1859,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                           executionLaunchType="flow"
                           onToggleUseCasePanel={() => setShowUseCasePanel((v) => !v)}
                           onSaveUseCase={saveUseCaseFromDebugger}
-                          onRuntimeBridgeReady={(bridge) => {
-                            runtimeBridgeRef.current = bridge;
-                            setRuntimeMessagesSnapshot(bridge?.getMessages() || []);
-                          }}
+                          onRuntimeBridgeReady={handleGlobalDebuggerRuntimeBridgeReady}
                           onMessagesSnapshotChange={setRuntimeMessagesSnapshot}
                           onClosePanel={() => {
                             setShowGlobalDebugger(false);

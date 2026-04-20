@@ -246,6 +246,8 @@ export interface ResponseEditorLayoutProps {
   // ✅ NEW: View mode for Behaviour (tabs or tree)
   viewMode?: 'tabs' | 'tree';
   onViewModeChange?: (mode: 'tabs' | 'tree') => void;
+  /** Open Recognition / parsers view (same as toolbar) — compile FIX ParserMissing */
+  onNavigateToRecognition?: () => void;
 }
 
 /**
@@ -349,6 +351,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     // ✅ NEW: View mode for Behaviour
     viewMode: viewModeProp,
     onViewModeChange: onViewModeChangeProp,
+    onNavigateToRecognition,
   } = props;
 
   // Wizard copy for labels/messages (WizardContext): used when publishing template data to Factory.
@@ -1335,6 +1338,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         <ResponseEditorNavigationProvider
           setLeftPanelMode={setLeftPanelMode}
           setTasksPanelMode={setTasksPanelMode}
+          onOpenRecognition={onNavigateToRecognition}
         >
           {content}
         </ResponseEditorNavigationProvider>

@@ -6,7 +6,7 @@
 
 import type { CompilationError, FixTarget } from '@components/FlowCompiler/types';
 import type { TaskEditorOpenEvent } from '@components/AppContent/domain/editorEvents';
-import { splitFlowPrefixedMessage } from '@components/ChatPanel/errorReportDisplay';
+import { splitFlowPrefixedMessage } from '@utils/flowPrefixedMessage';
 import { FlowStateBridge } from '@services/FlowStateBridge';
 import { resolveEdgeCaption } from '@components/Flowchart/utils/edgeConditionState';
 import { getActiveFlowCanvasId } from '@flows/activeFlowCanvas';
@@ -125,7 +125,20 @@ async function openTaskEditorForCompilationError(error: CompilationError): Promi
     openBehaviorPanel: true,
   };
 
-  switch (category) {
+  const code = (error.code ?? '').trim();
+
+  if (code === 'ParserMissing') {
+    navigation.openRecognition = true;
+    navigation.openBehaviorPanel = false;
+    navigation.openTasksPanel = false;
+  } else if (code === 'EscalationActionsMissing' && fixTarget.type === 'taskEscalation') {
+    navigation.stepKey = fixTarget.stepKey;
+    navigation.openTasksPanel = true;
+    navigation.openBehaviorPanel = false;
+    if (fixTarget.escalationIndex !== undefined) {
+      navigation.escalationIndex = fixTarget.escalationIndex;
+    }
+  } else switch (category) {
     case 'MissingOrInvalidTask':
     case 'TaskNotFound':
     case 'MissingTaskType':
@@ -208,14 +221,15 @@ async function openTaskEditorForCompilationError(error: CompilationError): Promi
   });
   document.dispatchEvent(event);
 
-  setTimeout(() => {
+  /** Editor tab mounts asynchronously; delay + retries inside ResponseEditorNavigationContext scroll helpers. */
+  window.setTimeout(() => {
     document.dispatchEvent(
       new CustomEvent('taskEditor:navigate', {
         detail: { navigation },
         bubbles: true,
       })
     );
-  }, 100);
+  }, 220);
 }
 
 /**

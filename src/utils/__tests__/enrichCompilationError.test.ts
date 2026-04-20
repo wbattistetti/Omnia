@@ -44,6 +44,21 @@ describe('enrichCompilationError', () => {
     });
   });
 
+  it('maps EscalationActionsMissing code to taskEscalation when category is empty (VB contract)', () => {
+    const e = enrichCompilationError({
+      category: '',
+      code: 'EscalationActionsMissing',
+      taskId: 'ref-task-guid',
+      rowId: 'row-instance-guid',
+      stepKey: 'noMatch',
+      message: '',
+      severity: 'Error',
+      escalationIndex: 0,
+    });
+    expect((e.fixTarget as { type: 'taskEscalation' }).type).toBe('taskEscalation');
+    expect((e.fixTarget as { type: 'taskEscalation' }).taskId).toBe('row-instance-guid');
+  });
+
   it('uses rowId as fixTarget taskId when both rowId and taskId differ (flowchart instance)', () => {
     const e = enrichCompilationError({
       category: 'EmptyEscalation',

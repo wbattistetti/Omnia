@@ -34,6 +34,8 @@ export interface TaskEditorOpenEvent {
     };
     openTasksPanel?: boolean;      // Open Tasks panel
     openBehaviorPanel?: boolean;   // Open Behavior panel
+    /** Recognition / contract / parsers view (toolbar “Recognition”) — e.g. ParserMissing FIX */
+    openRecognition?: boolean;
   };
 }
 

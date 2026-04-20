@@ -5,13 +5,13 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 
 export interface ResponseEditorNavigationContextValue {
-  // Step navigation
-  navigateToStep: (stepKey: string) => void;
+  // Step navigation (optional callback after tab scroll lands)
+  navigateToStep: (stepKey: string, onComplete?: () => void) => void;
   currentStepKey: string | null;
   setCurrentStepKey: (stepKey: string | null) => void;
 
-  // Escalation navigation
-  navigateToEscalation: (stepKey: string, escalationIndex: number) => void;
+  // Escalation navigation (optional callback runs after scroll lands — e.g. open Tasks palette)
+  navigateToEscalation: (stepKey: string, escalationIndex: number, onComplete?: () => void) => void;
 
   // Auto-edit prompt
   setAutoEditTarget: (target: { escIdx: number; taskIdx: number } | null) => void;
@@ -30,53 +30,79 @@ export interface ResponseEditorNavigationContextValue {
     autoEditTarget?: { escIdx: number; taskIdx: number };
     openTasksPanel?: boolean;
     openBehaviorPanel?: boolean;
+    openRecognition?: boolean;
   } | null;
   clearPendingNavigation: () => void;
 }
 
 const ResponseEditorNavigationContext = createContext<ResponseEditorNavigationContextValue | undefined>(undefined);
 
+const NAV_SCROLL_MAX_ATTEMPTS = 45;
+const NAV_SCROLL_INTERVAL_MS = 50;
+
 export function ResponseEditorNavigationProvider({
   children,
   setLeftPanelMode,
   setTasksPanelMode,
+  onOpenRecognition,
 }: {
   children: React.ReactNode;
   setLeftPanelMode?: (mode: any) => void;
   setTasksPanelMode?: (mode: any) => void;
+  /** Same UX as toolbar “Recognition” — contract / parsers (compile FIX ParserMissing). */
+  onOpenRecognition?: () => void;
 }) {
   const [currentStepKey, setCurrentStepKey] = useState<string | null>(null);
   const [autoEditTarget, setAutoEditTargetState] = useState<{ escIdx: number; taskIdx: number } | null>(null);
   const [pendingNavigation, setPendingNavigation] = useState<ResponseEditorNavigationContextValue['pendingNavigation']>(null);
 
-  const navigateToStep = useCallback((stepKey: string) => {
+  const navigateToStep = useCallback((stepKey: string, onComplete?: () => void) => {
     setCurrentStepKey(stepKey);
-    // Scroll to step tab if available — use a short outline flash (no errorPulse) to avoid flicker on text
-    setTimeout(() => {
+    let attempt = 0;
+    const tryScroll = () => {
+      attempt += 1;
       const stepElement = document.querySelector(`[data-step-key="${stepKey}"]`);
       if (stepElement) {
         stepElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         stepElement.classList.add('navigation-step-flash');
-        setTimeout(() => {
+        window.setTimeout(() => {
           stepElement.classList.remove('navigation-step-flash');
         }, 450);
+        onComplete?.();
+        return;
       }
-    }, 100);
+      if (attempt < NAV_SCROLL_MAX_ATTEMPTS) {
+        window.setTimeout(tryScroll, NAV_SCROLL_INTERVAL_MS);
+      } else {
+        onComplete?.();
+      }
+    };
+    window.setTimeout(tryScroll, 0);
   }, []);
 
-  const navigateToEscalation = useCallback((stepKey: string, escalationIndex: number) => {
-    /** One update + one scroll — do not call navigateToStep (avoids double scroll / tab fight with BehaviourUi). */
+  const navigateToEscalation = useCallback((stepKey: string, escalationIndex: number, onComplete?: () => void) => {
+    /** After BehaviourUi switches tab, escalation nodes mount async — retry scroll until present. */
     setCurrentStepKey(stepKey);
-    setTimeout(() => {
+    let attempt = 0;
+    const tryScroll = () => {
+      attempt += 1;
       const escalationElement = document.querySelector(`[data-escalation-index="${escalationIndex}"]`);
       if (escalationElement) {
         escalationElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         escalationElement.classList.add('navigation-step-flash');
-        setTimeout(() => {
+        window.setTimeout(() => {
           escalationElement.classList.remove('navigation-step-flash');
         }, 450);
+        onComplete?.();
+        return;
       }
-    }, 120);
+      if (attempt < NAV_SCROLL_MAX_ATTEMPTS) {
+        window.setTimeout(tryScroll, NAV_SCROLL_INTERVAL_MS);
+      } else {
+        onComplete?.();
+      }
+    };
+    window.setTimeout(tryScroll, 0);
   }, []);
 
   const setAutoEditTarget = useCallback((target: { escIdx: number; taskIdx: number } | null) => {
@@ -141,7 +167,8 @@ export function ResponseEditorNavigationProvider({
               'openTasksPanel' in raw ||
               'escalationIndex' in raw ||
               'openBehaviorPanel' in raw ||
-              'autoEditTarget' in raw
+              'autoEditTarget' in raw ||
+              'openRecognition' in raw
             ? (raw as ResponseEditorNavigationContextValue['pendingNavigation'])
             : null;
       if (!navigation) return;
@@ -149,11 +176,22 @@ export function ResponseEditorNavigationProvider({
       // Store pending navigation
       setPendingNavigation(navigation);
 
+      if (navigation.openRecognition && onOpenRecognition) {
+        onOpenRecognition();
+      }
+
+      let deferOpenTasks =
+        navigation.openTasksPanel === true &&
+        !(navigation.escalationIndex !== undefined && navigation.stepKey) &&
+        !navigation.stepKey;
+
+      const openTasksAfterScroll = navigation.openTasksPanel === true ? () => openTasksPanel() : undefined;
+
       // Apply navigation (escalation path sets the step once; do not also call navigateToStep)
       if (navigation.escalationIndex !== undefined && navigation.stepKey) {
-        navigateToEscalation(navigation.stepKey, navigation.escalationIndex);
+        navigateToEscalation(navigation.stepKey, navigation.escalationIndex, openTasksAfterScroll);
       } else if (navigation.stepKey) {
-        navigateToStep(navigation.stepKey);
+        navigateToStep(navigation.stepKey, openTasksAfterScroll);
       }
 
       if (navigation.autoEditTarget) {
@@ -164,7 +202,7 @@ export function ResponseEditorNavigationProvider({
         openBehaviorPanel();
       }
 
-      if (navigation.openTasksPanel) {
+      if (deferOpenTasks) {
         openTasksPanel();
       }
     };
@@ -173,7 +211,14 @@ export function ResponseEditorNavigationProvider({
     return () => {
       document.removeEventListener('taskEditor:navigate', handleNavigationEvent as EventListener);
     };
-  }, [navigateToStep, navigateToEscalation, setAutoEditTarget, openBehaviorPanel, openTasksPanel]);
+  }, [
+    navigateToStep,
+    navigateToEscalation,
+    setAutoEditTarget,
+    openBehaviorPanel,
+    openTasksPanel,
+    onOpenRecognition,
+  ]);
 
   const value = useMemo<ResponseEditorNavigationContextValue>(
     () => ({

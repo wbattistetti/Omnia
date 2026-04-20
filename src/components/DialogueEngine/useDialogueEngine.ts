@@ -327,15 +327,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         );
 
         if (blockingErrors.length > 0) {
-          // ✅ Open Error Report Panel automatically
-          try {
-            const { openErrorReportPanelService } = await import('../../services/ErrorReportPanelService');
-            openErrorReportPanelService();
-          } catch (e) {
-            console.error('[useDialogueEngine] ❌ Failed to open Error Report Panel:', e);
-          }
-
-          // ✅ Show user-friendly message in chat
+          // ✅ Show user-friendly message in chat (full list + FIX live in the flow debugger panel)
           const { formatCompilationErrorMessage } = await import('../../utils/errorMessageFormatter');
           const errorMessage = formatCompilationErrorMessage(blockingErrors);
 
@@ -343,7 +335,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           if (opts.onMessage) {
             opts.onMessage({
               id: `error-${Date.now()}`,
-              text: errorMessage + '\n\n💡 Apri il pannello Error Report per vedere i dettagli e selezionare i nodi con problemi.',
+              text: errorMessage + '\n\n💡 Apri il debugger del flusso (Run): lì trovi l’elenco errori con Fix.',
               stepType: 'error',
               taskId: 'SYSTEM'
             });

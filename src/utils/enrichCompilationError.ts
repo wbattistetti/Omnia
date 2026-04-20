@@ -27,6 +27,7 @@ function num(v: unknown): number | undefined {
  */
 export function buildFixTargetForCompilationError(
   category: string,
+  canonicalCode: string | undefined,
   taskId: string,
   rowId: string | undefined,
   nodeId: string | undefined,
@@ -35,8 +36,9 @@ export function buildFixTargetForCompilationError(
   escalationIndex?: number
 ): FixTarget {
   const cat = category.trim();
+  const code = (canonicalCode ?? '').trim();
   if (
-    cat === 'EmptyEscalation' &&
+    (cat === 'EmptyEscalation' || code === 'EscalationActionsMissing') &&
     taskId &&
     taskId !== 'SYSTEM' &&
     stepKey
@@ -82,8 +84,11 @@ export function enrichCompilationError(raw: Record<string, unknown>): Compilatio
   const escalationIndex = num(pick(raw, 'escalationIndex'));
   const taskTypeNum = num(pick(raw, 'taskType'));
 
+  const codeRaw = str(pick(raw, 'code'));
+
   const fixTarget = buildFixTargetForCompilationError(
     category,
+    codeRaw || undefined,
     taskId,
     rowId,
     nodeId,
@@ -91,7 +96,6 @@ export function enrichCompilationError(raw: Record<string, unknown>): Compilatio
     stepKeyRaw,
     escalationIndex
   );
-
   return {
     taskId,
     nodeId,
@@ -99,6 +103,7 @@ export function enrichCompilationError(raw: Record<string, unknown>): Compilatio
     edgeId,
     message,
     severity,
+    code: codeRaw || undefined,
     category: category || undefined,
     fixTarget,
     rowLabel: str(pick(raw, 'rowLabel')) || undefined,

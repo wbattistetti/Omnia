@@ -4,8 +4,7 @@ Imports Newtonsoft.Json
 
 ''' <summary>
 ''' Compilation error with task/node/row/edge context and optional structured fields for UI and tooling.
-''' category = stable code (e.g. MissingOrInvalidTask, AmbiguousLink); message = short diagnostic (English).
-''' Human-facing copy is resolved on the frontend from category + these fields.
+''' Prefer <see cref="Code"/> + context fields; avoid user-facing sentences in <see cref="Message"/>.
 ''' </summary>
 Public Class CompilationError
     <JsonProperty("taskId")>
@@ -23,11 +22,17 @@ Public Class CompilationError
     <JsonProperty("message")>
     Public Property Message As String
 
+    ''' <summary>
+    ''' Canonical code (same name as <see cref="CompilationErrorCode"/>). UX copy is resolved on the client.
+    ''' </summary>
+    <JsonProperty("code")>
+    Public Property Code As String
+
     <JsonProperty("severity")>
     Public Property Severity As ErrorSeverity
 
     ''' <summary>
-    ''' Stable error kind: NoEntryNodes, MissingOrInvalidTask, AmbiguousLink, TaskCompilationFailed, etc.
+    ''' Legacy stable kind for routing / migration (e.g. TaskCompilationFailed). Prefer <see cref="Code"/>.
     ''' </summary>
     <JsonProperty("category")>
     Public Property Category As String
@@ -110,5 +115,6 @@ Public Class CompilationError
         TechnicalDetail = String.Empty
         Reason = String.Empty
         StepKey = String.Empty
+        Code = String.Empty
     End Sub
 End Class
