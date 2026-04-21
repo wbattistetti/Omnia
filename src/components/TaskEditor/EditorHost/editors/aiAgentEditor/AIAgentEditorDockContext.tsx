@@ -12,6 +12,7 @@ import type { StructuredSectionsRevisionState } from './structuredSectionsRevisi
 import type { IaSectionDiffPair } from './iaSectionDiffTypes';
 import type { RevisionBatchOp } from './textRevisionLinear';
 import type { AgentPromptPlatformId, BackendPlaceholderInstance, PlatformPromptOutput } from '@domain/agentPrompt';
+import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 
 export interface AIAgentEditorDockContextValue {
   instanceId: string | undefined;
@@ -80,6 +81,14 @@ export interface AIAgentEditorDockContextValue {
   /** Prompt Finale panel: mutually exclusive textual IR preview vs readonly JS/JSON bundle. */
   promptFinaleJsMode: boolean;
   setPromptFinaleJsMode: (value: boolean) => void;
+
+  /** Per-task runtime IA motor overrides (persisted as `agentIaRuntimeOverrideJson`). */
+  iaRuntimeConfig: IAAgentConfig;
+  setIaRuntimeConfig: (next: IAAgentConfig) => void;
+  /** Loaded from saved task JSON vs copied global defaults when override was absent. */
+  iaRuntimeLoadedFrom: 'saved_override' | 'global_defaults';
+  /** Writes current editor state to TaskRepository including override JSON ("Salva override"). */
+  saveIaRuntimeOverrideToTask: () => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

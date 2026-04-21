@@ -13,12 +13,14 @@ import {
   ListOrdered,
   Pencil,
   ScrollText,
+  Settings,
   Shield,
   Sparkles,
   Target,
   UserCircle,
 } from 'lucide-react';
 import { AGENT_STRUCTURED_SECTION_TAB_TITLE } from './agentStructuredSectionIds';
+import { AI_AGENT_DOCK_PANEL_IDS } from './aiAgentDockPanelIds';
 
 const EMPTY = 'text-slate-500';
 
@@ -39,6 +41,7 @@ const FILLED = {
   examples: 'text-rose-300',
   dati: 'text-amber-300',
   useCases: 'text-violet-300',
+  agentSetup: 'text-violet-300',
 } as const;
 
 /** Distinct “human input” chrome for Descrizione (not IR); right edge separates from IR tabs. */
@@ -144,6 +147,12 @@ export function getAiAgentDockTabPresentation(
       return {
         icon: Ic(GitBranch, c(FILLED.useCases)),
         titleClassName: c(FILLED.useCases),
+      };
+    case AI_AGENT_DOCK_PANEL_IDS.iaRuntime:
+      return {
+        icon: Ic(Settings, c(FILLED.agentSetup)),
+        titleClassName: c(FILLED.agentSetup),
+        nativeTitle: 'Agent setup: runtime task; Salva override per persistere.',
       };
     default:
       return null;

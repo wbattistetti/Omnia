@@ -22,6 +22,7 @@ export interface AIAgentPersistState {
   hasAgentGeneration: boolean;
   agentLogicalStepsJson: string;
   agentUseCasesJson: string;
+  agentIaRuntimeOverrideJson: string;
 }
 
 /**
@@ -46,5 +47,6 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentDesignHasGeneration: state.hasAgentGeneration,
     agentLogicalStepsJson: state.agentLogicalStepsJson,
     agentUseCasesJson: state.agentUseCasesJson,
+    agentIaRuntimeOverrideJson: state.agentIaRuntimeOverrideJson,
   };
 }

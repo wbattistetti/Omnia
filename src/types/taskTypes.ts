@@ -456,6 +456,8 @@ export interface Task {
   agentLogicalStepsJson?: string;
   /** JSON array: use cases tree + dialogue (design-time). */
   agentUseCasesJson?: string;
+  /** JSON string: full {@link IAAgentConfig} (`types/iaAgentRuntimeSetup`) override for runtime motors (per task). */
+  agentIaRuntimeOverrideJson?: string;
 
   /**
    * Persisted sub-task tree for UtteranceInterpretation (structure + refs; steps/contracts on each Task row).

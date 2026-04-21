@@ -74,6 +74,9 @@ import {
   summarizeUseCasesForPersistLog,
 } from './aiAgentDebug';
 import { registerAiAgentProjectSaveFlush } from './aiAgentProjectSaveFlush';
+import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
+import { normalizeIAAgentConfig } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
+import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 
 export interface UseAIAgentEditorControllerParams {
   instanceId: string | undefined;
@@ -111,6 +114,14 @@ export function useAIAgentEditorController({
   const [backendPlaceholders, setBackendPlaceholders] = React.useState<BackendPlaceholderInstance[]>([]);
   const [agentPromptTargetPlatform, setAgentPromptTargetPlatformState] =
     React.useState<AgentPromptPlatformId>(() => normalizeAgentPromptPlatformId(undefined));
+
+  const [iaRuntimeConfig, setIaRuntimeConfigState] = React.useState<IAAgentConfig>(() =>
+    loadGlobalIaAgentConfig()
+  );
+  /** Set in `loadFromRepository`: task has `agentIaRuntimeOverrideJson` vs copy of global defaults. */
+  const [iaRuntimeLoadedFrom, setIaRuntimeLoadedFrom] = React.useState<'saved_override' | 'global_defaults'>(
+    'global_defaults'
+  );
 
   /** True only after `loadFromRepository` has applied repo data for this mount / reload. */
   const [hydrated, setHydrated] = React.useState(false);
@@ -212,6 +223,11 @@ export function useAIAgentEditorController({
     setAgentPromptTargetPlatformState(normalizeAgentPromptPlatformId(v));
   }, []);
 
+  const setIaRuntimeConfig = React.useCallback((next: IAAgentConfig) => {
+    setDirty(true);
+    setIaRuntimeConfigState(next);
+  }, []);
+
   const insertBackendPathAtSection = React.useCallback(
     (sectionId: AgentStructuredSectionId, path: string, rangeStart: number, rangeEnd?: number) => {
       const trimmed = String(path ?? '').trim();
@@ -303,6 +319,19 @@ export function useAIAgentEditorController({
     setHasAgentGeneration(resolveHasAgentGeneration(b));
     setLogicalSteps(b.logicalSteps);
     setUseCases(b.useCases);
+    const iaRaw = b.agentIaRuntimeOverrideJson.trim();
+    if (iaRaw) {
+      try {
+        setIaRuntimeConfigState(normalizeIAAgentConfig(JSON.parse(iaRaw) as unknown));
+        setIaRuntimeLoadedFrom('saved_override');
+      } catch {
+        setIaRuntimeConfigState(loadGlobalIaAgentConfig());
+        setIaRuntimeLoadedFrom('global_defaults');
+      }
+    } else {
+      setIaRuntimeConfigState(loadGlobalIaAgentConfig());
+      setIaRuntimeLoadedFrom('global_defaults');
+    }
     setUseCaseComposerError(null);
     setIaRevisionDiffBySection(null);
     logAiAgentDebug('loadFromRepository', {
@@ -334,6 +363,7 @@ export function useAIAgentEditorController({
       hasAgentGeneration,
       agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
       agentUseCasesJson,
+      agentIaRuntimeOverrideJson: JSON.stringify(iaRuntimeConfig),
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -370,7 +400,22 @@ export function useAIAgentEditorController({
     hasAgentGeneration,
     logicalSteps,
     useCases,
+    iaRuntimeConfig,
   ]);
+
+  /**
+   * Persists current {@link iaRuntimeConfig} into `agentIaRuntimeOverrideJson` on the task (plus full agent patch).
+   */
+  const saveIaRuntimeOverrideToTask = React.useCallback(() => {
+    if (!instanceId || !hydrated) return;
+    if (persistTimerRef.current) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    persistReasonRef.current = 'direct';
+    persistEditorStateToRepository();
+    setIaRuntimeLoadedFrom('saved_override');
+  }, [instanceId, hydrated, persistEditorStateToRepository]);
 
   dirtyRef.current = dirty;
   persistEditorStateToRepositoryRef.current = persistEditorStateToRepository;
@@ -700,5 +745,9 @@ export function useAIAgentEditorController({
     setAgentPromptTargetPlatform,
     compiledPlatformOutput,
     compiledPromptForTargetPlatform,
+    iaRuntimeConfig,
+    setIaRuntimeConfig,
+    iaRuntimeLoadedFrom,
+    saveIaRuntimeOverrideToTask,
   };
 }

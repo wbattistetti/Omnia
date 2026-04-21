@@ -7,6 +7,7 @@ export const AI_AGENT_DOCK_PANEL_IDS = {
   taskDesc: 'ai_agent_editor_task_desc',
   dati: 'ai_agent_editor_dati',
   useCases: 'ai_agent_editor_use_cases',
+  iaRuntime: 'ai_agent_editor_ia_runtime',
 } as const;
 
 export interface DockPanelRef {

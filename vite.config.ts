@@ -85,6 +85,9 @@ export default defineConfig({
       // OpenAPI proxy (Read API) — same FastAPI as below; explicit for clarity
       '/api/openapi-proxy': { target: 'http://localhost:8000', changeOrigin: true },
 
+      // Express IA catalog (Postgres + sync) — before catch-all /api
+      '/api/ia-catalog': { target: 'http://localhost:3100', changeOrigin: true },
+
       // FastAPI namespaced endpoints (other /api routes) - MUST come LAST
       '/api': { target: 'http://localhost:8000', changeOrigin: true },
     }

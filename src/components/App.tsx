@@ -26,6 +26,7 @@ import { MissingTranslationsDialog } from './common/MissingTranslationsDialog';
 import { generateMissingTranslations, type MissingTranslation } from '../services/TranslationIntegrityService';
 import { GlobalTestPanelProvider } from '@context/GlobalTestPanelContext';
 import { GlobalTestPanel } from '@components/GlobalTestPanel/GlobalTestPanel';
+import { ApplyEditorChrome } from '@components/settings/ApplyEditorChrome';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -155,6 +156,7 @@ function AppInner() {
 export default function App() {
   return (
     <ThemeProvider>
+      <ApplyEditorChrome />
       <ProjectDataProvider>
         <ProjectTranslationsProvider>
           <AIProviderProvider>

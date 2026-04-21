@@ -9,6 +9,7 @@ import {
   AGENT_STRUCTURED_SECTION_IDS,
   type AgentStructuredSectionId,
 } from './agentStructuredSectionIds';
+import { AI_AGENT_DOCK_PANEL_IDS } from './aiAgentDockPanelIds';
 
 function isStructuredSectionId(id: string): id is AgentStructuredSectionId {
   return (AGENT_STRUCTURED_SECTION_IDS as readonly string[]).includes(id);
@@ -35,6 +36,8 @@ export function isAiAgentDockPanelContentFilled(
       return ctx.proposedFields.length > 0;
     case 'ai_agent_editor_use_cases':
       return ctx.useCases.length > 0;
+    case AI_AGENT_DOCK_PANEL_IDS.iaRuntime:
+      return ctx.iaRuntimeLoadedFrom === 'saved_override';
     default: {
       if (isStructuredSectionId(panelId)) {
         const slice = ctx.structuredSectionsState[panelId];

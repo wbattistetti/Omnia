@@ -38,6 +38,7 @@ const AI_AGENT_INSTANCE_FIELD_KEYS = [
   'agentLogicalStepsJson',
   'agentUseCasesJson',
   'agentPromptTargetPlatform',
+  'agentIaRuntimeOverrideJson',
 ];
 
 /**

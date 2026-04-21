@@ -17,6 +17,7 @@ import {
   EditorUnifiedDescriptionPanel,
   EditorUseCasesPanel,
 } from './AIAgentEditorDockPanels';
+import { EditorIaRuntimePanel } from './EditorIaRuntimePanel';
 import { AI_AGENT_DOCK_PANEL_IDS as PANEL_IDS } from './aiAgentDockPanelIds';
 
 const PROMPT_FINALE_PANEL_ID = 'prompt_finale';
@@ -29,6 +30,7 @@ const UNIFIED_DOCK_COMPONENTS = {
   editorTaskDescription: EditorTaskDescriptionPanel,
   editorDati: EditorDatiPanel,
   editorUseCases: EditorUseCasesPanel,
+  editorIaRuntime: EditorIaRuntimePanel,
   agentSection: AgentSectionDockPanel,
   promptFinale: PromptFinaleDockPanel,
 };
@@ -105,6 +107,14 @@ function initUnifiedDock(
     title: 'Use case',
     params: {},
     position: { direction: 'within', referencePanel: PANEL_IDS.dati, index: 1 },
+  });
+
+  api.addPanel({
+    id: PANEL_IDS.iaRuntime,
+    component: 'editorIaRuntime',
+    title: 'Agent setup',
+    params: {},
+    position: { direction: 'within', referencePanel: PANEL_IDS.dati, index: 2 },
   });
 }
 

@@ -20,4 +20,5 @@ export const AI_AGENT_PERSIST_FIELD_KEYS: readonly string[] = [
   'agentLogicalStepsJson',
   'agentUseCasesJson',
   'agentPromptTargetPlatform',
+  'agentIaRuntimeOverrideJson',
 ];

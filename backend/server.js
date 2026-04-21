@@ -1,4 +1,8 @@
-
+/**
+ * Load backend/.env before other modules read process.env (ElevenLabs residency base, API keys).
+ */
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const cors = require('cors');
@@ -26,6 +30,7 @@ const TASK_TYPE_AI_AGENT = TaskTypeEnum.AIAgent;
 const CircuitBreakerManager = require('./middleware/CircuitBreakerManager');
 const RateLimiter = require('./middleware/RateLimiter');
 const AIHealthChecker = require('./health/AIHealthChecker');
+const { mountIaCatalog, runStartupIaCatalogSync } = require('./services/iaCatalog/catalogRoutes');
 
 console.log('>>> SERVER.JS AVVIATO <<<');
 
@@ -53,6 +58,8 @@ app.use(cors());
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
+mountIaCatalog(app);
+
 // ✅ Request logging middleware
 app.use((req, res, next) => {
   const startTime = Date.now();
@@ -71,7 +78,6 @@ app.use((req, res, next) => {
 
 const uri = 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
 const fs = require('fs');
-const path = require('path');
 const dbFactory = 'factory';
 const dbProjects = 'Projects';
 
@@ -7842,6 +7848,7 @@ Promise.race([initPromise, timeoutPromise])
     app.listen(3100, () => {
       console.log('[Server] ✅ Express server ready on port 3100');
       logInfo('Express', { message: 'Server ready on port 3100' });
+      runStartupIaCatalogSync();
     });
   })
   .catch((error) => {
@@ -7852,6 +7859,7 @@ Promise.race([initPromise, timeoutPromise])
     app.listen(3100, () => {
       console.log('[Server] ✅ Express server ready on port 3100 (MongoDB pool will initialize on first request)');
       logInfo('Express', { message: 'Server ready on port 3100 (MongoDB pool will initialize on first request)' });
+      runStartupIaCatalogSync();
     });
   });
 

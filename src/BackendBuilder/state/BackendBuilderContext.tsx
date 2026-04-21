@@ -1,6 +1,6 @@
 import React from 'react';
 
-type StepKey = 'design' | 'sources' | 'plan' | 'policies' | 'usecases' | 'codegen';
+export type StepKey = 'omniaTutor' | 'iaAgentRuntime' | 'font' | 'colors';
 
 export type ChatMessage = {
   id: string;
@@ -30,7 +30,7 @@ interface BackendBuilderState {
 const Ctx = React.createContext<BackendBuilderState | null>(null);
 
 export function BackendBuilderProvider({ children }: { children: React.ReactNode }) {
-  const [currentStep, setCurrentStep] = React.useState<StepKey>('design');
+  const [currentStep, setCurrentStep] = React.useState<StepKey>('omniaTutor');
 
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const addMessage = React.useCallback((m: Omit<ChatMessage, 'id' | 'ts'>) => {

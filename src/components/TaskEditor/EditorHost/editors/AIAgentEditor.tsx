@@ -115,6 +115,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     compiledPromptForTargetPlatform: c.compiledPromptForTargetPlatform,
     promptFinaleJsMode,
     setPromptFinaleJsMode,
+
+    iaRuntimeConfig: c.iaRuntimeConfig,
+    setIaRuntimeConfig: c.setIaRuntimeConfig,
+    iaRuntimeLoadedFrom: c.iaRuntimeLoadedFrom,
+    saveIaRuntimeOverrideToTask: c.saveIaRuntimeOverrideToTask,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;
