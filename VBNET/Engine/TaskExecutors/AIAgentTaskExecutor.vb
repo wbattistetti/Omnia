@@ -6,6 +6,7 @@ Imports System.Text
 Imports Compiler
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports TaskEngine
 
 ''' <summary>
 ''' Risultato di uno step AI Agent: nuovo stato JSON, messaggio assistente, completamento.
@@ -17,12 +18,18 @@ Public Class AIAgentStepResult
 End Class
 
 ''' <summary>
-''' Executor stateless per task AI Agent: una chiamata HTTP POST per turno, stato in ExecutionState.DialogueContexts.
+''' Executor stateless per task AI Agent: OpenAI = una POST LLM per turno; ElevenLabs = bridge HTTP sull&apos;ApiServer (<c>/elevenlabs/*</c>).
 ''' </summary>
 Public Class AIAgentTaskExecutor
     Inherits TaskExecutorBase
 
     Private Shared ReadOnly Http As New HttpClient With {.Timeout = TimeSpan.FromMinutes(2)}
+    ''' <summary>Long poll verso <c>readPrompt</c> (supera il timeout HTTP standard del client breve).</summary>
+    Private Shared ReadOnly HttpLong As New HttpClient With {.Timeout = TimeSpan.FromMinutes(3)}
+
+    Private Const ElevenLabsContextKind As String = "__omnia_ai_agent_kind"
+    Private Const ElevenLabsContextKindValue As String = "elevenlabs"
+    Private Const ElevenLabsConversationIdKey As String = "conversationId"
 
     ''' <summary>
     ''' Chiave in <c>state</c> dove il runtime inserisce le rules compilate (non è un campo top-level del POST).
@@ -34,16 +41,32 @@ Public Class AIAgentTaskExecutor
     End Sub
 
     ''' <summary>
-    ''' URL dell'endpoint: solo quello compilato nel task (<see cref="CompiledAIAgentTask.LlmEndpoint"/>).
-    ''' Nessun fallback da variabile d'ambiente: il compile deve includere sempre un URL assoluto.
+    ''' URL dell'endpoint LLM per il ramo OpenAI (<see cref="CompiledAIAgentTask.LlmEndpoint"/>).
     ''' </summary>
     Public Shared Function ResolveLlmEndpoint(taskEndpoint As String) As String
         Return If(taskEndpoint, "").Trim()
     End Function
 
     ''' <summary>
-    ''' Un passo: costruisce il payload, chiama il LLM, valida la risposta JSON.
-    ''' Nessuno stato conservato tra le chiamate oltre a HttpClient condiviso.
+    ''' Base URL ApiServer per i path <c>/elevenlabs/*</c> (override da task o env <c>OMNIA_API_PUBLIC_BASE_URL</c>).
+    ''' </summary>
+    Public Shared Function ResolveBackendBaseUrl(taskBase As String) As String
+        Dim t = If(taskBase, "").Trim()
+        If Not String.IsNullOrWhiteSpace(t) Then Return t.TrimEnd("/"c)
+        Dim env = Environment.GetEnvironmentVariable("OMNIA_API_PUBLIC_BASE_URL")
+        If Not String.IsNullOrWhiteSpace(env) Then Return env.Trim().TrimEnd("/"c)
+        Return "http://localhost:5000"
+    End Function
+
+    Private Shared Function CombineUrl(baseUrl As String, relativePath As String) As String
+        Dim b = baseUrl.TrimEnd("/"c)
+        Dim p = relativePath.Trim()
+        If Not p.StartsWith("/"c) Then p = "/" & p
+        Return b & p
+    End Function
+
+    ''' <summary>
+    ''' Un passo LLM OpenAI-compatible: costruisce il payload, chiama il backend, valida la risposta JSON.
     ''' </summary>
     Public Shared Async Function ExecuteStepAsync(
         stateJson As String,
@@ -108,23 +131,85 @@ Public Class AIAgentTaskExecutor
         }
     End Function
 
-    ''' <summary>
-    ''' Entrypoint TaskExecutor: aggiorna DialogueContexts e imposta TaskExecutionResult.
-    ''' </summary>
-    Public Overrides Async Function Execute(
+    Private Shared Function TryGetElevenLabsConversationId(rawContext As String) As String
+        If String.IsNullOrWhiteSpace(rawContext) Then Return Nothing
+        Try
+            Dim jo = JObject.Parse(rawContext)
+            If Not String.Equals(jo(ElevenLabsContextKind)?.ToString(), ElevenLabsContextKindValue, StringComparison.Ordinal) Then
+                Return Nothing
+            End If
+            Dim cid = jo(ElevenLabsConversationIdKey)?.ToString()
+            If String.IsNullOrWhiteSpace(cid) Then Return Nothing
+            Return cid.Trim()
+        Catch
+            Return Nothing
+        End Try
+    End Function
+
+    Private Shared Function BuildElevenLabsContextJson(conversationId As String) As String
+        Dim jo As New JObject From {
+            {ElevenLabsContextKind, ElevenLabsContextKindValue},
+            {ElevenLabsConversationIdKey, conversationId}
+        }
+        Return jo.ToString(Formatting.None)
+    End Function
+
+    Private Shared Async Function ElevenLabsStartAgentAsync(baseUrl As String, agentId As String, dynamicVars As Dictionary(Of String, Object), ct As System.Threading.CancellationToken) As System.Threading.Tasks.Task(Of String)
+        Dim url = CombineUrl(baseUrl, "/elevenlabs/startAgent")
+        Dim jo As New JObject From {
+            {"agentId", agentId},
+            {"dynamicVariables", JObject.FromObject(If(dynamicVars, New Dictionary(Of String, Object)()))}
+        }
+        Dim content As New StringContent(jo.ToString(Formatting.None), Encoding.UTF8, "application/json")
+        Dim resp = Await Http.PostAsync(url, content, ct).ConfigureAwait(False)
+        Dim body = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+        If Not resp.IsSuccessStatusCode Then
+            Throw New InvalidOperationException($"ElevenLabs startAgent failed: HTTP {CInt(resp.StatusCode)} — {body}")
+        End If
+        Dim out = JObject.Parse(body)
+        Dim cid = out("conversationId")?.ToString()
+        If String.IsNullOrWhiteSpace(cid) Then
+            Throw New InvalidOperationException("ElevenLabs startAgent response missing conversationId.")
+        End If
+        Return cid.Trim()
+    End Function
+
+    Private Shared Async Function ElevenLabsSendUserTurnAsync(baseUrl As String, conversationId As String, text As String, ct As System.Threading.CancellationToken) As System.Threading.Tasks.Task
+        Dim url = CombineUrl(baseUrl, "/elevenlabs/sendUserTurn")
+        Dim jo As New JObject From {
+            {"conversationId", conversationId},
+            {"text", If(text, "")}
+        }
+        Dim content As New StringContent(jo.ToString(Formatting.None), Encoding.UTF8, "application/json")
+        Dim resp = Await Http.PostAsync(url, content, ct).ConfigureAwait(False)
+        Dim body = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+        If Not resp.IsSuccessStatusCode Then
+            Throw New InvalidOperationException($"ElevenLabs sendUserTurn failed: HTTP {CInt(resp.StatusCode)} — {body}")
+        End If
+    End Function
+
+    Private Shared Async Function ElevenLabsReadPromptAsync(baseUrl As String, conversationId As String, ct As System.Threading.CancellationToken) As System.Threading.Tasks.Task(Of (Text As String, Status As String))
+        Dim url = CombineUrl(baseUrl, $"/elevenlabs/readPrompt/{Uri.EscapeDataString(conversationId)}")
+        Dim resp = Await HttpLong.GetAsync(url, ct).ConfigureAwait(False)
+        Dim body = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+        If resp.StatusCode = System.Net.HttpStatusCode.NotFound Then
+            Throw New InvalidOperationException($"ElevenLabs readPrompt: conversation not found ({conversationId}).")
+        End If
+        If Not resp.IsSuccessStatusCode Then
+            Throw New InvalidOperationException($"ElevenLabs readPrompt failed: HTTP {CInt(resp.StatusCode)} — {body}")
+        End If
+        Dim jo = JObject.Parse(body)
+        Dim agentTurn = If(jo("agentTurn")?.ToString(), "")
+        Dim status = If(jo("status")?.ToString(), "running")
+        Return (agentTurn, status)
+    End Function
+
+    Private Async Function ExecuteOpenAiBranch(
+        ai As CompiledAIAgentTask,
         task As CompiledTask,
         state As ExecutionState,
-        Optional userInput As String = ""
+        userInput As String
     ) As System.Threading.Tasks.Task(Of TaskExecutionResult)
-
-        Dim ai = TryCast(task, CompiledAIAgentTask)
-        If ai Is Nothing Then
-            Return New TaskExecutionResult With {
-                .Success = False,
-                .Err = "Task is not a CompiledAIAgentTask",
-                .IsCompleted = False
-            }
-        End If
 
         Dim stateJson = ""
         If state.DialogueContexts IsNot Nothing AndAlso state.DialogueContexts.ContainsKey(task.Id) Then
@@ -165,5 +250,96 @@ Public Class AIAgentTaskExecutor
             .WaitingTaskId = If(requiresInput, task.Id, Nothing),
             .IsCompleted = result.IsCompleted
         }
+    End Function
+
+    Private Async Function ExecuteElevenLabsBranch(
+        ai As CompiledAIAgentTask,
+        task As CompiledTask,
+        state As ExecutionState,
+        userInput As String
+    ) As System.Threading.Tasks.Task(Of TaskExecutionResult)
+
+        If String.IsNullOrWhiteSpace(ai.AgentId) Then
+            Return New TaskExecutionResult With {.Success = False, .Err = "ElevenLabs AI Agent requires compiled agentId.", .IsCompleted = False}
+        End If
+
+        Dim baseUrl = ResolveBackendBaseUrl(ai.BackendBaseUrl)
+
+        If state.DialogueContexts Is Nothing Then
+            state.DialogueContexts = New Dictionary(Of String, String)()
+        End If
+
+        Dim rawCtx = ""
+        If state.DialogueContexts.ContainsKey(task.Id) Then
+            rawCtx = state.DialogueContexts(task.Id)
+        End If
+
+        Dim conversationId = TryGetElevenLabsConversationId(rawCtx)
+
+        Try
+            If conversationId Is Nothing Then
+                conversationId = Await ElevenLabsStartAgentAsync(baseUrl, ai.AgentId.Trim(), ai.DynamicVariables, System.Threading.CancellationToken.None).ConfigureAwait(False)
+                state.DialogueContexts(task.Id) = BuildElevenLabsContextJson(conversationId)
+            End If
+
+            If Not String.IsNullOrWhiteSpace(userInput) Then
+                Await ElevenLabsSendUserTurnAsync(baseUrl, conversationId, userInput, System.Threading.CancellationToken.None).ConfigureAwait(False)
+            End If
+
+            Dim turn = Await ElevenLabsReadPromptAsync(baseUrl, conversationId, System.Threading.CancellationToken.None).ConfigureAwait(False)
+            Dim completed = turn.Status.Equals("completed", StringComparison.OrdinalIgnoreCase)
+
+            If completed Then
+                If state.DialogueContexts.ContainsKey(task.Id) Then
+                    state.DialogueContexts.Remove(task.Id)
+                End If
+            End If
+
+            If _messageCallback IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(turn.Text) Then
+                _messageCallback(turn.Text, "AIAgent", 0)
+            End If
+
+            Dim requiresInput = Not completed
+            Return New TaskExecutionResult With {
+                .Success = True,
+                .RequiresInput = requiresInput,
+                .WaitingTaskId = If(requiresInput, task.Id, Nothing),
+                .IsCompleted = completed
+            }
+        Catch ex As Exception
+            Return New TaskExecutionResult With {.Success = False, .Err = ex.Message, .IsCompleted = False}
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Entrypoint TaskExecutor: ramo OpenAI (LLM) o ElevenLabs (bridge ApiServer).
+    ''' </summary>
+    Public Overrides Async Function Execute(
+        task As CompiledTask,
+        state As ExecutionState,
+        Optional userInput As String = ""
+    ) As System.Threading.Tasks.Task(Of TaskExecutionResult)
+
+        Dim ai = TryCast(task, CompiledAIAgentTask)
+        If ai Is Nothing Then
+            Return New TaskExecutionResult With {
+                .Success = False,
+                .Err = "Task is not a CompiledAIAgentTask",
+                .IsCompleted = False
+            }
+        End If
+
+        Select Case ai.Platform
+            Case IAPlatform.ElevenLabs
+                Return Await ExecuteElevenLabsBranch(ai, task, state, userInput).ConfigureAwait(False)
+            Case IAPlatform.Google
+                Return New TaskExecutionResult With {
+                    .Success = False,
+                    .Err = "IAPlatform.Google is not implemented yet.",
+                    .IsCompleted = False
+                }
+            Case Else
+                Return Await ExecuteOpenAiBranch(ai, task, state, userInput).ConfigureAwait(False)
+        End Select
     End Function
 End Class

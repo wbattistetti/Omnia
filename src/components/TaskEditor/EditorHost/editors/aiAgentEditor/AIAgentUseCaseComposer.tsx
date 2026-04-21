@@ -16,6 +16,10 @@ import { previewToUseCaseDialogue, useCaseDialogueToPreview } from './useCaseDia
 import { HoverEditMultiline } from './HoverEditMultiline';
 import { LABEL_GENERATE_USE_CASES } from './constants';
 
+/** Main panels: slate-800 on near-black reads as broken/missing borders; slightly lighter edge for clarity. */
+const USE_CASE_PANEL_SHELL =
+  'rounded-lg border border-slate-600/65 bg-slate-900/40 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.06)]';
+
 export interface AIAgentUseCaseComposerProps {
   logicalSteps: readonly AIAgentLogicalStep[];
   useCases: readonly AIAgentUseCase[];
@@ -170,7 +174,7 @@ export function AIAgentUseCaseComposer({
 
       <div className="flex flex-1 min-h-0 gap-2 flex-col sm:flex-row sm:items-stretch sm:min-h-[320px]">
         {ordered.length === 0 ? (
-          <div className="flex-1 min-h-0 w-full rounded-lg border border-slate-800 bg-slate-900/40 overflow-y-auto flex flex-col">
+          <div className={`flex-1 min-h-0 w-full overflow-y-auto flex flex-col ${USE_CASE_PANEL_SHELL}`}>
             <div className="flex-1 min-h-[120px] flex flex-col items-center justify-center gap-4 p-6 text-center">
               <p className="text-sm text-slate-500 max-w-md">
                 {onGenerateUseCaseBundle
@@ -192,7 +196,9 @@ export function AIAgentUseCaseComposer({
           </div>
         ) : (
           <>
-            <div className="w-full sm:w-[44%] shrink-0 min-h-0 flex-1 rounded-lg border border-slate-800 bg-slate-900/40 overflow-y-auto flex flex-col self-stretch">
+            <div
+              className={`w-full sm:w-[44%] shrink-0 min-h-0 flex-1 overflow-y-auto flex flex-col self-stretch ${USE_CASE_PANEL_SHELL}`}
+            >
               <ul className="p-1.5 flex flex-col gap-1 flex-1 min-h-0">
                 {ordered.map((u) => {
                   const depth = depthById[u.id] ?? 0;
@@ -201,7 +207,7 @@ export function AIAgentUseCaseComposer({
                   const notesOpen = active && expandedIds.has(u.id);
                   const editingTitle = editingTitleId === u.id && active;
                   return (
-                    <li key={u.id} className="rounded-md border border-slate-800/90 bg-slate-950/30 overflow-hidden">
+                    <li key={u.id} className="rounded-md border border-slate-600/45 bg-slate-950/30 overflow-hidden">
                       <div
                         role="button"
                         tabIndex={0}
@@ -331,7 +337,7 @@ export function AIAgentUseCaseComposer({
                         </div>
                       </div>
                       {notesOpen ? (
-                        <div className="border-t border-slate-800/70 px-2 pb-2 pt-1.5">
+                        <div className="border-t border-slate-600/40 px-2 pb-2 pt-1.5">
                           <HoverEditMultiline
                             label=""
                             compact
@@ -345,7 +351,7 @@ export function AIAgentUseCaseComposer({
                             disabled={busy}
                             rows={3}
                           />
-                          <div className="mt-1 border-t border-slate-800/50 pt-1">
+                          <div className="mt-1 border-t border-slate-600/35 pt-1">
                             <HoverEditMultiline
                               label=""
                               compact
@@ -370,8 +376,8 @@ export function AIAgentUseCaseComposer({
 
             <div className="flex flex-1 min-h-0 flex-col overflow-hidden self-stretch">
               {selected ? (
-                <div className="flex flex-1 min-h-0 flex-col rounded-lg border border-slate-800 bg-slate-900/40 overflow-hidden">
-                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950/50 px-2 py-2 min-w-0">
+                <div className={`flex flex-1 min-h-0 flex-col overflow-hidden ${USE_CASE_PANEL_SHELL}`}>
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-600/45 bg-slate-950/50 px-2 py-2 min-w-0">
                     <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wide">
                       <MessageSquare size={14} className="shrink-0 text-violet-400" aria-hidden />
                       <span className="truncate">Esempio di dialogo</span>

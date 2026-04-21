@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <!-- Types and Enums -->
+    <Compile Include="Types\IAPlatform.vb" />
     <Compile Include="Types\TaskTypes.vb" />
     <Compile Include="Types\Types.vb" />
     <Compile Include="Types\SubflowBinding.vb" />

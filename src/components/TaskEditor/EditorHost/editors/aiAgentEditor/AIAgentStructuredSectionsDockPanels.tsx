@@ -141,9 +141,9 @@ export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
   );
 
   return (
-    <div className="h-full min-h-0 flex flex-col p-2 overflow-hidden bg-slate-950/80 gap-2">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-slate-950/80 px-2 pb-2 pt-1 gap-1">
       {!editorCtx ? null : jsMode ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-1">
           <ReadOnlyPlatformBanner />
           <textarea
             readOnly

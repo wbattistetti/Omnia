@@ -209,7 +209,8 @@
  * Bump the theme variable only inside the AI Agent shell so padding + tab row fit.
  */
 .ai-agent-editor-dock-shell {
-  --dv-tabs-and-actions-container-height: calc(35px + 24px);
+  /* Match vertical padding on .dv-tabs-and-actions-container (8px × 2) + Dockview tab row */
+  --dv-tabs-and-actions-container-height: calc(35px + 16px);
   --ai-agent-ir-tab-group-border: rgba(148, 163, 184, 0.38);
   --ai-agent-ir-tab-group-fill: rgba(148, 163, 184, 0.09);
   --ai-agent-ir-tab-group-fill-active: rgba(148, 163, 184, 0.18);
@@ -217,20 +218,48 @@
 
 /*
  * Strip container: layout only — the visible “frame” around IR sections lives on tabs Scopo…Tono (see below).
+ * Allow tab labels to wrap to a second row when space is tight (Dockview defaults to a single scroll row).
  */
 .ai-agent-editor-dock-shell .dv-groupview .dv-tabs-and-actions-container {
-  padding: 12px 16px;
-  margin: 8px 0 16px;
+  padding: 8px 16px;
+  margin: 4px 0 4px;
   background: transparent;
   border: none;
   box-shadow: none;
   box-sizing: border-box;
-  align-items: center;
+  align-items: flex-start;
+  height: auto !important;
+  min-height: calc(35px + 16px);
+}
+
+.ai-agent-editor-dock-shell .dv-groupview .dv-tabs-and-actions-container .dv-scrollable {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+.ai-agent-editor-dock-shell .dv-tabs-container {
+  flex-wrap: wrap !important;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 4px 0;
+  height: auto !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+}
+
+.ai-agent-editor-dock-shell .dv-scrollable > .dv-tabs-container {
+  overflow: visible !important;
+}
+
+.ai-agent-editor-dock-shell .dv-tab {
+  align-self: center;
 }
 
 /*
  * Single low-saturation rectangle around contiguous IR tabs (goal … tone), not around Descrizione or Prompt finale.
  * Dockview paints each .dv-tab with its own panel background — we unify fill + merge borders (:has requires a modern browser).
+ * When tabs wrap to two rows, the merged frame may split (e.g. last tab alone on row 2); layout still keeps all tabs visible.
  */
 .ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-structured-section='true']).dv-active-tab,
 .ai-agent-editor-dock-shell .dv-tab:has([data-ai-agent-structured-section='true']).dv-inactive-tab {

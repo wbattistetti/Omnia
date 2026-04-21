@@ -67,6 +67,11 @@
     <Compile Include="Interfaces\Handlers\ContractExtractHandlers.vb" />
     <Compile Include="Middleware\Utf8EncodingMiddleware.vb" />
     <Compile Include="Middleware\ExceptionLoggingMiddleware.vb" />
+    <Compile Include="ElevenLabs\ElevenLabsDtos.vb" />
+    <Compile Include="ElevenLabs\ElevenLabsTurnQueue.vb" />
+    <Compile Include="ElevenLabs\ElevenLabsSessionRegistry.vb" />
+    <Compile Include="ElevenLabs\ElevenLabsWebSocketRunner.vb" />
+    <Compile Include="ElevenLabs\ElevenLabsEndpoints.vb" />
     <!-- ❌ RIMOSSO: Migration\ContractMigrationRunner.vb - migrazione completata -->
   </ItemGroup>
 

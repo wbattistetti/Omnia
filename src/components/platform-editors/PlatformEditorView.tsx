@@ -15,7 +15,7 @@ import { ReadOnlyPlatformBanner } from './ReadOnlyPlatformBanner';
 
 export function PlatformEditorView({ output }: { output: PlatformPromptOutput }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
       <ReadOnlyPlatformBanner />
       {output.platform === AgentPlatform.Omnia ? (
         <OmniaEditor output={output} />

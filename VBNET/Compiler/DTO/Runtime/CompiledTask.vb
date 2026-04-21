@@ -381,10 +381,36 @@ Public Class CompiledTransferTask
 End Class
 
 ''' <summary>
-''' Task AI Agent: stato JSON persistito in ExecutionState.DialogueContexts; ogni turno chiama un endpoint LLM.
+''' Task AI Agent: per <see cref="IAPlatform.OpenAI"/> stato JSON in DialogieContexts + endpoint LLM;
+''' per <see cref="IAPlatform.ElevenLabs"/> conversation ID in DialogueContexts + bridge <c>/elevenlabs/*</c> sull&apos;ApiServer.
 ''' </summary>
 Public Class CompiledAIAgentTask
     Inherits CompiledTask
+
+    ''' <summary>
+    ''' Provider runtime (default: OpenAI / LLM interno per retrocompatibilità).
+    ''' </summary>
+    <JsonProperty("platform")>
+    <JsonConverter(GetType(IAPlatformJsonConverter))>
+    Public Property Platform As IAPlatform
+
+    ''' <summary>
+    ''' ElevenLabs agent id (ConvAI).
+    ''' </summary>
+    <JsonProperty("agentId")>
+    Public Property AgentId As String
+
+    ''' <summary>
+    ''' Dynamic variables for ElevenLabs conversation initiation.
+    ''' </summary>
+    <JsonProperty("dynamicVariables")>
+    Public Property DynamicVariables As Dictionary(Of String, Object)
+
+    ''' <summary>
+    ''' Base URL of this ApiServer for ElevenLabs HTTP bridge (must be reachable from the engine).
+    ''' </summary>
+    <JsonProperty("backendBaseUrl")>
+    Public Property BackendBaseUrl As String
 
     ''' <summary>
     ''' Prompt sintetico / regole del task (system-side contract).
@@ -395,7 +421,7 @@ Public Class CompiledAIAgentTask
     ''' <summary>
     ''' URL HTTP POST che accetta il payload runtime solo <c>state</c> e <c>user_message</c> (le rules compilate
     ''' sono iniettate in <c>state.__omnia_runtime_rules</c> dal motore). Risposta: new_state, assistant_message, status.
-    ''' Obbligatorio (non vuoto) dopo compile: il client di compile deve sempre valorizzarlo.
+    ''' Obbligatorio per il ramo OpenAI quando non configurato diversamente.
     ''' </summary>
     <JsonProperty("llmEndpoint")>
     Public Property LlmEndpoint As String
@@ -414,6 +440,10 @@ Public Class CompiledAIAgentTask
 
     Public Sub New()
         MyBase.New()
+        Platform = IAPlatform.OpenAI
+        AgentId = ""
+        DynamicVariables = New Dictionary(Of String, Object)()
+        BackendBaseUrl = ""
         Rules = ""
         LlmEndpoint = ""
     End Sub

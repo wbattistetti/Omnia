@@ -2,7 +2,6 @@ Option Strict On
 Option Explicit On
 Imports TaskEngine
 Imports Compiler.DTO.IDE
-Imports Compiler.DTO.Runtime
 Imports Newtonsoft.Json.Linq
 
 ''' <summary>
@@ -174,10 +173,29 @@ Public Class SimpleTaskCompiler
                 Dim agentTask As New CompiledAIAgentTask()
                 Dim agentDef = TryCast(task, AIAgentTaskDefinition)
                 If agentDef IsNot Nothing Then
+                    agentTask.Platform = agentDef.Platform
+                    agentTask.AgentId = If(agentDef.AgentId, "")
+                    agentTask.BackendBaseUrl = If(agentDef.BackendBaseUrl, "")
+                    If agentDef.DynamicVariables IsNot Nothing Then
+                        agentTask.DynamicVariables = agentDef.DynamicVariables
+                    Else
+                        agentTask.DynamicVariables = New Dictionary(Of String, Object)()
+                    End If
                     agentTask.Rules = If(agentDef.Rules, "")
                     agentTask.LlmEndpoint = If(agentDef.LlmEndpoint, "")
                 Else
                     If task.Value IsNot Nothing Then
+                        agentTask.Platform = IAPlatform.OpenAI
+                        Dim rawPlatform = ""
+                        If task.Value.ContainsKey("platform") Then
+                            rawPlatform = If(task.Value("platform")?.ToString(), "").Trim()
+                        End If
+                        agentTask.Platform = IAPlatformJsonConverter.ParsePlatformString(rawPlatform)
+
+                        agentTask.AgentId = If(TaskValueString(task.Value, "agentId"), "")
+                        agentTask.BackendBaseUrl = If(TaskValueString(task.Value, "backendBaseUrl"), "")
+                        agentTask.DynamicVariables = ParseDynamicVariablesFromTaskValue(task.Value)
+
                         If task.Value.ContainsKey("rules") Then
                             agentTask.Rules = If(task.Value("rules")?.ToString(), "")
                         End If
@@ -605,6 +623,30 @@ Public Class SimpleTaskCompiler
 
         Console.WriteLine($"[SimpleTaskCompiler] ✅ Compiled {compiled.Count} mockTable rows for task {taskId} (only active columns)")
         Return compiled
+    End Function
+
+    Private Shared Function TaskValueString(d As Dictionary(Of String, Object), key As String) As String
+        If d Is Nothing OrElse Not d.ContainsKey(key) OrElse d(key) Is Nothing Then Return ""
+        Return d(key).ToString()
+    End Function
+
+    ''' <summary>Parses <c>dynamicVariables</c> from IDE JSON (dictionary or object).</summary>
+    Private Shared Function ParseDynamicVariablesFromTaskValue(d As Dictionary(Of String, Object)) As Dictionary(Of String, Object)
+        Dim empty As New Dictionary(Of String, Object)()
+        If d Is Nothing OrElse Not d.ContainsKey("dynamicVariables") OrElse d("dynamicVariables") Is Nothing Then
+            Return empty
+        End If
+        Dim o = d("dynamicVariables")
+        Dim dict = TryCast(o, Dictionary(Of String, Object))
+        If dict IsNot Nothing Then
+            Return New Dictionary(Of String, Object)(dict)
+        End If
+        Dim jo = TryCast(o, JObject)
+        If jo IsNot Nothing Then
+            Dim parsed = jo.ToObject(Of Dictionary(Of String, Object))()
+            If parsed IsNot Nothing Then Return parsed
+        End If
+        Return empty
     End Function
 End Class
 

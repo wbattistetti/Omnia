@@ -214,6 +214,8 @@ Module Program
     ''' Maps all API endpoints
     ''' </summary>
     Private Sub MapApiEndpoints(app As WebApplication)
+        ApiServer.ElevenLabs.ElevenLabsEndpoints.MapElevenLabsRoutes(app)
+
         ' GET /api/health - Test endpoint
         app.MapGet("/api/health", Function() As IResult
                                       Console.WriteLine("✅ [Health] Health check requested")
