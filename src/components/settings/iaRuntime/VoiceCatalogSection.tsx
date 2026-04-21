@@ -24,10 +24,6 @@ const TT = {
     'Lingua principale delle risposte vocali. Di default segue la lingua del progetto; cambia solo per eccezioni multilingua.',
 } as const;
 
-/** Messaggio guida sempre visibile (non solo tooltip). */
-const GUIDE_COPY =
-  'Lingua e voce delle risposte vocali: elenco dal catalogo sincronizzato sul server (API ElevenLabs / residency). La lingua parte da quella del progetto; la voce definisce il timbro — modifica solo se serve un’eccezione.';
-
 export interface VoiceCatalogSectionProps {
   config: IAAgentConfig;
   showOverrideBadge?: boolean;
@@ -233,17 +229,13 @@ export function VoiceCatalogSection({
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex flex-row flex-wrap items-center gap-1">
-        <span className="text-[11px] font-semibold leading-none tracking-wide text-slate-200">
-          Lingua e voce
-        </span>
-        {showOverrideBadge ? (
+      {showOverrideBadge ? (
+        <div className="flex flex-row flex-wrap items-center gap-1">
           <span className="rounded border border-amber-500/35 bg-amber-500/15 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-amber-200">
             override
           </span>
-        ) : null}
-      </div>
-      <p className="max-w-[42rem] text-[10px] leading-snug text-slate-300">{GUIDE_COPY}</p>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-0.5">
         {blockingError ? (
           <div className="rounded border border-red-500/50 bg-red-950/40 px-1 py-0.5 text-[9px] leading-tight text-red-100">
