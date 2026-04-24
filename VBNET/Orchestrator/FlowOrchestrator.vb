@@ -598,42 +598,42 @@ Public Class FlowOrchestrator
     End Function
 
     ''' <summary>
-    ''' Handler per AI Agent: un passo LLM, stato JSON in DialogueContexts (come UtteranceInterpretation).
+    ''' Handler per AI Agent: delega a <see cref="TaskExecutor.ExecuteTask"/> → <see cref="AIAgentTaskExecutor.Execute"/>
+    ''' (dispatch LLM vs ElevenLabs già nell&apos;executor). Messaggi assistente raccolti dal callback <c>AIAgent</c>.
     ''' </summary>
     Private Async Function ProcessAIAgentTurn(rowTask As CompiledAIAgentTask) As System.Threading.Tasks.Task(Of RowTurnResult)
         Dim nav = ActiveFlow()
-        Dim stateJson = ""
-        If nav.DialogueContexts IsNot Nothing AndAlso nav.DialogueContexts.ContainsKey(rowTask.Id) Then
-            stateJson = nav.DialogueContexts(rowTask.Id)
-        End If
-
         Dim utterance = nav.PendingUtterance
         nav.PendingUtterance = ""
 
-        Dim endpoint = AIAgentTaskExecutor.ResolveLlmEndpoint(rowTask.LlmEndpoint)
-        Dim stepResult = Await AIAgentTaskExecutor.ExecuteStepAsync(
-            stateJson, utterance, rowTask.Rules, endpoint).ConfigureAwait(False)
+        Dim emittedMessages As New List(Of String)()
+        Dim execState = RuntimeStateForActiveFlow()
 
-        If nav.DialogueContexts Is Nothing Then
-            nav.DialogueContexts = New Dictionary(Of String, String)()
-        End If
-        If stepResult.IsCompleted Then
-            If nav.DialogueContexts.ContainsKey(rowTask.Id) Then
-                nav.DialogueContexts.Remove(rowTask.Id)
+        Dim result = Await TaskExecutor.ExecuteTask(
+            rowTask,
+            execState,
+            Sub(text As String, stepType As String, escalationNumber As Integer)
+                If String.Equals(stepType, "AIAgent", StringComparison.OrdinalIgnoreCase) AndAlso Not String.IsNullOrWhiteSpace(text) Then
+                    emittedMessages.Add(text)
+                End If
+            End Sub,
+            utterance
+        ).ConfigureAwait(False)
+
+        If Not result.Success Then
+            Dim errMsg = If(String.IsNullOrEmpty(result.Err), "Unknown error", result.Err)
+            ' ConvAI/startAgent: eccezione strutturata → ExecutionError SSE con payload ricco (non solo testo bubble).
+            If Not String.IsNullOrWhiteSpace(result.ErrDetailJson) Then
+                Throw RuntimeConvaiException.FromJsonDetail(errMsg, result.ErrDetailJson)
             End If
-        Else
-            nav.DialogueContexts(rowTask.Id) = stepResult.NewStateJson
+            Return RowTurnResult.Completed(New List(Of String) From { errMsg })
         End If
 
-        Dim messages As New List(Of String)()
-        If Not String.IsNullOrWhiteSpace(stepResult.AssistantMessage) Then
-            messages.Add(stepResult.AssistantMessage)
+        If result.IsCompleted Then
+            Return RowTurnResult.Completed(emittedMessages)
         End If
 
-        If stepResult.IsCompleted Then
-            Return RowTurnResult.Completed(messages)
-        End If
-        Return RowTurnResult.WaitingForInput(rowTask.Id, messages)
+        Return RowTurnResult.WaitingForInput(rowTask.Id, emittedMessages)
     End Function
 
     ''' <summary>

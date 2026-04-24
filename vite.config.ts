@@ -24,6 +24,7 @@ export default defineConfig({
       '@features': path.resolve(__dirname, 'src/features'),
       '@config': path.resolve(__dirname, 'config'),
       '@domain': path.resolve(__dirname, 'src/domain'),
+      '@diagnostics': path.resolve(__dirname, 'src/diagnostics'),
       /** Single resolution path for flow workspace context (avoids duplicate-module HMR bugs). */
       '@flows': path.resolve(__dirname, 'src/flows'),
       '@taskEditor': path.resolve(__dirname, 'src/components/TaskEditor'),
@@ -48,6 +49,7 @@ export default defineConfig({
         '@features': path.resolve(__dirname, 'src/features'),
         '@config': path.resolve(__dirname, 'config'),
         '@domain': path.resolve(__dirname, 'src/domain'),
+        '@diagnostics': path.resolve(__dirname, 'src/diagnostics'),
         '@flows': path.resolve(__dirname, 'src/flows'),
         '@taskEditor': path.resolve(__dirname, 'src/components/TaskEditor'),
         '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
@@ -74,6 +76,7 @@ export default defineConfig({
       '/api/grammar': { target: 'http://localhost:5000', changeOrigin: true },
       '/api/nlp': { target: 'http://localhost:5000', changeOrigin: true },
       '/api/runtime': { target: 'http://localhost:5000', changeOrigin: true },
+      '/elevenlabs': { target: 'http://localhost:5000', changeOrigin: true },
 
       // Node.js backend endpoints (MongoDB) - MUST come BEFORE generic /api
       '/api/factory': { target: 'http://localhost:3100', changeOrigin: true },

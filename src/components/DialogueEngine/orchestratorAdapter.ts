@@ -4,11 +4,63 @@
 import type { CompilationResult } from '../FlowCompiler/types';
 import type { ExecutionState } from '../FlowCompiler/types';
 
+/** Payload SSE `event: error` dall’orchestrator ( Newtonsoft può usare PascalCase ). */
+export type OrchestratorSseErrorPayload = {
+  error: string;
+  timestamp?: string;
+  httpStatus?: number;
+  phase?: string;
+  apiServerBody?: string;
+  elevenlabsRawBody?: string;
+  agentId?: string;
+  baseUrl?: string;
+};
+
+/** Normalizza chiavi PascalCase → camelCase per il frontend. */
+export function normalizeOrchestratorSseErrorPayload(raw: Record<string, unknown>): OrchestratorSseErrorPayload {
+  const errTok = raw.error ?? raw.Error;
+  const errStr =
+    typeof errTok === 'string' ? errTok : errTok != null ? String(errTok) : 'Orchestrator execution error';
+  const httpRaw = raw.httpStatus ?? raw.HttpStatus;
+  let httpStatus: number | undefined;
+  if (typeof httpRaw === 'number' && !Number.isNaN(httpRaw)) {
+    httpStatus = httpRaw;
+  } else if (typeof httpRaw === 'string' && httpRaw.trim() !== '') {
+    const n = Number(httpRaw);
+    if (!Number.isNaN(n)) httpStatus = n;
+  }
+  return {
+    error: errStr,
+    timestamp: (raw.timestamp ?? raw.Timestamp) as string | undefined,
+    httpStatus,
+    phase: (raw.phase ?? raw.Phase) as string | undefined,
+    apiServerBody: (raw.apiServerBody ?? raw.ApiServerBody) as string | undefined,
+    elevenlabsRawBody: (raw.elevenlabsRawBody ?? raw.ElevenLabsRawBody) as string | undefined,
+    agentId: (raw.agentId ?? raw.AgentId) as string | undefined,
+    baseUrl: (raw.baseUrl ?? raw.BaseUrl) as string | undefined,
+  };
+}
+
+/** Errore orchestrator con payload SSE completo (ConvAI startAgent, ecc.). */
+export class OrchestratorExecutionError extends Error {
+  readonly payload: OrchestratorSseErrorPayload;
+
+  constructor(payload: OrchestratorSseErrorPayload) {
+    super(payload.error || 'Orchestrator execution error');
+    this.name = 'OrchestratorExecutionError';
+    this.payload = payload;
+  }
+}
+
+export function isOrchestratorExecutionError(e: unknown): e is OrchestratorExecutionError {
+  return e instanceof OrchestratorExecutionError;
+}
+
 /**
  * Newtonsoft (VB) serializza spesso PascalCase; il frontend usa camelCase.
  * Senza questo merge, `variableStore` risulta {} e NLU/debug restano vuoti.
+ * @internal exported for unit tests
  */
-/** @internal exported for unit tests */
 export function parseSseExecutionStatePayload(raw: Record<string, unknown>): ExecutionState {
   const vs = raw.variableStore ?? raw.VariableStore;
   const store =
@@ -32,6 +84,7 @@ export interface OrchestratorCallbacks {
   onDDTStart?: (data: { ddt: any; taskId: string }) => void;
   onStateUpdate?: (state: ExecutionState) => void;
   onComplete?: () => void;
+  /** Preferire `OrchestratorExecutionError` quando l’SSE include il payload strutturato. */
   onError?: (error: Error) => void;
   onWaitingForInput?: (data: { taskId: string; nodeId?: string }) => void;
 }
@@ -143,22 +196,13 @@ export async function executeOrchestratorBackend(
     // 2. Connect to SSE stream
     const sseUrl = `${baseUrl}/api/runtime/orchestrator/session/${sessionId}/stream`;
     eventSource = new EventSource(sseUrl);
-    const sse = eventSource; // Save reference for type safety in callbacks
+    const sse = eventSource;
+    /** Dopo `event: error` con payload JSON evita doppio onError dal transport `onerror`. */
+    let sseExecutionErrorEmitted = false;
 
     sse.addEventListener('open', () => {
       console.log('[ORCHESTRATOR] ✅ SSE connection opened');
     });
-
-    sse.addEventListener('error', (e: Event) => {
-      console.error('[ORCHESTRATOR] ❌ SSE connection error', e);
-      console.error('[ORCHESTRATOR] 🔍 EventSource readyState on error:', sse.readyState);
-      // EventSource will automatically reconnect, but log the error
-    });
-
-    sse.onerror = (error) => {
-      console.error('[ORCHESTRATOR] ❌ SSE onerror', error);
-      console.error('[ORCHESTRATOR] 🔍 EventSource readyState on onerror:', sse.readyState);
-    };
 
     // 3. Listen to events
     sse.addEventListener('message', (e: MessageEvent) => {
@@ -255,49 +299,49 @@ export async function executeOrchestratorBackend(
       }
     });
 
-    sse.addEventListener('error', (e: MessageEvent) => {
+    /** `event: error` dal backend: payload JSON completo verso onError. */
+    sse.addEventListener('error', ((e: Event) => {
+      const me = e as MessageEvent;
       try {
-        if (e.data && typeof e.data === 'string' && e.data.trim()) {
-          const errorData = JSON.parse(e.data);
+        if (me?.data && typeof me.data === 'string' && me.data.trim()) {
+          const raw = JSON.parse(me.data) as Record<string, unknown>;
+          sseExecutionErrorEmitted = true;
+          console.error('[ORCHESTRATOR] SSE execution error event', raw);
           if (callbacks.onError) {
-            callbacks.onError(new Error(errorData.error || 'Orchestrator execution error'));
+            const payload = normalizeOrchestratorSseErrorPayload(raw);
+            callbacks.onError(new OrchestratorExecutionError(payload));
           }
-        } else {
-          console.error('[ORCHESTRATOR] SSE connection error');
+          sse.close();
+          return;
         }
-        sse.close();
-      } catch (error) {
-        console.error('[ORCHESTRATOR] Error parsing error event', error, 'Event data:', e.data);
-        // Still close the connection on any error
+      } catch (parseErr) {
+        console.error('[ORCHESTRATOR] Error parsing execution error event', parseErr, 'Event data:', me?.data);
         sse.close();
         if (callbacks.onError) {
-          callbacks.onError(new Error('SSE connection error'));
+          callbacks.onError(new Error('Orchestrator execution error (invalid error payload)'));
         }
       }
-    });
+    }) as EventListener);
 
-    sse.onerror = (error) => {
-      console.error('[ORCHESTRATOR] SSE connection error', {
-        error,
+    sse.onerror = () => {
+      console.error('[ORCHESTRATOR] SSE transport / connection error', {
         readyState: sse.readyState,
         url: sse.url,
-        sessionId
+        sessionId,
       });
-
-      // Check if connection is closed (readyState 2 = CLOSED)
+      if (sseExecutionErrorEmitted) {
+        return;
+      }
       if (sse.readyState === EventSource.CLOSED) {
-        console.error('[ORCHESTRATOR] SSE connection closed unexpectedly');
         if (callbacks.onError) {
-          callbacks.onError(new Error('SSE connection closed unexpectedly. Session may not exist on backend.'));
+          callbacks.onError(
+            new Error('SSE connection closed unexpectedly. Session may not exist on backend.'),
+          );
         }
       } else if (sse.readyState === EventSource.CONNECTING) {
-        // Still connecting, wait a bit
         console.warn('[ORCHESTRATOR] SSE still connecting...');
-      } else {
-        // Connection error
-        if (callbacks.onError) {
-          callbacks.onError(new Error('SSE connection error'));
-        }
+      } else if (callbacks.onError) {
+        callbacks.onError(new Error('SSE connection error'));
       }
     };
 

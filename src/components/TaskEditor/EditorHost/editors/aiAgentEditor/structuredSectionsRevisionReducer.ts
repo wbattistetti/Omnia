@@ -4,7 +4,7 @@
 
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { AGENT_STRUCTURED_SECTION_IDS } from './agentStructuredSectionIds';
-import type { InsertOp } from './effectiveFromRevisionMask';
+import { effectiveFromRevisionMask, type InsertOp } from './effectiveFromRevisionMask';
 import { baseRelativeDiffToRefinementOps } from './otRefinementPatch';
 import { commitOperations } from './otTextDocument';
 import type { OtOp, OtTextDocument } from './otTypes';
@@ -110,6 +110,36 @@ function normalizeOperationalSequenceSlice(slice: StructuredSectionRevisionSlice
     promptBaseText: baseF,
     deletedMask: new Array(Math.max(0, baseF.length)).fill(false),
   };
+}
+
+function effectiveTextFromSlice(slice: StructuredSectionRevisionSlice): string {
+  if (slice.storageMode === 'ot' && slice.ot) {
+    return slice.ot.currentText;
+  }
+  return effectiveFromRevisionMask(slice.promptBaseText, slice.deletedMask, slice.inserts);
+}
+
+/**
+ * Materializes the same effective section bodies as {@link RESET_FROM_PERSISTED} without dispatching.
+ * Used to compare persisted `runtime_compact` vs deterministic Phase-2 output after repository load.
+ */
+export function effectiveBySectionFromPersistedStructured(
+  persisted: PersistedStructuredSections
+): Record<AgentStructuredSectionId, string> {
+  const state = {} as StructuredSectionsRevisionState;
+  for (const id of AGENT_STRUCTURED_SECTION_IDS) {
+    const row = persisted[id];
+    let slice = row ? sliceFromPersisted(row) : emptySlice('');
+    if (id === 'operational_sequence') {
+      slice = normalizeOperationalSequenceSlice(slice);
+    }
+    state[id] = slice;
+  }
+  const eff = {} as Record<AgentStructuredSectionId, string>;
+  for (const id of AGENT_STRUCTURED_SECTION_IDS) {
+    eff[id] = effectiveTextFromSlice(state[id]);
+  }
+  return eff;
 }
 
 function sliceFromPersisted(p: PersistedSectionSnapshot): StructuredSectionRevisionSlice {

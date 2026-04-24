@@ -1,6 +1,8 @@
 // New Task-based model types
 // These types are added alongside existing types for gradual migration
 
+import type { NormalizedIaProviderError } from '@domain/compileErrors/iaProviderErrors';
+
 /**
  * TaskContext: Enumerated contexts where a TaskInstance can be inserted
  */
@@ -458,6 +460,9 @@ export interface Task {
   agentUseCasesJson?: string;
   /** JSON string: full {@link IAAgentConfig} (`types/iaAgentRuntimeSetup`) override for runtime motors (per task). */
   agentIaRuntimeOverrideJson?: string;
+
+  /** Client-only: last IA provisioning failure for this row (never persisted). */
+  provisioningError?: NormalizedIaProviderError;
 
   /**
    * Persisted sub-task tree for UtteranceInterpretation (structure + refs; steps/contracts on each Task row).

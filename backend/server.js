@@ -11,6 +11,7 @@ const { MongoClient, ObjectId } = require('mongodb');
 // ✅ ENTERPRISE AI SERVICES
 const AIProviderService = require('./services/AIProviderService');
 const { generateAIAgentDesign } = require('./services/AIAgentDesignService');
+const { extractStructure, generatePlatformPrompt } = require('./services/StructuredDesignPipelineService');
 const {
   generateUseCaseBundle,
   regenerateUseCase,
@@ -6382,6 +6383,55 @@ app.post('/design/ai-agent-generate', async (req, res) => {
     }
 
     const sectionN = Array.isArray(sectionRefinements) ? sectionRefinements.length : 0;
+    const descTrim = typeof userDesc === 'string' ? userDesc.trim() : '';
+    const structuredRegenerateScope =
+      typeof body.structuredRegenerateScope === 'string' ? body.structuredRegenerateScope.trim() : '';
+    const compilePlatformRaw =
+      typeof body.compilePlatform === 'string' && body.compilePlatform.trim()
+        ? body.compilePlatform.trim().toLowerCase()
+        : 'openai';
+
+    /**
+     * Refine with structured sections only: no full design LLM; Phase 3 deterministic only (logs).
+     */
+    if (structuredRegenerateScope === 'sections_only') {
+      const sd = body.structured_design;
+      console.log(`[AI_AGENT_DESIGN][${requestId}] scope=sections_only (Phase3-only)`, {
+        provider,
+        model,
+        compilePlatform: compilePlatformRaw,
+        structuredDesignKeys: sd && typeof sd === 'object' ? Object.keys(sd) : [],
+      });
+      if (!sd || typeof sd !== 'object' || Array.isArray(sd)) {
+        return res.status(400).json({
+          success: false,
+          error: 'structured_design object is required when structuredRegenerateScope is sections_only',
+        });
+      }
+      try {
+        const { platform: normalized, system_prompt } = await generatePlatformPrompt(
+          compilePlatformRaw,
+          sd,
+          { mode: 'deterministic' }
+        );
+        return res.json({
+          success: true,
+          refineMode: 'sections_only',
+          platform: normalized,
+          system_prompt,
+        });
+      } catch (error) {
+        console.error(`[AI_AGENT_DESIGN][${requestId}] sections_only Phase3:`, error.message);
+        const status =
+          error.message && String(error.message).includes('structured_design') ? 400 : 502;
+        return res.status(status).json({
+          success: false,
+          error: error.message || 'sections_only compile failed',
+          rawSnippet: error.rawSnippet,
+        });
+      }
+    }
+
     console.log(`[AI_AGENT_DESIGN][${requestId}] POST /design/ai-agent-generate`, {
       provider,
       model,
@@ -6390,6 +6440,8 @@ app.post('/design/ai-agent-generate', async (req, res) => {
       baseLen: typeof baseText === 'string' ? baseText.length : 0,
       outputLanguage: typeof outputLanguage === 'string' ? outputLanguage : '',
       sectionRefinements: sectionN,
+      structuredRegenerateScope: structuredRegenerateScope || '(default)',
+      compilePlatform: compilePlatformRaw,
     });
     const design = await generateAIAgentDesign({
       userDesc,
@@ -6408,6 +6460,101 @@ app.post('/design/ai-agent-generate', async (req, res) => {
     return res.status(status).json({
       success: false,
       error: error.message || 'AI agent design failed',
+      rawSnippet: error.rawSnippet,
+    });
+  }
+});
+
+/**
+ * Phase 1: extraction-only structured design (no invention).
+ * Body: { description?: string, userDesc?: string, provider?: string, model?: string }
+ */
+app.post('/design/extract-structure', async (req, res) => {
+  const requestId = Date.now();
+  try {
+    const body = req.body || {};
+    const description = body.description ?? body.userDesc;
+    const { provider = 'groq', model, outputLanguage } = body;
+    console.log(`[STRUCT_DESIGN][${requestId}] POST /design/extract-structure`, {
+      provider,
+      model,
+      outputLanguage: typeof outputLanguage === 'string' ? outputLanguage : undefined,
+    });
+    const structured_design = await extractStructure(
+      description,
+      provider,
+      model,
+      aiProviderService,
+      typeof outputLanguage === 'string' ? outputLanguage : undefined
+    );
+    return res.json({ success: true, structured_design });
+  } catch (error) {
+    console.error(`[STRUCT_DESIGN][${requestId}] extract-structure:`, error.message);
+    const status =
+      error.message && (error.message.includes('description') || error.message.includes('must be'))
+        ? 400
+        : 502;
+    return res.status(status).json({
+      success: false,
+      error: error.message || 'extract-structure failed',
+      rawSnippet: error.rawSnippet,
+    });
+  }
+});
+
+/**
+ * Removed: LLM JSON refine. Pipeline is Phase 1 (extract) + Phase 2 (deterministic compile) only.
+ */
+app.post('/design/refine-structure', (req, res) => {
+  return res.status(410).json({
+    success: false,
+    error:
+      'POST /design/refine-structure has been removed. Use POST /design/extract-structure (Phase 1) and deterministic compile (Phase 2) only.',
+  });
+});
+
+/**
+ * Phase 2: platform system prompt (deterministic assembly only).
+ * Body: { platform: string, structured_design: object, mode?: 'deterministic' }
+ */
+app.post('/design/generate-platform-prompt', async (req, res) => {
+  const requestId = Date.now();
+  try {
+    const body = req.body || {};
+    const { platform, structured_design, mode = 'deterministic', provider = 'groq', model } = body;
+    if (mode === 'llm_compiled') {
+      return res.status(400).json({
+        success: false,
+        error: 'llm_compiled is no longer supported; only deterministic compile is allowed.',
+      });
+    }
+    if (!platform || typeof platform !== 'string') {
+      return res.status(400).json({ success: false, error: 'platform is required (string)' });
+    }
+    if (!structured_design || typeof structured_design !== 'object') {
+      return res.status(400).json({ success: false, error: 'structured_design is required (object)' });
+    }
+    console.log(`[STRUCT_DESIGN][${requestId}] POST /design/generate-platform-prompt`, {
+      platform,
+      mode: 'deterministic',
+    });
+    const { platform: normalized, system_prompt } = await generatePlatformPrompt(platform, structured_design, {
+      mode: 'deterministic',
+      aiProviderService,
+      provider,
+      model,
+    });
+    return res.json({ success: true, platform: normalized, system_prompt });
+  } catch (error) {
+    console.error(`[STRUCT_DESIGN][${requestId}] generate-platform-prompt:`, error.message);
+    let status = 500;
+    if (error.message && error.message.includes('structured_design')) status = 400;
+    else if (error.message && error.message.includes('aiProviderService')) status = 400;
+    else if (error.message && (error.message.includes('Model returned') || error.message.includes('non-JSON')))
+      status = 502;
+    return res.status(status).json({
+      success: false,
+      error: error.message || 'generate-platform-prompt failed',
       rawSnippet: error.rawSnippet,
     });
   }

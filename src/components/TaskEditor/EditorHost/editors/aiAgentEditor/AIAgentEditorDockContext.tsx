@@ -78,6 +78,16 @@ export interface AIAgentEditorDockContextValue {
   compiledPlatformOutput: PlatformPromptOutput;
   /** Flattened preview string (same information as structured compile). */
   compiledPromptForTargetPlatform: string;
+  /**
+   * True when persisted `runtime_compact` matches deterministic Phase-2 output for the current IR.
+   * Governs lazy recompilation (Prompt finale view + flow debugger compile).
+   */
+  promptFinalAligned: boolean;
+  /**
+   * Synchronously rebuilds `agentRuntimeCompactJson` from current IR and patches TaskRepository when misaligned.
+   * No LLM; safe to call before compile/debug.
+   */
+  ensurePromptFinalDeterministicCompile: (reason: string) => void;
   /** Prompt Finale panel: mutually exclusive textual IR preview vs readonly JS/JSON bundle. */
   promptFinaleJsMode: boolean;
   setPromptFinaleJsMode: (value: boolean) => void;
@@ -89,6 +99,8 @@ export interface AIAgentEditorDockContextValue {
   iaRuntimeLoadedFrom: 'saved_override' | 'global_defaults';
   /** Writes current editor state to TaskRepository including override JSON ("Salva override"). */
   saveIaRuntimeOverrideToTask: () => void;
+  /** Merges partial IA fields into TaskRepository (`normalize` ×2); no hydrated gate. */
+  persistIaRuntimeOverrideSnapshot: (partial: Partial<IAAgentConfig>) => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

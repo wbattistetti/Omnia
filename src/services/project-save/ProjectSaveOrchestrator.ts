@@ -88,22 +88,6 @@ export class ProjectSaveOrchestrator {
       return !isFactory && !isInstance;
     });
 
-    // Log filtering details for debugging
-    if (allTemplates.length > 0) {
-      const factoryTemplates = allTemplates.filter((t: any) => t.source === 'Factory');
-      const projectTemplates = allTemplates.filter((t: any) => t.source !== 'Factory');
-      const instances = allTemplates.filter((t: any) => t.templateId !== null && t.templateId !== undefined);
-
-      console.log('[Save][Orchestrator] 📊 Template filtering (Solution 2: All Project templates)', {
-        totalTemplates: allTemplates.length,
-        factoryTemplates: factoryTemplates.length,
-        projectTemplates: projectTemplates.length,
-        instances: instances.length,
-        localTemplatesToSave: localTemplates.length,
-        note: 'Saving all Project templates (including those referenced by orphan tasks)',
-      });
-    }
-
     localTemplates.forEach((template: any) => {
       const mongoId = template._id
         ? (typeof template._id === 'object' ? template._id.toString() : String(template._id))
@@ -230,14 +214,11 @@ export class ProjectSaveOrchestrator {
     const results: SaveResult['results'] = {};
     const errors: string[] = [];
 
-    console.log('[Save][Orchestrator] 🚀 START executeSave', { projectId });
-
     // FLOW.SAVE-BULK REFACTOR — Global translation rows before flow-document PUTs (deterministic ordering).
     try {
       if (uiState.translationsContext?.saveAllTranslations) {
         await uiState.translationsContext.saveAllTranslations();
         results.translations = { success: true };
-        console.log('[Save][Orchestrator][2-translations] ✅ DONE (before flow PUTs)');
       } else {
         results.translations = { success: false, error: 'Translations context not available' };
         console.warn('[Save][Orchestrator][2-translations] ⚠️ Context not available');
@@ -263,7 +244,6 @@ export class ProjectSaveOrchestrator {
             throw new Error(`Catalog save failed: ${response.status} ${response.statusText}`);
           }
           results.catalog = { success: true };
-          console.log('[Save][Orchestrator][1-catalog] ✅ DONE');
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           errors.push(`Catalog: ${errorMsg}`);
@@ -387,7 +367,6 @@ export class ProjectSaveOrchestrator {
           }
 
           results.flow = { success: true, persistedFlowIds };
-          console.log('[Save][Orchestrator][3-flow] ✅ DONE', { flowCount: flowIds.length, persistedFlowIds });
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           errors.push(`Flow: ${errorMsg}`);
@@ -410,9 +389,6 @@ export class ProjectSaveOrchestrator {
               success: true,
               saved: request.variables.variables.length,
             };
-            console.log('[Save][Orchestrator][5-variables] ✅ DONE', {
-              saved: request.variables.variables.length,
-            });
           } else {
             throw new Error('Variable save returned false');
           }
@@ -452,9 +428,6 @@ export class ProjectSaveOrchestrator {
             success: true,
             saved: request.conditions.items.length,
           };
-          console.log('[Save][Orchestrator][7-conditions] ✅ DONE', {
-            saved: request.conditions.items.length,
-          });
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           errors.push(`Conditions: ${errorMsg}`);
@@ -491,11 +464,7 @@ export class ProjectSaveOrchestrator {
         ...(templateResult.failed > 0 ? { error: `${templateResult.failed} templates failed to save` } : {}),
       };
 
-      if (templateResult.failed === 0) {
-        console.log('[Save][Orchestrator][6-templates] ✅ DONE', {
-          saved: templateResult.saved,
-        });
-      } else {
+      if (templateResult.failed > 0) {
         console.warn('[Save][Orchestrator][6-templates] ⚠️ PARTIAL', {
           saved: templateResult.saved,
           failed: templateResult.failed,
@@ -530,9 +499,6 @@ export class ProjectSaveOrchestrator {
           saved: request.tasks.items.length,
           failed: 0,
         };
-        console.log('[Save][Orchestrator][4-tasks] ✅ DONE', {
-          saved: request.tasks.items.length,
-        });
       } else {
         throw new Error('Task save returned false');
       }
@@ -553,13 +519,6 @@ export class ProjectSaveOrchestrator {
 
     const allSuccess = Object.values(results).every((r) => r?.success !== false);
     const hasErrors = errors.length > 0;
-
-    console.log('[Save][Orchestrator] ✅ executeSave COMPLETED', {
-      projectId,
-      duration,
-      success: allSuccess,
-      errorsCount: errors.length,
-    });
 
     return {
       success: allSuccess && !hasErrors,

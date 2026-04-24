@@ -49,7 +49,8 @@ export function computeSectionOverrides(
 
   const voiceSection =
     stableStringify(value.voice ?? null) !== stableStringify(baseline.voice ?? null) ||
-    stableStringify(value.voices ?? null) !== stableStringify(baseline.voices ?? null);
+    stableStringify(value.voices ?? null) !== stableStringify(baseline.voices ?? null) ||
+    String(value.ttsModel ?? '').trim() !== String(baseline.ttsModel ?? '').trim();
 
   const advancedSection =
     stableStringify(value.advanced ?? {}) !== stableStringify(baseline.advanced ?? {});

@@ -26,4 +26,7 @@ Public Class TaskExecutionResult
     ''' FlowOrchestrator NON decide, legge solo questo valore
     ''' </summary>
     Public Property IsCompleted As Boolean = False
+
+    ''' <summary>JSON serializzato <see cref="RuntimeConvaiException"/> per propagazione verso FlowOrchestrator.</summary>
+    Public Property ErrDetailJson As String
 End Class

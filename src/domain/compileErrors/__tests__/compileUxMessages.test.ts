@@ -16,4 +16,18 @@ describe('compileUxMessages', () => {
   it('resolveCompileUxMessage returns null for unknown code', () => {
     expect(resolveCompileUxMessage(e({ taskId: 't', message: '', severity: 'error', code: 'TaskDataInvalid' }))).toBeNull();
   });
+
+  it('resolveCompileUxMessage passes through IaProvisionProviderError message', () => {
+    expect(
+      resolveCompileUxMessage(
+        e({
+          taskId: 't',
+          message: 'Non-english Agents must use turbo.',
+          severity: 'error',
+          code: 'IaProvisionProviderError',
+        })
+      )
+    ).toBe('Non-english Agents must use turbo.');
+    expect(isCompileErrorReportUxCode('IaProvisionProviderError')).toBe(true);
+  });
 });

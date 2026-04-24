@@ -489,11 +489,7 @@ Public Class SessionManager
                                                                 End Sub
 
             AddHandler session.Orchestrator.ExecutionError, Sub(sender, ex)
-                                                                Dim errorData = New With {
-                    .error = ex.Message,
-                    .timestamp = DateTime.UtcNow.ToString("O")
-                }
-                                                                session.EventEmitter.Emit("error", errorData)
+                                                                session.EventEmitter.Emit("error", BuildOrchestratorSseErrorPayload(ex))
                                                             End Sub
 
             ' ✅ STATELESS: Salva solo su Redis
@@ -686,11 +682,7 @@ Public Class SessionManager
                                                                 End Sub
 
             AddHandler session.Orchestrator.ExecutionError, Sub(sender, ex)
-                                                                Dim errorData = New With {
-                                                                    .error = ex.Message,
-                                                                    .timestamp = DateTime.UtcNow.ToString("O")
-                                                                }
-                                                                session.EventEmitter.Emit("error", errorData)
+                                                                session.EventEmitter.Emit("error", BuildOrchestratorSseErrorPayload(ex))
                                                             End Sub
 
             ' ✅ ARCHITECTURAL: Handler per WaitingForInput - SOLO emissione evento per frontend
@@ -1471,11 +1463,7 @@ Public Class SessionManager
                                                                          End If
                                                                          Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                                                                      Catch ex As Exception
-                                                                         Dim errorData = New With {
-                                                                             .error = ex.Message,
-                                                                             .timestamp = DateTime.UtcNow.ToString("O")
-                                                                         }
-                                                                         session.EventEmitter.Emit("error", errorData)
+                                                                         session.EventEmitter.Emit("error", BuildOrchestratorSseErrorPayload(ex))
                                                                          Console.WriteLine($"❌ [SessionManager] Error in orchestrator execution for session {sessionId}: {ex.Message}")
                                                                          Console.WriteLine($"❌ [SessionManager] Stack trace: {ex.StackTrace}")
                                                                          System.Diagnostics.Debug.WriteLine($"❌ [SessionManager] Error: {ex.Message}")
@@ -1485,6 +1473,26 @@ Public Class SessionManager
 
             Return True
         End SyncLock
+    End Function
+
+    ''' <summary>
+    ''' Costruisce il payload dell'evento SSE <c>error</c> con campi extra per <see cref="TaskEngine.RuntimeConvaiException"/> (startAgent / ConvAI).
+    ''' </summary>
+    Public Shared Function BuildOrchestratorSseErrorPayload(ex As Exception) As Dictionary(Of String, Object)
+        Dim d As New Dictionary(Of String, Object) From {
+            {"error", ex.Message},
+            {"timestamp", DateTime.UtcNow.ToString("O")}
+        }
+        Dim rc = TryCast(ex, TaskEngine.RuntimeConvaiException)
+        If rc IsNot Nothing Then
+            d("httpStatus") = rc.HttpStatus
+            d("phase") = rc.Phase
+            If Not String.IsNullOrWhiteSpace(rc.ApiServerBodyRaw) Then d("apiServerBody") = rc.ApiServerBodyRaw
+            If Not String.IsNullOrWhiteSpace(rc.ElevenLabsRawBody) Then d("elevenlabsRawBody") = rc.ElevenLabsRawBody
+            If Not String.IsNullOrWhiteSpace(rc.AgentId) Then d("agentId") = rc.AgentId
+            If Not String.IsNullOrWhiteSpace(rc.BaseUrl) Then d("baseUrl") = rc.BaseUrl
+        End If
+        Return d
     End Function
 
 End Class

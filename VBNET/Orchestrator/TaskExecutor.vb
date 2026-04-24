@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports Compiler
+Imports Newtonsoft.Json
 Imports TaskEngine
 ' Executor specifici sono in Engine/TaskExecutors/ (namespace TaskEngine)
 
@@ -71,6 +72,13 @@ Public Class TaskExecutor
             ' ✅ Passa userInput solo se fornito (per TaskUtteranceStepExecutor)
             Return Await executor.Execute(task, state, userInput)
 
+        Catch ex As RuntimeConvaiException
+            Return New TaskExecutionResult() With {
+                .Success = False,
+                .Err = ex.Message,
+                .IsCompleted = False,
+                .ErrDetailJson = JsonConvert.SerializeObject(ex.ToPayloadDictionary())
+            }
         Catch ex As Exception
             Return New TaskExecutionResult() With {
                 .Success = False,

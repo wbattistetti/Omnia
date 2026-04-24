@@ -113,6 +113,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setAgentPromptTargetPlatform: c.setAgentPromptTargetPlatform,
     compiledPlatformOutput: c.compiledPlatformOutput,
     compiledPromptForTargetPlatform: c.compiledPromptForTargetPlatform,
+    promptFinalAligned: c.promptFinalAligned,
+    ensurePromptFinalDeterministicCompile: c.ensurePromptFinalDeterministicCompile,
     promptFinaleJsMode,
     setPromptFinaleJsMode,
 
@@ -120,6 +122,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setIaRuntimeConfig: c.setIaRuntimeConfig,
     iaRuntimeLoadedFrom: c.iaRuntimeLoadedFrom,
     saveIaRuntimeOverrideToTask: c.saveIaRuntimeOverrideToTask,
+    persistIaRuntimeOverrideSnapshot: c.persistIaRuntimeOverrideSnapshot,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;

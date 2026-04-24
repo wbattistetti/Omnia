@@ -91,6 +91,26 @@ export function normalizeIAAgentConfig(raw: unknown): IAAgentConfig {
   const advanced =
     raw.advanced && isRecord(raw.advanced) ? { ...base.advanced, ...raw.advanced } : base.advanced;
 
+  const ttsModelRaw = raw.ttsModel;
+  const ttsModel =
+    platform === 'elevenlabs'
+      ? (typeof ttsModelRaw === 'string' ? ttsModelRaw : (base as IAAgentConfig).ttsModel ?? '').trim()
+      : undefined;
+
+  const convaiAgentIdRaw = raw.convaiAgentId;
+  const elevenLabsBackendBaseUrlRaw = raw.elevenLabsBackendBaseUrl;
+  const convaiAgentId =
+    typeof convaiAgentIdRaw === 'string' && convaiAgentIdRaw.trim().length > 0
+      ? convaiAgentIdRaw.trim()
+      : undefined;
+  const elevenLabsBackendBaseUrl =
+    typeof elevenLabsBackendBaseUrlRaw === 'string' && elevenLabsBackendBaseUrlRaw.trim().length > 0
+      ? elevenLabsBackendBaseUrlRaw.trim()
+      : undefined;
+
+  const elevenLabsNeedsReprovisionRaw = platform === 'elevenlabs' && raw.elevenLabsNeedsReprovision === true;
+  const elevenLabsNeedsReprovision = elevenLabsNeedsReprovisionRaw && Boolean(convaiAgentId);
+
   return {
     platform,
     model,
@@ -101,6 +121,44 @@ export function normalizeIAAgentConfig(raw: unknown): IAAgentConfig {
     tools,
     voice: platform === 'elevenlabs' ? voice : undefined,
     voices: platform === 'elevenlabs' ? voices ?? base.voices : undefined,
+    ...(platform === 'elevenlabs'
+      ? {
+          ttsModel: ttsModel ?? '',
+          ...(elevenLabsNeedsReprovision ? { elevenLabsNeedsReprovision: true as const } : {}),
+        }
+      : {}),
+    convaiAgentId,
+    elevenLabsBackendBaseUrl,
     advanced,
   };
+}
+
+/**
+ * If the task override has no ConvAI agent id (missing, empty, or whitespace-only) but
+ * `globalDefaults` provides one, copy it so effective IA runtime config never resolves to a blank id
+ * while defaults exist (ElevenLabs only).
+ */
+export function mergeConvaiAgentIdFromGlobalDefaults(
+  taskOverride: IAAgentConfig,
+  globalDefaults: IAAgentConfig
+): IAAgentConfig {
+  if (taskOverride.platform !== 'elevenlabs') return taskOverride;
+  const fromTask = taskOverride.convaiAgentId?.trim();
+  if (fromTask) return taskOverride;
+  const fromGlobal = globalDefaults.convaiAgentId?.trim();
+  if (!fromGlobal) return taskOverride;
+  return { ...taskOverride, convaiAgentId: fromGlobal };
+}
+
+/**
+ * Parses persisted `agentIaRuntimeOverrideJson`; returns null if missing or invalid JSON.
+ */
+export function parseOptionalIaRuntimeJson(raw: string | undefined | null): unknown | null {
+  const t = typeof raw === 'string' ? raw.trim() : '';
+  if (!t) return null;
+  try {
+    return JSON.parse(t);
+  } catch {
+    return null;
+  }
 }

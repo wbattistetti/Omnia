@@ -25,6 +25,12 @@ export interface ModelSectionProps {
   platformSlot?: ReactNode;
   /** Subito sotto la prima riga parametri (es. Voce/Lingua ElevenLabs). */
   afterParamRow?: ReactNode;
+  /** Optional: provision ConvAI agent via ApiServer when Agent ID is empty (ElevenLabs only). */
+  onProvisionConvaiAgent?: () => Promise<void>;
+  /**
+   * Quando false, Agent ID e pulsante «Crea agente» non sono qui (es. Developer tools in {@link IAAgentSetup}).
+   */
+  showElevenLabsConvaiIdentity?: boolean;
 }
 
 function num(v: unknown, fallback: number): number {
@@ -184,7 +190,11 @@ export function ModelSection({
   catalogReloadNonce = 0,
   platformSlot,
   afterParamRow,
+  onProvisionConvaiAgent,
+  showElevenLabsConvaiIdentity = true,
 }: ModelSectionProps) {
+  const [provisionBusy, setProvisionBusy] = React.useState(false);
+  const [provisionError, setProvisionError] = React.useState<string | null>(null);
   const adv = config.advanced ?? {};
 
   const wfStr = React.useMemo(
@@ -261,11 +271,66 @@ export function ModelSection({
         <div className="flex flex-row flex-wrap gap-1">{platformSlot}</div>
       ) : null}
 
+      {config.platform === 'elevenlabs' && showElevenLabsConvaiIdentity ? (
+        <FieldHint
+          label="ElevenLabs Agent ID"
+          tooltip="ID dell’agente ConvAI ElevenLabs (dashboard ElevenLabs / ConvAI); richiesto per il runtime hosted startAgent/readPrompt."
+          className="w-full max-w-[min(100%,22rem)] shrink-0"
+        >
+          <div data-ia-runtime-focus="agentId">
+            <input
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="es. agent_…"
+              className="box-border h-8 w-full min-w-[12rem] max-w-[22rem] rounded border border-slate-600 bg-slate-950 px-1.5 font-mono text-xs text-slate-100 placeholder:text-slate-500"
+              value={config.convaiAgentId ?? ''}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                onChange({
+                  ...config,
+                  convaiAgentId: v.length > 0 ? v : undefined,
+                });
+              }}
+            />
+          </div>
+        </FieldHint>
+      ) : null}
+
+      {config.platform === 'elevenlabs' &&
+      showElevenLabsConvaiIdentity &&
+      onProvisionConvaiAgent &&
+      !(config.convaiAgentId ?? '').trim() ? (
+        <div className="flex max-w-[min(100%,22rem)] flex-col gap-0.5 shrink-0" data-ia-runtime-focus="agentId">
+          <button
+            type="button"
+            disabled={provisionBusy}
+            onClick={async () => {
+              setProvisionError(null);
+              setProvisionBusy(true);
+              try {
+                await onProvisionConvaiAgent();
+              } catch (e) {
+                setProvisionError(e instanceof Error ? e.message : String(e));
+              } finally {
+                setProvisionBusy(false);
+              }
+            }}
+            className="h-8 rounded border border-violet-600/80 bg-violet-950/60 px-2 text-[11px] font-medium text-violet-100 hover:bg-violet-900/50 disabled:opacity-50"
+          >
+            {provisionBusy ? 'Creazione agente…' : 'Crea agente ConvAI (ElevenLabs API)'}
+          </button>
+          {provisionError ? (
+            <p className="text-[10px] leading-tight text-red-400">{provisionError}</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-row flex-wrap items-end gap-x-3 gap-y-2">
         {config.platform === 'openai' ||
         config.platform === 'anthropic' ||
         config.platform === 'google' ? (
-          <div className="w-fit max-w-[min(100%,22rem)] shrink-0">
+          <div className="w-fit max-w-[min(100%,22rem)] shrink-0" data-ia-runtime-focus="model">
             <LlmModelPicker
               reloadNonce={catalogReloadNonce}
               catalogProvider={
@@ -283,19 +348,24 @@ export function ModelSection({
           </div>
         ) : config.platform === 'custom' ? (
           <FieldHint label="LLM" tooltip={TT.modelloLlm} className="w-fit max-w-[min(100%,22rem)] shrink-0">
+            <div data-ia-runtime-focus="model">
             <AutosizeModelInput
               value={config.model}
               onChange={(model) => onChange({ ...config, model })}
             />
+            </div>
           </FieldHint>
         ) : config.platform === 'elevenlabs' && visibility.llm_model ? (
-          <FieldHint label="LLM" tooltip={TT.modelloLlm} className="w-fit shrink-0">
+          <div data-ia-runtime-focus="llm">
             <LlmProviderCatalogPanel
               reloadNonce={catalogReloadNonce}
+              catalogPlatform={config.platform}
               value={String(llm.model ?? '')}
               onChange={(model) => patchLlm({ model })}
+              label="LLM"
+              labelTooltip={TT.modelloLlm}
             />
-          </FieldHint>
+          </div>
         ) : null}
 
         {showStdTempMax ? (
@@ -325,6 +395,7 @@ export function ModelSection({
 
         {showStdTempMax ? (
           <FieldHint label="MAX TOKEN" tooltip={TT.tokenMax} className="w-fit shrink-0">
+            <div data-ia-runtime-focus="maxTokens">
             <CaptionBoundedNumberInput
               caption="MAX TOKEN"
               value={config.maxTokens}
@@ -336,6 +407,7 @@ export function ModelSection({
                 })
               }
             />
+            </div>
           </FieldHint>
         ) : null}
         {config.platform === 'elevenlabs' && visibility.llm_model ? (

@@ -1,14 +1,12 @@
 /**
- * Modello LLM ConvAI (ElevenLabs): un solo dropdown catalogo — niente tab provider
- * duplicate (la piattaforma è già scelta sopra). Default catalogo OpenAI; opzionale
- * lock su altro provider sincronizzato.
+ * Dropdown modelli LLM per la piattaforma runtime selezionata (ConvAI ElevenLabs = catalogo dedicato).
  */
 
 import React from 'react';
-import { CatalogApiError, fetchCatalogModels, type CatalogModel } from '@services/iaCatalogApi';
+import { CatalogApiError, type CatalogModel } from '@services/iaCatalogApi';
+import { fetchIaModelsForPlatform, type IaRuntimeCatalogPlatform } from '@utils/iaCatalog/fetchIaCatalog';
 import { SearchableSelect, type SearchableSelectOption } from './SearchableSelect';
-
-export type LockedLlmCatalogProvider = 'openai' | 'anthropic' | 'google';
+import { FieldHint } from './FieldHint';
 
 function catalogModelOption(m: CatalogModel): SearchableSelectOption<string> {
   const meta = [
@@ -38,15 +36,24 @@ export interface LlmProviderCatalogPanelProps {
   value: string;
   onChange: (modelId: string) => void;
   reloadNonce?: number;
-  /** Catalogo singolo da usare (default openai, coerente con preset ConvAI). */
-  lockedProvider?: LockedLlmCatalogProvider;
+  /** Piattaforma IA corrente — determina quale catalogo modelli caricare (elevenlabs = ConvAI). */
+  catalogPlatform: IaRuntimeCatalogPlatform;
+}
+
+function emptyCatalogHint(platform: IaRuntimeCatalogPlatform): string {
+  if (platform === 'elevenlabs') {
+    return 'Catalogo ConvAI vuoto: ELEVENLABS_API_KEY, EU base URL se serve, poi POST /api/ia-catalog/refresh.';
+  }
+  return 'Catalogo vuoto: chiave API provider e POST /api/ia-catalog/sync/models.';
 }
 
 export function LlmProviderCatalogPanel({
   value,
   onChange,
   reloadNonce = 0,
-  lockedProvider = 'openai',
+  catalogPlatform,
+  label = 'LLM',
+  labelTooltip,
 }: LlmProviderCatalogPanelProps) {
   const [models, setModels] = React.useState<CatalogModel[]>([]);
   const [err, setErr] = React.useState<string | null>(null);
@@ -57,14 +64,10 @@ export function LlmProviderCatalogPanel({
 
     (async () => {
       try {
-        const list = await fetchCatalogModels(lockedProvider);
+        const list = await fetchIaModelsForPlatform(catalogPlatform);
         if (cancelled) return;
         setModels(list);
-        setErr(
-          list.length
-            ? null
-            : 'Catalogo vuoto: chiave API e POST /api/ia-catalog/sync/models.'
-        );
+        setErr(list.length ? null : emptyCatalogHint(catalogPlatform));
       } catch (e) {
         if (cancelled) return;
         setModels([]);
@@ -75,12 +78,13 @@ export function LlmProviderCatalogPanel({
     return () => {
       cancelled = true;
     };
-  }, [lockedProvider, reloadNonce]);
+  }, [catalogPlatform, reloadNonce]);
 
   const catalogOpts = React.useMemo(() => models.map(catalogModelOption), [models]);
   const blockedCatalog = Boolean(err) || catalogOpts.length === 0;
+  const labelWithCount = `${label} (${models.length})`;
 
-  return (
+  const inner = (
     <div className="w-fit max-w-[min(100vw-2rem,22rem)]">
       {err ? (
         <div className="mb-0.5 rounded border border-amber-500/45 bg-amber-950/35 px-1 py-0.5 text-[9px] leading-tight text-amber-100">
@@ -97,5 +101,22 @@ export function LlmProviderCatalogPanel({
         onChange={onChange}
       />
     </div>
+  );
+
+  if (labelTooltip) {
+    return (
+      <FieldHint label={labelWithCount} tooltip={labelTooltip} className="w-fit shrink-0">
+        {inner}
+      </FieldHint>
+    );
+  }
+
+  return (
+    <label className="flex w-fit shrink-0 min-w-0 max-w-[min(100vw-2rem,22rem)] flex-col gap-0">
+      <span className="truncate text-[10px] font-medium uppercase leading-none tracking-wide text-slate-500">
+        {labelWithCount}
+      </span>
+      {inner}
+    </label>
   );
 }

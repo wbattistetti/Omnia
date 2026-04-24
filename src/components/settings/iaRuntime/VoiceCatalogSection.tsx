@@ -1,21 +1,22 @@
 /**
- * Voce ElevenLabs + lingua: due dropdown affiancati (catalogo residency); lingua default da progetto.
+ * Voce ElevenLabs: lingua come override opzionale (etichetta `Voce (lingua)` con lingua cliccabile);
+ * catalogo residency; lingua default da progetto (`getCurrentProjectLocale`).
  */
 
 import React from 'react';
 import type { IAAgentConfig, IAAgentVoiceEntry } from 'types/iaAgentRuntimeSetup';
+import { CatalogApiError, type CatalogVoice } from '@services/iaCatalogApi';
 import {
-  CatalogApiError,
-  fetchCatalogLanguages,
-  fetchCatalogVoices,
-  type CatalogVoice,
-} from '@services/iaCatalogApi';
+  fetchIaLanguagesForPlatform,
+  fetchIaVoicesForPlatform,
+} from '@utils/iaCatalog/fetchIaCatalog';
+import type { IaRuntimeCatalogPlatform } from '@utils/iaCatalog/fetchIaCatalog';
 import { getCurrentProjectLocale } from '@utils/categoryPresets';
-import { SearchableSelect, type SearchableSelectOption } from './SearchableSelect';
+import type { SearchableSelectOption } from './SearchableSelect';
 import { VoicePicker } from './VoicePicker';
 import { VoicePreviewProvider, useVoicePreview } from './VoicePreviewContext';
 import { LocaleFlagEmoji } from './LocaleFlagEmoji';
-import { FieldHint } from './FieldHint';
+import { FieldHint, runtimeIaFieldHintLabelClass } from './FieldHint';
 
 const TT = {
   voice:
@@ -29,6 +30,8 @@ export interface VoiceCatalogSectionProps {
   showOverrideBadge?: boolean;
   onChange: (next: IAAgentConfig) => void;
   catalogReloadNonce?: number;
+  /** Solo `elevenlabs` carica voci/lingue; le altre piattaforme lasciano i cataloghi vuoti. */
+  catalogPlatform?: IaRuntimeCatalogPlatform;
 }
 
 function ensureVoiceShape(c: IAAgentConfig): IAAgentVoiceEntry[] {
@@ -79,6 +82,74 @@ function resolveCatalogLocale(
   return byPrimary?.locale ?? null;
 }
 
+/** Dropdown compatto (no modal): stile allineato a SearchableSelect. */
+function CompactLanguageDropdown({
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  options: SearchableSelectOption<string>[];
+  value: string;
+  onChange: (locale: string) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const wrapRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
+  React.useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  const selected = options.find((o) => o.value === value);
+  const label = selected?.label ?? (value ? value : '—');
+
+  return (
+    <div ref={wrapRef} className="relative inline-flex max-w-[min(100%,14rem)] min-w-0 align-baseline">
+      <button
+        type="button"
+        disabled={disabled}
+        data-ia-runtime-focus="language"
+        title="Lingua risposte vocali (default: lingua progetto; qui override opzionale)"
+        onClick={() => !disabled && setOpen((v) => !v)}
+        className={`max-w-full truncate border-0 bg-transparent p-0 text-left font-mono text-[11px] font-semibold leading-snug text-violet-200 underline decoration-violet-400/80 underline-offset-2 outline-none hover:text-violet-100 disabled:cursor-not-allowed disabled:opacity-40 ${
+          disabled ? '' : 'cursor-pointer'
+        }`}
+      >
+        {label}
+      </button>
+      {open && options.length > 0 ? (
+        <div className="absolute left-0 top-[calc(100%+2px)] z-50 flex max-h-48 min-w-[10rem] max-w-[18rem] flex-col overflow-y-auto overscroll-contain rounded border border-violet-500/40 bg-slate-950 py-0.5 shadow-lg [scrollbar-width:thin]">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`flex w-full items-center gap-1.5 px-2 py-1 text-left text-[11px] leading-tight hover:bg-violet-900/40 ${
+                o.value === value ? 'bg-violet-950/50 text-violet-100' : 'text-slate-200'
+              }`}
+              onClick={() => {
+                onChange(o.value);
+                setOpen(false);
+              }}
+            >
+              {o.decorator ? <span className="shrink-0">{o.decorator}</span> : null}
+              <span className="min-w-0 truncate">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function VoiceRowPreviewControls({
   catalogBlocked,
   catalogVoices,
@@ -100,8 +171,9 @@ function VoiceRowPreviewControls({
   return (
     <div className="flex min-w-0 flex-row items-center gap-0.5">
       <VoicePicker
+        minimalTrigger
         emptyTriggerLabel="Scegli la voce"
-        listMaxClassName="min-w-[18rem] max-w-[28rem]"
+        listMaxClassName="min-w-0 w-full max-w-[min(100%,22rem)]"
         listScrollMaxHeightClassName="max-h-[min(42dvh,calc(100dvh-22rem),32rem)]"
         disabled={catalogBlocked || catalogVoices.length === 0}
         voices={catalogVoices}
@@ -128,6 +200,7 @@ export function VoiceCatalogSection({
   showOverrideBadge,
   onChange,
   catalogReloadNonce = 0,
+  catalogPlatform = 'elevenlabs',
 }: VoiceCatalogSectionProps) {
   const voice = config.voice ?? { id: '', language: 'en', settings: {} };
   const entries = React.useMemo(() => ensureVoiceShape(config), [config]);
@@ -146,12 +219,21 @@ export function VoiceCatalogSection({
     setInfoLine(null);
 
     (async () => {
+      if (catalogPlatform !== 'elevenlabs') {
+        if (cancelled) return;
+        setCatalogVoices([]);
+        setCatalogLangs([]);
+        setBlockingError(null);
+        setInfoLine(null);
+        return;
+      }
       try {
+        // Non passare `language` al backend: GET /ui/voices filtra via tutte le voci con
+        // `language === 'und'` (molte premade ElevenLabs), risultato elenco vuoto e banner rosso.
+        // Il VoicePicker filtra già lato client con `voiceMatchesLanguageTag`.
         const [vr, lr] = await Promise.all([
-          fetchCatalogVoices('elevenlabs', {
-            language: primaryLang.trim() || undefined,
-          }),
-          fetchCatalogLanguages('elevenlabs'),
+          fetchIaVoicesForPlatform('elevenlabs'),
+          fetchIaLanguagesForPlatform('elevenlabs'),
         ]);
         if (cancelled) return;
 
@@ -192,7 +274,7 @@ export function VoiceCatalogSection({
     return () => {
       cancelled = true;
     };
-  }, [catalogReloadNonce, primaryLang]);
+  }, [catalogReloadNonce, catalogPlatform]);
 
   /** Preseleziona lingua progetto quando il valore è ancora il default factory (`en`). */
   React.useEffect(() => {
@@ -225,10 +307,8 @@ export function VoiceCatalogSection({
 
   const primary = entries.find((e) => e.role === 'primary') ?? { id: '', role: 'primary' as const };
 
-  const projectLocaleLabel = React.useMemo(() => getCurrentProjectLocale(), []);
-
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex w-full min-w-0 flex-col gap-1">
       {showOverrideBadge ? (
         <div className="flex flex-row flex-wrap items-center gap-1">
           <span className="rounded border border-amber-500/35 bg-amber-500/15 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-amber-200">
@@ -250,26 +330,27 @@ export function VoiceCatalogSection({
         ) : null}
 
         <div
-          className={`grid w-full max-w-3xl grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 ${catalogBlocked ? 'pointer-events-none opacity-40' : ''}`}
+          className={`flex w-full min-w-0 flex-col gap-0 ${catalogBlocked ? 'pointer-events-none opacity-40' : ''}`}
+          role="group"
+          aria-label="Voce e lingua sintesi"
         >
-          <FieldHint variant="clear" label="Lingua" tooltip={TT.lang} className="min-w-0">
-            <SearchableSelect
-              emptyTriggerLabel={
-                langOptions.length
-                  ? 'Scegli la lingua'
-                  : `Lingua progetto (default): ${projectLocaleLabel}`
-              }
-              listMaxClassName="min-w-[18rem] max-w-[28rem]"
-              disabled={catalogBlocked || !langOptions.length}
+          <div
+            className={runtimeIaFieldHintLabelClass('clear', 'wrap')}
+            title={`${TT.voice}\n${TT.lang}`}
+          >
+            <span className="text-slate-200">Voce</span>
+            <span className="text-slate-500"> (</span>
+            <CompactLanguageDropdown
               options={langOptions}
               value={primaryLang || ''}
+              disabled={catalogBlocked || !langOptions.length}
               onChange={(locale) => {
                 onChange(setCompat(config, entries, locale, {}));
               }}
             />
-          </FieldHint>
-
-          <FieldHint variant="clear" label="Voce" tooltip={TT.voice} className="min-w-0">
+            <span className="text-slate-500">)</span>
+          </div>
+          <div data-ia-runtime-focus="voice" className="flex min-w-0 flex-row items-center gap-0.5">
             <VoicePreviewProvider voices={catalogVoices}>
               <VoiceRowPreviewControls
                 catalogBlocked={catalogBlocked}
@@ -282,7 +363,7 @@ export function VoiceCatalogSection({
                 }}
               />
             </VoicePreviewProvider>
-          </FieldHint>
+          </div>
         </div>
       </div>
     </div>

@@ -172,6 +172,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       const { compileWorkspaceForOrchestratorSession } = await import('./compileWorkspaceOrchestratorSession');
       const { FlowWorkspaceSnapshot } = await import('../../flows/FlowWorkspaceSnapshot');
       const { normalizeSeverity } = await import('../../utils/severityUtils');
+      const { ensureConvaiAgentsProvisioned } = await import('./ensureConvaiAgentsProvisioned');
 
       let translations: Record<string, string> = {};
       if (currentOptions.translations && Object.keys(currentOptions.translations).length > 0) {
@@ -208,6 +209,18 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           : orchestratorRoot === 'main'
             ? 'main'
             : FlowWorkspaceSnapshot.getActiveFlowId();
+
+      // Auto-provision ConvAI agents for ElevenLabs AI Agent tasks that lack an agentId.
+      // Runs before compilation so the freshly-written agentId is visible to the compiler.
+      {
+        const provisionResult = await ensureConvaiAgentsProvisioned(currentOptions.nodes);
+        if (provisionResult.provisioned.length > 0 || provisionResult.reprovisioned.length > 0) {
+          console.info('[IA·ConvAI] ConvAI provision / TTS reprovision summary', provisionResult);
+        }
+        if (provisionResult.failed.length > 0) {
+          console.warn('[IA·ConvAI] auto-provision: some tasks failed provisioning', provisionResult);
+        }
+      }
 
       const workspaceResult = await compileWorkspaceForOrchestratorSession({
         rootFlowId,
@@ -314,7 +327,6 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         try {
           const { setCompilationErrorsGlobal } = await import('../../context/CompilationErrorsContext');
           setCompilationErrorsGlobal(compilationResult.errors);
-          console.log('[useDialogueEngine] ✅ Errors set in context (reactive):', compilationResult.errors.length);
         } catch (e) {
           console.error('[useDialogueEngine] ❌ Failed to store errors in context:', e);
           // Note: No fallback to window - context should always be available
@@ -377,6 +389,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       if (useBackendOrchestrator) {
         // Use backend orchestrator via SSE (translations already resolved for compile)
         const { executeOrchestratorBackend } = await import('./orchestratorAdapter');
+        const { iaConvaiTraceSessionStart } = await import('../../utils/debug/iaConvaiFlowTrace');
+        iaConvaiTraceSessionStart(rootFlowId, allTasksWithTemplates);
 
         const orchestratorControl = await executeOrchestratorBackend(
           compileData,

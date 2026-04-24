@@ -49,23 +49,26 @@ export function DebuggerErrorList({ errors, flows, className = '' }: DebuggerErr
     if (!cardKey) return;
 
     const flowHeaderId = cardKey.split('::')[0];
-    flushSync(() => {
-      setCollapsedFlows((prev) => {
-        const next = new Set(prev);
-        next.delete(flowHeaderId);
-        return next;
+    /** Non chiamare flushSync dentro useLayoutEffect/render: React lo vieta. Rimanda al microtask dopo il commit. */
+    queueMicrotask(() => {
+      flushSync(() => {
+        setCollapsedFlows((prev) => {
+          const next = new Set(prev);
+          next.delete(flowHeaderId);
+          return next;
+        });
+        setCollapsedRows((prev) => {
+          const next = new Set(prev);
+          next.delete(cardKey);
+          return next;
+        });
       });
-      setCollapsedRows((prev) => {
-        const next = new Set(prev);
-        next.delete(cardKey);
-        return next;
-      });
-    });
 
-    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const el = cardElByKeyRef.current.get(cardKey);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        requestAnimationFrame(() => {
+          const el = cardElByKeyRef.current.get(cardKey);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
       });
     });
   }, []);

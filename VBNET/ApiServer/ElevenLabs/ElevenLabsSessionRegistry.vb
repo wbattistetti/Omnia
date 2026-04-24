@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 
 Imports System.Collections.Concurrent
+Imports System
 
 Namespace ApiServer.ElevenLabs
 
@@ -12,8 +13,9 @@ Public NotInheritable Class ElevenLabsHostedSession
     Public Property Runner As ElevenLabsWebSocketRunner
     Public Property Status As String
 
-    Public Sub New(omniaConversationId As String)
-        OmniaConversationId = omniaConversationId
+    ''' <summary>Parametro deve avere nome distinto da <see cref="OmniaConversationId"/> (VB è case-insensitive).</summary>
+    Public Sub New(conversationId As String)
+        OmniaConversationId = conversationId
         Queue = New ElevenLabsTurnQueue()
         Status = "running"
     End Sub
@@ -24,7 +26,12 @@ Public NotInheritable Class ElevenLabsSessionRegistry
     Private Shared ReadOnly Sessions As New ConcurrentDictionary(Of String, ElevenLabsHostedSession)(StringComparer.OrdinalIgnoreCase)
 
     Public Shared Function TryRegister(session As ElevenLabsHostedSession) As Boolean
-        Return Sessions.TryAdd(session.OmniaConversationId, session)
+        If session Is Nothing Then Throw New ArgumentNullException(NameOf(session))
+        Dim key = session.OmniaConversationId
+        If String.IsNullOrWhiteSpace(key) Then
+            Throw New InvalidOperationException("ElevenLabsHostedSession.OmniaConversationId must be set before TryRegister.")
+        End If
+        Return Sessions.TryAdd(key, session)
     End Function
 
     Public Shared Function TryGet(conversationId As String) As ElevenLabsHostedSession

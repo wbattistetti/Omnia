@@ -3,12 +3,17 @@
  */
 
 import React from 'react';
-import { CatalogApiError, fetchCatalogModels, type CatalogModel } from '@services/iaCatalogApi';
+import {
+  CatalogApiError,
+  fetchCatalogModels,
+  type CatalogModel,
+  type LlmCatalogProviderId,
+} from '@services/iaCatalogApi';
 import { FieldHint } from './FieldHint';
 import { SearchableSelect, type SearchableSelectOption } from './SearchableSelect';
 
 export interface LlmModelPickerProps {
-  catalogProvider: 'openai' | 'anthropic' | 'google';
+  catalogProvider: Exclude<LlmCatalogProviderId, 'elevenlabs'>;
   value: string;
   onChange: (modelId: string) => void;
   label?: string;
@@ -74,6 +79,7 @@ export function LlmModelPicker({
 
   const selectOpts = React.useMemo(() => opts.map(modelOption), [opts]);
   const blocked = Boolean(err) || selectOpts.length === 0;
+  const labelWithCount = `${label} (${opts.length})`;
 
   const inner = (
     <>
@@ -94,13 +100,13 @@ export function LlmModelPicker({
   );
 
   return labelTooltip ? (
-    <FieldHint label={label} tooltip={labelTooltip} className="min-w-0 max-w-[22rem]">
+    <FieldHint label={labelWithCount} tooltip={labelTooltip} className="min-w-0 max-w-[22rem]">
       {inner}
     </FieldHint>
   ) : (
     <label className="flex min-w-0 max-w-[22rem] flex-col gap-0">
       <span className="truncate text-[10px] font-medium uppercase leading-none tracking-wide text-slate-500">
-        {label}
+        {labelWithCount}
       </span>
       {inner}
     </label>

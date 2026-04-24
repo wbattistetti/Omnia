@@ -22,3 +22,18 @@ export {
   resolveCompilationNavigation,
   executeNavigationIntent,
 } from './compileNavigation';
+export {
+  mergeAiAgentTaskLocations,
+  collectIaAgentRuntimeCompileErrors,
+} from './collectIaAgentRuntimeCompileErrors';
+export type { AiAgentTaskLocation } from './collectIaAgentRuntimeCompileErrors';
+export type { NormalizedIaProviderError, ProviderErrorAdapter } from './iaProviderErrors';
+export { providerErrorAdapters } from './providerErrorRegistry';
+export { normalizeProviderError } from './normalizeProviderError';
+export { inferFixAction, providerFixActionToIaRuntimeFocus } from './fixActions';
+export type { ProviderFixActionId } from './fixActions';
+export {
+  setIaProvisioningError,
+  getIaProvisioningError,
+} from './iaProvisioningErrorStore';
+export { elevenLabsErrorAdapter } from './elevenLabsErrorAdapter';

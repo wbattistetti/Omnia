@@ -38,7 +38,8 @@
       "@responseEditor/*": ["components/TaskEditor/ResponseEditor/*"],
       "@TaskBuilderAIWizard/*": ["../TaskBuilderAIWizard/*"],
       "@wizard/*": ["wizard/*"],
-      "@domain/*": ["domain/*"]
+      "@domain/*": ["domain/*"],
+      "@diagnostics/*": ["diagnostics/*"]
     }
   },
   "include": ["src"]

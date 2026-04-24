@@ -8,6 +8,8 @@ import {
   loadGlobalIaAgentConfig,
   saveGlobalIaAgentConfig,
 } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
+import { conversationConfigFragmentFromIaAgentConfig } from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
+import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
 
 interface StudioProps {
   onClose?: () => void;
@@ -15,6 +17,18 @@ interface StudioProps {
 
 function RuntimeIaAgentSettingsTab() {
   const [cfg, setCfg] = React.useState(() => loadGlobalIaAgentConfig());
+
+  const handleProvisionConvaiAgent = React.useCallback(async () => {
+    if (cfg.convaiAgentId?.trim()) return;
+    const fragment = conversationConfigFragmentFromIaAgentConfig(cfg);
+    const { agentId } = await createConvaiAgentViaOmniaServer({
+      name: 'Omnia · global IA defaults',
+      ...(fragment ? { conversation_config: fragment } : {}),
+    });
+    const next = { ...cfg, platform: 'elevenlabs' as const, convaiAgentId: agentId };
+    setCfg(next);
+    saveGlobalIaAgentConfig(next);
+  }, [cfg]);
 
   return (
     <div style={{ maxWidth: 960 }}>
@@ -24,11 +38,13 @@ function RuntimeIaAgentSettingsTab() {
       </p>
       <IAAgentSetup
         mode="global"
+        listenConvaiTtsFix
         value={cfg}
         onChange={(next) => {
           setCfg(next);
           saveGlobalIaAgentConfig(next);
         }}
+        onProvisionConvaiAgent={handleProvisionConvaiAgent}
       />
     </div>
   );

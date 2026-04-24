@@ -70,6 +70,8 @@ export function compilationErrorFixKey(error: CompilationError): string {
       return `taskStep:${ft.taskId}:${ft.stepKey}`;
     case 'taskEscalation':
       return `taskEsc:${ft.taskId}:${ft.stepKey}:${ft.escalationIndex ?? 0}`;
+    case 'iaRuntime':
+      return `iaRuntime:${ft.taskId}:${ft.focus}`;
     case 'task':
       return `task:${ft.taskId}`;
     default:
@@ -81,6 +83,24 @@ export function compilationErrorFixKey(error: CompilationError): string {
  * Runs the same navigation as the flowchart affordances (wrench / gear / node select).
  */
 export async function runCompilationErrorFix(error: CompilationError): Promise<void> {
+  if (error.fixTarget?.type === 'iaRuntime') {
+    const ft = error.fixTarget;
+    const navigateError: CompilationError = {
+      ...error,
+      fixTarget: { type: 'task', taskId: ft.taskId },
+    };
+    await openTaskEditorForCompilationError(navigateError);
+    window.setTimeout(() => {
+      document.dispatchEvent(
+        new CustomEvent('omnia:ia-runtime-focus', {
+          detail: { taskInstanceId: ft.taskId, focus: ft.focus },
+          bubbles: true,
+        })
+      );
+    }, 420);
+    return;
+  }
+
   if (!error.fixTarget) {
     const nodeAmbiguityCategories = new Set([
       'AmbiguousLink',

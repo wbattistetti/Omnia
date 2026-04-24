@@ -163,13 +163,36 @@ Public Class AIAgentTaskExecutor
         Dim content As New StringContent(jo.ToString(Formatting.None), Encoding.UTF8, "application/json")
         Dim resp = Await Http.PostAsync(url, content, ct).ConfigureAwait(False)
         Dim body = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+        Dim httpSt = CInt(resp.StatusCode)
         If Not resp.IsSuccessStatusCode Then
-            Throw New InvalidOperationException($"ElevenLabs startAgent failed: HTTP {CInt(resp.StatusCode)} — {body}")
+            Dim summary As String = body
+            Dim elRaw As String = Nothing
+            Try
+                Dim ej = JObject.Parse(body)
+                Dim det = ej("detail")?.ToString()
+                Dim er = ej("error")?.ToString()
+                If Not String.IsNullOrWhiteSpace(det) Then
+                    summary = det
+                ElseIf Not String.IsNullOrWhiteSpace(er) Then
+                    summary = er
+                End If
+                Dim rawTok = ej("elevenlabsRawBody")
+                If rawTok IsNot Nothing Then elRaw = rawTok.ToString()
+            Catch
+            End Try
+            Throw New RuntimeConvaiException(summary, httpSt, "startAgent", agentId, baseUrl, body, elRaw)
         End If
         Dim out = JObject.Parse(body)
         Dim cid = out("conversationId")?.ToString()
         If String.IsNullOrWhiteSpace(cid) Then
-            Throw New InvalidOperationException("ElevenLabs startAgent response missing conversationId.")
+            Throw New RuntimeConvaiException(
+                "ElevenLabs startAgent response missing conversationId.",
+                httpSt,
+                "startAgent",
+                agentId,
+                baseUrl,
+                body,
+                Nothing)
         End If
         Return cid.Trim()
     End Function
@@ -220,6 +243,8 @@ Public Class AIAgentTaskExecutor
         Dim result As AIAgentStepResult
         Try
             result = Await ExecuteStepAsync(stateJson, userInput, ai.Rules, endpoint).ConfigureAwait(False)
+        Catch ex As RuntimeConvaiException
+            Throw
         Catch ex As Exception
             Return New TaskExecutionResult With {
                 .Success = False,
@@ -252,6 +277,14 @@ Public Class AIAgentTaskExecutor
         }
     End Function
 
+    ''' <summary>Logs first segment of agent id only (dashboard ids are opaque, not secrets — keeps logs readable).</summary>
+    Private Shared Function MaskAgentIdForLog(agentId As String) As String
+        Dim s = If(agentId, "").Trim()
+        If String.IsNullOrWhiteSpace(s) Then Return "(empty)"
+        If s.Length <= 10 Then Return s.Substring(0, Math.Min(4, s.Length)) & "…"
+        Return s.Substring(0, 10) & "…"
+    End Function
+
     Private Async Function ExecuteElevenLabsBranch(
         ai As CompiledAIAgentTask,
         task As CompiledTask,
@@ -260,10 +293,12 @@ Public Class AIAgentTaskExecutor
     ) As System.Threading.Tasks.Task(Of TaskExecutionResult)
 
         If String.IsNullOrWhiteSpace(ai.AgentId) Then
+            Console.WriteLine($"[IA·ConvAI] ElevenLabs branch: task={task.Id} agentId MISSING — compile/UI must set convaiAgentId")
             Return New TaskExecutionResult With {.Success = False, .Err = "ElevenLabs AI Agent requires compiled agentId.", .IsCompleted = False}
         End If
 
         Dim baseUrl = ResolveBackendBaseUrl(ai.BackendBaseUrl)
+        Console.WriteLine($"[IA·ConvAI] ElevenLabs runtime: task={task.Id} agent={MaskAgentIdForLog(ai.AgentId)} apiBase={baseUrl} userChars={If(userInput, """").Length}")
 
         If state.DialogueContexts Is Nothing Then
             state.DialogueContexts = New Dictionary(Of String, String)()
@@ -278,16 +313,25 @@ Public Class AIAgentTaskExecutor
 
         Try
             If conversationId Is Nothing Then
+                Console.WriteLine($"[IA·ConvAI] POST /elevenlabs/startAgent → new conversation")
                 conversationId = Await ElevenLabsStartAgentAsync(baseUrl, ai.AgentId.Trim(), ai.DynamicVariables, System.Threading.CancellationToken.None).ConfigureAwait(False)
                 state.DialogueContexts(task.Id) = BuildElevenLabsContextJson(conversationId)
+                Dim cidDisp = If(conversationId.Length <= 16, conversationId, conversationId.Substring(0, 12) & "…")
+                Console.WriteLine($"[IA·ConvAI] ConvAI conversationId={cidDisp} (stored in DialogueContexts)")
+            Else
+                Dim cidReuse = If(conversationId.Length <= 16, conversationId, conversationId.Substring(0, 12) & "…")
+                Console.WriteLine($"[IA·ConvAI] reuse conversationId={cidReuse}")
             End If
 
             If Not String.IsNullOrWhiteSpace(userInput) Then
+                Console.WriteLine($"[IA·ConvAI] POST /elevenlabs/sendUserTurn chars={userInput.Length}")
                 Await ElevenLabsSendUserTurnAsync(baseUrl, conversationId, userInput, System.Threading.CancellationToken.None).ConfigureAwait(False)
             End If
 
+            Console.WriteLine($"[IA·ConvAI] GET /elevenlabs/readPrompt (long-poll)")
             Dim turn = Await ElevenLabsReadPromptAsync(baseUrl, conversationId, System.Threading.CancellationToken.None).ConfigureAwait(False)
             Dim completed = turn.Status.Equals("completed", StringComparison.OrdinalIgnoreCase)
+            Console.WriteLine($"[IA·ConvAI] agent turn status={turn.Status} replyChars={If(turn.Text, """").Length} completed={completed}")
 
             If completed Then
                 If state.DialogueContexts.ContainsKey(task.Id) Then
@@ -306,7 +350,10 @@ Public Class AIAgentTaskExecutor
                 .WaitingTaskId = If(requiresInput, task.Id, Nothing),
                 .IsCompleted = completed
             }
+        Catch ex As RuntimeConvaiException
+            Throw
         Catch ex As Exception
+            Console.WriteLine($"[IA·ConvAI] ElevenLabs error: {ex.Message}")
             Return New TaskExecutionResult With {.Success = False, .Err = ex.Message, .IsCompleted = False}
         End Try
     End Function

@@ -16,7 +16,7 @@ function emptyCache() {
   return {
     voices: [],
     languages: [],
-    modelsByProvider: { openai: [], anthropic: [], google: [] },
+    modelsByProvider: { openai: [], anthropic: [], google: [], elevenlabs: [] },
     meta: { updatedAt: null },
   };
 }
@@ -32,7 +32,7 @@ function readCache() {
       modelsByProvider:
         j.modelsByProvider && typeof j.modelsByProvider === 'object'
           ? j.modelsByProvider
-          : { openai: [], anthropic: [], google: [] },
+          : { openai: [], anthropic: [], google: [], elevenlabs: [] },
       meta: j.meta && typeof j.meta === 'object' ? j.meta : { updatedAt: null },
     };
   } catch {
@@ -45,7 +45,12 @@ function writeCache(data) {
   const payload = {
     voices: data.voices ?? [],
     languages: data.languages ?? [],
-    modelsByProvider: data.modelsByProvider ?? { openai: [], anthropic: [], google: [] },
+    modelsByProvider: data.modelsByProvider ?? {
+      openai: [],
+      anthropic: [],
+      google: [],
+      elevenlabs: [],
+    },
     meta: {
       ...data.meta,
       updatedAt: new Date().toISOString(),

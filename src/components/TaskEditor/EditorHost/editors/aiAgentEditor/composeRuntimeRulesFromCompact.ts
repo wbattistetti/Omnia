@@ -4,6 +4,21 @@
  */
 
 import type { AIAgentRuntimeCompact } from '@types/aiAgentDesign';
+import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
+import { normalizeIAAgentConfig } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
+import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
+import {
+  iaConvaiTraceCompilePayload,
+  iaConvaiTraceElevenLabsFieldResolution,
+} from '@utils/debug/iaConvaiFlowTrace';
+
+/**
+ * ElevenLabs ConvAI agent.language expects ISO 639-1; Omnia may persist BCP-47 (e.g. it-IT).
+ */
+export function normalizeLanguage(lang: string | undefined | null): string | undefined | null {
+  if (!lang) return lang;
+  return lang.toLowerCase().split('-')[0];
+}
 
 /**
  * Parses task-persisted JSON; returns null if missing or invalid.
@@ -157,6 +172,8 @@ export interface MinimalAiAgentCompileTaskInput extends AiAgentTaskFieldsForComp
   type: number;
   templateId?: string | null;
   llmEndpoint?: string;
+  /** Task-persisted IA override (platform, convai id, …) for compile. */
+  agentIaRuntimeOverrideJson?: string;
 }
 
 export interface BuildMinimalAiAgentCompileTaskOptions {
@@ -164,27 +181,152 @@ export interface BuildMinimalAiAgentCompileTaskOptions {
   rulesVariant?: AiAgentRulesVariant;
 }
 
-/**
- * Minimal task JSON for POST /api/runtime/compile (AI Agent): id, type, templateId, rules, llmEndpoint.
- * Omits editor/Mongo-only fields (agentPrompt, agentStructuredSectionsJson, previews, use cases, etc.).
- */
-export function buildMinimalAiAgentCompileTask(
-  task: MinimalAiAgentCompileTaskInput,
-  options?: BuildMinimalAiAgentCompileTaskOptions
-): {
+/** Payload POST compile per VB: default LLM-only; estensioni opzionali per ElevenLabs. */
+export type MinimalAiAgentCompilePayload = {
   id: string;
   type: number;
   templateId: string | null;
   rules: string;
   llmEndpoint: string;
+  platform?: 'elevenlabs';
+  agentId?: string;
+  backendBaseUrl?: string;
+};
+
+/**
+ * Minimal task JSON for POST /api/runtime/compile (AI Agent): id, type, templateId, rules, llmEndpoint.
+ * Omits editor/Mongo-only fields (agentPrompt, agentStructuredSectionsJson, previews, use cases, etc.).
+ */
+/**
+ * Resolve ElevenLabs-specific compile fields so they match editor semantics:
+ * - Persisted task override wins on platform choice.
+ * - Missing `convaiAgentId` / backend URL fall back to global defaults (Settings → Runtime IA Agent),
+ *   same as the dock panel until the user saves an override-only-on-task slice.
+ * - With no persisted override JSON, ElevenLabs + ids can still apply from globals alone.
+ */
+/**
+ * Reads persisted override JSON **before** normalize to report whether `convaiAgentId` exists and non-empty.
+ * Helps distinguish «key missing» vs «empty string stripped by normalize» vs «invalid JSON».
+ */
+function peekConvaiAgentIdInRawOverride(raw: string): {
+  convaiAgentIdKeyInJson: boolean;
+  convaiAgentIdRawTrimmedChars: number;
 } {
+  const t = raw.trim();
+  if (!t.length) {
+    return { convaiAgentIdKeyInJson: false, convaiAgentIdRawTrimmedChars: 0 };
+  }
+  try {
+    const o = JSON.parse(t) as Record<string, unknown>;
+    const hasKey = Object.prototype.hasOwnProperty.call(o, 'convaiAgentId');
+    const v = o.convaiAgentId;
+    const chars = typeof v === 'string' ? v.trim().length : 0;
+    return { convaiAgentIdKeyInJson: hasKey, convaiAgentIdRawTrimmedChars: chars };
+  } catch {
+    return {
+      convaiAgentIdKeyInJson: t.includes('"convaiAgentId"'),
+      convaiAgentIdRawTrimmedChars: 0,
+    };
+  }
+}
+
+function resolveElevenLabsMinimalCompileExtension(
+  taskId: string,
+  agentIaRuntimeOverrideJson: string | undefined,
+  globalIa: IAAgentConfig
+): Pick<MinimalAiAgentCompilePayload, 'platform' | 'agentId' | 'backendBaseUrl'> | null {
+  const raw =
+    typeof agentIaRuntimeOverrideJson === 'string' ? agentIaRuntimeOverrideJson.trim() : '';
+  console.log('[IA·ConvAI] DIAG compile override raw', {
+    taskId,
+    rawOverride: raw,
+    rawOverrideChars: raw?.length ?? 0,
+  });
+  const peek = peekConvaiAgentIdInRawOverride(raw);
+  let ia: IAAgentConfig | null = null;
+  let parseOk = false;
+  if (raw.length > 0) {
+    try {
+      ia = normalizeIAAgentConfig(JSON.parse(raw) as unknown);
+      parseOk = true;
+    } catch {
+      /** Keep ia null — do not silently mix globals when persisted JSON is invalid */
+    }
+  }
+
+  let useElevenLabs = false;
+  let agentIdTask = '';
+  let backendTask = '';
+
+  if (parseOk && ia) {
+    if (ia.platform !== 'elevenlabs') return null;
+    useElevenLabs = true;
+    agentIdTask = ia.convaiAgentId?.trim() ?? '';
+    backendTask = ia.elevenLabsBackendBaseUrl?.trim() ?? '';
+  } else if (!raw && globalIa.platform === 'elevenlabs') {
+    useElevenLabs = true;
+    agentIdTask = '';
+    backendTask = '';
+  }
+
+  if (!useElevenLabs) return null;
+
+  const agentIdGlobal = globalIa.platform === 'elevenlabs' ? globalIa.convaiAgentId?.trim() ?? '' : '';
+  const backendGlobal =
+    globalIa.platform === 'elevenlabs' ? globalIa.elevenLabsBackendBaseUrl?.trim() ?? '' : '';
+
+  const agentId = agentIdTask || agentIdGlobal;
+  const backendBaseUrl = backendTask || backendGlobal;
+
+  const agentIdSource: 'task' | 'global' | 'none' =
+    agentIdTask.length > 0 ? 'task' : agentIdGlobal.length > 0 ? 'global' : 'none';
+
+  iaConvaiTraceElevenLabsFieldResolution(taskId, {
+    rawOverrideChars: raw.length,
+    parseOk,
+    parseFailedWithNonEmptyRaw: !parseOk && raw.length > 0,
+    iaPlatformAfterNormalize: ia?.platform,
+    convaiPresentOnTask: agentIdTask.length > 0,
+    convaiAgentIdKeyInJson: peek.convaiAgentIdKeyInJson,
+    convaiAgentIdRawTrimmedChars: peek.convaiAgentIdRawTrimmedChars,
+    globalPlatform: globalIa.platform,
+    convaiPresentInGlobalDefaults: agentIdGlobal.length > 0,
+    resolvedAgentIdChars: agentId.length,
+    agentIdSource,
+  });
+
+  return {
+    platform: 'elevenlabs',
+    agentId,
+    backendBaseUrl,
+  };
+}
+
+export function buildMinimalAiAgentCompileTask(
+  task: MinimalAiAgentCompileTaskInput,
+  options?: BuildMinimalAiAgentCompileTaskOptions
+): MinimalAiAgentCompilePayload {
   const variant = options?.rulesVariant ?? 'distilled';
   const rules = rulesStringForAiAgentCompile(task, variant);
-  return {
+  const base: MinimalAiAgentCompilePayload = {
     id: task.id,
     type: task.type,
     templateId: task.templateId ?? null,
     rules,
     llmEndpoint: resolveAiAgentLlmEndpointForCompile(task),
   };
+
+  const globalIa = loadGlobalIaAgentConfig();
+  const elFields = resolveElevenLabsMinimalCompileExtension(
+    task.id,
+    task.agentIaRuntimeOverrideJson,
+    globalIa
+  );
+  if (elFields) {
+    const el = { ...base, ...elFields };
+    iaConvaiTraceCompilePayload(task.id, el);
+    return el;
+  }
+
+  return base;
 }

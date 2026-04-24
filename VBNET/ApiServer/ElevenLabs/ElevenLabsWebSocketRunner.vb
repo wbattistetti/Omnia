@@ -211,14 +211,18 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
     End Function
 
     Private Shared Async Function FetchSignedWebSocketUrlAsync(agentId As String, apiKey As String, ct As CancellationToken) As Task(Of String)
-        Dim url = $"https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id={Uri.EscapeDataString(agentId)}"
+        Dim apiBase = ElevenLabsApiSettings.GetApiBaseUrl()
+        Dim url = $"{apiBase}/v1/convai/conversation/get-signed-url?agent_id={Uri.EscapeDataString(agentId)}"
         Using req As New HttpRequestMessage(HttpMethod.Get, url)
             req.Headers.TryAddWithoutValidation("xi-api-key", apiKey)
             Using resp = Await Http.SendAsync(req, ct).ConfigureAwait(False)
                 Dim body = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
                 If Not resp.IsSuccessStatusCode Then
-                    Throw New InvalidOperationException($"ElevenLabs get-signed-url failed: HTTP {CInt(resp.StatusCode)} — {body}")
+                    Dim sc = CInt(resp.StatusCode)
+                    Console.WriteLine($"[ElevenLabs] GET get-signed-url HTTP {sc} bodyLen={If(body?.Length, 0)} preview={body?.Substring(0, Math.Min(600, body.Length))}")
+                    Throw New ElevenLabsUpstreamHttpException(sc, body)
                 End If
+                Console.WriteLine($"[ElevenLabs] GET get-signed-url OK bodyLen={If(body?.Length, 0)} preview={body?.Substring(0, Math.Min(400, body.Length))}")
                 Dim jo = JObject.Parse(body)
                 Return jo("signed_url")?.ToString()
             End Using

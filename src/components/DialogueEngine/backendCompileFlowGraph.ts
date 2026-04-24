@@ -12,6 +12,12 @@ import { taskTemplateService } from '../../services/TaskTemplateService';
 import { templateIdToTaskType, TaskType } from '../../types/taskTypes';
 import { buildMinimalAiAgentCompileTask } from '../TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
 import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
+import { loadGlobalIaAgentConfig } from '../../utils/iaAgentRuntime/globalIaAgentPersistence';
+import {
+  iaConvaiTraceCompileTaskSource,
+  iaConvaiTraceCompileVsRepository,
+  iaConvaiTraceGlobalIaDefaultsSnapshot,
+} from '../../utils/debug/iaConvaiFlowTrace';
 
 const VB_COMPILE_URL = 'http://localhost:5000/api/runtime/compile';
 
@@ -119,6 +125,10 @@ export async function backendCompileFlowGraph(
 ): Promise<BackendCompileFlowArtifacts> {
   const { projectData, translations } = ctx;
 
+  const globalIaAtCompile = loadGlobalIaAgentConfig();
+  const globalConvai = globalIaAtCompile.convaiAgentId?.trim() ?? '';
+  iaConvaiTraceGlobalIaDefaultsSnapshot(globalIaAtCompile.platform, globalConvai.length);
+
   const referencedTaskIds = new Set<string>();
   enrichedNodes.forEach((node) => {
     const rows = node.data?.rows || [];
@@ -222,9 +232,40 @@ export async function backendCompileFlowGraph(
 
   const allTasksWithTemplates = [...referencedInstances, ...referencedTemplates];
   const aiAgentRulesVariant = 'distilled';
-  const tasksForCompile = allTasksWithTemplates.map((t: Record<string, unknown>) => {
+  const instanceRowCount = referencedInstances.length;
+  const tasksForCompile = allTasksWithTemplates.map((t: Record<string, unknown>, index: number) => {
     if (t.type === TaskType.AIAgent) {
-      return buildMinimalAiAgentCompileTask(t as Parameters<typeof buildMinimalAiAgentCompileTask>[0], {
+      const taskId = String(t.id ?? '').trim() || '(no-id)';
+      const slot = index < instanceRowCount ? 'canvas-instance' : 'template-catalog';
+      const ovRow = typeof t.agentIaRuntimeOverrideJson === 'string' ? t.agentIaRuntimeOverrideJson : '';
+      const live = taskRepository.getTask(taskId);
+      /** Compile uses TaskRepository when the task exists; catalog templates fall back to row JSON. */
+      const overrideStr =
+        live != null && typeof live.agentIaRuntimeOverrideJson === 'string'
+          ? live.agentIaRuntimeOverrideJson
+          : ovRow;
+      const compileInput = {
+        ...t,
+        agentIaRuntimeOverrideJson: overrideStr,
+      } as Parameters<typeof buildMinimalAiAgentCompileTask>[0];
+      iaConvaiTraceCompileVsRepository(taskId, {
+        repoTaskFound: Boolean(live),
+        rowOverrideChars: ovRow.length,
+        repoOverrideChars:
+          live != null && typeof live.agentIaRuntimeOverrideJson === 'string'
+            ? live.agentIaRuntimeOverrideJson.length
+            : 0,
+        overridesIdentical:
+          ovRow === (live != null && typeof live.agentIaRuntimeOverrideJson === 'string' ? live.agentIaRuntimeOverrideJson : ''),
+      });
+      iaConvaiTraceCompileTaskSource(taskId, slot, {
+        agentIaRuntimeOverrideJsonChars:
+          typeof compileInput.agentIaRuntimeOverrideJson === 'string'
+            ? compileInput.agentIaRuntimeOverrideJson.length
+            : 0,
+        hasAgentIaRuntimeOverrideKey: typeof compileInput.agentIaRuntimeOverrideJson === 'string',
+      });
+      return buildMinimalAiAgentCompileTask(compileInput, {
         rulesVariant: aiAgentRulesVariant,
       });
     }

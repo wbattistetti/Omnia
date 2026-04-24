@@ -16,6 +16,7 @@ import React from 'react';
 import { taskRepository } from '@services/TaskRepository';
 import { TaskType, type Task } from '@types/taskTypes';
 import {
+  extractStructuredDesign,
   generateAIAgentDesign,
   generateAIAgentUseCases,
   regenerateAIAgentUseCaseApi,
@@ -34,11 +35,16 @@ import { getActiveFlowCanvasId } from '../../../../../flows/activeFlowCanvas';
 import { buildTaskSnapshotFromRaw, resolveHasAgentGeneration } from './buildTaskSnapshot';
 import { createDefaultAIAgentTaskPayload } from './createDefaultAIAgentTaskPayload';
 import { AI_AGENT_MIN_INPUT_CHARS, EMPTY_OUTPUT_MAPPINGS } from './constants';
-import { applyGenerateDesignPayload } from './mergeDesignFromApi';
 import { nextMappingsAfterLabelBlur } from './flowVariableMapping';
-import { buildAIAgentTaskPersistPatch } from './buildPersistPatch';
+import { buildAIAgentTaskPersistPatch, type AIAgentPersistState } from './buildPersistPatch';
 import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
 import { buildRefineUserDescFromSections } from './composeRuntimePromptMarkdown';
+import {
+  applyStructuredIrToGenerateApplyResult,
+  buildDeterministicRuntimeCompactFromSectionBases,
+  parseStructuredDesignIrFromApi,
+} from './applyExtractStructureIr';
+import { structuredDesignForPipelinePhase3 } from './structuredDesignForPipeline';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { AGENT_STRUCTURED_SECTION_IDS } from './agentStructuredSectionIds';
 import {
@@ -59,6 +65,7 @@ import {
 import { revisionStateToPersisted } from './revisionStateToPersisted';
 import { isStructuredSectionsOtEnabled } from './structuredOtFlag';
 import { useStructuredAgentSectionsRevision } from './useStructuredAgentSectionsRevision';
+import { effectiveBySectionFromPersistedStructured } from './structuredSectionsRevisionReducer';
 import type { OtOp } from './otTypes';
 import type { IaSectionDiffPair } from './AIAgentStructuredSectionsPanel';
 import {
@@ -74,9 +81,22 @@ import {
   summarizeUseCasesForPersistLog,
 } from './aiAgentDebug';
 import { registerAiAgentProjectSaveFlush } from './aiAgentProjectSaveFlush';
+import { registerAiAgentPromptAlignmentFlush } from './aiAgentPromptAlignmentFlush';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
-import { normalizeIAAgentConfig } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
+import {
+  mergeConvaiAgentIdFromGlobalDefaults,
+  normalizeIAAgentConfig,
+  parseOptionalIaRuntimeJson,
+} from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
+import { iaConvaiTracePersistTaskRepository } from '@utils/debug/iaConvaiFlowTrace';
+import { withElevenLabsReprovisionAfterTtsChange } from '@utils/iaAgentRuntime/applyElevenLabsReprovisionFlag';
+
+function logStructuredPipelineAlignment(event: string, detail?: unknown): void {
+  if (import.meta.env.DEV) {
+    console.info(`[StructuredPipeline][Alignment] ${event}`, detail ?? '');
+  }
+}
 
 export interface UseAIAgentEditorControllerParams {
   instanceId: string | undefined;
@@ -100,6 +120,8 @@ export function useAIAgentEditorController({
   const [previewStyleId, setPreviewStyleIdState] = React.useState<string>(AI_AGENT_DEFAULT_PREVIEW_STYLE_ID);
   const [initialStateTemplateJson, setInitialStateTemplateJson] = React.useState('{}');
   const [agentRuntimeCompactJson, setAgentRuntimeCompactJson] = React.useState('');
+  /** True when persisted `runtime_compact` matches deterministic Phase-2 output for the current IR. */
+  const [promptFinalAligned, setPromptFinalAligned] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
   const [generateError, setGenerateError] = React.useState<string | null>(null);
   const [iaRevisionDiffBySection, setIaRevisionDiffBySection] = React.useState<Partial<
@@ -136,9 +158,32 @@ export function useAIAgentEditorController({
   /** Latest `dirty` / persist fn for unmount cleanup (avoids stale closure). */
   const dirtyRef = React.useRef(false);
   const persistEditorStateToRepositoryRef = React.useRef<() => void>(() => {});
+  const persistInputsRef = React.useRef<AIAgentPersistState | null>(null);
+  const effectiveBySectionRef = React.useRef<Record<AgentStructuredSectionId, string>>(
+    {} as Record<AgentStructuredSectionId, string>
+  );
+  const promptFinalAlignedRef = React.useRef(promptFinalAligned);
+  const hasAgentGenerationRef = React.useRef(hasAgentGeneration);
+  const instanceIdRef = React.useRef(instanceId);
+  const projectIdRef = React.useRef(projectId);
   const structuredOtEnabled = isStructuredSectionsOtEnabled();
   const structuredRev = useStructuredAgentSectionsRevision(structuredOtEnabled);
   const { loadFromPersisted } = structuredRev;
+
+  effectiveBySectionRef.current = structuredRev.effectiveBySection;
+  promptFinalAlignedRef.current = promptFinalAligned;
+  hasAgentGenerationRef.current = hasAgentGeneration;
+  instanceIdRef.current = instanceId;
+  projectIdRef.current = projectId;
+
+  const markPromptFinalMisaligned = React.useCallback((reason: string) => {
+    setPromptFinalAligned((prev) => {
+      if (prev) {
+        logStructuredPipelineAlignment('promptFinalAligned -> false', { reason });
+      }
+      return false;
+    });
+  }, []);
 
   const agentPrompt = structuredRev.composedRuntimeMarkdown;
   const agentStructuredSectionsJson = React.useMemo(
@@ -173,39 +218,44 @@ export function useAIAgentEditorController({
 
   const setDesignDescriptionUser = React.useCallback((v: React.SetStateAction<string>) => {
     setDirty(true);
+    markPromptFinalMisaligned('designDescription');
     setDesignDescription(v);
-  }, []);
+  }, [markPromptFinalMisaligned]);
 
   const applyRevisionOps = React.useCallback(
     (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => {
       setDirty(true);
+      markPromptFinalMisaligned('structuredSectionRevision');
       structuredRev.applyRevisionOps(sectionId, ops);
     },
-    [structuredRev]
+    [structuredRev, markPromptFinalMisaligned]
   );
 
   const applyOtCommit = React.useCallback(
     (sectionId: AgentStructuredSectionId, newOps: readonly OtOp[]) => {
       setDirty(true);
+      markPromptFinalMisaligned('structuredSectionOtCommit');
       structuredRev.applyOtCommit(sectionId, newOps);
     },
-    [structuredRev]
+    [structuredRev, markPromptFinalMisaligned]
   );
 
   const undoSection = React.useCallback(
     (sectionId: AgentStructuredSectionId) => {
       setDirty(true);
+      markPromptFinalMisaligned('structuredSectionUndo');
       structuredRev.undoSection(sectionId);
     },
-    [structuredRev]
+    [structuredRev, markPromptFinalMisaligned]
   );
 
   const redoSection = React.useCallback(
     (sectionId: AgentStructuredSectionId) => {
       setDirty(true);
+      markPromptFinalMisaligned('structuredSectionRedo');
       structuredRev.redoSection(sectionId);
     },
-    [structuredRev]
+    [structuredRev, markPromptFinalMisaligned]
   );
 
   const setUseCasesUser = React.useCallback((v: React.SetStateAction<AIAgentUseCase[]>) => {
@@ -220,12 +270,22 @@ export function useAIAgentEditorController({
 
   const setAgentPromptTargetPlatform = React.useCallback((v: AgentPromptPlatformId) => {
     setDirty(true);
+    markPromptFinalMisaligned('agentPromptTargetPlatform');
     setAgentPromptTargetPlatformState(normalizeAgentPromptPlatformId(v));
-  }, []);
+  }, [markPromptFinalMisaligned]);
+
+  const hydratedRef = React.useRef(false);
+  React.useEffect(() => {
+    hydratedRef.current = hydrated;
+  }, [hydrated]);
 
   const setIaRuntimeConfig = React.useCallback((next: IAAgentConfig) => {
     setDirty(true);
-    setIaRuntimeConfigState(next);
+    setIaRuntimeConfigState((prev) => {
+      const globals = loadGlobalIaAgentConfig();
+      const merged = mergeConvaiAgentIdFromGlobalDefaults(next, globals);
+      return withElevenLabsReprovisionAfterTtsChange(prev, merged, hydratedRef.current);
+    });
   }, []);
 
   const insertBackendPathAtSection = React.useCallback(
@@ -238,6 +298,7 @@ export function useAIAgentEditorController({
           ? crypto.randomUUID()
           : `bp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       setDirty(true);
+      markPromptFinalMisaligned('insertBackendPathAtSection');
       const eff = structuredRev.effectiveBySection[sectionId] ?? '';
       const s = Math.max(0, Math.min(Math.floor(rangeStart), eff.length));
       const e =
@@ -263,7 +324,7 @@ export function useAIAgentEditorController({
       }
       setBackendPlaceholders((prev) => [...prev, { id, definitionId: trimmed }]);
     },
-    [structuredRev, structuredOtEnabled]
+    [structuredRev, structuredOtEnabled, markPromptFinalMisaligned]
   );
 
   const insertBackendPathInDesign = React.useCallback((path: string, rangeStart: number, rangeEnd?: number) => {
@@ -275,6 +336,7 @@ export function useAIAgentEditorController({
         ? crypto.randomUUID()
         : `bp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     setDirty(true);
+    markPromptFinalMisaligned('insertBackendPathInDesign');
     setDesignDescription((prev) => {
       const p = String(prev ?? '');
       const s = Math.max(0, Math.min(Math.floor(rangeStart), p.length));
@@ -283,7 +345,7 @@ export function useAIAgentEditorController({
       return p.slice(0, s) + token + p.slice(e);
     });
     setBackendPlaceholders((prev) => [...prev, { id, definitionId: trimmed }]);
-  }, []);
+  }, [markPromptFinalMisaligned]);
 
   const loadFromRepository = React.useCallback(() => {
     if (!instanceId) return;
@@ -316,13 +378,20 @@ export function useAIAgentEditorController({
       b.agentInitialStateTemplateJson.trim() ? b.agentInitialStateTemplateJson : '{}'
     );
     setAgentRuntimeCompactJson(b.agentRuntimeCompactJson.trim());
-    setHasAgentGeneration(resolveHasAgentGeneration(b));
+    const hasGen = resolveHasAgentGeneration(b);
+    setHasAgentGeneration(hasGen);
     setLogicalSteps(b.logicalSteps);
     setUseCases(b.useCases);
     const iaRaw = b.agentIaRuntimeOverrideJson.trim();
     if (iaRaw) {
       try {
-        setIaRuntimeConfigState(normalizeIAAgentConfig(JSON.parse(iaRaw) as unknown));
+        const globals = loadGlobalIaAgentConfig();
+        setIaRuntimeConfigState(
+          mergeConvaiAgentIdFromGlobalDefaults(
+            normalizeIAAgentConfig(JSON.parse(iaRaw) as unknown),
+            globals
+          )
+        );
         setIaRuntimeLoadedFrom('saved_override');
       } catch {
         setIaRuntimeConfigState(loadGlobalIaAgentConfig());
@@ -334,6 +403,21 @@ export function useAIAgentEditorController({
     }
     setUseCaseComposerError(null);
     setIaRevisionDiffBySection(null);
+    const effLoaded = effectiveBySectionFromPersistedStructured(parsed.sections);
+    const expectedCompact = JSON.stringify(
+      buildDeterministicRuntimeCompactFromSectionBases({
+        goal: effLoaded.goal ?? '',
+        operational_sequence: effLoaded.operational_sequence ?? '',
+        context: effLoaded.context ?? '',
+        constraints: effLoaded.constraints ?? '',
+        personality: effLoaded.personality ?? '',
+        tone: effLoaded.tone ?? '',
+        examples: effLoaded.examples ?? '',
+      }),
+      null,
+      2
+    );
+    setPromptFinalAligned(!hasGen || expectedCompact.trim() === b.agentRuntimeCompactJson.trim());
     logAiAgentDebug('loadFromRepository', {
       instanceId,
       ...summarizeAgentTaskFields(taskRepository.getTask(instanceId)),
@@ -349,6 +433,10 @@ export function useAIAgentEditorController({
     const reason = persistReasonRef.current;
     persistReasonRef.current = 'direct';
     const agentUseCasesJson = serializeUseCases(useCases);
+    const iaRuntimeForPersist = mergeConvaiAgentIdFromGlobalDefaults(
+      iaRuntimeConfig,
+      loadGlobalIaAgentConfig()
+    );
     const patch = buildAIAgentTaskPersistPatch({
       designDescription,
       agentPrompt,
@@ -363,7 +451,7 @@ export function useAIAgentEditorController({
       hasAgentGeneration,
       agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
       agentUseCasesJson,
-      agentIaRuntimeOverrideJson: JSON.stringify(iaRuntimeConfig),
+      agentIaRuntimeOverrideJson: JSON.stringify(iaRuntimeForPersist),
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -402,6 +490,75 @@ export function useAIAgentEditorController({
     useCases,
     iaRuntimeConfig,
   ]);
+
+  /**
+   * Persists IA runtime override: parse repo JSON (or global defaults), merge `partial`, normalize twice,
+   * write only `agentIaRuntimeOverrideJson`. TaskRepository is the source of truth; no hydrated gate.
+   */
+  const persistIaRuntimeOverrideSnapshot = React.useCallback(
+    (partial: Partial<IAAgentConfig>) => {
+      if (!instanceId) {
+        console.error('[useAIAgentEditorController] persistIaRuntimeOverrideSnapshot: missing instanceId');
+        return;
+      }
+      console.log('[IA·ConvAI] DIAG persist start', {
+        taskId: instanceId,
+        partialKeys: Object.keys(partial),
+        partialConvaiAgentId: partial.convaiAgentId,
+        partialConvaiAgentIdChars: partial.convaiAgentId?.length ?? 0,
+      });
+      const task = taskRepository.getTask(instanceId);
+      console.log('[IA·ConvAI] DIAG repo before update', {
+        taskId: instanceId,
+        repoTaskFound: !!task,
+        repoJsonChars: task?.agentIaRuntimeOverrideJson?.length ?? 0,
+        repoJson: task?.agentIaRuntimeOverrideJson,
+      });
+      if (!task) {
+        console.error(
+          '[useAIAgentEditorController] persistIaRuntimeOverrideSnapshot: task not in TaskRepository',
+          { instanceId }
+        );
+        return;
+      }
+
+      persistReasonRef.current = 'direct';
+      const globals = loadGlobalIaAgentConfig();
+      const parsed = parseOptionalIaRuntimeJson(task.agentIaRuntimeOverrideJson);
+      const base = normalizeIAAgentConfig(parsed ?? globals);
+      const updated = normalizeIAAgentConfig({ ...base, ...partial });
+      console.log('[IA·ConvAI] DIAG updated override', {
+        taskId: instanceId,
+        updatedConvaiAgentId: updated.convaiAgentId,
+        updatedConvaiAgentIdChars: updated.convaiAgentId?.length ?? 0,
+      });
+      const iaJson = JSON.stringify(updated);
+
+      const ok = taskRepository.updateTask(
+        instanceId,
+        { agentIaRuntimeOverrideJson: iaJson } as Partial<Task>,
+        projectId
+      );
+      console.log('[IA·ConvAI] DIAG repo after update', {
+        taskId: instanceId,
+        newJsonChars: JSON.stringify(updated).length,
+        newJson: JSON.stringify(updated),
+      });
+      if (!ok) {
+        console.error('[useAIAgentEditorController] persistIaRuntimeOverrideSnapshot: updateTask failed', {
+          instanceId,
+        });
+        return;
+      }
+
+      setIaRuntimeConfigState(updated);
+      setIaRuntimeLoadedFrom('saved_override');
+      setDirty(false);
+      iaConvaiTracePersistTaskRepository(instanceId, iaJson);
+      logAiAgentDebug('after persistIaRuntimeOverrideSnapshot', summarizeAgentTaskFields(taskRepository.getTask(instanceId)));
+    },
+    [instanceId, projectId]
+  );
 
   /**
    * Persists current {@link iaRuntimeConfig} into `agentIaRuntimeOverrideJson` on the task (plus full agent patch).
@@ -520,30 +677,79 @@ export function useAIAgentEditorController({
 
   const handleGenerate = React.useCallback(async () => {
     const refining = hasAgentGeneration;
-    const userDesc = refining
-      ? `${designDescription.trim()}\n\n---\n\n${buildRefineUserDescFromSections(structuredRev.effectiveBySection).trim()}`.trim()
-      : designDescription.trim();
-    if (userDesc.length < AI_AGENT_MIN_INPUT_CHARS) {
+    const nlDescription = designDescription.trim();
+    const descriptionChanged =
+      refining && nlDescription !== committedDesignDescription.trim();
+    const structuredRegenerateScope = refining
+      ? descriptionChanged
+        ? ('from_description' as const)
+        : ('sections_only' as const)
+      : undefined;
+
+    if (structuredRegenerateScope === 'sections_only') {
+      const userDescForMin = `${nlDescription}\n\n---\n\n${buildRefineUserDescFromSections(structuredRev.effectiveBySection).trim()}`.trim();
+      if (userDescForMin.length < AI_AGENT_MIN_INPUT_CHARS) {
+        setGenerateError(
+          `Inserisci almeno ${AI_AGENT_MIN_INPUT_CHARS} caratteri complessivi nelle sezioni (o nella descrizione) per Refine.`
+        );
+        return;
+      }
+    } else if (nlDescription.length < AI_AGENT_MIN_INPUT_CHARS) {
       setGenerateError(
-        refining
-          ? `Inserisci almeno ${AI_AGENT_MIN_INPUT_CHARS} caratteri complessivi nelle sezioni (o nella descrizione) per Refine.`
-          : `Inserisci almeno ${AI_AGENT_MIN_INPUT_CHARS} caratteri nella descrizione del task.`
+        `Inserisci almeno ${AI_AGENT_MIN_INPUT_CHARS} caratteri nella descrizione del task.`
       );
       return;
     }
+
     const prevEff = { ...structuredRev.effectiveBySection };
     setGenerateError(null);
     setGenerating(true);
     try {
       const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
-      const design = await generateAIAgentDesign({
-        userDesc,
+      const structuredDesignForPhase3Payload =
+        structuredRegenerateScope === 'sections_only'
+          ? structuredDesignForPipelinePhase3(
+              structuredRev.effectiveBySection as Record<string, string | undefined>
+            )
+          : undefined;
+      const compilePlatform = normalizeAgentPromptPlatformId(agentPromptTargetPlatform);
+
+      if (structuredRegenerateScope === 'sections_only') {
+        const result = await generateAIAgentDesign({
+          userDesc: nlDescription,
+          provider,
+          model,
+          outputLanguage,
+          compilePlatform,
+          structuredRegenerateScope: 'sections_only',
+          ...(structuredDesignForPhase3Payload
+            ? { structuredDesignForPhase3: structuredDesignForPhase3Payload as Record<string, unknown> }
+            : {}),
+        });
+        if (result.mode !== 'sections_only') {
+          throw new Error('Risposta server inattesa: atteso compile sections_only.');
+        }
+        logAiAgentDebug('structured_pipeline_sections_only', {
+          platform: result.platform,
+          systemPromptChars: result.system_prompt.length,
+        });
+        setIaRevisionDiffBySection(null);
+        setDirty(true);
+        markPromptFinalMisaligned('structured_pipeline_sections_only');
+        return;
+      }
+
+      const rawIr = await extractStructuredDesign({
+        description: nlDescription,
         provider,
         model,
         outputLanguage,
-        ...(refining ? { sectionRefinements: structuredRev.collectRefinementBundles() } : {}),
       });
-      const applied = applyGenerateDesignPayload(design);
+      const ir = parseStructuredDesignIrFromApi(rawIr);
+      if (!ir) {
+        throw new Error('Risposta extract-structure non valida o JSON IR incompleto.');
+      }
+      const applied = applyStructuredIrToGenerateApplyResult(ir);
       setProposedFields(applied.proposedFields);
       structuredRev.resetAllFromApiBases(applied.sectionBases);
       const nextPersist = persistedFromCleanSectionBases(applied.sectionBases, {
@@ -570,13 +776,25 @@ export function useAIAgentEditorController({
       } else {
         setIaRevisionDiffBySection(null);
       }
+      setPromptFinalAligned(true);
       setDirty(true);
     } catch (e) {
       setGenerateError(e instanceof Error ? e.message : String(e));
     } finally {
       setGenerating(false);
     }
-  }, [hasAgentGeneration, designDescription, provider, model, structuredRev, structuredOtEnabled, backendPlaceholders]);
+  }, [
+    hasAgentGeneration,
+    designDescription,
+    committedDesignDescription,
+    provider,
+    model,
+    structuredRev,
+    structuredOtEnabled,
+    backendPlaceholders,
+    agentPromptTargetPlatform,
+    markPromptFinalMisaligned,
+  ]);
 
   const updateProposedField = React.useCallback(
     (slotId: string, patch: Partial<AIAgentProposedVariable>) => {
@@ -684,6 +902,80 @@ export function useAIAgentEditorController({
     [useCases, logicalSteps, provider, model]
   );
 
+  persistInputsRef.current = {
+    designDescription,
+    agentPrompt,
+    agentPromptTargetPlatform: normalizeAgentPromptPlatformId(agentPromptTargetPlatform),
+    agentStructuredSectionsJson,
+    outputVariableMappings,
+    proposedFields,
+    previewByStyle,
+    previewStyleId,
+    initialStateTemplateJson,
+    agentRuntimeCompactJson,
+    hasAgentGeneration,
+    agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
+    agentUseCasesJson: serializeUseCases(useCases),
+    agentIaRuntimeOverrideJson: JSON.stringify(
+      mergeConvaiAgentIdFromGlobalDefaults(iaRuntimeConfig, loadGlobalIaAgentConfig())
+    ),
+  };
+
+  const ensurePromptFinalDeterministicCompileSync = React.useCallback((reason: string) => {
+    const id = instanceIdRef.current;
+    if (!id || !hydratedRef.current || !hasAgentGenerationRef.current) {
+      return;
+    }
+    if (promptFinalAlignedRef.current) {
+      return;
+    }
+    const eff = effectiveBySectionRef.current;
+    const runtime = buildDeterministicRuntimeCompactFromSectionBases({
+      goal: eff.goal ?? '',
+      operational_sequence: eff.operational_sequence ?? '',
+      context: eff.context ?? '',
+      constraints: eff.constraints ?? '',
+      personality: eff.personality ?? '',
+      tone: eff.tone ?? '',
+      examples: eff.examples ?? '',
+    });
+    const nextJson = JSON.stringify(runtime, null, 2);
+    const basePersistence = persistInputsRef.current;
+    if (!basePersistence) {
+      return;
+    }
+    const prevTrim = (basePersistence.agentRuntimeCompactJson ?? '').trim();
+    if (nextJson.trim() === prevTrim) {
+      promptFinalAlignedRef.current = true;
+      setPromptFinalAligned(true);
+      return;
+    }
+    logStructuredPipelineAlignment('recompile prompt finale (deterministic)', { reason, chars: nextJson.length });
+    if (reason === 'beforeFlowCompile') {
+      logStructuredPipelineAlignment('debug required deterministic recompile', { instanceId: id });
+    }
+    const patch = buildAIAgentTaskPersistPatch({
+      ...basePersistence,
+      agentRuntimeCompactJson: nextJson,
+    }) as Record<string, unknown>;
+    const ok = taskRepository.updateTask(id, patch as Partial<Task>, projectIdRef.current);
+    if (!ok) {
+      console.error('[useAIAgentEditorController] ensurePromptFinalDeterministicCompileSync: updateTask failed', {
+        instanceId: id,
+      });
+      return;
+    }
+    setAgentRuntimeCompactJson(nextJson);
+    promptFinalAlignedRef.current = true;
+    setPromptFinalAligned(true);
+  }, []);
+
+  React.useEffect(() => {
+    return registerAiAgentPromptAlignmentFlush(() => {
+      ensurePromptFinalDeterministicCompileSync('beforeFlowCompile');
+    });
+  }, [ensurePromptFinalDeterministicCompileSync]);
+
   const structuredDesignDirty = agentStructuredSectionsJson !== committedStructuredJsonRef.current;
   const descriptionDirty = designDescription !== committedDesignDescription;
 
@@ -719,6 +1011,8 @@ export function useAIAgentEditorController({
     initialStateTemplateJson,
     setInitialStateTemplateJson,
     agentRuntimeCompactJson,
+    promptFinalAligned,
+    ensurePromptFinalDeterministicCompile: ensurePromptFinalDeterministicCompileSync,
     generating,
     generateError,
     iaRevisionDiffBySection,
@@ -749,5 +1043,6 @@ export function useAIAgentEditorController({
     setIaRuntimeConfig,
     iaRuntimeLoadedFrom,
     saveIaRuntimeOverrideToTask,
+    persistIaRuntimeOverrideSnapshot,
   };
 }

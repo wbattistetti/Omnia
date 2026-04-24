@@ -133,7 +133,8 @@ export function voiceMatchesLanguageTag(
   selectedLocale: string | null | undefined
 ): boolean {
   if (!selectedLocale || !String(selectedLocale).trim()) return true;
-  if (!voiceLang || voiceLang === 'und') return false;
+  // ElevenLabs spesso espone `und` / assente per voci multilingua: mostrarle per ogni locale.
+  if (!voiceLang || voiceLang === 'und') return true;
   const v = voiceLang.trim().toLowerCase();
   const s = selectedLocale.trim().toLowerCase();
   const prefix = s.split('-')[0];

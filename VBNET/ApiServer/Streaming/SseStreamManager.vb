@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports Microsoft.AspNetCore.Http
+Imports Microsoft.AspNetCore.Http.Features
 Imports Newtonsoft.Json
 Imports System.Collections.Concurrent
 Imports System.IO
@@ -40,6 +41,12 @@ Namespace ApiServer.Streaming
 
             If response Is Nothing Then
                 Throw New ArgumentNullException(NameOf(response))
+            End If
+
+            ' Kestrel: FlushAsync().Wait() e Task.Run(...).Wait() in EmitEvent contano come I/O sincrono sul body — altrimenti InvalidOperationException.
+            Dim bodyCtl = response.HttpContext.Features.Get(Of IHttpBodyControlFeature)()
+            If bodyCtl IsNot Nothing Then
+                bodyCtl.AllowSynchronousIO = True
             End If
 
             ' Setup SSE headers

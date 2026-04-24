@@ -1,5 +1,4 @@
 import React, {
-  createContext,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -7,6 +6,11 @@ import React, {
   useReducer,
   useRef,
 } from 'react';
+import {
+  WorkspaceContext,
+  WorkspaceDispatchContext,
+  WorkspaceSnapshotRefContext,
+} from './flowWorkspaceReactContext';
 import { takeWorkspaceRestoreForProjectOnce } from '../services/project-save/flowSaveSnapshot';
 import { logFlowSaveDebug } from '../utils/flowSaveDebug';
 import type { Flow, FlowId, WorkspaceState } from './FlowTypes';
@@ -85,12 +89,6 @@ function reducer<NodeT = any, EdgeT = any>(state: WorkspaceState<NodeT, EdgeT>, 
       return state;
   }
 }
-
-const WorkspaceContext = createContext<WorkspaceState | undefined>(undefined);
-const WorkspaceDispatchContext = createContext<React.Dispatch<Action> | undefined>(undefined);
-
-/** Latest workspace for synchronous transactional structural commits (same closure as domain apply). */
-const WorkspaceSnapshotRefContext = createContext<React.MutableRefObject<WorkspaceState> | null>(null);
 
 /**
  * In-memory flow workspace (draft when no project is selected). Persistence is gated in FlowPersistence

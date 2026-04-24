@@ -84,6 +84,42 @@ export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
   const { runtimeMarkdown } = useAgentStructuredDockSlice();
   const editorCtx = useOptionalAIAgentEditorDock();
   const jsMode = Boolean(editorCtx?.promptFinaleJsMode);
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const ensureCompile = editorCtx?.ensurePromptFinalDeterministicCompile;
+  const promptFinalAligned = editorCtx?.promptFinalAligned ?? true;
+  const dockInstanceId = editorCtx?.instanceId;
+
+  React.useEffect(() => {
+    if (!ensureCompile || dockInstanceId === undefined) return;
+    const el = rootRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting && e.intersectionRatio > 0) {
+            ensureCompile('promptFinalePanelVisible');
+          }
+        }
+      },
+      { threshold: [0, 0.02, 0.1] }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [dockInstanceId, ensureCompile]);
+
+  React.useEffect(() => {
+    if (!ensureCompile || promptFinalAligned) return;
+    const el = rootRef.current;
+    if (!el) return;
+    const raf = window.requestAnimationFrame(() => {
+      const r = el.getBoundingClientRect();
+      const vis = r.width > 2 && r.height > 2 && r.bottom > 0 && r.top < window.innerHeight;
+      if (vis) {
+        ensureCompile('promptFinaleVisibleAfterMisalign');
+      }
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [dockInstanceId, promptFinalAligned, ensureCompile]);
 
   const parsedInitialState = React.useMemo(() => {
     const src = editorCtx?.initialStateTemplateJson;
@@ -141,7 +177,10 @@ export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
   );
 
   return (
-    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-slate-950/80 px-2 pb-2 pt-1 gap-1">
+    <div
+      ref={rootRef}
+      className="h-full min-h-0 flex flex-col overflow-hidden bg-slate-950/80 px-2 pb-2 pt-1 gap-1"
+    >
       {!editorCtx ? null : jsMode ? (
         <div className="flex min-h-0 flex-1 flex-col gap-1">
           <ReadOnlyPlatformBanner />

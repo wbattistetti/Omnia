@@ -1,5 +1,6 @@
 /**
- * Sync ElevenLabs voices, derived + global languages, and LLM model lists (no ElevenLabs LLM).
+ * Sync ElevenLabs voices, derived + global languages, LLM lists (OpenAI/Anthropic/Google),
+ * and ElevenLabs ConvAI LLM catalog (/v1/convai/llm/list).
  */
 
 const { readCache, writeCache, CACHE_PATH } = require('./fileCache');
@@ -325,20 +326,149 @@ async function fetchGoogleModels() {
   return rows;
 }
 
+/**
+ * ElevenLabs ConvAI embedded LLMs (turbo / flash / …) — not OpenAI model IDs.
+ * GET {ELEVENLABS_API_BASE}/convai/llm/list
+ *
+ * API responses: legacy `models[]` + `model_id`; current `{ llms: [{ llm, max_tokens_limit, ... }] }`.
+ */
+async function fetchElevenLabsConvaiLlms() {
+  const rawKey = process.env.ELEVENLABS_API_KEY;
+  const key = typeof rawKey === 'string' ? rawKey.trim() : '';
+  if (!key) {
+    diag('syncConvaiLlms:no_key', {});
+    return [];
+  }
+  const elevenBase = getElevenLabsBaseUrl();
+  const url = `${elevenBase}/convai/llm/list`;
+  diag('syncConvaiLlms:request', { url: url.replace(/\/\/.*@/, '//…@') });
+
+  let res;
+  try {
+    res = await fetch(url, { headers: { 'xi-api-key': key } });
+  } catch (e) {
+    console.warn('[iaCatalog] ConvAI llm/list fetch failed:', e.message);
+    diag('syncConvaiLlms:fetch_error', { message: String(e.message || e) });
+    return [];
+  }
+
+  if (!res.ok) {
+    const t = await res.text();
+    console.warn('[iaCatalog] ConvAI llm/list HTTP', res.status, t.slice(0, 240));
+    diag('syncConvaiLlms:http_error', { httpStatus: res.status, bodyPreview: t.slice(0, 200) });
+    return [];
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    console.warn('[iaCatalog] ConvAI llm/list invalid JSON:', e.message);
+    return [];
+  }
+
+  const list = Array.isArray(data)
+    ? data
+    : Array.isArray(data.llms)
+      ? data.llms
+      : Array.isArray(data.models)
+        ? data.models
+        : Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data.items)
+            ? data.items
+            : [];
+
+  const rows = [];
+  for (const item of list) {
+    if (typeof item === 'string') {
+      const sid = item.trim();
+      if (!sid) continue;
+      rows.push({
+        model_id: sid,
+        name: sid,
+        latency_ms: null,
+        cost_hint: null,
+        capabilities: {},
+        tags: ['convai'],
+        notes: 'ElevenLabs ConvAI',
+        raw: { llm: sid },
+      });
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const llmField =
+      typeof item.llm === 'string'
+        ? item.llm.trim()
+        : item.llm != null &&
+            typeof item.llm === 'object' &&
+            typeof item.llm.id === 'string'
+          ? item.llm.id.trim()
+          : '';
+    const id =
+      item.model_id ||
+      item.id ||
+      item.llm_id ||
+      llmField ||
+      item.name ||
+      item.slug ||
+      '';
+    if (!id) continue;
+    const sid = String(id).trim();
+    const name =
+      typeof item.display_name === 'string'
+        ? item.display_name
+        : typeof item.label === 'string'
+          ? item.label
+          : typeof item.name === 'string'
+            ? item.name
+            : llmField || sid;
+    const capabilities = {};
+    if (typeof item.max_tokens_limit === 'number') {
+      capabilities.max_tokens_limit = item.max_tokens_limit;
+    }
+    if (typeof item.max_context_limit === 'number') {
+      capabilities.max_context_limit = item.max_context_limit;
+    }
+    if (typeof item.supports_image_input === 'boolean') {
+      capabilities.supports_image_input = item.supports_image_input;
+    }
+    if (typeof item.supports_document_input === 'boolean') {
+      capabilities.supports_document_input = item.supports_document_input;
+    }
+    rows.push({
+      model_id: sid,
+      name,
+      latency_ms: null,
+      cost_hint: null,
+      capabilities,
+      tags: ['convai'],
+      notes: 'ElevenLabs ConvAI',
+      raw: item,
+    });
+  }
+  rows.sort((a, b) => a.model_id.localeCompare(b.model_id));
+  diag('syncConvaiLlms:mapped', { count: rows.length });
+  return rows;
+}
+
 async function syncModelsLLM() {
   const openai = await fetchOpenAIModels();
   const anthropic = await fetchAnthropicModels();
   const google = await fetchGoogleModels();
+  const elevenlabs = await fetchElevenLabsConvaiLlms();
 
   await pg.upsertModels('openai', openai);
   await pg.upsertModels('anthropic', anthropic);
   await pg.upsertModels('google', google);
+  await pg.upsertModels('elevenlabs', elevenlabs);
 
   const c = readCache();
   c.modelsByProvider = {
     openai,
     anthropic,
     google,
+    elevenlabs,
   };
   c.meta = c.meta || {};
   c.meta.lastModelsSync = new Date().toISOString();
@@ -350,6 +480,7 @@ async function syncModelsLLM() {
       openai: openai.length,
       anthropic: anthropic.length,
       google: google.length,
+      elevenlabs: elevenlabs.length,
     },
   };
 }
@@ -391,4 +522,5 @@ module.exports = {
   syncAll,
   deriveLanguagesFromVoices,
   filterList,
+  fetchElevenLabsConvaiLlms,
 };

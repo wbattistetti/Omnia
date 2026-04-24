@@ -48,6 +48,20 @@ export interface IAAgentConfig {
   voice?: IAAgentVoiceConfig;
   /** Preferred over `voice` for ElevenLabs when set (1 primary + max 3 secondary). */
   voices?: IAAgentVoiceEntry[];
+  /** ConvAI agent id — used when `platform === 'elevenlabs'` at compile/runtime. */
+  convaiAgentId?: string;
+  /**
+   * Modello sintesi vocale ElevenLabs (`tts.model_id` in ConvAI). Catalogo da GET `/v1/models` filtrato `eleven_*`.
+   * Vuoto = default Omnia per lingua (`eleven_flash_v2` se `en`, altrimenti `eleven_flash_v2_5`).
+   */
+  ttsModel?: string;
+  /**
+   * Solo client / persistenza task: dopo cambio `ttsModel` con ConvAI già creato, il prossimo avvio flusso
+   * esegue `createAgent` di nuovo (conversation_config con TTS) e aggiorna `convaiAgentId`. Non va a ElevenLabs come campo top-level.
+   */
+  elevenLabsNeedsReprovision?: boolean;
+  /** Optional base URL for ApiServer `/elevenlabs/*`; default env / localhost in VB. */
+  elevenLabsBackendBaseUrl?: string;
   advanced?: Record<string, unknown>;
 }
 

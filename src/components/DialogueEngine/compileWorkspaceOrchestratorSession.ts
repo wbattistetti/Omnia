@@ -12,6 +12,13 @@ import { backendCompileFlowGraph, discoverSubflowCanvasIdsTransitively } from '.
 import { loadFlow } from '../../flows/FlowPersistence';
 import { collectSubflowWorkspaceCompileErrors } from '../../domain/compileErrors/collectSubflowWorkspaceCompileErrors';
 import { normalizeSeverity } from '../../utils/severityUtils';
+import { iaConvaiTraceMergedCompileTasks } from '../../utils/debug/iaConvaiFlowTrace';
+import {
+  collectIaAgentRuntimeCompileErrors,
+  mergeAiAgentTaskLocations,
+  type AiAgentTaskLocation,
+} from '../../domain/compileErrors/collectIaAgentRuntimeCompileErrors';
+import { flushAiAgentPromptAlignmentBeforeCompile } from '../TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentPromptAlignmentFlush';
 
 export type CompileWorkspaceOrchestratorParams = {
   rootFlowId: string;
@@ -105,6 +112,8 @@ export async function compileWorkspaceForOrchestratorSession(
   const enrichedRoot = enrichFlowNodes(nodes);
   const subflowIds = discoverSubflowCanvasIdsTransitively(enrichedRoot);
 
+  flushAiAgentPromptAlignmentBeforeCompile();
+
   const rootArtifacts = await backendCompileFlowGraph(enrichedRoot, edges, ctx);
   const primaryCompileJson = rootArtifacts.compileJson;
   const rootSubflowGuards = await collectSubflowWorkspaceCompileErrors({
@@ -112,6 +121,8 @@ export async function compileWorkspaceForOrchestratorSession(
     projectId,
   });
   mergeCompileJsonGuardErrors(primaryCompileJson, rootSubflowGuards);
+  const aiAgentLocations = new Map<string, AiAgentTaskLocation>();
+  mergeAiAgentTaskLocations(aiAgentLocations, enrichedRoot, rootFlowId);
   const mergedTasks = [...rootArtifacts.allTasksWithTemplates];
   const mergedDDTs = [...rootArtifacts.allDDTs];
   const subflowCompilations: Record<string, Record<string, unknown>> = {};
@@ -155,12 +166,33 @@ export async function compileWorkspaceForOrchestratorSession(
     subflowCompilations[sfId] = art.compileJson;
     mergeTasksById(mergedTasks, art.allTasksWithTemplates);
     mergedDDTs.push(...art.allDDTs);
+    mergeAiAgentTaskLocations(aiAgentLocations, en, sfId);
     allCompileSlices.push({
       flowId: sfId,
       errors: art.compileJson.errors as unknown[] | undefined,
       hasErrors: art.compileJson.hasErrors as boolean | undefined,
     });
   }
+
+  const iaProviderGuards = collectIaAgentRuntimeCompileErrors(mergedTasks, aiAgentLocations, rootFlowId);
+  mergeCompileJsonGuardErrors(primaryCompileJson, iaProviderGuards);
+
+  /** `mergeCompileJsonGuardErrors` replaces `errors` with a new array — keep root slice in sync for consumers that merged slices before this step (e.g. IA provisioning guards). */
+  const rootSlice = allCompileSlices[0];
+  if (rootSlice?.flowId === rootFlowId) {
+    rootSlice.errors = primaryCompileJson.errors as unknown[] | undefined;
+    rootSlice.hasErrors = primaryCompileJson.hasErrors as boolean | undefined;
+  }
+
+  if (iaProviderGuards.length > 0) {
+    console.info('[IA·ConvAI] compile: merged IA runtime / provisioning guards into root compile JSON', {
+      rootFlowId,
+      guardCount: iaProviderGuards.length,
+      codes: iaProviderGuards.map((g) => String((g as { code?: unknown }).code ?? '')),
+    });
+  }
+
+  iaConvaiTraceMergedCompileTasks(rootFlowId, mergedTasks);
 
   return {
     primaryCompileJson,

@@ -69,6 +69,7 @@
     <!-- Execution State (shared between Orchestrator and Engine) -->
     <Compile Include="ExecutionFlow.vb" />
     <Compile Include="ExecutionState.vb" />
+    <Compile Include="RuntimeConvaiException.vb" />
     <Compile Include="TaskExecutionResult.vb" />
     <Compile Include="RowTurnResult.vb" />
     <Compile Include="TurnStatus.vb" />

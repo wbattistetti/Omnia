@@ -36,6 +36,9 @@ import type { DebuggerRuntimeBridge } from '../../../../features/useCases/runtim
 import { UseCasesPanelIcon } from '../../../../features/useCases/ui/UseCaseIcons';
 import { chatFocusDebug, describeElement } from '@responseEditor/ChatSimulator/utils/chatFocusDebug';
 import { getFlowFocusManager } from '@features/focus';
+import { StartAgentErrorCard } from '@responseEditor/ChatSimulator/StartAgentErrorCard';
+import { ConvaiTtsConstraintRuntimeCard } from '@responseEditor/ChatSimulator/ConvaiTtsConstraintRuntimeCard';
+import { isConvaiNonEnglishTtsConstraintError } from '@utils/convai/convaiTtsConstraintError';
 
 /** Flow graph for error grouping when DDEBubbleChat is outside FlowWorkspaceProvider (global debugger). */
 function buildFlowsRecordFromWorkspaceSnapshot(): Record<string, Flow<Node<FlowNode>, Edge>> {
@@ -388,15 +391,12 @@ export default function DDEBubbleChat({
   const flowDebuggerHookOpts = React.useMemo<UseFlowModeChatOptions>(
     () => ({
       onSessionStarted: () => {
-        console.info('[DebuggerFlow] lifecycle sessionStarted → running');
         debuggerMachineRef.current?.setState('running');
       },
       onOrchestratorWaiting: () => {
-        console.info('[DebuggerFlow] lifecycle waitingForInput');
         debuggerMachineRef.current?.setState('waitingForInput');
       },
       onOrchestratorEnded: () => {
-        console.info('[DebuggerFlow] lifecycle ended → idle');
         debuggerMachineRef.current?.setState('idle');
       },
     }),
@@ -482,18 +482,6 @@ export default function DDEBubbleChat({
     [flowModeChat.startSession, flowModeChat.clearSession, flowModeChat.restartFlow]
   );
 
-  React.useEffect(() => {
-    if (!isFlowMode) return;
-    console.info('[DebuggerFlow] toolbarState', dbgToolbarState, {
-      sessionId: flowModeChat.getOrchestratorSessionId(),
-      waiting: flowModeChat.isWaitingForInput,
-    });
-  }, [
-    isFlowMode,
-    dbgToolbarState,
-    flowModeChat.isWaitingForInput,
-    flowModeChat.getOrchestratorSessionId,
-  ]);
   const launchExecutionLabel = React.useMemo(() => {
     const flowName = (executionFlowName || 'MAIN').trim() || 'MAIN';
     const launchLabel = (executionLaunchLabel || '').trim();
@@ -1963,6 +1951,16 @@ export default function DDEBubbleChat({
             <AlertTriangle size={14} className="flex-shrink-0" />
             <span className="break-words whitespace-normal">{displayChatError}</span>
           </div>
+        )}
+        {isFlowMode && flowModeChat.startAgentRuntimeError && !debuggerBlockedByCompile && (
+          isConvaiNonEnglishTtsConstraintError(flowModeChat.startAgentRuntimeError) ? (
+            <ConvaiTtsConstraintRuntimeCard
+              detail={flowModeChat.startAgentRuntimeError}
+              taskInstanceIdHint={flowModeChat.orchestratorTaskIdHint}
+            />
+          ) : (
+            <StartAgentErrorCard detail={flowModeChat.startAgentRuntimeError} />
+          )
         )}
       </div>
       {/* ✅ NEW: Tabs for preview mode */}

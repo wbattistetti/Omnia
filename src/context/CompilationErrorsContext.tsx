@@ -23,7 +23,6 @@ export function CompilationErrorsProvider({ children }: { children: React.ReactN
   // This is initialized when the provider mounts
   React.useEffect(() => {
     globalSetErrors = (newErrors: CompilationError[]) => {
-      console.log('[CompilationErrorsContext] ✅ Global setter called:', newErrors.length);
       setErrorsState(newErrors);
     };
 

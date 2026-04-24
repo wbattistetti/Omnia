@@ -856,10 +856,6 @@ export const AppContent: React.FC<AppContentProps> = ({
       if (persisted && persisted.length > 0) {
         markFlowsPersistedRef.current?.(persisted);
       }
-      console.log('[Save][Orchestrator] ✅ Save completed successfully', {
-        projectId: pid,
-        duration: saveResult.duration,
-      });
       try {
         const { saveDebuggerUseCasesToProject } = await import(
           '../features/useCases/persistence/projectDebuggerUseCasesApi'
@@ -1321,7 +1317,6 @@ export const AppContent: React.FC<AppContentProps> = ({
   // }, [handleTestSingleNode]);
 
   const handleRunFlow = React.useCallback(() => {
-    console.log('[AppContent] handleRunFlow -> global flow debugger');
     void import('../context/CompilationErrorsContext').then(({ clearCompilationErrorsGlobal }) => {
       clearCompilationErrorsGlobal();
     });

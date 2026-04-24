@@ -262,16 +262,6 @@ export class DialogueTaskService {
    * Marca un template come modificato (da chiamare quando si modifica dataContract in memoria)
    */
   static markTemplateAsModified(templateId: string): void {
-    console.log('[DialogueTaskService] 📝 markTemplateAsModified CALLED', {
-      templateId,
-      templateIdType: typeof templateId,
-      templateIdLength: templateId?.length,
-      cacheLoaded: this.cacheLoaded,
-      cacheSize: this.cache.length,
-      wasAlreadyModified: this.modifiedTemplates.has(templateId),
-    });
-
-    // ✅ DEEP LOG: Check if template exists before marking as modified
     const template = this.getTemplate(templateId);
     if (!template) {
       console.error('[DialogueTaskService] ❌ CANNOT MARK AS MODIFIED: Template not found!', {
@@ -284,38 +274,11 @@ export class DialogueTaskService {
         })).slice(0, 20),
       });
       // Still add to modified list in case template is loaded later
-    } else {
-      // ✅ DEEP LOG: Check grammarFlow in template before marking as modified
-      const grammarFlowEngine = template.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
-      console.log('[DialogueTaskService] 📝 Template found, checking grammarFlow', {
-        templateId,
-        hasDataContract: !!template.dataContract,
-        enginesCount: template.dataContract?.engines?.length || 0,
-        hasGrammarFlowEngine: !!grammarFlowEngine,
-        hasGrammarFlow: !!grammarFlowEngine?.grammarFlow,
-        grammarFlowNodesCount: grammarFlowEngine?.grammarFlow?.nodes?.length || 0,
-        templateSource: (template as any).source,
-      });
     }
 
     this.modifiedTemplates.add(templateId);
 
     syncProjectTemplateRowFromDialogueTask(templateId, this.getTemplate(templateId));
-
-    // ✅ Log dettagliato per debugging
-    const templateInfo = template ? {
-      has_id: !!template._id,
-      _id: template._id ? (typeof template._id === 'object' ? template._id.toString() : String(template._id)) : null,
-      hasId: !!template.id,
-      id: template.id,
-      label: template.label
-    } : null;
-    console.log('[DialogueTaskService] 📝 Template marked as modified', {
-      templateId,
-      totalModified: this.modifiedTemplates.size,
-      templateInfo,
-      modifiedTemplateIds: Array.from(this.modifiedTemplates),
-    });
   }
 
   /**
@@ -330,10 +293,6 @@ export class DialogueTaskService {
    */
   static clearModifiedTemplate(templateId: string): void {
     this.modifiedTemplates.delete(templateId);
-    console.log('[DialogueTaskService] ✅ Template cleared from modified list', {
-      templateId,
-      remainingModified: this.modifiedTemplates.size
-    });
   }
 
   /**
@@ -341,15 +300,8 @@ export class DialogueTaskService {
    */
   static async saveModifiedTemplates(projectId?: string): Promise<{ saved: number; failed: number }> {
     if (this.modifiedTemplates.size === 0) {
-      console.log('[DialogueTaskService] ✅ No modified templates to save');
       return { saved: 0, failed: 0 };
     }
-
-    console.log('[DialogueTaskService] 💾 Saving modified templates', {
-      count: this.modifiedTemplates.size,
-      templateIds: Array.from(this.modifiedTemplates),
-      projectId
-    });
 
     const templateIds = Array.from(this.modifiedTemplates);
     const results = await Promise.allSettled(
@@ -360,23 +312,7 @@ export class DialogueTaskService {
           throw new Error(`Template not found: ${templateId}`);
         }
 
-        // ✅ DEEP LOG: Check template state BEFORE preparing payload
         const grammarFlowEngineBefore = template.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
-        console.log('[DialogueTaskService] 🔍 Template state BEFORE payload preparation', {
-          templateId,
-          hasDataContract: !!template.dataContract,
-          enginesCount: template.dataContract?.engines?.length || 0,
-          grammarFlowEngineFound: !!grammarFlowEngineBefore,
-          grammarFlowEngineKeys: grammarFlowEngineBefore ? Object.keys(grammarFlowEngineBefore) : [],
-          hasGrammarFlow: !!grammarFlowEngineBefore?.grammarFlow,
-          grammarFlowNodesCount: grammarFlowEngineBefore?.grammarFlow?.nodes?.length || 0,
-          grammarFlowType: typeof grammarFlowEngineBefore?.grammarFlow,
-          grammarFlowIsArray: Array.isArray(grammarFlowEngineBefore?.grammarFlow),
-          grammarFlowIsObject: grammarFlowEngineBefore?.grammarFlow && typeof grammarFlowEngineBefore?.grammarFlow === 'object',
-          grammarFlowIsNull: grammarFlowEngineBefore?.grammarFlow === null,
-          grammarFlowIsUndefined: grammarFlowEngineBefore?.grammarFlow === undefined,
-          fullGrammarFlowEngine: grammarFlowEngineBefore ? JSON.stringify(grammarFlowEngineBefore, null, 2).substring(0, 2000) : 'null',
-        });
 
         try {
           const templateForSave = template as any;
@@ -391,22 +327,7 @@ export class DialogueTaskService {
             updatedAt: new Date()
           };
 
-          // ✅ DEEP LOG: Check payload state AFTER preparation
           const payloadGrammarFlowEngine = payload.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
-          console.log('[DialogueTaskService] 🔍 Payload state AFTER preparation', {
-            templateId,
-            hasDataContract: !!payload.dataContract,
-            enginesCount: payload.dataContract?.engines?.length || 0,
-            grammarFlowEngineFound: !!payloadGrammarFlowEngine,
-            grammarFlowEngineKeys: payloadGrammarFlowEngine ? Object.keys(payloadGrammarFlowEngine) : [],
-            hasGrammarFlow: !!payloadGrammarFlowEngine?.grammarFlow,
-            grammarFlowNodesCount: payloadGrammarFlowEngine?.grammarFlow?.nodes?.length || 0,
-            grammarFlowType: typeof payloadGrammarFlowEngine?.grammarFlow,
-            grammarFlowIsNull: payloadGrammarFlowEngine?.grammarFlow === null,
-            grammarFlowIsUndefined: payloadGrammarFlowEngine?.grammarFlow === undefined,
-            payloadKeys: Object.keys(payload).slice(0, 20),
-            fullPayloadGrammarFlowEngine: payloadGrammarFlowEngine ? JSON.stringify(payloadGrammarFlowEngine, null, 2).substring(0, 2000) : 'null',
-          });
 
           // ✅ VERIFY: Check if grammarFlow was lost during payload preparation
           if (grammarFlowEngineBefore?.grammarFlow && !payloadGrammarFlowEngine?.grammarFlow) {
@@ -430,28 +351,6 @@ export class DialogueTaskService {
           const grammarFlowEngine = payloadGrammarFlowEngine || templateForSave.dataContract?.engines?.find((e: any) => e.type === 'grammarflow');
           const hasGrammarFlow = !!grammarFlowEngine?.grammarFlow;
           const grammarFlowNodesCount = grammarFlowEngine?.grammarFlow?.nodes?.length || 0;
-
-          console.log('[DialogueTaskService] 💾 Saving template', {
-            templateId,
-            mongoId,
-            source: templateForSave.source,
-            isFactory,
-            hasDataContract: !!payload.dataContract,
-            hasConstraints: !!payload.constraints,
-            hasSteps: !!payload.steps,
-            enginesCount: payload.dataContract?.engines?.length || 0,
-            hasGrammarFlowEngine: !!grammarFlowEngine,
-            hasGrammarFlow: hasGrammarFlow,
-            grammarFlowNodesCount: grammarFlowNodesCount,
-            dataContractKeys: payload.dataContract ? Object.keys(payload.dataContract) : [],
-          });
-
-          // ✅ DEEP LOG: Full payload preview (first 2000 chars)
-          const payloadPreview = JSON.stringify(payload, null, 2).substring(0, 2000);
-          console.log('[DialogueTaskService] 📦 Payload preview (first 2000 chars)', {
-            templateId,
-            payloadPreview,
-          });
 
           let response: Response;
 
@@ -496,18 +395,6 @@ export class DialogueTaskService {
           const savedHasGrammarFlow = !!savedGrammarFlowEngine?.grammarFlow;
           const savedGrammarFlowNodesCount = savedGrammarFlowEngine?.grammarFlow?.nodes?.length || 0;
 
-          console.log('[DialogueTaskService] ✅ Template saved', {
-            templateId,
-            source: templateForSave.source,
-            isFactory,
-            hasDataContract: !!saved?.dataContract,
-            savedEnginesCount: saved?.dataContract?.engines?.length || 0,
-            savedHasGrammarFlowEngine: !!savedGrammarFlowEngine,
-            savedHasGrammarFlow: savedHasGrammarFlow,
-            savedGrammarFlowNodesCount: savedGrammarFlowNodesCount,
-            savedDataContractKeys: saved?.dataContract ? Object.keys(saved.dataContract) : [],
-          });
-
           // ✅ VERIFY: Check if grammarFlow was actually saved
           if (hasGrammarFlow && !savedHasGrammarFlow) {
             console.error('[DialogueTaskService] ❌ GRAMMARFLOW LOST DURING SAVE!', {
@@ -540,11 +427,6 @@ export class DialogueTaskService {
         failedIds: results
           .map((r, idx) => r.status === 'rejected' ? templateIds[idx] : null)
           .filter(Boolean)
-      });
-    } else {
-      console.log('[DialogueTaskService] ✅ All modified templates saved successfully', {
-        saved,
-        total: templateIds.length
       });
     }
 

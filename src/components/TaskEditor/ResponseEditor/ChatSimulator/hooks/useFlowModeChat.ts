@@ -16,8 +16,10 @@ import {
 } from '../../../../../features/debugger/persistence/debuggerConversationPersistence';
 import { chatFocusDebug, describeElement } from '../utils/chatFocusDebug';
 import { getFlowFocusManager } from '@features/focus';
-
-const DBG = '[DebuggerFlow]';
+import type { OrchestratorSseErrorPayload } from '@components/DialogueEngine/orchestratorAdapter';
+import {
+  isOrchestratorExecutionError,
+} from '@components/DialogueEngine/orchestratorAdapter';
 
 /** Optional debugger lifecycle hooks + auto-start (default: manual Play only). */
 export type UseFlowModeChatOptions = {
@@ -86,6 +88,11 @@ export function useFlowModeChat(
 
   const [isWaitingForInput, setIsWaitingForInputState] = React.useState(false);
   const [error, setErrorState] = React.useState<string | null>(null);
+  /** Payload SSE per errore runtime startAgent / ConvAI (card dedicata in DDEBubbleChat). */
+  const [startAgentRuntimeError, setStartAgentRuntimeError] =
+    React.useState<OrchestratorSseErrorPayload | null>(null);
+  /** Ultimo task orchestrator in attesa input (hint per scope fix ConvAI sul task corretto). */
+  const [orchestratorTaskIdHint, setOrchestratorTaskIdHint] = React.useState<string | null>(null);
   const [isRestarting, setIsRestarting] = React.useState(false);
   const [sessionActive, setSessionActive] = React.useState(false);
   const [currentExecutionLabel, setCurrentExecutionLabel] = React.useState<string>('');
@@ -278,13 +285,22 @@ export function useFlowModeChat(
         if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(false);
         setSessionActive(false);
         debuggerController.notifyOrchestratorEnded();
-        console.info(`${DBG} orchestrator onComplete → session inactive`);
         lifecycleRef.current.onOrchestratorEnded?.();
       },
       onError: (err: Error) => {
-        console.error(`${DBG} orchestrator onError`, err.message);
-        debuggerController.notifyExecutionError(err.message || 'Flow execution error');
-        if (setErrorRef.current) setErrorRef.current(err.message || 'Flow execution error');
+        console.error('[DebuggerFlow] orchestrator onError', err);
+        const sa =
+          isOrchestratorExecutionError(err) && err.payload.phase === 'startAgent' ? err.payload : null;
+        if (sa) {
+          setStartAgentRuntimeError(sa);
+          if (setErrorRef.current) setErrorRef.current(null);
+        } else {
+          setStartAgentRuntimeError(null);
+          if (setErrorRef.current) setErrorRef.current(err.message || 'Flow execution error');
+        }
+        debuggerController.notifyExecutionError(
+          isOrchestratorExecutionError(err) ? err.payload.error || err.message : err.message || 'Flow execution error',
+        );
         if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(false);
         setSessionActive(false);
         lifecycleRef.current.onOrchestratorEnded?.();
@@ -296,6 +312,8 @@ export function useFlowModeChat(
         taskLabel?: string;
         nodeLabel?: string;
       }) => {
+        const tid = String(data?.taskId ?? '').trim();
+        if (tid) setOrchestratorTaskIdHint(tid);
         if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(true);
         const flowName = (executionFlowName || 'MAIN').trim() || 'MAIN';
         const taskLabel = toReadableLabel(data?.taskLabel) || resolveTaskLabel(data?.taskId);
@@ -307,7 +325,6 @@ export function useFlowModeChat(
           setCurrentExecutionType('node');
           setCurrentExecutionLabel(`${flowName}: Nodo(${nodeLabel})`);
         }
-        console.info(`${DBG} waitingForInput`, { taskId: data?.taskId, nodeId: data?.nodeId });
         debuggerController.onWaitingForInput({
           taskId: data?.taskId,
           nodeId: data?.nodeId,
@@ -329,6 +346,8 @@ export function useFlowModeChat(
       toReadableLabel,
       options?.orchestratorCompileRootFlowId,
       debuggerController,
+      setStartAgentRuntimeError,
+      setOrchestratorTaskIdHint,
     ]
   );
 
@@ -348,7 +367,6 @@ export function useFlowModeChat(
       throw new Error('Flow engine is not available.');
     }
     if (hasStartedRef.current) {
-      console.info(`${DBG} executeStart skipped (already started)`);
       return;
     }
     if (startInFlightRef.current) {
@@ -359,18 +377,17 @@ export function useFlowModeChat(
     const startPromise = (async () => {
       hasStartedRef.current = true;
       try {
-        console.info(`${DBG} executeStart → engine.start()`);
+        setOrchestratorTaskIdHint(null);
         await engine.start();
         setSessionActive(true);
         debuggerController.notifySessionStarted(
           (flowEngineRef.current as { getSessionId?: () => string | null } | null)?.getSessionId?.() ?? null
         );
-        console.info(`${DBG} executeStart OK`, { sessionId: getOrchestratorSessionId() });
         lifecycleRef.current.onSessionStarted?.();
       } catch (err) {
         hasStartedRef.current = false;
         setSessionActive(false);
-        console.error(`${DBG} executeStart failed`, err);
+        console.error('[DebuggerFlow] executeStart failed', err);
         throw err;
       } finally {
         startInFlightRef.current = null;
@@ -432,20 +449,14 @@ export function useFlowModeChat(
   const handleUserInput = React.useCallback(
     async (input: string, clientMessageId: string) => {
       if (!flowEngineRef.current) {
-        console.warn(`${DBG} provideInput: no engine`);
+        console.warn('[DebuggerFlow] provideInput: no engine');
         return;
       }
       const sid = getOrchestratorSessionId();
-      console.info(`${DBG} provideInput`, {
-        sessionId: sid,
-        inputLength: input.length,
-        waitingUI: stateRef.current.isWaitingForInput,
-      });
       try {
         await debuggerController.onUserInput(String(input || '').trim(), String(clientMessageId || ''));
-        console.info(`${DBG} provideInput OK`, { sessionId: sid });
       } catch (err) {
-        console.error(`${DBG} provideInput error`, err);
+        console.error('[DebuggerFlow] provideInput error', err);
         if (setErrorRef.current) {
           setErrorRef.current(err instanceof Error ? err.message : 'Error providing input');
         }
@@ -502,10 +513,11 @@ export function useFlowModeChat(
     sentMessageIds.current.clear();
     if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(false);
     if (setErrorRef.current) setErrorRef.current(null);
+    setStartAgentRuntimeError(null);
+    setOrchestratorTaskIdHint(null);
   }, []);
 
   const clearSession = React.useCallback(async () => {
-    console.info(`${DBG} clearSession (soft) begin`, { sessionId: getOrchestratorSessionId() });
     resetDebuggerSessionArtifacts();
     suppressAutoStartAfterClearRef.current = true;
     startInFlightRef.current = null;
@@ -517,21 +529,20 @@ export function useFlowModeChat(
     setCurrentExecutionType('flow');
     if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(false);
     if (setErrorRef.current) setErrorRef.current(null);
+    setStartAgentRuntimeError(null);
+    setOrchestratorTaskIdHint(null);
     lifecycleRef.current.onOrchestratorEnded?.();
 
     const engine = flowEngineRef.current;
     if (engine && typeof engine.reset === 'function') {
       await engine.reset();
     }
-    console.info(`${DBG} clearSession (soft) done`);
   }, [getOrchestratorSessionId, resetDebuggerSessionArtifacts]);
 
   const restartFlow = React.useCallback(async () => {
     if (isRestartingRef.current) {
-      console.info(`${DBG} restartFlow skipped (already restarting)`);
       return;
     }
-    console.info(`${DBG} restartFlow (hard) begin`, { sessionId: getOrchestratorSessionId() });
     suppressAutoStartAfterClearRef.current = false;
     resetDebuggerSessionArtifacts();
 
@@ -553,6 +564,8 @@ export function useFlowModeChat(
     setCurrentExecutionType('flow');
     if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(false);
     if (setErrorRef.current) setErrorRef.current(null);
+    setStartAgentRuntimeError(null);
+    setOrchestratorTaskIdHint(null);
 
     try {
       const engine = flowEngineRef.current;
@@ -560,11 +573,10 @@ export function useFlowModeChat(
         await engine.reset();
       }
       await executeStart();
-      console.info(`${DBG} restartFlow (hard) done`, { sessionId: getOrchestratorSessionId() });
     } catch (err) {
       hasStartedRef.current = false;
       setSessionActive(false);
-      console.error(`${DBG} restartFlow failed`, err);
+      console.error('[DebuggerFlow] restartFlow failed', err);
       if (setErrorRef.current) {
         setErrorRef.current(err instanceof Error ? err.message : 'Failed to restart flow execution');
       }
@@ -590,6 +602,8 @@ export function useFlowModeChat(
   return {
     isWaitingForInput,
     error,
+    startAgentRuntimeError,
+    orchestratorTaskIdHint,
     sessionActive,
     currentExecutionLabel,
     currentExecutionType,

@@ -50,6 +50,7 @@ export function getVisibleFields(platform: IAAgentConfig['platform']): FieldVisi
     case 'elevenlabs':
       v(out, 'reasoning', false);
       v(out, 'elevenlabs_instructions', true);
+      v(out, 'tts_model', true);
       v(out, 'llm_model', true);
       v(out, 'llm_temperature', true);
       v(out, 'llm_max_tokens', true);
@@ -108,11 +109,13 @@ export function getDefaultConfig(platform: IAAgentConfig['platform']): IAAgentCo
         model: 'convai_default',
         ...base,
         systemPrompt: '',
+        /** Vuoto → builder applica default per lingua (`eleven_flash_v2` / `eleven_flash_v2_5`). */
+        ttsModel: '',
         voice: { id: '', language: 'en', settings: {} },
         voices: [{ id: '', role: 'primary' as const }],
         advanced: {
           llm: {
-            model: 'gpt-4o-mini',
+            model: 'gpt-4o',
             temperature: 0.5,
             max_tokens: 4096,
             reflection_budget: 3,

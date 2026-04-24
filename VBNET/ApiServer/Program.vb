@@ -181,8 +181,20 @@ Module Program
                                                                    Console.WriteLine($"❌ [GlobalExceptionHandler] UNHANDLED EXCEPTION: {ex.GetType().FullName} - {ex.Message}")
                                                                End Try
                                                            End If
-                                                           context.Response.StatusCode = 500
-                                                           Await context.Response.WriteAsync("Internal Server Error")
+                                                           context.Response.StatusCode = StatusCodes.Status500InternalServerError
+                                                           context.Response.ContentType = "application/json; charset=utf-8"
+                                                           Dim detail = If(ex IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(ex.Message),
+                                                                            ex.Message,
+                                                                            "Unhandled server error.")
+                                                           Dim exType = If(ex IsNot Nothing, ex.GetType().FullName, "")
+                                                           Dim path = context.Request.Path.ToString()
+                                                           Dim payload = JsonConvert.SerializeObject(New With {
+                                                               .error = "Internal Server Error",
+                                                               .detail = detail,
+                                                               .exceptionType = exType,
+                                                               .path = path
+                                                           })
+                                                           Await context.Response.WriteAsync(payload).ConfigureAwait(False)
                                                        End Function)
                                     End Sub)
 

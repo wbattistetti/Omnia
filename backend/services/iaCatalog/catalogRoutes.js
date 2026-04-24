@@ -279,29 +279,36 @@ function mountIaCatalog(app) {
   });
 
   /**
-   * Modelli LLM per provider (openai | anthropic | google). Obbligatorio: provider=...
+   * Modelli LLM per provider (openai | anthropic | google | elevenlabs).
+   * elevenlabs = ConvAI embedded LLMs da GET /v1/convai/llm/list (sync su server).
    */
   app.get('/api/ia-catalog/ui/models', async (req, res) => {
     try {
       const provider =
         typeof req.query.provider === 'string' ? req.query.provider.trim() : '';
-      const allowed = ['openai', 'anthropic', 'google'];
+      const allowed = ['openai', 'anthropic', 'google', 'elevenlabs'];
       if (!provider) {
         return res.status(400).json({
           ok: false,
           code: 'MISSING_PROVIDER',
-          message: 'Parametro query obbligatorio: provider (openai | anthropic | google).',
+          message:
+            'Parametro query obbligatorio: provider (openai | anthropic | google | elevenlabs).',
         });
       }
       if (!allowed.includes(provider)) {
         return res.status(400).json({
           ok: false,
           code: 'INVALID_PROVIDER',
-          message: `provider deve essere uno di: ${allowed.join(', ')} (ElevenLabs non espone catalogo LLM qui).`,
+          message: `provider deve essere uno di: ${allowed.join(', ')}.`,
         });
       }
 
       const qModels = typeof req.query.q === 'string' ? req.query.q : '';
+
+      const emptyModelsMessage =
+        provider === 'elevenlabs'
+          ? 'Catalogo ConvAI vuoto: imposta ELEVENLABS_API_KEY, ELEVENLABS_API_BASE (es. EU residency) e POST /api/ia-catalog/refresh.'
+          : EMPTY_MODELS.message;
 
       const loaded = await loadModelsFromStores(provider);
       if (!loaded) {
@@ -310,7 +317,7 @@ function mountIaCatalog(app) {
           catalogEmpty: true,
           provider,
           code: EMPTY_MODELS.code,
-          message: EMPTY_MODELS.message,
+          message: emptyModelsMessage,
           source: 'none',
           items: [],
           filteredCount: 0,
@@ -371,6 +378,128 @@ function mountIaCatalog(app) {
     try {
       const r = await sync.syncAll();
       res.json({ ok: true, results: r });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e.message || e) });
+    }
+  });
+
+  /**
+   * GET /api/ia-catalog/diagnostics?provider=openai|anthropic|google|elevenlabs
+   * Verifica variabili d’ambiente Node e cardinalità cataloghi dopo sync (no segreti in risposta).
+   */
+  app.get('/api/ia-catalog/diagnostics', async (req, res) => {
+    try {
+      const raw =
+        typeof req.query.provider === 'string' ? req.query.provider.trim().toLowerCase() : '';
+      const allowed = ['openai', 'anthropic', 'google', 'elevenlabs', 'custom'];
+      if (!raw || !allowed.includes(raw)) {
+        return res.status(400).json({
+          ok: false,
+          code: 'INVALID_PROVIDER',
+          message: `Parametro query provider obbligatorio: ${allowed.join(', ')}.`,
+        });
+      }
+
+      if (raw === 'custom') {
+        return res.json({
+          ok: true,
+          provider: 'custom',
+          env: { apiKeyPresent: false, apiBasePresent: false },
+          catalog: { modelsCount: 0 },
+          errors: [],
+          hints: [
+            'Provider Custom: nessun catalogo centralizzato Omnia — configura endpoint e modello manualmente.',
+          ],
+        });
+      }
+
+      const envFlag = (name) =>
+        typeof process.env[name] === 'string' && process.env[name].trim().length > 0;
+
+      let apiKeyPresent = false;
+      let apiBasePresent = false;
+
+      switch (raw) {
+        case 'openai':
+          apiKeyPresent = envFlag('OPENAI_API_KEY');
+          apiBasePresent = envFlag('OPENAI_API_BASE');
+          break;
+        case 'anthropic':
+          apiKeyPresent = envFlag('ANTHROPIC_API_KEY');
+          apiBasePresent = envFlag('ANTHROPIC_API_BASE');
+          break;
+        case 'google':
+          apiKeyPresent = envFlag('GOOGLE_API_KEY');
+          apiBasePresent = envFlag('GOOGLE_API_BASE');
+          break;
+        case 'elevenlabs':
+          apiKeyPresent = envFlag('ELEVENLABS_API_KEY');
+          apiBasePresent = envFlag('ELEVENLABS_API_BASE');
+          break;
+        default:
+          break;
+      }
+
+      const modelsLoaded = await loadModelsFromStores(raw);
+      const modelsCount = modelsLoaded?.items?.length ?? 0;
+
+      let voicesCount;
+      let languagesCount;
+      if (raw === 'elevenlabs') {
+        const v = await loadVoicesFromStores();
+        const l = await loadLanguagesFromStores();
+        voicesCount = v?.items?.length ?? 0;
+        languagesCount = l?.items?.length ?? 0;
+      }
+
+      const errors = [];
+      const hints = [];
+
+      if (!apiKeyPresent) {
+        errors.push('Chiave API assente nel processo Node (variabile ambiente non valorizzata).');
+      }
+      if (raw === 'elevenlabs' && !apiBasePresent) {
+        hints.push(
+          'ELEVENLABS_API_BASE non impostato: Omnia usa il default globale. Per EU residency imposta es. https://api.eu.residency.elevenlabs.io/v1'
+        );
+      }
+      if (modelsCount === 0) {
+        errors.push('Nessun modello sincronizzato per questo provider — eseguire POST /api/ia-catalog/refresh dopo aver configurato le chiavi.');
+      }
+      if (raw === 'elevenlabs') {
+        if ((voicesCount ?? 0) === 0) {
+          errors.push('Nessuna voce sincronizzata — verifica ELEVENLABS_API_KEY e sync voci.');
+        }
+        if ((languagesCount ?? 0) === 0) {
+          errors.push('Nessuna lingua nel catalogo — eseguire sync lingue dopo le voci.');
+        }
+      }
+
+      diag('ui_diagnostics', {
+        provider: raw,
+        apiKeyPresent,
+        apiBasePresent,
+        modelsCount,
+        voicesCount: voicesCount ?? null,
+        languagesCount: languagesCount ?? null,
+      });
+
+      res.json({
+        ok: true,
+        provider: raw,
+        env: {
+          apiKeyPresent,
+          apiBasePresent,
+        },
+        catalog: {
+          modelsCount,
+          ...(raw === 'elevenlabs'
+            ? { voicesCount: voicesCount ?? 0, languagesCount: languagesCount ?? 0 }
+            : {}),
+        },
+        errors,
+        hints,
+      });
     } catch (e) {
       res.status(500).json({ ok: false, error: String(e.message || e) });
     }

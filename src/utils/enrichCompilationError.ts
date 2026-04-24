@@ -86,16 +86,28 @@ export function enrichCompilationError(raw: Record<string, unknown>): Compilatio
 
   const codeRaw = str(pick(raw, 'code'));
 
-  const fixTarget = buildFixTargetForCompilationError(
-    category,
-    codeRaw || undefined,
-    taskId,
-    rowId,
-    nodeId,
-    edgeId,
-    stepKeyRaw,
-    escalationIndex
-  );
+  const explicitFix = pick(raw, 'fixTarget');
+  let fixTarget: CompilationError['fixTarget'];
+  if (
+    explicitFix &&
+    typeof explicitFix === 'object' &&
+    explicitFix !== null &&
+    'type' in explicitFix &&
+    typeof (explicitFix as { type?: unknown }).type === 'string'
+  ) {
+    fixTarget = explicitFix as CompilationError['fixTarget'];
+  } else {
+    fixTarget = buildFixTargetForCompilationError(
+      category,
+      codeRaw || undefined,
+      taskId,
+      rowId,
+      nodeId,
+      edgeId,
+      stepKeyRaw,
+      escalationIndex
+    );
+  }
   return {
     taskId,
     nodeId,

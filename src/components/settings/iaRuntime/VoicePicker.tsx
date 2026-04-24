@@ -26,6 +26,8 @@ export interface VoicePickerProps {
   selectedLanguage?: string;
   /** Piattaforma TTS per capability filtri (default elevenlabs). */
   platform?: string;
+  /** Trigger compatto: solo il nome voce (niente icona genere / colore). */
+  minimalTrigger?: boolean;
 }
 
 function normalizeGender(raw: string | null | undefined): 'male' | 'female' | 'unknown' {
@@ -107,6 +109,7 @@ export function VoicePicker({
   listScrollMaxHeightClassName = 'max-h-[min(42dvh,calc(100dvh-22rem),32rem)]',
   selectedLanguage,
   platform = 'elevenlabs',
+  minimalTrigger = false,
 }: VoicePickerProps) {
   const { playingVoiceId, togglePreview } = useVoicePreview();
   const [open, setOpen] = React.useState(false);
@@ -161,11 +164,13 @@ export function VoicePicker({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((v) => !v)}
-        className={`flex h-8 max-h-[32px] w-full min-w-0 items-center justify-between gap-1 rounded border border-slate-600 bg-slate-950 px-2 py-0.5 text-left text-[11px] leading-none ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${showEmptyHint ? 'text-slate-500 italic' : ''}`}
+        className={`flex h-8 max-h-[32px] w-full min-w-0 items-center justify-between gap-1 rounded border border-slate-600 bg-slate-950 px-2 py-0.5 text-left font-mono text-[11px] leading-none ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${showEmptyHint ? 'text-slate-500 italic' : ''}`}
       >
         <span className="inline-flex min-w-0 flex-1 items-center gap-1 truncate">
           {showEmptyHint ? (
             emptyTriggerLabel
+          ) : minimalTrigger ? (
+            <span className="truncate font-mono text-slate-100">{selected?.name ?? '—'}</span>
           ) : (
             <>
               <VoiceGenderIcon gender={selectedGender} />

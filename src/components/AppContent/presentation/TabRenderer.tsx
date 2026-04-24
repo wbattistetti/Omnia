@@ -294,6 +294,78 @@ const ConditionEditorDockTab: React.FC<{
   );
 };
 
+/** Task editor (AI Agent, DDT, …): toolbar mirrored into dock tab bar — `onToolbarUpdate` must stay referentially stable or child hooks loop (useAIAgentToolbarController). */
+const TaskEditorDockTab: React.FC<{
+  tab: DockTabTaskEditor;
+  setDockTree: TabRendererProps['setDockTree'];
+  editorCloseRefsMap: TabRendererProps['editorCloseRefsMap'];
+}> = ({ tab, setDockTree, editorCloseRefsMap }) => {
+  const editorKind = resolveEditorKind(tab.task || { id: '', type: TaskType.SayMessage, label: '' });
+  const isTaskTreeEditor = editorKind === 'ddt';
+
+  useEffect(() => {
+    return () => {
+      editorCloseRefsMap.current.delete(tab.id);
+    };
+  }, [tab.id, editorCloseRefsMap]);
+
+  const handleRegisterOnClose = useCallback(
+    (fn: () => Promise<boolean>) => {
+      if (!isTaskTreeEditor || !tab.id) return;
+      editorCloseRefsMap.current.set(tab.id, fn);
+    },
+    [tab.id, isTaskTreeEditor, editorCloseRefsMap]
+  );
+
+  const handleToolbarUpdate = useCallback(
+    (toolbar: ToolbarButton[], color: string) => {
+      setDockTree((prev) =>
+        mapNode(prev, (n) => {
+          if (n.kind === 'tabset') {
+            const idx = n.tabs.findIndex((t) => t.id === tab.id);
+            if (idx !== -1 && n.tabs[idx].type === 'taskEditor') {
+              const updatedTab = {
+                ...n.tabs[idx],
+                toolbarButtons: toolbar,
+                headerColor: color,
+              } as DockTabTaskEditor;
+              return { ...n, tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)] };
+            }
+          }
+          return n;
+        })
+      );
+    },
+    [tab.id, setDockTree]
+  );
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        flex: 1,
+        minHeight: 0,
+        backgroundColor: '#0b1220',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <TaskEditorHost
+        dockTabId={tab.id}
+        task={tab.task || { id: '', type: TaskType.SayMessage, label: '' }}
+        authoringFlowCanvasId={tab.flowId}
+        onClose={() => {
+          // Closure is handled by tab.onClose (only for TaskTree editor)
+        }}
+        onToolbarUpdate={handleToolbarUpdate}
+        hideHeader={true}
+        registerOnClose={isTaskTreeEditor ? handleRegisterOnClose : undefined}
+        setDockTree={setDockTree}
+      />
+    </div>
+  );
+};
+
 export const TabRenderer: React.FC<TabRendererProps> = React.memo(
   ({ tab, currentPid, isDraft: _isDraft, setDockTree, editorCloseRefsMap, pdUpdate, testSingleNode, onFlowCreateTaskFlow, onFlowOpenTaskFlow, onOpenSubflowForTask, onRunFlowInDebugger }) => {
     // Flow tab - FlowCanvasHost handles useFlowActions internally
@@ -505,68 +577,12 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
 
     // Task Editor tab (BackendCall, etc.)
     if (tab.type === 'taskEditor') {
-      const taskEditorTab = tab as DockTabTaskEditor;
-      const editorKind = resolveEditorKind(
-        tab.task || { id: '', type: TaskType.SayMessage, label: '' }
-      );
-      const isTaskTreeEditor = editorKind === 'ddt';
-
-      useEffect(() => {
-        return () => {
-          editorCloseRefsMap.current.delete(tab.id);
-        };
-      }, [tab.id, editorCloseRefsMap]);
-
-      /** DDT: ref-only; DockManager reads editorCloseRefsMap first (no tab tree patch on mount). */
-      const handleRegisterOnClose = useCallback(
-        (fn: () => Promise<boolean>) => {
-          if (!isTaskTreeEditor || !tab.id) return;
-          editorCloseRefsMap.current.set(tab.id, fn);
-        },
-        [tab.id, isTaskTreeEditor, editorCloseRefsMap]
-      );
-
       return (
-        <div
-          style={{
-            width: '100%',
-            flex: 1,
-            minHeight: 0,
-            backgroundColor: '#0b1220',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <TaskEditorHost
-            dockTabId={tab.id}
-            task={tab.task || { id: '', type: TaskType.SayMessage, label: '' }}
-            authoringFlowCanvasId={(tab as DockTabTaskEditor).flowId}
-            onClose={() => {
-              // Closure is handled by tab.onClose (only for TaskTree editor)
-            }}
-            onToolbarUpdate={(toolbar, color) => {
-              setDockTree(prev => {
-                return mapNode(prev, n => {
-                  if (n.kind === 'tabset') {
-                    const idx = n.tabs.findIndex(t => t.id === tab.id);
-                    if (idx !== -1 && n.tabs[idx].type === 'taskEditor') {
-                      const updatedTab = {
-                        ...n.tabs[idx],
-                        toolbarButtons: toolbar,
-                        headerColor: color,
-                      } as DockTabTaskEditor;
-                      return { ...n, tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)] };
-                    }
-                  }
-                  return n;
-                });
-              });
-            }}
-            hideHeader={true}
-            registerOnClose={isTaskTreeEditor ? handleRegisterOnClose : undefined}
-            setDockTree={setDockTree}
-          />
-        </div>
+        <TaskEditorDockTab
+          tab={tab as DockTabTaskEditor}
+          setDockTree={setDockTree}
+          editorCloseRefsMap={editorCloseRefsMap}
+        />
       );
     }
 

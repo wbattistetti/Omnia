@@ -13,6 +13,16 @@ export const COMPILE_ERROR_REPORT_UX_CODES = [
   'ResponseMessageMissing',
   'EscalationTerminationMissing',
   'SubflowChildNotRunnable',
+  'IaElevenLabsMissingAgentId',
+  'IaElevenLabsMissingVoice',
+  'IaElevenLabsMissingLanguage',
+  'IaElevenLabsMissingLlmModel',
+  'IaOpenAiMissingModel',
+  'IaOpenAiMissingMaxTokens',
+  'IaAnthropicMissingModel',
+  'IaGeminiMissingModel',
+  'IaCustomMissingModel',
+  'IaProvisionProviderError',
 ] as const;
 
 export type CompileUxMessageCode = (typeof COMPILE_ERROR_REPORT_UX_CODES)[number];
@@ -42,6 +52,28 @@ export function resolveCompileUxMessage(error: CompilationError): string | null 
       return 'Manca la condizione di terminazione.';
     case 'SubflowChildNotRunnable':
       return 'Il flusso collegato al task è vuoto.';
+    case 'IaElevenLabsMissingAgentId':
+      return 'ElevenLabs: manca ConvAI Agent ID.';
+    case 'IaElevenLabsMissingVoice':
+      return 'ElevenLabs: manca la voce.';
+    case 'IaElevenLabsMissingLanguage':
+      return 'ElevenLabs: manca la lingua.';
+    case 'IaElevenLabsMissingLlmModel':
+      return 'ElevenLabs: manca il modello LLM.';
+    case 'IaOpenAiMissingModel':
+      return 'OpenAI: manca il modello.';
+    case 'IaOpenAiMissingMaxTokens':
+      return 'OpenAI: max token non valido.';
+    case 'IaAnthropicMissingModel':
+      return 'Anthropic: manca il modello.';
+    case 'IaGeminiMissingModel':
+      return 'Gemini: manca il modello.';
+    case 'IaCustomMissingModel':
+      return 'Provider personalizzato: manca il modello.';
+    case 'IaProvisionProviderError': {
+      const m = (error.message ?? '').trim();
+      return m.length > 0 ? m : 'Provisioning IA non riuscito (vedi dettaglio tecnico se presente).';
+    }
     default:
       return null;
   }
