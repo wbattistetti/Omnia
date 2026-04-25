@@ -1,10 +1,16 @@
 /**
- * Maps Omnia {@link IAAgentConfig} to an optional ElevenLabs `conversation_config` fragment
- * for POST /elevenlabs/createAgent (merged server-side with defaults).
+ * Maps Omnia {@link IAAgentConfig} to un frammento `conversation_config` per POST /elevenlabs/createAgent.
+ * Il testo in `agent.prompt.prompt` viene da `rulesStringForCompilerFromTaskFields` se è passato `task`,
+ * altrimenti da `cfg.systemPrompt` (es. default globali). Nessun prompt generato automaticamente da Omnia.
  */
 
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
-import { normalizeLanguage } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
+import type { Task } from '@types/taskTypes';
+import {
+  normalizeLanguage,
+  rulesStringForCompilerFromTaskFields,
+  type AiAgentTaskFieldsForCompiler,
+} from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
 
 export type ConversationConfigFragmentOptions = {
   /**
@@ -12,6 +18,12 @@ export type ConversationConfigFragmentOptions = {
    * ElevenLabs EU residency cluster → 422. Voice can be set in ElevenLabs UI after creation.
    */
   omitTts?: boolean;
+  /**
+   * Task AI Agent: il testo inviato a ConvAI come `agent.prompt.prompt` viene da
+   * `rulesStringForCompilerFromTaskFields` (stesso criterio della compile), senza fallback Omnia.
+   * Se omesso, si usa solo `cfg.systemPrompt` (es. default globali da Studio) — deve essere non vuoto.
+   */
+  task?: Task | null;
 };
 
 function primaryVoiceId(cfg: IAAgentConfig): string {
@@ -41,6 +53,36 @@ function mapLlmModelForElevenLabsResidencyCreate(raw: string): string {
 }
 
 /**
+ * Testo istruzioni per `conversation_config.agent.prompt.prompt`: da task editor (preferito) o da
+ * `cfg.systemPrompt` se non c’è task. Nessun prompt generato da Omnia se manca l’input.
+ */
+function resolveConvaiAgentPromptText(cfg: IAAgentConfig, task?: Task | null): string {
+  if (task != null) {
+    const fields: AiAgentTaskFieldsForCompiler = {
+      agentRuntimeCompactJson: task.agentRuntimeCompactJson,
+      agentPrompt: task.agentPrompt,
+    };
+    const fromEditor = rulesStringForCompilerFromTaskFields(fields);
+    if (typeof fromEditor === 'string' && fromEditor.length > 0) {
+      return fromEditor;
+    }
+    /** Task senza testo in editor: ultimo tentativo = override runtime già persistito (no stringa Omnia generata). */
+    if (typeof cfg.systemPrompt === 'string' && cfg.systemPrompt.length > 0) {
+      return cfg.systemPrompt;
+    }
+    throw new Error(
+      'ConvAI createAgent: prompt del task vuoto. Compila agentPrompt o runtime compact prima di creare l’agente.'
+    );
+  }
+  if (typeof cfg.systemPrompt === 'string' && cfg.systemPrompt.length > 0) {
+    return cfg.systemPrompt;
+  }
+  throw new Error(
+    'ConvAI createAgent: prompt vuoto. Imposta le istruzioni nel runtime IA (o nel task) prima di creare l’agente.'
+  );
+}
+
+/**
  * Returns a partial `conversation_config` for ConvAI `agents/create`, or `null` if the platform
  * is not ElevenLabs (caller should skip the key in the request body).
  */
@@ -66,10 +108,7 @@ export function conversationConfigFragmentFromIaAgentConfig(
   const llmModel = mapLlmModelForElevenLabsResidencyCreate(
     typeof llm.model === 'string' && llm.model.trim().length > 0 ? llm.model.trim() : 'gpt-4o'
   );
-  const promptText =
-    typeof cfg.systemPrompt === 'string' && cfg.systemPrompt.trim().length > 0
-      ? cfg.systemPrompt.trim()
-      : 'You are a helpful conversational agent provisioned from Omnia.';
+  const promptText = resolveConvaiAgentPromptText(cfg, options?.task);
 
   const prompt: Record<string, unknown> = {
     prompt: promptText,
@@ -102,4 +141,24 @@ export function conversationConfigFragmentFromIaAgentConfig(
   }
 
   return out;
+}
+
+/**
+ * Chiave per confronto in sessione (stesso payload ConvAI che verrebbe inviato a createAgent).
+ */
+export function buildConvaiProvisionKey(
+  cfg: IAAgentConfig,
+  task: Task | null | undefined,
+  omitTts: boolean
+): string {
+  const fragment = conversationConfigFragmentFromIaAgentConfig(cfg, {
+    omitTts,
+    task: task ?? undefined,
+  });
+  if (!fragment) return '';
+  try {
+    return JSON.stringify(fragment);
+  } catch {
+    return '';
+  }
 }

@@ -108,8 +108,8 @@ export function normalizeIAAgentConfig(raw: unknown): IAAgentConfig {
       ? elevenLabsBackendBaseUrlRaw.trim()
       : undefined;
 
-  const elevenLabsNeedsReprovisionRaw = platform === 'elevenlabs' && raw.elevenLabsNeedsReprovision === true;
-  const elevenLabsNeedsReprovision = elevenLabsNeedsReprovisionRaw && Boolean(convaiAgentId);
+  const elevenLabsNeedsReprovision =
+    platform === 'elevenlabs' && raw.elevenLabsNeedsReprovision === true;
 
   return {
     platform,
@@ -134,20 +134,24 @@ export function normalizeIAAgentConfig(raw: unknown): IAAgentConfig {
 }
 
 /**
- * If the task override has no ConvAI agent id (missing, empty, or whitespace-only) but
- * `globalDefaults` provides one, copy it so effective IA runtime config never resolves to a blank id
- * while defaults exist (ElevenLabs only).
+ * ConvAI `agent_id` non viene più ereditato dai default globali sul task: resta solo in sessione tab
+ * dopo provisioning. Mantiene la firma per i call site esistenti.
  */
 export function mergeConvaiAgentIdFromGlobalDefaults(
   taskOverride: IAAgentConfig,
-  globalDefaults: IAAgentConfig
+  _globalDefaults: IAAgentConfig
 ): IAAgentConfig {
-  if (taskOverride.platform !== 'elevenlabs') return taskOverride;
-  const fromTask = taskOverride.convaiAgentId?.trim();
-  if (fromTask) return taskOverride;
-  const fromGlobal = globalDefaults.convaiAgentId?.trim();
-  if (!fromGlobal) return taskOverride;
-  return { ...taskOverride, convaiAgentId: fromGlobal };
+  return taskOverride;
+}
+
+/**
+ * Serializza override IA per `agentIaRuntimeOverrideJson` senza `convaiAgentId` (mai persistito).
+ */
+export function serializeIaAgentConfigForTaskPersistence(cfg: IAAgentConfig): string {
+  const n = normalizeIAAgentConfig(cfg);
+  const plain = { ...(n as Record<string, unknown>) };
+  delete plain.convaiAgentId;
+  return JSON.stringify(plain);
 }
 
 /**

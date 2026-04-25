@@ -1,0 +1,11 @@
+{
+  "elevenlabs": {
+    "nonEnglishAllowedModels": [],
+    "perLanguage": {
+      "it-IT": [
+        "claude-3-5-sonnet",
+        "claude-3-5-sonnet-v2@20241022"
+      ]
+    }
+  }
+}

@@ -39,6 +39,7 @@ import { nextMappingsAfterLabelBlur } from './flowVariableMapping';
 import { buildAIAgentTaskPersistPatch, type AIAgentPersistState } from './buildPersistPatch';
 import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
 import { buildRefineUserDescFromSections } from './composeRuntimePromptMarkdown';
+import { rulesStringForCompilerFromTaskFields } from './composeRuntimeRulesFromCompact';
 import {
   applyStructuredIrToGenerateApplyResult,
   buildDeterministicRuntimeCompactFromSectionBases,
@@ -87,7 +88,9 @@ import {
   mergeConvaiAgentIdFromGlobalDefaults,
   normalizeIAAgentConfig,
   parseOptionalIaRuntimeJson,
+  serializeIaAgentConfigForTaskPersistence,
 } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
+import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 import { iaConvaiTracePersistTaskRepository } from '@utils/debug/iaConvaiFlowTrace';
 import { withElevenLabsReprovisionAfterTtsChange } from '@utils/iaAgentRuntime/applyElevenLabsReprovisionFlag';
@@ -96,6 +99,29 @@ function logStructuredPipelineAlignment(event: string, detail?: unknown): void {
   if (import.meta.env.DEV) {
     console.info(`[StructuredPipeline][Alignment] ${event}`, detail ?? '');
   }
+}
+
+/** Se il testo rules/prompt del task cambia, richiede un nuovo `createAgent` ConvAI (stesso meccanismo del TTS). */
+function withElevenLabsReprovisionWhenTaskEditorPromptChanged(
+  iaRuntime: IAAgentConfig,
+  taskBefore: Task,
+  nextAgentPrompt: string,
+  nextRuntimeCompactJson: string
+): IAAgentConfig {
+  const hasConvaiSession = Boolean(getConvaiSessionBinding(taskBefore.id)?.agentId?.trim());
+  if (iaRuntime.platform !== 'elevenlabs' || !hasConvaiSession) {
+    return iaRuntime;
+  }
+  const prevText = rulesStringForCompilerFromTaskFields({
+    agentRuntimeCompactJson: taskBefore.agentRuntimeCompactJson ?? '',
+    agentPrompt: taskBefore.agentPrompt ?? '',
+  });
+  const nextText = rulesStringForCompilerFromTaskFields({
+    agentRuntimeCompactJson: nextRuntimeCompactJson,
+    agentPrompt: nextAgentPrompt,
+  });
+  if (prevText === nextText) return iaRuntime;
+  return { ...iaRuntime, elevenLabsNeedsReprovision: true };
 }
 
 export interface UseAIAgentEditorControllerParams {
@@ -386,12 +412,16 @@ export function useAIAgentEditorController({
     if (iaRaw) {
       try {
         const globals = loadGlobalIaAgentConfig();
-        setIaRuntimeConfigState(
-          mergeConvaiAgentIdFromGlobalDefaults(
+        {
+          const merged = mergeConvaiAgentIdFromGlobalDefaults(
             normalizeIAAgentConfig(JSON.parse(iaRaw) as unknown),
             globals
-          )
-        );
+          );
+          const { convaiAgentId: _drop, ...iaWithoutConvaiId } = merged as IAAgentConfig & {
+            convaiAgentId?: string;
+          };
+          setIaRuntimeConfigState(iaWithoutConvaiId as IAAgentConfig);
+        }
         setIaRuntimeLoadedFrom('saved_override');
       } catch {
         setIaRuntimeConfigState(loadGlobalIaAgentConfig());
@@ -433,10 +463,19 @@ export function useAIAgentEditorController({
     const reason = persistReasonRef.current;
     persistReasonRef.current = 'direct';
     const agentUseCasesJson = serializeUseCases(useCases);
-    const iaRuntimeForPersist = mergeConvaiAgentIdFromGlobalDefaults(
+    const taskBeforePersist = taskRepository.getTask(instanceId);
+    let iaRuntimeForPersist = mergeConvaiAgentIdFromGlobalDefaults(
       iaRuntimeConfig,
       loadGlobalIaAgentConfig()
     );
+    if (taskBeforePersist) {
+      iaRuntimeForPersist = withElevenLabsReprovisionWhenTaskEditorPromptChanged(
+        iaRuntimeForPersist,
+        taskBeforePersist,
+        agentPrompt,
+        agentRuntimeCompactJson
+      );
+    }
     const patch = buildAIAgentTaskPersistPatch({
       designDescription,
       agentPrompt,
@@ -451,7 +490,7 @@ export function useAIAgentEditorController({
       hasAgentGeneration,
       agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
       agentUseCasesJson,
-      agentIaRuntimeOverrideJson: JSON.stringify(iaRuntimeForPersist),
+      agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(iaRuntimeForPersist),
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -526,13 +565,17 @@ export function useAIAgentEditorController({
       const globals = loadGlobalIaAgentConfig();
       const parsed = parseOptionalIaRuntimeJson(task.agentIaRuntimeOverrideJson);
       const base = normalizeIAAgentConfig(parsed ?? globals);
-      const updated = normalizeIAAgentConfig({ ...base, ...partial });
+      const { convaiAgentId: _omitPartial, ...partialRest } = partial as Partial<IAAgentConfig> & {
+        convaiAgentId?: string;
+      };
+      const updated = normalizeIAAgentConfig({ ...base, ...partialRest });
+      const iaJson = serializeIaAgentConfigForTaskPersistence(updated);
+      const { convaiAgentId: _u, ...updatedForUi } = updated as IAAgentConfig & { convaiAgentId?: string };
       console.log('[IA·ConvAI] DIAG updated override', {
         taskId: instanceId,
-        updatedConvaiAgentId: updated.convaiAgentId,
-        updatedConvaiAgentIdChars: updated.convaiAgentId?.length ?? 0,
+        updatedConvaiAgentId: '(non persistito — sessione tab)',
+        updatedConvaiAgentIdChars: 0,
       });
-      const iaJson = JSON.stringify(updated);
 
       const ok = taskRepository.updateTask(
         instanceId,
@@ -541,8 +584,8 @@ export function useAIAgentEditorController({
       );
       console.log('[IA·ConvAI] DIAG repo after update', {
         taskId: instanceId,
-        newJsonChars: JSON.stringify(updated).length,
-        newJson: JSON.stringify(updated),
+        newJsonChars: iaJson.length,
+        newJson: iaJson,
       });
       if (!ok) {
         console.error('[useAIAgentEditorController] persistIaRuntimeOverrideSnapshot: updateTask failed', {
@@ -551,7 +594,7 @@ export function useAIAgentEditorController({
         return;
       }
 
-      setIaRuntimeConfigState(updated);
+      setIaRuntimeConfigState(updatedForUi as IAAgentConfig);
       setIaRuntimeLoadedFrom('saved_override');
       setDirty(false);
       iaConvaiTracePersistTaskRepository(instanceId, iaJson);
@@ -916,7 +959,7 @@ export function useAIAgentEditorController({
     hasAgentGeneration,
     agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
     agentUseCasesJson: serializeUseCases(useCases),
-    agentIaRuntimeOverrideJson: JSON.stringify(
+    agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(
       mergeConvaiAgentIdFromGlobalDefaults(iaRuntimeConfig, loadGlobalIaAgentConfig())
     ),
   };

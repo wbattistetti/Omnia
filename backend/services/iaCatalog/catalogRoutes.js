@@ -13,6 +13,7 @@ const {
   keyLooksResidencyScoped,
   isResidencyHost,
 } = require('./elevenLabsEndpoint');
+const llmMappingConfig = require('./llmMappingConfig');
 
 const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -387,6 +388,141 @@ function mountIaCatalog(app) {
    * GET /api/ia-catalog/diagnostics?provider=openai|anthropic|google|elevenlabs
    * Verifica variabili d’ambiente Node e cardinalità cataloghi dopo sync (no segreti in risposta).
    */
+  /**
+   * Diagnostica live: GET ConvAI LLM list (stesso endpoint del sync) + hint voci.
+   * Nessun segreto in risposta (solo presenza chiave).
+   */
+  app.get('/api/ia-catalog/diagnostics/elevenlabs-live', async (req, res) => {
+    try {
+      const rawKey = process.env.ELEVENLABS_API_KEY;
+      const key = typeof rawKey === 'string' ? rawKey.trim() : '';
+      const base = getElevenLabsBaseUrl();
+      const listUrl = `${base}/convai/llm/list`;
+      const voicesUrl = `${base}/voices`;
+
+      if (!key) {
+        return res.json({
+          ok: true,
+          elevenBaseUrl: base,
+          keyPresent: false,
+          convaiLlmList: {
+            ok: false,
+            skipped: true,
+            message: 'ELEVENLABS_API_KEY assente: impossibile chiamare ConvAI.',
+          },
+          voicesGet: { hint: `GET ${voicesUrl} richiede xi-api-key` },
+        });
+      }
+
+      let convai = { ok: false, httpStatus: null, error: null, sampleIds: [], bodyPreview: null };
+      try {
+        const r = await fetch(listUrl, { headers: { 'xi-api-key': key } });
+        const text = await r.text();
+        convai.httpStatus = r.status;
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
+        const list = Array.isArray(data)
+          ? data
+          : data && Array.isArray(data.llms)
+            ? data.llms
+            : data && Array.isArray(data.models)
+              ? data.models
+              : [];
+        const sampleIds = [];
+        for (const item of list.slice(0, 12)) {
+          if (typeof item === 'string') sampleIds.push(item);
+          else if (item && typeof item === 'object') {
+            const id =
+              item.model_id ||
+              item.id ||
+              (typeof item.llm === 'string' ? item.llm : item.llm?.id) ||
+              '';
+            if (id) sampleIds.push(String(id));
+          }
+        }
+        convai = {
+          ok: r.ok,
+          httpStatus: r.status,
+          error: r.ok ? null : text.slice(0, 500),
+          sampleIds,
+          bodyPreview: r.ok ? { itemCount: list.length, firstKeys: data && typeof data === 'object' ? Object.keys(data).slice(0, 8) : [] } : null,
+        };
+      } catch (e) {
+        convai.error = String(e.message || e);
+      }
+
+      diag('diagnostics_elevenlabs_live', {
+        listHttp: convai.httpStatus,
+        listOk: convai.ok,
+        keyPresent: true,
+      });
+
+      res.json({
+        ok: true,
+        elevenBaseUrl: base,
+        keyPresent: true,
+        keyResidencyPattern: keyLooksResidencyScoped(key),
+        endpointResidency: isResidencyHost(base),
+        convaiLlmListUrl: listUrl.replace(/\/\/[^/]+/, '//api…'),
+        convaiLlmList: convai,
+        voicesCatalogNote:
+          'Il sync voci usa GET {ELEVENLABS_API_BASE}/voices (stesso host). language deriva da labels.language o fine_tuning.language.',
+      });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e.message || e) });
+    }
+  });
+
+  app.get('/api/ia-catalog/ui/llm-mapping', (req, res) => {
+    try {
+      const r = llmMappingConfig.readLlmMapping();
+      res.json({
+        ok: true,
+        path: r.path,
+        readOk: r.ok,
+        readError: r.ok ? undefined : r.error,
+        mapping: r.mapping,
+      });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e.message || e) });
+    }
+  });
+
+  app.post('/api/ia-catalog/ui/llm-mapping', async (req, res) => {
+    try {
+      if (process.env.OMNIA_WRITABLE_CONFIG !== '1') {
+        return res.status(403).json({
+          ok: false,
+          code: 'WRITE_DISABLED',
+          message:
+            'Scrittura disabilitata. Imposta OMNIA_WRITABLE_CONFIG=1 nel processo Node per salvare config/llmMapping.json.',
+        });
+      }
+      const loaded = await loadModelsFromStores('elevenlabs');
+      const ids = (loaded?.items || []).map((m) => m.model_id).filter(Boolean);
+      if (ids.length === 0) {
+        return res.status(409).json({
+          ok: false,
+          code: 'EMPTY_ELEVENLABS_MODEL_CATALOG',
+          message:
+            'Catalogo modelli ElevenLabs vuoto sul server: eseguire POST /api/ia-catalog/refresh (ELEVENLABS_API_KEY e ELEVENLABS_API_BASE corretti) prima di salvare il mapping.',
+        });
+      }
+      const v = llmMappingConfig.validateElevenlabsMapping(req.body, ids);
+      if (!v.ok) {
+        return res.status(400).json({ ok: false, message: v.message });
+      }
+      const written = llmMappingConfig.writeLlmMapping(req.body);
+      res.json({ ok: true, mapping: written });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e.message || e) });
+    }
+  });
+
   app.get('/api/ia-catalog/diagnostics', async (req, res) => {
     try {
       const raw =

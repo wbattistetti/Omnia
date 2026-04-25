@@ -3902,6 +3902,78 @@
         }
       },
       {
+        "model_id": "gpt-5.5",
+        "name": "gpt-5.5",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {},
+        "tags": [
+          "preview",
+          "new"
+        ],
+        "notes": "Preview / check provider",
+        "raw": {
+          "id": "gpt-5.5",
+          "object": "model",
+          "created": 1776824847,
+          "owned_by": "system"
+        }
+      },
+      {
+        "model_id": "gpt-5.5-2026-04-23",
+        "name": "gpt-5.5-2026-04-23",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {},
+        "tags": [
+          "preview",
+          "new"
+        ],
+        "notes": "Preview / check provider",
+        "raw": {
+          "id": "gpt-5.5-2026-04-23",
+          "object": "model",
+          "created": 1776839241,
+          "owned_by": "system"
+        }
+      },
+      {
+        "model_id": "gpt-5.5-pro",
+        "name": "gpt-5.5-pro",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {},
+        "tags": [
+          "preview",
+          "new"
+        ],
+        "notes": "Preview / check provider",
+        "raw": {
+          "id": "gpt-5.5-pro",
+          "object": "model",
+          "created": 1776894349,
+          "owned_by": "system"
+        }
+      },
+      {
+        "model_id": "gpt-5.5-pro-2026-04-23",
+        "name": "gpt-5.5-pro-2026-04-23",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {},
+        "tags": [
+          "preview",
+          "new"
+        ],
+        "notes": "Preview / check provider",
+        "raw": {
+          "id": "gpt-5.5-pro-2026-04-23",
+          "object": "model",
+          "created": 1776894470,
+          "owned_by": "system"
+        }
+      },
+      {
         "model_id": "gpt-audio",
         "name": "gpt-audio",
         "latency_ms": null,
@@ -5079,6 +5151,36 @@
             "xhigh"
           ],
           "deprecation_info": null
+        }
+      },
+      {
+        "model_id": "eleven_flash_v2_5",
+        "name": "eleven_flash_v2_5",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {},
+        "tags": [
+          "convai",
+          "fallback"
+        ],
+        "notes": "Aggiunto se assente dalla risposta GET /convai/llm/list",
+        "raw": {
+          "fallback": true
+        }
+      },
+      {
+        "model_id": "eleven_turbo_v2",
+        "name": "eleven_turbo_v2",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {},
+        "tags": [
+          "convai",
+          "fallback"
+        ],
+        "notes": "Aggiunto se assente dalla risposta GET /convai/llm/list",
+        "raw": {
+          "fallback": true
         }
       },
       {
@@ -6329,12 +6431,12 @@
     ]
   },
   "meta": {
-    "updatedAt": "2026-04-24T08:20:03.647Z",
-    "lastLanguagesSync": "2026-04-24T08:20:01.959Z",
-    "lastModelsSync": "2026-04-24T08:20:03.647Z",
+    "updatedAt": "2026-04-25T05:33:14.498Z",
+    "lastLanguagesSync": "2026-04-25T05:33:12.692Z",
+    "lastModelsSync": "2026-04-25T05:33:14.498Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-04-24T08:20:01.913Z",
+      "at": "2026-04-24T14:46:37.346Z",
       "apiVoiceCount": 22,
       "mappedCount": 22,
       "emptyApiList": false

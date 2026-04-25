@@ -14,6 +14,10 @@ import { buildErrorReportTree } from '@components/ChatPanel/errorReportTreeModel
 import { compilationErrorFixKey } from '@utils/compilationErrorFix';
 import { executeNavigationIntent, resolveNavigationIntent } from '@domain/compileErrors';
 import { useErrorReportFocusOptional } from '@context/ErrorReportFocusContext';
+import {
+  ElevenLabsLlmEnumErrorAssist,
+  shouldShowElevenLabsLlmEnumAssist,
+} from './ElevenLabsLlmEnumErrorAssist';
 
 function formatErrorWarningCounts(errors: number, warnings: number): string {
   const parts: string[] = [];
@@ -216,13 +220,24 @@ export function DebuggerErrorList({ errors, flows, className = '' }: DebuggerErr
                                     key={`${rowKey}-${compilationErrorFixKey(issue.error)}`}
                                     className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 pl-6 pr-1 pt-2"
                                   >
-                                    <span className="text-xs text-gray-700 dark:text-gray-300 leading-snug flex-1">
-                                      {issue.message}
-                                    </span>
+                                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                                      <span className="text-xs text-gray-700 dark:text-gray-300 leading-snug">
+                                        {issue.message}
+                                      </span>
+                                      {shouldShowElevenLabsLlmEnumAssist(
+                                        issue.message,
+                                        issue.error.code
+                                      ) ? (
+                                        <ElevenLabsLlmEnumErrorAssist
+                                          rawMessage={issue.message}
+                                          sourceError={issue.error}
+                                        />
+                                      ) : null}
+                                    </div>
                                     <button
                                       type="button"
                                       onClick={(ev) => onFix(ev, issue.error)}
-                                      className="flex-shrink-0 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-md bg-gray-900 text-white hover:bg-gray-800 dark:bg-sky-600 dark:hover:bg-sky-500"
+                                      className="flex-shrink-0 self-start text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-md bg-gray-900 text-white hover:bg-gray-800 dark:bg-sky-600 dark:hover:bg-sky-500"
                                     >
                                       Fix
                                     </button>

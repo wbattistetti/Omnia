@@ -8,6 +8,7 @@ import type { FieldVisibilityMap, IAAgentConfig } from 'types/iaAgentRuntimeSetu
 import { FieldHint } from './FieldHint';
 import { LlmModelPicker } from './LlmModelPicker';
 import { LlmProviderCatalogPanel } from './LlmProviderCatalogPanel';
+import type { ModelCostRow } from './modelCostsCatalog';
 
 const REASONING_LEVELS: IAAgentConfig['reasoning'][] = ['none', 'low', 'medium', 'high'];
 
@@ -27,6 +28,8 @@ export interface ModelSectionProps {
   afterParamRow?: ReactNode;
   /** Optional: provision ConvAI agent via ApiServer when Agent ID is empty (ElevenLabs only). */
   onProvisionConvaiAgent?: () => Promise<void>;
+  /** Costi UI-only per arricchire la combobox LLM. */
+  llmCostRows?: readonly ModelCostRow[];
   /**
    * Quando false, Agent ID e pulsante «Crea agente» non sono qui (es. Developer tools in {@link IAAgentSetup}).
    */
@@ -149,6 +152,8 @@ function AutosizeModelInput(props: {
 const TT = {
   modelloLlm:
     'Modello linguistico usato per le risposte. Influenza qualità, costo e latenza. Cambialo quando devi bilanciare precisione, costo o contesto lungo.',
+  modelloLlmElevenLabs:
+    'Modelli LLM del motore ElevenLabs (lista da GET /v1/convai/llm/list dopo sync sul server). Se la lingua agente non è inglese, la combo mostra solo gli id definiti in config/llmMapping.json.',
   creativity:
     'Temperatura: bassa = risposte più deterministiche e allineate al prompt; alta = più creatività e variabilità. Abbassa per fatti/controlli; alza solo se serve esplorazione o tono informale.',
   tokenMax:
@@ -192,6 +197,7 @@ export function ModelSection({
   afterParamRow,
   onProvisionConvaiAgent,
   showElevenLabsConvaiIdentity = true,
+  llmCostRows = [],
 }: ModelSectionProps) {
   const [provisionBusy, setProvisionBusy] = React.useState(false);
   const [provisionError, setProvisionError] = React.useState<string | null>(null);
@@ -344,6 +350,7 @@ export function ModelSection({
               onChange={(model) => onChange({ ...config, model })}
               label="LLM"
               labelTooltip={TT.modelloLlm}
+              costRows={llmCostRows}
             />
           </div>
         ) : config.platform === 'custom' ? (
@@ -360,10 +367,12 @@ export function ModelSection({
             <LlmProviderCatalogPanel
               reloadNonce={catalogReloadNonce}
               catalogPlatform={config.platform}
+              agentLanguage={config.voice?.language}
               value={String(llm.model ?? '')}
               onChange={(model) => patchLlm({ model })}
               label="LLM"
-              labelTooltip={TT.modelloLlm}
+              labelTooltip={TT.modelloLlmElevenLabs}
+              costRows={llmCostRows}
             />
           </div>
         ) : null}

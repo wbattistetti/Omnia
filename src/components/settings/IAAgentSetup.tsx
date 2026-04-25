@@ -20,6 +20,13 @@ import {
 } from './iaRuntime/VoiceCatalogSection';
 import { TtsModelSection } from './iaRuntime/TtsModelSection';
 import { AdvancedSection } from './iaRuntime/AdvancedSection';
+import { LlmMappingSectionElevenLabs } from './iaRuntime/LlmMappingSectionElevenLabs';
+import { ModelCostsSection } from './iaRuntime/ModelCostsSection';
+import {
+  defaultLlmCostRows,
+  defaultTtsCostRows,
+  type ModelCostRow,
+} from './iaRuntime/modelCostsCatalog';
 import {
   runIaProviderDiagnostics,
   type IaProviderDiagnosticResult,
@@ -141,9 +148,24 @@ export function IAAgentSetup({
   const [diagnostic, setDiagnostic] = React.useState<IaProviderDiagnosticResult | null>(null);
   const [diagnosticBusy, setDiagnosticBusy] = React.useState(false);
   const [diagnosticFetchError, setDiagnosticFetchError] = React.useState<string | null>(null);
+  const [llmCostRows, setLlmCostRows] = React.useState<ModelCostRow[]>(() => defaultLlmCostRows());
+  const [ttsCostRows, setTtsCostRows] = React.useState<ModelCostRow[]>(() => defaultTtsCostRows());
 
   const platformLabel =
     PLATFORM_META.find((x) => x.id === config.platform)?.label ?? config.platform;
+  const mappingLanguageLabel = React.useMemo(() => {
+    const raw = String(config.voice?.language ?? '').trim();
+    if (!raw) return 'lingua non impostata';
+    const primary = raw.toLowerCase().split('-')[0];
+    try {
+      const dn = new Intl.DisplayNames(['it'], { type: 'language' });
+      const name = dn.of(primary);
+      if (name && name.trim()) return name;
+    } catch {
+      /* fallback su codice */
+    }
+    return raw;
+  }, [config.voice?.language]);
 
   const runDiagnostics = React.useCallback(async () => {
     if (config.platform === 'custom') return;
@@ -189,6 +211,7 @@ export function IAAgentSetup({
         showOverrideBadge={mode === 'override' && overrides.modelSection}
         onChange={setConfig}
         catalogReloadNonce={catalogReloadNonce}
+        llmCostRows={llmCostRows}
         showElevenLabsConvaiIdentity={false}
         platformSlot={platformSlot}
         afterParamRow={
@@ -199,6 +222,7 @@ export function IAAgentSetup({
                   config={config}
                   onChange={setConfig}
                   catalogReloadNonce={catalogReloadNonce}
+                  costRows={ttsCostRows}
                 />
               </div>
               <div className="min-w-0">
@@ -213,6 +237,24 @@ export function IAAgentSetup({
             </div>
           ) : null
         }
+      />
+
+      {config.platform === 'elevenlabs' ? (
+        <details className="rounded border border-slate-700/80 bg-slate-950/40">
+          <summary className="cursor-pointer px-1.5 py-0.5 text-[11px] font-semibold leading-none text-slate-300">
+            LLM mapping ({mappingLanguageLabel})
+          </summary>
+          <div className="border-t border-slate-800 px-1.5 py-1">
+            <LlmMappingSectionElevenLabs catalogReloadNonce={catalogReloadNonce} />
+          </div>
+        </details>
+      ) : null}
+
+      <ModelCostsSection
+        llmRows={llmCostRows}
+        ttsRows={ttsCostRows}
+        onLlmRowsChange={setLlmCostRows}
+        onTtsRowsChange={setTtsCostRows}
       />
 
       <details className="rounded border border-slate-700/80 bg-slate-950/40">
@@ -343,7 +385,7 @@ export function IAAgentSetup({
           {visibility.tools ? (
             <ToolsSection
               tools={config.tools}
-              showOverrideBadge={mode === 'override' && overrides.toolsSection}
+              showOverrideBadge={devOverride}
               onChange={(tools) => setConfig({ ...config, tools })}
             />
           ) : null}

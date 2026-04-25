@@ -104,7 +104,7 @@ export function iaConvaiTraceElevenLabsFieldResolution(
     globalPlatform: string;
     convaiPresentInGlobalDefaults: boolean;
     resolvedAgentIdChars: number;
-    agentIdSource: 'task' | 'global' | 'none';
+    agentIdSource: 'session' | 'task' | 'global' | 'none';
   }
 ): void {
   const empty = detail.resolvedAgentIdChars === 0;
@@ -112,8 +112,8 @@ export function iaConvaiTraceElevenLabsFieldResolution(
   logFn(`${PREFIX} ElevenLabs field resolution`, { taskId, ...detail });
   if (empty) {
     console.warn(
-      `${PREFIX} hint: Set ConvAI Agent ID in IA Runtime (task override or Impostazioni → Runtime IA Agent), or use «Crea agente ConvAI» when Agent ID is empty. ` +
-        `If you already saved, confirm agentIaRuntimeOverrideJson contains non-empty convaiAgentId for this task in TaskRepository.`
+      `${PREFIX} hint: Esegui il flusso (compile pre-run) per provisionare ConvAI in sessione, oppure «Crea agente» nel pannello IA Runtime. ` +
+        `L’agent_id non è più persistito sul task: resta in memoria fino al reload tab.`
     );
   }
 }

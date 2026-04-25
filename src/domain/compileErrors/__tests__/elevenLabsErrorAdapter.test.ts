@@ -22,4 +22,13 @@ describe('elevenLabsErrorAdapter', () => {
     expect(n).not.toBeNull();
     expect(n!.provider).toBe('elevenlabs');
   });
+
+  it('inferFixAction opens LLM panel for Input should be enum', () => {
+    const n = {
+      provider: 'elevenlabs' as const,
+      code: 'x',
+      message: `ElevenLabs agents/create failed. — Input should be 'gpt-4o-mini'`,
+    };
+    expect(inferFixAction(n)).toBe('open_elevenlabs_model');
+  });
 });

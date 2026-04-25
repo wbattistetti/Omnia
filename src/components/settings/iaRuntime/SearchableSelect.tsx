@@ -10,6 +10,12 @@ export interface SearchableSelectOption<T = string> {
   subtitle?: string;
   decorator?: React.ReactNode;
   badges?: string[];
+  /** Riga custom opzionale sotto label/subtitle (es. metriche + barre). */
+  details?: React.ReactNode;
+  /** Opzione non selezionabile (es. modello fuori mapping lingua). */
+  disabled?: boolean;
+  /** Tooltip quando `disabled`. */
+  disabledTitle?: string;
 }
 
 export interface SearchableSelectProps<T = string> {
@@ -105,12 +111,17 @@ export function SearchableSelect<T extends string | number>({
               <li key={String(o.value)}>
                 <button
                   type="button"
+                  disabled={Boolean(o.disabled)}
+                  title={o.disabled ? o.disabledTitle ?? 'Non disponibile' : undefined}
                   onClick={() => {
+                    if (o.disabled) return;
                     onChange(o.value);
                     setOpen(false);
                     setFilter('');
                   }}
-                  className="flex w-full items-start gap-1 px-2 py-0.5 text-left hover:bg-violet-900/40"
+                  className={`flex w-full items-start gap-1 px-2 py-0.5 text-left ${
+                    o.disabled ? 'cursor-not-allowed opacity-45' : 'hover:bg-violet-900/40'
+                  }`}
                 >
                   {o.decorator ? <span className="shrink-0">{o.decorator}</span> : null}
                   <span className="min-w-0 flex-1">
@@ -132,6 +143,7 @@ export function SearchableSelect<T extends string | number>({
                         ))}
                       </span>
                     ) : null}
+                    {o.details ? <span className="mt-0.5 block">{o.details}</span> : null}
                   </span>
                 </button>
               </li>

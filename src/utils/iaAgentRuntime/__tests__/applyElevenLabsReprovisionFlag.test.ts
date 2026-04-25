@@ -24,4 +24,11 @@ describe('withElevenLabsReprovisionAfterTtsChange', () => {
     const out = withElevenLabsReprovisionAfterTtsChange(prev, next, false);
     expect(out.elevenLabsNeedsReprovision).toBe(false);
   });
+
+  it('sets flag when systemPrompt changes and ConvAI id exists (hydrated)', () => {
+    const prev = { ...getDefaultConfig('elevenlabs'), convaiAgentId: 'agent_old', systemPrompt: 'A' };
+    const next = { ...getDefaultConfig('elevenlabs'), convaiAgentId: 'agent_old', systemPrompt: 'B' };
+    const out = withElevenLabsReprovisionAfterTtsChange(prev, next, true);
+    expect(out.elevenLabsNeedsReprovision).toBe(true);
+  });
 });

@@ -187,6 +187,50 @@ export async function fetchCatalogModels(
   return items;
 }
 
+/** Payload `config/llmMapping.json` (solo ElevenLabs in questa versione). */
+export interface LlmMappingPayload {
+  elevenlabs: {
+    nonEnglishAllowedModels: string[];
+    perLanguage: Record<string, string[]>;
+  };
+}
+
+function normalizePerLanguage(per: unknown): Record<string, string[]> {
+  if (!per || typeof per !== 'object' || Array.isArray(per)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(per as Record<string, unknown>)) {
+    if (!Array.isArray(v)) continue;
+    out[k] = v.map((x) => String(x).trim()).filter(Boolean);
+  }
+  return out;
+}
+
+export async function fetchLlmMapping(): Promise<LlmMappingPayload> {
+  const path = '/api/ia-catalog/ui/llm-mapping';
+  const res = await fetch(`${API_BASE}${path}`);
+  const data = await parseCatalogResponse(path, res, (j) => j);
+  const root = (data.mapping as Record<string, unknown> | undefined) ?? {};
+  const el = (root.elevenlabs as Record<string, unknown> | undefined) ?? {};
+  return {
+    elevenlabs: {
+      nonEnglishAllowedModels: Array.isArray(el.nonEnglishAllowedModels)
+        ? (el.nonEnglishAllowedModels as unknown[]).map((x) => String(x))
+        : [],
+      perLanguage: normalizePerLanguage(el.perLanguage),
+    },
+  };
+}
+
+export async function postLlmMapping(body: LlmMappingPayload): Promise<void> {
+  const path = '/api/ia-catalog/ui/llm-mapping';
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  await parseCatalogResponse(path, res, () => ({}));
+}
+
 export async function refreshIaCatalog(): Promise<unknown> {
   const res = await fetch(`${API_BASE}/api/ia-catalog/refresh`, { method: 'POST' });
   let json: Record<string, unknown> = {};

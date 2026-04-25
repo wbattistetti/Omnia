@@ -10,11 +10,11 @@ import {
 import { getDefaultConfig } from '../platformHelpers';
 
 describe('mergeConvaiAgentIdFromGlobalDefaults', () => {
-  it('fills convaiAgentId from globals when ElevenLabs task override has falsy id', () => {
+  it('non copia convaiAgentId dai globali (id ConvAI solo in sessione tab)', () => {
     const task = { ...getDefaultConfig('elevenlabs'), convaiAgentId: undefined };
     const globals = { ...getDefaultConfig('elevenlabs'), convaiAgentId: 'agent_global_1' };
     const out = mergeConvaiAgentIdFromGlobalDefaults(task, globals);
-    expect(out.convaiAgentId).toBe('agent_global_1');
+    expect(out.convaiAgentId).toBeUndefined();
   });
 
   it('does not override non-empty task convaiAgentId', () => {

@@ -86,7 +86,7 @@ function VoiceGenderIcon({ gender }: { gender: 'male' | 'female' | 'unknown' }) 
 
 function matchesPanel(cv: CatalogVoice, platform: string, panel: VoicePanelFilters): boolean {
   const m = catalogVoiceToMetadata(cv, platform);
-  if (panel.language && (m.language || '') !== panel.language) return false;
+  if (panel.language && !voiceMatchesLanguageTag(m.language ?? null, panel.language)) return false;
   if (panel.accent && (m.accent || '') !== panel.accent) return false;
   if (panel.category && (m.category || '') !== panel.category) return false;
   if (panel.gender) {

@@ -18,6 +18,7 @@ import {
   parseOptionalIaRuntimeJson,
 } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
+import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
 
 export type AiAgentTaskLocation = {
   nodeId?: string;
@@ -123,7 +124,8 @@ export function collectIaAgentRuntimeCompileErrors(
 
     switch (cfg.platform) {
       case 'elevenlabs': {
-        if (!cfg.convaiAgentId?.trim() && !provisioningSnapshot) {
+        const sessionAgentId = getConvaiSessionBinding(task.id)?.agentId?.trim() ?? '';
+        if (!sessionAgentId && !cfg.convaiAgentId?.trim() && !provisioningSnapshot) {
           push(
             'IaElevenLabsMissingAgentId',
             'ElevenLabs: manca ConvAI Agent ID — crea l’agente o incolla l’ID da ElevenLabs.',

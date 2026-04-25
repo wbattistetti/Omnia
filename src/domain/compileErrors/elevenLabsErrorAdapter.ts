@@ -117,6 +117,7 @@ export const elevenLabsErrorAdapter: ProviderErrorAdapter = {
   inferFixAction(normalized: NormalizedIaProviderError): string {
     const m = normalized.message.toLowerCase();
     if (m.includes('language')) return 'open_elevenlabs_language';
+    if (m.includes('input should be')) return 'open_elevenlabs_model';
     if (m.includes('turbo') || m.includes('flash') || m.includes('v2_5')) return 'open_elevenlabs_model';
     if (m.includes('voice')) return 'open_elevenlabs_voice';
     return 'open_elevenlabs_panel';

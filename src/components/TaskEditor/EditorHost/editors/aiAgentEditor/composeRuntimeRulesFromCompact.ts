@@ -11,6 +11,7 @@ import {
   iaConvaiTraceCompilePayload,
   iaConvaiTraceElevenLabsFieldResolution,
 } from '@utils/debug/iaConvaiFlowTrace';
+import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
 
 /**
  * ElevenLabs ConvAI agent.language expects ISO 639-1; Omnia may persist BCP-47 (e.g. it-IT).
@@ -275,11 +276,18 @@ function resolveElevenLabsMinimalCompileExtension(
   const backendGlobal =
     globalIa.platform === 'elevenlabs' ? globalIa.elevenLabsBackendBaseUrl?.trim() ?? '' : '';
 
-  const agentId = agentIdTask || agentIdGlobal;
+  const sessionId = getConvaiSessionBinding(taskId)?.agentId?.trim() ?? '';
+  const agentId = sessionId || agentIdTask || agentIdGlobal;
   const backendBaseUrl = backendTask || backendGlobal;
 
-  const agentIdSource: 'task' | 'global' | 'none' =
-    agentIdTask.length > 0 ? 'task' : agentIdGlobal.length > 0 ? 'global' : 'none';
+  const agentIdSource: 'session' | 'task' | 'global' | 'none' =
+    sessionId.length > 0
+      ? 'session'
+      : agentIdTask.length > 0
+        ? 'task'
+        : agentIdGlobal.length > 0
+          ? 'global'
+          : 'none';
 
   iaConvaiTraceElevenLabsFieldResolution(taskId, {
     rawOverrideChars: raw.length,

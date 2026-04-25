@@ -210,15 +210,39 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
             ? 'main'
             : FlowWorkspaceSnapshot.getActiveFlowId();
 
-      // Auto-provision ConvAI agents for ElevenLabs AI Agent tasks that lack an agentId.
-      // Runs before compilation so the freshly-written agentId is visible to the compiler.
+      // ConvAI ElevenLabs: allinea agenti (nome __GUID_{taskId}), id solo in sessione — prima della compile.
       {
-        const provisionResult = await ensureConvaiAgentsProvisioned(currentOptions.nodes);
-        if (provisionResult.provisioned.length > 0 || provisionResult.reprovisioned.length > 0) {
-          console.info('[IA·ConvAI] ConvAI provision / TTS reprovision summary', provisionResult);
+        const nodeLabelByTaskId: Record<string, string> = {};
+        for (const n of currentOptions.nodes || []) {
+          const rows = (n as { data?: { rows?: { id?: string; taskId?: string }[]; label?: string } }).data?.rows || [];
+          const nodeReadable = toReadableLabel(
+            (n as { data?: { label?: string }; label?: string }).data?.label ??
+              (n as { label?: string }).label
+          );
+          for (const row of rows) {
+            const tid = String(row.id || row.taskId || '').trim();
+            if (!tid) continue;
+            if (!nodeLabelByTaskId[tid] && nodeReadable) nodeLabelByTaskId[tid] = nodeReadable;
+          }
+        }
+        const snapFlow = FlowWorkspaceSnapshot.getFlowById(rootFlowId);
+        const rootFlowLabel =
+          toReadableLabel(snapFlow?.title) ||
+          (typeof rootFlowId === 'string' && rootFlowId.trim().length > 0 ? rootFlowId.trim() : 'main');
+        const projectLabel =
+          toReadableLabel(projectData?.name) ||
+          (typeof projectData?.id === 'string' && projectData.id.trim().length > 0 ? projectData.id.trim() : 'project');
+
+        const provisionResult = await ensureConvaiAgentsProvisioned(currentOptions.nodes, {
+          projectLabel,
+          rootFlowLabel,
+          nodeLabelByTaskId,
+        });
+        if (provisionResult.provisioned.length > 0) {
+          console.info('[IA·ConvAI] ConvAI provision summary', provisionResult);
         }
         if (provisionResult.failed.length > 0) {
-          console.warn('[IA·ConvAI] auto-provision: some tasks failed provisioning', provisionResult);
+          console.warn('[IA·ConvAI] provision: some tasks failed', provisionResult);
         }
       }
 

@@ -20,10 +20,17 @@ function RuntimeIaAgentSettingsTab() {
 
   const handleProvisionConvaiAgent = React.useCallback(async () => {
     if (cfg.convaiAgentId?.trim()) return;
-    const fragment = conversationConfigFragmentFromIaAgentConfig(cfg);
+    let fragment: Record<string, unknown>;
+    try {
+      fragment = conversationConfigFragmentFromIaAgentConfig(cfg)!;
+    } catch (e) {
+      console.error('[Studio] ConvAI createAgent: impossibile costruire il payload (prompt runtime vuoto)', e);
+      return;
+    }
+    console.warn('[DEBUG] createAgent FINAL PAYLOAD (global defaults)', JSON.stringify({ conversation_config: fragment }, null, 2));
     const { agentId } = await createConvaiAgentViaOmniaServer({
       name: 'Omnia · global IA defaults',
-      ...(fragment ? { conversation_config: fragment } : {}),
+      conversation_config: fragment,
     });
     const next = { ...cfg, platform: 'elevenlabs' as const, convaiAgentId: agentId };
     setCfg(next);

@@ -7,8 +7,17 @@ import type { IDockviewPanelProps } from 'dockview';
 import { IAAgentSetup } from '@components/settings/IAAgentSetup';
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 import { refreshIaCatalog } from '@services/iaCatalogApi';
-import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
-import { conversationConfigFragmentFromIaAgentConfig } from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
+import {
+  createConvaiAgentViaOmniaServer,
+  deleteConvaiAgentViaOmniaServer,
+  listAllConvaiAgentsMatchingTaskGuid,
+} from '@services/convaiProvisionApi';
+import {
+  buildConvaiProvisionKey,
+  conversationConfigFragmentFromIaAgentConfig,
+} from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
+import { buildConvaiAgentDisplayName } from '@utils/iaAgentRuntime/convaiAgentDisplayName';
+import { setConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
 import { iaAgentConfigWithEditorSystemPrompt } from '@utils/iaAgentRuntime/iaAgentConfigWithEditorSystemPrompt';
 import { resolveTaskIaConfig } from '@utils/iaAgentRuntime/resolveTaskIaConfig';
 import { taskRepository } from '@services/TaskRepository';
@@ -103,57 +112,45 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
   }, [instanceId]);
 
   const handleProvisionConvaiAgent = React.useCallback(async () => {
-    const currentIaConfig = iaRuntimeConfig;
-
-    if (currentIaConfig.convaiAgentId?.trim()) {
-      console.log('[IA·ConvAI] DIAG UI persist NOT called', {
-        taskId: instanceId,
-        reason: 'agentId missing, invalid, or early return',
-      });
-      return;
-    }
-
+    if (!instanceId?.trim()) return;
     try {
-      const task = instanceId ? taskRepository.getTask(instanceId) : null;
+      const task = taskRepository.getTask(instanceId);
       const cfgForCreate = iaAgentConfigWithEditorSystemPrompt(
         task ? resolveTaskIaConfig(task) : iaRuntimeConfig,
         task
       );
-      const fragment = conversationConfigFragmentFromIaAgentConfig(cfgForCreate);
-      const { agentId } = await createConvaiAgentViaOmniaServer({
-        name: `Omnia · ${instanceId ?? 'task'}`,
-        ...(fragment ? { conversation_config: fragment } : {}),
-      });
-
-      console.log('[IA·ConvAI] DIAG UI createAgent response', {
-        taskId: instanceId,
-        agentIdReceived: agentId,
-        type: typeof agentId,
-        isEmpty:
-          !agentId || (typeof agentId === 'string' && agentId.trim().length === 0),
-      });
-
-      console.log('[IA·ConvAI] DIAG UI pre-persist check', {
-        taskId: instanceId,
-        agentId,
-        hasExistingConvaiAgentId: !!currentIaConfig?.convaiAgentId,
-      });
-
-      if (!agentId || String(agentId).trim().length === 0) {
-        console.log('[IA·ConvAI] DIAG UI persist NOT called', {
-          taskId: instanceId,
-          reason: 'agentId missing, invalid, or early return',
-        });
+      let fragment: Record<string, unknown>;
+      try {
+        fragment = conversationConfigFragmentFromIaAgentConfig(cfgForCreate, { omitTts: true, task: task ?? undefined })!;
+      } catch (buildErr) {
+        console.error('[IA·ConvAI] createAgent: payload non costruibile (prompt vuoto o dati mancanti)', buildErr);
         return;
       }
-
-      console.log('[IA·ConvAI] DIAG UI calling persist', {
-        taskId: instanceId,
-        partial: { platform: 'elevenlabs', convaiAgentId: agentId },
+      const provisionKey = buildConvaiProvisionKey(cfgForCreate, task ?? undefined, true);
+      const matches = await listAllConvaiAgentsMatchingTaskGuid(instanceId);
+      for (const m of matches) {
+        console.warn('[DEBUG] DELETE AGENT', m.agentId, { name: m.name });
+        try {
+          await deleteConvaiAgentViaOmniaServer(m.agentId);
+        } catch {
+          /* continua la pulizia */
+        }
+      }
+      const displayName = buildConvaiAgentDisplayName({
+        projectLabel: 'omnia',
+        flowLabel: 'editor',
+        nodeLabel: 'ia-runtime',
+        taskGuid: instanceId,
       });
+      console.warn('[DEBUG] CREATE AGENT PAYLOAD (UI)', JSON.stringify({ name: displayName, conversation_config: fragment }, null, 2));
+      const { agentId } = await createConvaiAgentViaOmniaServer({
+        name: displayName,
+        conversation_config: fragment,
+      });
+      console.warn('[DEBUG] NEW AGENT ID (UI)', agentId);
+      setConvaiSessionBinding(instanceId, agentId, provisionKey);
       const persistPartial: Parameters<typeof persistIaRuntimeOverrideSnapshot>[0] = {
         platform: 'elevenlabs',
-        convaiAgentId: agentId,
         elevenLabsNeedsReprovision: false,
       };
       if (cfgForCreate.systemPrompt.trim().length > 0) {
