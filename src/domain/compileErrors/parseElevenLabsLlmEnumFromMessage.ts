@@ -44,3 +44,50 @@ export function messageLooksLikeElevenLabsLlmEnumValidation(text: string): boole
     t.includes("'llm'");
   return context && ids.length >= 1;
 }
+
+function stripElevenLabsApiBaseHint(tail: string): string {
+  const hintIdx = tail.indexOf(' [ElevenLabs API base:');
+  return hintIdx >= 0 ? tail.slice(0, hintIdx).trim() : tail.trim();
+}
+
+function inputFromDetailPayload(parsed: unknown): string | null {
+  if (!parsed || typeof parsed !== 'object') return null;
+  const o = parsed as Record<string, unknown>;
+  const detail = o.detail;
+  if (!Array.isArray(detail)) return null;
+  for (const item of detail) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const input = row.input;
+    const loc = row.loc;
+    if (typeof input !== 'string' || !input.trim()) continue;
+    if (!Array.isArray(loc)) continue;
+    const locStr = loc.map((x) => String(x).toLowerCase());
+    if (locStr.includes('llm')) return input.trim();
+  }
+  return null;
+}
+
+/**
+ * Estrae il valore LLM non valido dal payload JSON negli errori di provision (detail[].input + loc … llm).
+ */
+export function extractInvalidLlmInputFromProvisionMessage(text: string): string | null {
+  if (!text || typeof text !== 'string') return null;
+  const sep = ' — ';
+  if (text.includes(sep)) {
+    const tail = stripElevenLabsApiBaseHint(text.split(sep).slice(1).join(sep));
+    try {
+      const parsed = JSON.parse(tail);
+      const hit = inputFromDetailPayload(parsed);
+      if (hit) return hit;
+    } catch {
+      /* fall through */
+    }
+  }
+  try {
+    const parsed = JSON.parse(stripElevenLabsApiBaseHint(text));
+    return inputFromDetailPayload(parsed);
+  } catch {
+    return null;
+  }
+}

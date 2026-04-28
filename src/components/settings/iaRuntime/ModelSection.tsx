@@ -5,7 +5,7 @@
 import React from 'react';
 import type { ReactNode } from 'react';
 import type { FieldVisibilityMap, IAAgentConfig } from 'types/iaAgentRuntimeSetup';
-import { FieldHint } from './FieldHint';
+import { FieldHint, runtimeIaFieldHintLabelClass } from './FieldHint';
 import { LlmModelPicker } from './LlmModelPicker';
 import { LlmProviderCatalogPanel } from './LlmProviderCatalogPanel';
 import type { ModelCostRow } from './modelCostsCatalog';
@@ -24,12 +24,18 @@ export interface ModelSectionProps {
   catalogReloadNonce?: number;
   /** Pulsanti piattaforma sulla riga sopra modello/parametri. */
   platformSlot?: ReactNode;
-  /** Subito sotto la prima riga parametri (es. Voce/Lingua ElevenLabs). */
-  afterParamRow?: ReactNode;
+  /**
+   * ElevenLabs: TTS + Voce sotto il blocco LLM; stessa colonna per LLM e TTS così le combo hanno larghezza uguale.
+   */
+  elevenLabsTtsVoiceSlots?: { tts: ReactNode; voice: ReactNode };
   /** Optional: provision ConvAI agent via ApiServer when Agent ID is empty (ElevenLabs only). */
   onProvisionConvaiAgent?: () => Promise<void>;
   /** Costi UI-only per arricchire la combobox LLM. */
   llmCostRows?: readonly ModelCostRow[];
+  /** Se false, la combo LLM non applica mapping lingua-specifico. */
+  llmLanguageScopedEnabled?: boolean;
+  /** Toggle visibilità/uso mapping LLM (render vicino alla combo LLM). */
+  onLlmLanguageScopedChange?: (next: boolean) => void;
   /**
    * Quando false, Agent ID e pulsante «Crea agente» non sono qui (es. Developer tools in {@link IAAgentSetup}).
    */
@@ -194,10 +200,12 @@ export function ModelSection({
   onChange,
   catalogReloadNonce = 0,
   platformSlot,
-  afterParamRow,
+  elevenLabsTtsVoiceSlots,
   onProvisionConvaiAgent,
   showElevenLabsConvaiIdentity = true,
   llmCostRows = [],
+  llmLanguageScopedEnabled = true,
+  onLlmLanguageScopedChange,
 }: ModelSectionProps) {
   const [provisionBusy, setProvisionBusy] = React.useState(false);
   const [provisionError, setProvisionError] = React.useState<string | null>(null);
@@ -271,10 +279,87 @@ export function ModelSection({
     visibility.safety_settings ||
     (config.platform === 'elevenlabs' && visibility.workflow);
 
+  /** Stessa struttura dell’LLM: riga etichette + gap-1 + riga input così i bordi top delle combo coincidono con i numeric h-8. */
+  const elevenLabsParamsBlock = (
+    <div className="flex w-full min-w-0 flex-col gap-1">
+      <div className="flex min-h-[2rem] flex-row flex-wrap items-center gap-x-2 gap-y-1">
+        <span title={TT.creativityLlm} className={`${runtimeIaFieldHintLabelClass('muted', 'compact')} shrink-0`}>
+          Creatività
+        </span>
+        <span title={TT.tokenMaxLlm} className={`${runtimeIaFieldHintLabelClass('muted', 'compact')} shrink-0`}>
+          MAX TOKEN
+        </span>
+        <span title={TT.budgetExplain} className={`${runtimeIaFieldHintLabelClass('muted', 'compact')} shrink-0`}>
+          Budget
+        </span>
+      </div>
+      <div className="flex flex-row flex-wrap items-end gap-x-2 gap-y-1">
+        <CaptionBoundedNumberInput
+          caption="Creatività"
+          value={num(llm.temperature, 0.5)}
+          min={0}
+          max={2}
+          step={0.05}
+          onChange={(v) => patchLlm({ temperature: v })}
+        />
+        <CaptionBoundedNumberInput
+          caption="MAX TOKEN"
+          value={num(llm.max_tokens, 4096)}
+          min={1}
+          onChange={(v) => patchLlm({ max_tokens: Math.max(1, Math.floor(v)) })}
+        />
+        {visibility.reflection_budget ? (
+          <CaptionBoundedNumberInput
+            caption="Budget"
+            value={num(llm.reflection_budget, 3)}
+            min={0}
+            onChange={(v) => patchLlm({ reflection_budget: Math.floor(v) })}
+          />
+        ) : (
+          <span
+            className="h-8 font-mono text-xs leading-8 text-slate-600"
+            style={{ width: `${'Budget'.length + 3}ch` }}
+            title={TT.budgetExplain}
+          >
+            —
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
+  const elevenLabsLlmStackedPanel = (
+    <LlmProviderCatalogPanel
+      stackedLayout
+      trailingHeader={
+        onLlmLanguageScopedChange ? (
+          <label className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] text-slate-300">
+            <input
+              type="checkbox"
+              checked={llmLanguageScopedEnabled}
+              onChange={(e) => onLlmLanguageScopedChange(e.target.checked)}
+            />
+            <span>LLM dipende dalla lingua</span>
+          </label>
+        ) : null
+      }
+      reloadNonce={catalogReloadNonce}
+      catalogPlatform={config.platform}
+      agentLanguage={llmLanguageScopedEnabled ? config.voice?.language : undefined}
+      value={String(llm.model ?? '')}
+      onChange={(model) => patchLlm({ model })}
+      label="LLM"
+      labelTooltip={TT.modelloLlmElevenLabs}
+      costRows={llmCostRows}
+    />
+  );
+
   return (
     <div className="flex flex-col gap-0.5">
       {platformSlot ? (
-        <div className="flex flex-row flex-wrap gap-1">{platformSlot}</div>
+        <div className="flex flex-row flex-wrap gap-1" data-ia-runtime-focus="catalog">
+          {platformSlot}
+        </div>
       ) : null}
 
       {config.platform === 'elevenlabs' && showElevenLabsConvaiIdentity ? (
@@ -332,6 +417,26 @@ export function ModelSection({
         </div>
       ) : null}
 
+      {config.platform === 'elevenlabs' && visibility.llm_model ? (
+        elevenLabsTtsVoiceSlots ? (
+          <div className="grid w-full min-w-0 grid-cols-1 gap-x-2 gap-y-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-stretch">
+            {elevenLabsLlmStackedPanel}
+            <div className="flex min-h-0 w-full min-w-0 flex-col justify-start sm:h-full">
+              {elevenLabsParamsBlock}
+            </div>
+            {elevenLabsTtsVoiceSlots.tts}
+            <div className="flex min-h-0 w-full min-w-0 flex-col justify-start sm:h-full">
+              {elevenLabsTtsVoiceSlots.voice}
+            </div>
+          </div>
+        ) : (
+          <div className="flex w-full min-w-0 flex-col gap-2">
+            {elevenLabsLlmStackedPanel}
+            {elevenLabsParamsBlock}
+          </div>
+        )
+      ) : null}
+
       <div className="flex flex-row flex-wrap items-end gap-x-3 gap-y-2">
         {config.platform === 'openai' ||
         config.platform === 'anthropic' ||
@@ -362,19 +467,6 @@ export function ModelSection({
             />
             </div>
           </FieldHint>
-        ) : config.platform === 'elevenlabs' && visibility.llm_model ? (
-          <div data-ia-runtime-focus="llm">
-            <LlmProviderCatalogPanel
-              reloadNonce={catalogReloadNonce}
-              catalogPlatform={config.platform}
-              agentLanguage={config.voice?.language}
-              value={String(llm.model ?? '')}
-              onChange={(model) => patchLlm({ model })}
-              label="LLM"
-              labelTooltip={TT.modelloLlmElevenLabs}
-              costRows={llmCostRows}
-            />
-          </div>
         ) : null}
 
         {showStdTempMax ? (
@@ -386,18 +478,6 @@ export function ModelSection({
               max={2}
               step={0.05}
               onChange={(v) => onChange({ ...config, temperature: v })}
-            />
-          </FieldHint>
-        ) : null}
-        {config.platform === 'elevenlabs' && visibility.llm_model ? (
-          <FieldHint label="Creatività" tooltip={TT.creativityLlm} className="w-fit shrink-0">
-            <CaptionBoundedNumberInput
-              caption="Creatività"
-              value={num(llm.temperature, 0.5)}
-              min={0}
-              max={2}
-              step={0.05}
-              onChange={(v) => patchLlm({ temperature: v })}
             />
           </FieldHint>
         ) : null}
@@ -419,49 +499,7 @@ export function ModelSection({
             </div>
           </FieldHint>
         ) : null}
-        {config.platform === 'elevenlabs' && visibility.llm_model ? (
-          <FieldHint label="MAX TOKEN" tooltip={TT.tokenMaxLlm} className="w-fit shrink-0">
-            <CaptionBoundedNumberInput
-              caption="MAX TOKEN"
-              value={num(llm.max_tokens, 4096)}
-              min={1}
-              onChange={(v) => patchLlm({ max_tokens: Math.max(1, Math.floor(v)) })}
-            />
-          </FieldHint>
-        ) : null}
-
-        {config.platform === 'elevenlabs' && visibility.llm_model && visibility.reflection_budget ? (
-          <FieldHint label="Budget" tooltip={TT.budgetExplain} className="w-fit shrink-0">
-            <CaptionBoundedNumberInput
-              caption="Budget"
-              value={num(llm.reflection_budget, 3)}
-              min={0}
-              onChange={(v) => patchLlm({ reflection_budget: Math.floor(v) })}
-            />
-          </FieldHint>
-        ) : (
-          <div
-            className="flex w-fit shrink-0 flex-col gap-0"
-            title={TT.budgetExplain}
-          >
-            <span className="w-fit cursor-help border-b border-dotted border-slate-600 text-[11px] font-semibold leading-snug text-slate-500">
-              Budget
-            </span>
-            <span
-              className="h-8 font-mono text-xs leading-8 text-slate-600"
-              style={{ width: `${'Budget'.length + 3}ch` }}
-            >
-              —
-            </span>
-          </div>
-        )}
       </div>
-
-      {afterParamRow ? (
-        <div className="mt-1 flex flex-col gap-0.5 border-t border-slate-800/80 pt-1">
-          {afterParamRow}
-        </div>
-      ) : null}
 
       {showImpostazioniAvanzate ? (
         <details className="rounded border border-slate-700/90 bg-slate-950/50">

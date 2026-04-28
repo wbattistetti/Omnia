@@ -10,24 +10,34 @@ function payload(partial: Partial<OrchestratorSseErrorPayload>): OrchestratorSse
 }
 
 describe('isConvaiNonEnglishTtsConstraintError', () => {
-  it('returns true when ElevenLabs message appears in error', () => {
+  it('returns true when error contains tts.model_id', () => {
+    expect(
+      isConvaiNonEnglishTtsConstraintError(
+        payload({
+          error: 'Invalid conversation config: tts.model_id is invalid',
+        })
+      )
+    ).toBe(true);
+  });
+
+  it('matches case-insensitively in API body', () => {
+    expect(
+      isConvaiNonEnglishTtsConstraintError(
+        payload({
+          apiServerBody: '{"detail":"TTS.MODEL_ID not allowed for this voice"}',
+        })
+      )
+    ).toBe(true);
+  });
+
+  it('returns false for LLM-only constraint message', () => {
     expect(
       isConvaiNonEnglishTtsConstraintError(
         payload({
           error: 'Non-English Agents must use turbo or flash v2_5',
         })
       )
-    ).toBe(true);
-  });
-
-  it('matches case-insensitively', () => {
-    expect(
-      isConvaiNonEnglishTtsConstraintError(
-        payload({
-          apiServerBody: '{"detail":"non-english agents must use turbo or flash v2_5"}',
-        })
-      )
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('returns false for unrelated startAgent errors', () => {

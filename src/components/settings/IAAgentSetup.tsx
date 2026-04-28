@@ -21,6 +21,7 @@ import {
 import { TtsModelSection } from './iaRuntime/TtsModelSection';
 import { AdvancedSection } from './iaRuntime/AdvancedSection';
 import { LlmMappingSectionElevenLabs } from './iaRuntime/LlmMappingSectionElevenLabs';
+import { TtsMappingSectionElevenLabs } from './iaRuntime/TtsMappingSectionElevenLabs';
 import { ModelCostsSection } from './iaRuntime/ModelCostsSection';
 import {
   defaultLlmCostRows,
@@ -32,6 +33,10 @@ import {
   type IaProviderDiagnosticResult,
 } from '@diagnostics/iaProviderDiagnostics';
 import { withElevenLabsReprovisionAfterTtsChange } from '@utils/iaAgentRuntime/applyElevenLabsReprovisionFlag';
+import {
+  OMNIA_PROJECT_ELEVENLABS_LLM_MAPPING_KEY,
+  parseProjectElevenLabsLlmMapping,
+} from '@utils/iaAgentRuntime/omniaProjectElevenLabsLlmMapping';
 
 export interface IAAgentSetupProps {
   defaultConfig?: IAAgentConfig;
@@ -47,6 +52,10 @@ export interface IAAgentSetupProps {
    * (fix da chat verso default globali). I pannelli override per-task gestiscono l’evento nel container.
    */
   listenConvaiTtsFix?: boolean;
+  /**
+   * Se false, nasconde LLM/TTS Costs. Default: true solo con `mode="global"` (Studio / app-wide).
+   */
+  showModelCostsSection?: boolean;
 }
 
 /** OpenAI → Anthropic → Gemini → ElevenLabs → Custom */
@@ -72,6 +81,10 @@ function emptyOverrides(): SectionOverrideFlags {
   };
 }
 
+const ADV_LLM_LANGUAGE_SCOPED_KEY = 'llmLanguageScopedEnabled';
+const ADV_TTS_LANGUAGE_SCOPED_KEY = 'ttsLanguageScopedEnabled';
+const ADV_TTS_PER_LANGUAGE_MAP_KEY = 'ttsPerLanguageModelMap';
+
 export function IAAgentSetup({
   defaultConfig,
   value,
@@ -80,7 +93,9 @@ export function IAAgentSetup({
   catalogReloadNonce = 0,
   onProvisionConvaiAgent,
   listenConvaiTtsFix = false,
+  showModelCostsSection: showModelCostsProp,
 }: IAAgentSetupProps) {
+  const showModelCostsSection = showModelCostsProp ?? mode === 'global';
   const [inner, setInner] = React.useState<IAAgentConfig>(() =>
     value !== undefined ? value : getDefaultConfig('openai')
   );
@@ -150,9 +165,41 @@ export function IAAgentSetup({
   const [diagnosticFetchError, setDiagnosticFetchError] = React.useState<string | null>(null);
   const [llmCostRows, setLlmCostRows] = React.useState<ModelCostRow[]>(() => defaultLlmCostRows());
   const [ttsCostRows, setTtsCostRows] = React.useState<ModelCostRow[]>(() => defaultTtsCostRows());
+  const advanced = React.useMemo(
+    () => (config.advanced && typeof config.advanced === 'object' ? config.advanced : {}),
+    [config.advanced]
+  );
+  const llmLanguageScopedEnabled =
+    config.platform === 'elevenlabs' ? advanced[ADV_LLM_LANGUAGE_SCOPED_KEY] !== false : false;
+  /** Stesso criterio dell’LLM mapping: attivo di default su ElevenLabs; disattivabile dal checkbox in TtsModelSection. */
+  const ttsLanguageScopedEnabled =
+    config.platform === 'elevenlabs' ? advanced[ADV_TTS_LANGUAGE_SCOPED_KEY] !== false : false;
+  const ttsPerLanguageModelMap =
+    advanced[ADV_TTS_PER_LANGUAGE_MAP_KEY] &&
+    typeof advanced[ADV_TTS_PER_LANGUAGE_MAP_KEY] === 'object' &&
+    !Array.isArray(advanced[ADV_TTS_PER_LANGUAGE_MAP_KEY])
+      ? (advanced[ADV_TTS_PER_LANGUAGE_MAP_KEY] as Record<string, string[]>)
+      : {};
+  const hasScopedTtsRules = Object.values(ttsPerLanguageModelMap).some((arr) => Array.isArray(arr) && arr.length > 0);
+  const hasVoiceLanguage = Boolean(String(config.voice?.language ?? '').trim());
+
+  const patchAdvanced = React.useCallback(
+    (patch: Record<string, unknown>) => {
+      const current = configRef.current;
+      const advCurrent =
+        current.advanced && typeof current.advanced === 'object' ? current.advanced : {};
+      setConfig({ ...current, advanced: { ...advCurrent, ...patch } });
+    },
+    [setConfig]
+  );
 
   const platformLabel =
     PLATFORM_META.find((x) => x.id === config.platform)?.label ?? config.platform;
+  const embeddedElevenLabsLlmMapping = React.useMemo(
+    () => parseProjectElevenLabsLlmMapping(config.advanced),
+    [config.advanced]
+  );
+
   const mappingLanguageLabel = React.useMemo(() => {
     const raw = String(config.voice?.language ?? '').trim();
     if (!raw) return 'lingua non impostata';
@@ -212,50 +259,94 @@ export function IAAgentSetup({
         onChange={setConfig}
         catalogReloadNonce={catalogReloadNonce}
         llmCostRows={llmCostRows}
+        llmLanguageScopedEnabled={llmLanguageScopedEnabled}
+        onLlmLanguageScopedChange={(next) =>
+          patchAdvanced({ [ADV_LLM_LANGUAGE_SCOPED_KEY]: next })
+        }
         showElevenLabsConvaiIdentity={false}
         platformSlot={platformSlot}
-        afterParamRow={
-          visibility.voice && config.platform === 'elevenlabs' ? (
-            <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start sm:gap-x-4 sm:gap-y-1">
-              <div className="min-w-0">
-                <TtsModelSection
-                  config={config}
-                  onChange={setConfig}
-                  catalogReloadNonce={catalogReloadNonce}
-                  costRows={ttsCostRows}
-                />
-              </div>
-              <div className="min-w-0">
-                <VoiceCatalogSection
-                  config={config}
-                  catalogPlatform={config.platform}
-                  showOverrideBadge={false}
-                  onChange={setConfig}
-                  catalogReloadNonce={catalogReloadNonce}
-                />
-              </div>
-            </div>
-          ) : null
+        elevenLabsTtsVoiceSlots={
+          visibility.voice && config.platform === 'elevenlabs'
+            ? {
+                tts: (
+                  <TtsModelSection
+                    config={config}
+                    onChange={setConfig}
+                    catalogReloadNonce={catalogReloadNonce}
+                    costRows={ttsCostRows}
+                    ttsLanguageScopedEnabled={ttsLanguageScopedEnabled}
+                    ttsPerLanguageModelMap={ttsPerLanguageModelMap}
+                    onTtsLanguageScopedChange={(next) =>
+                      patchAdvanced({ [ADV_TTS_LANGUAGE_SCOPED_KEY]: next })
+                    }
+                  />
+                ),
+                voice: (
+                  <VoiceCatalogSection
+                    config={config}
+                    catalogPlatform={config.platform}
+                    showOverrideBadge={false}
+                    onChange={setConfig}
+                    catalogReloadNonce={catalogReloadNonce}
+                  />
+                ),
+              }
+            : undefined
         }
       />
 
-      {config.platform === 'elevenlabs' ? (
+      {config.platform === 'elevenlabs' && llmLanguageScopedEnabled ? (
         <details className="rounded border border-slate-700/80 bg-slate-950/40">
           <summary className="cursor-pointer px-1.5 py-0.5 text-[11px] font-semibold leading-none text-slate-300">
-            LLM mapping ({mappingLanguageLabel})
+            LLM mapping
           </summary>
           <div className="border-t border-slate-800 px-1.5 py-1">
-            <LlmMappingSectionElevenLabs catalogReloadNonce={catalogReloadNonce} />
+            <LlmMappingSectionElevenLabs
+              catalogReloadNonce={catalogReloadNonce}
+              embeddedProjectMapping={mode === 'global' ? embeddedElevenLabsLlmMapping : undefined}
+              onEmbeddedProjectMappingChange={
+                mode === 'global'
+                  ? (next) => patchAdvanced({ [OMNIA_PROJECT_ELEVENLABS_LLM_MAPPING_KEY]: next })
+                  : undefined
+              }
+            />
           </div>
         </details>
       ) : null}
 
-      <ModelCostsSection
-        llmRows={llmCostRows}
-        ttsRows={ttsCostRows}
-        onLlmRowsChange={setLlmCostRows}
-        onTtsRowsChange={setTtsCostRows}
-      />
+      {config.platform === 'elevenlabs' && ttsLanguageScopedEnabled ? (
+        <details className="rounded border border-slate-700/80 bg-slate-950/40">
+          <summary className="cursor-pointer px-1.5 py-0.5 text-[11px] font-semibold leading-none text-slate-300">
+            TTS mapping
+          </summary>
+          <div className="border-t border-slate-800 px-1.5 py-1">
+            {!hasVoiceLanguage ? (
+              <div className="mb-1 rounded border border-amber-500/35 bg-amber-950/25 px-1 py-0.5 text-[9px] text-amber-100">
+                Imposta prima la lingua voce dell&apos;agente per applicare correttamente il mapping TTS.
+              </div>
+            ) : null}
+            {!hasScopedTtsRules ? (
+              <div className="mb-1 rounded border border-amber-500/35 bg-amber-950/25 px-1 py-0.5 text-[9px] text-amber-100">
+                Mapping TTS attivo ma senza regole: seleziona almeno un modello per una lingua.
+              </div>
+            ) : null}
+            <TtsMappingSectionElevenLabs
+              catalogReloadNonce={catalogReloadNonce}
+              value={ttsPerLanguageModelMap}
+              onChange={(next) => patchAdvanced({ [ADV_TTS_PER_LANGUAGE_MAP_KEY]: next })}
+            />
+          </div>
+        </details>
+      ) : null}
+
+      {showModelCostsSection ? (
+        <ModelCostsSection
+          llmRows={llmCostRows}
+          ttsRows={ttsCostRows}
+          onLlmRowsChange={setLlmCostRows}
+          onTtsRowsChange={setTtsCostRows}
+        />
+      ) : null}
 
       <details className="rounded border border-slate-700/80 bg-slate-950/40">
         <summary className="cursor-pointer px-1.5 py-0.5 text-[11px] font-semibold leading-none text-slate-300">

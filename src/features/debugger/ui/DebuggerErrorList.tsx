@@ -14,10 +14,17 @@ import { buildErrorReportTree } from '@components/ChatPanel/errorReportTreeModel
 import { compilationErrorFixKey } from '@utils/compilationErrorFix';
 import { executeNavigationIntent, resolveNavigationIntent } from '@domain/compileErrors';
 import { useErrorReportFocusOptional } from '@context/ErrorReportFocusContext';
+import { shouldSuppressTechnicalDetailForError } from '@domain/compileErrors/compileMessages';
 import {
   ElevenLabsLlmEnumErrorAssist,
   shouldShowElevenLabsLlmEnumAssist,
 } from './ElevenLabsLlmEnumErrorAssist';
+
+function detectIaEngineTypeLabel(message: string, code?: string): 'LLM' | 'TTS' | null {
+  if (shouldShowElevenLabsLlmEnumAssist(message, code)) return 'LLM';
+  if (/non-english agents must use turbo or flash v2_5/i.test(message)) return 'LLM';
+  return null;
+}
 
 function formatErrorWarningCounts(errors: number, warnings: number): string {
   const parts: string[] = [];
@@ -215,23 +222,61 @@ export function DebuggerErrorList({ errors, flows, className = '' }: DebuggerErr
                           {rowOpen && (
                             <div className="border-t border-gray-100 dark:border-gray-800/80">
                               <ul className="px-2 pb-1 pt-0 space-y-2">
-                                {rowGroup.issues.map((issue) => (
+                                {rowGroup.issues.map((issue) => {
+                                  const showLlmEnumAssist = shouldShowElevenLabsLlmEnumAssist(
+                                    issue.message,
+                                    issue.error.code
+                                  );
+                                  return (
                                   <li
                                     key={`${rowKey}-${compilationErrorFixKey(issue.error)}`}
                                     className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 pl-6 pr-1 pt-2"
                                   >
                                     <div className="flex min-w-0 flex-1 flex-col gap-1">
-                                      <span className="text-xs text-gray-700 dark:text-gray-300 leading-snug">
-                                        {issue.message}
-                                      </span>
-                                      {shouldShowElevenLabsLlmEnumAssist(
-                                        issue.message,
-                                        issue.error.code
-                                      ) ? (
+                                      {showLlmEnumAssist ? null : (
+                                        <span className="text-xs text-gray-700 dark:text-gray-300 leading-snug">
+                                          {detectIaEngineTypeLabel(issue.message, issue.error.code) ? (
+                                            <span className="mr-1 inline-flex items-center rounded border border-amber-500/50 bg-amber-950/25 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-200">
+                                              {detectIaEngineTypeLabel(issue.message, issue.error.code)}
+                                            </span>
+                                          ) : null}
+                                          {issue.message}
+                                        </span>
+                                      )}
+                                      {!showLlmEnumAssist &&
+                                      issue.error.technicalDetail?.trim() &&
+                                      !shouldSuppressTechnicalDetailForError(issue.error) ? (
+                                        <details className="mt-0.5 text-gray-600 dark:text-gray-400">
+                                          <summary className="cursor-pointer select-none text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                                            Dettaglio tecnico
+                                          </summary>
+                                          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all text-[10px] font-mono text-gray-700 dark:text-gray-300">
+                                            {issue.error.technicalDetail}
+                                          </pre>
+                                        </details>
+                                      ) : null}
+                                      {showLlmEnumAssist ? (
                                         <ElevenLabsLlmEnumErrorAssist
                                           rawMessage={issue.message}
                                           sourceError={issue.error}
                                         />
+                                      ) : null}
+                                      {showLlmEnumAssist ? (
+                                        <details className="mt-2 text-gray-600 dark:text-gray-400">
+                                          <summary className="cursor-pointer select-none text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                                            Dettaglio tecnico (messaggio originale)
+                                          </summary>
+                                          <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-all text-[10px] font-mono text-gray-700 dark:text-gray-300">
+                                            {issue.message}
+                                            {issue.error.technicalDetail?.trim() &&
+                                            !shouldSuppressTechnicalDetailForError(issue.error) ? (
+                                              <>
+                                                {'\n\n'}
+                                                {issue.error.technicalDetail}
+                                              </>
+                                            ) : null}
+                                          </pre>
+                                        </details>
                                       ) : null}
                                     </div>
                                     <button
@@ -242,7 +287,8 @@ export function DebuggerErrorList({ errors, flows, className = '' }: DebuggerErr
                                       Fix
                                     </button>
                                   </li>
-                                ))}
+                                  );
+                                })}
                               </ul>
                             </div>
                           )}

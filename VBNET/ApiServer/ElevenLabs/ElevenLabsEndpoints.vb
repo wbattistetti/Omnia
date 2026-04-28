@@ -233,38 +233,60 @@ Public NotInheritable Class ElevenLabsEndpoints
 
     ''' <summary>
     ''' GET /elevenlabs/agents — proxy <c>GET /v1/convai/agents</c> (paginazione, query opzionale <c>search</c>).
+    ''' In caso di eccezione (timeout, rete, ecc.) risponde sempre JSON strutturato invece di 500 generico senza dettaglio.
     ''' </summary>
     Private Shared Async Function HandleListAgents(context As HttpContext) As Task
-        Dim apiKey = Environment.GetEnvironmentVariable("ELEVENLABS_API_KEY")
-        If String.IsNullOrWhiteSpace(apiKey) Then
-            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable
-            Await context.Response.WriteAsJsonAsync(New With {.error = "ELEVENLABS_API_KEY is not configured."}).ConfigureAwait(False)
-            Return
-        End If
+        Dim fatalEx As Exception = Nothing
+        Dim apiBaseLogged As String = ""
+        Try
+            Dim apiKey = Environment.GetEnvironmentVariable("ELEVENLABS_API_KEY")
+            If String.IsNullOrWhiteSpace(apiKey) Then
+                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable
+                Await context.Response.WriteAsJsonAsync(New With {.error = "ELEVENLABS_API_KEY is not configured."}).ConfigureAwait(False)
+                Return
+            End If
 
-        Dim apiBase = ElevenLabsApiSettings.GetApiBaseUrl()
-        Dim q = context.Request.Query
-        Dim pageSize = q("page_size").ToString()
-        If String.IsNullOrWhiteSpace(pageSize) Then pageSize = "30"
-        Dim cursor = q("cursor").ToString()
-        Dim search = q("search").ToString()
+            Dim apiBase = ElevenLabsApiSettings.GetApiBaseUrl()
+            apiBaseLogged = apiBase
+            Dim q = context.Request.Query
+            Dim pageSize = q("page_size").ToString()
+            If String.IsNullOrWhiteSpace(pageSize) Then pageSize = "30"
+            Dim cursor = q("cursor").ToString()
+            Dim search = q("search").ToString()
 
-        Dim qParts As New List(Of String) From {
-            "page_size=" & Uri.EscapeDataString(pageSize)
-        }
-        If Not String.IsNullOrWhiteSpace(cursor) Then qParts.Add("cursor=" & Uri.EscapeDataString(cursor))
-        If Not String.IsNullOrWhiteSpace(search) Then qParts.Add("search=" & Uri.EscapeDataString(search))
-        Dim url = apiBase.TrimEnd("/"c) & "/v1/convai/agents?" & String.Join("&", qParts)
+            Dim qParts As New List(Of String) From {
+                "page_size=" & Uri.EscapeDataString(pageSize)
+            }
+            If Not String.IsNullOrWhiteSpace(cursor) Then qParts.Add("cursor=" & Uri.EscapeDataString(cursor))
+            If Not String.IsNullOrWhiteSpace(search) Then qParts.Add("search=" & Uri.EscapeDataString(search))
+            Dim url = apiBase.TrimEnd("/"c) & "/v1/convai/agents?" & String.Join("&", qParts)
 
-        Using req As New HttpRequestMessage(HttpMethod.Get, url)
-            req.Headers.TryAddWithoutValidation("xi-api-key", apiKey.Trim())
-            Using resp = Await ElevenLabsApiHttp.SendAsync(req, context.RequestAborted).ConfigureAwait(False)
-                Dim respBody = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
-                context.Response.StatusCode = CInt(resp.StatusCode)
-                context.Response.ContentType = "application/json; charset=utf-8"
-                Await context.Response.WriteAsync(respBody).ConfigureAwait(False)
+            Using req As New HttpRequestMessage(HttpMethod.Get, url)
+                req.Headers.TryAddWithoutValidation("xi-api-key", apiKey.Trim())
+                Using resp = Await ElevenLabsApiHttp.SendAsync(req, context.RequestAborted).ConfigureAwait(False)
+                    Dim respBody = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+                    context.Response.StatusCode = CInt(resp.StatusCode)
+                    context.Response.ContentType = "application/json; charset=utf-8"
+                    Await context.Response.WriteAsync(respBody).ConfigureAwait(False)
+                End Using
             End Using
-        End Using
+        Catch ex As Exception
+            fatalEx = ex
+        End Try
+
+        If fatalEx Is Nothing Then Return
+        If context.Response.HasStarted Then Return
+
+        Global.System.Console.WriteLine($"[ElevenLabs] HandleListAgents FATAL: {fatalEx}")
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError
+        context.Response.ContentType = "application/json; charset=utf-8"
+        Await context.Response.WriteAsJsonAsync(New With {
+            .error = "ElevenLabs list agents failed (ApiServer / upstream).",
+            .phase = "listAgents",
+            .detail = fatalEx.Message,
+            .elevenLabsApiBase = apiBaseLogged,
+            .details = fatalEx.ToString()
+        }).ConfigureAwait(False)
     End Function
 
     ''' <summary>

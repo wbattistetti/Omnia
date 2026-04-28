@@ -118,6 +118,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     promptFinaleJsMode,
     setPromptFinaleJsMode,
 
+    projectId,
     iaRuntimeConfig: c.iaRuntimeConfig,
     setIaRuntimeConfig: c.setIaRuntimeConfig,
     iaRuntimeLoadedFrom: c.iaRuntimeLoadedFrom,

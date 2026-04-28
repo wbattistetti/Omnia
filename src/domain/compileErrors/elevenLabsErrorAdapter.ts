@@ -90,6 +90,8 @@ export const elevenLabsErrorAdapter: ProviderErrorAdapter = {
     if (raw.includes('non-english agents')) return true;
     if (raw.includes('elevenlabs agents/create failed')) return true;
     if (raw.includes('invalid conversation config')) return true;
+    if (raw.includes('listagents:')) return true;
+    if (raw.includes('deleteagent:')) return true;
     if (raw.includes('elevenlabs') && (raw.includes('convai') || raw.includes('/v1/convai'))) return true;
     return false;
   },

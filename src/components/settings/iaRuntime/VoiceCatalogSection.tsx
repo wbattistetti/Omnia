@@ -330,25 +330,27 @@ export function VoiceCatalogSection({
         ) : null}
 
         <div
-          className={`flex w-full min-w-0 flex-col gap-0 ${catalogBlocked ? 'pointer-events-none opacity-40' : ''}`}
+          className={`flex w-full min-w-0 flex-col gap-1 ${catalogBlocked ? 'pointer-events-none opacity-40' : ''}`}
           role="group"
           aria-label="Voce e lingua sintesi"
         >
-          <div
-            className={runtimeIaFieldHintLabelClass('clear', 'wrap')}
-            title={`${TT.voice}\n${TT.lang}`}
-          >
-            <span className="text-slate-200">Voce</span>
-            <span className="text-slate-500"> (</span>
-            <CompactLanguageDropdown
-              options={langOptions}
-              value={primaryLang || ''}
-              disabled={catalogBlocked || !langOptions.length}
-              onChange={(locale) => {
-                onChange(setCompat(config, entries, locale, {}));
-              }}
-            />
-            <span className="text-slate-500">)</span>
+          <div className="flex min-h-[2rem] w-full min-w-0 items-center">
+            <div
+              className={runtimeIaFieldHintLabelClass('clear', 'wrap')}
+              title={`${TT.voice}\n${TT.lang}`}
+            >
+              <span className="text-slate-200">Voce</span>
+              <span className="text-slate-500"> (</span>
+              <CompactLanguageDropdown
+                options={langOptions}
+                value={primaryLang || ''}
+                disabled={catalogBlocked || !langOptions.length}
+                onChange={(locale) => {
+                  onChange(setCompat(config, entries, locale, {}));
+                }}
+              />
+              <span className="text-slate-500">)</span>
+            </div>
           </div>
           <div data-ia-runtime-focus="voice" className="flex min-w-0 flex-row items-center gap-0.5">
             <VoicePreviewProvider voices={catalogVoices}>

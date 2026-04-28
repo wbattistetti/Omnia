@@ -4,6 +4,7 @@
  */
 
 import { agentNameContainsTaskGuid } from '@utils/iaAgentRuntime/convaiAgentDisplayName';
+import { formatDeleteAgentHttpError, formatListAgentsHttpError } from './convaiProvisionHttpError';
 
 export type CreateConvaiAgentViaOmniaParams = {
   /** Optional label for ElevenLabs agent display name */
@@ -84,15 +85,16 @@ export async function listConvaiAgentsViaOmniaServer(params?: {
   const url = `/elevenlabs/agents?${q.toString()}`;
   const res = await fetch(url, { method: 'GET' });
   const text = await res.text();
+  if (!res.ok) {
+    throw new Error(formatListAgentsHttpError(res, url, text));
+  }
   let data: Record<string, unknown> = {};
   try {
     data = text.trim() ? (JSON.parse(text) as Record<string, unknown>) : {};
   } catch {
-    throw new Error(`listAgents: invalid JSON (${res.status})`);
-  }
-  if (!res.ok) {
-    const err = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`;
-    throw new Error(err);
+    throw new Error(
+      `listAgents: risposta successo non JSON (${res.status}) — ${text.trim().slice(0, 240)}`
+    );
   }
   const agentsRaw = data.agents;
   const agents: ConvaiAgentListItem[] = [];
@@ -127,14 +129,7 @@ export async function deleteConvaiAgentViaOmniaServer(agentId: string): Promise<
   const res = await fetch(`/elevenlabs/agents/${encodeURIComponent(id)}`, { method: 'DELETE' });
   const text = await res.text();
   if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try {
-      const j = text.trim() ? (JSON.parse(text) as Record<string, unknown>) : {};
-      if (typeof j.error === 'string') msg = j.error;
-    } catch {
-      /* noop */
-    }
-    throw new Error(`deleteAgent: ${msg}`);
+    throw new Error(formatDeleteAgentHttpError(res, id, text));
   }
 }
 

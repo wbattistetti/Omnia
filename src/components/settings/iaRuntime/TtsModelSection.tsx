@@ -6,16 +6,13 @@ import React from 'react';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import { fetchElevenLabsTtsModels, type ElevenLabsTtsModelRow } from '@services/elevenLabsTtsModelsApi';
 import { SearchableSelect, type SearchableSelectOption } from './SearchableSelect';
-import { FieldHint } from './FieldHint';
 import {
   costPerHour,
   parseLatencyMs,
   resolveTtsCostRow,
   type ModelCostRow,
 } from './modelCostsCatalog';
-
-type SortField = 'model' | 'latency' | 'costPerHour';
-type SortDir = 'asc' | 'desc';
+import { resolveScopedTtsModelIds } from '@utils/iaCatalog/ttsLanguageModelMap';
 
 function toOptions(
   rows: ElevenLabsTtsModelRow[],
@@ -69,6 +66,9 @@ export interface TtsModelSectionProps {
   catalogReloadNonce?: number;
   showOverrideBadge?: boolean;
   costRows?: readonly ModelCostRow[];
+  ttsLanguageScopedEnabled?: boolean;
+  ttsPerLanguageModelMap?: Record<string, string[]>;
+  onTtsLanguageScopedChange?: (next: boolean) => void;
 }
 
 export function TtsModelSection({
@@ -77,11 +77,12 @@ export function TtsModelSection({
   catalogReloadNonce = 0,
   showOverrideBadge,
   costRows = [],
+  ttsLanguageScopedEnabled = false,
+  ttsPerLanguageModelMap,
+  onTtsLanguageScopedChange,
 }: TtsModelSectionProps) {
   const [models, setModels] = React.useState<ElevenLabsTtsModelRow[]>([]);
   const [err, setErr] = React.useState<string | null>(null);
-  const [sortField, setSortField] = React.useState<SortField>('model');
-  const [sortDir, setSortDir] = React.useState<SortDir>('asc');
 
   React.useEffect(() => {
     let cancelled = false;
@@ -107,23 +108,19 @@ export function TtsModelSection({
     [models]
   );
 
+  const scopedModels = React.useMemo(() => {
+    if (!ttsLanguageScopedEnabled) return ttsOnlyModels;
+    const allowed = resolveScopedTtsModelIds(ttsPerLanguageModelMap, config.voice?.language);
+    if (allowed === null) return ttsOnlyModels;
+    const set = new Set(allowed);
+    return ttsOnlyModels.filter((m) => set.has(m.model_id));
+  }, [ttsLanguageScopedEnabled, ttsPerLanguageModelMap, config.voice?.language, ttsOnlyModels]);
+
   const sortedModels = React.useMemo(() => {
-    const sign = sortDir === 'asc' ? 1 : -1;
-    const list = [...ttsOnlyModels];
-    list.sort((a, b) => {
-      if (sortField === 'model') return sign * (a.name || a.model_id).localeCompare(b.name || b.model_id);
-      const aRow = resolveTtsCostRow(costRows, a.model_id);
-      const bRow = resolveTtsCostRow(costRows, b.model_id);
-      const aN = sortField === 'latency' ? (aRow ? parseLatencyMs(aRow.latency) : null) : aRow ? costPerHour(aRow.costPerMin) : null;
-      const bN = sortField === 'latency' ? (bRow ? parseLatencyMs(bRow.latency) : null) : bRow ? costPerHour(bRow.costPerMin) : null;
-      if (aN == null && bN == null) return (a.name || a.model_id).localeCompare(b.name || b.model_id);
-      if (aN == null) return 1;
-      if (bN == null) return -1;
-      if (aN === bN) return (a.name || a.model_id).localeCompare(b.name || b.model_id);
-      return sign * (aN - bN);
-    });
+    const list = [...scopedModels];
+    list.sort((a, b) => (a.name || a.model_id).localeCompare(b.name || b.model_id));
     return list;
-  }, [ttsOnlyModels, sortDir, sortField, costRows]);
+  }, [scopedModels]);
 
   const maxLatency = React.useMemo(
     () => Math.max(0, ...sortedModels.map((m) => parseLatencyMs(resolveTtsCostRow(costRows, m.model_id)?.latency ?? '') ?? 0)),
@@ -160,30 +157,25 @@ export function TtsModelSection({
           {err}
         </div>
       ) : null}
-      <div className="flex items-center gap-1 text-[9px]">
-        <select
-          value={sortField}
-          onChange={(e) => setSortField(e.target.value as SortField)}
-          className="h-6 rounded border border-slate-700 bg-slate-900 px-1 text-[9px] text-slate-200"
-        >
-          <option value="model">Nome</option>
-          <option value="latency">Latenza</option>
-          <option value="costPerHour">Costo/h</option>
-        </select>
-        <button
-          type="button"
-          className="h-6 rounded border border-slate-700 bg-slate-900 px-1.5 text-[9px] text-slate-200"
-          onClick={() => setSortDir((v) => (v === 'asc' ? 'desc' : 'asc'))}
-        >
-          {sortDir === 'asc' ? 'Asc' : 'Desc'}
-        </button>
-      </div>
-      <FieldHint
-        variant="clear"
-        label="Modello TTS (voce)"
-        tooltip="Motore sintesi ElevenLabs per ConvAI (`eleven_*`). Per lingue ≠ inglese servono Flash v2.5 o Turbo v2.5; «turbo» nel nome non indica GPT-4-turbo."
-        className="w-full min-w-0 max-w-full"
-      >
+      <div className="flex w-full min-w-0 flex-col gap-1">
+        <div className="flex min-h-[2rem] flex-row flex-wrap items-center justify-start gap-x-2 gap-y-1">
+          <span
+            title="Motore sintesi ElevenLabs per ConvAI (`eleven_*`). Per lingue ≠ inglese servono Flash v2.5 o Turbo v2.5; «turbo» nel nome non indica GPT-4-turbo."
+            className="cursor-help border-b border-dotted border-slate-600 text-[11px] font-semibold leading-snug text-gray-900 dark:text-white"
+          >
+            TTS ({sortedModels.length})
+          </span>
+          {onTtsLanguageScopedChange ? (
+            <label className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] text-slate-300">
+              <input
+                type="checkbox"
+                checked={ttsLanguageScopedEnabled}
+                onChange={(e) => onTtsLanguageScopedChange(e.target.checked)}
+              />
+              <span>TTS dipende dalla lingua</span>
+            </label>
+          ) : null}
+        </div>
         <SearchableSelect
           listMaxClassName="w-full min-w-0 max-w-full"
           disabled={Boolean(err) && models.length === 0}
@@ -193,7 +185,7 @@ export function TtsModelSection({
           value={value}
           onChange={(modelId) => onChange({ ...config, ttsModel: modelId })}
         />
-      </FieldHint>
+      </div>
     </div>
   );
 }

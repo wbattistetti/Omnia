@@ -1,6 +1,7 @@
 /**
  * LLM mapping (ElevenLabs): per lingua ≠ en definisce quali `model_id` del catalogo sync sono ammessi.
- * Persistenza su `config/llmMapping.json` via POST solo se il backend ha OMNIA_WRITABLE_CONFIG=1.
+ * - File: `config/llmMapping.json` via POST (OMNIA_WRITABLE_CONFIG=1).
+ * - Progetto (global): stesso payload in `IAAgentConfig.advanced.omniaProjectElevenLabsLlmMapping` → Mongo con «Salva configurazione».
  */
 
 import React from 'react';
@@ -19,15 +20,24 @@ import {
   pickDefaultLocaleForElevenLabsMappingFromFile,
   primaryLang,
 } from '@utils/iaCatalog/elevenLabsLlmMappingLocale';
+import { mergeFileLlmMappingWithProjectEmbedded } from '@utils/iaAgentRuntime/omniaProjectElevenLabsLlmMapping';
 
 /** Ultima lingua mapping scelta: sopravvive a chiusura/riapertura pannello (stesso tab). */
 const LLM_MAPPING_LOCALE_STORAGE_KEY = 'omnia.llmMapping.selectedLocale.v1';
 
 export interface LlmMappingSectionElevenLabsProps {
   catalogReloadNonce?: number;
+  /** Mapping letto da default progetto (Mongo); unito al file dopo fetch. */
+  embeddedProjectMapping?: LlmMappingPayload | null;
+  /** Aggiorna `advanced` così «Salva configurazione» Studio persiste i checkbox. */
+  onEmbeddedProjectMappingChange?: (next: LlmMappingPayload) => void;
 }
 
-export function LlmMappingSectionElevenLabs({ catalogReloadNonce = 0 }: LlmMappingSectionElevenLabsProps) {
+export function LlmMappingSectionElevenLabs({
+  catalogReloadNonce = 0,
+  embeddedProjectMapping = null,
+  onEmbeddedProjectMappingChange,
+}: LlmMappingSectionElevenLabsProps) {
   const [models, setModels] = React.useState<CatalogModel[]>([]);
   const [locales, setLocales] = React.useState<{ locale: string; label: string }[]>([]);
   const [mapping, setMapping] = React.useState<LlmMappingPayload | null>(null);
@@ -41,8 +51,13 @@ export function LlmMappingSectionElevenLabs({ catalogReloadNonce = 0 }: LlmMappi
   /** Dopo il primo fetch, non sovrascrivere la lingua scelta dall’utente (solo se resta nel catalogo). */
   const localeEditorHydratedRef = React.useRef(false);
 
+  const embeddedJson = React.useMemo(
+    () => JSON.stringify(embeddedProjectMapping ?? null),
+    [embeddedProjectMapping]
+  );
+
   React.useEffect(() => {
-    let c = false;
+    let cancelled = false;
     setLoadErr(null);
     void (async () => {
       try {
@@ -51,14 +66,18 @@ export function LlmMappingSectionElevenLabs({ catalogReloadNonce = 0 }: LlmMappi
           fetchCatalogLanguages('elevenlabs'),
           fetchLlmMapping(),
         ]);
-        if (c) return;
+        if (cancelled) return;
         setModels(mods);
+        const merged = mergeFileLlmMappingWithProjectEmbedded(
+          map,
+          embeddedProjectMapping ? embeddedProjectMapping : null
+        );
         const nonEn = langs.languages.filter((l) => String(l.locale || '').trim() && primaryLang(l.locale) !== 'en');
-        const list = mergeNonEnLocalesFromCatalogAndMapping(nonEn, map.elevenlabs.perLanguage ?? {});
+        const list = mergeNonEnLocalesFromCatalogAndMapping(nonEn, merged.elevenlabs.perLanguage ?? {});
         setLocales(list);
-        setMapping(map);
+        setMapping(merged);
         const keys = list.map((l) => l.locale);
-        const per = map.elevenlabs.perLanguage || {};
+        const per = merged.elevenlabs.perLanguage || {};
         let storedLocale: string | null = null;
         try {
           storedLocale = sessionStorage.getItem(LLM_MAPPING_LOCALE_STORAGE_KEY);
@@ -72,14 +91,14 @@ export function LlmMappingSectionElevenLabs({ catalogReloadNonce = 0 }: LlmMappi
           return pickDefaultLocaleForElevenLabsMappingFromFile(keys, per);
         });
       } catch (e) {
-        if (c) return;
+        if (cancelled) return;
         setLoadErr(e instanceof CatalogApiError ? e.message : String(e));
       }
     })();
     return () => {
-      c = true;
+      cancelled = true;
     };
-  }, [catalogReloadNonce]);
+  }, [catalogReloadNonce, embeddedJson]);
 
   const allowedForSelected = React.useMemo(() => {
     if (!mapping) return [];
@@ -95,6 +114,7 @@ export function LlmMappingSectionElevenLabs({ catalogReloadNonce = 0 }: LlmMappi
     const arr = [...cur].sort();
     next.elevenlabs.perLanguage = { ...next.elevenlabs.perLanguage, [selectedLocale]: arr };
     setMapping(next);
+    onEmbeddedProjectMappingChange?.(next);
   };
 
   const save = async () => {
@@ -104,7 +124,11 @@ export function LlmMappingSectionElevenLabs({ catalogReloadNonce = 0 }: LlmMappi
     try {
       await postLlmMapping(mapping);
       const fresh = await fetchLlmMapping();
-      setMapping(fresh);
+      setMapping(
+        onEmbeddedProjectMappingChange
+          ? mergeFileLlmMappingWithProjectEmbedded(fresh, embeddedProjectMapping)
+          : fresh
+      );
       try {
         sessionStorage.setItem(LLM_MAPPING_LOCALE_STORAGE_KEY, selectedLocale);
       } catch {
@@ -128,8 +152,22 @@ export function LlmMappingSectionElevenLabs({ catalogReloadNonce = 0 }: LlmMappi
     <div className="flex flex-col gap-1.5 text-[10px] text-slate-300">
       <p className="leading-snug text-slate-500">
         Seleziona una lingua (≠ en) e spunta gli LLM ElevenLabs ammessi per quella lingua. La combo LLM in
-        runtime userà solo questi id quando l’agente ha la stessa lingua. File:{' '}
-        <code className="rounded bg-slate-900 px-0.5 text-slate-400">config/llmMapping.json</code>.
+        runtime userà solo questi id quando l’agente ha la stessa lingua.
+        {onEmbeddedProjectMappingChange ? (
+          <>
+            {' '}
+            Con i default di progetto, le selezioni sono incluse in{' '}
+            <strong className="text-slate-400">Salva configurazione</strong> (Mongo). Il file{' '}
+            <code className="rounded bg-slate-900 px-0.5 text-slate-400">config/llmMapping.json</code> è
+            opzionale (pulsante sotto).
+          </>
+        ) : (
+          <>
+            {' '}
+            File:{' '}
+            <code className="rounded bg-slate-900 px-0.5 text-slate-400">config/llmMapping.json</code>.
+          </>
+        )}
       </p>
       {loadErr ? (
         <div className="rounded border border-red-500/40 bg-red-950/30 px-1 py-0.5 text-red-100">{loadErr}</div>
@@ -164,8 +202,13 @@ export function LlmMappingSectionElevenLabs({ catalogReloadNonce = 0 }: LlmMappi
               disabled={saveBusy}
               onClick={() => void save()}
               className="h-8 rounded border border-violet-600/80 bg-violet-950/50 px-2 text-[11px] font-medium text-violet-100 hover:bg-violet-900/40 disabled:opacity-50"
+              title={
+                onEmbeddedProjectMappingChange
+                  ? 'Scrive anche config/llmMapping.json sul server (opzionale). I checkbox sono salvati nel progetto con «Salva configurazione» in alto.'
+                  : undefined
+              }
             >
-              {saveBusy ? 'Salvataggio…' : 'Salva mapping'}
+              {saveBusy ? 'Salvataggio…' : onEmbeddedProjectMappingChange ? 'Salva su file (opz.)' : 'Salva mapping'}
             </button>
           </div>
           <div className="max-h-48 overflow-y-auto rounded border border-slate-700/80 bg-slate-950/50 p-1">

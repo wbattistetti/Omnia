@@ -177,6 +177,7 @@ export function useAIAgentEditorController({
   const [dirty, setDirty] = React.useState(false);
 
   const committedStructuredJsonRef = React.useRef<string>('');
+  const iaRuntimeConfigRef = React.useRef<IAAgentConfig>(iaRuntimeConfig);
   /** Pending debounced persist; cleared on flush or unmount. */
   const persistTimerRef = React.useRef<ReturnType<typeof window.setTimeout> | null>(null);
   /** Why {@link persistEditorStateToRepository} ran (for persist logs). */
@@ -201,6 +202,7 @@ export function useAIAgentEditorController({
   hasAgentGenerationRef.current = hasAgentGeneration;
   instanceIdRef.current = instanceId;
   projectIdRef.current = projectId;
+  iaRuntimeConfigRef.current = iaRuntimeConfig;
 
   const markPromptFinalMisaligned = React.useCallback((reason: string) => {
     setPromptFinalAligned((prev) => {
@@ -641,15 +643,25 @@ export function useAIAgentEditorController({
     setDirty(false);
   }, [instanceId, projectId, loadFromRepository]);
 
-  /** Re-sync when project tasks are loaded from API into TaskRepository (fixes race: editor before load). */
+  /**
+   * Re-sync when project tasks are loaded from API into TaskRepository (fixes race: editor before load).
+   * Guard: if the user has local IA runtime changes that are more recent than the incoming snapshot,
+   * preserve the local iaRuntimeConfig and re-write it into the freshly loaded task so it is not lost.
+   */
   React.useEffect(() => {
     if (!instanceId || !projectId) return;
     const onTasksLoaded = (e: Event) => {
       const detail = (e as CustomEvent<{ projectId?: string }>).detail;
       if (detail?.projectId !== projectId) return;
+      const wasDirty = dirtyRef.current;
+      const localIaConfig = wasDirty ? iaRuntimeConfigRef.current : null;
       loadFromRepository();
       setHydrated(true);
       setDirty(false);
+      if (wasDirty && localIaConfig) {
+        setIaRuntimeConfigState(localIaConfig);
+        setDirty(true);
+      }
     };
     window.addEventListener('tasks:loaded', onTasksLoaded as EventListener);
     return () => window.removeEventListener('tasks:loaded', onTasksLoaded as EventListener);

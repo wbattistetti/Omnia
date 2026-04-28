@@ -1,11 +1,11 @@
 import type { OrchestratorSseErrorPayload } from '@components/DialogueEngine/orchestratorAdapter';
 
-const NEEDLE = /non-english agents must use turbo or flash v2_5/i;
+const TTS_MODEL_NEEDLES = [/tts\.model_id/i, /invalid\s+tts\s+model/i, /tts\s+model(_id)?\s+is\s+invalid/i];
 
-/** Errore ElevenLabs ConvAI su `tts.model_id` per agenti non inglesi (non è l’LLM «turbo» GPT). */
+/** Detects real TTS-model validation errors only (`tts.model_id`), not LLM constraints. */
 export function isConvaiNonEnglishTtsConstraintError(payload: OrchestratorSseErrorPayload): boolean {
   const hay = [payload.error ?? '', payload.apiServerBody ?? '', payload.elevenlabsRawBody ?? ''].join('\n');
-  return NEEDLE.test(hay);
+  return TTS_MODEL_NEEDLES.some((needle) => needle.test(hay));
 }
 
 /** Modello TTS applicato dal fix rapido dalla card runtime. */

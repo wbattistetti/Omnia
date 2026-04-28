@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import type { ReactNode } from 'react';
 import {
   CatalogApiError,
   fetchLlmMapping,
@@ -105,6 +106,12 @@ export interface LlmProviderCatalogPanelProps {
   label?: string;
   labelTooltip?: string;
   costRows?: readonly ModelCostRow[];
+  /**
+   * Riga titolo bianca + checkbox affiancati, combo LLM a tutta larghezza sotto (allineata alla combo TTS).
+   */
+  stackedLayout?: boolean;
+  /** Es. checkbox «dipende dalla lingua» sulla stessa riga del titolo. */
+  trailingHeader?: ReactNode;
 }
 
 function emptyCatalogHint(platform: IaRuntimeCatalogPlatform): string {
@@ -123,6 +130,8 @@ export function LlmProviderCatalogPanel({
   label = 'LLM',
   labelTooltip,
   costRows = [],
+  stackedLayout = false,
+  trailingHeader,
 }: LlmProviderCatalogPanelProps) {
   const [models, setModels] = React.useState<CatalogModel[]>([]);
   const [err, setErr] = React.useState<string | null>(null);
@@ -224,8 +233,8 @@ export function LlmProviderCatalogPanel({
   const blockedCatalog = Boolean(err) || catalogOpts.length === 0;
   const labelWithCount = `${label} (${displayModels.length})`;
 
-  const inner = (
-    <div className="w-fit max-w-[min(100vw-2rem,22rem)]">
+  const alerts = (
+    <>
       {mappingErr ? (
         <div className="mb-0.5 rounded border border-amber-500/35 bg-amber-950/25 px-1 py-0.5 text-[9px] text-amber-100">
           Mapping: {mappingErr}
@@ -236,15 +245,47 @@ export function LlmProviderCatalogPanel({
           {err}
         </div>
       ) : null}
-      <SearchableSelect
-        listMaxClassName="max-w-[min(100%,22rem)] min-w-[12rem]"
-        disabled={blockedCatalog}
-        placeholder="Cerca modello…"
-        emptyTriggerLabel="Scegli il modello LLM"
-        options={catalogOpts}
-        value={value || ''}
-        onChange={onChange}
-      />
+    </>
+  );
+
+  const selectEl = (
+    <SearchableSelect
+      listMaxClassName={
+        stackedLayout
+          ? 'w-full min-w-0 max-w-full'
+          : 'max-w-[min(100%,22rem)] min-w-[12rem]'
+      }
+      disabled={blockedCatalog}
+      placeholder="Cerca modello…"
+      emptyTriggerLabel="Scegli il modello LLM"
+      options={catalogOpts}
+      value={value || ''}
+      onChange={onChange}
+    />
+  );
+
+  if (stackedLayout) {
+    return (
+      <div className="flex w-full min-w-0 flex-col gap-1" data-ia-runtime-focus="llm">
+        {alerts}
+        <div className="flex min-h-[2rem] flex-row flex-wrap items-center justify-start gap-x-2 gap-y-1">
+          <span
+            title={labelTooltip ?? ''}
+            className="cursor-help border-b border-dotted border-slate-500 text-[11px] font-semibold leading-snug text-gray-900 dark:text-white"
+          >
+            {labelWithCount}
+          </span>
+          {trailingHeader}
+        </div>
+        {selectEl}
+      </div>
+    );
+  }
+
+  const inner = (
+    <div className="w-fit max-w-[min(100vw-2rem,22rem)]">
+      {alerts}
+      {selectEl}
     </div>
   );
 

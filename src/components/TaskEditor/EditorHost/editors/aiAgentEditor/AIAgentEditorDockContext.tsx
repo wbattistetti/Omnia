@@ -92,6 +92,8 @@ export interface AIAgentEditorDockContextValue {
   promptFinaleJsMode: boolean;
   setPromptFinaleJsMode: (value: boolean) => void;
 
+  /** Project ID (needed for direct DB save of IA runtime override). */
+  projectId: string | undefined;
   /** Per-task runtime IA motor overrides (persisted as `agentIaRuntimeOverrideJson`). */
   iaRuntimeConfig: IAAgentConfig;
   setIaRuntimeConfig: (next: IAAgentConfig) => void;

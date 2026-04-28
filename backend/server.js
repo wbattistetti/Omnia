@@ -709,6 +709,66 @@ app.put('/api/projects/:id/debugger-use-cases', async (req, res) => {
   }
 });
 
+// GET /api/projects/:id/ia-agent-global-config — default runtime IA (JSON string) in project_meta
+app.get('/api/projects/:id/ia-agent-global-config', async (req, res) => {
+  const projectId = req.params.id;
+  if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+  try {
+    const client = await getMongoClient();
+    const projDb = await getProjectDb(client, projectId);
+    const meta = await projDb.collection('project_meta').findOne({ _id: 'meta' });
+    const raw = meta?.iaAgentGlobalConfigJson;
+    const config = typeof raw === 'string' && raw.trim() ? raw : null;
+    res.json({ config });
+  } catch (e) {
+    console.error('[Projects.ia-agent-global-config GET]', e?.message);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// PUT/POST /api/projects/:id/ia-agent-global-config — body: { config: string } (JSON serialized IAAgentConfig)
+async function handleIaAgentGlobalConfigWrite(req, res) {
+  const projectId = req.params.id;
+  if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+  const body = req.body || {};
+  if (typeof body.config !== 'string') {
+    return res.status(400).json({ error: 'config_string_required' });
+  }
+  try {
+    JSON.parse(body.config);
+  } catch {
+    return res.status(400).json({ error: 'config_invalid_json' });
+  }
+  try {
+    const client = await getMongoClient();
+    const projDb = await getProjectDb(client, projectId);
+    const now = new Date();
+    await projDb.collection('project_meta').updateOne(
+      { _id: 'meta' },
+      {
+        $set: {
+          iaAgentGlobalConfigJson: body.config,
+          updatedAt: now,
+        },
+        $setOnInsert: {
+          _id: 'meta',
+          projectId,
+          createdAt: now,
+        },
+      },
+      { upsert: true }
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[Projects.ia-agent-global-config WRITE]', e?.message);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+}
+
+app.put('/api/projects/:id/ia-agent-global-config', handleIaAgentGlobalConfigWrite);
+app.post('/api/projects/:id/ia-agent-global-config', handleIaAgentGlobalConfigWrite);
+console.log('[Routes] /api/projects/:id/ia-agent-global-config — GET, PUT, POST registered');
+
 // Endpoint: Get unique clients from catalog
 // ✅ Test endpoints
 app.get('/api/ping', (req, res) => {

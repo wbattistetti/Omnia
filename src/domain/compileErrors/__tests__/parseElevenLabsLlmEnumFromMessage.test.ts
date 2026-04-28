@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  extractInvalidLlmInputFromProvisionMessage,
   extractLlmEnumQuotedIdsFromMessage,
   messageLooksLikeElevenLabsLlmEnumValidation,
 } from '../parseElevenLabsLlmEnumFromMessage';
@@ -33,5 +34,28 @@ describe('messageLooksLikeElevenLabsLlmEnumValidation', () => {
 
   it('rejects random text with Input should be but no ids', () => {
     expect(messageLooksLikeElevenLabsLlmEnumValidation('Input should be valid')).toBe(false);
+  });
+});
+
+describe('extractInvalidLlmInputFromProvisionMessage', () => {
+  it('reads input from detail[] when loc includes llm', () => {
+    const msg = `ElevenLabs agents/create failed. — ${JSON.stringify({
+      detail: [
+        {
+          type: 'enum',
+          loc: ['body', 'conversation_config', 'agent', 'prompt', 'llm'],
+          msg: "Input should be 'gpt-4o'",
+          input: 'gemini-2.5-flash',
+        },
+      ],
+    })}`;
+    expect(extractInvalidLlmInputFromProvisionMessage(msg)).toBe('gemini-2.5-flash');
+  });
+
+  it('returns null when no llm loc', () => {
+    const msg = `x — ${JSON.stringify({
+      detail: [{ loc: ['body', 'other'], input: 'x' }],
+    })}`;
+    expect(extractInvalidLlmInputFromProvisionMessage(msg)).toBeNull();
   });
 });

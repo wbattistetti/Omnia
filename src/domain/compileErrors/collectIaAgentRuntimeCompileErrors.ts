@@ -64,6 +64,38 @@ function llmModelForElevenLabs(cfg: IAAgentConfig): string {
   return typeof llm.model === 'string' ? llm.model.trim() : '';
 }
 
+const PROVISIONING_RAW_EXCERPT_MAX = 600;
+
+function provisioningRawExcerpt(raw: unknown): string | undefined {
+  if (raw === undefined) return undefined;
+  try {
+    let text: string;
+    if (typeof raw === 'string') text = raw;
+    else if (raw instanceof Error) text = raw.stack ?? raw.message;
+    else text = JSON.stringify(raw);
+    const trimmed = text.trim();
+    if (!trimmed) return undefined;
+    return trimmed.length > PROVISIONING_RAW_EXCERPT_MAX
+      ? `${trimmed.slice(0, PROVISIONING_RAW_EXCERPT_MAX)}…`
+      : trimmed;
+  } catch {
+    const t = String(raw).trim();
+    if (!t) return undefined;
+    return t.length > PROVISIONING_RAW_EXCERPT_MAX ? `${t.slice(0, PROVISIONING_RAW_EXCERPT_MAX)}…` : t;
+  }
+}
+
+/** Provider:code tag plus optional JSON / error excerpt from {@link NormalizedIaProviderError.raw}. */
+function buildProvisioningTechnicalDetail(snapshot: NormalizedIaProviderError): string | undefined {
+  const tag =
+    snapshot.provider !== 'unknown' ? `${snapshot.provider}:${snapshot.code}` : undefined;
+  const rawPart = provisioningRawExcerpt(snapshot.raw);
+  if (tag && rawPart) return `${tag}\n${rawPart}`;
+  if (tag) return tag;
+  if (rawPart) return rawPart;
+  return undefined;
+}
+
 /**
  * Raw compiler-shaped payloads for `enrichCompilationError`.
  */
@@ -115,10 +147,7 @@ export function collectIaAgentRuntimeCompileErrors(
         code: 'IaProvisionProviderError',
         fixTarget: { type: 'iaRuntime', taskId: task.id, focus },
         taskType: TaskType.AIAgent,
-        technicalDetail:
-          provisioningSnapshot.provider !== 'unknown'
-            ? `${provisioningSnapshot.provider}:${provisioningSnapshot.code}`
-            : undefined,
+        technicalDetail: buildProvisioningTechnicalDetail(provisioningSnapshot),
       });
     }
 

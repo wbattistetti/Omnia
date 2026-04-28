@@ -1769,7 +1769,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                 >
                   {showBackendBuilder ? (
                     <div style={{ flex: 1, minHeight: 0 }}>
-                      <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
+                      <BackendBuilderStudio
+                        projectId={currentPid}
+                        onClose={() => setShowBackendBuilder(false)}
+                      />
                     </div>
                   ) : (
                     <div
