@@ -9,6 +9,8 @@ Imports ApiServer.Interfaces
 Imports ApiServer.Logging
 Imports ApiServer.Repositories
 Imports ApiServer.SessionStorage
+Imports ApiServer.Infrastructure
+Imports ApiServer.ElevenLabs
 Imports Microsoft.AspNetCore.Builder
 Imports Microsoft.AspNetCore.Hosting
 Imports Microsoft.AspNetCore.Http
@@ -55,6 +57,11 @@ Module Program
     Private Sub RunHttpServerMode(args As String())
         Console.WriteLine("🌐 [RunHttpServerMode] Initializing ASP.NET Core Web API...")
         Try
+            ElevenLabsApiSettings.CapturePreDotEnvElevenLabs()
+            OmniaEnvLoader.LoadDotEnvLocal()
+            ElevenLabsApiSettings.AfterDotEnvFilesLoaded()
+            ElevenLabsApiSettings.ValidateAtStartup()
+
             Dim builder = WebApplication.CreateBuilder(args)
 
             ' ✅ FIX: Increase request body size limit to handle large compilation requests with conditions
@@ -226,7 +233,7 @@ Module Program
     ''' Maps all API endpoints
     ''' </summary>
     Private Sub MapApiEndpoints(app As WebApplication)
-        ApiServer.ElevenLabs.ElevenLabsEndpoints.MapElevenLabsRoutes(app)
+        ElevenLabsEndpoints.MapElevenLabsRoutes(app)
 
         ' GET /api/health - Test endpoint
         app.MapGet("/api/health", Function() As IResult

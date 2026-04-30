@@ -3,6 +3,7 @@ import {
   mergeFileLlmMappingWithProjectEmbedded,
   OMNIA_PROJECT_ELEVENLABS_LLM_MAPPING_KEY,
   parseProjectElevenLabsLlmMapping,
+  resolveProjectLlmAllowlistForLocale,
 } from '../omniaProjectElevenLabsLlmMapping';
 import type { LlmMappingPayload } from '@services/iaCatalogApi';
 
@@ -41,5 +42,34 @@ describe('mergeFileLlmMappingWithProjectEmbedded', () => {
     };
     const m = mergeFileLlmMappingWithProjectEmbedded(file, emb);
     expect(m.elevenlabs.perLanguage['it-IT']).toEqual(['gemini-2.0-flash']);
+  });
+});
+
+describe('resolveProjectLlmAllowlistForLocale', () => {
+  const project: LlmMappingPayload = {
+    elevenlabs: {
+      nonEnglishAllowedModels: ['should-not-use'],
+      perLanguage: { 'it-IT': ['gemini-2.5-flash'] },
+    },
+  };
+
+  it('ritorna null senza mapping o lingua', () => {
+    expect(resolveProjectLlmAllowlistForLocale(null, 'it-IT')).toBeNull();
+    expect(resolveProjectLlmAllowlistForLocale(project, undefined)).toBeNull();
+  });
+
+  it('ritorna null per en (catalogo intero)', () => {
+    expect(resolveProjectLlmAllowlistForLocale(project, 'en')).toBeNull();
+  });
+
+  it('usa solo perLanguage per it-IT; ignora nonEnglishAllowedModels', () => {
+    expect(resolveProjectLlmAllowlistForLocale(project, 'it-IT')).toEqual(['gemini-2.5-flash']);
+  });
+
+  it('array vuoto per lingua ⇒ null (catalogo intero)', () => {
+    const empty: LlmMappingPayload = {
+      elevenlabs: { nonEnglishAllowedModels: [], perLanguage: { 'it-IT': [] } },
+    };
+    expect(resolveProjectLlmAllowlistForLocale(empty, 'it-IT')).toBeNull();
   });
 });

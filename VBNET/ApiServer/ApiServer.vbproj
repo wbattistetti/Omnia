@@ -23,6 +23,7 @@
     <PackageReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="8.0.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.7.10" />
+    <PackageReference Include="DotNetEnv" Version="3.1.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,6 +36,7 @@
     <!-- Fine FASE 1 -->
     <!-- FASE 4: Redis Infrastructure (DEVE essere prima di RedisSessionStorage) -->
     <Compile Include="Infrastructure\RedisConnectionManager.vb" />
+    <Compile Include="Infrastructure\OmniaEnvLoader.vb" />
     <!-- ✅ STATELESS: Repositories per configurazione immutabile -->
     <Compile Include="Repositories\IDialogRepository.vb" />
     <Compile Include="Repositories\DialogRepository.vb" />

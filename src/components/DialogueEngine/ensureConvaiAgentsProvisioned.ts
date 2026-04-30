@@ -10,6 +10,7 @@ import { taskRepository } from '../../services/TaskRepository';
 import { TaskType } from '../../types/taskTypes';
 import type { Task } from '../../types/taskTypes';
 import {
+  CreateConvaiAgentHttpError,
   createConvaiAgentViaOmniaServer,
   deleteConvaiAgentViaOmniaServer,
   listAllConvaiAgentsMatchingTaskGuid,
@@ -28,6 +29,10 @@ import {
 import type { NormalizedIaProviderError } from '@domain/compileErrors/iaProviderErrors';
 import { normalizeProviderError } from '@domain/compileErrors/normalizeProviderError';
 import { setIaProvisioningError } from '@domain/compileErrors/iaProvisioningErrorStore';
+import {
+  emitConvaiProvisionPayloadPreview,
+  type ConvaiProvisionPayloadPreviewItem,
+} from '@utils/iaAgentRuntime/convaiPayloadPreviewEvents';
 
 /** Contesto per il nome leggibile ElevenLabs (slug + GUID). */
 export type ConvaiProvisionContext = {
@@ -37,7 +42,12 @@ export type ConvaiProvisionContext = {
   nodeLabelByTaskId: Record<string, string>;
 };
 
-const OMIT_TTS_ON_CREATE = true;
+/**
+ * Se `false`, `conversation_config.tts` (voice_id + model_id) è incluso nel create quando la runtime
+ * ha una voce primaria — allineato alla UI Agent setup. Su alcuni cluster EU un voice_id non valido
+ * può causare 422 da ElevenLabs; in quel caso verificare voce/catalogo o residency.
+ */
+const OMIT_TTS_ON_CREATE = false;
 
 /**
  * Per ogni task AI Agent ElevenLabs sul canvas: se la chiave di provision in sessione coincide con
@@ -63,6 +73,7 @@ export async function ensureConvaiAgentsProvisioned(
 
   const projectSlug = String(context.projectLabel || 'project').trim() || 'project';
   const flowSlug = String(context.rootFlowLabel || 'flow').trim() || 'flow';
+  const payloadPreviewItems: ConvaiProvisionPayloadPreviewItem[] = [];
 
   for (const node of enriched) {
     const rows = node.data?.rows || [];
@@ -133,10 +144,10 @@ export async function ensureConvaiAgentsProvisioned(
         continue;
       }
 
+      let previewEntry: ConvaiProvisionPayloadPreviewItem | undefined;
       try {
         const matches = await listAllConvaiAgentsMatchingTaskGuid(taskId);
         for (const m of matches) {
-          console.warn('[DEBUG] DELETE AGENT', m.agentId, { name: m.name });
           try {
             await deleteConvaiAgentViaOmniaServer(m.agentId);
           } catch (delErr) {
@@ -158,18 +169,37 @@ export async function ensureConvaiAgentsProvisioned(
           throw buildErr;
         }
 
-        const payload = { conversation_config: fragment };
-        console.warn('[DEBUG] CREATE AGENT PAYLOAD', JSON.stringify({ name: displayName, ...payload }, null, 2));
-        const { agentId } = await createConvaiAgentViaOmniaServer({
+        {
+          const requestBody: Record<string, unknown> = {};
+          const n = displayName.trim();
+          if (n) requestBody.name = n;
+          requestBody.conversation_config = fragment;
+          previewEntry = {
+            taskId,
+            displayName,
+            bodyText: JSON.stringify(requestBody, null, 2),
+          };
+          payloadPreviewItems.push(previewEntry);
+        }
+        const result = await createConvaiAgentViaOmniaServer({
           name: displayName,
           conversation_config: fragment,
         });
-        console.warn('[DEBUG] NEW AGENT ID', agentId);
+        if (previewEntry && result.elevenLabsRequestJson?.trim()) {
+          previewEntry.bodyText = result.elevenLabsRequestJson.trim();
+        }
 
-        setConvaiSessionBinding(taskId, agentId, provisionKey);
+        setConvaiSessionBinding(taskId, result.agentId, provisionKey);
         provisioned.push(taskId);
         setIaProvisioningError(taskId, null);
       } catch (err) {
+        if (
+          previewEntry &&
+          err instanceof CreateConvaiAgentHttpError &&
+          err.elevenLabsRequestJson?.trim()
+        ) {
+          previewEntry.bodyText = err.elevenLabsRequestJson.trim();
+        }
         failed.push(taskId);
         const normalized: NormalizedIaProviderError =
           normalizeProviderError(err) ?? {
@@ -186,6 +216,10 @@ export async function ensureConvaiAgentsProvisioned(
         });
       }
     }
+  }
+
+  if (payloadPreviewItems.length > 0) {
+    emitConvaiProvisionPayloadPreview(payloadPreviewItems);
   }
 
   return { provisioned, skipped, failed };

@@ -14,7 +14,7 @@ Imports Microsoft.Extensions.Logging
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 
-Namespace ApiServer.ElevenLabs
+Namespace ElevenLabs
 
 ''' <summary>
 ''' Minimal API wiring for ElevenLabs ConvAI bridge (mounted on the existing ApiServer).
@@ -144,14 +144,16 @@ Public NotInheritable Class ElevenLabsEndpoints
         If requestObj IsNot Nothing Then
             MergeConvaiConversationConfigFromRequest(payload, requestObj)
         End If
+        ' Same object serialized as HTTP body to ElevenLabs (merge defaults + client conversation_config).
+        Dim elevenLabsRequestJson = payload.ToString(Formatting.Indented)
         Dim apiBase = ElevenLabsApiSettings.GetApiBaseUrl()
         Dim url = $"{apiBase}/v1/convai/agents/create"
 
         Dim Logger = context.RequestServices.GetService(Of ILogger(Of ElevenLabsEndpoints))()
         If Logger IsNot Nothing Then
-            Logger.LogInformation("ELEVENLABS CREATE PAYLOAD DEBUG: " & Newtonsoft.Json.JsonConvert.SerializeObject(payload, Newtonsoft.Json.Formatting.Indented))
+            Logger.LogInformation("ELEVENLABS CREATE PAYLOAD DEBUG: " & elevenLabsRequestJson)
         Else
-            Global.System.Console.WriteLine("ELEVENLABS CREATE PAYLOAD DEBUG: " & Newtonsoft.Json.JsonConvert.SerializeObject(payload, Newtonsoft.Json.Formatting.Indented))
+            Global.System.Console.WriteLine("ELEVENLABS CREATE PAYLOAD DEBUG: " & elevenLabsRequestJson)
         End If
 
         Using req As New HttpRequestMessage(HttpMethod.Post, url)
@@ -173,7 +175,8 @@ Public NotInheritable Class ElevenLabsEndpoints
                         .error = "ElevenLabs agents/create failed.",
                         .statusCode = upstream,
                         .elevenLabsApiBase = apiBase,
-                        .details = respBody
+                        .details = respBody,
+                        .elevenLabsRequestJson = elevenLabsRequestJson
                     }).ConfigureAwait(False)
                     Return
                 End If
@@ -186,13 +189,17 @@ Public NotInheritable Class ElevenLabsEndpoints
                     Await context.Response.WriteAsJsonAsync(New With {
                         .error = "ElevenLabs response missing agent_id.",
                         .elevenLabsApiBase = apiBase,
-                        .details = respBody
+                        .details = respBody,
+                        .elevenLabsRequestJson = elevenLabsRequestJson
                     }).ConfigureAwait(False)
                     Return
                 End If
 
                 context.Response.StatusCode = StatusCodes.Status200OK
-                Await context.Response.WriteAsJsonAsync(New With {.agentId = agentId}).ConfigureAwait(False)
+                Await context.Response.WriteAsJsonAsync(New With {
+                    .agentId = agentId,
+                    .elevenLabsRequestJson = elevenLabsRequestJson
+                }).ConfigureAwait(False)
             End Using
         End Using
     End Function

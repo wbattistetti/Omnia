@@ -10,7 +10,7 @@ Imports System.Threading.Tasks
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 
-Namespace ApiServer.ElevenLabs
+Namespace ElevenLabs
 
 ''' <summary>
 ''' Maintains one ConvAI WebSocket connection for a hosted Omnia conversation; forwards agent text into <see cref="ElevenLabsTurnQueue"/>.

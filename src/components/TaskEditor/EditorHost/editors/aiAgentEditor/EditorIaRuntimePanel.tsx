@@ -140,12 +140,12 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
       );
       let fragment: Record<string, unknown>;
       try {
-        fragment = conversationConfigFragmentFromIaAgentConfig(cfgForCreate, { omitTts: true, task: task ?? undefined })!;
+        fragment = conversationConfigFragmentFromIaAgentConfig(cfgForCreate, { task: task ?? undefined })!;
       } catch (buildErr) {
         console.error('[IA·ConvAI] createAgent: payload non costruibile (prompt vuoto o dati mancanti)', buildErr);
         return;
       }
-      const provisionKey = buildConvaiProvisionKey(cfgForCreate, task ?? undefined, true);
+      const provisionKey = buildConvaiProvisionKey(cfgForCreate, task ?? undefined, false);
       const matches = await listAllConvaiAgentsMatchingTaskGuid(instanceId);
       for (const m of matches) {
         console.warn('[DEBUG] DELETE AGENT', m.agentId, { name: m.name });

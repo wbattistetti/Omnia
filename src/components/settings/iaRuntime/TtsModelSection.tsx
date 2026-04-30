@@ -69,6 +69,8 @@ export interface TtsModelSectionProps {
   ttsLanguageScopedEnabled?: boolean;
   ttsPerLanguageModelMap?: Record<string, string[]>;
   onTtsLanguageScopedChange?: (next: boolean) => void;
+  /** Override task: mostra lo stato globale, checkbox non modificabile. */
+  ttsLanguageScopedUiLocked?: boolean;
 }
 
 export function TtsModelSection({
@@ -80,6 +82,7 @@ export function TtsModelSection({
   ttsLanguageScopedEnabled = false,
   ttsPerLanguageModelMap,
   onTtsLanguageScopedChange,
+  ttsLanguageScopedUiLocked = false,
 }: TtsModelSectionProps) {
   const [models, setModels] = React.useState<ElevenLabsTtsModelRow[]>([]);
   const [err, setErr] = React.useState<string | null>(null);
@@ -165,12 +168,21 @@ export function TtsModelSection({
           >
             TTS ({sortedModels.length})
           </span>
-          {onTtsLanguageScopedChange ? (
-            <label className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] text-slate-300">
+          {onTtsLanguageScopedChange != null || ttsLanguageScopedUiLocked ? (
+            <label
+              className={`inline-flex items-center gap-1 whitespace-nowrap text-[10px] text-slate-300 ${
+                ttsLanguageScopedUiLocked ? 'cursor-default' : ''
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={ttsLanguageScopedEnabled}
-                onChange={(e) => onTtsLanguageScopedChange(e.target.checked)}
+                disabled={ttsLanguageScopedUiLocked}
+                onChange={
+                  ttsLanguageScopedUiLocked || !onTtsLanguageScopedChange
+                    ? undefined
+                    : (e) => onTtsLanguageScopedChange(e.target.checked)
+                }
               />
               <span>TTS dipende dalla lingua</span>
             </label>

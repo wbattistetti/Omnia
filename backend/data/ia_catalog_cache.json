@@ -4967,6 +4967,38 @@
         }
       },
       {
+        "model_id": "claude-opus-4-7",
+        "name": "claude-opus-4-7",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {
+          "max_tokens_limit": 128000,
+          "max_context_limit": 1000000,
+          "supports_image_input": true,
+          "supports_document_input": true
+        },
+        "tags": [
+          "convai"
+        ],
+        "notes": "ElevenLabs ConvAI",
+        "raw": {
+          "llm": "claude-opus-4-7",
+          "is_checkpoint": false,
+          "max_tokens_limit": 128000,
+          "max_context_limit": 1000000,
+          "supports_image_input": true,
+          "supports_document_input": true,
+          "supports_parallel_tool_calls": false,
+          "available_reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "deprecation_info": null
+        }
+      },
+      {
         "model_id": "claude-sonnet-4",
         "name": "claude-sonnet-4",
         "latency_ms": null,
@@ -5151,36 +5183,6 @@
             "xhigh"
           ],
           "deprecation_info": null
-        }
-      },
-      {
-        "model_id": "eleven_flash_v2_5",
-        "name": "eleven_flash_v2_5",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {},
-        "tags": [
-          "convai",
-          "fallback"
-        ],
-        "notes": "Aggiunto se assente dalla risposta GET /convai/llm/list",
-        "raw": {
-          "fallback": true
-        }
-      },
-      {
-        "model_id": "eleven_turbo_v2",
-        "name": "eleven_turbo_v2",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {},
-        "tags": [
-          "convai",
-          "fallback"
-        ],
-        "notes": "Aggiunto se assente dalla risposta GET /convai/llm/list",
-        "raw": {
-          "fallback": true
         }
       },
       {
@@ -6431,12 +6433,12 @@
     ]
   },
   "meta": {
-    "updatedAt": "2026-04-28T17:57:22.634Z",
-    "lastLanguagesSync": "2026-04-28T17:57:21.258Z",
-    "lastModelsSync": "2026-04-28T17:57:22.634Z",
+    "updatedAt": "2026-04-30T14:56:35.916Z",
+    "lastLanguagesSync": "2026-04-30T14:56:34.731Z",
+    "lastModelsSync": "2026-04-30T14:56:35.915Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-04-28T17:19:20.776Z",
+      "at": "2026-04-30T14:56:34.698Z",
       "apiVoiceCount": 22,
       "mappedCount": 22,
       "emptyApiList": false

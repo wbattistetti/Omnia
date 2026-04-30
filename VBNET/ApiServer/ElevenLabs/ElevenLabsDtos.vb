@@ -3,7 +3,7 @@ Option Explicit On
 
 Imports Newtonsoft.Json
 
-Namespace ApiServer.ElevenLabs
+Namespace ElevenLabs
 
 ''' <summary>
 ''' POST /elevenlabs/startAgent request body.

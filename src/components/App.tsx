@@ -27,6 +27,7 @@ import { generateMissingTranslations, type MissingTranslation } from '../service
 import { GlobalTestPanelProvider } from '@context/GlobalTestPanelContext';
 import { GlobalTestPanel } from '@components/GlobalTestPanel/GlobalTestPanel';
 import { ApplyEditorChrome } from '@components/settings/ApplyEditorChrome';
+import { ConvaiProvisionPayloadModal } from '@components/DialogueEngine/ConvaiProvisionPayloadModal';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -149,6 +150,8 @@ function AppInner() {
 
       {/* ✅ NEW: Global Test Panel (full height, right side) */}
       <GlobalTestPanel />
+
+      <ConvaiProvisionPayloadModal />
     </GlobalTestPanelProvider>
   );
 }

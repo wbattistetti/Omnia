@@ -9,6 +9,8 @@ import { FieldHint, runtimeIaFieldHintLabelClass } from './FieldHint';
 import { LlmModelPicker } from './LlmModelPicker';
 import { LlmProviderCatalogPanel } from './LlmProviderCatalogPanel';
 import type { ModelCostRow } from './modelCostsCatalog';
+import type { LlmMappingPayload } from '@services/iaCatalogApi';
+import { parseProjectElevenLabsLlmMapping } from '@utils/iaAgentRuntime/omniaProjectElevenLabsLlmMapping';
 
 const REASONING_LEVELS: IAAgentConfig['reasoning'][] = ['none', 'low', 'medium', 'high'];
 
@@ -36,6 +38,13 @@ export interface ModelSectionProps {
   llmLanguageScopedEnabled?: boolean;
   /** Toggle visibilità/uso mapping LLM (render vicino alla combo LLM). */
   onLlmLanguageScopedChange?: (next: boolean) => void;
+  /** Override task: mostra lo stato globale, checkbox non modificabile. */
+  llmLanguageScopedUiLocked?: boolean;
+  /**
+   * Se valorizzato (es. `mode=override`), mapping progetto per la combo LLM da default globali,
+   * non da `config.advanced` del task.
+   */
+  elevenLabsLlmMappingForCatalog?: LlmMappingPayload | null;
   /**
    * Quando false, Agent ID e pulsante «Crea agente» non sono qui (es. Developer tools in {@link IAAgentSetup}).
    */
@@ -159,7 +168,7 @@ const TT = {
   modelloLlm:
     'Modello linguistico usato per le risposte. Influenza qualità, costo e latenza. Cambialo quando devi bilanciare precisione, costo o contesto lungo.',
   modelloLlmElevenLabs:
-    'Modelli LLM del motore ElevenLabs (lista da GET /v1/convai/llm/list dopo sync sul server). Se la lingua agente non è inglese, la combo mostra solo gli id definiti in config/llmMapping.json.',
+    'Modelli LLM da catalogo ConvAI. Con «LLM dipende dalla lingua» e un elenco non vuoto in LLM mapping (progetto), la combo mostra solo quegli id; altrimenti tutto il catalogo. Nessun uso del file server llmMapping.json in questa combo.',
   creativity:
     'Temperatura: bassa = risposte più deterministiche e allineate al prompt; alta = più creatività e variabilità. Abbassa per fatti/controlli; alza solo se serve esplorazione o tono informale.',
   tokenMax:
@@ -206,6 +215,8 @@ export function ModelSection({
   llmCostRows = [],
   llmLanguageScopedEnabled = true,
   onLlmLanguageScopedChange,
+  llmLanguageScopedUiLocked = false,
+  elevenLabsLlmMappingForCatalog,
 }: ModelSectionProps) {
   const [provisionBusy, setProvisionBusy] = React.useState(false);
   const [provisionError, setProvisionError] = React.useState<string | null>(null);
@@ -266,6 +277,14 @@ export function ModelSection({
 
   const elLlmPrimary = config.platform === 'elevenlabs' && visibility.llm_model;
   const showStdTempMax = visibility.temperature && visibility.maxTokens && !elLlmPrimary;
+
+  const projectElevenLabsLlmMapping = React.useMemo(
+    () =>
+      elevenLabsLlmMappingForCatalog !== undefined
+        ? elevenLabsLlmMappingForCatalog
+        : parseProjectElevenLabsLlmMapping(config.advanced),
+    [config.advanced, elevenLabsLlmMappingForCatalog]
+  );
 
   const showImpostazioniAvanzate =
     (visibility.reasoning && config.platform === 'anthropic') ||
@@ -332,12 +351,21 @@ export function ModelSection({
     <LlmProviderCatalogPanel
       stackedLayout
       trailingHeader={
-        onLlmLanguageScopedChange ? (
-          <label className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] text-slate-300">
+        onLlmLanguageScopedChange != null || llmLanguageScopedUiLocked ? (
+          <label
+            className={`inline-flex items-center gap-1 whitespace-nowrap text-[10px] text-slate-300 ${
+              llmLanguageScopedUiLocked ? 'cursor-default' : ''
+            }`}
+          >
             <input
               type="checkbox"
               checked={llmLanguageScopedEnabled}
-              onChange={(e) => onLlmLanguageScopedChange(e.target.checked)}
+              disabled={llmLanguageScopedUiLocked}
+              onChange={
+                llmLanguageScopedUiLocked || !onLlmLanguageScopedChange
+                  ? undefined
+                  : (e) => onLlmLanguageScopedChange(e.target.checked)
+              }
             />
             <span>LLM dipende dalla lingua</span>
           </label>
@@ -346,6 +374,7 @@ export function ModelSection({
       reloadNonce={catalogReloadNonce}
       catalogPlatform={config.platform}
       agentLanguage={llmLanguageScopedEnabled ? config.voice?.language : undefined}
+      projectElevenLabsLlmMapping={projectElevenLabsLlmMapping}
       value={String(llm.model ?? '')}
       onChange={(model) => patchLlm({ model })}
       label="LLM"

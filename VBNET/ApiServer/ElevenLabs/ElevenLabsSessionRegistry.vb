@@ -4,7 +4,7 @@ Option Explicit On
 Imports System.Collections.Concurrent
 Imports System
 
-Namespace ApiServer.ElevenLabs
+Namespace ElevenLabs
 
 ''' <summary>Holds runtime objects for one Omnia-hosted ElevenLabs-backed conversation.</summary>
 Public NotInheritable Class ElevenLabsHostedSession

@@ -37,6 +37,7 @@ import {
   OMNIA_PROJECT_ELEVENLABS_LLM_MAPPING_KEY,
   parseProjectElevenLabsLlmMapping,
 } from '@utils/iaAgentRuntime/omniaProjectElevenLabsLlmMapping';
+import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 
 export interface IAAgentSetupProps {
   defaultConfig?: IAAgentConfig;
@@ -174,12 +175,37 @@ export function IAAgentSetup({
   /** Stesso criterio dell’LLM mapping: attivo di default su ElevenLabs; disattivabile dal checkbox in TtsModelSection. */
   const ttsLanguageScopedEnabled =
     config.platform === 'elevenlabs' ? advanced[ADV_TTS_LANGUAGE_SCOPED_KEY] !== false : false;
+
+  /** In override, checkbox e filtri LLM/TTS per lingua seguono i default globali (mapping non editabile qui). */
+  const globalIaRuntimeSlice = React.useMemo(() => {
+    const g = loadGlobalIaAgentConfig();
+    const ga = g.advanced && typeof g.advanced === 'object' ? g.advanced : {};
+    const ttsMap =
+      ga[ADV_TTS_PER_LANGUAGE_MAP_KEY] &&
+      typeof ga[ADV_TTS_PER_LANGUAGE_MAP_KEY] === 'object' &&
+      !Array.isArray(ga[ADV_TTS_PER_LANGUAGE_MAP_KEY])
+        ? (ga[ADV_TTS_PER_LANGUAGE_MAP_KEY] as Record<string, string[]>)
+        : {};
+    return {
+      llmScoped: g.platform === 'elevenlabs' ? ga[ADV_LLM_LANGUAGE_SCOPED_KEY] !== false : false,
+      ttsScoped: g.platform === 'elevenlabs' ? ga[ADV_TTS_LANGUAGE_SCOPED_KEY] !== false : false,
+      ttsPerLanguageModelMap: ttsMap,
+      elevenLabsLlmMapping: parseProjectElevenLabsLlmMapping(ga),
+    };
+  }, [catalogReloadNonce]);
+
+  const effectiveLlmLanguageScoped =
+    mode === 'override' ? globalIaRuntimeSlice.llmScoped : llmLanguageScopedEnabled;
+  const effectiveTtsLanguageScoped =
+    mode === 'override' ? globalIaRuntimeSlice.ttsScoped : ttsLanguageScopedEnabled;
   const ttsPerLanguageModelMap =
     advanced[ADV_TTS_PER_LANGUAGE_MAP_KEY] &&
     typeof advanced[ADV_TTS_PER_LANGUAGE_MAP_KEY] === 'object' &&
     !Array.isArray(advanced[ADV_TTS_PER_LANGUAGE_MAP_KEY])
       ? (advanced[ADV_TTS_PER_LANGUAGE_MAP_KEY] as Record<string, string[]>)
       : {};
+  const ttsPerLanguageModelMapForPicker =
+    mode === 'override' ? globalIaRuntimeSlice.ttsPerLanguageModelMap : ttsPerLanguageModelMap;
   const hasScopedTtsRules = Object.values(ttsPerLanguageModelMap).some((arr) => Array.isArray(arr) && arr.length > 0);
   const hasVoiceLanguage = Boolean(String(config.voice?.language ?? '').trim());
 
@@ -259,9 +285,15 @@ export function IAAgentSetup({
         onChange={setConfig}
         catalogReloadNonce={catalogReloadNonce}
         llmCostRows={llmCostRows}
-        llmLanguageScopedEnabled={llmLanguageScopedEnabled}
-        onLlmLanguageScopedChange={(next) =>
-          patchAdvanced({ [ADV_LLM_LANGUAGE_SCOPED_KEY]: next })
+        llmLanguageScopedEnabled={effectiveLlmLanguageScoped}
+        llmLanguageScopedUiLocked={mode === 'override'}
+        elevenLabsLlmMappingForCatalog={
+          mode === 'override' ? globalIaRuntimeSlice.elevenLabsLlmMapping : undefined
+        }
+        onLlmLanguageScopedChange={
+          mode === 'override'
+            ? undefined
+            : (next) => patchAdvanced({ [ADV_LLM_LANGUAGE_SCOPED_KEY]: next })
         }
         showElevenLabsConvaiIdentity={false}
         platformSlot={platformSlot}
@@ -274,10 +306,13 @@ export function IAAgentSetup({
                     onChange={setConfig}
                     catalogReloadNonce={catalogReloadNonce}
                     costRows={ttsCostRows}
-                    ttsLanguageScopedEnabled={ttsLanguageScopedEnabled}
-                    ttsPerLanguageModelMap={ttsPerLanguageModelMap}
-                    onTtsLanguageScopedChange={(next) =>
-                      patchAdvanced({ [ADV_TTS_LANGUAGE_SCOPED_KEY]: next })
+                    ttsLanguageScopedEnabled={effectiveTtsLanguageScoped}
+                    ttsPerLanguageModelMap={ttsPerLanguageModelMapForPicker}
+                    ttsLanguageScopedUiLocked={mode === 'override'}
+                    onTtsLanguageScopedChange={
+                      mode === 'override'
+                        ? undefined
+                        : (next) => patchAdvanced({ [ADV_TTS_LANGUAGE_SCOPED_KEY]: next })
                     }
                   />
                 ),
@@ -295,7 +330,7 @@ export function IAAgentSetup({
         }
       />
 
-      {config.platform === 'elevenlabs' && llmLanguageScopedEnabled ? (
+      {mode === 'global' && config.platform === 'elevenlabs' && llmLanguageScopedEnabled ? (
         <details className="rounded border border-slate-700/80 bg-slate-950/40">
           <summary className="cursor-pointer px-1.5 py-0.5 text-[11px] font-semibold leading-none text-slate-300">
             LLM mapping
@@ -314,7 +349,7 @@ export function IAAgentSetup({
         </details>
       ) : null}
 
-      {config.platform === 'elevenlabs' && ttsLanguageScopedEnabled ? (
+      {mode === 'global' && config.platform === 'elevenlabs' && ttsLanguageScopedEnabled ? (
         <details className="rounded border border-slate-700/80 bg-slate-950/40">
           <summary className="cursor-pointer px-1.5 py-0.5 text-[11px] font-semibold leading-none text-slate-300">
             TTS mapping

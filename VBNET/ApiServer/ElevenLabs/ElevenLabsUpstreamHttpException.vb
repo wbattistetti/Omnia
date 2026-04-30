@@ -1,7 +1,7 @@
 Option Strict On
 Option Explicit On
 
-Namespace ApiServer.ElevenLabs
+Namespace ElevenLabs
 
 ''' <summary>
 ''' Risposta HTTP non-success da ElevenLabs REST (es. get-signed-url) — conserva il body grezzo per logging e JSON errore ApiServer.

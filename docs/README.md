@@ -12,6 +12,10 @@ Welcome to the TaskTree Generation Pipeline documentation. This system generates
 
 ### Core Documentation
 
+- **[PIATTAFORMA_OMNIA_SINTESI.md](./PIATTAFORMA_OMNIA_SINTESI.md)** - Sintesi funzionalità piattaforma e angoli di differenziazione (vs dialoghi “solo LLM”).
+- **[PIATTAFORMA_PITCH_INVESTITORI.md](./PIATTAFORMA_PITCH_INVESTITORI.md)** - Pitch investitori: problema/soluzione, differenziale innovativo, moat potenziale, sezioni [da compilare] per trazione e round.
+- **[PIATTAFORMA_WIZARD_E_MATCHING_TEMPLATE.md](./PIATTAFORMA_WIZARD_E_MATCHING_TEMPLATE.md)** - Wizard task: match label → template libreria (`RowHeuristicsService`), apertura adattamento (`TaskTreeOpener`), `TaskBuilderAIWizard`; riferimenti al codice.
+- **[PIATTAFORMA_IA_DELEGATION_GOVERNED.md](./PIATTAFORMA_IA_DELEGATION_GOVERNED.md)** - Delega a IA esterne (LLM, ElevenLabs/ConvAI) **confinata** nel task `AIAgent`: flusso deterministico, contract JSON, piattaforme, riferimenti al codice.
 - **[SEMANTICA_TASK_VARIABLES_E_SUBFLOW.md](./SEMANTICA_TASK_VARIABLES_E_SUBFLOW.md)** - **Normativo:** semantica task-based (`TaskTreeNode`, `taskId`), variabili e GUID (`varId` = `taskId`), calcolo **variabili referenziate**, spostamento task verso sottoflusso, mapping parent ↔ subflow e debito tecnico vs modello.
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Complete architecture overview
   - Layer structure

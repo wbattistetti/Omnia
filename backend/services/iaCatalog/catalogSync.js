@@ -447,21 +447,6 @@ async function fetchElevenLabsConvaiLlms() {
       raw: item,
     });
   }
-  const ensureIds = ['eleven_flash_v2_5', 'eleven_turbo_v2'];
-  for (const sid of ensureIds) {
-    if (!rows.some((r) => r.model_id === sid)) {
-      rows.push({
-        model_id: sid,
-        name: sid,
-        latency_ms: null,
-        cost_hint: null,
-        capabilities: {},
-        tags: ['convai', 'fallback'],
-        notes: 'Aggiunto se assente dalla risposta GET /convai/llm/list',
-        raw: { fallback: true },
-      });
-    }
-  }
 
   rows.sort((a, b) => a.model_id.localeCompare(b.model_id));
   diag('syncConvaiLlms:mapped', { count: rows.length });

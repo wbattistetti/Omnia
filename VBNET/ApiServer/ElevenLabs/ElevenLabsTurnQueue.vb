@@ -5,7 +5,7 @@ Imports System.Collections.Concurrent
 Imports System.Threading
 Imports System.Threading.Tasks
 
-Namespace ApiServer.ElevenLabs
+Namespace ElevenLabs
 
 ''' <summary>
 ''' Thread-safe queue with async wait for the next agent turn (used by GET readPrompt long-poll).

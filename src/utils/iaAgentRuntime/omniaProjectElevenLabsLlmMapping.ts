@@ -3,6 +3,7 @@
  */
 
 import type { LlmMappingPayload } from '@services/iaCatalogApi';
+import { primaryLang } from '@utils/iaCatalog/elevenLabsLlmMappingLocale';
 
 export const OMNIA_PROJECT_ELEVENLABS_LLM_MAPPING_KEY = 'omniaProjectElevenLabsLlmMapping';
 
@@ -35,6 +36,47 @@ export function parseProjectElevenLabsLlmMapping(
       perLanguage: per,
     },
   };
+}
+
+function normalizeModelIdList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((x) => String(x).trim()).filter(Boolean))];
+}
+
+/**
+ * Solo `omniaProjectElevenLabsLlmMapping`: se per la lingua dell'agente c'è un elenco **non vuoto** in
+ * `perLanguage`, quella lista filtra la combo LLM. Altrimenti `null` = nessun filtro (catalogo intero).
+ * Nessun merge con file server-side né fallback a `nonEnglishAllowedModels`.
+ */
+export function resolveProjectLlmAllowlistForLocale(
+  projectMapping: LlmMappingPayload | null,
+  agentLanguage: string | undefined
+): string[] | null {
+  if (!projectMapping?.elevenlabs || !agentLanguage?.trim()) return null;
+  const full = agentLanguage.trim();
+  if (primaryLang(full) === 'en') return null;
+  const { perLanguage } = projectMapping.elevenlabs;
+  if (Object.prototype.hasOwnProperty.call(perLanguage, full)) {
+    const arr = normalizeModelIdList(perLanguage[full]);
+    return arr.length > 0 ? arr : null;
+  }
+  const p = primaryLang(full);
+  if (Object.prototype.hasOwnProperty.call(perLanguage, p)) {
+    const arr = normalizeModelIdList(perLanguage[p]);
+    return arr.length > 0 ? arr : null;
+  }
+  const samePrimary = Object.keys(perLanguage).filter((k) => primaryLang(k) === p);
+  if (samePrimary.length > 0) {
+    samePrimary.sort((a, b) => {
+      const ra = a.split('-').filter(Boolean).length;
+      const rb = b.split('-').filter(Boolean).length;
+      if (rb !== ra) return rb - ra;
+      return b.length - a.length;
+    });
+    const arr = normalizeModelIdList(perLanguage[samePrimary[0]]);
+    return arr.length > 0 ? arr : null;
+  }
+  return null;
 }
 
 /**

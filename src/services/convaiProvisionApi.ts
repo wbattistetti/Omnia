@@ -18,7 +18,30 @@ export type CreateConvaiAgentViaOmniaParams = {
 
 export type CreateConvaiAgentViaOmniaResult = {
   agentId: string;
+  /**
+   * JSON effettivo inviato da ApiServer a ElevenLabs `POST .../v1/convai/agents/create`
+   * dopo merge con i default Omnia (stesso contenuto del body HTTP verso ElevenLabs).
+   */
+  elevenLabsRequestJson?: string;
 };
+
+/**
+ * Errore HTTP da POST /elevenlabs/createAgent con eventuale JSON richiesta ElevenLabs per debug UI.
+ */
+export class CreateConvaiAgentHttpError extends Error {
+  override readonly name = 'CreateConvaiAgentHttpError';
+
+  constructor(
+    message: string,
+    public readonly httpStatus: number,
+    public readonly elevenLabsRequestJson?: string,
+    public readonly details?: string,
+    public readonly elevenLabsApiBase?: string
+  ) {
+    super(message);
+    Object.setPrototypeOf(this, CreateConvaiAgentHttpError.prototype);
+  }
+}
 
 export async function createConvaiAgentViaOmniaServer(
   params?: CreateConvaiAgentViaOmniaParams
@@ -43,6 +66,11 @@ export async function createConvaiAgentViaOmniaServer(
     throw new Error(`createAgent: invalid JSON (${res.status})`);
   }
 
+  const elevenLabsRequestJsonFromBody =
+    typeof data.elevenLabsRequestJson === 'string' && data.elevenLabsRequestJson.trim().length > 0
+      ? data.elevenLabsRequestJson.trim()
+      : undefined;
+
   if (!res.ok) {
     const details = typeof data.details === 'string' ? data.details : JSON.stringify(data);
     const err = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`;
@@ -51,7 +79,13 @@ export async function createConvaiAgentViaOmniaServer(
         ? data.elevenLabsApiBase.trim()
         : '';
     const baseHint = apiBase ? ` [ElevenLabs API base: ${apiBase}]` : '';
-    throw new Error(`${err}${details ? ` — ${details.slice(0, 500)}` : ''}${baseHint}`);
+    throw new CreateConvaiAgentHttpError(
+      `${err}${details ? ` — ${details.slice(0, 500)}` : ''}${baseHint}`,
+      res.status,
+      elevenLabsRequestJsonFromBody,
+      typeof data.details === 'string' ? data.details : undefined,
+      apiBase || undefined
+    );
   }
 
   const agentId = typeof data.agentId === 'string' ? data.agentId.trim() : '';
@@ -59,7 +93,7 @@ export async function createConvaiAgentViaOmniaServer(
     throw new Error('createAgent: response missing agentId');
   }
 
-  return { agentId };
+  return { agentId, elevenLabsRequestJson: elevenLabsRequestJsonFromBody };
 }
 
 export type ConvaiAgentListItem = {

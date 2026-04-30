@@ -1,20 +1,13 @@
 /**
- * Dropdown modelli LLM: contenuto = catalogo del provider selezionato (ElevenLabs = lista sync da GET /v1/convai/llm/list).
+ * Dropdown modelli LLM: catalogo per provider. ElevenLabs = sync catalog; filtro opzionale solo da
+ * `advanced.omniaProjectElevenLabsLlmMapping` per lingua agente (nessun merge con file server).
  */
 
 import React from 'react';
 import type { ReactNode } from 'react';
-import {
-  CatalogApiError,
-  fetchLlmMapping,
-  type CatalogModel,
-  type LlmMappingPayload,
-} from '@services/iaCatalogApi';
+import type { CatalogModel, LlmMappingPayload } from '@services/iaCatalogApi';
 import { fetchIaModelsForPlatform, type IaRuntimeCatalogPlatform } from '@utils/iaCatalog/fetchIaCatalog';
-import {
-  effectiveAllowedForLocale,
-  primaryLang,
-} from '@utils/iaCatalog/elevenLabsLlmMappingLocale';
+import { resolveProjectLlmAllowlistForLocale } from '@utils/iaAgentRuntime/omniaProjectElevenLabsLlmMapping';
 import { SearchableSelect, type SearchableSelectOption } from './SearchableSelect';
 import { FieldHint } from './FieldHint';
 import {
@@ -72,45 +65,26 @@ function catalogModelOption(
 }
 
 function reasonToMessage(reason: unknown): string {
-  if (reason instanceof CatalogApiError) return reason.message;
   if (reason instanceof Error) return reason.message;
   return String(reason ?? 'Errore sconosciuto');
-}
-
-/** `null` = nessun filtro mapping (en, lingua assente, o config non ancora impostata); array = elenco ammessi. */
-function allowedIdsForAgent(
-  mapping: LlmMappingPayload | null,
-  agentLanguage: string | undefined
-): string[] | null {
-  if (!mapping || !agentLanguage?.trim()) return null;
-  const full = agentLanguage.trim();
-  if (primaryLang(full) === 'en') return null;
-  const { perLanguage, nonEnglishAllowedModels } = mapping.elevenlabs;
-  const p = primaryLang(full);
-  const hasExplicitEntry =
-    Object.prototype.hasOwnProperty.call(perLanguage, full) ||
-    Object.prototype.hasOwnProperty.call(perLanguage, p) ||
-    Object.keys(perLanguage).some((k) => primaryLang(k) === p);
-  if (!hasExplicitEntry && nonEnglishAllowedModels.length === 0) return null;
-  return effectiveAllowedForLocale(mapping, full);
 }
 
 export interface LlmProviderCatalogPanelProps {
   value: string;
   onChange: (modelId: string) => void;
   reloadNonce?: number;
-  /** Piattaforma IA — determina quale catalogo modelli caricare. */
   catalogPlatform: IaRuntimeCatalogPlatform;
-  /** Lingua agente (BCP-47): se ≠ en, la combo mostra solo i modelli definiti in config/llmMapping.json. */
+  /** Lingua agente (BCP-47): usata con «LLM dipende dalla lingua» per risolvere `perLanguage` nel mapping progetto. */
   agentLanguage?: string;
+  /**
+   * Mapping LLM ElevenLabs salvato nel progetto (`omniaProjectElevenLabsLlmMapping`). Se per la
+   * lingua c’è un elenco non vuoto, la combo mostra solo quegli id; altrimenti tutto il catalogo.
+   */
+  projectElevenLabsLlmMapping?: LlmMappingPayload | null;
   label?: string;
   labelTooltip?: string;
   costRows?: readonly ModelCostRow[];
-  /**
-   * Riga titolo bianca + checkbox affiancati, combo LLM a tutta larghezza sotto (allineata alla combo TTS).
-   */
   stackedLayout?: boolean;
-  /** Es. checkbox «dipende dalla lingua» sulla stessa riga del titolo. */
   trailingHeader?: ReactNode;
 }
 
@@ -127,6 +101,7 @@ export function LlmProviderCatalogPanel({
   reloadNonce = 0,
   catalogPlatform,
   agentLanguage,
+  projectElevenLabsLlmMapping = null,
   label = 'LLM',
   labelTooltip,
   costRows = [],
@@ -135,8 +110,6 @@ export function LlmProviderCatalogPanel({
 }: LlmProviderCatalogPanelProps) {
   const [models, setModels] = React.useState<CatalogModel[]>([]);
   const [err, setErr] = React.useState<string | null>(null);
-  const [mapping, setMapping] = React.useState<LlmMappingPayload | null>(null);
-  const [mappingErr, setMappingErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -160,33 +133,12 @@ export function LlmProviderCatalogPanel({
     };
   }, [catalogPlatform, reloadNonce]);
 
-  React.useEffect(() => {
-    if (catalogPlatform !== 'elevenlabs') {
-      setMapping(null);
-      setMappingErr(null);
-      return;
-    }
-    let cancelled = false;
-    setMappingErr(null);
-    void (async () => {
-      try {
-        const m = await fetchLlmMapping();
-        if (cancelled) return;
-        setMapping(m);
-      } catch (e) {
-        if (cancelled) return;
-        setMapping(null);
-        setMappingErr(reasonToMessage(e));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [catalogPlatform, reloadNonce]);
-
   const allowed = React.useMemo(
-    () => (catalogPlatform === 'elevenlabs' ? allowedIdsForAgent(mapping, agentLanguage) : null),
-    [catalogPlatform, mapping, agentLanguage]
+    () =>
+      catalogPlatform === 'elevenlabs'
+        ? resolveProjectLlmAllowlistForLocale(projectElevenLabsLlmMapping ?? null, agentLanguage)
+        : null,
+    [catalogPlatform, projectElevenLabsLlmMapping, agentLanguage]
   );
 
   const displayModels = React.useMemo(() => {
@@ -233,20 +185,12 @@ export function LlmProviderCatalogPanel({
   const blockedCatalog = Boolean(err) || catalogOpts.length === 0;
   const labelWithCount = `${label} (${displayModels.length})`;
 
-  const alerts = (
-    <>
-      {mappingErr ? (
-        <div className="mb-0.5 rounded border border-amber-500/35 bg-amber-950/25 px-1 py-0.5 text-[9px] text-amber-100">
-          Mapping: {mappingErr}
-        </div>
-      ) : null}
-      {err ? (
-        <div className="mb-0.5 rounded border border-amber-500/45 bg-amber-950/35 px-1 py-0.5 text-[9px] leading-tight text-amber-100">
-          {err}
-        </div>
-      ) : null}
-    </>
-  );
+  const alerts =
+    err ? (
+      <div className="mb-0.5 rounded border border-amber-500/45 bg-amber-950/35 px-1 py-0.5 text-[9px] leading-tight text-amber-100">
+        {err}
+      </div>
+    ) : null;
 
   const selectEl = (
     <SearchableSelect
