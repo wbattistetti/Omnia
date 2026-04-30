@@ -19,30 +19,25 @@ export interface AgentStructuredDesignIr {
   tone: string;
 }
 
-function clipWords(text: string, maxWords: number): string {
-  const w = text.trim().split(/\s+/).filter(Boolean);
-  if (w.length === 0) return '';
-  return w.slice(0, maxWords).join(' ');
-}
-
 /**
- * Build runtime_compact without LLM (word caps mirror backend design-time contract).
+ * Build runtime_compact without LLM — **full** section text (no word clipping). Compile/ConvAI use
+ * resolveAiAgentPlatformRulesString; compact remains for alignment checks / legacy readers.
  */
 export function buildDeterministicRuntimeCompactFromSectionBases(
   sections: Record<AgentStructuredSectionId, string>
 ): AIAgentRuntimeCompact {
-  const behavior = clipWords(`${sections.personality} ${sections.tone}`.replace(/\s+/g, ' ').trim(), 20);
-  const constraints = clipWords((sections.constraints || '').replace(/\s+/g, ' '), 28);
-  const sequence = clipWords((sections.operational_sequence || '').replace(/\s+/g, ' '), 32);
-  const corrections = clipWords((sections.goal || '').replace(/\s+/g, ' '), 20);
+  const behavior = `${sections.personality} ${sections.tone}`.replace(/\s+/g, ' ').trim();
+  const constraints = (sections.constraints || '').replace(/\s+/g, ' ').trim();
+  const sequence = (sections.operational_sequence || '').replace(/\s+/g, ' ').trim();
+  const corrections = (sections.goal || '').replace(/\s+/g, ' ').trim();
   return {
     behavior_compact: behavior || 'Professional concise agent.',
     constraints_compact: constraints || 'Follow stated must and must-not rules.',
     sequence_compact: sequence || 'Greet clarify confirm assist.',
     corrections_compact: corrections || 'Confirm unclear inputs before acting.',
     examples_compact: [
-      { role: 'user', content: clipWords('Ciao', 12) || 'Ciao' },
-      { role: 'assistant', content: clipWords('Come posso aiutarti', 12) || 'Come posso aiutarti' },
+      { role: 'user', content: 'Ciao' },
+      { role: 'assistant', content: 'Come posso aiutarti' },
     ],
   };
 }

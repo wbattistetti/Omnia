@@ -460,6 +460,10 @@ export interface Task {
   agentUseCasesJson?: string;
   /** JSON string: full {@link IAAgentConfig} (`types/iaAgentRuntimeSetup`) override for runtime motors (per task). */
   agentIaRuntimeOverrideJson?: string;
+  /**
+   * When true, runtime starts the agent turn without waiting for real user input (orchestrator injects synthetic utterance).
+   */
+  agentImmediateStart?: boolean;
 
   /** Client-only: last IA provisioning failure for this row (never persisted). */
   provisioningError?: NormalizedIaProviderError;

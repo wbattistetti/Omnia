@@ -11,6 +11,15 @@ import { flushSemanticDraftToTaskOnTaskCreated } from '@utils/semanticValuesRowS
 import { ensureTaskExists } from '@utils/ensureTaskExists';
 import { hasValidTemplateIdRef } from '@utils/taskKind';
 
+/** DevTools: localStorage.setItem('omnia.debug.taskTreeOpener', '1') */
+function isTaskTreeOpenerDebugEnabled(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('omnia.debug.taskTreeOpener') === '1';
+  } catch {
+    return false;
+  }
+}
+
 export interface TaskTreeOpenerDependencies {
   taskEditorCtx: {
     open: (params: {
@@ -304,12 +313,14 @@ export class TaskTreeOpener {
       const metaTemplateId = rowHeuristics?.templateId || null;
       const projectId = getProjectId?.() || undefined;
 
-      console.log('🆕 [TaskTreeOpener][LAZY] Creando task usando metadati riga', {
-        rowId: row.id,
-        metaTaskType,
-        metaTaskTypeName: TaskType[metaTaskType],
-        metaTemplateId,
-      });
+      if (isTaskTreeOpenerDebugEnabled()) {
+        console.info('[Omnia][TaskTreeOpener][LAZY] create task from row metadata', {
+          rowId: row.id,
+          metaTaskType,
+          metaTaskTypeName: TaskType[metaTaskType],
+          metaTemplateId,
+        });
+      }
 
       const initialFields: Partial<Task> | undefined =
         metaTaskType === TaskType.AIAgent
@@ -328,9 +339,11 @@ export class TaskTreeOpener {
 
       // If there's templateId, copy steps (escalations) from template
       if (metaTemplateId) {
-        console.log('📋 [TaskTreeOpener][LAZY] Copiando steps dal template', {
-          templateId: metaTemplateId,
-        });
+        if (isTaskTreeOpenerDebugEnabled()) {
+          console.info('[Omnia][TaskTreeOpener][LAZY] copy steps from template', {
+            templateId: metaTemplateId,
+          });
+        }
         const DialogueTaskService = (await import('@services/DialogueTaskService'))
           .default;
         const template = DialogueTaskService.getTemplate(metaTemplateId);

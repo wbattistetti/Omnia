@@ -511,14 +511,6 @@ class VariableCreationService {
       variableStoreCountBefore: storeBefore,
       variableStoreCountAfter: storeAfter,
     });
-    if (import.meta.env.DEV) {
-      console.info('[Omnia][hydrateVariablesFromFlow]', {
-        projectId: pid,
-        utteranceTaskRowsHydrated: hydratedTaskRows.length,
-        variableStoreCountAfter: storeAfter,
-        hydratedTaskRows,
-      });
-    }
 
     const upsertSlice = getSubflowSyncUpsertFlowSlice();
     if (upsertSlice && flowsMerged) {

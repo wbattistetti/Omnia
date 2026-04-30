@@ -4,6 +4,36 @@
  * translations, or flow-document fields.
  */
 
+import type { Flow } from '../../flows/FlowTypes';
+
+/**
+ * Merges `incoming.meta.translations` onto `current.meta` when the inbound slice carries label writes
+ * (e.g. {@link writeTranslationToFlowSlice}). Dock layout payloads typically omit `meta`; plain
+ * `meta: current.meta ?? incoming.meta` would drop those writes permanently.
+ */
+export function mergeInboundFlowMeta(
+  current: Flow['meta'] | undefined | null,
+  incoming: Flow['meta'] | undefined | null
+): Flow['meta'] | undefined {
+  if (!current) return incoming ?? undefined;
+  const incTr = incoming?.translations;
+  if (!incTr || typeof incTr !== 'object' || Array.isArray(incTr)) {
+    return current;
+  }
+  const incKeys = Object.keys(incTr as Record<string, unknown>);
+  if (incKeys.length === 0) {
+    return current;
+  }
+  const curTr =
+    current.translations && typeof current.translations === 'object' && !Array.isArray(current.translations)
+      ? { ...(current.translations as Record<string, string | Record<string, string>>) }
+      : {};
+  return {
+    ...current,
+    translations: { ...curTr, ...(incTr as Record<string, string | Record<string, string>>) },
+  };
+}
+
 /**
  * Discard Dock slices that carry no graph payload — prevents wiping store slices with empty upserts.
  * Matches `emptyNodesExplicit` from subflow sync when the sender marks an intentional empty graph.
@@ -78,7 +108,7 @@ export function mergeDockInboundLayoutOnly(incoming: any, current: any | undefin
     id: incoming?.id ?? current?.id,
     nodes: mergedNodes,
     edges: Array.isArray(current?.edges) ? current.edges : incoming?.edges,
-    meta: current.meta ?? incoming?.meta,
+    meta: mergeInboundFlowMeta(current?.meta, incoming?.meta),
     tasks: current.tasks ?? incoming?.tasks,
     variables: current.variables ?? incoming?.variables,
     bindings: current.bindings ?? incoming?.bindings,

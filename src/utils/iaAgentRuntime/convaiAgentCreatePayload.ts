@@ -1,16 +1,16 @@
 /**
  * Maps Omnia {@link IAAgentConfig} to un frammento `conversation_config` per POST /elevenlabs/createAgent.
- * Il testo in `agent.prompt.prompt` viene da `rulesStringForCompilerFromTaskFields` se è passato `task`,
- * altrimenti da `cfg.systemPrompt` (es. default globali). Nessun prompt generato automaticamente da Omnia.
+ * Il testo in `agent.prompt.prompt` viene dal compile ElevenLabs delle sezioni strutturate complete
+ * ({@link resolveElevenLabsAgentPromptFromTask}) se è passato `task`, altrimenti da `cfg.systemPrompt`.
  */
 
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { Task } from '@types/taskTypes';
-import {
-  normalizeLanguage,
-  rulesStringForCompilerFromTaskFields,
-  type AiAgentTaskFieldsForCompiler,
-} from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
+import { normalizeLanguage } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
+import { resolveElevenLabsAgentPromptFromTask } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentPlatformRulesString';
+
+/** ConvAI default greeting when designer «Avvio immediato» is off. */
+export const CONVAI_DEFAULT_FIRST_MESSAGE = 'Hello! How can I help you today?';
 
 export type ConversationConfigFragmentOptions = {
   /**
@@ -19,8 +19,7 @@ export type ConversationConfigFragmentOptions = {
    */
   omitTts?: boolean;
   /**
-   * Task AI Agent: il testo inviato a ConvAI come `agent.prompt.prompt` viene da
-   * `rulesStringForCompilerFromTaskFields` (stesso criterio della compile), senza fallback Omnia.
+   * Task AI Agent: testo = compile ElevenLabs a partire dalle sezioni (stesso criterio semanticamente della VB compile).
    * Se omesso, si usa solo `cfg.systemPrompt` (es. default globali da Studio) — deve essere non vuoto.
    */
   task?: Task | null;
@@ -58,12 +57,8 @@ function mapLlmModelForElevenLabsResidencyCreate(raw: string): string {
  */
 function resolveConvaiAgentPromptText(cfg: IAAgentConfig, task?: Task | null): string {
   if (task != null) {
-    const fields: AiAgentTaskFieldsForCompiler = {
-      agentRuntimeCompactJson: task.agentRuntimeCompactJson,
-      agentPrompt: task.agentPrompt,
-    };
-    const fromEditor = rulesStringForCompilerFromTaskFields(fields);
-    if (typeof fromEditor === 'string' && fromEditor.length > 0) {
+    const fromEditor = resolveElevenLabsAgentPromptFromTask(task).trim();
+    if (fromEditor.length > 0) {
       return fromEditor;
     }
     /** Task senza testo in editor: ultimo tentativo = override runtime già persistito (no stringa Omnia generata). */
@@ -121,9 +116,10 @@ export function conversationConfigFragmentFromIaAgentConfig(
     prompt.max_tokens = Math.floor(llm.max_tokens);
   }
 
+  const immediateStart = options?.task?.agentImmediateStart === true;
   const agent: Record<string, unknown> = {
-    /** Matches ApiServer default so merge + EU validation always see a consistent first turn. */
-    first_message: 'Hello! How can I help you today?',
+    /** Empty when «Avvio immediato»: orchestrator injects a synthetic user turn instead. */
+    first_message: immediateStart ? '' : CONVAI_DEFAULT_FIRST_MESSAGE,
     language: lang,
     prompt,
   };

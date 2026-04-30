@@ -55,6 +55,7 @@ import { fetchChildFlowInterfaceOutputs } from '@services/childFlowInterfaceServ
 import { resolveChildFlowIdFromCanvasRow, resolveChildFlowIdFromTask } from '@utils/resolveSubflowChildFlowId';
 import { getSubflowOpenArgsFromTaskAndRowText } from '@utils/getSubflowOpenArgsFromTaskAndRowText';
 import { isSubflowChildFlowLinkedAndNonEmpty } from '@utils/subflowChildFlowStatus';
+import { logSayMessageChrome } from '@utils/sayMessageChromeDebug';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -703,8 +704,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   useEffect(() => {
     const handleInstanceUpdate = (event: CustomEvent) => {
-      const { instanceId: updatedInstanceId } = event.detail;
-      if (updatedInstanceId === instanceId) {
+      const { instanceId: updatedInstanceId } = (event.detail ?? {}) as { instanceId?: string };
+      const matched = updatedInstanceId === instanceId;
+      logSayMessageChrome('nodeRowListener', {
+        updatedInstanceId: updatedInstanceId ?? '(missing)',
+        rowInstanceId: instanceId,
+        rowId: row.id,
+        resolvedTaskType: resolveTaskType(row),
+        matched,
+        willBumpTrigger: matched,
+      });
+      if (matched) {
         // Force re-render by updating trigger
         setInstanceUpdateTrigger(prev => prev + 1);
       }

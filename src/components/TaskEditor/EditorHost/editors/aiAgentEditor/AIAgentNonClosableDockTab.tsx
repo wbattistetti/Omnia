@@ -13,9 +13,38 @@ import {
 import { getAiAgentDockTabPresentation } from './aiAgentDockTabIcons';
 import { AGENT_STRUCTURED_DOCK_TAB_IDS } from './agentStructuredSectionIds';
 import { isAiAgentDockPanelContentFilled } from './aiAgentDockTabFillState';
-import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
+import {
+  useOptionalAIAgentEditorDock,
+  type AIAgentEditorDockContextValue,
+} from './AIAgentEditorDockContext';
 
 const PROMPT_FINALE_PANEL_ID = 'prompt_finale';
+
+const IMMEDIATE_START_TOOLTIP =
+  'Se attivo, l’agente inizia a parlare subito senza aspettare un messaggio dell’utente.';
+
+/** Avvio immediato: solo nella riga «Prompt per … / JS» (tab Prompt finale). */
+function ImmediateStartTabToggle({ dockCtx }: { dockCtx: AIAgentEditorDockContextValue }) {
+  return (
+    <label
+      className="inline-flex max-w-[118px] cursor-pointer items-center gap-0.5 shrink-0 rounded border border-slate-600/55 bg-slate-900/85 px-1 py-0.5"
+      title={IMMEDIATE_START_TOOLTIP}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <input
+        type="checkbox"
+        className="h-3 w-3 shrink-0 rounded border-slate-500"
+        checked={dockCtx.agentImmediateStart}
+        disabled={dockCtx.generating}
+        onChange={(e) => dockCtx.setAgentImmediateStart(e.target.checked)}
+        onPointerDown={(e) => e.stopPropagation()}
+        aria-label="Avvio immediato"
+      />
+      <span className="text-[9px] leading-tight text-slate-300 select-none">Avvio immediato</span>
+    </label>
+  );
+}
 
 const STRUCTURED_DOCK_TAB_ID_SET = new Set<string>(AGENT_STRUCTURED_DOCK_TAB_IDS);
 
@@ -158,6 +187,7 @@ export function AIAgentNonClosableDockTab(props: IDockviewDefaultTabProps) {
               >
                 JS
               </button>
+              <ImmediateStartTabToggle dockCtx={dockCtx} />
             </>
           ) : (
             <span className={`whitespace-nowrap ${presentation.titleClassName}`}>{title}</span>

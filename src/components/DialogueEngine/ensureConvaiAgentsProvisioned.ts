@@ -31,6 +31,7 @@ import { normalizeProviderError } from '@domain/compileErrors/normalizeProviderE
 import { setIaProvisioningError } from '@domain/compileErrors/iaProvisioningErrorStore';
 import {
   emitConvaiProvisionPayloadPreview,
+  isConvaiPayloadPreviewOnRunDebugEnabled,
   type ConvaiProvisionPayloadPreviewItem,
 } from '@utils/iaAgentRuntime/convaiPayloadPreviewEvents';
 
@@ -113,13 +114,6 @@ export async function ensureConvaiAgentsProvisioned(
         continue;
       }
 
-      const session = getConvaiSessionBinding(taskId);
-      if (session && session.lastProvisionKey === provisionKey && session.agentId.trim().length > 0) {
-        setIaProvisioningError(taskId, null);
-        skipped.push(taskId);
-        continue;
-      }
-
       const nodeLabel =
         context.nodeLabelByTaskId[taskId] ||
         String(node.data?.label || node.data?.text || 'node').trim() ||
@@ -144,6 +138,42 @@ export async function ensureConvaiAgentsProvisioned(
         continue;
       }
 
+      let fragment: Record<string, unknown>;
+      try {
+        fragment = conversationConfigFragmentFromIaAgentConfig(cfgForCreate, {
+          omitTts: OMIT_TTS_ON_CREATE,
+          task,
+        })!;
+      } catch (buildErr) {
+        failed.push(taskId);
+        setIaProvisioningError(taskId, {
+          provider: 'elevenlabs',
+          code: 'conversationConfig',
+          message: buildErr instanceof Error ? buildErr.message : String(buildErr),
+          raw: buildErr,
+        });
+        continue;
+      }
+
+      const session = getConvaiSessionBinding(taskId);
+      if (session && session.lastProvisionKey === provisionKey && session.agentId.trim().length > 0) {
+        const previewBody: Record<string, unknown> = {};
+        const n = displayName.trim();
+        if (n) previewBody.name = n;
+        previewBody.conversation_config = fragment;
+        payloadPreviewItems.push({
+          taskId,
+          displayName,
+          bodyText:
+            '// Provisioning non ripetuto: sessione già allineata (stessa provision key, agentId in sessione).\n' +
+            '// JSON di riferimento (corpo client; al create il server merge con i default ElevenLabs):\n' +
+            JSON.stringify(previewBody, null, 2),
+        });
+        setIaProvisioningError(taskId, null);
+        skipped.push(taskId);
+        continue;
+      }
+
       let previewEntry: ConvaiProvisionPayloadPreviewItem | undefined;
       try {
         const matches = await listAllConvaiAgentsMatchingTaskGuid(taskId);
@@ -157,16 +187,6 @@ export async function ensureConvaiAgentsProvisioned(
               error: delErr instanceof Error ? delErr.message : String(delErr),
             });
           }
-        }
-
-        let fragment: Record<string, unknown>;
-        try {
-          fragment = conversationConfigFragmentFromIaAgentConfig(cfgForCreate, {
-            omitTts: OMIT_TTS_ON_CREATE,
-            task,
-          })!;
-        } catch (buildErr) {
-          throw buildErr;
         }
 
         {
@@ -220,6 +240,17 @@ export async function ensureConvaiAgentsProvisioned(
 
   if (payloadPreviewItems.length > 0) {
     emitConvaiProvisionPayloadPreview(payloadPreviewItems);
+  } else if (isConvaiPayloadPreviewOnRunDebugEnabled()) {
+    emitConvaiProvisionPayloadPreview([
+      {
+        taskId: 'convai-preview-no-elevenlabs-tasks',
+        displayName: 'ConvAI — nessun task da provisionare',
+        bodyText:
+          '// Debug Run: nessun task AI Agent con piattaforma ElevenLabs nel flusso passato a ensureConvaiAgentsProvisioned.\n' +
+          '// Il pannello è mostrato in sviluppo (import.meta.env.DEV) o con localStorage omnia.debug.convaiPayloadOnRun=1.\n' +
+          '// Per non aprirlo in dev: localStorage.setItem("omnia.debug.convaiPayloadOnRun", "0").',
+      },
+    ]);
   }
 
   return { provisioned, skipped, failed };

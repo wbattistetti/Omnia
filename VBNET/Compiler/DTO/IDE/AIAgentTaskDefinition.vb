@@ -48,6 +48,12 @@ Public Class AIAgentTaskDefinition
     <JsonProperty("llmEndpoint")>
     Public Property LlmEndpoint As String
 
+    ''' <summary>
+    ''' Designer «Avvio immediato»: primo turno senza utterance reale (orchestratore inietta messaggio sintetico).
+    ''' </summary>
+    <JsonProperty("immediateStart")>
+    Public Property ImmediateStart As Boolean
+
     Public Sub New()
         MyBase.New()
         Platform = IAPlatform.OpenAI
@@ -56,5 +62,6 @@ Public Class AIAgentTaskDefinition
         BackendBaseUrl = ""
         Rules = ""
         LlmEndpoint = ""
+        ImmediateStart = False
     End Sub
 End Class

@@ -231,7 +231,6 @@ export async function backendCompileFlowGraph(
   }
 
   const allTasksWithTemplates = [...referencedInstances, ...referencedTemplates];
-  const aiAgentRulesVariant = 'distilled';
   const instanceRowCount = referencedInstances.length;
   const tasksForCompile = allTasksWithTemplates.map((t: Record<string, unknown>, index: number) => {
     if (t.type === TaskType.AIAgent) {
@@ -244,9 +243,14 @@ export async function backendCompileFlowGraph(
         live != null && typeof live.agentIaRuntimeOverrideJson === 'string'
           ? live.agentIaRuntimeOverrideJson
           : ovRow;
+      const immediateFromLive =
+        live != null && typeof (live as { agentImmediateStart?: boolean }).agentImmediateStart === 'boolean'
+          ? (live as { agentImmediateStart: boolean }).agentImmediateStart
+          : undefined;
       const compileInput = {
         ...t,
         agentIaRuntimeOverrideJson: overrideStr,
+        ...(immediateFromLive !== undefined ? { agentImmediateStart: immediateFromLive } : {}),
       } as Parameters<typeof buildMinimalAiAgentCompileTask>[0];
       iaConvaiTraceCompileVsRepository(taskId, {
         repoTaskFound: Boolean(live),
@@ -265,9 +269,7 @@ export async function backendCompileFlowGraph(
             : 0,
         hasAgentIaRuntimeOverrideKey: typeof compileInput.agentIaRuntimeOverrideJson === 'string',
       });
-      return buildMinimalAiAgentCompileTask(compileInput, {
-        rulesVariant: aiAgentRulesVariant,
-      });
+      return buildMinimalAiAgentCompileTask(compileInput);
     }
     if (t.type === TaskType.Subflow) {
       const fid = resolveSubflowFlowIdFromTask(t);

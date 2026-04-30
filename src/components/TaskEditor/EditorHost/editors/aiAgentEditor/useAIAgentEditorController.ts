@@ -39,7 +39,7 @@ import { nextMappingsAfterLabelBlur } from './flowVariableMapping';
 import { buildAIAgentTaskPersistPatch, type AIAgentPersistState } from './buildPersistPatch';
 import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
 import { buildRefineUserDescFromSections } from './composeRuntimePromptMarkdown';
-import { rulesStringForCompilerFromTaskFields } from './composeRuntimeRulesFromCompact';
+import { resolveElevenLabsAgentPromptFromTask } from './resolveAiAgentPlatformRulesString';
 import {
   applyStructuredIrToGenerateApplyResult,
   buildDeterministicRuntimeCompactFromSectionBases,
@@ -101,26 +101,39 @@ function logStructuredPipelineAlignment(event: string, detail?: unknown): void {
   }
 }
 
-/** Se il testo rules/prompt del task cambia, richiede un nuovo `createAgent` ConvAI (stesso meccanismo del TTS). */
+/**
+ * Se il testo rules/prompt del task o «Avvio immediato» cambiano, richiede un nuovo `createAgent` ConvAI
+ * (`first_message` diverso sul payload ElevenLabs).
+ */
 function withElevenLabsReprovisionWhenTaskEditorPromptChanged(
   iaRuntime: IAAgentConfig,
   taskBefore: Task,
-  nextAgentPrompt: string,
-  nextRuntimeCompactJson: string
+  next: {
+    agentPrompt: string;
+    agentRuntimeCompactJson: string;
+    agentStructuredSectionsJson: string;
+    agentPromptTargetPlatform: AgentPromptPlatformId;
+    agentImmediateStart: boolean;
+  }
 ): IAAgentConfig {
   const hasConvaiSession = Boolean(getConvaiSessionBinding(taskBefore.id)?.agentId?.trim());
   if (iaRuntime.platform !== 'elevenlabs' || !hasConvaiSession) {
     return iaRuntime;
   }
-  const prevText = rulesStringForCompilerFromTaskFields({
-    agentRuntimeCompactJson: taskBefore.agentRuntimeCompactJson ?? '',
-    agentPrompt: taskBefore.agentPrompt ?? '',
-  });
-  const nextText = rulesStringForCompilerFromTaskFields({
-    agentRuntimeCompactJson: nextRuntimeCompactJson,
-    agentPrompt: nextAgentPrompt,
-  });
-  if (prevText === nextText) return iaRuntime;
+  const prevText = resolveElevenLabsAgentPromptFromTask(taskBefore);
+  const nextTask: Task = {
+    ...taskBefore,
+    agentPrompt: next.agentPrompt,
+    agentRuntimeCompactJson: next.agentRuntimeCompactJson,
+    agentStructuredSectionsJson: next.agentStructuredSectionsJson,
+    agentPromptTargetPlatform: next.agentPromptTargetPlatform,
+    agentImmediateStart: next.agentImmediateStart,
+  };
+  const nextText = resolveElevenLabsAgentPromptFromTask(nextTask);
+  const promptChanged = prevText !== nextText;
+  const immediateChanged =
+    Boolean(taskBefore.agentImmediateStart) !== Boolean(next.agentImmediateStart);
+  if (!promptChanged && !immediateChanged) return iaRuntime;
   return { ...iaRuntime, elevenLabsNeedsReprovision: true };
 }
 
@@ -162,6 +175,7 @@ export function useAIAgentEditorController({
   const [backendPlaceholders, setBackendPlaceholders] = React.useState<BackendPlaceholderInstance[]>([]);
   const [agentPromptTargetPlatform, setAgentPromptTargetPlatformState] =
     React.useState<AgentPromptPlatformId>(() => normalizeAgentPromptPlatformId(undefined));
+  const [agentImmediateStart, setAgentImmediateStartState] = React.useState(false);
 
   const [iaRuntimeConfig, setIaRuntimeConfigState] = React.useState<IAAgentConfig>(() =>
     loadGlobalIaAgentConfig()
@@ -302,6 +316,11 @@ export function useAIAgentEditorController({
     setAgentPromptTargetPlatformState(normalizeAgentPromptPlatformId(v));
   }, [markPromptFinalMisaligned]);
 
+  const setAgentImmediateStart = React.useCallback((value: boolean) => {
+    setDirty(true);
+    setAgentImmediateStartState(value);
+  }, []);
+
   const hydratedRef = React.useRef(false);
   React.useEffect(() => {
     hydratedRef.current = hydrated;
@@ -408,6 +427,7 @@ export function useAIAgentEditorController({
     setAgentRuntimeCompactJson(b.agentRuntimeCompactJson.trim());
     const hasGen = resolveHasAgentGeneration(b);
     setHasAgentGeneration(hasGen);
+    setAgentImmediateStartState(b.agentImmediateStart);
     setLogicalSteps(b.logicalSteps);
     setUseCases(b.useCases);
     const iaRaw = b.agentIaRuntimeOverrideJson.trim();
@@ -474,8 +494,13 @@ export function useAIAgentEditorController({
       iaRuntimeForPersist = withElevenLabsReprovisionWhenTaskEditorPromptChanged(
         iaRuntimeForPersist,
         taskBeforePersist,
-        agentPrompt,
-        agentRuntimeCompactJson
+        {
+          agentPrompt,
+          agentRuntimeCompactJson,
+          agentStructuredSectionsJson,
+          agentPromptTargetPlatform: normalizeAgentPromptPlatformId(agentPromptTargetPlatform),
+          agentImmediateStart,
+        }
       );
     }
     const patch = buildAIAgentTaskPersistPatch({
@@ -493,6 +518,7 @@ export function useAIAgentEditorController({
       agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
       agentUseCasesJson,
       agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(iaRuntimeForPersist),
+      agentImmediateStart,
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -530,6 +556,7 @@ export function useAIAgentEditorController({
     logicalSteps,
     useCases,
     iaRuntimeConfig,
+    agentImmediateStart,
   ]);
 
   /**
@@ -974,6 +1001,7 @@ export function useAIAgentEditorController({
     agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(
       mergeConvaiAgentIdFromGlobalDefaults(iaRuntimeConfig, loadGlobalIaAgentConfig())
     ),
+    agentImmediateStart,
   };
 
   const ensurePromptFinalDeterministicCompileSync = React.useCallback((reason: string) => {
@@ -1068,6 +1096,8 @@ export function useAIAgentEditorController({
     agentRuntimeCompactJson,
     promptFinalAligned,
     ensurePromptFinalDeterministicCompile: ensurePromptFinalDeterministicCompileSync,
+    agentImmediateStart,
+    setAgentImmediateStart,
     generating,
     generateError,
     iaRevisionDiffBySection,

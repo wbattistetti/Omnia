@@ -11,7 +11,6 @@ import { useAgentStructuredDockSlice } from './useAgentStructuredDockSlice';
 import { parseAgentRuntimeCompactJson } from './composeRuntimeRulesFromCompact';
 import {
   buildAiAgentRuntimeExperimentPayload,
-  buildDistilledRulesString,
   stringifyExperimentPayload,
 } from './aiAgentRuntimeExperimentJson';
 import { PlatformEditorView, ReadOnlyPlatformBanner } from '@components/platform-editors';
@@ -160,9 +159,11 @@ export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
   }, [editorCtx, runtimeExamples]);
 
   const rulesForPreview = React.useMemo(() => {
-    const compactJson = editorCtx?.agentRuntimeCompactJson ?? '';
-    return buildDistilledRulesString(compactJson, runtimeMarkdown);
-  }, [editorCtx?.agentRuntimeCompactJson, runtimeMarkdown]);
+    if (editorCtx?.compiledPromptForTargetPlatform?.trim()) {
+      return editorCtx.compiledPromptForTargetPlatform;
+    }
+    return runtimeMarkdown.trim();
+  }, [editorCtx?.compiledPromptForTargetPlatform, runtimeMarkdown]);
 
   const condensedRuntimeJson = React.useMemo(
     () =>
@@ -170,10 +171,11 @@ export function PromptFinaleDockPanel(_props: IDockviewPanelProps) {
         buildAiAgentRuntimeExperimentPayload(
           rulesForPreview,
           parsedInitialState,
-          examplesForPreview
+          examplesForPreview,
+          { immediateStart: editorCtx?.agentImmediateStart === true }
         )
       ),
-    [rulesForPreview, parsedInitialState, examplesForPreview]
+    [rulesForPreview, parsedInitialState, examplesForPreview, editorCtx?.agentImmediateStart]
   );
 
   return (

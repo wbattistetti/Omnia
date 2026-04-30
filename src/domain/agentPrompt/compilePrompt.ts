@@ -44,16 +44,6 @@ export function splitExpandedAtExamplesMarkdown(expanded: string): { main: strin
   };
 }
 
-function elevenLabsBrief(ir: PromptIR, fallback: string): string {
-  const parts = [ir.goal, ir.persona, ir.style, ...ir.rules].filter((s) => s && s.trim().length > 0);
-  const joined = parts.join(' ').trim();
-  if (joined.length > 0) {
-    return joined.length > 4000 ? `${joined.slice(0, 3997)}…` : joined;
-  }
-  const fb = fallback.trim();
-  return fb.length > 4000 ? `${fb.slice(0, 3997)}…` : fb;
-}
-
 /**
  * Structured compile: IR + pre-expanded Markdown + tool catalog → platform-specific shapes.
  */
@@ -103,7 +93,7 @@ export function compilePrompt(ir: PromptIR, platform: AgentPlatform, options: Co
     case AgentPlatform.ElevenLabs:
       return {
         platform: AgentPlatform.ElevenLabs,
-        prompt: elevenLabsBrief(ir, expandedMarkdown),
+        prompt: expandedMarkdown.trim() || '—',
       };
     case AgentPlatform.Meta:
       return {

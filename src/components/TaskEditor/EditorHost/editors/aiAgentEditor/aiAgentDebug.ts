@@ -36,6 +36,7 @@ export function summarizeAgentTaskFields(task: Task | null | undefined): Record<
     agentLogicalStepsJsonLen: String(t.agentLogicalStepsJson ?? '').length,
     agentProposedFieldsCount: Array.isArray(t.agentProposedFields) ? (t.agentProposedFields as unknown[]).length : 0,
     agentDesignHasGeneration: t.agentDesignHasGeneration,
+    agentImmediateStart: t.agentImmediateStart === true,
   };
 }
 

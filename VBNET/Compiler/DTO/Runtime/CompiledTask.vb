@@ -426,6 +426,12 @@ Public Class CompiledAIAgentTask
     <JsonProperty("llmEndpoint")>
     Public Property LlmEndpoint As String
 
+    ''' <summary>
+    ''' True quando il designer richiede avvio senza attendere input utente (orchestratore inietta turno sintetico).
+    ''' </summary>
+    <JsonProperty("immediateStart")>
+    Public Property ImmediateStart As Boolean
+
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
             Return TaskTypes.AIAgent
@@ -446,6 +452,7 @@ Public Class CompiledAIAgentTask
         BackendBaseUrl = ""
         Rules = ""
         LlmEndpoint = ""
+        ImmediateStart = False
     End Sub
 End Class
 

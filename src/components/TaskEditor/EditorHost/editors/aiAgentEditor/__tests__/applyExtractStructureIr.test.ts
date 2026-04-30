@@ -23,7 +23,7 @@ describe('applyExtractStructureIr', () => {
     expect(rc.examples_compact).toHaveLength(2);
   });
 
-  it('buildDeterministicRuntimeCompactFromSectionBases respects word caps', () => {
+  it('buildDeterministicRuntimeCompactFromSectionBases keeps full section text (no word clipping)', () => {
     const long = Array.from({ length: 50 }, () => 'word').join(' ');
     const rc = buildDeterministicRuntimeCompactFromSectionBases({
       goal: long,
@@ -34,7 +34,7 @@ describe('applyExtractStructureIr', () => {
       tone: long,
       examples: '',
     });
-    expect(rc.sequence_compact.split(/\s+/).length).toBeLessThanOrEqual(32);
-    expect(rc.constraints_compact.split(/\s+/).length).toBeLessThanOrEqual(28);
+    expect(rc.sequence_compact.split(/\s+/).length).toBe(50);
+    expect(rc.constraints_compact.split(/\s+/).length).toBe(50);
   });
 });

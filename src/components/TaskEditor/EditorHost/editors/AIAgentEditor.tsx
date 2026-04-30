@@ -111,6 +111,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     insertBackendPathInDesign: c.insertBackendPathInDesign,
     agentPromptTargetPlatform: c.agentPromptTargetPlatform,
     setAgentPromptTargetPlatform: c.setAgentPromptTargetPlatform,
+    agentImmediateStart: c.agentImmediateStart,
+    setAgentImmediateStart: c.setAgentImmediateStart,
     compiledPlatformOutput: c.compiledPlatformOutput,
     compiledPromptForTargetPlatform: c.compiledPromptForTargetPlatform,
     promptFinalAligned: c.promptFinalAligned,

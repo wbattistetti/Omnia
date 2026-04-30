@@ -11,10 +11,12 @@ import { IAAgentSetup } from '@components/settings/IAAgentSetup';
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 import { saveIaRuntimeOverrideToDb } from '@utils/iaAgentRuntime/saveIaRuntimeOverrideToDb';
 import {
+  CreateConvaiAgentHttpError,
   createConvaiAgentViaOmniaServer,
   deleteConvaiAgentViaOmniaServer,
   listAllConvaiAgentsMatchingTaskGuid,
 } from '@services/convaiProvisionApi';
+import { emitConvaiProvisionPayloadPreview } from '@utils/iaAgentRuntime/convaiPayloadPreviewEvents';
 import {
   buildConvaiProvisionKey,
   conversationConfigFragmentFromIaAgentConfig,
@@ -132,6 +134,8 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
 
   const handleProvisionConvaiAgent = React.useCallback(async () => {
     if (!instanceId?.trim()) return;
+    let displayNameForPreview = '';
+    let fragmentForPreview: Record<string, unknown> | undefined;
     try {
       const task = taskRepository.getTask(instanceId);
       const cfgForCreate = iaAgentConfigWithEditorSystemPrompt(
@@ -145,6 +149,7 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         console.error('[IA·ConvAI] createAgent: payload non costruibile (prompt vuoto o dati mancanti)', buildErr);
         return;
       }
+      fragmentForPreview = fragment;
       const provisionKey = buildConvaiProvisionKey(cfgForCreate, task ?? undefined, false);
       const matches = await listAllConvaiAgentsMatchingTaskGuid(instanceId);
       for (const m of matches) {
@@ -161,11 +166,20 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         nodeLabel: 'ia-runtime',
         taskGuid: instanceId,
       });
+      displayNameForPreview = displayName;
       console.warn('[DEBUG] CREATE AGENT PAYLOAD (UI)', JSON.stringify({ name: displayName, conversation_config: fragment }, null, 2));
-      const { agentId } = await createConvaiAgentViaOmniaServer({
+      const result = await createConvaiAgentViaOmniaServer({
         name: displayName,
         conversation_config: fragment,
       });
+      const fallbackPreview = JSON.stringify(
+        { name: displayName, conversation_config: fragment },
+        null,
+        2
+      );
+      const bodyText = result.elevenLabsRequestJson?.trim() || fallbackPreview;
+      emitConvaiProvisionPayloadPreview([{ taskId: instanceId, displayName, bodyText }]);
+      const { agentId } = result;
       console.warn('[DEBUG] NEW AGENT ID (UI)', agentId);
       setConvaiSessionBinding(instanceId, agentId, provisionKey);
       const persistPartial: Parameters<typeof persistIaRuntimeOverrideSnapshot>[0] = {
@@ -181,6 +195,26 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         taskId: instanceId,
         error: err,
       });
+      let bodyText: string;
+      if (err instanceof CreateConvaiAgentHttpError && err.elevenLabsRequestJson?.trim()) {
+        bodyText = err.elevenLabsRequestJson.trim();
+      } else if (fragmentForPreview && displayNameForPreview) {
+        bodyText = JSON.stringify(
+          { name: displayNameForPreview, conversation_config: fragmentForPreview },
+          null,
+          2
+        );
+      } else {
+        bodyText =
+          `// Errore prima di un payload completo\n${err instanceof Error ? err.message : String(err)}`;
+      }
+      emitConvaiProvisionPayloadPreview([
+        {
+          taskId: instanceId,
+          displayName: displayNameForPreview || instanceId,
+          bodyText,
+        },
+      ]);
     }
   }, [iaRuntimeConfig, instanceId, persistIaRuntimeOverrideSnapshot]);
 

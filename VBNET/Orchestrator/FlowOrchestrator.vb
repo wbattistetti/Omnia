@@ -609,6 +609,14 @@ Public Class FlowOrchestrator
         Dim emittedMessages As New List(Of String)()
         Dim execState = RuntimeStateForActiveFlow()
 
+        Dim effectiveUtterance = utterance
+        If rowTask.ImmediateStart AndAlso String.IsNullOrWhiteSpace(effectiveUtterance) Then
+            Dim hasExistingDialogue = execState.DialogueContexts IsNot Nothing AndAlso execState.DialogueContexts.ContainsKey(rowTask.Id)
+            If Not hasExistingDialogue Then
+                effectiveUtterance = AIAgentTaskExecutor.ImmediateStartSyntheticUserMessage
+            End If
+        End If
+
         Dim result = Await TaskExecutor.ExecuteTask(
             rowTask,
             execState,
@@ -617,7 +625,7 @@ Public Class FlowOrchestrator
                     emittedMessages.Add(text)
                 End If
             End Sub,
-            utterance
+            effectiveUtterance
         ).ConfigureAwait(False)
 
         If Not result.Success Then

@@ -74,6 +74,9 @@ export interface AIAgentEditorDockContextValue {
   /** Persisted target platform for deterministic compile preview. */
   agentPromptTargetPlatform: AgentPromptPlatformId;
   setAgentPromptTargetPlatform: (v: AgentPromptPlatformId) => void;
+  /** Designer «Avvio immediato»: orchestrator injects synthetic first user turn at runtime. */
+  agentImmediateStart: boolean;
+  setAgentImmediateStart: (value: boolean) => void;
   /** Structured compile for {@link agentPromptTargetPlatform} (derived views + debugger). */
   compiledPlatformOutput: PlatformPromptOutput;
   /** Flattened preview string (same information as structured compile). */

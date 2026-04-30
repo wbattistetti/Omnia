@@ -6,6 +6,9 @@
  * Enable: .env.local VITE_FLOW_SAVE_DEBUG=true, or in DevTools:
  *   localStorage.setItem('omnia.flowSaveDebug', '1')
  * Disable: localStorage.removeItem('omnia.flowSaveDebug')
+ *
+ * `FlowCanvasHost: skip server loadFlow` is throttled (10s per projectId+flowId+reason) when
+ * flowSaveDebug is enabled — the hydration effect can fire twice in quick succession (e.g. graph + row update).
  */
 
 const LS_KEY = 'omnia.flowSaveDebug';
@@ -24,8 +27,22 @@ export function isFlowSaveDebugEnabled(): boolean {
   return false;
 }
 
+/** High-frequency React effect paths log the same "skip loadFlow" line many times per second. */
+const SKIP_SERVER_LOADFLOW_THROTTLE_MS = 10_000;
+const lastSkipServerLoadFlowLogAt = new Map<string, number>();
+
 export function logFlowSaveDebug(message: string, payload?: Record<string, unknown>): void {
   if (!isFlowSaveDebugEnabled()) return;
+
+  if (message === 'FlowCanvasHost: skip server loadFlow' && payload && typeof payload === 'object') {
+    const p = payload as Record<string, unknown>;
+    const key = `${String(p.projectId ?? '')}:${String(p.flowId ?? '')}:${String(p.reason ?? '')}`;
+    const now = Date.now();
+    const prev = lastSkipServerLoadFlowLogAt.get(key) ?? 0;
+    if (now - prev < SKIP_SERVER_LOADFLOW_THROTTLE_MS) return;
+    lastSkipServerLoadFlowLogAt.set(key, now);
+  }
+
   if (payload !== undefined) {
     console.log(`[FlowSaveDebug] ${message}`, payload);
   } else {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   mergeDockInboundLayoutOnly,
   mergeDockInboundWithAuthoritativeDocFields,
+  mergeInboundFlowMeta,
   shouldSkipDockInboundBareEmptySlice,
   shouldSkipDockInboundEmptySubflowGraph,
 } from '../dockInboundFlowSlicePolicy';
@@ -80,6 +81,44 @@ describe('mergeDockInboundLayoutOnly', () => {
     expect((out.nodes[0] as any).position).toEqual({ x: 99, y: 50 });
     expect((out.nodes[0] as any).data.rows[0].text).toBe('Keep');
     expect(out.edges).toEqual(current.edges);
+  });
+
+  it('merges incoming meta.translations into current (flow label write / writeTranslationToFlowSlice)', () => {
+    const current = {
+      id: 'main',
+      meta: { translations: { 'task:aaa': 'keep-me', 'task:bbb': 'old' } },
+      nodes: [{ id: 'a', position: { x: 0, y: 0 }, data: { rows: [] } }],
+      edges: [],
+    };
+    const incoming = {
+      id: 'main',
+      meta: { translations: { 'task:bbb': 'Salve-encoded', 'task:ccc': 'new' } },
+      nodes: [{ id: 'a', position: { x: 5, y: 5 }, data: { rows: [] } }],
+      edges: [],
+    };
+    const out = mergeDockInboundLayoutOnly(incoming, current as any);
+    expect(out.meta?.translations).toEqual({
+      'task:aaa': 'keep-me',
+      'task:bbb': 'Salve-encoded',
+      'task:ccc': 'new',
+    });
+  });
+});
+
+describe('mergeInboundFlowMeta', () => {
+  it('returns current when incoming has no translations', () => {
+    const cur = { translations: { 'task:x': 'a' } };
+    expect(mergeInboundFlowMeta(cur, undefined)).toBe(cur);
+    expect(mergeInboundFlowMeta(cur, {})).toBe(cur);
+  });
+
+  it('merges translation keys from incoming onto current', () => {
+    const out = mergeInboundFlowMeta(
+      { translations: { 'task:a': '1' }, flowInterface: { input: [], output: [] } },
+      { translations: { 'task:a': '2', 'task:b': '3' } }
+    );
+    expect(out?.translations).toEqual({ 'task:a': '2', 'task:b': '3' });
+    expect(out?.flowInterface).toEqual({ input: [], output: [] });
   });
 });
 

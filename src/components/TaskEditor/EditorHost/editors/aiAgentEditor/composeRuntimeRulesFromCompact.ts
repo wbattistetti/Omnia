@@ -1,9 +1,10 @@
 /**
- * Parses persisted `agentRuntimeCompactJson`, builds rules strings for compile/runtime preview,
- * and resolves `llmEndpoint` for VB compile (explicit task URL or default runtime step URL).
+ * Parses persisted `agentRuntimeCompactJson` (examples / legacy), resolves `llmEndpoint` for VB compile.
+ * Compile/ConvAI `rules` / prompts use {@link resolveAiAgentPlatformRulesString} (full sections → platform).
  */
 
 import type { AIAgentRuntimeCompact } from '@types/aiAgentDesign';
+import { resolveAiAgentPlatformRulesString, type TaskLikeForPlatformRules } from './resolveAiAgentPlatformRulesString';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import { normalizeIAAgentConfig } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
@@ -84,53 +85,9 @@ export function composeRulesTextFromRuntimeCompact(rc: AIAgentRuntimeCompact): s
 export interface AiAgentTaskFieldsForCompiler {
   agentRuntimeCompactJson?: string;
   agentPrompt?: string;
+  agentStructuredSectionsJson?: string;
+  agentPromptTargetPlatform?: string;
 }
-
-/**
- * Builds the `rules` string for VB from `runtime_compact` (deterministic join of four fields only).
- * Falls back to `agentPrompt` only when compact JSON is missing or invalid (legacy tasks).
- */
-export function rulesStringForCompilerFromTaskFields(task: AiAgentTaskFieldsForCompiler): string {
-  const compactJson = task.agentRuntimeCompactJson;
-  if (typeof compactJson === 'string' && compactJson.trim().length > 0) {
-    const compact = parseAgentRuntimeCompactJson(compactJson);
-    if (compact) {
-      return composeRulesTextFromRuntimeCompact(compact);
-    }
-  }
-  return String(task.agentPrompt ?? '').trim();
-}
-
-function formatRichRulesExamplesAppendix(rc: AIAgentRuntimeCompact | null): string {
-  if (!rc?.examples_compact?.length) return '';
-  const lines = rc.examples_compact.map((t) => `${t.role}: ${t.content}`).join('\n');
-  return `\n\n---\n\nStyle examples (from runtime_compact.examples_compact):\n${lines}`;
-}
-
-/**
- * Rich `rules`: composed Markdown (`agentPrompt`) + optional few-shot lines from compact examples.
- */
-export function buildRichRulesString(
-  composedRuntimeMarkdown: string,
-  compact: AIAgentRuntimeCompact | null
-): string {
-  return composedRuntimeMarkdown.trim() + formatRichRulesExamplesAppendix(compact);
-}
-
-/**
- * Distilled `rules`: compact join when valid; else Markdown fallback (same as {@link rulesStringForCompilerFromTaskFields}).
- */
-export function buildDistilledRulesString(
-  agentRuntimeCompactJson: string,
-  composedRuntimeMarkdownFallback: string
-): string {
-  return rulesStringForCompilerFromTaskFields({
-    agentRuntimeCompactJson,
-    agentPrompt: composedRuntimeMarkdownFallback,
-  });
-}
-
-export type AiAgentRulesVariant = 'distilled' | 'rich';
 
 /**
  * Default POST URL for the Node runtime bridge (`/api/runtime/ai-agent/step`).
@@ -153,20 +110,6 @@ export function resolveAiAgentLlmEndpointForCompile(task: { llmEndpoint?: string
   return defaultAiAgentLlmEndpoint();
 }
 
-/**
- * `rules` string for compile: compact join vs rich Markdown (+ examples appendix).
- */
-export function rulesStringForAiAgentCompile(
-  task: AiAgentTaskFieldsForCompiler,
-  variant: AiAgentRulesVariant
-): string {
-  if (variant === 'rich') {
-    const compact = parseAgentRuntimeCompactJson(task.agentRuntimeCompactJson ?? '');
-    return buildRichRulesString(String(task.agentPrompt ?? '').trim(), compact);
-  }
-  return rulesStringForCompilerFromTaskFields(task);
-}
-
 /** Fields required to build the minimal compile DTO for VB (AI Agent). */
 export interface MinimalAiAgentCompileTaskInput extends AiAgentTaskFieldsForCompiler {
   id: string;
@@ -175,11 +118,13 @@ export interface MinimalAiAgentCompileTaskInput extends AiAgentTaskFieldsForComp
   llmEndpoint?: string;
   /** Task-persisted IA override (platform, convai id, …) for compile. */
   agentIaRuntimeOverrideJson?: string;
+  /** Designer «Avvio immediato»: compiled into VB + ConvAI first_message preview. */
+  agentImmediateStart?: boolean;
 }
 
 export interface BuildMinimalAiAgentCompileTaskOptions {
-  /** Default distilled (compact). Rich uses `agentPrompt` + examples from compact. */
-  rulesVariant?: AiAgentRulesVariant;
+  /** @deprecated Removed; compile always uses full structured sections → platform string. */
+  rulesVariant?: never;
 }
 
 /** Payload POST compile per VB: default LLM-only; estensioni opzionali per ElevenLabs. */
@@ -189,6 +134,9 @@ export type MinimalAiAgentCompilePayload = {
   templateId: string | null;
   rules: string;
   llmEndpoint: string;
+  /** Mirrors ConvAI `first_message` wiring (empty when immediate start). Same string as {@link CONVAI_DEFAULT_FIRST_MESSAGE}. */
+  firstMessage: string;
+  immediateStart: boolean;
   platform?: 'elevenlabs';
   agentId?: string;
   backendBaseUrl?: string;
@@ -312,16 +260,20 @@ function resolveElevenLabsMinimalCompileExtension(
 
 export function buildMinimalAiAgentCompileTask(
   task: MinimalAiAgentCompileTaskInput,
-  options?: BuildMinimalAiAgentCompileTaskOptions
+  _options?: BuildMinimalAiAgentCompileTaskOptions
 ): MinimalAiAgentCompilePayload {
-  const variant = options?.rulesVariant ?? 'distilled';
-  const rules = rulesStringForAiAgentCompile(task, variant);
+  const rules = resolveAiAgentPlatformRulesString(task as TaskLikeForPlatformRules);
+  const immediateStart = task.agentImmediateStart === true;
+  /** Keep in sync with `CONVAI_DEFAULT_FIRST_MESSAGE` in convaiAgentCreatePayload.ts (avoid import cycle). */
+  const defaultConvaiFirst = 'Hello! How can I help you today?';
   const base: MinimalAiAgentCompilePayload = {
     id: task.id,
     type: task.type,
     templateId: task.templateId ?? null,
     rules,
     llmEndpoint: resolveAiAgentLlmEndpointForCompile(task),
+    immediateStart,
+    firstMessage: immediateStart ? '' : defaultConvaiFirst,
   };
 
   const globalIa = loadGlobalIaAgentConfig();

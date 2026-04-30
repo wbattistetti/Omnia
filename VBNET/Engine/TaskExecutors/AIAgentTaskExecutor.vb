@@ -36,6 +36,9 @@ Public Class AIAgentTaskExecutor
     ''' </summary>
     Public Const RuntimeRulesStateKey As String = "__omnia_runtime_rules"
 
+    ''' <summary>Utterance sintetica quando «Avvio immediato» e nessun input utente (allineato al compile TS).</summary>
+    Public Const ImmediateStartSyntheticUserMessage As String = "start"
+
     Public Sub New()
         MyBase.New()
     End Sub

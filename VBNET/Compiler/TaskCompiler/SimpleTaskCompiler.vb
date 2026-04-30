@@ -183,6 +183,7 @@ Public Class SimpleTaskCompiler
                     End If
                     agentTask.Rules = If(agentDef.Rules, "")
                     agentTask.LlmEndpoint = If(agentDef.LlmEndpoint, "")
+                    agentTask.ImmediateStart = agentDef.ImmediateStart
                 Else
                     If task.Value IsNot Nothing Then
                         agentTask.Platform = IAPlatform.OpenAI
@@ -201,6 +202,15 @@ Public Class SimpleTaskCompiler
                         End If
                         If task.Value.ContainsKey("llmEndpoint") Then
                             agentTask.LlmEndpoint = If(task.Value("llmEndpoint")?.ToString(), "")
+                        End If
+                        If task.Value.ContainsKey("immediateStart") Then
+                            Dim imm = task.Value("immediateStart")
+                            If TypeOf imm Is Boolean Then
+                                agentTask.ImmediateStart = DirectCast(imm, Boolean)
+                            ElseIf imm IsNot Nothing Then
+                                Dim s = imm.ToString().Trim().ToLowerInvariant()
+                                agentTask.ImmediateStart = (s = "true")
+                            End If
                         End If
                     End If
                 End If

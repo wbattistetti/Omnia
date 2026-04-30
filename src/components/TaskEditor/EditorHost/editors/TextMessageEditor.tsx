@@ -29,6 +29,11 @@ import { useTextTranslationField } from './shared/useTextTranslationField';
 import { fingerprintVariableMapping } from './shared/variableMappingFingerprint';
 import { logVariableMenuDebug } from '../../../../utils/variableMenuDebug';
 import { resolveVariableStoreProjectId } from '../../../../utils/safeProjectId';
+import { getSayMessageSyncedBody } from '../../../../utils/sayMessageTaskSync';
+import {
+  isSayMessageChromeDebugEnabled,
+  logSayMessageChrome,
+} from '../../../../utils/sayMessageChromeDebug';
 
 export default function TextMessageEditor({ task: taskMeta, onClose }: EditorProps) {
   const instanceId = taskMeta.instanceId || taskMeta.id;
@@ -200,6 +205,34 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     };
     // Depend on stable setters from HeaderToolbarProvider, not the whole context value.
   }, [setHeaderIcon, setHeaderTitle, taskMeta?.label, taskMeta?.type, Icon, color]);
+
+  /**
+   * Chiusura tab: persiste subito il testo (stesso contratto di {@link useResponseEditorClose} che emette
+   * `instanceRepository:updated` dopo save) così {@link NodeRow} rivaluta `hasTaskTree` / icona SayMessage.
+   * Questo effect è registrato per ultimo: in unmount la cleanup corre per prima → flush prima del resto.
+   */
+  React.useEffect(() => {
+    return () => {
+      flushNow();
+      const id = String(instanceId || taskMeta.id || '').trim();
+      if (isSayMessageChromeDebugEnabled()) {
+        const taskAfterFlush = id ? taskRepository.getTask(id) : undefined;
+        const body = taskAfterFlush ? getSayMessageSyncedBody(taskAfterFlush) : '';
+        logSayMessageChrome('editorUnmount', {
+          instanceId: id || '(empty)',
+          dispatchedEvent: Boolean(id),
+          sayMessageBodyLength: body.trim().length,
+          sayMessagePreview: body.trim().slice(0, 120),
+          taskType: taskAfterFlush?.type,
+        });
+      }
+      if (id) {
+        window.dispatchEvent(
+          new CustomEvent('instanceRepository:updated', { detail: { instanceId: id } })
+        );
+      }
+    };
+  }, [instanceId, taskMeta.id, flushNow]);
 
   return (
     <div className="h-full bg-white flex flex-col min-h-0">

@@ -28,5 +28,6 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentUseCasesJson: '[]',
     agentPromptTargetPlatform: DEFAULT_AGENT_PROMPT_PLATFORM,
     agentIaRuntimeOverrideJson: '',
+    agentImmediateStart: false,
   };
 }

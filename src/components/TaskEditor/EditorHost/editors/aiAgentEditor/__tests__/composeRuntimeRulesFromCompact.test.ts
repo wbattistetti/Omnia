@@ -1,5 +1,5 @@
 /**
- * Tests for compact runtime JSON parsing and rules composition.
+ * Tests for compact runtime JSON parsing and platform-resolved compile rules.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,8 +14,6 @@ import {
   buildMinimalAiAgentCompileTask,
   composeRulesTextFromRuntimeCompact,
   parseAgentRuntimeCompactJson,
-  rulesStringForCompilerFromTaskFields,
-  rulesStringForAiAgentCompile,
 } from '../composeRuntimeRulesFromCompact';
 
 const mockLoadGlobalIa = vi.mocked(loadGlobalIaAgentConfig);
@@ -56,78 +54,26 @@ describe('composeRuntimeRulesFromCompact', () => {
     expect(text).toBe('One\n\nTwo\n\nThree\n\nFour');
   });
 
-  it('rulesStringForCompilerFromTaskFields prefers compact over agentPrompt', () => {
-    const rules = rulesStringForCompilerFromTaskFields({
-      agentRuntimeCompactJson: JSON.stringify({
-        behavior_compact: 'Goal.',
-        constraints_compact: 'Must A.',
-        sequence_compact: 'Step one.',
-        corrections_compact: 'Fix B.',
-        examples_compact: [
-          { role: 'assistant' as const, content: 'Hi' },
-          { role: 'user' as const, content: 'Yo' },
-        ],
-      }),
-      agentPrompt: 'IGNORE THIS LONG MARKDOWN',
-    });
-    expect(rules).toContain('Goal.');
-    expect(rules).not.toContain('IGNORE');
-  });
-
-  it('rulesStringForCompilerFromTaskFields falls back to agentPrompt when compact invalid', () => {
-    const rules = rulesStringForCompilerFromTaskFields({
-      agentRuntimeCompactJson: '',
-      agentPrompt: '## Rich only',
-    });
-    expect(rules).toBe('## Rich only');
-  });
-
-  it('rulesStringForAiAgentCompile rich uses agentPrompt and appends examples', () => {
-    const compact = {
-      behavior_compact: 'G.',
-      constraints_compact: 'C.',
-      sequence_compact: 'S.',
-      corrections_compact: 'R.',
-      examples_compact: [
-        { role: 'assistant' as const, content: 'A' },
-        { role: 'user' as const, content: 'B' },
-      ],
-    };
-    const rules = rulesStringForAiAgentCompile(
-      {
-        agentRuntimeCompactJson: JSON.stringify(compact),
-        agentPrompt: '## Full markdown',
-      },
-      'rich'
-    );
-    expect(rules).toContain('## Full markdown');
-    expect(rules).toContain('Style examples');
-  });
-
-  it('buildMinimalAiAgentCompileTask returns only compile fields', () => {
+  it('buildMinimalAiAgentCompileTask derives rules from persisted sections / migrated agentPrompt', () => {
     const minimal = buildMinimalAiAgentCompileTask({
       id: 'task-1',
       type: 6,
       templateId: null,
       llmEndpoint: '',
-      agentRuntimeCompactJson: JSON.stringify({
-        behavior_compact: 'Goal.',
-        constraints_compact: 'Must A.',
-        sequence_compact: 'Step.',
-        corrections_compact: 'Fix.',
-        examples_compact: [
-          { role: 'assistant' as const, content: 'Hi' },
-          { role: 'user' as const, content: 'Yo' },
-        ],
-      }),
-      agentPrompt: 'SHOULD NOT APPEAR',
+      agentStructuredSectionsJson: '',
+      agentPrompt: '## Purpose\n\nServe users politely.',
+      agentPromptTargetPlatform: undefined,
     });
     expect(minimal.id).toBe('task-1');
     expect(minimal.type).toBe(6);
-    expect(minimal.rules).toContain('Goal.');
-    expect(minimal.rules).not.toContain('SHOULD NOT');
+    expect(minimal.rules.length).toBeGreaterThan(20);
+    expect(minimal.rules).toMatch(/Purpose|Serve users/i);
     expect(minimal.llmEndpoint).toBe('http://localhost:3100/api/runtime/ai-agent/step');
-    expect(Object.keys(minimal).sort()).toEqual(['id', 'llmEndpoint', 'rules', 'templateId', 'type'].sort());
+    expect(minimal.immediateStart).toBe(false);
+    expect(minimal.firstMessage).toBe('Hello! How can I help you today?');
+    expect(Object.keys(minimal).sort()).toEqual(
+      ['firstMessage', 'immediateStart', 'id', 'llmEndpoint', 'rules', 'templateId', 'type'].sort()
+    );
   });
 
   it('buildMinimalAiAgentCompileTask keeps explicit llmEndpoint', () => {
@@ -137,16 +83,8 @@ describe('composeRuntimeRulesFromCompact', () => {
       type: 6,
       templateId: null,
       llmEndpoint: custom,
-      agentRuntimeCompactJson: JSON.stringify({
-        behavior_compact: 'Goal.',
-        constraints_compact: 'Must A.',
-        sequence_compact: 'Step.',
-        corrections_compact: 'Fix.',
-        examples_compact: [
-          { role: 'assistant' as const, content: 'Hi' },
-          { role: 'user' as const, content: 'Yo' },
-        ],
-      }),
+      agentStructuredSectionsJson: '',
+      agentPrompt: 'Hello.',
     });
     expect(minimal.llmEndpoint).toBe(custom);
   });
@@ -156,16 +94,8 @@ describe('composeRuntimeRulesFromCompact', () => {
       id: 'agent-task-1',
       type: 6,
       templateId: null,
-      agentRuntimeCompactJson: JSON.stringify({
-        behavior_compact: 'Goal.',
-        constraints_compact: 'Must A.',
-        sequence_compact: 'Step.',
-        corrections_compact: 'Fix.',
-        examples_compact: [
-          { role: 'assistant' as const, content: 'Hi' },
-          { role: 'user' as const, content: 'Yo' },
-        ],
-      }),
+      agentStructuredSectionsJson: '',
+      agentPrompt: 'Agent instructions here.',
       agentIaRuntimeOverrideJson: JSON.stringify({
         platform: 'elevenlabs',
         model: 'convai_default',
@@ -181,10 +111,35 @@ describe('composeRuntimeRulesFromCompact', () => {
     expect(minimal.platform).toBe('elevenlabs');
     expect(minimal.agentId).toBe('agent_xyz');
     expect(minimal.backendBaseUrl).toBe('http://localhost:5000');
-    expect(minimal.rules).toContain('Goal.');
+    expect(minimal.rules.length).toBeGreaterThan(10);
+    expect(minimal.immediateStart).toBe(false);
     expect(Object.keys(minimal).sort()).toEqual(
-      ['agentId', 'backendBaseUrl', 'id', 'llmEndpoint', 'platform', 'rules', 'templateId', 'type'].sort()
+      [
+        'agentId',
+        'backendBaseUrl',
+        'firstMessage',
+        'immediateStart',
+        'id',
+        'llmEndpoint',
+        'platform',
+        'rules',
+        'templateId',
+        'type',
+      ].sort()
     );
+  });
+
+  it('buildMinimalAiAgentCompileTask sets empty firstMessage when agentImmediateStart', () => {
+    const minimal = buildMinimalAiAgentCompileTask({
+      id: 'imm',
+      type: 6,
+      templateId: null,
+      agentStructuredSectionsJson: '',
+      agentPrompt: 'Hi.',
+      agentImmediateStart: true,
+    });
+    expect(minimal.immediateStart).toBe(true);
+    expect(minimal.firstMessage).toBe('');
   });
 
   it('buildMinimalAiAgentCompileTask fills convaiAgentId from global defaults when task EL override omits it', () => {
@@ -197,16 +152,8 @@ describe('composeRuntimeRulesFromCompact', () => {
       id: 'agent-task-merge',
       type: 6,
       templateId: null,
-      agentRuntimeCompactJson: JSON.stringify({
-        behavior_compact: 'Goal.',
-        constraints_compact: 'Must A.',
-        sequence_compact: 'Step.',
-        corrections_compact: 'Fix.',
-        examples_compact: [
-          { role: 'assistant' as const, content: 'Hi' },
-          { role: 'user' as const, content: 'Yo' },
-        ],
-      }),
+      agentStructuredSectionsJson: '',
+      agentPrompt: 'Test.',
       agentIaRuntimeOverrideJson: JSON.stringify({
         platform: 'elevenlabs',
         model: 'convai_default',
@@ -231,16 +178,8 @@ describe('composeRuntimeRulesFromCompact', () => {
       id: 'agent-global-only',
       type: 6,
       templateId: null,
-      agentRuntimeCompactJson: JSON.stringify({
-        behavior_compact: 'Goal.',
-        constraints_compact: 'Must A.',
-        sequence_compact: 'Step.',
-        corrections_compact: 'Fix.',
-        examples_compact: [
-          { role: 'assistant' as const, content: 'Hi' },
-          { role: 'user' as const, content: 'Yo' },
-        ],
-      }),
+      agentStructuredSectionsJson: '',
+      agentPrompt: 'Hello.',
       agentIaRuntimeOverrideJson: '',
     });
     expect(minimal.platform).toBe('elevenlabs');
