@@ -7,6 +7,8 @@ import type { CompiledTask, CompilationError, CompilationResult, ExecutionState 
 // Frontend DialogueEngine removed - backend orchestrator is now default
 import { useProjectData } from '../../context/ProjectDataContext';
 import { looksLikeTechnicalTranslationOrId } from '../../utils/translationKeys';
+import { createVariableMappings } from '@utils/conditionCodeConverter';
+import { interpolateVariableBracketsInText } from './interpolateVariableBracketsInText';
 
 interface UseDialogueEngineOptions {
   nodes: Node<FlowNode>[];
@@ -56,51 +58,12 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     return text;
   }, []);
 
-  const getRuntimeValueText = useCallback((value: unknown): string => {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      return String(value);
-    }
-    if (Array.isArray(value)) {
-      return value.map((v) => getRuntimeValueText(v)).filter(Boolean).join(', ');
-    }
-    if (typeof value === 'object') {
-      const obj = value as Record<string, unknown>;
-      // Common runtime payload shape: { semantic, linguistic, ... }
-      const semantic = getRuntimeValueText(obj.semantic);
-      if (semantic) return semantic;
-      const linguistic = getRuntimeValueText(obj.linguistic);
-      if (linguistic) return linguistic;
-      const val = getRuntimeValueText(obj.value);
-      if (val) return val;
-      return '';
-    }
-    return '';
-  }, []);
+  /** Map&lt;varId, display label&gt; for the flow being run; used to resolve `[label]` in outgoing messages. */
+  const bracketGuidToLabelMappingsRef = useRef<Map<string, string>>(new Map());
 
-  const interpolateGuidPlaceholders = useCallback((text: string, variableStore: Record<string, unknown> | null | undefined): string => {
-    if (!text) return text;
-    if (!variableStore || Object.keys(variableStore).length === 0) return text;
-    return text.replace(/\[\s*([^\[\]]+?)\s*\]/g, (full, token) => {
-      const key = String(token || '').trim();
-      if (!key) return full;
-      // Exact match first (works for both GUID varIds and label-based keys)
-      const raw = (variableStore as Record<string, unknown>)[key];
-      if (raw !== undefined && raw !== null) {
-        const resolved = getRuntimeValueText(raw).trim();
-        if (resolved) return resolved;
-      }
-      // Case-insensitive fallback
-      const lowerKey = key.toLowerCase();
-      for (const [k, v] of Object.entries(variableStore)) {
-        if (k.toLowerCase() === lowerKey) {
-          const resolved = getRuntimeValueText(v).trim();
-          if (resolved) return resolved;
-        }
-      }
-      return full;
-    });
-  }, [getRuntimeValueText]);
+  const interpolateOutgoingMessageText = useCallback((text: string, variableStore: Record<string, unknown> | null | undefined): string => {
+    return interpolateVariableBracketsInText(text, variableStore, bracketGuidToLabelMappingsRef.current);
+  }, []);
 
   // ✅ STATE: UI-reactive state (triggers re-renders)
   const [executionState, setExecutionState] = useState<ExecutionState | null>(null);
@@ -414,6 +377,9 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         // Use backend orchestrator via SSE (translations already resolved for compile)
         const { executeOrchestratorBackend } = await import('./orchestratorAdapter');
         const { iaConvaiTraceSessionStart } = await import('../../utils/debug/iaConvaiFlowTrace');
+        pendingMessagesRef.current = [];
+        runtimeVariableStoreRef.current = {};
+        bracketGuidToLabelMappingsRef.current = createVariableMappings(rootFlowId);
         iaConvaiTraceSessionStart(rootFlowId, allTasksWithTemplates);
 
         const orchestratorControl = await executeOrchestratorBackend(
@@ -431,7 +397,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
                 // stateUpdate hasn't arrived yet — buffer and emit as-is for now
                 pendingMessagesRef.current.push({ text: rawText, raw: message });
               }
-              const interpolatedText = interpolateGuidPlaceholders(rawText, store);
+              const interpolatedText = interpolateOutgoingMessageText(rawText, store);
               opts.onMessage({ ...message, text: interpolatedText });
             },
             onDDTStart: (data) => {
@@ -454,7 +420,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
                 const opts = optionsRef.current;
                 if (opts.onMessage) {
                   for (const entry of pending) {
-                    const resolved = interpolateGuidPlaceholders(entry.text, newStore);
+                    const resolved = interpolateOutgoingMessageText(entry.text, newStore);
                     if (resolved !== entry.text) {
                       opts.onMessage({ ...(entry.raw as object), text: resolved } as Parameters<typeof opts.onMessage>[0]);
                     }
@@ -569,6 +535,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
     isRunningRef.current = false;
     pendingMessagesRef.current = [];
     runtimeVariableStoreRef.current = {};
+    bracketGuidToLabelMappingsRef.current = new Map();
     setIsRunning(false);
     setCurrentTask(null);
     setExecutionState(null);

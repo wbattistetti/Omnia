@@ -13,7 +13,15 @@ const servers = [
     name: 'FastAPI',
     url: 'http://localhost:8000',
     healthCheck: 'http://localhost:8000/api/ping', // Usa /api/ping come startPythonService.js
-    port: 8000
+    port: 8000,
+    expectJsonOk: true
+  },
+  {
+    name: 'Mock booking-slots',
+    url: 'http://localhost:3110',
+    healthCheck: 'http://localhost:3110/health',
+    port: 3110,
+    expectJsonOk: true
   },
 ];
 
@@ -27,7 +35,7 @@ function checkServer(server) {
 
     const req = http.get(checkUrl, { timeout: 3000 }, (res) => {
       // Per FastAPI, verifica che la risposta sia JSON valido con ok: true
-      if (server.name === 'FastAPI') {
+      if (server.expectJsonOk) {
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {

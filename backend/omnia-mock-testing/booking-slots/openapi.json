@@ -1,0 +1,114 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Omnia mock — slot appuntamenti",
+    "version": "1.0.0",
+    "description": "API di test: genera slot casuali. Usare in Omnia come qualsiasi backend con OpenAPI (URL dello spec o della chiamata)."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3110",
+      "description": "Default locale (PORT env per cambiare)"
+    }
+  ],
+  "tags": [{ "name": "Appointments", "description": "Disponibilità" }],
+  "paths": {
+    "/slots": {
+      "get": {
+        "operationId": "listAppointmentSlots",
+        "tags": ["Appointments"],
+        "summary": "Elenco slot disponibili",
+        "description": "Restituisce N slot da startDate, al massimo P slot per giorno, orari casuali tra startHour e endHour (endHour escluso per sorteggiare l’ora).",
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "description": "Data inizio (YYYY-MM-DD o ISO). Default: oggi UTC.",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "N",
+            "in": "query",
+            "required": false,
+            "description": "Numero totale di slot.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 10 }
+          },
+          {
+            "name": "P",
+            "in": "query",
+            "required": false,
+            "description": "Massimo slot per giorno.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 3 }
+          },
+          {
+            "name": "startHour",
+            "in": "query",
+            "required": false,
+            "description": "Ora inizio fascia (0–23).",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 23, "default": 9 }
+          },
+          {
+            "name": "endHour",
+            "in": "query",
+            "required": false,
+            "description": "Ora esclusiva fine fascia (1–24).",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 24, "default": 18 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista slot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["slots"],
+                  "properties": {
+                    "slots": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/AppointmentSlot" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parametri non validi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AppointmentSlot": {
+        "type": "object",
+        "required": ["start", "end"],
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Inizio slot (ISO 8601)"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Fine slot (ISO 8601), 30 min dopo start"
+          }
+        }
+      }
+    }
+  }
+}
