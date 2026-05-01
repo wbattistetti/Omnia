@@ -20,4 +20,11 @@ describe('normalizeProjectData', () => {
     expect(items[0].type).toBe(TaskType.SayMessage);
     expect(items[1].type).toBe(TaskType.UNDEFINED);
   });
+
+  it('initializes backendCatalog when absent', () => {
+    const out = normalizeProjectData({});
+    expect(out.backendCatalog?.schemaVersion).toBe(1);
+    expect(Array.isArray(out.backendCatalog?.manualEntries)).toBe(true);
+    expect(Array.isArray(out.backendCatalog?.auditLog)).toBe(true);
+  });
 });

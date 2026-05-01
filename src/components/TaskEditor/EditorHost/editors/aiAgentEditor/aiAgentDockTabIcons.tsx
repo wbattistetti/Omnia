@@ -13,6 +13,7 @@ import {
   ListOrdered,
   Pencil,
   ScrollText,
+  Server,
   Settings,
   Shield,
   Sparkles,
@@ -42,6 +43,7 @@ const FILLED = {
   dati: 'text-amber-300',
   useCases: 'text-violet-300',
   agentSetup: 'text-violet-300',
+  backends: 'text-cyan-300',
 } as const;
 
 /** Distinct “human input” chrome for Descrizione (not IR); right edge separates from IR tabs. */
@@ -153,6 +155,12 @@ export function getAiAgentDockTabPresentation(
         icon: Ic(Settings, c(FILLED.agentSetup)),
         titleClassName: c(FILLED.agentSetup),
         nativeTitle: 'Agent setup: runtime task; Salva override per persistere.',
+      };
+    case AI_AGENT_DOCK_PANEL_IDS.backends:
+      return {
+        icon: Ic(Server, c(FILLED.backends)),
+        titleClassName: c(FILLED.backends),
+        nativeTitle: 'Backends: URL manuali (OpenAPI) e riepilogo da grafo / agent.',
       };
     default:
       return null;

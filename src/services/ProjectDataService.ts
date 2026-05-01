@@ -36,7 +36,13 @@ let projectData: ProjectData = {
   backendActions: [],
   conditions: [],
   tasks: [],
-  macrotasks: []
+  macrotasks: [],
+  backendCatalog: {
+    schemaVersion: 1,
+    manualEntries: [],
+    auditLog: [],
+    catalogVersion: 0,
+  },
 };
 
 // Funzione specifica per task templates

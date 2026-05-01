@@ -10,6 +10,10 @@ export type OpenApiOperationFields = {
   requestBodyPropertyNames: string[];
   /** Top-level JSON response property names (2xx, application/json) */
   responsePropertyNames: string[];
+  /** OpenAPI `description` per nome parametro/property (chiave = nome API). */
+  inputDescriptionsByApiName: Record<string, string>;
+  /** OpenAPI `description` per proprietà risposta top-level. */
+  outputDescriptionsByApiName: Record<string, string>;
 };
 
 function isRecord(x: unknown): x is Record<string, unknown> {
@@ -37,6 +41,57 @@ function schemaPropertyKeys(root: Record<string, unknown>, schema: unknown): str
     return Object.keys(schema.properties as Record<string, unknown>);
   }
   return [];
+}
+
+/** Top-level property descriptions from a JSON Schema object (risolve $ref). */
+export function schemaPropertyDescriptions(root: Record<string, unknown>, schema: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!isRecord(schema)) return out;
+  if (typeof schema.$ref === 'string') {
+    const resolved = resolveRef(root, schema.$ref);
+    return schemaPropertyDescriptions(root, resolved);
+  }
+  if (schema.type === 'object' && isRecord(schema.properties)) {
+    const props = schema.properties as Record<string, unknown>;
+    for (const [key, propSchema] of Object.entries(props)) {
+      if (!isRecord(propSchema)) continue;
+      const d = propSchema.description;
+      if (typeof d === 'string' && d.trim()) {
+        out[key.trim()] = d.trim();
+      }
+    }
+  }
+  return out;
+}
+
+function mergeDescriptionMaps(target: Record<string, string>, source: Record<string, string>): void {
+  for (const [k, v] of Object.entries(source)) {
+    const key = k.trim();
+    if (!key || target[key]) continue;
+    const t = v.trim();
+    if (t) target[key] = t;
+  }
+}
+
+function setFirstDescription(target: Record<string, string>, key: string, desc: unknown): void {
+  const k = key.trim();
+  if (!k || target[k]) return;
+  if (typeof desc !== 'string' || !desc.trim()) return;
+  target[k] = desc.trim();
+}
+
+/** Confronto testi descrizione (locale vs OpenAPI). */
+export function normalizeOpenApiDescriptionText(s: string | undefined): string {
+  if (!s?.trim()) return '';
+  return s.trim().replace(/\s+/g, ' ');
+}
+
+/** True se entrambi valorizzati e diversi dopo normalizzazione. */
+export function descriptionsDifferFromOpenApi(local: string | undefined, openapi: string | undefined): boolean {
+  const a = normalizeOpenApiDescriptionText(local);
+  const b = normalizeOpenApiDescriptionText(openapi);
+  if (!a || !b) return false;
+  return a !== b;
 }
 
 function mergeUnique(a: string[], b: string[]): string[] {
@@ -279,6 +334,9 @@ export function extractOperationFields(
   const op = pathItem[method.toLowerCase()];
   if (!isRecord(op)) return null;
 
+  const inputDescriptionsByApiName: Record<string, string> = {};
+  const outputDescriptionsByApiName: Record<string, string> = {};
+
   const requestParamNames: string[] = [];
   let requestBodyPropertyNames: string[] = [];
   const params = op.parameters;
@@ -288,17 +346,22 @@ export function extractOperationFields(
       const inn = String(p.in || '');
       const name = String(p.name || '').trim();
       if (inn === 'query' || inn === 'path' || inn === 'header') {
-        if (name) requestParamNames.push(name);
+        if (name) {
+          requestParamNames.push(name);
+          setFirstDescription(inputDescriptionsByApiName, name, p.description);
+        }
         continue;
       }
       /** Swagger 2.0: body in parameters[] */
       if (inn === 'body' && isRecord(p.schema)) {
         const keys = schemaPropertyKeys(doc, p.schema);
         requestBodyPropertyNames = mergeUnique(requestBodyPropertyNames, keys);
+        mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, p.schema));
       }
       /** formData → trattati come nomi campo inviati */
       if (inn === 'formData' && name) {
         requestParamNames.push(name);
+        setFirstDescription(inputDescriptionsByApiName, name, p.description);
       }
     }
   }
@@ -314,6 +377,7 @@ export function extractOperationFields(
       if (isRecord(json) && isRecord(json.schema)) {
         const keys = schemaPropertyKeys(doc, json.schema);
         requestBodyPropertyNames = mergeUnique(requestBodyPropertyNames, keys);
+        mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, json.schema));
       }
     }
   }
@@ -331,11 +395,13 @@ export function extractOperationFields(
           content[Object.keys(content).find((k) => k.includes('json')) || ''];
         if (isRecord(json) && isRecord(json.schema)) {
           responsePropertyNames = schemaPropertyKeys(doc, json.schema);
+          mergeDescriptionMaps(outputDescriptionsByApiName, schemaPropertyDescriptions(doc, json.schema));
         }
       }
       /** Swagger 2.0: schema direttamente sulla risposta */
       if (responsePropertyNames.length === 0 && isRecord(code.schema)) {
         responsePropertyNames = schemaPropertyKeys(doc, code.schema);
+        mergeDescriptionMaps(outputDescriptionsByApiName, schemaPropertyDescriptions(doc, code.schema));
       }
     }
   }
@@ -344,6 +410,8 @@ export function extractOperationFields(
     requestParamNames,
     requestBodyPropertyNames,
     responsePropertyNames,
+    inputDescriptionsByApiName,
+    outputDescriptionsByApiName,
   };
 }
 

@@ -52,6 +52,8 @@ describe('openApiBackendCallSpec', () => {
     const f = extractOperationFields(doc as any, '/pet', 'post');
     expect(f?.requestBodyPropertyNames).toEqual(expect.arrayContaining(['id', 'name', 'status']));
     expect(f?.responsePropertyNames).toEqual(expect.arrayContaining(['id', 'name', 'status']));
+    expect(f?.inputDescriptionsByApiName).toEqual({});
+    expect(f?.outputDescriptionsByApiName).toEqual({});
   });
 
   it('extractOperationFields collects params and body fields', () => {
@@ -85,6 +87,38 @@ describe('openApiBackendCallSpec', () => {
     expect(f?.requestParamNames).toContain('q');
     expect(f?.requestBodyPropertyNames).toEqual(expect.arrayContaining(['a', 'b']));
     expect(f?.responsePropertyNames).toContain('out1');
+    expect(f?.inputDescriptionsByApiName).toEqual({});
+    expect(f?.outputDescriptionsByApiName).toEqual({});
+  });
+
+  it('extractOperationFields captures OpenAPI descriptions on params and response properties', () => {
+    const doc = {
+      openapi: '3.0.0',
+      paths: {
+        '/x': {
+          get: {
+            parameters: [{ name: 'q', in: 'query', description: '  Query help  ' }],
+            responses: {
+              '200': {
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: {
+                        out1: { type: 'string', description: 'Out one' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const f = extractOperationFields(doc as any, '/x', 'get');
+    expect(f?.inputDescriptionsByApiName.q).toBe('Query help');
+    expect(f?.outputDescriptionsByApiName.out1).toBe('Out one');
   });
 
   it('slugInternalName normalizes', () => {

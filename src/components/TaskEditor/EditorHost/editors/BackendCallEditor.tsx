@@ -17,17 +17,14 @@ import {
   mappingEntriesToBackendOutputs,
 } from '../../../../components/FlowMappingPanel/backendCallMappingAdapter';
 import type { MappingEntry } from '../../../../components/FlowMappingPanel/mappingTypes';
+import { enrichBackendMappingEntriesOpenApi } from '../../../../components/FlowMappingPanel/enrichBackendMappingOpenApiUi';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import { resolveVariableStoreProjectId } from '../../../../utils/safeProjectId';
 import { getVariableLabel } from '../../../../utils/getVariableLabel';
 import type { ToolbarButton } from '../../../../dock/types';
 import TableEditor from './TableEditor';
-import {
-  extractOperationFields,
-  fetchOpenApiDocument,
-  pickOpenApiPathForReadApi,
-  slugInternalName,
-} from '../../../../services/openApiBackendCallSpec';
+import { slugInternalName } from '../../../../services/openApiBackendCallSpec';
+import { runBackendCallReadApiForTask } from '../../../../services/runBackendCallReadApiForTask';
 
 function collectUsedInternalNames(cfg: BackendCallConfig): Set<string> {
   const s = new Set<string>();
@@ -103,7 +100,14 @@ const DEFAULT_CONFIG: BackendCallConfig = {
   outputs: []
 };
 
-export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }: EditorProps) { // ✅ RINOMINATO: act → task
+export default function BackendCallEditor({
+  task,
+  onToolbarUpdate,
+  hideHeader,
+  hideEndpointRow,
+  endpointExternalRevision,
+}: EditorProps) {
+  // ✅ RINOMINATO: act → task
   const instanceId = task.instanceId || task.id; // ✅ RINOMINATO: act → task
   const pdUpdate = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
@@ -117,6 +121,24 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
 
   // ✅ State to force re-render of availableVariables when a new variable is created
   const [variablesRefreshKey, setVariablesRefreshKey] = React.useState(0);
+
+  /** Snapshot testi OpenAPI dopo ultimo Read API (persistito anche su `backendCallSpecMeta`). */
+  const [openapiDescriptionSnapshots, setOpenapiDescriptionSnapshots] = React.useState<{
+    inputs: Record<string, string>;
+    outputs: Record<string, string>;
+  } | null>(null);
+
+  React.useEffect(() => {
+    if (!instanceId) {
+      setOpenapiDescriptionSnapshots(null);
+      return;
+    }
+    const t = taskRepository.getTask(instanceId) as
+      | { backendCallSpecMeta?: { openapiDescriptionSnapshots?: { inputs: Record<string, string>; outputs: Record<string, string> } } }
+      | null;
+    const snap = t?.backendCallSpecMeta?.openapiDescriptionSnapshots;
+    setOpenapiDescriptionSnapshots(snap ?? null);
+  }, [instanceId]);
 
   // Show/hide API column (tree: Campo API inputs)
   const [showApiColumn, setShowApiColumn] = React.useState(true);
@@ -210,7 +232,7 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
 
     const loaded = buildConfigFromTask(storedTask);
     setConfig(loaded);
-  }, [instanceId, buildConfigFromTask]);
+  }, [instanceId, buildConfigFromTask, endpointExternalRevision]);
 
   React.useEffect(() => {
     if (instanceId && config) {
@@ -277,67 +299,28 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
 
   const handleReadApi = React.useCallback(async () => {
     const url = config.endpoint.url.trim();
-    if (!url) return;
+    if (!url || !instanceId) return;
     setReadApiBusy(true);
     try {
-      const { doc } = await fetchOpenApiDocument(url);
-      const picked = pickOpenApiPathForReadApi(url, doc, config.endpoint.method);
-      if ('error' in picked) {
-        window.alert(picked.error);
+      const result = await runBackendCallReadApiForTask(instanceId, projectId, url, config.endpoint.method);
+      if (!result.ok) {
+        window.alert(result.error);
         return;
       }
-      const pathKey = picked.pathKey;
-      const fields = extractOperationFields(doc, pathKey, config.endpoint.method);
-      if (!fields) {
-        window.alert(`Operazione ${config.endpoint.method} non trovata per ${pathKey}.`);
-        return;
+      setSwaggerInputContract(result.inputNames);
+      setSwaggerOutputContract(result.outputNames);
+      setOpenapiDescriptionSnapshots({
+        inputs: { ...result.inputDescriptionsByApiName },
+        outputs: { ...result.outputDescriptionsByApiName },
+      });
+      const storedTask = taskRepository.getTask(instanceId);
+      if (storedTask) {
+        setConfig(buildConfigFromTask(storedTask));
       }
-      const inputNames = [...new Set([...fields.requestParamNames, ...fields.requestBodyPropertyNames])].filter(
-        Boolean
-      );
-      const outputNames = fields.responsePropertyNames.filter(Boolean);
-      setSwaggerInputContract(inputNames);
-      setSwaggerOutputContract(outputNames);
-
-      const inputsEmpty = !(config.inputs && config.inputs.length);
-      const outputsEmpty = !(config.outputs && config.outputs.length);
-
-      if (inputNames.length > 0 || outputNames.length > 0) {
-        setConfig((prev) => {
-          const used = new Set<string>();
-          for (const i of prev.inputs || []) {
-            const t = i.internalName?.trim();
-            if (t) used.add(t);
-          }
-          for (const o of prev.outputs || []) {
-            const t = o.internalName?.trim();
-            if (t) used.add(t);
-          }
-          let nextInputs = prev.inputs || [];
-          let nextOutputs = prev.outputs || [];
-          if (inputsEmpty && inputNames.length > 0) {
-            nextInputs = inputNames.map((apiName) => ({
-              internalName: nextUniqueInternalName(slugInternalName(apiName), used),
-              apiParam: apiName,
-              variable: '',
-            }));
-          }
-          if (outputsEmpty && outputNames.length > 0) {
-            nextOutputs = outputNames.map((apiName) => ({
-              internalName: nextUniqueInternalName(slugInternalName(apiName), used),
-              apiField: apiName,
-              variable: '',
-            }));
-          }
-          return { ...prev, inputs: nextInputs, outputs: nextOutputs };
-        });
-      }
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : String(e));
     } finally {
       setReadApiBusy(false);
     }
-  }, [config.endpoint.url, config.endpoint.method, config.inputs, config.outputs]);
+  }, [buildConfigFromTask, config.endpoint.method, config.endpoint.url, instanceId, projectId]);
 
   const handleTestApi = React.useCallback(async () => {
     const url = config.endpoint.url.trim();
@@ -503,13 +486,23 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
   );
 
   const mappingSend = React.useMemo(
-    () => backendInputsToMappingEntries(config.inputs),
-    [config.inputs]
+    () =>
+      enrichBackendMappingEntriesOpenApi(
+        backendInputsToMappingEntries(config.inputs),
+        'send',
+        openapiDescriptionSnapshots
+      ),
+    [config.inputs, openapiDescriptionSnapshots]
   );
 
   const mappingReceive = React.useMemo(
-    () => backendOutputsToMappingEntries(config.outputs),
-    [config.outputs]
+    () =>
+      enrichBackendMappingEntriesOpenApi(
+        backendOutputsToMappingEntries(config.outputs),
+        'receive',
+        openapiDescriptionSnapshots
+      ),
+    [config.outputs, openapiDescriptionSnapshots]
   );
 
   type MappingEntriesUpdater = MappingEntry[] | ((prev: MappingEntry[]) => MappingEntry[]);
@@ -674,7 +667,7 @@ export default function BackendCallEditor({ task, onToolbarUpdate, hideHeader }:
 
       <div className="flex-1 min-h-0 overflow-auto p-3">
         {/* Endpoint Configuration - Compact (hidden when table view is active) */}
-        {!showTableView && (
+        {!showTableView && !hideEndpointRow && (
           <div className="mb-3 flex gap-3 items-center">
             <div className="flex-1">
               <input

@@ -31,6 +31,7 @@ import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
+  void _props;
   const {
     instanceId,
     projectId,

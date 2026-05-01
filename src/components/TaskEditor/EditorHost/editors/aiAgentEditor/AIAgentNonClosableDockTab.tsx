@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { DockviewDefaultTab, type IDockviewDefaultTabProps } from 'dockview';
+import { Plus } from 'lucide-react';
 import {
   AGENT_PROMPT_PLATFORM_SELECT_SEPARATOR_VALUE,
   getAgentPromptPlatformSelectOptions,
@@ -17,6 +18,7 @@ import {
   useOptionalAIAgentEditorDock,
   type AIAgentEditorDockContextValue,
 } from './AIAgentEditorDockContext';
+import { AI_AGENT_DOCK_PANEL_IDS } from './aiAgentDockPanelIds';
 
 const PROMPT_FINALE_PANEL_ID = 'prompt_finale';
 
@@ -64,6 +66,23 @@ function usePanelTitle(api: IDockviewDefaultTabProps['api']): string {
   return title;
 }
 
+/** Tab chrome only: Backends «Aggiungi» shows when this panel is the active tab. */
+function usePanelIsActive(api: IDockviewDefaultTabProps['api']): boolean {
+  const [active, setActive] = React.useState(() =>
+    Boolean((api as { isActive?: boolean }).isActive)
+  );
+  React.useEffect(() => {
+    const panelApi = api as {
+      isActive?: boolean;
+      onDidActiveChange?: (cb: (ev: { isActive: boolean }) => void) => { dispose: () => void };
+    };
+    setActive(Boolean(panelApi.isActive));
+    const disposable = panelApi.onDidActiveChange?.((ev) => setActive(Boolean(ev.isActive)));
+    return () => disposable?.dispose();
+  }, [api]);
+  return active;
+}
+
 export function AIAgentNonClosableDockTab(props: IDockviewDefaultTabProps) {
   const {
     api,
@@ -79,6 +98,7 @@ export function AIAgentNonClosableDockTab(props: IDockviewDefaultTabProps) {
   } = props;
 
   const title = usePanelTitle(api);
+  const panelIsActive = usePanelIsActive(api);
   const dockCtx = useOptionalAIAgentEditorDock();
   const filled = dockCtx ? isAiAgentDockPanelContentFilled(api.id, dockCtx) : true;
   const presentation = getAiAgentDockTabPresentation(api.id, filled);
@@ -130,6 +150,7 @@ export function AIAgentNonClosableDockTab(props: IDockviewDefaultTabProps) {
   if (presentation) {
     const platformInTab = api.id === PROMPT_FINALE_PANEL_ID && dockCtx;
     const structuredIr = isStructuredDockSectionTab(api.id);
+    const backendsTabActions = api.id === AI_AGENT_DOCK_PANEL_IDS.backends && dockCtx;
 
     return (
       <div
@@ -188,6 +209,27 @@ export function AIAgentNonClosableDockTab(props: IDockviewDefaultTabProps) {
                 JS
               </button>
               <ImmediateStartTabToggle dockCtx={dockCtx} />
+            </>
+          ) : backendsTabActions ? (
+            <>
+              <span className={`whitespace-nowrap ${presentation.titleClassName}`}>{title}</span>
+              {panelIsActive ? (
+                <button
+                  type="button"
+                  title="Aggiungi una riga backend manuale in fondo all’elenco"
+                  aria-label="Aggiungi backend"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    dockCtx.invokeBackendsAddManual();
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="inline-flex shrink-0 items-center gap-0.5 rounded border border-slate-600/55 bg-slate-900/85 px-1.5 py-0.5 text-[9px] font-medium text-slate-200 hover:bg-slate-800 hover:border-slate-500"
+                >
+                  <Plus className="h-3 w-3 shrink-0" aria-hidden />
+                  Aggiungi
+                </button>
+              ) : null}
             </>
           ) : (
             <span className={`whitespace-nowrap ${presentation.titleClassName}`}>{title}</span>

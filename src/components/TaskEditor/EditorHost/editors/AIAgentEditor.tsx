@@ -37,6 +37,14 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
   const [promptFinaleJsMode, setPromptFinaleJsMode] = React.useState(false);
 
+  const backendsAddManualHandlerRef = React.useRef<(() => void) | null>(null);
+  const registerBackendsAddManualHandler = React.useCallback((handler: (() => void) | null) => {
+    backendsAddManualHandlerRef.current = handler;
+  }, []);
+  const invokeBackendsAddManual = React.useCallback(() => {
+    backendsAddManualHandlerRef.current?.();
+  }, []);
+
   const showRightPanel =
     c.hasAgentGeneration ||
     c.proposedFields.length > 0 ||
@@ -126,6 +134,9 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     iaRuntimeLoadedFrom: c.iaRuntimeLoadedFrom,
     saveIaRuntimeOverrideToTask: c.saveIaRuntimeOverrideToTask,
     persistIaRuntimeOverrideSnapshot: c.persistIaRuntimeOverrideSnapshot,
+
+    registerBackendsAddManualHandler,
+    invokeBackendsAddManual,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;

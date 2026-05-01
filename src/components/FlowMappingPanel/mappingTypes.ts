@@ -17,6 +17,10 @@ export interface MappingEntry {
   fieldDescription?: string;
   /** Backend: example or allowed values (shown in grid; first value may surface as hint). */
   sampleValues?: string[];
+  /** Solo UI: descrizione locale ≠ snapshot OpenAPI (non persistita sul task). */
+  openapiDescriptionDrift?: boolean;
+  /** Solo UI: testo OpenAPI corrente per tooltip / pannello confronto. */
+  openapiDescriptionHint?: string;
 }
 
 export function createMappingEntry(partial: Partial<MappingEntry> & Pick<MappingEntry, 'wireKey'>): MappingEntry {
@@ -32,6 +36,8 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
     apiField: partial.apiField ?? '',
     ...(partial.fieldDescription != null ? { fieldDescription: partial.fieldDescription } : {}),
     ...(partial.sampleValues != null ? { sampleValues: partial.sampleValues } : {}),
+    ...(partial.openapiDescriptionDrift !== undefined ? { openapiDescriptionDrift: partial.openapiDescriptionDrift } : {}),
+    ...(partial.openapiDescriptionHint !== undefined ? { openapiDescriptionHint: partial.openapiDescriptionHint } : {}),
     ...(vid ? { variableRefId: vid } : {}),
     ...(lk ? { labelKey: lk } : {}),
   };

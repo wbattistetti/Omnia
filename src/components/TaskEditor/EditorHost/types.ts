@@ -49,6 +49,10 @@ export type EditorProps = {
   onClose?: () => void;
   onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void;
   hideHeader?: boolean;
+  /** Nasconde la riga URL/metodo (es. host esterno nell’accordion AI Agent). */
+  hideEndpointRow?: boolean;
+  /** Incrementato dal parent quando `task.endpoint` è aggiornato fuori dall’editor (header condiviso). */
+  endpointExternalRevision?: number;
   registerOnClose?: (fn: () => Promise<boolean>) => void; // ✅ Per gestire chiusura con controllo contracts
   setDockTree?: (updater: (prev: any) => any) => void; // ✅ Per aprire chat panel come tab dockabile
 };

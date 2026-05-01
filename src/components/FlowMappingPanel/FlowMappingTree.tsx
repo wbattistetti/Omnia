@@ -19,6 +19,7 @@ import {
   StickyNote,
   Table2,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 import type { MappingEntry } from './mappingTypes';
 import {
@@ -602,7 +603,19 @@ function MappingTreeRow({
           )}
         </div>
 
-        <div className="relative shrink-0 min-w-0 max-w-[min(18rem,55vw)] pl-0.5 group/label-slot">
+        <div className="relative shrink-0 min-w-0 max-w-[min(18rem,55vw)] pl-0.5 group/label-slot flex items-center gap-1">
+          {variant === 'backend' && node.entry?.openapiDescriptionDrift ? (
+            <span
+              className="shrink-0 text-amber-400"
+              title={
+                node.entry.openapiDescriptionHint
+                  ? `Descrizione salvata diversa da OpenAPI.\nOpenAPI: ${node.entry.openapiDescriptionHint}`
+                  : 'Descrizione salvata diversa da OpenAPI'
+              }
+            >
+              <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2} aria-hidden />
+            </span>
+          ) : null}
           {variant === 'backend' && node.entry && !isGroupOnly && (
             <div className="absolute bottom-full left-0 z-30 mb-0.5 flex items-center gap-0.5 rounded-md bg-slate-900/95 px-0.5 py-0.5 opacity-0 shadow-md ring-1 ring-slate-600/50 transition-opacity pointer-events-none group-hover/label-slot:opacity-100 group-hover/label-slot:pointer-events-auto">
               <button
@@ -643,26 +656,28 @@ function MappingTreeRow({
               </button>
             </div>
           )}
-          <LabelWithPencilEdit
-            ref={labelEditRef}
-            segment={node.segment}
-            displayLabel={
-              variant === 'interface' && node.entry
-                ? getInterfaceLeafDisplayName(node.entry, projectId, {
-                    flowCanvasId,
-                    flows: workspaceFlows,
-                  })
-                : undefined
-            }
-            editable={leafLabelEditable}
-            onCommit={handleRenameSegment}
-            editIntent={Boolean(node.entry && pendingLabelEditId === node.entry.id)}
-            onConsumeEditIntent={onConsumeLabelEditIntent}
-            ephemeralNew={ephemeralNew}
-            onAbandonEphemeral={ephemeralNew ? handleAbandonEphemeral : undefined}
-            inlinePencil={variant !== 'backend'}
-            viewTitle={variant === 'backend' ? descTitle : undefined}
-          />
+          <div className="min-w-0 flex-1">
+            <LabelWithPencilEdit
+              ref={labelEditRef}
+              segment={node.segment}
+              displayLabel={
+                variant === 'interface' && node.entry
+                  ? getInterfaceLeafDisplayName(node.entry, projectId, {
+                      flowCanvasId,
+                      flows: workspaceFlows,
+                    })
+                  : undefined
+              }
+              editable={leafLabelEditable}
+              onCommit={handleRenameSegment}
+              editIntent={Boolean(node.entry && pendingLabelEditId === node.entry.id)}
+              onConsumeEditIntent={onConsumeLabelEditIntent}
+              ephemeralNew={ephemeralNew}
+              onAbandonEphemeral={ephemeralNew ? handleAbandonEphemeral : undefined}
+              inlinePencil={variant !== 'backend'}
+              viewTitle={variant === 'backend' ? descTitle : undefined}
+            />
+          </div>
         </div>
 
         <div
@@ -705,8 +720,14 @@ function MappingTreeRow({
 
         {variant === 'backend' && node.entry && rowExtra === 'notes' && (
           <div className="mt-1 w-full min-w-0 rounded-md border border-amber-600/35 bg-slate-950/50 px-2 py-1.5 pb-2">
+            {node.entry.openapiDescriptionDrift && node.entry.openapiDescriptionHint ? (
+              <div className="mb-2 rounded border border-amber-700/45 bg-amber-950/40 px-2 py-1.5 text-[10px] text-amber-100/95">
+                <div className="font-semibold text-amber-200/95">Riferimento OpenAPI</div>
+                <p className="mt-1 whitespace-pre-wrap text-amber-50/90">{node.entry.openapiDescriptionHint}</p>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between gap-2 mb-1">
-              <span className="text-[10px] font-medium text-amber-200/90">Descrizione</span>
+              <span className="text-[10px] font-medium text-amber-200/90">Descrizione (locale)</span>
               <button
                 type="button"
                 className="shrink-0 rounded p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-200"

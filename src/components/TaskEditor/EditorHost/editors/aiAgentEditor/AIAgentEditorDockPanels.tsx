@@ -10,6 +10,7 @@ import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
 import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
+import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
 
 export function EditorUnifiedDescriptionPanel(_props: IDockviewPanelProps) {
   const {
@@ -89,12 +90,12 @@ export function EditorDatiPanel(_props: IDockviewPanelProps) {
 
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-slate-950/80">
-      {proposedFields.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">
-          Usa {primaryAgentActionLabel} per popolare i dati da raccogliere.
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
+        {proposedFields.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">
+            Usa {primaryAgentActionLabel} per popolare i dati da raccogliere.
+          </div>
+        ) : (
           <AIAgentProposedFieldsTable
             fields={proposedFields}
             outputVariableMappings={outputVariableMappings}
@@ -102,8 +103,9 @@ export function EditorDatiPanel(_props: IDockviewPanelProps) {
             onRemoveField={onRemoveProposedField}
             onLabelBlur={onProposedLabelBlur}
           />
-        </div>
-      )}
+        )}
+        <ProjectDerivedBackendsSection />
+      </div>
     </div>
   );
 }

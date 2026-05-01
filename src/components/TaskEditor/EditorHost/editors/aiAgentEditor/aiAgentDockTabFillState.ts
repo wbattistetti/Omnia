@@ -38,6 +38,8 @@ export function isAiAgentDockPanelContentFilled(
       return ctx.useCases.length > 0;
     case AI_AGENT_DOCK_PANEL_IDS.iaRuntime:
       return ctx.iaRuntimeLoadedFrom === 'saved_override';
+    case AI_AGENT_DOCK_PANEL_IDS.backends:
+      return true;
     default: {
       if (isStructuredSectionId(panelId)) {
         const slice = ctx.structuredSectionsState[panelId];

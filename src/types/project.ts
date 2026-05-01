@@ -65,6 +65,9 @@ export interface TaskTemplateItem extends ProjectEntityItem {
 
 // ❌ RIMOSSO: AgentActItem - non più necessario, usa TaskTemplateItem
 
+/** @see `domain/backendCatalog/catalogTypes` — inventario backend designer-time (manuali + audit). */
+export type ProjectBackendCatalogBlob = import('../domain/backendCatalog/catalogTypes').ProjectBackendCatalogBlob;
+
 export type ProjectData = {
   id?: string;
   name: string;
@@ -80,6 +83,8 @@ export type ProjectData = {
   conditions?: any[];
   tasks?: any[]; // Deprecated: kept for compatibility, new data goes to macrotasks
   macrotasks?: { id?: string; name?: string; items: Macrotask[] }[];
+  /** Catalogo backend (voci manuali + audit append-only); righe da grafo sono derivate dai task. */
+  backendCatalog?: ProjectBackendCatalogBlob;
   // ...other fields as needed
 };
 

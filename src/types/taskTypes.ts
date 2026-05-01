@@ -489,6 +489,12 @@ export interface Task {
   authoringFlowCanvasId?: string;
 
   /**
+   * Backend Call: meta dopo Read API (OpenAPI) per catalogo backend + badge stale in designer-time.
+   * @see `BackendCallSpecMeta` in `domain/backendCatalog/catalogTypes.ts`
+   */
+  backendCallSpecMeta?: import('../domain/backendCatalog/catalogTypes').BackendCallSpecMeta;
+
+  /**
    * Precomputed GUID-form reference corpus for this task (messages, scripts, API strings), refreshed on
    * editor close / project save. Used to speed variable reference scanning; if absent, the scanner
    * reconstructs from task JSON.

@@ -106,6 +106,13 @@ export interface AIAgentEditorDockContextValue {
   saveIaRuntimeOverrideToTask: () => void;
   /** Merges partial IA fields into TaskRepository (`normalize` ×2); no hydrated gate. */
   persistIaRuntimeOverrideSnapshot: (partial: Partial<IAAgentConfig>) => void;
+
+  /**
+   * {@link EditorBackendsPanel} registers the handler; tab strip calls {@link invokeBackendsAddManual}
+   * to append a manual backend row (same logic as in-panel «Aggiungi»).
+   */
+  registerBackendsAddManualHandler: (handler: (() => void) | null) => void;
+  invokeBackendsAddManual: () => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

@@ -10,6 +10,22 @@ import { TaskType } from '../types/taskTypes';
 export function normalizeProjectData(pd: any) {
   const out = typeof structuredClone === 'function' ? structuredClone(pd) : JSON.parse(JSON.stringify(pd || {}));
 
+  if (!out.backendCatalog || typeof out.backendCatalog !== 'object') {
+    out.backendCatalog = {
+      schemaVersion: 1,
+      manualEntries: [],
+      auditLog: [],
+      catalogVersion: 0,
+    };
+  } else {
+    out.backendCatalog.manualEntries = Array.isArray(out.backendCatalog.manualEntries)
+      ? out.backendCatalog.manualEntries
+      : [];
+    out.backendCatalog.auditLog = Array.isArray(out.backendCatalog.auditLog) ? out.backendCatalog.auditLog : [];
+    if (typeof out.backendCatalog.catalogVersion !== 'number') out.backendCatalog.catalogVersion = 0;
+    if (out.backendCatalog.schemaVersion !== 1) out.backendCatalog.schemaVersion = 1;
+  }
+
   // ✅ Normalize taskTemplates - type must be TaskType enum
   (out.taskTemplates || []).forEach((cat: any) => {
     (cat.items || []).forEach((item: any) => {
