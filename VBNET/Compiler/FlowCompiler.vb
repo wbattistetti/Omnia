@@ -15,7 +15,16 @@ Public Class FlowCompiler
     ''' <summary>
     ''' Crea un CompiledTask type-safe in base al TaskType usando il factory pattern
     ''' </summary>
-    Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As TaskDefinition, row As TaskRow, node As FlowNode, taskId As String, flow As Flow, errors As List(Of CompilationError)) As CompiledTask
+    Private Function CreateTypedCompiledTask(
+        taskType As TaskTypes,
+        task As TaskDefinition,
+        row As TaskRow,
+        node As FlowNode,
+        taskId As String,
+        flow As Flow,
+        errors As List(Of CompilationError),
+        knownVariableIds As HashSet(Of String)
+    ) As CompiledTask
         Console.WriteLine($"🔍 [COMPILER][FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
         ' Usa il factory per ottenere il compiler appropriato
@@ -35,7 +44,7 @@ Public Class FlowCompiler
         Dim escalationIssuesAdded As Integer = 0
 
         Try
-            result = compiler.Compile(task, taskId, allTemplates)
+            result = compiler.Compile(task, taskId, allTemplates, knownVariableIds)
             compileSucceeded = True
             Console.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
             System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
@@ -266,6 +275,16 @@ Public Class FlowCompiler
     ''' Trasforma IDE.* → Runtime.*
     ''' </summary>
     Public Function CompileFlow(flow As Flow, Optional variables As List(Of VariableInstance) = Nothing, Optional projectId As String = Nothing) As CompiledFlow
+        Dim knownVariableIds As HashSet(Of String) = Nothing
+        If variables IsNot Nothing AndAlso variables.Count > 0 Then
+            knownVariableIds = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+            For Each v In variables
+                If v IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(v.Id) Then
+                    knownVariableIds.Add(v.Id.Trim())
+                End If
+            Next
+        End If
+
         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
         Console.WriteLine($"🔧 [COMPILER][FlowCompiler] Starting compilation...")
         System.Diagnostics.Debug.WriteLine($"🔧 [COMPILER][FlowCompiler] Starting compilation...")
@@ -477,7 +496,7 @@ Public Class FlowCompiler
                 Console.WriteLine($"✅ [COMPILER][FlowCompiler] Using task.Type: {taskType} (value={typeValue})")
                 System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] Using task.Type: {taskType} (value={typeValue})")
 
-                Dim compiledTask As CompiledTask = CreateTypedCompiledTask(taskType, task, row, node, taskId, flow, errors)
+                Dim compiledTask As CompiledTask = CreateTypedCompiledTask(taskType, task, row, node, taskId, flow, errors, knownVariableIds)
 
                 ' ✅ Skip if compilation failed (compiledTask is Nothing)
                 If compiledTask Is Nothing Then

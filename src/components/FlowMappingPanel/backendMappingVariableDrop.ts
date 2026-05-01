@@ -48,15 +48,15 @@ export function mergeBackendMappingVariableDrop(
   if (projectId && flowCanvasId) {
     ensureFlowVariableBindingForInterfaceRow(projectId, flowCanvasId, vid);
   }
-  const merged = next.map((entry) =>
-    entry.id === newEntry.id
-      ? {
-          ...entry,
-          wireKey: newWireKey,
-          variableRefId: vid,
-        }
-      : entry
-  );
+  const merged = next.map((entry) => {
+    if (entry.id !== newEntry.id) return entry;
+    const { literalConstant: _omitLit, ...rest } = entry as MappingEntry & { literalConstant?: string };
+    return {
+      ...rest,
+      wireKey: newWireKey,
+      variableRefId: vid,
+    };
+  });
   const patched = merged.find((e) => e.id === newEntry.id);
   if (!patched) return null;
   return { merged, newEntry: patched };

@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 
+Imports System.Collections.Generic
 Imports Compiler.DTO.IDE
 Imports Compiler.DTO.Runtime
 Imports TaskEngine
@@ -11,7 +12,12 @@ Imports TaskEngine
 Public Class SubflowTaskCompiler
     Inherits TaskCompilerBase
 
-    Public Overrides Function Compile(task As TaskDefinition, taskId As String, allTemplates As List(Of TaskDefinition)) As CompiledTask
+    Public Overrides Function Compile(
+        task As TaskDefinition,
+        taskId As String,
+        allTemplates As List(Of TaskDefinition),
+        Optional knownVariableIds As HashSet(Of String) = Nothing
+    ) As CompiledTask
         Dim def = TryCast(task, SubflowTaskDefinition)
         If def Is Nothing Then
             Throw New InvalidOperationException(

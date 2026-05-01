@@ -224,10 +224,25 @@ export interface FlowMappingTreeProps {
   /** Backend RECEIVE: crea variabile manuale da nome digitato. */
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
+  /**
+   * Backend: id variabili note (es. GUID da `variableCreationService`) per split variabile vs costante su `inputs[].variable`.
+   * Se omesso, l’adapter usa la modalità legacy (tutto in `variableRefId`).
+   */
+  backendKnownVariableIds?: ReadonlySet<string>;
 }
 
 function updateEntry(entries: MappingEntry[], id: string, patch: Partial<MappingEntry>): MappingEntry[] {
-  return entries.map((e) => (e.id === id ? { ...e, ...patch } : e));
+  return entries.map((e) => {
+    if (e.id !== id) return e;
+    const next: MappingEntry = { ...e, ...patch };
+    if (Object.prototype.hasOwnProperty.call(patch, 'literalConstant') && patch.literalConstant === undefined) {
+      delete (next as MappingEntry & { literalConstant?: string }).literalConstant;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'variableRefId') && patch.variableRefId === undefined) {
+      delete (next as MappingEntry & { variableRefId?: string }).variableRefId;
+    }
+    return next;
+  });
 }
 
 function removeEntry(entries: MappingEntry[], id: string): MappingEntry[] {
@@ -272,6 +287,7 @@ interface RowProps {
   variableOptions: string[];
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
+  backendKnownVariableIds?: ReadonlySet<string>;
 }
 
 function MappingTreeRow({
@@ -305,6 +321,7 @@ function MappingTreeRow({
   variableOptions,
   onCreateOutputVariable,
   onOutputVariableCreated,
+  backendKnownVariableIds,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const labelEditRef = useRef<LabelWithPencilEditHandle>(null);
@@ -701,6 +718,7 @@ function MappingTreeRow({
             variableOptions={variableOptions}
             onCreateOutputVariable={onCreateOutputVariable}
             onOutputVariableCreated={onOutputVariableCreated}
+            backendKnownVariableIds={backendKnownVariableIds}
           />
         </div>
 
@@ -797,6 +815,7 @@ function MappingTreeRow({
               variableOptions={variableOptions}
               onCreateOutputVariable={onCreateOutputVariable}
               onOutputVariableCreated={onOutputVariableCreated}
+              backendKnownVariableIds={backendKnownVariableIds}
             />
           ))}
         </div>
@@ -830,6 +849,7 @@ export function FlowMappingTree({
   backendColumn,
   onCreateOutputVariable,
   onOutputVariableCreated,
+  backendKnownVariableIds,
 }: FlowMappingTreeProps) {
   const workspaceState = useFlowWorkspaceOptional();
   const workspaceFlows = variant === 'interface' ? workspaceState?.flows : undefined;
@@ -1173,6 +1193,7 @@ export function FlowMappingTree({
           variableOptions={variableOptions}
           onCreateOutputVariable={onCreateOutputVariable}
           onOutputVariableCreated={onOutputVariableCreated}
+          backendKnownVariableIds={backendKnownVariableIds}
         />
       ))}
 

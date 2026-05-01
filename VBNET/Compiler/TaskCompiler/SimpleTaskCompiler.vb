@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System.Collections.Generic
 Imports TaskEngine
 Imports Compiler.DTO.IDE
 Imports Newtonsoft.Json.Linq
@@ -17,7 +18,12 @@ Public Class SimpleTaskCompiler
         _taskType = taskType
     End Sub
 
-    Public Overrides Function Compile(task As TaskDefinition, taskId As String, allTemplates As List(Of TaskDefinition)) As CompiledTask
+    Public Overrides Function Compile(
+        task As TaskDefinition,
+        taskId As String,
+        allTemplates As List(Of TaskDefinition),
+        Optional knownVariableIds As HashSet(Of String) = Nothing
+    ) As CompiledTask
         Dim compiledTask As CompiledTask
 
         Select Case _taskType
@@ -131,7 +137,7 @@ Public Class SimpleTaskCompiler
                         Dim mockTableDesign = ParseMockTableJson(backendDef.MockTable, backendDef.Inputs, backendDef.Outputs)
 
                         ' ✅ NEW: Build ColumnMapping
-                        Dim columnMapping = BuildColumnMapping(backendDef.Inputs, backendDef.Outputs, task.Id)
+                        Dim columnMapping = BuildColumnMapping(backendDef.Inputs, backendDef.Outputs, task.Id, knownVariableIds)
 
                         ' ✅ NEW: Compile MockTableDesign + ColumnMapping → MockRows
                         Dim mockRows = CompileMockTable(mockTableDesign, columnMapping, task.Id)
@@ -531,11 +537,12 @@ Public Class SimpleTaskCompiler
     Private Function BuildColumnMapping(
         inputs As List(Of Dictionary(Of String, Object)),
         outputs As List(Of Dictionary(Of String, Object)),
-        taskId As String
+        taskId As String,
+        knownVariableIds As HashSet(Of String)
     ) As Compiler.DTO.IDE.ColumnMapping
         Dim mapping As New Compiler.DTO.IDE.ColumnMapping()
 
-        ' ✅ Build input mappings: columnName → varId
+        ' ✅ Build input mappings: columnName → varId (stesso campo TS; costante se non in knownVariableIds)
         If inputs IsNot Nothing Then
             For Each inputDef In inputs
                 Dim columnName = If(inputDef.ContainsKey("internalName"), inputDef("internalName")?.ToString(), "")
@@ -543,13 +550,15 @@ Public Class SimpleTaskCompiler
 
                 If Not String.IsNullOrEmpty(columnName) AndAlso Not String.IsNullOrEmpty(varId) Then
                     mapping.InputMappings(columnName) = varId
+                    Dim isLit = knownVariableIds IsNot Nothing AndAlso Not knownVariableIds.Contains(varId)
+                    mapping.InputIsLiteral(columnName) = isLit
                 ElseIf Not String.IsNullOrEmpty(columnName) Then
                     Console.WriteLine($"[SimpleTaskCompiler] ⚠️ Input column '{columnName}' missing varId in task {taskId}")
                 End If
             Next
         End If
 
-        ' ✅ Build output mappings: columnName → varId
+        ' ✅ Build output mappings
         If outputs IsNot Nothing Then
             For Each outputDef In outputs
                 Dim columnName = If(outputDef.ContainsKey("internalName"), outputDef("internalName")?.ToString(), "")
@@ -557,6 +566,8 @@ Public Class SimpleTaskCompiler
 
                 If Not String.IsNullOrEmpty(columnName) AndAlso Not String.IsNullOrEmpty(varId) Then
                     mapping.OutputMappings(columnName) = varId
+                    Dim isLit = knownVariableIds IsNot Nothing AndAlso Not knownVariableIds.Contains(varId)
+                    mapping.OutputIsLiteral(columnName) = isLit
                 ElseIf Not String.IsNullOrEmpty(columnName) Then
                     Console.WriteLine($"[SimpleTaskCompiler] ⚠️ Output column '{columnName}' missing varId in task {taskId}")
                 End If
@@ -613,14 +624,16 @@ Public Class SimpleTaskCompiler
                 If col.Type = Compiler.DTO.IDE.ColumnType.Input Then
                     If mapping.InputMappings.ContainsKey(cell.ColumnName) Then
                         Dim varId = mapping.InputMappings(cell.ColumnName)
-                        compiledRow.Conditions.Add(New CompiledMockCondition(varId, cell.Value))
+                        Dim isLit = mapping.InputIsLiteral IsNot Nothing AndAlso mapping.InputIsLiteral.ContainsKey(cell.ColumnName) AndAlso mapping.InputIsLiteral(cell.ColumnName)
+                        compiledRow.Conditions.Add(New CompiledMockCondition(varId, cell.Value, isLit))
                     Else
                         Console.WriteLine($"[SimpleTaskCompiler] ⚠️ Row {row.Id}: input column '{cell.ColumnName}' not mapped to any variable")
                     End If
                 Else
                     If mapping.OutputMappings.ContainsKey(cell.ColumnName) Then
                         Dim varId = mapping.OutputMappings(cell.ColumnName)
-                        compiledRow.Assignments.Add(New CompiledMockAssignment(varId, cell.Value))
+                        Dim isLit = mapping.OutputIsLiteral IsNot Nothing AndAlso mapping.OutputIsLiteral.ContainsKey(cell.ColumnName) AndAlso mapping.OutputIsLiteral(cell.ColumnName)
+                        compiledRow.Assignments.Add(New CompiledMockAssignment(varId, cell.Value, isLit))
                     Else
                         Console.WriteLine($"[SimpleTaskCompiler] ⚠️ Row {row.Id}: output column '{cell.ColumnName}' not mapped to any variable")
                     End If

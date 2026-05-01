@@ -173,6 +173,12 @@ export default function BackendCallEditor({
     }
   }, [projectData, variablesRefreshKey]); // ✅ Include variablesRefreshKey to force re-render
 
+  /** Euristica variabile (GUID noto) vs valore costante su `inputs[].variable` / `outputs[].variable`. */
+  const knownBackendVariableIdSet = React.useMemo(
+    () => new Set(availableVariables),
+    [availableVariables]
+  );
+
   // ─────────────────────────────────────────────────────────
   // Config state must be declared before hooks that read `config` (Swagger / missing fields).
   // ─────────────────────────────────────────────────────────
@@ -488,21 +494,21 @@ export default function BackendCallEditor({
   const mappingSend = React.useMemo(
     () =>
       enrichBackendMappingEntriesOpenApi(
-        backendInputsToMappingEntries(config.inputs),
+        backendInputsToMappingEntries(config.inputs, knownBackendVariableIdSet),
         'send',
         openapiDescriptionSnapshots
       ),
-    [config.inputs, openapiDescriptionSnapshots]
+    [config.inputs, knownBackendVariableIdSet, openapiDescriptionSnapshots]
   );
 
   const mappingReceive = React.useMemo(
     () =>
       enrichBackendMappingEntriesOpenApi(
-        backendOutputsToMappingEntries(config.outputs),
+        backendOutputsToMappingEntries(config.outputs, knownBackendVariableIdSet),
         'receive',
         openapiDescriptionSnapshots
       ),
-    [config.outputs, openapiDescriptionSnapshots]
+    [config.outputs, knownBackendVariableIdSet, openapiDescriptionSnapshots]
   );
 
   type MappingEntriesUpdater = MappingEntry[] | ((prev: MappingEntry[]) => MappingEntry[]);
@@ -510,7 +516,7 @@ export default function BackendCallEditor({
   const handleBackendSendChange = React.useCallback(
     (entriesOrUpdater: MappingEntriesUpdater) => {
       setConfig((prev) => {
-        const currentMapping = backendInputsToMappingEntries(prev.inputs);
+        const currentMapping = backendInputsToMappingEntries(prev.inputs, knownBackendVariableIdSet);
         const nextEntries =
           typeof entriesOrUpdater === 'function' ? entriesOrUpdater(currentMapping) : entriesOrUpdater;
         return {
@@ -519,13 +525,13 @@ export default function BackendCallEditor({
         };
       });
     },
-    []
+    [knownBackendVariableIdSet]
   );
 
   const handleBackendReceiveChange = React.useCallback(
     (entriesOrUpdater: MappingEntriesUpdater) => {
       setConfig((prev) => {
-        const currentMapping = backendOutputsToMappingEntries(prev.outputs);
+        const currentMapping = backendOutputsToMappingEntries(prev.outputs, knownBackendVariableIdSet);
         const nextEntries =
           typeof entriesOrUpdater === 'function' ? entriesOrUpdater(currentMapping) : entriesOrUpdater;
         return {
@@ -534,7 +540,7 @@ export default function BackendCallEditor({
         };
       });
     },
-    []
+    [knownBackendVariableIdSet]
   );
 
   const handleCreateOutputVariable = React.useCallback(
@@ -665,7 +671,13 @@ export default function BackendCallEditor({
     <div className="h-full bg-slate-900 flex flex-col min-h-0" style={{ color: '#e5e7eb' }}>
       {/* ✅ ARCHITECTURE: No local header - icon/title/toolbar are injected into main header */}
 
-      <div className="flex-1 min-h-0 overflow-auto p-3">
+      <div
+        className={
+          hideEndpointRow
+            ? 'flex-1 min-h-0 overflow-auto px-0 py-0'
+            : 'flex-1 min-h-0 overflow-auto p-3'
+        }
+      >
         {/* Endpoint Configuration - Compact (hidden when table view is active) */}
         {!showTableView && !hideEndpointRow && (
           <div className="mb-3 flex gap-3 items-center">
@@ -707,14 +719,22 @@ export default function BackendCallEditor({
               </button>
             </div>
             <TableEditor
-              inputs={(config.inputs || []).map(input => ({
-              ...input,
-                variable: input.variable ? getVariableLabel(input.variable, activeFlowTranslations) || undefined : undefined
-              }))}
-              outputs={(config.outputs || []).map(output => ({
-                ...output,
-                variable: output.variable ? getVariableLabel(output.variable, activeFlowTranslations) || undefined : undefined
-              }))}
+              inputs={(config.inputs || []).map((input) => {
+                const v = input.variable?.trim();
+                const displayVar =
+                  v && knownBackendVariableIdSet.has(v)
+                    ? getVariableLabel(v, activeFlowTranslations) || undefined
+                    : v || undefined;
+                return { ...input, variable: displayVar };
+              })}
+              outputs={(config.outputs || []).map((output) => {
+                const v = output.variable?.trim();
+                const displayVar =
+                  v && knownBackendVariableIdSet.has(v)
+                    ? getVariableLabel(v, activeFlowTranslations) || undefined
+                    : v || undefined;
+                return { ...output, variable: displayVar };
+              })}
               rows={config.mockTable || []}
               columns={config.mockTableColumns}
               onChange={(rows) => setConfig(prev => ({ ...prev, mockTable: rows }))}
@@ -722,7 +742,7 @@ export default function BackendCallEditor({
             />
           </>
         ) : (
-        <div className="flex-1 min-h-[320px] min-w-0 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
+        <div className="flex-1 min-h-[320px] min-w-0 flex flex-col min-h-0">
           <InterfaceMappingEditor
             variant="backend"
             showVariantToggle={false}
@@ -734,14 +754,15 @@ export default function BackendCallEditor({
             backendReceive={mappingReceive}
             onBackendSendChange={handleBackendSendChange}
             onBackendReceiveChange={handleBackendReceiveChange}
+            backendKnownVariableIds={knownBackendVariableIdSet}
             apiOptions={availableApiParams}
             variableOptions={availableVariables}
             showApiFields={showApiColumn}
             onCreateOutputVariable={handleCreateOutputVariable}
             onOutputVariableCreated={handleOutputVariableCreated}
             showInterfacePalette={false}
-            className="bg-slate-900"
-            innerClassName="!p-2"
+            compactBackendPanels
+            className="bg-transparent"
             flowDropTarget={
               getActiveFlowCanvasId() ? { flowCanvasId: getActiveFlowCanvasId()! } : undefined
             }

@@ -1,5 +1,5 @@
 /**
- * Backend mapping "Variabile" column: pick variable by GUID; label from active flow `meta.translations` only.
+ * Backend mapping colonna «Variabile»: scelta GUID da elenco; in SEND anche valore costante (euristica id noto vs testo).
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -12,16 +12,22 @@ import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlo
 
 const mirror10 = 'text-[10px] px-2 py-1 font-normal';
 
+export type BackendMappingCommitPatch = {
+  variableRefId?: string;
+  literalConstant?: string;
+};
+
 export interface BackendMappingVariableFieldProps {
   mode: 'send' | 'receive';
-  /** Variable GUID when wired. */
   variableRefId?: string;
-  /** Sorted unique variable GUIDs (see {@link VariableCreationService.getAllVarNames}). */
+  /** SEND: valore letterale persistito sul task quando non è un id variabile noto. */
+  literalConstant?: string;
+  /** SEND: insieme degli id variabile del progetto (GUID) per l’euristica variabile vs costante. */
+  knownVariableIds?: ReadonlySet<string>;
   variableOptions: string[];
   placeholder?: string;
   accentClassName?: string;
-  onCommit: (patch: { variableRefId?: string }) => void;
-  /** RECEIVE: create variable when user confirms a new name (Invio). */
+  onCommit: (patch: BackendMappingCommitPatch) => void;
   onCreateVariable?: (displayName: string) => { id: string; label: string } | null;
   onVariableCreated?: () => void;
 }
@@ -46,12 +52,33 @@ function filterOptions(
   });
 }
 
-const panelClassName =
-  'min-w-[12rem] max-w-[min(20rem,92vw)] rounded-md border border-amber-500/40 bg-slate-950 shadow-lg ring-1 ring-amber-500/25';
+const panelBaseClassName =
+  'rounded-md border border-amber-500/40 bg-slate-950 shadow-lg ring-1 ring-amber-500/25';
+
+/** Match list row text (`text-[10px] font-normal`); avoids measuring `w-full` buttons (scrollWidth = row width). */
+function measureTextWidthPx(text: string, fontFamily: string): number {
+  if (typeof document === 'undefined' || !text) return 0;
+  const span = document.createElement('span');
+  span.style.cssText = [
+    'position:absolute',
+    'visibility:hidden',
+    'white-space:nowrap',
+    'font-size:10px',
+    'font-weight:400',
+    `font-family:${fontFamily}`,
+  ].join(';');
+  span.textContent = text;
+  document.body.appendChild(span);
+  const w = span.offsetWidth;
+  document.body.removeChild(span);
+  return w;
+}
 
 export function BackendMappingVariableField({
   mode,
   variableRefId,
+  literalConstant,
+  knownVariableIds,
   variableOptions,
   placeholder = 'Variabile',
   accentClassName = 'text-amber-100/95',
@@ -74,12 +101,24 @@ export function BackendMappingVariableField({
   );
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const [sendLiteralDraft, setSendLiteralDraft] = useState('');
+  /** Max intrinsic width of menu labels + placeholder/draft (not full row width). */
+  const [labelColumnMaxPx, setLabelColumnMaxPx] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const inputTopRef = useRef<HTMLInputElement>(null);
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
-  const displayText = variableRefId ? menuLabel(variableRefId) : '';
+  const knownIds = useMemo(
+    () => knownVariableIds ?? new Set(variableOptions),
+    [knownVariableIds, variableOptions]
+  );
+
+  const displayText = variableRefId
+    ? menuLabel(variableRefId)
+    : literalConstant?.trim()
+      ? literalConstant.trim()
+      : '';
 
   useEffect(() => {
     if (!open) return;
@@ -93,28 +132,79 @@ export function BackendMappingVariableField({
   }, [open]);
 
   useLayoutEffect(() => {
-    if (!open) return;
-    const place = () => {
+    if (!open) {
+      setLabelColumnMaxPx(0);
+      setPanelStyle({});
+      return;
+    }
+    const root = rootRef.current;
+    const fontFamily = root ? getComputedStyle(root).fontFamily : 'system-ui,sans-serif';
+    let max = 0;
+    for (const opt of variableOptions) {
+      max = Math.max(max, measureTextWidthPx(menuLabel(opt), fontFamily));
+    }
+    if (mode === 'send') {
+      max = Math.max(max, measureTextWidthPx('Costante (Invio)', fontFamily));
+      max = Math.max(max, measureTextWidthPx(sendLiteralDraft, fontFamily));
+    } else {
+      max = Math.max(max, measureTextWidthPx('Cerca per GUID o crea (Invio)', fontFamily));
+      max = Math.max(max, measureTextWidthPx(draft, fontFamily));
+    }
+    const capped = Math.max(max, 40);
+    setLabelColumnMaxPx(capped);
+
+    const runPlace = () => {
       const r = rootRef.current?.getBoundingClientRect();
       if (!r) return;
-      const maxW = Math.min(320, window.innerWidth - 16);
-      const left = Math.max(8, Math.min(r.left, window.innerWidth - maxW - 8));
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const padX = 16;
+      const inputBorderBox = Math.min(Math.max(capped + padX + 2, 72), Math.min(320, vw - 16));
+      const panelW = Math.min(inputBorderBox + padX, vw - 16);
+      const left = Math.max(8, Math.min(r.left, vw - panelW - 8));
+
+      const receiveFiltered = filterOptions(variableOptions, draft, mergedTr);
+      const itemCount = mode === 'receive' ? receiveFiltered.length : variableOptions.length;
+      const estList = Math.min(itemCount * 26 + 12, 192);
+      const estHeader = 44;
+      const estPanelH = estHeader + estList + 8;
+      const ph = panelRef.current?.getBoundingClientRect().height || estPanelH;
+
+      const gap = 4;
+      const margin = 8;
+      let top = r.bottom + gap;
+      const bottomOverflow = top + ph > vh - margin;
+      const fitsAbove = r.top - gap - ph >= margin;
+      if (bottomOverflow && fitsAbove) {
+        top = r.top - gap - ph;
+      } else if (bottomOverflow && !fitsAbove) {
+        top = Math.max(margin, vh - margin - ph);
+      }
+
       setPanelStyle({
         position: 'fixed',
         left,
-        top: r.bottom + 4,
-        width: maxW,
+        top,
+        width: panelW,
         zIndex: 100000,
       });
     };
-    place();
-    window.addEventListener('scroll', place, true);
-    window.addEventListener('resize', place);
+
+    runPlace();
+    let rafNested = 0;
+    const raf1 = window.requestAnimationFrame(() => {
+      runPlace();
+      rafNested = window.requestAnimationFrame(() => runPlace());
+    });
+    window.addEventListener('scroll', runPlace, true);
+    window.addEventListener('resize', runPlace);
     return () => {
-      window.removeEventListener('scroll', place, true);
-      window.removeEventListener('resize', place);
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(rafNested);
+      window.removeEventListener('scroll', runPlace, true);
+      window.removeEventListener('resize', runPlace);
     };
-  }, [open]);
+  }, [open, variableOptions, menuLabel, mode, sendLiteralDraft, draft, mergedTr]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -123,16 +213,23 @@ export function BackendMappingVariableField({
     }
   }, [open, mode]);
 
-  const showEmpty = !variableRefId?.trim();
+  useEffect(() => {
+    if (open && mode === 'send') {
+      setSendLiteralDraft(literalConstant?.trim() ?? '');
+    }
+  }, [open, mode, literalConstant]);
+
+  const showEmpty = !variableRefId?.trim() && !literalConstant?.trim();
   const emptyClass = 'text-slate-500 italic font-normal';
 
   const pickExisting = useCallback(
     (varId: string) => {
       const id = String(varId || '').trim();
       if (!id || !isUuidString(id)) return;
-      onCommit({ variableRefId: id });
+      onCommit({ variableRefId: id, literalConstant: undefined });
       setOpen(false);
       setDraft('');
+      setSendLiteralDraft('');
     },
     [onCommit]
   );
@@ -153,7 +250,7 @@ export function BackendMappingVariableField({
     if (onCreateVariable) {
       const created = onCreateVariable(t);
       if (created) {
-        onCommit({ variableRefId: created.id });
+        onCommit({ variableRefId: created.id, literalConstant: undefined });
         onVariableCreated?.();
       }
     }
@@ -161,18 +258,38 @@ export function BackendMappingVariableField({
     setDraft('');
   }, [draft, variableOptions, onCreateVariable, onCommit, onVariableCreated, pickExisting]);
 
-  const filtered = filterOptions(variableOptions, mode === 'receive' ? draft : draft, mergedTr);
+  const handleSendLiteralSubmit = useCallback(() => {
+    const t = sendLiteralDraft.trim();
+    if (!t) {
+      onCommit({ variableRefId: undefined, literalConstant: undefined });
+    } else if (knownIds.has(t)) {
+      onCommit({ variableRefId: t, literalConstant: undefined });
+    } else {
+      onCommit({ variableRefId: undefined, literalConstant: t });
+    }
+    setOpen(false);
+    setDraft('');
+  }, [knownIds, onCommit, sendLiteralDraft]);
+
+  const filteredReceive = filterOptions(variableOptions, draft, mergedTr);
+  const filteredSend = variableOptions;
+
+  const innerPadAndBorder = 16 + 2;
+  const constantInputWidthPx =
+    labelColumnMaxPx > 0
+      ? Math.min(Math.max(labelColumnMaxPx + innerPadAndBorder, 72), Math.min(320, typeof window !== 'undefined' ? window.innerWidth - 16 : 320))
+      : undefined;
 
   const panel = open ? (
     <div
       ref={panelRef}
-      className={panelClassName}
+      className={`${panelBaseClassName} min-w-0`}
       style={panelStyle}
       onPointerDownCapture={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {mode === 'receive' && (
-        <div className="border-b border-amber-500/20 p-1.5">
+        <div className="border-b border-amber-500/20 px-2 pt-1.5 pb-1.5">
           <input
             ref={inputTopRef}
             type="text"
@@ -191,24 +308,30 @@ export function BackendMappingVariableField({
         </div>
       )}
       {mode === 'send' && (
-        <div className="border-b border-amber-500/20 p-1.5">
+        <div className="border-b border-amber-500/20 px-2 pt-1.5 pb-1.5 flex justify-start min-w-0">
           <input
             type="text"
-            className="w-full rounded border border-amber-400/40 bg-slate-900 px-2 py-1 text-[10px] text-amber-50 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-400/60"
-            placeholder="Filtra per GUID…"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            className="min-w-0 rounded border border-amber-400/40 bg-slate-900 px-2 py-1 text-[10px] text-amber-50 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-400/60 box-border"
+            style={constantInputWidthPx != null ? { width: constantInputWidthPx } : { width: '100%' }}
+            placeholder="Costante (Invio)"
+            value={sendLiteralDraft}
+            onChange={(e) => setSendLiteralDraft(e.target.value)}
             onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSendLiteralSubmit();
+              }
               if (e.key === 'Escape') setOpen(false);
             }}
+            title="Valore fisso inviato all’API se non scegli una variabile dall’elenco sotto"
           />
         </div>
       )}
       <ul className="max-h-48 overflow-y-auto py-0.5" role="listbox">
-        {filtered.length === 0 ? (
+        {(mode === 'receive' ? filteredReceive : filteredSend).length === 0 ? (
           <li className="px-2 py-1.5 text-[10px] text-slate-500">Nessuna variabile</li>
         ) : (
-          filtered.map((opt) => (
+          (mode === 'receive' ? filteredReceive : filteredSend).map((opt) => (
             <li key={opt}>
               <button
                 type="button"

@@ -1,5 +1,6 @@
 /**
- * Mapping section: horizontal accent header + matching border around rounded frame (SEND/RECEIVE, INPUT/OUTPUT).
+ * Mapping section: accent header + optional frame (SEND/RECEIVE, INPUT/OUTPUT).
+ * `flat`: lighter single border, no inner shadow — less “nested box” chrome when embedded (e.g. Backend Call).
  */
 
 import React from 'react';
@@ -56,6 +57,8 @@ export interface MappingBlockProps {
   backendMappingDropTarget?: { flowCanvasId: string; zone: 'send' | 'receive' };
   /** When true, tree body grows with the column (Interface double-column layout). */
   fillBodyHeight?: boolean;
+  /** Thinner border, no shadow-inner — embedded backend panels without double-frame look. */
+  flat?: boolean;
 }
 
 /** Max body height before vertical scroll; keeps panels short when few rows. */
@@ -73,6 +76,7 @@ export function MappingBlock({
   flowDropTarget,
   backendMappingDropTarget,
   fillBodyHeight = false,
+  flat = false,
 }: MappingBlockProps) {
   const { headerClass, borderClass, label } = ACCENT[accent];
   const text = labelOverride ?? label;
@@ -82,9 +86,15 @@ export function MappingBlock({
     'text-[10px] font-bold leading-none tracking-wide text-slate-950 uppercase select-none';
   const borderBar = borderClassNameOverride ?? borderClass;
 
+  const frameClass = flat
+    ? 'rounded-md border border-slate-600/25 bg-slate-950/30'
+    : `rounded-xl border-2 ${borderBar} bg-[#0a0c10] shadow-inner`;
+
+  const bodyPad = flat ? 'p-1.5' : 'p-2.5';
+
   return (
     <div
-      className={`flex flex-col min-h-0 rounded-xl border-2 ${borderBar} overflow-hidden min-w-0 bg-[#0a0c10] shadow-inner ${rootClassName}`}
+      className={`flex flex-col min-h-0 overflow-hidden min-w-0 ${frameClass} ${rootClassName}`}
       {...(flowDropTarget
         ? {
             'data-flow-interface-zone': flowDropTarget.zone,
@@ -109,8 +119,8 @@ export function MappingBlock({
       <div
         className={
           fillBodyHeight
-            ? 'min-h-0 min-w-0 flex-1 p-2.5 overflow-y-auto overflow-x-hidden'
-            : `min-h-0 min-w-0 p-2.5 overflow-y-auto overflow-x-hidden ${BODY_MAX_H}`
+            ? `min-h-0 min-w-0 flex-1 ${bodyPad} overflow-y-auto overflow-x-hidden`
+            : `min-h-0 min-w-0 ${bodyPad} overflow-y-auto overflow-x-hidden ${BODY_MAX_H}`
         }
       >
         {children}

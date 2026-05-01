@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System.Collections.Generic
 Imports Compiler.DTO.IDE
 Imports TaskEngine
 
@@ -16,7 +17,13 @@ Public MustInherit Class TaskCompilerBase
     ''' <param name="task">Il task da compilare</param>
     ''' <param name="taskId">L'ID del task da compilare</param>
     ''' <param name="allTemplates">Lista di tutti i template necessari per la compilazione (incluso il template referenziato e tutti i sub-template)</param>
-    Public MustOverride Function Compile(task As TaskDefinition, taskId As String, allTemplates As List(Of TaskDefinition)) As CompiledTask
+    ''' <param name="knownVariableIds">Id variabili progetto/flow: se presente, <c>inputs[].variable</c> non in elenco è trattato come costante in mockTable (stesso modello del TS).</param>
+    Public MustOverride Function Compile(
+        task As TaskDefinition,
+        taskId As String,
+        allTemplates As List(Of TaskDefinition),
+        Optional knownVariableIds As HashSet(Of String) = Nothing
+    ) As CompiledTask
 
     ''' <summary>
     ''' Popola i campi comuni di un CompiledTask (solo logica base, senza metadata flowchart)

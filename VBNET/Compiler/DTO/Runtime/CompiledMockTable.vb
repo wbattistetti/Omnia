@@ -8,7 +8,7 @@ Option Explicit On
 ''' </summary>
 Public Class CompiledMockCondition
     ''' <summary>
-    ''' Variable ID (GUID) in VariableStore
+    ''' Variable ID (GUID) in VariableStore, oppure testo costante se <see cref="IsLiteralConstant"/> è True.
     ''' </summary>
     Public Property VariableId As String
 
@@ -17,14 +17,21 @@ Public Class CompiledMockCondition
     ''' </summary>
     Public Property ExpectedValue As Object
 
+    ''' <summary>
+    ''' Se True, <see cref="VariableId"/> è il valore letterale da confrontare con <see cref="ExpectedValue"/>, non una chiave in VariableStore.
+    ''' </summary>
+    Public Property IsLiteralConstant As Boolean
+
     Public Sub New()
         VariableId = ""
         ExpectedValue = Nothing
+        IsLiteralConstant = False
     End Sub
 
-    Public Sub New(variableId As String, expectedValue As Object)
+    Public Sub New(variableId As String, expectedValue As Object, Optional isLiteralConstant As Boolean = False)
         Me.VariableId = variableId
         Me.ExpectedValue = expectedValue
+        Me.IsLiteralConstant = isLiteralConstant
     End Sub
 End Class
 
@@ -44,14 +51,21 @@ Public Class CompiledMockAssignment
     ''' </summary>
     Public Property Value As Object
 
+    ''' <summary>
+    ''' Se True, il mapping output è una costante senza varId: nessuna scrittura in VariableStore a runtime.
+    ''' </summary>
+    Public Property IsLiteralConstant As Boolean
+
     Public Sub New()
         VariableId = ""
         Value = Nothing
+        IsLiteralConstant = False
     End Sub
 
-    Public Sub New(variableId As String, value As Object)
+    Public Sub New(variableId As String, value As Object, Optional isLiteralConstant As Boolean = False)
         Me.VariableId = variableId
         Me.Value = value
+        Me.IsLiteralConstant = isLiteralConstant
     End Sub
 End Class
 

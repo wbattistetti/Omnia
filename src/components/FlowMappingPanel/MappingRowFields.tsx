@@ -28,6 +28,8 @@ export interface MappingRowFieldsProps {
   /** Backend: SEND = solo variabili esistenti; RECEIVE = crea al volo. */
   backendColumn?: 'send' | 'receive';
   variableOptions: string[];
+  /** Backend: per euristica costante vs variabile (default: elenco `variableOptions`). */
+  backendKnownVariableIds?: ReadonlySet<string>;
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
 }
@@ -45,6 +47,7 @@ export function MappingRowFields({
   onPatch,
   backendColumn,
   variableOptions = [],
+  backendKnownVariableIds,
   onCreateOutputVariable,
   onOutputVariableCreated,
 }: MappingRowFieldsProps) {
@@ -111,6 +114,8 @@ export function MappingRowFields({
           <BackendMappingVariableField
             mode={varMode}
             variableRefId={entry.variableRefId}
+            literalConstant={entry.literalConstant}
+            knownVariableIds={backendKnownVariableIds ?? new Set(variableOptions)}
             variableOptions={variableOptions}
             onCommit={(patch) => onPatch(patch)}
             onCreateVariable={varMode === 'receive' ? onCreateOutputVariable : undefined}

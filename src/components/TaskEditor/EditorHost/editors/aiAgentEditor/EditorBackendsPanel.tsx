@@ -185,7 +185,7 @@ function ManualBackendAccordion({
         </button>
       </div>
       {expanded && editorTask ? (
-        <div className="p-2 border-t border-slate-800/80 min-h-0">
+        <div className="px-0 pt-1 pb-0 border-t border-slate-800/50 min-h-0">
           <EmbeddedBackendCallEditor
             key={editorTask.id}
             task={editorTask}

@@ -11,6 +11,11 @@ export interface MappingEntry {
   apiField: string;
   /** Promised variable GUID when wired from a flow row or wizard (stable for runtime). */
   variableRefId?: string;
+  /**
+   * Backend SEND: valore letterale per il parametro quando `variable` sul task non è un id variabile noto.
+   * Mutuamente esclusivo con {@link variableRefId} in UI; persistenza sul task in `inputs[].variable` (euristica).
+   */
+  literalConstant?: string;
   /** Optional key into `flow.meta.translations` — canonical `var:<uuid>` for variable-linked rows. */
   labelKey?: string;
   /** Backend: human description for tooltip / docs. */
@@ -30,6 +35,7 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
       : `me_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const vid = partial.variableRefId?.trim();
   const lk = partial.labelKey?.trim();
+  const lit = partial.literalConstant?.trim();
   return {
     id,
     wireKey: partial.wireKey.trim(),
@@ -39,6 +45,7 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
     ...(partial.openapiDescriptionDrift !== undefined ? { openapiDescriptionDrift: partial.openapiDescriptionDrift } : {}),
     ...(partial.openapiDescriptionHint !== undefined ? { openapiDescriptionHint: partial.openapiDescriptionHint } : {}),
     ...(vid ? { variableRefId: vid } : {}),
+    ...(lit ? { literalConstant: lit } : {}),
     ...(lk ? { labelKey: lk } : {}),
   };
 }

@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System.Collections.Generic
 Imports System.Linq
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
@@ -25,7 +26,12 @@ Imports TaskEngine
 Public Class UtteranceTaskCompiler
     Inherits TaskCompilerBase
 
-    Public Overrides Function Compile(task As TaskDefinition, taskId As String, allTemplates As List(Of TaskDefinition)) As CompiledTask
+    Public Overrides Function Compile(
+        task As TaskDefinition,
+        taskId As String,
+        allTemplates As List(Of TaskDefinition),
+        Optional knownVariableIds As HashSet(Of String) = Nothing
+    ) As CompiledTask
         ' ✅ Cast a UtteranceTaskDefinition per accedere ai campi specifici
         Dim utteranceTask = TryCast(task, UtteranceTaskDefinition)
         If utteranceTask Is Nothing Then

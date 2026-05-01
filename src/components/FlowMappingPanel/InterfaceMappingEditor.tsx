@@ -119,6 +119,10 @@ export interface InterfaceMappingEditorProps {
   /** Backend RECEIVE: create variable from typed name (Invio). */
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
+  /** Backend: ids variabile noti per costante vs variabile (default: `new Set(variableOptions)`). */
+  backendKnownVariableIds?: ReadonlySet<string>;
+  /** Backend Call editor: thinner SEND/RECEIVE frames, no extra inset — less nested “matryoshka” chrome. */
+  compactBackendPanels?: boolean;
 }
 
 export function InterfaceMappingEditor({
@@ -145,6 +149,7 @@ export function InterfaceMappingEditor({
   showApiFields = true,
   onCreateOutputVariable,
   onOutputVariableCreated,
+  backendKnownVariableIds,
   interfaceDragLabels = [],
   showInterfacePalette = true,
   showLayoutHint = true,
@@ -156,6 +161,7 @@ export function InterfaceMappingEditor({
   interfaceShellHeaderExtra,
   projectId,
   collapsibleInterfaceBlocks = false,
+  compactBackendPanels = false,
 }: InterfaceMappingEditorProps) {
   const interfaceInput = interfaceInputProp ?? [];
   const interfaceOutput = interfaceOutputProp ?? [];
@@ -168,6 +174,11 @@ export function InterfaceMappingEditor({
   /** Backend SEND/RECEIVE: default alphabetical by internal path segment (nome interno). */
   const [sortBackendSendAlphabetical, setSortBackendSendAlphabetical] = useState(true);
   const [sortBackendReceiveAlphabetical, setSortBackendReceiveAlphabetical] = useState(true);
+
+  const backendVariableIdSet = useMemo(
+    () => backendKnownVariableIds ?? new Set(variableOptions),
+    [backendKnownVariableIds, variableOptions]
+  );
 
   /** Pointer drop da riga nodo (useNodeDragDrop) su SEND/RECEIVE quando il canvas è noto. */
   useEffect(() => {
@@ -258,13 +269,12 @@ export function InterfaceMappingEditor({
     [projectId, flowDropTarget, interfaceOutput, onInterfaceOutputChange]
   );
 
-  const blocksClass = useMemo(
-    () =>
-      layout === 'stacked'
-        ? 'flex flex-col gap-3 flex-1 min-h-0'
-        : 'flex flex-row gap-3 flex-1 min-h-0 items-stretch',
-    [layout]
-  );
+  const blocksClass = useMemo(() => {
+    const gap = compactBackendPanels && variant === 'backend' ? 'gap-2' : 'gap-3';
+    return layout === 'stacked'
+      ? `flex flex-col ${gap} flex-1 min-h-0`
+      : `flex flex-row ${gap} flex-1 min-h-0 items-stretch`;
+  }, [layout, compactBackendPanels, variant]);
 
   const mappingBlockRootClass = layout === 'stacked' ? 'w-full' : 'flex-1 min-w-0';
 
@@ -283,7 +293,12 @@ export function InterfaceMappingEditor({
   const outPrefix = `${listIdPrefix}-ifaceOut`;
 
   return (
-    <div ref={containerRef} className={`flex flex-col h-full min-h-0 w-full bg-[#0c0f14] text-slate-100 ${className}`}>
+    <div
+      ref={containerRef}
+      className={`flex flex-col h-full min-h-0 w-full text-slate-100 ${
+        compactBackendPanels ? 'bg-transparent' : 'bg-[#0c0f14]'
+      } ${className}`}
+    >
       {(title || (showVariantToggle && onVariantChange)) && (
         <header className="shrink-0 border-b border-amber-900/30 px-3 py-2 flex flex-wrap items-center gap-2 bg-slate-950/80">
           {title ? <span className="text-amber-200/90 text-sm font-medium truncate">{title}</span> : null}
@@ -336,7 +351,9 @@ export function InterfaceMappingEditor({
       )}
 
       <div
-        className={`flex-1 min-h-0 flex flex-col p-3 ${interfaceFlowTitle && variant === 'interface' ? 'overflow-hidden min-h-0' : 'overflow-y-auto'} ${innerClassName}`}
+        className={`flex-1 min-h-0 flex flex-col ${
+          compactBackendPanels && variant === 'backend' ? 'p-0' : 'p-3'
+        } ${interfaceFlowTitle && variant === 'interface' ? 'overflow-hidden min-h-0' : 'overflow-y-auto'} ${innerClassName}`}
       >
         {showLayoutHint ? (
           <p className="text-[10px] text-slate-500 mb-2">
@@ -349,6 +366,7 @@ export function InterfaceMappingEditor({
           <div className={blocksClass}>
             <MappingBlock
               accent="send"
+              flat={compactBackendPanels}
               rootClassName={mappingBlockRootClass}
               backendMappingDropTarget={
                 flowDropTarget?.flowCanvasId
@@ -377,10 +395,12 @@ export function InterfaceMappingEditor({
                 backendColumn="send"
                 onCreateOutputVariable={onCreateOutputVariable}
                 onOutputVariableCreated={onOutputVariableCreated}
+                backendKnownVariableIds={backendVariableIdSet}
               />
             </MappingBlock>
             <MappingBlock
               accent="receive"
+              flat={compactBackendPanels}
               rootClassName={mappingBlockRootClass}
               backendMappingDropTarget={
                 flowDropTarget?.flowCanvasId
@@ -409,6 +429,7 @@ export function InterfaceMappingEditor({
                 backendColumn="receive"
                 onCreateOutputVariable={onCreateOutputVariable}
                 onOutputVariableCreated={onOutputVariableCreated}
+                backendKnownVariableIds={backendVariableIdSet}
               />
             </MappingBlock>
           </div>

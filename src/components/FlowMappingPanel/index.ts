@@ -11,6 +11,7 @@ export {
   backendOutputsToMappingEntries,
   mappingEntriesToBackendInputs,
   mappingEntriesToBackendOutputs,
+  splitTaskVariableField,
 } from './backendCallMappingAdapter';
 export type { BackendCallInputRow, BackendCallOutputRow } from './backendCallMappingAdapter';
 export { MappingRowShell } from './MappingRowShell';

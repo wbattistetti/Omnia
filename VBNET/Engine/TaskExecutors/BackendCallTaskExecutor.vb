@@ -88,10 +88,15 @@ Public Class BackendCallTaskExecutor
             For Each cond In row.Conditions
                 Dim currentValue As Object = Nothing
 
-                If state.VariableStore.ContainsKey(cond.VariableId) Then
-                    currentValue = state.VariableStore(cond.VariableId)
+                If cond.IsLiteralConstant Then
+                    ' Stesso campo `variable` del task: valore costante, non lookup in VariableStore (allineato a splitTaskVariableField lato TS)
+                    currentValue = cond.VariableId
                 Else
-                    Console.WriteLine($"[BackendCallTaskExecutor] ⚠️ VariableStore does not contain varId '{cond.VariableId}'. Using Nothing for comparison.")
+                    If state.VariableStore.ContainsKey(cond.VariableId) Then
+                        currentValue = state.VariableStore(cond.VariableId)
+                    Else
+                        Console.WriteLine($"[BackendCallTaskExecutor] ⚠️ VariableStore does not contain varId '{cond.VariableId}'. Using Nothing for comparison.")
+                    End If
                 End If
 
                 ' ❌ Se una condizione fallisce → la riga non matcha
@@ -133,6 +138,10 @@ Public Class BackendCallTaskExecutor
 
         Dim assignmentCount = 0
         For Each assign In matchedRow.Assignments
+            If assign.IsLiteralConstant Then
+                Console.WriteLine($"[BackendCallTaskExecutor] ⚠️ Output mapping is a literal (no varId). Skipping VariableStore write.")
+                Continue For
+            End If
             If Not String.IsNullOrEmpty(assign.VariableId) Then
                 state.VariableStore(assign.VariableId) = assign.Value
                 assignmentCount += 1

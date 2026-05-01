@@ -12,7 +12,7 @@ function InlineToolbarStrip({ buttons }: { buttons: ToolbarButton[] }) {
   const visible = buttons.filter((b) => b.visible !== false);
   if (visible.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-1 items-center mb-2 pb-2 border-b border-slate-700 shrink-0">
+    <div className="flex flex-wrap gap-1 items-center mb-1 shrink-0">
       {visible.map((b, i) => {
         if (b.dropdownItems && b.dropdownItems.length > 0) {
           return (
@@ -74,8 +74,8 @@ export function EmbeddedBackendCallEditor({
   const [toolbarButtons, setToolbarButtons] = React.useState<ToolbarButton[]>([]);
 
   return (
-    <div className="flex flex-col min-h-[320px] max-h-[min(70vh,520px)] border border-slate-700/80 rounded-lg bg-slate-900/40 overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-y-auto p-2">
+    <div className="flex flex-col min-h-[320px] max-h-[min(70vh,520px)] overflow-hidden bg-transparent">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-[5px] py-0">
         <InlineToolbarStrip buttons={toolbarButtons} />
         <BackendCallEditor
           task={task}
