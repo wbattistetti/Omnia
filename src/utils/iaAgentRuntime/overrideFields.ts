@@ -45,7 +45,10 @@ export function computeSectionOverrides(
   /** systemPrompt is deprecated in setup UI — do not surface override badges for it. */
   const promptSection = false;
 
-  const toolsSection = stableStringify(value.tools) !== stableStringify(baseline.tools);
+  const toolsSection =
+    stableStringify(value.tools) !== stableStringify(baseline.tools) ||
+    stableStringify(value.convaiBackendToolTaskIds ?? []) !==
+      stableStringify(baseline.convaiBackendToolTaskIds ?? []);
 
   const voiceSection =
     stableStringify(value.voice ?? null) !== stableStringify(baseline.voice ?? null) ||

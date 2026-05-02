@@ -793,6 +793,9 @@ export const AppContent: React.FC<AppContentProps> = ({
       projectName: currentProject?.name,
       flows: allFlows,
       tasks: allTasksInMemory,
+      backendCatalogManualEntryIds: (projectData?.backendCatalog?.manualEntries ?? []).map((e: { id: string }) =>
+        String(e?.id || '').trim()
+      ).filter(Boolean),
       conditions: projectData?.conditions?.flatMap((cat: any) => cat.items || []) || [],
       templates: allTemplates,
       variables: allVariables,
@@ -806,6 +809,7 @@ export const AppContent: React.FC<AppContentProps> = ({
     const saveRequest = orchestrator.prepareSave(domain, {
       flows: allFlows,
       allTemplates: allTemplates,
+      projectData: projectData ?? undefined,
     });
 
     const validation = orchestrator.validateRequest(saveRequest);

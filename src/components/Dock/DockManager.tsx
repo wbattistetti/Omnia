@@ -453,6 +453,7 @@ function renderTabButton(btn: import('../../dock/types').ToolbarButton, idx: num
     : null;
   const buttonId = btn.buttonId;
 
+  const successOn = Boolean(btn.successHighlight && !btn.disabled);
   const buttonProps = {
     onClick: (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -464,15 +465,22 @@ function renderTabButton(btn: import('../../dock/types').ToolbarButton, idx: num
       display: btn.visible === false ? 'none' : 'flex',
       alignItems: 'center',
       gap: 4,
-      background: btn.primary ? '#0b1220' : (btn.active ? 'rgba(255,255,255,0.2)' : 'transparent'),
+      background: successOn
+        ? '#059669'
+        : btn.primary
+          ? '#0b1220'
+          : btn.active
+            ? 'rgba(255,255,255,0.2)'
+            : 'transparent',
       color: '#ffffff',
-      border: btn.primary ? 'none' : '1px solid rgba(255,255,255,0.3)',
+      border: successOn ? '1px solid #047857' : btn.primary ? 'none' : '1px solid rgba(255,255,255,0.3)',
       borderRadius: 6,
       padding: btn.label ? '4px 8px' : '4px 6px',
       cursor: btn.disabled ? 'not-allowed' : 'pointer',
       opacity: btn.disabled ? 0.5 : 1,
       fontSize: '11px',
       whiteSpace: 'nowrap' as const,
+      fontWeight: successOn ? 600 : 400,
     },
   };
 

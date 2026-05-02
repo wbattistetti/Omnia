@@ -19,6 +19,10 @@ import {
 } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
+import {
+  deriveBackendToolDefinition,
+  mergeEffectiveIaAgentTools,
+} from '@domain/iaAgentTools/backendToolDerivation';
 
 export type AiAgentTaskLocation = {
   nodeId?: string;
@@ -174,6 +178,56 @@ export function collectIaAgentRuntimeCompileErrors(
             'ElevenLabs: seleziona il modello LLM per ConvAI.',
             'llm'
           );
+        }
+
+        const backendIds = cfg.convaiBackendToolTaskIds ?? [];
+        for (const bid of backendIds) {
+          const tid = String(bid || '').trim();
+          if (!tid) continue;
+          const bt = taskRepository.getTask(tid);
+          if (!bt) {
+            push(
+              'IaConvaiBackendToolMissing',
+              `ConvAI: Backend Call task ${tid.slice(0, 8)}… non trovato nel progetto.`,
+              'tools'
+            );
+            continue;
+          }
+          if (bt.type !== TaskType.BackendCall) {
+            push(
+              'IaConvaiBackendToolWrongType',
+              `ConvAI: il task ${tid.slice(0, 8)}… non è di tipo Backend Call.`,
+              'tools'
+            );
+            continue;
+          }
+          const ep = (bt as Task & { endpoint?: { url?: string } }).endpoint;
+          const url = ep && typeof ep.url === 'string' ? ep.url.trim() : '';
+          if (!url) {
+            push(
+              'IaConvaiBackendToolNoUrl',
+              `ConvAI: Backend Call (${tid.slice(0, 8)}…) senza URL endpoint.`,
+              'tools'
+            );
+          }
+          const dr = deriveBackendToolDefinition(bt);
+          if (!dr.ok) {
+            push('IaConvaiBackendToolInvalid', `ConvAI: ${dr.error}`, 'tools');
+          }
+        }
+
+        const mergedTools = mergeEffectiveIaAgentTools(cfg, (id) => taskRepository.getTask(id));
+        for (const td of mergedTools) {
+          if (!td.name.trim()) {
+            push('IaConvaiToolMissingName', 'ConvAI: ogni tool deve avere un nome non vuoto.', 'tools');
+          }
+          if (!td.description.trim()) {
+            push(
+              'IaConvaiToolMissingDescription',
+              `ConvAI: il tool «${td.name || '(senza nome)'}» richiede una descrizione non vuota.`,
+              'tools'
+            );
+          }
         }
         break;
       }

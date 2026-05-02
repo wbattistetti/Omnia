@@ -109,6 +109,7 @@ export function getDefaultConfig(platform: IAAgentConfig['platform']): IAAgentCo
         model: 'convai_default',
         ...base,
         systemPrompt: '',
+        convaiBackendToolTaskIds: [],
         /** Vuoto → builder applica default per lingua (`eleven_flash_v2` / `eleven_flash_v2_5`). */
         ttsModel: '',
         voice: { id: '', language: 'en', settings: {} },

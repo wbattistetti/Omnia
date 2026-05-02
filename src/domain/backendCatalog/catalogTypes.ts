@@ -34,6 +34,13 @@ export interface BackendCallSpecMeta {
     inputs: Record<string, string>;
     outputs: Record<string, string>;
   };
+  /**
+   * Dopo Read API: tipo UI suggerito per parametro/property body (chiave = nome API come in SEND).
+   * Valori: `text` | `number` | `date` | `time` | `datetime-local` (allineati a `input type=` HTML5).
+   */
+  openapiInputUiKindByApiName?: Record<string, string>;
+  /** OpenAPI `operationId` dell’operazione scelta al Read API (per naming tool verso ConvAI). */
+  openapiOperationId?: string | null;
 }
 
 /** Voce manuale nel progetto (`project.backendCatalog.manualEntries`). */

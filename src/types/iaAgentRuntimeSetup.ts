@@ -45,6 +45,11 @@ export interface IAAgentConfig {
    */
   systemPrompt: string;
   tools: ToolDefinition[];
+  /**
+   * Task Backend Call (GUID) da esporre come tool ConvAI (oltre ai tool manuali in `tools`).
+   * Naming e schema sono derivati dal task (vedi `@domain/iaAgentTools/backendToolDerivation`).
+   */
+  convaiBackendToolTaskIds?: string[];
   voice?: IAAgentVoiceConfig;
   /** Preferred over `voice` for ElevenLabs when set (1 primary + max 3 secondary). */
   voices?: IAAgentVoiceEntry[];

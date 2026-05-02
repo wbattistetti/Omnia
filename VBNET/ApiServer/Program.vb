@@ -11,6 +11,7 @@ Imports ApiServer.Repositories
 Imports ApiServer.SessionStorage
 Imports ApiServer.Infrastructure
 Imports ApiServer.ElevenLabs
+Imports ApiServer.Designer
 Imports Microsoft.AspNetCore.Builder
 Imports Microsoft.AspNetCore.Hosting
 Imports Microsoft.AspNetCore.Http
@@ -240,6 +241,13 @@ Module Program
                                       Console.WriteLine("✅ [Health] Health check requested")
                                       Return Results.Ok(New With {.status = "ok", .timestamp = DateTime.UtcNow.ToString("O")})
                                   End Function)
+
+        ' POST /api/designer/backend-call-test/proxy — inoltro HTTP per tester Backend Call (no CORS).
+        app.MapPost(
+            "/api/designer/backend-call-test/proxy",
+            Async Function(ctx As HttpContext) As System.Threading.Tasks.Task(Of IResult)
+                Return Await BackendCallTestProxyHandler.HandleAsync(ctx)
+            End Function)
 
         ' POST /api/runtime/compile - Read body manually to use Newtonsoft.Json (handles string->int conversion)
         app.MapPost("/api/runtime/compile", Function(context As HttpContext) As System.Threading.Tasks.Task

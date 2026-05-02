@@ -1,13 +1,13 @@
 import React from 'react';
 import type { EditorProps } from '../../EditorHost/types';
 import { taskRepository } from '../../../../services/TaskRepository';
-import { TaskType } from '../../../../types/taskTypes';
+import { TaskType, type Task } from '../../../../types/taskTypes';
 import { useProjectDataUpdate, useProjectData } from '../../../../context/ProjectDataContext';
 import { useProjectTranslations } from '../../../../context/ProjectTranslationsContext';
 import { useActiveFlowMetaTranslationsFlattened } from '../../../../hooks/useActiveFlowMetaTranslations';
 import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
-import { Server, Eye, EyeOff, Table2, RefreshCw, BookOpen, FlaskConical, ListPlus } from 'lucide-react';
+import { Server, Eye, EyeOff, Table2, BookOpen, FlaskConical, ListPlus, RefreshCw } from 'lucide-react';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { InterfaceMappingEditor } from '../../../../components/FlowMappingPanel/InterfaceMappingEditor';
 import {
@@ -22,9 +22,14 @@ import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import { resolveVariableStoreProjectId } from '../../../../utils/safeProjectId';
 import { getVariableLabel } from '../../../../utils/getVariableLabel';
 import type { ToolbarButton } from '../../../../dock/types';
-import TableEditor from './TableEditor';
-import { slugInternalName } from '../../../../services/openApiBackendCallSpec';
+import { BackendCallMockTable } from './backendMockTable/BackendCallMockTable';
+import { BackendExecutionMode, type BackendMockTableRow } from '../../../../domain/backendTest/backendTestRowTypes';
+import {
+  isBackendMockRowInputsFilledForColumns,
+} from '../../../../domain/backendTest/backendMockRowCompletion';
+import { slugInternalName, type OpenApiInputUiKind } from '../../../../services/openApiBackendCallSpec';
 import { runBackendCallReadApiForTask } from '../../../../services/runBackendCallReadApiForTask';
+import { logBackendCallTest } from '../../../../debug/backendCallTestDebug';
 
 function collectUsedInternalNames(cfg: BackendCallConfig): Set<string> {
   const s = new Set<string>();
@@ -57,6 +62,8 @@ interface BackendCallConfig {
     method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
     headers?: Record<string, string>;
   };
+  /** URL documento OpenAPI: Read API lo usa solo se fallisce la discovery sull’endpoint operativo. */
+  openapiSpecUrl?: string;
   // Per ora: struttura semplificata (template locale + eventuali override)
   localTemplateId?: string;
   inputOverrides?: Record<string, string>; // internalName -> readableName (sovrascrive template locale)
@@ -76,12 +83,10 @@ interface BackendCallConfig {
     fieldDescription?: string;
     sampleValues?: string[];
   }>;
-  // Mock table: array di righe con valori input/output
-  mockTable?: Array<{
-    id: string;
-    inputs: Record<string, any>;  // internalName -> valore
-    outputs: Record<string, any>; // internalName -> valore
-  }>;
+  // Mock table: array di righe con valori input/output (+ testRun opzionale)
+  mockTable?: BackendMockTableRow[];
+  /** Default MOCK/REAL per nuove righe e per righe senza override. */
+  mockTableDefaultExecutionMode?: BackendExecutionMode;
   // ✅ NEW: Column definitions (active + parked)
   mockTableColumns?: Array<{
     name: string;
@@ -96,9 +101,108 @@ const DEFAULT_CONFIG: BackendCallConfig = {
     method: 'POST',
     headers: {}
   },
+  openapiSpecUrl: '',
   inputs: [],
   outputs: []
 };
+
+type MockTableColumnDef = { name: string; type: 'input' | 'output'; isActive: boolean };
+
+type MockSigSlice = {
+  inputs?: Array<{ internalName?: string }>;
+  outputs?: Array<{ internalName?: string }>;
+  mockTable?: BackendMockTableRow[];
+  mockTableColumns?: MockTableColumnDef[];
+};
+
+/** Ricalcolo `mockTableColumns` dalla firma SEND/RECEIVE + colonne parked con dati legacy. */
+function computeMockTableColumnsForSignature(prev: MockSigSlice): MockTableColumnDef[] {
+  const currentInputs = prev.inputs || [];
+  const currentOutputs = prev.outputs || [];
+  const existingRows = prev.mockTable || [];
+  const existingColumns = prev.mockTableColumns || [];
+
+  const currentInputNames = new Set(currentInputs.map((inp) => inp.internalName).filter(Boolean));
+  const currentOutputNames = new Set(currentOutputs.map((out) => out.internalName).filter(Boolean));
+
+  const columnsByName = new Map<string, MockTableColumnDef>();
+  for (const col of existingColumns) {
+    columnsByName.set(col.name, col);
+  }
+
+  const allColumnNamesInRows = new Set<string>();
+  for (const row of existingRows) {
+    if (row.inputs) {
+      for (const key of Object.keys(row.inputs)) {
+        allColumnNamesInRows.add(key);
+      }
+    }
+    if (row.outputs) {
+      for (const key of Object.keys(row.outputs)) {
+        allColumnNamesInRows.add(key);
+      }
+    }
+  }
+
+  for (const inputName of currentInputNames) {
+    if (columnsByName.has(inputName)) {
+      const col = columnsByName.get(inputName)!;
+      col.isActive = true;
+      col.type = 'input';
+    } else {
+      columnsByName.set(inputName, { name: inputName, type: 'input', isActive: true });
+    }
+  }
+
+  for (const outputName of currentOutputNames) {
+    if (columnsByName.has(outputName)) {
+      const col = columnsByName.get(outputName)!;
+      col.isActive = true;
+      col.type = 'output';
+    } else {
+      columnsByName.set(outputName, { name: outputName, type: 'output', isActive: true });
+    }
+  }
+
+  for (const colName of allColumnNamesInRows) {
+    if (!currentInputNames.has(colName) && !currentOutputNames.has(colName)) {
+      if (columnsByName.has(colName)) {
+        const col = columnsByName.get(colName)!;
+        col.isActive = false;
+      } else {
+        const isInInputs = existingRows.some((row) => row.inputs && row.inputs[colName] !== undefined);
+        const colType = isInInputs ? 'input' : 'output';
+        columnsByName.set(colName, { name: colName, type: colType, isActive: false });
+      }
+    }
+  }
+
+  return Array.from(columnsByName.values());
+}
+
+/** Mantiene in ogni riga solo chiavi ancora presenti nelle colonne (input/output). */
+function mergeMockTableRowsToColumns(
+  rows: BackendMockTableRow[],
+  columns: MockTableColumnDef[]
+): BackendMockTableRow[] {
+  const validIn = new Set(columns.filter((c) => c.type === 'input').map((c) => c.name));
+  const validOut = new Set(columns.filter((c) => c.type === 'output').map((c) => c.name));
+  return rows.map((row) => {
+    const ni: Record<string, unknown> = {};
+    for (const k of validIn) {
+      if (row.inputs && Object.prototype.hasOwnProperty.call(row.inputs, k)) {
+        ni[k] = row.inputs[k];
+      }
+    }
+    const no: Record<string, unknown> = {};
+    for (const k of validOut) {
+      if (row.outputs && Object.prototype.hasOwnProperty.call(row.outputs, k)) {
+        no[k] = row.outputs[k];
+      }
+    }
+    return { ...row, inputs: ni, outputs: no };
+  });
+}
 
 export default function BackendCallEditor({
   task,
@@ -150,7 +254,8 @@ export default function BackendCallEditor({
   const [swaggerInputContract, setSwaggerInputContract] = React.useState<string[]>([]);
   const [swaggerOutputContract, setSwaggerOutputContract] = React.useState<string[]>([]);
   const [readApiBusy, setReadApiBusy] = React.useState(false);
-  const [testApiBusy, setTestApiBusy] = React.useState(false);
+  const [bulkApiTestBusy, setBulkApiTestBusy] = React.useState(false);
+  const [bulkTestNonce, setBulkTestNonce] = React.useState(0);
 
   // Get available variables for autocomplete
   // ✅ Use readable names directly (e.g., "data di nascita", "data di nascita.giorno")
@@ -190,15 +295,23 @@ export default function BackendCallEditor({
     const outputs: BackendCallConfig['outputs'] = rawOut.filter((o: { internalName?: string }) =>
       Boolean(o?.internalName?.trim())
     );
-    const mockTable: BackendCallConfig['mockTable'] = rawTask?.mockTable;
+    const mockTable = rawTask?.mockTable as BackendCallConfig['mockTable'] | undefined;
     const mockTableColumns: BackendCallConfig['mockTableColumns'] = rawTask?.mockTableColumns;
+    const mockTableDefaultExecutionMode = (rawTask as { mockTableDefaultExecutionMode?: BackendExecutionMode })
+      ?.mockTableDefaultExecutionMode;
+    const openapiSpecUrl =
+      typeof (rawTask as { openapiSpecUrl?: string }).openapiSpecUrl === 'string'
+        ? (rawTask as { openapiSpecUrl: string }).openapiSpecUrl
+        : '';
 
     const cfg: BackendCallConfig = {
       endpoint,
+      openapiSpecUrl,
       inputs,
       outputs,
       ...(mockTable !== undefined ? { mockTable } : {}),
       ...(mockTableColumns !== undefined ? { mockTableColumns } : {}),
+      ...(mockTableDefaultExecutionMode !== undefined ? { mockTableDefaultExecutionMode } : {}),
     };
     return cfg;
   }, []);
@@ -220,6 +333,7 @@ export default function BackendCallEditor({
         null,
         {
           endpoint: DEFAULT_CONFIG.endpoint,
+          openapiSpecUrl: '',
           inputs: initialInputs,
           outputs: initialOutputs,
         } as any,
@@ -231,6 +345,12 @@ export default function BackendCallEditor({
     return buildConfigFromTask(existingTask);
   });
 
+  const [backendToolDescription, setBackendToolDescription] = React.useState(() => {
+    if (!instanceId) return '';
+    const st = taskRepository.getTask(instanceId);
+    return String((st as Task)?.backendToolDescription ?? '');
+  });
+
   React.useEffect(() => {
     if (!instanceId) return;
     const storedTask = taskRepository.getTask(instanceId);
@@ -238,6 +358,7 @@ export default function BackendCallEditor({
 
     const loaded = buildConfigFromTask(storedTask);
     setConfig(loaded);
+    setBackendToolDescription(String((storedTask as Task).backendToolDescription ?? ''));
   }, [instanceId, buildConfigFromTask, endpointExternalRevision]);
 
   React.useEffect(() => {
@@ -246,15 +367,20 @@ export default function BackendCallEditor({
         instanceId,
         {
           endpoint: config.endpoint,
+          openapiSpecUrl: config.openapiSpecUrl ?? '',
           inputs: config.inputs,
           outputs: config.outputs,
           ...(config.mockTable !== undefined ? { mockTable: config.mockTable } : {}),
           ...(config.mockTableColumns !== undefined ? { mockTableColumns: config.mockTableColumns } : {}),
+          ...(config.mockTableDefaultExecutionMode !== undefined
+            ? { mockTableDefaultExecutionMode: config.mockTableDefaultExecutionMode }
+            : {}),
+          backendToolDescription,
         } as any,
         projectId
       );
     }
-  }, [config, instanceId, projectId]);
+  }, [config, backendToolDescription, instanceId, projectId]);
 
   /** Datalist for "Campo API": filled after Read API from Swagger. */
   const availableApiParams = React.useMemo(() => {
@@ -304,11 +430,18 @@ export default function BackendCallEditor({
   }, []);
 
   const handleReadApi = React.useCallback(async () => {
-    const url = config.endpoint.url.trim();
-    if (!url || !instanceId) return;
+    if (!instanceId) return;
+    const op = config.endpoint.url.trim();
+    const spec = (config.openapiSpecUrl || '').trim();
+    if (!op && !spec) {
+      window.alert('Inserire endpoint operativo o Spec URL (OpenAPI).');
+      return;
+    }
     setReadApiBusy(true);
     try {
-      const result = await runBackendCallReadApiForTask(instanceId, projectId, url, config.endpoint.method);
+      const result = await runBackendCallReadApiForTask(instanceId, projectId, op, config.endpoint.method, {
+        openapiSpecUrl: spec || undefined,
+      });
       if (!result.ok) {
         window.alert(result.error);
         return;
@@ -326,122 +459,34 @@ export default function BackendCallEditor({
     } finally {
       setReadApiBusy(false);
     }
-  }, [buildConfigFromTask, config.endpoint.method, config.endpoint.url, instanceId, projectId]);
+  }, [
+    buildConfigFromTask,
+    config.endpoint.method,
+    config.endpoint.url,
+    config.openapiSpecUrl,
+    instanceId,
+    projectId,
+  ]);
 
-  const handleTestApi = React.useCallback(async () => {
-    const url = config.endpoint.url.trim();
-    if (!url) return;
-    setTestApiBusy(true);
-    try {
-      const method = config.endpoint.method;
-      const init: RequestInit = {
-        method,
-        credentials: 'omit',
-        headers: { ...(config.endpoint.headers || {}) },
-      };
-      if (method !== 'GET' && method !== 'HEAD') {
-        const h = init.headers as Record<string, string>;
-        h['Content-Type'] = h['Content-Type'] || 'application/json';
-        init.body = '{}';
-      }
-      const res = await fetch(url, init);
-      const text = await res.text();
-      const preview = text.length > 3500 ? `${text.slice(0, 3500)}…` : text;
-      window.alert(`HTTP ${res.status} ${res.statusText}\n\n${preview}`);
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : String(e));
-    } finally {
-      setTestApiBusy(false);
-    }
-  }, [config.endpoint]);
-
-  // ✅ NEW: Update mockTable columns based on current signature (active + parked columns)
   const updateMockTableColumns = React.useCallback(() => {
-    setConfig(prev => {
-      const currentInputs = prev.inputs || [];
-      const currentOutputs = prev.outputs || [];
-      const existingRows = prev.mockTable || [];
-      const existingColumns = prev.mockTableColumns || [];
+    setConfig((prev) => ({
+      ...prev,
+      mockTableColumns: computeMockTableColumnsForSignature(prev),
+    }));
+  }, []);
 
-      // ✅ Build sets of current signature column names
-      const currentInputNames = new Set(currentInputs.map(inp => inp.internalName).filter(Boolean));
-      const currentOutputNames = new Set(currentOutputs.map(out => out.internalName).filter(Boolean));
-
-      // ✅ Build dictionary of existing columns by name
-      const columnsByName = new Map<string, { name: string; type: 'input' | 'output'; isActive: boolean }>();
-      for (const col of existingColumns) {
-        columnsByName.set(col.name, col);
-      }
-
-      // ✅ Collect all column names from existing rows (to preserve parked columns with data)
-      const allColumnNamesInRows = new Set<string>();
-      for (const row of existingRows) {
-        if (row.inputs) {
-          for (const key of Object.keys(row.inputs)) {
-            allColumnNamesInRows.add(key);
-          }
-        }
-        if (row.outputs) {
-          for (const key of Object.keys(row.outputs)) {
-            allColumnNamesInRows.add(key);
-          }
-        }
-      }
-
-      // ✅ Process input columns
-      for (const inputName of currentInputNames) {
-        if (columnsByName.has(inputName)) {
-          // ✅ Column exists → reactivate it
-          const col = columnsByName.get(inputName)!;
-          col.isActive = true;
-          col.type = 'input';
-        } else {
-          // ✅ New column → create it as active
-          columnsByName.set(inputName, { name: inputName, type: 'input', isActive: true });
-        }
-      }
-
-      // ✅ Process output columns
-      for (const outputName of currentOutputNames) {
-        if (columnsByName.has(outputName)) {
-          // ✅ Column exists → reactivate it
-          const col = columnsByName.get(outputName)!;
-          col.isActive = true;
-          col.type = 'output';
-        } else {
-          // ✅ New column → create it as active
-          columnsByName.set(outputName, { name: outputName, type: 'output', isActive: true });
-        }
-      }
-
-      // ✅ Park columns that are no longer in signature
-      for (const colName of allColumnNamesInRows) {
-        if (!currentInputNames.has(colName) && !currentOutputNames.has(colName)) {
-          if (columnsByName.has(colName)) {
-            // ✅ Park existing column
-            const col = columnsByName.get(colName)!;
-            col.isActive = false;
-          } else {
-            // ✅ Create parked column (preserve data from rows)
-            // Try to infer type from existing cells
-            const isInInputs = existingRows.some(row => row.inputs && row.inputs[colName] !== undefined);
-            const colType = isInInputs ? 'input' : 'output';
-            columnsByName.set(colName, { name: colName, type: colType, isActive: false });
-          }
-        }
-      }
-
-      // ✅ Update columns array
-      const updatedColumns = Array.from(columnsByName.values());
-
+  const refreshMockTableStructure = React.useCallback(() => {
+    setConfig((prev) => {
+      const updatedColumns = computeMockTableColumnsForSignature(prev);
+      const mergedRows = mergeMockTableRowsToColumns(prev.mockTable || [], updatedColumns);
       return {
         ...prev,
-        mockTableColumns: updatedColumns
+        mockTableColumns: updatedColumns,
+        mockTable: mergedRows,
       };
     });
   }, []);
 
-  // ✅ NEW: Funzione per riorganizzare la mockTable (mantiene compatibilità)
   const reorganizeMockTable = React.useCallback(() => {
     updateMockTableColumns();
   }, [updateMockTableColumns]);
@@ -575,17 +620,149 @@ export default function BackendCallEditor({
     [missingInputApiNames, missingOutputApiNames, appendMissingParam]
   );
 
-  const endpointUrlNonEmpty = Boolean(config.endpoint.url?.trim());
+  const operationalUrlNonEmpty = Boolean(config.endpoint.url?.trim());
+  const openapiSpecUrlNonEmpty = Boolean((config.openapiSpecUrl || '').trim());
+  const readApiToolbarVisible = operationalUrlNonEmpty || openapiSpecUrlNonEmpty;
+  const mockTableActiveInputInternalNames = React.useMemo(() => {
+    const cols = config.mockTableColumns;
+    if (cols?.length) {
+      return cols.filter((c) => c.type === 'input' && c.isActive).map((c) => c.name).filter(Boolean);
+    }
+    return (config.inputs || []).map((i) => i.internalName?.trim()).filter(Boolean) as string[];
+  }, [config.mockTableColumns, config.inputs]);
+
+  /** Almeno una riga ha tutti gli input attivi compilati (sufficiente per «Test API»; le altre righe vengono saltate). */
+  const mockTableHasAtLeastOneCompleteRow = React.useMemo(() => {
+    const table = config.mockTable ?? [];
+    const names = mockTableActiveInputInternalNames;
+    if (names.length === 0) {
+      return false;
+    }
+    return table.some((row) => isBackendMockRowInputsFilledForColumns(row, names));
+  }, [config.mockTable, mockTableActiveInputInternalNames]);
+
+  const [highlightIncompleteRows, setHighlightIncompleteRows] = React.useState(false);
+
+  React.useEffect(() => {
+    if (mockTableHasAtLeastOneCompleteRow) setHighlightIncompleteRows(false);
+  }, [mockTableHasAtLeastOneCompleteRow]);
+
+  const testApiReadiness = React.useMemo(() => {
+    if (mockTableActiveInputInternalNames.length === 0) return 'needs_setup' as const;
+    if (mockTableHasAtLeastOneCompleteRow) return 'ready' as const;
+    return 'incomplete' as const;
+  }, [mockTableActiveInputInternalNames.length, mockTableHasAtLeastOneCompleteRow]);
+
+  const handleTestApi = React.useCallback(() => {
+    logBackendCallTest('handleTestApi: click', { testApiReadiness });
+    setShowTableView(true);
+    if (testApiReadiness === 'needs_setup') {
+      logBackendCallTest('handleTestApi: stop (needs_setup — nessun input attivo in tabella)');
+      return;
+    }
+    if (testApiReadiness === 'incomplete') {
+      logBackendCallTest('handleTestApi: evidenzia righe incomplete, bulk non avviato');
+      setHighlightIncompleteRows(true);
+      return;
+    }
+    setHighlightIncompleteRows(false);
+    setBulkTestNonce((n) => {
+      const next = n + 1;
+      logBackendCallTest('handleTestApi: avvio bulk mock table', { bulkTestNonce: { from: n, to: next } });
+      return next;
+    });
+  }, [testApiReadiness]);
+
+  /** Tooltip celle: descrizione parametro + «. Clicca per editare.» */
+  const inputTooltipByInternalName = React.useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const inp of config.inputs || []) {
+      const internal = inp.internalName?.trim();
+      if (!internal) continue;
+      const api = inp.apiParam?.trim();
+      const local = inp.fieldDescription?.trim();
+      const snap = api ? openapiDescriptionSnapshots?.inputs?.[api]?.trim() : undefined;
+      const desc = local || snap || '';
+      out[internal] = desc ? `${desc}. Clicca per editare.` : 'Clicca per editare.';
+    }
+    return out;
+  }, [config.inputs, openapiDescriptionSnapshots]);
+
+  const outputValueTooltipByInternalName = React.useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const o of config.outputs || []) {
+      const internal = o.internalName?.trim();
+      if (!internal) continue;
+      const api = o.apiField?.trim();
+      const local = o.fieldDescription?.trim();
+      const snap = api ? openapiDescriptionSnapshots?.outputs?.[api]?.trim() : undefined;
+      const desc = local || snap || '';
+      out[internal] = desc ? `${desc}. Clicca per editare.` : 'Clicca per editare.';
+    }
+    return out;
+  }, [config.outputs, openapiDescriptionSnapshots]);
+
+  const inputUiKindByInternalName = React.useMemo(() => {
+    const st = instanceId ? (taskRepository.getTask(instanceId) as Task | null) : null;
+    const meta = st?.backendCallSpecMeta as { openapiInputUiKindByApiName?: Record<string, string> } | undefined;
+    const byApi = meta?.openapiInputUiKindByApiName;
+    if (!byApi || typeof byApi !== 'object') return {} as Record<string, OpenApiInputUiKind>;
+    const out: Record<string, OpenApiInputUiKind> = {};
+    for (const inp of config.inputs || []) {
+      const internal = inp.internalName?.trim();
+      const api = inp.apiParam?.trim();
+      if (!internal || !api) continue;
+      const raw = byApi[api];
+      if (raw === 'number' || raw === 'date' || raw === 'time' || raw === 'datetime-local' || raw === 'text') {
+        out[internal] = raw;
+      }
+    }
+    return out;
+  }, [instanceId, config.inputs, openapiDescriptionSnapshots]);
+
+  const labelStyle = React.useMemo(
+    () => ({ fontFamily: 'var(--ds-font-field-label, inherit)' } as React.CSSProperties),
+    []
+  );
+  const controlStyle = React.useMemo(
+    () => ({ fontFamily: 'var(--ds-font-control, inherit)' } as React.CSSProperties),
+    []
+  );
+
+  const mockExecMode = config.mockTableDefaultExecutionMode ?? BackendExecutionMode.MOCK;
 
   // Toolbar buttons
   const toolbarButtons = React.useMemo<ToolbarButton[]>(() => {
-    const readTestVisible = endpointUrlNonEmpty;
     const showMissing =
-      readTestVisible &&
+      readApiToolbarVisible &&
       missingFieldsTotal > 0 &&
       (swaggerInputContract.length > 0 || swaggerOutputContract.length > 0);
 
-    return [
+    const testApiTitle =
+      testApiReadiness === 'needs_setup'
+        ? 'Clicca per impostare il set di test'
+        : testApiReadiness === 'incomplete'
+          ? 'Completa tutti gli input attivi su almeno una riga: il test gira solo sulle righe complete; le righe vuote vengono saltate.'
+          : 'Chiamata HTTP reale al backend (proxy ApiServer) per ogni riga con tutti gli input compilati; le righe vuote sono saltate. Il toggle MOCK/REAL non influisce su Test API — MOCK serve per emulare i valori nelle celle output senza rete.';
+
+    const base: ToolbarButton[] = [
+      {
+        label: mockExecMode === BackendExecutionMode.MOCK ? 'MOCK' : 'REAL',
+        onClick: () =>
+          setConfig((prev) => ({
+            ...prev,
+            mockTableDefaultExecutionMode:
+              (prev.mockTableDefaultExecutionMode ?? BackendExecutionMode.MOCK) === BackendExecutionMode.MOCK
+                ? BackendExecutionMode.REAL
+                : BackendExecutionMode.MOCK,
+          })),
+        title:
+          mockExecMode === BackendExecutionMode.MOCK
+            ? 'Modalità MOCK: emula il backend con i valori che scrivi nelle celle output (nessuna HTTP da qui). «Test API» chiama comunque il backend via proxy. Clicca per passare a REAL.'
+            : 'Modalità REAL: preferenza predefinita per nuove righe (HTTP via proxy se usassi esecuzione per riga). «Test API» è sempre HTTP. Clicca per passare a MOCK.',
+        active: mockExecMode === BackendExecutionMode.REAL,
+        visible: operationalUrlNonEmpty,
+      },
       {
         icon: showApiColumn ? <EyeOff size={16} /> : <Eye size={16} />,
         label: showApiColumn ? 'Hide API' : 'Show API',
@@ -605,38 +782,59 @@ export default function BackendCallEditor({
         label: readApiBusy ? 'Reading…' : 'Read API',
         onClick: () => void handleReadApi(),
         title:
-          'Scarica OpenAPI via server (no CORS): URL JSON, base API, o link Redoc con ?url=…. Se non indichi l’URL della singola chiamata, si usa #operation/id o #tag/nome se presenti nell’URL, altrimenti il primo path per il metodo scelto.',
+          'Scarica OpenAPI via ApiServer (no CORS): prima discovery dall’endpoint operativo; se fallisce, usa lo Spec URL se compilato. Path operazione da URL (hash/query) o primo path per il metodo.',
         disabled: readApiBusy,
-        visible: readTestVisible,
+        visible: readApiToolbarVisible,
       },
       {
         icon: <FlaskConical size={16} />,
-        label: testApiBusy ? 'Testing…' : 'Test API',
+        label: bulkApiTestBusy ? 'Testing…' : 'Test API',
         onClick: () => void handleTestApi(),
-        title: 'Chiamata di prova all’URL con il metodo selezionato (corpo JSON vuoto se non GET).',
-        disabled: testApiBusy,
-        visible: readTestVisible,
+        title: testApiTitle,
+        disabled: bulkApiTestBusy,
+        successHighlight: testApiReadiness === 'ready' && !bulkApiTestBusy,
+        visible: operationalUrlNonEmpty,
       },
-      {
+    ];
+
+    if (showMissing) {
+      base.push({
         icon: <ListPlus size={16} />,
         label: `Missing (${missingFieldsTotal})`,
         title: 'Campi definiti nello Swagger ma non ancora mappati: clic per aggiungere la riga in SEND o RECEIVE.',
-        visible: showMissing,
+        visible: true,
         dropdownItems: missingFieldsDropdownItems,
-      },
-    ];
+      });
+    }
+
+    if (showTableView && operationalUrlNonEmpty) {
+      base.push({
+        icon: <RefreshCw size={16} />,
+        label: 'Refresh',
+        onClick: () => refreshMockTableStructure(),
+        title:
+          'Ricalcola colonne dalla firma SEND/RECEIVE attuale (es. dopo Read API o modifiche mapping). I valori nelle celle ancora valide vengono conservati.',
+        visible: true,
+      });
+    }
+
+    return base;
   }, [
     showApiColumn,
     showTableView,
-    endpointUrlNonEmpty,
+    readApiToolbarVisible,
+    operationalUrlNonEmpty,
     readApiBusy,
-    testApiBusy,
+    bulkApiTestBusy,
     handleReadApi,
     handleTestApi,
     missingFieldsTotal,
     swaggerInputContract.length,
     swaggerOutputContract.length,
     missingFieldsDropdownItems,
+    testApiReadiness,
+    mockExecMode,
+    refreshMockTableStructure,
   ]);
 
   // Update toolbar when it changes (for docking mode)
@@ -678,47 +876,94 @@ export default function BackendCallEditor({
             : 'flex-1 min-h-0 overflow-auto p-3'
         }
       >
-        {/* Endpoint Configuration - Compact (hidden when table view is active) */}
-        {!showTableView && !hideEndpointRow && (
-          <div className="mb-3 flex gap-3 items-center">
-            <div className="flex-1">
+        {!hideEndpointRow && (
+          <div className="mb-3 space-y-2">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <label
+                className="text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+                style={labelStyle}
+              >
+                Endpoint operativo
+              </label>
+              <div className="flex min-w-0 flex-wrap items-stretch gap-2">
+                <input
+                  type="text"
+                  style={controlStyle}
+                  value={config.endpoint.url}
+                  onChange={(e) => updateEndpoint({ url: e.target.value })}
+                  placeholder="https://api.example.com/… — discovery /openapi.json, /swagger.json, … sulla stessa origine"
+                  className="min-w-0 flex-1 px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <select
+                  value={config.endpoint.method}
+                  onChange={(e) => updateEndpoint({ method: e.target.value as any })}
+                  className="shrink-0 px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="DELETE">DELETE</option>
+                  <option value="PATCH">PATCH</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <label
+                className="text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+                style={labelStyle}
+              >
+                Spec URL (OpenAPI, fallback)
+              </label>
               <input
                 type="text"
-                value={config.endpoint.url}
-                onChange={(e) => updateEndpoint({ url: e.target.value })}
-                placeholder="https://api.example.com/v1/risorsa oppure …/v3/api-docs"
-                className="w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={controlStyle}
+                value={config.openapiSpecUrl ?? ''}
+                onChange={(e) => setConfig((prev) => ({ ...prev, openapiSpecUrl: e.target.value }))}
+                placeholder="Usato solo se la discovery dall’endpoint operativo fallisce (es. …/v3/api-docs)"
+                className="w-full min-w-0 px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <select
-              value={config.endpoint.method}
-              onChange={(e) => updateEndpoint({ method: e.target.value as any })}
-              className="px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
-              <option value="PUT">PUT</option>
-              <option value="DELETE">DELETE</option>
-              <option value="PATCH">PATCH</option>
-            </select>
+            <div className="rounded border border-amber-900/50 bg-amber-950/25 px-2 py-1.5 text-[10px] leading-snug text-amber-100/85">
+              <div className="font-semibold uppercase tracking-wide text-amber-400/95" style={labelStyle}>
+                Debiti tecnici (design)
+              </div>
+              <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-100/75">
+                <li>Modello legacy `task.endpoint` (stringa) vs oggetto `endpoint` attuale — allineamento catalogo in corso.</li>
+                <li>Audit test: oggi ultima risposta per riga; storico append-only resta pianificato.</li>
+              </ul>
+            </div>
           </div>
         )}
+
+        {!showTableView && !hideEndpointRow ? (
+          <div className="mb-2 rounded border border-slate-700/80 bg-slate-950/50 px-2 py-1.5">
+            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              ConvAI (function calling)
+            </div>
+            <p className="mb-1 text-[9px] leading-snug text-slate-500">
+              Se questo backend è incluso come tool dell&apos;agente ElevenLabs, serve una descrizione chiara (nome
+              interno = label del task).
+            </p>
+            <textarea
+              value={backendToolDescription}
+              onChange={(e) => setBackendToolDescription(e.target.value)}
+              placeholder="Quando il modello deve chiamare questa API (contesto, prerequisiti, effetto atteso)…"
+              className="min-h-[52px] w-full resize-y rounded border border-slate-600 bg-slate-900 px-1.5 py-1 text-[11px] leading-snug text-slate-100 placeholder:text-slate-600"
+            />
+          </div>
+        ) : null}
 
         {/* Two Column Layout: Input (left) + Output (right) OR Table View */}
         {showTableView ? (
           <>
-            {/* ✅ NEW: Pulsante Ricrea MockTable */}
-            <div className="flex items-center gap-2 mb-2">
-              <button
-                onClick={reorganizeMockTable}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded flex items-center gap-1.5"
-                title="Riorganizza la mockTable in base agli input/output attuali, mantenendo i valori esistenti quando possibile"
-              >
-                <RefreshCw size={14} />
-                Ricrea MockTable
-              </button>
-            </div>
-            <TableEditor
+            <BackendCallMockTable
+              bulkTestNonce={bulkTestNonce}
+              onBulkTestStart={() => setBulkApiTestBusy(true)}
+              onBulkTestEnd={() => setBulkApiTestBusy(false)}
+              highlightIncompleteRows={highlightIncompleteRows}
+              inputTooltipByInternalName={inputTooltipByInternalName}
+              outputValueTooltipByInternalName={outputValueTooltipByInternalName}
+              inputUiKindByInternalName={inputUiKindByInternalName}
               inputs={(config.inputs || []).map((input) => {
                 const v = input.variable?.trim();
                 const displayVar =
@@ -735,10 +980,30 @@ export default function BackendCallEditor({
                     : v || undefined;
                 return { ...output, variable: displayVar };
               })}
-              rows={config.mockTable || []}
+              rows={(config.mockTable || []) as BackendMockTableRow[]}
               columns={config.mockTableColumns}
-              onChange={(rows) => setConfig(prev => ({ ...prev, mockTable: rows }))}
-              onColumnsChange={(columns) => setConfig(prev => ({ ...prev, mockTableColumns: columns }))}
+              onMockTableRecipe={(recipe) => {
+                setConfig((prev) => ({
+                  ...prev,
+                  mockTable: recipe((prev.mockTable || []) as BackendMockTableRow[]),
+                }));
+              }}
+              onColumnsChange={(columns) => setConfig((prev) => ({ ...prev, mockTableColumns: columns }))}
+              mappingSend={mappingSend}
+              endpoint={config.endpoint}
+              defaultExecutionMode={
+                config.mockTableDefaultExecutionMode ?? BackendExecutionMode.MOCK
+              }
+              variableLabelByColumn={(internalName, zone) => {
+                const list = zone === 'input' ? config.inputs || [] : config.outputs || [];
+                const row = list.find((x) => x.internalName === internalName);
+                const v = row?.variable?.trim();
+                if (!v) return undefined;
+                if (knownBackendVariableIdSet.has(v)) {
+                  return getVariableLabel(v, activeFlowTranslations) || v;
+                }
+                return v;
+              }}
             />
           </>
         ) : (

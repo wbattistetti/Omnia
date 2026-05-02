@@ -76,6 +76,8 @@ export default defineConfig({
       '/api/grammar': { target: 'http://localhost:5000', changeOrigin: true },
       '/api/nlp': { target: 'http://localhost:5000', changeOrigin: true },
       '/api/runtime': { target: 'http://localhost:5000', changeOrigin: true },
+      /** Backend Call «Test API» proxy — Express :3100 (stesso contratto VB; dev:beNew non avvia ApiServer :5000). */
+      '/api/designer': { target: 'http://localhost:3100', changeOrigin: true },
       '/elevenlabs': { target: 'http://localhost:5000', changeOrigin: true },
 
       // Node.js backend endpoints (MongoDB) - MUST come BEFORE generic /api
@@ -93,6 +95,11 @@ export default defineConfig({
 
       // FastAPI namespaced endpoints (other /api routes) - MUST come LAST
       '/api': { target: 'http://localhost:8000', changeOrigin: true },
-    }
-  }
+    },
+  },
+  preview: {
+    proxy: {
+      '/api/designer': { target: 'http://localhost:3100', changeOrigin: true },
+    },
+  },
 });

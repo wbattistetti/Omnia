@@ -54,6 +54,8 @@ describe('openApiBackendCallSpec', () => {
     expect(f?.responsePropertyNames).toEqual(expect.arrayContaining(['id', 'name', 'status']));
     expect(f?.inputDescriptionsByApiName).toEqual({});
     expect(f?.outputDescriptionsByApiName).toEqual({});
+    expect(f?.inputUiKindByApiName.id).toBe('number');
+    expect(f?.inputUiKindByApiName.name).toBe('text');
   });
 
   it('extractOperationFields collects params and body fields', () => {
@@ -89,6 +91,9 @@ describe('openApiBackendCallSpec', () => {
     expect(f?.responsePropertyNames).toContain('out1');
     expect(f?.inputDescriptionsByApiName).toEqual({});
     expect(f?.outputDescriptionsByApiName).toEqual({});
+    expect(f?.inputUiKindByApiName.q).toBe('text');
+    expect(f?.inputUiKindByApiName.a).toBe('text');
+    expect(f?.inputUiKindByApiName.b).toBe('number');
   });
 
   it('extractOperationFields captures OpenAPI descriptions on params and response properties', () => {

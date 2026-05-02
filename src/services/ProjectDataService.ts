@@ -1,4 +1,5 @@
 import { ProjectData, EntityType, Category, ProjectEntityItem, TaskTemplateItem, Macrotask, MacrotaskPayloadNode, MacrotaskPayloadEdge } from '../types/project';
+import { normalizeProjectData } from '../utils/normalizers';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 // import { getLabelColor } from '../utils/labelColor';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../components/Sidebar/sidebarTheme';
@@ -210,6 +211,19 @@ export const ProjectDataService = {
   // ✅ Use taskRepository.createTask() instead - saves to tasks collection (unified model)
   makeId(): string {
     return generateId();
+  },
+
+  /**
+   * Keeps module-level `projectData.backendCatalog` aligned with React Provider after tab Backends edits.
+   */
+  syncBackendCatalogFromProvider(blob: unknown): void {
+    if (!blob || typeof blob !== 'object') {
+      const n = normalizeProjectData({} as ProjectData);
+      projectData.backendCatalog = n.backendCatalog!;
+      return;
+    }
+    const n = normalizeProjectData({ backendCatalog: blob } as ProjectData);
+    projectData.backendCatalog = n.backendCatalog!;
   },
   async initializeProjectData(templateName: string, language: string, projectIndustry?: string): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -593,6 +607,41 @@ export const ProjectDataService = {
           error: e.message
         });
       }
+
+      // Designer-time backend catalog: same document as GET /meta (avoids extra route / server restart issues)
+      try {
+        const metaRes = await fetch(`/api/projects/${encodeURIComponent(currentProjectId)}/meta`);
+        if (metaRes.ok) {
+          const metaBody = await metaRes.json();
+          const raw = metaBody?.backendCatalog;
+          if (raw && typeof raw === 'object') {
+            const normalized = normalizeProjectData({ backendCatalog: raw } as ProjectData);
+            projectData.backendCatalog = normalized.backendCatalog!;
+          } else {
+            const normalized = normalizeProjectData({} as ProjectData);
+            projectData.backendCatalog = normalized.backendCatalog!;
+          }
+        } else {
+          const normalized = normalizeProjectData({} as ProjectData);
+          projectData.backendCatalog = normalized.backendCatalog!;
+          if (metaRes.status !== 404) {
+            console.warn('[ProjectDataService] project meta load for backend catalog failed', {
+              projectId: currentProjectId,
+              status: metaRes.status,
+            });
+          }
+        }
+      } catch (e: any) {
+        const normalized = normalizeProjectData({} as ProjectData);
+        projectData.backendCatalog = normalized.backendCatalog!;
+        console.warn('[ProjectDataService] ⚠️ Failed to load backend catalog from meta', {
+          projectId: currentProjectId,
+          error: e?.message,
+        });
+      }
+    } else {
+      const normalized = normalizeProjectData({} as ProjectData);
+      projectData.backendCatalog = normalized.backendCatalog!;
     }
 
     const result = { ...projectData };

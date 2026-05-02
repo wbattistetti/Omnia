@@ -17,6 +17,8 @@ type ToolbarButton = {
   title?: string;
   active?: boolean;
   primary?: boolean;
+  /** Stile pieno tipo «vai» (es. Test API con setup completo). */
+  successHighlight?: boolean;
   disabled?: boolean;
   buttonRef?: React.RefObject<HTMLButtonElement> | ((ref: HTMLButtonElement | null) => void);
   buttonId?: string; // For identifying specific buttons
@@ -250,6 +252,7 @@ function renderEditorHeaderToolbarControl(
     return <ToolbarDropdownButton btn={btn} buttonRef={buttonRef} theme={theme} />;
   }
 
+  const successOn = Boolean(btn.successHighlight && !btn.disabled);
   const buttonProps = {
     ref: buttonRef,
     onClick: (e: React.MouseEvent) => {
@@ -262,14 +265,20 @@ function renderEditorHeaderToolbarControl(
       display: btn.visible === false ? 'none' : 'flex',
       alignItems: 'center',
       gap: 6,
-      background: btn.primary ? '#0b1220' : (btn.active ? '#fff' : 'transparent'),
-      color: btn.primary ? '#fff' : (btn.active ? theme.bg : theme.fg),
-      border: btn.primary ? 'none' : `1px solid rgba(255,255,255,0.3)`,
+      background: successOn
+        ? '#059669'
+        : btn.primary
+          ? '#0b1220'
+          : btn.active
+            ? '#fff'
+            : 'transparent',
+      color: successOn ? '#fff' : btn.primary ? '#fff' : btn.active ? theme.bg : theme.fg,
+      border: successOn ? '1px solid #047857' : btn.primary ? 'none' : `1px solid rgba(255,255,255,0.3)`,
       borderRadius: 8,
       padding: btn.label ? '8px 14px' : '6px 10px',
       cursor: btn.disabled ? 'not-allowed' : 'pointer',
       opacity: btn.disabled ? 0.5 : 1,
-      fontWeight: btn.primary ? 600 : 400,
+      fontWeight: btn.primary || successOn ? 600 : 400,
       whiteSpace: 'nowrap' as const,
     },
   };

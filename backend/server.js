@@ -61,6 +61,9 @@ app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
 mountIaCatalog(app);
 
+const { mountBackendCallTestProxy } = require('./designer/backendCallTestProxyRoute');
+mountBackendCallTestProxy(app);
+
 // ✅ Request logging middleware
 app.use((req, res, next) => {
   const startTime = Date.now();
@@ -630,6 +633,17 @@ app.get('/api/projects/catalog', async (req, res) => {
   }
 });
 
+/** @returns {string|null} error code or null if valid */
+function validateBackendCatalogForPersistence(bc) {
+  if (!bc || typeof bc !== 'object') return 'backendCatalog_object_required';
+  if (bc.schemaVersion !== 1) return 'invalid_backend_catalog_schemaVersion';
+  if (!Array.isArray(bc.manualEntries) || !Array.isArray(bc.auditLog)) return 'invalid_backend_catalog_shape';
+  if (typeof bc.catalogVersion !== 'number' || bc.catalogVersion < 0 || !Number.isFinite(bc.catalogVersion)) {
+    return 'invalid_catalog_version';
+  }
+  return null;
+}
+
 // GET /api/projects/:id/meta - Project metadata from project_meta (fallback when catalog misses clientName etc.)
 app.get('/api/projects/:id/meta', async (req, res) => {
   const projectId = req.params.id;
@@ -651,7 +665,8 @@ app.get('/api/projects/:id/meta', async (req, res) => {
       industry: meta.industry ?? null,
       language: meta.language ?? null,
       ownerCompany: meta.ownerCompany ?? null,
-      ownerClient: meta.ownerClient ?? null
+      ownerClient: meta.ownerClient ?? null,
+      backendCatalog: meta.backendCatalog != null ? meta.backendCatalog : null,
     });
   } catch (e) {
     console.error('[Projects.meta] Error:', e?.message);
@@ -6923,9 +6938,15 @@ app.post('/api/extractors/run', async (req, res) => {
 // Endpoint: Update catalog timestamp
 // -----------------------------
 app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
-  const { projectId, ownerCompany, ownerClient, clientName } = req.body;
+  const { projectId, ownerCompany, ownerClient, clientName, backendCatalog } = req.body || {};
   if (!projectId) {
     return res.status(400).json({ error: 'projectId_required' });
+  }
+  if (backendCatalog !== undefined && backendCatalog !== null) {
+    const verr = validateBackendCatalogForPersistence(backendCatalog);
+    if (verr) {
+      return res.status(400).json({ error: verr });
+    }
   }
   const client = await getMongoClient();
   try {
@@ -6996,9 +7017,20 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
           const clientNameFinal = clientNameTrimmed && clientNameTrimmed.length > 0 ? clientNameTrimmed : null;
           metaUpdate.clientName = clientNameFinal;
         }
+        if (backendCatalog !== undefined && backendCatalog !== null) {
+          metaUpdate.backendCatalog = backendCatalog;
+        }
         await projDb.collection('project_meta').updateOne(
           { _id: 'meta' },
-          { $set: metaUpdate }
+          {
+            $set: metaUpdate,
+            $setOnInsert: {
+              _id: 'meta',
+              projectId,
+              createdAt: now,
+            },
+          },
+          { upsert: true }
         );
       }
     } catch (metaErr) {

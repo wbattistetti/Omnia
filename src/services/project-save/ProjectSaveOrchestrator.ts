@@ -13,6 +13,8 @@ import type {
   IFlowStateService,
 } from './SaveServiceInterfaces';
 import { logFlowSaveDebug } from '../../utils/flowSaveDebug';
+import { normalizeProjectData } from '../../utils/normalizers';
+import type { ProjectData } from '../../types/project';
 import type { WorkspaceState } from '../../flows/FlowTypes';
 import { buildFlowDocumentFromFlowSlice } from '../../domain/flowDocument/flowDocumentSerialize';
 import { saveFlowDocument } from '../../flows/flowDocumentPersistence';
@@ -109,6 +111,14 @@ export class ProjectSaveOrchestrator {
       ...variable,
     }));
 
+    const pd = uiState.projectData as ProjectData | undefined;
+    const backendCatalogNormalized = normalizeProjectData({
+      backendCatalog:
+        pd?.backendCatalog != null && typeof pd.backendCatalog === 'object'
+          ? pd.backendCatalog
+          : {},
+    } as ProjectData).backendCatalog!;
+
     return {
       version: '1.0',
       projectId: domain.id,
@@ -116,6 +126,7 @@ export class ProjectSaveOrchestrator {
         projectId: domain.id,
         ownerCompany: domain.metadata?.ownerCompany || null,
         ownerClient: domain.metadata?.ownerClient || null,
+        backendCatalog: backendCatalogNormalized,
       },
       tasks: {
         items: tasksToSave as any[], // Task[] format

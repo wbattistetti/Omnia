@@ -8,7 +8,7 @@ import type { Task } from '../types/taskTypes';
 import { taskRepository } from './TaskRepository';
 import {
   extractOperationFields,
-  fetchOpenApiDocument,
+  fetchOpenApiDocumentOperationalThenManualFallback,
   pickOpenApiPathForReadApi,
   slugInternalName,
 } from './openApiBackendCallSpec';
@@ -60,18 +60,27 @@ export type RunBackendCallReadApiResult =
     }
   | { ok: false; error: string };
 
+/** Opzioni Read API: Spec URL usato solo se fallisce la discovery sull’endpoint operativo. */
+export type RunBackendCallReadApiOptions = {
+  openapiSpecUrl?: string;
+};
+
 /**
  * Scarica OpenAPI, aggiorna inputs/outputs e `backendCallSpecMeta` sul task.
+ * @param operationalUrl Endpoint operativo (path per `pickOpenApiPathForReadApi` + primo tentativo discovery).
+ * @param options.openapiSpecUrl Secondo tentativo se il primo fallisce (opzionale).
  */
 export async function runBackendCallReadApiForTask(
   instanceId: string,
   projectId: string | undefined,
-  url: string,
-  method: string
+  operationalUrl: string,
+  method: string,
+  options?: RunBackendCallReadApiOptions
 ): Promise<RunBackendCallReadApiResult> {
-  const trimmed = url.trim();
-  if (!trimmed) {
-    return { ok: false, error: 'URL vuoto' };
+  const op = operationalUrl.trim();
+  const manual = (options?.openapiSpecUrl || '').trim();
+  if (!op && !manual) {
+    return { ok: false, error: 'Inserire endpoint operativo o Spec URL (OpenAPI).' };
   }
 
   const task = taskRepository.getTask(instanceId);
@@ -84,9 +93,12 @@ export async function runBackendCallReadApiForTask(
   const inputsEmpty = prevInputs.length === 0;
   const outputsEmpty = prevOutputs.length === 0;
 
+  const fpSeed = op || manual;
+
   try {
-    const { doc } = await fetchOpenApiDocument(trimmed);
-    const picked = pickOpenApiPathForReadApi(trimmed, doc, method);
+    const { doc } = await fetchOpenApiDocumentOperationalThenManualFallback(op, manual || undefined);
+    const pathPickUrl = fpSeed;
+    const picked = pickOpenApiPathForReadApi(pathPickUrl, doc, method);
     if ('error' in picked) {
       return { ok: false, error: picked.error };
     }
@@ -102,9 +114,10 @@ export async function runBackendCallReadApiForTask(
     const outputNames = fields.responsePropertyNames.filter(Boolean);
     const inputDesc = fields.inputDescriptionsByApiName;
     const outputDesc = fields.outputDescriptionsByApiName;
+    const inputUiKindByApiName: Record<string, string> = { ...fields.inputUiKindByApiName };
 
     const contentHash = hashString(JSON.stringify(doc));
-    const fp = structuralFingerprint(method, trimmed);
+    const fp = structuralFingerprint(method, fpSeed);
 
     const used = collectUsedInternalNames(prevInputs, prevOutputs);
     let nextInputs = prevInputs;
@@ -156,10 +169,12 @@ export async function runBackendCallReadApiForTask(
           contentHash,
           importState: 'ok',
           structuralFingerprint: fp,
+          openapiOperationId: fields.operationId ?? null,
           openapiDescriptionSnapshots: {
             inputs: { ...inputDesc },
             outputs: { ...outputDesc },
           },
+          openapiInputUiKindByApiName: inputUiKindByApiName,
         },
         inputs: nextInputs,
         outputs: nextOutputs,
@@ -185,7 +200,7 @@ export async function runBackendCallReadApiForTask(
           contentHash: null,
           importState: 'error',
           lastError: msg.slice(0, 500),
-          structuralFingerprint: structuralFingerprint(method, trimmed),
+          structuralFingerprint: structuralFingerprint(method, fpSeed),
         },
       } as Partial<Task>,
       projectId

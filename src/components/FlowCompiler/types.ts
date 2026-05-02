@@ -85,7 +85,8 @@ export type IaRuntimeFocus =
   | 'maxTokens'
   | 'endpoint'
   | 'apiKey'
-  | 'safety';
+  | 'safety'
+  | 'tools';
 
 /**
  * Fix target: defines where to navigate when user clicks "Fix".

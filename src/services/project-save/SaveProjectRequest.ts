@@ -14,11 +14,18 @@ export interface SaveProjectRequest {
   version: '1.0';
   projectId: string;
 
-  // 1. Catalog timestamp update
+  // 1. Catalog timestamp update (also persists project_meta.backendCatalog when present)
   catalog: {
     projectId: string;
     ownerCompany?: string | null;
     ownerClient?: string | null;
+    /** Normalized designer-time backend catalog; POSTed with catalog/update-timestamp. */
+    backendCatalog?: {
+      schemaVersion: 1;
+      manualEntries: unknown[];
+      auditLog: unknown[];
+      catalogVersion: number;
+    };
   };
 
   // 2. Tasks bulk save

@@ -111,6 +111,20 @@ export function normalizeIAAgentConfig(raw: unknown): IAAgentConfig {
   const elevenLabsNeedsReprovision =
     platform === 'elevenlabs' && raw.elevenLabsNeedsReprovision === true;
 
+  const convaiBackendToolTaskIds: string[] | undefined = (() => {
+    if (isRecord(raw) && Array.isArray(raw.convaiBackendToolTaskIds)) {
+      return [
+        ...new Set(
+          raw.convaiBackendToolTaskIds
+            .filter((x): x is string => typeof x === 'string')
+            .map((x) => x.trim())
+            .filter(Boolean)
+        ),
+      ];
+    }
+    return (base as IAAgentConfig).convaiBackendToolTaskIds;
+  })();
+
   return {
     platform,
     model,
@@ -119,6 +133,7 @@ export function normalizeIAAgentConfig(raw: unknown): IAAgentConfig {
     reasoning,
     systemPrompt,
     tools,
+    ...(convaiBackendToolTaskIds !== undefined ? { convaiBackendToolTaskIds } : {}),
     voice: platform === 'elevenlabs' ? voice : undefined,
     voices: platform === 'elevenlabs' ? voices ?? base.voices : undefined,
     ...(platform === 'elevenlabs'

@@ -74,6 +74,40 @@ describe('mapUIStateToDomain - Characterization Tests', () => {
     expect(domain.tasks.find((t) => t.id === 'task-2')).toBeUndefined();
   });
 
+  it('includes BackendCall tasks listed in backendCatalogManualEntryIds even when not on a flow node', () => {
+    const manualId = 'manual-catalog-backend-id';
+    const uiState = {
+      projectId: 'test-project',
+      flows: {
+        main: {
+          id: 'main',
+          title: 'Main Flow',
+          nodes: [],
+          edges: [],
+        },
+      },
+      tasks: [
+        {
+          id: manualId,
+          type: 4,
+          templateId: null,
+          endpoint: { url: 'http://localhost:3110/slots', method: 'GET' },
+          mockTable: [{ id: 'row_1', inputs: { n: '1' }, outputs: {} }],
+        },
+      ],
+      backendCatalogManualEntryIds: [manualId],
+      conditions: [],
+      templates: [],
+      variables: [],
+    };
+
+    const domain = mapUIStateToDomain(uiState as any);
+
+    expect(domain.tasks).toHaveLength(1);
+    expect(domain.tasks[0].id).toBe(manualId);
+    expect((domain.tasks[0] as { mockTable?: unknown }).mockTable).toEqual(uiState.tasks[0].mockTable);
+  });
+
   it('should preserve all task fields during mapping', () => {
     const uiState = {
       projectId: 'test-project',

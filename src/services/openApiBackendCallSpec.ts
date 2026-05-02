@@ -3,7 +3,12 @@
  * Shallow $ref resolution via #/components/schemas/... only.
  */
 
+/** Kind per `input` HTML5 nelle celle mock (chiave = nome campo API). */
+export type OpenApiInputUiKind = 'text' | 'number' | 'date' | 'time' | 'datetime-local';
+
 export type OpenApiOperationFields = {
+  /** OpenAPI `operationId` for the resolved path/method, when present. */
+  operationId?: string;
   /** query, path, header parameter names */
   requestParamNames: string[];
   /** Top-level JSON body property names (POST/PUT/PATCH body object) */
@@ -14,6 +19,8 @@ export type OpenApiOperationFields = {
   inputDescriptionsByApiName: Record<string, string>;
   /** OpenAPI `description` per proprietà risposta top-level. */
   outputDescriptionsByApiName: Record<string, string>;
+  /** Tipo UI input (date/time/number) dedotto da schema OpenAPI. */
+  inputUiKindByApiName: Record<string, OpenApiInputUiKind>;
 };
 
 function isRecord(x: unknown): x is Record<string, unknown> {
@@ -71,6 +78,66 @@ function mergeDescriptionMaps(target: Record<string, string>, source: Record<str
     const t = v.trim();
     if (t) target[key] = t;
   }
+}
+
+function mergeUiKindMaps(target: Record<string, OpenApiInputUiKind>, source: Record<string, OpenApiInputUiKind>): void {
+  for (const [k, v] of Object.entries(source)) {
+    const key = k.trim();
+    if (!key || target[key]) continue;
+    target[key] = v;
+  }
+}
+
+/** Risolve $ref e mappa `type`/`format` JSON Schema → controllo HTML5. */
+export function openApiSchemaToInputUiKind(root: Record<string, unknown>, schema: unknown): OpenApiInputUiKind {
+  let cur: unknown = schema;
+  for (let i = 0; i < 12; i++) {
+    if (!isRecord(cur)) return 'text';
+    if (typeof cur.$ref === 'string') {
+      cur = resolveRef(root, cur.$ref);
+      continue;
+    }
+    const t = String(cur.type || '').toLowerCase();
+    const f = typeof cur.format === 'string' ? cur.format.toLowerCase() : '';
+    if (t === 'integer' || t === 'number') return 'number';
+    if (t === 'string') {
+      if (f === 'date') return 'date';
+      if (f === 'date-time' || f === 'datetime') return 'datetime-local';
+      if (f === 'time' || f === 'partial-time') return 'time';
+    }
+    return 'text';
+  }
+  return 'text';
+}
+
+/** Per ogni property top-level di uno schema object, kind UI (risolve $ref sulle property). */
+function schemaPropertyInputKinds(root: Record<string, unknown>, schema: unknown): Record<string, OpenApiInputUiKind> {
+  const out: Record<string, OpenApiInputUiKind> = {};
+  if (!isRecord(schema)) return out;
+  if (typeof schema.$ref === 'string') {
+    const resolved = resolveRef(root, schema.$ref);
+    return schemaPropertyInputKinds(root, resolved);
+  }
+  if (schema.type === 'object' && isRecord(schema.properties)) {
+    const props = schema.properties as Record<string, unknown>;
+    for (const [key, propSchema] of Object.entries(props)) {
+      const k = key.trim();
+      if (!k) continue;
+      out[k] = openApiSchemaToInputUiKind(root, propSchema);
+    }
+  }
+  return out;
+}
+
+function setFirstUiKind(
+  target: Record<string, OpenApiInputUiKind>,
+  key: string,
+  root: Record<string, unknown>,
+  schema: unknown
+): void {
+  const k = key.trim();
+  if (!k || target[k]) return;
+  target[k] = openApiSchemaToInputUiKind(root, schema);
 }
 
 function setFirstDescription(target: Record<string, string>, key: string, desc: unknown): void {
@@ -334,8 +401,15 @@ export function extractOperationFields(
   const op = pathItem[method.toLowerCase()];
   if (!isRecord(op)) return null;
 
+  const operationIdRaw = op.operationId;
+  const operationId =
+    typeof operationIdRaw === 'string' && operationIdRaw.trim().length > 0
+      ? operationIdRaw.trim()
+      : undefined;
+
   const inputDescriptionsByApiName: Record<string, string> = {};
   const outputDescriptionsByApiName: Record<string, string> = {};
+  const inputUiKindByApiName: Record<string, OpenApiInputUiKind> = {};
 
   const requestParamNames: string[] = [];
   let requestBodyPropertyNames: string[] = [];
@@ -349,6 +423,14 @@ export function extractOperationFields(
         if (name) {
           requestParamNames.push(name);
           setFirstDescription(inputDescriptionsByApiName, name, p.description);
+          if (isRecord(p.schema)) {
+            setFirstUiKind(inputUiKindByApiName, name, doc, p.schema);
+          } else if (p.type !== undefined || p.format !== undefined) {
+            const k = openApiSchemaToInputUiKind(doc, { type: p.type, format: p.format });
+            if (!inputUiKindByApiName[name]) inputUiKindByApiName[name] = k;
+          } else if (!inputUiKindByApiName[name]) {
+            inputUiKindByApiName[name] = 'text';
+          }
         }
         continue;
       }
@@ -357,11 +439,18 @@ export function extractOperationFields(
         const keys = schemaPropertyKeys(doc, p.schema);
         requestBodyPropertyNames = mergeUnique(requestBodyPropertyNames, keys);
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, p.schema));
+        mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, p.schema));
       }
       /** formData → trattati come nomi campo inviati */
       if (inn === 'formData' && name) {
         requestParamNames.push(name);
         setFirstDescription(inputDescriptionsByApiName, name, p.description);
+        if (isRecord(p.schema)) {
+          setFirstUiKind(inputUiKindByApiName, name, doc, p.schema);
+        } else if (p.type !== undefined || p.format !== undefined) {
+          const k = openApiSchemaToInputUiKind(doc, { type: p.type, format: p.format });
+          if (!inputUiKindByApiName[name]) inputUiKindByApiName[name] = k;
+        }
       }
     }
   }
@@ -378,6 +467,7 @@ export function extractOperationFields(
         const keys = schemaPropertyKeys(doc, json.schema);
         requestBodyPropertyNames = mergeUnique(requestBodyPropertyNames, keys);
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, json.schema));
+        mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, json.schema));
       }
     }
   }
@@ -407,11 +497,13 @@ export function extractOperationFields(
   }
 
   return {
+    ...(operationId ? { operationId } : {}),
     requestParamNames,
     requestBodyPropertyNames,
     responsePropertyNames,
     inputDescriptionsByApiName,
     outputDescriptionsByApiName,
+    inputUiKindByApiName,
   };
 }
 
@@ -611,6 +703,32 @@ export async function fetchOpenApiDocument(endpointUrl: string): Promise<{ doc: 
   }
 
   return fetchOpenApiDocumentDirect(trimmed);
+}
+
+/**
+ * Read API: prima discovery dall’endpoint operativo (candidati standard sulla stessa origine).
+ * Solo se fallisce e `manualSpecUrl` è valorizzato, secondo tentativo da Spec URL manuale.
+ */
+export async function fetchOpenApiDocumentOperationalThenManualFallback(
+  operationalUrl: string,
+  manualSpecUrl?: string
+): Promise<{ doc: Record<string, unknown>; sourceUrl: string }> {
+  const op = operationalUrl.trim();
+  const manual = (manualSpecUrl || '').trim();
+  if (op) {
+    try {
+      return await fetchOpenApiDocument(op);
+    } catch (e) {
+      if (manual) {
+        return await fetchOpenApiDocument(manual);
+      }
+      throw e;
+    }
+  }
+  if (manual) {
+    return await fetchOpenApiDocument(manual);
+  }
+  throw new Error('Inserire endpoint operativo o Spec URL (OpenAPI).');
 }
 
 export function slugInternalName(name: string): string {

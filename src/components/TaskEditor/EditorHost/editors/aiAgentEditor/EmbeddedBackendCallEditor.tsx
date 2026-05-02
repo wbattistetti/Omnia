@@ -41,6 +41,7 @@ function InlineToolbarStrip({ buttons }: { buttons: ToolbarButton[] }) {
             </select>
           );
         }
+        const successOn = Boolean(b.successHighlight && !b.disabled);
         return (
           <button
             key={i}
@@ -49,9 +50,11 @@ function InlineToolbarStrip({ buttons }: { buttons: ToolbarButton[] }) {
             disabled={b.disabled}
             onClick={b.onClick}
             className={`inline-flex items-center gap-1 rounded border px-1.5 py-1 text-[10px] ${
-              b.active
-                ? 'border-emerald-600/70 bg-emerald-950/50 text-emerald-100'
-                : 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700/80'
+              successOn
+                ? 'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-500'
+                : b.active
+                  ? 'border-emerald-600/70 bg-emerald-950/50 text-emerald-100'
+                  : 'border-slate-600 bg-transparent text-slate-200 hover:bg-slate-800/80'
             } disabled:opacity-45`}
           >
             {b.icon}

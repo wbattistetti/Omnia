@@ -8,6 +8,8 @@ import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { Task } from '@types/taskTypes';
 import { normalizeLanguage } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
 import { resolveElevenLabsAgentPromptFromTask } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentPlatformRulesString';
+import { mergeEffectiveIaAgentTools } from '@domain/iaAgentTools/backendToolDerivation';
+import { taskRepository } from '@services/TaskRepository';
 
 /** ConvAI default greeting when designer «Avvio immediato» is off. */
 export const CONVAI_DEFAULT_FIRST_MESSAGE = 'Hello! How can I help you today?';
@@ -114,6 +116,23 @@ export function conversationConfigFragmentFromIaAgentConfig(
   }
   if (typeof llm.max_tokens === 'number' && llm.max_tokens > 0) {
     prompt.max_tokens = Math.floor(llm.max_tokens);
+  }
+
+  /**
+   * Tool definitions (manuali + derivati da Backend Call). Formato compatibile OpenAI «functions»
+   * così ConvAI / gateway possono abilitare function-calling; ElevenLabs può richiedere `tool_ids`
+   * separati in versioni diverse dell’API — in quel caso il merge server-side resta valido per Omnia.
+   */
+  const effectiveTools = mergeEffectiveIaAgentTools(cfg, (id) => taskRepository.getTask(id));
+  if (effectiveTools.length > 0) {
+    (prompt as Record<string, unknown>).tools = effectiveTools.map((t) => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.inputSchema,
+      },
+    }));
   }
 
   const immediateStart = options?.task?.agentImmediateStart === true;

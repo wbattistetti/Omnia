@@ -25,6 +25,33 @@ function collectTasksForFlow(flowId: FlowId, flows: WorkspaceState['flows']): Ta
   return out;
 }
 
+/**
+ * Allinea le righe task dello slice al TaskRepository (mock table, ultima test run, mapping SEND/RECEIVE).
+ * Evita di serializzare copie stale dello slice quando `syncTaskAuthoringIntoFlowSlice` non ha aggiornato.
+ */
+function mergeFlowTasksWithRepository(
+  flowTasks: Task[] | undefined,
+  flowId: FlowId,
+  flows: WorkspaceState['flows']
+): Task[] {
+  const fromRepo = collectTasksForFlow(flowId, flows);
+  const repoById = new Map(fromRepo.map((t) => [t.id, t] as const));
+  if (!flowTasks?.length) {
+    return fromRepo;
+  }
+  const sliceIds = new Set(flowTasks.map((t) => t.id));
+  const merged: Task[] = flowTasks.map((st) => {
+    const latest = repoById.get(st.id);
+    return latest ? ({ ...st, ...latest } as Task) : st;
+  });
+  for (const r of fromRepo) {
+    if (!sliceIds.has(r.id)) {
+      merged.push(r);
+    }
+  }
+  return merged;
+}
+
 /** Aggregates `subflowBindings` from Subflow tasks on this canvas for export / persistence. */
 function collectSubflowBindingsFromTasks(tasks: Task[]): FlowSubflowBindingPersisted[] {
   const seen = new Set<string>();
@@ -67,7 +94,8 @@ export function buildFlowDocumentFromFlowSlice(
   const tr = flow.meta?.translations ?? {};
   const ifaceIn = (flow.meta?.flowInterface?.input ?? []) as MappingEntry[];
   const ifaceOut = (flow.meta?.flowInterface?.output ?? []) as MappingEntry[];
-  const tasks = flow.tasks !== undefined ? flow.tasks : collectTasksForFlow(fid, flows);
+  const tasks =
+    flow.tasks !== undefined ? mergeFlowTasksWithRepository(flow.tasks, fid, flows) : collectTasksForFlow(fid, flows);
   const variables =
     flow.variables !== undefined
       ? flow.variables

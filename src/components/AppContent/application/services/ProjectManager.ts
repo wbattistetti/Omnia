@@ -412,6 +412,7 @@ export class ProjectManager {
         conditions: data.conditions,
         tasks: [],
         macrotasks: data.macrotasks,
+        backendCatalog: data.backendCatalog,
       };
 
       this.params.setCurrentProject(openedProject);

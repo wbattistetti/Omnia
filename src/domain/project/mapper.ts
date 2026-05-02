@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import type { ProjectDomainModel, TaskDomainModel, FlowDomainModel, ConditionDomainModel, TemplateDomainModel, VariableDomainModel } from './model';
-import type { Task } from '@types/taskTypes';
+import { TaskType, type Task } from '@types/taskTypes';
 import type { Flow } from '@flows/FlowTypes';
 import { isAiAgentDebugEnabled } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDebug';
 import { getVariableLabel } from '@utils/getVariableLabel';
@@ -19,6 +19,8 @@ interface UIState {
   projectName?: string;
   flows: Record<string, Flow<any, any>>;
   tasks: Task[];
+  /** Id voci `backendCatalog.manualEntries`: i relativi task BackendCall restano in TaskRepository ma non sono su un nodo grafo. */
+  backendCatalogManualEntryIds?: string[];
   conditions: any[];
   templates: any[];
   variables: any[];
@@ -35,8 +37,8 @@ interface UIState {
  * This function extracts the pure domain logic from React/UI state,
  * making it testable and deterministic.
  *
- * IMPORTANT: This function excludes orphan tasks (tasks not referenced in flows).
- * This is the key invariant that ensures data integrity.
+ * Orphan policy: tasks not on any flow node are excluded from the save payload, except
+ * BackendCall rows whose id is listed in `backendCatalogManualEntryIds` (tab Backends / catalogo manuale).
  *
  * @param uiState - Current UI state (from AppContent.tsx, TaskRepository, etc.)
  * @returns Stable domain model
@@ -78,9 +80,16 @@ export function mapUIStateToDomain(uiState: UIState): ProjectDomainModel {
     console.log('REFERENCED TASK IDS', referencedTaskIds);
   }
 
-  // Map tasks (only referenced ones, excluding orphans)
+  const manualCatalogTaskIds = new Set(
+    (uiState.backendCatalogManualEntryIds || []).map((id) => String(id || '').trim()).filter(Boolean)
+  );
+
+  const shouldPersistTask = (task: Task) =>
+    referencedTaskIds.has(task.id) ||
+    (task.type === TaskType.BackendCall && manualCatalogTaskIds.has(task.id));
+
   const tasks: TaskDomainModel[] = (uiState.tasks || [])
-    .filter((task) => referencedTaskIds.has(task.id))
+    .filter((task) => shouldPersistTask(task))
     .map((task) => mapTaskToDomain(task));
 
   // Map flows

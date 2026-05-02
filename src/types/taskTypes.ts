@@ -489,6 +489,16 @@ export interface Task {
   authoringFlowCanvasId?: string;
 
   /**
+   * Backend Call: testo mostrato al modello ConvAI quando questo backend è incluso come tool (`convaiBackendToolTaskIds`).
+   */
+  backendToolDescription?: string;
+
+  /**
+   * Backend Call: URL del documento OpenAPI (JSON). Read API lo usa solo se la discovery sull’endpoint operativo fallisce.
+   */
+  openapiSpecUrl?: string;
+
+  /**
    * Backend Call: meta dopo Read API (OpenAPI) per catalogo backend + badge stale in designer-time.
    * @see `BackendCallSpecMeta` in `domain/backendCatalog/catalogTypes.ts`
    */

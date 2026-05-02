@@ -126,6 +126,11 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
     setData(cloned);
     // ✅ Also update window.__projectData immediately for synchronous access
     (window as any).__projectData = cloned;
+    try {
+      ProjectDataService.syncBackendCatalogFromProvider(cloned.backendCatalog);
+    } catch {
+      /* noop */
+    }
   }, []);
 
   const getCurrentProjectId = () => currentProjectId;

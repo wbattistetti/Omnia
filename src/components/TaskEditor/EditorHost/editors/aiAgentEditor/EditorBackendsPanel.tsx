@@ -73,7 +73,14 @@ function ManualBackendAccordion({
     try {
       ensureManualCatalogBackendTask(entry, projectId);
       const method = normalizeMethod(entry.method);
-      const res = await runBackendCallReadApiForTask(entry.id, projectId, url, method);
+      const t = taskRepository.getTask(entry.id);
+      const spec =
+        t && typeof (t as { openapiSpecUrl?: string }).openapiSpecUrl === 'string'
+          ? String((t as { openapiSpecUrl: string }).openapiSpecUrl).trim()
+          : '';
+      const res = await runBackendCallReadApiForTask(entry.id, projectId, url, method, {
+        openapiSpecUrl: spec || undefined,
+      });
       if (!res.ok) {
         window.alert(res.error);
         return;

@@ -17,6 +17,8 @@ export type ToolbarButton = {
   title?: string;
   active?: boolean;
   primary?: boolean;
+  /** Evidenziazione «pronta» (es. verde): i renderer della toolbar la mappano su stile pieno. */
+  successHighlight?: boolean;
   disabled?: boolean;
   // ✅ NEW: Support for select dropdown
   type?: 'button' | 'select';

@@ -14,6 +14,7 @@ import { getDefaultConfig, getVisibleFields } from '@utils/iaAgentRuntime/platfo
 import { ModelSection } from './iaRuntime/ModelSection';
 import { ElevenLabsConvaiIdentitySection } from './iaRuntime/ElevenLabsConvaiIdentitySection';
 import { ToolsSection } from './iaRuntime/ToolsSection';
+import { BackendToolsSection } from './iaRuntime/BackendToolsSection';
 import {
   VoiceCatalogSection,
   VoiceRuntimeDeveloperJson,
@@ -513,6 +514,14 @@ export function IAAgentSetup({
               tools={config.tools}
               showOverrideBadge={devOverride}
               onChange={(tools) => setConfig({ ...config, tools })}
+            />
+          ) : null}
+          {config.platform === 'elevenlabs' && visibility.tools ? (
+            <BackendToolsSection
+              config={config}
+              showOverrideBadge={devOverride}
+              catalogReloadNonce={catalogReloadNonce}
+              onChange={setConfig}
             />
           ) : null}
           {config.platform === 'elevenlabs' ? (

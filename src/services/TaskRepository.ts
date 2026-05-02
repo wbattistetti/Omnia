@@ -782,15 +782,19 @@ class TaskRepository {
 
   /**
    * FlowDocument load: upsert tasks that belong to this flow canvas into the in-memory store.
+   * Merges onto any task already loaded from GET /tasks so fields omitted from the flow slice
+   * (e.g. mockTable, testRun) are not wiped.
    */
   ingestTasksFromFlowDocument(flowCanvasId: string, tasks: Task[]): void {
     const fid = String(flowCanvasId || '').trim();
     if (!fid) return;
     for (const t of tasks) {
+      const existing = this.tasks.get(t.id);
       const merged: Task = {
+        ...(existing || {}),
         ...t,
         authoringFlowCanvasId: fid,
-      };
+      } as Task;
       this.tasks.set(t.id, merged);
       this.pendingRemoteTaskDeletes.delete(t.id);
     }
