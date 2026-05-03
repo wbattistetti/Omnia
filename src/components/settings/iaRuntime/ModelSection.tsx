@@ -45,9 +45,7 @@ export interface ModelSectionProps {
    * non da `config.advanced` del task.
    */
   elevenLabsLlmMappingForCatalog?: LlmMappingPayload | null;
-  /**
-   * Quando false, Agent ID e pulsante «Crea agente» non sono qui (es. Developer tools in {@link IAAgentSetup}).
-   */
+  /** Quando false, Agent ID ConvAI e pulsante provision sono nascosti (raro). */
   showElevenLabsConvaiIdentity?: boolean;
 }
 

@@ -44,6 +44,8 @@ export type BackendCallMockTableProps = {
   highlightIncompleteRows?: boolean;
   /** Incrementato dal parent per avviare «Test API» su tutte le righe senza ref imperativo. */
   bulkTestNonce?: number;
+  /** Striscia endpoint (internalName): completa righe mock se le celle sono vuote. */
+  endpointInvocationFallback?: Record<string, string>;
   onBulkTestStart?: () => void;
   onBulkTestEnd?: () => void;
 };
@@ -64,6 +66,7 @@ export function BackendCallMockTable({
   inputUiKindByInternalName,
   highlightIncompleteRows,
   bulkTestNonce,
+  endpointInvocationFallback,
   onBulkTestStart,
   onBulkTestEnd,
 }: BackendCallMockTableProps) {
@@ -115,6 +118,7 @@ export function BackendCallMockTable({
       endpointHeaders: endpoint.headers,
       sendEntries: mappingSend,
       outputDefs,
+      endpointInvocationFallback,
     });
 
     /** Test bulk: solo righe con tutti gli input attivi compilati (allineato a `testApiReadiness` nel parent). */
@@ -126,7 +130,7 @@ export function BackendCallMockTable({
         return;
       }
       const ids = currentRows
-        .filter((r) => isBackendMockRowInputsFilledForColumns(r, names))
+        .filter((r) => isBackendMockRowInputsFilledForColumns(r, names, endpointInvocationFallback))
         .map((r) => r.id);
       logBackendCallTest('runBulkTestOnCompleteRows: righe da eseguire', {
         rowIds: ids,
@@ -139,7 +143,7 @@ export function BackendCallMockTable({
       }
       await Promise.all(ids.map((id) => runRow(id, { forceHttp: true })));
       logBackendCallTest('runBulkTestOnCompleteRows: Promise.all completato', { rowIds: ids });
-    }, [getRows, activeMockInputInternalNames, runRow]);
+    }, [getRows, activeMockInputInternalNames, runRow, endpointInvocationFallback]);
 
     const lastHandledBulkNonce = useRef(0);
     useEffect(() => {
@@ -401,7 +405,11 @@ export function BackendCallMockTable({
                 {rows.map((row, rowIndex) => {
                   const rowInputsComplete =
                     activeMockInputInternalNames.length > 0 &&
-                    isBackendMockRowInputsFilledForColumns(row, activeMockInputInternalNames);
+                    isBackendMockRowInputsFilledForColumns(
+                      row,
+                      activeMockInputInternalNames,
+                      endpointInvocationFallback
+                    );
                   const showRowIncomplete =
                     Boolean(highlightIncompleteRows) &&
                     activeMockInputInternalNames.length > 0 &&

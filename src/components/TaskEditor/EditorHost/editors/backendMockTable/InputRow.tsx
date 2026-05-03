@@ -24,7 +24,8 @@ export type InputRowProps = {
   inputTooltipByInternalName?: Record<string, string>;
 };
 
-function htmlInputTypeForKind(kind: OpenApiInputUiKind | undefined): string {
+/** Tipi HTML coerenti con OpenAPI (mock table + SEND mapping). */
+export function htmlInputTypeForKind(kind: OpenApiInputUiKind | undefined): string {
   if (!kind || kind === 'text') return 'text';
   return kind;
 }

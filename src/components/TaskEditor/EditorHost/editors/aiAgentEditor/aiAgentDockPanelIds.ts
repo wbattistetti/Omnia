@@ -11,6 +11,15 @@ export const AI_AGENT_DOCK_PANEL_IDS = {
   backends: 'ai_agent_editor_backends',
 } as const;
 
+/**
+ * Document event: Fix compile / iaRuntime attiva il tab Dockview «Agent setup» prima di
+ * `omnia:ia-runtime-focus` (focus diverso da tool/backend).
+ */
+export const OMNIA_ACTIVATE_AI_AGENT_AGENT_SETUP_TAB = 'omnia:activate-ai-agent-agent-setup-tab';
+
+/** Document event: Fix compile tool/backend → tab Dockview «Backends» (ConvAI tool + SEND). */
+export const OMNIA_ACTIVATE_AI_AGENT_BACKENDS_TAB = 'omnia:activate-ai-agent-backends-tab';
+
 export interface DockPanelRef {
   readonly id: string;
 }

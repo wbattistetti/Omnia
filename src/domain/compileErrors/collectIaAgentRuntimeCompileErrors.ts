@@ -29,6 +29,7 @@ import {
 import type { DeriveBackendToolFailureCode } from '@domain/iaAgentTools/backendToolDerivation';
 import { collectReachableBackendCallTaskIdsFromFlow } from '@domain/iaAgentTools/collectReachableBackendCallTaskIdsFromFlow';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
+import { listIncompleteBackendSendWireKeys } from './collectBackendCallIncompleteSendMessages';
 
 export type AiAgentTaskLocation = {
   nodeId?: string;
@@ -80,6 +81,24 @@ function primaryVoiceId(cfg: IAAgentConfig): string {
   const fromList = cfg.voices?.find((e) => e.role === 'primary')?.id?.trim();
   if (fromList) return fromList;
   return (cfg.voice?.id ?? '').trim();
+}
+
+function backendDisplayName(bt: Task): string {
+  const t = bt as Task & { label?: string; title?: string };
+  const label = String(t.label ?? t.title ?? '').trim();
+  if (label) return label;
+  const ep = (bt as Task & { endpoint?: { url?: string } }).endpoint;
+  const url = ep && typeof ep.url === 'string' ? ep.url.trim() : '';
+  if (url) {
+    try {
+      const u = new URL(url);
+      return u.hostname || url.slice(0, 40);
+    } catch {
+      return url.slice(0, 48);
+    }
+  }
+  const id = String(bt.id || '').trim();
+  return id ? `${id.slice(0, 8)}…` : 'Backend';
 }
 
 function llmModelForElevenLabs(cfg: IAAgentConfig): string {
@@ -268,6 +287,23 @@ export function collectIaAgentRuntimeCompileErrors(
               `ConvAI: ${dr.error}`,
               'tools'
             );
+          }
+          const missingSendKeys = listIncompleteBackendSendWireKeys(bt);
+          if (missingSendKeys.length > 0) {
+            const bkName = backendDisplayName(bt);
+            out.push({
+              taskId: task.id,
+              rowId: task.id,
+              nodeId: loc?.nodeId,
+              message: `${prefix}I parametri SEND del Backend «${bkName}» non sono completamente valorizzati.`,
+              severity: 'Error',
+              category: 'IaProviderConfiguration',
+              code: 'IaConvaiBackendCallSendIncomplete',
+              fixTarget: { type: 'iaRuntime', taskId: task.id, focus: 'tools' },
+              taskType: TaskType.AIAgent,
+              backendSendHighlightWireKeys: missingSendKeys,
+              convaiSendFixBackendTaskId: tid,
+            });
           }
         }
 

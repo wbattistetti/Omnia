@@ -19,7 +19,15 @@ interface UseDialogueEngineOptions {
   onTaskExecute: (task: CompiledTask) => Promise<any>;
   onComplete?: () => void;
   onError?: (error: Error) => void;
-  onMessage?: (message: { id: string; text: string; stepType?: string; escalationNumber?: number; taskId?: string }) => void;
+  onMessage?: (message: {
+    id: string;
+    text: string;
+    stepType?: string;
+    escalationNumber?: number;
+    taskId?: string;
+    /** Navigazione Fix (simulatore chat) — stesso flusso del debugger Run. */
+    compilationFixError?: CompilationError;
+  }) => void;
   onDDTStart?: (data: { ddt: any; taskId: string }) => void;
   onWaitingForInput?: (data: { taskId: string; nodeId?: string; taskLabel?: string; nodeLabel?: string }) => void;
   /** Fired on each orchestrator state update (SSE), after internal execution state is applied. */
@@ -329,17 +337,18 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         );
 
         if (blockingErrors.length > 0) {
-          // ✅ Show user-friendly message in chat (full list + FIX live in the flow debugger panel)
-          const { formatCompilationErrorMessage } = await import('../../utils/errorMessageFormatter');
-          const errorMessage = formatCompilationErrorMessage(blockingErrors);
-
+          const { formatCompilationErrorChatBubble } = await import('../../utils/errorMessageFormatter');
           const opts = optionsRef.current;
           if (opts.onMessage) {
-            opts.onMessage({
-              id: `error-${Date.now()}`,
-              text: errorMessage + '\n\n💡 Apri il debugger del flusso (Run): lì trovi l’elenco errori con Fix.',
-              stepType: 'error',
-              taskId: 'SYSTEM'
+            const base = Date.now();
+            blockingErrors.forEach((e, i) => {
+              opts.onMessage!({
+                id: `compile-err-${base}-${i}-${String(e.taskId ?? 'x').slice(0, 8)}`,
+                text: formatCompilationErrorChatBubble(e, i, blockingErrors.length),
+                stepType: 'error',
+                taskId: String(e.taskId ?? 'SYSTEM'),
+                compilationFixError: e,
+              });
             });
           }
 

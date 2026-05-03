@@ -1,0 +1,111 @@
+{
+  "today": {
+    "it": "Oggi",
+    "en": "Today",
+    "es": "Hoy"
+  },
+  "tomorrow": {
+    "it": "Domani",
+    "en": "Tomorrow",
+    "es": "Mañana"
+  },
+  "apply": {
+    "it": "Applica",
+    "en": "Apply",
+    "es": "Aplicar"
+  },
+  "cancel": {
+    "it": "Annulla",
+    "en": "Cancel",
+    "es": "Cancelar"
+  },
+  "openCalendar": {
+    "it": "Apri calendario",
+    "en": "Open calendar",
+    "es": "Abrir calendario"
+  },
+  "wheelHint": {
+    "it": "Rotella: cambia mese. Maiusc + rotella: cambia anno.",
+    "en": "Wheel: change month. Shift + wheel: change year.",
+    "es": "Rueda: cambiar mes. Mayús + rueda: cambiar año."
+  },
+  "wheelMonthColumn": {
+    "it": "Rotella: cambia solo il mese.",
+    "en": "Wheel: change month only.",
+    "es": "Rueda: solo el mes."
+  },
+  "wheelYearColumn": {
+    "it": "Rotella: cambia solo l'anno.",
+    "en": "Wheel: change year only.",
+    "es": "Rueda: solo el año."
+  },
+  "monthUp": {
+    "it": "Mese precedente",
+    "en": "Previous month",
+    "es": "Mes anterior"
+  },
+  "monthDown": {
+    "it": "Mese successivo",
+    "en": "Next month",
+    "es": "Mes siguiente"
+  },
+  "yearUp": {
+    "it": "Anno precedente",
+    "en": "Previous year",
+    "es": "Año anterior"
+  },
+  "yearDown": {
+    "it": "Anno successivo",
+    "en": "Next year",
+    "es": "Año siguiente"
+  },
+  "weekdaysShort": {
+    "it": ["lun", "mar", "mer", "gio", "ven", "sab", "dom"],
+    "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "es": ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+  },
+  "months": {
+    "it": [
+      "gennaio",
+      "febbraio",
+      "marzo",
+      "aprile",
+      "maggio",
+      "giugno",
+      "luglio",
+      "agosto",
+      "settembre",
+      "ottobre",
+      "novembre",
+      "dicembre"
+    ],
+    "en": [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ],
+    "es": [
+      "enero",
+      "febrero",
+      "marzo",
+      "abril",
+      "mayo",
+      "junio",
+      "julio",
+      "agosto",
+      "septiembre",
+      "octubre",
+      "noviembre",
+      "diciembre"
+    ]
+  }
+}

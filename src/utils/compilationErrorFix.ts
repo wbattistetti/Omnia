@@ -12,6 +12,10 @@ import { resolveEdgeCaption } from '@components/Flowchart/utils/edgeConditionSta
 import { getActiveFlowCanvasId } from '@flows/activeFlowCanvas';
 import { taskRepository } from '@services/TaskRepository';
 import { TaskType, normalizeLegacyTaskTypeValue } from '@types/taskTypes';
+import {
+  OMNIA_ACTIVATE_AI_AGENT_AGENT_SETUP_TAB,
+  OMNIA_ACTIVATE_AI_AGENT_BACKENDS_TAB,
+} from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDockPanelIds';
 
 /**
  * Flowchart row id equals task instance id in taskRepository; prefer it over referenced task id.
@@ -90,14 +94,64 @@ export async function runCompilationErrorFix(error: CompilationError): Promise<v
       fixTarget: { type: 'task', taskId: ft.taskId },
     };
     await openTaskEditorForCompilationError(navigateError);
+    /** Allinea l’editor aperto (`rowId` vs `taskId`) agli eventi verso Agent setup / tab Backends. */
+    const instanceIdForEvents = resolveCompilationFixInstanceId(navigateError);
+
+    const focus = String(ft.focus ?? '').trim();
+    const codeTrim = (error.code ?? '').trim();
+    const backendFixId = error.convaiSendFixBackendTaskId?.trim();
+    const useBackendsTab =
+      focus === 'tools' ||
+      (codeTrim === 'IaConvaiBackendCallSendIncomplete' && Boolean(backendFixId));
+
+    document.dispatchEvent(
+      new CustomEvent(
+        useBackendsTab ? OMNIA_ACTIVATE_AI_AGENT_BACKENDS_TAB : OMNIA_ACTIVATE_AI_AGENT_AGENT_SETUP_TAB,
+        {
+          bubbles: true,
+        }
+      )
+    );
+
+    if (useBackendsTab && backendFixId) {
+      document.dispatchEvent(
+        new CustomEvent('omnia:expand-catalog-backend-for-task', {
+          detail: { taskInstanceId: backendFixId },
+          bubbles: true,
+        })
+      );
+    }
+
     window.setTimeout(() => {
       document.dispatchEvent(
         new CustomEvent('omnia:ia-runtime-focus', {
-          detail: { taskInstanceId: ft.taskId, focus: ft.focus },
+          detail: { taskInstanceId: instanceIdForEvents, focus: ft.focus },
           bubbles: true,
         })
       );
     }, 420);
+
+    const wireKeys = error.backendSendHighlightWireKeys;
+    const code = (error.code ?? '').trim();
+    if (
+      code === 'IaConvaiBackendCallSendIncomplete' &&
+      backendFixId &&
+      Array.isArray(wireKeys) &&
+      wireKeys.length > 0
+    ) {
+      window.setTimeout(() => {
+        document.dispatchEvent(
+          new CustomEvent('omnia:convai-fix-backend-send', {
+            detail: {
+              agentTaskId: instanceIdForEvents,
+              backendTaskId: backendFixId,
+              wireKeys,
+            },
+            bubbles: true,
+          })
+        );
+      }, 720);
+    }
     return;
   }
 

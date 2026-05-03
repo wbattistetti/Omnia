@@ -18,6 +18,7 @@ import { createMappingEntry, type MappingEntry } from './mappingTypes';
 import { ensureFlowVariableBindingForInterfaceRow, shouldSkipInterfaceDuplicate } from './interfaceMappingLabels';
 import { useContainerWidth } from './useContainerWidth';
 import { CollapsiblePanelSection } from '../FlowWorkspace/CollapsiblePanelSection';
+import type { OpenApiInputUiKind } from '../../services/openApiBackendCallSpec';
 
 /** Draggable chip in SEND/RECEIVE headers: drop on tree to insert a new parameter. */
 export function BackendParameterDragChip() {
@@ -123,6 +124,8 @@ export interface InterfaceMappingEditorProps {
   backendKnownVariableIds?: ReadonlySet<string>;
   /** Backend Call editor: thinner SEND/RECEIVE frames, no extra inset — less nested “matryoshka” chrome. */
   compactBackendPanels?: boolean;
+  /** Backend SEND: tipo editor costante OpenAPI per wireKey (internalName). */
+  backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
 }
 
 export function InterfaceMappingEditor({
@@ -162,6 +165,7 @@ export function InterfaceMappingEditor({
   projectId,
   collapsibleInterfaceBlocks = false,
   compactBackendPanels = false,
+  backendSendParamKindByWireKey,
 }: InterfaceMappingEditorProps) {
   const interfaceInput = interfaceInputProp ?? [];
   const interfaceOutput = interfaceOutputProp ?? [];
@@ -396,6 +400,7 @@ export function InterfaceMappingEditor({
                 onCreateOutputVariable={onCreateOutputVariable}
                 onOutputVariableCreated={onOutputVariableCreated}
                 backendKnownVariableIds={backendVariableIdSet}
+                backendSendParamKindByWireKey={backendSendParamKindByWireKey}
               />
             </MappingBlock>
             <MappingBlock

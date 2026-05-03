@@ -12,12 +12,6 @@ import {
 } from '@utils/iaAgentRuntime/overrideFields';
 import { getDefaultConfig, getVisibleFields } from '@utils/iaAgentRuntime/platformHelpers';
 import { ModelSection } from './iaRuntime/ModelSection';
-import { ElevenLabsConvaiIdentitySection } from './iaRuntime/ElevenLabsConvaiIdentitySection';
-import { ToolsSection } from './iaRuntime/ToolsSection';
-import {
-  BackendToolsSection,
-  type ConvaiBackendToolsDiscoveryContext,
-} from './iaRuntime/BackendToolsSection';
 import {
   VoiceCatalogSection,
   VoiceRuntimeDeveloperJson,
@@ -61,10 +55,6 @@ export interface IAAgentSetupProps {
    * Se false, nasconde LLM/TTS Costs. Default: true solo con `mode="global"` (Studio / app-wide).
    */
   showModelCostsSection?: boolean;
-  /**
-   * Override per-task: consente «Aggiungi da canvas» nella sezione tool ConvAI (backend a valle sul flow).
-   */
-  convaiBackendToolsDiscoveryContext?: ConvaiBackendToolsDiscoveryContext | null;
 }
 
 /** OpenAI → Anthropic → Gemini → ElevenLabs → Custom */
@@ -103,7 +93,6 @@ export function IAAgentSetup({
   onProvisionConvaiAgent,
   listenConvaiTtsFix = false,
   showModelCostsSection: showModelCostsProp,
-  convaiBackendToolsDiscoveryContext = null,
 }: IAAgentSetupProps) {
   const showModelCostsSection = showModelCostsProp ?? mode === 'global';
   const [inner, setInner] = React.useState<IAAgentConfig>(() =>
@@ -166,9 +155,6 @@ export function IAAgentSetup({
       ))}
     </>
   );
-
-  const devOverride =
-    (overrides.toolsSection || overrides.advancedSection) && mode === 'override';
 
   const [diagnostic, setDiagnostic] = React.useState<IaProviderDiagnosticResult | null>(null);
   const [diagnosticBusy, setDiagnosticBusy] = React.useState(false);
@@ -304,7 +290,8 @@ export function IAAgentSetup({
             ? undefined
             : (next) => patchAdvanced({ [ADV_LLM_LANGUAGE_SCOPED_KEY]: next })
         }
-        showElevenLabsConvaiIdentity={false}
+        showElevenLabsConvaiIdentity
+        onProvisionConvaiAgent={onProvisionConvaiAgent}
         platformSlot={platformSlot}
         elevenLabsTtsVoiceSlots={
           visibility.voice && config.platform === 'elevenlabs'
@@ -500,51 +487,23 @@ export function IAAgentSetup({
         </div>
       </details>
 
-      <details className="rounded border border-slate-700/80 bg-slate-950/40">
-        <summary className="cursor-pointer px-1.5 py-0.5 text-[11px] font-semibold leading-none text-slate-300">
-          Developer tools
-          {devOverride ? (
-            <span className="ml-1 rounded border border-amber-500/35 bg-amber-500/15 px-1 py-px text-[9px] uppercase text-amber-200">
-              override
-            </span>
-          ) : null}
-        </summary>
-        <div className="flex flex-col gap-1 border-t border-slate-800 px-1.5 py-1">
-          {config.platform === 'elevenlabs' ? (
-            <ElevenLabsConvaiIdentitySection
-              config={config}
-              onChange={setConfig}
-              onProvisionConvaiAgent={onProvisionConvaiAgent}
+      {import.meta.env.DEV ? (
+        <details className="rounded border border-slate-700/80 bg-slate-950/40">
+          <summary className="cursor-pointer px-1.5 py-0.5 text-[11px] font-semibold leading-none text-slate-400">
+            Debug IA (solo build dev)
+          </summary>
+          <div className="flex flex-col gap-1 border-t border-slate-800 px-1.5 py-1">
+            {config.platform === 'elevenlabs' ? (
+              <VoiceRuntimeDeveloperJson config={config} onChange={setConfig} />
+            ) : null}
+            <AdvancedSection
+              advanced={config.advanced ?? {}}
+              showOverrideBadge={mode === 'override' && overrides.advancedSection}
+              onChange={(advanced) => setConfig({ ...config, advanced })}
             />
-          ) : null}
-          {visibility.tools ? (
-            <ToolsSection
-              tools={config.tools}
-              showOverrideBadge={devOverride}
-              onChange={(tools) => setConfig({ ...config, tools })}
-            />
-          ) : null}
-          {config.platform === 'elevenlabs' && visibility.tools ? (
-            <BackendToolsSection
-              config={config}
-              showOverrideBadge={devOverride}
-              catalogReloadNonce={catalogReloadNonce}
-              convaiBackendToolsDiscoveryContext={
-                mode === 'override' ? convaiBackendToolsDiscoveryContext : null
-              }
-              onChange={setConfig}
-            />
-          ) : null}
-          {config.platform === 'elevenlabs' ? (
-            <VoiceRuntimeDeveloperJson config={config} onChange={setConfig} />
-          ) : null}
-          <AdvancedSection
-            advanced={config.advanced ?? {}}
-            showOverrideBadge={mode === 'override' && overrides.advancedSection}
-            onChange={(advanced) => setConfig({ ...config, advanced })}
-          />
-        </div>
-      </details>
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

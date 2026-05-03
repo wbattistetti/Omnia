@@ -19,7 +19,11 @@ import {
 } from './AIAgentEditorDockPanels';
 import { EditorIaRuntimePanel } from './EditorIaRuntimePanel';
 import { EditorBackendsPanel } from './EditorBackendsPanel';
-import { AI_AGENT_DOCK_PANEL_IDS as PANEL_IDS } from './aiAgentDockPanelIds';
+import {
+  AI_AGENT_DOCK_PANEL_IDS as PANEL_IDS,
+  OMNIA_ACTIVATE_AI_AGENT_AGENT_SETUP_TAB,
+  OMNIA_ACTIVATE_AI_AGENT_BACKENDS_TAB,
+} from './aiAgentDockPanelIds';
 
 const PROMPT_FINALE_PANEL_ID = 'prompt_finale';
 
@@ -144,12 +148,43 @@ export function AIAgentEditorDockShell({
   value,
   generateError,
 }: AIAgentEditorDockShellProps) {
+  const dockApiRef = React.useRef<DockviewApi | null>(null);
+
   const onReady = React.useCallback(
     (event: DockviewReadyEvent) => {
       initUnifiedDock(event.api, { hasAgentGeneration, showRightPanel });
+      dockApiRef.current = event.api;
     },
     [hasAgentGeneration, showRightPanel]
   );
+
+  React.useEffect(() => {
+    const activateTab =
+      (panelId: string) => () => {
+        let attempts = 0;
+        const tryActivate = () => {
+          const api = dockApiRef.current;
+          const panel = api?.getPanel(panelId);
+          if (panel) {
+            panel.api.setActive();
+            return;
+          }
+          attempts += 1;
+          if (attempts < 90) {
+            window.setTimeout(tryActivate, 45);
+          }
+        };
+        tryActivate();
+      };
+    const activateAgentSetupTab = activateTab(PANEL_IDS.iaRuntime);
+    const activateBackendsTab = activateTab(PANEL_IDS.backends);
+    document.addEventListener(OMNIA_ACTIVATE_AI_AGENT_AGENT_SETUP_TAB, activateAgentSetupTab, true);
+    document.addEventListener(OMNIA_ACTIVATE_AI_AGENT_BACKENDS_TAB, activateBackendsTab, true);
+    return () => {
+      document.removeEventListener(OMNIA_ACTIVATE_AI_AGENT_AGENT_SETUP_TAB, activateAgentSetupTab, true);
+      document.removeEventListener(OMNIA_ACTIVATE_AI_AGENT_BACKENDS_TAB, activateBackendsTab, true);
+    };
+  }, []);
 
   return (
     <AIAgentEditorDockProvider value={value}>

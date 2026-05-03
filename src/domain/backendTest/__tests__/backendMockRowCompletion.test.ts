@@ -42,4 +42,14 @@ describe('isBackendMockRowInputsFilledForColumns', () => {
       isBackendMockRowInputsFilledForColumns(row({ inputs: { a: 'x', b: 'y' } }), names)
     ).toBe(true);
   });
+
+  it('uses endpoint fallback when mock cell empty', () => {
+    const names = ['a', 'b'] as const;
+    expect(
+      isBackendMockRowInputsFilledForColumns(row({ inputs: {} }), names, { a: '1', b: '2' })
+    ).toBe(true);
+    expect(
+      isBackendMockRowInputsFilledForColumns(row({ inputs: { a: 'x' } }), names, { b: 'y' })
+    ).toBe(true);
+  });
 });

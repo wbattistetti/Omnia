@@ -3,6 +3,7 @@ import { useDialogueEngine } from '@components/DialogueEngine/useDialogueEngine'
 import type { ExecutionState } from '@components/FlowCompiler/types';
 import { looksLikeTechnicalTranslationOrId } from '@utils/translationKeys';
 import type { Message } from '@components/ChatSimulator/UserMessage';
+import type { CompilationError } from '@components/FlowCompiler/types';
 import { FlowHighlighter } from '../../../../../features/debugger/FlowHighlighter';
 import { DebuggerController } from '../../../../../features/debugger/controller/DebuggerController';
 import type { DebuggerStep } from '../../../../../features/debugger/core/DebuggerStep';
@@ -254,6 +255,7 @@ export function useFlowModeChat(
         stepType?: string;
         taskId?: string;
         id?: string;
+        compilationFixError?: CompilationError;
       }) => {
         const messageId =
           message.id != null && String(message.id) !== ''
@@ -274,6 +276,7 @@ export function useFlowModeChat(
           type: 'bot',
           textKey: message.textKey,
           stepType: message.stepType,
+          compilationFixError: message.compilationFixError,
         };
         const currentOnMessage = onMessageRef.current;
         if (currentOnMessage) currentOnMessage(newMessage);

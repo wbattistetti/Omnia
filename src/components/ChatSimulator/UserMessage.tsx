@@ -1,6 +1,6 @@
 import React from 'react';
 import { Check, X as XIcon, CheckCircle, AlertCircle, AlertTriangle, ChevronDown, ChevronUp, User } from 'lucide-react';
-
+import type { CompilationError } from '@components/FlowCompiler/types';
 
 export interface ExtractedValue {
   variable: string; // Nome della variabile (es. "Day", "Month", "Year")
@@ -22,6 +22,8 @@ export interface Message {
   grammarMissing?: boolean; // Flag per indicare che manca la grammatica NLP
   extractedValues?: ExtractedValue[]; // Valori estratti dall'input
   engineType?: 'new' | 'old'; // Track which engine generated this message
+  /** Per messaggi compile error: apre editor come Fix nel debugger. */
+  compilationFixError?: CompilationError;
 }
 
 interface UserMessageProps {

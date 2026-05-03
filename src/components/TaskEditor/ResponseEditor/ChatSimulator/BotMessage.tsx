@@ -1,5 +1,6 @@
 import React from 'react';
 import { Bot, Check, X as XIcon, Pencil, AlertTriangle, AlertCircle } from 'lucide-react';
+import { executeNavigationIntent, resolveNavigationIntent } from '@domain/compileErrors';
 import { getStepIcon } from '@responseEditor/ChatSimulator/chatSimulatorUtils';
 import type { Message } from '@components/ChatSimulator/UserMessage';
 import { useFontContext } from '@context/FontContext';
@@ -48,6 +49,20 @@ const BotMessage: React.FC<BotMessageProps> = ({
   };
   const isEditing = editingId === message.id;
 
+  const onCompilationFix = React.useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const err = message.compilationFixError;
+      if (!err) return;
+      try {
+        await executeNavigationIntent(resolveNavigationIntent(err));
+      } catch (errx) {
+        console.error('[BotMessage] Fix navigation failed:', errx);
+      }
+    },
+    [message.compilationFixError]
+  );
+
   return (
     <div className={`flex flex-col items-start ${combinedClass}`}>
       <div className="flex flex-row items-start gap-2 w-full flex-wrap">
@@ -92,18 +107,8 @@ const BotMessage: React.FC<BotMessageProps> = ({
                   <Bot size={18} className="text-slate-600" aria-hidden />
                 </span>
                 <div className={`flex items-start gap-2 flex-1 min-w-0 ${combinedClass}`}>
-                  {message.stepType && (
-                    <div className={`mt-0.5 flex items-center gap-1 shrink-0 ${combinedClass}`} style={{ color: message.color }}>
-                      {message.escalationNumber !== undefined && message.escalationNumber > 0 && (
-                        <span className={`font-medium ${combinedClass}`} style={{ color: message.color }}>
-                          {message.escalationNumber}°
-                        </span>
-                      )}
-                      {getStepIcon(message.stepType, message.color)}
-                    </div>
-                  )}
                   <div
-                    className={`cursor-pointer flex-1 min-w-0 ${combinedClass}`}
+                    className={`flex-1 min-w-0 whitespace-pre-line break-words ${message.textKey ? 'cursor-pointer' : ''} ${combinedClass}`}
                     title={message.textKey ? 'Click to edit' : undefined}
                     onClick={() => {
                       if (message.textKey) {
@@ -113,6 +118,27 @@ const BotMessage: React.FC<BotMessageProps> = ({
                     style={fontStyle}
                   >
                     {message.text}
+                  </div>
+                  <div className={`mt-0.5 flex items-center gap-1 shrink-0 flex-wrap ${combinedClass}`}>
+                    {message.compilationFixError ? (
+                      <button
+                        type="button"
+                        onClick={onCompilationFix}
+                        className="text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-md bg-gray-900 text-white hover:bg-gray-800 dark:bg-sky-600 dark:hover:bg-sky-500"
+                      >
+                        Fix
+                      </button>
+                    ) : null}
+                    {message.stepType ? (
+                      <div className="flex items-center gap-1" style={{ color: message.color }}>
+                        {message.escalationNumber !== undefined && message.escalationNumber > 0 && (
+                          <span className={`font-medium ${combinedClass}`} style={{ color: message.color }}>
+                            {message.escalationNumber}°
+                          </span>
+                        )}
+                        {getStepIcon(message.stepType, message.color)}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { flushSync } from 'react-dom';
 import type { EditorProps } from '../../EditorHost/types';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { TaskType, type Task } from '../../../../types/taskTypes';
@@ -23,8 +24,11 @@ import { resolveVariableStoreProjectId } from '../../../../utils/safeProjectId';
 import { getVariableLabel } from '../../../../utils/getVariableLabel';
 import type { ToolbarButton } from '../../../../dock/types';
 import { BackendCallMockTable } from './backendMockTable/BackendCallMockTable';
+import { EndpointUrlMethodBar } from './EndpointUrlMethodBar';
 import { BackendExecutionMode, type BackendMockTableRow } from '../../../../domain/backendTest/backendTestRowTypes';
+import { buildLiteralFallbackFromSendMapping } from '../../../../domain/backendTest/buildLiteralFallbackFromSendMapping';
 import {
+  isBackendMockInputCellFilled,
   isBackendMockRowInputsFilledForColumns,
 } from '../../../../domain/backendTest/backendMockRowCompletion';
 import { slugInternalName, type OpenApiInputUiKind } from '../../../../services/openApiBackendCallSpec';
@@ -291,10 +295,24 @@ export default function BackendCallEditor({
     const endpoint = rawTask?.endpoint ?? DEFAULT_CONFIG.endpoint;
     const rawIn = Array.isArray(rawTask?.inputs) ? rawTask.inputs : [];
     const rawOut = Array.isArray(rawTask?.outputs) ? rawTask.outputs : [];
-    const inputs: BackendCallConfig['inputs'] = rawIn.filter((i: { internalName?: string }) => Boolean(i?.internalName?.trim()));
+    let inputs: BackendCallConfig['inputs'] = rawIn.filter((i: { internalName?: string }) => Boolean(i?.internalName?.trim()));
     const outputs: BackendCallConfig['outputs'] = rawOut.filter((o: { internalName?: string }) =>
       Boolean(o?.internalName?.trim())
     );
+
+    const epInv = (rawTask as { endpointInvocationValues?: Record<string, string> }).endpointInvocationValues;
+    if (epInv && typeof epInv === 'object') {
+      inputs = inputs.map((inp) => {
+        const name = inp.internalName?.trim();
+        if (!name) return inp;
+        const mig = epInv[name];
+        if (mig === undefined || mig === null) return inp;
+        const m = String(mig).trim();
+        if (!m) return inp;
+        if (String(inp.variable ?? '').trim()) return inp;
+        return { ...inp, variable: m };
+      });
+    }
     const mockTable = rawTask?.mockTable as BackendCallConfig['mockTable'] | undefined;
     const mockTableColumns: BackendCallConfig['mockTableColumns'] = rawTask?.mockTableColumns;
     const mockTableDefaultExecutionMode = (rawTask as { mockTableDefaultExecutionMode?: BackendExecutionMode })
@@ -375,6 +393,7 @@ export default function BackendCallEditor({
           ...(config.mockTableDefaultExecutionMode !== undefined
             ? { mockTableDefaultExecutionMode: config.mockTableDefaultExecutionMode }
             : {}),
+          endpointInvocationValues: undefined,
           backendToolDescription,
         } as any,
         projectId
@@ -557,6 +576,12 @@ export default function BackendCallEditor({
     [config.outputs, knownBackendVariableIdSet, openapiDescriptionSnapshots]
   );
 
+  /** Fallback Test API: solo letterali SEND (variabile di flusso → valorizza la cella mock o runtime). */
+  const literalFallbackFromSend = React.useMemo(
+    () => buildLiteralFallbackFromSendMapping(mappingSend),
+    [mappingSend]
+  );
+
   type MappingEntriesUpdater = MappingEntry[] | ((prev: MappingEntry[]) => MappingEntry[]);
 
   const handleBackendSendChange = React.useCallback(
@@ -632,15 +657,21 @@ export default function BackendCallEditor({
     return (config.inputs || []).map((i) => i.internalName?.trim()).filter(Boolean) as string[];
   }, [config.mockTableColumns, config.inputs]);
 
-  /** Almeno una riga ha tutti gli input attivi compilati (sufficiente per «Test API»; le altre righe vengono saltate). */
+  /**
+   * Test API: tutti gli input SEND sono valorizzati dalla striscia endpoint oppure (fallback) da almeno una riga mock completa.
+   */
   const mockTableHasAtLeastOneCompleteRow = React.useMemo(() => {
     const table = config.mockTable ?? [];
     const names = mockTableActiveInputInternalNames;
     if (names.length === 0) {
       return false;
     }
-    return table.some((row) => isBackendMockRowInputsFilledForColumns(row, names));
-  }, [config.mockTable, mockTableActiveInputInternalNames]);
+    const fallback = literalFallbackFromSend;
+    if (names.every((n) => isBackendMockInputCellFilled(fallback[n]))) {
+      return true;
+    }
+    return table.some((row) => isBackendMockRowInputsFilledForColumns(row, names, fallback));
+  }, [config.mockTable, mockTableActiveInputInternalNames, literalFallbackFromSend]);
 
   const [highlightIncompleteRows, setHighlightIncompleteRows] = React.useState(false);
 
@@ -667,12 +698,48 @@ export default function BackendCallEditor({
       return;
     }
     setHighlightIncompleteRows(false);
+    flushSync(() => {
+      setConfig((prev) => {
+        const names =
+          (prev.mockTableColumns?.length
+            ? prev.mockTableColumns.filter((c) => c.type === 'input' && c.isActive).map((c) => c.name)
+            : (prev.inputs || []).map((i) => i.internalName?.trim()).filter(Boolean)) ?? [];
+        const fb = buildLiteralFallbackFromSendMapping(
+          enrichBackendMappingEntriesOpenApi(
+            backendInputsToMappingEntries(prev.inputs, knownBackendVariableIdSet),
+            'send',
+            openapiDescriptionSnapshots
+          )
+        );
+        const stripComplete =
+          names.length > 0 && names.every((n) => isBackendMockInputCellFilled(fb[String(n)]));
+        if (stripComplete && (prev.mockTable?.length ?? 0) === 0) {
+          const nextTable = [
+            {
+              id: `row_${Date.now()}`,
+              inputs: {},
+              outputs: {},
+              testRun: {
+                executionMode: prev.mockTableDefaultExecutionMode ?? BackendExecutionMode.MOCK,
+                notes: {},
+              },
+            },
+          ] as BackendMockTableRow[];
+          return {
+            ...prev,
+            mockTable: nextTable,
+            mockTableColumns: computeMockTableColumnsForSignature({ ...prev, mockTable: nextTable }),
+          };
+        }
+        return prev;
+      });
+    });
     setBulkTestNonce((n) => {
       const next = n + 1;
       logBackendCallTest('handleTestApi: avvio bulk mock table', { bulkTestNonce: { from: n, to: next } });
       return next;
     });
-  }, [testApiReadiness]);
+  }, [testApiReadiness, knownBackendVariableIdSet, openapiDescriptionSnapshots]);
 
   /** Tooltip celle: descrizione parametro + «. Clicca per editare.» */
   const inputTooltipByInternalName = React.useMemo(() => {
@@ -886,27 +953,15 @@ export default function BackendCallEditor({
               >
                 Endpoint operativo
               </label>
-              <div className="flex min-w-0 flex-wrap items-stretch gap-2">
-                <input
-                  type="text"
-                  style={controlStyle}
-                  value={config.endpoint.url}
-                  onChange={(e) => updateEndpoint({ url: e.target.value })}
-                  placeholder="https://api.example.com/… — discovery /openapi.json, /swagger.json, … sulla stessa origine"
-                  className="min-w-0 flex-1 px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <select
-                  value={config.endpoint.method}
-                  onChange={(e) => updateEndpoint({ method: e.target.value as any })}
-                  className="shrink-0 px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="GET">GET</option>
-                  <option value="POST">POST</option>
-                  <option value="PUT">PUT</option>
-                  <option value="DELETE">DELETE</option>
-                  <option value="PATCH">PATCH</option>
-                </select>
-              </div>
+              <EndpointUrlMethodBar
+                url={config.endpoint.url}
+                method={config.endpoint.method}
+                onUrlChange={(next) => updateEndpoint({ url: next })}
+                onMethodChange={(next) => updateEndpoint({ method: next as BackendCallConfig['endpoint']['method'] })}
+                placeholder="https://api.example.com/… — discovery /openapi.json, /swagger.json, … sulla stessa origine"
+                controlStyle={controlStyle}
+                labelStyle={labelStyle}
+              />
             </div>
             <div className="flex min-w-0 flex-col gap-0.5">
               <label
@@ -924,53 +979,15 @@ export default function BackendCallEditor({
                 className="w-full min-w-0 px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <div className="rounded border border-amber-900/50 bg-amber-950/25 px-2 py-1.5 text-[10px] leading-snug text-amber-100/85">
-              <div className="font-semibold uppercase tracking-wide text-amber-400/95" style={labelStyle}>
-                Debiti tecnici (design)
-              </div>
-              <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-100/75">
-                <li>Modello legacy `task.endpoint` (stringa) vs oggetto `endpoint` attuale — allineamento catalogo in corso.</li>
-                <li>Audit test: oggi ultima risposta per riga; storico append-only resta pianificato.</li>
-              </ul>
-            </div>
           </div>
         )}
-
-        {!showTableView && !hideEndpointRow ? (
-          <div className="mb-2 rounded border border-slate-700/80 bg-slate-950/50 px-2 py-1.5">
-            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              ConvAI (function calling)
-            </div>
-            <p className="mb-1 text-[9px] leading-snug text-slate-500">
-              Per ConvAI non esiste <code className="text-slate-400">outputSchema</code> nel payload tool: qui e nella
-              sezione <strong className="text-slate-400">Contesto</strong> dell&apos;agente descrivi in modo{' '}
-              <strong>contrattuale</strong> cosa restituisce l&apos;API (forma JSON, campi, ISO date, errori), quando
-              invocarla e cosa il modello <strong>non</strong> può inventare oltre quella risposta.
-            </p>
-            <textarea
-              value={backendToolDescription}
-              onChange={(e) => setBackendToolDescription(e.target.value)}
-              placeholder="Quando chiamare il tool; parametri; formato risposta atteso (es. elenco slot ISO start/end); errori; divieti di inferenza oltre il payload…"
-              className="min-h-[52px] w-full resize-y rounded border border-slate-600 bg-slate-900 px-1.5 py-1 text-[11px] leading-snug text-slate-100 placeholder:text-slate-600"
-            />
-          </div>
-        ) : null}
-
-        {showTableView && !hideEndpointRow ? (
-          <div className="mb-2 rounded border border-amber-800/55 bg-amber-950/35 px-2 py-1.5 text-[10px] leading-snug text-amber-100/90">
-            <span className="font-semibold text-amber-300/95">ConvAI — descrizione tool: </span>
-            in vista <strong className="text-amber-200/90">Mock Table</strong> il campo «Descrizione per ConvAI» (
-            <code className="text-amber-200/80">backendToolDescription</code>) non è visibile. Disattiva{' '}
-            <strong className="text-amber-200/90">Mock Table</strong> nella toolbar per modificarlo; non confonderlo
-            con le descrizioni dei campi SEND/RECEIVE o con OpenAPI.
-          </div>
-        ) : null}
 
         {/* Two Column Layout: Input (left) + Output (right) OR Table View */}
         {showTableView ? (
           <>
             <BackendCallMockTable
               bulkTestNonce={bulkTestNonce}
+              endpointInvocationFallback={literalFallbackFromSend}
               onBulkTestStart={() => setBulkApiTestBusy(true)}
               onBulkTestEnd={() => setBulkApiTestBusy(false)}
               highlightIncompleteRows={highlightIncompleteRows}
@@ -1044,6 +1061,7 @@ export default function BackendCallEditor({
             flowDropTarget={
               getActiveFlowCanvasId() ? { flowCanvasId: getActiveFlowCanvasId()! } : undefined
             }
+            backendSendParamKindByWireKey={inputUiKindByInternalName}
           />
         </div>
         )}

@@ -31,7 +31,6 @@ import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAge
 import { taskRepository } from '@services/TaskRepository';
 import { useProjectData } from '@context/ProjectDataContext';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
-import type { ConvaiBackendToolsDiscoveryContext } from '@components/settings/iaRuntime/BackendToolsSection';
 
 type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
@@ -50,19 +49,6 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
     [projectData]
   );
   const baseline = React.useMemo(() => loadGlobalIaAgentConfig(), []);
-
-  const convaiBackendToolsDiscoveryContext = React.useMemo((): ConvaiBackendToolsDiscoveryContext | null => {
-    const tid = String(instanceId ?? '').trim();
-    if (!tid) return null;
-    const agentTask = taskRepository.getTask(tid);
-    const fid = String((agentTask as { authoringFlowCanvasId?: string } | null)?.authoringFlowCanvasId ?? '').trim();
-    const flows = projectData?.flows as Record<string, { nodes?: unknown[]; edges?: unknown[] }> | undefined;
-    const flowDoc = fid && flows ? flows[fid] : undefined;
-    const nodes = Array.isArray(flowDoc?.nodes) ? flowDoc.nodes : [];
-    const edges = Array.isArray(flowDoc?.edges) ? flowDoc.edges : [];
-    if (!fid || nodes.length === 0) return null;
-    return { aiAgentTaskId: tid, flow: { nodes, edges } };
-  }, [instanceId, projectData?.flows]);
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
   const [saveError, setSaveError] = React.useState<string | null>(null);
@@ -133,7 +119,8 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         | 'endpoint'
         | 'apiKey'
         | 'safety'
-        | 'ttsModel';
+        | 'ttsModel'
+        | 'tools';
       if (!id || id !== String(instanceId ?? '').trim()) return;
       if (!focus) return;
       let attempt = 0;
@@ -320,7 +307,6 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         value={iaRuntimeConfig}
         onChange={handleChange}
         onProvisionConvaiAgent={handleProvisionConvaiAgent}
-        convaiBackendToolsDiscoveryContext={convaiBackendToolsDiscoveryContext}
       />
     </div>
   );

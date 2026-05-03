@@ -139,6 +139,10 @@ export function enrichCompilationError(raw: Record<string, unknown>): Compilatio
     stepKey: stepKeyRaw,
     escalationIndex,
     taskType: taskTypeNum,
+    backendSendHighlightWireKeys: Array.isArray(pick(raw, 'backendSendHighlightWireKeys'))
+      ? (pick(raw, 'backendSendHighlightWireKeys') as unknown[]).map((x) => String(x))
+      : undefined,
+    convaiSendFixBackendTaskId: str(pick(raw, 'convaiSendFixBackendTaskId')) || undefined,
   };
 }
 

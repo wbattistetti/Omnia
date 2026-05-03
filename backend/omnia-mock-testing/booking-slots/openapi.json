@@ -18,42 +18,42 @@
         "operationId": "listAppointmentSlots",
         "tags": ["Appointments"],
         "summary": "Elenco slot disponibili",
-        "description": "Restituisce N slot da startDate, al massimo P slot per giorno, orari casuali tra startHour e endHour (endHour escluso per sorteggiare l’ora).",
+        "description": "Genera slot per un intervallo di giorni: per ogni giorno nella finestra [startDate, startDate+days) crea fino a slotsPerDay slot con orari casuali tra startHour e endHour (endHour escluso). Nessun default server-side: tutti i parametri query sono obbligatori.",
         "parameters": [
           {
             "name": "startDate",
             "in": "query",
-            "required": false,
-            "description": "Data inizio (YYYY-MM-DD o ISO). Default: oggi UTC.",
-            "schema": { "type": "string", "format": "date" }
+            "required": true,
+            "description": "Data di partenza della finestra: data ISO YYYY-MM-DD, oppure le costanti letterali \"Now\" (oggi UTC) o \"Tomorrow\" (domani UTC).",
+            "schema": { "type": "string" }
           },
           {
-            "name": "N",
+            "name": "days",
             "in": "query",
-            "required": false,
-            "description": "Numero totale di slot.",
-            "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 10 }
+            "required": true,
+            "description": "Numero di giorni da generare/cercare (intero ≥ 1).",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 60 }
           },
           {
-            "name": "P",
+            "name": "slotsPerDay",
             "in": "query",
-            "required": false,
-            "description": "Massimo slot per giorno.",
-            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 3 }
+            "required": true,
+            "description": "Slot per giorno (massimo slot generati in ogni giorno della finestra).",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50 }
           },
           {
             "name": "startHour",
             "in": "query",
-            "required": false,
-            "description": "Ora inizio fascia (0–23).",
-            "schema": { "type": "integer", "minimum": 0, "maximum": 23, "default": 9 }
+            "required": true,
+            "description": "Ora di inizio della finestra giornaliera per sorteggiare gli slot (0–23).",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 23 }
           },
           {
             "name": "endHour",
             "in": "query",
-            "required": false,
-            "description": "Ora esclusiva fine fascia (1–24).",
-            "schema": { "type": "integer", "minimum": 1, "maximum": 24, "default": 18 }
+            "required": true,
+            "description": "Ora esclusiva di fine fascia giornaliera (1–24); nessuna ora sorteggiata ≥ endHour.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 24 }
           }
         ],
         "responses": {

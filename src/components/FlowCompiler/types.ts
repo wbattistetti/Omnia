@@ -144,6 +144,15 @@ export interface CompilationError {
   escalationIndex?: number;
   /** TaskTypes enum (aligned with VB) so Fix opens the correct editor without guessing. */
   taskType?: number;
+  /**
+   * ConvAI guard: wireKey (internalName) delle righe SEND incomplete su Backend Call.
+   * Usato da Fix per evidenziare le righe nell’editor mapping.
+   */
+  backendSendHighlightWireKeys?: string[];
+  /**
+   * Con Fix da errore IA su SEND incompleto: id del task Backend Call da mostrare nell’editor dell’agente.
+   */
+  convaiSendFixBackendTaskId?: string;
 }
 
 /**

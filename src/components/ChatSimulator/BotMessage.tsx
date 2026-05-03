@@ -1,5 +1,6 @@
 import React from 'react';
 import { Check, X as XIcon, Pencil, AlertTriangle, AlertCircle, Bot } from 'lucide-react';
+import { executeNavigationIntent, resolveNavigationIntent } from '@domain/compileErrors';
 import { getStepIcon } from './chatSimulatorUtils';
 import type { Message } from './UserMessage';
 
@@ -26,15 +27,19 @@ const BotMessage: React.FC<BotMessageProps> = ({
 }) => {
   const isEditing = editingId === message.id;
 
-  // Debug: log warning message
-  if (message.warningMessage) {
-    console.log('[BotMessage] ⚠️ Rendering message with warning:', {
-      id: message.id,
-      text: message.text,
-      warningMessage: message.warningMessage,
-      hasWarningMessage: !!message.warningMessage
-    });
-  }
+  const onCompilationFix = React.useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const err = message.compilationFixError;
+      if (!err) return;
+      try {
+        await executeNavigationIntent(resolveNavigationIntent(err));
+      } catch (errx) {
+        console.error('[BotMessage] Fix navigation failed:', errx);
+      }
+    },
+    [message.compilationFixError]
+  );
 
   return (
     <div className="flex flex-col items-start">
@@ -80,7 +85,9 @@ const BotMessage: React.FC<BotMessageProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start gap-2 flex-wrap">
                     <div
-                      className="flex-1 min-w-0 text-sm cursor-pointer whitespace-normal break-words"
+                      className={`flex-1 min-w-0 text-sm whitespace-pre-line break-words ${
+                        message.textKey ? 'cursor-pointer' : ''
+                      }`}
                       title={message.textKey ? 'Click to edit' : undefined}
                       onClick={() => {
                         if (message.textKey) {
@@ -91,16 +98,27 @@ const BotMessage: React.FC<BotMessageProps> = ({
                       {message.warningMessage ? '' : message.text}
                     </div>
                     {/* Step icon on the right */}
-                    {message.stepType && (
-                      <div className="flex items-center gap-1 flex-shrink-0 mt-0.5" style={{ color: message.color }}>
-                        {message.escalationNumber !== undefined && message.escalationNumber > 0 && (
-                          <span className="text-xs font-medium" style={{ color: message.color }}>
-                            {message.escalationNumber}°
-                          </span>
-                        )}
-                        {getStepIcon(message.stepType, message.color)}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                      {message.compilationFixError ? (
+                        <button
+                          type="button"
+                          onClick={onCompilationFix}
+                          className="text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-md bg-gray-900 text-white hover:bg-gray-800 dark:bg-sky-600 dark:hover:bg-sky-500"
+                        >
+                          Fix
+                        </button>
+                      ) : null}
+                      {message.stepType ? (
+                        <div className="flex items-center gap-1" style={{ color: message.color }}>
+                          {message.escalationNumber !== undefined && message.escalationNumber > 0 && (
+                            <span className="text-xs font-medium" style={{ color: message.color }}>
+                              {message.escalationNumber}°
+                            </span>
+                          )}
+                          {getStepIcon(message.stepType, message.color)}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </div>

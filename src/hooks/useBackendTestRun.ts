@@ -78,6 +78,8 @@ export type UseBackendTestRunParams = {
   endpointHeaders?: Record<string, string>;
   sendEntries: MappingEntry[];
   outputDefs: BackendOutputDef[];
+  /** Valori striscia endpoint (internalName): uniti a `row.inputs` prima della HTTP; la riga vince. */
+  endpointInvocationFallback?: Record<string, string>;
 };
 
 export function useBackendTestRun(params: UseBackendTestRunParams) {
@@ -132,12 +134,17 @@ export function useBackendTestRun(params: UseBackendTestRunParams) {
         return;
       }
 
+      const mergedInputs: Record<string, unknown> = {
+        ...(p.endpointInvocationFallback ?? {}),
+        ...((row.inputs ?? {}) as Record<string, unknown>),
+      };
+
       const built = buildSendHttpRequest({
         endpointUrl: p.endpointUrl,
         method: p.endpointMethod,
         endpointHeaders: p.endpointHeaders,
         sendEntries: p.sendEntries,
-        rowInputs: (row.inputs ?? {}) as Record<string, unknown>,
+        rowInputs: mergedInputs,
       });
 
       const proxy = await forwardBackendCallViaProxy(built);

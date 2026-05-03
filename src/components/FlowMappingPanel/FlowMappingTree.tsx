@@ -22,6 +22,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import type { MappingEntry } from './mappingTypes';
+import type { OpenApiInputUiKind } from '../../services/openApiBackendCallSpec';
 import {
   buildMappingTree,
   renameLeafSegment,
@@ -229,6 +230,8 @@ export interface FlowMappingTreeProps {
    * Se omesso, l’adapter usa la modalità legacy (tutto in `variableRefId`).
    */
   backendKnownVariableIds?: ReadonlySet<string>;
+  /** Backend SEND: tipo editor costante (OpenAPI) per wireKey. */
+  backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
 }
 
 function updateEntry(entries: MappingEntry[], id: string, patch: Partial<MappingEntry>): MappingEntry[] {
@@ -288,6 +291,7 @@ interface RowProps {
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
   backendKnownVariableIds?: ReadonlySet<string>;
+  backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
 }
 
 function MappingTreeRow({
@@ -322,6 +326,7 @@ function MappingTreeRow({
   onCreateOutputVariable,
   onOutputVariableCreated,
   backendKnownVariableIds,
+  backendSendParamKindByWireKey,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const labelEditRef = useRef<LabelWithPencilEditHandle>(null);
@@ -719,6 +724,7 @@ function MappingTreeRow({
             onCreateOutputVariable={onCreateOutputVariable}
             onOutputVariableCreated={onOutputVariableCreated}
             backendKnownVariableIds={backendKnownVariableIds}
+            backendSendParamKindByWireKey={backendSendParamKindByWireKey}
           />
         </div>
 
@@ -816,6 +822,7 @@ function MappingTreeRow({
               onCreateOutputVariable={onCreateOutputVariable}
               onOutputVariableCreated={onOutputVariableCreated}
               backendKnownVariableIds={backendKnownVariableIds}
+              backendSendParamKindByWireKey={backendSendParamKindByWireKey}
             />
           ))}
         </div>
@@ -850,6 +857,7 @@ export function FlowMappingTree({
   onCreateOutputVariable,
   onOutputVariableCreated,
   backendKnownVariableIds,
+  backendSendParamKindByWireKey,
 }: FlowMappingTreeProps) {
   const workspaceState = useFlowWorkspaceOptional();
   const workspaceFlows = variant === 'interface' ? workspaceState?.flows : undefined;
@@ -1194,6 +1202,7 @@ export function FlowMappingTree({
           onCreateOutputVariable={onCreateOutputVariable}
           onOutputVariableCreated={onOutputVariableCreated}
           backendKnownVariableIds={backendKnownVariableIds}
+          backendSendParamKindByWireKey={backendSendParamKindByWireKey}
         />
       ))}
 

@@ -499,6 +499,12 @@ export interface Task {
   openapiSpecUrl?: string;
 
   /**
+   * Backend Call: valori espliciti per parametri SEND (chiave = internalName), mostrati accanto al metodo HTTP.
+   * Si uniscono alle celle mock per Test API (la cella vince su questo fallback); nessun default implicito lato server.
+   */
+  endpointInvocationValues?: Record<string, string>;
+
+  /**
    * Backend Call: meta dopo Read API (OpenAPI) per catalogo backend + badge stale in designer-time.
    * @see `BackendCallSpecMeta` in `domain/backendCatalog/catalogTypes.ts`
    */

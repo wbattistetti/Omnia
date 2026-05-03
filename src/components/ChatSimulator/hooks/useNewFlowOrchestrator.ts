@@ -252,7 +252,8 @@ export function useNewFlowOrchestrator({
             escalationNumber: message.escalationNumber,
             timestamp: new Date(),
             color: message.stepType ? getStepColor(message.stepType) : undefined,
-            warningMessage: undefined
+            warningMessage: undefined,
+            compilationFixError: (message as { compilationFixError?: unknown }).compilationFixError,
           };
           onMessage(messagePayload);
         }).catch((error) => {

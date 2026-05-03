@@ -1,14 +1,17 @@
 /**
  * Per-row field strip: backend (API + variable) as label → edit in place. Interface: no extra fields.
+ * Colonna variabile: SEND → `SendParameterValueEditor` (costante tipizzata + lista); RECEIVE → `ReceiveVariableMenu` (solo lista).
  */
 
 import React, { useMemo } from 'react';
 import type { MappingEntry } from './mappingTypes';
 import { InlineFieldWithPencilEdit } from './InlineFieldWithPencilEdit';
-import { BackendMappingVariableField } from './BackendMappingVariableField';
+import { ReceiveVariableMenu } from './ReceiveVariableMenu';
+import { SendParameterValueEditor } from './SendParameterValueEditor';
 import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegistry';
 import { resolveVariableDisplayName } from '../../utils/resolveVariableDisplayName';
 import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
+import type { OpenApiInputUiKind } from '../../services/openApiBackendCallSpec';
 
 export interface MappingRowFieldsProps {
   variant: 'backend' | 'interface';
@@ -32,6 +35,8 @@ export interface MappingRowFieldsProps {
   backendKnownVariableIds?: ReadonlySet<string>;
   onCreateOutputVariable?: (displayName: string) => { id: string; label: string } | null;
   onOutputVariableCreated?: () => void;
+  /** Backend SEND: tipo UI per costante (OpenAPI Read API). Chiave = wireKey / internalName. */
+  backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
 }
 
 export function MappingRowFields({
@@ -50,6 +55,7 @@ export function MappingRowFields({
   backendKnownVariableIds,
   onCreateOutputVariable,
   onOutputVariableCreated,
+  backendSendParamKindByWireKey,
 }: MappingRowFieldsProps) {
   const flowTr = useActiveFlowMetaTranslationsFlattened();
   const mergedTr = useMemo(() => ({ ...getProjectTranslationsTable(), ...flowTr }), [flowTr]);
@@ -85,6 +91,8 @@ export function MappingRowFields({
           flowMetaTranslations: mergedTr,
         })
       : '';
+    const sendKind =
+      backendColumn === 'send' ? backendSendParamKindByWireKey?.[entry.wireKey.trim()] : undefined;
     return (
       <div className="flex items-center gap-2 shrink-0 min-w-0">
         {showApiFields ? (
@@ -110,16 +118,23 @@ export function MappingRowFields({
             viewTabIndex={-1}
             onCommit={() => {}}
           />
+        ) : varMode === 'receive' ? (
+          <ReceiveVariableMenu
+            variableRefId={entry.variableRefId}
+            variableOptions={variableOptions}
+            onCommit={(patch) => onPatch(patch)}
+            onCreateVariable={onCreateOutputVariable}
+            onVariableCreated={onOutputVariableCreated}
+          />
         ) : (
-          <BackendMappingVariableField
-            mode={varMode}
+          <SendParameterValueEditor
             variableRefId={entry.variableRefId}
             literalConstant={entry.literalConstant}
             knownVariableIds={backendKnownVariableIds ?? new Set(variableOptions)}
             variableOptions={variableOptions}
             onCommit={(patch) => onPatch(patch)}
-            onCreateVariable={varMode === 'receive' ? onCreateOutputVariable : undefined}
-            onVariableCreated={varMode === 'receive' ? onOutputVariableCreated : undefined}
+            openApiInputKind={sendKind}
+            apiField={entry.apiField}
           />
         )}
       </div>
