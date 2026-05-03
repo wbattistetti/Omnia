@@ -56,7 +56,7 @@ describe('collectIaAgentRuntimeCompileErrors', () => {
     setIaProvisioningError('task-prov', null);
   });
 
-  it('flags ElevenLabs missing convaiAgentId when override has voice and llm', async () => {
+  it('does not flag IaElevenLabsMissingAgentId when convaiAgentId absent (provisioning gestisce createAgent)', async () => {
     const { collectIaAgentRuntimeCompileErrors } = await import('../collectIaAgentRuntimeCompileErrors');
 
     const json = JSON.stringify({
@@ -74,10 +74,7 @@ describe('collectIaAgentRuntimeCompileErrors', () => {
       'main'
     );
 
-    expect(raw.some((e) => (e.code as string) === 'IaElevenLabsMissingAgentId')).toBe(true);
-    expect((raw.find((e) => e.code === 'IaElevenLabsMissingAgentId')?.fixTarget as any)?.focus).toBe(
-      'agentId'
-    );
+    expect(raw.some((e) => (e.code as string) === 'IaElevenLabsMissingAgentId')).toBe(false);
   });
 
   it('does not duplicate elevenlabs checks when configured', async () => {

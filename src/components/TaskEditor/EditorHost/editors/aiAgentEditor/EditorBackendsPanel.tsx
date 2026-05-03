@@ -13,6 +13,7 @@ import { deriveBackendLabelFromUrl, type ManualCatalogEntry } from '@domain/back
 import { appendAuditEntry } from '../../../../../application/backendCatalog/appendOnlyAuditLog';
 import { generateSafeGuid } from '@utils/idGenerator';
 import type { ProjectData } from '@types/project';
+import type { Task } from '@types/taskTypes';
 import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { EmbeddedBackendCallEditor } from './EmbeddedBackendCallEditor';
 import { ensureManualCatalogBackendTask } from './ensureManualCatalogBackendTask';
@@ -42,6 +43,7 @@ function ManualBackendAccordion({
 }) {
   const [endpointRev, setEndpointRev] = React.useState(0);
   const [readBusy, setReadBusy] = React.useState(false);
+  const [headerToolDescription, setHeaderToolDescription] = React.useState('');
 
   const editorTask = React.useMemo(() => {
     if (!expanded) return null;
@@ -65,6 +67,32 @@ function ManualBackendAccordion({
     },
     [entry, onPatch, projectId]
   );
+
+  const applyHeaderToolDescription = React.useCallback(
+    (text: string) => {
+      setHeaderToolDescription(text);
+      ensureManualCatalogBackendTask(entry, projectId);
+      taskRepository.updateTask(entry.id, { backendToolDescription: text } as Partial<Task>, projectId);
+    },
+    [entry, projectId]
+  );
+
+  React.useEffect(() => {
+    ensureManualCatalogBackendTask(entry, projectId);
+    const t = taskRepository.getTask(entry.id);
+    setHeaderToolDescription(String((t as Task)?.backendToolDescription ?? ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- usiamo `entry` solo al run; dipendenze strette per non resettare la descrizione a ogni rerender del parent
+  }, [entry.id, endpointRev, projectId]);
+
+  const wasExpandedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (expanded && !wasExpandedRef.current) {
+      ensureManualCatalogBackendTask(entry, projectId);
+      const t = taskRepository.getTask(entry.id);
+      setHeaderToolDescription(String((t as Task)?.backendToolDescription ?? ''));
+    }
+    wasExpandedRef.current = expanded;
+  }, [expanded, entry, projectId]);
 
   const runReadApiCollapsed = React.useCallback(async () => {
     const url = entry.endpointUrl.trim();
@@ -148,7 +176,15 @@ function ManualBackendAccordion({
         />
         <input
           type="text"
-          className="min-w-[8rem] flex-1 basis-[12rem] rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-[10px] font-mono text-slate-200"
+          className="min-w-[10rem] flex-1 basis-[14rem] rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-[11px] text-slate-100"
+          value={headerToolDescription}
+          onChange={(e) => applyHeaderToolDescription(e.target.value)}
+          placeholder="Descrizione (ConvAI / tool)…"
+          title="Quando il modello deve chiamare questa API. Dopo «Recupera», se vuoto, si precompila da summary/description OpenAPI dell’operazione."
+        />
+        <input
+          type="text"
+          className="min-w-[10rem] flex-1 basis-[14rem] rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-[10px] font-mono text-slate-200"
           value={entry.endpointUrl}
           onChange={(e) => applyHeaderEndpoint(e.target.value, entry.method || 'GET')}
           placeholder="https://… o …/v3/api-docs"
@@ -172,7 +208,7 @@ function ManualBackendAccordion({
             disabled={readBusy}
             onClick={() => void runReadApiCollapsed()}
             className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-600/80 bg-violet-950/50 px-2 py-0.5 text-[10px] text-violet-100 hover:bg-violet-900/60 disabled:opacity-45"
-            title="Recupera descrizione OpenAPI (poi si espande il pannello)"
+            title="Read API: struttura SEND/RECEIVE da OpenAPI; se la descrizione tool è vuota, la si compila da summary/description dell’operazione. Poi si espande il pannello."
           >
             {readBusy ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />

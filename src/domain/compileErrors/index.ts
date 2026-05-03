@@ -26,7 +26,10 @@ export {
   mergeAiAgentTaskLocations,
   collectIaAgentRuntimeCompileErrors,
 } from './collectIaAgentRuntimeCompileErrors';
-export type { AiAgentTaskLocation } from './collectIaAgentRuntimeCompileErrors';
+export type {
+  AiAgentTaskLocation,
+  CollectIaAgentRuntimeCompileErrorsOptions,
+} from './collectIaAgentRuntimeCompileErrors';
 export type { NormalizedIaProviderError, ProviderErrorAdapter } from './iaProviderErrors';
 export { providerErrorAdapters } from './providerErrorRegistry';
 export { normalizeProviderError } from './normalizeProviderError';

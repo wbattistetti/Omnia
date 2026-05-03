@@ -6,6 +6,7 @@ import type { Task } from '@types/taskTypes';
 import { TaskType } from '@types/taskTypes';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import { deriveBackendToolDefinition } from './backendToolDerivation';
+import { mergeConvaiBackendToolIdLists } from './manualCatalogBackendToolIds';
 
 /**
  * @returns `taskId` del Backend Call se `exportedToolName` coincide con la derivazione, altrimenti `undefined`.
@@ -13,11 +14,13 @@ import { deriveBackendToolDefinition } from './backendToolDerivation';
 export function resolveBackendCallTaskIdForExportedToolName(
   exportedToolName: string,
   cfg: IAAgentConfig,
-  getTask: (taskId: string) => Task | null | undefined
+  getTask: (taskId: string) => Task | null | undefined,
+  options?: { manualCatalogBackendTaskIds?: readonly string[] }
 ): string | undefined {
   const want = exportedToolName.trim();
   if (!want) return undefined;
-  const ids = cfg.convaiBackendToolTaskIds ?? [];
+  const fromCfg = (cfg.convaiBackendToolTaskIds ?? []).map((x) => String(x ?? '').trim()).filter(Boolean);
+  const ids = mergeConvaiBackendToolIdLists(fromCfg, options?.manualCatalogBackendTaskIds ?? []);
   for (const id of ids) {
     const tid = String(id || '').trim();
     if (!tid) continue;

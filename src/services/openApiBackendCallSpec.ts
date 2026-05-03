@@ -9,6 +9,10 @@ export type OpenApiInputUiKind = 'text' | 'number' | 'date' | 'time' | 'datetime
 export type OpenApiOperationFields = {
   /** OpenAPI `operationId` for the resolved path/method, when present. */
   operationId?: string;
+  /** OpenAPI operation `summary` (short human label). */
+  operationSummary?: string;
+  /** OpenAPI operation `description` (longer prose). */
+  operationDescription?: string;
   /** query, path, header parameter names */
   requestParamNames: string[];
   /** Top-level JSON body property names (POST/PUT/PATCH body object) */
@@ -407,6 +411,13 @@ export function extractOperationFields(
       ? operationIdRaw.trim()
       : undefined;
 
+  const summaryRaw = op.summary;
+  const operationSummary =
+    typeof summaryRaw === 'string' && summaryRaw.trim().length > 0 ? summaryRaw.trim() : undefined;
+  const descOpRaw = op.description;
+  const operationDescription =
+    typeof descOpRaw === 'string' && descOpRaw.trim().length > 0 ? descOpRaw.trim() : undefined;
+
   const inputDescriptionsByApiName: Record<string, string> = {};
   const outputDescriptionsByApiName: Record<string, string> = {};
   const inputUiKindByApiName: Record<string, OpenApiInputUiKind> = {};
@@ -498,6 +509,8 @@ export function extractOperationFields(
 
   return {
     ...(operationId ? { operationId } : {}),
+    ...(operationSummary ? { operationSummary } : {}),
+    ...(operationDescription ? { operationDescription } : {}),
     requestParamNames,
     requestBodyPropertyNames,
     responsePropertyNames,
@@ -505,6 +518,21 @@ export function extractOperationFields(
     outputDescriptionsByApiName,
     inputUiKindByApiName,
   };
+}
+
+const OPERATION_DOC_BLURB_MAX = 4000;
+
+/**
+ * Testo unico per descrizione tool / UI: combina summary e description OpenAPI dell’operazione.
+ */
+export function buildOperationDocBlurbFromOpenApiFields(fields: OpenApiOperationFields): string {
+  const s = fields.operationSummary?.trim() || '';
+  const d = fields.operationDescription?.trim() || '';
+  if (!s && !d) return '';
+  if (s && d && s !== d) {
+    return `${s}\n\n${d}`.slice(0, OPERATION_DOC_BLURB_MAX);
+  }
+  return (s || d).slice(0, OPERATION_DOC_BLURB_MAX);
 }
 
 const SPEC_CANDIDATE_PATHS = [

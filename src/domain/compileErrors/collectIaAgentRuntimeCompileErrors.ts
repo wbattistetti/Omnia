@@ -18,11 +18,17 @@ import {
   parseOptionalIaRuntimeJson,
 } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
-import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
+import {
+  mergeResolvedAndLiveIaConfig,
+  peekConvaiLiveIaConfig,
+} from '@utils/iaAgentRuntime/convaiLiveIaConfigBridge';
 import {
   deriveBackendToolDefinition,
   mergeEffectiveIaAgentTools,
 } from '@domain/iaAgentTools/backendToolDerivation';
+import type { DeriveBackendToolFailureCode } from '@domain/iaAgentTools/backendToolDerivation';
+import { collectReachableBackendCallTaskIdsFromFlow } from '@domain/iaAgentTools/collectReachableBackendCallTaskIdsFromFlow';
+import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 
 export type AiAgentTaskLocation = {
   nodeId?: string;
@@ -53,7 +59,21 @@ function effectiveIaConfig(task: Task): IAAgentConfig {
   const globals = loadGlobalIaAgentConfig();
   const parsed = parseOptionalIaRuntimeJson(task.agentIaRuntimeOverrideJson);
   const merged = normalizeIAAgentConfig(parsed ?? globals);
-  return mergeConvaiAgentIdFromGlobalDefaults(merged, globals);
+  const base = mergeConvaiAgentIdFromGlobalDefaults(merged, globals);
+  return mergeResolvedAndLiveIaConfig(base, peekConvaiLiveIaConfig(task.id));
+}
+
+function compileErrorCodeForDerivationFailure(code: DeriveBackendToolFailureCode): string {
+  switch (code) {
+    case 'missing_label':
+      return 'IaConvaiBackendToolMissingLabel';
+    case 'missing_backend_tool_description':
+      return 'IaConvaiBackendToolMissingDescription';
+    case 'not_backend_call':
+    case 'missing_task':
+    default:
+      return 'IaConvaiBackendToolInvalid';
+  }
 }
 
 function primaryVoiceId(cfg: IAAgentConfig): string {
@@ -100,13 +120,21 @@ function buildProvisioningTechnicalDetail(snapshot: NormalizedIaProviderError): 
   return undefined;
 }
 
+/** Opzioni: grafi persistiti per rilevare Backend Call raggiungibili senza id in `convaiBackendToolTaskIds`. */
+export type CollectIaAgentRuntimeCompileErrorsOptions = {
+  flowsByFlowId?: Record<string, { nodes?: unknown[]; edges?: unknown[] } | undefined>;
+  /** Tab Backends / catalogo manuale progetto — include gli id nei tool ConvAI effettivi. */
+  manualCatalogBackendTaskIds?: readonly string[];
+};
+
 /**
  * Raw compiler-shaped payloads for `enrichCompilationError`.
  */
 export function collectIaAgentRuntimeCompileErrors(
   mergedTasks: unknown[],
   locations: Map<string, AiAgentTaskLocation>,
-  rootFlowId: string
+  rootFlowId: string,
+  options?: CollectIaAgentRuntimeCompileErrorsOptions
 ): Array<Record<string, unknown>> {
   const out: Array<Record<string, unknown>> = [];
 
@@ -157,14 +185,6 @@ export function collectIaAgentRuntimeCompileErrors(
 
     switch (cfg.platform) {
       case 'elevenlabs': {
-        const sessionAgentId = getConvaiSessionBinding(task.id)?.agentId?.trim() ?? '';
-        if (!sessionAgentId && !cfg.convaiAgentId?.trim() && !provisioningSnapshot) {
-          push(
-            'IaElevenLabsMissingAgentId',
-            'ElevenLabs: manca ConvAI Agent ID — crea l’agente o incolla l’ID da ElevenLabs.',
-            'agentId'
-          );
-        }
         if (!primaryVoiceId(cfg)) {
           push('IaElevenLabsMissingVoice', 'ElevenLabs: seleziona una voce nel catalogo.', 'voice');
         }
@@ -181,7 +201,38 @@ export function collectIaAgentRuntimeCompileErrors(
         }
 
         const backendIds = cfg.convaiBackendToolTaskIds ?? [];
-        for (const bid of backendIds) {
+        const normalizedBackendIds = backendIds.map((x) => String(x || '').trim()).filter(Boolean);
+        const manualCatalogIds = (options?.manualCatalogBackendTaskIds ?? []).map((x) =>
+          String(x || '').trim()
+        ).filter(Boolean);
+        const effectiveBackendIds = mergeConvaiBackendToolIdLists(normalizedBackendIds, manualCatalogIds);
+        const mergedTools = mergeEffectiveIaAgentTools(cfg, (id) => taskRepository.getTask(id), {
+          manualCatalogBackendTaskIds: manualCatalogIds,
+        });
+
+        const flowIdForReachability = String(loc?.flowId ?? rootFlowId).trim() || rootFlowId;
+        const flowDoc = options?.flowsByFlowId?.[flowIdForReachability];
+        const flowSlice =
+          flowDoc && Array.isArray(flowDoc.nodes) && flowDoc.nodes.length > 0
+            ? {
+                nodes: flowDoc.nodes,
+                edges: Array.isArray(flowDoc.edges) ? flowDoc.edges : [],
+              }
+            : null;
+        const reachableBackendIds = collectReachableBackendCallTaskIdsFromFlow(
+          flowSlice,
+          task.id,
+          (id) => taskRepository.getTask(id)
+        );
+        if (reachableBackendIds.length > 0 && effectiveBackendIds.length === 0) {
+          push(
+            'IaConvaiBackendToolIdsEmpty',
+            'Nessun tool ConvAI selezionato: sul canvas ci sono Backend Call raggiungibili dall’agente, ma `convaiBackendToolTaskIds` è vuoto. In Agent setup → backend aggiungi gli id o usa «Aggiungi da canvas».',
+            'tools'
+          );
+        }
+
+        for (const bid of effectiveBackendIds) {
           const tid = String(bid || '').trim();
           if (!tid) continue;
           const bt = taskRepository.getTask(tid);
@@ -212,11 +263,14 @@ export function collectIaAgentRuntimeCompileErrors(
           }
           const dr = deriveBackendToolDefinition(bt);
           if (!dr.ok) {
-            push('IaConvaiBackendToolInvalid', `ConvAI: ${dr.error}`, 'tools');
+            push(
+              compileErrorCodeForDerivationFailure(dr.code),
+              `ConvAI: ${dr.error}`,
+              'tools'
+            );
           }
         }
 
-        const mergedTools = mergeEffectiveIaAgentTools(cfg, (id) => taskRepository.getTask(id));
         for (const td of mergedTools) {
           if (!td.name.trim()) {
             push('IaConvaiToolMissingName', 'ConvAI: ogni tool deve avere un nome non vuoto.', 'tools');

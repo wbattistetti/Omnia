@@ -19,6 +19,7 @@ import {
   type AiAgentTaskLocation,
 } from '../../domain/compileErrors/collectIaAgentRuntimeCompileErrors';
 import { flushAiAgentPromptAlignmentBeforeCompile } from '../TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentPromptAlignmentFlush';
+import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 
 export type CompileWorkspaceOrchestratorParams = {
   rootFlowId: string;
@@ -69,6 +70,56 @@ function mergeTasksById(existing: unknown[], more: unknown[]): void {
       existing.push(t);
     }
   }
+}
+
+/**
+ * Grafi per reachability ConvAI nel collector: preferisce {@link FlowWorkspaceSnapshot} (UI attuale),
+ * integra con `projectData.flows` persistito dove lo snapshot non ha ancora nodi.
+ */
+function buildFlowsByFlowIdForIaRuntimeGuards(
+  rootFlowId: string,
+  subflowIds: readonly string[],
+  aiAgentLocations: Map<string, AiAgentTaskLocation>,
+  projectData: unknown
+): Record<string, { nodes: unknown[]; edges: unknown[] }> {
+  const flowIds = new Set<string>([rootFlowId, ...subflowIds]);
+  for (const loc of aiAgentLocations.values()) {
+    const f = String(loc?.flowId ?? '').trim();
+    if (f) flowIds.add(f);
+  }
+  for (const fid of FlowWorkspaceSnapshot.getAllFlowIds()) {
+    const t = String(fid ?? '').trim();
+    if (t) flowIds.add(t);
+  }
+
+  const out: Record<string, { nodes: unknown[]; edges: unknown[] }> = {};
+
+  for (const fid of flowIds) {
+    const snap = FlowWorkspaceSnapshot.getFlowById(fid);
+    const n = snap?.nodes;
+    if (Array.isArray(n) && n.length > 0) {
+      out[fid] = {
+        nodes: n as unknown[],
+        edges: (Array.isArray(snap?.edges) ? snap.edges : []) as unknown[],
+      };
+    }
+  }
+
+  const persisted = (projectData as { flows?: Record<string, { nodes?: unknown[]; edges?: unknown[] }> })?.flows;
+  if (persisted) {
+    for (const [fid, doc] of Object.entries(persisted)) {
+      if (!doc || !Array.isArray(doc.nodes) || doc.nodes.length === 0) continue;
+      const cur = out[fid];
+      if (!cur || cur.nodes.length === 0) {
+        out[fid] = {
+          nodes: doc.nodes,
+          edges: Array.isArray(doc.edges) ? doc.edges : [],
+        };
+      }
+    }
+  }
+
+  return out;
 }
 
 /**
@@ -174,7 +225,17 @@ export async function compileWorkspaceForOrchestratorSession(
     });
   }
 
-  const iaProviderGuards = collectIaAgentRuntimeCompileErrors(mergedTasks, aiAgentLocations, rootFlowId);
+  const flowsByFlowId = buildFlowsByFlowIdForIaRuntimeGuards(
+    rootFlowId,
+    subflowIds,
+    aiAgentLocations,
+    projectData
+  );
+  const manualCatalogBackendTaskIds = extractManualCatalogBackendTaskIdsFromProjectData(projectData);
+  const iaProviderGuards = collectIaAgentRuntimeCompileErrors(mergedTasks, aiAgentLocations, rootFlowId, {
+    flowsByFlowId,
+    manualCatalogBackendTaskIds,
+  });
   mergeCompileJsonGuardErrors(primaryCompileJson, iaProviderGuards);
 
   /** `mergeCompileJsonGuardErrors` replaces `errors` with a new array — keep root slice in sync for consumers that merged slices before this step (e.g. IA provisioning guards). */

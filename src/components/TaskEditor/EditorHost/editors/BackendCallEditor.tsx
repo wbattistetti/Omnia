@@ -455,6 +455,7 @@ export default function BackendCallEditor({
       const storedTask = taskRepository.getTask(instanceId);
       if (storedTask) {
         setConfig(buildConfigFromTask(storedTask));
+        setBackendToolDescription(String((storedTask as Task).backendToolDescription ?? ''));
       }
     } finally {
       setReadApiBusy(false);
@@ -941,15 +942,27 @@ export default function BackendCallEditor({
               ConvAI (function calling)
             </div>
             <p className="mb-1 text-[9px] leading-snug text-slate-500">
-              Se questo backend è incluso come tool dell&apos;agente ElevenLabs, serve una descrizione chiara (nome
-              interno = label del task).
+              Per ConvAI non esiste <code className="text-slate-400">outputSchema</code> nel payload tool: qui e nella
+              sezione <strong className="text-slate-400">Contesto</strong> dell&apos;agente descrivi in modo{' '}
+              <strong>contrattuale</strong> cosa restituisce l&apos;API (forma JSON, campi, ISO date, errori), quando
+              invocarla e cosa il modello <strong>non</strong> può inventare oltre quella risposta.
             </p>
             <textarea
               value={backendToolDescription}
               onChange={(e) => setBackendToolDescription(e.target.value)}
-              placeholder="Quando il modello deve chiamare questa API (contesto, prerequisiti, effetto atteso)…"
+              placeholder="Quando chiamare il tool; parametri; formato risposta atteso (es. elenco slot ISO start/end); errori; divieti di inferenza oltre il payload…"
               className="min-h-[52px] w-full resize-y rounded border border-slate-600 bg-slate-900 px-1.5 py-1 text-[11px] leading-snug text-slate-100 placeholder:text-slate-600"
             />
+          </div>
+        ) : null}
+
+        {showTableView && !hideEndpointRow ? (
+          <div className="mb-2 rounded border border-amber-800/55 bg-amber-950/35 px-2 py-1.5 text-[10px] leading-snug text-amber-100/90">
+            <span className="font-semibold text-amber-300/95">ConvAI — descrizione tool: </span>
+            in vista <strong className="text-amber-200/90">Mock Table</strong> il campo «Descrizione per ConvAI» (
+            <code className="text-amber-200/80">backendToolDescription</code>) non è visibile. Disattiva{' '}
+            <strong className="text-amber-200/90">Mock Table</strong> nella toolbar per modificarlo; non confonderlo
+            con le descrizioni dei campi SEND/RECEIVE o con OpenAPI.
           </div>
         ) : null}
 

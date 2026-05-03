@@ -91,9 +91,15 @@ import {
   serializeIaAgentConfigForTaskPersistence,
 } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
 import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
+import {
+  registerConvaiLiveIaConfig,
+  unregisterConvaiLiveIaConfig,
+} from '@utils/iaAgentRuntime/convaiLiveIaConfigBridge';
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 import { iaConvaiTracePersistTaskRepository } from '@utils/debug/iaConvaiFlowTrace';
 import { withElevenLabsReprovisionAfterTtsChange } from '@utils/iaAgentRuntime/applyElevenLabsReprovisionFlag';
+import { useProjectData } from '@context/ProjectDataContext';
+import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 
 function logStructuredPipelineAlignment(event: string, detail?: unknown): void {
   if (import.meta.env.DEV) {
@@ -114,13 +120,15 @@ function withElevenLabsReprovisionWhenTaskEditorPromptChanged(
     agentStructuredSectionsJson: string;
     agentPromptTargetPlatform: AgentPromptPlatformId;
     agentImmediateStart: boolean;
-  }
+  },
+  manualCatalogBackendTaskIds?: readonly string[]
 ): IAAgentConfig {
   const hasConvaiSession = Boolean(getConvaiSessionBinding(taskBefore.id)?.agentId?.trim());
   if (iaRuntime.platform !== 'elevenlabs' || !hasConvaiSession) {
     return iaRuntime;
   }
-  const prevText = resolveElevenLabsAgentPromptFromTask(taskBefore);
+  const appendixOpts = { manualCatalogBackendTaskIds };
+  const prevText = resolveElevenLabsAgentPromptFromTask(taskBefore, appendixOpts);
   const nextTask: Task = {
     ...taskBefore,
     agentPrompt: next.agentPrompt,
@@ -129,7 +137,7 @@ function withElevenLabsReprovisionWhenTaskEditorPromptChanged(
     agentPromptTargetPlatform: next.agentPromptTargetPlatform,
     agentImmediateStart: next.agentImmediateStart,
   };
-  const nextText = resolveElevenLabsAgentPromptFromTask(nextTask);
+  const nextText = resolveElevenLabsAgentPromptFromTask(nextTask, appendixOpts);
   const promptChanged = prevText !== nextText;
   const immediateChanged =
     Boolean(taskBefore.agentImmediateStart) !== Boolean(next.agentImmediateStart);
@@ -150,6 +158,12 @@ export function useAIAgentEditorController({
   provider,
   model,
 }: UseAIAgentEditorControllerParams) {
+  const { data: projectData } = useProjectData();
+  const manualCatalogBackendTaskIds = React.useMemo(
+    () => extractManualCatalogBackendTaskIdsFromProjectData(projectData),
+    [projectData]
+  );
+
   const [designDescription, setDesignDescription] = React.useState('');
   const [outputVariableMappings, setOutputVariableMappings] = React.useState<Record<string, string>>(
     () => ({ ...EMPTY_OUTPUT_MAPPINGS })
@@ -217,6 +231,21 @@ export function useAIAgentEditorController({
   instanceIdRef.current = instanceId;
   projectIdRef.current = projectId;
   iaRuntimeConfigRef.current = iaRuntimeConfig;
+
+  React.useEffect(() => {
+    const id = String(instanceId ?? '').trim();
+    if (!id) return () => {};
+    if (!hydrated) {
+      unregisterConvaiLiveIaConfig(id);
+      return () => {
+        unregisterConvaiLiveIaConfig(id);
+      };
+    }
+    registerConvaiLiveIaConfig(id, iaRuntimeConfig);
+    return () => {
+      unregisterConvaiLiveIaConfig(id);
+    };
+  }, [instanceId, hydrated, iaRuntimeConfig]);
 
   const markPromptFinalMisaligned = React.useCallback((reason: string) => {
     setPromptFinalAligned((prev) => {
@@ -500,7 +529,8 @@ export function useAIAgentEditorController({
           agentStructuredSectionsJson,
           agentPromptTargetPlatform: normalizeAgentPromptPlatformId(agentPromptTargetPlatform),
           agentImmediateStart,
-        }
+        },
+        manualCatalogBackendTaskIds
       );
     }
     const patch = buildAIAgentTaskPersistPatch({
@@ -557,6 +587,7 @@ export function useAIAgentEditorController({
     useCases,
     iaRuntimeConfig,
     agentImmediateStart,
+    manualCatalogBackendTaskIds,
   ]);
 
   /**

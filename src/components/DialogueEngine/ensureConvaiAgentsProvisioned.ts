@@ -23,6 +23,10 @@ import { buildConvaiAgentDisplayName } from '../../utils/iaAgentRuntime/convaiAg
 import { iaAgentConfigWithEditorSystemPrompt } from '../../utils/iaAgentRuntime/iaAgentConfigWithEditorSystemPrompt';
 import { resolveTaskIaConfig } from '../../utils/iaAgentRuntime/resolveTaskIaConfig';
 import {
+  mergeResolvedAndLiveIaConfig,
+  peekConvaiLiveIaConfig,
+} from '../../utils/iaAgentRuntime/convaiLiveIaConfigBridge';
+import {
   getConvaiSessionBinding,
   setConvaiSessionBinding,
 } from '../../utils/iaAgentRuntime/convaiSessionAgentStore';
@@ -41,6 +45,8 @@ export type ConvaiProvisionContext = {
   rootFlowLabel: string;
   /** taskId → etichetta nodo canvas */
   nodeLabelByTaskId: Record<string, string>;
+  /** Allinea payload/tool alla tab Backends (`backendCatalog.manualEntries`). */
+  manualCatalogBackendTaskIds?: readonly string[];
 };
 
 /**
@@ -86,13 +92,20 @@ export async function ensureConvaiAgentsProvisioned(
       const task = taskRepository.getTask(taskId);
       if (!task || task.type !== TaskType.AIAgent) continue;
 
-      const cfg = resolveTaskIaConfig(task);
+      const resolved = resolveTaskIaConfig(task);
+      const live = peekConvaiLiveIaConfig(taskId);
+      const cfg = mergeResolvedAndLiveIaConfig(resolved, live);
       if (cfg.platform !== 'elevenlabs') continue;
 
-      const cfgForCreate = iaAgentConfigWithEditorSystemPrompt(cfg, task);
+      const manualCatalogBackendTaskIds = context.manualCatalogBackendTaskIds ?? [];
+      const cfgForCreate = iaAgentConfigWithEditorSystemPrompt(cfg, task, {
+        manualCatalogBackendTaskIds,
+      });
       let provisionKey: string;
       try {
-        provisionKey = buildConvaiProvisionKey(cfgForCreate, task, OMIT_TTS_ON_CREATE);
+        provisionKey = buildConvaiProvisionKey(cfgForCreate, task, OMIT_TTS_ON_CREATE, {
+          manualCatalogBackendTaskIds,
+        });
       } catch {
         failed.push(taskId);
         setIaProvisioningError(taskId, {
@@ -143,6 +156,7 @@ export async function ensureConvaiAgentsProvisioned(
         fragment = conversationConfigFragmentFromIaAgentConfig(cfgForCreate, {
           omitTts: OMIT_TTS_ON_CREATE,
           task,
+          manualCatalogBackendTaskIds,
         })!;
       } catch (buildErr) {
         failed.push(taskId);

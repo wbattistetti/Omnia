@@ -7,6 +7,7 @@ import { hashString, structuralFingerprint } from '../domain/backendCatalog';
 import type { Task } from '../types/taskTypes';
 import { taskRepository } from './TaskRepository';
 import {
+  buildOperationDocBlurbFromOpenApiFields,
   extractOperationFields,
   fetchOpenApiDocumentOperationalThenManualFallback,
   pickOpenApiPathForReadApi,
@@ -115,6 +116,10 @@ export async function runBackendCallReadApiForTask(
     const inputDesc = fields.inputDescriptionsByApiName;
     const outputDesc = fields.outputDescriptionsByApiName;
     const inputUiKindByApiName: Record<string, string> = { ...fields.inputUiKindByApiName };
+    const operationDocBlurb = buildOperationDocBlurbFromOpenApiFields(fields);
+    const currentToolDesc = String(
+      (task as Task & { backendToolDescription?: string }).backendToolDescription ?? ''
+    ).trim();
 
     const contentHash = hashString(JSON.stringify(doc));
     const fp = structuralFingerprint(method, fpSeed);
@@ -160,27 +165,28 @@ export async function runBackendCallReadApiForTask(
       }
     }
 
-    taskRepository.updateTask(
-      instanceId,
-      {
-        backendCallSpecMeta: {
-          schemaVersion: 1,
-          lastImportedAt: new Date().toISOString(),
-          contentHash,
-          importState: 'ok',
-          structuralFingerprint: fp,
-          openapiOperationId: fields.operationId ?? null,
-          openapiDescriptionSnapshots: {
-            inputs: { ...inputDesc },
-            outputs: { ...outputDesc },
-          },
-          openapiInputUiKindByApiName: inputUiKindByApiName,
+    const taskUpdates: Partial<Task> = {
+      backendCallSpecMeta: {
+        schemaVersion: 1,
+        lastImportedAt: new Date().toISOString(),
+        contentHash,
+        importState: 'ok',
+        structuralFingerprint: fp,
+        openapiOperationId: fields.operationId ?? null,
+        openapiDescriptionSnapshots: {
+          inputs: { ...inputDesc },
+          outputs: { ...outputDesc },
         },
-        inputs: nextInputs,
-        outputs: nextOutputs,
-      } as Partial<Task>,
-      projectId
-    );
+        openapiInputUiKindByApiName: inputUiKindByApiName,
+      },
+      inputs: nextInputs,
+      outputs: nextOutputs,
+    };
+    if (operationDocBlurb && !currentToolDesc) {
+      taskUpdates.backendToolDescription = operationDocBlurb;
+    }
+
+    taskRepository.updateTask(instanceId, taskUpdates, projectId);
 
     return {
       ok: true,

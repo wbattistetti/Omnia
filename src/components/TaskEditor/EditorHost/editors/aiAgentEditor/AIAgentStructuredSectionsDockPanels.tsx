@@ -14,6 +14,7 @@ import {
   stringifyExperimentPayload,
 } from './aiAgentRuntimeExperimentJson';
 import { PlatformEditorView, ReadOnlyPlatformBanner } from '@components/platform-editors';
+import { normalizeAgentPromptPlatformId } from '@domain/agentPrompt';
 export function AgentSectionDockPanel(
   props: IDockviewPanelProps<{ sectionId?: AgentStructuredSectionId }>
 ) {
@@ -43,9 +44,52 @@ export function AgentSectionDockPanel(
 
   const otMode = Boolean(structuredOtEnabled && activeSlice.storageMode === 'ot' && activeSlice.ot);
 
+  const elevenlabsTarget =
+    editorCtx && normalizeAgentPromptPlatformId(editorCtx.agentPromptTargetPlatform) === 'elevenlabs';
+
+  const contractualElevenLabsHint =
+    elevenlabsTarget && sectionId === 'context' ? (
+      <div className="mb-1.5 shrink-0 rounded border border-violet-800/60 bg-violet-950/35 px-2 py-1 text-[9px] leading-snug text-violet-100/95">
+        <span className="font-semibold uppercase tracking-wide text-violet-300/95">ConvAI · Contesto contrattuale</span>
+        <p className="mt-0.5 text-violet-100/88">
+          Scrivi vincoli misurabili: nomi esatti dei tool, <strong>formato</strong> della risposta (es. JSON / ISO
+          8601), <strong>fuso orario</strong> e riferimento temporale (&quot;oggi&quot; = clock del backend). Vietare
+          dati non presenti nella risposta tool. Senza <code className="text-violet-200/90">outputSchema</code> nel
+          payload ElevenLabs, il contratto sul formato di uscita deve stare qui e nella descrizione ConvAI del
+          Backend Call.
+        </p>
+      </div>
+    ) : null;
+
+  const contractualGuardrailsHint =
+    elevenlabsTarget && sectionId === 'constraints' ? (
+      <div className="mb-1.5 shrink-0 rounded border border-amber-900/45 bg-amber-950/25 px-2 py-1 text-[9px] leading-snug text-amber-100/90">
+        <span className="font-semibold uppercase tracking-wide text-amber-400/95">ConvAI · Vincoli operativi</span>
+        <p className="mt-0.5 text-amber-100/85">
+          Esplicita must/must-not eseguibili: es. invocare il tool prima di proporre valori; solo elementi dalla
+          lista restituita; conferma utente prima di chiudere; se lista vuota → messaggio + raccolta preferenze (niente
+          invenzione).
+        </p>
+      </div>
+    ) : null;
+
+  const operationalSequenceToolHint =
+    elevenlabsTarget && sectionId === 'operational_sequence' ? (
+      <div className="mb-1.5 shrink-0 rounded border border-sky-900/50 bg-sky-950/25 px-2 py-1 text-[9px] leading-snug text-sky-100/90">
+        <span className="font-semibold uppercase tracking-wide text-sky-300/95">ConvAI · Sequenza</span>
+        <p className="mt-0.5 text-sky-100/85">
+          Inserisci un <strong>passo zero</strong> obbligatorio: chiamare il tool (per nome) e attendere la risposta
+          prima di qualsiasi proposta all&apos;utente basata sui suoi dati.
+        </p>
+      </div>
+    ) : null;
+
   return (
     <div className="h-full min-h-0 flex flex-col bg-slate-950/80 overflow-hidden">
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col p-2 pt-1">
+        {contractualElevenLabsHint}
+        {contractualGuardrailsHint}
+        {operationalSequenceToolHint}
         <AIAgentRevisionEditorShell
           key={sectionId}
           instanceId={`${instanceIdSuffix}-${sectionId}`}

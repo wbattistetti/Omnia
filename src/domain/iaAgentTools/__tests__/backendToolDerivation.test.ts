@@ -82,7 +82,25 @@ describe('backendToolDerivation', () => {
       inputs: [],
       outputs: [],
     });
-    expect(deriveBackendToolDefinition(noDesc).ok).toBe(false);
+    const noDescR = deriveBackendToolDefinition(noDesc);
+    expect(noDescR.ok).toBe(false);
+    if (!noDescR.ok) {
+      expect(noDescR.code).toBe('missing_backend_tool_description');
+    }
+
+    const noLabel = backendTask({
+      id: 'e',
+      label: '',
+      backendToolDescription: 'Solo descrizione.',
+      endpoint: { url: 'https://a', method: 'GET', headers: {} },
+      inputs: [],
+      outputs: [],
+    });
+    const noLabelR = deriveBackendToolDefinition(noLabel);
+    expect(noLabelR.ok).toBe(false);
+    if (!noLabelR.ok) {
+      expect(noLabelR.code).toBe('missing_label');
+    }
   });
 
   it('dedupeToolDefinitionNames resolves collisions', () => {
@@ -120,5 +138,35 @@ describe('backendToolDerivation', () => {
     );
 
     expect(merged.map((t) => t.name).sort()).toEqual(['bk_tool', 'manual_one']);
+  });
+
+  it('mergeEffectiveIaAgentTools includes manualCatalogBackendTaskIds when cfg list is empty', () => {
+    const cfg: IAAgentConfig = {
+      platform: 'elevenlabs',
+      model: 'convai_default',
+      temperature: 0.5,
+      maxTokens: 100,
+      reasoning: 'none',
+      systemPrompt: '',
+      convaiBackendToolTaskIds: [],
+    };
+
+    const merged = mergeEffectiveIaAgentTools(
+      cfg,
+      (id) =>
+        id === 'cat1'
+          ? backendTask({
+              id: 'cat1',
+              label: 'Catalog backend',
+              backendToolDescription: 'From catalog row.',
+              endpoint: { url: 'https://api/', method: 'GET', headers: {} },
+              inputs: [],
+              outputs: [],
+            })
+          : null,
+      { manualCatalogBackendTaskIds: ['cat1'] }
+    );
+
+    expect(merged.map((t) => t.name)).toEqual(['Catalog_backend']);
   });
 });

@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { conversationConfigFragmentFromIaAgentConfig } from '../convaiAgentCreatePayload';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDefaultConfig } from '../platformHelpers';
 import type { Task } from '@types/taskTypes';
 import { TaskType } from '@types/taskTypes';
+
+const resolveElevenLabsMock = vi.fn<(task: Task, opts?: unknown) => string>();
+vi.mock('@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentPlatformRulesString', () => ({
+  resolveElevenLabsAgentPromptFromTask: (task: Task, opts?: unknown) => resolveElevenLabsMock(task, opts),
+}));
+
+import { conversationConfigFragmentFromIaAgentConfig } from '../convaiAgentCreatePayload';
 
 function minimalTask(overrides: Partial<Task>): Task {
   return {
@@ -16,6 +22,10 @@ function minimalTask(overrides: Partial<Task>): Task {
 }
 
 describe('conversationConfigFragmentFromIaAgentConfig', () => {
+  beforeEach(() => {
+    resolveElevenLabsMock.mockImplementation((task: Task) => String(task.agentPrompt ?? '').trim());
+  });
+
   it('returns null for non-elevenlabs platforms', () => {
     expect(conversationConfigFragmentFromIaAgentConfig(getDefaultConfig('openai'))).toBeNull();
   });

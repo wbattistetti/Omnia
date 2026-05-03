@@ -25,8 +25,13 @@ import { buildConvaiAgentDisplayName } from '@utils/iaAgentRuntime/convaiAgentDi
 import { setConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
 import { iaAgentConfigWithEditorSystemPrompt } from '@utils/iaAgentRuntime/iaAgentConfigWithEditorSystemPrompt';
 import { resolveTaskIaConfig } from '@utils/iaAgentRuntime/resolveTaskIaConfig';
+import { mergeResolvedAndLiveIaConfig } from '@utils/iaAgentRuntime/convaiLiveIaConfigBridge';
+import { mergeEffectiveIaAgentTools } from '@domain/iaAgentTools/backendToolDerivation';
+import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { taskRepository } from '@services/TaskRepository';
+import { useProjectData } from '@context/ProjectDataContext';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
+import type { ConvaiBackendToolsDiscoveryContext } from '@components/settings/iaRuntime/BackendToolsSection';
 
 type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
@@ -39,7 +44,25 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
     setIaRuntimeConfig,
     persistIaRuntimeOverrideSnapshot,
   } = useAIAgentEditorDock();
+  const { data: projectData } = useProjectData();
+  const manualCatalogBackendTaskIds = React.useMemo(
+    () => extractManualCatalogBackendTaskIdsFromProjectData(projectData),
+    [projectData]
+  );
   const baseline = React.useMemo(() => loadGlobalIaAgentConfig(), []);
+
+  const convaiBackendToolsDiscoveryContext = React.useMemo((): ConvaiBackendToolsDiscoveryContext | null => {
+    const tid = String(instanceId ?? '').trim();
+    if (!tid) return null;
+    const agentTask = taskRepository.getTask(tid);
+    const fid = String((agentTask as { authoringFlowCanvasId?: string } | null)?.authoringFlowCanvasId ?? '').trim();
+    const flows = projectData?.flows as Record<string, { nodes?: unknown[]; edges?: unknown[] }> | undefined;
+    const flowDoc = fid && flows ? flows[fid] : undefined;
+    const nodes = Array.isArray(flowDoc?.nodes) ? flowDoc.nodes : [];
+    const edges = Array.isArray(flowDoc?.edges) ? flowDoc.edges : [];
+    if (!fid || nodes.length === 0) return null;
+    return { aiAgentTaskId: tid, flow: { nodes, edges } };
+  }, [instanceId, projectData?.flows]);
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
   const [saveError, setSaveError] = React.useState<string | null>(null);
@@ -139,19 +162,50 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
     let fragmentForPreview: Record<string, unknown> | undefined;
     try {
       const task = taskRepository.getTask(instanceId);
-      const cfgForCreate = iaAgentConfigWithEditorSystemPrompt(
-        task ? resolveTaskIaConfig(task) : iaRuntimeConfig,
-        task
-      );
+      /** Preferisci lo stato del pannello: evita payload senza `tools` se il repo non è ancora allineato al tick React. */
+      const resolved = task ? resolveTaskIaConfig(task) : iaRuntimeConfig;
+      const cfgMerged = mergeResolvedAndLiveIaConfig(resolved, iaRuntimeConfig);
+      const cfgForCreate = iaAgentConfigWithEditorSystemPrompt(cfgMerged, task, {
+        manualCatalogBackendTaskIds,
+      });
+      const effectiveTools = mergeEffectiveIaAgentTools(cfgForCreate, (id) => taskRepository.getTask(id), {
+        manualCatalogBackendTaskIds,
+      });
       let fragment: Record<string, unknown>;
       try {
-        fragment = conversationConfigFragmentFromIaAgentConfig(cfgForCreate, { task: task ?? undefined })!;
+        fragment = conversationConfigFragmentFromIaAgentConfig(cfgForCreate, {
+          task: task ?? undefined,
+          manualCatalogBackendTaskIds,
+        })!;
       } catch (buildErr) {
         console.error('[IA·ConvAI] createAgent: payload non costruibile (prompt vuoto o dati mancanti)', buildErr);
         return;
       }
       fragmentForPreview = fragment;
-      const provisionKey = buildConvaiProvisionKey(cfgForCreate, task ?? undefined, false);
+      const agentPrompt = (fragment.agent as Record<string, unknown> | undefined)?.prompt as
+        | Record<string, unknown>
+        | undefined;
+      const toolsInFragment = Array.isArray(agentPrompt?.tools) ? (agentPrompt.tools as unknown[]).length : 0;
+      console.info('[IA·ConvAI] provision merge', {
+        taskId: instanceId,
+        convaiBackendToolTaskIds: cfgForCreate.convaiBackendToolTaskIds ?? [],
+        manualToolsCount: Array.isArray(cfgForCreate.tools) ? cfgForCreate.tools.length : 0,
+        effectiveToolsCount: effectiveTools.length,
+        effectiveToolNames: effectiveTools.map((x) => x.name),
+        toolsInConversationConfig: toolsInFragment,
+      });
+      if (toolsInFragment === 0 && (cfgForCreate.convaiBackendToolTaskIds?.length ?? 0) > 0) {
+        console.warn(
+          '[IA·ConvAI] convaiBackendToolTaskIds valorizzati ma nessun tool nel payload: controlla label, backendToolDescription e tipo Backend Call su ogni id.'
+        );
+      }
+      console.info(
+        '[IA·ConvAI] conversation_config (post-merge, JSON completo)',
+        JSON.stringify({ conversation_config: fragment }, null, 2)
+      );
+      const provisionKey = buildConvaiProvisionKey(cfgForCreate, task ?? undefined, false, {
+        manualCatalogBackendTaskIds,
+      });
       const matches = await listAllConvaiAgentsMatchingTaskGuid(instanceId);
       for (const m of matches) {
         console.warn('[DEBUG] DELETE AGENT', m.agentId, { name: m.name });
@@ -217,7 +271,7 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         },
       ]);
     }
-  }, [iaRuntimeConfig, instanceId, persistIaRuntimeOverrideSnapshot]);
+  }, [iaRuntimeConfig, instanceId, persistIaRuntimeOverrideSnapshot, manualCatalogBackendTaskIds]);
 
   const saveBtnLabel =
     saveStatus === 'saving' ? 'Salvataggio…' : 'Salva';
@@ -266,6 +320,7 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         value={iaRuntimeConfig}
         onChange={handleChange}
         onProvisionConvaiAgent={handleProvisionConvaiAgent}
+        convaiBackendToolsDiscoveryContext={convaiBackendToolsDiscoveryContext}
       />
     </div>
   );

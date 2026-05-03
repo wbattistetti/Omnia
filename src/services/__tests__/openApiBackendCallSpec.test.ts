@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildOpenApiCandidateUrlList,
+  buildOperationDocBlurbFromOpenApiFields,
   extractNestedSpecUrlsFromEndpoint,
   extractOperationFields,
   fetchOpenApiDocument,
@@ -124,6 +125,26 @@ describe('openApiBackendCallSpec', () => {
     const f = extractOperationFields(doc as any, '/x', 'get');
     expect(f?.inputDescriptionsByApiName.q).toBe('Query help');
     expect(f?.outputDescriptionsByApiName.out1).toBe('Out one');
+  });
+
+  it('extractOperationFields reads operation summary and description', () => {
+    const doc = {
+      openapi: '3.0.0',
+      paths: {
+        '/slots': {
+          get: {
+            summary: 'List slots',
+            description: 'Returns available exam slots for the next week.',
+            responses: { '200': { description: 'ok' } },
+          },
+        },
+      },
+    };
+    const f = extractOperationFields(doc as any, '/slots', 'get');
+    expect(f?.operationSummary).toBe('List slots');
+    expect(f?.operationDescription).toBe('Returns available exam slots for the next week.');
+    expect(buildOperationDocBlurbFromOpenApiFields(f!)).toContain('List slots');
+    expect(buildOperationDocBlurbFromOpenApiFields(f!)).toContain('Returns available exam slots');
   });
 
   it('slugInternalName normalizes', () => {

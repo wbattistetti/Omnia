@@ -14,7 +14,10 @@ import { getDefaultConfig, getVisibleFields } from '@utils/iaAgentRuntime/platfo
 import { ModelSection } from './iaRuntime/ModelSection';
 import { ElevenLabsConvaiIdentitySection } from './iaRuntime/ElevenLabsConvaiIdentitySection';
 import { ToolsSection } from './iaRuntime/ToolsSection';
-import { BackendToolsSection } from './iaRuntime/BackendToolsSection';
+import {
+  BackendToolsSection,
+  type ConvaiBackendToolsDiscoveryContext,
+} from './iaRuntime/BackendToolsSection';
 import {
   VoiceCatalogSection,
   VoiceRuntimeDeveloperJson,
@@ -58,6 +61,10 @@ export interface IAAgentSetupProps {
    * Se false, nasconde LLM/TTS Costs. Default: true solo con `mode="global"` (Studio / app-wide).
    */
   showModelCostsSection?: boolean;
+  /**
+   * Override per-task: consente «Aggiungi da canvas» nella sezione tool ConvAI (backend a valle sul flow).
+   */
+  convaiBackendToolsDiscoveryContext?: ConvaiBackendToolsDiscoveryContext | null;
 }
 
 /** OpenAI → Anthropic → Gemini → ElevenLabs → Custom */
@@ -96,6 +103,7 @@ export function IAAgentSetup({
   onProvisionConvaiAgent,
   listenConvaiTtsFix = false,
   showModelCostsSection: showModelCostsProp,
+  convaiBackendToolsDiscoveryContext = null,
 }: IAAgentSetupProps) {
   const showModelCostsSection = showModelCostsProp ?? mode === 'global';
   const [inner, setInner] = React.useState<IAAgentConfig>(() =>
@@ -521,6 +529,9 @@ export function IAAgentSetup({
               config={config}
               showOverrideBadge={devOverride}
               catalogReloadNonce={catalogReloadNonce}
+              convaiBackendToolsDiscoveryContext={
+                mode === 'override' ? convaiBackendToolsDiscoveryContext : null
+              }
               onChange={setConfig}
             />
           ) : null}

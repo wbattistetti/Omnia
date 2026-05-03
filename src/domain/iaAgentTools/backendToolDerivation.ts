@@ -7,6 +7,7 @@ import type { Task } from '@types/taskTypes';
 import { TaskType } from '@types/taskTypes';
 import type { IAAgentConfig, ToolDefinition } from 'types/iaAgentRuntimeSetup';
 import type { BackendCallSpecMeta } from '@domain/backendCatalog/catalogTypes';
+import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 
 /** Limite pratico per nomi tool stile OpenAI / gateway ConvAI. */
 export const CONVAI_TOOL_NAME_MAX_LENGTH = 64;
@@ -116,9 +117,16 @@ export function buildToolInputSchemaFromBackendInputs(
   };
 }
 
+export type DeriveBackendToolFailureCode =
+  | 'not_backend_call'
+  | 'missing_label'
+  | 'missing_backend_tool_description'
+  /** Solo UI (task non in repository); non emesso da {@link deriveBackendToolDefinition}. */
+  | 'missing_task';
+
 export type DeriveBackendToolResult =
   | { ok: true; tool: ToolDefinition }
-  | { ok: false; error: string };
+  | { ok: false; code: DeriveBackendToolFailureCode; error: string };
 
 /**
  * Costruisce un singolo {@link ToolDefinition} da un task Backend Call.
@@ -126,11 +134,19 @@ export type DeriveBackendToolResult =
  */
 export function deriveBackendToolDefinition(task: Task): DeriveBackendToolResult {
   if (task.type !== TaskType.BackendCall) {
-    return { ok: false, error: 'Il task non è di tipo BackendCall.' };
+    return {
+      ok: false,
+      code: 'not_backend_call',
+      error: 'Il task non è di tipo BackendCall.',
+    };
   }
   const internalLabel = String((task as Task & { label?: string }).label ?? '').trim();
   if (!internalLabel) {
-    return { ok: false, error: 'Nome interno (label) obbligatorio sul Backend Call.' };
+    return {
+      ok: false,
+      code: 'missing_label',
+      error: 'Nome interno (label) obbligatorio sul Backend Call.',
+    };
   }
   const description = String(
     (task as Task & { backendToolDescription?: string }).backendToolDescription ?? ''
@@ -138,6 +154,7 @@ export function deriveBackendToolDefinition(task: Task): DeriveBackendToolResult
   if (!description) {
     return {
       ok: false,
+      code: 'missing_backend_tool_description',
       error: 'Descrizione tool ConvAI obbligatoria (campo «Descrizione per ConvAI» sul Backend Call).',
     };
   }
@@ -165,17 +182,26 @@ export function dedupeToolDefinitionNames(tools: ToolDefinition[]): ToolDefiniti
   });
 }
 
+export type MergeEffectiveIaAgentToolsOptions = {
+  /** Id task Backend Call delle righe `backendCatalog.manualEntries` (tab Backends dell’editor). */
+  manualCatalogBackendTaskIds?: readonly string[];
+};
+
 /**
- * Unisce tool manuali (`cfg.tools`) e tool derivati dai Backend Call elencati in `convaiBackendToolTaskIds`.
+ * Unisce tool manuali (`cfg.tools`) e tool derivati dai Backend Call in `convaiBackendToolTaskIds`
+ * più eventuali backend catalogo manuale progetto (`manualCatalogBackendTaskIds`).
  */
 export function mergeEffectiveIaAgentTools(
   cfg: IAAgentConfig,
-  getTask: (taskId: string) => Task | null | undefined
+  getTask: (taskId: string) => Task | null | undefined,
+  options?: MergeEffectiveIaAgentToolsOptions
 ): ToolDefinition[] {
   const manual = Array.isArray(cfg.tools) ? [...cfg.tools] : [];
-  const ids = Array.isArray(cfg.convaiBackendToolTaskIds)
+  const fromCfg = Array.isArray(cfg.convaiBackendToolTaskIds)
     ? cfg.convaiBackendToolTaskIds.map((x) => String(x || '').trim()).filter(Boolean)
     : [];
+  const fromCatalog = options?.manualCatalogBackendTaskIds ?? [];
+  const ids = mergeConvaiBackendToolIdLists(fromCfg, fromCatalog);
   const derived: ToolDefinition[] = [];
   for (const id of ids) {
     const t = getTask(id);

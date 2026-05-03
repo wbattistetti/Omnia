@@ -118,6 +118,13 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
         Dim typ = jo("type")?.ToString()
         If String.IsNullOrEmpty(typ) Then Return
 
+        ' Trace ConvAI client/tool events for end-to-end debugging (ElevenLabs console + ApiServer stdout).
+        If typ.IndexOf("tool", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            typ.IndexOf("client", StringComparison.OrdinalIgnoreCase) >= 0 Then
+            Dim previewLen = Math.Min(900, jsonText.Length)
+            Console.WriteLine($"{_logPrefix} WS convai type={typ} payloadChars={jsonText.Length} preview={jsonText.Substring(0, previewLen)}")
+        End If
+
         If typ.IndexOf("user_transcript", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
             (typ.StartsWith("user_", StringComparison.OrdinalIgnoreCase) AndAlso typ.IndexOf("agent", StringComparison.OrdinalIgnoreCase) < 0) Then
             Return

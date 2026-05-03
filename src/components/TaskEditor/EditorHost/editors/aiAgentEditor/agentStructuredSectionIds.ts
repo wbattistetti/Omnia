@@ -51,8 +51,9 @@ export const AGENT_STRUCTURED_SECTION_TAB_TITLE: Partial<Record<AgentStructuredS
   goal: 'Cosa deve ottenere l’agente a fine conversazione.',
   operational_sequence:
     'Ordine di domande, raccolta dati, conferme e correzioni.',
-  context: 'Dove avviene la conversazione, chi è l’utente, cosa è già noto.',
-  constraints: 'Must e Must not: obblighi e divieti.',
+  context:
+    'Contratto: tool, formato risposta API, fuso/tempo; vincoli misurabili (ConvAI: non solo testo narrativo).',
+  constraints: 'Must/must-not operativi (es. solo dati dal tool; conferme; niente invenzione).',
   personality: 'Chi è l’agente: ruolo e atteggiamento.',
   tone: 'Come parla: registro, brevità, chiarezza (prima riga Tone: …).',
   examples: 'Esempi di turno (opzionale) per stile o formato.',

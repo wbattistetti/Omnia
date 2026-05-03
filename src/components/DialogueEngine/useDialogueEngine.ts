@@ -6,6 +6,7 @@ import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import type { CompiledTask, CompilationError, CompilationResult, ExecutionState } from '../FlowCompiler/types';
 // Frontend DialogueEngine removed - backend orchestrator is now default
 import { useProjectData } from '../../context/ProjectDataContext';
+import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { looksLikeTechnicalTranslationOrId } from '../../utils/translationKeys';
 import { createVariableMappings } from '@utils/conditionCodeConverter';
 import { interpolateVariableBracketsInText } from './interpolateVariableBracketsInText';
@@ -173,7 +174,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
             ? 'main'
             : FlowWorkspaceSnapshot.getActiveFlowId();
 
-      // ConvAI ElevenLabs: allinea agenti (nome __GUID_{taskId}), id solo in sessione — prima della compile.
+      // ConvAI ElevenLabs: createAgent / sessione prima della compile — l’agentId non è un prerequisito del JSON compile.
       {
         const nodeLabelByTaskId: Record<string, string> = {};
         for (const n of currentOptions.nodes || []) {
@@ -196,10 +197,12 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           toReadableLabel(projectData?.name) ||
           (typeof projectData?.id === 'string' && projectData.id.trim().length > 0 ? projectData.id.trim() : 'project');
 
+        const manualCatalogBackendTaskIds = extractManualCatalogBackendTaskIdsFromProjectData(projectData);
         const provisionResult = await ensureConvaiAgentsProvisioned(currentOptions.nodes, {
           projectLabel,
           rootFlowLabel,
           nodeLabelByTaskId,
+          manualCatalogBackendTaskIds,
         });
         if (provisionResult.provisioned.length > 0) {
           console.info('[IA·ConvAI] ConvAI provision summary', provisionResult);
