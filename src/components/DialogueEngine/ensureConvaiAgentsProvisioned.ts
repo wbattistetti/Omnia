@@ -33,6 +33,7 @@ import {
 import type { NormalizedIaProviderError } from '@domain/compileErrors/iaProviderErrors';
 import { normalizeProviderError } from '@domain/compileErrors/normalizeProviderError';
 import { setIaProvisioningError } from '@domain/compileErrors/iaProvisioningErrorStore';
+import { buildUseCaseDialoguesPreviewFromTask } from '@utils/iaAgentRuntime/agentUseCasesProvisionPreviewFormat';
 import {
   emitConvaiProvisionPayloadPreview,
   isConvaiPayloadPreviewOnRunDebugEnabled,
@@ -182,6 +183,7 @@ export async function ensureConvaiAgentsProvisioned(
             '// Provisioning non ripetuto: sessione già allineata (stessa provision key, agentId in sessione).\n' +
             '// JSON di riferimento (corpo client; al create il server merge con i default ElevenLabs):\n' +
             JSON.stringify(previewBody, null, 2),
+          useCaseDialoguesPreview: buildUseCaseDialoguesPreviewFromTask(task),
         });
         setIaProvisioningError(taskId, null);
         skipped.push(taskId);
@@ -212,6 +214,7 @@ export async function ensureConvaiAgentsProvisioned(
             taskId,
             displayName,
             bodyText: JSON.stringify(requestBody, null, 2),
+            useCaseDialoguesPreview: buildUseCaseDialoguesPreviewFromTask(task),
           };
           payloadPreviewItems.push(previewEntry);
         }

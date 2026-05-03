@@ -87,4 +87,33 @@ describe('resolveElevenLabsAgentPromptFromTask ConvAI appendix', () => {
     expect(out).toContain('Catalog API');
     expect(out).not.toMatch(/### Context\n\nmissing/m);
   });
+
+  it('includes use case dialogues under Examples in compiled prompt', () => {
+    const task = {
+      agentStructuredSectionsJson: minimalStructured,
+      agentPrompt: '',
+      agentPromptTargetPlatform: 'elevenlabs',
+      agentUseCasesJson: JSON.stringify([
+        {
+          id: 'uc1',
+          label: 'Prenotazione',
+          parent_id: null,
+          sort_order: 0,
+          refinement_prompt: '',
+          dialogue: [
+            { turn_id: 'a', role: 'user', content: 'Vorrei un appuntamento.' },
+            { turn_id: 'b', role: 'assistant', content: 'Certamente, quale giorno preferisce?' },
+          ],
+          notes: { behavior: '', tone: '' },
+          bubble_notes: {},
+        },
+      ]),
+    } as Task;
+
+    const out = resolveElevenLabsAgentPromptFromTask(task);
+    expect(out).toMatch(/### Examples/s);
+    expect(out).toContain('Scenari use case');
+    expect(out).toContain('Prenotazione');
+    expect(out).toContain('Vorrei un appuntamento');
+  });
 });

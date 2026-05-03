@@ -31,6 +31,11 @@ export type ConvaiProvisionPayloadPreviewItem = {
   displayName: string;
   /** JSON già formattato (stesso body della fetch). */
   bodyText: string;
+  /**
+   * Dialoghi use case dal task (`agentUseCasesJson`), formattati solo per il tab anteprima few-shot.
+   * Non fanno parte di `bodyText` / elevenLabsRequestJson.
+   */
+  useCaseDialoguesPreview?: string;
 };
 
 export type ConvaiProvisionPayloadPreviewDetail = {

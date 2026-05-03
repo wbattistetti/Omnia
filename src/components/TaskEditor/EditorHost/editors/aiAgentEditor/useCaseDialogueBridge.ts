@@ -40,7 +40,13 @@ export function previewToUseCaseDialogue(
   for (let i = 0; i < turns.length; i++) {
     const id = dialogue[i].turn_id;
     const note = turns[i].designerNote;
-    if (typeof note === 'string' && note.trim()) bubble_notes[id] = note.trim();
+    if (note === undefined) continue;
+    if (typeof note === 'string') {
+      const trimmed = note.trim();
+      // Keep explicit empty notes so "Aggiungi nota" round-trips through use case state
+      // (otherwise the note panel disappears on the next render).
+      bubble_notes[id] = trimmed.length > 0 ? trimmed : '';
+    }
   }
   return { dialogue, bubble_notes };
 }

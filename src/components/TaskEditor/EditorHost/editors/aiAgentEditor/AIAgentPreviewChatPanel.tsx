@@ -1,11 +1,12 @@
 /**
- * Design-time simulated chat: style selector, agent bubble toolbars (edit / note),
- * note block toolbars (edit / delete).
+ * Design-time simulated chat: agent bubble toolbar hosts confirm/cancel via EditableText toolbar API
+ * (same pattern as ResponseEditor EditableText + external actions).
  */
 import React from 'react';
 import type { AIAgentPreviewTurn } from '@types/aiAgentPreview';
 import { AI_AGENT_PREVIEW_STYLES } from '@types/aiAgentPreview';
-import { Pencil, StickyNote, Trash2 } from 'lucide-react';
+import { Check, Pencil, StickyNote, Trash2, X } from 'lucide-react';
+import { EditableText, type EditableTextToolbarApi } from '@components/common/EditableText';
 
 export interface AIAgentPreviewChatPanelProps {
   selectedStyleId: string;
@@ -25,6 +26,28 @@ function replaceTurn(turns: AIAgentPreviewTurn[], index: number, patch: Partial<
   return turns.map((t, i) => (i === index ? { ...t, ...patch } : t));
 }
 
+function hasSavedNoteText(turn: AIAgentPreviewTurn): boolean {
+  return (turn.designerNote ?? '').trim().length > 0;
+}
+
+const AGENT_EDITABLE_TEXT_STYLE: React.CSSProperties = {
+  background: 'rgb(2 6 23)',
+  color: '#f1f5f9',
+  border: '1px solid rgb(139 92 246 / 0.45)',
+  borderRadius: 6,
+  width: '100%',
+  minHeight: 72,
+};
+
+const NOTE_EDITABLE_TEXT_STYLE: React.CSSProperties = {
+  background: 'rgb(2 6 23)',
+  color: 'rgb(254 243 199 / 0.9)',
+  border: '1px solid rgb(217 119 6 / 0.45)',
+  borderRadius: 6,
+  width: '100%',
+  minHeight: 64,
+};
+
 export function AIAgentPreviewChatPanel({
   selectedStyleId,
   onStyleIdChange,
@@ -37,62 +60,88 @@ export function AIAgentPreviewChatPanel({
 }: AIAgentPreviewChatPanelProps) {
   const [editingMessageIndex, setEditingMessageIndex] = React.useState<number | null>(null);
   const [editingNoteIndex, setEditingNoteIndex] = React.useState<number | null>(null);
-  const [draftText, setDraftText] = React.useState('');
+  const [expandedNotePanelIndex, setExpandedNotePanelIndex] = React.useState<number | null>(null);
+
+  const messageToolbarRef = React.useRef<EditableTextToolbarApi | null>(null);
+  const noteToolbarRef = React.useRef<EditableTextToolbarApi | null>(null);
 
   React.useEffect(() => {
     if (readOnly) {
       setEditingMessageIndex(null);
       setEditingNoteIndex(null);
+      setExpandedNotePanelIndex(null);
     }
   }, [readOnly]);
 
+  React.useEffect(() => {
+    setExpandedNotePanelIndex((prev) => {
+      if (prev === null) return prev;
+      return prev < turns.length ? prev : null;
+    });
+  }, [turns.length]);
+
   const beginEditMessage = (index: number) => {
     setEditingMessageIndex(index);
-    setDraftText(turns[index]?.content ?? '');
     setEditingNoteIndex(null);
-  };
-
-  const saveEditMessage = () => {
-    if (editingMessageIndex === null) return;
-    onTurnsChange(replaceTurn(turns, editingMessageIndex, { content: draftText }));
-    setEditingMessageIndex(null);
-  };
-
-  const cancelEditMessage = () => {
-    setEditingMessageIndex(null);
   };
 
   const beginEditNote = (index: number) => {
     setEditingNoteIndex(index);
-    setDraftText(turns[index]?.designerNote ?? '');
     setEditingMessageIndex(null);
   };
 
-  const saveEditNote = () => {
-    if (editingNoteIndex === null) return;
-    const trimmed = draftText.trim();
-    onTurnsChange(
-      replaceTurn(turns, editingNoteIndex, {
-        designerNote: trimmed.length > 0 ? trimmed : undefined,
-      })
-    );
-    setEditingNoteIndex(null);
+  /** Drop empty placeholder notes when closing panel or canceling a fresh note. */
+  const stripEmptyPlaceholderNote = React.useCallback(
+    (index: number) => {
+      const t = turns[index];
+      if (!t || t.designerNote === undefined) return;
+      if (t.designerNote.trim() === '') {
+        onTurnsChange(replaceTurn(turns, index, { designerNote: undefined }));
+      }
+    },
+    [onTurnsChange, turns]
+  );
+
+  const collapseNotePanel = (index: number) => {
+    if (editingNoteIndex === index) {
+      setEditingNoteIndex(null);
+    }
+    stripEmptyPlaceholderNote(index);
+    setExpandedNotePanelIndex(null);
   };
 
-  const cancelEditNote = () => {
-    setEditingNoteIndex(null);
-  };
-
-  const addNote = (index: number) => {
-    onTurnsChange(replaceTurn(turns, index, { designerNote: '' }));
-    setEditingNoteIndex(index);
-    setDraftText('');
+  const expandNotePanel = (index: number) => {
+    const turn = turns[index];
+    if (turn.designerNote === undefined) {
+      onTurnsChange(replaceTurn(turns, index, { designerNote: '' }));
+      setEditingNoteIndex(index);
+    }
+    setExpandedNotePanelIndex(index);
     setEditingMessageIndex(null);
+  };
+
+  const toggleNotePanel = (index: number) => {
+    if (expandedNotePanelIndex === index) {
+      collapseNotePanel(index);
+    } else {
+      expandNotePanel(index);
+    }
   };
 
   const deleteNote = (index: number) => {
     onTurnsChange(replaceTurn(turns, index, { designerNote: undefined }));
     if (editingNoteIndex === index) setEditingNoteIndex(null);
+    if (expandedNotePanelIndex === index) setExpandedNotePanelIndex(null);
+  };
+
+  const runToolbarConfirm = () => {
+    if (editingMessageIndex !== null) messageToolbarRef.current?.confirm();
+    else if (editingNoteIndex !== null) noteToolbarRef.current?.confirm();
+  };
+
+  const runToolbarCancel = () => {
+    if (editingMessageIndex !== null) messageToolbarRef.current?.cancel();
+    else if (editingNoteIndex !== null) noteToolbarRef.current?.cancel();
   };
 
   return (
@@ -131,33 +180,73 @@ export function AIAgentPreviewChatPanel({
             const isAssistant = turn.role === 'assistant';
             const isEditingMessage = editingMessageIndex === i;
             const isEditingNote = editingNoteIndex === i;
-            const hasNote = turn.designerNote !== undefined && turn.designerNote !== '';
+            const hasNote = hasSavedNoteText(turn);
+            const showInteractiveNotePanel = isAssistant && !readOnly && expandedNotePanelIndex === i;
+            const showReadOnlyNotePanel = isAssistant && readOnly && hasNote;
+            const rowToolbarPinned = isEditingMessage || isEditingNote;
 
             return (
               <div key={i} className="space-y-1">
                 {isAssistant ? (
                   <div
-                    className={`group relative text-sm rounded-lg px-3 py-2 border mr-6 bg-violet-950/50 border-violet-800/70 ${
+                    className={`group relative text-sm rounded-lg px-3 py-2 border mr-2 bg-violet-950/50 border-violet-800/70 ${
                       isEditingMessage ? 'ring-2 ring-violet-500' : ''
                     }`}
                   >
                     {!readOnly ? (
-                      <div className="absolute top-1 right-1 z-10 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div
+                        className={`absolute top-1 right-1 z-10 flex gap-0.5 items-center transition-opacity ${
+                          rowToolbarPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        {rowToolbarPinned ? (
+                          <>
+                            <button
+                              type="button"
+                              title="Conferma"
+                              aria-label="Conferma"
+                              onClick={runToolbarConfirm}
+                              className="p-1 rounded bg-slate-900/90 border border-slate-600 text-emerald-400 hover:text-emerald-300 hover:bg-slate-800"
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Annulla"
+                              aria-label="Annulla"
+                              onClick={runToolbarCancel}
+                              className="p-1 rounded bg-slate-900/90 border border-slate-600 text-red-400 hover:text-red-300 hover:bg-slate-800"
+                            >
+                              <X size={14} />
+                            </button>
+                          </>
+                        ) : null}
+                        {!isEditingMessage && !isEditingNote ? (
+                          <button
+                            type="button"
+                            title="Modifica messaggio"
+                            onClick={() => beginEditMessage(i)}
+                            className="p-1 rounded bg-slate-900/90 border border-slate-600 text-slate-300 hover:text-white hover:bg-slate-800"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        ) : null}
                         <button
                           type="button"
-                          title="Modifica messaggio"
-                          onClick={() => beginEditMessage(i)}
-                          className="p-1 rounded bg-slate-900/90 border border-slate-600 text-slate-300 hover:text-white hover:bg-slate-800"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          title={turn.designerNote !== undefined ? 'Modifica nota' : 'Aggiungi nota'}
-                          onClick={() =>
-                            turn.designerNote !== undefined ? beginEditNote(i) : addNote(i)
+                          title={
+                            expandedNotePanelIndex === i
+                              ? 'Chiudi nota'
+                              : hasNote
+                                ? 'Mostra nota'
+                                : 'Aggiungi nota'
                           }
-                          className="p-1 rounded bg-slate-900/90 border border-slate-600 text-slate-300 hover:text-amber-200 hover:bg-slate-800"
+                          aria-expanded={expandedNotePanelIndex === i}
+                          onClick={() => toggleNotePanel(i)}
+                          className={`p-1 rounded bg-slate-900/90 border ${
+                            hasNote
+                              ? 'border-amber-500/60 text-amber-400 hover:text-amber-300 hover:bg-slate-800'
+                              : 'border-slate-600 text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+                          }`}
                         >
                           <StickyNote size={14} />
                         </button>
@@ -165,32 +254,29 @@ export function AIAgentPreviewChatPanel({
                     ) : null}
                     <span className="text-[10px] uppercase tracking-wide text-violet-400/80 block mb-0.5">Agente</span>
                     {isEditingMessage ? (
-                      <div className="space-y-2 pr-6">
-                        <textarea
-                          value={draftText}
-                          onChange={(e) => setDraftText(e.target.value)}
-                          className="w-full min-h-[72px] rounded bg-slate-950 border border-slate-600 px-2 py-1 text-sm text-slate-100"
-                          autoFocus
+                      <div className="w-full min-w-0 pt-0.5">
+                        <EditableText
+                          value={turn.content}
+                          editing
+                          onSave={(trimmed) => {
+                            onTurnsChange(replaceTurn(turns, i, { content: trimmed }));
+                            setEditingMessageIndex(null);
+                          }}
+                          onCancel={() => setEditingMessageIndex(null)}
+                          showActionButtons={false}
+                          toolbarApiRef={messageToolbarRef}
+                          enableVoice={false}
+                          multiline
+                          showLanguageWarning={false}
+                          expectedLanguage="it"
+                          displayMode="text"
+                          placeholder="Messaggio agente…"
+                          style={AGENT_EDITABLE_TEXT_STYLE}
+                          className="text-sm"
                         />
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={saveEditMessage}
-                            className="px-2 py-1 text-xs rounded bg-violet-600 hover:bg-violet-500"
-                          >
-                            Salva
-                          </button>
-                          <button
-                            type="button"
-                            onClick={cancelEditMessage}
-                            className="px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600"
-                          >
-                            Annulla
-                          </button>
-                        </div>
                       </div>
                     ) : (
-                      <div className="pr-8 whitespace-pre-wrap">{turn.content}</div>
+                      <div className="whitespace-pre-wrap pr-1">{turn.content}</div>
                     )}
                   </div>
                 ) : (
@@ -200,22 +286,31 @@ export function AIAgentPreviewChatPanel({
                   </div>
                 )}
 
-                {isAssistant && turn.designerNote !== undefined ? (
+                {showReadOnlyNotePanel ? (
+                  <div className="relative ml-1 mr-2 pl-3 border-l-2 border-amber-700/60">
+                    <span className="text-[10px] uppercase tracking-wide text-amber-600/90 block mb-0.5">Nota</span>
+                    <p className="text-xs text-amber-100/80 whitespace-pre-wrap pr-2">{turn.designerNote}</p>
+                  </div>
+                ) : null}
+
+                {showInteractiveNotePanel ? (
                   <div
-                    className={`group/note relative ml-1 mr-6 pl-3 border-l-2 border-amber-700/60 ${
+                    className={`group/note relative ml-1 mr-2 pl-3 border-l-2 border-amber-700/60 ${
                       isEditingNote ? 'ring-1 ring-amber-600/50 rounded-r' : ''
                     }`}
                   >
                     {!readOnly ? (
                       <div className="absolute top-0.5 right-0 z-10 flex gap-0.5 opacity-0 group-hover/note:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          title="Modifica nota"
-                          onClick={() => beginEditNote(i)}
-                          className="p-1 rounded bg-slate-900/90 border border-slate-600 text-slate-300 hover:text-white hover:bg-slate-800"
-                        >
-                          <Pencil size={14} />
-                        </button>
+                        {!isEditingNote ? (
+                          <button
+                            type="button"
+                            title="Modifica nota"
+                            onClick={() => beginEditNote(i)}
+                            className="p-1 rounded bg-slate-900/90 border border-slate-600 text-slate-300 hover:text-white hover:bg-slate-800"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           title="Elimina nota"
@@ -228,39 +323,41 @@ export function AIAgentPreviewChatPanel({
                     ) : null}
                     <span className="text-[10px] uppercase tracking-wide text-amber-600/90 block mb-0.5">Nota</span>
                     {isEditingNote ? (
-                      <div className="space-y-2 pr-8">
-                        <textarea
-                          value={draftText}
-                          onChange={(e) => setDraftText(e.target.value)}
+                      <div className="w-full min-w-0 pt-0.5">
+                        <EditableText
+                          value={turn.designerNote ?? ''}
+                          editing
+                          onSave={(trimmed) => {
+                            onTurnsChange(
+                              replaceTurn(turns, i, {
+                                designerNote: trimmed.length > 0 ? trimmed : undefined,
+                              })
+                            );
+                            setEditingNoteIndex(null);
+                          }}
+                          onCancel={() => {
+                            setEditingNoteIndex(null);
+                            stripEmptyPlaceholderNote(i);
+                          }}
+                          showActionButtons={false}
+                          toolbarApiRef={noteToolbarRef}
+                          enableVoice={false}
+                          multiline
+                          showLanguageWarning={false}
+                          expectedLanguage="it"
+                          displayMode="text"
                           placeholder="Istruzioni per questo turno…"
-                          className="w-full min-h-[64px] rounded bg-slate-950 border border-slate-600 px-2 py-1 text-xs text-amber-100/90"
-                          autoFocus
+                          style={NOTE_EDITABLE_TEXT_STYLE}
+                          className="text-xs"
                         />
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={saveEditNote}
-                            className="px-2 py-1 text-xs rounded bg-amber-700 hover:bg-amber-600"
-                          >
-                            Salva nota
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (turn.designerNote === '' && !draftText.trim()) {
-                                deleteNote(i);
-                              }
-                              cancelEditNote();
-                            }}
-                            className="px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600"
-                          >
-                            Annulla
-                          </button>
-                        </div>
                       </div>
                     ) : (
                       <p className="text-xs text-amber-100/80 whitespace-pre-wrap pr-8">
-                        {hasNote ? turn.designerNote : <span className="text-slate-500 italic">(nota vuota)</span>}
+                        {hasNote ? (
+                          turn.designerNote
+                        ) : (
+                          <span className="text-slate-500 italic">(nota vuota)</span>
+                        )}
                       </p>
                     )}
                   </div>

@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Check, X } from 'lucide-react';
 import { VoiceTextbox } from './VoiceTextbox';
 
@@ -27,6 +27,12 @@ function detectLanguage(text: string): 'it' | 'en' | 'pt' {
   return 'it';
 }
 
+/** Wired when `showActionButtons` is false so a parent toolbar can host confirm/cancel. */
+export type EditableTextToolbarApi = {
+  confirm: () => void;
+  cancel: () => void;
+};
+
 export interface EditableTextProps {
   // Core props
   value: string;
@@ -41,6 +47,8 @@ export interface EditableTextProps {
 
   // Action buttons
   showActionButtons?: boolean; // Check/X buttons (default: true)
+  /** When buttons are hidden, parent calls confirm/cancel via this ref (e.g. header toolbar). */
+  toolbarApiRef?: React.MutableRefObject<EditableTextToolbarApi | null>;
 
   // Language check
   expectedLanguage?: 'it' | 'en' | 'pt'; // Expected language (default: 'it')
@@ -96,6 +104,7 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
   onStartEditing,
   displayMode = 'text',
   showActionButtons = true,
+  toolbarApiRef,
   expectedLanguage = 'it',
   showLanguageWarning = true,
   enableVoice = true,
@@ -287,6 +296,20 @@ export const EditableText = React.forwardRef<HTMLTextAreaElement, EditableTextPr
   const handleCancel = useCallback(() => {
     onCancel(buffer.trim());
   }, [onCancel, buffer]);
+
+  useLayoutEffect(() => {
+    if (!toolbarApiRef || showActionButtons) {
+      if (toolbarApiRef) toolbarApiRef.current = null;
+      return;
+    }
+    toolbarApiRef.current = {
+      confirm: () => handleSave(),
+      cancel: () => handleCancel(),
+    };
+    return () => {
+      toolbarApiRef.current = null;
+    };
+  }, [toolbarApiRef, showActionButtons, handleSave, handleCancel]);
 
   const handleBlur = useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
     // Don't blur if clicking on action buttons

@@ -17,11 +17,16 @@ import { deriveExportedToolName } from '@domain/iaAgentTools/backendToolDerivati
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { parsePersistedStructuredSectionsJson } from './structuredSectionPersist';
 import { effectiveBySectionFromPersistedStructured } from './structuredSectionsRevisionReducer';
+import { mergeUseCaseExamplesIntoExamplesBody } from '@utils/iaAgentRuntime/agentUseCasesProvisionPreviewFormat';
 
 export type TaskLikeForPlatformRules = Pick<
   Task,
   'agentStructuredSectionsJson' | 'agentPrompt' | 'agentPromptTargetPlatform'
 >;
+
+/** Task fields needed to merge use-case dialogues into the ConvAI Examples section. */
+export type TaskLikeForElevenLabsPrompt = TaskLikeForPlatformRules &
+  Pick<Task, 'agentUseCasesJson'> & { agentIaRuntimeOverrideJson?: string | null };
 
 function structuredSectionsToIr(task: TaskLikeForPlatformRules) {
   const parsed = parsePersistedStructuredSectionsJson(
@@ -92,10 +97,12 @@ function buildConvaiBackendToolContractAppendix(
 
 /** ConvAI `conversation_config.agent.prompt.prompt`: ElevenLabs compile of full sections (cloud agent target). */
 export function resolveElevenLabsAgentPromptFromTask(
-  task: TaskLikeForPlatformRules & { agentIaRuntimeOverrideJson?: string | null },
+  task: TaskLikeForElevenLabsPrompt,
   options?: ResolveElevenLabsAgentPromptOptions
 ): string {
   const ir = structuredSectionsToIr(task);
+  const examplesMerged = mergeUseCaseExamplesIntoExamplesBody(ir.examples ?? '', task);
+  const irWithUseCases = { ...ir, examples: examplesMerged };
   const appendix = buildConvaiBackendToolContractAppendix(task, options?.manualCatalogBackendTaskIds);
   const ctxRaw = (ir.context ?? '').trim();
   let context = ctxRaw;
@@ -106,5 +113,5 @@ export function resolveElevenLabsAgentPromptFromTask(
       context = `${ctxRaw}\n\n${appendix}`;
     }
   }
-  return compileAgentPromptToPlatform({ ...ir, context }, AgentPlatform.ElevenLabs);
+  return compileAgentPromptToPlatform({ ...irWithUseCases, context }, AgentPlatform.ElevenLabs);
 }

@@ -9,6 +9,9 @@ import {
   type ConvaiProvisionPayloadPreviewDetail,
   type ConvaiProvisionPayloadPreviewItem,
 } from '@utils/iaAgentRuntime/convaiPayloadPreviewEvents';
+import { formatFewShotTabCombined } from '@utils/iaAgentRuntime/convaiPayloadFewShotPreview';
+
+type PayloadPreviewMode = 'full' | 'few_shot';
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -31,9 +34,15 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+function displayedPayloadText(item: ConvaiProvisionPayloadPreviewItem, mode: PayloadPreviewMode): string {
+  if (mode === 'full') return item.bodyText;
+  return formatFewShotTabCombined(item.bodyText, item.useCaseDialoguesPreview);
+}
+
 export function ConvaiProvisionPayloadModal(): React.ReactElement | null {
   const [open, setOpen] = React.useState(false);
   const [items, setItems] = React.useState<ConvaiProvisionPayloadPreviewItem[]>([]);
+  const [previewMode, setPreviewMode] = React.useState<PayloadPreviewMode>('full');
   const [copied, setCopied] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -42,6 +51,7 @@ export function ConvaiProvisionPayloadModal(): React.ReactElement | null {
       const next = ce.detail?.items;
       if (!Array.isArray(next) || next.length === 0) return;
       setItems(next);
+      setPreviewMode('full');
       setOpen(true);
       setCopied(null);
     };
@@ -51,8 +61,11 @@ export function ConvaiProvisionPayloadModal(): React.ReactElement | null {
   }, []);
 
   const allText = React.useMemo(
-    () => items.map((i) => `// ${i.displayName} (task ${i.taskId})\n${i.bodyText}`).join('\n\n---\n\n'),
-    [items]
+    () =>
+      items
+        .map((i) => `// ${i.displayName} (task ${i.taskId})\n${displayedPayloadText(i, previewMode)}`)
+        .join('\n\n---\n\n'),
+    [items, previewMode]
   );
 
   const handleCopyAll = React.useCallback(async () => {
@@ -105,28 +118,66 @@ export function ConvaiProvisionPayloadModal(): React.ReactElement | null {
             <code className="text-slate-300">elevenLabsRequestJson</code>). Se assente (proxy vecchio), vedi il
             body client verso <code className="text-slate-300">/elevenlabs/createAgent</code>.
           </p>
-          <div className="flex flex-col gap-4">
-            {items.map((it, idx) => (
-              <div
-                key={`${it.taskId}-${idx}`}
-                className="rounded border border-slate-700/80 bg-slate-900/50 p-2"
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-[11px] font-medium text-slate-300">Anteprima</span>
+            <div className="flex rounded border border-slate-600 bg-slate-900 p-0.5">
+              <button
+                type="button"
+                onClick={() => setPreviewMode('full')}
+                className={`rounded px-2 py-1 text-[11px] font-medium ${
+                  previewMode === 'full'
+                    ? 'bg-slate-700 text-slate-100'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
               >
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[11px] font-medium text-slate-200">{it.displayName}</span>
-                  <span className="font-mono text-[10px] text-slate-500">{it.taskId}</span>
-                  <button
-                    type="button"
-                    onClick={() => void handleCopyOne(idx, it.bodyText)}
-                    className="ml-auto rounded border border-slate-600 px-1.5 py-px text-[10px] text-slate-300 hover:bg-slate-800"
-                  >
-                    {copied === `one-${idx}` ? 'Copiato' : 'Copia'}
-                  </button>
+                Payload completo
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewMode('few_shot')}
+                className={`rounded px-2 py-1 text-[11px] font-medium ${
+                  previewMode === 'few_shot'
+                    ? 'bg-slate-700 text-slate-100'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Solo Examples (few-shot)
+              </button>
+            </div>
+          </div>
+          {previewMode === 'few_shot' ? (
+            <p className="mb-3 text-[11px] leading-snug text-amber-200/90">
+              In alto: sezione <code className="text-amber-100">### Examples</code> dal prompt ConvAI (structured
+              Examples). Se il task ha use case salvati, in basso compare anche il testo da{' '}
+              <code className="text-amber-100">agentUseCasesJson</code> — solo anteprima: non è nel POST salvo che lo
+              copi nella sezione Examples dell’editor.
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-4">
+            {items.map((it, idx) => {
+              const shown = displayedPayloadText(it, previewMode);
+              return (
+                <div
+                  key={`${it.taskId}-${idx}`}
+                  className="rounded border border-slate-700/80 bg-slate-900/50 p-2"
+                >
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-medium text-slate-200">{it.displayName}</span>
+                    <span className="font-mono text-[10px] text-slate-500">{it.taskId}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyOne(idx, shown)}
+                      className="ml-auto rounded border border-slate-600 px-1.5 py-px text-[10px] text-slate-300 hover:bg-slate-800"
+                    >
+                      {copied === `one-${idx}` ? 'Copiato' : 'Copia'}
+                    </button>
+                  </div>
+                  <pre className="max-h-[40vh] overflow-auto whitespace-pre-wrap break-all rounded bg-black/40 p-2 font-mono text-[10px] leading-relaxed text-slate-200">
+                    {shown}
+                  </pre>
                 </div>
-                <pre className="max-h-[40vh] overflow-auto whitespace-pre-wrap break-all rounded bg-black/40 p-2 font-mono text-[10px] leading-relaxed text-slate-200">
-                  {it.bodyText}
-                </pre>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

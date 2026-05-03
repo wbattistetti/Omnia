@@ -17,6 +17,7 @@ import {
   listAllConvaiAgentsMatchingTaskGuid,
 } from '@services/convaiProvisionApi';
 import { emitConvaiProvisionPayloadPreview } from '@utils/iaAgentRuntime/convaiPayloadPreviewEvents';
+import { buildUseCaseDialoguesPreviewFromTask } from '@utils/iaAgentRuntime/agentUseCasesProvisionPreviewFormat';
 import {
   buildConvaiProvisionKey,
   conversationConfigFragmentFromIaAgentConfig,
@@ -220,7 +221,10 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         2
       );
       const bodyText = result.elevenLabsRequestJson?.trim() || fallbackPreview;
-      emitConvaiProvisionPayloadPreview([{ taskId: instanceId, displayName, bodyText }]);
+      const useCaseDialoguesPreview = buildUseCaseDialoguesPreviewFromTask(taskRepository.getTask(instanceId));
+      emitConvaiProvisionPayloadPreview([
+        { taskId: instanceId, displayName, bodyText, useCaseDialoguesPreview },
+      ]);
       const { agentId } = result;
       console.warn('[DEBUG] NEW AGENT ID (UI)', agentId);
       setConvaiSessionBinding(instanceId, agentId, provisionKey);
@@ -250,11 +254,13 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         bodyText =
           `// Errore prima di un payload completo\n${err instanceof Error ? err.message : String(err)}`;
       }
+      const useCaseDialoguesPreview = buildUseCaseDialoguesPreviewFromTask(taskRepository.getTask(instanceId));
       emitConvaiProvisionPayloadPreview([
         {
           taskId: instanceId,
           displayName: displayNameForPreview || instanceId,
           bodyText,
+          useCaseDialoguesPreview,
         },
       ]);
     }
