@@ -8,7 +8,7 @@ import { useProjectTranslations } from '../../../../context/ProjectTranslationsC
 import { useActiveFlowMetaTranslationsFlattened } from '../../../../hooks/useActiveFlowMetaTranslations';
 import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
-import { Server, Eye, EyeOff, Table2, BookOpen, FlaskConical, ListPlus, RefreshCw } from 'lucide-react';
+import { Server, Eye, EyeOff, Table2, BookOpen, FlaskConical, ListPlus, RefreshCw, Columns2 } from 'lucide-react';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { InterfaceMappingEditor } from '../../../../components/FlowMappingPanel/InterfaceMappingEditor';
 import {
@@ -34,6 +34,25 @@ import {
 import { slugInternalName, type OpenApiInputUiKind } from '../../../../services/openApiBackendCallSpec';
 import { runBackendCallReadApiForTask } from '../../../../services/runBackendCallReadApiForTask';
 import { logBackendCallTest } from '../../../../debug/backendCallTestDebug';
+import type { BackendInputAdvancementEntry } from '../../../../domain/advancement/backendAdvancementConfig';
+import type { AdvancementValueType } from '../../../../domain/advancement/advancementDsl';
+import { BackendAdvancementTestContextBar } from './backendAdvancement/BackendAdvancementTestContextBar';
+import { SendParamAdvancementFullEditor } from './backendAdvancement/SendParamAdvancementFullEditor';
+import { SendParamAdvancementRowEditor } from './backendAdvancement/SendParamAdvancementRowEditor';
+import {
+  buildAdvancementContextChips,
+  buildParamRecordFromSendMapping,
+  parsePrevJson,
+  runAdvancementPlayEvaluation,
+  sendRowValueFingerprint,
+  type AdvancementQuickTestRowState,
+} from '../../../../domain/advancement/advancementQuickTest';
+
+function defaultAdvancementEntry(): BackendInputAdvancementEntry {
+  return { enabled: false, dslExpression: '', naturalLanguage: '' };
+}
+
+const SEND_RECV_SPLIT_STORAGE_KEY = 'omnia.backendCall.sendReceiveSplitRatio';
 
 function collectUsedInternalNames(cfg: BackendCallConfig): Set<string> {
   const s = new Set<string>();
@@ -97,6 +116,10 @@ interface BackendCallConfig {
     type: 'input' | 'output';
     isActive: boolean;
   }>;
+  /** Batch progression: executable DSL per SEND parameter (Omnia runtime). */
+  inputAdvancement?: Record<string, BackendInputAdvancementEntry>;
+  inputAdvancementTypes?: Record<string, AdvancementValueType>;
+  advancementTestPrevJson?: string;
 }
 
 const DEFAULT_CONFIG: BackendCallConfig = {
@@ -261,6 +284,37 @@ export default function BackendCallEditor({
   const [bulkApiTestBusy, setBulkApiTestBusy] = React.useState(false);
   const [bulkTestNonce, setBulkTestNonce] = React.useState(0);
 
+  /** WireKey SEND con editor avanzamento a pannello intero aperto. */
+  const [advancementEditorWireKey, setAdvancementEditorWireKey] = React.useState<string | null>(null);
+
+  /** Chip contesto test rapido per riga SEND (condivisi tra riga collassata e overlay). */
+  const [advancementQuickTestUi, setAdvancementQuickTestUi] = React.useState<
+    Record<string, AdvancementQuickTestRowState | undefined>
+  >({});
+  const prevAdvancementOverlayWireKeyRef = React.useRef<string | null>(null);
+
+  const [receiveMappingPanelVisible, setReceiveMappingPanelVisible] = React.useState(true);
+  const [sendReceiveSplitRatio, setSendReceiveSplitRatio] = React.useState(() => {
+    try {
+      const s = typeof localStorage !== 'undefined' ? localStorage.getItem(SEND_RECV_SPLIT_STORAGE_KEY) : null;
+      if (s == null) return 0.58;
+      const n = Number(s);
+      return Number.isFinite(n) ? Math.min(0.82, Math.max(0.28, n)) : 0.58;
+    } catch {
+      return 0.58;
+    }
+  });
+
+  const persistSendReceiveSplitRatio = React.useCallback((r: number) => {
+    const c = Math.min(0.82, Math.max(0.28, r));
+    setSendReceiveSplitRatio(c);
+    try {
+      localStorage.setItem(SEND_RECV_SPLIT_STORAGE_KEY, String(c));
+    } catch {
+      /* noop */
+    }
+  }, []);
+
   // Get available variables for autocomplete
   // ✅ Use readable names directly (e.g., "data di nascita", "data di nascita.giorno")
   // These are the same names used in ConditionEditor and runtime (ctx["data di nascita"])
@@ -322,6 +376,11 @@ export default function BackendCallEditor({
         ? (rawTask as { openapiSpecUrl: string }).openapiSpecUrl
         : '';
 
+    const adv = (rawTask as { inputAdvancement?: BackendCallConfig['inputAdvancement'] }).inputAdvancement;
+    const advTypes = (rawTask as { inputAdvancementTypes?: BackendCallConfig['inputAdvancementTypes'] })
+      .inputAdvancementTypes;
+    const testPrev = (rawTask as { advancementTestPrevJson?: string }).advancementTestPrevJson;
+
     const cfg: BackendCallConfig = {
       endpoint,
       openapiSpecUrl,
@@ -330,6 +389,9 @@ export default function BackendCallEditor({
       ...(mockTable !== undefined ? { mockTable } : {}),
       ...(mockTableColumns !== undefined ? { mockTableColumns } : {}),
       ...(mockTableDefaultExecutionMode !== undefined ? { mockTableDefaultExecutionMode } : {}),
+      ...(adv && typeof adv === 'object' ? { inputAdvancement: adv } : {}),
+      ...(advTypes && typeof advTypes === 'object' ? { inputAdvancementTypes: advTypes } : {}),
+      ...(typeof testPrev === 'string' ? { advancementTestPrevJson: testPrev } : {}),
     };
     return cfg;
   }, []);
@@ -393,6 +455,13 @@ export default function BackendCallEditor({
           ...(config.mockTableDefaultExecutionMode !== undefined
             ? { mockTableDefaultExecutionMode: config.mockTableDefaultExecutionMode }
             : {}),
+          ...(config.inputAdvancement !== undefined ? { inputAdvancement: config.inputAdvancement } : {}),
+          ...(config.inputAdvancementTypes !== undefined
+            ? { inputAdvancementTypes: config.inputAdvancementTypes }
+            : {}),
+          ...(config.advancementTestPrevJson !== undefined
+            ? { advancementTestPrevJson: config.advancementTestPrevJson }
+            : {}),
           endpointInvocationValues: undefined,
           backendToolDescription,
         } as any,
@@ -430,6 +499,100 @@ export default function BackendCallEditor({
   }, [swaggerOutputContract, config.outputs]);
 
   const missingFieldsTotal = missingInputApiNames.length + missingOutputApiNames.length;
+
+  /** Descrizioni OpenAPI per firma IA / contesto traduzione DSL avanzamento. */
+  const advancementOpenApiHints = React.useMemo(() => {
+    const snap = openapiDescriptionSnapshots?.inputs;
+    if (!snap) return {};
+    const out: Record<string, string> = {};
+    for (const inp of config.inputs || []) {
+      const n = inp.internalName?.trim();
+      if (!n) continue;
+      const api = (inp.apiParam || '').trim();
+      const fromApi = api ? snap[api] : undefined;
+      out[n] = (typeof fromApi === 'string' && fromApi ? fromApi : snap[n]) || '';
+    }
+    return out;
+  }, [openapiDescriptionSnapshots, config.inputs]);
+
+  const advancementSignatureBuilder = React.useCallback(() => {
+    const parameters: Record<string, { type: string; description: string }> = {};
+    for (const inp of config.inputs || []) {
+      const name = inp.internalName?.trim();
+      if (!name) continue;
+      const desc =
+        advancementOpenApiHints[name] ||
+        inp.fieldDescription ||
+        (inp.apiParam ? `API: ${inp.apiParam}` : '');
+      parameters[name] = {
+        type: config.inputAdvancementTypes?.[name] ?? 'String',
+        description: desc,
+      };
+    }
+    return { parameters };
+  }, [advancementOpenApiHints, config.inputs, config.inputAdvancementTypes]);
+
+  const advancementInputNamesKey = React.useMemo(
+    () =>
+      (config.inputs || [])
+        .map((i) => i.internalName?.trim())
+        .filter(Boolean)
+        .sort()
+        .join('|'),
+    [config.inputs]
+  );
+
+  /** Rimuove regole avanzamento per parametri SEND eliminati. */
+  React.useEffect(() => {
+    const names = new Set(
+      (config.inputs || []).map((i) => i.internalName?.trim()).filter(Boolean) as string[]
+    );
+    setConfig((prev) => {
+      const ia = prev.inputAdvancement;
+      const it = prev.inputAdvancementTypes;
+      if (!ia && !it) return prev;
+      let changed = false;
+      const nextA = ia ? { ...ia } : undefined;
+      const nextT = it ? { ...it } : undefined;
+      if (nextA) {
+        for (const k of Object.keys(nextA)) {
+          if (!names.has(k)) {
+            delete nextA[k];
+            changed = true;
+          }
+        }
+      }
+      if (nextT) {
+        for (const k of Object.keys(nextT)) {
+          if (!names.has(k)) {
+            delete nextT[k];
+            changed = true;
+          }
+        }
+      }
+      if (!changed) return prev;
+      return {
+        ...prev,
+        ...(nextA ? { inputAdvancement: nextA } : {}),
+        ...(nextT ? { inputAdvancementTypes: nextT } : {}),
+      };
+    });
+  }, [advancementInputNamesKey]);
+
+  /** Chiude l'overlay se il parametro sparisce o l'avanzamento viene disattivato. */
+  React.useEffect(() => {
+    if (!advancementEditorWireKey) return;
+    const names = new Set(
+      (config.inputs || []).map((i) => i.internalName?.trim()).filter(Boolean) as string[]
+    );
+    if (!names.has(advancementEditorWireKey)) {
+      setAdvancementEditorWireKey(null);
+      return;
+    }
+    if (!config.inputAdvancement?.[advancementEditorWireKey]?.enabled) {
+      setAdvancementEditorWireKey(null);
+    }
+  }, [advancementEditorWireKey, config.inputAdvancement, config.inputs]);
 
   const appendMissingParam = React.useCallback((zone: 'send' | 'receive', apiName: string) => {
     setConfig((prev) => {
@@ -564,6 +727,206 @@ export default function BackendCallEditor({
         openapiDescriptionSnapshots
       ),
     [config.inputs, knownBackendVariableIdSet, openapiDescriptionSnapshots]
+  );
+
+  const getAdvancementPlayContext = React.useCallback(
+    (wk: string) => {
+      const focusEntry = mappingSend.find((e) => e.wireKey === wk);
+      const built = buildParamRecordFromSendMapping(
+        mappingSend,
+        config.inputAdvancementTypes,
+        wk,
+        focusEntry
+      );
+      if (built.error) {
+        return { prev: {}, param: {}, error: built.error };
+      }
+      let prevExtra: Record<string, unknown> = {};
+      const rawPrev = (config.advancementTestPrevJson ?? '').trim();
+      if (rawPrev) {
+        try {
+          prevExtra = parsePrevJson(rawPrev);
+        } catch {
+          prevExtra = {};
+        }
+      }
+      /** Test Play: prev include sempre i letterali SEND (griglia); PREV JSON opzionale sovrascrive chiavi. */
+      const prev = { ...built.param, ...prevExtra };
+      return { prev, param: built.param, error: null };
+    },
+    [config.advancementTestPrevJson, config.inputAdvancementTypes, mappingSend]
+  );
+
+  const commitAdvancementQuickTest = React.useCallback(
+    (wk: string) => {
+      const ctx = getAdvancementPlayContext(wk);
+      const entry = config.inputAdvancement?.[wk] ?? defaultAdvancementEntry();
+      const paramType = config.inputAdvancementTypes?.[wk] ?? 'String';
+      const row = mappingSend.find((e) => e.wireKey === wk);
+      const snapshotRow = sendRowValueFingerprint(row);
+      const snapshotNaturalLanguage = (entry.naturalLanguage ?? '').trim();
+      const snapshotDsl = (entry.dslExpression ?? '').trim();
+
+      if (ctx.error) {
+        setAdvancementQuickTestUi((p) => ({
+          ...p,
+          [wk]: { chips: [], error: ctx.error, snapshotRow, snapshotNaturalLanguage, snapshotDsl },
+        }));
+        return;
+      }
+      const out = runAdvancementPlayEvaluation(
+        entry.dslExpression ?? '',
+        { prev: ctx.prev, param: ctx.param },
+        paramType
+      );
+      if (out.ok) {
+        const chips = buildAdvancementContextChips(
+          { prev: ctx.prev, param: ctx.param },
+          out.display,
+          { focusWireKey: wk }
+        );
+        setAdvancementQuickTestUi((p) => ({
+          ...p,
+          [wk]: { chips, snapshotRow, snapshotNaturalLanguage, snapshotDsl },
+        }));
+      } else {
+        setAdvancementQuickTestUi((p) => ({
+          ...p,
+          [wk]: { chips: [], error: out.message, snapshotRow, snapshotNaturalLanguage, snapshotDsl },
+        }));
+      }
+    },
+    [config.inputAdvancement, config.inputAdvancementTypes, getAdvancementPlayContext, mappingSend]
+  );
+
+  React.useEffect(() => {
+    const cur = advancementEditorWireKey;
+    const prevOpen = prevAdvancementOverlayWireKeyRef.current;
+    if (prevOpen !== null && cur !== prevOpen) {
+      setAdvancementQuickTestUi((s) => {
+        if (!(prevOpen in s)) return s;
+        const next = { ...s };
+        delete next[prevOpen];
+        return next;
+      });
+    }
+    prevAdvancementOverlayWireKeyRef.current = cur;
+  }, [advancementEditorWireKey]);
+
+  React.useEffect(() => {
+    setAdvancementQuickTestUi((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const wk of Object.keys(prev)) {
+        const st = prev[wk];
+        if (!st) continue;
+        const row = mappingSend.find((e) => e.wireKey === wk);
+        const rs = sendRowValueFingerprint(row);
+        const nl = (config.inputAdvancement?.[wk]?.naturalLanguage ?? '').trim();
+        const dsl = (config.inputAdvancement?.[wk]?.dslExpression ?? '').trim();
+        if (
+          st.snapshotRow !== rs ||
+          (st.snapshotNaturalLanguage ?? '') !== nl ||
+          st.snapshotDsl !== dsl
+        ) {
+          delete next[wk];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [mappingSend, config.inputAdvancement]);
+
+  const backendSendAdvancement = React.useMemo(
+    () => ({
+      isEnabled: (wk: string) => Boolean(config.inputAdvancement?.[wk]?.enabled),
+      onToggle: (wk: string, next: boolean) => {
+        setConfig((p) => {
+          const cur = p.inputAdvancement?.[wk] ?? defaultAdvancementEntry();
+          return {
+            ...p,
+            inputAdvancement: {
+              ...(p.inputAdvancement ?? {}),
+              [wk]: { ...cur, enabled: next },
+            },
+          };
+        });
+      },
+      renderEditor: (wk: string) => {
+        const entry = config.inputAdvancement?.[wk] ?? defaultAdvancementEntry();
+        const paramType = config.inputAdvancementTypes?.[wk] ?? 'String';
+        const row = mappingSend.find((e) => e.wireKey === wk);
+        return (
+          <SendParamAdvancementRowEditor
+            wireKey={wk}
+            advancementEntry={entry}
+            sendRowSnapshot={row}
+            paramType={paramType}
+            getPlayContext={getAdvancementPlayContext}
+            onOpenFullEditor={() => setAdvancementEditorWireKey(wk)}
+            onRunQuickTest={() => commitAdvancementQuickTest(wk)}
+            quickTestUi={advancementQuickTestUi[wk]}
+          />
+        );
+      },
+    }),
+    [
+      advancementQuickTestUi,
+      commitAdvancementQuickTest,
+      config.inputAdvancement,
+      config.inputAdvancementTypes,
+      getAdvancementPlayContext,
+      mappingSend,
+    ]
+  );
+
+  const backendSendAdvancementOverlay = React.useMemo(
+    () => ({
+      openWireKey: advancementEditorWireKey,
+      onClose: () => setAdvancementEditorWireKey(null),
+      renderPanel: (wk: string) => {
+        const entry = config.inputAdvancement?.[wk] ?? defaultAdvancementEntry();
+        const paramType = config.inputAdvancementTypes?.[wk] ?? 'String';
+        const rowInp = (config.inputs || []).find((i) => i.internalName?.trim() === wk);
+        const fieldHint =
+          advancementOpenApiHints[wk] || rowInp?.fieldDescription || undefined;
+        return (
+          <SendParamAdvancementFullEditor
+            wireKey={wk}
+            entry={entry}
+            paramType={paramType}
+            getPlayContext={getAdvancementPlayContext}
+            onPatch={(patch) =>
+              setConfig((p) => {
+                const c = p.inputAdvancement?.[wk] ?? defaultAdvancementEntry();
+                return {
+                  ...p,
+                  inputAdvancement: {
+                    ...(p.inputAdvancement ?? {}),
+                    [wk]: { ...c, ...patch },
+                  },
+                };
+              })
+            }
+            buildSignature={advancementSignatureBuilder}
+            fieldDescriptionHint={fieldHint}
+            onRunAdvancementQuickTest={() => commitAdvancementQuickTest(wk)}
+            quickTestUi={advancementQuickTestUi[wk]}
+          />
+        );
+      },
+    }),
+    [
+      advancementEditorWireKey,
+      advancementOpenApiHints,
+      advancementQuickTestUi,
+      advancementSignatureBuilder,
+      commitAdvancementQuickTest,
+      getAdvancementPlayContext,
+      config.inputAdvancement,
+      config.inputAdvancementTypes,
+      config.inputs,
+    ]
   );
 
   const mappingReceive = React.useMemo(
@@ -863,6 +1226,16 @@ export default function BackendCallEditor({
         successHighlight: testApiReadiness === 'ready' && !bulkApiTestBusy,
         visible: operationalUrlNonEmpty,
       },
+      {
+        icon: <Columns2 size={16} />,
+        label: receiveMappingPanelVisible ? 'Hide Receive' : 'Show Receive',
+        onClick: () => setReceiveMappingPanelVisible((v) => !v),
+        title: receiveMappingPanelVisible
+          ? 'Nascondi il pannello RECEIVE: tutta la larghezza è per SEND.'
+          : 'Mostra di nuovo il pannello RECEIVE affiancato a SEND.',
+        active: receiveMappingPanelVisible,
+        visible: true,
+      },
     ];
 
     if (showMissing) {
@@ -903,6 +1276,7 @@ export default function BackendCallEditor({
     testApiReadiness,
     mockExecMode,
     refreshMockTableStructure,
+    receiveMappingPanelVisible,
   ]);
 
   // Update toolbar when it changes (for docking mode)
@@ -1037,7 +1411,7 @@ export default function BackendCallEditor({
             />
           </>
         ) : (
-        <div className="flex-1 min-h-[320px] min-w-0 flex flex-col min-h-0">
+        <div className="flex-1 min-h-[320px] min-w-0 flex flex-col min-h-0 overflow-auto">
           <InterfaceMappingEditor
             variant="backend"
             showVariantToggle={false}
@@ -1062,6 +1436,19 @@ export default function BackendCallEditor({
               getActiveFlowCanvasId() ? { flowCanvasId: getActiveFlowCanvasId()! } : undefined
             }
             backendSendParamKindByWireKey={inputUiKindByInternalName}
+            backendSendBodyPrefix={
+              <BackendAdvancementTestContextBar
+                advancementTestPrevJson={config.advancementTestPrevJson ?? '{}'}
+                onTestPrevJsonChange={(s) =>
+                  setConfig((p) => ({ ...p, advancementTestPrevJson: s }))
+                }
+              />
+            }
+            backendSendAdvancement={backendSendAdvancement}
+            backendSendAdvancementOverlay={backendSendAdvancementOverlay}
+            backendReceiveColumnVisible={receiveMappingPanelVisible}
+            backendSendReceiveSplitRatio={sendReceiveSplitRatio}
+            onBackendSendReceiveSplitRatioChange={persistSendReceiveSplitRatio}
           />
         </div>
         )}

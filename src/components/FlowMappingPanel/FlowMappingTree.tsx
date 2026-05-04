@@ -232,7 +232,16 @@ export interface FlowMappingTreeProps {
   backendKnownVariableIds?: ReadonlySet<string>;
   /** Backend SEND: tipo editor costante (OpenAPI) per wireKey. */
   backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
+  /** Backend SEND: checkbox avanzamento + editor inline per riga (batch progression). */
+  backendSendAdvancement?: BackendSendAdvancementApi;
 }
+
+/** Checkbox + editor DSL inline sulla riga SEND (Backend Call). */
+export type BackendSendAdvancementApi = {
+  isEnabled: (wireKey: string) => boolean;
+  onToggle: (wireKey: string, next: boolean) => void;
+  renderEditor: (wireKey: string) => React.ReactNode;
+};
 
 function updateEntry(entries: MappingEntry[], id: string, patch: Partial<MappingEntry>): MappingEntry[] {
   return entries.map((e) => {
@@ -292,6 +301,7 @@ interface RowProps {
   onOutputVariableCreated?: () => void;
   backendKnownVariableIds?: ReadonlySet<string>;
   backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
+  backendSendAdvancement?: BackendSendAdvancementApi;
 }
 
 function MappingTreeRow({
@@ -327,6 +337,7 @@ function MappingTreeRow({
   onOutputVariableCreated,
   backendKnownVariableIds,
   backendSendParamKindByWireKey,
+  backendSendAdvancement,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const labelEditRef = useRef<LabelWithPencilEditHandle>(null);
@@ -515,6 +526,18 @@ function MappingTreeRow({
 
   const ephemeralNew = Boolean(node.entry && isEphemeralNewSegment(node.segment));
 
+  const wireKey = node.entry?.wireKey?.trim() ?? '';
+  const showAdvancementUi =
+    variant === 'backend' &&
+    backendColumn === 'send' &&
+    Boolean(node.entry) &&
+    !isGroupOnly &&
+    Boolean(backendSendAdvancement) &&
+    !ephemeralNew;
+
+  /** Una sola altezza riga per freccia/checkbox/label/valore quando l’avanzamento è collassato (h-7). */
+  const rowAlignClass = 'items-center';
+
   const handleAbandonEphemeral = useCallback(() => {
     if (node.entry) onAbandonEphemeralEntry(node.entry.id);
   }, [node.entry, onAbandonEphemeralEntry]);
@@ -570,14 +593,14 @@ function MappingTreeRow({
           onDragEnd={() => {
             reorderDragSourceIdRef.current = null;
           }}
-          className={`group/row flex items-center gap-0.5 min-h-[32px] rounded-md px-0.5 py-0.5 -mx-0.5 hover:bg-slate-800/50 ${
+          className={`group/row flex ${rowAlignClass} gap-0.5 min-h-[32px] rounded-md px-0.5 py-0.5 -mx-0.5 hover:bg-slate-800/50 ${
             enableRowReorder && node.entry ? 'cursor-grab active:cursor-grabbing' : ''
           }`}
           onDragOver={combinedRowDragOver}
           onDragOverCapture={combinedRowDragOver}
           onDrop={combinedRowDrop}
         >
-        <div className="flex items-center gap-0.5 shrink-0 w-4 justify-start min-w-[1rem]">
+        <div className="flex h-7 shrink-0 items-center gap-0.5 min-w-[1rem] justify-start">
           {hasChildren ? (
             <button
               type="button"
@@ -593,7 +616,7 @@ function MappingTreeRow({
         </div>
 
         <div
-          className="shrink-0 -mr-0.5 flex items-center justify-center"
+          className="flex h-7 shrink-0 items-center justify-center -mr-0.5"
           title={
             isGroupOnly
               ? 'Gruppo'
@@ -625,7 +648,24 @@ function MappingTreeRow({
           )}
         </div>
 
-        <div className="relative shrink-0 min-w-0 max-w-[min(18rem,55vw)] pl-0.5 group/label-slot flex items-center gap-1">
+        {showAdvancementUi ? (
+          <div
+            className="flex h-7 shrink-0 items-center"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 cursor-pointer rounded border-slate-500 bg-slate-900 text-teal-500 focus:ring-teal-500/40"
+              checked={backendSendAdvancement!.isEnabled(wireKey)}
+              onChange={(e) => backendSendAdvancement!.onToggle(wireKey, e.target.checked)}
+              title="Avanzamento tra batch"
+              aria-label="Avanzamento parametro"
+            />
+          </div>
+        ) : null}
+
+        <div className="group/label-slot relative flex min-h-[28px] min-w-0 max-w-[min(18rem,55vw)] shrink-0 items-center gap-1 pl-0.5">
           {variant === 'backend' && node.entry?.openapiDescriptionDrift ? (
             <span
               className="shrink-0 text-amber-400"
@@ -703,7 +743,7 @@ function MappingTreeRow({
         </div>
 
         <div
-          className="shrink-0 flex items-center min-w-0"
+          className="flex min-h-[28px] min-w-0 shrink-0 items-center"
           {...(variant === 'backend' && ephemeralNew ? ({ inert: true } as React.HTMLAttributes<HTMLDivElement>) : {})}
         >
           <MappingRowFields
@@ -727,6 +767,10 @@ function MappingTreeRow({
             backendSendParamKindByWireKey={backendSendParamKindByWireKey}
           />
         </div>
+
+        {showAdvancementUi && backendSendAdvancement!.isEnabled(wireKey) ? (
+          <div className="flex min-w-0 shrink-0 items-center">{backendSendAdvancement.renderEditor(wireKey)}</div>
+        ) : null}
 
         <span className="flex-1 min-w-2 shrink" aria-hidden />
 
@@ -823,6 +867,7 @@ function MappingTreeRow({
               onOutputVariableCreated={onOutputVariableCreated}
               backendKnownVariableIds={backendKnownVariableIds}
               backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+              backendSendAdvancement={backendSendAdvancement}
             />
           ))}
         </div>
@@ -858,6 +903,7 @@ export function FlowMappingTree({
   onOutputVariableCreated,
   backendKnownVariableIds,
   backendSendParamKindByWireKey,
+  backendSendAdvancement,
 }: FlowMappingTreeProps) {
   const workspaceState = useFlowWorkspaceOptional();
   const workspaceFlows = variant === 'interface' ? workspaceState?.flows : undefined;
@@ -1203,6 +1249,7 @@ export function FlowMappingTree({
           onOutputVariableCreated={onOutputVariableCreated}
           backendKnownVariableIds={backendKnownVariableIds}
           backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+          backendSendAdvancement={backendSendAdvancement}
         />
       ))}
 

@@ -310,3 +310,52 @@
 .ai-agent-prompt-platform-select option {
   white-space: nowrap;
 }
+
+/* Advancement editor: bordo pulsante Affina che lampeggia quando NL/script non allineati */
+@keyframes omnia-affina-border-blink {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(232, 121, 249, 0.95),
+      0 0 16px rgba(167, 139, 250, 0.55);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(232, 121, 249, 0.2),
+      0 0 8px rgba(167, 139, 250, 0.12);
+  }
+}
+
+.omnia-affina-button-blink {
+  animation: omnia-affina-border-blink 1.05s ease-in-out infinite;
+}
+
+/* Triangolo warning avanzamento: lampeggio in sync con pulsante Affina */
+@keyframes omnia-warning-triangle-blink {
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.85));
+  }
+  50% {
+    opacity: 0.42;
+    filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.2));
+  }
+}
+
+.omnia-warning-triangle-blink {
+  animation: omnia-warning-triangle-blink 1.05s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omnia-affina-button-blink {
+    animation: none;
+    box-shadow: none;
+  }
+
+  .omnia-warning-triangle-blink {
+    animation: none;
+    opacity: 1;
+    filter: none;
+  }
+}

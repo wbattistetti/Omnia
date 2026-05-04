@@ -1,0 +1,20 @@
+---
+description: Backend Call SEND — chiavi param.* da internalName/wireKey, non dal nome OpenAPI (Campo API)
+alwaysApply: false
+---
+
+# Omnia: nomi `param.x` / `prev.x` negli script di avanzamento
+
+Fonti: `docs/ADVANCEMENT_DSL.md`, `advancementQuickTest.ts` (`paramFieldKeyFromWireKey`), `backendCallMappingAdapter.ts`.
+
+## Invarianti
+
+- **`param.<x>`** in `dslExpression` non usa il testo azzurro “Campo API” (OpenAPI) se diverso dal nome interno.
+- Le chiavi provengono da **`inputs[].internalName`** del task → **`wireKey`** in mapping → **`paramFieldKeyFromWireKey(wireKey)`** (ultimo segmento dopo `.`, altrimenti tutto il `wireKey`).
+- All’aggiunta da Swagger, l’`internalName` è spesso **`slugInternalName(apiParam)`** (minuscolo, `startDate` → `start_date`); l’utente può rinominare.
+- **Nessun mapping automatico** `startDate` (API) → `param.startDate` se l’interno è `start_date`.
+- **Test/Play:** serve un **letterale** per ogni riga usata; senza letterale la chiave non entra in `param`.
+
+## IA
+
+- `buildSignature` / `backendParameterSignature.parameters` elenca i nomi **interni**; l’IA deve usare quelle stringhe esatte in `param.*` e `prev.*`, non i nomi API delle descrizioni.

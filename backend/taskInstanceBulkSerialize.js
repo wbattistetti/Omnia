@@ -21,6 +21,31 @@ const TaskType = {
   Negotiation: 9,
 };
 
+/**
+ * Backend Call: full authoring payload for instances (not only legacy endpoint/method/params).
+ * Keep in sync with `BACKEND_CALL_INSTANCE_PERSIST_KEYS` in
+ * `src/domain/backendCall/backendCallInstancePersistKeys.ts`.
+ */
+const BACKEND_CALL_INSTANCE_FIELD_KEYS = [
+  'endpoint',
+  'method',
+  'params',
+  'label',
+  'openapiSpecUrl',
+  'inputs',
+  'outputs',
+  'mockTable',
+  'mockTableColumns',
+  'mockTableDefaultExecutionMode',
+  'inputAdvancement',
+  'inputAdvancementTypes',
+  'advancementTestPrevJson',
+  'backendToolDescription',
+  'endpointInvocationValues',
+  'backendCallSpecMeta',
+  'referenceScanInternalText',
+];
+
 /** @see TaskType.AIAgent — design-time + persisted runtime fields */
 const AI_AGENT_INSTANCE_FIELD_KEYS = [
   'agentDesignDescription',
@@ -51,7 +76,8 @@ const INSTANCE_TYPED_FIELD_KEYS = {
   [TaskType.CloseSession]: ['parameters', 'label'],
   [TaskType.Transfer]: ['parameters', 'label'],
   [TaskType.UtteranceInterpretation]: [],
-  [TaskType.BackendCall]: ['endpoint', 'method', 'params', 'label'],
+  /** Use {@link BACKEND_CALL_INSTANCE_FIELD_KEYS} in {@link buildInstanceTaskDocument}. */
+  [TaskType.BackendCall]: [],
   [TaskType.ClassifyProblem]: ['label'],
   [TaskType.Subflow]: ['params', 'label'],
   [TaskType.Summarizer]: ['label'],
@@ -121,6 +147,10 @@ function buildInstanceTaskDocument(item, { projectId, now }) {
     Object.assign(doc, pickAiAgentInstanceFields(item));
   }
 
+  if (type === TaskType.BackendCall) {
+    Object.assign(doc, pickPresentKeys(item, BACKEND_CALL_INSTANCE_FIELD_KEYS));
+  }
+
   return doc;
 }
 
@@ -145,6 +175,9 @@ function getAllowedInstanceFieldKeysForTaskType(type) {
   if (type === TaskType.AIAgent) {
     combined = [...combined, ...AI_AGENT_INSTANCE_FIELD_KEYS];
   }
+  if (type === TaskType.BackendCall) {
+    combined = [...combined, ...BACKEND_CALL_INSTANCE_FIELD_KEYS];
+  }
   return [...new Set(combined)];
 }
 
@@ -154,4 +187,5 @@ module.exports = {
   getAllowedInstanceFieldKeysForTaskType,
   pickAiAgentInstanceFields,
   AI_AGENT_INSTANCE_FIELD_KEYS,
+  BACKEND_CALL_INSTANCE_FIELD_KEYS,
 };

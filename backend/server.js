@@ -477,6 +477,7 @@ async function resolveTemplateRefsWithLevels(subTasks, templates) {
 
 // ✅ ENTERPRISE AI SERVICES INITIALIZATION
 const aiProviderService = new AIProviderService();
+const { translateAdvancementDslRequest } = require('./services/advancementDslTranslateService');
 const templateIntelligenceOrchestrator = new TemplateIntelligenceOrchestrator(aiProviderService);
 
 // ✅ ENTERPRISE MIDDLEWARE INITIALIZATION
@@ -6573,6 +6574,53 @@ app.post('/design/extract-structure', async (req, res) => {
       success: false,
       error: error.message || 'extract-structure failed',
       rawSnippet: error.rawSnippet,
+    });
+  }
+});
+
+/**
+ * Design-time: NL -> advancement DSL for backend SEND progression rules.
+ * Body: { naturalLanguage, targetParam, targetType, signature?, provider?, model? }
+ */
+app.post('/design/advancement-dsl-translate', async (req, res) => {
+  const requestId = Date.now();
+  try {
+    const body = req.body || {};
+    const {
+      naturalLanguage,
+      targetParam,
+      targetType,
+      signature,
+      provider = 'groq',
+      model,
+    } = body;
+    console.log(`[ADVANCEMENT_DSL][${requestId}] POST /design/advancement-dsl-translate`, {
+      targetParam,
+      targetType,
+      provider,
+    });
+    const out = await translateAdvancementDslRequest({
+      naturalLanguage,
+      targetParam,
+      targetType,
+      signature,
+      aiProviderService,
+      provider,
+      model,
+    });
+    return res.json({
+      success: true,
+      dslExpression: out.dslExpression,
+      ...(out.refinedNaturalLanguage != null && out.refinedNaturalLanguage !== ''
+        ? { refinedNaturalLanguage: out.refinedNaturalLanguage }
+        : {}),
+    });
+  } catch (error) {
+    console.error(`[ADVANCEMENT_DSL][${requestId}]`, error.message);
+    const status = error.statusCode && Number.isInteger(error.statusCode) ? error.statusCode : 502;
+    return res.status(status).json({
+      success: false,
+      error: error.message || 'advancement-dsl-translate failed',
     });
   }
 });

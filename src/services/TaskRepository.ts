@@ -20,6 +20,7 @@ import {
   removeTaskIdFromFlowSlice,
   syncTaskAuthoringIntoFlowSlice,
 } from '@domain/flowDocument/flowSliceDomainSync';
+import { BACKEND_CALL_INSTANCE_PERSIST_KEYS } from '@domain/backendCall/backendCallInstancePersistKeys';
 
 /**
  * TaskRepository: Primary repository for Task data
@@ -689,7 +690,15 @@ class TaskRepository {
           templateVersion: task.templateVersion || 1,
           labelKey: task.labelKey,
           steps: task.steps,
-        };
+        } as Record<string, unknown>;
+        if (task.type === TaskType.BackendCall) {
+          const t = task as Record<string, unknown>;
+          for (const key of BACKEND_CALL_INSTANCE_PERSIST_KEYS) {
+            if (Object.prototype.hasOwnProperty.call(t, key)) {
+              payload[key] = t[key];
+            }
+          }
+        }
       } else {
         payload = {
           id: task.id,
