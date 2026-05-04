@@ -8,7 +8,12 @@ vi.mock('@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentP
   resolveElevenLabsAgentPromptFromTask: (task: Task, opts?: unknown) => resolveElevenLabsMock(task, opts),
 }));
 
-import { conversationConfigFragmentFromIaAgentConfig } from '../convaiAgentCreatePayload';
+import { DEV_TUNNEL_COMPILE_FLAG_KEY } from '@domain/devTunnel/devTunnelCompileBridge';
+import {
+  buildConvaiProvisionKey,
+  conversationConfigForConvaiApi,
+  conversationConfigFragmentFromIaAgentConfig,
+} from '../convaiAgentCreatePayload';
 
 function minimalTask(overrides: Partial<Task>): Task {
   return {
@@ -146,5 +151,73 @@ describe('conversationConfigFragmentFromIaAgentConfig', () => {
     cfg.systemPrompt = '';
     cfg.voice = { id: 'v', language: 'en', settings: {} };
     expect(() => conversationConfigFragmentFromIaAgentConfig(cfg)).toThrow(/prompt vuoto/i);
+  });
+});
+
+describe('conversationConfigForConvaiApi (dev tunnel)', () => {
+  const LS_MAP = 'omnia.devTunnel.portToPublicBaseJson';
+
+  beforeEach(() => {
+    const map = new Map<string, string>();
+    vi.stubGlobal(
+      'localStorage',
+      {
+        getItem: (k: string) => (map.has(k) ? map.get(k)! : null),
+        setItem: (k: string, v: string) => {
+          map.set(k, v);
+        },
+        removeItem: (k: string) => {
+          map.delete(k);
+        },
+        clear: () => map.clear(),
+        length: 0,
+        key: () => null,
+      } as Storage
+    );
+  });
+
+  it('lascia invariato il fragment se «Compilazione con tunnel» è off', () => {
+    localStorage.setItem(DEV_TUNNEL_COMPILE_FLAG_KEY, '0');
+    localStorage.setItem(LS_MAP, JSON.stringify({ 3110: 'https://pub.example' }));
+    const frag: Record<string, unknown> = {
+      agent: {
+        prompt: {
+          tools: [{ api_schema: { url: 'http://localhost:3110/slots' } }],
+        },
+      },
+    };
+    const out = conversationConfigForConvaiApi(frag)!;
+    const tools = ((out.agent as Record<string, unknown>).prompt as Record<string, unknown>).tools as Array<{
+      api_schema: { url: string };
+    }>;
+    expect(tools[0].api_schema.url).toBe('http://localhost:3110/slots');
+  });
+
+  it('riscriv api_schema.url dei webhook come il compile orchestrator', () => {
+    localStorage.setItem(DEV_TUNNEL_COMPILE_FLAG_KEY, '1');
+    localStorage.setItem(LS_MAP, JSON.stringify({ 3110: 'https://pub.example' }));
+    const frag: Record<string, unknown> = {
+      agent: {
+        prompt: {
+          tools: [{ type: 'webhook', api_schema: { url: 'http://localhost:3110/slots', method: 'GET' } }],
+        },
+      },
+    };
+    const out = conversationConfigForConvaiApi(frag)!;
+    const tools = ((out.agent as Record<string, unknown>).prompt as Record<string, unknown>).tools as Array<{
+      api_schema: { url: string };
+    }>;
+    expect(tools[0].api_schema.url).toBe('https://pub.example/slots');
+  });
+
+  it('buildConvaiProvisionKey non include URL tunnel (chiave stabile se ngrok cambia)', () => {
+    localStorage.setItem(DEV_TUNNEL_COMPILE_FLAG_KEY, '1');
+    localStorage.setItem(LS_MAP, JSON.stringify({ 3110: 'https://session-only.ngrok.app' }));
+    const cfg = getDefaultConfig('elevenlabs');
+    cfg.systemPrompt = 'p';
+    cfg.voice = { id: 'v', language: 'en', settings: {} };
+    const key = buildConvaiProvisionKey(cfg, undefined, false);
+    expect(key.length).toBeGreaterThan(0);
+    expect(key).not.toContain('session-only.ngrok.app');
   });
 });

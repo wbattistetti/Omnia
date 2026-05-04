@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type StepKey = 'omniaTutor' | 'iaAgentRuntime' | 'font' | 'colors';
+export type StepKey = 'omniaTutor' | 'iaAgentRuntime' | 'font' | 'colors' | 'devTunnel';
 
 export type ChatMessage = {
   id: string;

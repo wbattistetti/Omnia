@@ -20,6 +20,7 @@ import { emitConvaiProvisionPayloadPreview } from '@utils/iaAgentRuntime/convaiP
 import { buildUseCaseDialoguesPreviewFromTask } from '@utils/iaAgentRuntime/agentUseCasesProvisionPreviewFormat';
 import {
   buildConvaiProvisionKey,
+  conversationConfigForConvaiApi,
   conversationConfigFragmentFromIaAgentConfig,
 } from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
 import { buildConvaiAgentDisplayName } from '@utils/iaAgentRuntime/convaiAgentDisplayName';
@@ -148,6 +149,7 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
     if (!instanceId?.trim()) return;
     let displayNameForPreview = '';
     let fragmentForPreview: Record<string, unknown> | undefined;
+    let outboundForPreview: Record<string, unknown> | undefined;
     try {
       const task = taskRepository.getTask(instanceId);
       /** Preferisci lo stato del pannello: evita payload senza `tools` se il repo non è ancora allineato al tick React. */
@@ -169,6 +171,8 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         console.error('[IA·ConvAI] createAgent: payload non costruibile (prompt vuoto o dati mancanti)', buildErr);
         return;
       }
+      const outbound = conversationConfigForConvaiApi(fragment) ?? fragment;
+      outboundForPreview = outbound;
       fragmentForPreview = fragment;
       const agentPrompt = (fragment.agent as Record<string, unknown> | undefined)?.prompt as
         | Record<string, unknown>
@@ -189,7 +193,7 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
       }
       console.info(
         '[IA·ConvAI] conversation_config (post-merge, JSON completo)',
-        JSON.stringify({ conversation_config: fragment }, null, 2)
+        JSON.stringify({ conversation_config: outbound }, null, 2)
       );
       const provisionKey = buildConvaiProvisionKey(cfgForCreate, task ?? undefined, false, {
         manualCatalogBackendTaskIds,
@@ -210,13 +214,16 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         taskGuid: instanceId,
       });
       displayNameForPreview = displayName;
-      console.warn('[DEBUG] CREATE AGENT PAYLOAD (UI)', JSON.stringify({ name: displayName, conversation_config: fragment }, null, 2));
+      console.warn(
+        '[DEBUG] CREATE AGENT PAYLOAD (UI)',
+        JSON.stringify({ name: displayName, conversation_config: outbound }, null, 2)
+      );
       const result = await createConvaiAgentViaOmniaServer({
         name: displayName,
-        conversation_config: fragment,
+        conversation_config: outbound,
       });
       const fallbackPreview = JSON.stringify(
-        { name: displayName, conversation_config: fragment },
+        { name: displayName, conversation_config: outbound },
         null,
         2
       );
@@ -244,9 +251,12 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
       let bodyText: string;
       if (err instanceof CreateConvaiAgentHttpError && err.elevenLabsRequestJson?.trim()) {
         bodyText = err.elevenLabsRequestJson.trim();
-      } else if (fragmentForPreview && displayNameForPreview) {
+      } else if ((outboundForPreview ?? fragmentForPreview) && displayNameForPreview) {
         bodyText = JSON.stringify(
-          { name: displayNameForPreview, conversation_config: fragmentForPreview },
+          {
+            name: displayNameForPreview,
+            conversation_config: outboundForPreview ?? fragmentForPreview,
+          },
           null,
           2
         );

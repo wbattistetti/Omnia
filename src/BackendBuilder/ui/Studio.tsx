@@ -4,13 +4,17 @@ import { OmniaTutorSetup } from '@components/settings/OmniaTutorSetup';
 import { IAAgentSetup } from '@components/settings/IAAgentSetup';
 import { EditorFontPanel } from '@components/settings/EditorFontPanel';
 import { EditorColorsPanel } from '@components/settings/EditorColorsPanel';
+import { DevTunnelNgrokPanel } from '@components/settings/DevTunnelNgrokPanel';
 import { saveGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 import { getDefaultConfig } from '@utils/iaAgentRuntime/platformHelpers';
 import {
   normalizeIAAgentConfig,
   serializeIaAgentConfigForTaskPersistence,
 } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
-import { conversationConfigFragmentFromIaAgentConfig } from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
+import {
+  conversationConfigForConvaiApi,
+  conversationConfigFragmentFromIaAgentConfig,
+} from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
 import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
 import { fetchIaAgentGlobalConfig, putIaAgentGlobalConfig } from '@services/iaAgentGlobalConfigApi';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
@@ -78,9 +82,10 @@ function RuntimeIaAgentSettingsTab(props: {
       console.error('[Studio] ConvAI createAgent: impossibile costruire il payload (prompt runtime vuoto)', e);
       return;
     }
+    const outbound = conversationConfigForConvaiApi(fragment) ?? fragment;
     const { agentId } = await createConvaiAgentViaOmniaServer({
       name: 'Omnia · global IA defaults',
-      conversation_config: fragment,
+      conversation_config: outbound,
     });
     const next = { ...cfg, platform: 'elevenlabs' as const, convaiAgentId: agentId };
     onChange(next);
@@ -292,6 +297,7 @@ function StudioContent({ onClose, projectId }: StudioProps) {
     { key: 'iaAgentRuntime', label: 'Runtime IA Agent' },
     { key: 'font', label: 'Font' },
     { key: 'colors', label: 'Colors' },
+    ...(import.meta.env.DEV ? [{ key: 'devTunnel' as const, label: 'Tunnel dev (ngrok)' }] : []),
   ];
 
   return (
@@ -343,6 +349,9 @@ function StudioContent({ onClose, projectId }: StudioProps) {
           )}
           {currentStep === 'font' && <EditorFontPanel />}
           {currentStep === 'colors' && <EditorColorsPanel />}
+          {import.meta.env.DEV && currentStep === 'devTunnel' && (
+            <DevTunnelNgrokPanel projectId={projectId} iaAgentConfig={iaCfg} />
+          )}
         </main>
       </div>
     </div>

@@ -59,14 +59,12 @@ test('BackendCall instance includes advancement and mock table fields', () => {
     mockTable: [{ x: 1 }],
     inputAdvancement: { startDate: { enabled: true, dslExpression: 'prev.startDate' } },
     inputAdvancementTypes: { startDate: 'Date' },
-    advancementTestPrevJson: '{"startDate":"2026-05-04"}',
   };
   const doc = buildInstanceTaskDocument(item, { projectId, now });
   assert.deepStrictEqual(doc.inputs, item.inputs);
   assert.deepStrictEqual(doc.mockTable, item.mockTable);
   assert.deepStrictEqual(doc.inputAdvancement, item.inputAdvancement);
   assert.deepStrictEqual(doc.inputAdvancementTypes, item.inputAdvancementTypes);
-  assert.strictEqual(doc.advancementTestPrevJson, item.advancementTestPrevJson);
 });
 
 test('AI Agent instance merges agent fields', () => {

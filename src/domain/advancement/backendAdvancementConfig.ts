@@ -38,6 +38,4 @@ export function isAdvancementNlScriptOutOfSync(entry: BackendInputAdvancementEnt
 export interface BackendAdvancementPersistedSlice {
   inputAdvancement?: Record<string, BackendInputAdvancementEntry>;
   inputAdvancementTypes?: Record<string, AdvancementValueType>;
-  /** JSON string: previous batch snapshot for editor "Test". */
-  advancementTestPrevJson?: string;
 }

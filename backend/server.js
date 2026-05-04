@@ -64,6 +64,9 @@ mountIaCatalog(app);
 const { mountBackendCallTestProxy } = require('./designer/backendCallTestProxyRoute');
 mountBackendCallTestProxy(app);
 
+/** Route tunnel: `mount` è chiamato poco sotto, subito prima di `app.listen` (coda dello stack Express, dopo tutte le altre route). */
+const { mountDevTunnelNgrokRoutes } = require('./routes/devTunnelNgrokRoutes');
+
 // ✅ Request logging middleware
 app.use((req, res, next) => {
   const startTime = Date.now();
@@ -8118,6 +8121,11 @@ async function initializeMongoPool() {
 
 // Inizializza il pool prima di avviare il server
 console.log('[Server] Starting initialization...');
+
+mountDevTunnelNgrokRoutes(app);
+console.log(
+  '[Routes] dev-tunnel ngrok — GET /api/dev-tunnel/ngrok/status, POST /api/dev-tunnel/ngrok/start, POST /api/dev-tunnel/ngrok/stop'
+);
 
 // ✅ Add timeout to prevent blocking forever
 const INIT_TIMEOUT_MS = 10000; // 10 seconds max

@@ -221,14 +221,6 @@ export type AdvancementPlayContextBundle = {
   error: string | null;
 };
 
-export function parsePrevJson(prevJson: string): Record<string, unknown> {
-  const j = JSON.parse((prevJson || '').trim() || '{}');
-  if (typeof j !== 'object' || j === null || Array.isArray(j)) {
-    throw new Error('PREV deve essere un oggetto JSON.');
-  }
-  return j as Record<string, unknown>;
-}
-
 export type AdvancementPlayOutcome =
   | { ok: true; display: string }
   | { ok: false; message: string };

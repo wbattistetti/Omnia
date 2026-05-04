@@ -17,6 +17,7 @@ import {
 } from '../../services/convaiProvisionApi';
 import {
   buildConvaiProvisionKey,
+  conversationConfigForConvaiApi,
   conversationConfigFragmentFromIaAgentConfig,
 } from '../../utils/iaAgentRuntime/convaiAgentCreatePayload';
 import { buildConvaiAgentDisplayName } from '../../utils/iaAgentRuntime/convaiAgentDisplayName';
@@ -170,6 +171,9 @@ export async function ensureConvaiAgentsProvisioned(
         continue;
       }
 
+      const conversationConfigOutbound =
+        conversationConfigForConvaiApi(fragment) ?? fragment;
+
       const session = getConvaiSessionBinding(taskId);
       if (session && session.lastProvisionKey === provisionKey && session.agentId.trim().length > 0) {
         const previewBody: Record<string, unknown> = {};
@@ -209,7 +213,7 @@ export async function ensureConvaiAgentsProvisioned(
           const requestBody: Record<string, unknown> = {};
           const n = displayName.trim();
           if (n) requestBody.name = n;
-          requestBody.conversation_config = fragment;
+          requestBody.conversation_config = conversationConfigOutbound;
           previewEntry = {
             taskId,
             displayName,
@@ -220,7 +224,7 @@ export async function ensureConvaiAgentsProvisioned(
         }
         const result = await createConvaiAgentViaOmniaServer({
           name: displayName,
-          conversation_config: fragment,
+          conversation_config: conversationConfigOutbound,
         });
         if (previewEntry && result.elevenLabsRequestJson?.trim()) {
           previewEntry.bodyText = result.elevenLabsRequestJson.trim();

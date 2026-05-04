@@ -43,6 +43,7 @@
     "verify:legacy-writers": "node scripts/verify-legacy-writers.js"
   },
   "dependencies": {
+    "@ngrok/ngrok": "^1.4.1",
     "@popperjs/core": "^2.11.8",
     "@radix-ui/react-context-menu": "^2.2.16",
     "@radix-ui/react-dropdown-menu": "^2.1.16",

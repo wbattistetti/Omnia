@@ -36,13 +36,11 @@ import { runBackendCallReadApiForTask } from '../../../../services/runBackendCal
 import { logBackendCallTest } from '../../../../debug/backendCallTestDebug';
 import type { BackendInputAdvancementEntry } from '../../../../domain/advancement/backendAdvancementConfig';
 import type { AdvancementValueType } from '../../../../domain/advancement/advancementDsl';
-import { BackendAdvancementTestContextBar } from './backendAdvancement/BackendAdvancementTestContextBar';
 import { SendParamAdvancementFullEditor } from './backendAdvancement/SendParamAdvancementFullEditor';
 import { SendParamAdvancementRowEditor } from './backendAdvancement/SendParamAdvancementRowEditor';
 import {
   buildAdvancementContextChips,
   buildParamRecordFromSendMapping,
-  parsePrevJson,
   runAdvancementPlayEvaluation,
   sendRowValueFingerprint,
   type AdvancementQuickTestRowState,
@@ -119,7 +117,6 @@ interface BackendCallConfig {
   /** Batch progression: executable DSL per SEND parameter (Omnia runtime). */
   inputAdvancement?: Record<string, BackendInputAdvancementEntry>;
   inputAdvancementTypes?: Record<string, AdvancementValueType>;
-  advancementTestPrevJson?: string;
 }
 
 const DEFAULT_CONFIG: BackendCallConfig = {
@@ -379,8 +376,6 @@ export default function BackendCallEditor({
     const adv = (rawTask as { inputAdvancement?: BackendCallConfig['inputAdvancement'] }).inputAdvancement;
     const advTypes = (rawTask as { inputAdvancementTypes?: BackendCallConfig['inputAdvancementTypes'] })
       .inputAdvancementTypes;
-    const testPrev = (rawTask as { advancementTestPrevJson?: string }).advancementTestPrevJson;
-
     const cfg: BackendCallConfig = {
       endpoint,
       openapiSpecUrl,
@@ -391,7 +386,6 @@ export default function BackendCallEditor({
       ...(mockTableDefaultExecutionMode !== undefined ? { mockTableDefaultExecutionMode } : {}),
       ...(adv && typeof adv === 'object' ? { inputAdvancement: adv } : {}),
       ...(advTypes && typeof advTypes === 'object' ? { inputAdvancementTypes: advTypes } : {}),
-      ...(typeof testPrev === 'string' ? { advancementTestPrevJson: testPrev } : {}),
     };
     return cfg;
   }, []);
@@ -458,9 +452,6 @@ export default function BackendCallEditor({
           ...(config.inputAdvancement !== undefined ? { inputAdvancement: config.inputAdvancement } : {}),
           ...(config.inputAdvancementTypes !== undefined
             ? { inputAdvancementTypes: config.inputAdvancementTypes }
-            : {}),
-          ...(config.advancementTestPrevJson !== undefined
-            ? { advancementTestPrevJson: config.advancementTestPrevJson }
             : {}),
           endpointInvocationValues: undefined,
           backendToolDescription,
@@ -741,20 +732,11 @@ export default function BackendCallEditor({
       if (built.error) {
         return { prev: {}, param: {}, error: built.error };
       }
-      let prevExtra: Record<string, unknown> = {};
-      const rawPrev = (config.advancementTestPrevJson ?? '').trim();
-      if (rawPrev) {
-        try {
-          prevExtra = parsePrevJson(rawPrev);
-        } catch {
-          prevExtra = {};
-        }
-      }
-      /** Test Play: prev include sempre i letterali SEND (griglia); PREV JSON opzionale sovrascrive chiavi. */
-      const prev = { ...built.param, ...prevExtra };
+      /** Test Play: `prev` e `param` dai letterali SEND (stesso oggetto, senza override JSON). */
+      const prev = { ...built.param };
       return { prev, param: built.param, error: null };
     },
-    [config.advancementTestPrevJson, config.inputAdvancementTypes, mappingSend]
+    [config.inputAdvancementTypes, mappingSend]
   );
 
   const commitAdvancementQuickTest = React.useCallback(
@@ -1436,14 +1418,6 @@ export default function BackendCallEditor({
               getActiveFlowCanvasId() ? { flowCanvasId: getActiveFlowCanvasId()! } : undefined
             }
             backendSendParamKindByWireKey={inputUiKindByInternalName}
-            backendSendBodyPrefix={
-              <BackendAdvancementTestContextBar
-                advancementTestPrevJson={config.advancementTestPrevJson ?? '{}'}
-                onTestPrevJsonChange={(s) =>
-                  setConfig((p) => ({ ...p, advancementTestPrevJson: s }))
-                }
-              />
-            }
             backendSendAdvancement={backendSendAdvancement}
             backendSendAdvancementOverlay={backendSendAdvancementOverlay}
             backendReceiveColumnVisible={receiveMappingPanelVisible}

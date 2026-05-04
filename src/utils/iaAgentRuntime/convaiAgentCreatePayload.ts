@@ -2,10 +2,17 @@
  * Maps Omnia {@link IAAgentConfig} to un frammento `conversation_config` per POST /elevenlabs/createAgent.
  * Il testo in `agent.prompt.prompt` viene dal compile ElevenLabs delle sezioni strutturate complete
  * ({@link resolveElevenLabsAgentPromptFromTask}) se è passato `task`, altrimenti da `cfg.systemPrompt`.
+ *
+ * Per le chiamate HTTP usare {@link conversationConfigForConvaiApi} sul risultato: sostituisce URL localhost
+ * con le basi tunnel come il compile orchestrator, senza toccare {@link buildConvaiProvisionKey}.
  */
 
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { Task } from '@types/taskTypes';
+import {
+  getCompileUseDevTunnel,
+  rewriteCompilePayloadWithDevTunnel,
+} from '@domain/devTunnel/devTunnelCompileBridge';
 import { normalizeLanguage } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
 import { resolveElevenLabsAgentPromptFromTask } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentPlatformRulesString';
 import { taskRepository } from '@services/TaskRepository';
@@ -156,6 +163,21 @@ export function conversationConfigFragmentFromIaAgentConfig(
   }
 
   return out;
+}
+
+/**
+ * Fragment pronto per POST create ConvAI: applica la stessa regola del compile orchestrator
+ * (`rewriteCompilePayloadWithDevTunnel`) quando «Compilazione con tunnel» è attiva.
+ * Non applicare a {@link buildConvaiProvisionKey}: gli URL ngrok cambiano tra sessioni e invaliderebbero la chiave.
+ */
+export function conversationConfigForConvaiApi(
+  fragment: Record<string, unknown> | null
+): Record<string, unknown> | null {
+  if (!fragment) return null;
+  if (!getCompileUseDevTunnel()) return fragment;
+  return rewriteCompilePayloadWithDevTunnel(
+    JSON.parse(JSON.stringify(fragment)) as Record<string, unknown>
+  ) as Record<string, unknown>;
 }
 
 /**
