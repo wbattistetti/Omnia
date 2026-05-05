@@ -32,6 +32,7 @@ export function EditorParam(props: EditorParamProps) {
       accentClassName={props.accentClassName}
       onCommit={props.onCommit}
       openApiInputKind={props.openApiInputKind}
+      openApiEnumValues={props.openApiEnumValues}
       apiField={props.apiField}
     />
   );

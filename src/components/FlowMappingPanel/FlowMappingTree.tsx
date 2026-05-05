@@ -232,6 +232,8 @@ export interface FlowMappingTreeProps {
   backendKnownVariableIds?: ReadonlySet<string>;
   /** Backend SEND: tipo editor costante (OpenAPI) per wireKey. */
   backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
+  /** Backend SEND: valori enum OpenAPI per costante (wireKey). */
+  backendSendParamEnumByWireKey?: Record<string, string[]>;
   /** Backend SEND: checkbox avanzamento + editor inline per riga (batch progression). */
   backendSendAdvancement?: BackendSendAdvancementApi;
 }
@@ -301,6 +303,7 @@ interface RowProps {
   onOutputVariableCreated?: () => void;
   backendKnownVariableIds?: ReadonlySet<string>;
   backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
+  backendSendParamEnumByWireKey?: Record<string, string[]>;
   backendSendAdvancement?: BackendSendAdvancementApi;
 }
 
@@ -337,6 +340,7 @@ function MappingTreeRow({
   onOutputVariableCreated,
   backendKnownVariableIds,
   backendSendParamKindByWireKey,
+  backendSendParamEnumByWireKey,
   backendSendAdvancement,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
@@ -765,6 +769,7 @@ function MappingTreeRow({
             onOutputVariableCreated={onOutputVariableCreated}
             backendKnownVariableIds={backendKnownVariableIds}
             backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+            backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
           />
         </div>
 
@@ -867,6 +872,7 @@ function MappingTreeRow({
               onOutputVariableCreated={onOutputVariableCreated}
               backendKnownVariableIds={backendKnownVariableIds}
               backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+              backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
               backendSendAdvancement={backendSendAdvancement}
             />
           ))}
@@ -903,6 +909,7 @@ export function FlowMappingTree({
   onOutputVariableCreated,
   backendKnownVariableIds,
   backendSendParamKindByWireKey,
+  backendSendParamEnumByWireKey,
   backendSendAdvancement,
 }: FlowMappingTreeProps) {
   const workspaceState = useFlowWorkspaceOptional();
@@ -1249,6 +1256,7 @@ export function FlowMappingTree({
           onOutputVariableCreated={onOutputVariableCreated}
           backendKnownVariableIds={backendKnownVariableIds}
           backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+          backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
           backendSendAdvancement={backendSendAdvancement}
         />
       ))}

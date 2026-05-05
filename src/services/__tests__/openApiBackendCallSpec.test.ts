@@ -315,6 +315,42 @@ describe('openApiBackendCallSpec', () => {
     expect(f?.requestBodyPropertyNames).toEqual(expect.arrayContaining(['a', 'b']));
   });
 
+  it('extractOperationFields collects enum values and uri kind from body properties', () => {
+    const doc = {
+      openapi: '3.0.0',
+      paths: {
+        '/book': {
+          post: {
+            requestBody: {
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      'agenda.type': {
+                        type: 'string',
+                        enum: ['Omnia', 'ICS'],
+                      },
+                      'agenda.url': { type: 'string', format: 'uri' },
+                      plain: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+            responses: { '200': { description: 'ok' } },
+          },
+        },
+      },
+    };
+    const f = extractOperationFields(doc as any, '/book', 'post');
+    expect(f?.inputUiKindByApiName['agenda.type']).toBe('enum');
+    expect(f?.inputUiKindByApiName['agenda.url']).toBe('uri');
+    expect(f?.inputUiKindByApiName.plain).toBe('text');
+    expect(f?.inputEnumByApiName['agenda.type']).toEqual(['Omnia', 'ICS']);
+    expect(f?.inputEnumByApiName['agenda.url']).toBeUndefined();
+  });
+
   it('fetchOpenApiDocument prefers backend proxy when it returns OpenAPI JSON', async () => {
     const doc = { openapi: '3.0.0', paths: { '/x': { get: {} } } };
     const fetchMock = vi.fn().mockResolvedValue({

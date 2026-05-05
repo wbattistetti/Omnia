@@ -3,8 +3,15 @@
  * Shallow $ref resolution via #/components/schemas/... only.
  */
 
-/** Kind per `input` HTML5 nelle celle mock (chiave = nome campo API). */
-export type OpenApiInputUiKind = 'text' | 'number' | 'date' | 'time' | 'datetime-local';
+/** Kind per `input` HTML5 nelle celle mock / SEND (chiave = nome campo API). */
+export type OpenApiInputUiKind =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'time'
+  | 'datetime-local'
+  | 'uri'
+  | 'enum';
 
 export type OpenApiOperationFields = {
   /** OpenAPI `operationId` for the resolved path/method, when present. */
@@ -23,8 +30,10 @@ export type OpenApiOperationFields = {
   inputDescriptionsByApiName: Record<string, string>;
   /** OpenAPI `description` per proprietà risposta top-level. */
   outputDescriptionsByApiName: Record<string, string>;
-  /** Tipo UI input (date/time/number) dedotto da schema OpenAPI. */
+  /** Tipo UI input (date/time/number/uri/enum/…) dedotto da schema OpenAPI. */
   inputUiKindByApiName: Record<string, OpenApiInputUiKind>;
+  /** Valori `enum` JSON Schema per parametro/property (solo quando dichiarati nello spec). */
+  inputEnumByApiName: Record<string, string[]>;
 };
 
 function isRecord(x: unknown): x is Record<string, unknown> {
@@ -151,7 +160,114 @@ function mergeUiKindMaps(target: Record<string, OpenApiInputUiKind>, source: Rec
   }
 }
 
-/** Risolve $ref e mappa `type`/`format` JSON Schema → controllo HTML5. */
+function mergeEnumMaps(target: Record<string, string[]>, source: Record<string, string[]>): void {
+  for (const [k, v] of Object.entries(source)) {
+    const key = k.trim();
+    if (!key || (target[key]?.length ?? 0) > 0) continue;
+    if (Array.isArray(v) && v.length > 0) target[key] = [...v];
+  }
+}
+
+function setFirstEnum(target: Record<string, string[]>, key: string, values: string[]): void {
+  const k = key.trim();
+  if (!k || (target[k]?.length ?? 0) > 0) return;
+  if (values.length > 0) target[k] = [...values];
+}
+
+/**
+ * Enum della proprietà (risolve $ref / composizioni).
+ */
+function enumValuesFromPropertySchema(
+  root: Record<string, unknown>,
+  propSchema: unknown,
+  refStack?: Set<string>
+): string[] | undefined {
+  let cur: unknown = propSchema;
+  const rs = refStack ?? new Set<string>();
+  for (let i = 0; i < 16; i++) {
+    if (!isRecord(cur)) return undefined;
+    if (typeof cur.$ref === 'string') {
+      const ref = cur.$ref;
+      if (rs.has(ref)) return undefined;
+      rs.add(ref);
+      try {
+        cur = resolveRef(root, ref);
+        continue;
+      } finally {
+        rs.delete(ref);
+      }
+    }
+    if (Array.isArray(cur.enum) && cur.enum.length > 0) {
+      return cur.enum.map((x) => String(x));
+    }
+    if (Array.isArray(cur.allOf)) {
+      for (const sub of cur.allOf) {
+        const e = enumValuesFromPropertySchema(root, sub, rs);
+        if (e?.length) return e;
+      }
+      return undefined;
+    }
+    if (Array.isArray(cur.oneOf)) {
+      for (const sub of cur.oneOf) {
+        const e = enumValuesFromPropertySchema(root, sub, rs);
+        if (e?.length) return e;
+      }
+      return undefined;
+    }
+    if (Array.isArray(cur.anyOf)) {
+      for (const sub of cur.anyOf) {
+        const e = enumValuesFromPropertySchema(root, sub, rs);
+        if (e?.length) return e;
+      }
+      return undefined;
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+/** Per ogni property top-level: lista enum se presente nello schema. */
+function schemaPropertyEnums(root: Record<string, unknown>, schema: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  function walk(s: unknown, rs: Set<string>): void {
+    if (!isRecord(s)) return;
+    if (typeof s.$ref === 'string') {
+      if (rs.has(s.$ref)) return;
+      rs.add(s.$ref);
+      try {
+        walk(resolveRef(root, s.$ref), rs);
+      } finally {
+        rs.delete(s.$ref);
+      }
+      return;
+    }
+    if (Array.isArray(s.allOf)) {
+      for (const sub of s.allOf) walk(sub, rs);
+      return;
+    }
+    if (Array.isArray(s.oneOf)) {
+      for (const sub of s.oneOf) walk(sub, rs);
+      return;
+    }
+    if (Array.isArray(s.anyOf)) {
+      for (const sub of s.anyOf) walk(sub, rs);
+      return;
+    }
+    if (isRecord(s.properties)) {
+      const props = s.properties as Record<string, unknown>;
+      for (const [key, propSchema] of Object.entries(props)) {
+        const k = key.trim();
+        if (!k || (out[k]?.length ?? 0) > 0) continue;
+        const vals = enumValuesFromPropertySchema(root, propSchema, new Set(rs));
+        if (vals?.length) out[k] = vals;
+      }
+    }
+  }
+  walk(schema, new Set());
+  return out;
+}
+
+/** Risolve $ref e mappa `type`/`format`/`enum` JSON Schema → controllo HTML5 / combo. */
 export function openApiSchemaToInputUiKind(root: Record<string, unknown>, schema: unknown): OpenApiInputUiKind {
   let cur: unknown = schema;
   for (let i = 0; i < 12; i++) {
@@ -160,10 +276,12 @@ export function openApiSchemaToInputUiKind(root: Record<string, unknown>, schema
       cur = resolveRef(root, cur.$ref);
       continue;
     }
+    if (Array.isArray(cur.enum) && cur.enum.length > 0) return 'enum';
     const t = String(cur.type || '').toLowerCase();
     const f = typeof cur.format === 'string' ? cur.format.toLowerCase() : '';
     if (t === 'integer' || t === 'number') return 'number';
     if (t === 'string') {
+      if (f === 'uri' || f === 'url') return 'uri';
       if (f === 'date') return 'date';
       if (f === 'date-time' || f === 'datetime') return 'datetime-local';
       if (f === 'time' || f === 'partial-time') return 'time';
@@ -555,6 +673,7 @@ export function extractOperationFields(
   const inputDescriptionsByApiName: Record<string, string> = {};
   const outputDescriptionsByApiName: Record<string, string> = {};
   const inputUiKindByApiName: Record<string, OpenApiInputUiKind> = {};
+  const inputEnumByApiName: Record<string, string[]> = {};
 
   const requestParamNames: string[] = [];
   let requestBodyPropertyNames: string[] = [];
@@ -585,6 +704,7 @@ export function extractOperationFields(
         requestBodyPropertyNames = mergeUnique(requestBodyPropertyNames, keys);
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, p.schema));
         mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, p.schema));
+        mergeEnumMaps(inputEnumByApiName, schemaPropertyEnums(doc, p.schema));
       }
       /** formData → trattati come nomi campo inviati */
       if (inn === 'formData' && name) {
@@ -592,6 +712,8 @@ export function extractOperationFields(
         setFirstDescription(inputDescriptionsByApiName, name, p.description);
         if (isRecord(p.schema)) {
           setFirstUiKind(inputUiKindByApiName, name, doc, p.schema);
+          const ev = enumValuesFromPropertySchema(doc, p.schema);
+          if (ev?.length) setFirstEnum(inputEnumByApiName, name, ev);
         } else if (p.type !== undefined || p.format !== undefined) {
           const k = openApiSchemaToInputUiKind(doc, { type: p.type, format: p.format });
           if (!inputUiKindByApiName[name]) inputUiKindByApiName[name] = k;
@@ -613,6 +735,7 @@ export function extractOperationFields(
         requestBodyPropertyNames = mergeUnique(requestBodyPropertyNames, keys);
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, json.schema));
         mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, json.schema));
+        mergeEnumMaps(inputEnumByApiName, schemaPropertyEnums(doc, json.schema));
       }
     }
   }
@@ -651,6 +774,7 @@ export function extractOperationFields(
     inputDescriptionsByApiName,
     outputDescriptionsByApiName,
     inputUiKindByApiName,
+    inputEnumByApiName,
   };
 }
 

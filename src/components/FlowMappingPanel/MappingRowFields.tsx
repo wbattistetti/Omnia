@@ -37,6 +37,8 @@ export interface MappingRowFieldsProps {
   onOutputVariableCreated?: () => void;
   /** Backend SEND: tipo UI per costante (OpenAPI Read API). Chiave = wireKey / internalName. */
   backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
+  /** Backend SEND: valori `enum` OpenAPI per costante (chiave = wireKey). */
+  backendSendParamEnumByWireKey?: Record<string, string[]>;
 }
 
 export function MappingRowFields({
@@ -56,6 +58,7 @@ export function MappingRowFields({
   onCreateOutputVariable,
   onOutputVariableCreated,
   backendSendParamKindByWireKey,
+  backendSendParamEnumByWireKey,
 }: MappingRowFieldsProps) {
   const flowTr = useActiveFlowMetaTranslationsFlattened();
   const mergedTr = useMemo(() => ({ ...getProjectTranslationsTable(), ...flowTr }), [flowTr]);
@@ -93,6 +96,8 @@ export function MappingRowFields({
       : '';
     const sendKind =
       backendColumn === 'send' ? backendSendParamKindByWireKey?.[entry.wireKey.trim()] : undefined;
+    const sendEnum =
+      backendColumn === 'send' ? backendSendParamEnumByWireKey?.[entry.wireKey.trim()] : undefined;
     return (
       <div className="flex items-center gap-2 shrink-0 min-w-0">
         {showApiFields ? (
@@ -134,6 +139,7 @@ export function MappingRowFields({
             variableOptions={variableOptions}
             onCommit={(patch) => onPatch(patch)}
             openApiInputKind={sendKind}
+            openApiEnumValues={sendEnum}
             apiField={entry.apiField}
           />
         )}

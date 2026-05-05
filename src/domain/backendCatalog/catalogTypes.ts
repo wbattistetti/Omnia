@@ -36,9 +36,11 @@ export interface BackendCallSpecMeta {
   };
   /**
    * Dopo Read API: tipo UI suggerito per parametro/property body (chiave = nome API come in SEND).
-   * Valori: `text` | `number` | `date` | `time` | `datetime-local` (allineati a `input type=` HTML5).
+   * Valori: `text` | `number` | `date` | `time` | `datetime-local` | `uri` | `enum` (allineati a controlli SEND/mock).
    */
   openapiInputUiKindByApiName?: Record<string, string>;
+  /** Se lo schema OpenAPI dichiara `enum` per il campo, lista valori ammessi (stessa chiave API). */
+  openapiInputEnumByApiName?: Record<string, string[]>;
   /** OpenAPI `operationId` dell’operazione scelta al Read API (per naming tool verso ConvAI). */
   openapiOperationId?: string | null;
 }

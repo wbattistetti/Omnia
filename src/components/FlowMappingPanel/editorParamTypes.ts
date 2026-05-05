@@ -25,6 +25,8 @@ export interface EditorParamProps {
   onVariableCreated?: () => void;
   /** SEND: tipo OpenAPI per controllo costante. */
   openApiInputKind?: OpenApiInputUiKind;
+  /** SEND: valori `enum` dallo OpenAPI (combo costante). */
+  openApiEnumValues?: string[];
   /** SEND: nome campo API (es. startDate) per UI data estesa. */
   apiField?: string;
 }

@@ -1268,9 +1268,33 @@ export default function BackendCallEditor({
       const api = inp.apiParam?.trim();
       if (!internal || !api) continue;
       const raw = byApi[api];
-      if (raw === 'number' || raw === 'date' || raw === 'time' || raw === 'datetime-local' || raw === 'text') {
+      if (
+        raw === 'number' ||
+        raw === 'date' ||
+        raw === 'time' ||
+        raw === 'datetime-local' ||
+        raw === 'text' ||
+        raw === 'uri' ||
+        raw === 'enum'
+      ) {
         out[internal] = raw;
       }
+    }
+    return out;
+  }, [instanceId, config.inputs, openapiDescriptionSnapshots]);
+
+  const inputEnumByInternalName = React.useMemo(() => {
+    const st = instanceId ? (taskRepository.getTask(instanceId) as Task | null) : null;
+    const meta = st?.backendCallSpecMeta as { openapiInputEnumByApiName?: Record<string, string[]> } | undefined;
+    const byApi = meta?.openapiInputEnumByApiName;
+    if (!byApi || typeof byApi !== 'object') return {} as Record<string, string[]>;
+    const out: Record<string, string[]> = {};
+    for (const inp of config.inputs || []) {
+      const internal = inp.internalName?.trim();
+      const api = inp.apiParam?.trim();
+      if (!internal || !api) continue;
+      const arr = byApi[api];
+      if (Array.isArray(arr) && arr.length > 0) out[internal] = arr;
     }
     return out;
   }, [instanceId, config.inputs, openapiDescriptionSnapshots]);
@@ -1576,6 +1600,7 @@ export default function BackendCallEditor({
               getActiveFlowCanvasId() ? { flowCanvasId: getActiveFlowCanvasId()! } : undefined
             }
             backendSendParamKindByWireKey={inputUiKindByInternalName}
+            backendSendParamEnumByWireKey={inputEnumByInternalName}
             backendSendAdvancement={backendSendAdvancement}
             backendSendAdvancementOverlay={backendSendAdvancementOverlay}
             backendReceiveColumnVisible={receiveMappingPanelVisible}

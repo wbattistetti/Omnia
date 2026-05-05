@@ -9,7 +9,7 @@ import { resolveVariableDisplayName } from '../../utils/resolveVariableDisplayNa
 import { isUuidString } from '../../utils/translationKeys';
 import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
 import type { OpenApiInputUiKind } from '../../services/openApiBackendCallSpec';
-import { SendLiteralTypedEditors } from './sendLiteralTypedEditors';
+import { SendEnumLiteralSelect, SendLiteralTypedEditors } from './sendLiteralTypedEditors';
 import { NumberLiteralEditor } from './NumberLiteralEditor';
 import { formatSendChipLiteralDisplay } from './sendLiteralChipDisplay';
 import type { EditorParamCommitPatch } from './editorParamTypes';
@@ -29,6 +29,30 @@ function editorParamDebug(message: string, payload?: Record<string, unknown>) {
 
 const panelBaseClassName =
   'rounded-md border border-amber-500/40 bg-slate-950 shadow-lg ring-1 ring-amber-500/25';
+
+/** Validazione costante SEND vs tipo OpenAPI (`uri`, `enum`). */
+function validateSendLiteralAgainstOpenApi(
+  raw: string,
+  kind: OpenApiInputUiKind | undefined,
+  enumVals: string[] | undefined
+): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  if (enumVals && enumVals.length > 0) {
+    return enumVals.includes(t) ? null : 'Scegli un valore tra quelli ammessi dallo schema.';
+  }
+  if (kind === 'uri') {
+    try {
+      const u = new URL(t);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return 'L’URL deve usare il protocollo http o https.';
+      }
+    } catch {
+      return 'URL non valido.';
+    }
+  }
+  return null;
+}
 
 function measureTextWidthPx(text: string, fontFamily: string): number {
   if (typeof document === 'undefined' || !text) return 0;
@@ -57,6 +81,8 @@ export interface SendParameterValueEditorProps {
   accentClassName?: string;
   onCommit: (patch: EditorParamCommitPatch) => void;
   openApiInputKind?: OpenApiInputUiKind;
+  /** Valori ammessi se lo OpenAPI definisce `enum` sul campo. */
+  openApiEnumValues?: string[];
   apiField?: string;
 }
 
@@ -69,6 +95,7 @@ export function SendParameterValueEditor({
   accentClassName = 'text-amber-100/95',
   onCommit,
   openApiInputKind,
+  openApiEnumValues,
   apiField,
 }: SendParameterValueEditorProps) {
   const missingSendHintId = useId();
@@ -88,6 +115,7 @@ export function SendParameterValueEditor({
 
   const [open, setOpen] = useState(false);
   const [literalDraft, setLiteralDraft] = useState('');
+  const [literalCommitError, setLiteralCommitError] = useState<string | null>(null);
   const [hideVariableListForDatePicker, setHideVariableListForDatePicker] = useState(false);
   const [labelColumnMaxPx, setLabelColumnMaxPx] = useState(0);
 
@@ -99,6 +127,12 @@ export function SendParameterValueEditor({
     () => knownVariableIds ?? new Set(variableOptions),
     [knownVariableIds, variableOptions]
   );
+
+  const enumList = useMemo(() => {
+    const v = openApiEnumValues;
+    if (!Array.isArray(v) || v.length === 0) return [];
+    return [...new Set(v.map((x) => String(x).trim()).filter(Boolean))];
+  }, [openApiEnumValues]);
 
   const literalChipText = useMemo(
     () => formatSendChipLiteralDisplay(literalConstant, openApiInputKind, apiField),
@@ -114,6 +148,7 @@ export function SendParameterValueEditor({
   useEffect(() => {
     if (open) {
       setHideVariableListForDatePicker(false);
+      setLiteralCommitError(null);
     }
   }, [open]);
 
@@ -183,7 +218,7 @@ export function SendParameterValueEditor({
   useLayoutEffect(() => {
     if (!open) return;
     const id = window.requestAnimationFrame(() => {
-      const el = panelRef.current?.querySelector<HTMLElement>('input, button[type="button"]');
+      const el = panelRef.current?.querySelector<HTMLElement>('input, button[type="button"], select');
       el?.focus();
     });
     return () => window.cancelAnimationFrame(id);
@@ -213,14 +248,26 @@ export function SendParameterValueEditor({
   const commitLiteralSend = useCallback(() => {
     const t = literalDraft.trim();
     if (!t) {
+      setLiteralCommitError(null);
       onCommit({ variableRefId: undefined, literalConstant: undefined });
-    } else if (knownIds.has(t)) {
-      onCommit({ variableRefId: t, literalConstant: undefined });
-    } else {
-      onCommit({ variableRefId: undefined, literalConstant: t });
+      setOpen(false);
+      return;
     }
+    if (knownIds.has(t)) {
+      setLiteralCommitError(null);
+      onCommit({ variableRefId: t, literalConstant: undefined });
+      setOpen(false);
+      return;
+    }
+    const err = validateSendLiteralAgainstOpenApi(t, openApiInputKind, enumList.length ? enumList : undefined);
+    if (err) {
+      setLiteralCommitError(err);
+      return;
+    }
+    setLiteralCommitError(null);
+    onCommit({ variableRefId: undefined, literalConstant: t });
     setOpen(false);
-  }, [knownIds, onCommit, literalDraft]);
+  }, [knownIds, onCommit, literalDraft, openApiInputKind, enumList]);
 
   const innerPadAndBorder = 16 + 2;
   const constantInputWidthPx =
@@ -232,8 +279,9 @@ export function SendParameterValueEditor({
       : undefined;
 
   const api = (apiField || '').trim();
-  const useTypedLiteralUi = openApiInputKind != null || Boolean(api);
-  const useNumberUi = openApiInputKind === 'number';
+  const useEnumUi = enumList.length > 0;
+  const useTypedLiteralUi = openApiInputKind != null || Boolean(api) || useEnumUi;
+  const useNumberUi = openApiInputKind === 'number' && !useEnumUi;
 
   const sendKeyHandlers = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -258,12 +306,35 @@ export function SendParameterValueEditor({
           <div
             className="min-w-0 w-full"
             style={constantInputWidthPx != null ? { maxWidth: constantInputWidthPx } : undefined}
-            onKeyDown={useNumberUi ? undefined : sendKeyHandlers}
+            onKeyDown={
+              useNumberUi || useEnumUi
+                ? undefined
+                : sendKeyHandlers
+            }
           >
-            {useNumberUi ? (
+            {useEnumUi ? (
+              <SendEnumLiteralSelect
+                values={enumList}
+                value={literalDraft}
+                onChange={(next) => {
+                  setLiteralCommitError(null);
+                  setLiteralDraft(next);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitLiteralSend();
+                  }
+                  if (e.key === 'Escape') setOpen(false);
+                }}
+              />
+            ) : useNumberUi ? (
               <NumberLiteralEditor
                 value={literalDraft}
-                onChange={setLiteralDraft}
+                onChange={(v) => {
+                  setLiteralCommitError(null);
+                  setLiteralDraft(v);
+                }}
                 onKeyDown={sendKeyHandlers}
               />
             ) : (
@@ -271,7 +342,10 @@ export function SendParameterValueEditor({
                 kind={openApiInputKind}
                 apiField={apiField}
                 value={literalDraft}
-                onChange={setLiteralDraft}
+                onChange={(v) => {
+                  setLiteralCommitError(null);
+                  setLiteralDraft(v);
+                }}
                 onLiteralCommitted={(next) => {
                   setLiteralDraft(next);
                   onCommit({ variableRefId: undefined, literalConstant: next });
@@ -279,6 +353,11 @@ export function SendParameterValueEditor({
                 onCalendarOpenChange={setHideVariableListForDatePicker}
               />
             )}
+            {literalCommitError ? (
+              <p className="mt-1 text-[10px] text-red-400/95" role="alert">
+                {literalCommitError}
+              </p>
+            ) : null}
           </div>
         ) : (
           <input

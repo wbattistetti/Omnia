@@ -58,6 +58,39 @@ export type SendLiteralTypedEditorsProps = {
 };
 
 /**
+ * Costante SEND: valori ammessi da `enum` nello OpenAPI.
+ */
+export function SendEnumLiteralSelect({
+  values,
+  value,
+  onChange,
+  onKeyDown,
+}: {
+  values: string[];
+  value: string;
+  onChange: (next: string) => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLSelectElement>;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={onKeyDown}
+      aria-label="Valore costante (enum OpenAPI)"
+      title="Valore ammesso dallo schema OpenAPI"
+      className="min-w-0 rounded border border-amber-400/40 bg-slate-900 px-2 py-1 text-[10px] text-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-400/60 box-border w-full"
+    >
+      <option value="">— Scegli —</option>
+      {values.map((v) => (
+        <option key={v} value={v}>
+          {v}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
  * Campo costante nel pannello SEND: input HTML coerente con il tipo OpenAPI.
  */
 export function SendLiteralTypedEditors({

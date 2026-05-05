@@ -191,6 +191,7 @@ export async function runBackendCallReadApiForTask(
     const inputDesc = fields.inputDescriptionsByApiName;
     const outputDesc = fields.outputDescriptionsByApiName;
     const inputUiKindByApiName: Record<string, string> = { ...fields.inputUiKindByApiName };
+    const inputEnumByApiName: Record<string, string[]> = { ...fields.inputEnumByApiName };
     const operationDocBlurb = buildOperationDocBlurbFromOpenApiFields(fields);
     const currentToolDesc = String(
       (task as Task & { backendToolDescription?: string }).backendToolDescription ?? ''
@@ -232,6 +233,7 @@ export async function runBackendCallReadApiForTask(
           outputs: { ...outputDesc },
         },
         openapiInputUiKindByApiName: inputUiKindByApiName,
+        openapiInputEnumByApiName: inputEnumByApiName,
       },
       inputs: nextInputs,
       outputs: nextOutputs,

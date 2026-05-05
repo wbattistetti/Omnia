@@ -181,6 +181,8 @@ export interface InterfaceMappingEditorProps {
   compactBackendPanels?: boolean;
   /** Backend SEND: tipo editor costante OpenAPI per wireKey (internalName). */
   backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
+  /** Backend SEND: valori `enum` OpenAPI per costante (stessa chiave di `backendSendParamKindByWireKey`). */
+  backendSendParamEnumByWireKey?: Record<string, string[]>;
   /** Contenuto sopra l’albero SEND (es. JSON prev/param per test avanzamento). */
   backendSendBodyPrefix?: React.ReactNode;
   /** Checkbox + editor avanzamento inline per riga SEND. */
@@ -244,6 +246,7 @@ export function InterfaceMappingEditor({
   collapsibleInterfaceBlocks = false,
   compactBackendPanels = false,
   backendSendParamKindByWireKey,
+  backendSendParamEnumByWireKey,
   backendSendBodyPrefix,
   backendSendAdvancement,
   backendSendAdvancementOverlay,
@@ -532,6 +535,7 @@ export function InterfaceMappingEditor({
                         onOutputVariableCreated={onOutputVariableCreated}
                         backendKnownVariableIds={backendVariableIdSet}
                         backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+                        backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
                         backendSendAdvancement={backendSendAdvancement}
                       />
                     </div>
