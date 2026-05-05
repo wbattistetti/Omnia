@@ -22,7 +22,6 @@ import { flushAiAgentPromptAlignmentBeforeCompile } from '../TaskEditor/EditorHo
 import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import {
   collectDevTunnelCompileErrors,
-  getCompileUseDevTunnel,
   rewriteCompilePayloadWithDevTunnel,
 } from '@domain/devTunnel/devTunnelCompileBridge';
 
@@ -246,28 +245,27 @@ export async function compileWorkspaceForOrchestratorSession(
   const tunnelGuards = collectDevTunnelCompileErrors(mergedTasks);
   mergeCompileJsonGuardErrors(primaryCompileJson, tunnelGuards);
 
-  if (getCompileUseDevTunnel()) {
-    const nextPrimary = rewriteCompilePayloadWithDevTunnel(
-      JSON.parse(JSON.stringify(primaryCompileJson)) as Record<string, unknown>
-    ) as Record<string, unknown>;
-    for (const k of Object.keys(primaryCompileJson)) {
-      delete (primaryCompileJson as Record<string, unknown>)[k];
-    }
-    Object.assign(primaryCompileJson, nextPrimary);
+  /** Stessa logica di {@link conversationConfigForConvaiApi}: rewrite quando la mappa tunnel in LS ha voci (no-op se vuota). */
+  const nextPrimary = rewriteCompilePayloadWithDevTunnel(
+    JSON.parse(JSON.stringify(primaryCompileJson)) as Record<string, unknown>
+  ) as Record<string, unknown>;
+  for (const k of Object.keys(primaryCompileJson)) {
+    delete (primaryCompileJson as Record<string, unknown>)[k];
+  }
+  Object.assign(primaryCompileJson, nextPrimary);
 
-    for (const sfId of Object.keys(subflowCompilations)) {
-      const cur = subflowCompilations[sfId];
-      const nextSf = rewriteCompilePayloadWithDevTunnel(
-        JSON.parse(JSON.stringify(cur)) as Record<string, unknown>
-      ) as Record<string, unknown>;
-      for (const k of Object.keys(cur)) {
-        delete (cur as Record<string, unknown>)[k];
-      }
-      Object.assign(cur, nextSf);
+  for (const sfId of Object.keys(subflowCompilations)) {
+    const cur = subflowCompilations[sfId];
+    const nextSf = rewriteCompilePayloadWithDevTunnel(
+      JSON.parse(JSON.stringify(cur)) as Record<string, unknown>
+    ) as Record<string, unknown>;
+    for (const k of Object.keys(cur)) {
+      delete (cur as Record<string, unknown>)[k];
     }
-    for (let i = 0; i < mergedTasks.length; i++) {
-      mergedTasks[i] = rewriteCompilePayloadWithDevTunnel(JSON.parse(JSON.stringify(mergedTasks[i])));
-    }
+    Object.assign(cur, nextSf);
+  }
+  for (let i = 0; i < mergedTasks.length; i++) {
+    mergedTasks[i] = rewriteCompilePayloadWithDevTunnel(JSON.parse(JSON.stringify(mergedTasks[i])));
   }
 
   /** `mergeCompileJsonGuardErrors` replaces `errors` with a new array — keep root slice in sync for consumers that merged slices before this step (e.g. IA provisioning guards). */

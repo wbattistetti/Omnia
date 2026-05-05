@@ -10,6 +10,10 @@ import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAge
 import { looksLikeTechnicalTranslationOrId } from '../../utils/translationKeys';
 import { createVariableMappings } from '@utils/conditionCodeConverter';
 import { interpolateVariableBracketsInText } from './interpolateVariableBracketsInText';
+import type { FlowBackendCallInvocation } from '@features/debugger/types/flowBackendCallDiagnostic';
+import { parseFlowBackendCallInvocation } from '@features/debugger/types/flowBackendCallDiagnostic';
+import type { FlowConvaiWebhookDiagnostic } from '@features/debugger/types/flowConvaiWebhookDiagnostic';
+import { collectConvaiWebhookDiagnosticsFromMergedTasks } from '@utils/iaAgentRuntime/convaiWebhookToolDiagnostics';
 
 interface UseDialogueEngineOptions {
   nodes: Node<FlowNode>[];
@@ -27,6 +31,8 @@ interface UseDialogueEngineOptions {
     taskId?: string;
     /** Navigazione Fix (simulatore chat) — stesso flusso del debugger Run. */
     compilationFixError?: CompilationError;
+    backendInvocations?: FlowBackendCallInvocation[];
+    convaiWebhookInvocations?: FlowConvaiWebhookDiagnostic[];
   }) => void;
   onDDTStart?: (data: { ddt: any; taskId: string }) => void;
   onWaitingForInput?: (data: { taskId: string; nodeId?: string; taskLabel?: string; nodeLabel?: string }) => void;
@@ -83,6 +89,9 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
   // Buffer for messages that arrived before the variableStore was populated.
   // Each entry holds the original message object; flushed on first stateUpdate.
   const pendingMessagesRef = useRef<Array<{ text: string; raw: unknown }>>([]);
+  const pendingBackendInvocationsRef = useRef<FlowBackendCallInvocation[]>([]);
+  const pendingConvaiWebhookDiagnosticsRef = useRef<FlowConvaiWebhookDiagnostic[]>([]);
+  const convaiWebhookEmittedRef = useRef(false);
 
   // ✅ REFS: Stable state that survives remounts
   const engineRef = useRef<{
@@ -390,9 +399,28 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         const { executeOrchestratorBackend } = await import('./orchestratorAdapter');
         const { iaConvaiTraceSessionStart } = await import('../../utils/debug/iaConvaiFlowTrace');
         pendingMessagesRef.current = [];
+        pendingBackendInvocationsRef.current = [];
+        pendingConvaiWebhookDiagnosticsRef.current = [];
+        convaiWebhookEmittedRef.current = false;
         runtimeVariableStoreRef.current = {};
         bracketGuidToLabelMappingsRef.current = createVariableMappings(rootFlowId);
         iaConvaiTraceSessionStart(rootFlowId, allTasksWithTemplates);
+
+        try {
+          pendingConvaiWebhookDiagnosticsRef.current = collectConvaiWebhookDiagnosticsFromMergedTasks(
+            allTasksWithTemplates,
+            extractManualCatalogBackendTaskIdsFromProjectData(projectData)
+          );
+        } catch (convaiDiagErr) {
+          console.warn('[useDialogueEngine] ConvAI webhook diagnostics skipped', convaiDiagErr);
+        }
+
+        const takeConvaiWebhookBatch = (): FlowConvaiWebhookDiagnostic[] => {
+          if (convaiWebhookEmittedRef.current) return [];
+          if (pendingConvaiWebhookDiagnosticsRef.current.length === 0) return [];
+          convaiWebhookEmittedRef.current = true;
+          return pendingConvaiWebhookDiagnosticsRef.current.splice(0);
+        };
 
         const orchestratorControl = await executeOrchestratorBackend(
           compileData,
@@ -410,7 +438,18 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
                 pendingMessagesRef.current.push({ text: rawText, raw: message });
               }
               const interpolatedText = interpolateOutgoingMessageText(rawText, store);
-              opts.onMessage({ ...message, text: interpolatedText });
+              const backendBatch = pendingBackendInvocationsRef.current.splice(0);
+              const convaiBatch = takeConvaiWebhookBatch();
+              opts.onMessage({
+                ...message,
+                text: interpolatedText,
+                ...(backendBatch.length > 0 ? { backendInvocations: backendBatch } : {}),
+                ...(convaiBatch.length > 0 ? { convaiWebhookInvocations: convaiBatch } : {}),
+              });
+            },
+            onBackendCallDiagnostic: (payload) => {
+              const inv = parseFlowBackendCallInvocation(payload);
+              if (inv) pendingBackendInvocationsRef.current.push(inv);
             },
             onDDTStart: (data) => {
               // ✅ Always use latest options from ref
@@ -431,10 +470,19 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
               if (pending.length > 0 && Object.keys(newStore).length > 0) {
                 const opts = optionsRef.current;
                 if (opts.onMessage) {
-                  for (const entry of pending) {
+                  for (let i = 0; i < pending.length; i++) {
+                    const entry = pending[i];
                     const resolved = interpolateOutgoingMessageText(entry.text, newStore);
                     if (resolved !== entry.text) {
-                      opts.onMessage({ ...(entry.raw as object), text: resolved } as Parameters<typeof opts.onMessage>[0]);
+                      const backendExtra =
+                        i === 0 ? pendingBackendInvocationsRef.current.splice(0) : [];
+                      const convaiExtra = i === 0 ? takeConvaiWebhookBatch() : [];
+                      opts.onMessage({
+                        ...(entry.raw as object),
+                        text: resolved,
+                        ...(backendExtra.length > 0 ? { backendInvocations: backendExtra } : {}),
+                        ...(convaiExtra.length > 0 ? { convaiWebhookInvocations: convaiExtra } : {}),
+                      } as Parameters<typeof opts.onMessage>[0]);
                     }
                   }
                 }

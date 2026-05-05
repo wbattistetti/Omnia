@@ -171,7 +171,7 @@ describe('openApiBackendCallSpec', () => {
       },
     };
     const r = pickOpenApiPathForReadApi('https://petstore.swagger.io/v2/pet/42', doc as any, 'GET');
-    expect(r).toEqual({ pathKey: '/pet/{petId}' });
+    expect(r).toEqual({ pathKey: '/pet/{petId}', method: 'get' });
   });
 
   it('pickOpenApiPathForReadApi picks first GET path when only Redoc URL (no hash)', () => {
@@ -185,7 +185,7 @@ describe('openApiBackendCallSpec', () => {
     };
     const redoc = 'https://redocly.github.io/redoc/?url=https://example.com/v2/swagger.json';
     const r = pickOpenApiPathForReadApi(redoc, doc as any, 'GET');
-    expect(r).toEqual({ pathKey: '/pet' });
+    expect(r).toEqual({ pathKey: '/pet', method: 'get' });
   });
 
   it('parseOpenApiViewerHash reads tag and operation', () => {
@@ -203,7 +203,7 @@ describe('openApiBackendCallSpec', () => {
       },
     };
     const url = 'https://r.com/redoc/?url=https://x/swagger.json#tag/pet';
-    expect(pickOpenApiPathForReadApi(url, doc as any, 'POST')).toEqual({ pathKey: '/pet' });
+    expect(pickOpenApiPathForReadApi(url, doc as any, 'POST')).toEqual({ pathKey: '/pet', method: 'post' });
   });
 
   it('pickOpenApiPathForReadApi uses #operation/', () => {
@@ -215,6 +215,7 @@ describe('openApiBackendCallSpec', () => {
     };
     expect(pickOpenApiPathForReadApi('https://x.com/doc#operation/addPet', doc as any, 'POST')).toEqual({
       pathKey: '/pet',
+      method: 'post',
     });
   });
 
@@ -224,7 +225,94 @@ describe('openApiBackendCallSpec', () => {
       paths: { '/only': { post: { responses: { '200': { description: 'x' } } } } },
     };
     const r = pickOpenApiPathForReadApi('https://redocly.github.io/redoc/?url=https://x/openapi.json', doc as any, 'POST');
-    expect(r).toEqual({ pathKey: '/only' });
+    expect(r).toEqual({ pathKey: '/only', method: 'post' });
+  });
+
+  it('pickOpenApiPathForReadApi from operational URL auto-selects POST when hint is GET', () => {
+    const doc = {
+      openapi: '3.0.0',
+      paths: {
+        '/api/runtime/bookfromagenda': {
+          post: { responses: { '200': { description: 'ok' } } },
+        },
+      },
+    };
+    const r = pickOpenApiPathForReadApi('http://localhost:3100/api/runtime/bookfromagenda', doc as any, 'GET');
+    expect(r).toEqual({ pathKey: '/api/runtime/bookfromagenda', method: 'post' });
+  });
+
+  it('extractOperationFields merges allOf request body property names', () => {
+    const doc = {
+      openapi: '3.0.0',
+      components: {
+        schemas: {
+          Base: {
+            type: 'object',
+            properties: {
+              'agenda.type': { type: 'string', description: 't' },
+              'horizon.start': { type: 'string' },
+            },
+          },
+          Extra: {
+            type: 'object',
+            required: ['queryConstraints'],
+            properties: {
+              queryConstraints: { type: 'object', description: 'qc' },
+            },
+          },
+          Merged: {
+            allOf: [{ $ref: '#/components/schemas/Base' }, { $ref: '#/components/schemas/Extra' }],
+          },
+        },
+      },
+      paths: {
+        '/api': {
+          post: {
+            requestBody: {
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/Merged' } },
+              },
+            },
+            responses: { '200': { description: 'ok' } },
+          },
+        },
+      },
+    };
+    const f = extractOperationFields(doc as any, '/api', 'post');
+    expect(f?.requestBodyPropertyNames?.length).toBe(3);
+    expect(f?.requestBodyPropertyNames).toEqual(
+      expect.arrayContaining(['agenda.type', 'horizon.start', 'queryConstraints'])
+    );
+    expect(f?.inputDescriptionsByApiName['agenda.type']).toBe('t');
+    expect(f?.inputDescriptionsByApiName.queryConstraints).toBe('qc');
+  });
+
+  it('extractOperationFields merges oneOf branch keys for body', () => {
+    const doc = {
+      openapi: '3.0.0',
+      paths: {
+        '/x': {
+          post: {
+            requestBody: {
+              content: {
+                'application/json': {
+                  schema: {
+                    oneOf: [
+                      { type: 'object', properties: { a: { type: 'string' } } },
+                      { type: 'object', properties: { b: { type: 'number' } } },
+                    ],
+                  },
+                },
+              },
+            },
+            responses: { '200': { description: 'ok' } },
+          },
+        },
+      },
+    };
+    const f = extractOperationFields(doc as any, '/x', 'post');
+    expect(f?.requestBodyPropertyNames?.length).toBe(2);
+    expect(f?.requestBodyPropertyNames).toEqual(expect.arrayContaining(['a', 'b']));
   });
 
   it('fetchOpenApiDocument prefers backend proxy when it returns OpenAPI JSON', async () => {

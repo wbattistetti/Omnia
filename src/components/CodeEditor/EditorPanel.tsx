@@ -6,6 +6,7 @@ import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController.js';
 import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2.js';
 import { useFontContext } from '../../context/FontContext';
+import { ensureMonacoEmbeddedOverlayStyles } from '../../utils/monacoEmbeddedSetup';
 import { VariablesTreeMenu } from './VariablesTreeMenu';
 
 const TEMPLATE = `// Describe below, in detail, when the condition should be TRUE.
@@ -324,16 +325,7 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
           }
 
           try {
-            // z-index for Monaco widgets
-            try {
-              if (!document.querySelector('style[data-omnia="monaco-suggest-z"]')) {
-                const style = document.createElement('style');
-                style.setAttribute('data-omnia', 'monaco-suggest-z');
-                style.textContent = `.monaco-editor .suggest-widget{z-index:99999 !important}.monaco-editor .context-view{z-index:99999 !important}`;
-                document.head.appendChild(style);
-              }
-            } catch { }
-
+            ensureMonacoEmbeddedOverlayStyles();
 
             // Register custom language FIRST, before anything else
 

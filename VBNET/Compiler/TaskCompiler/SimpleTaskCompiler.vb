@@ -86,6 +86,9 @@ Public Class SimpleTaskCompiler
                 Dim backendDef = TryCast(task, BackendCallTaskDefinition)
 
                 If backendDef IsNot Nothing Then
+                    If Not String.IsNullOrWhiteSpace(backendDef.Label) Then
+                        backendTask.Config("label") = backendDef.Label.Trim()
+                    End If
                     ' ✅ DEBUG: Log per verificare la deserializzazione
                     Console.WriteLine($"[SimpleTaskCompiler] ✅ Task deserialized as BackendCallTaskDefinition: taskId={task.Id}")
                     Console.WriteLine($"[SimpleTaskCompiler] 🔍 Inputs count: {If(backendDef.Inputs IsNot Nothing, backendDef.Inputs.Count, 0)}")

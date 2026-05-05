@@ -176,7 +176,7 @@ describe('conversationConfigForConvaiApi (dev tunnel)', () => {
     );
   });
 
-  it('lascia invariato il fragment se «Compilazione con tunnel» è off', () => {
+  it('riscriv api_schema.url se la mappa tunnel ha la porta, anche con «Compilazione con tunnel» off', () => {
     localStorage.setItem(DEV_TUNNEL_COMPILE_FLAG_KEY, '0');
     localStorage.setItem(LS_MAP, JSON.stringify({ 3110: 'https://pub.example' }));
     const frag: Record<string, unknown> = {
@@ -190,7 +190,7 @@ describe('conversationConfigForConvaiApi (dev tunnel)', () => {
     const tools = ((out.agent as Record<string, unknown>).prompt as Record<string, unknown>).tools as Array<{
       api_schema: { url: string };
     }>;
-    expect(tools[0].api_schema.url).toBe('http://localhost:3110/slots');
+    expect(tools[0].api_schema.url).toBe('https://pub.example/slots');
   });
 
   it('riscriv api_schema.url dei webhook come il compile orchestrator', () => {

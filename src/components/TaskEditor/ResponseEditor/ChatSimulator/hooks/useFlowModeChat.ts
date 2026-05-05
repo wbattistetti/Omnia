@@ -256,6 +256,8 @@ export function useFlowModeChat(
         taskId?: string;
         id?: string;
         compilationFixError?: CompilationError;
+        backendInvocations?: Message['backendInvocations'];
+        convaiWebhookInvocations?: Message['convaiWebhookInvocations'];
       }) => {
         const messageId =
           message.id != null && String(message.id) !== ''
@@ -277,6 +279,8 @@ export function useFlowModeChat(
           textKey: message.textKey,
           stepType: message.stepType,
           compilationFixError: message.compilationFixError,
+          backendInvocations: message.backendInvocations,
+          convaiWebhookInvocations: message.convaiWebhookInvocations,
         };
         const currentOnMessage = onMessageRef.current;
         if (currentOnMessage) currentOnMessage(newMessage);

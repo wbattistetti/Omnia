@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAdvancementContextChips,
+  buildFullParamRecordFromSendMapping,
   buildParamRecordFromSendMapping,
+  buildUnifiedRecalculationBeforeAfterRows,
   formatAdvancementTestResultDisplay,
   paramFieldKeyFromWireKey,
   runAdvancementPlayEvaluation,
+  runUnifiedBackendAdvancementPlayEvaluation,
   sendRowValueFingerprint,
 } from './advancementQuickTest';
 
@@ -43,6 +46,19 @@ describe('advancementQuickTest', () => {
     expect(param.startDate).toBe('2026-05-01');
   });
 
+  it('buildFullParamRecordFromSendMapping merges all SEND literals for unified backend ricalcolo', () => {
+    const { param, error } = buildFullParamRecordFromSendMapping(
+      [
+        { wireKey: 'days', literalConstant: '30' },
+        { wireKey: 'startdate', literalConstant: '2026-05-04' },
+      ],
+      { days: 'Int', startdate: 'Date' }
+    );
+    expect(error).toBeNull();
+    expect(param.days).toBe(30);
+    expect(param.startdate).toBe('2026-05-04');
+  });
+
   it('buildAdvancementContextChips legacy lists prev, param, result when no focus', () => {
     const chips = buildAdvancementContextChips(
       {
@@ -72,6 +88,50 @@ describe('advancementQuickTest', () => {
     expect(chips[1].label).toBe('Nuovo');
     expect(chips[1].tone).toBe('nuovo');
     expect(chips[1].value).toBe('2026-06-04');
+  });
+
+  it('runUnifiedBackendAdvancementPlayEvaluation accepts plain object with allowed keys', () => {
+    const out = runUnifiedBackendAdvancementPlayEvaluation(
+      '({ startdate: "2026-06-01", days: 30 })',
+      { prev: {}, param: { startdate: '2026-05-01', days: 30 } },
+      ['startdate', 'days']
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.display).toContain('2026-06-01');
+      expect(out.resultObject.startdate).toBe('2026-06-01');
+      expect(out.resultObject.days).toBe(30);
+    }
+  });
+
+  it('buildUnifiedRecalculationBeforeAfterRows maps param snapshot to result object', () => {
+    const rows = buildUnifiedRecalculationBeforeAfterRows(
+      { startdate: '2026-01-01', days: 7 },
+      { startdate: '2026-01-10', days: 7 },
+      ['days', 'startdate']
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0].key).toBe('days');
+    expect(rows[0].beforeDisplay).toBe('7');
+    expect(rows[0].afterDisplay).toBe('7');
+    expect(rows[1].key).toBe('startdate');
+    expect(rows[1].beforeDisplay).toBe('2026-01-01');
+    expect(rows[1].afterDisplay).toBe('2026-01-10');
+  });
+
+  it('buildUnifiedRecalculationBeforeAfterRows shows em dash for key missing in result', () => {
+    const rows = buildUnifiedRecalculationBeforeAfterRows({ a: 1 }, { a: 2 }, ['a', 'b']);
+    expect(rows.find((r) => r.key === 'b')?.beforeDisplay).toBe('—');
+    expect(rows.find((r) => r.key === 'b')?.afterDisplay).toBe('—');
+  });
+
+  it('runUnifiedBackendAdvancementPlayEvaluation rejects unknown keys', () => {
+    const out = runUnifiedBackendAdvancementPlayEvaluation(
+      '({ startdate: "2026-06-01", extra: 1 })',
+      { prev: {}, param: {} },
+      ['startdate']
+    );
+    expect(out.ok).toBe(false);
   });
 
   it('runAdvancementPlayEvaluation matches typed result', () => {

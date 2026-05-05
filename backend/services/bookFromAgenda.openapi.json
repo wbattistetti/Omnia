@@ -1,0 +1,364 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Omnia - BookFromAgenda API",
+    "version": "4.1.0",
+    "description": "Un solo endpoint operativo e un solo OpenAPI per il Task Editor (Recupera).\n\n**POST** `/api/runtime/bookfromagenda`\n\n**Contratto unico (chiavi puntate):** `agenda.json` **oppure** `agenda.url` + `agenda.type`; opzionale `horizon.start` / `horizon.end`; obbligatorio `queryConstraints` (con `horizon` interno se serve). Nessun `grid`/`timezone` API.\n\nPipeline: UniversalAgenda → filtro → `{ slots, summary }`."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3100",
+      "description": "Sviluppo locale Express"
+    }
+  ],
+  "tags": [
+    {
+      "name": "BookFromAgenda",
+      "description": "Solve unificato (import + filtro)"
+    }
+  ],
+  "paths": {
+    "/api/runtime/bookfromagenda": {
+      "post": {
+        "tags": ["BookFromAgenda"],
+        "operationId": "bookFromAgenda",
+        "summary": "BookFromAgenda — normalizza agenda e restituisce slot filtrati",
+        "description": "Body con chiavi puntate: `agenda.json` oppure `agenda.url` + `agenda.type`; `horizon.start`/`horizon.end` oppure horizon solo in `queryConstraints`. Risposta: `slots` + `summary`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookFromAgendaRequest"
+              },
+              "examples": {
+                "agenda_json_inline": {
+                  "summary": "`agenda.json` = UniversalAgenda + vincoli",
+                  "value": {
+                    "agenda.json": {
+                      "timezone": "Europe/Rome",
+                      "days": [
+                        {
+                          "date": "2026-05-04",
+                          "slots": [
+                            { "time": "09:00", "duration": 60, "status": "free" },
+                            { "time": "10:00", "duration": 60, "status": "booked" }
+                          ]
+                        }
+                      ]
+                    },
+                    "queryConstraints": {
+                      "horizon": { "start": "2026-05-01", "end": "2026-05-31" },
+                      "weekdays": [1]
+                    }
+                  }
+                },
+                "ics_url": {
+                  "summary": "Fetch ICS — `agenda.url` + `agenda.type` + horizon puntato",
+                  "value": {
+                    "agenda.type": "ICS",
+                    "agenda.url": "https://calendar.example.com/calendar.ics",
+                    "horizon.start": "2026-05-01",
+                    "horizon.end": "2026-05-07",
+                    "queryConstraints": {
+                      "horizon": { "start": "2026-05-01", "end": "2026-05-31" },
+                      "allowedIntervals": [{ "start": "09:00", "end": "17:00" }],
+                      "forbiddenIntervals": [{ "start": "12:00", "end": "13:00" }]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Slot filtrati",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input non valido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Errore interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BookFromAgendaRequest": {
+        "type": "object",
+        "required": ["queryConstraints"],
+        "description": "Solo chiavi puntate nel body radice. Una sorgente agenda: **`agenda.json`** (object) **oppure** **`agenda.url`** + **`agenda.type`**. Per fetch URL servono date di fetch: **`horizon.start`** / **`horizon.end`** oppure solo `queryConstraints.horizon`.",
+        "properties": {
+          "agenda.type": {
+            "type": "string",
+            "enum": ["Omnia", "Google", "Outlook", "ICS"],
+            "description": "Con `agenda.url`: tipo di feed remoto."
+          },
+          "agenda.url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL calendario (con `agenda.type`). Mutuamente esclusivo con `agenda.json`."
+          },
+          "agenda.json": {
+            "description": "UniversalAgenda o giorno compatto. Mutuamente esclusivo con `agenda.url`.",
+            "oneOf": [
+              { "$ref": "#/components/schemas/UniversalAgenda" },
+              { "$ref": "#/components/schemas/AgendaJsonCompactDay" }
+            ]
+          },
+          "horizon.start": {
+            "type": "string",
+            "format": "date",
+            "description": "Con `agenda.url`: inizio intervallo fetch (YYYY-MM-DD). Alternativa: horizon solo in `queryConstraints`."
+          },
+          "horizon.end": {
+            "type": "string",
+            "format": "date",
+            "description": "Con `agenda.url`: fine intervallo fetch."
+          },
+          "queryConstraints": {
+            "$ref": "#/components/schemas/SchedulingQueryConstraints"
+          }
+        }
+      },
+      "SchedulingQueryConstraints": {
+        "type": "object",
+        "required": ["horizon"],
+        "description": "Vincoli applicati dopo la normalizzazione agenda. Stessa semantica del solver scheduling Omnia (vietati = sottrazione, preferiti = solo ordinamento).",
+        "properties": {
+          "horizon": {
+            "description": "Finestra date (YYYY-MM-DD inclusivi) entro cui considerare gli slot candidati.",
+            "allOf": [{ "$ref": "#/components/schemas/HorizonRange" }]
+          },
+          "allowedIntervals": {
+            "type": "array",
+            "description": "Fasce orarie ammesse (HH:mm). Se omesso o vuoto = tutta la giornata prima dei divieti.",
+            "items": { "$ref": "#/components/schemas/TimeInterval" }
+          },
+          "forbiddenIntervals": {
+            "type": "array",
+            "description": "Fasce orarie escluse (es. pausa pranzo).",
+            "items": { "$ref": "#/components/schemas/TimeInterval" }
+          },
+          "weekdays": {
+            "type": "array",
+            "items": { "type": "integer", "minimum": 0, "maximum": 6 },
+            "description": "Giorni ammessi: 0=domenica … 6=sabato (come JS). Vuoto = tutti i giorni."
+          },
+          "preferredIntervals": {
+            "type": "array",
+            "description": "Preferenze soft: non escludono slot; influenzano solo l’ordine in `slots`.",
+            "items": { "$ref": "#/components/schemas/PreferredInterval" }
+          },
+          "matchSlotDurationMinutes": {
+            "type": "number",
+            "description": "Se impostato, restano solo slot libere con esattamente questa durata (minuti)."
+          }
+        }
+      },
+      "UniversalAgenda": {
+        "type": "object",
+        "required": ["days"],
+        "description": "Disponibilità reale: per ogni giorno, elenco slot con stato free o booked. Nessun vincolo utente qui.",
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "description": "Fuso IANA informativo (es. Europe/Rome)."
+          },
+          "id": {
+            "type": "string",
+            "description": "Identificativo opzionale dell’istanza agenda."
+          },
+          "days": {
+            "type": "array",
+            "description": "Giorni con slot ordinate per tempo.",
+            "items": { "$ref": "#/components/schemas/AgendaDay" }
+          }
+        }
+      },
+      "AgendaDay": {
+        "type": "object",
+        "required": ["date", "slots"],
+        "description": "Un giorno civile e i suoi slot.",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Data YYYY-MM-DD."
+          },
+          "slots": {
+            "type": "array",
+            "description": "Slot del giorno (non attraversare mezzanotte in una singola riga).",
+            "items": { "$ref": "#/components/schemas/AgendaSlot" }
+          }
+        }
+      },
+      "AgendaSlot": {
+        "type": "object",
+        "required": ["time", "duration", "status"],
+        "description": "Un intervallo prenotabile o occupato sul giorno.",
+        "properties": {
+          "time": {
+            "type": "string",
+            "description": "Inizio slot HH:mm (stesso giorno civile)."
+          },
+          "duration": {
+            "type": "number",
+            "description": "Durata in minuti (> 0)."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["free", "booked"],
+            "description": "free = candidato alla prenotazione dopo i vincoli; booked = occupato."
+          },
+          "resource": {
+            "type": "string",
+            "description": "Opzionale: stanza, risorsa, ecc."
+          }
+        }
+      },
+      "AgendaJsonCompactDay": {
+        "type": "object",
+        "required": ["date", "slots"],
+        "description": "Forma compatta: un solo giorno; il server la espande in UniversalAgenda.",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Data del giorno."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "Opzionale; default lato server se omesso."
+          },
+          "slots": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AgendaSlot" }
+          }
+        }
+      },
+      "HorizonRange": {
+        "type": "object",
+        "required": ["start", "end"],
+        "description": "Intervallo di date inclusive (YYYY-MM-DD).",
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date",
+            "description": "Primo giorno incluso."
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "description": "Ultimo giorno incluso."
+          }
+        }
+      },
+      "TimeInterval": {
+        "type": "object",
+        "required": ["start", "end"],
+        "description": "Intervallo orario HH:mm sulla stessa riga giornaliera (no oltre mezzanotte).",
+        "properties": {
+          "start": { "type": "string", "description": "Inizio HH:mm." },
+          "end": {
+            "type": "string",
+            "description": "Fine HH:mm (24:00 ammesso come fine giornata)."
+          }
+        }
+      },
+      "PreferredInterval": {
+        "type": "object",
+        "required": ["start", "end"],
+        "description": "Fascia preferita con peso per il ranking.",
+        "properties": {
+          "start": { "type": "string", "description": "HH:mm" },
+          "end": { "type": "string", "description": "HH:mm" },
+          "weight": {
+            "type": "number",
+            "default": 1,
+            "description": "Peso per ordinare le slot preferite (default 1)."
+          }
+        }
+      },
+      "FilteredSlot": {
+        "type": "object",
+        "required": ["date", "start", "end", "duration"],
+        "description": "Slot libera ammessa dopo applicazione dei vincoli.",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Giorno della prenotazione."
+          },
+          "start": { "type": "string", "description": "Inizio HH:mm." },
+          "end": { "type": "string", "description": "Fine HH:mm (inizio + durata)." },
+          "duration": { "type": "number", "description": "Durata in minuti." },
+          "resource": {
+            "type": "string",
+            "description": "Eco risorsa se presente nello slot sorgente."
+          }
+        }
+      },
+      "SolveSummary": {
+        "type": "object",
+        "required": ["dayCount", "slotCount"],
+        "properties": {
+          "dayCount": {
+            "type": "integer",
+            "description": "Giorni distinti negli slot filtrati"
+          },
+          "slotCount": {
+            "type": "integer",
+            "description": "Numero slot filtrati"
+          }
+        }
+      },
+      "SolveResponse": {
+        "type": "object",
+        "required": ["slots", "summary"],
+        "description": "Risposta dell’endpoint POST /api/runtime/bookfromagenda.",
+        "properties": {
+          "slots": {
+            "type": "array",
+            "description": "Slot libere che soddisfano i vincoli, ordinate (preferenze poi data/ora).",
+            "items": { "$ref": "#/components/schemas/FilteredSlot" }
+          },
+          "summary": {
+            "description": "Conteggi sul risultato filtrato.",
+            "allOf": [{ "$ref": "#/components/schemas/SolveSummary" }]
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        }
+      }
+    }
+  }
+}

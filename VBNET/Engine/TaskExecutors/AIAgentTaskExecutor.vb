@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System
 Imports System.Collections.Generic
 Imports System.Net.Http
 Imports System.Text
@@ -36,6 +37,12 @@ Public Class AIAgentTaskExecutor
     ''' </summary>
     Public Const RuntimeRulesStateKey As String = "__omnia_runtime_rules"
 
+    ''' <summary>Solver input JSON v1 — POST verso <c>/api/runtime/scheduling/solve</c>.</summary>
+    Public Const SchedulingConstraintsStateKey As String = "__omnia_scheduling_constraints_v1"
+
+    ''' <summary>Risultato deterministico del solver (merge dopo il turno LLM se il payload è presente).</summary>
+    Public Const SchedulingSolveResultStateKey As String = "__omnia_scheduling_solve_result_v1"
+
     ''' <summary>Utterance sintetica quando «Avvio immediato» e nessun input utente (allineato al compile TS).</summary>
     Public Const ImmediateStartSyntheticUserMessage As String = "start"
 
@@ -66,6 +73,58 @@ Public Class AIAgentTaskExecutor
         Dim p = relativePath.Trim()
         If Not p.StartsWith("/"c) Then p = "/" & p
         Return b & p
+    End Function
+
+    ''' <summary>Estrae scheme + authority dall&apos;URL del bridge runtime (stesso host del solver Express).</summary>
+    Private Shared Function ExtractHttpOrigin(llmEndpoint As String) As String
+        Dim u As Uri = Nothing
+        If Not Uri.TryCreate(llmEndpoint, UriKind.Absolute, u) Then Return Nothing
+        Return u.GetLeftPart(UriPartial.Authority)
+    End Function
+
+    ''' <summary>
+    ''' Se <paramref name="newState"/> contiene <see cref="SchedulingConstraintsStateKey"/>, POST al solver Node e popola <see cref="SchedulingSolveResultStateKey"/>.
+    ''' </summary>
+    Private Shared Async Function MergeSchedulingSolveIntoStateAsync(llmEndpoint As String, newState As JObject) As System.Threading.Tasks.Task
+        If newState Is Nothing Then Return
+        Dim constraintTok = newState(SchedulingConstraintsStateKey)
+        If constraintTok Is Nothing OrElse constraintTok.Type <> JTokenType.Object Then Return
+
+        Dim origin = ExtractHttpOrigin(llmEndpoint)
+        If String.IsNullOrWhiteSpace(origin) Then Return
+
+        Dim url = CombineUrl(origin, "/api/runtime/scheduling/solve")
+        Dim payload = constraintTok.ToString(Formatting.None)
+        Dim content As New StringContent(payload, Encoding.UTF8, "application/json")
+
+        Dim resp As HttpResponseMessage = Nothing
+        Dim body As String = ""
+        Try
+            resp = Await Http.PostAsync(url, content).ConfigureAwait(False)
+            body = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+        Catch ex As Exception
+            newState(SchedulingSolveResultStateKey) = New JObject From {
+                {"error", "Scheduling solver request failed: " & ex.Message}
+            }
+            Return
+        End Try
+
+        If resp IsNot Nothing AndAlso resp.IsSuccessStatusCode Then
+            Try
+                newState(SchedulingSolveResultStateKey) = JToken.Parse(body)
+            Catch ex As Exception
+                newState(SchedulingSolveResultStateKey) = New JObject From {
+                    {"error", "Invalid JSON from scheduling solver: " & ex.Message},
+                    {"rawBody", body}
+                }
+            End Try
+        Else
+            Dim code = If(resp IsNot Nothing, CInt(resp.StatusCode), 0)
+            newState(SchedulingSolveResultStateKey) = New JObject From {
+                {"error", "Scheduling solver HTTP " & code.ToString()},
+                {"body", body}
+            }
+        End If
     End Function
 
     ''' <summary>
@@ -254,6 +313,14 @@ Public Class AIAgentTaskExecutor
                 .Err = ex.Message,
                 .IsCompleted = False
             }
+        End Try
+
+        Try
+            Dim newStateJo = JObject.Parse(result.NewStateJson)
+            Await MergeSchedulingSolveIntoStateAsync(endpoint, newStateJo).ConfigureAwait(False)
+            result.NewStateJson = newStateJo.ToString(Formatting.None)
+        Catch
+            ' Mantieni new_state originale se il JSON non è oggetto valido.
         End Try
 
         If state.DialogueContexts Is Nothing Then

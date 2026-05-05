@@ -1,6 +1,8 @@
 import React from 'react';
 import { Check, X as XIcon, CheckCircle, AlertCircle, AlertTriangle, ChevronDown, ChevronUp, User } from 'lucide-react';
 import type { CompilationError } from '@components/FlowCompiler/types';
+import type { FlowBackendCallInvocation } from '@features/debugger/types/flowBackendCallDiagnostic';
+import type { FlowConvaiWebhookDiagnostic } from '@features/debugger/types/flowConvaiWebhookDiagnostic';
 
 export interface ExtractedValue {
   variable: string; // Nome della variabile (es. "Day", "Month", "Year")
@@ -24,6 +26,10 @@ export interface Message {
   engineType?: 'new' | 'old'; // Track which engine generated this message
   /** Per messaggi compile error: apre editor come Fix nel debugger. */
   compilationFixError?: CompilationError;
+  /** Debugger flusso: chiamate BackendCall (mock) collegate a questo messaggio bot. */
+  backendInvocations?: FlowBackendCallInvocation[];
+  /** Debugger flusso: tool ConvAI webhook (URL effettivi post-tunnel). */
+  convaiWebhookInvocations?: FlowConvaiWebhookDiagnostic[];
 }
 
 interface UserMessageProps {

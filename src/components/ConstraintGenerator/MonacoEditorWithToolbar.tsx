@@ -7,6 +7,7 @@ import pythonIcon from './icons/python.svg';
 import tsIcon from './icons/ts.svg';
 import { LANGUAGES } from './constants';
 import * as monaco from 'monaco-editor';
+import { applyMonacoEmbeddedEditorUi } from '../../utils/monacoEmbeddedSetup';
 import MonacoToolbar from './MonacoToolbar';
 import PanelHeader from './PanelHeader';
 
@@ -138,6 +139,7 @@ const MonacoEditorWithToolbar: React.FC<MonacoEditorWithToolbarProps & { panelHe
               fixedOverflowWidgets: true,
               tabSize: 2
             }}
+            editorDidMount={(editor) => applyMonacoEmbeddedEditorUi(editor)}
           />
         ) : (
           <div style={{ color: '#888', fontStyle: 'italic', padding: 24, textAlign: 'center' }}>

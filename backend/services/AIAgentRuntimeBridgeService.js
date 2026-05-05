@@ -4,6 +4,11 @@
 
 const RUNTIME_RULES_STATE_KEY = '__omnia_runtime_rules';
 
+/** AI-authored scheduling constraint bundle (solver input v1). Same host POST → {@link runSchedulingSolve}. */
+const SCHEDULING_CONSTRAINTS_STATE_KEY = '__omnia_scheduling_constraints_v1';
+/** Filled by engine/Node when optional solve runs (VB after LLM step or direct POST). */
+const SCHEDULING_SOLVE_RESULT_STATE_KEY = '__omnia_scheduling_solve_result_v1';
+
 const { extractJsonString } = require('./AIAgentDesignService');
 
 const RUNTIME_SYSTEM = `You are the runtime engine for an OMNIA AI Agent dialogue task.
@@ -104,6 +109,14 @@ function validateLlmPayload(obj) {
  * @param {string} rules
  */
 function buildUserMessage(state, userMessage, rules) {
+  const schedulingAppend =
+    (process.env.OMNIA_AI_AGENT_SCHEDULING_PROMPT || '').trim() === '0'
+      ? ''
+      : `\n\n${buildSchedulingContractAppendix()}`;
+  const bookFromAgendaAppend =
+    (process.env.OMNIA_AI_AGENT_BOOKFROMAGENDA_PROMPT || '').trim() === '0'
+      ? ''
+      : `\n\n${buildBookFromAgendaContractAppendix()}`;
   return `TASK_RULES (synthetic prompt for this task):
 """
 ${rules}
@@ -120,7 +133,44 @@ ${userMessage}
 Instructions:
 - Apply TASK_RULES and merge USER_MESSAGE into new_state.
 - Set assistant_message to the next assistant reply in the user's language (infer from TASK_RULES and USER_MESSAGE).
-- Set status to "completed" only when the task is fully done per TASK_RULES; otherwise "in_progress".`;
+- Set status to "completed" only when the task is fully done per TASK_RULES; otherwise "in_progress".${schedulingAppend}${bookFromAgendaAppend}`;
+}
+
+/**
+ * Optional: tells the model to maintain machine-readable scheduling state for the deterministic solver.
+ * Disable with OMNIA_AI_AGENT_SCHEDULING_PROMPT=0 to save tokens.
+ */
+/**
+ * Optional: remind the LLM of the public BookFromAgenda contract (Backend Call → POST /api/runtime/bookfromagenda).
+ * Disable with OMNIA_AI_AGENT_BOOKFROMAGENDA_PROMPT=0 to save tokens.
+ */
+function buildBookFromAgendaContractAppendix() {
+  return `BOOKFROMAGENDA HTTP (when the flow calls Backend Call POST /api/runtime/bookfromagenda):
+- Body uses **dotted keys only** at the root: \`agenda.json\` (object) **or** \`agenda.url\` + \`agenda.type\`; optional \`horizon.start\` / \`horizon.end\` for URL fetch; required \`queryConstraints\` (may include \`horizon\`).
+- Do **not** nest \`agenda\` as a separate object, do **not** use top-level \`agendaJson\`, and do **not** invent \`grid.*\` / \`timezone\` API fields.
+- Response: \`{ "slots": [...], "summary": { "dayCount", "slotCount" } }\`.`;
+}
+
+function buildSchedulingContractAppendix() {
+  return `SCHEDULING JSON (optional — only if the task books appointments or similar):
+- In new_state, you may set "${SCHEDULING_CONSTRAINTS_STATE_KEY}" to a single JSON object (schema version 1) the backend can solve:
+  {
+    "schemaVersion": 1,
+    "timezone": "IANA id (e.g. Europe/Rome) — if omitted, tenant default applies",
+    "horizon": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" },
+    "slotDurationMinutes": 30,
+    "slotStepMinutes": 15,
+    "mandatory": {
+      "allowedIntervals": [ { "start": "HH:mm", "end": "HH:mm" } ],
+      "forbiddenIntervals": [ { "start": "HH:mm", "end": "HH:mm" } ],
+      "weekdays": [ 0-6, 0=Sun … 6=Sat ]
+    },
+    "preferred": { "intervals": [ { "start": "HH:mm", "end": "HH:mm", "weight": 1 } ] }
+  }
+- Omit allowedIntervals = whole calendar day (within horizon/weekdays).
+- Cross-midnight ranges must be split into two rows (end day D and start day D+1); never put 22:00–06:00 on one row.
+- Merge corrections into mandatory/preferred (replace overlapping intent); do not rely only on appending unrelated bans.
+- After the runtime engine POST to /api/runtime/scheduling/solve, results appear under "${SCHEDULING_SOLVE_RESULT_STATE_KEY}" in state when wired from the executor (VB.NET).`;
 }
 
 /**
@@ -164,7 +214,19 @@ async function runAIAgentRuntimeStep(body, aiProviderService) {
   return validateLlmPayload(parsed);
 }
 
+/**
+ * POST body = scheduling solver input v1 (same shape as state.__omnia_scheduling_constraints_v1).
+ * @param {object} body
+ */
+function runSchedulingSolve(body) {
+  const { solveSchedulingConstraints } = require('./schedulingConstraintSolver');
+  return solveSchedulingConstraints(body || {});
+}
+
 module.exports = {
   runAIAgentRuntimeStep,
   resolveProvider,
+  runSchedulingSolve,
+  SCHEDULING_CONSTRAINTS_STATE_KEY,
+  SCHEDULING_SOLVE_RESULT_STATE_KEY,
 };

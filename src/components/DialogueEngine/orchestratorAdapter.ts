@@ -87,6 +87,8 @@ export interface OrchestratorCallbacks {
   /** Preferire `OrchestratorExecutionError` quando l’SSE include il payload strutturato. */
   onError?: (error: Error) => void;
   onWaitingForInput?: (data: { taskId: string; nodeId?: string }) => void;
+  /** Diagnostica task BackendCall (mockTable) dal runtime .NET. */
+  onBackendCallDiagnostic?: (payload: Record<string, unknown>) => void;
 }
 
 /**
@@ -269,6 +271,15 @@ export async function executeOrchestratorBackend(
         // We don't have a direct callback here, but the event is logged for debugging
       } catch (error) {
         console.error('[ORCHESTRATOR] Error parsing userInputProcessed event', error);
+      }
+    });
+
+    sse.addEventListener('backendCallDiagnostic', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as Record<string, unknown>;
+        callbacks.onBackendCallDiagnostic?.(data);
+      } catch (err) {
+        console.error('[ORCHESTRATOR] Error parsing backendCallDiagnostic event', err);
       }
     });
 

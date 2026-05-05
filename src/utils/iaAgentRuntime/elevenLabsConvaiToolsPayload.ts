@@ -147,3 +147,9 @@ export function buildElevenLabsConvaiPromptTools(
 
   return dedupeElevenLabsToolNames(out);
 }
+
+/** Diagnostica webhook post-tunnel: {@link collectConvaiWebhookDiagnosticsFromMergedTasks}. */
+export {
+  collectConvaiWebhookDiagnosticsFromMergedTasks,
+  extractConvaiWebhookDiagnosticsFromConversationFragment,
+} from './convaiWebhookToolDiagnostics';

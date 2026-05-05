@@ -39,6 +39,7 @@ const BACKEND_CALL_INSTANCE_FIELD_KEYS = [
   'mockTableDefaultExecutionMode',
   'inputAdvancement',
   'inputAdvancementTypes',
+  'backendAdvancement',
   'backendToolDescription',
   'endpointInvocationValues',
   'backendCallSpecMeta',

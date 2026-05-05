@@ -33,16 +33,16 @@ export async function importOpenApiForCatalogUrl(
     const { doc } = await fetchOpenApiDocument(trimmed);
     const picked = pickOpenApiPathForReadApi(trimmed, doc, method);
     if ('error' in picked) return { ok: false, error: picked.error };
-    const fields = extractOperationFields(doc, picked.pathKey, method);
+    const fields = extractOperationFields(doc, picked.pathKey, picked.method);
     if (!fields) {
-      return { ok: false, error: `Operazione ${method} non trovata per ${picked.pathKey}.` };
+      return { ok: false, error: `Operazione ${picked.method.toUpperCase()} non trovata per ${picked.pathKey}.` };
     }
     const inputNames = [...new Set([...fields.requestParamNames, ...fields.requestBodyPropertyNames])].filter(
       Boolean
     );
     const outputNames = fields.responsePropertyNames.filter(Boolean);
     const contentHash = hashString(JSON.stringify(doc));
-    const structuralFp = structuralFingerprint(method, trimmed);
+    const structuralFp = structuralFingerprint(picked.method, trimmed);
     return {
       ok: true,
       contentHash,

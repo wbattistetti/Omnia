@@ -29,4 +29,7 @@ Public Class TaskExecutionResult
 
     ''' <summary>JSON serializzato <see cref="RuntimeConvaiException"/> per propagazione verso FlowOrchestrator.</summary>
     Public Property ErrDetailJson As String
+
+    ''' <summary>Opcionale: diagnostica mock/backend per SSE debugger flusso (JSON object).</summary>
+    Public Property BackendCallDiagnosticJson As String
 End Class

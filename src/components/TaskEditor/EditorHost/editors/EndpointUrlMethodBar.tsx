@@ -13,6 +13,10 @@ export type EndpointUrlMethodBarProps = {
   placeholder?: string;
   controlStyle?: React.CSSProperties;
   labelStyle?: React.CSSProperties;
+  /** Messaggio inline (es. errore Read API); sostituisce alert. */
+  errorMessage?: string | null;
+  /** Evidenzia il selettore metodo (es. metodo non allineato allo spec). */
+  methodHighlightError?: boolean;
 };
 
 export function EndpointUrlMethodBar({
@@ -23,6 +27,8 @@ export function EndpointUrlMethodBar({
   placeholder = 'https://… — discovery /openapi.json sulla stessa origine',
   controlStyle,
   labelStyle,
+  errorMessage,
+  methodHighlightError,
 }: EndpointUrlMethodBarProps) {
   const [expanded, setExpanded] = React.useState(true);
   const measureRef = React.useRef<HTMLSpanElement>(null);
@@ -45,8 +51,12 @@ export function EndpointUrlMethodBar({
         : url.trim()
       : null;
 
+  const err = (errorMessage ?? '').trim();
+  const methodErr = Boolean(methodHighlightError && err);
+
   return (
-    <div className="flex min-w-0 flex-wrap items-end gap-2">
+    <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex min-w-0 flex-wrap items-end gap-2">
       <label className="sr-only" htmlFor="omnia-endpoint-url" style={labelStyle}>
         URL endpoint
       </label>
@@ -62,8 +72,13 @@ export function EndpointUrlMethodBar({
       <select
         value={method}
         onChange={(e) => onMethodChange(e.target.value)}
-        className="shrink-0 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className={`shrink-0 rounded border bg-slate-800 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 ${
+          methodErr
+            ? 'border-red-500 text-red-100 focus:ring-red-500'
+            : 'border-slate-600 text-slate-100 focus:ring-blue-500'
+        }`}
         aria-label="Metodo HTTP"
+        aria-invalid={methodErr}
       >
         <option value="GET">GET</option>
         <option value="POST">POST</option>
@@ -89,12 +104,16 @@ export function EndpointUrlMethodBar({
             value={url}
             onChange={(e) => onUrlChange(e.target.value)}
             placeholder={placeholder}
-            className="min-w-0 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`min-w-0 rounded border bg-slate-800 px-2 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 ${
+              err ? 'border-red-500 focus:ring-red-500' : 'border-slate-600 focus:ring-blue-500'
+            }`}
           />
         ) : (
           <button
             type="button"
-            className="min-h-[2.25rem] w-full min-w-[8rem] max-w-full truncate rounded border border-slate-600 bg-slate-800/90 px-2 py-1.5 text-left text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`min-h-[2.25rem] w-full min-w-[8rem] max-w-full truncate rounded border bg-slate-800/90 px-2 py-1.5 text-left text-sm focus:outline-none focus:ring-2 ${
+              err ? 'border-red-500 focus:ring-red-500' : 'border-slate-600 focus:ring-blue-500'
+            }`}
             onClick={() => setExpanded(true)}
             title={url.trim() || placeholder}
           >
@@ -106,6 +125,12 @@ export function EndpointUrlMethodBar({
           </button>
         )}
       </div>
+      </div>
+      {err ? (
+        <p className="text-[11px] leading-snug text-red-400 pl-1" role="alert">
+          {err}
+        </p>
+      ) : null}
     </div>
   );
 }

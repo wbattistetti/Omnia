@@ -3193,6 +3193,21 @@
         }
       },
       {
+        "model_id": "chat-latest",
+        "name": "chat-latest",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {},
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "chat-latest",
+          "object": "model",
+          "created": 1777704602,
+          "owned_by": "system"
+        }
+      },
+      {
         "model_id": "chatgpt-image-latest",
         "name": "chatgpt-image-latest",
         "latency_ms": null,
@@ -7218,12 +7233,12 @@
     ]
   },
   "meta": {
-    "updatedAt": "2026-05-04T18:37:09.613Z",
-    "lastLanguagesSync": "2026-05-04T18:37:08.349Z",
-    "lastModelsSync": "2026-05-04T18:37:09.613Z",
+    "updatedAt": "2026-05-05T18:24:56.540Z",
+    "lastLanguagesSync": "2026-05-05T18:24:54.843Z",
+    "lastModelsSync": "2026-05-05T18:24:56.540Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-05-04T18:37:08.318Z",
+      "at": "2026-05-05T18:24:54.779Z",
       "apiVoiceCount": 26,
       "mappedCount": 26,
       "emptyApiList": false

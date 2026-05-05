@@ -492,6 +492,15 @@ Public Class SessionManager
                                                                 session.EventEmitter.Emit("error", BuildOrchestratorSseErrorPayload(ex))
                                                             End Sub
 
+            AddHandler session.Orchestrator.BackendCallDiagnostic, Sub(sender As Object, jsonText As String)
+                                                                         Try
+                                                                             Dim payload = JsonConvert.DeserializeObject(Of Object)(jsonText)
+                                                                             session.EventEmitter.Emit("backendCallDiagnostic", payload)
+                                                                         Catch ex As Exception
+                                                                             Console.WriteLine($"[SessionManager] BackendCallDiagnostic deserialize/Emit: {ex.Message}")
+                                                                         End Try
+                                                                     End Sub
+
             ' ✅ STATELESS: Salva solo su Redis
             _storage.SaveOrchestratorSession(session)
 
@@ -684,6 +693,15 @@ Public Class SessionManager
             AddHandler session.Orchestrator.ExecutionError, Sub(sender, ex)
                                                                 session.EventEmitter.Emit("error", BuildOrchestratorSseErrorPayload(ex))
                                                             End Sub
+
+            AddHandler session.Orchestrator.BackendCallDiagnostic, Sub(sender As Object, jsonText As String)
+                                                                         Try
+                                                                             Dim payload = JsonConvert.DeserializeObject(Of Object)(jsonText)
+                                                                             session.EventEmitter.Emit("backendCallDiagnostic", payload)
+                                                                         Catch ex As Exception
+                                                                             Console.WriteLine($"[SessionManager] BackendCallDiagnostic deserialize/Emit: {ex.Message}")
+                                                                         End Try
+                                                                     End Sub
 
             ' ✅ ARCHITECTURAL: Handler per WaitingForInput - SOLO emissione evento per frontend
             ' ExecutionState.DialogueContexts è l'unica fonte di verità, non impostiamo flag duplicati

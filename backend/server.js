@@ -6596,11 +6596,13 @@ app.post('/design/advancement-dsl-translate', async (req, res) => {
       signature,
       provider = 'groq',
       model,
+      mode,
     } = body;
     console.log(`[ADVANCEMENT_DSL][${requestId}] POST /design/advancement-dsl-translate`, {
       targetParam,
       targetType,
       provider,
+      mode,
     });
     const out = await translateAdvancementDslRequest({
       naturalLanguage,
@@ -6610,6 +6612,7 @@ app.post('/design/advancement-dsl-translate', async (req, res) => {
       aiProviderService,
       provider,
       model,
+      mode,
     });
     return res.json({
       success: true,
@@ -6838,6 +6841,61 @@ app.post('/api/runtime/ai-agent/step', async (req, res) => {
     res.status(500).json({ error: error.message || String(error) });
   }
 });
+
+/**
+ * Legacy alias: pure grid solver without UniversalAgenda (same constraint math as BookFromAgenda query half).
+ * BookFromAgenda: POST /api/runtime/bookfromagenda (canonico). Alias: …/bookfromagenda/solve.
+ */
+app.post('/api/runtime/scheduling/solve', async (req, res) => {
+  try {
+    const { runSchedulingSolve } = require('./services/AIAgentRuntimeBridgeService');
+    const result = runSchedulingSolve(req.body || {});
+    res.json(result);
+  } catch (error) {
+    console.error('[POST /api/runtime/scheduling/solve]', error);
+    const msg = error.message || String(error);
+    const status = msg.startsWith('scheduling:') ? 400 : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
+/**
+ * OpenAPI 3 — BookFromAgenda v4.1: solo chiavi puntate (`agenda.json` | `agenda.url`+`agenda.type`, `horizon.*`, `queryConstraints`).
+ * Read API: `…/api/runtime/bookfromagenda/openapi.json`
+ */
+function serveBookFromAgendaOpenApiSpec(req, res) {
+  try {
+    const specPath = path.join(__dirname, 'services', 'bookFromAgenda.openapi.json');
+    const buf = fs.readFileSync(specPath, 'utf8');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(buf);
+  } catch (err) {
+    console.error('[BookFromAgenda OpenAPI]', err);
+    res.status(500).json({ error: 'OpenAPI spec read failed' });
+  }
+}
+
+app.get('/api/runtime/bookfromagenda/openapi.json', serveBookFromAgendaOpenApiSpec);
+app.get('/api/runtime/bookfromagenda/swagger.json', serveBookFromAgendaOpenApiSpec);
+
+async function handleBookFromAgendaPost(req, res) {
+  try {
+    const { solveBookFromAgenda } = require('./services/bookFromAgendaService');
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+    const result = await solveBookFromAgenda(body);
+    res.json(result);
+  } catch (error) {
+    console.error('[POST BookFromAgenda]', error);
+    const msg = error.message || String(error);
+    const status = msg.startsWith('bookfromagenda:') || msg.startsWith('scheduling:') ? 400 : 500;
+    res.status(status).json({ error: msg });
+  }
+}
+
+app.post('/api/runtime/bookfromagenda', handleBookFromAgendaPost);
+/** @deprecated Usare POST /api/runtime/bookfromagenda */
+app.post('/api/runtime/bookfromagenda/solve', handleBookFromAgendaPost);
 
 // Provider information endpoint
 app.get('/api/ai-providers', (req, res) => {

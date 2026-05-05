@@ -4,15 +4,14 @@
  * ({@link resolveElevenLabsAgentPromptFromTask}) se è passato `task`, altrimenti da `cfg.systemPrompt`.
  *
  * Per le chiamate HTTP usare {@link conversationConfigForConvaiApi} sul risultato: sostituisce URL localhost
- * con le basi tunnel come il compile orchestrator, senza toccare {@link buildConvaiProvisionKey}.
+ * con le basi tunnel (localStorage) come il compile orchestrator, senza toccare {@link buildConvaiProvisionKey}.
+ * La mappa porte non è in database: se la vedi ancora in `localhost`, la mappa era vuota in quel momento o stai
+ * guardando un JSON pre-outbound (es. solo {@link conversationConfigFragmentFromIaAgentConfig}).
  */
 
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { Task } from '@types/taskTypes';
-import {
-  getCompileUseDevTunnel,
-  rewriteCompilePayloadWithDevTunnel,
-} from '@domain/devTunnel/devTunnelCompileBridge';
+import { rewriteCompilePayloadWithDevTunnel } from '@domain/devTunnel/devTunnelCompileBridge';
 import { normalizeLanguage } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
 import { resolveElevenLabsAgentPromptFromTask } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentPlatformRulesString';
 import { taskRepository } from '@services/TaskRepository';
@@ -166,15 +165,14 @@ export function conversationConfigFragmentFromIaAgentConfig(
 }
 
 /**
- * Fragment pronto per POST create ConvAI: applica la stessa regola del compile orchestrator
- * (`rewriteCompilePayloadWithDevTunnel`) quando «Compilazione con tunnel» è attiva.
- * Non applicare a {@link buildConvaiProvisionKey}: gli URL ngrok cambiano tra sessioni e invaliderebbero la chiave.
+ * Fragment pronto per POST ConvAI: applica {@link rewriteCompilePayloadWithDevTunnel} sulla copia (no-op se la mappa
+ * tunnel in localStorage è vuota). Non dipende dalla checkbox «Compilazione con tunnel» quella controlla solo errori
+ * di compilazione orchestrator. Non applicare a {@link buildConvaiProvisionKey}: gli URL ngrok cambiano tra sessioni.
  */
 export function conversationConfigForConvaiApi(
   fragment: Record<string, unknown> | null
 ): Record<string, unknown> | null {
   if (!fragment) return null;
-  if (!getCompileUseDevTunnel()) return fragment;
   return rewriteCompilePayloadWithDevTunnel(
     JSON.parse(JSON.stringify(fragment)) as Record<string, unknown>
   ) as Record<string, unknown>;

@@ -44,6 +44,55 @@ export function BackendParameterDragChip() {
   );
 }
 
+/** Pannello editor avanzamento SEND: header con titolo e chiusura (coerente con toolbar «Ricalcolo backend»). */
+function BackendSendAdvancementOverlayPanel({
+  openWireKey,
+  overlayTitle,
+  onClose,
+  children,
+}: {
+  openWireKey: string;
+  overlayTitle?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="absolute inset-0 z-[70] flex flex-col rounded-md bg-[#070a10]/[0.98] shadow-[inset_0_0_0_1px_rgba(45,212,191,0.28)] backdrop-blur-[2px]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="omnia-send-advancement-title"
+    >
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-teal-500/40 bg-slate-950/95 px-2 py-2">
+        <h2
+          id="omnia-send-advancement-title"
+          className="min-w-0 text-[10px] font-extrabold uppercase leading-tight tracking-wide text-amber-200/95"
+        >
+          {overlayTitle ? (
+            <span className="normal-case tracking-normal">{overlayTitle}</span>
+          ) : (
+            <>
+              Criteri di avanzamento per il parametro{' '}
+              <span className="break-all font-mono text-[11px] font-bold normal-case tracking-normal text-teal-200/95">
+                {openWireKey}
+              </span>
+            </>
+          )}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+          aria-label="Chiudi editor avanzamento"
+        >
+          <X className="h-4 w-4" strokeWidth={2} />
+        </button>
+      </header>
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-2">{children}</div>
+    </div>
+  );
+}
+
 /** A–B toggle (left) + Parameter chip: alphabetical view vs construction order (stored array unchanged). */
 function BackendMappingHeaderToolbar({
   sortAlphabetical,
@@ -143,6 +192,12 @@ export interface InterfaceMappingEditorProps {
     openWireKey: string | null;
     onClose: () => void;
     renderPanel: (wireKey: string) => React.ReactNode;
+    /** Se impostato, sostituisce il titolo predefinito «Criteri di avanzamento per il parametro …». */
+    overlayTitle?: string;
+    /**
+     * Se `openWireKey` coincide con questo valore, l’editor copre l’intera area SEND+RECEIVE (non solo la colonna SEND).
+     */
+    fullSpanWireKey?: string | null;
   };
   /** Backend: mostra colonna RECEIVE; se false, SEND usa tutta la larghezza (affiancato). */
   backendReceiveColumnVisible?: boolean;
@@ -276,6 +331,13 @@ export function InterfaceMappingEditor({
     [interfaceOutput, onInterfaceOutputChange]
   );
 
+  const advancementOpenKey = backendSendAdvancementOverlay?.openWireKey ?? null;
+  const fullSpanKey = backendSendAdvancementOverlay?.fullSpanWireKey ?? null;
+  const isFullSpanAdvancement = Boolean(
+    advancementOpenKey && fullSpanKey && advancementOpenKey === fullSpanKey
+  );
+  const showSendColumnAdvancementOverlay = Boolean(advancementOpenKey && !isFullSpanAdvancement);
+
   const onIfaceInDrop = useCallback(
     (payload: FlowInterfaceDropPayload) => {
       const vid = String(payload.variableRefId || '').trim();
@@ -406,86 +468,74 @@ export function InterfaceMappingEditor({
         ) : null}
 
         {variant === 'backend' && (
-          <BackendSendReceivePanels
-            layoutMode={layout}
-            receiveVisible={backendReceiveColumnVisible}
-            sendBasisRatio={backendSendReceiveSplitRatio}
-            onSendBasisRatioChange={onBackendSendReceiveSplitRatioChange}
-            compactGap={Boolean(compactBackendPanels)}
-            splitContainerRef={backendSplitRowRef}
-            send={
-              <MappingBlock
-                accent="send"
-                flat={compactBackendPanels}
-                rootClassName="flex flex-1 min-h-0 min-w-0 w-full"
-                fillBodyHeight={Boolean(backendSendAdvancementOverlay)}
-                backendMappingDropTarget={
-                  flowDropTarget?.flowCanvasId
-                    ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'send' }
-                    : undefined
-                }
-                headerExtra={
-                  <BackendMappingHeaderToolbar
-                    sortAlphabetical={sortBackendSendAlphabetical}
-                    onSortAlphabeticalChange={setSortBackendSendAlphabetical}
-                  />
-                }
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            {isFullSpanAdvancement && advancementOpenKey && backendSendAdvancementOverlay ? (
+              <BackendSendAdvancementOverlayPanel
+                openWireKey={advancementOpenKey}
+                overlayTitle={backendSendAdvancementOverlay.overlayTitle}
+                onClose={backendSendAdvancementOverlay.onClose}
               >
-                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-                  {backendSendAdvancementOverlay?.openWireKey ? (
-                    <div
-                      className="absolute inset-0 z-[70] flex flex-col rounded-md bg-[#070a10]/[0.98] shadow-[inset_0_0_0_1px_rgba(45,212,191,0.28)] backdrop-blur-[2px]"
-                      role="dialog"
-                      aria-modal="true"
-                      aria-labelledby="omnia-send-advancement-title"
-                    >
-                      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-teal-500/40 bg-slate-950/95 px-2 py-2">
-                        <h2
-                          id="omnia-send-advancement-title"
-                          className="min-w-0 text-[10px] font-extrabold uppercase leading-tight tracking-wide text-amber-200/95"
-                        >
-                          Criteri di avanzamento per il parametro{' '}
-                          <span className="break-all font-mono text-[11px] font-bold normal-case tracking-normal text-teal-200/95">
-                            {backendSendAdvancementOverlay.openWireKey}
-                          </span>
-                        </h2>
-                        <button
-                          type="button"
-                          onClick={backendSendAdvancementOverlay.onClose}
-                          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
-                          aria-label="Chiudi editor avanzamento"
-                        >
-                          <X className="h-4 w-4" strokeWidth={2} />
-                        </button>
-                      </header>
-                      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2">
-                        {backendSendAdvancementOverlay.renderPanel(backendSendAdvancementOverlay.openWireKey)}
-                      </div>
-                    </div>
-                  ) : null}
-                  {backendSendBodyPrefix}
-                  <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                    <FlowMappingTree
-                      variant="backend"
-                      entries={backendSend}
-                      onEntriesChange={onBackendSendChange}
-                      apiOptions={apiOptions}
-                      variableOptions={variableOptions}
-                      listIdPrefix={sendPrefix}
-                      enableBackendParamDrop
-                      showApiFields={showApiFields}
-                      projectId={projectId}
-                      flowCanvasId={flowDropTarget?.flowCanvasId}
-                      siblingOrder={sortBackendSendAlphabetical ? 'alphabetical' : 'construction'}
-                      backendColumn="send"
-                      onCreateOutputVariable={onCreateOutputVariable}
-                      onOutputVariableCreated={onOutputVariableCreated}
-                      backendKnownVariableIds={backendVariableIdSet}
-                      backendSendParamKindByWireKey={backendSendParamKindByWireKey}
-                      backendSendAdvancement={backendSendAdvancement}
+                {backendSendAdvancementOverlay.renderPanel(advancementOpenKey)}
+              </BackendSendAdvancementOverlayPanel>
+            ) : null}
+            <BackendSendReceivePanels
+              layoutMode={layout}
+              receiveVisible={backendReceiveColumnVisible}
+              sendBasisRatio={backendSendReceiveSplitRatio}
+              onSendBasisRatioChange={onBackendSendReceiveSplitRatioChange}
+              compactGap={Boolean(compactBackendPanels)}
+              splitContainerRef={backendSplitRowRef}
+              send={
+                <MappingBlock
+                  accent="send"
+                  flat={compactBackendPanels}
+                  rootClassName="flex flex-1 min-h-0 min-w-0 w-full"
+                  fillBodyHeight
+                  backendMappingDropTarget={
+                    flowDropTarget?.flowCanvasId
+                      ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'send' }
+                      : undefined
+                  }
+                  headerExtra={
+                    <BackendMappingHeaderToolbar
+                      sortAlphabetical={sortBackendSendAlphabetical}
+                      onSortAlphabeticalChange={setSortBackendSendAlphabetical}
                     />
+                  }
+                >
+                  <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                    {showSendColumnAdvancementOverlay && advancementOpenKey && backendSendAdvancementOverlay ? (
+                      <BackendSendAdvancementOverlayPanel
+                        openWireKey={advancementOpenKey}
+                        overlayTitle={backendSendAdvancementOverlay.overlayTitle}
+                        onClose={backendSendAdvancementOverlay.onClose}
+                      >
+                        {backendSendAdvancementOverlay.renderPanel(advancementOpenKey)}
+                      </BackendSendAdvancementOverlayPanel>
+                    ) : null}
+                    {backendSendBodyPrefix}
+                    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+                      <FlowMappingTree
+                        variant="backend"
+                        entries={backendSend}
+                        onEntriesChange={onBackendSendChange}
+                        apiOptions={apiOptions}
+                        variableOptions={variableOptions}
+                        listIdPrefix={sendPrefix}
+                        enableBackendParamDrop
+                        showApiFields={showApiFields}
+                        projectId={projectId}
+                        flowCanvasId={flowDropTarget?.flowCanvasId}
+                        siblingOrder={sortBackendSendAlphabetical ? 'alphabetical' : 'construction'}
+                        backendColumn="send"
+                        onCreateOutputVariable={onCreateOutputVariable}
+                        onOutputVariableCreated={onOutputVariableCreated}
+                        backendKnownVariableIds={backendVariableIdSet}
+                        backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+                        backendSendAdvancement={backendSendAdvancement}
+                      />
+                    </div>
                   </div>
-                </div>
               </MappingBlock>
             }
             receive={
@@ -493,6 +543,7 @@ export function InterfaceMappingEditor({
                 accent="receive"
                 flat={compactBackendPanels}
                 rootClassName="flex flex-1 min-h-0 min-w-0 w-full"
+                fillBodyHeight
                 backendMappingDropTarget={
                   flowDropTarget?.flowCanvasId
                     ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'receive' }
@@ -505,26 +556,29 @@ export function InterfaceMappingEditor({
                   />
                 }
               >
-                <FlowMappingTree
-                  variant="backend"
-                  entries={backendReceive}
-                  onEntriesChange={onBackendReceiveChange}
-                  apiOptions={apiOptions}
-                  variableOptions={variableOptions}
-                  listIdPrefix={recvPrefix}
-                  enableBackendParamDrop
-                  showApiFields={showApiFields}
-                  projectId={projectId}
-                  flowCanvasId={flowDropTarget?.flowCanvasId}
-                  siblingOrder={sortBackendReceiveAlphabetical ? 'alphabetical' : 'construction'}
-                  backendColumn="receive"
-                  onCreateOutputVariable={onCreateOutputVariable}
-                  onOutputVariableCreated={onOutputVariableCreated}
-                  backendKnownVariableIds={backendVariableIdSet}
-                />
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+                  <FlowMappingTree
+                    variant="backend"
+                    entries={backendReceive}
+                    onEntriesChange={onBackendReceiveChange}
+                    apiOptions={apiOptions}
+                    variableOptions={variableOptions}
+                    listIdPrefix={recvPrefix}
+                    enableBackendParamDrop
+                    showApiFields={showApiFields}
+                    projectId={projectId}
+                    flowCanvasId={flowDropTarget?.flowCanvasId}
+                    siblingOrder={sortBackendReceiveAlphabetical ? 'alphabetical' : 'construction'}
+                    backendColumn="receive"
+                    onCreateOutputVariable={onCreateOutputVariable}
+                    onOutputVariableCreated={onOutputVariableCreated}
+                    backendKnownVariableIds={backendVariableIdSet}
+                  />
+                </div>
               </MappingBlock>
             }
           />
+          </div>
         )}
 
         {variant === 'interface' && (

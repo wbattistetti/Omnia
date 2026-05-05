@@ -72,6 +72,9 @@ Public Class FlowOrchestrator
     ''' <summary>Sollevato quando un task richiede input utente (emette taskId).</summary>
     Public Event WaitingForInput As EventHandler(Of String)
 
+    ''' <summary>Sollevato dopo BackendCall: payload JSON diagnostica (mockTable) verso SSE debugger.</summary>
+    Public Event BackendCallDiagnostic As EventHandler(Of String)
+
     ' ─────────────────────────────────────────────────────────────────────────
     ' Costruttori
     ' ─────────────────────────────────────────────────────────────────────────
@@ -679,6 +682,10 @@ Public Class FlowOrchestrator
                 Console.WriteLine($"[FlowOrchestrator] BackendCall message: {text}")
             End Sub
         )
+
+        If Not String.IsNullOrWhiteSpace(result.BackendCallDiagnosticJson) Then
+            RaiseEvent BackendCallDiagnostic(Me, result.BackendCallDiagnosticJson)
+        End If
 
         ' ✅ Gestisci errori
         If Not result.Success Then

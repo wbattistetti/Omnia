@@ -556,6 +556,16 @@ Public NotInheritable Class ElevenLabsEndpoints
             session.Status = "completed"
         End If
 
+        Dim txt = If(req.Text, "")
+        Global.System.Console.WriteLine(
+            "[ConvAI→Orchestrator] POST /elevenlabs/agentTurn " &
+            "conversationId=" & ShortIdForLog(req.ConversationId) &
+            " textChars=" & txt.Length.ToString() &
+            " textPreview=" & PreviewForLog(txt, 120) &
+            " isFinal=" & isFinal.ToString() &
+            " rawStatus=" & If(req.Status, "") &
+            " bodyChars=" & body.Length.ToString())
+
         context.Response.StatusCode = StatusCodes.Status200OK
         Await context.Response.WriteAsJsonAsync(New With {.ok = True}).ConfigureAwait(False)
     End Function
@@ -587,6 +597,8 @@ Public NotInheritable Class ElevenLabsEndpoints
 
         session.Status = "completed"
         session.Queue.Enqueue(New ElevenLabsAgentTurnPayload With {.Text = "", .Status = "completed"})
+        Global.System.Console.WriteLine(
+            "[ConvAI→Orchestrator] POST /elevenlabs/endConversation conversationId=" & ShortIdForLog(req.ConversationId))
         context.Response.StatusCode = StatusCodes.Status200OK
         Await context.Response.WriteAsJsonAsync(New With {.ok = True}).ConfigureAwait(False)
     End Function
@@ -628,11 +640,37 @@ Public NotInheritable Class ElevenLabsEndpoints
             Return
         End If
 
+        Dim at = If(turn.Text, "")
+        Global.System.Console.WriteLine(
+            "[ConvAI→Orchestrator] GET /elevenlabs/readPrompt → dequeue (verso FlowOrchestrator) " &
+            "conversationId=" & ShortIdForLog(conversationId) &
+            " agentTurnChars=" & at.Length.ToString() &
+            " agentTurnPreview=" & PreviewForLog(at, 120) &
+            " queueStatus=" & If(turn.Status, ""))
+
         context.Response.StatusCode = StatusCodes.Status200OK
         Await context.Response.WriteAsJsonAsync(New With {
             .agentTurn = turn.Text,
             .status = turn.Status
         }).ConfigureAwait(False)
+    End Function
+
+    ''' <summary>Log leggibile per conversation id (non è segreto ma evita righe lunghissime).</summary>
+    Private Shared Function ShortIdForLog(id As String) As String
+        Dim s = If(id, "").Trim()
+        If s.Length <= 20 Then Return s
+        Return s.Substring(0, 16) & "…"
+    End Function
+
+    ''' <summary>Anteprima testo agente per log (evita dump di utterance molto lunghe).</summary>
+    Private Shared Function PreviewForLog(t As String, maxLen As Integer) As String
+        Dim s = If(t, "").Replace(vbCr, " ").Replace(vbLf, " ").Trim()
+        If maxLen < 8 Then maxLen = 8
+        If s.Length <= maxLen Then
+            If s.Length = 0 Then Return "(empty)"
+            Return """" & s & """"
+        End If
+        Return """" & s.Substring(0, maxLen) & "…"""
     End Function
 
     Private Shared Function ValidateWebhookSecret(context As HttpContext) As Boolean

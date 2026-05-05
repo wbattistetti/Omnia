@@ -1,12 +1,13 @@
 /**
- * Full advancement editor: tipo da contratto (sola lettura), NL, generazione script (Crea / Affina), DSL Monaco, test.
- * Allineato alla logica Create/Refine degli altri editor (es. estrattori).
+ * Policy di **Recalculation** per BackendCall: script unificato, NL, Monaco, Test prima/dopo.
+ * Vedi anche export `BackendRecalculationEditor` (stesso componente).
  */
 
 import React from 'react';
 import MonacoEditor from 'react-monaco-editor';
 import { AlertTriangle, FlaskConical, Sparkles } from 'lucide-react';
 import { setupMonacoEnvironment } from '../../../../../utils/monacoWorkerSetup';
+import { applyMonacoEmbeddedEditorUi } from '../../../../../utils/monacoEmbeddedSetup';
 import {
   type BackendInputAdvancementEntry,
   isAdvancementNlScriptOutOfSync,
@@ -18,7 +19,12 @@ import {
   type AdvancementQuickTestRowState,
 } from '../../../../../domain/advancement/advancementQuickTest';
 import { translateAdvancementDsl } from '../../../../../services/advancementDslTranslateApi';
+import type { AdvancementTranslateMode } from '../../../../../services/advancementDslTranslateApi';
 import { AdvancementQuickTestChips } from './AdvancementQuickTestChips';
+import { UnifiedRecalculationTestTable } from './UnifiedRecalculationTestTable';
+import type * as MonacoNS from 'monaco-editor';
+import type { AdvancementMonacoInsertOpts } from './advancementInsertMenuModel';
+import { AdvancementMonacoContextMenuHost } from './AdvancementMonacoContextMenuHost';
 
 try {
   setupMonacoEnvironment();
@@ -28,11 +34,19 @@ try {
 
 const NL_TEXTAREA_MAX_PX = 200;
 
+export type AdvancementEditorVariant = 'singleParam' | 'unifiedBackend';
+
 export interface SendParamAdvancementFullEditorProps {
   wireKey: string;
   entry: BackendInputAdvancementEntry;
-  /** Tipo risultato DSL: deriva dalla firma backend (OpenAPI), non modificabile qui. */
+  /** Tipo risultato DSL: deriva dalla firma backend (OpenAPI), non modificabile qui. Ignorato se `editorVariant` è unifiedBackend. */
   paramType: AdvancementValueType;
+  /** Script unico backend: oggetto multi-chiave + prompt IA dedicato + Monaco JS + menu contestuale inserimenti. */
+  editorVariant?: AdvancementEditorVariant;
+  /** Chiavi campo `param.*` / `prev.*` (menu tasto destro in unified). */
+  snippetParamFieldKeys?: readonly string[];
+  /** Variabili di flusso (GUID): voci menu «Commento variabile…» — il Play DSL usa solo param/prev. */
+  snippetFlowVariables?: ReadonlyArray<{ id: string; label: string }>;
   getPlayContext: (wireKey: string) => AdvancementPlayContextBundle;
   onPatch: (patch: Partial<BackendInputAdvancementEntry>) => void;
   buildSignature: () => { parameters: Record<string, { type: string; description: string }> };
@@ -46,6 +60,9 @@ export function SendParamAdvancementFullEditor({
   wireKey,
   entry,
   paramType,
+  editorVariant = 'singleParam',
+  snippetParamFieldKeys,
+  snippetFlowVariables,
   getPlayContext: _getPlayContext,
   onPatch,
   buildSignature,
@@ -56,6 +73,7 @@ export function SendParamAdvancementFullEditor({
   const [translateBusy, setTranslateBusy] = React.useState(false);
   const [translateErr, setTranslateErr] = React.useState<string | null>(null);
   const nlTextareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const [monacoEditor, setMonacoEditor] = React.useState<MonacoNS.editor.IStandaloneCodeEditor | null>(null);
 
   const dslTrim = (entry.dslExpression || '').trim();
   /** Stesso criterio degli editor contract: niente script → Crea; script presente → Affina. */
@@ -70,12 +88,15 @@ export function SendParamAdvancementFullEditor({
     setTranslateBusy(true);
     setTranslateErr(null);
     try {
+      const unified = editorVariant === 'unifiedBackend';
+      const mode: AdvancementTranslateMode | undefined = unified ? 'unifiedBackend' : undefined;
       const res = await translateAdvancementDsl({
         naturalLanguage: nlt,
-        targetParam: wireKey,
-        targetType: paramType,
+        targetParam: unified ? '__backend__' : wireKey,
+        targetType: unified ? 'Object' : paramType,
         signature: buildSignature(),
         provider: 'groq',
+        ...(mode ? { mode } : {}),
       });
       if (!res.success || !res.dslExpression) {
         setTranslateErr(res.error || 'Traduzione fallita.');
@@ -101,7 +122,7 @@ export function SendParamAdvancementFullEditor({
     } finally {
       setTranslateBusy(false);
     }
-  }, [buildSignature, entry.naturalLanguage, onPatch, paramType, wireKey]);
+  }, [buildSignature, editorVariant, entry.naturalLanguage, onPatch, paramType, wireKey]);
 
   const handleTest = React.useCallback(() => {
     if (!dslTrim) {
@@ -133,15 +154,40 @@ export function SendParamAdvancementFullEditor({
   const nlTrimForDisabled = (entry.naturalLanguage || '').trim();
   const translateDisabled = translateBusy || !nlTrimForDisabled;
 
+  const insertMenuOpts = React.useMemo<AdvancementMonacoInsertOpts>(
+    () => ({
+      editorVariant,
+      wireKey,
+      snippetParamFieldKeys,
+      snippetFlowVariables,
+    }),
+    [editorVariant, wireKey, snippetParamFieldKeys, snippetFlowVariables]
+  );
+
+  const showInsertMenuHint =
+    editorVariant === 'unifiedBackend'
+      ? (snippetParamFieldKeys?.length ?? 0) > 0 || (snippetFlowVariables?.length ?? 0) > 0
+      : Boolean(wireKey?.trim());
+
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span
-          className="inline-flex items-center rounded border border-slate-600/80 bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-slate-200/95"
-          title="Tipo del parametro dalla firma API (OpenAPI / Read API). Non modificabile qui."
-        >
-          Tipo: <span className="ml-1 font-mono text-amber-200/90">{paramType}</span>
-        </span>
+        {editorVariant === 'unifiedBackend' ? (
+          <span
+            className="inline-flex items-center rounded border border-teal-600/70 bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-slate-200/95"
+            title="Lo script deve valutarsi in un oggetto con chiavi = nomi interni SEND (param/prev sono snapshot in sola lettura)."
+          >
+            Output:{' '}
+            <span className="ml-1 font-mono text-teal-200/95">oggetto (più chiavi SEND)</span>
+          </span>
+        ) : (
+          <span
+            className="inline-flex items-center rounded border border-slate-600/80 bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-slate-200/95"
+            title="Tipo del parametro dalla firma API (OpenAPI / Read API). Non modificabile qui."
+          >
+            Tipo: <span className="ml-1 font-mono text-amber-200/90">{paramType}</span>
+          </span>
+        )}
         {isCreateScript ? (
           <button
             type="button"
@@ -184,6 +230,9 @@ export function SendParamAdvancementFullEditor({
         </button>
         <AdvancementQuickTestChips state={quickTestUi} />
       </div>
+      {editorVariant === 'unifiedBackend' && quickTestUi?.unifiedBeforeAfter && quickTestUi.unifiedBeforeAfter.length > 0 ? (
+        <UnifiedRecalculationTestTable rows={quickTestUi.unifiedBeforeAfter} />
+      ) : null}
       <textarea
         ref={nlTextareaRef}
         value={nl}
@@ -218,12 +267,17 @@ export function SendParamAdvancementFullEditor({
             </span>
           </>
         ) : null}
-        <div className="min-h-[120px] min-w-0 flex-1 overflow-hidden rounded border border-slate-600/70">
+        <div className="monaco-advancement-host relative z-0 min-h-[120px] min-w-0 flex-1 overflow-visible rounded border border-slate-600/70">
+          <AdvancementMonacoContextMenuHost editor={monacoEditor} insertOpts={insertMenuOpts} />
           <MonacoEditor
-          height={140}
-          language="plaintext"
+          height={editorVariant === 'unifiedBackend' ? 200 : 140}
+          language={editorVariant === 'unifiedBackend' ? 'javascript' : 'plaintext'}
           theme="vs-dark"
           value={cur.dslExpression ?? ''}
+          editorDidMount={(editor) => {
+            setMonacoEditor(editor);
+            applyMonacoEmbeddedEditorUi(editor);
+          }}
           onChange={(v) => {
             const next = (v ?? '').trim();
             if (!next) {
@@ -242,10 +296,19 @@ export function SendParamAdvancementFullEditor({
             wordWrap: 'on',
             scrollBeyondLastLine: false,
             automaticLayout: true,
+            fixedOverflowWidgets: true,
+            /** Menu nativo Monaco disattivato: usiamo il menu HTML portal (AdvancementMonacoContextMenuHost). */
+            contextmenu: false,
           }}
         />
         </div>
       </div>
+      {showInsertMenuHint ? (
+        <p className="text-[9px] leading-snug text-slate-500">
+          <span className="text-slate-400">Inserimenti:</span> tasto destro → menu (variabili di flusso, sottomenu Param / Prev). I
+          valori si vedono nel Test. Letterali SEND per il Play.
+        </p>
+      ) : null}
       {translateErr ? <p className="text-[10px] text-red-300">{translateErr}</p> : null}
       {fieldDescriptionHint ? (
         <p className="text-[10px] text-slate-500" title={fieldDescriptionHint}>
@@ -255,3 +318,6 @@ export function SendParamAdvancementFullEditor({
     </div>
   );
 }
+
+/** Nome prodotto «Recalculation»: alias di SendParamAdvancementFullEditor. */
+export const BackendRecalculationEditor = SendParamAdvancementFullEditor;

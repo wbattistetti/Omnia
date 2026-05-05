@@ -72,6 +72,10 @@ export default defineConfig({
       '/step3b': { target: 'http://localhost:8000', changeOrigin: true },
       '/step4': { target: 'http://localhost:8000', changeOrigin: true },
 
+      // Express-only runtime routes (Node :3100) — BEFORE catch-all /api/runtime → VB
+      '/api/runtime/ai-agent': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/runtime/scheduling': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/runtime/bookfromagenda': { target: 'http://localhost:3100', changeOrigin: true },
       // VB.NET ApiServer endpoints (porta 5000) - MUST come BEFORE Node.js and FastAPI
       '/api/grammar': { target: 'http://localhost:5000', changeOrigin: true },
       '/api/nlp': { target: 'http://localhost:5000', changeOrigin: true },
@@ -104,6 +108,9 @@ export default defineConfig({
     proxy: {
       '/api/designer': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/dev-tunnel': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/runtime/ai-agent': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/runtime/scheduling': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/runtime/bookfromagenda': { target: 'http://localhost:3100', changeOrigin: true },
     },
   },
 });

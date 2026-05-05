@@ -42,36 +42,95 @@ function resolveRef(root: Record<string, unknown>, ref: string): unknown {
   return cur;
 }
 
-function schemaPropertyKeys(root: Record<string, unknown>, schema: unknown): string[] {
+/**
+ * Chiavi proprietà top-level di uno schema JSON (body/risposta OpenAPI).
+ * Espande `allOf` / `oneOf` / `anyOf` e risolve `$ref` con guardia cicli.
+ */
+function schemaPropertyKeys(root: Record<string, unknown>, schema: unknown, refStack?: Set<string>): string[] {
+  const rs = refStack ?? new Set<string>();
   if (!isRecord(schema)) return [];
   if (typeof schema.$ref === 'string') {
-    const resolved = resolveRef(root, schema.$ref);
-    return schemaPropertyKeys(root, resolved);
+    const ref = schema.$ref;
+    if (rs.has(ref)) return [];
+    rs.add(ref);
+    try {
+      const resolved = resolveRef(root, ref);
+      return schemaPropertyKeys(root, resolved, rs);
+    } finally {
+      rs.delete(ref);
+    }
+  }
+  if (Array.isArray(schema.allOf)) {
+    const acc: string[] = [];
+    for (const sub of schema.allOf) {
+      acc.push(...schemaPropertyKeys(root, sub, rs));
+    }
+    return mergeUnique(acc, []);
+  }
+  if (Array.isArray(schema.oneOf)) {
+    const acc: string[] = [];
+    for (const sub of schema.oneOf) {
+      acc.push(...schemaPropertyKeys(root, sub, rs));
+    }
+    return mergeUnique(acc, []);
+  }
+  if (Array.isArray(schema.anyOf)) {
+    const acc: string[] = [];
+    for (const sub of schema.anyOf) {
+      acc.push(...schemaPropertyKeys(root, sub, rs));
+    }
+    return mergeUnique(acc, []);
   }
   if (schema.type === 'object' && isRecord(schema.properties)) {
     return Object.keys(schema.properties as Record<string, unknown>);
   }
+  if (isRecord(schema.properties)) {
+    const pk = Object.keys(schema.properties as Record<string, unknown>);
+    if (pk.length > 0) return pk;
+  }
   return [];
 }
 
-/** Top-level property descriptions from a JSON Schema object (risolve $ref). */
+/** Top-level property descriptions from a JSON Schema object (risolve $ref, composizioni). */
 export function schemaPropertyDescriptions(root: Record<string, unknown>, schema: unknown): Record<string, string> {
   const out: Record<string, string> = {};
-  if (!isRecord(schema)) return out;
-  if (typeof schema.$ref === 'string') {
-    const resolved = resolveRef(root, schema.$ref);
-    return schemaPropertyDescriptions(root, resolved);
-  }
-  if (schema.type === 'object' && isRecord(schema.properties)) {
-    const props = schema.properties as Record<string, unknown>;
-    for (const [key, propSchema] of Object.entries(props)) {
-      if (!isRecord(propSchema)) continue;
-      const d = propSchema.description;
-      if (typeof d === 'string' && d.trim()) {
-        out[key.trim()] = d.trim();
+  function walk(s: unknown, rs: Set<string>): void {
+    if (!isRecord(s)) return;
+    if (typeof s.$ref === 'string') {
+      if (rs.has(s.$ref)) return;
+      rs.add(s.$ref);
+      try {
+        walk(resolveRef(root, s.$ref), rs);
+      } finally {
+        rs.delete(s.$ref);
+      }
+      return;
+    }
+    if (Array.isArray(s.allOf)) {
+      for (const sub of s.allOf) walk(sub, rs);
+      return;
+    }
+    if (Array.isArray(s.oneOf)) {
+      for (const sub of s.oneOf) walk(sub, rs);
+      return;
+    }
+    if (Array.isArray(s.anyOf)) {
+      for (const sub of s.anyOf) walk(sub, rs);
+      return;
+    }
+    if (isRecord(s.properties)) {
+      const props = s.properties as Record<string, unknown>;
+      for (const [key, propSchema] of Object.entries(props)) {
+        if (!isRecord(propSchema)) continue;
+        const d = propSchema.description;
+        if (typeof d === 'string' && d.trim()) {
+          const k = key.trim();
+          if (k && !out[k]) out[k] = d.trim();
+        }
       }
     }
   }
+  walk(schema, new Set());
   return out;
 }
 
@@ -114,22 +173,43 @@ export function openApiSchemaToInputUiKind(root: Record<string, unknown>, schema
   return 'text';
 }
 
-/** Per ogni property top-level di uno schema object, kind UI (risolve $ref sulle property). */
+/** Per ogni property top-level, kind UI (composizioni + $ref). */
 function schemaPropertyInputKinds(root: Record<string, unknown>, schema: unknown): Record<string, OpenApiInputUiKind> {
   const out: Record<string, OpenApiInputUiKind> = {};
-  if (!isRecord(schema)) return out;
-  if (typeof schema.$ref === 'string') {
-    const resolved = resolveRef(root, schema.$ref);
-    return schemaPropertyInputKinds(root, resolved);
-  }
-  if (schema.type === 'object' && isRecord(schema.properties)) {
-    const props = schema.properties as Record<string, unknown>;
-    for (const [key, propSchema] of Object.entries(props)) {
-      const k = key.trim();
-      if (!k) continue;
-      out[k] = openApiSchemaToInputUiKind(root, propSchema);
+  function walk(s: unknown, rs: Set<string>): void {
+    if (!isRecord(s)) return;
+    if (typeof s.$ref === 'string') {
+      if (rs.has(s.$ref)) return;
+      rs.add(s.$ref);
+      try {
+        walk(resolveRef(root, s.$ref), rs);
+      } finally {
+        rs.delete(s.$ref);
+      }
+      return;
+    }
+    if (Array.isArray(s.allOf)) {
+      for (const sub of s.allOf) walk(sub, rs);
+      return;
+    }
+    if (Array.isArray(s.oneOf)) {
+      for (const sub of s.oneOf) walk(sub, rs);
+      return;
+    }
+    if (Array.isArray(s.anyOf)) {
+      for (const sub of s.anyOf) walk(sub, rs);
+      return;
+    }
+    if (isRecord(s.properties)) {
+      const props = s.properties as Record<string, unknown>;
+      for (const [key, propSchema] of Object.entries(props)) {
+        const k = key.trim();
+        if (!k || out[k]) continue;
+        out[k] = openApiSchemaToInputUiKind(root, propSchema);
+      }
     }
   }
+  walk(schema, new Set());
   return out;
 }
 
@@ -311,21 +391,53 @@ function operationHasTag(op: unknown, tag: string): boolean {
   return tags.some((t) => typeof t === 'string' && t.toLowerCase() === tl);
 }
 
-function findPathKeyByOperationId(
+/** Verbi HTTP considerati per Read API / auto-metodo. */
+export const READ_API_HTTP_VERBS = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'] as const;
+
+/**
+ * Sceglie il verbo HTTP per un Path Item OpenAPI: rispetta `methodHint` se presente sul path, altrimenti POST poi GET.
+ */
+export function pickHttpMethodForPathItem(pathItem: unknown, methodHint?: string): string | null {
+  if (!isRecord(pathItem)) return null;
+  const available = READ_API_HTTP_VERBS.filter((v) => isRecord(pathItem[v]));
+  if (available.length === 0) return null;
+  const h = methodHint?.trim().toLowerCase();
+  if (h && (available as readonly string[]).includes(h)) return h;
+  if (available.includes('post')) return 'post';
+  if (available.includes('get')) return 'get';
+  return available[0];
+}
+
+function pathKeysForVerb(paths: Record<string, unknown>, verb: string): string[] {
+  const v = verb.toLowerCase();
+  return Object.keys(paths).filter((k) => {
+    const item = paths[k];
+    return isRecord(item) && isRecord(item[v]);
+  });
+}
+
+function pathKeysWithAnyVerb(paths: Record<string, unknown>): string[] {
+  return Object.keys(paths).filter((k) => {
+    const item = paths[k];
+    if (!isRecord(item)) return false;
+    return READ_API_HTTP_VERBS.some((verb) => isRecord(item[verb]));
+  });
+}
+
+function findPathAndMethodByOperationId(
   paths: Record<string, unknown>,
-  method: string,
   operationId: string
-): string | null {
-  const m = method.toLowerCase();
+): { pathKey: string; method: string } | null {
   const target = operationId.trim();
   if (!target) return null;
   for (const pk of Object.keys(paths)) {
     const item = paths[pk];
     if (!isRecord(item)) continue;
-    const op = item[m];
-    if (!isRecord(op)) continue;
-    if (typeof op.operationId === 'string' && op.operationId === target) {
-      return pk;
+    for (const verb of READ_API_HTTP_VERBS) {
+      const op = item[verb];
+      if (isRecord(op) && typeof op.operationId === 'string' && op.operationId === target) {
+        return { pathKey: pk, method: verb };
+      }
     }
   }
   return null;
@@ -336,45 +448,67 @@ function sortPathKeys(keys: string[]): string[] {
 }
 
 /**
- * Sceglie il path OpenAPI in base all’URL nel campo endpoint (non alla pagina Redoc).
- * Con solo Redoc/swagger.json: usa `#operation/id`, poi `#tag/…`, altrimenti il primo path per quel metodo (ordinato).
+ * Sceglie path + metodo HTTP dallo spec per Read API.
+ * Con URL operativo: abbina il pathname; il metodo viene dedotto dal Path Item (hint UI se valido).
+ * Con solo Redoc/swagger: `#operation/id` (qualsiasi verbo), `#tag/`, altrimenti path unici / disambiguazione per hint.
  */
 export function pickOpenApiPathForReadApi(
   endpointUrl: string,
   doc: Record<string, unknown>,
-  method: string
-): { pathKey: string } | { error: string } {
+  methodHint: string
+): { pathKey: string; method: string } | { error: string } {
   const paths = doc.paths;
   if (!isRecord(paths)) {
     return { error: 'Il documento OpenAPI non contiene paths.' };
   }
-  const m = method.toLowerCase();
-  const pathKeysForMethod = Object.keys(paths).filter((k) => {
-    const item = paths[k];
-    if (!isRecord(item)) return false;
-    return isRecord(item[m]);
-  });
+  const hint = methodHint.trim() || 'get';
+  const m = hint.toLowerCase();
 
   const raw = deriveApiRequestPathnameFromEndpointUrl(endpointUrl);
   if (raw != null) {
     const stripped = stripSwagger2BasePathFromPathname(raw, doc);
     const norm = normalizePathname(stripped);
     const key = matchOpenApiPath(paths, norm);
-    if (key) return { pathKey: key };
+    if (key) {
+      const item = paths[key];
+      const method = pickHttpMethodForPathItem(item, hint);
+      if (!method) {
+        return { error: `Il path ${key} non definisce operazioni HTTP riconosciute.` };
+      }
+      return { pathKey: key, method };
+    }
+  }
+
+  let pathKeysForMethod = pathKeysForVerb(paths, m);
+
+  if (pathKeysForMethod.length === 0) {
+    const anyPaths = pathKeysWithAnyVerb(paths);
+    if (anyPaths.length === 1) {
+      const pk = anyPaths[0];
+      const item = paths[pk];
+      const method = pickHttpMethodForPathItem(item, hint);
+      if (!method) {
+        return { error: `Il path ${pk} non definisce operazioni HTTP riconosciute.` };
+      }
+      return { pathKey: pk, method };
+    }
+    if (anyPaths.length === 0) {
+      return { error: 'Nessun path con operazioni HTTP nello spec.' };
+    }
+    return {
+      error: `Nessuna operazione ${hint.toUpperCase()} nello spec. Inserisci l’URL dell’operazione o scegli un metodo presente nel documento.`,
+    };
   }
 
   if (pathKeysForMethod.length === 1) {
-    return { pathKey: pathKeysForMethod[0] };
-  }
-
-  if (pathKeysForMethod.length === 0) {
-    return { error: `Nessuna operazione ${method} definita nello spec.` };
+    const pk = pathKeysForMethod[0];
+    return { pathKey: pk, method: m };
   }
 
   const hash = parseOpenApiViewerHash(endpointUrl);
   if (hash.operationId) {
-    const byOp = findPathKeyByOperationId(paths, method, hash.operationId);
-    if (byOp) return { pathKey: byOp };
+    const byOp = findPathAndMethodByOperationId(paths, hash.operationId);
+    if (byOp) return { pathKey: byOp.pathKey, method: byOp.method };
   }
   if (hash.tag) {
     const tagged = pathKeysForMethod.filter((pk) => {
@@ -383,14 +517,14 @@ export function pickOpenApiPathForReadApi(
       return operationHasTag(item[m], hash.tag!);
     });
     if (tagged.length === 1) {
-      return { pathKey: tagged[0] };
+      return { pathKey: tagged[0], method: m };
     }
     if (tagged.length > 1) {
-      return { pathKey: sortPathKeys(tagged)[0] };
+      return { pathKey: sortPathKeys(tagged)[0], method: m };
     }
   }
 
-  return { pathKey: sortPathKeys(pathKeysForMethod)[0] };
+  return { pathKey: sortPathKeys(pathKeysForMethod)[0], method: m };
 }
 
 export function extractOperationFields(

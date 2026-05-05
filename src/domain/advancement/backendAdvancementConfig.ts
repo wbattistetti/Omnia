@@ -39,3 +39,9 @@ export interface BackendAdvancementPersistedSlice {
   inputAdvancement?: Record<string, BackendInputAdvancementEntry>;
   inputAdvancementTypes?: Record<string, AdvancementValueType>;
 }
+
+/**
+ * Avanzamento / ricalcolo unico per l’intero Backend Call (tutti i SEND), senza checkbox per riga.
+ * Stessi campi dell’entry per parametro tranne `enabled`.
+ */
+export type BackendRecalculationEntry = Omit<BackendInputAdvancementEntry, 'enabled'>;

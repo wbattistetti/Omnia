@@ -2,15 +2,21 @@
  * Client for POST /design/advancement-dsl-translate (Node design-time).
  */
 
+/** `unifiedBackend` = script unico che restituisce un oggetto su tutti i SEND (ricalcolo backend). */
+export type AdvancementTranslateMode = 'singleParam' | 'unifiedBackend';
+
 export interface AdvancementDslTranslateRequest {
   naturalLanguage: string;
-  targetParam: string;
-  targetType: string;
+  /** Opzionale se `mode` è `unifiedBackend`. */
+  targetParam?: string;
+  /** Opzionale se `mode` è `unifiedBackend`. */
+  targetType?: string;
   signature?: {
     parameters: Record<string, { type: string; description?: string }>;
   };
   provider?: 'groq' | 'openai';
   model?: string;
+  mode?: AdvancementTranslateMode;
 }
 
 export interface AdvancementDslTranslateResponse {

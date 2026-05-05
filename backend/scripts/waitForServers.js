@@ -16,13 +16,6 @@ const servers = [
     port: 8000,
     expectJsonOk: true
   },
-  {
-    name: 'Mock booking-slots',
-    url: 'http://localhost:3110',
-    healthCheck: 'http://localhost:3110/health',
-    port: 3110,
-    expectJsonOk: true
-  },
 ];
 
 const maxAttempts = 60; // 60 seconds total

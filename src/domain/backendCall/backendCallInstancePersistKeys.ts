@@ -17,6 +17,7 @@ export const BACKEND_CALL_INSTANCE_PERSIST_KEYS: readonly string[] = [
   'mockTableDefaultExecutionMode',
   'inputAdvancement',
   'inputAdvancementTypes',
+  'backendAdvancement',
   'backendToolDescription',
   'endpointInvocationValues',
   'backendCallSpecMeta',

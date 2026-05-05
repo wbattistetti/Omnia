@@ -7,8 +7,9 @@
 /**
  * @param {object} params
  * @param {string} params.naturalLanguage
- * @param {string} params.targetParam
- * @param {string} params.targetType
+ * @param {string} [params.targetParam]
+ * @param {string} [params.targetType]
+ * @param {'singleParam'|'unifiedBackend'} [params.mode]
  * @param {object} params.signature - e.g. { parameters: { name: { type, description } } }
  * @param {import('./AIProviderService')} params.aiProviderService
  * @param {string} [params.provider]
@@ -16,6 +17,21 @@
  * @returns {Promise<{ dslExpression: string, refinedNaturalLanguage?: string }>}
  */
 async function translateAdvancementDslRequest(params) {
+  const mode =
+    typeof params.mode === 'string' && params.mode.trim() === 'unifiedBackend'
+      ? 'unifiedBackend'
+      : 'singleParam';
+  if (mode === 'unifiedBackend') {
+    return translateUnifiedBackendAdvancementDslRequest(params);
+  }
+  return translateSingleParamAdvancementDslRequest(params);
+}
+
+/**
+ * @param {object} params
+ * @returns {Promise<{ dslExpression: string, refinedNaturalLanguage?: string }>}
+ */
+async function translateSingleParamAdvancementDslRequest(params) {
   const {
     naturalLanguage,
     targetParam,
@@ -91,6 +107,113 @@ If a \`Date\` helper returns a number but **targetType is String**, wrap so the 
     model: model || undefined,
     temperature: 0.1,
     maxTokens: 900,
+  });
+
+  const rawText = extractChatText(result);
+  if (!rawText) {
+    const e = new Error('Empty AI response');
+    e.statusCode = 502;
+    throw e;
+  }
+
+  const text = stripMarkdownJsonFence(rawText);
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    const e = new Error('AI did not return valid JSON');
+    e.statusCode = 502;
+    throw e;
+  }
+  const dslExpression =
+    typeof parsed.dslExpression === 'string'
+      ? parsed.dslExpression.trim()
+      : typeof parsed.expression === 'string'
+        ? parsed.expression.trim()
+        : '';
+
+  if (!dslExpression) {
+    const e = new Error('JSON missing dslExpression');
+    e.statusCode = 502;
+    throw e;
+  }
+
+  let refinedNaturalLanguage;
+  if (typeof parsed.refinedNaturalLanguage === 'string') {
+    refinedNaturalLanguage = parsed.refinedNaturalLanguage.trim();
+  }
+
+  const out = { dslExpression };
+  if (refinedNaturalLanguage && refinedNaturalLanguage !== nl) {
+    out.refinedNaturalLanguage = refinedNaturalLanguage;
+  }
+  return out;
+}
+
+/**
+ * Modalità «ricalcolo backend»: un solo script che restituisce un oggetto con più chiavi SEND.
+ */
+async function translateUnifiedBackendAdvancementDslRequest(params) {
+  const { naturalLanguage, signature, aiProviderService, provider = 'groq', model } = params;
+
+  const nl = typeof naturalLanguage === 'string' ? naturalLanguage.trim() : '';
+  if (!nl) {
+    const e = new Error('naturalLanguage is required');
+    e.statusCode = 400;
+    throw e;
+  }
+  if (!aiProviderService) {
+    const e = new Error('aiProviderService is required');
+    e.statusCode = 500;
+    throw e;
+  }
+
+  const system = `You are a Script Builder for Omnia BackendCall batch recalculation (single DSL per entire call).
+
+Task: turn natural-language business rules into ONE JavaScript **expression** whose value is a **plain object**. Keys must be **internal SEND names** from \`backendParameterSignature.parameters\` (the designer’s internalName / left column), not raw OpenAPI names unless they match.
+
+**Output to Omnia:** exactly one JSON object with keys:
+- "dslExpression" (string, required): the JavaScript **expression** only (no surrounding \`return\` — Omnia wraps it).
+- "refinedNaturalLanguage" (optional): concise Italian; same language as user if clear.
+
+**Expression rules:**
+1. Must be one expression: either an **object literal** \`{ a: 1, b: "x" }\` or an **invoked IIFE** \`( () => { const x = …; return { … }; } )()\`.
+2. Forbidden at root: uninvoked \`() => …\` (would be a Function value). Use \`( () => { … } )()\` for blocks.
+3. **Do not mutate** \`param\` or \`prev\` — they are frozen. Compute new values and **return** them in the result object.
+4. **Output object keys are not “assignments to param”:** \`return { startdate: '2026-01-01', days: 3 }\` sets the **recalculated output** for those internal SEND names. That is **required** and is **not** the same as writing \`param.startdate = …\` (forbidden). Use one property in the returned object per parameter you are outputting.
+5. Available bindings: \`param\` and \`prev\` only (objects keyed by internal SEND names). Use exact keys from \`parameters\`.
+6. Value types: strings, numbers, ISO date strings (YYYY-MM-DD) as appropriate to each parameter’s type hint in the signature.
+7. **Purity (Omnia):** never assign to \`param\` / \`prev\` / their properties. You may use local variables and mutate a **local** \`Date\` (e.g. \`const d = new Date(...); d.setUTCDate(...)\`). Use \`Number(param.someInt)\` or \`parseInt\` when doing arithmetic on values that may be strings from the batch.
+
+**Style checklist (apply when generating \`dslExpression\`):**
+- Use readable local names (e.g. \`newStartDate\`, \`dayIncrement\`).
+- **Return** only an object whose keys are **canonical internal SEND names** from \`parameters\` (e.g. \`startdate\`, \`days\`).
+- No \`param.x = …\`; use \`return { x: computed, … }\` for outputs.
+
+**Bad (mutation):** \`param.startdate = …\` or \`Object.assign(param, { startdate: … })\`.
+**Good (return output object):** \`( () => { const newStartDate = new Date(String(param.startdate)); newStartDate.setUTCDate(newStartDate.getUTCDate() + Number(param.days) + 1); return { startdate: newStartDate.toISOString().slice(0, 10), days: param.days }; } )()\`
+
+No markdown outside the JSON response.`;
+
+  const user = JSON.stringify(
+    {
+      userIntent: nl,
+      backendParameterSignature: signature && typeof signature === 'object' ? signature : {},
+    },
+    null,
+    0
+  );
+
+  const messages = [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ];
+
+  const result = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.1,
+    maxTokens: 1400,
   });
 
   const rawText = extractChatText(result);

@@ -18,9 +18,18 @@ export type AdvancementContextChip = {
   tone?: 'precedente' | 'nuovo';
 };
 
+/** Riga confronto Test per ricalcolo backend unificato (ingresso `param` → output script). */
+export type UnifiedRecalculationBeforeAfterRow = {
+  key: string;
+  beforeDisplay: string;
+  afterDisplay: string;
+};
+
 /** Snapshot UI quick test per wireKey (invalidazione su cambio riga, NL, DSL o chiusura overlay). */
 export type AdvancementQuickTestRowState = {
   chips: AdvancementContextChip[];
+  /** Ricalcolo unificato: tabella prima/dopo per ogni chiave SEND ammessa. */
+  unifiedBeforeAfter?: readonly UnifiedRecalculationBeforeAfterRow[];
   error?: string;
   snapshotRow: string;
   /** `naturalLanguage` in trim al momento del Test (invalida se l’utente modifica la descrizione). */
@@ -214,6 +223,30 @@ export function buildParamRecordFromSendMapping(
   return { param, error: null };
 }
 
+/**
+ * Letterali di tutte le righe SEND uniti in un unico `param` (chiave = ultimo segmento wireKey).
+ * Usato per Test / contesto DSL di «ricalcolo backend» unificato.
+ */
+export function buildFullParamRecordFromSendMapping(
+  entries: readonly SendRowSnapshot[],
+  typesByWireKey: Record<string, AdvancementValueType> | undefined
+): { param: Record<string, unknown>; error: string | null } {
+  const param: Record<string, unknown> = {};
+  for (const e of entries) {
+    const lit = e.literalConstant?.trim();
+    if (!lit) continue;
+    const field = paramFieldKeyFromWireKey(e.wireKey);
+    if (!field) continue;
+    const t = typesByWireKey?.[e.wireKey.trim()] ?? 'String';
+    try {
+      param[field] = coerceLiteralString(lit, t);
+    } catch {
+      /* ignora righe incoerenti col tipo */
+    }
+  }
+  return { param, error: null };
+}
+
 /** Output di `getPlayContext` per UI (prev globale + param da letterali SEND). */
 export type AdvancementPlayContextBundle = {
   prev: Record<string, unknown>;
@@ -245,6 +278,75 @@ export function runAdvancementPlayEvaluation(
     }
     const display = formatAdvancementTestResultDisplay(check.value);
     return { ok: true, display };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+const UNIFIED_MUST_BE_OBJECT = 'Il risultato deve essere un oggetto (non array) con le chiavi dei parametri SEND da aggiornare.';
+
+/** Esito Test solo per ricalcolo unificato: include l’oggetto valutato per confronto prima/dopo. */
+export type UnifiedAdvancementPlayOutcome =
+  | { ok: true; display: string; resultObject: Record<string, unknown> }
+  | { ok: false; message: string };
+
+/**
+ * Tabella Test: per ogni chiave ammessa, valore in ingresso nello snapshot `param` vs valore nell’oggetto restituito dallo script.
+ */
+export function buildUnifiedRecalculationBeforeAfterRows(
+  paramSnapshot: Record<string, unknown>,
+  resultObject: Record<string, unknown>,
+  allowedFieldKeys: readonly string[]
+): UnifiedRecalculationBeforeAfterRow[] {
+  const sorted = [...new Set(allowedFieldKeys.map((k) => k.trim()).filter(Boolean))].sort();
+  return sorted.map((key) => ({
+    key,
+    beforeDisplay: formatChipValue(
+      Object.prototype.hasOwnProperty.call(paramSnapshot, key) ? paramSnapshot[key] : undefined
+    ),
+    afterDisplay: Object.prototype.hasOwnProperty.call(resultObject, key)
+      ? formatChipValue(resultObject[key])
+      : '—',
+  }));
+}
+
+/**
+ * Test Play per script «ricalcolo backend» unificato: l’espressione deve valutarsi in un oggetto piano
+ * le cui chiavi sono un sottoinsieme di `allowedFieldKeys` (nomi interni, ultimo segmento se wireKey con punti).
+ */
+export function runUnifiedBackendAdvancementPlayEvaluation(
+  dslSource: string,
+  ctx: AdvancementEvalContext,
+  allowedFieldKeys: readonly string[]
+): UnifiedAdvancementPlayOutcome {
+  const dslTrim = dslSource.trim();
+  if (!dslTrim) {
+    return { ok: false, message: 'Espressione vuota.' };
+  }
+  const allowed = new Set(allowedFieldKeys.map((k) => k.trim()).filter(Boolean));
+  if (allowed.size === 0) {
+    return { ok: false, message: 'Nessun parametro SEND: aggiungi righe in mapping.' };
+  }
+  try {
+    const raw = evaluateAdvancementJsExpression(dslTrim, ctx);
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { ok: false, message: UNIFIED_MUST_BE_OBJECT };
+    }
+    const o = raw as Record<string, unknown>;
+    const keys = Object.keys(o);
+    if (keys.length === 0) {
+      return { ok: false, message: 'L’oggetto restituito non ha proprietà.' };
+    }
+    for (const k of keys) {
+      if (!allowed.has(k)) {
+        return {
+          ok: false,
+          message: `Chiave «${k}» non ammessa. Usa solo: ${[...allowed].sort().join(', ')}`,
+        };
+      }
+    }
+    const display = JSON.stringify(o);
+    return { ok: true, display, resultObject: o };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : String(e) };
   }

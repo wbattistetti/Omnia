@@ -8,7 +8,18 @@ import { useProjectTranslations } from '../../../../context/ProjectTranslationsC
 import { useActiveFlowMetaTranslationsFlattened } from '../../../../hooks/useActiveFlowMetaTranslations';
 import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
 import { useHeaderToolbarContext } from '../../ResponseEditor/context/HeaderToolbarContext';
-import { Server, Eye, EyeOff, Table2, BookOpen, FlaskConical, ListPlus, RefreshCw, Columns2 } from 'lucide-react';
+import {
+  Server,
+  Eye,
+  EyeOff,
+  Table2,
+  BookOpen,
+  FlaskConical,
+  ListPlus,
+  RefreshCw,
+  Columns2,
+  Calculator,
+} from 'lucide-react';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { InterfaceMappingEditor } from '../../../../components/FlowMappingPanel/InterfaceMappingEditor';
 import {
@@ -34,20 +45,33 @@ import {
 import { slugInternalName, type OpenApiInputUiKind } from '../../../../services/openApiBackendCallSpec';
 import { runBackendCallReadApiForTask } from '../../../../services/runBackendCallReadApiForTask';
 import { logBackendCallTest } from '../../../../debug/backendCallTestDebug';
-import type { BackendInputAdvancementEntry } from '../../../../domain/advancement/backendAdvancementConfig';
+import type {
+  BackendInputAdvancementEntry,
+  BackendRecalculationEntry,
+} from '../../../../domain/advancement/backendAdvancementConfig';
 import type { AdvancementValueType } from '../../../../domain/advancement/advancementDsl';
-import { SendParamAdvancementFullEditor } from './backendAdvancement/SendParamAdvancementFullEditor';
-import { SendParamAdvancementRowEditor } from './backendAdvancement/SendParamAdvancementRowEditor';
+import { BackendRecalculationEditor, SendParamAdvancementFullEditor } from './backendAdvancement/SendParamAdvancementFullEditor';
 import {
   buildAdvancementContextChips,
+  buildFullParamRecordFromSendMapping,
   buildParamRecordFromSendMapping,
+  buildUnifiedRecalculationBeforeAfterRows,
+  paramFieldKeyFromWireKey,
   runAdvancementPlayEvaluation,
+  runUnifiedBackendAdvancementPlayEvaluation,
   sendRowValueFingerprint,
   type AdvancementQuickTestRowState,
 } from '../../../../domain/advancement/advancementQuickTest';
 
 function defaultAdvancementEntry(): BackendInputAdvancementEntry {
   return { enabled: false, dslExpression: '', naturalLanguage: '' };
+}
+
+/** WireKey sintetico per editor di ricalcolo unificato (tutti i SEND). */
+const BACKEND_RECALC_WIRE_KEY = '__backend__';
+
+function defaultBackendRecalculationEntry(): BackendRecalculationEntry {
+  return { dslExpression: '', naturalLanguage: '' };
 }
 
 const SEND_RECV_SPLIT_STORAGE_KEY = 'omnia.backendCall.sendReceiveSplitRatio';
@@ -117,6 +141,11 @@ interface BackendCallConfig {
   /** Batch progression: executable DSL per SEND parameter (Omnia runtime). */
   inputAdvancement?: Record<string, BackendInputAdvancementEntry>;
   inputAdvancementTypes?: Record<string, AdvancementValueType>;
+  /**
+   * Un solo script di avanzamento/ricalcolo per l’intera chiamata (sostituisce la UI per-parametro).
+   * Se presente con contenuto, ha priorità concettuale su `inputAdvancement` legacy.
+   */
+  backendAdvancement?: BackendRecalculationEntry;
 }
 
 const DEFAULT_CONFIG: BackendCallConfig = {
@@ -278,6 +307,8 @@ export default function BackendCallEditor({
   const [swaggerInputContract, setSwaggerInputContract] = React.useState<string[]>([]);
   const [swaggerOutputContract, setSwaggerOutputContract] = React.useState<string[]>([]);
   const [readApiBusy, setReadApiBusy] = React.useState(false);
+  /** Errore Read API / validazione: inline sotto URL/metodo (no alert). */
+  const [readApiError, setReadApiError] = React.useState<string | null>(null);
   const [bulkApiTestBusy, setBulkApiTestBusy] = React.useState(false);
   const [bulkTestNonce, setBulkTestNonce] = React.useState(0);
 
@@ -376,6 +407,25 @@ export default function BackendCallEditor({
     const adv = (rawTask as { inputAdvancement?: BackendCallConfig['inputAdvancement'] }).inputAdvancement;
     const advTypes = (rawTask as { inputAdvancementTypes?: BackendCallConfig['inputAdvancementTypes'] })
       .inputAdvancementTypes;
+    let backendAdvancement = (rawTask as { backendAdvancement?: BackendRecalculationEntry }).backendAdvancement;
+    if (
+      (!backendAdvancement?.dslExpression || !String(backendAdvancement.dslExpression).trim()) &&
+      adv &&
+      typeof adv === 'object'
+    ) {
+      for (const k of Object.keys(adv)) {
+        const e = adv[k];
+        if (e?.enabled && String(e.dslExpression ?? '').trim()) {
+          backendAdvancement = {
+            dslExpression: e.dslExpression ?? '',
+            naturalLanguage: e.naturalLanguage,
+            naturalLanguageAlignedWithScript: e.naturalLanguageAlignedWithScript,
+            dslManuallyEditedAfterAlign: e.dslManuallyEditedAfterAlign,
+          };
+          break;
+        }
+      }
+    }
     const cfg: BackendCallConfig = {
       endpoint,
       openapiSpecUrl,
@@ -386,6 +436,9 @@ export default function BackendCallEditor({
       ...(mockTableDefaultExecutionMode !== undefined ? { mockTableDefaultExecutionMode } : {}),
       ...(adv && typeof adv === 'object' ? { inputAdvancement: adv } : {}),
       ...(advTypes && typeof advTypes === 'object' ? { inputAdvancementTypes: advTypes } : {}),
+      ...(backendAdvancement && typeof backendAdvancement === 'object'
+        ? { backendAdvancement }
+        : {}),
     };
     return cfg;
   }, []);
@@ -436,6 +489,10 @@ export default function BackendCallEditor({
   }, [instanceId, buildConfigFromTask, endpointExternalRevision]);
 
   React.useEffect(() => {
+    setReadApiError(null);
+  }, [config.endpoint.url, config.endpoint.method, config.openapiSpecUrl]);
+
+  React.useEffect(() => {
     if (instanceId && config) {
       taskRepository.updateTask(
         instanceId,
@@ -453,6 +510,7 @@ export default function BackendCallEditor({
           ...(config.inputAdvancementTypes !== undefined
             ? { inputAdvancementTypes: config.inputAdvancementTypes }
             : {}),
+          ...(config.backendAdvancement !== undefined ? { backendAdvancement: config.backendAdvancement } : {}),
           endpointInvocationValues: undefined,
           backendToolDescription,
         } as any,
@@ -573,6 +631,7 @@ export default function BackendCallEditor({
   /** Chiude l'overlay se il parametro sparisce o l'avanzamento viene disattivato. */
   React.useEffect(() => {
     if (!advancementEditorWireKey) return;
+    if (advancementEditorWireKey === BACKEND_RECALC_WIRE_KEY) return;
     const names = new Set(
       (config.inputs || []).map((i) => i.internalName?.trim()).filter(Boolean) as string[]
     );
@@ -607,16 +666,17 @@ export default function BackendCallEditor({
     const op = config.endpoint.url.trim();
     const spec = (config.openapiSpecUrl || '').trim();
     if (!op && !spec) {
-      window.alert('Inserire endpoint operativo o Spec URL (OpenAPI).');
+      setReadApiError('Inserire endpoint operativo o Spec URL (OpenAPI).');
       return;
     }
+    setReadApiError(null);
     setReadApiBusy(true);
     try {
       const result = await runBackendCallReadApiForTask(instanceId, projectId, op, config.endpoint.method, {
         openapiSpecUrl: spec || undefined,
       });
       if (!result.ok) {
-        window.alert(result.error);
+        setReadApiError(result.error);
         return;
       }
       setSwaggerInputContract(result.inputNames);
@@ -720,8 +780,38 @@ export default function BackendCallEditor({
     [config.inputs, knownBackendVariableIdSet, openapiDescriptionSnapshots]
   );
 
+  /** Chiavi ammesse nell’oggetto risultato dello script unificato (= segmenti interni SEND). */
+  const unifiedAllowedFieldKeys = React.useMemo(
+    () =>
+      [
+        ...new Set(
+          mappingSend
+            .map((e) => {
+              const w = (e.wireKey || '').trim();
+              return w ? paramFieldKeyFromWireKey(w) || w : '';
+            })
+            .filter(Boolean)
+        ),
+    ] as string[],
+    [mappingSend]
+  );
+
+  const advancementSnippetFlowVariables = React.useMemo(
+    () =>
+      availableVariables.slice(0, 80).map((id) => ({
+        id,
+        label: getVariableLabel(id, activeFlowTranslations) || id,
+      })),
+    [availableVariables, activeFlowTranslations]
+  );
+
   const getAdvancementPlayContext = React.useCallback(
     (wk: string) => {
+      if (wk === BACKEND_RECALC_WIRE_KEY) {
+        const built = buildFullParamRecordFromSendMapping(mappingSend, config.inputAdvancementTypes);
+        const prev = { ...built.param };
+        return { prev, param: built.param, error: built.error };
+      }
       const focusEntry = mappingSend.find((e) => e.wireKey === wk);
       const built = buildParamRecordFromSendMapping(
         mappingSend,
@@ -742,10 +832,16 @@ export default function BackendCallEditor({
   const commitAdvancementQuickTest = React.useCallback(
     (wk: string) => {
       const ctx = getAdvancementPlayContext(wk);
-      const entry = config.inputAdvancement?.[wk] ?? defaultAdvancementEntry();
+      const entry: BackendInputAdvancementEntry =
+        wk === BACKEND_RECALC_WIRE_KEY
+          ? { ...defaultAdvancementEntry(), ...config.backendAdvancement, enabled: true }
+          : config.inputAdvancement?.[wk] ?? defaultAdvancementEntry();
       const paramType = config.inputAdvancementTypes?.[wk] ?? 'String';
       const row = mappingSend.find((e) => e.wireKey === wk);
-      const snapshotRow = sendRowValueFingerprint(row);
+      const snapshotRow =
+        wk === BACKEND_RECALC_WIRE_KEY
+          ? mappingSend.map((e) => sendRowValueFingerprint(e)).join('|')
+          : sendRowValueFingerprint(row);
       const snapshotNaturalLanguage = (entry.naturalLanguage ?? '').trim();
       const snapshotDsl = (entry.dslExpression ?? '').trim();
 
@@ -756,21 +852,46 @@ export default function BackendCallEditor({
         }));
         return;
       }
-      const out = runAdvancementPlayEvaluation(
-        entry.dslExpression ?? '',
-        { prev: ctx.prev, param: ctx.param },
-        paramType
-      );
+      const out =
+        wk === BACKEND_RECALC_WIRE_KEY
+          ? runUnifiedBackendAdvancementPlayEvaluation(
+              entry.dslExpression ?? '',
+              { prev: ctx.prev, param: ctx.param },
+              unifiedAllowedFieldKeys
+            )
+          : runAdvancementPlayEvaluation(
+              entry.dslExpression ?? '',
+              { prev: ctx.prev, param: ctx.param },
+              paramType
+            );
       if (out.ok) {
-        const chips = buildAdvancementContextChips(
-          { prev: ctx.prev, param: ctx.param },
-          out.display,
-          { focusWireKey: wk }
-        );
-        setAdvancementQuickTestUi((p) => ({
-          ...p,
-          [wk]: { chips, snapshotRow, snapshotNaturalLanguage, snapshotDsl },
-        }));
+        if (wk === BACKEND_RECALC_WIRE_KEY && 'resultObject' in out) {
+          const unifiedBeforeAfter = buildUnifiedRecalculationBeforeAfterRows(
+            ctx.param,
+            out.resultObject,
+            unifiedAllowedFieldKeys
+          );
+          setAdvancementQuickTestUi((p) => ({
+            ...p,
+            [wk]: {
+              chips: [],
+              unifiedBeforeAfter,
+              snapshotRow,
+              snapshotNaturalLanguage,
+              snapshotDsl,
+            },
+          }));
+        } else {
+          const chips = buildAdvancementContextChips(
+            { prev: ctx.prev, param: ctx.param },
+            out.display,
+            { focusWireKey: wk }
+          );
+          setAdvancementQuickTestUi((p) => ({
+            ...p,
+            [wk]: { chips, snapshotRow, snapshotNaturalLanguage, snapshotDsl },
+          }));
+        }
       } else {
         setAdvancementQuickTestUi((p) => ({
           ...p,
@@ -778,7 +899,14 @@ export default function BackendCallEditor({
         }));
       }
     },
-    [config.inputAdvancement, config.inputAdvancementTypes, getAdvancementPlayContext, mappingSend]
+    [
+      config.backendAdvancement,
+      config.inputAdvancement,
+      config.inputAdvancementTypes,
+      getAdvancementPlayContext,
+      mappingSend,
+      unifiedAllowedFieldKeys,
+    ]
   );
 
   React.useEffect(() => {
@@ -802,6 +930,20 @@ export default function BackendCallEditor({
       for (const wk of Object.keys(prev)) {
         const st = prev[wk];
         if (!st) continue;
+        if (wk === BACKEND_RECALC_WIRE_KEY) {
+          const rs = mappingSend.map((e) => sendRowValueFingerprint(e)).join('|');
+          const nl = (config.backendAdvancement?.naturalLanguage ?? '').trim();
+          const dsl = (config.backendAdvancement?.dslExpression ?? '').trim();
+          if (
+            st.snapshotRow !== rs ||
+            (st.snapshotNaturalLanguage ?? '') !== nl ||
+            st.snapshotDsl !== dsl
+          ) {
+            delete next[wk];
+            changed = true;
+          }
+          continue;
+        }
         const row = mappingSend.find((e) => e.wireKey === wk);
         const rs = sendRowValueFingerprint(row);
         const nl = (config.inputAdvancement?.[wk]?.naturalLanguage ?? '').trim();
@@ -817,56 +959,54 @@ export default function BackendCallEditor({
       }
       return changed ? next : prev;
     });
-  }, [mappingSend, config.inputAdvancement]);
+  }, [mappingSend, config.backendAdvancement, config.inputAdvancement]);
 
-  const backendSendAdvancement = React.useMemo(
-    () => ({
-      isEnabled: (wk: string) => Boolean(config.inputAdvancement?.[wk]?.enabled),
-      onToggle: (wk: string, next: boolean) => {
-        setConfig((p) => {
-          const cur = p.inputAdvancement?.[wk] ?? defaultAdvancementEntry();
-          return {
-            ...p,
-            inputAdvancement: {
-              ...(p.inputAdvancement ?? {}),
-              [wk]: { ...cur, enabled: next },
-            },
-          };
-        });
-      },
-      renderEditor: (wk: string) => {
-        const entry = config.inputAdvancement?.[wk] ?? defaultAdvancementEntry();
-        const paramType = config.inputAdvancementTypes?.[wk] ?? 'String';
-        const row = mappingSend.find((e) => e.wireKey === wk);
-        return (
-          <SendParamAdvancementRowEditor
-            wireKey={wk}
-            advancementEntry={entry}
-            sendRowSnapshot={row}
-            paramType={paramType}
-            getPlayContext={getAdvancementPlayContext}
-            onOpenFullEditor={() => setAdvancementEditorWireKey(wk)}
-            onRunQuickTest={() => commitAdvancementQuickTest(wk)}
-            quickTestUi={advancementQuickTestUi[wk]}
-          />
-        );
-      },
-    }),
-    [
-      advancementQuickTestUi,
-      commitAdvancementQuickTest,
-      config.inputAdvancement,
-      config.inputAdvancementTypes,
-      getAdvancementPlayContext,
-      mappingSend,
-    ]
-  );
+  /** Avanzamento per parametro (checkbox + striscia) rimosso: un solo editor «Ricalcolo» a livello backend. */
+  const backendSendAdvancement = undefined;
 
   const backendSendAdvancementOverlay = React.useMemo(
     () => ({
       openWireKey: advancementEditorWireKey,
+      fullSpanWireKey: BACKEND_RECALC_WIRE_KEY,
+      overlayTitle:
+        advancementEditorWireKey === BACKEND_RECALC_WIRE_KEY ? 'Ricalcolo backend' : undefined,
       onClose: () => setAdvancementEditorWireKey(null),
       renderPanel: (wk: string) => {
+        if (wk === BACKEND_RECALC_WIRE_KEY) {
+          const entry: BackendInputAdvancementEntry = {
+            ...defaultAdvancementEntry(),
+            ...config.backendAdvancement,
+            enabled: true,
+          };
+          return (
+            <BackendRecalculationEditor
+              wireKey={BACKEND_RECALC_WIRE_KEY}
+              entry={entry}
+              paramType="String"
+              editorVariant="unifiedBackend"
+              snippetParamFieldKeys={unifiedAllowedFieldKeys}
+              snippetFlowVariables={advancementSnippetFlowVariables}
+              getPlayContext={getAdvancementPlayContext}
+              onPatch={(patch) => {
+                const { enabled: _en, ...rest } = patch as Partial<BackendInputAdvancementEntry>;
+                setConfig((p) => ({
+                  ...p,
+                  backendAdvancement: {
+                    ...(p.backendAdvancement ?? defaultBackendRecalculationEntry()),
+                    ...rest,
+                  },
+                  inputAdvancement: {},
+                }));
+              }}
+              buildSignature={advancementSignatureBuilder}
+              fieldDescriptionHint={
+                'Script unico: valuta in un oggetto con chiavi = nomi interni SEND. Le chiavi nell’oggetto restituito (es. startdate) sono i valori di output del ricalcolo, non assegnazioni a `param`. Vietato scrivere su `param`/`prev` (es. `param.startdate = …`); consentito `return { startdate: …, days: … }` o IIFE che restituisce quell’oggetto. Test: solo letterali mapping in `param`/`prev`.'
+              }
+              onRunAdvancementQuickTest={() => commitAdvancementQuickTest(BACKEND_RECALC_WIRE_KEY)}
+              quickTestUi={advancementQuickTestUi[BACKEND_RECALC_WIRE_KEY]}
+            />
+          );
+        }
         const entry = config.inputAdvancement?.[wk] ?? defaultAdvancementEntry();
         const paramType = config.inputAdvancementTypes?.[wk] ?? 'String';
         const rowInp = (config.inputs || []).find((i) => i.internalName?.trim() === wk);
@@ -877,6 +1017,7 @@ export default function BackendCallEditor({
             wireKey={wk}
             entry={entry}
             paramType={paramType}
+            snippetFlowVariables={advancementSnippetFlowVariables}
             getPlayContext={getAdvancementPlayContext}
             onPatch={(patch) =>
               setConfig((p) => {
@@ -905,6 +1046,7 @@ export default function BackendCallEditor({
       advancementSignatureBuilder,
       commitAdvancementQuickTest,
       getAdvancementPlayContext,
+      config.backendAdvancement,
       config.inputAdvancement,
       config.inputAdvancementTypes,
       config.inputs,
@@ -1195,7 +1337,7 @@ export default function BackendCallEditor({
         label: readApiBusy ? 'Reading…' : 'Read API',
         onClick: () => void handleReadApi(),
         title:
-          'Scarica OpenAPI via ApiServer (no CORS): prima discovery dall’endpoint operativo; se fallisce, usa lo Spec URL se compilato. Path operazione da URL (hash/query) o primo path per il metodo.',
+          'Scarica OpenAPI via ApiServer (no CORS): path da URL; metodo HTTP allineato allo spec (POST/GET, …). Discovery dall’endpoint; fallback Spec URL. SEND include body con allOf/oneOf.',
         disabled: readApiBusy,
         visible: readApiToolbarVisible,
       },
@@ -1217,6 +1359,18 @@ export default function BackendCallEditor({
           : 'Mostra di nuovo il pannello RECEIVE affiancato a SEND.',
         active: receiveMappingPanelVisible,
         visible: true,
+      },
+      {
+        icon: <Calculator size={16} />,
+        label: 'Ricalcolo backend',
+        onClick: () =>
+          setAdvancementEditorWireKey((k) =>
+            k === BACKEND_RECALC_WIRE_KEY ? null : BACKEND_RECALC_WIRE_KEY
+          ),
+        title:
+          'Mostra o nascondi lo script di ricalcolo su tutti i parametri SEND (area come SEND+RECEIVE). Clic di nuovo per chiudere.',
+        visible: operationalUrlNonEmpty && !showTableView,
+        active: advancementEditorWireKey === BACKEND_RECALC_WIRE_KEY,
       },
     ];
 
@@ -1259,6 +1413,8 @@ export default function BackendCallEditor({
     mockExecMode,
     refreshMockTableStructure,
     receiveMappingPanelVisible,
+    advancementEditorWireKey,
+    showTableView,
   ]);
 
   // Update toolbar when it changes (for docking mode)
@@ -1317,6 +1473,8 @@ export default function BackendCallEditor({
                 placeholder="https://api.example.com/… — discovery /openapi.json, /swagger.json, … sulla stessa origine"
                 controlStyle={controlStyle}
                 labelStyle={labelStyle}
+                errorMessage={readApiError}
+                methodHighlightError={Boolean(readApiError)}
               />
             </div>
             <div className="flex min-w-0 flex-col gap-0.5">
