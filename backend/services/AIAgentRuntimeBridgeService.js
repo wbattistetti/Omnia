@@ -146,7 +146,7 @@ Instructions:
  */
 function buildBookFromAgendaContractAppendix() {
   return `BOOKFROMAGENDA HTTP (when the flow calls Backend Call POST /api/runtime/bookfromagenda):
-- Body uses **dotted keys only** at the root: \`agenda.json\` (object) **or** \`agenda.url\` + \`agenda.type\`; optional \`horizon.start\` / \`horizon.end\` for URL fetch; required \`queryConstraints\` (may include \`horizon\`).
+- Body uses **dotted keys only** at the root: \`agenda.json\` (object) **or** \`agenda.url\` + \`agenda.type\`; \`queryConstraints\` is **optional** (omit = no constraints / all free slots; same as \`{}\`). Filter horizon optional: with \`agenda.json\` or Omnia URL (and after ICS-like materialization), if no horizon the backend derives min/max dates from \`agenda.days\`. For **fetching** ICS-like URLs you still pass \`horizon.start\`/\`horizon.end\` (or \`queryConstraints.horizon\`) as the download window.
 - Do **not** nest \`agenda\` as a separate object, do **not** use top-level \`agendaJson\`, and do **not** invent \`grid.*\` / \`timezone\` API fields.
 - Response: \`{ "slots": [...], "summary": { "dayCount", "slotCount" } }\`.`;
 }

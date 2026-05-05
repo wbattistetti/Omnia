@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BackendMockTableRow } from '../backendTestRowTypes';
 import {
   isBackendMockInputCellFilled,
+  isBackendMockRowAnyInputFilled,
   isBackendMockRowInputsFilledForColumns,
 } from '../backendMockRowCompletion';
 
@@ -51,5 +52,18 @@ describe('isBackendMockRowInputsFilledForColumns', () => {
     expect(
       isBackendMockRowInputsFilledForColumns(row({ inputs: { a: 'x' } }), names, { b: 'y' })
     ).toBe(true);
+  });
+});
+
+describe('isBackendMockRowAnyInputFilled', () => {
+  it('false when no columns defined', () => {
+    expect(isBackendMockRowAnyInputFilled(row({ inputs: { a: 'x' } }), [])).toBe(false);
+  });
+  it('true when any listed column has cell or fallback', () => {
+    const names = ['a', 'b'] as const;
+    expect(isBackendMockRowAnyInputFilled(row({ inputs: {} }), names)).toBe(false);
+    expect(isBackendMockRowAnyInputFilled(row({ inputs: { a: '' } }), names)).toBe(false);
+    expect(isBackendMockRowAnyInputFilled(row({ inputs: { a: 'x' } }), names)).toBe(true);
+    expect(isBackendMockRowAnyInputFilled(row({ inputs: {} }), names, { b: 'y' })).toBe(true);
   });
 });

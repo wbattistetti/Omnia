@@ -1,5 +1,5 @@
 /**
- * Stato «riga compilata» per mock table: tutti gli input attivi hanno un valore non vuoto.
+ * Mock table Backend Call: completamento righe e criteri «pronto per test» (cella non vuota vs tutte le colonne).
  */
 
 import type { BackendMockTableRow } from './backendTestRowTypes';
@@ -25,6 +25,23 @@ export function isBackendMockRowInputsFilledForColumns(
 ): boolean {
   if (activeInputInternalNames.length === 0) return true;
   return activeInputInternalNames.every((name) => {
+    if (isBackendMockInputCellFilled(row.inputs?.[name])) return true;
+    if (fallbackByInternalName && isBackendMockInputCellFilled(fallbackByInternalName[name])) return true;
+    return false;
+  });
+}
+
+/**
+ * True se la riga ha almeno un input SEND valorizzato (cella o fallback striscia endpoint).
+ * Usato per abilitare Test API e bulk senza richiedere tutte le colonne.
+ */
+export function isBackendMockRowAnyInputFilled(
+  row: BackendMockTableRow,
+  inputInternalNames: readonly string[],
+  fallbackByInternalName?: Readonly<Record<string, string>>
+): boolean {
+  if (inputInternalNames.length === 0) return false;
+  return inputInternalNames.some((name) => {
     if (isBackendMockInputCellFilled(row.inputs?.[name])) return true;
     if (fallbackByInternalName && isBackendMockInputCellFilled(fallbackByInternalName[name])) return true;
     return false;

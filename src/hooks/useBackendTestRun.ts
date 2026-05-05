@@ -40,6 +40,35 @@ function mergeRow(prev: BackendMockTableRow, patch: Partial<BackendMockTableRow>
 }
 
 /** Messaggio esplicito per corpo non JSON (HTML, 204, testo grezzo). */
+/** Messaggio tooltip riga: preferisce detail/message dal JSON di errore, altrimenti etichetta per status. */
+export function formatBackendHttpFailure(proxy: BackendCallProxyResponse, parsedBody: unknown): string {
+  if (typeof parsedBody === 'string') {
+    const t = parsedBody.trim();
+    if (t) return t.length > 500 ? `${t.slice(0, 497)}…` : t;
+  }
+  if (parsedBody && typeof parsedBody === 'object' && !Array.isArray(parsedBody)) {
+    const o = parsedBody as Record<string, unknown>;
+    const msg =
+      (typeof o.message === 'string' && o.message.trim()) ||
+      (typeof o.detail === 'string' && o.detail.trim()) ||
+      (typeof o.title === 'string' && o.title.trim());
+    if (msg) return msg;
+    const err = o.error;
+    if (typeof err === 'string' && err.trim()) return err.trim();
+    if (err && typeof err === 'object') {
+      const e = err as Record<string, unknown>;
+      const nested =
+        (typeof e.message === 'string' && e.message.trim()) ||
+        (typeof e.detail === 'string' && e.detail.trim());
+      if (nested) return nested;
+    }
+  }
+  const status = proxy.status;
+  if (status === 400 || status === 422) return `Errore di validazione (HTTP ${status})`;
+  if (status === 404) return 'Errore 404';
+  return `Errore HTTP ${status}`;
+}
+
 function formatNonJsonResponseError(proxy: BackendCallProxyResponse): string {
   const raw = (proxy.bodyText || '').trim();
   const preview = raw.slice(0, 120).replace(/\s+/g, ' ');
@@ -171,6 +200,11 @@ export function useBackendTestRun(params: UseBackendTestRunParams) {
         parsed = bodyForTarget ? (JSON.parse(proxy.bodyText) as unknown) : null;
       } catch {
         throw new Error(formatNonJsonResponseError(proxy));
+      }
+
+      const failedTarget = !proxy.ok || proxy.status >= 400;
+      if (failedTarget) {
+        throw new Error(formatBackendHttpFailure(proxy, parsed));
       }
 
       const mapped =

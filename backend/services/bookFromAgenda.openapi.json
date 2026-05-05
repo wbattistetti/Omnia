@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Omnia - BookFromAgenda API",
-    "version": "4.1.0",
-    "description": "Un solo endpoint operativo e un solo OpenAPI per il Task Editor (Recupera).\n\n**POST** `/api/runtime/bookfromagenda`\n\n**Contratto unico (chiavi puntate):** `agenda.json` **oppure** `agenda.url` + `agenda.type`; opzionale `horizon.start` / `horizon.end`; obbligatorio `queryConstraints` (con `horizon` interno se serve). Nessun `grid`/`timezone` API.\n\nPipeline: UniversalAgenda → filtro → `{ slots, summary }`."
+    "version": "4.3.0",
+    "description": "Un solo endpoint operativo e un solo OpenAPI per il Task Editor (Recupera).\n\n**POST** `/api/runtime/bookfromagenda`\n\n**Contratto unico (chiavi puntate):** `agenda.json` **oppure** `agenda.url` + `agenda.type`; **`queryConstraints` opzionale** — se assente si interpreta come nessun vincolo e si restituiscono tutti gli slot liberi dell’agenda (stesso effetto di `{}`). Con `horizon` / `horizon.start` / `horizon.end` opzionali per il **filtro** — se assenti con `agenda.json` o `agenda.type` Omnia (o dopo materializzazione ICS-like), la finestra deriva da **min/max** delle date in `agenda.days`. Per **fetch URL ICS/Google/Outlook** restano necessarie date di fetch (`horizon.start/end` o `queryConstraints.horizon`). Nessun `grid`/`timezone` API.\n\nPipeline: UniversalAgenda → filtro → `{ slots, summary }`."
   },
   "servers": [
     {
@@ -23,7 +23,7 @@
         "tags": ["BookFromAgenda"],
         "operationId": "bookFromAgenda",
         "summary": "BookFromAgenda — normalizza agenda e restituisce slot filtrati",
-        "description": "Body con chiavi puntate: `agenda.json` oppure `agenda.url` + `agenda.type`; `horizon.start`/`horizon.end` oppure horizon solo in `queryConstraints`. Risposta: `slots` + `summary`.",
+        "description": "Body con chiavi puntate: `agenda.json` oppure `agenda.url` + `agenda.type`; `queryConstraints` opzionale; `horizon.start`/`horizon.end` oppure horizon in `queryConstraints`. Risposta: `slots` + `summary`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -110,8 +110,7 @@
     "schemas": {
       "BookFromAgendaRequest": {
         "type": "object",
-        "required": ["queryConstraints"],
-        "description": "Solo chiavi puntate nel body radice. Una sorgente agenda: **`agenda.json`** (object) **oppure** **`agenda.url`** + **`agenda.type`**. Per fetch URL servono date di fetch: **`horizon.start`** / **`horizon.end`** oppure solo `queryConstraints.horizon`.",
+        "description": "Solo chiavi puntate nel body radice. Una sorgente agenda: **`agenda.json`** (object) **oppure** **`agenda.url`** + **`agenda.type`**. `queryConstraints` è **opzionale** (omit = tutti gli slot liberi). Filtro: se `horizon` non è passato, con `agenda.json` o `agenda.type` Omnia (e dopo normalizzazione anche ICS/… ) si usa min/max di `agenda.days`. Per **fetch** di feed ICS-like da URL, servono date: **`horizon.start`** / **`horizon.end`** o `queryConstraints.horizon`.",
         "properties": {
           "agenda.type": {
             "type": "string",
@@ -147,11 +146,10 @@
       },
       "SchedulingQueryConstraints": {
         "type": "object",
-        "required": ["horizon"],
-        "description": "Vincoli applicati dopo la normalizzazione agenda. Stessa semantica del solver scheduling Omnia (vietati = sottrazione, preferiti = solo ordinamento).",
+        "description": "Vincoli applicati dopo la normalizzazione agenda. Stessa semantica del solver scheduling Omnia (vietati = sottrazione, preferiti = solo ordinamento). `horizon` opzionale: se assente (e ammessa derivazione) la finestra è min/max delle date in agenda.",
         "properties": {
           "horizon": {
-            "description": "Finestra date (YYYY-MM-DD inclusivi) entro cui considerare gli slot candidati.",
+            "description": "Finestra date (YYYY-MM-DD inclusivi) per il filtro. Se omessa, con `agenda.json` o feed Omnia/ICS materializzato il backend può derivarla dalle date presenti in agenda.",
             "allOf": [{ "$ref": "#/components/schemas/HorizonRange" }]
           },
           "allowedIntervals": {

@@ -3,13 +3,13 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlignLeft, Braces, Plus, Trash2 } from 'lucide-react';
+import { AlignLeft, AlertTriangle, Braces, Plus, Trash2 } from 'lucide-react';
 import {
   BackendExecutionMode,
   backendTestNoteKey,
   type BackendMockTableRow,
 } from '../../../../../domain/backendTest/backendTestRowTypes';
-import { isBackendMockRowInputsFilledForColumns } from '../../../../../domain/backendTest/backendMockRowCompletion';
+import { isBackendMockRowAnyInputFilled } from '../../../../../domain/backendTest/backendMockRowCompletion';
 import type { MappingEntry } from '../../../../FlowMappingPanel/mappingTypes';
 import type { BackendOutputDef } from '../../../../../utils/backendCall/mapJsonResponseToWireOutputs';
 import { useBackendTestRun } from '../../../../../hooks/useBackendTestRun';
@@ -94,9 +94,10 @@ export function BackendCallMockTable({
     const visibleInputColumns = visibleColumns.filter((c) => c.type === 'input');
     const visibleOutputColumns = visibleColumns.filter((c) => c.type === 'output');
 
-    const activeMockInputInternalNames = useMemo(
-      () => visibleInputColumns.filter((c) => c.isActive).map((c) => c.name),
-      [visibleInputColumns]
+    /** Tutti i parametri SEND della tabella (non solo colonne visibili/attive): stesso criterio di BackendCallEditor. */
+    const allMockInputInternalNames = useMemo(
+      () => inputs.map((i) => i.internalName?.trim()).filter(Boolean) as string[],
+      [inputs]
     );
 
     const outputDefs: BackendOutputDef[] = useMemo(
@@ -121,29 +122,29 @@ export function BackendCallMockTable({
       endpointInvocationFallback,
     });
 
-    /** Test bulk: solo righe con tutti gli input attivi compilati (allineato a `testApiReadiness` nel parent). */
-    const runBulkTestOnCompleteRows = useCallback(async () => {
+    /** Test bulk: righe con almeno una cella input non vuota (allineato al pulsante Test API). */
+    const runBulkTestOnFilledRows = useCallback(async () => {
       const currentRows = getRows();
-      const names = activeMockInputInternalNames;
+      const names = allMockInputInternalNames;
       if (names.length === 0) {
-        logBackendCallTest('runBulkTestOnCompleteRows: skip (nessun nome colonna input attivo)');
+        logBackendCallTest('runBulkTestOnFilledRows: skip (nessun param SEND)');
         return;
       }
       const ids = currentRows
-        .filter((r) => isBackendMockRowInputsFilledForColumns(r, names, endpointInvocationFallback))
+        .filter((r) => isBackendMockRowAnyInputFilled(r, names, endpointInvocationFallback))
         .map((r) => r.id);
-      logBackendCallTest('runBulkTestOnCompleteRows: righe da eseguire', {
+      logBackendCallTest('runBulkTestOnFilledRows: righe da eseguire', {
         rowIds: ids,
-        activeInputColumns: names,
+        inputColumns: names,
         totalRows: currentRows.length,
       });
       if (ids.length === 0) {
-        logBackendCallTest('runBulkTestOnCompleteRows: nessuna riga completa, runRow non chiamato');
+        logBackendCallTest('runBulkTestOnFilledRows: nessuna riga con input, runRow non chiamato');
         return;
       }
       await Promise.all(ids.map((id) => runRow(id, { forceHttp: true })));
-      logBackendCallTest('runBulkTestOnCompleteRows: Promise.all completato', { rowIds: ids });
-    }, [getRows, activeMockInputInternalNames, runRow, endpointInvocationFallback]);
+      logBackendCallTest('runBulkTestOnFilledRows: Promise.all completato', { rowIds: ids });
+    }, [getRows, allMockInputInternalNames, runRow, endpointInvocationFallback]);
 
     const lastHandledBulkNonce = useRef(0);
     useEffect(() => {
@@ -154,12 +155,12 @@ export function BackendCallMockTable({
       void (async () => {
         onBulkTestStart?.();
         try {
-          await runBulkTestOnCompleteRows();
+          await runBulkTestOnFilledRows();
         } finally {
           onBulkTestEnd?.();
         }
       })();
-    }, [bulkTestNonce, runBulkTestOnCompleteRows, onBulkTestStart, onBulkTestEnd]);
+    }, [bulkTestNonce, runBulkTestOnFilledRows, onBulkTestStart, onBulkTestEnd]);
 
     const cleanParkedColumns = useCallback(() => {
       if (!columns?.length || !onColumnsChange) return;
@@ -403,17 +404,17 @@ export function BackendCallMockTable({
               </thead>
               <tbody>
                 {rows.map((row, rowIndex) => {
-                  const rowInputsComplete =
-                    activeMockInputInternalNames.length > 0 &&
-                    isBackendMockRowInputsFilledForColumns(
+                  const rowHasAnyInput =
+                    allMockInputInternalNames.length > 0 &&
+                    isBackendMockRowAnyInputFilled(
                       row,
-                      activeMockInputInternalNames,
+                      allMockInputInternalNames,
                       endpointInvocationFallback
                     );
                   const showRowIncomplete =
                     Boolean(highlightIncompleteRows) &&
-                    activeMockInputInternalNames.length > 0 &&
-                    !rowInputsComplete;
+                    allMockInputInternalNames.length > 0 &&
+                    !rowHasAnyInput;
                   return (
                   <tr
                     key={row.id}
@@ -422,7 +423,21 @@ export function BackendCallMockTable({
                     }`}
                   >
                     <td className="sticky left-0 z-10 bg-slate-900 px-1 py-2 align-top text-center text-xs text-slate-400">
-                      <div>{rowIndex + 1}</div>
+                      <div className="flex items-start justify-center gap-1">
+                        {errorByRowId[row.id] ? (
+                          <span
+                            className="mt-0.5 shrink-0 cursor-help text-red-500"
+                            title={errorByRowId[row.id]}
+                            role="img"
+                            aria-label={`Errore test: ${errorByRowId[row.id]}`}
+                          >
+                            <AlertTriangle size={14} strokeWidth={2} aria-hidden />
+                          </span>
+                        ) : (
+                          <span className="mt-0.5 inline-block w-[14px] shrink-0" aria-hidden />
+                        )}
+                        <span>{rowIndex + 1}</span>
+                      </div>
                       {row.testRun?.lastTestedAt ? (
                         <div
                           className="mt-0.5 text-[8px] leading-tight text-slate-600"
@@ -433,14 +448,6 @@ export function BackendCallMockTable({
                             minute: '2-digit',
                             second: '2-digit',
                           })}
-                        </div>
-                      ) : null}
-                      {errorByRowId[row.id] ? (
-                        <div
-                          className="mt-1 max-w-[72px] break-words text-left text-[9px] text-red-400"
-                          title={errorByRowId[row.id]}
-                        >
-                          {errorByRowId[row.id]}
                         </div>
                       ) : null}
                     </td>

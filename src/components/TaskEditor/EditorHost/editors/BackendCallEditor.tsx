@@ -38,9 +38,9 @@ import { BackendCallMockTable } from './backendMockTable/BackendCallMockTable';
 import { EndpointUrlMethodBar } from './EndpointUrlMethodBar';
 import { BackendExecutionMode, type BackendMockTableRow } from '../../../../domain/backendTest/backendTestRowTypes';
 import { buildLiteralFallbackFromSendMapping } from '../../../../domain/backendTest/buildLiteralFallbackFromSendMapping';
+import { ensureMockTablePrefilledFromSendLiterals } from '../../../../domain/backendTest/ensureMockTablePrefilledFromSendLiterals';
 import {
-  isBackendMockInputCellFilled,
-  isBackendMockRowInputsFilledForColumns,
+  isBackendMockRowAnyInputFilled,
 } from '../../../../domain/backendTest/backendMockRowCompletion';
 import { slugInternalName, type OpenApiInputUiKind } from '../../../../services/openApiBackendCallSpec';
 import { runBackendCallReadApiForTask } from '../../../../services/runBackendCallReadApiForTask';
@@ -1136,97 +1136,93 @@ export default function BackendCallEditor({
   const operationalUrlNonEmpty = Boolean(config.endpoint.url?.trim());
   const openapiSpecUrlNonEmpty = Boolean((config.openapiSpecUrl || '').trim());
   const readApiToolbarVisible = operationalUrlNonEmpty || openapiSpecUrlNonEmpty;
-  const mockTableActiveInputInternalNames = React.useMemo(() => {
+  /** Tutti i parametri SEND (colonne input mock), incluse quelle «parked»: il criterio Test API non dipende da isActive. */
+  const mockTableAllInputInternalNames = React.useMemo(() => {
     const cols = config.mockTableColumns;
     if (cols?.length) {
-      return cols.filter((c) => c.type === 'input' && c.isActive).map((c) => c.name).filter(Boolean);
+      return cols.filter((c) => c.type === 'input').map((c) => c.name).filter(Boolean);
     }
     return (config.inputs || []).map((i) => i.internalName?.trim()).filter(Boolean) as string[];
   }, [config.mockTableColumns, config.inputs]);
 
-  /**
-   * Test API: tutti gli input SEND sono valorizzati dalla striscia endpoint oppure (fallback) da almeno una riga mock completa.
-   */
-  const mockTableHasAtLeastOneCompleteRow = React.useMemo(() => {
+  /** Test API abilitato se esiste almeno una riga con almeno una cella input non vuota (o fallback letterale SEND sulla colonna). */
+  const mockTableHasAtLeastOneNonEmptyInputRow = React.useMemo(() => {
     const table = config.mockTable ?? [];
-    const names = mockTableActiveInputInternalNames;
+    const names = mockTableAllInputInternalNames;
     if (names.length === 0) {
       return false;
     }
     const fallback = literalFallbackFromSend;
-    if (names.every((n) => isBackendMockInputCellFilled(fallback[n]))) {
-      return true;
-    }
-    return table.some((row) => isBackendMockRowInputsFilledForColumns(row, names, fallback));
-  }, [config.mockTable, mockTableActiveInputInternalNames, literalFallbackFromSend]);
+    return table.some((row) => isBackendMockRowAnyInputFilled(row, names, fallback));
+  }, [config.mockTable, mockTableAllInputInternalNames, literalFallbackFromSend]);
 
   const [highlightIncompleteRows, setHighlightIncompleteRows] = React.useState(false);
 
   React.useEffect(() => {
-    if (mockTableHasAtLeastOneCompleteRow) setHighlightIncompleteRows(false);
-  }, [mockTableHasAtLeastOneCompleteRow]);
+    if (mockTableHasAtLeastOneNonEmptyInputRow) setHighlightIncompleteRows(false);
+  }, [mockTableHasAtLeastOneNonEmptyInputRow]);
 
   const testApiReadiness = React.useMemo(() => {
-    if (mockTableActiveInputInternalNames.length === 0) return 'needs_setup' as const;
-    if (mockTableHasAtLeastOneCompleteRow) return 'ready' as const;
+    if (mockTableAllInputInternalNames.length === 0) return 'needs_setup' as const;
+    if (mockTableHasAtLeastOneNonEmptyInputRow) return 'ready' as const;
     return 'incomplete' as const;
-  }, [mockTableActiveInputInternalNames.length, mockTableHasAtLeastOneCompleteRow]);
+  }, [mockTableAllInputInternalNames.length, mockTableHasAtLeastOneNonEmptyInputRow]);
 
   const handleTestApi = React.useCallback(() => {
     logBackendCallTest('handleTestApi: click', { testApiReadiness });
     setShowTableView(true);
-    if (testApiReadiness === 'needs_setup') {
-      logBackendCallTest('handleTestApi: stop (needs_setup — nessun input attivo in tabella)');
+    if (mockTableAllInputInternalNames.length === 0) {
+      logBackendCallTest('handleTestApi: stop (needs_setup — nessun input SEND in tabella)');
       return;
     }
-    if (testApiReadiness === 'incomplete') {
-      logBackendCallTest('handleTestApi: evidenzia righe incomplete, bulk non avviato');
-      setHighlightIncompleteRows(true);
-      return;
-    }
-    setHighlightIncompleteRows(false);
+
+    let canBulk = false;
     flushSync(() => {
       setConfig((prev) => {
         const names =
           (prev.mockTableColumns?.length
-            ? prev.mockTableColumns.filter((c) => c.type === 'input' && c.isActive).map((c) => c.name)
+            ? prev.mockTableColumns.filter((c) => c.type === 'input').map((c) => c.name)
             : (prev.inputs || []).map((i) => i.internalName?.trim()).filter(Boolean)) ?? [];
-        const fb = buildLiteralFallbackFromSendMapping(
+        const literals = buildLiteralFallbackFromSendMapping(
           enrichBackendMappingEntriesOpenApi(
             backendInputsToMappingEntries(prev.inputs, knownBackendVariableIdSet),
             'send',
             openapiDescriptionSnapshots
           )
         );
-        const stripComplete =
-          names.length > 0 && names.every((n) => isBackendMockInputCellFilled(fb[String(n)]));
-        if (stripComplete && (prev.mockTable?.length ?? 0) === 0) {
-          const nextTable = [
-            {
-              id: `row_${Date.now()}`,
-              inputs: {},
-              outputs: {},
-              testRun: {
-                executionMode: prev.mockTableDefaultExecutionMode ?? BackendExecutionMode.MOCK,
-                notes: {},
-              },
-            },
-          ] as BackendMockTableRow[];
-          return {
-            ...prev,
-            mockTable: nextTable,
-            mockTableColumns: computeMockTableColumnsForSignature({ ...prev, mockTable: nextTable }),
-          };
-        }
-        return prev;
+        const nextTable = ensureMockTablePrefilledFromSendLiterals(
+          prev.mockTable ?? [],
+          names,
+          literals,
+          prev.mockTableDefaultExecutionMode ?? BackendExecutionMode.MOCK
+        );
+        canBulk =
+          names.length > 0 &&
+          nextTable.some((row) => isBackendMockRowAnyInputFilled(row, names, literals));
+        const withTable = { ...prev, mockTable: nextTable };
+        return {
+          ...withTable,
+          mockTableColumns: computeMockTableColumnsForSignature(withTable),
+        };
       });
     });
+
+    if (!canBulk) {
+      logBackendCallTest('handleTestApi: incomplete dopo prefill letterali SEND nella tabella');
+      setHighlightIncompleteRows(true);
+      return;
+    }
+    setHighlightIncompleteRows(false);
     setBulkTestNonce((n) => {
       const next = n + 1;
       logBackendCallTest('handleTestApi: avvio bulk mock table', { bulkTestNonce: { from: n, to: next } });
       return next;
     });
-  }, [testApiReadiness, knownBackendVariableIdSet, openapiDescriptionSnapshots]);
+  }, [
+    knownBackendVariableIdSet,
+    openapiDescriptionSnapshots,
+    mockTableAllInputInternalNames.length,
+  ]);
 
   /** Tooltip celle: descrizione parametro + «. Clicca per editare.» */
   const inputTooltipByInternalName = React.useMemo(() => {

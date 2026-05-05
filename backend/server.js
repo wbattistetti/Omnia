@@ -6860,7 +6860,7 @@ app.post('/api/runtime/scheduling/solve', async (req, res) => {
 });
 
 /**
- * OpenAPI 3 — BookFromAgenda v4.1: solo chiavi puntate (`agenda.json` | `agenda.url`+`agenda.type`, `horizon.*`, `queryConstraints`).
+ * OpenAPI 3 — BookFromAgenda v4.3: chiavi puntate (`agenda.json` | `agenda.url`+`agenda.type`, `horizon.*`, `queryConstraints` opzionale; horizon filtro derivabile da agenda).
  * Read API: `…/api/runtime/bookfromagenda/openapi.json`
  */
 function serveBookFromAgendaOpenApiSpec(req, res) {

@@ -113,14 +113,71 @@ function resolveAgendaPayload(body) {
   return { agendaUrl, agendaType, horizon };
 }
 
+/**
+ * Min/max date da UniversalAgenda.days (YYYY-MM-DD).
+ * @param {{ days: { date: string }[] }} agenda
+ */
+function deriveHorizonFromAgendaDays(agenda) {
+  const days = agenda.days;
+  if (!Array.isArray(days) || days.length === 0) {
+    throw new Error('bookfromagenda: cannot derive horizon — agenda has no days');
+  }
+  let min = /** @type {string | null} */ (null);
+  let max = /** @type {string | null} */ (null);
+  for (let i = 0; i < days.length; i++) {
+    const d = days[i];
+    const ds = d && typeof d === 'object' && !Array.isArray(d) ? String(/** @type {{ date?: unknown }} */ (d).date ?? '') : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) {
+      throw new Error(`bookfromagenda: cannot derive horizon — invalid days[${i}].date`);
+    }
+    if (!min || ds < min) min = ds;
+    if (!max || ds > max) max = ds;
+  }
+  return { start: /** @type {string} */ (min), end: /** @type {string} */ (max) };
+}
+
+/**
+ * @param {unknown} h
+ */
+function horizonExplicitComplete(h) {
+  if (!isRecord(h)) return false;
+  const a = String(h.start ?? '').trim();
+  const b = String(h.end ?? '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(a) && /^\d{4}-\d{2}-\d{2}$/.test(b);
+}
+
+/**
+ * Deriva finestra solver da days quando non si passa horizon (Omnia / agenda.json; dopo materializzazione anche ICS-like).
+ * Fetch ICS da URL resta con horizon obbligatorio in {@link extractHorizon}.
+ * @param {Record<string, unknown>} body body HTTP originale
+ */
+function shouldDeriveHorizonWhenMissing(body) {
+  if (body['agenda.json'] !== undefined && body['agenda.json'] !== null) return true;
+  const t = String(body['agenda.type'] || '').trim().toUpperCase();
+  return t === 'OMNIA' || t === 'ICS' || t === 'GOOGLE' || t === 'OUTLOOK';
+}
+
 function normalizeQueryConstraints(body) {
   const qcRaw = isRecord(body.queryConstraints)
     ? body.queryConstraints
     : isRecord(body.query)
       ? body.query
       : null;
+
+  const dottedHorizonOnly =
+    body['horizon.start'] !== undefined || body['horizon.end'] !== undefined
+      ? {
+          start: String(body['horizon.start'] ?? ''),
+          end: String(body['horizon.end'] ?? ''),
+        }
+      : null;
+
+  /** Assenza di queryConstraints/query = nessun vincolo (solo horizon da chiavi puntate se presenti). */
   if (!qcRaw) {
-    throw new Error('bookfromagenda: queryConstraints object required');
+    return {
+      horizon: dottedHorizonOnly,
+      mandatory: {},
+    };
   }
 
   const qc = /** @type {Record<string, unknown>} */ (qcRaw);
@@ -140,14 +197,7 @@ function normalizeQueryConstraints(body) {
     (qc.preferredIntervals !== undefined ? { intervals: qc.preferredIntervals } : undefined);
 
   const qcHorizon = isRecord(qc.horizon) ? qc.horizon : null;
-  const dottedHorizon =
-    body['horizon.start'] !== undefined || body['horizon.end'] !== undefined
-      ? {
-          start: String(body['horizon.start'] ?? ''),
-          end: String(body['horizon.end'] ?? ''),
-        }
-      : null;
-  const horizon = qcHorizon || dottedHorizon;
+  const horizon = qcHorizon || dottedHorizonOnly;
 
   return {
     horizon,
@@ -162,8 +212,9 @@ function normalizeQueryConstraints(body) {
 /**
  * @param {{ days: { date: string, slots: unknown[] }[], timezone?: string }} agenda
  * @param {Record<string, unknown>} qObj normalized query object
+ * @param {Record<string, unknown>} body body HTTP originale (per derivazione horizon)
  */
-function solveWithAgenda(agenda, qObj) {
+function solveWithAgenda(agenda, qObj, body) {
   const matchDur =
     qObj.matchSlotDurationMinutes === undefined || qObj.matchSlotDurationMinutes === null
       ? undefined
@@ -173,8 +224,25 @@ function solveWithAgenda(agenda, qObj) {
     throw new Error('bookfromagenda: query.matchSlotDurationMinutes invalid');
   }
 
+  let horizon = qObj.horizon;
+  if (!horizonExplicitComplete(horizon)) {
+    const b = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+    if (shouldDeriveHorizonWhenMissing(b)) {
+      horizon = deriveHorizonFromAgendaDays(agenda);
+    }
+  } else {
+    const hz = /** @type {{ start?: unknown; end?: unknown }} */ (horizon);
+    horizon = { start: String(hz.start ?? '').trim(), end: String(hz.end ?? '').trim() };
+  }
+
+  if (!horizonExplicitComplete(horizon)) {
+    throw new Error(
+      'bookfromagenda: set horizon (queryConstraints.horizon or horizon.start/end), or use agenda.json / Omnia URL so horizon can be derived from agenda.days'
+    );
+  }
+
   const qNorm = normalizeSchedulingQueryParts({
-    horizon: qObj.horizon,
+    horizon,
     mandatory: qObj.mandatory,
     preferred: qObj.preferred,
   });
@@ -264,11 +332,13 @@ async function solveBookFromAgenda(raw) {
 
   const qObj = normalizeQueryConstraints(body);
 
-  return solveWithAgenda(agenda, qObj);
+  return solveWithAgenda(agenda, qObj, body);
 }
 
 module.exports = {
   solveBookFromAgenda,
   validateUniversalAgenda,
   solveWithAgenda,
+  deriveHorizonFromAgendaDays,
+  horizonExplicitComplete,
 };

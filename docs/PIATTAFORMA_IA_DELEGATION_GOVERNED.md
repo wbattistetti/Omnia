@@ -72,7 +72,7 @@ Il backend (`StructuredDesignPipelineService.js`, vedi commento in testa al file
 |------|------|
 | Bridge runtime LLM + JSON contract | `backend/services/AIAgentRuntimeBridgeService.js` |
 | Solver vincoli calendario (POST) + chiavi `__omnia_scheduling_*` | `backend/services/schedulingConstraintSolver.js`, `POST /api/runtime/scheduling/solve` |
-| BookFromAgenda — contratto **v4.1 chiavi puntate** (`agenda.json` / `agenda.url`+`agenda.type`, `queryConstraints`; nessun `grid`/`timezone` API) `POST …/bookfromagenda`, spec `…/openapi.json` | `bookFromAgendaService.js`, `bookFromAgendaInput.js`, `bookFromAgendaIcs.js`; alias `…/solve`; doc `backend/services/bookFromAgenda.md`; appendice bridge `AIAgentRuntimeBridgeService.js` (`OMNIA_AI_AGENT_BOOKFROMAGENDA_PROMPT=0` disattiva) |
+| BookFromAgenda — contratto **v4.2 chiavi puntate** (`agenda.json` / `agenda.url`+`agenda.type`, `queryConstraints`; horizon filtro opzionale con derivazione da `days`; fetch ICS richiede finestra date; nessun `grid`/`timezone` API) `POST …/bookfromagenda`, spec `…/openapi.json` | `bookFromAgendaService.js`, `bookFromAgendaInput.js`, `bookFromAgendaIcs.js`; alias `…/solve`; doc `backend/services/bookFromAgenda.md`; appendice bridge `AIAgentRuntimeBridgeService.js` (`OMNIA_AI_AGENT_BOOKFROMAGENDA_PROMPT=0` disattiva) |
 | Executor VB.NET, chiave rules, payload | `VBNET/Engine/TaskExecutors/AIAgentTaskExecutor.vb` |
 | DTO compilato `CompiledAIAgentTask` | `VBNET/Compiler/DTO/Runtime/CompiledTask.vb` |
 | Tipo piattaforme e config runtime | `src/types/iaAgentRuntimeSetup.ts`, `src/utils/iaAgentRuntime/platformHelpers.ts` |
