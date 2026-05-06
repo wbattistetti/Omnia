@@ -32,6 +32,15 @@ describe('parseFlowBackendCallInvocation', () => {
     expect(p!.inputParameters).toEqual([{ name: 'n', value: 'v' }]);
   });
 
+  it('keeps HTTP-specific outcomes', () => {
+    const p = parseFlowBackendCallInvocation({
+      taskId: 't-http',
+      outcome: 'http_error',
+    });
+    expect(p).not.toBeNull();
+    expect(p!.outcome).toBe('http_error');
+  });
+
   it('returns null without task id', () => {
     expect(parseFlowBackendCallInvocation({})).toBeNull();
   });

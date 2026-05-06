@@ -51,7 +51,17 @@ describe('buildElevenLabsConvaiPromptTools', () => {
     expect(api.url).toBe('https://api.example.com/v1/slots');
     expect(api.method).toBe('POST');
     expect(api.request_headers).toEqual({ 'X-Test': '1' });
-    expect(api.request_body_schema).toEqual(expect.objectContaining({ type: 'object' }));
+    expect(api.request_body_schema).toEqual(
+      expect.objectContaining({
+        type: 'object',
+        properties: {
+          n: expect.objectContaining({
+            description: 'N',
+            type: 'string',
+          }),
+        },
+      })
+    );
   });
 
   it('uses query_params_schema for GET backends', () => {
@@ -80,6 +90,68 @@ describe('buildElevenLabsConvaiPromptTools', () => {
     expect(qps).not.toHaveProperty('type');
     expect(qps.properties).toEqual(expect.any(Object));
     expect(api.request_body_schema).toBeUndefined();
+  });
+
+  it('maps GET query param properties to description + type (ElevenLabs query_params_schema)', () => {
+    const cfg = {
+      platform: 'elevenlabs',
+      convaiBackendToolTaskIds: ['bk2b'],
+      tools: [],
+    } as IAAgentConfig;
+
+    const tools = buildElevenLabsConvaiPromptTools(cfg, (id) =>
+      id === 'bk2b'
+        ? backendTask({
+            id: 'bk2b',
+            label: 'get_with_query',
+            backendToolDescription: 'Get with params.',
+            endpoint: { url: 'https://api.example.com/x', method: 'GET', headers: {} },
+            inputs: [{ internalName: 'queryConstraints', apiParam: 'queryConstraints' }],
+          })
+        : null
+    );
+
+    const api = tools[0].api_schema as Record<string, unknown>;
+    expect(api.method).toBe('GET');
+    const qps = api.query_params_schema as Record<string, unknown>;
+    const props = qps.properties as Record<string, unknown>;
+    expect(props.queryConstraints).toEqual(
+      expect.objectContaining({
+        description: 'Parametro queryConstraints',
+        type: 'string',
+      })
+    );
+    expect(api.request_body_schema).toBeUndefined();
+  });
+
+  it('maps body properties to description + type (ElevenLabs request_body_schema)', () => {
+    const cfg = {
+      platform: 'elevenlabs',
+      convaiBackendToolTaskIds: ['bk3'],
+      tools: [],
+    } as IAAgentConfig;
+
+    const tools = buildElevenLabsConvaiPromptTools(cfg, (id) =>
+      id === 'bk3'
+        ? backendTask({
+            id: 'bk3',
+            label: 'create_booking',
+            backendToolDescription: 'Create booking.',
+            endpoint: { url: 'https://api.example.com/book', method: 'POST', headers: {} },
+            inputs: [{ internalName: 'queryConstraints', apiParam: 'queryConstraints' }],
+          })
+        : null
+    );
+
+    const api = tools[0].api_schema as Record<string, unknown>;
+    const body = api.request_body_schema as Record<string, unknown>;
+    const props = body.properties as Record<string, unknown>;
+    expect(props.queryConstraints).toEqual(
+      expect.objectContaining({
+        description: 'Parametro queryConstraints',
+        type: 'string',
+      })
+    );
   });
 
   it('emits client tools for cfg.tools entries', () => {

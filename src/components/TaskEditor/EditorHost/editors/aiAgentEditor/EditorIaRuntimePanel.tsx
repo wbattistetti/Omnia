@@ -208,10 +208,12 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         }
       }
       const displayName = buildConvaiAgentDisplayName({
-        projectLabel: 'omnia',
+        projectLabel: String(projectData?.name || 'project').trim() || 'project',
         flowLabel: 'editor',
         nodeLabel: 'ia-runtime',
         taskGuid: instanceId,
+        omniaClientLabel: String(projectData?.clientName ?? projectData?.ownerClient ?? 'default').trim() || 'default',
+        omniaVersionLabel: String(projectData?.version ?? '0').trim() || '0',
       });
       displayNameForPreview = displayName;
       console.warn(

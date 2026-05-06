@@ -113,6 +113,9 @@ function OutcomeBadge(props: { outcome: FlowBackendCallInvocation['outcome'] }) 
   const styles: Record<typeof outcome, string> = {
     success:
       'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100',
+    http_success:
+      'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100',
+    http_error: 'bg-red-100 text-red-950 dark:bg-red-900/45 dark:text-red-50',
     no_match:
       'bg-amber-100 text-amber-950 dark:bg-amber-900/40 dark:text-amber-100',
     ambiguous: 'bg-red-100 text-red-950 dark:bg-red-900/45 dark:text-red-50',
@@ -120,6 +123,8 @@ function OutcomeBadge(props: { outcome: FlowBackendCallInvocation['outcome'] }) 
   };
   const labels: Record<typeof outcome, string> = {
     success: 'ok',
+    http_success: 'http ok',
+    http_error: 'http err',
     no_match: 'nessuna riga',
     ambiguous: 'ambiguo',
     no_mock: 'solo endpoint',

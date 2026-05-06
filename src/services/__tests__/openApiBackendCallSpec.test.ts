@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildOpenApiCandidateUrlList,
@@ -349,6 +351,16 @@ describe('openApiBackendCallSpec', () => {
     expect(f?.inputUiKindByApiName.plain).toBe('text');
     expect(f?.inputEnumByApiName['agenda.type']).toEqual(['Omnia', 'ICS']);
     expect(f?.inputEnumByApiName['agenda.url']).toBeUndefined();
+  });
+
+  it('extractOperationFields reads x-omnia sendBinding from bookFromAgenda.openapi.json', () => {
+    const doc = JSON.parse(
+      readFileSync(join(process.cwd(), 'backend/services/bookFromAgenda.openapi.json'), 'utf-8')
+    ) as Record<string, unknown>;
+    const f = extractOperationFields(doc, '/api/runtime/bookfromagenda', 'post');
+    expect(f?.sendBindingRules?.optionalApiParams).toContain('queryConstraints');
+    expect(f?.sendBindingRules?.requireOneOfSets?.[0]?.id).toBe('agenda_source');
+    expect(f?.sendBindingRules?.requireOneOfSets?.[0]?.alternatives).toHaveLength(2);
   });
 
   it('fetchOpenApiDocument prefers backend proxy when it returns OpenAPI JSON', async () => {

@@ -27,6 +27,13 @@ Public NotInheritable Class ElevenLabsEndpoints
 
     Private Shared ReadOnly ElevenLabsApiHttp As New HttpClient With {.Timeout = TimeSpan.FromMinutes(2)}
 
+    ''' <summary>Log su console processo ApiServer (copia-incolla per debug); tronca per non esplodere il buffer.</summary>
+    Private Shared Sub LogOmniaElevenLabs(phase As String, message As String, Optional maxLen As Integer = 6000)
+        Dim raw = If(message, "")
+        If raw.Length > maxLen Then raw = raw.Substring(0, maxLen) & " …[troncato]"
+        Global.System.Console.WriteLine("[Omnia·ElevenLabs·" & phase & "] " & raw)
+    End Sub
+
     Public Shared Sub MapElevenLabsRoutes(app As WebApplication)
         app.MapGet(
             "/elevenlabs/tts-models",
@@ -149,6 +156,16 @@ Public NotInheritable Class ElevenLabsEndpoints
         Dim apiBase = ElevenLabsApiSettings.GetApiBaseUrl()
         Dim url = $"{apiBase}/v1/convai/agents/create"
 
+        Dim toolsCount As Integer = 0
+        Try
+            Dim toolsTok = payload.SelectToken("conversation_config.agent.prompt.tools")
+            If toolsTok IsNot Nothing AndAlso toolsTok.Type = JTokenType.Array Then
+                toolsCount = DirectCast(toolsTok, JArray).Count
+            End If
+        Catch
+        End Try
+        LogOmniaElevenLabs("createAgent·inizio", "name=" & displayName & " incomingLen=" & If(body, "").Length & " tools=" & toolsCount & " apiBase=" & apiBase)
+
         Dim Logger = context.RequestServices.GetService(Of ILogger(Of ElevenLabsEndpoints))()
         If Logger IsNot Nothing Then
             Logger.LogInformation("ELEVENLABS CREATE PAYLOAD DEBUG: " & elevenLabsRequestJson)
@@ -156,52 +173,70 @@ Public NotInheritable Class ElevenLabsEndpoints
             Global.System.Console.WriteLine("ELEVENLABS CREATE PAYLOAD DEBUG: " & elevenLabsRequestJson)
         End If
 
-        Using req As New HttpRequestMessage(HttpMethod.Post, url)
-            req.Headers.TryAddWithoutValidation("xi-api-key", apiKey.Trim())
-            req.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
-            Using resp = Await ElevenLabsApiHttp.SendAsync(req, context.RequestAborted).ConfigureAwait(False)
-                Dim respBody = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
-                If Not resp.IsSuccessStatusCode Then
-                    Dim upstream = CInt(resp.StatusCode)
-                    ' Surface 4xx from ElevenLabs (validation, auth, wrong region) instead of always 502.
-                    Dim clientStatus = upstream
-                    If upstream < CInt(HttpStatusCode.BadRequest) OrElse upstream >= 600 Then
-                        clientStatus = StatusCodes.Status502BadGateway
-                    ElseIf upstream >= CInt(HttpStatusCode.InternalServerError) Then
-                        clientStatus = StatusCodes.Status502BadGateway
+        Dim createAgentFatalEx As Exception = Nothing
+        Try
+            Using req As New HttpRequestMessage(HttpMethod.Post, url)
+                req.Headers.TryAddWithoutValidation("xi-api-key", apiKey.Trim())
+                req.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
+                Using resp = Await ElevenLabsApiHttp.SendAsync(req, context.RequestAborted).ConfigureAwait(False)
+                    Dim respBody = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+                    If Not resp.IsSuccessStatusCode Then
+                        Dim upstream = CInt(resp.StatusCode)
+                        LogOmniaElevenLabs("createAgent·upstreamErr", "status=" & upstream.ToString() & " body=" & respBody)
+                        ' Surface 4xx from ElevenLabs (validation, auth, wrong region) instead of always 502.
+                        Dim clientStatus = upstream
+                        If upstream < CInt(HttpStatusCode.BadRequest) OrElse upstream >= 600 Then
+                            clientStatus = StatusCodes.Status502BadGateway
+                        ElseIf upstream >= CInt(HttpStatusCode.InternalServerError) Then
+                            clientStatus = StatusCodes.Status502BadGateway
+                        End If
+                        context.Response.StatusCode = clientStatus
+                        Await context.Response.WriteAsJsonAsync(New With {
+                            .error = "ElevenLabs agents/create failed.",
+                            .statusCode = upstream,
+                            .elevenLabsApiBase = apiBase,
+                            .details = respBody,
+                            .elevenLabsRequestJson = elevenLabsRequestJson
+                        }).ConfigureAwait(False)
+                        Return
                     End If
-                    context.Response.StatusCode = clientStatus
+
+                    Dim out = JObject.Parse(respBody)
+                    Dim agentId = out("agent_id")?.ToString()
+                    If String.IsNullOrWhiteSpace(agentId) Then agentId = out("agentId")?.ToString()
+                    If String.IsNullOrWhiteSpace(agentId) Then
+                        LogOmniaElevenLabs("createAgent·badResponse", "missing agent_id raw=" & respBody)
+                        context.Response.StatusCode = StatusCodes.Status502BadGateway
+                        Await context.Response.WriteAsJsonAsync(New With {
+                            .error = "ElevenLabs response missing agent_id.",
+                            .elevenLabsApiBase = apiBase,
+                            .details = respBody,
+                            .elevenLabsRequestJson = elevenLabsRequestJson
+                        }).ConfigureAwait(False)
+                        Return
+                    End If
+
+                    LogOmniaElevenLabs("createAgent·ok", "agentId=" & agentId & " name=" & displayName)
+                    context.Response.StatusCode = StatusCodes.Status200OK
                     Await context.Response.WriteAsJsonAsync(New With {
-                        .error = "ElevenLabs agents/create failed.",
-                        .statusCode = upstream,
-                        .elevenLabsApiBase = apiBase,
-                        .details = respBody,
+                        .agentId = agentId,
                         .elevenLabsRequestJson = elevenLabsRequestJson
                     }).ConfigureAwait(False)
-                    Return
-                End If
-
-                Dim out = JObject.Parse(respBody)
-                Dim agentId = out("agent_id")?.ToString()
-                If String.IsNullOrWhiteSpace(agentId) Then agentId = out("agentId")?.ToString()
-                If String.IsNullOrWhiteSpace(agentId) Then
-                    context.Response.StatusCode = StatusCodes.Status502BadGateway
-                    Await context.Response.WriteAsJsonAsync(New With {
-                        .error = "ElevenLabs response missing agent_id.",
-                        .elevenLabsApiBase = apiBase,
-                        .details = respBody,
-                        .elevenLabsRequestJson = elevenLabsRequestJson
-                    }).ConfigureAwait(False)
-                    Return
-                End If
-
-                context.Response.StatusCode = StatusCodes.Status200OK
-                Await context.Response.WriteAsJsonAsync(New With {
-                    .agentId = agentId,
-                    .elevenLabsRequestJson = elevenLabsRequestJson
-                }).ConfigureAwait(False)
+                End Using
             End Using
-        End Using
+        Catch ex As Exception
+            createAgentFatalEx = ex
+            LogOmniaElevenLabs("createAgent·fatal", ex.ToString(), 8000)
+        End Try
+
+        If createAgentFatalEx IsNot Nothing AndAlso Not context.Response.HasStarted Then
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError
+            Await context.Response.WriteAsJsonAsync(New With {
+                .error = "ElevenLabs createAgent failed (ApiServer exception).",
+                .detail = createAgentFatalEx.Message,
+                .details = createAgentFatalEx.ToString()
+            }).ConfigureAwait(False)
+        End If
     End Function
 
     ''' <summary>Minimal JSON for ConvAI agent create (align with ElevenLabs API if schema changes).</summary>
@@ -272,6 +307,11 @@ Public NotInheritable Class ElevenLabsEndpoints
                 req.Headers.TryAddWithoutValidation("xi-api-key", apiKey.Trim())
                 Using resp = Await ElevenLabsApiHttp.SendAsync(req, context.RequestAborted).ConfigureAwait(False)
                     Dim respBody = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+                    If Not resp.IsSuccessStatusCode Then
+                        LogOmniaElevenLabs("listAgents·upstreamErr", "status=" & CInt(resp.StatusCode).ToString() & " search=" & search & " body=" & respBody)
+                    Else
+                        LogOmniaElevenLabs("listAgents·ok", "status=200 search=" & search & " bodyLen=" & respBody.Length.ToString())
+                    End If
                     context.Response.StatusCode = CInt(resp.StatusCode)
                     context.Response.ContentType = "application/json; charset=utf-8"
                     Await context.Response.WriteAsync(respBody).ConfigureAwait(False)
@@ -284,7 +324,7 @@ Public NotInheritable Class ElevenLabsEndpoints
         If fatalEx Is Nothing Then Return
         If context.Response.HasStarted Then Return
 
-        Global.System.Console.WriteLine($"[ElevenLabs] HandleListAgents FATAL: {fatalEx}")
+        LogOmniaElevenLabs("listAgents·fatal", fatalEx.ToString(), 8000)
         context.Response.StatusCode = StatusCodes.Status500InternalServerError
         context.Response.ContentType = "application/json; charset=utf-8"
         Await context.Response.WriteAsJsonAsync(New With {
@@ -324,6 +364,7 @@ Public NotInheritable Class ElevenLabsEndpoints
                 Dim respBody = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
                 If Not resp.IsSuccessStatusCode Then
                     Dim upstream = CInt(resp.StatusCode)
+                    LogOmniaElevenLabs("deleteAgent·upstreamErr", "agentId=" & id & " status=" & upstream.ToString() & " body=" & respBody)
                     Dim clientStatus = upstream
                     If upstream < CInt(HttpStatusCode.BadRequest) OrElse upstream >= 600 Then
                         clientStatus = StatusCodes.Status502BadGateway
@@ -340,6 +381,7 @@ Public NotInheritable Class ElevenLabsEndpoints
                     Return
                 End If
 
+                LogOmniaElevenLabs("deleteAgent·ok", "agentId=" & id)
                 context.Response.StatusCode = StatusCodes.Status200OK
                 If Not String.IsNullOrWhiteSpace(respBody) Then
                     context.Response.ContentType = "application/json; charset=utf-8"

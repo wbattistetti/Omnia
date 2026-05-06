@@ -564,6 +564,18 @@ function MappingTreeRow({
       ? node.entry.fieldDescription.trim()
       : undefined;
 
+  const backendMappingViewTitle =
+    variant === 'backend'
+      ? backendColumn === 'send' && node.entry?.sendConstraintGroupLabel?.trim()
+        ? [descTitle, node.entry.sendConstraintGroupLabel].filter(Boolean).join('\n\n')
+        : descTitle
+      : undefined;
+
+  const sendOptionalLabelClass =
+    variant === 'backend' && backendColumn === 'send' && node.entry?.sendBindingOptional
+      ? 'italic text-slate-400/95'
+      : undefined;
+
   return (
     <div className="select-none" {...ifaceRowAttrs}>
       {(showBefore || showIfaceBefore || showReorderBefore) && (
@@ -741,7 +753,8 @@ function MappingTreeRow({
               ephemeralNew={ephemeralNew}
               onAbandonEphemeral={ephemeralNew ? handleAbandonEphemeral : undefined}
               inlinePencil={variant !== 'backend'}
-              viewTitle={variant === 'backend' ? descTitle : undefined}
+              viewTitle={backendMappingViewTitle}
+              segmentClassName={sendOptionalLabelClass}
             />
           </div>
         </div>

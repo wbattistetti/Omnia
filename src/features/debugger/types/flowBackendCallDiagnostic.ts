@@ -9,7 +9,7 @@ export type FlowBackendCallInvocation = {
   displayName: string;
   endpoint: string;
   method: string;
-  outcome: 'success' | 'no_match' | 'ambiguous' | 'no_mock';
+  outcome: 'success' | 'no_match' | 'ambiguous' | 'no_mock' | 'http_success' | 'http_error';
   matchedRowId?: string | null;
   errorMessage?: string | null;
   inputParameters: FlowBackendParamRow[];
@@ -52,7 +52,9 @@ export function parseFlowBackendCallInvocation(raw: unknown): FlowBackendCallInv
     outcomeRaw === 'success' ||
     outcomeRaw === 'no_match' ||
     outcomeRaw === 'ambiguous' ||
-    outcomeRaw === 'no_mock'
+    outcomeRaw === 'no_mock' ||
+    outcomeRaw === 'http_success' ||
+    outcomeRaw === 'http_error'
       ? outcomeRaw
       : 'success';
   const ep = o.endpoint ?? (o as { Endpoint?: unknown }).Endpoint;

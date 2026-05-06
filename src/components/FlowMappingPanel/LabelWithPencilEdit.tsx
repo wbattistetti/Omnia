@@ -22,6 +22,8 @@ export interface LabelWithPencilEditProps {
   onAbandonEphemeral?: () => void;
   inlinePencil?: boolean;
   viewTitle?: string;
+  /** Classi aggiuntive sul label in sola lettura (es. corsivo per param opzionale). */
+  segmentClassName?: string;
   /** Fired when inline rename mode starts or ends (e.g. to hide sibling toolbars). */
   onEditingChange?: (editing: boolean) => void;
 }
@@ -39,6 +41,7 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
       onAbandonEphemeral,
       inlinePencil = true,
       viewTitle,
+      segmentClassName,
       onEditingChange,
     },
     ref
@@ -153,7 +156,10 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
 
     if (!editable) {
       return (
-        <span className="truncate text-slate-100 text-[11px] font-medium" title={viewTitle ?? viewLabel}>
+        <span
+          className={`truncate text-slate-100 text-[11px] font-medium ${segmentClassName || ''}`}
+          title={viewTitle ?? viewLabel}
+        >
           {viewLabel}
         </span>
       );
@@ -216,7 +222,7 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
     return (
       <div className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
         <span
-          className="peer whitespace-nowrap text-slate-100 text-[11px] font-medium cursor-default select-none rounded px-0.5 outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 overflow-hidden text-ellipsis min-w-0 max-w-full min-h-[1.1em]"
+          className={`peer whitespace-nowrap text-slate-100 text-[11px] font-medium cursor-default select-none rounded px-0.5 outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 overflow-hidden text-ellipsis min-w-0 max-w-full min-h-[1.1em] ${segmentClassName || ''}`}
           tabIndex={0}
           onDoubleClick={() => setEditing(true)}
           onKeyDown={(e) => {

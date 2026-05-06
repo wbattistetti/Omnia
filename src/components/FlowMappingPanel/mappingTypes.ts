@@ -26,6 +26,11 @@ export interface MappingEntry {
   openapiDescriptionDrift?: boolean;
   /** Solo UI: testo OpenAPI corrente per tooltip / pannello confronto. */
   openapiDescriptionHint?: string;
+  /** SEND: parametro opzionale per compile (`x-omnia.sendBinding`). */
+  sendBindingOptional?: boolean;
+  /** SEND: id gruppo vincolo one-of (stesso id su più righe). */
+  sendConstraintGroupId?: string;
+  sendConstraintGroupLabel?: string;
 }
 
 export function createMappingEntry(partial: Partial<MappingEntry> & Pick<MappingEntry, 'wireKey'>): MappingEntry {
@@ -44,6 +49,11 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
     ...(partial.sampleValues != null ? { sampleValues: partial.sampleValues } : {}),
     ...(partial.openapiDescriptionDrift !== undefined ? { openapiDescriptionDrift: partial.openapiDescriptionDrift } : {}),
     ...(partial.openapiDescriptionHint !== undefined ? { openapiDescriptionHint: partial.openapiDescriptionHint } : {}),
+    ...(partial.sendBindingOptional !== undefined ? { sendBindingOptional: partial.sendBindingOptional } : {}),
+    ...(partial.sendConstraintGroupId !== undefined ? { sendConstraintGroupId: partial.sendConstraintGroupId } : {}),
+    ...(partial.sendConstraintGroupLabel !== undefined
+      ? { sendConstraintGroupLabel: partial.sendConstraintGroupLabel }
+      : {}),
     ...(vid ? { variableRefId: vid } : {}),
     ...(lit ? { literalConstant: lit } : {}),
     ...(lk ? { labelKey: lk } : {}),

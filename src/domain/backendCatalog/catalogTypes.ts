@@ -10,6 +10,19 @@ export type CatalogBindingSource = 'graph' | 'tools' | 'manual';
 export type FrozenImportState = 'none' | 'ok' | 'error';
 
 /**
+ * Regole compile-time SEND derivate da `x-omnia.sendBinding` sullo schema body OpenAPI.
+ * Opzionale: lista nomi API; gruppi: almeno un’alternativa con tutti i parametri valorizzati.
+ */
+export type OpenApiSendBindingRules = {
+  optionalApiParams: string[];
+  requireOneOfSets?: Array<{
+    id: string;
+    label?: string;
+    alternatives: Array<{ allApiParams: string[] }>;
+  }>;
+};
+
+/**
  * Meta persistita opzionale sul Task Backend Call dopo Read API (`BackendCallEditor`).
  * Usata per badge stale (enum) senza rifetch continuo.
  */
@@ -43,6 +56,8 @@ export interface BackendCallSpecMeta {
   openapiInputEnumByApiName?: Record<string, string[]>;
   /** OpenAPI `operationId` dell’operazione scelta al Read API (per naming tool verso ConvAI). */
   openapiOperationId?: string | null;
+  /** Regole obbligatorietà SEND da `x-omnia.sendBinding` (se presenti nello spec). `null` = assenti dopo import. */
+  openapiSendBinding?: OpenApiSendBindingRules | null;
 }
 
 /** Voce manuale nel progetto (`project.backendCatalog.manualEntries`). */

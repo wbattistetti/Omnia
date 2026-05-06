@@ -45,18 +45,93 @@ function defaultObjectSchema(): Record<string, unknown> {
   return { type: 'object', properties: {} };
 }
 
+/** Tipi JSON Schema ammessi su `query_params_schema.properties.*.type` (ElevenLabs). */
+const ELEVENLABS_QUERY_PARAM_JSON_TYPES = new Set([
+  'string',
+  'number',
+  'integer',
+  'boolean',
+  'array',
+  'object',
+]);
+
+function jsonSchemaPrimitiveTypeFromProperty(src: Record<string, unknown>): string {
+  const t = src.type;
+  if (typeof t === 'string' && ELEVENLABS_QUERY_PARAM_JSON_TYPES.has(t)) return t;
+  return 'string';
+}
+
 /**
- * ElevenLabs `QueryParamsJsonSchema`: solo `properties` + `required` — niente `type` in radice
+ * `request_body_schema.properties.*` (ConvAI EU): serve `description` e **`type`** JSON primitives per ogni
+ * proprietà — solo `{ description }` produce `union_tag_not_found` sul discriminatore API ElevenLabs.
+ */
+function propertiesToElevenLabsParamDefs(
+  props: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
+  const converted: Record<string, unknown> = {};
+  for (const [name, raw] of Object.entries(props)) {
+    const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const descRaw = src.description;
+    const desc =
+      typeof descRaw === 'string' && descRaw.trim().length > 0
+        ? descRaw.trim()
+        : `Parametro ${name}`;
+    converted[name] = {
+      description: desc,
+      type: jsonSchemaPrimitiveTypeFromProperty(src),
+    };
+  }
+  return converted;
+}
+
+/**
+ * `query_params_schema.properties.*`: ElevenLabs richiede sia metadati ConvAI (`description`) sia `type`
+ * per ogni proprietà (422 se manca `type`).
+ */
+function propertiesToElevenLabsQueryParamDefs(
+  props: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
+  const converted: Record<string, unknown> = {};
+  for (const [name, raw] of Object.entries(props)) {
+    const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const descRaw = src.description;
+    const desc =
+      typeof descRaw === 'string' && descRaw.trim().length > 0
+        ? descRaw.trim()
+        : `Parametro ${name}`;
+    converted[name] = {
+      description: desc,
+      type: jsonSchemaPrimitiveTypeFromProperty(src),
+    };
+  }
+  return converted;
+}
+
+/**
+ * `request_body_schema` ElevenLabs: object con `properties` convertite.
+ */
+function toElevenLabsRequestBodySchema(inputSchema: Record<string, unknown>): Record<string, unknown> {
+  return {
+    type: 'object',
+    properties: propertiesToElevenLabsParamDefs(
+      inputSchema.properties as Record<string, unknown> | undefined
+    ),
+  };
+}
+
+/**
+ * `QueryParamsJsonSchema`: solo `properties` + `required` — niente `type` in radice
  * (vedi errore API extra_forbidden su `query_params_schema.type`).
+ * Ogni `properties.*`: `{ description, type }` (ConvAI + JSON Schema).
  */
 function toElevenLabsQueryParamsSchema(inputSchema: Record<string, unknown>): Record<string, unknown> {
-  const props = inputSchema.properties;
-  const out: Record<string, unknown> = {};
-  if (props && typeof props === 'object' && !Array.isArray(props)) {
-    out.properties = props;
-  } else {
-    out.properties = {};
-  }
+  const out: Record<string, unknown> = {
+    properties: propertiesToElevenLabsQueryParamDefs(
+      inputSchema.properties as Record<string, unknown> | undefined
+    ),
+  };
   const req = inputSchema.required;
   if (Array.isArray(req) && req.every((x) => typeof x === 'string')) {
     out.required = req;
@@ -133,7 +208,7 @@ export function buildElevenLabsConvaiPromptTools(
     if (usesQueryParamsForMethod(method)) {
       apiSchema.query_params_schema = toElevenLabsQueryParamsSchema(schema);
     } else {
-      apiSchema.request_body_schema = schema;
+      apiSchema.request_body_schema = toElevenLabsRequestBodySchema(schema);
     }
 
     out.push({

@@ -12,6 +12,7 @@ import {
   fetchOpenApiDocumentOperationalThenManualFallback,
   pickOpenApiPathForReadApi,
 } from './openApiBackendCallSpec';
+import type { OpenApiSendBindingRules } from '../domain/backendCatalog/catalogTypes';
 
 type IoRow = {
   internalName: string;
@@ -19,7 +20,32 @@ type IoRow = {
   variable?: string;
   fieldDescription?: string;
   apiField?: string;
+  /** Da `x-omnia.sendBinding` dopo Read API. */
+  sendBindingOptional?: boolean;
+  sendConstraintGroupId?: string;
+  sendConstraintGroupLabel?: string;
 };
+
+function buildSendBindingRowFields(
+  apiName: string,
+  rules: OpenApiSendBindingRules | undefined
+): Pick<IoRow, 'sendBindingOptional' | 'sendConstraintGroupId' | 'sendConstraintGroupLabel'> {
+  if (!rules) return {};
+  if (rules.optionalApiParams.includes(apiName)) {
+    return { sendBindingOptional: true };
+  }
+  for (const set of rules.requireOneOfSets ?? []) {
+    for (const alt of set.alternatives) {
+      if (alt.allApiParams.includes(apiName)) {
+        return {
+          sendConstraintGroupId: set.id,
+          ...(set.label?.trim() ? { sendConstraintGroupLabel: set.label.trim() } : {}),
+        };
+      }
+    }
+  }
+  return {};
+}
 
 function filterRows(rows: unknown): IoRow[] {
   if (!Array.isArray(rows)) return [];
@@ -59,7 +85,8 @@ function rebuildInputRows(
   prevInputs: IoRow[],
   apiNames: string[],
   inputDesc: Record<string, string>,
-  used: Set<string>
+  used: Set<string>,
+  sendBinding?: OpenApiSendBindingRules
 ): IoRow[] {
   const byApi = new Map<string, IoRow>();
   for (const row of prevInputs) {
@@ -73,10 +100,12 @@ function rebuildInputRows(
     const internalName = prev?.internalName?.trim()
       ? nextUniqueInternalName(prev.internalName.trim(), used)
       : nextUniqueInternalName(toTreeInternalName(apiName), used);
+    const bind = buildSendBindingRowFields(apiName, sendBinding);
     next.push({
       internalName,
       apiParam: apiName,
       variable: prev?.variable ?? '',
+      ...bind,
       ...(prev?.fieldDescription?.trim()
         ? { fieldDescription: prev.fieldDescription }
         : inputDesc[apiName]?.trim()
@@ -192,6 +221,7 @@ export async function runBackendCallReadApiForTask(
     const outputDesc = fields.outputDescriptionsByApiName;
     const inputUiKindByApiName: Record<string, string> = { ...fields.inputUiKindByApiName };
     const inputEnumByApiName: Record<string, string[]> = { ...fields.inputEnumByApiName };
+    const sendBinding = fields.sendBindingRules;
     const operationDocBlurb = buildOperationDocBlurbFromOpenApiFields(fields);
     const currentToolDesc = String(
       (task as Task & { backendToolDescription?: string }).backendToolDescription ?? ''
@@ -202,7 +232,7 @@ export async function runBackendCallReadApiForTask(
 
     const used = new Set<string>();
     const nextInputs = inputNames.length > 0
-      ? rebuildInputRows(prevInputs, inputNames, inputDesc, used)
+      ? rebuildInputRows(prevInputs, inputNames, inputDesc, used, sendBinding)
       : (inputsEmpty ? [] : prevInputs);
     const nextOutputs = outputNames.length > 0
       ? rebuildOutputRows(prevOutputs, outputNames, outputDesc, used)
@@ -234,6 +264,7 @@ export async function runBackendCallReadApiForTask(
         },
         openapiInputUiKindByApiName: inputUiKindByApiName,
         openapiInputEnumByApiName: inputEnumByApiName,
+        openapiSendBinding: sendBinding ?? null,
       },
       inputs: nextInputs,
       outputs: nextOutputs,

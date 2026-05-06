@@ -214,12 +214,22 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           toReadableLabel(projectData?.name) ||
           (typeof projectData?.id === 'string' && projectData.id.trim().length > 0 ? projectData.id.trim() : 'project');
 
+        const omniaClientLabel =
+          String(projectData?.clientName ?? projectData?.ownerClient ?? 'default').trim() || 'default';
+        const omniaVersionLabel = String(projectData?.version ?? '0').trim() || '0';
+
         const manualCatalogBackendTaskIds = extractManualCatalogBackendTaskIdsFromProjectData(projectData);
         const provisionResult = await ensureConvaiAgentsProvisioned(currentOptions.nodes, {
           projectLabel,
           rootFlowLabel,
           nodeLabelByTaskId,
           manualCatalogBackendTaskIds,
+          omniaClientLabel,
+          omniaVersionLabel,
+          flowSlice: {
+            nodes: (currentOptions.nodes || []) as unknown[],
+            edges: (currentOptions.edges || []) as unknown[],
+          },
         });
         if (provisionResult.provisioned.length > 0) {
           console.info('[IA·ConvAI] ConvAI provision summary', provisionResult);
@@ -557,7 +567,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       const opts = optionsRef.current;
       opts.onError?.(error as Error);
     }
-  }, [toReadableLabel]); // ✅ Only stable deps; options come from ref
+  }, [toReadableLabel, projectData?.id, projectData?.name, projectData?.clientName, projectData?.ownerClient, projectData?.version]); // projectData: provision label cliente/versione
 
   // Stop execution
   const stop = useCallback(async () => {

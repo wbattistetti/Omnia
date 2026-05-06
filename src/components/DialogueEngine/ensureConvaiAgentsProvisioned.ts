@@ -1,5 +1,6 @@
 /**
- * Pre-compile ConvAI ElevenLabs: allinea agenti cloud al task tramite nome `__GUID_{taskId}`.
+ * Pre-compile ConvAI ElevenLabs: ogni Run elimina agenti con `__GUID_{taskId}` + crea un agente nuovo
+ * (nome `OMNIA_<client>_<progetto>_<versione>_…__GUID_<taskId>`), dopo validazione tool backend.
  * `agent_id` resta solo in {@link convaiSessionAgentStore} (non nel DB).
  */
 
@@ -8,7 +9,6 @@ import type { FlowNode } from '../Flowchart/types/flowTypes';
 import { enrichRowsWithTaskId } from '../../utils/taskHelpers';
 import { taskRepository } from '../../services/TaskRepository';
 import { TaskType } from '../../types/taskTypes';
-import type { Task } from '../../types/taskTypes';
 import {
   CreateConvaiAgentHttpError,
   createConvaiAgentViaOmniaServer,
@@ -27,10 +27,7 @@ import {
   mergeResolvedAndLiveIaConfig,
   peekConvaiLiveIaConfig,
 } from '../../utils/iaAgentRuntime/convaiLiveIaConfigBridge';
-import {
-  getConvaiSessionBinding,
-  setConvaiSessionBinding,
-} from '../../utils/iaAgentRuntime/convaiSessionAgentStore';
+import { setConvaiSessionBinding } from '../../utils/iaAgentRuntime/convaiSessionAgentStore';
 import type { NormalizedIaProviderError } from '@domain/compileErrors/iaProviderErrors';
 import { normalizeProviderError } from '@domain/compileErrors/normalizeProviderError';
 import { setIaProvisioningError } from '@domain/compileErrors/iaProvisioningErrorStore';
@@ -40,8 +37,10 @@ import {
   isConvaiPayloadPreviewOnRunDebugEnabled,
   type ConvaiProvisionPayloadPreviewItem,
 } from '@utils/iaAgentRuntime/convaiPayloadPreviewEvents';
+import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
+import { collectReachableBackendCallTaskIdsFromFlow } from '@domain/iaAgentTools/collectReachableBackendCallTaskIdsFromFlow';
 
-/** Contesto per il nome leggibile ElevenLabs (slug + GUID). */
+/** Contesto per il nome leggibile ElevenLabs (OMNIA… + GUID) e validazione tool. */
 export type ConvaiProvisionContext = {
   projectLabel: string;
   rootFlowLabel: string;
@@ -49,6 +48,12 @@ export type ConvaiProvisionContext = {
   nodeLabelByTaskId: Record<string, string>;
   /** Allinea payload/tool alla tab Backends (`backendCatalog.manualEntries`). */
   manualCatalogBackendTaskIds?: readonly string[];
+  /** ProjectData.clientName / ownerClient — prefisso deterministico agent name. */
+  omniaClientLabel?: string;
+  /** ProjectData.version */
+  omniaVersionLabel?: string;
+  /** Grafo corrente per reachability Backend Call vs lista tool vuota. */
+  flowSlice?: { nodes: unknown[]; edges: unknown[] };
 };
 
 /**
@@ -59,8 +64,8 @@ export type ConvaiProvisionContext = {
 const OMIT_TTS_ON_CREATE = false;
 
 /**
- * Per ogni task AI Agent ElevenLabs sul canvas: se la chiave di provision in sessione coincide con
- * quella attuale, skip; altrimenti DELETE mirato su `__GUID_{taskId}` + CREATE + aggiornamento sessione.
+ * Per ogni task AI Agent ElevenLabs sul canvas: sempre DELETE mirato su `__GUID_{taskId}` + CREATE
+ * (nessuno skip per provision key: ogni Run crea un agente nuovo allineato ai backend correnti).
  */
 export async function ensureConvaiAgentsProvisioned(
   nodes: Node<FlowNode>[],
@@ -129,6 +134,43 @@ export async function ensureConvaiAgentsProvisioned(
         continue;
       }
 
+      const fromCfg = (cfgForCreate.convaiBackendToolTaskIds ?? [])
+        .map((x) => String(x || '').trim())
+        .filter(Boolean);
+      const effectiveBackendIds = mergeConvaiBackendToolIdLists(fromCfg, [...manualCatalogBackendTaskIds]);
+      let backendToolValidationFailed = false;
+      for (const bid of effectiveBackendIds) {
+        const bt = taskRepository.getTask(bid);
+        if (!bt || bt.type !== TaskType.BackendCall) {
+          failed.push(taskId);
+          setIaProvisioningError(taskId, {
+            provider: 'elevenlabs',
+            code: 'backendToolTaskMissing',
+            message: `ConvAI: id tool backend «${bid.slice(0, 8)}…» non trovato nel progetto o non è un Backend Call.`,
+            raw: { bid },
+          });
+          backendToolValidationFailed = true;
+          break;
+        }
+      }
+      if (backendToolValidationFailed) continue;
+
+      const reachableBackendIds = collectReachableBackendCallTaskIdsFromFlow(
+        context.flowSlice ?? null,
+        taskId
+      );
+      if (reachableBackendIds.length > 0 && effectiveBackendIds.length === 0) {
+        failed.push(taskId);
+        setIaProvisioningError(taskId, {
+          provider: 'elevenlabs',
+          code: 'convaiBackendToolIdsEmpty',
+          message:
+            'ConvAI: nessun tool backend in elenco (`convaiBackendToolTaskIds` / catalogo) ma il flusso ha Backend Call raggiungibili dall’agente.',
+          raw: null,
+        });
+        continue;
+      }
+
       const nodeLabel =
         context.nodeLabelByTaskId[taskId] ||
         String(node.data?.label || node.data?.text || 'node').trim() ||
@@ -141,6 +183,8 @@ export async function ensureConvaiAgentsProvisioned(
           flowLabel: flowSlug,
           nodeLabel,
           taskGuid: taskId,
+          omniaClientLabel: context.omniaClientLabel,
+          omniaVersionLabel: context.omniaVersionLabel,
         });
       } catch (e) {
         failed.push(taskId);
@@ -173,26 +217,6 @@ export async function ensureConvaiAgentsProvisioned(
 
       const conversationConfigOutbound =
         conversationConfigForConvaiApi(fragment) ?? fragment;
-
-      const session = getConvaiSessionBinding(taskId);
-      if (session && session.lastProvisionKey === provisionKey && session.agentId.trim().length > 0) {
-        const previewBody: Record<string, unknown> = {};
-        const n = displayName.trim();
-        if (n) previewBody.name = n;
-        previewBody.conversation_config = fragment;
-        payloadPreviewItems.push({
-          taskId,
-          displayName,
-          bodyText:
-            '// Provisioning non ripetuto: sessione già allineata (stessa provision key, agentId in sessione).\n' +
-            '// JSON di riferimento (corpo client; al create il server merge con i default ElevenLabs):\n' +
-            JSON.stringify(previewBody, null, 2),
-          useCaseDialoguesPreview: buildUseCaseDialoguesPreviewFromTask(task),
-        });
-        setIaProvisioningError(taskId, null);
-        skipped.push(taskId);
-        continue;
-      }
 
       let previewEntry: ConvaiProvisionPayloadPreviewItem | undefined;
       try {

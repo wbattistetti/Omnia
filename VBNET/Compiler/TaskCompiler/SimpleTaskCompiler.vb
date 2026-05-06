@@ -104,6 +104,21 @@ Public Class SimpleTaskCompiler
                         If backendDef.Endpoint.ContainsKey("method") Then
                             backendTask.Method = If(backendDef.Endpoint("method")?.ToString(), "POST")
                         End If
+                        If backendDef.Endpoint.ContainsKey("headers") Then
+                            Dim htRaw = backendDef.Endpoint("headers")
+                            Dim jo = TryCast(Newtonsoft.Json.Linq.JToken.FromObject(htRaw), Newtonsoft.Json.Linq.JObject)
+                            If jo IsNot Nothing Then
+                                For Each p In jo.Properties()
+                                    If Not String.IsNullOrWhiteSpace(p.Name) Then
+                                        backendTask.EndpointHeaders(p.Name.Trim()) = If(p.Value?.ToString(), "")
+                                    End If
+                                Next
+                            End If
+                        End If
+                    End If
+
+                    If Not String.IsNullOrWhiteSpace(backendDef.MockTableDefaultExecutionMode) Then
+                        backendTask.Config("mockTableDefaultExecutionMode") = backendDef.MockTableDefaultExecutionMode.Trim()
                     End If
 
                     ' ✅ Inputs

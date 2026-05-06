@@ -111,6 +111,25 @@
       "BookFromAgendaRequest": {
         "type": "object",
         "description": "Solo chiavi puntate nel body radice. Una sorgente agenda: **`agenda.json`** (object) **oppure** **`agenda.url`** + **`agenda.type`**. `queryConstraints` è **opzionale** (omit = tutti gli slot liberi). Filtro: se `horizon` non è passato, con `agenda.json` o `agenda.type` Omnia (e dopo normalizzazione anche ICS/… ) si usa min/max di `agenda.days`. Per **fetch** di feed ICS-like da URL, servono date: **`horizon.start`** / **`horizon.end`** o `queryConstraints.horizon`.",
+        "x-omnia": {
+          "sendBinding": {
+            "optionalApiParams": [
+              "queryConstraints",
+              "horizon.start",
+              "horizon.end"
+            ],
+            "requireOneOfSets": [
+              {
+                "id": "agenda_source",
+                "label": "Sorgente agenda: indica `agenda.json` oppure sia `agenda.url` che `agenda.type`.",
+                "alternatives": [
+                  { "allApiParams": ["agenda.json"] },
+                  { "allApiParams": ["agenda.url", "agenda.type"] }
+                ]
+              }
+            ]
+          }
+        },
         "properties": {
           "agenda.type": {
             "type": "string",

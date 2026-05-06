@@ -71,6 +71,7 @@
     <Compile Include="TaskExecutors\ProcessTurnHelpers.vb" />
     <!-- Executor specifici (moved from Orchestrator) -->
     <Compile Include="TaskExecutors\SayMessageTaskExecutor.vb" />
+    <Compile Include="TaskExecutors\BackendSendHttp.vb" />
     <Compile Include="TaskExecutors\BackendCallTaskExecutor.vb" />
     <Compile Include="TaskExecutors\CloseSessionTaskExecutor.vb" />
     <Compile Include="TaskExecutors\TransferTaskExecutor.vb" />

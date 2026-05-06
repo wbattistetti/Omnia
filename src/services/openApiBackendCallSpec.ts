@@ -3,6 +3,8 @@
  * Shallow $ref resolution via #/components/schemas/... only.
  */
 
+import type { OpenApiSendBindingRules } from '../domain/backendCatalog/catalogTypes';
+
 /** Kind per `input` HTML5 nelle celle mock / SEND (chiave = nome campo API). */
 export type OpenApiInputUiKind =
   | 'text'
@@ -34,6 +36,8 @@ export type OpenApiOperationFields = {
   inputUiKindByApiName: Record<string, OpenApiInputUiKind>;
   /** Valori `enum` JSON Schema per parametro/property (solo quando dichiarati nello spec). */
   inputEnumByApiName: Record<string, string[]>;
+  /** `x-omnia.sendBinding` sullo schema body (obbligatorietà compile SEND). */
+  sendBindingRules?: OpenApiSendBindingRules;
 };
 
 function isRecord(x: unknown): x is Record<string, unknown> {
@@ -172,6 +176,72 @@ function setFirstEnum(target: Record<string, string[]>, key: string, values: str
   const k = key.trim();
   if (!k || (target[k]?.length ?? 0) > 0) return;
   if (values.length > 0) target[k] = [...values];
+}
+
+function parseRequireOneOfSetsFromXomnia(
+  raw: unknown
+): OpenApiSendBindingRules['requireOneOfSets'] {
+  if (!Array.isArray(raw)) return undefined;
+  const out: NonNullable<OpenApiSendBindingRules['requireOneOfSets']> = [];
+  for (const item of raw) {
+    if (!isRecord(item)) continue;
+    const id = String(item.id ?? '').trim();
+    if (!id) continue;
+    const labelRaw = item.label;
+    const label = typeof labelRaw === 'string' && labelRaw.trim() ? labelRaw.trim() : undefined;
+    const altsRaw = item.alternatives;
+    const alternatives: Array<{ allApiParams: string[] }> = [];
+    if (Array.isArray(altsRaw)) {
+      for (const a of altsRaw) {
+        if (!isRecord(a)) continue;
+        const p = a.allApiParams;
+        if (!Array.isArray(p)) continue;
+        const allApiParams = p.map((x) => String(x ?? '').trim()).filter(Boolean);
+        if (allApiParams.length > 0) alternatives.push({ allApiParams });
+      }
+    }
+    if (alternatives.length > 0) out.push({ id, ...(label ? { label } : {}), alternatives });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function parseSendBindingRecord(sb: Record<string, unknown>): OpenApiSendBindingRules | undefined {
+  const opt = sb.optionalApiParams;
+  const optionalApiParams = Array.isArray(opt)
+    ? opt.map((x) => String(x ?? '').trim()).filter(Boolean)
+    : [];
+  const requireOneOfSets = parseRequireOneOfSetsFromXomnia(sb.requireOneOfSets);
+  return { optionalApiParams, requireOneOfSets };
+}
+
+/**
+ * Legge `x-omnia.sendBinding` sullo schema body (risolve `$ref` fino allo schema con estensioni).
+ */
+export function extractOmniaSendBindingRules(
+  root: Record<string, unknown>,
+  schema: unknown
+): OpenApiSendBindingRules | undefined {
+  let cur: unknown = schema;
+  const rs = new Set<string>();
+  for (let depth = 0; depth < 40; depth++) {
+    if (!isRecord(cur)) return undefined;
+    if (typeof cur.$ref === 'string') {
+      const ref = cur.$ref;
+      if (rs.has(ref)) return undefined;
+      rs.add(ref);
+      cur = resolveRef(root, ref);
+      continue;
+    }
+    const x = cur['x-omnia'];
+    if (isRecord(x)) {
+      const sb = x.sendBinding;
+      if (isRecord(sb)) {
+        return parseSendBindingRecord(sb);
+      }
+    }
+    return undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -675,6 +745,8 @@ export function extractOperationFields(
   const inputUiKindByApiName: Record<string, OpenApiInputUiKind> = {};
   const inputEnumByApiName: Record<string, string[]> = {};
 
+  let sendBindingRules: OpenApiSendBindingRules | undefined;
+
   const requestParamNames: string[] = [];
   let requestBodyPropertyNames: string[] = [];
   const params = op.parameters;
@@ -705,6 +777,8 @@ export function extractOperationFields(
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, p.schema));
         mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, p.schema));
         mergeEnumMaps(inputEnumByApiName, schemaPropertyEnums(doc, p.schema));
+        const sb = extractOmniaSendBindingRules(doc, p.schema);
+        if (sb) sendBindingRules = sb;
       }
       /** formData → trattati come nomi campo inviati */
       if (inn === 'formData' && name) {
@@ -736,6 +810,8 @@ export function extractOperationFields(
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, json.schema));
         mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, json.schema));
         mergeEnumMaps(inputEnumByApiName, schemaPropertyEnums(doc, json.schema));
+        const sb = extractOmniaSendBindingRules(doc, json.schema);
+        if (sb) sendBindingRules = sb;
       }
     }
   }
@@ -775,6 +851,7 @@ export function extractOperationFields(
     outputDescriptionsByApiName,
     inputUiKindByApiName,
     inputEnumByApiName,
+    ...(sendBindingRules ? { sendBindingRules } : {}),
   };
 }
 

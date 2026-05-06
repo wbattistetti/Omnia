@@ -120,6 +120,10 @@ interface BackendCallConfig {
     variable?: string; // combobox (variabile app)
     fieldDescription?: string;
     sampleValues?: string[];
+    /** Da Read API + `x-omnia.sendBinding`. */
+    sendBindingOptional?: boolean;
+    sendConstraintGroupId?: string;
+    sendConstraintGroupLabel?: string;
   }>;
   outputs?: Array<{
     internalName: string; // textbox
@@ -779,6 +783,22 @@ export default function BackendCallEditor({
       ),
     [config.inputs, knownBackendVariableIdSet, openapiDescriptionSnapshots]
   );
+
+  /** Blocchi informativi da `x-omnia.sendBinding` (vincoli one-of) sopra l’albero SEND. */
+  const backendSendOneOfHintBlocks = React.useMemo(() => {
+    if (!instanceId) return [];
+    const meta = taskRepository.getTask(instanceId)?.backendCallSpecMeta?.openapiSendBinding;
+    const sets = meta?.requireOneOfSets;
+    if (!sets?.length) return [];
+    const seen = new Set<string>();
+    const out: { id: string; label: string }[] = [];
+    for (const s of sets) {
+      if (!s.label?.trim() || seen.has(s.id)) continue;
+      seen.add(s.id);
+      out.push({ id: s.id, label: s.label.trim() });
+    }
+    return out;
+  }, [instanceId, config.inputs, swaggerInputContract.length]);
 
   /** Chiavi ammesse nell’oggetto risultato dello script unificato (= segmenti interni SEND). */
   const unifiedAllowedFieldKeys = React.useMemo(
@@ -1602,6 +1622,17 @@ export default function BackendCallEditor({
             backendReceiveColumnVisible={receiveMappingPanelVisible}
             backendSendReceiveSplitRatio={sendReceiveSplitRatio}
             onBackendSendReceiveSplitRatioChange={persistSendReceiveSplitRatio}
+            backendSendBodyPrefix={
+              backendSendOneOfHintBlocks.length > 0 ? (
+                <div className="mb-2 space-y-1 rounded-md border border-teal-500/30 bg-teal-950/35 px-2 py-1.5 text-[10px] leading-snug text-teal-50/95">
+                  {backendSendOneOfHintBlocks.map((h) => (
+                    <p key={h.id}>
+                      <span className="font-semibold text-teal-200/95">{h.id}</span>: {h.label}
+                    </p>
+                  ))}
+                </div>
+              ) : undefined
+            }
           />
         </div>
         )}

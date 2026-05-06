@@ -33,6 +33,12 @@ Public Class BackendCallTaskDefinition
     <JsonProperty("mockTable")>
     Public Property MockTable As List(Of Dictionary(Of String, Object))
 
+    ''' <summary>
+    ''' MOCK = solo tabella mock in runtime; REAL = HTTP verso <see cref="Endpoint"/> quando configurato.
+    ''' </summary>
+    <JsonProperty("mockTableDefaultExecutionMode")>
+    Public Property MockTableDefaultExecutionMode As String
+
     Public Sub New()
         MyBase.New()
         Inputs = New List(Of Dictionary(Of String, Object))()

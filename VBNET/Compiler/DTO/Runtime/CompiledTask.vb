@@ -273,6 +273,11 @@ Public Class CompiledBackendCallTask
     Public Property Method As String
 
     ''' <summary>
+    ''' Header HTTP dall&apos;endpoint task (chiave case-insensitive).
+    ''' </summary>
+    Public Property EndpointHeaders As Dictionary(Of String, String)
+
+    ''' <summary>
     ''' Payload della richiesta (legacy - mantenuto per retrocompatibilità)
     ''' </summary>
     Public Property Payload As Dictionary(Of String, Object)
@@ -328,6 +333,7 @@ Public Class CompiledBackendCallTask
     Public Sub New()
         MyBase.New()
         Payload = New Dictionary(Of String, Object)()
+        EndpointHeaders = New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase)
         Inputs = New List(Of Dictionary(Of String, Object))()
         Outputs = New List(Of Dictionary(Of String, Object))()
         Config = New Dictionary(Of String, Object)()

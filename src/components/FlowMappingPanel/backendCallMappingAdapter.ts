@@ -11,6 +11,9 @@ export type BackendCallInputRow = {
   variable?: string;
   fieldDescription?: string;
   sampleValues?: string[];
+  sendBindingOptional?: boolean;
+  sendConstraintGroupId?: string;
+  sendConstraintGroupLabel?: string;
 };
 
 export type BackendCallOutputRow = {
@@ -57,6 +60,11 @@ export function backendInputsToMappingEntries(
         ...(literalConstant ? { literalConstant } : {}),
         ...(row.fieldDescription !== undefined ? { fieldDescription: row.fieldDescription } : {}),
         ...(row.sampleValues !== undefined ? { sampleValues: row.sampleValues } : {}),
+        ...(row.sendBindingOptional !== undefined ? { sendBindingOptional: row.sendBindingOptional } : {}),
+        ...(row.sendConstraintGroupId !== undefined ? { sendConstraintGroupId: row.sendConstraintGroupId } : {}),
+        ...(row.sendConstraintGroupLabel !== undefined
+          ? { sendConstraintGroupLabel: row.sendConstraintGroupLabel }
+          : {}),
       });
     });
 }
@@ -90,6 +98,11 @@ export function mappingEntriesToBackendInputs(entries: MappingEntry[]): BackendC
       variable: e.variableRefId?.trim() || e.literalConstant?.trim() || '',
       ...(e.fieldDescription !== undefined ? { fieldDescription: e.fieldDescription } : {}),
       ...(e.sampleValues !== undefined ? { sampleValues: e.sampleValues } : {}),
+      ...(e.sendBindingOptional !== undefined ? { sendBindingOptional: e.sendBindingOptional } : {}),
+      ...(e.sendConstraintGroupId !== undefined ? { sendConstraintGroupId: e.sendConstraintGroupId } : {}),
+      ...(e.sendConstraintGroupLabel !== undefined
+        ? { sendConstraintGroupLabel: e.sendConstraintGroupLabel }
+        : {}),
     }));
 }
 

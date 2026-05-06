@@ -27,6 +27,7 @@ Public Class AIAgentTaskExecutor
     Private Shared ReadOnly Http As New HttpClient With {.Timeout = TimeSpan.FromMinutes(2)}
     ''' <summary>Long poll verso <c>readPrompt</c> (supera il timeout HTTP standard del client breve).</summary>
     Private Shared ReadOnly HttpLong As New HttpClient With {.Timeout = TimeSpan.FromMinutes(3)}
+    Private Const DiagnosticListPreviewLimit As Integer = 12
 
     Private Const ElevenLabsContextKind As String = "__omnia_ai_agent_kind"
     Private Const ElevenLabsContextKindValue As String = "elevenlabs"
@@ -355,6 +356,97 @@ Public Class AIAgentTaskExecutor
         Return s.Substring(0, 10) & "…"
     End Function
 
+    Private Shared Function ResolveDisplayName(task As CompiledTask) As String
+        Dim sid = If(task?.Id, "")
+        If String.IsNullOrWhiteSpace(sid) Then Return "AIAgent"
+        If sid.Length <= 12 Then Return sid
+        Return sid.Substring(0, 8) & "…"
+    End Function
+
+    Private Shared Function BuildDiagnosticParamRows(pairs As IEnumerable(Of KeyValuePair(Of String, Object))) As JArray
+        Dim arr As New JArray()
+        If pairs Is Nothing Then Return arr
+        For Each kv In pairs
+            arr.Add(New JObject From {
+                {"name", kv.Key},
+                {"value", If(kv.Value Is Nothing, JValue.CreateNull(), JToken.FromObject(kv.Value))}
+            })
+        Next
+        Return arr
+    End Function
+
+    Private Shared Function IsDateRelatedSignal(text As String) As Boolean
+        Dim t = If(text, "").Trim().ToLowerInvariant()
+        If t = "" Then Return False
+        Return t.Contains("bookfromagenda") OrElse
+            t.Contains("scheduling/solve") OrElse
+            t.Contains("horizon") OrElse
+            t.Contains("slot") OrElse
+            t.Contains("agenda") OrElse
+            t.Contains("date") OrElse
+            t.Contains("day") OrElse
+            t.Contains("availability") OrElse
+            t.Contains("start") OrElse
+            t.Contains("end")
+    End Function
+
+    Private Shared Function IsDateRelatedDiagnostic(
+        endpoint As String,
+        inputs As IEnumerable(Of KeyValuePair(Of String, Object)),
+        outputs As IEnumerable(Of KeyValuePair(Of String, Object))
+    ) As Boolean
+        If IsDateRelatedSignal(endpoint) Then Return True
+
+        If inputs IsNot Nothing Then
+            For Each kv In inputs
+                If IsDateRelatedSignal(kv.Key) OrElse IsDateRelatedSignal(If(kv.Value, "").ToString()) Then Return True
+            Next
+        End If
+        If outputs IsNot Nothing Then
+            For Each kv In outputs
+                If IsDateRelatedSignal(kv.Key) OrElse IsDateRelatedSignal(If(kv.Value, "").ToString()) Then Return True
+            Next
+        End If
+        Return False
+    End Function
+
+    Private Sub EmitElevenLabsBackendDiagnostic(
+        task As CompiledTask,
+        endpoint As String,
+        method As String,
+        outcome As String,
+        errMsg As String,
+        inputs As IEnumerable(Of KeyValuePair(Of String, Object)),
+        outputs As IEnumerable(Of KeyValuePair(Of String, Object))
+    )
+        If _messageCallback Is Nothing Then Return
+        Dim inList = If(inputs, New List(Of KeyValuePair(Of String, Object))()).ToList()
+        Dim outList = If(outputs, New List(Of KeyValuePair(Of String, Object))()).ToList()
+        Dim dateRelated = IsDateRelatedDiagnostic(endpoint, inList, outList)
+        If Not dateRelated Then
+            Console.WriteLine(
+                $"[IA·ConvAI][BackendDiag] SKIP non-date-related task={If(task?.Id, "")} method={If(method, "POST")} endpoint={If(endpoint, "")} outcome={If(outcome, "")} in={inList.Count} out={outList.Count}")
+            Return
+        End If
+
+        Console.WriteLine(
+            $"[IA·ConvAI][BackendDiag] EMIT date-related task={If(task?.Id, "")} method={If(method, "POST")} endpoint={If(endpoint, "")} outcome={If(outcome, "")} in={inList.Count} out={outList.Count} err={If(errMsg, "")}")
+
+        Dim payload As New JObject From {
+            {"taskId", If(task?.Id, "")},
+            {"displayName", ResolveDisplayName(task)},
+            {"endpoint", If(endpoint, "")},
+            {"method", If(method, "POST")},
+            {"outcome", outcome},
+            {"matchedRowId", Nothing},
+            {"errorMessage", If(String.IsNullOrWhiteSpace(errMsg), Nothing, JToken.FromObject(errMsg))},
+            {"inputParameters", BuildDiagnosticParamRows(inList)},
+            {"outputParameters", BuildDiagnosticParamRows(outList)},
+            {"listPreviewLimit", DiagnosticListPreviewLimit}
+        }
+        _messageCallback(payload.ToString(Formatting.None), "BackendCallDiagnostic", 0)
+    End Sub
+
     Private Async Function ExecuteElevenLabsBranch(
         ai As CompiledAIAgentTask,
         task As CompiledTask,
@@ -384,7 +476,34 @@ Public Class AIAgentTaskExecutor
         Try
             If conversationId Is Nothing Then
                 Console.WriteLine($"[IA·ConvAI] POST /elevenlabs/startAgent → new conversation")
-                conversationId = Await ElevenLabsStartAgentAsync(baseUrl, ai.AgentId.Trim(), ai.DynamicVariables, System.Threading.CancellationToken.None).ConfigureAwait(False)
+                Dim startUrl = CombineUrl(baseUrl, "/elevenlabs/startAgent")
+                Try
+                    conversationId = Await ElevenLabsStartAgentAsync(baseUrl, ai.AgentId.Trim(), ai.DynamicVariables, System.Threading.CancellationToken.None).ConfigureAwait(False)
+                    EmitElevenLabsBackendDiagnostic(
+                        task,
+                        startUrl,
+                        "POST",
+                        "http_success",
+                        Nothing,
+                        New List(Of KeyValuePair(Of String, Object)) From {
+                            New KeyValuePair(Of String, Object)("agentId", MaskAgentIdForLog(ai.AgentId))
+                        },
+                        New List(Of KeyValuePair(Of String, Object)) From {
+                            New KeyValuePair(Of String, Object)("conversationId", conversationId)
+                        })
+                Catch ex As Exception
+                    EmitElevenLabsBackendDiagnostic(
+                        task,
+                        startUrl,
+                        "POST",
+                        "http_error",
+                        ex.Message,
+                        New List(Of KeyValuePair(Of String, Object)) From {
+                            New KeyValuePair(Of String, Object)("agentId", MaskAgentIdForLog(ai.AgentId))
+                        },
+                        New List(Of KeyValuePair(Of String, Object))())
+                    Throw
+                End Try
                 state.DialogueContexts(task.Id) = BuildElevenLabsContextJson(conversationId)
                 Dim cidDisp = If(conversationId.Length <= 16, conversationId, conversationId.Substring(0, 12) & "…")
                 Console.WriteLine($"[IA·ConvAI] ConvAI conversationId={cidDisp} (stored in DialogueContexts)")
@@ -395,12 +514,69 @@ Public Class AIAgentTaskExecutor
 
             If Not String.IsNullOrWhiteSpace(userInput) Then
                 Console.WriteLine($"[IA·ConvAI] POST /elevenlabs/sendUserTurn chars={userInput.Length}")
-                Await ElevenLabsSendUserTurnAsync(baseUrl, conversationId, userInput, System.Threading.CancellationToken.None).ConfigureAwait(False)
+                Dim sendUrl = CombineUrl(baseUrl, "/elevenlabs/sendUserTurn")
+                Try
+                    Await ElevenLabsSendUserTurnAsync(baseUrl, conversationId, userInput, System.Threading.CancellationToken.None).ConfigureAwait(False)
+                    EmitElevenLabsBackendDiagnostic(
+                        task,
+                        sendUrl,
+                        "POST",
+                        "http_success",
+                        Nothing,
+                        New List(Of KeyValuePair(Of String, Object)) From {
+                            New KeyValuePair(Of String, Object)("conversationId", conversationId),
+                            New KeyValuePair(Of String, Object)("userTextChars", userInput.Length)
+                        },
+                        New List(Of KeyValuePair(Of String, Object))())
+                Catch ex As Exception
+                    EmitElevenLabsBackendDiagnostic(
+                        task,
+                        sendUrl,
+                        "POST",
+                        "http_error",
+                        ex.Message,
+                        New List(Of KeyValuePair(Of String, Object)) From {
+                            New KeyValuePair(Of String, Object)("conversationId", conversationId),
+                            New KeyValuePair(Of String, Object)("userTextChars", userInput.Length)
+                        },
+                        New List(Of KeyValuePair(Of String, Object))())
+                    Throw
+                End Try
             End If
 
             Console.WriteLine($"[IA·ConvAI] GET /elevenlabs/readPrompt (long-poll)")
-            Dim turn = Await ElevenLabsReadPromptAsync(baseUrl, conversationId, System.Threading.CancellationToken.None).ConfigureAwait(False)
+            Dim readUrl = CombineUrl(baseUrl, $"/elevenlabs/readPrompt/{Uri.EscapeDataString(conversationId)}")
+            Dim turn As (Text As String, Status As String)
+            Try
+                turn = Await ElevenLabsReadPromptAsync(baseUrl, conversationId, System.Threading.CancellationToken.None).ConfigureAwait(False)
+            Catch ex As Exception
+                EmitElevenLabsBackendDiagnostic(
+                    task,
+                    readUrl,
+                    "GET",
+                    "http_error",
+                    ex.Message,
+                    New List(Of KeyValuePair(Of String, Object)) From {
+                        New KeyValuePair(Of String, Object)("conversationId", conversationId)
+                    },
+                    New List(Of KeyValuePair(Of String, Object))())
+                Throw
+            End Try
             Dim completed = turn.Status.Equals("completed", StringComparison.OrdinalIgnoreCase)
+            EmitElevenLabsBackendDiagnostic(
+                task,
+                readUrl,
+                "GET",
+                "http_success",
+                Nothing,
+                New List(Of KeyValuePair(Of String, Object)) From {
+                    New KeyValuePair(Of String, Object)("conversationId", conversationId)
+                },
+                New List(Of KeyValuePair(Of String, Object)) From {
+                    New KeyValuePair(Of String, Object)("status", turn.Status),
+                    New KeyValuePair(Of String, Object)("replyChars", If(turn.Text, "").Length),
+                    New KeyValuePair(Of String, Object)("completed", completed)
+                })
             Console.WriteLine($"[IA·ConvAI] agent turn status={turn.Status} replyChars={If(turn.Text, """").Length} completed={completed}")
 
             If completed Then
