@@ -359,8 +359,8 @@ describe('openApiBackendCallSpec', () => {
     ) as Record<string, unknown>;
     const f = extractOperationFields(doc, '/api/runtime/bookfromagenda', 'post');
     expect(f?.sendBindingRules?.optionalApiParams).toContain('queryConstraints');
-    expect(f?.sendBindingRules?.requireOneOfSets?.[0]?.id).toBe('agenda_source');
-    expect(f?.sendBindingRules?.requireOneOfSets?.[0]?.alternatives).toHaveLength(2);
+    expect(f?.sendBindingRules?.requireOneOfSets?.[0]?.id).toBe('agenda_source_or_cached');
+    expect(f?.sendBindingRules?.requireOneOfSets?.[0]?.alternatives).toHaveLength(5);
   });
 
   it('fetchOpenApiDocument prefers backend proxy when it returns OpenAPI JSON', async () => {

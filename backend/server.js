@@ -6860,7 +6860,7 @@ app.post('/api/runtime/scheduling/solve', async (req, res) => {
 });
 
 /**
- * OpenAPI 3 — BookFromAgenda v4.3: chiavi puntate (`agenda.json` | `agenda.url`+`agenda.type`, `horizon.*`, `queryConstraints` opzionale; horizon filtro derivabile da agenda).
+ * OpenAPI 3 — BookFromAgenda v4.5: chiavi puntate (`agenda.json` | `agenda.url`+`agenda.type`, `horizon.*`, `queryConstraints` opzionale; horizon filtro derivabile da agenda). Snapshot Redis per scope composito (`conversationId`, `projectId`, `tenantId`), `forceRefresh`, TTL `BOOKFROMAGENDA_CACHE_TTL_SEC`.
  * Read API: `…/api/runtime/bookfromagenda/openapi.json`
  */
 function serveBookFromAgendaOpenApiSpec(req, res) {

@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Omnia - BookFromAgenda API",
-    "version": "4.3.0",
-    "description": "Un solo endpoint operativo e un solo OpenAPI per il Task Editor (Recupera).\n\n**POST** `/api/runtime/bookfromagenda`\n\n**Contratto unico (chiavi puntate):** `agenda.json` **oppure** `agenda.url` + `agenda.type`; **`queryConstraints` opzionale** — se assente si interpreta come nessun vincolo e si restituiscono tutti gli slot liberi dell’agenda (stesso effetto di `{}`). Con `horizon` / `horizon.start` / `horizon.end` opzionali per il **filtro** — se assenti con `agenda.json` o `agenda.type` Omnia (o dopo materializzazione ICS-like), la finestra deriva da **min/max** delle date in `agenda.days`. Per **fetch URL ICS/Google/Outlook** restano necessarie date di fetch (`horizon.start/end` o `queryConstraints.horizon`). Nessun `grid`/`timezone` API.\n\nPipeline: UniversalAgenda → filtro → `{ slots, summary }`."
+    "version": "4.5.0",
+    "description": "Un solo endpoint operativo e un solo OpenAPI per il Task Editor (Recupera).\n\n**POST** `/api/runtime/bookfromagenda`\n\n**Contratto unico (chiavi puntate):** `agenda.json` **oppure** `agenda.url` + `agenda.type`; **`queryConstraints` opzionale** — se assente si interpreta come nessun vincolo e si restituiscono tutti gli slot liberi dell’agenda (stesso effetto di `{}`). Con `horizon` / `horizon.start` / `horizon.end` opzionali per il **filtro** — se assenti con `agenda.json` o `agenda.type` Omnia (o dopo materializzazione ICS-like), la finestra deriva da **min/max** delle date in `agenda.days`. Per **fetch URL ICS/Google/Outlook** restano necessarie date di fetch (`horizon.start/end` o `queryConstraints.horizon`). Nessun `grid`/`timezone` API.\n\n**Persistenza snapshot (Redis):** con **`conversationId`**, **`projectId`**, **`tenantId`** (camelCase; stringhe vuote per dimensioni non usate) si definisce lo **scope composito**; il backend salva la UniversalAgenda materializzata e alle chiamate successive con **stesso scope** e **stessa sorgente** non rifà fetch dall’URL. **`forceRefresh`: true** forza rifetch e sovrascrive la cache. Senza `agenda.json`/`agenda.url`, si può inviare solo `queryConstraints` **se** esiste già uno snapshot per lo scope (follow-up).\n\nPipeline: UniversalAgenda → filtro → `{ slots, summary }`."
   },
   "servers": [
     {
@@ -23,7 +23,7 @@
         "tags": ["BookFromAgenda"],
         "operationId": "bookFromAgenda",
         "summary": "BookFromAgenda — normalizza agenda e restituisce slot filtrati",
-        "description": "Body con chiavi puntate: `agenda.json` oppure `agenda.url` + `agenda.type`; `queryConstraints` opzionale; `horizon.start`/`horizon.end` oppure horizon in `queryConstraints`. Risposta: `slots` + `summary`.",
+        "description": "Body con chiavi puntate: `agenda.json` oppure `agenda.url` + `agenda.type`; `queryConstraints` opzionale; **`conversationId`**, **`projectId`**, **`tenantId`**, **`forceRefresh`** (obbligatori). Risposta: `slots` + `summary`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -50,7 +50,11 @@
                     "queryConstraints": {
                       "horizon": { "start": "2026-05-01", "end": "2026-05-31" },
                       "weekdays": [1]
-                    }
+                    },
+                    "conversationId": "conv-example",
+                    "projectId": "",
+                    "tenantId": "",
+                    "forceRefresh": false
                   }
                 },
                 "ics_url": {
@@ -64,7 +68,11 @@
                       "horizon": { "start": "2026-05-01", "end": "2026-05-31" },
                       "allowedIntervals": [{ "start": "09:00", "end": "17:00" }],
                       "forbiddenIntervals": [{ "start": "12:00", "end": "13:00" }]
-                    }
+                    },
+                    "conversationId": "conv-example",
+                    "projectId": "",
+                    "tenantId": "",
+                    "forceRefresh": false
                   }
                 }
               }
@@ -110,7 +118,8 @@
     "schemas": {
       "BookFromAgendaRequest": {
         "type": "object",
-        "description": "Solo chiavi puntate nel body radice. Una sorgente agenda: **`agenda.json`** (object) **oppure** **`agenda.url`** + **`agenda.type`**. `queryConstraints` è **opzionale** (omit = tutti gli slot liberi). Filtro: se `horizon` non è passato, con `agenda.json` o `agenda.type` Omnia (e dopo normalizzazione anche ICS/… ) si usa min/max di `agenda.days`. Per **fetch** di feed ICS-like da URL, servono date: **`horizon.start`** / **`horizon.end`** o `queryConstraints.horizon`.",
+        "required": ["conversationId", "projectId", "tenantId", "forceRefresh"],
+        "description": "Solo chiavi puntate nel body radice. **Sorgente agenda:** `agenda.json` **oppure** `agenda.url` + `agenda.type` — oppure, in **follow-up**, solo vincoli se esiste snapshot Redis per lo **scope composito** (`conversationId` / `projectId` / `tenantId`). **`queryConstraints` opzionale** (omit = tutti gli slot liberi). **`conversationId`**, **`projectId`**, **`tenantId`** (stringhe; vuote dove non applicabile), **`forceRefresh`** (booleano) sono **obbligatori** su ogni richiesta.",
         "x-omnia": {
           "sendBinding": {
             "optionalApiParams": [
@@ -120,11 +129,14 @@
             ],
             "requireOneOfSets": [
               {
-                "id": "agenda_source",
-                "label": "Sorgente agenda: indica `agenda.json` oppure sia `agenda.url` che `agenda.type`.",
+                "id": "agenda_source_or_cached",
+                "label": "Prima chiamata: `agenda.json` oppure `agenda.url`+`agenda.type`. Follow-up con agenda già in cache: almeno uno tra `conversationId` / `projectId` / `tenantId` valorizzato + `queryConstraints`.",
                 "alternatives": [
                   { "allApiParams": ["agenda.json"] },
-                  { "allApiParams": ["agenda.url", "agenda.type"] }
+                  { "allApiParams": ["agenda.url", "agenda.type"] },
+                  { "allApiParams": ["conversationId"] },
+                  { "allApiParams": ["projectId"] },
+                  { "allApiParams": ["tenantId"] }
                 ]
               }
             ]
@@ -160,6 +172,22 @@
           },
           "queryConstraints": {
             "$ref": "#/components/schemas/SchedulingQueryConstraints"
+          },
+          "conversationId": {
+            "type": "string",
+            "description": "Identificativo conversazione corrente (scope cache). Stringa vuota se non usato."
+          },
+          "projectId": {
+            "type": "string",
+            "description": "Identificativo progetto se l’agenda è condivisa. Stringa vuota se non usato."
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Identificativo tenant in scenario multi-tenant. Stringa vuota se non usato."
+          },
+          "forceRefresh": {
+            "type": "boolean",
+            "description": "Se true, ignora lo snapshot Redis e rifà fetch/materializzazione dall’URL o da `agenda.json`, poi aggiorna la cache."
           }
         }
       },

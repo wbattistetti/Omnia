@@ -7,6 +7,15 @@
 
 const { resolveUniversalAgenda } = require('./bookFromAgendaInput');
 const {
+  buildScopePersistenceKey,
+  extractForceRefresh,
+  hasAgendaSource,
+  fingerprintFromBody,
+  loadCachedAgenda,
+  saveCachedAgenda,
+  DEFAULT_TTL_SEC,
+} = require('./bookFromAgendaSlotCache');
+const {
   normalizeSchedulingQueryParts,
   slotFitsQueryMandatory,
   preferredScore,
@@ -317,6 +326,13 @@ function solveWithAgenda(agenda, qObj, body) {
 }
 
 /**
+ * Snapshot Redis per UniversalAgenda:
+ * - `conversationId`, `projectId`, `tenantId` (stringhe; vuote se non usate) → chiave scope composita.
+ * - Prima richiesta con `agenda.url` o `agenda.json`: materializza, salva, applica filtri.
+ * - Richieste successive con stesso scope e stessa impronta sorgente: niente refetch.
+ * - `forceRefresh: true`: ignora cache e rifetch.
+ * - Solo `queryConstraints` senza sorgente: legge snapshot (richiede scope non vuoto + cache hit).
+ *
  * @param {unknown} raw
  */
 async function solveBookFromAgenda(raw) {
@@ -324,14 +340,61 @@ async function solveBookFromAgenda(raw) {
     throw new Error('bookfromagenda: body must be a JSON object');
   }
   const body = /** @type {Record<string, unknown>} */ (raw);
-  const agendaPayload = resolveAgendaPayload(body);
 
+  const forceRefresh = extractForceRefresh(body);
+  const scopeId = buildScopePersistenceKey(body);
+
+  /** Follow-up: solo filtri, senza agenda.json / agenda.url */
+  if (!hasAgendaSource(body)) {
+    if (!scopeId) {
+      throw new Error(
+        'bookfromagenda: provide agenda.json or agenda.url (first call), or set at least one of conversationId / projectId / tenantId (non-empty) to use a cached agenda'
+      );
+    }
+    const cached = await loadCachedAgenda(scopeId);
+    if (!cached) {
+      throw new Error(
+        'bookfromagenda: no cached agenda for this scope — send agenda.url or agenda.json on the first request with the same conversationId / projectId / tenantId values'
+      );
+    }
+    const agendaCached = /** @type {{ days: { date: string, slots: unknown[] }[], timezone?: string }} */ (
+      cached.universalAgenda
+    );
+    validateUniversalAgenda(agendaCached);
+    const qObjFollow = normalizeQueryConstraints(body);
+    return solveWithAgenda(agendaCached, qObjFollow, body);
+  }
+
+  let fp;
+  try {
+    fp = fingerprintFromBody(body);
+  } catch (e) {
+    throw e instanceof Error ? e : new Error(String(e));
+  }
+
+  /** Cache hit: stesso scope, stessa sorgente, niente refresh forzato */
+  if (scopeId && !forceRefresh) {
+    const entry = await loadCachedAgenda(scopeId);
+    if (entry && entry.sourceFingerprint === fp) {
+      const agendaHit = /** @type {{ days: { date: string, slots: unknown[] }[], timezone?: string }} */ (
+        entry.universalAgenda
+      );
+      validateUniversalAgenda(agendaHit);
+      const qObjHit = normalizeQueryConstraints(body);
+      return solveWithAgenda(agendaHit, qObjHit, body);
+    }
+  }
+
+  const agendaPayload = resolveAgendaPayload(body);
   const agenda = /** @type {{ days: { date: string, slots: unknown[] }[], timezone?: string }} */ (
     await resolveUniversalAgenda(agendaPayload, validateUniversalAgenda)
   );
 
-  const qObj = normalizeQueryConstraints(body);
+  if (scopeId) {
+    await saveCachedAgenda(scopeId, fp, agenda, DEFAULT_TTL_SEC);
+  }
 
+  const qObj = normalizeQueryConstraints(body);
   return solveWithAgenda(agenda, qObj, body);
 }
 
