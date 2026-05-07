@@ -26,8 +26,9 @@ export type InputRowProps = {
 
 /** Tipi HTML coerenti con OpenAPI (mock table + SEND mapping). */
 export function htmlInputTypeForKind(kind: OpenApiInputUiKind | undefined): string {
-  if (!kind || kind === 'text' || kind === 'enum') return 'text';
+  if (!kind || kind === 'text' || kind === 'enum' || kind === 'boolean') return 'text';
   if (kind === 'uri') return 'url';
+  if (kind === 'object') return 'text';
   return kind;
 }
 

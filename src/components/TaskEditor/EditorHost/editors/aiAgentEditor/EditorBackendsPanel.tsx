@@ -10,6 +10,7 @@ import { runBackendCallReadApiForTask } from '@services/runBackendCallReadApiFor
 import { taskRepository } from '@services/TaskRepository';
 import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
 import { deriveBackendLabelFromUrl, type ManualCatalogEntry } from '@domain/backendCatalog';
+import type { BackendCallSpecMeta } from '@domain/backendCatalog/catalogTypes';
 import { collectReachableBackendCallTaskIdsFromFlow } from '@domain/iaAgentTools/collectReachableBackendCallTaskIdsFromFlow';
 import { deriveBackendToolDefinition } from '@domain/iaAgentTools/backendToolDerivation';
 import { appendAuditEntry } from '../../../../../application/backendCatalog/appendOnlyAuditLog';
@@ -31,8 +32,6 @@ type ConvaiBackendToolsDiscoveryContext = {
 function normalizeMethod(m: string | undefined): string {
   return (m || 'GET').toUpperCase();
 }
-
-const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
 function ManualBackendAccordion({
   entry,
@@ -140,6 +139,36 @@ function ManualBackendAccordion({
     onPatch(entry.id, { endpointUrl: entry.endpointUrl });
   }, [entry.endpointUrl, entry.id, entry.label, onPatch]);
 
+  const httpMethodOpenApiUi = React.useMemo(() => {
+    const t = taskRepository.getTask(entry.id);
+    const meta = (t as Task & { backendCallSpecMeta?: BackendCallSpecMeta })?.backendCallSpecMeta;
+    const urlTrim = entry.endpointUrl.trim();
+    const locked =
+      Boolean(meta?.openApiMethodLocked && meta.importState === 'ok') &&
+      (meta.openApiMethodLockUrlSnapshot ?? '').trim() === urlTrim;
+    const ep = (t as Task & { endpoint?: { method?: string } })?.endpoint;
+    const methodNorm = normalizeMethod(ep?.method ?? entry.method);
+    const display = locked && meta?.openApiLockedHttpMethod ? normalizeMethod(meta.openApiLockedHttpMethod) : methodNorm;
+    return { locked, display };
+  }, [entry.endpointUrl, entry.id, entry.method, endpointRev]);
+
+  React.useEffect(() => {
+    const h = (ev: Event) => {
+      const id = String((ev as CustomEvent<{ taskId?: string }>).detail?.taskId ?? '').trim();
+      if (id && id === entry.id) setEndpointRev((r) => r + 1);
+    };
+    window.addEventListener('omnia:backend-read-api-complete', h as EventListener);
+    return () => window.removeEventListener('omnia:backend-read-api-complete', h as EventListener);
+  }, [entry.id]);
+
+  /** Normalizza verbi legacy quando il metodo è libero (solo GET/POST). */
+  React.useEffect(() => {
+    if (httpMethodOpenApiUi.locked) return;
+    const m = normalizeMethod(entry.method);
+    if (m === 'GET' || m === 'POST') return;
+    onPatch(entry.id, { method: 'GET', lastStructuralEditAt: new Date().toISOString() });
+  }, [entry.id, entry.method, httpMethodOpenApiUi.locked, onPatch]);
+
   /** Keep catalog URL/method aligned with task edits (editor persists on task). */
   React.useEffect(() => {
     const id = entry.id;
@@ -218,18 +247,24 @@ function ManualBackendAccordion({
           placeholder="https://… o …/v3/api-docs"
           title="URL endpoint (stesso dato del Backend Call sotto)"
         />
-        <select
-          className="shrink-0 rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[10px] text-slate-200"
-          value={normalizeMethod(entry.method)}
-          onChange={(e) => applyHeaderEndpoint(entry.endpointUrl, e.target.value)}
-          title="Metodo HTTP"
-        >
-          {HTTP_METHODS.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
+        {httpMethodOpenApiUi.locked ? (
+          <span
+            className="shrink-0 rounded border border-slate-700 bg-slate-900/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-200 select-none cursor-default"
+            title="Metodo HTTP definito dallo Swagger/OpenAPI per questo path"
+          >
+            {httpMethodOpenApiUi.display}
+          </span>
+        ) : (
+          <select
+            className="shrink-0 rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[10px] text-slate-200"
+            value={normalizeMethod(entry.method) === 'POST' ? 'POST' : 'GET'}
+            onChange={(e) => applyHeaderEndpoint(entry.endpointUrl, e.target.value)}
+            title="Metodo HTTP (GET/POST se il path non è nello Swagger)"
+          >
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+          </select>
+        )}
         {!expanded && entry.endpointUrl.trim() ? (
           <button
             type="button"

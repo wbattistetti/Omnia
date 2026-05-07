@@ -4,6 +4,7 @@
  */
 
 import { createMappingEntry, type MappingEntry } from './mappingTypes';
+import { unwrapSessionTreeWireKey } from './bookFromAgendaSessionTree';
 
 export type BackendCallInputRow = {
   internalName: string;
@@ -12,6 +13,8 @@ export type BackendCallInputRow = {
   fieldDescription?: string;
   sampleValues?: string[];
   sendBindingOptional?: boolean;
+  sendBindingDesignTimeRequired?: boolean;
+  sendBindingBindingPhase?: 'design' | 'runtime';
   sendConstraintGroupId?: string;
   sendConstraintGroupLabel?: string;
 };
@@ -54,13 +57,17 @@ export function backendInputsToMappingEntries(
     .map((row) => {
       const { variableRefId, literalConstant } = splitTaskVariableField(row.variable, knownVariableIds);
       return createMappingEntry({
-        wireKey: row.internalName.trim(),
+        wireKey: unwrapSessionTreeWireKey(row.internalName.trim()),
         apiField: row.apiParam?.trim() ?? '',
         ...(variableRefId ? { variableRefId } : {}),
         ...(literalConstant ? { literalConstant } : {}),
         ...(row.fieldDescription !== undefined ? { fieldDescription: row.fieldDescription } : {}),
         ...(row.sampleValues !== undefined ? { sampleValues: row.sampleValues } : {}),
         ...(row.sendBindingOptional !== undefined ? { sendBindingOptional: row.sendBindingOptional } : {}),
+        ...(row.sendBindingDesignTimeRequired !== undefined
+          ? { sendBindingDesignTimeRequired: row.sendBindingDesignTimeRequired }
+          : {}),
+        ...(row.sendBindingBindingPhase !== undefined ? { sendBindingBindingPhase: row.sendBindingBindingPhase } : {}),
         ...(row.sendConstraintGroupId !== undefined ? { sendConstraintGroupId: row.sendConstraintGroupId } : {}),
         ...(row.sendConstraintGroupLabel !== undefined
           ? { sendConstraintGroupLabel: row.sendConstraintGroupLabel }
@@ -93,12 +100,16 @@ export function mappingEntriesToBackendInputs(entries: MappingEntry[]): BackendC
   return entries
     .filter((e) => e.wireKey.trim())
     .map((e) => ({
-      internalName: e.wireKey.trim(),
+      internalName: unwrapSessionTreeWireKey(e.wireKey.trim()),
       apiParam: e.apiField.trim(),
       variable: e.variableRefId?.trim() || e.literalConstant?.trim() || '',
       ...(e.fieldDescription !== undefined ? { fieldDescription: e.fieldDescription } : {}),
       ...(e.sampleValues !== undefined ? { sampleValues: e.sampleValues } : {}),
       ...(e.sendBindingOptional !== undefined ? { sendBindingOptional: e.sendBindingOptional } : {}),
+      ...(e.sendBindingDesignTimeRequired !== undefined
+        ? { sendBindingDesignTimeRequired: e.sendBindingDesignTimeRequired }
+        : {}),
+      ...(e.sendBindingBindingPhase !== undefined ? { sendBindingBindingPhase: e.sendBindingBindingPhase } : {}),
       ...(e.sendConstraintGroupId !== undefined ? { sendConstraintGroupId: e.sendConstraintGroupId } : {}),
       ...(e.sendConstraintGroupLabel !== undefined
         ? { sendConstraintGroupLabel: e.sendConstraintGroupLabel }

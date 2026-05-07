@@ -124,6 +124,81 @@ describe('buildElevenLabsConvaiPromptTools', () => {
     expect(api.request_body_schema).toBeUndefined();
   });
 
+  it('merges BookFromAgenda v4.5 scope fields into request_body_schema for bookfromagenda URL', () => {
+    const cfg = {
+      platform: 'elevenlabs',
+      convaiBackendToolTaskIds: ['bfa'],
+      tools: [],
+    } as IAAgentConfig;
+
+    const tools = buildElevenLabsConvaiPromptTools(cfg, (id) =>
+      id === 'bfa'
+        ? backendTask({
+            id: 'bfa',
+            label: 'book_agenda',
+            backendToolDescription: 'Slot da agenda.',
+            endpoint: {
+              url: 'http://localhost:3100/api/runtime/bookfromagenda',
+              method: 'POST',
+              headers: {},
+            },
+            inputs: [{ internalName: 'qc', apiParam: 'queryConstraints' }],
+          })
+        : null
+    );
+
+    expect(tools).toHaveLength(1);
+    const api = tools[0].api_schema as Record<string, unknown>;
+    const body = api.request_body_schema as Record<string, unknown>;
+    const props = body.properties as Record<string, unknown>;
+    expect(props.conversationId).toEqual(
+      expect.objectContaining({ type: 'string', description: expect.any(String) })
+    );
+    expect(props.forceRefresh).toEqual(
+      expect.objectContaining({ type: 'boolean', description: expect.any(String) })
+    );
+    expect(body.required).toEqual(
+      expect.arrayContaining(['projectId', 'conversationId', 'agenda.url', 'agenda.type'])
+    );
+  });
+
+  it('preserves enum constraints in ElevenLabs body schema (fixed infra literals)', () => {
+    const cfg = {
+      platform: 'elevenlabs',
+      convaiBackendToolTaskIds: ['bfa'],
+      tools: [],
+    } as IAAgentConfig;
+    const tools = buildElevenLabsConvaiPromptTools(cfg, (id) =>
+      id === 'bfa'
+        ? backendTask({
+            id: 'bfa',
+            label: 'book_agenda',
+            backendToolDescription: 'Slot da agenda.',
+            endpoint: {
+              url: 'http://localhost:3100/api/runtime/bookfromagenda',
+              method: 'POST',
+              headers: {},
+            },
+            inputs: [
+              { internalName: 'u', apiParam: 'agenda.url', variable: 'https://real.feed/agenda' },
+              { internalName: 't', apiParam: 'agenda.type', variable: 'Omnia' },
+              { internalName: 'p', apiParam: 'projectId', variable: 'project_static' },
+              { internalName: 'fr', apiParam: 'forceRefresh', variable: 'true' },
+            ],
+          })
+        : null
+    );
+    const api = tools[0].api_schema as Record<string, unknown>;
+    const body = api.request_body_schema as Record<string, unknown>;
+    const props = body.properties as Record<string, Record<string, unknown>>;
+    expect(props['agenda.url']?.enum).toEqual(['https://real.feed/agenda']);
+    expect(props['agenda.type']?.enum).toEqual(['Omnia']);
+    expect(props.projectId?.enum).toEqual(['project_static']);
+    expect(props.forceRefresh).toEqual(
+      expect.objectContaining({ type: 'string', enum: ['true'] })
+    );
+  });
+
   it('maps body properties to description + type (ElevenLabs request_body_schema)', () => {
     const cfg = {
       platform: 'elevenlabs',

@@ -153,6 +153,10 @@ export interface CompilationError {
    * Con Fix da errore IA su SEND incompleto: id del task Backend Call da mostrare nell’editor dell’agente.
    */
   convaiSendFixBackendTaskId?: string;
+  /**
+   * Errori tunnel ConvAI (`ConvaiWebhookLocalhostTunnelMissing`): endpoint webhook localhost da mappare su URL pubblico.
+   */
+  convaiWebhookTunnelUrls?: readonly string[];
 }
 
 /**

@@ -17,6 +17,25 @@ import { resolveElevenLabsAgentPromptFromTask } from '@components/TaskEditor/Edi
 import { taskRepository } from '@services/TaskRepository';
 import { buildElevenLabsConvaiPromptTools } from './elevenLabsConvaiToolsPayload';
 
+/** Istruzioni aggiuntive ConvAI quando è presente un tool webhook BookFromAgenda (API v4.6). */
+const BOOK_FROM_AGENDA_ELEVENLABS_PROMPT_APPEND = `BOOKFROMAGENDA (webhook POST …/bookfromagenda, contratto API v4.6):
+- **projectId** nel JSON deve coincidere con il valore cablato in Omnia a design-time (costante identificativa); è obbligatorio nello schema tool.
+- **conversationId**: runtime — usa **omnia_conversation_id** (variabile dinamica all’avvio sessione host); non ometterlo mai.
+- **Prima chiamata dello scope**: includi sempre una sorgente agenda valida (**agenda.url** + **agenda.type='Omnia'**, oppure **agenda.json**).
+- **forceRefresh**: runtime — true con agenda.url/agenda.json; false solo query su snapshot; il backend può dedurre se omesso.
+- **queryConstraints** (opzionale): deve essere un **oggetto JSON**, mai una stringa. Esempio: \`{ "weekdays": [2, 4], "horizon": { "start": "2026-05-01", "end": "2026-05-31" } }\` (weekdays 0=domenica … 6=sabato).
+Header HTTP (es. x-omnia-conversation-id) possono integrare gli scope; il modello deve comunque inviare i campi nel body come sopra.`;
+
+function fragmentUsesBookFromAgendaWebhook(tools: Record<string, unknown>[]): boolean {
+  for (const t of tools) {
+    if (String(t.type) !== 'webhook') continue;
+    const api = t.api_schema as Record<string, unknown> | undefined;
+    const url = typeof api?.url === 'string' ? api.url.toLowerCase() : '';
+    if (url.includes('bookfromagenda')) return true;
+  }
+  return false;
+}
+
 /** ConvAI default greeting when designer «Avvio immediato» is off. */
 export const CONVAI_DEFAULT_FIRST_MESSAGE = 'Hello! How can I help you today?';
 
@@ -120,7 +139,16 @@ export function conversationConfigFragmentFromIaAgentConfig(
     typeof llm.model === 'string' && llm.model.trim().length > 0 ? llm.model.trim() : 'gpt-4o'
   );
   const manualCatalogBackendTaskIds = options?.manualCatalogBackendTaskIds ?? [];
-  const promptText = resolveConvaiAgentPromptText(cfg, options?.task, manualCatalogBackendTaskIds);
+
+  /** ElevenLabs accetta `webhook` | `client` | … — non `function` (OpenAI). */
+  const elevenTools = buildElevenLabsConvaiPromptTools(cfg, (id) => taskRepository.getTask(id), {
+    manualCatalogBackendTaskIds,
+  });
+
+  let promptText = resolveConvaiAgentPromptText(cfg, options?.task, manualCatalogBackendTaskIds);
+  if (elevenTools.length > 0 && fragmentUsesBookFromAgendaWebhook(elevenTools)) {
+    promptText = `${promptText.trim()}\n\n${BOOK_FROM_AGENDA_ELEVENLABS_PROMPT_APPEND}`;
+  }
 
   const prompt: Record<string, unknown> = {
     prompt: promptText,
@@ -133,10 +161,6 @@ export function conversationConfigFragmentFromIaAgentConfig(
     prompt.max_tokens = Math.floor(llm.max_tokens);
   }
 
-  /** ElevenLabs accetta `webhook` | `client` | … — non `function` (OpenAI). */
-  const elevenTools = buildElevenLabsConvaiPromptTools(cfg, (id) => taskRepository.getTask(id), {
-    manualCatalogBackendTaskIds,
-  });
   if (elevenTools.length > 0) {
     (prompt as Record<string, unknown>).tools = elevenTools;
   }

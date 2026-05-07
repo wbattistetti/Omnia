@@ -192,6 +192,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
             : FlowWorkspaceSnapshot.getActiveFlowId();
 
       // ConvAI ElevenLabs: createAgent / sessione prima della compile — l’agentId non è un prerequisito del JSON compile.
+      let convaiSessionConversationId: string | undefined;
       {
         const nodeLabelByTaskId: Record<string, string> = {};
         for (const n of currentOptions.nodes || []) {
@@ -237,6 +238,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         if (provisionResult.failed.length > 0) {
           console.warn('[IA·ConvAI] provision: some tasks failed', provisionResult);
         }
+        convaiSessionConversationId = provisionResult.sessionConversationId;
       }
 
       const workspaceResult = await compileWorkspaceForOrchestratorSession({
@@ -244,6 +246,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         projectData,
         translations,
         fallback: { nodes: currentOptions.nodes, edges: currentOptions.edges },
+        convaiSessionConversationId,
       });
 
       const {

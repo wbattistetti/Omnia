@@ -13,6 +13,10 @@ export const COMPILE_ERROR_REPORT_UX_CODES = [
   'ResponseMessageMissing',
   'EscalationTerminationMissing',
   'SubflowChildNotRunnable',
+  /** ConvAI: webhook localhost senza mappa tunnel ngrok */
+  'ConvaiWebhookLocalhostTunnelMissing',
+  /** Opzionale: compilazione con tunnel attiva ma porta senza URL pubblico */
+  'DevTunnelLocalhostPortNotExposed',
   'IaElevenLabsMissingAgentId',
   'IaElevenLabsMissingVoice',
   'IaElevenLabsMissingLanguage',
@@ -73,6 +77,11 @@ export function resolveCompileUxMessage(error: CompilationError): string | null 
     case 'IaProvisionProviderError': {
       const m = (error.message ?? '').trim();
       return m.length > 0 ? m : 'Provisioning IA non riuscito (vedi dettaglio tecnico se presente).';
+    }
+    case 'ConvaiWebhookLocalhostTunnelMissing':
+    case 'DevTunnelLocalhostPortNotExposed': {
+      const m = (error.message ?? '').trim();
+      return m.length > 0 ? m : 'Tunnel di sviluppo richiesto per raggiungere URL locali dall’agente esterno.';
     }
     default:
       return null;

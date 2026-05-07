@@ -3,6 +3,8 @@
  */
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+const { ensureDiagnosticBridgeSecret } = require('./scripts/ensureDiagnosticBridgeSecret');
+ensureDiagnosticBridgeSecret();
 
 const express = require('express');
 const cors = require('cors');
@@ -30,6 +32,7 @@ const TASK_TYPE_AI_AGENT = TaskTypeEnum.AIAgent;
 // ✅ ENTERPRISE MIDDLEWARE
 const CircuitBreakerManager = require('./middleware/CircuitBreakerManager');
 const RateLimiter = require('./middleware/RateLimiter');
+const { bookFromAgendaRuntimeTrace } = require('./middleware/bookFromAgendaRuntimeTrace');
 const AIHealthChecker = require('./health/AIHealthChecker');
 const { mountIaCatalog, runStartupIaCatalogSync } = require('./services/iaCatalog/catalogRoutes');
 
@@ -59,6 +62,9 @@ app.use(cors());
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
+/** Webhook BookFromAgenda: log dedicato (disabilita con OMNIA_TRACE_BOOKFROMAGENDA=0) */
+app.use(bookFromAgendaRuntimeTrace);
+
 mountIaCatalog(app);
 
 const { mountBackendCallTestProxy } = require('./designer/backendCallTestProxyRoute');
@@ -67,21 +73,27 @@ mountBackendCallTestProxy(app);
 /** Route tunnel: `mount` è chiamato poco sotto, subito prima di `app.listen` (coda dello stack Express, dopo tutte le altre route). */
 const { mountDevTunnelNgrokRoutes } = require('./routes/devTunnelNgrokRoutes');
 
-// ✅ Request logging middleware
-app.use((req, res, next) => {
-  const startTime = Date.now();
-  console.log(`[REQUEST] ${req.method} ${req.path}`, {
-    query: Object.keys(req.query).length > 0 ? req.query : undefined,
-    bodySize: req.body ? JSON.stringify(req.body).length : 0
-  });
+// ✅ Request logging middleware (disabilita rumore con OMNIA_VERBOSE_HTTP=0 — resta la traccia BookFromAgenda sopra)
+const omniaVerboseHttp =
+  process.env.OMNIA_VERBOSE_HTTP !== '0' && process.env.OMNIA_VERBOSE_HTTP !== 'false';
+if (omniaVerboseHttp) {
+  app.use((req, res, next) => {
+    const startTime = Date.now();
+    console.log(`[REQUEST] ${req.method} ${req.path}`, {
+      query: Object.keys(req.query).length > 0 ? req.query : undefined,
+      bodySize: req.body ? JSON.stringify(req.body).length : 0
+    });
 
-  res.on('finish', () => {
-    const duration = Date.now() - startTime;
-    console.log(`[RESPONSE] ${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
-  });
+    res.on('finish', () => {
+      const duration = Date.now() - startTime;
+      console.log(`[RESPONSE] ${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+    });
 
-  next();
-});
+    next();
+  });
+} else {
+  console.log('[server] OMNIA_VERBOSE_HTTP=0 — [REQUEST]/[RESPONSE] globali disattivati; vedi [Omnia·BookFromAgenda·HTTP] per /api/runtime/bookfromagenda*');
+}
 
 const uri = 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
 const fs = require('fs');
@@ -6860,7 +6872,7 @@ app.post('/api/runtime/scheduling/solve', async (req, res) => {
 });
 
 /**
- * OpenAPI 3 — BookFromAgenda v4.5: chiavi puntate (`agenda.json` | `agenda.url`+`agenda.type`, `horizon.*`, `queryConstraints` opzionale; horizon filtro derivabile da agenda). Snapshot Redis per scope composito (`conversationId`, `projectId`, `tenantId`), `forceRefresh`, TTL `BOOKFROMAGENDA_CACHE_TTL_SEC`.
+ * OpenAPI 3 — BookFromAgenda v4.6: chiavi puntate agenda + scope; compile SEND richiede `projectId` (design-time); `conversationId`/`forceRefresh` runtime; optionalApiParams + designTimeRequiredApiParams in spec. Snapshot Redis, TTL `BOOKFROMAGENDA_CACHE_TTL_SEC`.
  * Read API: `…/api/runtime/bookfromagenda/openapi.json`
  */
 function serveBookFromAgendaOpenApiSpec(req, res) {
@@ -6882,20 +6894,47 @@ app.get('/api/runtime/bookfromagenda/swagger.json', serveBookFromAgendaOpenApiSp
 async function handleBookFromAgendaPost(req, res) {
   try {
     const { solveBookFromAgenda } = require('./services/bookFromAgendaService');
+    const { normalizeBookFromAgendaIncomingBody } = require('./services/bookFromAgendaHttpNormalize');
+    const { logAfterNormalize } = require('./services/bookFromAgendaSolveDiagnostics');
     const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+    normalizeBookFromAgendaIncomingBody(body, req);
+    logAfterNormalize(body, req);
     const result = await solveBookFromAgenda(body);
     res.json(result);
   } catch (error) {
     console.error('[POST BookFromAgenda]', error);
-    const msg = error.message || String(error);
-    const status = msg.startsWith('bookfromagenda:') || msg.startsWith('scheduling:') ? 400 : 500;
-    res.status(status).json({ error: msg });
+    const { envelopeFromCaughtBookFromAgendaError } = require('./services/bookFromAgendaErrorEnvelope');
+    const { status, payload } = envelopeFromCaughtBookFromAgendaError(error, req);
+    res.status(status).json(payload);
+
+    const conv =
+      req.body && typeof req.body === 'object' && !Array.isArray(req.body) && req.body.conversationId
+        ? String(req.body.conversationId).trim()
+        : '';
+    if (status >= 400 && conv) {
+      const { notifyApiServerBookFromAgendaFailure } = require('./services/notifyApiServerToolDiagnostic');
+      void notifyApiServerBookFromAgendaFailure({
+        conversationId: conv,
+        httpStatus: status,
+        payload,
+      });
+    } else if (status >= 400 && !conv) {
+      console.warn(
+        '[BookFromAgenda] HTTP',
+        status,
+        'but request body has no conversationId — [Omnia diagnostic bridge] cannot enqueue tool diagnostic for debugger.'
+      );
+    }
   }
 }
 
-app.post('/api/runtime/bookfromagenda', handleBookFromAgendaPost);
+const {
+  coerceBookFromAgendaRequestBodyMiddleware,
+} = require('./middleware/coerceBookFromAgendaRequestBody');
+
+app.post('/api/runtime/bookfromagenda', coerceBookFromAgendaRequestBodyMiddleware, handleBookFromAgendaPost);
 /** @deprecated Usare POST /api/runtime/bookfromagenda */
-app.post('/api/runtime/bookfromagenda/solve', handleBookFromAgendaPost);
+app.post('/api/runtime/bookfromagenda/solve', coerceBookFromAgendaRequestBodyMiddleware, handleBookFromAgendaPost);
 
 // Provider information endpoint
 app.get('/api/ai-providers', (req, res) => {

@@ -39,6 +39,7 @@ import {
 } from '@utils/iaAgentRuntime/convaiPayloadPreviewEvents';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { collectReachableBackendCallTaskIdsFromFlow } from '@domain/iaAgentTools/collectReachableBackendCallTaskIdsFromFlow';
+import { readBackendCallEndpoint } from '@domain/iaAgentTools/backendCallEndpoint';
 
 /** Contesto per il nome leggibile ElevenLabs (OMNIA… + GUID) e validazione tool. */
 export type ConvaiProvisionContext = {
@@ -63,6 +64,184 @@ export type ConvaiProvisionContext = {
  */
 const OMIT_TTS_ON_CREATE = false;
 
+function newSessionConversationId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `omnia_conv_${crypto.randomUUID()}`;
+  }
+  return `omnia_conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isLikelyVariableRef(raw: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw);
+}
+
+function readFixedInputLiteral(task: unknown, apiParam: string): string | null {
+  const rows = (task as { inputs?: unknown[] })?.inputs;
+  if (!Array.isArray(rows)) return null;
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const api = String((row as { apiParam?: string }).apiParam ?? '').trim();
+    if (api !== apiParam) continue;
+    const variable = String((row as { variable?: string }).variable ?? '').trim();
+    if (!variable || isLikelyVariableRef(variable)) continue;
+    return variable;
+  }
+  return null;
+}
+
+/**
+ * ConvAI EU: `enum` è valido solo con `type: "string"` (non boolean + enum).
+ * `logicalKind` `'boolean'` serializza i valori come `"true"` / `"false"`.
+ */
+function setSchemaPropertyEnum(
+  properties: Record<string, unknown>,
+  required: Set<string>,
+  key: string,
+  logicalKind: 'string' | 'boolean',
+  values: unknown[]
+): void {
+  const prev =
+    properties[key] && typeof properties[key] === 'object' && !Array.isArray(properties[key])
+      ? (properties[key] as Record<string, unknown>)
+      : {};
+  const enumValues =
+    logicalKind === 'boolean'
+      ? values.map((v) => {
+          if (v === true) return 'true';
+          if (v === false) return 'false';
+          return v;
+        })
+      : values;
+  properties[key] = {
+    ...prev,
+    type: 'string',
+    enum: enumValues,
+  };
+  required.add(key);
+}
+
+function enforceBookFromAgendaRuntimeToolPolicy(
+  conversationConfigOutbound: Record<string, unknown>,
+  fixed: { agendaUrl: string | null; agendaType: string | null; projectId: string | null; forceRefresh: boolean | null },
+  sessionConversationId: string
+): void {
+  const agent = (conversationConfigOutbound.agent ?? null) as Record<string, unknown> | null;
+  const prompt = (agent?.prompt ?? null) as Record<string, unknown> | null;
+  const tools = Array.isArray(prompt?.tools) ? prompt!.tools : [];
+  for (const tool of tools) {
+    if (!tool || typeof tool !== 'object') continue;
+    const t = tool as Record<string, unknown>;
+    if (String(t.type ?? '').toLowerCase() !== 'webhook') continue;
+    const apiSchema =
+      t.api_schema && typeof t.api_schema === 'object' && !Array.isArray(t.api_schema)
+        ? (t.api_schema as Record<string, unknown>)
+        : null;
+    if (!apiSchema) continue;
+    const webhookUrl = String(apiSchema.url ?? '').toLowerCase();
+    if (!webhookUrl.includes('bookfromagenda')) continue;
+    const method = String(apiSchema.method ?? 'POST').toUpperCase();
+    const bodyOrQuery =
+      method === 'GET' || method === 'HEAD'
+        ? (apiSchema.query_params_schema as Record<string, unknown> | undefined)
+        : (apiSchema.request_body_schema as Record<string, unknown> | undefined);
+    if (!bodyOrQuery || typeof bodyOrQuery !== 'object' || Array.isArray(bodyOrQuery)) continue;
+    const properties =
+      bodyOrQuery.properties && typeof bodyOrQuery.properties === 'object' && !Array.isArray(bodyOrQuery.properties)
+        ? ({ ...(bodyOrQuery.properties as Record<string, unknown>) } as Record<string, unknown>)
+        : ({} as Record<string, unknown>);
+    const required = new Set<string>(
+      Array.isArray(bodyOrQuery.required)
+        ? bodyOrQuery.required.filter((x): x is string => typeof x === 'string')
+        : []
+    );
+
+    // Runtime session id controlled by Omnia, never invented by LLM.
+    setSchemaPropertyEnum(properties, required, 'conversationId', 'string', [sessionConversationId]);
+    // LLM follow-up should read snapshot; first refresh is handled by Omnia warm-up.
+    setSchemaPropertyEnum(properties, required, 'forceRefresh', 'boolean', [false]);
+
+    if (fixed.projectId && fixed.projectId.trim()) {
+      setSchemaPropertyEnum(properties, required, 'projectId', 'string', [fixed.projectId.trim()]);
+    }
+    if (fixed.agendaUrl && fixed.agendaUrl.trim()) {
+      setSchemaPropertyEnum(properties, required, 'agenda.url', 'string', [fixed.agendaUrl.trim()]);
+    }
+    const agendaType = (fixed.agendaType || 'Omnia').trim();
+    if (agendaType) {
+      setSchemaPropertyEnum(properties, required, 'agenda.type', 'string', [agendaType]);
+    }
+
+    if (fixed.agendaUrl && fixed.agendaUrl.trim()) {
+      required.add('agenda.url');
+      required.add('agenda.type');
+    }
+
+    const qcPrev = properties['queryConstraints'];
+    const qcPrevObj =
+      qcPrev && typeof qcPrev === 'object' && !Array.isArray(qcPrev)
+        ? ({ ...(qcPrev as Record<string, unknown>) } as Record<string, unknown>)
+        : {};
+    delete qcPrevObj.additionalProperties;
+    const qcDescPrev =
+      typeof qcPrevObj.description === 'string' && qcPrevObj.description.trim().length > 0
+        ? qcPrevObj.description.trim()
+        : '';
+    properties['queryConstraints'] = {
+      ...qcPrevObj,
+      type: 'object',
+      description: qcDescPrev
+        ? `${qcDescPrev} Invia come oggetto JSON, non come stringa.`
+        : 'Vincoli query (oggetto JSON). Non inviare una stringa serializzata.',
+    };
+
+    bodyOrQuery.properties = properties;
+    bodyOrQuery.required = [...required];
+
+    console.info('[IA·BookFromAgenda·ToolPolicy]', {
+      toolName: String(t.name ?? ''),
+      endpoint: apiSchema.url,
+      sessionConversationId,
+      fixedAgendaUrl: fixed.agendaUrl ? '[fixed]' : '(none)',
+      fixedAgendaType: agendaType || '(none)',
+      fixedProjectId: fixed.projectId ? '[fixed]' : '(none)',
+      llmForceRefresh: false,
+      required: bodyOrQuery.required,
+    });
+  }
+}
+
+async function warmupBookFromAgendaSnapshot(
+  backendTask: unknown,
+  payload: { conversationId: string; projectId: string; agendaUrl: string; agendaType: string }
+): Promise<void> {
+  const { url } = readBackendCallEndpoint(backendTask as never);
+  if (!url.trim()) throw new Error('warmup skipped: backend endpoint url vuoto');
+  const body = {
+    'agenda.url': payload.agendaUrl,
+    'agenda.type': payload.agendaType,
+    conversationId: payload.conversationId,
+    projectId: payload.projectId,
+    forceRefresh: true,
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`warmup HTTP ${res.status} ${text}`.trim());
+  }
+  console.info('[IA·BookFromAgenda·Warmup]', {
+    endpoint: url,
+    conversationId: payload.conversationId,
+    projectId: payload.projectId,
+    agendaUrl: payload.agendaUrl,
+    agendaType: payload.agendaType,
+    status: res.status,
+  });
+}
+
 /**
  * Per ogni task AI Agent ElevenLabs sul canvas: sempre DELETE mirato su `__GUID_{taskId}` + CREATE
  * (nessuno skip per provision key: ogni Run crea un agente nuovo allineato ai backend correnti).
@@ -74,6 +253,8 @@ export async function ensureConvaiAgentsProvisioned(
   provisioned: string[];
   skipped: string[];
   failed: string[];
+  /** Stesso id del tool webhook BookFromAgenda (`omnia_conv_…`); va inviato a startAgent come sessionAlias. */
+  sessionConversationId: string;
 }> {
   const enriched = nodes.map((node) => ({
     ...node,
@@ -88,6 +269,7 @@ export async function ensureConvaiAgentsProvisioned(
   const projectSlug = String(context.projectLabel || 'project').trim() || 'project';
   const flowSlug = String(context.rootFlowLabel || 'flow').trim() || 'flow';
   const payloadPreviewItems: ConvaiProvisionPayloadPreviewItem[] = [];
+  const sessionConversationId = newSessionConversationId();
 
   for (const node of enriched) {
     const rows = node.data?.rows || [];
@@ -138,6 +320,9 @@ export async function ensureConvaiAgentsProvisioned(
         .map((x) => String(x || '').trim())
         .filter(Boolean);
       const effectiveBackendIds = mergeConvaiBackendToolIdLists(fromCfg, [...manualCatalogBackendTaskIds]);
+      const effectiveBackendTasks = effectiveBackendIds
+        .map((id) => taskRepository.getTask(id))
+        .filter((t): t is NonNullable<typeof t> => Boolean(t) && t!.type === TaskType.BackendCall);
       let backendToolValidationFailed = false;
       for (const bid of effectiveBackendIds) {
         const bt = taskRepository.getTask(bid);
@@ -217,6 +402,35 @@ export async function ensureConvaiAgentsProvisioned(
 
       const conversationConfigOutbound =
         conversationConfigForConvaiApi(fragment) ?? fragment;
+      const bookFromAgendaTask = effectiveBackendTasks.find((bt) =>
+        String(readBackendCallEndpoint(bt as never).url ?? '')
+          .toLowerCase()
+          .includes('bookfromagenda')
+      );
+      const fixedAgendaUrl = bookFromAgendaTask ? readFixedInputLiteral(bookFromAgendaTask, 'agenda.url') : null;
+      const fixedAgendaType = bookFromAgendaTask ? readFixedInputLiteral(bookFromAgendaTask, 'agenda.type') : null;
+      const fixedProjectId = bookFromAgendaTask ? readFixedInputLiteral(bookFromAgendaTask, 'projectId') : null;
+      const fixedForceRefreshRaw = bookFromAgendaTask ? readFixedInputLiteral(bookFromAgendaTask, 'forceRefresh') : null;
+      const fixedForceRefresh =
+        fixedForceRefreshRaw != null
+          ? (fixedForceRefreshRaw.toLowerCase() === 'true' || fixedForceRefreshRaw === '1'
+              ? true
+              : fixedForceRefreshRaw.toLowerCase() === 'false' || fixedForceRefreshRaw === '0'
+                ? false
+                : null)
+          : null;
+      if (bookFromAgendaTask) {
+        enforceBookFromAgendaRuntimeToolPolicy(
+          conversationConfigOutbound as Record<string, unknown>,
+          {
+            agendaUrl: fixedAgendaUrl,
+            agendaType: fixedAgendaType,
+            projectId: fixedProjectId,
+            forceRefresh: fixedForceRefresh,
+          },
+          sessionConversationId
+        );
+      }
 
       let previewEntry: ConvaiProvisionPayloadPreviewItem | undefined;
       try {
@@ -255,6 +469,30 @@ export async function ensureConvaiAgentsProvisioned(
         }
 
         setConvaiSessionBinding(taskId, result.agentId, provisionKey);
+        if (bookFromAgendaTask) {
+          if (!fixedAgendaUrl || !fixedProjectId) {
+            console.warn('[IA·BookFromAgenda·Warmup] skipped (missing fixed literals)', {
+              taskId,
+              hasAgendaUrl: Boolean(fixedAgendaUrl),
+              hasProjectId: Boolean(fixedProjectId),
+              sessionConversationId,
+            });
+          } else {
+            try {
+              await warmupBookFromAgendaSnapshot(bookFromAgendaTask, {
+                conversationId: sessionConversationId,
+                projectId: fixedProjectId,
+                agendaUrl: fixedAgendaUrl,
+                agendaType: (fixedAgendaType || 'Omnia').trim() || 'Omnia',
+              });
+            } catch (warmErr) {
+              console.warn('[IA·BookFromAgenda·Warmup] failed (continue)', {
+                taskId,
+                error: warmErr instanceof Error ? warmErr.message : String(warmErr),
+              });
+            }
+          }
+        }
         provisioned.push(taskId);
         setIaProvisioningError(taskId, null);
       } catch (err) {
@@ -298,5 +536,5 @@ export async function ensureConvaiAgentsProvisioned(
     ]);
   }
 
-  return { provisioned, skipped, failed };
+  return { provisioned, skipped, failed, sessionConversationId };
 }

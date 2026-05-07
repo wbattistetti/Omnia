@@ -5,6 +5,10 @@
  */
 
 import type { CompilationError, FixTarget } from '@components/FlowCompiler/types';
+import {
+  OMNIA_OPEN_STUDIO_SETTINGS_EVENT,
+  type OmniaOpenStudioSettingsEventDetail,
+} from '../BackendBuilder/state/BackendBuilderContext';
 import type { TaskEditorOpenEvent } from '@components/AppContent/domain/editorEvents';
 import { splitFlowPrefixedMessage } from '@utils/flowPrefixedMessage';
 import { FlowStateBridge } from '@services/FlowStateBridge';
@@ -87,6 +91,17 @@ export function compilationErrorFixKey(error: CompilationError): string {
  * Runs the same navigation as the flowchart affordances (wrench / gear / node select).
  */
 export async function runCompilationErrorFix(error: CompilationError): Promise<void> {
+  const codeTrim = (error.code ?? '').trim();
+  if (codeTrim === 'ConvaiWebhookLocalhostTunnelMissing' || codeTrim === 'DevTunnelLocalhostPortNotExposed') {
+    document.dispatchEvent(
+      new CustomEvent<OmniaOpenStudioSettingsEventDetail>(OMNIA_OPEN_STUDIO_SETTINGS_EVENT, {
+        detail: { step: 'devTunnel' },
+        bubbles: true,
+      })
+    );
+    return;
+  }
+
   if (error.fixTarget?.type === 'iaRuntime') {
     const ft = error.fixTarget;
     const navigateError: CompilationError = {
@@ -98,7 +113,6 @@ export async function runCompilationErrorFix(error: CompilationError): Promise<v
     const instanceIdForEvents = resolveCompilationFixInstanceId(navigateError);
 
     const focus = String(ft.focus ?? '').trim();
-    const codeTrim = (error.code ?? '').trim();
     const backendFixId = error.convaiSendFixBackendTaskId?.trim();
     const useBackendsTab =
       focus === 'tools' ||

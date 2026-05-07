@@ -30,6 +30,7 @@
     "test:integration": "node scripts/test-wizard-integration.js",
     "test:refactoring": "vitest run tests/unit/TaskRepository.refactored.test.ts tests/unit/buildTaskTree.refactored.test.ts tests/integration/ResponseEditor.integration.test.ts tests/regression/ResponseEditorRegression.test.ts",
     "test:e2e": "vitest run tests/e2e",
+    "test:diagnostic-bridge": "vitest run tests/integration/bookFromAgenda.queryConstraintsShape.test.ts tests/integration/notifyApiServerToolDiagnostic.test.ts src/features/debugger/ui/__tests__/FlowBackendCallInvocationsPanel.diagnostic.test.tsx",
     "validate:refactoring": "tsx scripts/validate-refactoring.ts",
     "seed:act-patterns": "node scripts/seed-act-type-patterns.js",
     "migrate:translations": "node backend/scripts/migrateTranslationsToBCP47.js",

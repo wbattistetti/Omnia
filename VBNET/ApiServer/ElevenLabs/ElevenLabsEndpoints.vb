@@ -60,6 +60,7 @@ Public NotInheritable Class ElevenLabsEndpoints
             Async Function(context As HttpContext, conversationId As String) As Task
                 Await HandleReadPrompt(context, conversationId).ConfigureAwait(False)
             End Function)
+        app.MapPost("/elevenlabs/internal/enqueueToolDiagnostic", AddressOf HandleEnqueueToolDiagnosticInternal)
     End Sub
 
     ''' <summary>
@@ -475,7 +476,9 @@ Public NotInheritable Class ElevenLabsEndpoints
         ElevenLabsSessionRegistry.TryRegister(session)
 
         Dim dyn = If(req.DynamicVariables, New Dictionary(Of String, Object)())
-        Dim runner As New ElevenLabsWebSocketRunner(req.AgentId.Trim(), apiKey.Trim(), dyn, session.Queue, $"[ElevenLabs:{omniaId}]")
+        ''' Injects omnia_conversation_id dynamic variable for BookFromAgenda webhook scope (host session id).
+        dyn("omnia_conversation_id") = omniaId
+        Dim runner As New ElevenLabsWebSocketRunner(req.AgentId.Trim(), apiKey.Trim(), dyn, session.Queue, $"[ElevenLabs:{omniaId}]", session)
 
         Dim connectFailed As Boolean = False
         Dim failMessage As String = Nothing
@@ -504,6 +507,12 @@ Public NotInheritable Class ElevenLabsEndpoints
                 .details = failMessage
             }).ConfigureAwait(False)
             Return
+        End If
+
+        Dim aliasRaw = If(req.SessionAlias, "").Trim()
+        If aliasRaw.Length > 0 AndAlso aliasRaw.Length <= 512 Then
+            ElevenLabsSessionRegistry.RegisterSessionAlias(aliasRaw, omniaId)
+            Global.System.Console.WriteLine($"[ElevenLabs] startAgent sessionAlias registered len={aliasRaw.Length}")
         End If
 
         Global.System.Console.WriteLine($"[ElevenLabs] startAgent OK conversationId={omniaId} agentIdChars={req.AgentId.Trim().Length}")
@@ -690,11 +699,16 @@ Public NotInheritable Class ElevenLabsEndpoints
             " agentTurnPreview=" & PreviewForLog(at, 120) &
             " queueStatus=" & If(turn.Status, ""))
 
+        Dim payload As New JObject From {
+            {"agentTurn", If(turn.Text, "")},
+            {"status", If(turn.Status, "running")}
+        }
+        Dim drained = session.DrainToolDiagnosticsArray()
+        If drained IsNot Nothing Then payload("toolDiagnostics") = drained
+
         context.Response.StatusCode = StatusCodes.Status200OK
-        Await context.Response.WriteAsJsonAsync(New With {
-            .agentTurn = turn.Text,
-            .status = turn.Status
-        }).ConfigureAwait(False)
+        context.Response.ContentType = "application/json; charset=utf-8"
+        Await context.Response.WriteAsync(payload.ToString(Formatting.None), Encoding.UTF8).ConfigureAwait(False)
     End Function
 
     ''' <summary>Log leggibile per conversation id (non è segreto ma evita righe lunghissime).</summary>
@@ -721,6 +735,132 @@ Public NotInheritable Class ElevenLabsEndpoints
         Dim headerName = If(Environment.GetEnvironmentVariable("OMNIA_ELEVENLABS_WEBHOOK_HEADER"), "X-Omnia-Webhook-Secret")
         Dim provided = context.Request.Headers(headerName).ToString()
         Return String.Equals(provided, expected, StringComparison.Ordinal)
+    End Function
+
+    Private Const InternalToolSecretHeader As String = "X-Omnia-Internal-Tool-Secret"
+
+    Private Shared Function ValidateInternalToolDiagnosticSecret(context As HttpContext) As Boolean
+        Dim expected = OmniaDiagnosticBridgeSecret.ResolveExpectedInternalToolSecret()
+        If String.IsNullOrWhiteSpace(expected) Then Return False
+        Dim provided = If(context.Request.Headers(InternalToolSecretHeader).ToString(), "").Trim()
+        Return String.Equals(provided, expected.Trim(), StringComparison.Ordinal)
+    End Function
+
+    ''' <summary>
+    ''' POST <c>/elevenlabs/internal/enqueueToolDiagnostic</c> — Express notifica errori BookFromAgenda (HTTP ≥400) per correlazione debugger.
+    ''' Richiede <c>OMNIA_INTERNAL_TOOL_DIAGNOSTIC_SECRET</c> e header <see cref="InternalToolSecretHeader"/>.
+    ''' </summary>
+    Private Shared Async Function HandleEnqueueToolDiagnosticInternal(context As HttpContext) As Task
+        If Not ValidateInternalToolDiagnosticSecret(context) Then
+            LogOmniaElevenLabs(
+                "enqueueToolDiag·forbidden",
+                "403 — secret missing/mismatch or OMNIA_INTERNAL_TOOL_DIAGNOSTIC_SECRET unset on ApiServer (must match Express).")
+            context.Response.StatusCode = StatusCodes.Status403Forbidden
+            Await context.Response.WriteAsJsonAsync(
+                New With {.error = "forbidden or OMNIA_INTERNAL_TOOL_DIAGNOSTIC_SECRET not set on ApiServer."}).ConfigureAwait(False)
+            Return
+        End If
+
+        Dim body As String
+        Using reader As New StreamReader(context.Request.Body, Encoding.UTF8)
+            body = Await reader.ReadToEndAsync().ConfigureAwait(False)
+        End Using
+
+        Dim jo As JObject = Nothing
+        Dim jsonOk As Boolean = False
+        Try
+            jo = JObject.Parse(body)
+            jsonOk = True
+        Catch
+        End Try
+        If Not jsonOk OrElse jo Is Nothing Then
+            LogOmniaElevenLabs("enqueueToolDiag·badJson", "400 — invalid JSON body from Express notify.")
+            context.Response.StatusCode = StatusCodes.Status400BadRequest
+            Await context.Response.WriteAsJsonAsync(New With {.error = "invalid JSON body."}).ConfigureAwait(False)
+            Return
+        End If
+
+        Dim conv = jo("conversationId")?.ToString()
+        If String.IsNullOrWhiteSpace(conv) Then
+            LogOmniaElevenLabs("enqueueToolDiag·noConversationId", "400 — conversationId required for debugger correlation.")
+            context.Response.StatusCode = StatusCodes.Status400BadRequest
+            Await context.Response.WriteAsJsonAsync(New With {.error = "conversationId is required."}).ConfigureAwait(False)
+            Return
+        End If
+
+        Dim session = ElevenLabsSessionLookup.TryResolveHostedSession(conv.Trim())
+        If session Is Nothing Then
+            LogOmniaElevenLabs(
+                "enqueueToolDiag·session404",
+                "404 — no hosted session for conversationId=" & ShortIdForLog(conv) &
+                " — start ConvAI from Omnia debugger so session alias is registered.")
+            context.Response.StatusCode = StatusCodes.Status404NotFound
+            Await context.Response.WriteAsJsonAsync(New With {.error = "hosted ElevenLabs session not found for conversationId."}).ConfigureAwait(False)
+            Return
+        End If
+
+        Dim httpTok = jo("httpStatus")
+        Dim statusVal As Integer? = Nothing
+        If httpTok IsNot Nothing AndAlso httpTok.Type <> JTokenType.Null Then
+            Try
+                statusVal = httpTok.Value(Of Integer)()
+            Catch
+                Try
+                    statusVal = CInt(Math.Truncate(httpTok.Value(Of Double)()))
+                Catch
+                End Try
+            End Try
+        End If
+
+        If Not statusVal.HasValue OrElse statusVal.Value < 400 Then
+            LogOmniaElevenLabs(
+                "enqueueToolDiag·badHttpStatus",
+                "400 — httpStatus must be >= 400 (BookFromAgenda error); got " &
+                If(statusVal.HasValue, statusVal.Value.ToString(), "(missing)"))
+            context.Response.StatusCode = StatusCodes.Status400BadRequest
+            Await context.Response.WriteAsJsonAsync(New With {.error = "httpStatus (>=400) is required."}).ConfigureAwait(False)
+            Return
+        End If
+
+        Dim errMsg = jo("errorMessage")?.ToString()
+        If String.IsNullOrWhiteSpace(errMsg) Then errMsg = jo("error")?.ToString()
+        Dim diagTok = jo("diagnostic")
+
+        Dim responsePreview = jo("responsePreview")?.ToString()
+        If String.IsNullOrWhiteSpace(responsePreview) Then
+            Dim pay = jo("payload")
+            If pay IsNot Nothing AndAlso pay.Type <> JTokenType.Null Then
+                responsePreview = pay.ToString(Formatting.None)
+            End If
+        End If
+        If String.IsNullOrWhiteSpace(responsePreview) Then
+            responsePreview = body
+        End If
+        If responsePreview.Length > 2400 Then
+            responsePreview = responsePreview.Substring(0, 2400) & "…"
+        End If
+
+        Dim toolJo As New JObject From {
+            {"endpoint", "POST /api/runtime/bookfromagenda"},
+            {"method", "POST"},
+            {"httpStatus", statusVal.Value},
+            {"responsePreview", responsePreview},
+            {"toolDisplayName", "BookFromAgenda (tool ConvAI)"},
+            {"source", "express_bookfromagenda"},
+            {"conversationId", conv.Trim()}
+        }
+        If Not String.IsNullOrWhiteSpace(errMsg) Then toolJo("errorMessage") = errMsg
+        If diagTok IsNot Nothing AndAlso diagTok.Type <> JTokenType.Null Then toolJo("diagnostic") = diagTok
+
+        session.ToolDiagnostics.Enqueue(toolJo)
+        LogOmniaElevenLabs(
+            "ExpressToolDiag",
+            "enqueue BookFromAgenda failure session=" & ShortIdForLog(session.OmniaConversationId) &
+            " http=" & statusVal.Value.ToString() &
+            " convIn=" & ShortIdForLog(conv))
+
+        context.Response.StatusCode = StatusCodes.Status200OK
+        Await context.Response.WriteAsJsonAsync(New With {.ok = True}).ConfigureAwait(False)
     End Function
 End Class
 

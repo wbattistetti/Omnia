@@ -17,6 +17,14 @@ export type EndpointUrlMethodBarProps = {
   errorMessage?: string | null;
   /** Evidenzia il selettore metodo (es. metodo non allineato allo spec). */
   methodHighlightError?: boolean;
+  /**
+   * Metodo risolto da Swagger/OpenAPI sul pathname dell’endpoint: etichetta fissa, non modificabile.
+   */
+  methodLocked?: boolean;
+  /**
+   * Senza lock: `getPost` = solo GET/POST (default da progetto per endpoint non documentati); `full` = tutti i verbi.
+   */
+  manualHttpMethodOptions?: 'getPost' | 'full';
 };
 
 export function EndpointUrlMethodBar({
@@ -29,6 +37,8 @@ export function EndpointUrlMethodBar({
   labelStyle,
   errorMessage,
   methodHighlightError,
+  methodLocked = false,
+  manualHttpMethodOptions = 'full',
 }: EndpointUrlMethodBarProps) {
   const [expanded, setExpanded] = React.useState(true);
   const measureRef = React.useRef<HTMLSpanElement>(null);
@@ -54,6 +64,13 @@ export function EndpointUrlMethodBar({
   const err = (errorMessage ?? '').trim();
   const methodErr = Boolean(methodHighlightError && err);
 
+  const selectValue =
+    manualHttpMethodOptions === 'getPost'
+      ? method.toUpperCase() === 'POST'
+        ? 'POST'
+        : 'GET'
+      : method;
+
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="flex min-w-0 flex-wrap items-end gap-2">
@@ -69,23 +86,42 @@ export function EndpointUrlMethodBar({
       >
         {expanded ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronRight className="h-4 w-4" aria-hidden />}
       </button>
-      <select
-        value={method}
-        onChange={(e) => onMethodChange(e.target.value)}
-        className={`shrink-0 rounded border bg-slate-800 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 ${
-          methodErr
-            ? 'border-red-500 text-red-100 focus:ring-red-500'
-            : 'border-slate-600 text-slate-100 focus:ring-blue-500'
-        }`}
-        aria-label="Metodo HTTP"
-        aria-invalid={methodErr}
-      >
-        <option value="GET">GET</option>
-        <option value="POST">POST</option>
-        <option value="PUT">PUT</option>
-        <option value="DELETE">DELETE</option>
-        <option value="PATCH">PATCH</option>
-      </select>
+      {methodLocked ? (
+        <span
+          className={`shrink-0 rounded border border-slate-600 bg-slate-900/80 px-2 py-1.5 text-sm font-semibold tracking-wide text-slate-200 select-none cursor-default`}
+          title="Metodo HTTP definito dallo Swagger/OpenAPI per questo path"
+          aria-label={`Metodo HTTP ${method.toUpperCase()} (da OpenAPI, non modificabile)`}
+        >
+          {method.toUpperCase()}
+        </span>
+      ) : (
+        <select
+          value={selectValue}
+          onChange={(e) => onMethodChange(e.target.value)}
+          className={`shrink-0 rounded border bg-slate-800 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 ${
+            methodErr
+              ? 'border-red-500 text-red-100 focus:ring-red-500'
+              : 'border-slate-600 text-slate-100 focus:ring-blue-500'
+          }`}
+          aria-label="Metodo HTTP"
+          aria-invalid={methodErr}
+        >
+          {manualHttpMethodOptions === 'getPost' ? (
+            <>
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+            </>
+          ) : (
+            <>
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+              <option value="PATCH">PATCH</option>
+            </>
+          )}
+        </select>
+      )}
 
       <div className="relative min-w-0 flex-1 basis-[min(100%,14rem)]">
         <span

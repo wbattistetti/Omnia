@@ -1,6 +1,19 @@
 import React from 'react';
 
-export type StepKey = 'omniaTutor' | 'iaAgentRuntime' | 'font' | 'colors' | 'devTunnel';
+export type StepKey =
+  | 'omniaTutor'
+  | 'iaAgentRuntime'
+  | 'generateCodes'
+  | 'font'
+  | 'colors'
+  | 'devTunnel';
+
+/** Evento document: apre Impostazioni Omnia (Studio) e opzionalmente la sezione indicata in `detail.step`. */
+export const OMNIA_OPEN_STUDIO_SETTINGS_EVENT = 'omnia:open-studio-settings';
+
+export type OmniaOpenStudioSettingsEventDetail = {
+  step?: StepKey;
+};
 
 export type ChatMessage = {
   id: string;

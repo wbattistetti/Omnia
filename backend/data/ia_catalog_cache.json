@@ -4975,6 +4975,21 @@
         }
       },
       {
+        "model_id": "gpt-realtime-2",
+        "name": "gpt-realtime-2",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {},
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "gpt-realtime-2",
+          "object": "model",
+          "created": 1778006032,
+          "owned_by": "system"
+        }
+      },
+      {
         "model_id": "gpt-realtime-2025-08-28",
         "name": "gpt-realtime-2025-08-28",
         "latency_ms": null,
@@ -5037,6 +5052,36 @@
           "id": "gpt-realtime-mini-2025-12-15",
           "object": "model",
           "created": 1765612007,
+          "owned_by": "system"
+        }
+      },
+      {
+        "model_id": "gpt-realtime-translate",
+        "name": "gpt-realtime-translate",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {},
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "gpt-realtime-translate",
+          "object": "model",
+          "created": 1777950216,
+          "owned_by": "system"
+        }
+      },
+      {
+        "model_id": "gpt-realtime-whisper",
+        "name": "gpt-realtime-whisper",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {},
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "gpt-realtime-whisper",
+          "object": "model",
+          "created": 1778012060,
           "owned_by": "system"
         }
       },
@@ -7233,12 +7278,12 @@
     ]
   },
   "meta": {
-    "updatedAt": "2026-05-06T14:14:59.393Z",
-    "lastLanguagesSync": "2026-05-06T14:14:58.088Z",
-    "lastModelsSync": "2026-05-06T14:14:59.393Z",
+    "updatedAt": "2026-05-07T20:16:08.828Z",
+    "lastLanguagesSync": "2026-05-07T20:16:07.871Z",
+    "lastModelsSync": "2026-05-07T20:16:08.828Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-05-06T14:14:58.046Z",
+      "at": "2026-05-07T20:16:07.839Z",
       "apiVoiceCount": 26,
       "mappedCount": 26,
       "emptyApiList": false

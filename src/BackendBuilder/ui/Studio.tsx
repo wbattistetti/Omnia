@@ -1,10 +1,15 @@
 import React from 'react';
-import { BackendBuilderProvider, useBackendBuilder, type StepKey } from '../state/BackendBuilderContext';
+import {
+  BackendBuilderProvider,
+  useBackendBuilder,
+  type StepKey,
+} from '../state/BackendBuilderContext';
 import { OmniaTutorSetup } from '@components/settings/OmniaTutorSetup';
 import { IAAgentSetup } from '@components/settings/IAAgentSetup';
 import { EditorFontPanel } from '@components/settings/EditorFontPanel';
 import { EditorColorsPanel } from '@components/settings/EditorColorsPanel';
 import { DevTunnelNgrokPanel } from '@components/settings/DevTunnelNgrokPanel';
+import { ProjectIdGeneratorPanel } from '@components/settings/ProjectIdGeneratorPanel';
 import { saveGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 import { getDefaultConfig } from '@utils/iaAgentRuntime/platformHelpers';
 import {
@@ -18,6 +23,7 @@ import {
 import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
 import { fetchIaAgentGlobalConfig, putIaAgentGlobalConfig } from '@services/iaAgentGlobalConfigApi';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
+import type { ProjectData } from 'types/project';
 
 /** Progetto senza blob salvato: partiamo da ElevenLabs così TTS, combo e mapping sono in vista (Omnia ConvAI). */
 const STUDIO_IA_EMPTY_DEFAULT: IAAgentConfig['platform'] = 'elevenlabs';
@@ -26,6 +32,10 @@ interface StudioProps {
   onClose?: () => void;
   /** Progetto aperto: richiesto per salvare i default IA su Mongo (`project_meta`). */
   projectId?: string;
+  /** Metadati progetto corrente (nome, cliente, versione) per Project ID in Impostazioni. */
+  projectData?: ProjectData | null;
+  /** Se valorizzato all’apertura (es. Fix errore tunnel), seleziona questa voce nel menu laterale. */
+  initialStep?: StepKey;
 }
 
 type SaveUi = 'idle' | 'saving' | 'saved' | 'error';
@@ -213,8 +223,15 @@ function RuntimeIaAgentSettingsTab(props: {
   );
 }
 
-function StudioContent({ onClose, projectId }: StudioProps) {
+function StudioContent({ onClose, projectId, projectData, initialStep }: StudioProps) {
   const { currentStep, setCurrentStep } = useBackendBuilder();
+
+  React.useLayoutEffect(() => {
+    if (!initialStep) return;
+    const resolved: StepKey =
+      initialStep === 'devTunnel' && !import.meta.env.DEV ? 'iaAgentRuntime' : initialStep;
+    setCurrentStep(resolved);
+  }, [initialStep, setCurrentStep]);
   const [iaCfg, setIaCfg] = React.useState<IAAgentConfig>(() => getDefaultConfig(STUDIO_IA_EMPTY_DEFAULT));
   const [iaDirty, setIaDirty] = React.useState(false);
   const [iaLoad, setIaLoad] = React.useState<LoadUi>('loading');
@@ -295,6 +312,7 @@ function StudioContent({ onClose, projectId }: StudioProps) {
   const steps: Array<{ key: StepKey; label: string }> = [
     { key: 'omniaTutor', label: 'Omnia Tutor (IA interna)' },
     { key: 'iaAgentRuntime', label: 'Runtime IA Agent' },
+    { key: 'generateCodes', label: 'Genera codici' },
     { key: 'font', label: 'Font' },
     { key: 'colors', label: 'Colors' },
     ...(import.meta.env.DEV ? [{ key: 'devTunnel' as const, label: 'Tunnel dev (ngrok)' }] : []),
@@ -347,6 +365,7 @@ function StudioContent({ onClose, projectId }: StudioProps) {
               saveError={saveErr}
             />
           )}
+          {currentStep === 'generateCodes' && <ProjectIdGeneratorPanel projectData={projectData} />}
           {currentStep === 'font' && <EditorFontPanel />}
           {currentStep === 'colors' && <EditorColorsPanel />}
           {import.meta.env.DEV && currentStep === 'devTunnel' && (
@@ -358,10 +377,15 @@ function StudioContent({ onClose, projectId }: StudioProps) {
   );
 }
 
-export default function BackendBuilderStudio({ onClose, projectId }: StudioProps) {
+export default function BackendBuilderStudio({ onClose, projectId, projectData, initialStep }: StudioProps) {
   return (
     <BackendBuilderProvider>
-      <StudioContent onClose={onClose} projectId={projectId} />
+      <StudioContent
+        onClose={onClose}
+        projectId={projectId}
+        projectData={projectData}
+        initialStep={initialStep}
+      />
     </BackendBuilderProvider>
   );
 }

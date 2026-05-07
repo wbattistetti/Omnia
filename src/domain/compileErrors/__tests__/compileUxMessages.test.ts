@@ -17,6 +17,21 @@ describe('compileUxMessages', () => {
     expect(resolveCompileUxMessage(e({ taskId: 't', message: '', severity: 'error', code: 'TaskDataInvalid' }))).toBeNull();
   });
 
+  it('resolveCompileUxMessage resolves ConvaiWebhookLocalhostTunnelMissing from message', () => {
+    expect(isCompileErrorReportUxCode('ConvaiWebhookLocalhostTunnelMissing')).toBe(true);
+    expect(isCompileErrorReportUxCode('DevTunnelLocalhostPortNotExposed')).toBe(true);
+    expect(
+      resolveCompileUxMessage(
+        e({
+          taskId: 't',
+          message: 'Tunnel richiesto.',
+          severity: 'error',
+          code: 'ConvaiWebhookLocalhostTunnelMissing',
+        })
+      )
+    ).toBe('Tunnel richiesto.');
+  });
+
   it('resolveCompileUxMessage passes through IaProvisionProviderError message', () => {
     expect(
       resolveCompileUxMessage(

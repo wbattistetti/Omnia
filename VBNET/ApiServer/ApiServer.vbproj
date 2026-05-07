@@ -75,6 +75,8 @@
     <Compile Include="ElevenLabs\ElevenLabsSessionRegistry.vb" />
     <Compile Include="ElevenLabs\ElevenLabsUpstreamHttpException.vb" />
     <Compile Include="ElevenLabs\ElevenLabsWebSocketRunner.vb" />
+    <Compile Include="ElevenLabs\ElevenLabsConvaiToolDiagnosticExtractor.vb" />
+    <Compile Include="ElevenLabs\OmniaDiagnosticBridgeSecret.vb" />
     <Compile Include="ElevenLabs\ElevenLabsEndpoints.vb" />
     <Compile Include="Designer\BackendCallTestProxyHandler.vb" />
     <!-- ❌ RIMOSSO: Migration\ContractMigrationRunner.vb - migrazione completata -->

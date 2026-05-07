@@ -54,6 +54,12 @@ Public Class AIAgentTaskDefinition
     <JsonProperty("immediateStart")>
     Public Property ImmediateStart As Boolean
 
+    ''' <summary>
+    ''' Run ConvAI: id sessione tool webhook (es. <c>omnia_conv_…</c>) allineato al provision; passato a startAgent come <c>sessionAlias</c>.
+    ''' </summary>
+    <JsonProperty("convaiSessionConversationId")>
+    Public Property ConvaiSessionConversationId As String
+
     Public Sub New()
         MyBase.New()
         Platform = IAPlatform.OpenAI
@@ -63,5 +69,6 @@ Public Class AIAgentTaskDefinition
         Rules = ""
         LlmEndpoint = ""
         ImmediateStart = False
+        ConvaiSessionConversationId = ""
     End Sub
 End Class

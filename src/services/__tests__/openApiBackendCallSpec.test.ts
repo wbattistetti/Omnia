@@ -173,7 +173,7 @@ describe('openApiBackendCallSpec', () => {
       },
     };
     const r = pickOpenApiPathForReadApi('https://petstore.swagger.io/v2/pet/42', doc as any, 'GET');
-    expect(r).toEqual({ pathKey: '/pet/{petId}', method: 'get' });
+    expect(r).toEqual({ pathKey: '/pet/{petId}', method: 'get', operationalPathMatched: true });
   });
 
   it('pickOpenApiPathForReadApi picks first GET path when only Redoc URL (no hash)', () => {
@@ -187,7 +187,7 @@ describe('openApiBackendCallSpec', () => {
     };
     const redoc = 'https://redocly.github.io/redoc/?url=https://example.com/v2/swagger.json';
     const r = pickOpenApiPathForReadApi(redoc, doc as any, 'GET');
-    expect(r).toEqual({ pathKey: '/pet', method: 'get' });
+    expect(r).toEqual({ pathKey: '/pet', method: 'get', operationalPathMatched: false });
   });
 
   it('parseOpenApiViewerHash reads tag and operation', () => {
@@ -205,7 +205,11 @@ describe('openApiBackendCallSpec', () => {
       },
     };
     const url = 'https://r.com/redoc/?url=https://x/swagger.json#tag/pet';
-    expect(pickOpenApiPathForReadApi(url, doc as any, 'POST')).toEqual({ pathKey: '/pet', method: 'post' });
+    expect(pickOpenApiPathForReadApi(url, doc as any, 'POST')).toEqual({
+      pathKey: '/pet',
+      method: 'post',
+      operationalPathMatched: false,
+    });
   });
 
   it('pickOpenApiPathForReadApi uses #operation/', () => {
@@ -218,6 +222,7 @@ describe('openApiBackendCallSpec', () => {
     expect(pickOpenApiPathForReadApi('https://x.com/doc#operation/addPet', doc as any, 'POST')).toEqual({
       pathKey: '/pet',
       method: 'post',
+      operationalPathMatched: false,
     });
   });
 
@@ -227,7 +232,7 @@ describe('openApiBackendCallSpec', () => {
       paths: { '/only': { post: { responses: { '200': { description: 'x' } } } } },
     };
     const r = pickOpenApiPathForReadApi('https://redocly.github.io/redoc/?url=https://x/openapi.json', doc as any, 'POST');
-    expect(r).toEqual({ pathKey: '/only', method: 'post' });
+    expect(r).toEqual({ pathKey: '/only', method: 'post', operationalPathMatched: false });
   });
 
   it('pickOpenApiPathForReadApi from operational URL auto-selects POST when hint is GET', () => {
@@ -240,7 +245,11 @@ describe('openApiBackendCallSpec', () => {
       },
     };
     const r = pickOpenApiPathForReadApi('http://localhost:3100/api/runtime/bookfromagenda', doc as any, 'GET');
-    expect(r).toEqual({ pathKey: '/api/runtime/bookfromagenda', method: 'post' });
+    expect(r).toEqual({
+      pathKey: '/api/runtime/bookfromagenda',
+      method: 'post',
+      operationalPathMatched: true,
+    });
   });
 
   it('extractOperationFields merges allOf request body property names', () => {
@@ -358,9 +367,19 @@ describe('openApiBackendCallSpec', () => {
       readFileSync(join(process.cwd(), 'backend/services/bookFromAgenda.openapi.json'), 'utf-8')
     ) as Record<string, unknown>;
     const f = extractOperationFields(doc, '/api/runtime/bookfromagenda', 'post');
+    expect(f?.inputUiKindByApiName.forceRefresh).toBe('boolean');
+    expect(f?.inputUiKindByApiName.queryConstraints).toBe('object');
     expect(f?.sendBindingRules?.optionalApiParams).toContain('queryConstraints');
+    expect(f?.sendBindingRules?.designTimeRequiredApiParams).toContain('projectId');
     expect(f?.sendBindingRules?.requireOneOfSets?.[0]?.id).toBe('agenda_source_or_cached');
-    expect(f?.sendBindingRules?.requireOneOfSets?.[0]?.alternatives).toHaveLength(5);
+    expect(f?.sendBindingRules?.requireOneOfSets?.[0]?.alternatives).toHaveLength(3);
+    const qc = f?.inputJsonSchemaByApiName?.queryConstraints;
+    expect(qc?.type).toBe('object');
+    const weekdays = (qc?.properties as Record<string, unknown> | undefined)?.weekdays as
+      | Record<string, unknown>
+      | undefined;
+    expect(weekdays?.type).toBe('array');
+    expect((weekdays?.items as Record<string, unknown> | undefined)?.type).toBe('integer');
   });
 
   it('fetchOpenApiDocument prefers backend proxy when it returns OpenAPI JSON', async () => {

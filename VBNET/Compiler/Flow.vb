@@ -28,6 +28,15 @@ Public Class Flow
     ''' </summary>
     Public Property Conditions As List(Of ConditionDefinition)
 
+    ''' <summary>Slug cliente per auto-generazione projectId BookFromAgenda (compile).</summary>
+    Public Property OmniaClientSlug As String
+
+    ''' <summary>Nome progetto per auto-generazione projectId BookFromAgenda (compile).</summary>
+    Public Property OmniaProjectName As String
+
+    ''' <summary>Versione release per auto-generazione projectId BookFromAgenda (compile).</summary>
+    Public Property OmniaReleaseVersion As String
+
     ' ❌ RIMOSSO: DDTs property - non più usato, struttura costruita da template usando templateId
     ' Public Property DDTs As List(Of Compiler.AssembledDDT)
 

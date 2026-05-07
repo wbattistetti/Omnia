@@ -36,6 +36,7 @@ function legacyIncompleteKeys(inputs: SendRow[]): string[] {
 
 function incompleteKeysWithRules(inputs: SendRow[], rules: OpenApiSendBindingRules): string[] {
   const optional = new Set(rules.optionalApiParams ?? []);
+  const designRequired = new Set(rules.designTimeRequiredApiParams ?? []);
   const incomplete = new Set<string>();
 
   for (const row of inputs) {
@@ -77,6 +78,14 @@ function incompleteKeysWithRules(inputs: SendRow[], rules: OpenApiSendBindingRul
       if (!iname) continue;
       if (!rowHasBindingValue(row!)) incomplete.add(iname);
     }
+  }
+
+  /** Obbligatorietà SEND solo a design-time (indipendente dai gruppi one-of). */
+  for (const api of designRequired) {
+    const row = inputs.find((r) => r.apiParam?.trim() === api);
+    const iname = row?.internalName?.trim();
+    if (!iname) continue;
+    if (!rowHasBindingValue(row!)) incomplete.add(iname);
   }
 
   return [...incomplete];

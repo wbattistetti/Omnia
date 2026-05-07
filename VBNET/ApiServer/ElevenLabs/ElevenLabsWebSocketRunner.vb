@@ -24,6 +24,7 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
     Private ReadOnly _dynamicVars As Dictionary(Of String, Object)
     Private ReadOnly _queue As ElevenLabsTurnQueue
     Private ReadOnly _logPrefix As String
+    Private ReadOnly _hostSession As ElevenLabsHostedSession
 
     Private _ws As ClientWebSocket
     Private _cts As CancellationTokenSource
@@ -31,7 +32,14 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
     Private _externalConversationId As String
     Private _disposed As Boolean
 
-    Public Sub New(agentId As String, apiKey As String, dynamicVars As Dictionary(Of String, Object), queue As ElevenLabsTurnQueue, optionalLogPrefix As String)
+    Public Sub New(
+        agentId As String,
+        apiKey As String,
+        dynamicVars As Dictionary(Of String, Object),
+        queue As ElevenLabsTurnQueue,
+        optionalLogPrefix As String,
+        Optional hostSession As ElevenLabsHostedSession = Nothing
+    )
         If String.IsNullOrWhiteSpace(agentId) Then Throw New ArgumentException("agentId is required.", NameOf(agentId))
         If String.IsNullOrWhiteSpace(apiKey) Then Throw New ArgumentException("apiKey is required.", NameOf(apiKey))
         _agentId = agentId.Trim()
@@ -39,6 +47,7 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
         _dynamicVars = If(dynamicVars, New Dictionary(Of String, Object)())
         _queue = If(queue, New ElevenLabsTurnQueue())
         _logPrefix = If(optionalLogPrefix, "[ElevenLabs]")
+        _hostSession = hostSession
     End Sub
 
     Public ReadOnly Property ExternalConversationId As String
@@ -118,6 +127,13 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
         Dim typ = jo("type")?.ToString()
         If String.IsNullOrEmpty(typ) Then Return
 
+        If _hostSession IsNot Nothing AndAlso ShouldScanForToolFailure(typ, jsonText) Then
+            Dim toolDiag = ElevenLabsConvaiToolDiagnosticExtractor.TryExtractFailure(jo, jsonText)
+            If toolDiag IsNot Nothing Then
+                _hostSession.ToolDiagnostics.Enqueue(toolDiag)
+            End If
+        End If
+
         ' Trace ConvAI client/tool events for end-to-end debugging (ElevenLabs console + ApiServer stdout).
         If typ.IndexOf("tool", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
             typ.IndexOf("client", StringComparison.OrdinalIgnoreCase) >= 0 Then
@@ -193,6 +209,17 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
             Return True
         End If
 
+        Return False
+    End Function
+
+    Private Shared Function ShouldScanForToolFailure(typ As String, raw As String) As Boolean
+        If Not String.IsNullOrEmpty(typ) Then
+            If typ.IndexOf("tool", StringComparison.OrdinalIgnoreCase) >= 0 Then Return True
+            If typ.IndexOf("webhook", StringComparison.OrdinalIgnoreCase) >= 0 Then Return True
+        End If
+        If String.IsNullOrWhiteSpace(raw) Then Return False
+        If raw.IndexOf("bookfromagenda", StringComparison.OrdinalIgnoreCase) >= 0 AndAlso
+            raw.IndexOf("""ok""", StringComparison.OrdinalIgnoreCase) >= 0 Then Return True
         Return False
     End Function
 

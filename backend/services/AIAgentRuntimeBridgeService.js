@@ -145,10 +145,12 @@ Instructions:
  * Disable with OMNIA_AI_AGENT_BOOKFROMAGENDA_PROMPT=0 to save tokens.
  */
 function buildBookFromAgendaContractAppendix() {
-  return `BOOKFROMAGENDA HTTP (when the flow calls Backend Call POST /api/runtime/bookfromagenda):
-- Body uses **dotted keys only** at the root: \`agenda.json\` (object) **or** \`agenda.url\` + \`agenda.type\`; \`queryConstraints\` is **optional** (omit = no constraints / all free slots; same as \`{}\`). Filter horizon optional: with \`agenda.json\` or Omnia URL (and after ICS-like materialization), if no horizon the backend derives min/max dates from \`agenda.days\`. For **fetching** ICS-like URLs you still pass \`horizon.start\`/\`horizon.end\` (or \`queryConstraints.horizon\`) as the download window.
-- Do **not** nest \`agenda\` as a separate object, do **not** use top-level \`agendaJson\`, and do **not** invent \`grid.*\` / \`timezone\` API fields.
-- Response: \`{ "slots": [...], "summary": { "dayCount", "slotCount" } }\`.`;
+  return `BOOKFROMAGENDA HTTP v4.6 (Backend Call POST /api/runtime/bookfromagenda):
+- **Design-time (SEND):** \`projectId\` must be wired (stable app id). **Runtime:** \`conversationId\`, \`forceRefresh\`. Redis snapshot scope is conversation + project; ConvAI: \`omnia_conversation_id\` for \`conversationId\`.
+- **Agenda source (dotted keys):** \`agenda.json\` **or** \`agenda.url\` + \`agenda.type\`; \`queryConstraints\` **optional**. Follow-up without agenda source uses the persisted snapshot if scope matches.
+- **forceRefresh:** \`true\` when materializing from URL/JSON; \`false\` for follow-up queries on the cached agenda only.
+- **Body layout:** dotted agenda keys at root; do **not** nest a separate \`agenda\` object or use \`agendaJson\`; no \`grid.*\` / \`timezone\` API fields.
+- **Response:** \`{ "slots": [...], "summary": { "dayCount", "slotCount" } }\`.`;
 }
 
 function buildSchedulingContractAppendix() {

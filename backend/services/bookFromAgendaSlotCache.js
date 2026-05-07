@@ -64,12 +64,22 @@ function sha256hex(s) {
 }
 
 /**
- * Chiave Redis stabile per scope (conversation / progetto / tenant).
+ * Chiave Redis stabile per scope (conversation + progetto).
  * @param {string} scopeId
  */
 function redisKey(scopeId) {
   const h = sha256hex(scopeId);
   return `${KEY_PREFIX}${h}`;
+}
+
+/**
+ * Chiave Redis effettiva per uno scope logico (debug / log).
+ * @param {string} scopeId risultato di {@link buildScopePersistenceKey}
+ * @returns {string}
+ */
+function getRedisStorageKey(scopeId) {
+  if (!scopeId || typeof scopeId !== 'string') return '';
+  return redisKey(scopeId);
 }
 
 /**
@@ -89,8 +99,8 @@ function readRequiredScopeString(body, fieldName) {
 }
 
 /**
- * Chiave logica di persistenza (prima dell’hash Redis): composizione stabile di conversationId / projectId / tenantId (camelCase).
- * Stringhe vuote ammesse per dimensioni non usate; se tutte vuote → nessuno scope cache.
+ * Chiave logica di persistenza (prima dell’hash Redis): solo conversationId + projectId (camelCase).
+ * Stringhe vuote ammesse per dimensioni non usate; se entrambe vuote → nessuno scope cache.
  *
  * @param {Record<string, unknown>} body
  * @returns {string}
@@ -98,9 +108,8 @@ function readRequiredScopeString(body, fieldName) {
 function buildScopePersistenceKey(body) {
   const c = readRequiredScopeString(body, 'conversationId');
   const p = readRequiredScopeString(body, 'projectId');
-  const t = readRequiredScopeString(body, 'tenantId');
-  if (!c && !p && !t) return '';
-  return `c:${c}|p:${p}|t:${t}`;
+  if (!c && !p) return '';
+  return `c:${c}|p:${p}`;
 }
 
 /**
@@ -109,7 +118,8 @@ function buildScopePersistenceKey(body) {
  */
 function extractForceRefresh(body) {
   if (!('forceRefresh' in body)) {
-    throw new Error('bookfromagenda: missing required field "forceRefresh"');
+    /** Default: prima materializzazione (con sorgente agenda) → true; follow-up solo filtri → false. */
+    return hasAgendaSource(body);
   }
   const v = body.forceRefresh;
   if (v !== true && v !== false) {
@@ -198,5 +208,6 @@ module.exports = {
   loadCachedAgenda,
   saveCachedAgenda,
   getRedisOptional,
+  getRedisStorageKey,
   DEFAULT_TTL_SEC,
 };

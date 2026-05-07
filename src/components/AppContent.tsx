@@ -46,6 +46,11 @@ import { ProjectManager, isDraftProjectId } from './AppContent/application/servi
 import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
+import {
+  OMNIA_OPEN_STUDIO_SETTINGS_EVENT,
+  type OmniaOpenStudioSettingsEventDetail,
+  type StepKey as StudioStepKey,
+} from '../BackendBuilder/state/BackendBuilderContext';
 import { useChatOrchestrator } from '../hooks/useChatOrchestrator';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
 import { resolveFlowTabDisplayTitle } from '@utils/resolveFlowTabDisplayTitle';
@@ -963,6 +968,8 @@ export const AppContent: React.FC<AppContentProps> = ({
   }, [currentProject?.id, currentProject?.name, currentProject?.clientName, currentProject?.version]);
 
   const [showBackendBuilder, setShowBackendBuilder] = useState(false);
+  /** Tab Studio da selezionare all’apertura (es. tunnel da errore compilazione). */
+  const [studioInitialStep, setStudioInitialStep] = useState<StudioStepKey | undefined>(undefined);
   const [globalDataPanelOpen, setGlobalDataPanelOpen] = useState(false);
   const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
   const [showUseCasePanel, setShowUseCasePanel] = useState(false);
@@ -1334,6 +1341,18 @@ export const AppContent: React.FC<AppContentProps> = ({
     const handler = () => setShowBackendBuilder(true);
     document.addEventListener('backendBuilder:open', handler);
     return () => document.removeEventListener('backendBuilder:open', handler);
+  }, []);
+
+  /** Apre Impostazioni Omnia (Studio) e opzionalmente una sezione (menu sinistro), es. tunnel dev. */
+  React.useEffect(() => {
+    const handler = (ev: Event) => {
+      const d = (ev as CustomEvent<OmniaOpenStudioSettingsEventDetail>).detail;
+      const step = d?.step;
+      if (step) setStudioInitialStep(step);
+      setShowBackendBuilder(true);
+    };
+    document.addEventListener(OMNIA_OPEN_STUDIO_SETTINGS_EVENT, handler);
+    return () => document.removeEventListener(OMNIA_OPEN_STUDIO_SETTINGS_EVENT, handler);
   }, []);
 
   // Open ConditionEditor as docking tab
@@ -1717,7 +1736,10 @@ export const AppContent: React.FC<AppContentProps> = ({
               }
             }}
             onRun={handleRunFlow}
-            onSettings={() => setShowBackendBuilder(true)}
+            onSettings={() => {
+              setStudioInitialStep(undefined);
+              setShowBackendBuilder(true);
+            }}
             globalDataOpen={globalDataPanelOpen}
             onGlobalDataToggle={() => setGlobalDataPanelOpen((v) => !v)}
             onOpenLibrary={() => setIsSidebarCollapsed(false)}
@@ -1775,7 +1797,12 @@ export const AppContent: React.FC<AppContentProps> = ({
                     <div style={{ flex: 1, minHeight: 0 }}>
                       <BackendBuilderStudio
                         projectId={currentPid}
-                        onClose={() => setShowBackendBuilder(false)}
+                        projectData={currentProject ?? undefined}
+                        initialStep={studioInitialStep}
+                        onClose={() => {
+                          setShowBackendBuilder(false);
+                          setStudioInitialStep(undefined);
+                        }}
                       />
                     </div>
                   ) : (

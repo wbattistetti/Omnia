@@ -7,6 +7,12 @@ import type {
   FlowBackendCallInvocation,
   FlowBackendParamRow,
 } from '@features/debugger/types/flowBackendCallDiagnostic';
+import {
+  BookFromAgendaDiagnosticSections,
+  JsonBlobCollapsible,
+} from './flowBackendCallDiagnosticRichUi';
+import { resolveIntegrationObservation } from '@domain/observability/integrationObservationCatalog';
+import { IntegrationObservationCard } from './IntegrationObservationCard';
 
 type ParamTreeNode = {
   segment: string;
@@ -164,13 +170,25 @@ function ExpandableParamSection(props: {
   );
 }
 
+function effectiveOutcome(inv: FlowBackendCallInvocation): FlowBackendCallInvocation['outcome'] {
+  if (inv.httpStatus != null && inv.httpStatus >= 400) return 'http_error';
+  return inv.outcome;
+}
+
 export function FlowBackendCallInvocationsPanel(props: { invocations: FlowBackendCallInvocation[] }) {
   const { invocations } = props;
   if (!invocations.length) return null;
 
   return (
     <div className="mt-2 space-y-2 w-full max-w-xs lg:max-w-md xl:max-w-xl">
-      {invocations.map((inv, idx) => (
+      {invocations.map((inv, idx) => {
+        const oc = effectiveOutcome(inv);
+        const catalogObservation = resolveIntegrationObservation(inv);
+        const convaiToolCard =
+          /bookfromagenda/i.test(inv.displayName || '') ||
+          /convai tool/i.test(inv.displayName || '') ||
+          /\/api\/runtime\/bookfromagenda/i.test(inv.endpoint || '');
+        return (
         <details
           key={`${inv.taskId}-${idx}`}
           className="group rounded-lg border border-slate-200 bg-white/90 text-xs shadow-sm dark:border-slate-600 dark:bg-slate-900/50"
@@ -182,16 +200,30 @@ export function FlowBackendCallInvocationsPanel(props: { invocations: FlowBacken
                 className="shrink-0 text-slate-500 transition-transform group-open:rotate-180 dark:text-slate-400"
                 aria-hidden
               />
-              <span className="inline-flex items-center rounded border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-900 dark:border-violet-600 dark:bg-violet-950/50 dark:text-violet-100">
-                backend
+              <span
+                className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                  convaiToolCard
+                    ? 'border-sky-400 bg-sky-50 text-sky-950 dark:border-sky-600 dark:bg-sky-950/40 dark:text-sky-100'
+                    : 'border-violet-300 bg-violet-50 text-violet-900 dark:border-violet-600 dark:bg-violet-950/50 dark:text-violet-100'
+                }`}
+              >
+                {convaiToolCard ? 'tool ConvAI' : 'backend'}
               </span>
               <span>
                 Chiamata <span className="font-semibold">{inv.displayName}</span>
               </span>
-              <OutcomeBadge outcome={inv.outcome} />
+              <OutcomeBadge outcome={oc} />
+              {inv.httpStatus != null ? (
+                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                  HTTP {inv.httpStatus}
+                </span>
+              ) : null}
             </div>
           </summary>
           <div className="border-t border-slate-200 px-3 py-2 space-y-3 dark:border-slate-700">
+            {catalogObservation ? (
+              <IntegrationObservationCard observation={catalogObservation} />
+            ) : null}
             {(inv.endpoint || inv.method) && (
               <div className="text-[11px] text-slate-600 dark:text-slate-400">
                 <span className="font-semibold text-slate-700 dark:text-slate-200">{inv.method || 'POST'}</span>
@@ -214,6 +246,9 @@ export function FlowBackendCallInvocationsPanel(props: { invocations: FlowBacken
                 {inv.errorMessage}
               </div>
             ) : null}
+            <BookFromAgendaDiagnosticSections diagnostic={inv.diagnostic} />
+            <JsonBlobCollapsible title="Anteprima body richiesta (HTTP)" raw={inv.requestBodyPreview} />
+            <JsonBlobCollapsible title="Anteprima body risposta (HTTP)" raw={inv.responsePreview} />
             <ExpandableParamSection
               title="Parametri di input"
               rows={inv.inputParameters}
@@ -224,7 +259,8 @@ export function FlowBackendCallInvocationsPanel(props: { invocations: FlowBacken
             />
           </div>
         </details>
-      ))}
+        );
+      })}
     </div>
   );
 }

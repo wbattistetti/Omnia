@@ -208,6 +208,7 @@ Public Class SimpleTaskCompiler
                     agentTask.Rules = If(agentDef.Rules, "")
                     agentTask.LlmEndpoint = If(agentDef.LlmEndpoint, "")
                     agentTask.ImmediateStart = agentDef.ImmediateStart
+                    agentTask.ConvaiSessionConversationId = If(agentDef.ConvaiSessionConversationId, "")
                 Else
                     If task.Value IsNot Nothing Then
                         agentTask.Platform = IAPlatform.OpenAI
@@ -235,6 +236,9 @@ Public Class SimpleTaskCompiler
                                 Dim s = imm.ToString().Trim().ToLowerInvariant()
                                 agentTask.ImmediateStart = (s = "true")
                             End If
+                        End If
+                        If task.Value.ContainsKey("convaiSessionConversationId") Then
+                            agentTask.ConvaiSessionConversationId = If(task.Value("convaiSessionConversationId")?.ToString(), "")
                         End If
                     End If
                 End If

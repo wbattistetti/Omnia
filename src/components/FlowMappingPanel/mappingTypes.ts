@@ -28,6 +28,10 @@ export interface MappingEntry {
   openapiDescriptionHint?: string;
   /** SEND: parametro opzionale per compile (`x-omnia.sendBinding`). */
   sendBindingOptional?: boolean;
+  /** SEND: obbligatorio a compile (`designTimeRequiredApiParams`). */
+  sendBindingDesignTimeRequired?: boolean;
+  /** SEND: design vs runtime (`x-omnia.bindingPhase` su OpenAPI). */
+  sendBindingBindingPhase?: 'design' | 'runtime';
   /** SEND: id gruppo vincolo one-of (stesso id su più righe). */
   sendConstraintGroupId?: string;
   sendConstraintGroupLabel?: string;
@@ -50,6 +54,10 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
     ...(partial.openapiDescriptionDrift !== undefined ? { openapiDescriptionDrift: partial.openapiDescriptionDrift } : {}),
     ...(partial.openapiDescriptionHint !== undefined ? { openapiDescriptionHint: partial.openapiDescriptionHint } : {}),
     ...(partial.sendBindingOptional !== undefined ? { sendBindingOptional: partial.sendBindingOptional } : {}),
+    ...(partial.sendBindingDesignTimeRequired !== undefined
+      ? { sendBindingDesignTimeRequired: partial.sendBindingDesignTimeRequired }
+      : {}),
+    ...(partial.sendBindingBindingPhase !== undefined ? { sendBindingBindingPhase: partial.sendBindingBindingPhase } : {}),
     ...(partial.sendConstraintGroupId !== undefined ? { sendConstraintGroupId: partial.sendConstraintGroupId } : {}),
     ...(partial.sendConstraintGroupLabel !== undefined
       ? { sendConstraintGroupLabel: partial.sendConstraintGroupLabel }

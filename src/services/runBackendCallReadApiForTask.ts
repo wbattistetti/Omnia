@@ -22,6 +22,10 @@ type IoRow = {
   apiField?: string;
   /** Da `x-omnia.sendBinding` dopo Read API. */
   sendBindingOptional?: boolean;
+  /** Obbligatorio in SEND a compile (`designTimeRequiredApiParams`). */
+  sendBindingDesignTimeRequired?: boolean;
+  /** Da `x-omnia.bindingPhase` / `x-runtime-mandatory` sul campo OpenAPI. */
+  sendBindingBindingPhase?: 'design' | 'runtime';
   sendConstraintGroupId?: string;
   sendConstraintGroupLabel?: string;
 };
@@ -29,22 +33,33 @@ type IoRow = {
 function buildSendBindingRowFields(
   apiName: string,
   rules: OpenApiSendBindingRules | undefined
-): Pick<IoRow, 'sendBindingOptional' | 'sendConstraintGroupId' | 'sendConstraintGroupLabel'> {
+): Pick<
+  IoRow,
+  | 'sendBindingOptional'
+  | 'sendBindingDesignTimeRequired'
+  | 'sendConstraintGroupId'
+  | 'sendConstraintGroupLabel'
+> {
   if (!rules) return {};
   if (rules.optionalApiParams.includes(apiName)) {
     return { sendBindingOptional: true };
   }
+  const design =
+    rules.designTimeRequiredApiParams?.includes(apiName) === true
+      ? { sendBindingDesignTimeRequired: true as const }
+      : {};
   for (const set of rules.requireOneOfSets ?? []) {
     for (const alt of set.alternatives) {
       if (alt.allApiParams.includes(apiName)) {
         return {
+          ...design,
           sendConstraintGroupId: set.id,
           ...(set.label?.trim() ? { sendConstraintGroupLabel: set.label.trim() } : {}),
         };
       }
     }
   }
-  return {};
+  return Object.keys(design).length > 0 ? design : {};
 }
 
 function filterRows(rows: unknown): IoRow[] {
@@ -86,7 +101,8 @@ function rebuildInputRows(
   apiNames: string[],
   inputDesc: Record<string, string>,
   used: Set<string>,
-  sendBinding?: OpenApiSendBindingRules
+  sendBinding?: OpenApiSendBindingRules,
+  bindingPhaseByApiName?: Record<string, 'design' | 'runtime'>
 ): IoRow[] {
   const byApi = new Map<string, IoRow>();
   for (const row of prevInputs) {
@@ -101,11 +117,13 @@ function rebuildInputRows(
       ? nextUniqueInternalName(prev.internalName.trim(), used)
       : nextUniqueInternalName(toTreeInternalName(apiName), used);
     const bind = buildSendBindingRowFields(apiName, sendBinding);
+    const phaseResolved = bindingPhaseByApiName?.[apiName] ?? prev?.sendBindingBindingPhase;
     next.push({
       internalName,
       apiParam: apiName,
       variable: prev?.variable ?? '',
       ...bind,
+      ...(phaseResolved ? { sendBindingBindingPhase: phaseResolved } : {}),
       ...(prev?.fieldDescription?.trim()
         ? { fieldDescription: prev.fieldDescription }
         : inputDesc[apiName]?.trim()
@@ -153,6 +171,8 @@ export type RunBackendCallReadApiResult =
       ok: true;
       /** Metodo HTTP effettivo letto dallo spec (es. POST) dopo auto-selezione. */
       resolvedMethod: string;
+      /** Path operativo risolto sul documento OpenAPI (pathname presente negli `paths`). */
+      operationalPathMatched: boolean;
       inputNames: string[];
       outputNames: string[];
       inputDescriptionsByApiName: Record<string, string>;
@@ -203,6 +223,9 @@ export async function runBackendCallReadApiForTask(
       return { ok: false, error: picked.error };
     }
     const pathKey = picked.pathKey;
+    /** Lock UI solo se c’è URL operativo: altrimenti snapshot vs campo endpoint è ambiguo (solo Spec URL). */
+    const operationalPathMatched = picked.operationalPathMatched;
+    const effectiveMethodLock = operationalPathMatched && op.trim().length > 0;
     const resolvedMethodLower = picked.method;
     const resolvedMethodUpper = normalizeTaskHttpMethod(resolvedMethodLower);
     const fields = extractOperationFields(doc, pathKey, resolvedMethodLower);
@@ -232,7 +255,7 @@ export async function runBackendCallReadApiForTask(
 
     const used = new Set<string>();
     const nextInputs = inputNames.length > 0
-      ? rebuildInputRows(prevInputs, inputNames, inputDesc, used, sendBinding)
+      ? rebuildInputRows(prevInputs, inputNames, inputDesc, used, sendBinding, fields.bindingPhaseByApiName)
       : (inputsEmpty ? [] : prevInputs);
     const nextOutputs = outputNames.length > 0
       ? rebuildOutputRows(prevOutputs, outputNames, outputDesc, used)
@@ -264,7 +287,13 @@ export async function runBackendCallReadApiForTask(
         },
         openapiInputUiKindByApiName: inputUiKindByApiName,
         openapiInputEnumByApiName: inputEnumByApiName,
+        ...(fields.inputJsonSchemaByApiName && Object.keys(fields.inputJsonSchemaByApiName).length > 0
+          ? { openapiInputJsonSchemaByApiName: fields.inputJsonSchemaByApiName }
+          : {}),
         openapiSendBinding: sendBinding ?? null,
+        openApiMethodLocked: effectiveMethodLock,
+        openApiMethodLockUrlSnapshot: effectiveMethodLock ? op.trim() : null,
+        openApiLockedHttpMethod: effectiveMethodLock ? resolvedMethodUpper : null,
       },
       inputs: nextInputs,
       outputs: nextOutputs,
@@ -278,6 +307,7 @@ export async function runBackendCallReadApiForTask(
     return {
       ok: true,
       resolvedMethod: resolvedMethodUpper,
+      operationalPathMatched: effectiveMethodLock,
       inputNames,
       outputNames,
       inputDescriptionsByApiName: { ...inputDesc },
@@ -295,6 +325,9 @@ export async function runBackendCallReadApiForTask(
           importState: 'error',
           lastError: msg.slice(0, 500),
           structuralFingerprint: structuralFingerprint(method, fpSeed),
+          openApiMethodLocked: false,
+          openApiMethodLockUrlSnapshot: null,
+          openApiLockedHttpMethod: null,
         },
       } as Partial<Task>,
       projectId

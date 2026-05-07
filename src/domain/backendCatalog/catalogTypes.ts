@@ -15,6 +15,11 @@ export type FrozenImportState = 'none' | 'ok' | 'error';
  */
 export type OpenApiSendBindingRules = {
   optionalApiParams: string[];
+  /**
+   * Parametri SEND obbligatori a compile (design-time), es. `projectId` su BookFromAgenda.
+   * Distinti da `optionalApiParams` (runtime-only o facoltativi in designer).
+   */
+  designTimeRequiredApiParams?: string[];
   requireOneOfSets?: Array<{
     id: string;
     label?: string;
@@ -49,15 +54,28 @@ export interface BackendCallSpecMeta {
   };
   /**
    * Dopo Read API: tipo UI suggerito per parametro/property body (chiave = nome API come in SEND).
-   * Valori: `text` | `number` | `date` | `time` | `datetime-local` | `uri` | `enum` (allineati a controlli SEND/mock).
+   * Valori: `text` | `number` | `boolean` | `date` | `time` | `datetime-local` | `uri` | `enum` (allineati a controlli SEND/mock).
    */
   openapiInputUiKindByApiName?: Record<string, string>;
   /** Se lo schema OpenAPI dichiara `enum` per il campo, lista valori ammessi (stessa chiave API). */
   openapiInputEnumByApiName?: Record<string, string[]>;
+  /**
+   * Frammenti JSON Schema per proprietà top-level del body (Read API), `$ref` risolti — schema tool ConvAI fedele a OpenAPI.
+   */
+  openapiInputJsonSchemaByApiName?: Record<string, Record<string, unknown>>;
   /** OpenAPI `operationId` dell’operazione scelta al Read API (per naming tool verso ConvAI). */
   openapiOperationId?: string | null;
   /** Regole obbligatorietà SEND da `x-omnia.sendBinding` (se presenti nello spec). `null` = assenti dopo import. */
   openapiSendBinding?: OpenApiSendBindingRules | null;
+  /**
+   * Ultimo Read API: pathname dell’endpoint operativo trovato nello Swagger/OpenAPI (match esplicito sul path).
+   * Se true e `openApiMethodLockUrlSnapshot` coincide con l’URL operativo corrente, il metodo HTTP è solo lettura (da spec).
+   */
+  openApiMethodLocked?: boolean;
+  /** URL (trim) usato al lock; se diverso dall’endpoint operativo → selezione manuale GET/POST. */
+  openApiMethodLockUrlSnapshot?: string | null;
+  /** Metodo HTTP risolto dallo spec quando il lock è attivo (es. POST). */
+  openApiLockedHttpMethod?: string | null;
 }
 
 /** Voce manuale nel progetto (`project.backendCatalog.manualEntries`). */

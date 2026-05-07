@@ -376,7 +376,10 @@ Public Module CompilationHandlers
                     .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
                     .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
                     .Tasks = materializedTasks,  ' ✅ Task materializzati con dataContract
-                    .Conditions = If(request.Conditions, New List(Of Compiler.ConditionDefinition)())  ' ✅ NEW: Conditions per validazione
+                    .Conditions = If(request.Conditions, New List(Of Compiler.ConditionDefinition)()),  ' ✅ NEW: Conditions per validazione
+                    .OmniaClientSlug = request.OmniaClientSlug,
+                    .OmniaProjectName = request.OmniaProjectName,
+                    .OmniaReleaseVersion = request.OmniaReleaseVersion
                 }
 
             ' ✅ DEBUG: Log Flow.Conditions after creation

@@ -12,6 +12,7 @@ import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegi
 import { resolveVariableDisplayName } from '../../utils/resolveVariableDisplayName';
 import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
 import type { OpenApiInputUiKind } from '../../services/openApiBackendCallSpec';
+import { unwrapSessionTreeWireKey } from './bookFromAgendaSessionTree';
 
 export interface MappingRowFieldsProps {
   variant: 'backend' | 'interface';
@@ -94,10 +95,11 @@ export function MappingRowFields({
           flowMetaTranslations: mergedTr,
         })
       : '';
+    const wireMetaKey = unwrapSessionTreeWireKey(entry.wireKey.trim());
     const sendKind =
-      backendColumn === 'send' ? backendSendParamKindByWireKey?.[entry.wireKey.trim()] : undefined;
+      backendColumn === 'send' ? backendSendParamKindByWireKey?.[wireMetaKey] : undefined;
     const sendEnum =
-      backendColumn === 'send' ? backendSendParamEnumByWireKey?.[entry.wireKey.trim()] : undefined;
+      backendColumn === 'send' ? backendSendParamEnumByWireKey?.[wireMetaKey] : undefined;
     return (
       <div className="flex items-center gap-2 shrink-0 min-w-0">
         {showApiFields ? (

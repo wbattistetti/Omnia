@@ -24,6 +24,8 @@ import {
   collectDevTunnelCompileErrors,
   rewriteCompilePayloadWithDevTunnel,
 } from '@domain/devTunnel/devTunnelCompileBridge';
+import { collectConvaiWebhookTunnelCompileErrors } from '@utils/iaAgentRuntime/convaiWebhookToolDiagnostics';
+import { TaskType } from '../../types/taskTypes';
 
 export type CompileWorkspaceOrchestratorParams = {
   rootFlowId: string;
@@ -31,6 +33,8 @@ export type CompileWorkspaceOrchestratorParams = {
   translations: Record<string, string>;
   /** If the snapshot has no nodes yet for root, use props when the active canvas matches rootFlowId */
   fallback?: { nodes: Node<FlowNode>[]; edges: Edge<EdgeData>[] };
+  /** Allineato al provision ConvAI run (`omnia_conv_…`) → correlazione webhook ↔ ApiServer startAgent. */
+  convaiSessionConversationId?: string;
 };
 
 export type FlowCompileSlice = {
@@ -61,6 +65,32 @@ function mergeCompileJsonGuardErrors(
     (e) => normalizeSeverity((e as { severity?: string })?.severity) === 'error'
   );
   compileJson.hasErrors = hasBlocking || compileJson.hasErrors === true;
+}
+
+/** Aggiunge convaiSessionConversationId ai task AI Agent ElevenLabs nel payload compilato (post-VB). */
+function injectConvaiSessionConversationIdIntoCompiledPayload(
+  compileJson: Record<string, unknown> | undefined,
+  sessionId: string | undefined
+): void {
+  if (!compileJson || !sessionId?.trim()) return;
+  const sid = sessionId.trim();
+  const tasks = compileJson.tasks;
+  if (!Array.isArray(tasks)) return;
+  for (let i = 0; i < tasks.length; i++) {
+    const t = tasks[i];
+    if (!t || typeof t !== 'object') continue;
+    const o = t as Record<string, unknown>;
+    const typ = o.taskType ?? o.TaskType ?? o.type ?? o.Type ?? o.templateId ?? o.TemplateId;
+    const isAi =
+      typ === TaskType.AIAgent ||
+      typ === 'AIAgent' ||
+      typ === 'aiAgent' ||
+      Number(typ) === 6;
+    const plat = String(o.platform ?? o.Platform ?? '').toLowerCase();
+    if (isAi && plat === 'elevenlabs') {
+      tasks[i] = { ...o, convaiSessionConversationId: sid };
+    }
+  }
 }
 
 function mergeTasksById(existing: unknown[], more: unknown[]): void {
@@ -138,7 +168,7 @@ export async function compileWorkspaceForOrchestratorSession(
   mergedDDTs: unknown[];
   allCompileSlices: FlowCompileSlice[];
 }> {
-  const { rootFlowId, projectData, translations, fallback } = params;
+  const { rootFlowId, projectData, translations, fallback, convaiSessionConversationId } = params;
   const ctx = { projectData, translations };
   const projectId = String(localStorage.getItem('currentProjectId') || '').trim();
 
@@ -242,6 +272,9 @@ export async function compileWorkspaceForOrchestratorSession(
   });
   mergeCompileJsonGuardErrors(primaryCompileJson, iaProviderGuards);
 
+  const convaiTunnelGuards = collectConvaiWebhookTunnelCompileErrors(mergedTasks, manualCatalogBackendTaskIds);
+  mergeCompileJsonGuardErrors(primaryCompileJson, convaiTunnelGuards as Record<string, unknown>[]);
+
   const tunnelGuards = collectDevTunnelCompileErrors(mergedTasks);
   mergeCompileJsonGuardErrors(primaryCompileJson, tunnelGuards);
 
@@ -267,6 +300,19 @@ export async function compileWorkspaceForOrchestratorSession(
   for (let i = 0; i < mergedTasks.length; i++) {
     mergedTasks[i] = rewriteCompilePayloadWithDevTunnel(JSON.parse(JSON.stringify(mergedTasks[i])));
   }
+
+  injectConvaiSessionConversationIdIntoCompiledPayload(primaryCompileJson, convaiSessionConversationId);
+  for (const sfId of Object.keys(subflowCompilations)) {
+    injectConvaiSessionConversationIdIntoCompiledPayload(
+      subflowCompilations[sfId],
+      convaiSessionConversationId
+    );
+  }
+  /** L'orchestrator POST invia `tasks` come `mergedTasks`, non solo `compilationResult.tasks`: stesso inject o sessionAlias ConvAI resta vuoto → 404 enqueue diagnostic. */
+  injectConvaiSessionConversationIdIntoCompiledPayload(
+    { tasks: mergedTasks } as Record<string, unknown>,
+    convaiSessionConversationId
+  );
 
   /** `mergeCompileJsonGuardErrors` replaces `errors` with a new array — keep root slice in sync for consumers that merged slices before this step (e.g. IA provisioning guards). */
   const rootSlice = allCompileSlices[0];

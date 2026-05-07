@@ -28,6 +28,7 @@ import {
   mappingEntriesToBackendInputs,
   mappingEntriesToBackendOutputs,
 } from '../../../../components/FlowMappingPanel/backendCallMappingAdapter';
+import { wrapBookFromAgendaSessionEntries } from '../../../../components/FlowMappingPanel/bookFromAgendaSessionTree';
 import type { MappingEntry } from '../../../../components/FlowMappingPanel/mappingTypes';
 import { enrichBackendMappingEntriesOpenApi } from '../../../../components/FlowMappingPanel/enrichBackendMappingOpenApiUi';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
@@ -122,6 +123,7 @@ interface BackendCallConfig {
     sampleValues?: string[];
     /** Da Read API + `x-omnia.sendBinding`. */
     sendBindingOptional?: boolean;
+    sendBindingDesignTimeRequired?: boolean;
     sendConstraintGroupId?: string;
     sendConstraintGroupLabel?: string;
   }>;
@@ -155,7 +157,7 @@ interface BackendCallConfig {
 const DEFAULT_CONFIG: BackendCallConfig = {
   endpoint: {
     url: '',
-    method: 'POST',
+    method: 'GET',
     headers: {}
   },
   openapiSpecUrl: '',
@@ -694,6 +696,13 @@ export default function BackendCallEditor({
         setConfig(buildConfigFromTask(storedTask));
         setBackendToolDescription(String((storedTask as Task).backendToolDescription ?? ''));
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent<{ taskId: string }>('omnia:backend-read-api-complete', {
+            detail: { taskId: instanceId },
+          })
+        );
+      }
     } finally {
       setReadApiBusy(false);
     }
@@ -762,12 +771,33 @@ export default function BackendCallEditor({
     }
   }, [config.inputs, config.outputs, reorganizeMockTable]); // ✅ Dipende da inputs/outputs per riorganizzare quando cambiano
 
+  const httpMethodLocked = React.useMemo(() => {
+    if (!instanceId) return false;
+    const st = taskRepository.getTask(instanceId) as Task | null;
+    const meta = st?.backendCallSpecMeta;
+    if (!meta?.openApiMethodLocked || meta.importState !== 'ok') return false;
+    const snap = (meta.openApiMethodLockUrlSnapshot ?? '').trim();
+    if (!snap) return false;
+    return config.endpoint.url.trim() === snap;
+  }, [instanceId, config.endpoint.url, endpointExternalRevision]);
+
   const updateEndpoint = (updates: Partial<BackendCallConfig['endpoint']>) => {
     setConfig(prev => ({
       ...prev,
       endpoint: { ...prev.endpoint, ...updates }
     }));
   };
+
+  /** Endpoint non documentato: solo GET/POST; normalizza metodi legacy (PUT, …) a GET. */
+  React.useEffect(() => {
+    if (!instanceId || httpMethodLocked) return;
+    const m = config.endpoint.method;
+    if (m === 'GET' || m === 'POST') return;
+    setConfig((prev) => ({
+      ...prev,
+      endpoint: { ...prev.endpoint, method: 'GET' },
+    }));
+  }, [instanceId, httpMethodLocked, config.endpoint.method]);
 
   const listIdPrefix = React.useMemo(
     () => `bc${String(instanceId || 'x').replace(/[^a-zA-Z0-9]/g, '') || 'x'}`,
@@ -782,6 +812,12 @@ export default function BackendCallEditor({
         openapiDescriptionSnapshots
       ),
     [config.inputs, knownBackendVariableIdSet, openapiDescriptionSnapshots]
+  );
+
+  /** BookFromAgenda: cartella Session (solo UI); persistenza senza prefisso tramite adapter. */
+  const mappingSendDisplay = React.useMemo(
+    () => wrapBookFromAgendaSessionEntries(mappingSend, config.endpoint?.url),
+    [mappingSend, config.endpoint?.url]
   );
 
   /** Blocchi informativi da `x-omnia.sendBinding` (vincoli one-of) sopra l’albero SEND. */
@@ -1377,7 +1413,7 @@ export default function BackendCallEditor({
         label: readApiBusy ? 'Reading…' : 'Read API',
         onClick: () => void handleReadApi(),
         title:
-          'Scarica OpenAPI via ApiServer (no CORS): path da URL; metodo HTTP allineato allo spec (POST/GET, …). Discovery dall’endpoint; fallback Spec URL. SEND include body con allOf/oneOf.',
+          'Scarica OpenAPI via ApiServer (no CORS): path da URL; metodo HTTP determinato da Swagger se il path è nello spec; altrimenti selezionabile manualmente (GET/POST). Discovery dall’endpoint; fallback Spec URL. SEND include body con allOf/oneOf.',
         disabled: readApiBusy,
         visible: readApiToolbarVisible,
       },
@@ -1515,6 +1551,8 @@ export default function BackendCallEditor({
                 labelStyle={labelStyle}
                 errorMessage={readApiError}
                 methodHighlightError={Boolean(readApiError)}
+                methodLocked={httpMethodLocked}
+                manualHttpMethodOptions="getPost"
               />
             </div>
             <div className="flex min-w-0 flex-col gap-0.5">
@@ -1599,7 +1637,7 @@ export default function BackendCallEditor({
             showLayoutHint={false}
             title=""
             listIdPrefix={listIdPrefix}
-            backendSend={mappingSend}
+            backendSend={mappingSendDisplay}
             backendReceive={mappingReceive}
             onBackendSendChange={handleBackendSendChange}
             onBackendReceiveChange={handleBackendReceiveChange}

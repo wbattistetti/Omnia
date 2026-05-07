@@ -7,6 +7,7 @@ import {
   deriveBackendToolDefinition,
   deriveExportedToolName,
   lastUrlPathSegment,
+  mergeBookFromAgendaScopeIntoInputSchema,
   mergeEffectiveIaAgentTools,
   sanitizeConvaiToolName,
 } from '../backendToolDerivation';
@@ -138,6 +139,143 @@ describe('backendToolDerivation', () => {
     );
 
     expect(merged.map((t) => t.name).sort()).toEqual(['bk_tool', 'manual_one']);
+  });
+
+  it('mergeBookFromAgendaScopeIntoInputSchema overwrites scope keys with OpenAPI types', () => {
+    const base = buildToolInputSchemaFromBackendInputs(
+      [{ internalName: 'fr', apiParam: 'forceRefresh', variable: '' }],
+      undefined
+    );
+    expect((base.properties as Record<string, { type?: string }>).forceRefresh?.type).toBe('string');
+    const merged = mergeBookFromAgendaScopeIntoInputSchema(base);
+    expect((merged.properties as Record<string, { type?: string }>).forceRefresh?.type).toBe('boolean');
+    expect(merged.required).toEqual(expect.arrayContaining(['projectId', 'conversationId']));
+  });
+
+  it('mergeBookFromAgendaScopeIntoInputSchema forces queryConstraints to object (not string)', () => {
+    const base = buildToolInputSchemaFromBackendInputs(
+      [{ internalName: 'qc', apiParam: 'queryConstraints', variable: '' }],
+      undefined
+    );
+    expect((base.properties as Record<string, { type?: string }>).queryConstraints?.type).toBe('string');
+    const merged = mergeBookFromAgendaScopeIntoInputSchema(base);
+    expect((merged.properties as Record<string, { type?: string }>).queryConstraints?.type).toBe('object');
+  });
+
+  it('keeps dotted OpenAPI keys (agenda.url / agenda.json) in tool schema', () => {
+    const base = buildToolInputSchemaFromBackendInputs(
+      [
+        { internalName: 'agendaUrl', apiParam: 'agenda.url', variable: '' },
+        { internalName: 'agendaType', apiParam: 'agenda.type', variable: '' },
+      ],
+      undefined
+    );
+    const props = base.properties as Record<string, { type?: string }>;
+    expect(props['agenda.url']).toBeDefined();
+    expect(props['agenda.type']).toBeDefined();
+    expect(props['agenda_url']).toBeUndefined();
+    expect(props['agenda_type']).toBeUndefined();
+  });
+
+  it('requires agenda source fields when BookFromAgenda schema exposes agenda.url', () => {
+    const base = buildToolInputSchemaFromBackendInputs(
+      [
+        { internalName: 'agendaUrl', apiParam: 'agenda.url', variable: '' },
+        { internalName: 'agendaType', apiParam: 'agenda.type', variable: '' },
+      ],
+      undefined
+    );
+    const merged = mergeBookFromAgendaScopeIntoInputSchema(base);
+    expect(merged.required).toEqual(
+      expect.arrayContaining(['projectId', 'conversationId', 'agenda.url', 'agenda.type'])
+    );
+  });
+
+  it('locks BookFromAgenda infra params to SEND literals when provided', () => {
+    const base = buildToolInputSchemaFromBackendInputs(
+      [
+        { internalName: 'u', apiParam: 'agenda.url', variable: 'https://real.feed/agenda' },
+        { internalName: 't', apiParam: 'agenda.type', variable: 'Omnia' },
+        { internalName: 'p', apiParam: 'projectId', variable: 'project_static' },
+        { internalName: 'fr', apiParam: 'forceRefresh', variable: 'true' },
+      ],
+      undefined
+    );
+    const merged = mergeBookFromAgendaScopeIntoInputSchema(base as Record<string, unknown>, [
+      { internalName: 'u', apiParam: 'agenda.url', variable: 'https://real.feed/agenda' },
+      { internalName: 't', apiParam: 'agenda.type', variable: 'Omnia' },
+      { internalName: 'p', apiParam: 'projectId', variable: 'project_static' },
+      { internalName: 'fr', apiParam: 'forceRefresh', variable: 'true' },
+    ]);
+    const props = merged.properties as Record<string, Record<string, unknown>>;
+    expect(props['agenda.url']?.enum).toEqual(['https://real.feed/agenda']);
+    expect(props['agenda.type']?.enum).toEqual(['Omnia']);
+    expect(props.projectId?.enum).toEqual(['project_static']);
+    expect(props.forceRefresh?.enum).toEqual([true]);
+  });
+
+  it('buildToolInputSchemaFromBackendInputs uses openapiInputUiKindByApiName for boolean', () => {
+    const task = backendTask({
+      id: 'meta1',
+      label: 'bf',
+      backendToolDescription: 'Book.',
+      endpoint: { url: 'https://x/api/runtime/bookfromagenda', method: 'POST', headers: {} },
+      inputs: [{ internalName: 'fr', apiParam: 'forceRefresh', variable: '' }],
+      outputs: [],
+      backendCallSpecMeta: {
+        schemaVersion: 1,
+        lastImportedAt: null,
+        contentHash: null,
+        importState: 'ok',
+        structuralFingerprint: null,
+        openapiInputUiKindByApiName: { forceRefresh: 'boolean' },
+      },
+    });
+    const s = buildToolInputSchemaFromBackendInputs(
+      [{ internalName: 'fr', apiParam: 'forceRefresh', variable: '' }],
+      task
+    );
+    expect((s.properties as Record<string, { type?: string }>).forceRefresh?.type).toBe('boolean');
+  });
+
+  it('buildToolInputSchemaFromBackendInputs prefers openapiInputJsonSchemaByApiName for nested objects', () => {
+    const task = backendTask({
+      id: 'meta2',
+      label: 'bf',
+      backendToolDescription: 'Book.',
+      endpoint: { url: 'https://x/api/runtime/bookfromagenda', method: 'POST', headers: {} },
+      inputs: [{ internalName: 'qc', apiParam: 'queryConstraints', variable: '' }],
+      outputs: [],
+      backendCallSpecMeta: {
+        schemaVersion: 1,
+        lastImportedAt: null,
+        contentHash: null,
+        importState: 'ok',
+        structuralFingerprint: null,
+        openapiInputUiKindByApiName: { queryConstraints: 'object' },
+        openapiInputJsonSchemaByApiName: {
+          queryConstraints: {
+            type: 'object',
+            properties: {
+              weekdays: {
+                type: 'array',
+                items: { type: 'integer', minimum: 0, maximum: 6 },
+              },
+            },
+          },
+        },
+      },
+    });
+    const s = buildToolInputSchemaFromBackendInputs(
+      [{ internalName: 'qc', apiParam: 'queryConstraints', variable: '' }],
+      task
+    );
+    const qc = (s.properties as Record<string, Record<string, unknown>>).queryConstraints;
+    expect(qc?.type).toBe('object');
+    expect((qc.properties as Record<string, unknown>).weekdays).toMatchObject({
+      type: 'array',
+      items: { type: 'integer', minimum: 0, maximum: 6 },
+    });
   });
 
   it('mergeEffectiveIaAgentTools includes manualCatalogBackendTaskIds when cfg list is empty', () => {

@@ -13,7 +13,6 @@ import {
   Trash2,
   Circle,
   Brackets,
-  ArrowRight,
   ArrowLeft,
   Pencil,
   StickyNote,
@@ -50,6 +49,13 @@ import {
 } from './flowInterfaceDragTypes';
 import { mergeBackendMappingVariableDrop } from './backendMappingVariableDrop';
 import { getInterfaceLeafDisplayName } from './interfaceMappingLabels';
+import {
+  BackendSendArrowIcon,
+  resolveSendArrowKind,
+  sendArrowTitle,
+  type SendArrowGlyphKind,
+} from './BackendSendArrowIcon';
+import { unwrapSessionTreeWireKey } from './bookFromAgendaSessionTree';
 
 const DND_TYPE = 'application/x-omnia-varlabel';
 
@@ -531,6 +537,7 @@ function MappingTreeRow({
   const ephemeralNew = Boolean(node.entry && isEphemeralNewSegment(node.segment));
 
   const wireKey = node.entry?.wireKey?.trim() ?? '';
+  const advancementWireKey = unwrapSessionTreeWireKey(wireKey);
   const showAdvancementUi =
     variant === 'backend' &&
     backendColumn === 'send' &&
@@ -575,6 +582,11 @@ function MappingTreeRow({
     variant === 'backend' && backendColumn === 'send' && node.entry?.sendBindingOptional
       ? 'italic text-slate-400/95'
       : undefined;
+
+  const sendGlyphKind: SendArrowGlyphKind =
+    variant === 'backend' && backendColumn === 'send' && node.entry && !isGroupOnly
+      ? resolveSendArrowKind(node.entry.apiField, node.entry)
+      : 'filledSolid';
 
   return (
     <div className="select-none" {...ifaceRowAttrs}>
@@ -635,9 +647,11 @@ function MappingTreeRow({
           className="flex h-7 shrink-0 items-center justify-center -mr-0.5"
           title={
             isGroupOnly
-              ? 'Gruppo'
+              ? node.segment === 'Session'
+                ? 'Session · scope progetto e conversazione (BookFromAgenda)'
+                : 'Gruppo'
               : variant === 'backend' && backendColumn === 'send'
-                ? 'Parametro in uscita (verso API)'
+                ? sendArrowTitle(sendGlyphKind)
                 : variant === 'backend' && backendColumn === 'receive'
                   ? 'Parametro in ingresso (da API)'
                   : 'Parametro'
@@ -648,11 +662,7 @@ function MappingTreeRow({
           ) : variant === 'interface' ? (
             <span className="w-3.5 h-3.5 inline-block" aria-hidden />
           ) : variant === 'backend' && backendColumn === 'send' ? (
-            <ArrowRight
-              className="w-[1.125rem] h-[1.125rem] text-teal-400 drop-shadow-[0_0_6px_rgba(45,212,191,0.45)]"
-              strokeWidth={3.1}
-              aria-hidden
-            />
+            <BackendSendArrowIcon kind={sendGlyphKind} />
           ) : variant === 'backend' && backendColumn === 'receive' ? (
             <ArrowLeft
               className="w-[1.125rem] h-[1.125rem] text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.45)]"
@@ -673,8 +683,8 @@ function MappingTreeRow({
             <input
               type="checkbox"
               className="h-3.5 w-3.5 cursor-pointer rounded border-slate-500 bg-slate-900 text-teal-500 focus:ring-teal-500/40"
-              checked={backendSendAdvancement!.isEnabled(wireKey)}
-              onChange={(e) => backendSendAdvancement!.onToggle(wireKey, e.target.checked)}
+              checked={backendSendAdvancement!.isEnabled(advancementWireKey)}
+              onChange={(e) => backendSendAdvancement!.onToggle(advancementWireKey, e.target.checked)}
               title="Avanzamento tra batch"
               aria-label="Avanzamento parametro"
             />
@@ -786,8 +796,8 @@ function MappingTreeRow({
           />
         </div>
 
-        {showAdvancementUi && backendSendAdvancement!.isEnabled(wireKey) ? (
-          <div className="flex min-w-0 shrink-0 items-center">{backendSendAdvancement.renderEditor(wireKey)}</div>
+        {showAdvancementUi && backendSendAdvancement!.isEnabled(advancementWireKey) ? (
+          <div className="flex min-w-0 shrink-0 items-center">{backendSendAdvancement.renderEditor(advancementWireKey)}</div>
         ) : null}
 
         <span className="flex-1 min-w-2 shrink" aria-hidden />

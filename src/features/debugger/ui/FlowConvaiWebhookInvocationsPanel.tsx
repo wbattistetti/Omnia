@@ -4,6 +4,8 @@
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { FlowConvaiWebhookDiagnostic } from '@features/debugger/types/flowConvaiWebhookDiagnostic';
+import { resolveIntegrationObservationForConvaiWebhook } from '@domain/observability/integrationObservationCatalog';
+import { IntegrationObservationCard } from './IntegrationObservationCard';
 
 function formatJson(value: unknown): string {
   if (value === null || value === undefined) return '—';
@@ -22,7 +24,9 @@ export function FlowConvaiWebhookInvocationsPanel(props: {
 
   return (
     <div className="mt-2 space-y-2 w-full max-w-xs lg:max-w-md xl:max-w-xl">
-      {invocations.map((inv, idx) => (
+      {invocations.map((inv, idx) => {
+        const catalogObservation = resolveIntegrationObservationForConvaiWebhook(inv);
+        return (
         <details
           key={`${inv.toolName}-${inv.endpoint}-${idx}`}
           className="group rounded-lg border border-slate-200 bg-white/90 text-xs shadow-sm dark:border-slate-600 dark:bg-slate-900/50"
@@ -53,6 +57,9 @@ export function FlowConvaiWebhookInvocationsPanel(props: {
             </div>
           </summary>
           <div className="border-t border-slate-200 px-3 py-2 space-y-2 dark:border-slate-700">
+            {catalogObservation ? (
+              <IntegrationObservationCard observation={catalogObservation} />
+            ) : null}
             {inv.unreachable && inv.errorMessage ? (
               <div className="rounded-md border border-red-400 bg-red-50 px-2 py-1.5 text-[11px] font-medium text-red-950 dark:border-red-700 dark:bg-red-950/35 dark:text-red-50">
                 {inv.errorMessage}
@@ -89,7 +96,8 @@ export function FlowConvaiWebhookInvocationsPanel(props: {
             </div>
           </div>
         </details>
-      ))}
+        );
+      })}
     </div>
   );
 }

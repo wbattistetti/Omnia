@@ -217,12 +217,20 @@ Public Class AIAgentTaskExecutor
         Return jo.ToString(Formatting.None)
     End Function
 
-    Private Shared Async Function ElevenLabsStartAgentAsync(baseUrl As String, agentId As String, dynamicVars As Dictionary(Of String, Object), ct As System.Threading.CancellationToken) As System.Threading.Tasks.Task(Of String)
+    Private Shared Async Function ElevenLabsStartAgentAsync(
+        baseUrl As String,
+        agentId As String,
+        dynamicVars As Dictionary(Of String, Object),
+        ct As System.Threading.CancellationToken,
+        Optional sessionAlias As String = Nothing
+    ) As System.Threading.Tasks.Task(Of String)
         Dim url = CombineUrl(baseUrl, "/elevenlabs/startAgent")
         Dim jo As New JObject From {
             {"agentId", agentId},
             {"dynamicVariables", JObject.FromObject(If(dynamicVars, New Dictionary(Of String, Object)()))}
         }
+        Dim aliasTrim = If(sessionAlias, "").Trim()
+        If aliasTrim.Length > 0 Then jo("sessionAlias") = aliasTrim
         Dim content As New StringContent(jo.ToString(Formatting.None), Encoding.UTF8, "application/json")
         Dim resp = Await Http.PostAsync(url, content, ct).ConfigureAwait(False)
         Dim body = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
@@ -274,7 +282,11 @@ Public Class AIAgentTaskExecutor
         End If
     End Function
 
-    Private Shared Async Function ElevenLabsReadPromptAsync(baseUrl As String, conversationId As String, ct As System.Threading.CancellationToken) As System.Threading.Tasks.Task(Of (Text As String, Status As String))
+    Private Shared Async Function ElevenLabsReadPromptAsync(
+        baseUrl As String,
+        conversationId As String,
+        ct As System.Threading.CancellationToken
+    ) As System.Threading.Tasks.Task(Of (Text As String, Status As String, ToolDiags As List(Of JObject)))
         Dim url = CombineUrl(baseUrl, $"/elevenlabs/readPrompt/{Uri.EscapeDataString(conversationId)}")
         Dim resp = Await HttpLong.GetAsync(url, ct).ConfigureAwait(False)
         Dim body = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
@@ -287,7 +299,15 @@ Public Class AIAgentTaskExecutor
         Dim jo = JObject.Parse(body)
         Dim agentTurn = If(jo("agentTurn")?.ToString(), "")
         Dim status = If(jo("status")?.ToString(), "running")
-        Return (agentTurn, status)
+        Dim list As New List(Of JObject)()
+        Dim arr = jo("toolDiagnostics")
+        If arr IsNot Nothing AndAlso arr.Type = JTokenType.Array Then
+            For Each t In CType(arr, JArray)
+                Dim o = TryCast(t, JObject)
+                If o IsNot Nothing Then list.Add(o)
+            Next
+        End If
+        Return (agentTurn, status, list)
     End Function
 
     Private Async Function ExecuteOpenAiBranch(
@@ -417,7 +437,14 @@ Public Class AIAgentTaskExecutor
         outcome As String,
         errMsg As String,
         inputs As IEnumerable(Of KeyValuePair(Of String, Object)),
-        outputs As IEnumerable(Of KeyValuePair(Of String, Object))
+        outputs As IEnumerable(Of KeyValuePair(Of String, Object)),
+        Optional httpStatus As Integer? = Nothing,
+        Optional requestBodyPreview As String = Nothing,
+        Optional responsePreview As String = Nothing,
+        Optional diagnosticToken As JToken = Nothing,
+        Optional displayNameOverride As String = Nothing,
+        Optional catalogEvent As String = Nothing,
+        Optional catalogHint As String = Nothing
     )
         If _messageCallback Is Nothing Then Return
         Dim inList = If(inputs, New List(Of KeyValuePair(Of String, Object))()).ToList()
@@ -432,9 +459,10 @@ Public Class AIAgentTaskExecutor
         Console.WriteLine(
             $"[IA·ConvAI][BackendDiag] EMIT date-related task={If(task?.Id, "")} method={If(method, "POST")} endpoint={If(endpoint, "")} outcome={If(outcome, "")} in={inList.Count} out={outList.Count} err={If(errMsg, "")}")
 
+        Dim dispName = If(String.IsNullOrWhiteSpace(displayNameOverride), ResolveDisplayName(task), displayNameOverride.Trim())
         Dim payload As New JObject From {
             {"taskId", If(task?.Id, "")},
-            {"displayName", ResolveDisplayName(task)},
+            {"displayName", dispName},
             {"endpoint", If(endpoint, "")},
             {"method", If(method, "POST")},
             {"outcome", outcome},
@@ -444,7 +472,82 @@ Public Class AIAgentTaskExecutor
             {"outputParameters", BuildDiagnosticParamRows(outList)},
             {"listPreviewLimit", DiagnosticListPreviewLimit}
         }
+        If httpStatus.HasValue Then payload("httpStatus") = httpStatus.Value
+        If Not String.IsNullOrWhiteSpace(requestBodyPreview) Then payload("requestBodyPreview") = JToken.FromObject(requestBodyPreview)
+        If Not String.IsNullOrWhiteSpace(responsePreview) Then payload("responsePreview") = JToken.FromObject(responsePreview)
+        If diagnosticToken IsNot Nothing AndAlso diagnosticToken.Type <> JTokenType.Null Then payload("diagnostic") = diagnosticToken
+        If Not String.IsNullOrWhiteSpace(catalogEvent) Then payload("catalogEvent") = catalogEvent.Trim()
+        If Not String.IsNullOrWhiteSpace(catalogHint) Then payload("catalogHint") = catalogHint.Trim()
         _messageCallback(payload.ToString(Formatting.None), "BackendCallDiagnostic", 0)
+    End Sub
+
+    ''' <summary>Errore tool ConvAI (BookFromAgenda / scheduling) raccolto da ApiServer readPrompt → toolDiagnostics.</summary>
+    Private Sub EmitElevenLabsBackendDiagnosticFromConvaiTool(task As CompiledTask, diag As JObject)
+        If diag Is Nothing Then Return
+        Dim ep = If(diag("endpoint")?.ToString(), "")
+        Dim rawResp = If(diag("responsePreview")?.ToString(), "")
+        Dim errMsg = diag("errorMessage")?.ToString()
+        Dim diagTok As JToken = diag("diagnostic")
+
+        Dim httpSt As Integer? = Nothing
+        Dim hs = diag("httpStatus")
+        If hs IsNot Nothing AndAlso hs.Type <> JTokenType.Null Then
+            Try
+                httpSt = hs.Value(Of Integer)()
+            Catch
+                Try
+                    httpSt = CInt(Math.Truncate(hs.Value(Of Double)()))
+                Catch
+                End Try
+            End Try
+        End If
+
+        Dim src = If(diag("source")?.ToString(), "convai_ws_tool")
+        Dim inRow As New List(Of KeyValuePair(Of String, Object)) From {
+            New KeyValuePair(Of String, Object)("source", src),
+            New KeyValuePair(Of String, Object)("responseChars", If(rawResp, "").Length)
+        }
+        Dim convId = diag("conversationId")?.ToString()
+        If Not String.IsNullOrWhiteSpace(convId) Then
+            inRow.Add(New KeyValuePair(Of String, Object)("conversationId", convId))
+        End If
+
+        Dim outsEmpty As New List(Of KeyValuePair(Of String, Object))()
+        If Not IsDateRelatedDiagnostic(ep, inRow, outsEmpty) Then Return
+
+        Dim dn = diag("toolDisplayName")?.ToString()
+
+        Dim catEv As String = Nothing
+        Dim catHint As String = Nothing
+        If httpSt.HasValue Then
+            Dim code = httpSt.Value
+            If code = 404 Then
+                catEv = "session_not_found"
+                catHint = "Sessione ElevenLabs non registrata su ApiServer: esegui Run con startAgent e alias omnia_conv allineato al tool; dopo restart ApiServer ripeti il Run."
+            ElseIf code = 401 OrElse code = 403 Then
+                catEv = "webhook_auth_failed"
+                catHint = "Verifica header e segreti verso il backend Express per il webhook tool."
+            ElseIf code = 429 Then
+                catEv = "rate_limited"
+                catHint = "Troppe richieste: attendi o riduci frequenza."
+            End If
+        End If
+
+        EmitElevenLabsBackendDiagnostic(
+            task,
+            ep,
+            "POST",
+            "http_error",
+            errMsg,
+            inRow,
+            New List(Of KeyValuePair(Of String, Object))(),
+            httpSt,
+            Nothing,
+            rawResp,
+            diagTok,
+            If(String.IsNullOrWhiteSpace(dn), Nothing, dn),
+            catalogEvent:=catEv,
+            catalogHint:=catHint)
     End Sub
 
     Private Async Function ExecuteElevenLabsBranch(
@@ -478,7 +581,12 @@ Public Class AIAgentTaskExecutor
                 Console.WriteLine($"[IA·ConvAI] POST /elevenlabs/startAgent → new conversation")
                 Dim startUrl = CombineUrl(baseUrl, "/elevenlabs/startAgent")
                 Try
-                    conversationId = Await ElevenLabsStartAgentAsync(baseUrl, ai.AgentId.Trim(), ai.DynamicVariables, System.Threading.CancellationToken.None).ConfigureAwait(False)
+                    conversationId = Await ElevenLabsStartAgentAsync(
+                        baseUrl,
+                        ai.AgentId.Trim(),
+                        ai.DynamicVariables,
+                        System.Threading.CancellationToken.None,
+                        If(ai.ConvaiSessionConversationId, "").Trim()).ConfigureAwait(False)
                     EmitElevenLabsBackendDiagnostic(
                         task,
                         startUrl,
@@ -546,7 +654,7 @@ Public Class AIAgentTaskExecutor
 
             Console.WriteLine($"[IA·ConvAI] GET /elevenlabs/readPrompt (long-poll)")
             Dim readUrl = CombineUrl(baseUrl, $"/elevenlabs/readPrompt/{Uri.EscapeDataString(conversationId)}")
-            Dim turn As (Text As String, Status As String)
+            Dim turn As (Text As String, Status As String, ToolDiags As List(Of JObject))
             Try
                 turn = Await ElevenLabsReadPromptAsync(baseUrl, conversationId, System.Threading.CancellationToken.None).ConfigureAwait(False)
             Catch ex As Exception
@@ -562,6 +670,13 @@ Public Class AIAgentTaskExecutor
                     New List(Of KeyValuePair(Of String, Object))())
                 Throw
             End Try
+
+            If turn.ToolDiags IsNot Nothing Then
+                For Each td In turn.ToolDiags
+                    EmitElevenLabsBackendDiagnosticFromConvaiTool(task, td)
+                Next
+            End If
+
             Dim completed = turn.Status.Equals("completed", StringComparison.OrdinalIgnoreCase)
             EmitElevenLabsBackendDiagnostic(
                 task,

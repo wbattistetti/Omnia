@@ -41,6 +41,11 @@ function validateSendLiteralAgainstOpenApi(
   if (enumVals && enumVals.length > 0) {
     return enumVals.includes(t) ? null : 'Scegli un valore tra quelli ammessi dallo schema.';
   }
+  if (kind === 'boolean') {
+    const low = t.toLowerCase();
+    if (low === 'true' || low === 'false' || t === '1' || t === '0') return null;
+    return 'Usa true o false.';
+  }
   if (kind === 'uri') {
     try {
       const u = new URL(t);

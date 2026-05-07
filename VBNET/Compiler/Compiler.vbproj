@@ -44,6 +44,8 @@
     <Compile Include="TaskCompiler\SubflowTaskCompiler.vb" />
 
     <!-- Flow Compiler -->
+    <Compile Include="BookFromAgendaProjectId.vb" />
+    <Compile Include="BookFromAgendaCompileMutator.vb" />
     <Compile Include="FlowCompiler.vb" />
     <Compile Include="UtteranceEscalationValidation.vb" />
     <Compile Include="ConditionBuilder.vb" />

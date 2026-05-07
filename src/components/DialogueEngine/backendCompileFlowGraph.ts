@@ -18,6 +18,9 @@ import {
   iaConvaiTraceCompileVsRepository,
   iaConvaiTraceGlobalIaDefaultsSnapshot,
 } from '../../utils/debug/iaConvaiFlowTrace';
+import { getSafeProjectId } from '../../utils/safeProjectId';
+import { readOmniaCompileProjectSegments } from '../../utils/projectId/omniaCompileSegments';
+import { patchEmptyBookFromAgendaProjectId } from '../../utils/projectId/patchBookFromAgendaProjectId';
 
 const VB_COMPILE_URL = 'http://localhost:5000/api/runtime/compile';
 
@@ -136,6 +139,10 @@ export async function backendCompileFlowGraph(
       if (row.id) referencedTaskIds.add(row.id);
     });
   });
+
+  const compileSegments = readOmniaCompileProjectSegments(projectData);
+  const projectId = getSafeProjectId();
+  patchEmptyBookFromAgendaProjectId(Array.from(referencedTaskIds), compileSegments, projectId);
 
   const referencedInstances = Array.from(referencedTaskIds)
     .map((taskId) => {
@@ -404,8 +411,6 @@ export async function backendCompileFlowGraph(
   });
 
   const { variableCreationService } = await import('../../services/VariableCreationService');
-  const { getSafeProjectId } = await import('../../utils/safeProjectId');
-  const projectId = getSafeProjectId();
   const variables = variableCreationService.getAllVariables(projectId);
 
   const requestBody = {
@@ -417,6 +422,9 @@ export async function backendCompileFlowGraph(
     translations,
     conditions,
     variables,
+    omniaClientSlug: compileSegments.cliente,
+    omniaProjectName: compileSegments.nomeProgetto,
+    omniaReleaseVersion: compileSegments.versione,
   };
 
   const compileResponse = await fetch(VB_COMPILE_URL, {

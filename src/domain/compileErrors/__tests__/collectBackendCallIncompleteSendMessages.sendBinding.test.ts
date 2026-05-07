@@ -63,4 +63,40 @@ describe('listIncompleteBackendSendWireKeys (openapiSendBinding)', () => {
     } as unknown as Task;
     expect(listIncompleteBackendSendWireKeys(t)).toEqual([]);
   });
+
+  const bookRulesDesignProject: OpenApiSendBindingRules = {
+    optionalApiParams: ['conversationId', 'forceRefresh'],
+    designTimeRequiredApiParams: ['projectId'],
+    requireOneOfSets: [
+      {
+        id: 'agenda_source_or_cached',
+        alternatives: [{ allApiParams: ['agenda.json'] }, { allApiParams: ['projectId'] }],
+      },
+    ],
+  };
+
+  it('requires designTimeRequiredApiParams even when a one-of alternative is satisfied', () => {
+    const t = {
+      type: TaskType.BackendCall,
+      inputs: [
+        { internalName: 'j', apiParam: 'agenda.json', variable: '{}' },
+        { internalName: 'pid', apiParam: 'projectId', variable: '' },
+      ],
+      backendCallSpecMeta: { schemaVersion: 1 as const, openapiSendBinding: bookRulesDesignProject },
+    } as unknown as Task;
+    expect(listIncompleteBackendSendWireKeys(t)).toEqual(['pid']);
+  });
+
+  it('does not require optional runtime params when empty', () => {
+    const t = {
+      type: TaskType.BackendCall,
+      inputs: [
+        { internalName: 'j', apiParam: 'agenda.json', variable: '{}' },
+        { internalName: 'pid', apiParam: 'projectId', variable: 'my-app-v1' },
+        { internalName: 'cid', apiParam: 'conversationId', variable: '' },
+      ],
+      backendCallSpecMeta: { schemaVersion: 1 as const, openapiSendBinding: bookRulesDesignProject },
+    } as unknown as Task;
+    expect(listIncompleteBackendSendWireKeys(t)).toEqual([]);
+  });
 });

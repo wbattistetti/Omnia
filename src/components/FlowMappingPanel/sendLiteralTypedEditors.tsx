@@ -105,6 +105,29 @@ export function SendLiteralTypedEditors({
   const api = (apiField || '').trim();
   const useStartDateUi = api === 'startDate' || kind === 'date';
 
+  if (kind === 'boolean') {
+    const norm =
+      value.trim().toLowerCase() === 'true' || value.trim() === '1'
+        ? 'true'
+        : value.trim().toLowerCase() === 'false' || value.trim() === '0'
+          ? 'false'
+          : value.trim() === ''
+            ? ''
+            : value;
+    return (
+      <select
+        value={norm === 'true' || norm === 'false' ? norm : ''}
+        onChange={(e) => onChange(e.target.value)}
+        title="Costante booleana (OpenAPI)"
+        className="min-w-0 rounded border border-amber-400/40 bg-slate-900 px-2 py-1 text-[10px] text-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-400/60 box-border w-full"
+      >
+        <option value="">— Scegli —</option>
+        <option value="true">true</option>
+        <option value="false">false</option>
+      </select>
+    );
+  }
+
   if (useStartDateUi) {
     return (
       <StartDateSendLiteralInput

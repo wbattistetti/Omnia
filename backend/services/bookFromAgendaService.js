@@ -5,6 +5,7 @@
 
 'use strict';
 
+const { logSolveDecision, logSolveEntry } = require('./bookFromAgendaSolveDiagnostics');
 const { resolveUniversalAgenda } = require('./bookFromAgendaInput');
 const {
   buildScopePersistenceKey,
@@ -164,6 +165,53 @@ function shouldDeriveHorizonWhenMissing(body) {
   if (body['agenda.json'] !== undefined && body['agenda.json'] !== null) return true;
   const t = String(body['agenda.type'] || '').trim().toUpperCase();
   return t === 'OMNIA' || t === 'ICS' || t === 'GOOGLE' || t === 'OUTLOOK';
+}
+
+/**
+ * Validazione esplicita: il modello non deve inviare stringhe JSON al posto dell’oggetto (errore 400 leggibile).
+ * @param {Record<string, unknown>} body
+ */
+function assertQueryConstraintPayloadShape(body) {
+  if (Object.prototype.hasOwnProperty.call(body, 'queryConstraints')) {
+    const q = body.queryConstraints;
+    if (q != null && (!isRecord(q) || Array.isArray(q))) {
+      const err = new Error(
+        'bookfromagenda: queryConstraints must be a JSON object (not a string). Example: { "weekdays": [2, 4], "horizon": { "start": "2026-05-01", "end": "2026-05-31" } }. OpenAPI: components/schemas/SchedulingQueryConstraints.'
+      );
+      err.bfaDiagnostic = {
+        failedStage: 'query_constraints_shape',
+        fields: {
+          queryConstraints: {
+            expected: 'object (plain JSON)',
+            actual: Array.isArray(q) ? 'array' : typeof q,
+            note:
+              typeof q === 'string'
+                ? 'Il client ha inviato una stringa (spesso JSON serializzato). Usare un oggetto annidato nel body.'
+                : undefined,
+          },
+        },
+      };
+      throw err;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'query')) {
+    const q = body.query;
+    if (q != null && (!isRecord(q) || Array.isArray(q))) {
+      const err = new Error(
+        'bookfromagenda: query (alias of queryConstraints) must be a JSON object, not a string or array.'
+      );
+      err.bfaDiagnostic = {
+        failedStage: 'query_constraints_shape',
+        fields: {
+          query: {
+            expected: 'object',
+            actual: Array.isArray(q) ? 'array' : typeof q,
+          },
+        },
+      };
+      throw err;
+    }
+  }
 }
 
 function normalizeQueryConstraints(body) {
@@ -327,7 +375,7 @@ function solveWithAgenda(agenda, qObj, body) {
 
 /**
  * Snapshot Redis per UniversalAgenda:
- * - `conversationId`, `projectId`, `tenantId` (stringhe; vuote se non usate) → chiave scope composita.
+ * - `conversationId`, `projectId` (stringhe; vuote se non usate) → chiave scope composita.
  * - Prima richiesta con `agenda.url` o `agenda.json`: materializza, salva, applica filtri.
  * - Richieste successive con stesso scope e stessa impronta sorgente: niente refetch.
  * - `forceRefresh: true`: ignora cache e rifetch.
@@ -341,20 +389,26 @@ async function solveBookFromAgenda(raw) {
   }
   const body = /** @type {Record<string, unknown>} */ (raw);
 
+  assertQueryConstraintPayloadShape(body);
+
   const forceRefresh = extractForceRefresh(body);
   const scopeId = buildScopePersistenceKey(body);
 
+  logSolveEntry(body);
+
   /** Follow-up: solo filtri, senza agenda.json / agenda.url */
   if (!hasAgendaSource(body)) {
+    logSolveDecision('follow_up_redis_snapshot_only', { note: 'forceRefresh non rifetch URL se assente agenda source' });
     if (!scopeId) {
       throw new Error(
-        'bookfromagenda: provide agenda.json or agenda.url (first call), or set at least one of conversationId / projectId / tenantId (non-empty) to use a cached agenda'
+        'bookfromagenda: provide agenda.json or agenda.url (first call), or set at least one of conversationId / projectId (non-empty) to use a cached agenda'
       );
     }
     const cached = await loadCachedAgenda(scopeId);
     if (!cached) {
+      logSolveDecision('cache_miss_follow_up', { persistenceKey: scopeId });
       throw new Error(
-        'bookfromagenda: no cached agenda for this scope — send agenda.url or agenda.json on the first request with the same conversationId / projectId / tenantId values'
+        'bookfromagenda: no cached agenda for this scope — send agenda.url or agenda.json on the first request with the same conversationId / projectId values'
       );
     }
     const agendaCached = /** @type {{ days: { date: string, slots: unknown[] }[], timezone?: string }} */ (
@@ -362,6 +416,7 @@ async function solveBookFromAgenda(raw) {
     );
     validateUniversalAgenda(agendaCached);
     const qObjFollow = normalizeQueryConstraints(body);
+    logSolveDecision('ok_follow_up_from_redis', { daysInAgenda: agendaCached.days?.length });
     return solveWithAgenda(agendaCached, qObjFollow, body);
   }
 
@@ -376,6 +431,7 @@ async function solveBookFromAgenda(raw) {
   if (scopeId && !forceRefresh) {
     const entry = await loadCachedAgenda(scopeId);
     if (entry && entry.sourceFingerprint === fp) {
+      logSolveDecision('redis_cache_hit_same_fingerprint', { fingerprint: fp.slice(0, 24) });
       const agendaHit = /** @type {{ days: { date: string, slots: unknown[] }[], timezone?: string }} */ (
         entry.universalAgenda
       );
@@ -383,7 +439,15 @@ async function solveBookFromAgenda(raw) {
       const qObjHit = normalizeQueryConstraints(body);
       return solveWithAgenda(agendaHit, qObjHit, body);
     }
+    logSolveDecision('redis_cache_miss_or_fingerprint_mismatch', {
+      hadEntry: !!entry,
+      fingerprintMatch: !!(entry && entry.sourceFingerprint === fp),
+    });
+  } else if (scopeId && forceRefresh) {
+    logSolveDecision('skip_redis_cache_because_force_refresh', {});
   }
+
+  logSolveDecision('materialize_fetch_agenda', { agendaUrlPresent: typeof body['agenda.url'] === 'string' });
 
   const agendaPayload = resolveAgendaPayload(body);
   const agenda = /** @type {{ days: { date: string, slots: unknown[] }[], timezone?: string }} */ (
@@ -392,6 +456,7 @@ async function solveBookFromAgenda(raw) {
 
   if (scopeId) {
     await saveCachedAgenda(scopeId, fp, agenda, DEFAULT_TTL_SEC);
+    logSolveDecision('saved_agenda_to_redis', { persistenceKey: scopeId });
   }
 
   const qObj = normalizeQueryConstraints(body);
@@ -404,4 +469,5 @@ module.exports = {
   solveWithAgenda,
   deriveHorizonFromAgendaDays,
   horizonExplicitComplete,
+  assertQueryConstraintPayloadShape,
 };

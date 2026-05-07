@@ -9,11 +9,14 @@ import type { OpenApiSendBindingRules } from '../domain/backendCatalog/catalogTy
 export type OpenApiInputUiKind =
   | 'text'
   | 'number'
+  | 'boolean'
   | 'date'
   | 'time'
   | 'datetime-local'
   | 'uri'
-  | 'enum';
+  | 'enum'
+  /** Corpo/query con `type: object` o `$ref` a schema oggetto — JSON Schema per tool ConvAI. */
+  | 'object';
 
 export type OpenApiOperationFields = {
   /** OpenAPI `operationId` for the resolved path/method, when present. */
@@ -38,13 +41,19 @@ export type OpenApiOperationFields = {
   inputEnumByApiName: Record<string, string[]>;
   /** `x-omnia.sendBinding` sullo schema body (obbligatorietà compile SEND). */
   sendBindingRules?: OpenApiSendBindingRules;
+  /** Per proprietà body: `x-omnia.bindingPhase` / `x-runtime-mandatory` (runtime vs design). */
+  bindingPhaseByApiName?: Record<string, 'design' | 'runtime'>;
+  /**
+   * Frammenti JSON Schema (inline, `$ref` risolti) per ogni proprietà top-level del body — tool LLM fedeli a OpenAPI.
+   */
+  inputJsonSchemaByApiName?: Record<string, Record<string, unknown>>;
 };
 
 function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
 }
 
-function resolveRef(root: Record<string, unknown>, ref: string): unknown {
+export function resolveRef(root: Record<string, unknown>, ref: string): unknown {
   if (!ref.startsWith('#/')) return undefined;
   const parts = ref.slice(2).split('/');
   let cur: unknown = root;
@@ -53,6 +62,171 @@ function resolveRef(root: Record<string, unknown>, ref: string): unknown {
     cur = cur[p];
   }
   return cur;
+}
+
+const MAX_TOOL_SCHEMA_DEPTH = 28;
+const MAX_TOOL_SCHEMA_PROPERTIES = 120;
+
+/**
+ * Inline di uno schema JSON Schema per ConvAI: risolve `$ref`, limita profondità/dimensione (nessun ciclo serializzato).
+ */
+export function materializeJsonSchemaFragmentForTool(
+  root: Record<string, unknown>,
+  schema: unknown,
+  refStack: Set<string>,
+  depth: number
+): Record<string, unknown> {
+  if (depth > MAX_TOOL_SCHEMA_DEPTH) {
+    return { description: 'Limite profondità schema OpenAPI (frammento troncato).' };
+  }
+  if (!isRecord(schema)) {
+    return {};
+  }
+  if (typeof schema.$ref === 'string') {
+    const ref = schema.$ref;
+    if (refStack.has(ref)) {
+      return { description: 'Riferimento circolare nello schema OpenAPI.' };
+    }
+    refStack.add(ref);
+    try {
+      const resolved = resolveRef(root, ref);
+      return materializeJsonSchemaFragmentForTool(root, resolved, refStack, depth + 1);
+    } finally {
+      refStack.delete(ref);
+    }
+  }
+  if (Array.isArray(schema.allOf)) {
+    if (schema.allOf.length === 1) {
+      return materializeJsonSchemaFragmentForTool(root, schema.allOf[0], refStack, depth);
+    }
+    const propsAcc: Record<string, unknown> = {};
+    let desc = '';
+    let type = '';
+    for (const sub of schema.allOf) {
+      const m = materializeJsonSchemaFragmentForTool(root, sub, new Set(refStack), depth + 1);
+      if (typeof m.description === 'string' && m.description && !desc) desc = m.description;
+      if (typeof m.type === 'string' && m.type && !type) type = m.type;
+      if (isRecord(m.properties)) {
+        Object.assign(propsAcc, m.properties as Record<string, unknown>);
+      }
+    }
+    const out: Record<string, unknown> = {};
+    if (type) out.type = type;
+    if (desc) out.description = desc;
+    if (Object.keys(propsAcc).length > 0) out.properties = propsAcc;
+    return out;
+  }
+  if (Array.isArray(schema.oneOf) && schema.oneOf.length > 0) {
+    return materializeJsonSchemaFragmentForTool(root, schema.oneOf[0], refStack, depth);
+  }
+  if (Array.isArray(schema.anyOf) && schema.anyOf.length > 0) {
+    return materializeJsonSchemaFragmentForTool(root, schema.anyOf[0], refStack, depth);
+  }
+
+  const out: Record<string, unknown> = {};
+  for (const key of [
+    'type',
+    'format',
+    'title',
+    'description',
+    'default',
+    'const',
+    'enum',
+    'minimum',
+    'maximum',
+    'exclusiveMinimum',
+    'exclusiveMaximum',
+    'minLength',
+    'maxLength',
+    'pattern',
+    'minItems',
+    'maxItems',
+    'uniqueItems',
+    'additionalProperties',
+  ]) {
+    if (schema[key] !== undefined) out[key] = schema[key];
+  }
+
+  const tRaw = schema.type;
+  const t = typeof tRaw === 'string' ? tRaw.toLowerCase() : '';
+  const propsObj = isRecord(schema.properties) ? schema.properties : undefined;
+
+  if ((t === 'object' || (!tRaw && propsObj)) && propsObj) {
+    out.type = 'object';
+    const props: Record<string, unknown> = {};
+    let n = 0;
+    for (const [k, v] of Object.entries(propsObj)) {
+      if (n++ >= MAX_TOOL_SCHEMA_PROPERTIES) break;
+      props[k] = materializeJsonSchemaFragmentForTool(root, v, new Set(refStack), depth + 1);
+    }
+    out.properties = props;
+    if (Array.isArray(schema.required)) out.required = schema.required;
+    return out;
+  }
+
+  if (t === 'array' || schema.items !== undefined) {
+    out.type = 'array';
+    out.items = materializeJsonSchemaFragmentForTool(root, schema.items, new Set(refStack), depth + 1);
+    return out;
+  }
+
+  return out;
+}
+
+/**
+ * Per ogni property top-level del body: frammento JSON Schema materializzato (composizioni + `$ref` come {@link schemaPropertyInputKinds}).
+ */
+export function schemaPropertyJsonSchemaFragmentsForTool(
+  root: Record<string, unknown>,
+  schema: unknown
+): Record<string, Record<string, unknown>> {
+  const out: Record<string, Record<string, unknown>> = {};
+  function walk(s: unknown, rs: Set<string>): void {
+    if (!isRecord(s)) return;
+    if (typeof s.$ref === 'string') {
+      if (rs.has(s.$ref)) return;
+      rs.add(s.$ref);
+      try {
+        walk(resolveRef(root, s.$ref), rs);
+      } finally {
+        rs.delete(s.$ref);
+      }
+      return;
+    }
+    if (Array.isArray(s.allOf)) {
+      for (const sub of s.allOf) walk(sub, rs);
+      return;
+    }
+    if (Array.isArray(s.oneOf)) {
+      for (const sub of s.oneOf) walk(sub, rs);
+      return;
+    }
+    if (Array.isArray(s.anyOf)) {
+      for (const sub of s.anyOf) walk(sub, rs);
+      return;
+    }
+    if (isRecord(s.properties)) {
+      const props = s.properties as Record<string, unknown>;
+      for (const [key, propSchema] of Object.entries(props)) {
+        const k = key.trim();
+        if (!k || out[k]) continue;
+        out[k] = materializeJsonSchemaFragmentForTool(root, propSchema, new Set(), 0);
+      }
+    }
+  }
+  walk(schema, new Set());
+  return out;
+}
+
+function mergeJsonSchemaFragmentMaps(
+  target: Record<string, Record<string, unknown>>,
+  source: Record<string, Record<string, unknown>>
+): void {
+  for (const [k, v] of Object.entries(source)) {
+    const key = k.trim();
+    if (!key || target[key]) continue;
+    target[key] = v;
+  }
 }
 
 /**
@@ -147,6 +321,68 @@ export function schemaPropertyDescriptions(root: Record<string, unknown>, schema
   return out;
 }
 
+/** bindingPhase per campo body (`x-omnia.bindingPhase` o `x-runtime-mandatory`). */
+export function schemaPropertyBindingPhases(root: Record<string, unknown>, schema: unknown): Record<string, 'design' | 'runtime'> {
+  const out: Record<string, 'design' | 'runtime'> = {};
+  function walk(s: unknown, rs: Set<string>): void {
+    if (!isRecord(s)) return;
+    if (typeof s.$ref === 'string') {
+      if (rs.has(s.$ref)) return;
+      rs.add(s.$ref);
+      try {
+        walk(resolveRef(root, s.$ref), rs);
+      } finally {
+        rs.delete(s.$ref);
+      }
+      return;
+    }
+    if (Array.isArray(s.allOf)) {
+      for (const sub of s.allOf) walk(sub, rs);
+      return;
+    }
+    if (Array.isArray(s.oneOf)) {
+      for (const sub of s.oneOf) walk(sub, rs);
+      return;
+    }
+    if (Array.isArray(s.anyOf)) {
+      for (const sub of s.anyOf) walk(sub, rs);
+      return;
+    }
+    if (isRecord(s.properties)) {
+      const props = s.properties as Record<string, unknown>;
+      for (const [key, propSchema] of Object.entries(props)) {
+        if (!isRecord(propSchema)) continue;
+        const k = key.trim();
+        if (!k || out[k]) continue;
+        const xo = propSchema['x-omnia'];
+        if (isRecord(xo)) {
+          const bp = xo.bindingPhase;
+          if (bp === 'runtime' || bp === 'design') {
+            out[k] = bp;
+            continue;
+          }
+        }
+        if (propSchema['x-runtime-mandatory'] === true) {
+          out[k] = 'runtime';
+        }
+      }
+    }
+  }
+  walk(schema, new Set());
+  return out;
+}
+
+function mergeBindingPhaseMaps(
+  target: Record<string, 'design' | 'runtime'>,
+  source: Record<string, 'design' | 'runtime'>
+): void {
+  for (const [k, v] of Object.entries(source)) {
+    const key = k.trim();
+    if (!key || target[key]) continue;
+    target[key] = v;
+  }
+}
+
 function mergeDescriptionMaps(target: Record<string, string>, source: Record<string, string>): void {
   for (const [k, v] of Object.entries(source)) {
     const key = k.trim();
@@ -210,8 +446,14 @@ function parseSendBindingRecord(sb: Record<string, unknown>): OpenApiSendBinding
   const optionalApiParams = Array.isArray(opt)
     ? opt.map((x) => String(x ?? '').trim()).filter(Boolean)
     : [];
+  const dtr = sb.designTimeRequiredApiParams;
+  const designTimeRequiredApiParams = Array.isArray(dtr)
+    ? dtr.map((x) => String(x ?? '').trim()).filter(Boolean)
+    : [];
   const requireOneOfSets = parseRequireOneOfSetsFromXomnia(sb.requireOneOfSets);
-  return { optionalApiParams, requireOneOfSets };
+  const out: OpenApiSendBindingRules = { optionalApiParams, requireOneOfSets };
+  if (designTimeRequiredApiParams.length > 0) out.designTimeRequiredApiParams = designTimeRequiredApiParams;
+  return out;
 }
 
 /**
@@ -349,7 +591,13 @@ export function openApiSchemaToInputUiKind(root: Record<string, unknown>, schema
     if (Array.isArray(cur.enum) && cur.enum.length > 0) return 'enum';
     const t = String(cur.type || '').toLowerCase();
     const f = typeof cur.format === 'string' ? cur.format.toLowerCase() : '';
+    if (t === 'boolean') return 'boolean';
     if (t === 'integer' || t === 'number') return 'number';
+    if (t === 'object') return 'object';
+    if (t === 'array') return 'text';
+    if (!cur.type && isRecord(cur.properties) && Object.keys(cur.properties).length > 0) {
+      return 'object';
+    }
     if (t === 'string') {
       if (f === 'uri' || f === 'url') return 'uri';
       if (f === 'date') return 'date';
@@ -639,12 +887,15 @@ function sortPathKeys(keys: string[]): string[] {
  * Sceglie path + metodo HTTP dallo spec per Read API.
  * Con URL operativo: abbina il pathname; il metodo viene dedotto dal Path Item (hint UI se valido).
  * Con solo Redoc/swagger: `#operation/id` (qualsiasi verbo), `#tag/`, altrimenti path unici / disambiguazione per hint.
+ * `operationalPathMatched`: true solo se il pathname dell’URL è stato trovato negli `paths` del documento (contratto noto sul path).
  */
 export function pickOpenApiPathForReadApi(
   endpointUrl: string,
   doc: Record<string, unknown>,
   methodHint: string
-): { pathKey: string; method: string } | { error: string } {
+):
+  | { pathKey: string; method: string; operationalPathMatched: boolean }
+  | { error: string } {
   const paths = doc.paths;
   if (!isRecord(paths)) {
     return { error: 'Il documento OpenAPI non contiene paths.' };
@@ -663,7 +914,7 @@ export function pickOpenApiPathForReadApi(
       if (!method) {
         return { error: `Il path ${key} non definisce operazioni HTTP riconosciute.` };
       }
-      return { pathKey: key, method };
+      return { pathKey: key, method, operationalPathMatched: true };
     }
   }
 
@@ -678,7 +929,7 @@ export function pickOpenApiPathForReadApi(
       if (!method) {
         return { error: `Il path ${pk} non definisce operazioni HTTP riconosciute.` };
       }
-      return { pathKey: pk, method };
+      return { pathKey: pk, method, operationalPathMatched: false };
     }
     if (anyPaths.length === 0) {
       return { error: 'Nessun path con operazioni HTTP nello spec.' };
@@ -690,13 +941,13 @@ export function pickOpenApiPathForReadApi(
 
   if (pathKeysForMethod.length === 1) {
     const pk = pathKeysForMethod[0];
-    return { pathKey: pk, method: m };
+    return { pathKey: pk, method: m, operationalPathMatched: false };
   }
 
   const hash = parseOpenApiViewerHash(endpointUrl);
   if (hash.operationId) {
     const byOp = findPathAndMethodByOperationId(paths, hash.operationId);
-    if (byOp) return { pathKey: byOp.pathKey, method: byOp.method };
+    if (byOp) return { pathKey: byOp.pathKey, method: byOp.method, operationalPathMatched: false };
   }
   if (hash.tag) {
     const tagged = pathKeysForMethod.filter((pk) => {
@@ -705,14 +956,14 @@ export function pickOpenApiPathForReadApi(
       return operationHasTag(item[m], hash.tag!);
     });
     if (tagged.length === 1) {
-      return { pathKey: tagged[0], method: m };
+      return { pathKey: tagged[0], method: m, operationalPathMatched: false };
     }
     if (tagged.length > 1) {
-      return { pathKey: sortPathKeys(tagged)[0], method: m };
+      return { pathKey: sortPathKeys(tagged)[0], method: m, operationalPathMatched: false };
     }
   }
 
-  return { pathKey: sortPathKeys(pathKeysForMethod)[0], method: m };
+  return { pathKey: sortPathKeys(pathKeysForMethod)[0], method: m, operationalPathMatched: false };
 }
 
 export function extractOperationFields(
@@ -744,8 +995,11 @@ export function extractOperationFields(
   const outputDescriptionsByApiName: Record<string, string> = {};
   const inputUiKindByApiName: Record<string, OpenApiInputUiKind> = {};
   const inputEnumByApiName: Record<string, string[]> = {};
+  const bindingPhaseByApiName: Record<string, 'design' | 'runtime'> = {};
 
   let sendBindingRules: OpenApiSendBindingRules | undefined;
+
+  const inputJsonSchemaByApiName: Record<string, Record<string, unknown>> = {};
 
   const requestParamNames: string[] = [];
   let requestBodyPropertyNames: string[] = [];
@@ -777,6 +1031,11 @@ export function extractOperationFields(
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, p.schema));
         mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, p.schema));
         mergeEnumMaps(inputEnumByApiName, schemaPropertyEnums(doc, p.schema));
+        mergeBindingPhaseMaps(bindingPhaseByApiName, schemaPropertyBindingPhases(doc, p.schema));
+        mergeJsonSchemaFragmentMaps(
+          inputJsonSchemaByApiName,
+          schemaPropertyJsonSchemaFragmentsForTool(doc, p.schema)
+        );
         const sb = extractOmniaSendBindingRules(doc, p.schema);
         if (sb) sendBindingRules = sb;
       }
@@ -810,6 +1069,11 @@ export function extractOperationFields(
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, json.schema));
         mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, json.schema));
         mergeEnumMaps(inputEnumByApiName, schemaPropertyEnums(doc, json.schema));
+        mergeBindingPhaseMaps(bindingPhaseByApiName, schemaPropertyBindingPhases(doc, json.schema));
+        mergeJsonSchemaFragmentMaps(
+          inputJsonSchemaByApiName,
+          schemaPropertyJsonSchemaFragmentsForTool(doc, json.schema)
+        );
         const sb = extractOmniaSendBindingRules(doc, json.schema);
         if (sb) sendBindingRules = sb;
       }
@@ -852,6 +1116,8 @@ export function extractOperationFields(
     inputUiKindByApiName,
     inputEnumByApiName,
     ...(sendBindingRules ? { sendBindingRules } : {}),
+    ...(Object.keys(bindingPhaseByApiName).length > 0 ? { bindingPhaseByApiName } : {}),
+    ...(Object.keys(inputJsonSchemaByApiName).length > 0 ? { inputJsonSchemaByApiName } : {}),
   };
 }
 

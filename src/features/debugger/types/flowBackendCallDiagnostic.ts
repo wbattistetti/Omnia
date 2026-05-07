@@ -15,6 +15,18 @@ export type FlowBackendCallInvocation = {
   inputParameters: FlowBackendParamRow[];
   outputParameters: FlowBackendParamRow[];
   listPreviewLimit?: number;
+  /** Status HTTP effettivo (orchestratore .NET). */
+  httpStatus?: number | null;
+  /** Anteprima body richiesta (truncate). */
+  requestBodyPreview?: string | null;
+  /** Anteprima body risposta (truncate). */
+  responsePreview?: string | null;
+  /** Da JSON risposta errore BookFromAgenda (`diagnostic`) o payload esteso. */
+  diagnostic?: Record<string, unknown> | null;
+  /** Catalogo osservabilità v1 (opzionale, da orchestrator): priorità su inferenza UI. */
+  catalogEvent?: string;
+  catalogHint?: string;
+  catalogFields?: Record<string, string>;
 };
 
 function asRowArray(raw: unknown): FlowBackendParamRow[] {
@@ -65,7 +77,67 @@ export function parseFlowBackendCallInvocation(raw: unknown): FlowBackendCallInv
   const outp = o.outputParameters ?? (o as { OutputParameters?: unknown }).OutputParameters;
   const limRaw = o.listPreviewLimit ?? (o as { ListPreviewLimit?: unknown }).ListPreviewLimit;
 
-  return {
+  const httpStatusRaw = o.httpStatus ?? (o as { HttpStatus?: unknown }).HttpStatus;
+  const httpStatus =
+    typeof httpStatusRaw === 'number' && Number.isFinite(httpStatusRaw)
+      ? Math.floor(httpStatusRaw)
+      : null;
+
+  const reqPrev = o.requestBodyPreview ?? (o as { RequestBodyPreview?: unknown }).RequestBodyPreview;
+  const requestBodyPreview =
+    typeof reqPrev === 'string' ? reqPrev : reqPrev != null ? String(reqPrev) : null;
+
+  const respPrev = o.responsePreview ?? (o as { ResponsePreview?: unknown }).ResponsePreview;
+  const responsePreview =
+    typeof respPrev === 'string' ? respPrev : respPrev != null ? String(respPrev) : null;
+
+  let diagnostic: Record<string, unknown> | null = null;
+  const diagRaw = o.diagnostic ?? (o as { Diagnostic?: unknown }).Diagnostic;
+  if (diagRaw && typeof diagRaw === 'object' && !Array.isArray(diagRaw)) {
+    diagnostic = diagRaw as Record<string, unknown>;
+  } else if (typeof responsePreview === 'string' && responsePreview.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(responsePreview) as Record<string, unknown>;
+      const d = parsed.diagnostic;
+      if (d && typeof d === 'object' && !Array.isArray(d)) {
+        diagnostic = d as Record<string, unknown>;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const catalogEventRaw =
+    o.catalogEvent ??
+    (o as { CatalogEvent?: unknown }).CatalogEvent ??
+    o.integrationObservationEvent ??
+    (o as { IntegrationObservationEvent?: unknown }).IntegrationObservationEvent;
+  const catalogEvent =
+    typeof catalogEventRaw === 'string' && catalogEventRaw.trim()
+      ? catalogEventRaw.trim()
+      : undefined;
+
+  const catalogHintRaw =
+    o.catalogHint ?? (o as { CatalogHint?: unknown }).CatalogHint ?? (o as { IntegrationObservationHint?: unknown }).IntegrationObservationHint;
+  const catalogHint =
+    typeof catalogHintRaw === 'string' && catalogHintRaw.trim() ? catalogHintRaw.trim() : undefined;
+
+  let catalogFields: Record<string, string> | undefined;
+  const cfRaw =
+    o.catalogFields ??
+    (o as { CatalogFields?: unknown }).CatalogFields ??
+    o.integrationObservationFields ??
+    (o as { IntegrationObservationFields?: unknown }).IntegrationObservationFields;
+  if (cfRaw && typeof cfRaw === 'object' && !Array.isArray(cfRaw)) {
+    const cf: Record<string, string> = {};
+    for (const [k, v] of Object.entries(cfRaw as Record<string, unknown>)) {
+      if (v == null) continue;
+      cf[k] = typeof v === 'string' ? v : JSON.stringify(v);
+    }
+    if (Object.keys(cf).length > 0) catalogFields = cf;
+  }
+
+  const base = {
     taskId,
     displayName,
     endpoint: typeof ep === 'string' ? ep : '',
@@ -76,5 +148,16 @@ export function parseFlowBackendCallInvocation(raw: unknown): FlowBackendCallInv
     inputParameters: asRowArray(inp),
     outputParameters: asRowArray(outp),
     listPreviewLimit: typeof limRaw === 'number' && limRaw > 0 ? Math.floor(limRaw) : 12,
+    httpStatus,
+    requestBodyPreview,
+    responsePreview,
+    diagnostic,
+  };
+
+  return {
+    ...base,
+    ...(catalogEvent ? { catalogEvent } : {}),
+    ...(catalogHint ? { catalogHint } : {}),
+    ...(catalogFields ? { catalogFields } : {}),
   };
 }

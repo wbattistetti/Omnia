@@ -11,30 +11,9 @@ import {
   deriveBackendToolDefinition,
   sanitizeConvaiToolName,
 } from '@domain/iaAgentTools/backendToolDerivation';
+import { readBackendCallEndpoint } from '@domain/iaAgentTools/backendCallEndpoint';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import type { MergeEffectiveIaAgentToolsOptions } from '@domain/iaAgentTools/backendToolDerivation';
-
-function normalizeHttpMethod(m: string | undefined): string {
-  const u = (m || 'GET').toUpperCase();
-  return ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'].includes(u) ? u : 'GET';
-}
-
-function readBackendCallEndpoint(task: Task): {
-  url: string;
-  method: string;
-  headers: Record<string, string>;
-} {
-  const ep = (task as Task & { endpoint?: { url?: string; method?: string; headers?: Record<string, string> } })
-    .endpoint;
-  const url = ep && typeof ep.url === 'string' ? ep.url.trim() : '';
-  const method = normalizeHttpMethod(ep && typeof ep.method === 'string' ? ep.method : undefined);
-  const raw = ep && typeof ep.headers === 'object' && ep.headers ? ep.headers : {};
-  const headers: Record<string, string> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (typeof v === 'string' && v.trim()) headers[k] = v;
-  }
-  return { url, method, headers };
-}
 
 /** GET/HEAD: body params → query string schema; altrimenti JSON body. */
 function usesQueryParamsForMethod(method: string): boolean {
@@ -61,6 +40,36 @@ function jsonSchemaPrimitiveTypeFromProperty(src: Record<string, unknown>): stri
   return 'string';
 }
 
+/** Valore singolo in `enum` / da normalizzare per string enum ConvAI EU. */
+function enumMemberToElevenLabsString(v: unknown): string {
+  if (v === true) return 'true';
+  if (v === false) return 'false';
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  if (typeof v === 'string') return v;
+  return String(v);
+}
+
+/**
+ * ConvAI EU (`agents/create`): **enum è consentito solo con `type: "string"`** (value_error se enum + boolean).
+ * Converte `enum` in array di stringhe e imposta `type: "string"`. Per boolean JSON nel modello sorgente usa
+ * `"true"` / `"false"`; il backend Omnia (OpenAPI coerce) accetta ancora stringhe per `forceRefresh`.
+ */
+function adaptEnumsAndConstsForElevenLabsConvai(row: Record<string, unknown>): void {
+  const en = row.enum;
+  if (Array.isArray(en) && en.length > 0) {
+    row.type = 'string';
+    row.enum = en.map((v) => enumMemberToElevenLabsString(v));
+    return;
+  }
+  if (Object.prototype.hasOwnProperty.call(row, 'const')) {
+    const c = row.const;
+    if (c === true || c === false) {
+      row.type = 'string';
+      row.const = c === true ? 'true' : 'false';
+    }
+  }
+}
+
 /**
  * `request_body_schema.properties.*` (ConvAI EU): serve `description` e **`type`** JSON primitives per ogni
  * proprietà — solo `{ description }` produce `union_tag_not_found` sul discriminatore API ElevenLabs.
@@ -77,10 +86,19 @@ function propertiesToElevenLabsParamDefs(
       typeof descRaw === 'string' && descRaw.trim().length > 0
         ? descRaw.trim()
         : `Parametro ${name}`;
-    converted[name] = {
+    const row: Record<string, unknown> = {
       description: desc,
       type: jsonSchemaPrimitiveTypeFromProperty(src),
     };
+    const enumRaw = src.enum;
+    if (Array.isArray(enumRaw) && enumRaw.length > 0) {
+      row.enum = enumRaw;
+    }
+    if (Object.prototype.hasOwnProperty.call(src, 'const')) {
+      row.const = src.const;
+    }
+    adaptEnumsAndConstsForElevenLabsConvai(row);
+    converted[name] = row;
   }
   return converted;
 }
@@ -101,24 +119,38 @@ function propertiesToElevenLabsQueryParamDefs(
       typeof descRaw === 'string' && descRaw.trim().length > 0
         ? descRaw.trim()
         : `Parametro ${name}`;
-    converted[name] = {
+    const row: Record<string, unknown> = {
       description: desc,
       type: jsonSchemaPrimitiveTypeFromProperty(src),
     };
+    const enumRaw = src.enum;
+    if (Array.isArray(enumRaw) && enumRaw.length > 0) {
+      row.enum = enumRaw;
+    }
+    if (Object.prototype.hasOwnProperty.call(src, 'const')) {
+      row.const = src.const;
+    }
+    adaptEnumsAndConstsForElevenLabsConvai(row);
+    converted[name] = row;
   }
   return converted;
 }
 
 /**
- * `request_body_schema` ElevenLabs: object con `properties` convertite.
+ * `request_body_schema` ElevenLabs: object con `properties` convertite e `required` se presente nello schema.
  */
 function toElevenLabsRequestBodySchema(inputSchema: Record<string, unknown>): Record<string, unknown> {
-  return {
+  const out: Record<string, unknown> = {
     type: 'object',
     properties: propertiesToElevenLabsParamDefs(
       inputSchema.properties as Record<string, unknown> | undefined
     ),
   };
+  const req = inputSchema.required;
+  if (Array.isArray(req) && req.every((x) => typeof x === 'string')) {
+    out.required = req;
+  }
+  return out;
 }
 
 /**
@@ -218,6 +250,35 @@ export function buildElevenLabsConvaiPromptTools(
       api_schema: apiSchema,
       response_timeout_secs: 20,
     });
+
+    if (String(url).toLowerCase().includes('bookfromagenda')) {
+      const bodySchema =
+        method === 'GET' || method === 'HEAD'
+          ? (apiSchema.query_params_schema as Record<string, unknown> | undefined)
+          : (apiSchema.request_body_schema as Record<string, unknown> | undefined);
+      const props =
+        bodySchema && typeof bodySchema === 'object' && !Array.isArray(bodySchema)
+          ? ((bodySchema.properties as Record<string, unknown> | undefined) ?? {})
+          : {};
+      const readFixed = (k: string): unknown[] =>
+        props[k] && typeof props[k] === 'object' && !Array.isArray(props[k])
+          ? (Array.isArray((props[k] as Record<string, unknown>).enum)
+              ? (((props[k] as Record<string, unknown>).enum as unknown[]) ?? [])
+              : Object.prototype.hasOwnProperty.call(props[k] as Record<string, unknown>, 'const')
+                ? [((props[k] as Record<string, unknown>).const as unknown)]
+                : [])
+          : [];
+      console.info('[IA·BookFromAgenda·ToolConfig]', {
+        taskId: t.id,
+        toolName: dr.tool.name,
+        endpoint: url,
+        fixedAgendaUrl: readFixed('agenda.url'),
+        fixedAgendaType: readFixed('agenda.type'),
+        fixedProjectId: readFixed('projectId'),
+        fixedForceRefresh: readFixed('forceRefresh'),
+        required: Array.isArray(bodySchema?.required) ? bodySchema.required : [],
+      });
+    }
   }
 
   return dedupeElevenLabsToolNames(out);

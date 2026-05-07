@@ -438,6 +438,12 @@ Public Class CompiledAIAgentTask
     <JsonProperty("immediateStart")>
     Public Property ImmediateStart As Boolean
 
+    ''' <summary>
+    ''' Run ConvAI: alias sessione tool (es. <c>omnia_conv_…</c>) per correlare webhook Express → sessione host ApiServer.
+    ''' </summary>
+    <JsonProperty("convaiSessionConversationId")>
+    Public Property ConvaiSessionConversationId As String
+
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
             Return TaskTypes.AIAgent
@@ -459,6 +465,7 @@ Public Class CompiledAIAgentTask
         Rules = ""
         LlmEndpoint = ""
         ImmediateStart = False
+        ConvaiSessionConversationId = ""
     End Sub
 End Class
 

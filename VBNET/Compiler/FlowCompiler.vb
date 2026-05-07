@@ -44,6 +44,13 @@ Public Class FlowCompiler
         Dim escalationIssuesAdded As Integer = 0
 
         Try
+            If taskType = TaskTypes.BackendCall Then
+                Dim backendDef = TryCast(task, BackendCallTaskDefinition)
+                If backendDef IsNot Nothing Then
+                    BookFromAgendaCompileMutator.Apply(backendDef, flow)
+                    BookFromAgendaCompileMutator.ValidateDesignTimeProjectId(backendDef)
+                End If
+            End If
             result = compiler.Compile(task, taskId, allTemplates, knownVariableIds)
             compileSucceeded = True
             Console.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")

@@ -44,4 +44,34 @@ describe('parseFlowBackendCallInvocation', () => {
   it('returns null without task id', () => {
     expect(parseFlowBackendCallInvocation({})).toBeNull();
   });
+
+  it('parses catalogEvent / catalogHint / catalogFields for osservabilità v1', () => {
+    const p = parseFlowBackendCallInvocation({
+      taskId: 't-cat',
+      outcome: 'http_error',
+      CatalogEvent: 'validation_rejected',
+      CatalogHint: 'Controlla SEND.',
+      CatalogFields: { fieldPath: 'queryConstraints', endpoint: '/bookfromagenda' },
+    });
+    expect(p!.catalogEvent).toBe('validation_rejected');
+    expect(p!.catalogHint).toBe('Controlla SEND.');
+    expect(p!.catalogFields?.fieldPath).toBe('queryConstraints');
+  });
+
+  it('parses httpStatus and extracts diagnostic from JSON responsePreview', () => {
+    const body = {
+      ok: false,
+      error: 'x',
+      diagnostic: { schemaVersion: 1, timeline: [{ id: 'a', ok: true }] },
+    };
+    const p = parseFlowBackendCallInvocation({
+      taskId: 't1',
+      outcome: 'http_error',
+      httpStatus: 400,
+      responsePreview: JSON.stringify(body),
+    });
+    expect(p!.httpStatus).toBe(400);
+    expect(p!.diagnostic?.schemaVersion).toBe(1);
+    expect(Array.isArray(p!.diagnostic?.timeline)).toBe(true);
+  });
 });

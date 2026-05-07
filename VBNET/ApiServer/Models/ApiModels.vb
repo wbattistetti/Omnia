@@ -36,6 +36,18 @@ Namespace Models
         ''' </summary>
         <JsonProperty("variables")>
         Public Property Variables As List(Of Compiler.VariableInstance)
+
+        ''' <summary>Slug cliente per generateProjectId BookFromAgenda (opzionale).</summary>
+        <JsonProperty("omniaClientSlug")>
+        Public Property OmniaClientSlug As String
+
+        ''' <summary>Nome progetto visibile per generateProjectId BookFromAgenda (opzionale).</summary>
+        <JsonProperty("omniaProjectName")>
+        Public Property OmniaProjectName As String
+
+        ''' <summary>Versione release / manifest per generateProjectId BookFromAgenda (opzionale).</summary>
+        <JsonProperty("omniaReleaseVersion")>
+        Public Property OmniaReleaseVersion As String
     End Class
 
     ''' <summary>

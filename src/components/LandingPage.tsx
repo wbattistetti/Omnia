@@ -798,9 +798,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             }
                           }}
                           onMouseLeave={(e) => {
-                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            const relatedTarget = e.relatedTarget;
                             // Se il mouse va verso la toolbar, non nasconderla
-                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                            if (relatedTarget instanceof Element && relatedTarget.closest('.action-buttons-container')) {
                               return;
                             }
                             // Controlla se il mouse sta andando verso la toolbar (area a destra)
@@ -855,10 +855,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             }
                           }}
                           onMouseLeave={(e) => {
-                            const relatedTarget = e.relatedTarget as HTMLElement;
-                            if (relatedTarget && relatedTarget.closest('.action-buttons-container') ||
-                                relatedTarget && relatedTarget.closest('.version-menu-container') ||
-                                relatedTarget && relatedTarget.closest('.version-badge')) {
+                            const relatedTarget = e.relatedTarget;
+                            if (relatedTarget instanceof Element && (
+                                relatedTarget.closest('.action-buttons-container') ||
+                                relatedTarget.closest('.version-menu-container') ||
+                                relatedTarget.closest('.version-badge'))) {
                               return;
                             }
                             if (!isLoading) {
@@ -973,9 +974,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             }
                           }}
                           onMouseLeave={(e) => {
-                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            const relatedTarget = e.relatedTarget;
                             // Se il mouse va verso la toolbar, non nasconderla
-                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                            if (relatedTarget instanceof Element && relatedTarget.closest('.action-buttons-container')) {
                               return;
                             }
                             // Controlla se il mouse sta andando verso la toolbar (area a destra)
@@ -1025,9 +1026,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             }
                           }}
                           onMouseLeave={(e) => {
-                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            const relatedTarget = e.relatedTarget;
                             // Se il mouse va verso la toolbar, non nasconderla
-                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                            if (relatedTarget instanceof Element && relatedTarget.closest('.action-buttons-container')) {
                               return;
                             }
                             // Controlla se il mouse sta andando verso la toolbar (area a destra)
@@ -1077,9 +1078,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             }
                           }}
                           onMouseLeave={(e) => {
-                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            const relatedTarget = e.relatedTarget;
                             // Se il mouse va verso la toolbar, non nasconderla
-                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                            if (relatedTarget instanceof Element && relatedTarget.closest('.action-buttons-container')) {
                               return;
                             }
                             // Controlla se il mouse sta andando verso la toolbar (area a destra)
@@ -1127,9 +1128,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             });
                           }}
                           onMouseLeave={(e) => {
-                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            const relatedTarget = e.relatedTarget;
                             // Se il mouse va verso la toolbar, non nasconderla
-                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                            if (relatedTarget instanceof Element && relatedTarget.closest('.action-buttons-container')) {
                               return;
                             }
                             // Controlla se il mouse sta andando verso la toolbar (area a destra)
@@ -1200,9 +1201,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 }
               }}
               onMouseLeave={(e) => {
-                const relatedTarget = e.relatedTarget as HTMLElement;
+                const relatedTarget = e.relatedTarget;
                 // Se il mouse va verso una cella della stessa riga, non nascondere
-                if (relatedTarget && relatedTarget.closest(`[data-project-id="${toolbarPosition.projectId}"]`)) {
+                if (relatedTarget instanceof Element && relatedTarget.closest(`[data-project-id="${toolbarPosition.projectId}"]`)) {
                   return;
                 }
                 // Controlla se il mouse è ancora nell'area della toolbar o della riga

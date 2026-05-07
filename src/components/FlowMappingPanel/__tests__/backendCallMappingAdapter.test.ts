@@ -66,6 +66,19 @@ describe('backendCallMappingAdapter', () => {
     expect(rows).toEqual([{ internalName: 'x.y', apiParam: 'q', variable: 'vid' }]);
   });
 
+  it('entries → inputs strips BookFromAgenda Session.* tree prefix from internalName', () => {
+    const entries = [
+      createMappingEntry({
+        wireKey: 'Session.projectId',
+        apiField: 'projectId',
+        literalConstant: 'p1',
+      }),
+    ];
+    const rows = mappingEntriesToBackendInputs(entries);
+    expect(rows[0].internalName).toBe('projectId');
+    expect(rows[0].apiParam).toBe('projectId');
+  });
+
   it('entries → inputs prefers variableRefId over literalConstant', () => {
     const entries = [
       createMappingEntry({

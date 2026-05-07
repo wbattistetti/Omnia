@@ -14,6 +14,12 @@ Public Class ElevenLabsStartAgentRequest
 
     <JsonProperty("dynamicVariables")>
     Public Property DynamicVariables As Dictionary(Of String, Object)
+
+    ''' <summary>
+    ''' Opzionale: stesso id serializzato nel tool webhook ConvAI (es. <c>omnia_conv_…</c> da provision run); consente enqueue diagnostica tool ↔ sessione host.
+    ''' </summary>
+    <JsonProperty("sessionAlias")>
+    Public Property SessionAlias As String
 End Class
 
 ''' <summary>

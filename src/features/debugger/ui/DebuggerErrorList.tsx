@@ -19,6 +19,7 @@ import {
   ElevenLabsLlmEnumErrorAssist,
   shouldShowElevenLabsLlmEnumAssist,
 } from './ElevenLabsLlmEnumErrorAssist';
+import { ConvaiWebhookTunnelHintCard } from './ConvaiWebhookTunnelHintCard';
 
 function detectIaEngineTypeLabel(message: string, code?: string): 'LLM' | 'TTS' | null {
   if (shouldShowElevenLabsLlmEnumAssist(message, code)) return 'LLM';
@@ -46,6 +47,18 @@ export interface DebuggerErrorListProps {
 
 export function DebuggerErrorList({ errors, flows, className = '' }: DebuggerErrorListProps) {
   const tree = React.useMemo(() => buildErrorReportTree(errors, flows), [errors, flows]);
+
+  const convaiTunnelHintUrls = React.useMemo(() => {
+    const s = new Set<string>();
+    for (const e of errors) {
+      const arr = e.convaiWebhookTunnelUrls;
+      if (!Array.isArray(arr)) continue;
+      for (const u of arr) {
+        if (typeof u === 'string' && u.trim()) s.add(u.trim());
+      }
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, 'it'));
+  }, [errors]);
 
   const [collapsedFlows, setCollapsedFlows] = React.useState<Set<string>>(() => new Set());
   const [collapsedRows, setCollapsedRows] = React.useState<Set<string>>(() => new Set());
@@ -135,6 +148,7 @@ export function DebuggerErrorList({ errors, flows, className = '' }: DebuggerErr
   return (
     <div className={`flex flex-col flex-1 min-h-0 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 ${className}`}>
       <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+        <ConvaiWebhookTunnelHintCard urls={convaiTunnelHintUrls} />
         {tree.map((flowRoot) => {
           const flowOpen = !collapsedFlows.has(flowRoot.flowId);
           const FlowIcon = flowRoot.flowVisuals.Icon;
