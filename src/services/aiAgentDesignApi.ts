@@ -329,6 +329,14 @@ export interface GenerateAIAgentUseCasesParams {
   globalStyleContract?: string;
   /** cortese | ironico | formale — persisted as style_id on each use case after normalize. */
   globalStyleId?: string;
+  /**
+   * Se valorizzato con lista non vuota, il backend genera **solo** nuovi use case da aggiungere
+   * (evitando duplicati rispetto a questi).
+   */
+  extendFrom?: {
+    logicalSteps: readonly AIAgentLogicalStep[];
+    useCases: readonly AIAgentUseCase[];
+  };
 }
 
 export interface GenerateAIAgentUseCasesResult {
@@ -342,17 +350,36 @@ export interface GenerateAIAgentUseCasesResult {
 export async function generateAIAgentUseCases(
   params: GenerateAIAgentUseCasesParams
 ): Promise<GenerateAIAgentUseCasesResult> {
-  const { userDesc, provider, model, runtimeContext, outputLanguage, globalStyleContract, globalStyleId } =
-    params;
+  const {
+    userDesc,
+    provider,
+    model,
+    runtimeContext,
+    outputLanguage,
+    globalStyleContract,
+    globalStyleId,
+    extendFrom,
+  } = params;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GENERATE_USE_CASES_TIMEOUT_MS);
   try {
+    const extend =
+      extendFrom &&
+      Array.isArray(extendFrom.useCases) &&
+      extendFrom.useCases.length > 0 &&
+      Array.isArray(extendFrom.logicalSteps);
+
     const bodyPayload: Record<string, unknown> = {
       action: 'generate_use_cases',
       userDesc,
       provider: provider.toLowerCase(),
       model,
     };
+    if (extend) {
+      bodyPayload.extendExisting = true;
+      bodyPayload.existingUseCases = extendFrom!.useCases;
+      bodyPayload.existingLogicalSteps = extendFrom!.logicalSteps;
+    }
     if (typeof runtimeContext === 'string' && runtimeContext.trim().length > 0) {
       bodyPayload.runtimeContext = runtimeContext.trim();
     }
@@ -372,7 +399,12 @@ export async function generateAIAgentUseCases(
       signal: controller.signal,
     });
     const body = (await res.json()) as
-      | { success: true; logical_steps: unknown; use_cases: unknown }
+      | {
+          success: true;
+          logical_steps?: unknown;
+          use_cases: unknown;
+          extend_mode?: boolean;
+        }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
       const err = body as AIAgentDesignApiError;
@@ -380,10 +412,22 @@ export async function generateAIAgentUseCases(
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
       throw new Error(msg + extra);
     }
-    const logicalSteps = parseAgentLogicalStepsFromApi(body.logical_steps);
+
     const useCases = parseAgentUseCasesFromApi(body.use_cases);
-    if (logicalSteps.length === 0 || useCases.length === 0) {
-      throw new Error('Risposta use case non valida: logical_steps o use_cases vuoti dopo la normalizzazione.');
+    if (useCases.length === 0) {
+      throw new Error('Risposta use case non valida: use_cases vuoti dopo la normalizzazione.');
+    }
+
+    if (body.extend_mode === true && extendFrom) {
+      return {
+        logicalSteps: [...extendFrom.logicalSteps],
+        useCases,
+      };
+    }
+
+    const logicalSteps = parseAgentLogicalStepsFromApi(body.logical_steps);
+    if (logicalSteps.length === 0) {
+      throw new Error('Risposta use case non valida: logical_steps vuoti dopo la normalizzazione.');
     }
     return { logicalSteps, useCases };
   } finally {

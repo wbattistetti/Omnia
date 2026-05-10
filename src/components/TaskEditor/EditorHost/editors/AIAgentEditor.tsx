@@ -12,6 +12,8 @@ import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEdito
 import { AIAgentEditorDockShell } from './aiAgentEditor/AIAgentEditorDockShell';
 import { useAIAgentEditorController } from './aiAgentEditor/useAIAgentEditorController';
 import { useAIAgentToolbarController } from './aiAgentEditor/useAIAgentToolbarController';
+import { normalizeUseCaseSiblingOrder } from './aiAgentEditor/useCaseHierarchy';
+import { useUseCaseGeneratorWizard } from './aiAgentEditor/useCaseGeneratorWizard/useUseCaseGeneratorWizard';
 
 export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: EditorProps) {
   const instanceId = task.instanceId || task.id;
@@ -19,12 +21,68 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const projectId = pdUpdate?.getCurrentProjectId() || undefined;
   const { provider, model } = useAIProvider();
 
+  const deferAgentMessagesInUseCaseListRef = React.useRef(false);
+
   const c = useAIAgentEditorController({
     instanceId,
     projectId,
     provider,
     model,
+    getDeferAgentMessages: () => deferAgentMessagesInUseCaseListRef.current,
   });
+
+  const useCaseGenWizard = useUseCaseGeneratorWizard({
+    instanceId: c.instanceId,
+    useCases: c.useCases,
+  });
+
+  /** Always keep IA-generated assistant turns: lista use case mostra etichetta + scenario + messaggio. */
+  deferAgentMessagesInUseCaseListRef.current = false;
+  const captureUseCaseListAiBaseline = useCaseGenWizard.captureUseCaseListAiBaseline;
+
+  const [useCaseBundleFeedback, setUseCaseBundleFeedback] = React.useState<string | null>(null);
+  const [useCaseHighlightIds, setUseCaseHighlightIds] = React.useState<readonly string[]>([]);
+
+  const dismissUseCaseBundleFeedback = React.useCallback(() => setUseCaseBundleFeedback(null), []);
+
+  const clearUseCaseHighlight = React.useCallback((useCaseId: string) => {
+    setUseCaseHighlightIds((prev) => prev.filter((id) => id !== useCaseId));
+  }, []);
+
+  const runGenerateUseCaseBundle = React.useCallback(async () => {
+    const result = await c.handleGenerateUseCaseBundle();
+    if (!result) return;
+    captureUseCaseListAiBaseline(result.useCases);
+    if (result.mode === 'extend' && result.addedCount > 0) {
+      setUseCaseBundleFeedback(`Ho aggiunto ${result.addedCount} use case.`);
+    } else if (result.mode === 'replace' && result.addedCount > 0) {
+      setUseCaseBundleFeedback(`Generati ${result.addedCount} use case.`);
+    } else {
+      setUseCaseBundleFeedback(null);
+    }
+    setUseCaseHighlightIds(result.highlightIds);
+  }, [c.handleGenerateUseCaseBundle, captureUseCaseListAiBaseline]);
+
+  const runRegenerateUseCase = React.useCallback(
+    async (useCaseId: string) => {
+      const merged = await c.handleRegenerateUseCase(useCaseId);
+      if (merged) {
+        captureUseCaseListAiBaseline(
+          normalizeUseCaseSiblingOrder(
+            c.useCases.map((u) => (u.id === useCaseId ? merged : u)),
+            c.useCaseSiblingSortMode
+          )
+        );
+      }
+      return merged;
+    },
+    [
+      c.handleRegenerateUseCase,
+      c.useCases,
+      c.useCaseSiblingSortMode,
+      captureUseCaseListAiBaseline,
+    ]
+  );
 
   /** Stable refs — inline `() => c.handleX()` in render made `primaryToolbarButtons` new every frame → toolbar useEffect → onToolbarUpdate loop. */
   const onPrimaryAgentAction = React.useCallback(() => {
@@ -32,8 +90,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   }, [c.handleGenerate]);
 
   const onGenerateUseCaseBundleAction = React.useCallback(() => {
-    void c.handleGenerateUseCaseBundle();
-  }, [c.handleGenerateUseCaseBundle]);
+    void runGenerateUseCaseBundle();
+  }, [runGenerateUseCaseBundle]);
 
   const [promptFinaleJsMode, setPromptFinaleJsMode] = React.useState(false);
 
@@ -108,9 +166,9 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     useCaseCreationMessage: c.useCaseCreationMessage,
     useCaseComposerError: c.useCaseComposerError,
     onClearUseCaseComposerError: c.clearUseCaseComposerError,
-    onGenerateUseCaseBundle: c.handleGenerateUseCaseBundle,
+    onGenerateUseCaseBundle: runGenerateUseCaseBundle,
     onCreateUseCase: c.handleCreateUseCase,
-    onRegenerateUseCase: c.handleRegenerateUseCase,
+    onRegenerateUseCase: runRegenerateUseCase,
     onRegenerateAgentMessage: c.handleRegenerateAgentMessage,
     onAnnotateAgentMessageForJson: c.handleAnnotateAgentMessageForJson,
     onDeleteUseCase: c.handleDeleteUseCase,
@@ -144,6 +202,16 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
     registerBackendsAddManualHandler,
     invokeBackendsAddManual,
+
+    useCaseGeneratorWizard: useCaseGenWizard,
+
+    useCaseBundleFeedback,
+    onDismissUseCaseBundleFeedback: dismissUseCaseBundleFeedback,
+    useCaseHighlightIds,
+    onClearUseCaseHighlight: clearUseCaseHighlight,
+
+    useCaseSiblingSortMode: c.useCaseSiblingSortMode,
+    setUseCaseSiblingSortMode: c.setUseCaseSiblingSortMode,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;
@@ -190,7 +258,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
                 <button
                   type="button"
                   disabled={c.useCaseComposerBusy || c.generating}
-                  onClick={() => void c.handleGenerateUseCaseBundle()}
+                  onClick={() => void runGenerateUseCaseBundle()}
                   className="inline-flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-3 py-1.5 text-sm font-medium text-white"
                 >
                   {c.useCaseComposerBusy ? (

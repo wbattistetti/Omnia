@@ -20,8 +20,9 @@ Respond with a single valid JSON object only (no markdown fences, no commentary)
 Every id and turn_id in the JSON must be a string value (quoted), never a number.
 When OUTPUT_LANGUAGE is set, write every human-readable string in that language.
 Never output "editable" (the platform injects it).
-Each use case must include a clear "payoff" (scenario context narrative) and a single assistant "dialogue" turn — the virtual agent output example only.
-For assistant "content", mark only the **variable semantic fragment** with brackets. In Italian, keep **articles, prepositions, and fixed function words outside** the brackets (e.g. write \`alle [14]\` not \`[alle 14]\`, \`al [mattino]\` not \`[al mattino]\`). Plain text outside brackets is fixed script; bracket inners are runtime-filled slots.`;
+Each use case must include a clear "payoff" (scenario context narrative) and a single assistant "dialogue" turn — the virtual agent output example only; **assistant content must never be empty** (at least one sentence).
+For assistant "content", mark only the **variable semantic fragment** with brackets. In Italian, keep **articles, prepositions, and fixed function words outside** the brackets (e.g. write \`alle [14]\` not \`[alle 14]\`, \`al [mattino]\` not \`[al mattino]\`). Plain text outside brackets is fixed script; bracket inners are runtime-filled slots.
+The user message may give a numeric band for how many "use_cases" to emit — follow it when it fits the task. **Do not collapse to exactly four scenarios by habit** (a frequent shortcut); vary the count with real coverage.`;
 
 /** System prompt for annotate_assistant_message_for_json only — avoids UC_SYSTEM “design full use case” framing. */
 const ANNOTATE_ASSISTANT_FOR_JSON_SYSTEM = `You annotate existing assistant messages for OMNIA runtime JSON templating.
@@ -79,7 +80,8 @@ function normalizeDialogueAgentOnly(dialogueIn) {
   if (assistant) {
     return [{ turn_id: assistant.turn_id, role: 'assistant', content: assistant.content, editable: true }];
   }
-  return [];
+  /** Garantisce un turno assistente così l’UI può mostrare messaggio + rigenera anche se il modello omette. */
+  return [{ turn_id: makeTurnId(), role: 'assistant', content: '', editable: true }];
 }
 
 /**
@@ -108,11 +110,29 @@ function normalizeUseCaseBundle(bundle, globalStyleId) {
 }
 
 /**
+ * Random band per HTTP request so the model cannot settle on a ritual count (e.g. four).
+ * @returns {{ lo: number, hi: number }}
+ */
+function pickBundleScenarioTargetBand() {
+  const lo = 8 + Math.floor(Math.random() * 5); // 8–12
+  const hi = Math.min(lo + 4 + Math.floor(Math.random() * 7), 24); // lo+4 … lo+10, cap 24
+  return { lo, hi };
+}
+
+/** Band for **new** rows only in extend mode (different scale than full bundle). */
+function pickExtendNewScenarioTargetBand() {
+  const lo = 3 + Math.floor(Math.random() * 4); // 3–6
+  const hi = Math.min(lo + 3 + Math.floor(Math.random() * 6), 14);
+  return { lo, hi };
+}
+
+/**
  * @param {string} outputLanguage
  * @param {string} userDesc
  * @param {string} [runtimeContext] composed markdown or summary
+ * @param {{ lo: number, hi: number }} [scenarioBand] from {@link pickBundleScenarioTargetBand}
  */
-function buildGenerateUseCasesUserMessage(userDesc, outputLanguage, runtimeContext) {
+function buildGenerateUseCasesUserMessage(userDesc, outputLanguage, runtimeContext, scenarioBand) {
   const lang =
     typeof outputLanguage === 'string' && outputLanguage.trim()
       ? `\nOUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
@@ -121,21 +141,29 @@ function buildGenerateUseCasesUserMessage(userDesc, outputLanguage, runtimeConte
     typeof runtimeContext === 'string' && runtimeContext.trim()
       ? `\nRUNTIME_PROMPT_OR_SECTIONS (context):\n"""\n${runtimeContext.slice(0, 12000)}\n"""\n`
       : '';
+  const band =
+    scenarioBand &&
+    typeof scenarioBand.lo === 'number' &&
+    typeof scenarioBand.hi === 'number' &&
+    scenarioBand.lo > 0 &&
+    scenarioBand.hi >= scenarioBand.lo
+      ? `\nREQUEST_SCENARIO_BAND (this API call only — overrides blind defaults): For a normal multi-outcome agent, emit **between ${scenarioBand.lo} and ${scenarioBand.hi}** use_cases (roots and/or nested children). **If your draft has exactly four use_cases, revise before returning:** add missing branches/edge cases or merge true duplicates — four is a known shortcut to avoid. Only fewer than ${scenarioBand.lo} if the DESIGNER_TASK_DESCRIPTION is explicitly a minimal single-path demo; only more than ${scenarioBand.hi} if the domain clearly needs deeper coverage.\n`
+      : '';
   return `${lang}DESIGNER_TASK_DESCRIPTION:
 """
 ${userDesc}
 """
-${ctx}
+${ctx}${band}
 Produce JSON with exactly:
-1) "logical_steps" — array of { "id": string (snake_case), "description": string } — 4–12 ordered steps the agent follows.
-2) "use_cases" — array of 4–10 objects, each:
+1) "logical_steps" — array of { "id": string (snake_case), "description": string } — **6–14** ordered steps the agent follows (use **5–15** if needed; do **not** read this range as the number of use_cases). Start counts here from **six**, not four.
+2) "use_cases" — array. **No fixed count:** derive how many from DESIGNER_TASK_DESCRIPTION plus REQUEST_SCENARIO_BAND above. Typical non-trivial flows need **several distinct scenarios**; complex domains need **many**. **Never pad** with shallow duplicates. **Do not treat “four” as a batch size.** A **tiny** micro-task may need **2–3** scenarios; a broad task should **greatly exceed four** when coverage demands it. Each object:
    - "id": string (unique among all use_cases)
    - "label": string — short title for this scenario (shown in the UI tree).
    - "payoff": string — clear narrative of the negotiation/dialog CONTEXT for this scenario (who wants what, what happens). This is NOT the agent script; it explains the situation for designers.
    - "parent_id": string | null — null = root; if a string, it MUST equal the "id" of another object in this same "use_cases" array (no dangling references)
    - "sort_order": number — among siblings (same parent_id), use 0-based integers 0,1,2,... with strictly increasing order (no ties per sibling group)
    - "refinement_prompt": string (may be "")
-   - "dialogue": array containing EXACTLY ONE object: { "turn_id": string, "role": "assistant", "content": string } — the virtual agent spoken output example for this scenario only (concise, follows GLOBAL_STYLE_CONTRACT). No user turns. Do NOT include "editable".
+   - "dialogue": array containing EXACTLY ONE object: { "turn_id": string, "role": "assistant", "content": string } — the virtual agent spoken output example for this scenario only (concise, follows GLOBAL_STYLE_CONTRACT). **"content" MUST be non-empty substantive Italian (or OUTPUT_LANGUAGE) prose** — at least one full sentence the agent would say in this scenario; never omit, never use only placeholders. No user turns. Do NOT include "editable".
    - "notes": { "behavior": string, "tone": string } — may summarize payoff briefly in "behavior" if helpful
    - "bubble_notes": {} (may be empty object)
 
@@ -148,7 +176,7 @@ Content rules:
 - Every human-readable string must strictly relate to the DESIGNER_TASK_DESCRIPTION${ctx ? ' and stay consistent with RUNTIME_PROMPT_OR_SECTIONS when provided above' : ''}.
 - "payoff" must make the scenario understandable without a multi-turn transcript.
 
-Include at least: happy path, one correction, one ambiguity, one refusal variant (as separate use_cases or children).
+Coverage (not a four-item checklist): where relevant, span situation types such as success path, corrections/clarifications, ambiguity, refusals/guardrails — using **as many use_cases as appropriate** (multiple rows per type if needed, or parent/child structure). **Listing these themes does not mean “output exactly four use_cases”.**
 Return valid JSON only.`;
 }
 
@@ -178,6 +206,173 @@ function validateUseCaseBundle(raw) {
 }
 
 /**
+ * Extend bundle: only `use_cases` (new scenarios to append).
+ * @param {unknown} raw
+ */
+function validateExtendUseCases(raw) {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Invalid extend use case JSON: not an object');
+  }
+  const uc = raw.use_cases;
+  if (!Array.isArray(uc) || uc.length === 0) {
+    throw new Error('Invalid extend JSON: use_cases must be a non-empty array');
+  }
+  return { use_cases: uc };
+}
+
+/**
+ * Compact summary of existing scenarios so the model avoids duplicates.
+ * @param {object[]} existingUseCases
+ */
+function summarizeExistingUseCasesForPrompt(existingUseCases) {
+  const arr = Array.isArray(existingUseCases) ? existingUseCases : [];
+  return arr.map((u) => ({
+    label: typeof u.label === 'string' ? u.label.slice(0, 160) : '',
+    payoff_excerpt:
+      typeof u.payoff === 'string'
+        ? String(u.payoff)
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 280)
+        : '',
+  }));
+}
+
+/**
+ * @param {string} userDesc
+ * @param {string} [outputLanguage]
+ * @param {string} [runtimeContext]
+ * @param {object[]} existingUseCases
+ * @param {object[]} existingLogicalSteps
+ */
+function buildExtendUseCasesUserMessage(
+  userDesc,
+  outputLanguage,
+  runtimeContext,
+  existingUseCases,
+  existingLogicalSteps,
+  newScenarioBand
+) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `\nOUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const ctx =
+    typeof runtimeContext === 'string' && runtimeContext.trim()
+      ? `\nRUNTIME_PROMPT_OR_SECTIONS (context):\n"""\n${runtimeContext.slice(0, 12000)}\n"""\n`
+      : '';
+  const existingJson = JSON.stringify(summarizeExistingUseCasesForPrompt(existingUseCases)).slice(0, 14000);
+  const lsJson = JSON.stringify(
+    Array.isArray(existingLogicalSteps)
+      ? existingLogicalSteps.map((s) => ({
+          id: typeof s.id === 'string' ? s.id : '',
+          description:
+            typeof s.description === 'string' ? String(s.description).slice(0, 240) : '',
+        }))
+      : []
+  ).slice(0, 8000);
+
+  const band =
+    newScenarioBand &&
+    typeof newScenarioBand.lo === 'number' &&
+    typeof newScenarioBand.hi === 'number' &&
+    newScenarioBand.lo > 0 &&
+    newScenarioBand.hi >= newScenarioBand.lo
+      ? `\nNEW_USE_CASES_BAND (this call only): add **between ${newScenarioBand.lo} and ${newScenarioBand.hi}** net-new scenarios. **Do not add exactly four new rows** unless unavoidable — split edges or combine duplicates if you hit four by habit.\n`
+      : '';
+
+  return `${lang}DESIGNER_TASK_DESCRIPTION:
+"""
+${userDesc}
+"""
+${ctx}
+EXISTING_LOGICAL_STEPS (reference — stay consistent with the agent flow):
+${lsJson}
+
+ALREADY_DEFINED_USE_CASES (do **not** duplicate these themes, labels, or near-identical payoffs):
+${existingJson}
+${band}
+Produce JSON with **exactly one** top-level key:
+"use_cases" — array of **NEW** scenarios only (minimum 1). Each object uses the same shape as in the full bundle:
+"id", "label", "payoff", "parent_id", "sort_order", "refinement_prompt",
+"dialogue" (exactly one assistant turn), "notes", "bubble_notes".
+
+Rules:
+- Only **net-new** scenarios that expand coverage relative to ALREADY_DEFINED_USE_CASES.
+- How many: **as many as remain meaningful** — typically **1–14** added items depending on gaps; **never** output a fixed ritual count (e.g. always four). **Do not pad** with shallow variants.
+- Use **new** unique string ids among themselves; parent_id may reference another **new** id in this array or null.
+- Each assistant "dialogue" turn **content** must be non-empty substantive prose (label + payoff + message triplet for designers).
+
+Return valid JSON only: { "use_cases": [ ... ] }`;
+}
+
+/**
+ * @param {object} params
+ * @param {string} params.userDesc
+ * @param {object[]} params.existingUseCases
+ * @param {object[]} params.existingLogicalSteps
+ * @param {string} [params.runtimeContext]
+ * @param {string} [params.outputLanguage]
+ * @param {string} [params.provider]
+ * @param {string} [params.model]
+ * @param {import('./AIProviderService')} params.aiProviderService
+ */
+async function generateUseCaseBundleExtend({
+  userDesc,
+  runtimeContext,
+  outputLanguage,
+  globalStyleContract,
+  globalStyleId,
+  existingUseCases,
+  existingLogicalSteps,
+  provider = 'groq',
+  model,
+  aiProviderService,
+}) {
+  if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
+    throw new Error('userDesc must be a non-empty string (at least 8 characters)');
+  }
+  if (!Array.isArray(existingUseCases) || existingUseCases.length === 0) {
+    throw new Error('existingUseCases required for extend');
+  }
+  const newBand = pickExtendNewScenarioTargetBand();
+  const messages = [
+    { role: 'system', content: UC_SYSTEM },
+    {
+      role: 'user',
+      content: `${buildExtendUseCasesUserMessage(
+        userDesc.trim(),
+        outputLanguage,
+        runtimeContext,
+        existingUseCases,
+        existingLogicalSteps || [],
+        newBand
+      )}${buildGlobalStyleBlock(globalStyleContract)}`,
+    },
+  ];
+  const maxTokens = provider === 'openai' ? 4096 : 8192;
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.52,
+    maxTokens,
+    timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
+  });
+  const content = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(content);
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    const err = new Error(`Model returned non-JSON: ${e.message}`);
+    err.rawSnippet = jsonStr.slice(0, 500);
+    throw err;
+  }
+  const ext = validateExtendUseCases(parsed);
+  const use_cases = ext.use_cases.map((u) => normalizeUseCase(u, globalStyleId));
+  return { use_cases };
+}
+
+/**
  * @param {object} params
  * @param {string} params.userDesc
  * @param {string} [params.runtimeContext]
@@ -199,17 +394,23 @@ async function generateUseCaseBundle({
   if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
     throw new Error('userDesc must be a non-empty string (at least 8 characters)');
   }
+  const scenarioBand = pickBundleScenarioTargetBand();
   const messages = [
     { role: 'system', content: UC_SYSTEM },
     {
       role: 'user',
-      content: `${buildGenerateUseCasesUserMessage(userDesc.trim(), outputLanguage, runtimeContext)}${buildGlobalStyleBlock(globalStyleContract)}`,
+      content: `${buildGenerateUseCasesUserMessage(
+        userDesc.trim(),
+        outputLanguage,
+        runtimeContext,
+        scenarioBand
+      )}${buildGlobalStyleBlock(globalStyleContract)}`,
     },
   ];
   const maxTokens = provider === 'openai' ? 4096 : 8192;
   const response = await aiProviderService.callAI(provider, messages, {
     model: model || undefined,
-    temperature: 0.4,
+    temperature: 0.62,
     maxTokens,
     timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
   });
@@ -884,6 +1085,7 @@ Legacy synonym (accept internally): matched_wrong_response → treat as exists_b
 
 module.exports = {
   generateUseCaseBundle,
+  generateUseCaseBundleExtend,
   createUseCase,
   regenerateUseCase,
   regenerateTurn,

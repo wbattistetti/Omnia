@@ -45,6 +45,14 @@ export interface AIAgentUseCase {
     tone: string;
   };
   bubble_notes: Record<string, string>;
+  /** Design-time wizard: conferma dopo modifica manuale (spunta). */
+  designer_edit_confirmed?: boolean;
+  /** Design-time wizard: visto/ok con cerchio anche senza modifica. */
+  designer_acknowledged?: boolean;
+  /** Validazione manuale pollice su/giù (persistita nel bundle use case). */
+  designer_label_vote?: 'up' | 'down';
+  designer_payoff_vote?: 'up' | 'down';
+  designer_agent_message_vote?: 'up' | 'down';
 }
 
 /** Stable id for a dialogue turn (exported for UI bridge). */
@@ -194,6 +202,20 @@ export function parseAgentUseCasesJson(raw: string | undefined): AIAgentUseCase[
           }
         }
       }
+      const designer_edit_confirmed = o.designer_edit_confirmed === true;
+      const designer_acknowledged = o.designer_acknowledged === true;
+      const designer_label_vote =
+        o.designer_label_vote === 'up' || o.designer_label_vote === 'down'
+          ? o.designer_label_vote
+          : undefined;
+      const designer_payoff_vote =
+        o.designer_payoff_vote === 'up' || o.designer_payoff_vote === 'down'
+          ? o.designer_payoff_vote
+          : undefined;
+      const designer_agent_message_vote =
+        o.designer_agent_message_vote === 'up' || o.designer_agent_message_vote === 'down'
+          ? o.designer_agent_message_vote
+          : undefined;
       out.push({
         id,
         label,
@@ -205,6 +227,11 @@ export function parseAgentUseCasesJson(raw: string | undefined): AIAgentUseCase[
         dialogue,
         notes: { behavior, tone },
         bubble_notes,
+        ...(designer_edit_confirmed ? { designer_edit_confirmed: true } : {}),
+        ...(designer_acknowledged ? { designer_acknowledged: true } : {}),
+        ...(designer_label_vote ? { designer_label_vote } : {}),
+        ...(designer_payoff_vote ? { designer_payoff_vote } : {}),
+        ...(designer_agent_message_vote ? { designer_agent_message_vote } : {}),
       });
     }
     return out;

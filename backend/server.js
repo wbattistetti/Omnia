@@ -16,6 +16,7 @@ const { generateAIAgentDesign, induceStyleRuleFromCorrection } = require('./serv
 const { extractStructure, generatePlatformPrompt } = require('./services/StructuredDesignPipelineService');
 const {
   generateUseCaseBundle,
+  generateUseCaseBundleExtend,
   createUseCase,
   regenerateUseCase,
   regenerateTurn,
@@ -6439,7 +6440,34 @@ app.post('/design/ai-agent-generate', async (req, res) => {
       typeof globalStyleId === 'string' && globalStyleId.trim() ? globalStyleId.trim() : undefined;
 
     if (action === 'generate_use_cases') {
-      console.log(`[AI_AGENT_USE_CASES][${requestId}] generate_use_cases`, { provider, model });
+      const extendExisting = body.extendExisting === true;
+      const existingUseCases = Array.isArray(body.existingUseCases) ? body.existingUseCases : [];
+      const existingLogicalSteps = Array.isArray(body.existingLogicalSteps) ? body.existingLogicalSteps : [];
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] generate_use_cases`, {
+        provider,
+        model,
+        extendExisting,
+        existingCount: existingUseCases.length,
+      });
+      if (extendExisting && existingUseCases.length > 0) {
+        const extended = await generateUseCaseBundleExtend({
+          userDesc,
+          runtimeContext,
+          outputLanguage,
+          globalStyleContract,
+          globalStyleId: globalStyleIdNorm,
+          existingUseCases,
+          existingLogicalSteps,
+          provider,
+          model,
+          aiProviderService,
+        });
+        return res.json({
+          success: true,
+          extend_mode: true,
+          use_cases: extended.use_cases,
+        });
+      }
       const bundle = await generateUseCaseBundle({
         userDesc,
         runtimeContext,

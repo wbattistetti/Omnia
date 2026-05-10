@@ -5,6 +5,10 @@
 import React from 'react';
 import {
   Brackets,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Circle,
   Copy,
   FileJson,
   GitBranch,
@@ -13,7 +17,10 @@ import {
   Plus,
   RefreshCw,
   Sparkles,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   newAgentUseCaseTurnId,
@@ -26,15 +33,12 @@ import {
 import { orderUseCasesWithDepth } from './useCaseTreeOrder';
 import {
   AI_AGENT_GLOBAL_USE_CASE_STYLES,
-  LABEL_AGENT_MSG_CREATE_JSON,
-  LABEL_AGENT_MSG_UPDATE_JSON,
   LABEL_AGENT_MSG_STRIP_TOKENS,
   LABEL_AGENT_MSG_WRAP_TOKEN,
   LABEL_GENERATE_USE_CASES,
   LABEL_REGENERATE_AGENT_EXAMPLE,
   LABEL_REGENERATE_USE_CASE_FOR_SCENARIO,
 } from './constants';
-import { AgentMessageMotorPreview } from './AgentMessageMotorPreview';
 import {
   normalizeRootUseCaseDraftDisplay,
   parseRootUseCaseDraftSegments,
@@ -50,10 +54,95 @@ import {
   buildVirtualAgentUseCaseConstrainedPromptAppendix,
   serializeVirtualAgentRuntimeCatalog,
 } from '@domain/aiAgentUseCase/virtualAgentRuntimeCatalog';
+import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 
 /** Main panels: slate-800 on near-black reads as broken/missing borders; slightly lighter edge for clarity. */
 const USE_CASE_PANEL_SHELL =
   'rounded-lg border border-slate-600/65 bg-slate-900/40 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.06)]';
+
+/** Pill testuale; la matita sta in un wrapper `relative` (angolo in alto a destra del contenitore label). */
+const UC_PILL_SCENARIO =
+  'inline-flex shrink-0 select-none items-center rounded-full border border-violet-500/45 bg-violet-950/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-100';
+const UC_PILL_AGENT_MSG =
+  'inline-flex shrink-0 select-none items-center rounded-full border border-emerald-600/50 bg-emerald-950/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-100';
+const UC_CLASSIC_TEXTAREA_SCENARIO =
+  'min-w-0 flex-1 rounded-md border border-violet-500/50 bg-slate-900/95 px-2 py-1.5 text-xs leading-snug text-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 disabled:opacity-60';
+const UC_CLASSIC_TEXTAREA_AGENT =
+  'min-w-0 flex-1 rounded-md border border-emerald-500/50 bg-emerald-950/50 px-2 py-1.5 font-mono text-sm leading-snug text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-emerald-300/45 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-60';
+/** Matita a destra della riga (stesso stile dell’header lista use case: `Pencil` 12px). */
+const UC_SCENARIO_ROW_EDIT_BTN =
+  'shrink-0 rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:text-violet-300 group-hover/payoff-row:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:opacity-40';
+const UC_AGENT_ROW_EDIT_BTN =
+  'shrink-0 rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:text-violet-300 group-hover/agentmsg-row:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 disabled:opacity-40';
+
+/** Triplet IA non modificato (grigio) vs campo editato rispetto all’ultima baseline (verde). */
+export type AiTripletFieldBaseline = {
+  label: string;
+  payoff: string;
+  assistantContent: string;
+};
+
+function aiFieldToneClass(current: string, baseline: string | undefined): string {
+  if (baseline === undefined) return 'text-slate-500';
+  return current === baseline ? 'text-slate-500' : 'text-emerald-400';
+}
+
+/** Colore testo: pollice (verde/rosso) ha priorità su baseline IA. */
+function fieldTextClass(
+  vote: 'up' | 'down' | undefined,
+  current: string,
+  baseline: string | undefined
+): string {
+  if (vote === 'up') return 'text-emerald-400';
+  if (vote === 'down') return 'text-red-400';
+  return aiFieldToneClass(current, baseline);
+}
+
+const UC_HEAD_VOTE_BTN =
+  'shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-slate-800/80 group-hover/uc-head:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/55 disabled:opacity-40';
+const UC_SCENARIO_VOTE_BTN =
+  'shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-slate-800/80 group-hover/payoff-row:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/55 disabled:opacity-40';
+const UC_AGENT_VOTE_BTN =
+  'shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-slate-800/80 group-hover/agentmsg-row:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/55 disabled:opacity-40';
+
+type DesignerVoteField = 'label' | 'payoff' | 'agentMessage';
+
+function VoteThumbPair(props: {
+  vote?: 'up' | 'down';
+  disabled?: boolean;
+  outerBtnClass: string;
+  onVote: (choice: 'up' | 'down') => void;
+}): React.ReactElement {
+  const { vote, disabled, outerBtnClass, onVote } = props;
+  return (
+    <>
+      <button
+        type="button"
+        disabled={disabled}
+        title={vote === 'up' ? 'Rimuovi validazione' : 'Valida (testo verde)'}
+        className={`${outerBtnClass} ${vote === 'up' ? 'text-emerald-400' : 'text-slate-500 hover:text-emerald-300/90'}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onVote('up');
+        }}
+      >
+        <ThumbsUp size={12} aria-hidden />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        title={vote === 'down' ? 'Rimuovi invalidazione' : 'Invalida (testo rosso)'}
+        className={`${outerBtnClass} ${vote === 'down' ? 'text-red-400' : 'text-slate-500 hover:text-red-300/90'}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onVote('down');
+        }}
+      >
+        <ThumbsDown size={12} aria-hidden />
+      </button>
+    </>
+  );
+}
 
 export interface AIAgentUseCaseComposerProps {
   /** When set, selects this use case id once after it appears (e.g. debugger «Aggiungi»). */
@@ -71,7 +160,7 @@ export interface AIAgentUseCaseComposerProps {
     creationScope?: 'single' | 'batch';
   }) => Promise<string>;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
-  onRegenerateAgentMessage: (useCaseId: string) => void | Promise<void>;
+  onRegenerateAgentMessage: (useCaseId: string) => void | Promise<string | null | void>;
   /** IA: tokenizza il messaggio con [slot] e allinea il JSON motore (preview sotto). */
   onAnnotateAgentMessageForJson: (
     useCaseId: string,
@@ -86,6 +175,15 @@ export interface AIAgentUseCaseComposerProps {
   onGenerateUseCaseBundle?: () => void | Promise<void>;
   /** Disables generate CTA while Create/Refine agent is running. */
   generating?: boolean;
+  /**
+   * Generazione lista nel view wizard: nessun pulsante «Genera use case» nel pannello sinistro;
+   * messaggio empty state punta al Tutorial destro.
+   */
+  primaryGenerateOnRightOnly?: boolean;
+  /** Id da evidenziare dopo generazione / «creane altri». */
+  highlightIds?: readonly string[];
+  /** Rimuove l’evidenziazione quando l’use case è confermato (edit o cerchio). */
+  onClearUseCaseHighlight?: (useCaseId: string) => void;
 }
 
 export function AIAgentUseCaseComposer({
@@ -100,7 +198,7 @@ export function AIAgentUseCaseComposer({
   onCreateUseCase,
   onRegenerateUseCase,
   onRegenerateAgentMessage,
-  onAnnotateAgentMessageForJson,
+  onAnnotateAgentMessageForJson: _onAnnotateAgentMessageForJson,
   onDeleteUseCase,
   useCaseGlobalStyleId,
   onUseCaseGlobalStyleIdChange,
@@ -108,8 +206,17 @@ export function AIAgentUseCaseComposer({
   onPreviewStyleIdChange = () => {},
   onGenerateUseCaseBundle,
   generating = false,
+  primaryGenerateOnRightOnly = false,
+  highlightIds = [],
+  onClearUseCaseHighlight,
 }: AIAgentUseCaseComposerProps) {
   const { ordered, depthById } = React.useMemo(() => orderUseCasesWithDepth(useCases), [useCases]);
+  const highlightIdSet = React.useMemo(() => new Set(highlightIds), [highlightIds]);
+  const listToolbarCtx = useUseCaseWizardListToolbarOptional();
+  const wizardShowScenario =
+    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenario : true;
+  const wizardShowMessage =
+    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showMessage : true;
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -152,13 +259,15 @@ export function AIAgentUseCaseComposer({
 
   const [editingTitleId, setEditingTitleId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState('');
-  const [hoveredId, setHoveredId] = React.useState<string | null>(null);
   const [rootDraftLabel, setRootDraftLabel] = React.useState('');
   const [creatingChildParentId, setCreatingChildParentId] = React.useState<string | null>(null);
   const [childDraftLabel, setChildDraftLabel] = React.useState('');
-  /** Last payoff baseline per use case for “scenario dirty” (edit vs last AI sync). */
-  const [scenarioBaselines, setScenarioBaselines] = React.useState<Record<string, string>>({});
-  const [motorJsonExpanded, setMotorJsonExpanded] = React.useState(false);
+  /** Valori triplet (etichetta, scenario, messaggio) all’ingresso in lista o dopo rigenera IA. */
+  const [fieldBaselineByUseCaseId, setFieldBaselineByUseCaseId] = React.useState<
+    Record<string, AiTripletFieldBaseline>
+  >({});
+  /** Wizard only: corpo card espanso per id (default true quando compare un nuovo use case). */
+  const [cardExpandedById, setCardExpandedById] = React.useState<Record<string, boolean>>({});
   const [rootBatchWarning, setRootBatchWarning] = React.useState<string | null>(null);
   const rootDraftRef = React.useRef<HTMLTextAreaElement>(null);
   /** Selection range in assistant message textarea (for Token wrap UX). */
@@ -167,22 +276,93 @@ export function AIAgentUseCaseComposer({
     end: 0,
   });
 
+  /** Modifica payoff / messaggio: vista etichetta+matita, edit con textbox classica e ✓ / ✗ */
+  const [payoffEditUseCaseId, setPayoffEditUseCaseId] = React.useState<string | null>(null);
+  const [payoffEditDraft, setPayoffEditDraft] = React.useState('');
+  const [agentMsgEditUseCaseId, setAgentMsgEditUseCaseId] = React.useState<string | null>(null);
+  const [agentMsgEditDraft, setAgentMsgEditDraft] = React.useState('');
+
   React.useEffect(() => {
     setEditingTitleId(null);
   }, [effectiveSelectedId]);
 
   React.useEffect(() => {
-    if (!effectiveSelectedId) return;
-    setScenarioBaselines((prev) => {
-      if (prev[effectiveSelectedId] !== undefined) return prev;
-      const uc = useCases.find((u) => u.id === effectiveSelectedId);
-      return { ...prev, [effectiveSelectedId]: uc?.payoff ?? '' };
+    if (!primaryGenerateOnRightOnly) {
+      setPayoffEditUseCaseId(null);
+      setAgentMsgEditUseCaseId(null);
+    }
+  }, [effectiveSelectedId, primaryGenerateOnRightOnly]);
+
+  React.useEffect(() => {
+    setFieldBaselineByUseCaseId((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const u of ordered) {
+        if (next[u.id]) continue;
+        const ast = u.dialogue.find((t) => t.role === 'assistant');
+        next[u.id] = {
+          label: u.label,
+          payoff: u.payoff ?? '',
+          assistantContent: ast?.content ?? '',
+        };
+        changed = true;
+      }
+      for (const id of Object.keys(next)) {
+        if (!ordered.some((u) => u.id === id)) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
     });
-  }, [effectiveSelectedId, useCases]);
+  }, [ordered, useCases]);
 
   React.useEffect(() => {
     setAgentMsgSelection({ start: 0, end: 0 });
   }, [effectiveSelectedId]);
+
+  React.useEffect(() => {
+    setCardExpandedById((prev) => {
+      const next = { ...prev };
+      for (const u of ordered) {
+        if (!(u.id in next)) next[u.id] = true;
+      }
+      for (const id of Object.keys(next)) {
+        if (!ordered.some((u) => u.id === id)) delete next[id];
+      }
+      return next;
+    });
+  }, [ordered]);
+
+  const expandAllWizardCards = React.useCallback(() => {
+    setCardExpandedById((prev) => {
+      const next = { ...prev };
+      for (const u of ordered) next[u.id] = true;
+      return next;
+    });
+  }, [ordered]);
+
+  const collapseAllWizardCards = React.useCallback(() => {
+    setCardExpandedById((prev) => {
+      const next = { ...prev };
+      for (const u of ordered) next[u.id] = false;
+      return next;
+    });
+  }, [ordered]);
+
+  React.useEffect(() => {
+    if (!primaryGenerateOnRightOnly || !listToolbarCtx) return;
+    listToolbarCtx.registerHandlers({
+      expandAll: expandAllWizardCards,
+      collapseAll: collapseAllWizardCards,
+    });
+    return () => listToolbarCtx.registerHandlers(null);
+  }, [
+    primaryGenerateOnRightOnly,
+    listToolbarCtx,
+    expandAllWizardCards,
+    collapseAllWizardCards,
+  ]);
 
   const commitTitleEdit = React.useCallback(
     (useCaseId: string) => {
@@ -191,10 +371,22 @@ export function AIAgentUseCaseComposer({
         setEditingTitleId(null);
         return;
       }
-      setUseCases((prev) => prev.map((u) => (u.id === useCaseId ? { ...u, label: next } : u)));
+      setUseCases((prev) =>
+        prev.map((u) =>
+          u.id === useCaseId
+            ? {
+                ...u,
+                label: next,
+                designer_edit_confirmed: true as const,
+                designer_label_vote: 'up' as const,
+              }
+            : u
+        )
+      );
+      onClearUseCaseHighlight?.(useCaseId);
       setEditingTitleId(null);
     },
-    [draftTitle, setUseCases]
+    [draftTitle, setUseCases, onClearUseCaseHighlight]
   );
 
   const createUseCase = React.useCallback(
@@ -286,14 +478,15 @@ export function AIAgentUseCaseComposer({
     [busy, childDraftLabel, createUseCase]
   );
 
-  const setAssistantTurnContent = React.useCallback(
-    (turnId: string, content: string) => {
-      if (!selected) return;
+  const setAssistantTurnContentForUseCase = React.useCallback(
+    (useCaseId: string, turnId: string, content: string) => {
       setUseCases((prev) =>
         prev.map((u) =>
-          u.id === selected.id
+          u.id === useCaseId
             ? {
                 ...u,
+                designer_edit_confirmed: true as const,
+                designer_agent_message_vote: 'up' as const,
                 dialogue: u.dialogue.map((turn) =>
                   turn.turn_id === turnId ? { ...turn, content, userEdited: true } : turn
                 ),
@@ -301,12 +494,27 @@ export function AIAgentUseCaseComposer({
             : u
         )
       );
+      onClearUseCaseHighlight?.(useCaseId);
     },
-    [selected, setUseCases]
+    [setUseCases, onClearUseCaseHighlight]
+  );
+
+  const setAssistantTurnContent = React.useCallback(
+    (turnId: string, content: string) => {
+      if (!selected) return;
+      setAssistantTurnContentForUseCase(selected.id, turnId, content);
+    },
+    [selected, setAssistantTurnContentForUseCase]
   );
 
   const payoffTextareaRef = React.useRef<HTMLTextAreaElement>(null);
   const agentTextareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const payoffTextareaRefsById = React.useRef<Map<string, HTMLTextAreaElement>>(new Map());
+  const agentTextareaRefsById = React.useRef<Map<string, HTMLTextAreaElement>>(new Map());
+  /** Live assistant text per use case (Annotate JSON / focus safety). */
+  const liveAgentContentByIdRef = React.useRef<Record<string, string>>({});
+  /** Turn in modifica nel wizard (commit messaggio). */
+  const agentMsgEditTurnIdRef = React.useRef<string>('');
   /** Shell for JSON “Espandi”: overlay fills treeview + dettaglio (intera riga use case). */
   const useCaseDetailShellRef = React.useRef<HTMLDivElement>(null);
 
@@ -320,14 +528,132 @@ export function AIAgentUseCaseComposer({
     grow(agentTextareaRef.current, 64);
   }, []);
 
+  const syncWizardTextareaHeights = React.useCallback(() => {
+    const grow = (el: HTMLTextAreaElement | null, minPx: number) => {
+      if (!el) return;
+      el.style.height = 'auto';
+      el.style.height = `${Math.max(minPx, el.scrollHeight)}px`;
+    };
+    for (const el of payoffTextareaRefsById.current.values()) grow(el, 48);
+    for (const el of agentTextareaRefsById.current.values()) grow(el, 64);
+  }, []);
+
+  const setPayoffForUseCase = React.useCallback(
+    (useCaseId: string, value: string) => {
+      setUseCases((prev) =>
+        prev.map((u) =>
+          u.id === useCaseId
+            ? {
+                ...u,
+                payoff: value,
+                designer_edit_confirmed: true as const,
+                designer_payoff_vote: 'up' as const,
+              }
+            : u
+        )
+      );
+      onClearUseCaseHighlight?.(useCaseId);
+    },
+    [setUseCases, onClearUseCaseHighlight]
+  );
+
+  const acknowledgeUseCaseReview = React.useCallback(
+    (useCaseId: string) => {
+      setUseCases((prev) =>
+        prev.map((u) =>
+          u.id === useCaseId ? { ...u, designer_acknowledged: true as const } : u
+        )
+      );
+      onClearUseCaseHighlight?.(useCaseId);
+    },
+    [setUseCases, onClearUseCaseHighlight]
+  );
+
+  const toggleDesignerFieldVote = React.useCallback(
+    (useCaseId: string, field: DesignerVoteField, choice: 'up' | 'down') => {
+      setUseCases((prev) =>
+        prev.map((u) => {
+          if (u.id !== useCaseId) return u;
+          if (field === 'label') {
+            const cur = u.designer_label_vote;
+            return { ...u, designer_label_vote: cur === choice ? undefined : choice };
+          }
+          if (field === 'payoff') {
+            const cur = u.designer_payoff_vote;
+            return { ...u, designer_payoff_vote: cur === choice ? undefined : choice };
+          }
+          const cur = u.designer_agent_message_vote;
+          return { ...u, designer_agent_message_vote: cur === choice ? undefined : choice };
+        })
+      );
+      onClearUseCaseHighlight?.(useCaseId);
+    },
+    [setUseCases, onClearUseCaseHighlight]
+  );
+
+  const beginPayoffEdit = React.useCallback((useCaseId: string, current: string) => {
+    setAgentMsgEditUseCaseId(null);
+    setPayoffEditUseCaseId(useCaseId);
+    setPayoffEditDraft(current);
+  }, []);
+
+  const commitPayoffEdit = React.useCallback(() => {
+    if (!payoffEditUseCaseId) return;
+    setPayoffForUseCase(payoffEditUseCaseId, payoffEditDraft.trim());
+    setPayoffEditUseCaseId(null);
+    requestAnimationFrame(() => {
+      syncWizardTextareaHeights();
+      syncDetailTextareaHeights();
+    });
+  }, [
+    payoffEditUseCaseId,
+    payoffEditDraft,
+    setPayoffForUseCase,
+    syncWizardTextareaHeights,
+    syncDetailTextareaHeights,
+  ]);
+
+  const cancelPayoffEdit = React.useCallback(() => {
+    setPayoffEditUseCaseId(null);
+  }, []);
+
+  const beginAgentMsgEdit = React.useCallback((useCaseId: string, turnId: string, current: string) => {
+    setPayoffEditUseCaseId(null);
+    agentMsgEditTurnIdRef.current = turnId;
+    setAgentMsgEditUseCaseId(useCaseId);
+    setAgentMsgEditDraft(current);
+    liveAgentContentByIdRef.current[useCaseId] = current;
+    liveAgentContentRef.current = current;
+  }, []);
+
+  const commitAgentMsgEdit = React.useCallback(() => {
+    if (!agentMsgEditUseCaseId || !agentMsgEditTurnIdRef.current) return;
+    const tid = agentMsgEditTurnIdRef.current;
+    setAssistantTurnContentForUseCase(agentMsgEditUseCaseId, tid, agentMsgEditDraft);
+    liveAgentContentByIdRef.current[agentMsgEditUseCaseId] = agentMsgEditDraft;
+    setAgentMsgEditUseCaseId(null);
+    requestAnimationFrame(() => {
+      syncWizardTextareaHeights();
+      syncDetailTextareaHeights();
+    });
+  }, [
+    agentMsgEditUseCaseId,
+    agentMsgEditDraft,
+    setAssistantTurnContentForUseCase,
+    syncWizardTextareaHeights,
+    syncDetailTextareaHeights,
+  ]);
+
+  const cancelAgentMsgEdit = React.useCallback(() => {
+    setAgentMsgEditUseCaseId(null);
+  }, []);
+
   const setPayoffContent = React.useCallback(
     (value: string) => {
       if (!selected) return;
-      setUseCases((prev) =>
-        prev.map((u) => (u.id === selected.id ? { ...u, payoff: value } : u))
-      );
+      setPayoffForUseCase(selected.id, value);
     },
-    [selected, setUseCases]
+    [selected, setPayoffForUseCase]
   );
 
   const assistantTurn = React.useMemo(
@@ -345,25 +671,14 @@ export function AIAgentUseCaseComposer({
 
   const scenarioDirty = React.useMemo(() => {
     if (!selected) return false;
-    if (!(selected.id in scenarioBaselines)) return false;
-    return (selected.payoff ?? '') !== scenarioBaselines[selected.id];
-  }, [selected, selected?.payoff, scenarioBaselines]);
+    const b = fieldBaselineByUseCaseId[selected.id];
+    if (!b) return false;
+    return (selected.payoff ?? '') !== b.payoff;
+  }, [selected, selected?.payoff, fieldBaselineByUseCaseId]);
 
   const agentMessageEmpty = React.useMemo(
     () => !assistantTurn || !String(assistantTurn.content ?? '').trim(),
     [assistantTurn, assistantTurn?.content]
-  );
-
-  const motorPayload = assistantTurn?.motor_snapshot?.payload ?? null;
-  const motorJsonStale = Boolean(
-    assistantTurn?.motor_snapshot &&
-      assistantTurn.content !== assistantTurn.motor_snapshot.source_content
-  );
-  const showMotorJsonCreate = Boolean(
-    assistantTurn && !agentMessageEmpty && !assistantTurn.motor_snapshot
-  );
-  const showMotorJsonUpdate = Boolean(
-    assistantTurn && !agentMessageEmpty && assistantTurn.motor_snapshot && motorJsonStale
   );
 
   const syncAgentMsgSelection = React.useCallback(() => {
@@ -372,31 +687,41 @@ export function AIAgentUseCaseComposer({
     setAgentMsgSelection({ start: ta.selectionStart, end: ta.selectionEnd });
   }, []);
 
+  const agentMsgContentForDetailOps = React.useMemo(() => {
+    if (!assistantTurn) return '';
+    if (selected && agentMsgEditUseCaseId === selected.id) return agentMsgEditDraft;
+    return assistantTurn.content;
+  }, [assistantTurn, selected, agentMsgEditUseCaseId, agentMsgEditDraft]);
+
   const canWrapAgentToken = React.useMemo(() => {
     if (!assistantTurn || busy) return false;
     const { start, end } = agentMsgSelection;
     if (start === end) return false;
-    return assistantTurn.content.slice(start, end).trim().length > 0;
-  }, [assistantTurn, busy, agentMsgSelection, assistantTurn?.content]);
+    return agentMsgContentForDetailOps.slice(start, end).trim().length > 0;
+  }, [assistantTurn, busy, agentMsgSelection, agentMsgContentForDetailOps]);
 
   const canStripAgentTokens = React.useMemo(
-    () => Boolean(assistantTurn && messageHasSlotBrackets(assistantTurn.content)),
-    [assistantTurn]
+    () => Boolean(assistantTurn && messageHasSlotBrackets(agentMsgContentForDetailOps)),
+    [assistantTurn, agentMsgContentForDetailOps]
   );
 
   const handleWrapAgentToken = React.useCallback(() => {
-    if (!assistantTurn || busy) return;
+    if (!assistantTurn || busy || !selected) return;
     const ta = agentTextareaRef.current;
     if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
     if (start === end) return;
-    const content = assistantTurn.content;
+    const content = agentMsgContentForDetailOps;
     const sel = content.slice(start, end);
     if (!sel.trim()) return;
     const wrapped = `[${sel}]`;
     const next = content.slice(0, start) + wrapped + content.slice(end);
     setAssistantTurnContent(assistantTurn.turn_id, next);
+    if (agentMsgEditUseCaseId === selected.id) {
+      setAgentMsgEditDraft(next);
+      liveAgentContentRef.current = next;
+    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const el = agentTextareaRef.current;
@@ -408,48 +733,85 @@ export function AIAgentUseCaseComposer({
         setAgentMsgSelection({ start, end: hi });
       });
     });
-  }, [assistantTurn, busy, setAssistantTurnContent, syncDetailTextareaHeights]);
+  }, [
+    assistantTurn,
+    busy,
+    selected,
+    agentMsgContentForDetailOps,
+    agentMsgEditUseCaseId,
+    setAssistantTurnContent,
+    syncDetailTextareaHeights,
+  ]);
 
   const handleStripAgentTokens = React.useCallback(() => {
-    if (!assistantTurn || busy) return;
-    if (!messageHasSlotBrackets(assistantTurn.content)) return;
-    const next = stripAgentMessageSlotBrackets(assistantTurn.content);
+    if (!assistantTurn || busy || !selected) return;
+    const content = agentMsgContentForDetailOps;
+    if (!messageHasSlotBrackets(content)) return;
+    const next = stripAgentMessageSlotBrackets(content);
     setAssistantTurnContent(assistantTurn.turn_id, next);
+    if (agentMsgEditUseCaseId === selected.id) {
+      setAgentMsgEditDraft(next);
+      liveAgentContentRef.current = next;
+    }
     requestAnimationFrame(() => {
       syncDetailTextareaHeights();
       syncAgentMsgSelection();
     });
-  }, [assistantTurn, busy, setAssistantTurnContent, syncDetailTextareaHeights, syncAgentMsgSelection]);
+  }, [
+    assistantTurn,
+    busy,
+    selected,
+    agentMsgContentForDetailOps,
+    agentMsgEditUseCaseId,
+    setAssistantTurnContent,
+    syncDetailTextareaHeights,
+    syncAgentMsgSelection,
+  ]);
 
   const handleScenarioRegenerateClick = React.useCallback(async () => {
     if (!selected || busy) return;
     const updated = await onRegenerateUseCase(selected.id);
-    if (updated && typeof updated.payoff === 'string') {
-      setScenarioBaselines((prev) => ({ ...prev, [selected.id]: updated.payoff }));
+    if (updated) {
+      const ast = updated.dialogue.find((t) => t.role === 'assistant');
+      setFieldBaselineByUseCaseId((prev) => ({
+        ...prev,
+        [selected.id]: {
+          label: updated.label,
+          payoff: typeof updated.payoff === 'string' ? updated.payoff : '',
+          assistantContent: ast?.content ?? '',
+        },
+      }));
     }
   }, [selected, busy, onRegenerateUseCase]);
 
+  const ensureAssistantTurnFor = React.useCallback(
+    (useCaseId: string) => {
+      setUseCases((prev) =>
+        prev.map((u) => {
+          if (u.id !== useCaseId) return u;
+          if (u.dialogue.some((t) => t.role === 'assistant')) return u;
+          return {
+            ...u,
+            dialogue: [
+              ...u.dialogue,
+              {
+                turn_id: newAgentUseCaseTurnId(),
+                role: 'assistant' as const,
+                content: '',
+                editable: true,
+              },
+            ],
+          };
+        })
+      );
+    },
+    [setUseCases]
+  );
+
   const ensureAssistantTurn = React.useCallback(() => {
     if (!selected) return;
-    setUseCases((prev) =>
-      prev.map((u) => {
-        if (u.id !== selected.id) return u;
-        if (u.dialogue.some((t) => t.role === 'assistant')) return u;
-        return {
-          ...u,
-          dialogue: [
-            ...u.dialogue,
-            {
-              turn_id: newAgentUseCaseTurnId(),
-              role: 'assistant' as const,
-              content: '',
-              editable: true,
-            },
-          ],
-        };
-      })
-    );
-  }, [selected, setUseCases]);
+    ensureAssistantTurnFor(selected.id);
+  }, [selected, ensureAssistantTurnFor]);
 
   React.useLayoutEffect(() => {
     syncDetailTextareaHeights();
@@ -461,6 +823,18 @@ export function AIAgentUseCaseComposer({
     assistantTurn?.turn_id,
   ]);
 
+  React.useLayoutEffect(() => {
+    if (!primaryGenerateOnRightOnly) return;
+    syncWizardTextareaHeights();
+  }, [
+    primaryGenerateOnRightOnly,
+    syncWizardTextareaHeights,
+    useCases,
+    wizardShowScenario,
+    wizardShowMessage,
+    cardExpandedById,
+  ]);
+
   /**
    * Keep liveAgentContentRef in sync with external state changes (API annotation response,
    * use case selection, regeneration). User input is captured directly in onChange and takes
@@ -469,6 +843,15 @@ export function AIAgentUseCaseComposer({
   React.useEffect(() => {
     liveAgentContentRef.current = assistantTurn?.content ?? '';
   }, [assistantTurn?.content, assistantTurn?.turn_id]);
+
+  React.useEffect(() => {
+    const m = { ...liveAgentContentByIdRef.current };
+    for (const uc of useCases) {
+      const t = uc.dialogue.find((x) => x.role === 'assistant');
+      m[uc.id] = t?.content ?? '';
+    }
+    liveAgentContentByIdRef.current = m;
+  }, [useCases]);
 
   const styleContract =
     AI_AGENT_GLOBAL_USE_CASE_STYLES.find((s) => s.id === useCaseGlobalStyleId)?.contract ?? '';
@@ -499,29 +882,31 @@ export function AIAgentUseCaseComposer({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-2">
-      <div className={`rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL}`}>
-        <div className="flex items-center gap-2">
-          <label htmlFor="ai-agent-global-use-case-style" className="text-slate-300 whitespace-nowrap">
-            Stile globale
-          </label>
-          <select
-            id="ai-agent-global-use-case-style"
-            value={useCaseGlobalStyleId}
-            onChange={(e) => onUseCaseGlobalStyleIdChange(e.target.value)}
-            disabled={busy}
-            className="rounded-md bg-slate-900 border border-slate-600 px-2 py-1 text-xs text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60"
-          >
-            {AI_AGENT_GLOBAL_USE_CASE_STYLES.map((style) => (
-              <option key={style.id} value={style.id}>
-                {style.label}
-              </option>
-            ))}
-          </select>
-          <span className="text-slate-500">Applicato a tutti i use case</span>
+      {!primaryGenerateOnRightOnly ? (
+        <div className={`rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL}`}>
+          <div className="flex items-center gap-2">
+            <label htmlFor="ai-agent-global-use-case-style" className="text-slate-300 whitespace-nowrap">
+              Stile globale
+            </label>
+            <select
+              id="ai-agent-global-use-case-style"
+              value={useCaseGlobalStyleId}
+              onChange={(e) => onUseCaseGlobalStyleIdChange(e.target.value)}
+              disabled={busy}
+              className="rounded-md bg-slate-900 border border-slate-600 px-2 py-1 text-xs text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60"
+            >
+              {AI_AGENT_GLOBAL_USE_CASE_STYLES.map((style) => (
+                <option key={style.id} value={style.id}>
+                  {style.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-slate-500">Applicato a tutti i use case</span>
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      {ordered.length > 0 ? (
+      {ordered.length > 0 && !primaryGenerateOnRightOnly ? (
         <div
           className={`flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL}`}
         >
@@ -584,10 +969,12 @@ export function AIAgentUseCaseComposer({
       >
         <div
           className={`${
-            ordered.length === 0 ? 'w-full' : 'w-full sm:w-[44%]'
+            ordered.length === 0 || primaryGenerateOnRightOnly
+              ? 'w-full'
+              : 'w-full sm:w-[44%]'
           } shrink-0 min-h-0 flex-1 flex flex-col self-stretch overflow-hidden min-h-[240px] ${USE_CASE_PANEL_SHELL}`}
         >
-          <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+          <div className="flex flex-1 min-h-0 flex-col overflow-y-auto overflow-x-hidden">
               <div className="px-2 pt-2 pb-1 border-b border-slate-700/50 shrink-0 space-y-1">
                 <textarea
                   ref={rootDraftRef}
@@ -634,7 +1021,9 @@ export function AIAgentUseCaseComposer({
                   <p className="text-sm text-slate-500 max-w-md">
                     {onGenerateUseCaseBundle
                       ? 'Nessuno scenario ancora. Puoi generarli con IA usando il pulsante qui sotto.'
-                      : 'Nessuno scenario. Genera con IA o crea il design agent prima.'}
+                      : primaryGenerateOnRightOnly
+                        ? 'Nessuno scenario ancora. Usa la bozza sopra (INVIO per creare in batch) oppure il pulsante «Genera use case» nel pannello Tutorial a destra.'
+                        : 'Nessuno scenario. Genera con IA o crea il design agent prima.'}
                   </p>
                   {onGenerateUseCaseBundle ? (
                     <button
@@ -653,20 +1042,31 @@ export function AIAgentUseCaseComposer({
                   ) : null}
                 </div>
               ) : (
-              <ul className="p-1.5 flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto">
+              <>
+              <ul className="flex flex-col gap-1 p-1 pb-2">
                 {ordered.map((u) => {
+                  const rowBaseline = fieldBaselineByUseCaseId[u.id];
                   const depth = depthById[u.id] ?? 0;
                   const active = u.id === effectiveSelectedId;
                   const editingTitle = editingTitleId === u.id;
-                  const showToolbar = active || hoveredId === u.id || creatingChildParentId === u.id || editingTitle;
                   const creatingChild = creatingChildParentId === u.id;
+                  const reviewed = Boolean(u.designer_edit_confirmed || u.designer_acknowledged);
                   const descriptionTooltip = String(u.notes?.behavior || '').trim();
+                  const rowAssistant = u.dialogue.find((t) => t.role === 'assistant');
+                  const cardExpanded =
+                    !primaryGenerateOnRightOnly || cardExpandedById[u.id] !== false;
+                  const showWizardBody =
+                    primaryGenerateOnRightOnly &&
+                    cardExpanded &&
+                    (wizardShowScenario || wizardShowMessage);
                   return (
                     <li
                       key={u.id}
-                      className="rounded-md border border-slate-600/45 bg-slate-950/30 overflow-hidden"
-                      onMouseEnter={() => setHoveredId(u.id)}
-                      onMouseLeave={() => setHoveredId((prev) => (prev === u.id ? null : prev))}
+                      className={
+                        highlightIdSet.has(u.id)
+                          ? 'overflow-hidden rounded-md border border-amber-500/55 bg-amber-950/20 ring-2 ring-amber-400/40'
+                          : 'overflow-hidden rounded-md border border-slate-600/45 bg-slate-950/30'
+                      }
                     >
                       <div
                         role="button"
@@ -680,75 +1080,149 @@ export function AIAgentUseCaseComposer({
                         onClick={() => {
                           if (u.id !== effectiveSelectedId) setSelectedId(u.id);
                         }}
-                        className={`flex items-center gap-1.5 px-2 py-1.5 cursor-pointer ${
+                        className={`group/uc-head flex cursor-pointer items-center gap-1 pl-1.5 pr-2 py-1 ${
                           active ? 'bg-violet-900/40' : 'hover:bg-slate-800/80'
                         }`}
-                        style={{ paddingLeft: `${8 + depth * 12}px` }}
+                        style={{ paddingLeft: `${4 + depth * 8}px` }}
                       >
-                        <GitBranch size={12} className="shrink-0 opacity-60 text-slate-400" aria-hidden />
-                        <div className="flex min-w-0 flex-1 items-center gap-1">
-                          {editingTitle ? (
-                            <div
-                              className="flex min-w-0 flex-1 items-center gap-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <input
-                                type="text"
-                                value={draftTitle}
-                                onChange={(e) => setDraftTitle(e.target.value)}
-                                className="min-w-0 flex-1 rounded border border-violet-600/50 bg-slate-950 px-2 py-0.5 text-xs text-slate-100"
-                                autoFocus
-                                disabled={busy}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    commitTitleEdit(u.id);
-                                    return;
-                                  }
-                                  if (e.key === 'Escape') {
-                                    e.stopPropagation();
-                                    setDraftTitle(u.label);
-                                    setEditingTitleId(null);
-                                  }
-                                }}
-                                onBlur={() => commitTitleEdit(u.id)}
-                              />
-                            </div>
+                        <div className="flex w-5 shrink-0 items-center justify-center">
+                          {reviewed ? (
+                            <Check
+                              size={14}
+                              className="shrink-0 text-emerald-400/95"
+                              aria-label="Controllato"
+                            />
                           ) : (
-                            <>
+                            <button
+                              type="button"
+                              title="Segna come controllato"
+                              aria-label="Segna come controllato"
+                              className="shrink-0 rounded-full p-0.5 text-slate-500 opacity-0 transition-opacity hover:bg-slate-800/90 hover:text-slate-200 group-hover/uc-head:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                acknowledgeUseCaseReview(u.id);
+                              }}
+                            >
+                              <Circle size={14} strokeWidth={2} aria-hidden />
+                            </button>
+                          )}
+                        </div>
+                        {primaryGenerateOnRightOnly ? (
+                          <button
+                            type="button"
+                            className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800/90 hover:text-slate-100"
+                            title={cardExpanded ? 'Collassa' : 'Espandi'}
+                            aria-expanded={cardExpanded}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCardExpandedById((prev) => {
+                                const isOpen = prev[u.id] !== false;
+                                return { ...prev, [u.id]: !isOpen };
+                              });
+                              listToolbarCtx?.notifyCardToggle();
+                            }}
+                          >
+                            {cardExpanded ? (
+                              <ChevronDown size={14} aria-hidden />
+                            ) : (
+                              <ChevronRight size={14} aria-hidden />
+                            )}
+                          </button>
+                        ) : null}
+                        <GitBranch size={12} className="shrink-0 opacity-60 text-slate-400" aria-hidden />
+                        {editingTitle ? (
+                          <div
+                            className="flex min-w-0 flex-1 items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="text"
+                              value={draftTitle}
+                              onChange={(e) => setDraftTitle(e.target.value)}
+                              className="min-w-0 flex-1 rounded border border-violet-600/50 bg-slate-950 px-2 py-0.5 text-xs text-slate-100"
+                              autoFocus
+                              disabled={busy}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  commitTitleEdit(u.id);
+                                  return;
+                                }
+                                if (e.key === 'Escape') {
+                                  e.stopPropagation();
+                                  setDraftTitle(u.label);
+                                  setEditingTitleId(null);
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              title="Conferma"
+                              disabled={busy}
+                              className="shrink-0 rounded p-0.5 text-emerald-400 hover:bg-slate-800/90 hover:text-emerald-300 disabled:opacity-40"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                commitTitleEdit(u.id);
+                              }}
+                            >
+                              <Check size={14} aria-hidden />
+                            </button>
+                            <button
+                              type="button"
+                              title="Annulla"
+                              disabled={busy}
+                              className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800/90 hover:text-slate-100 disabled:opacity-40"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDraftTitle(u.label);
+                                setEditingTitleId(null);
+                              }}
+                            >
+                              <X size={14} aria-hidden />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              title={descriptionTooltip || undefined}
+                              className={`min-w-0 flex-1 text-left text-sm truncate ${fieldTextClass(
+                                u.designer_label_vote,
+                                u.label ?? '',
+                                fieldBaselineByUseCaseId[u.id]?.label
+                              )} ${active ? 'font-semibold' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (u.id !== effectiveSelectedId) setSelectedId(u.id);
+                              }}
+                            >
+                              {u.label || u.id}
+                            </button>
+                            <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/uc-head:opacity-100 group-focus-within/uc-head:opacity-100">
+                              <VoteThumbPair
+                                vote={u.designer_label_vote}
+                                disabled={busy}
+                                outerBtnClass={UC_HEAD_VOTE_BTN}
+                                onVote={(choice) => toggleDesignerFieldVote(u.id, 'label', choice)}
+                              />
                               <button
                                 type="button"
-                                title={descriptionTooltip || undefined}
-                                className={`min-w-0 flex-1 text-left text-sm truncate ${
-                                  active ? 'text-violet-100' : 'text-slate-300'
-                                }`}
+                                title="Modifica etichetta"
+                                className="shrink-0 rounded p-0.5 text-slate-400 hover:text-violet-300"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (u.id !== effectiveSelectedId) setSelectedId(u.id);
+                                  setDraftTitle(u.label);
+                                  setEditingTitleId(u.id);
                                 }}
                               >
-                                {u.label || u.id}
+                                <Pencil size={12} aria-hidden />
                               </button>
-                              {showToolbar ? (
-                                <button
-                                  type="button"
-                                  title="Modifica etichetta"
-                                  className="shrink-0 p-0.5 rounded text-slate-400 hover:text-violet-300"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDraftTitle(u.label);
-                                    setEditingTitleId(u.id);
-                                  }}
-                                >
-                                  <Pencil size={12} aria-hidden />
-                                </button>
-                              ) : null}
-                              {showToolbar ? (
+                              {!primaryGenerateOnRightOnly ? (
                                 <button
                                   type="button"
                                   title="Aggiungi figlio"
-                                  className="shrink-0 p-0.5 rounded text-slate-400 hover:text-violet-200"
+                                  className="shrink-0 rounded p-0.5 text-slate-400 hover:text-violet-200"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setSelectedId(u.id);
@@ -759,29 +1233,27 @@ export function AIAgentUseCaseComposer({
                                   <Plus size={12} aria-hidden />
                                 </button>
                               ) : null}
-                              {showToolbar ? (
-                                <button
-                                  type="button"
-                                  title="Elimina questo scenario e i figli"
-                                  aria-label="Elimina scenario"
-                                  disabled={busy}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDeleteUseCase(u.id);
-                                  }}
-                                  className="shrink-0 p-0.5 rounded text-slate-400 hover:text-rose-300 hover:bg-slate-800/90 disabled:opacity-40"
-                                >
-                                  <Trash2 size={14} aria-hidden />
-                                </button>
-                              ) : null}
-                            </>
-                          )}
-                        </div>
+                              <button
+                                type="button"
+                                title="Elimina questo scenario e i figli"
+                                aria-label="Elimina scenario"
+                                disabled={busy}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteUseCase(u.id);
+                                }}
+                                className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800/90 hover:text-rose-300 disabled:opacity-40"
+                              >
+                                <Trash2 size={14} aria-hidden />
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                       {creatingChild ? (
                         <div
                           className="border-t border-slate-700/45 px-2 py-2 bg-slate-950/40"
-                          style={{ paddingLeft: `${8 + (depth + 1) * 12}px` }}
+                          style={{ paddingLeft: `${4 + (depth + 1) * 8}px` }}
                         >
                           <input
                             type="text"
@@ -804,192 +1276,510 @@ export function AIAgentUseCaseComposer({
                           />
                         </div>
                       ) : null}
+                      {showWizardBody ? (
+                        <div
+                          className="border-t border-slate-700/45 px-2 py-2 space-y-2 bg-slate-950/25"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {wizardShowScenario ? (
+                            <div className="rounded-md ring-1 ring-violet-500/25 bg-slate-950/40 px-2 py-1">
+                              {payoffEditUseCaseId === u.id ? (
+                                <div className="flex flex-wrap items-start gap-2">
+                                  <span className={UC_PILL_SCENARIO}>Scenario</span>
+                                  <textarea
+                                    ref={(el) => {
+                                      if (el) payoffTextareaRefsById.current.set(u.id, el);
+                                      else payoffTextareaRefsById.current.delete(u.id);
+                                    }}
+                                    value={payoffEditDraft}
+                                    onChange={(e) => {
+                                      setPayoffEditDraft(e.target.value);
+                                      requestAnimationFrame(() => syncWizardTextareaHeights());
+                                    }}
+                                    disabled={busy}
+                                    rows={2}
+                                    autoFocus
+                                    placeholder="Descrizione sintetica dello scenario…"
+                                    className={`${UC_CLASSIC_TEXTAREA_SCENARIO} min-h-[52px]`}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        cancelPayoffEdit();
+                                      }
+                                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                        e.preventDefault();
+                                        commitPayoffEdit();
+                                      }
+                                    }}
+                                  />
+                                  <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+                                    <button
+                                      type="button"
+                                      title="Conferma"
+                                      disabled={busy}
+                                      className="rounded p-0.5 text-emerald-400 hover:bg-slate-800/90 disabled:opacity-40"
+                                      onClick={() => commitPayoffEdit()}
+                                    >
+                                      <Check size={14} aria-hidden />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Annulla"
+                                      disabled={busy}
+                                      className="rounded p-0.5 text-slate-400 hover:bg-slate-800/90 disabled:opacity-40"
+                                      onClick={() => cancelPayoffEdit()}
+                                    >
+                                      <X size={14} aria-hidden />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="group/payoff-row flex w-full min-w-0 items-center gap-x-1 rounded px-0.5 py-0">
+                                  <span className={UC_PILL_SCENARIO}>Scenario</span>
+                                  <p
+                                    className={`min-w-0 flex-1 cursor-default text-xs leading-snug whitespace-pre-wrap ${fieldTextClass(
+                                      u.designer_payoff_vote,
+                                      (u.payoff ?? '').trim() ? (u.payoff ?? '') : '',
+                                      rowBaseline?.payoff
+                                    )}`}
+                                  >
+                                    {(u.payoff ?? '').trim() ? (
+                                      u.payoff
+                                    ) : (
+                                      <span className="text-slate-500">— passa il mouse e usa la matita a destra</span>
+                                    )}
+                                  </p>
+                                  <VoteThumbPair
+                                    vote={u.designer_payoff_vote}
+                                    disabled={busy}
+                                    outerBtnClass={UC_SCENARIO_VOTE_BTN}
+                                    onVote={(choice) => toggleDesignerFieldVote(u.id, 'payoff', choice)}
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    title="Modifica scenario"
+                                    className={UC_SCENARIO_ROW_EDIT_BTN}
+                                    onClick={() => beginPayoffEdit(u.id, u.payoff ?? '')}
+                                  >
+                                    <Pencil size={12} aria-hidden />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+                          {wizardShowMessage ? (
+                            <div className="rounded-md ring-1 ring-emerald-600/35 bg-emerald-950/20 px-2 py-1">
+                              {rowAssistant ? (
+                                <>
+                                  {agentMsgEditUseCaseId === u.id ? (
+                                    <div className="flex flex-wrap items-start gap-2">
+                                      <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                                      <textarea
+                                        ref={(el) => {
+                                          if (el) agentTextareaRefsById.current.set(u.id, el);
+                                          else agentTextareaRefsById.current.delete(u.id);
+                                        }}
+                                        value={agentMsgEditDraft}
+                                        onChange={(e) => {
+                                          const v = e.target.value;
+                                          setAgentMsgEditDraft(v);
+                                          liveAgentContentByIdRef.current[u.id] = v;
+                                          requestAnimationFrame(() => syncWizardTextareaHeights());
+                                        }}
+                                        disabled={busy}
+                                        rows={2}
+                                        autoFocus
+                                        spellCheck={false}
+                                        aria-label="Messaggio agente"
+                                        placeholder="Testo esempio per il messaggio agente…"
+                                        className={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Escape') {
+                                            e.preventDefault();
+                                            cancelAgentMsgEdit();
+                                          }
+                                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                            e.preventDefault();
+                                            commitAgentMsgEdit();
+                                          }
+                                        }}
+                                      />
+                                      <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+                                        <button
+                                          type="button"
+                                          title="Conferma"
+                                          disabled={busy}
+                                          className="rounded p-0.5 text-emerald-400 hover:bg-slate-800/90 disabled:opacity-40"
+                                          onClick={() => commitAgentMsgEdit()}
+                                        >
+                                          <Check size={14} aria-hidden />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          title="Annulla"
+                                          disabled={busy}
+                                          className="rounded p-0.5 text-slate-400 hover:bg-slate-800/90 disabled:opacity-40"
+                                          onClick={() => cancelAgentMsgEdit()}
+                                        >
+                                          <X size={14} aria-hidden />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="group/agentmsg-row flex w-full min-w-0 items-center gap-x-1 rounded px-0.5 py-0">
+                                      <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                                      <p
+                                        className={`min-w-0 flex-1 cursor-default font-mono text-sm leading-snug whitespace-pre-wrap ${fieldTextClass(
+                                          u.designer_agent_message_vote,
+                                          rowAssistant.content,
+                                          rowBaseline?.assistantContent
+                                        )}`}
+                                      >
+                                        {rowAssistant.content.trim() ? (
+                                          rowAssistant.content
+                                        ) : (
+                                          <span className="text-slate-500">— passa il mouse e usa la matita a destra</span>
+                                        )}
+                                      </p>
+                                      <VoteThumbPair
+                                        vote={u.designer_agent_message_vote}
+                                        disabled={busy}
+                                        outerBtnClass={UC_AGENT_VOTE_BTN}
+                                        onVote={(choice) =>
+                                          toggleDesignerFieldVote(u.id, 'agentMessage', choice)
+                                        }
+                                      />
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        title="Modifica messaggio"
+                                        className={UC_AGENT_ROW_EDIT_BTN}
+                                        onClick={() =>
+                                          beginAgentMsgEdit(u.id, rowAssistant.turn_id, rowAssistant.content)
+                                        }
+                                      >
+                                        <Pencil size={12} aria-hidden />
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                                  <div className="min-w-0 flex-1 space-y-2">
+                                    <p className="text-xs text-slate-500">
+                                      Nessun turno assistente. Aggiungi un messaggio vuoto per iniziare.
+                                    </p>
+                                    <button
+                                      type="button"
+                                      disabled={busy}
+                                      onClick={() => ensureAssistantTurnFor(u.id)}
+                                      className="text-xs text-emerald-300 underline disabled:opacity-50"
+                                    >
+                                      Aggiungi messaggio agente (vuoto)
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}
               </ul>
+              </>
               )}
           </div>
         </div>
 
-        {ordered.length > 0 ? (
+        {ordered.length > 0 && !primaryGenerateOnRightOnly ? (
             <div className="flex flex-1 min-h-0 flex-col overflow-hidden self-stretch">
               {selected ? (
                 <div className="flex flex-1 min-h-0 flex-col overflow-auto gap-3 px-0.5 py-1 min-h-0">
-                  <div className="rounded-lg overflow-hidden ring-1 ring-violet-500/35">
-                    <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide bg-violet-950/85 text-violet-100 border-b border-violet-600/45">
-                      <span>Scenario</span>
-                      {scenarioDirty ? (
-                        <button
-                          type="button"
+                  <div className="rounded-lg ring-1 ring-violet-500/35 bg-slate-950/40 px-2 py-1">
+                    {payoffEditUseCaseId === selected.id ? (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className={UC_PILL_SCENARIO}>Scenario</span>
+                        <textarea
+                          ref={payoffTextareaRef}
+                          value={payoffEditDraft}
+                          onChange={(e) => {
+                            setPayoffEditDraft(e.target.value);
+                            requestAnimationFrame(() => syncDetailTextareaHeights());
+                          }}
                           disabled={busy}
-                          onClick={() => void handleScenarioRegenerateClick()}
-                          title={LABEL_REGENERATE_USE_CASE_FOR_SCENARIO}
-                          className="inline-flex items-center gap-1 rounded-md border border-violet-500/50 bg-violet-900/40 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-violet-100 hover:bg-violet-800/50 disabled:opacity-40"
+                          rows={2}
+                          autoFocus
+                          placeholder="Descrizione sintetica dello scenario…"
+                          className={`${UC_CLASSIC_TEXTAREA_SCENARIO} min-h-[52px]`}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              e.preventDefault();
+                              cancelPayoffEdit();
+                            }
+                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                              e.preventDefault();
+                              commitPayoffEdit();
+                            }
+                          }}
+                        />
+                        <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+                          <button
+                            type="button"
+                            title="Conferma"
+                            disabled={busy}
+                            className="rounded p-0.5 text-emerald-400 hover:bg-slate-800/90 disabled:opacity-40"
+                            onClick={() => commitPayoffEdit()}
+                          >
+                            <Check size={14} aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            title="Annulla"
+                            disabled={busy}
+                            className="rounded p-0.5 text-slate-400 hover:bg-slate-800/90 disabled:opacity-40"
+                            onClick={() => cancelPayoffEdit()}
+                          >
+                            <X size={14} aria-hidden />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="group/payoff-row flex w-full min-w-0 items-center gap-x-1">
+                        <span className={UC_PILL_SCENARIO}>Scenario</span>
+                        <p
+                          className={`min-w-0 flex-1 text-xs leading-snug whitespace-pre-wrap ${fieldTextClass(
+                            selected.designer_payoff_vote,
+                            selected.payoff ?? '',
+                            fieldBaselineByUseCaseId[selected.id]?.payoff
+                          )}`}
                         >
-                          {busy ? (
-                            <Loader2 className="animate-spin shrink-0" size={12} aria-hidden />
+                          {(selected.payoff ?? '').trim() ? (
+                            selected.payoff
                           ) : (
-                            <RefreshCw size={12} className="shrink-0" aria-hidden />
+                            <span className="text-slate-500">— passa il mouse sulla riga e usa la matita a destra</span>
                           )}
-                          {LABEL_REGENERATE_USE_CASE_FOR_SCENARIO}
-                        </button>
-                      ) : null}
-                    </div>
-                    <textarea
-                      ref={payoffTextareaRef}
-                      value={selected.payoff ?? ''}
-                      onChange={(e) => {
-                        setPayoffContent(e.target.value);
-                        requestAnimationFrame(() => syncDetailTextareaHeights());
-                      }}
-                      disabled={busy}
-                      rows={1}
-                      placeholder="Descrizione sintetica dello scenario e del contesto dialogico…"
-                      className="w-full resize-none overflow-hidden rounded-none border-0 bg-slate-900/95 px-2.5 py-2 text-xs leading-relaxed text-slate-200 whitespace-pre-wrap break-words placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-violet-500/50 disabled:opacity-60"
-                    />
-                  </div>
-
-                  <div className="rounded-lg overflow-hidden ring-1 ring-emerald-600/40">
-                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide bg-emerald-950/80 text-emerald-100 border-b border-emerald-700/45">
-                      <span>Messaggio agente</span>
-                      <div className="flex flex-wrap items-center gap-1 justify-end">
-                        {assistantTurn && !agentMessageEmpty ? (
-                          <>
-                            <button
-                              type="button"
-                              disabled={busy || !canWrapAgentToken}
-                              onClick={() => handleWrapAgentToken()}
-                              title="Avvolge il testo selezionato tra quadre [ ] come slot runtime"
-                              className="inline-flex items-center gap-0.5 rounded-md border border-emerald-600/50 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-emerald-50 hover:bg-emerald-900/70 disabled:opacity-40"
-                            >
-                              <Brackets size={12} className="shrink-0 opacity-90" aria-hidden />
-                              {LABEL_AGENT_MSG_WRAP_TOKEN}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busy || !canStripAgentTokens}
-                              onClick={() => handleStripAgentTokens()}
-                              title="Rimuove tutte le quadre [ ], lasciando solo il testo interno"
-                              className="inline-flex items-center gap-0.5 rounded-md border border-emerald-600/45 bg-emerald-950/45 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-emerald-100/95 hover:bg-emerald-900/55 disabled:opacity-40"
-                            >
-                              {LABEL_AGENT_MSG_STRIP_TOKENS}
-                            </button>
-                            {showMotorJsonCreate || showMotorJsonUpdate ? (
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => {
-                                  if (!assistantTurn) {
-                                    void (async () => {
-                                      const ok = await onAnnotateAgentMessageForJson(selected.id);
-                                      if (ok) setMotorJsonExpanded(true);
-                                    })();
-                                    return;
-                                  }
-                                  /**
-                                   * liveAgentContentRef is updated synchronously in onChange,
-                                   * BEFORE React's batched state commit. It is the definitive
-                                   * source of the current user-visible text at click time,
-                                   * immune to React's concurrent-mode rendering cycle.
-                                   *
-                                   * Fallback chain: live ref → DOM textarea value → React state.
-                                   */
-                                  // liveAgentContentRef is always a string (set synchronously in onChange
-                                  // and synced from external state via useEffect). Use it directly.
-                                  // DOM value is the secondary safety net if somehow ref is unset.
-                                  const live =
-                                    liveAgentContentRef.current ??
-                                    agentTextareaRef.current?.value ??
-                                    assistantTurn.content;
-                                  void (async () => {
-                                    const ok = await onAnnotateAgentMessageForJson(selected.id, live);
-                                    if (ok) setMotorJsonExpanded(true);
-                                  })();
-                                }}
-                                title={
-                                  showMotorJsonUpdate
-                                    ? 'Ricalcola il JSON motore (messaggio modificato rispetto all’ultima sincronizzazione)'
-                                    : 'Usa l’IA per aggiungere [slot] al testo e generare il JSON motore'
-                                }
-                                className="inline-flex items-center gap-0.5 rounded-md border border-emerald-600/50 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-emerald-50 hover:bg-emerald-900/70 disabled:opacity-40"
-                              >
-                                {busy ? (
-                                  <Loader2 className="animate-spin shrink-0" size={12} aria-hidden />
-                                ) : (
-                                  <FileJson size={12} className="shrink-0 opacity-90" aria-hidden />
-                                )}
-                                {showMotorJsonUpdate
-                                  ? LABEL_AGENT_MSG_UPDATE_JSON
-                                  : LABEL_AGENT_MSG_CREATE_JSON}
-                              </button>
-                            ) : null}
-                          </>
-                        ) : null}
-                        {agentMessageEmpty ? (
+                        </p>
+                        {scenarioDirty ? (
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => void onRegenerateAgentMessage(selected.id)}
-                            title={LABEL_REGENERATE_AGENT_EXAMPLE}
-                            className="inline-flex items-center gap-1 rounded-md border border-emerald-600/50 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-emerald-50 hover:bg-emerald-900/70 disabled:opacity-40"
+                            onClick={() => void handleScenarioRegenerateClick()}
+                            title={LABEL_REGENERATE_USE_CASE_FOR_SCENARIO}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-violet-500/50 bg-violet-900/40 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-violet-100 hover:bg-violet-800/50 disabled:opacity-40"
                           >
                             {busy ? (
                               <Loader2 className="animate-spin shrink-0" size={12} aria-hidden />
                             ) : (
                               <RefreshCw size={12} className="shrink-0" aria-hidden />
                             )}
-                            {LABEL_REGENERATE_AGENT_EXAMPLE}
+                            {LABEL_REGENERATE_USE_CASE_FOR_SCENARIO}
                           </button>
                         ) : null}
-                      </div>
-                    </div>
-                    {assistantTurn ? (
-                      <textarea
-                        ref={agentTextareaRef}
-                        value={assistantTurn.content}
-                        onChange={(e) => {
-                          // Update the live ref synchronously BEFORE the React state update.
-                          // This ensures "Aggiorna JSON" always reads the current user input
-                          // even if the click fires before React commits the state change.
-                          liveAgentContentRef.current = e.target.value;
-                          setAssistantTurnContent(assistantTurn.turn_id, e.target.value);
-                          requestAnimationFrame(() => syncDetailTextareaHeights());
-                        }}
-                        onMouseUp={syncAgentMsgSelection}
-                        onSelect={syncAgentMsgSelection}
-                        onKeyUp={syncAgentMsgSelection}
-                        disabled={busy}
-                        rows={1}
-                        spellCheck={false}
-                        aria-label="Messaggio agente"
-                        placeholder="Seleziona testo e usa Token per creare [slot]. Senza quadre rimuove il markup."
-                        className="w-full resize-none overflow-hidden rounded-none border-0 bg-emerald-950/35 px-2.5 py-2 font-mono text-sm leading-relaxed text-emerald-50 whitespace-pre-wrap break-words placeholder:text-emerald-300/45 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500/45 disabled:opacity-60"
-                      />
-                    ) : (
-                      <div className="space-y-2 bg-emerald-950/25 px-2.5 py-3">
-                        <p className="text-xs text-slate-500">
-                          Nessun turno assistente. Rigenera per crearne uno con l&apos;IA oppure aggiungi manualmente un
-                          turno vuoto.
-                        </p>
+                        <VoteThumbPair
+                          vote={selected.designer_payoff_vote}
+                          disabled={busy}
+                          outerBtnClass={UC_SCENARIO_VOTE_BTN}
+                          onVote={(choice) => toggleDesignerFieldVote(selected.id, 'payoff', choice)}
+                        />
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={() => ensureAssistantTurn()}
-                          className="text-xs text-emerald-300 underline disabled:opacity-50"
+                          title="Modifica scenario"
+                          className={UC_SCENARIO_ROW_EDIT_BTN}
+                          onClick={() => beginPayoffEdit(selected.id, selected.payoff ?? '')}
                         >
-                          Aggiungi messaggio agente (vuoto)
+                          <Pencil size={12} aria-hidden />
                         </button>
                       </div>
                     )}
-                    <div className="border-t border-emerald-800/35 bg-emerald-950/20 px-2 py-2">
-                      <AgentMessageMotorPreview
-                        motorPayload={motorPayload}
-                        isStale={motorJsonStale}
-                        expanded={motorJsonExpanded}
-                        onToggleExpanded={() => setMotorJsonExpanded((v) => !v)}
-                        expandMountRef={useCaseDetailShellRef}
-                      />
+                  </div>
+
+                  <div className="rounded-lg ring-1 ring-emerald-600/40 bg-emerald-950/20 px-2 py-1">
+                    {assistantTurn ? (
+                      agentMsgEditUseCaseId === selected.id ? (
+                        <div className="flex flex-wrap items-start gap-2">
+                          <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                          <textarea
+                            ref={agentTextareaRef}
+                            value={agentMsgEditDraft}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              liveAgentContentRef.current = v;
+                              setAgentMsgEditDraft(v);
+                              requestAnimationFrame(() => syncDetailTextareaHeights());
+                            }}
+                            onMouseUp={syncAgentMsgSelection}
+                            onSelect={syncAgentMsgSelection}
+                            onKeyUp={syncAgentMsgSelection}
+                            disabled={busy}
+                            rows={2}
+                            autoFocus
+                            spellCheck={false}
+                            aria-label="Messaggio agente"
+                            placeholder="Seleziona testo e usa Token per creare [slot]. Senza quadre rimuove il markup."
+                            className={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') {
+                                e.preventDefault();
+                                cancelAgentMsgEdit();
+                              }
+                              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                e.preventDefault();
+                                commitAgentMsgEdit();
+                              }
+                            }}
+                          />
+                          <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+                            <button
+                              type="button"
+                              title="Conferma"
+                              disabled={busy}
+                              className="rounded p-0.5 text-emerald-400 hover:bg-slate-800/90 disabled:opacity-40"
+                              onClick={() => commitAgentMsgEdit()}
+                            >
+                              <Check size={14} aria-hidden />
+                            </button>
+                            <button
+                              type="button"
+                              title="Annulla"
+                              disabled={busy}
+                              className="rounded p-0.5 text-slate-400 hover:bg-slate-800/90 disabled:opacity-40"
+                              onClick={() => cancelAgentMsgEdit()}
+                            >
+                              <X size={14} aria-hidden />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="group/agentmsg-row flex w-full min-w-0 items-center gap-x-1">
+                          <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                          <p
+                            className={`min-w-0 flex-1 font-mono text-sm leading-snug whitespace-pre-wrap ${fieldTextClass(
+                              selected.designer_agent_message_vote,
+                              assistantTurn.content,
+                              fieldBaselineByUseCaseId[selected.id]?.assistantContent
+                            )}`}
+                          >
+                            {assistantTurn.content.trim() ? (
+                              assistantTurn.content
+                            ) : (
+                              <span className="text-slate-500">— passa il mouse sulla riga e usa la matita a destra</span>
+                            )}
+                          </p>
+                          <VoteThumbPair
+                            vote={selected.designer_agent_message_vote}
+                            disabled={busy}
+                            outerBtnClass={UC_AGENT_VOTE_BTN}
+                            onVote={(choice) =>
+                              toggleDesignerFieldVote(selected.id, 'agentMessage', choice)
+                            }
+                          />
+                          <button
+                            type="button"
+                            disabled={busy}
+                            title="Modifica messaggio"
+                            className={UC_AGENT_ROW_EDIT_BTN}
+                            onClick={() =>
+                              beginAgentMsgEdit(selected.id, assistantTurn.turn_id, assistantTurn.content)
+                            }
+                          >
+                            <Pencil size={12} aria-hidden />
+                          </button>
+                        </div>
+                      )
+                    ) : (
+                      <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
+                        <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                        <div className="min-w-0 flex-1 space-y-2 py-0.5">
+                          <p className="text-xs text-slate-500">
+                            Nessun turno assistente. Rigenera per crearne uno con l&apos;IA oppure aggiungi manualmente un
+                            turno vuoto.
+                          </p>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => ensureAssistantTurn()}
+                            className="text-xs text-emerald-300 underline disabled:opacity-50"
+                          >
+                            Aggiungi messaggio agente (vuoto)
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1 border-t border-emerald-800/40 pt-1.5">
+                      {assistantTurn && !agentMessageEmpty ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={
+                              busy ||
+                              !canWrapAgentToken ||
+                              (Boolean(selected) && agentMsgEditUseCaseId !== selected.id)
+                            }
+                            title={
+                              selected && agentMsgEditUseCaseId !== selected.id
+                                ? 'Apri la modifica con la matita per selezionare il testo e usare Token'
+                                : 'Avvolge il testo selezionato tra quadre [ ] come slot runtime'
+                            }
+                            onClick={() => handleWrapAgentToken()}
+                            className="inline-flex items-center gap-0.5 rounded-md border border-emerald-600/50 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-emerald-50 hover:bg-emerald-900/70 disabled:opacity-40"
+                          >
+                            <Brackets size={12} className="shrink-0 opacity-90" aria-hidden />
+                            {LABEL_AGENT_MSG_WRAP_TOKEN}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              busy ||
+                              !canStripAgentTokens ||
+                              (Boolean(selected) && agentMsgEditUseCaseId !== selected.id)
+                            }
+                            onClick={() => handleStripAgentTokens()}
+                            title={
+                              selected && agentMsgEditUseCaseId !== selected.id
+                                ? 'Apri la modifica con la matita per usare questa azione sul testo'
+                                : 'Rimuove tutte le quadre [ ], lasciando solo il testo interno'
+                            }
+                            className="inline-flex items-center gap-0.5 rounded-md border border-emerald-600/45 bg-emerald-950/45 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-emerald-100/95 hover:bg-emerald-900/55 disabled:opacity-40"
+                          >
+                            {LABEL_AGENT_MSG_STRIP_TOKENS}
+                          </button>
+                        </>
+                      ) : null}
+                      {agentMessageEmpty ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            void (async () => {
+                              const next = await onRegenerateAgentMessage(selected.id);
+                              if (typeof next === 'string') {
+                                setFieldBaselineByUseCaseId((prev) => {
+                                  const cur = prev[selected.id];
+                                  if (!cur) return prev;
+                                  return {
+                                    ...prev,
+                                    [selected.id]: { ...cur, assistantContent: next },
+                                  };
+                                });
+                              }
+                            })();
+                          }}
+                          title={LABEL_REGENERATE_AGENT_EXAMPLE}
+                          className="inline-flex items-center gap-1 rounded-md border border-emerald-600/50 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-emerald-50 hover:bg-emerald-900/70 disabled:opacity-40"
+                        >
+                          {busy ? (
+                            <Loader2 className="animate-spin shrink-0" size={12} aria-hidden />
+                          ) : (
+                            <RefreshCw size={12} className="shrink-0" aria-hidden />
+                          )}
+                          {LABEL_REGENERATE_AGENT_EXAMPLE}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>

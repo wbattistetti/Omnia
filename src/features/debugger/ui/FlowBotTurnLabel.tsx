@@ -35,7 +35,7 @@ import {
   parseAgentUseCasesJson,
   serializeUseCases,
 } from '@types/aiAgentUseCases';
-import { normalizeUseCaseSortOrderAlphabetically } from '@taskEditor/EditorHost/editors/aiAgentEditor/useCaseHierarchy';
+import { normalizeUseCaseSortOrderLogical } from '@taskEditor/EditorHost/editors/aiAgentEditor/useCaseHierarchy';
 import {
   resolveCatalogLabelForTaskUseCase,
   resolveCatalogPayoffForTaskUseCase,
@@ -379,7 +379,7 @@ export function FlowBotTurnLabel(props: {
         /* Designer può usare «Crea JSON» in editor */
       }
 
-      const next = normalizeUseCaseSortOrderAlphabetically([...existing, draft]);
+      const next = normalizeUseCaseSortOrderLogical([...existing, draft]);
       const ok = taskRepository.updateTask(
         task.id,
         { agentUseCasesJson: serializeUseCases(next) },

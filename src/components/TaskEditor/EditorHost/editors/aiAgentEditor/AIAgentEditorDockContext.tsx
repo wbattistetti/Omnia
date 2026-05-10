@@ -13,6 +13,8 @@ import type { IaSectionDiffPair } from './iaSectionDiffTypes';
 import type { RevisionBatchOp } from './textRevisionLinear';
 import type { AgentPromptPlatformId, BackendPlaceholderInstance, PlatformPromptOutput } from '@domain/agentPrompt';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
+import type { UseCaseGeneratorWizardModel } from './useCaseGeneratorWizard/useUseCaseGeneratorWizard';
+import type { UseCaseSiblingSortMode } from './useCaseHierarchy';
 
 export interface AIAgentEditorDockContextValue {
   instanceId: string | undefined;
@@ -56,7 +58,8 @@ export interface AIAgentEditorDockContextValue {
     creationScope?: 'single' | 'batch';
   }) => Promise<string>;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
-  onRegenerateAgentMessage: (useCaseId: string) => void | Promise<void>;
+  /** Risolve con il nuovo testo assistente quando la rigenerazione ha successo (per baseline UI). */
+  onRegenerateAgentMessage: (useCaseId: string) => void | Promise<string | null | void>;
   onAnnotateAgentMessageForJson: (
     useCaseId: string,
     assistantContentFromEditor?: string
@@ -128,6 +131,20 @@ export interface AIAgentEditorDockContextValue {
    */
   registerBackendsAddManualHandler: (handler: (() => void) | null) => void;
   invokeBackendsAddManual: () => void;
+
+  /** Presente dopo il mount dell’editor quando il generatore guidato è disponibile. */
+  useCaseGeneratorWizard: UseCaseGeneratorWizardModel | null;
+
+  /** Messaggio dopo «Genera» / «creane altri» (wizard use case). */
+  useCaseBundleFeedback: string | null;
+  onDismissUseCaseBundleFeedback: () => void;
+  /** Id evidenziati nel composer dopo un batch generato. */
+  useCaseHighlightIds: readonly string[];
+  onClearUseCaseHighlight: (useCaseId: string) => void;
+
+  /** Ordine tra fratelli: dialogo (default) vs alfabetico (toolbar AB). */
+  useCaseSiblingSortMode: UseCaseSiblingSortMode;
+  setUseCaseSiblingSortMode: (mode: UseCaseSiblingSortMode) => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

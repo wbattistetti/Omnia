@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
   collectUseCaseSubtreeIds,
+  normalizeUseCaseSiblingOrder,
   normalizeUseCaseSortOrderAlphabetically,
+  normalizeUseCaseSortOrderLogical,
 } from './useCaseHierarchy';
 
 function uc(id: string, label: string, parent_id: string | null, sort_order: number): AIAgentUseCase {
@@ -21,6 +23,40 @@ function uc(id: string, label: string, parent_id: string | null, sort_order: num
     bubble_notes: {},
   };
 }
+
+describe('normalizeUseCaseSortOrderLogical', () => {
+  it('keeps sibling order by first appearance in array (dialogue flow)', () => {
+    const input: AIAgentUseCase[] = [
+      uc('r2', 'Zeta', null, 9),
+      uc('r1', 'Alpha', null, 8),
+      uc('c2', 'Bravo child', 'r1', 0),
+      uc('c1', 'Alpha child', 'r1', 1),
+    ];
+    const out = normalizeUseCaseSortOrderLogical(input);
+    const byId = new Map(out.map((x) => [x.id, x]));
+
+    expect(byId.get('r2')?.sort_order).toBe(0);
+    expect(byId.get('r1')?.sort_order).toBe(1);
+    expect(byId.get('c2')?.sort_order).toBe(0);
+    expect(byId.get('c1')?.sort_order).toBe(1);
+  });
+});
+
+describe('normalizeUseCaseSiblingOrder', () => {
+  it('delegates to alphabetical when mode is alphabetical', () => {
+    const input: AIAgentUseCase[] = [uc('r2', 'Zeta', null, 0), uc('r1', 'Alpha', null, 1)];
+    const out = normalizeUseCaseSiblingOrder(input, 'alphabetical');
+    expect(out.find((x) => x.id === 'r1')?.sort_order).toBe(0);
+    expect(out.find((x) => x.id === 'r2')?.sort_order).toBe(1);
+  });
+
+  it('delegates to logical when mode is logical', () => {
+    const input: AIAgentUseCase[] = [uc('r2', 'Zeta', null, 1), uc('r1', 'Alpha', null, 0)];
+    const out = normalizeUseCaseSiblingOrder(input, 'logical');
+    expect(out.find((x) => x.id === 'r2')?.sort_order).toBe(0);
+    expect(out.find((x) => x.id === 'r1')?.sort_order).toBe(1);
+  });
+});
 
 describe('normalizeUseCaseSortOrderAlphabetically', () => {
   it('reassigns root and child sort_order by alphabetical label', () => {

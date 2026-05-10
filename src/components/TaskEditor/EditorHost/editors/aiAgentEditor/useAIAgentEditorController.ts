@@ -29,6 +29,11 @@ import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases'
 import { newAgentUseCaseTurnId, serializeLogicalSteps, serializeUseCases } from '@types/aiAgentUseCases';
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import {
+  stripAssistantTurnsFromUseCase,
+  stripAssistantTurnsFromUseCases,
+} from '@domain/aiAgentUseCase/stripAssistantTurnsFromUseCases';
+import { remapExtendUseCaseIds } from '@domain/aiAgentUseCase/remapExtendUseCaseIds';
+import {
   AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
   mapSampleToPreviewTurns,
   normalizeAgentPreviewFromTask,
@@ -111,7 +116,11 @@ import { iaConvaiTracePersistTaskRepository } from '@utils/debug/iaConvaiFlowTra
 import { withElevenLabsReprovisionAfterTtsChange } from '@utils/iaAgentRuntime/applyElevenLabsReprovisionFlag';
 import { useProjectData } from '@context/ProjectDataContext';
 import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
-import { collectUseCaseSubtreeIds, normalizeUseCaseSortOrderAlphabetically } from './useCaseHierarchy';
+import {
+  collectUseCaseSubtreeIds,
+  normalizeUseCaseSiblingOrder,
+  type UseCaseSiblingSortMode,
+} from './useCaseHierarchy';
 import { OMNIA_AI_AGENT_REHYDRATE_FROM_REPO } from './aiAgentDockPanelIds';
 
 function logStructuredPipelineAlignment(event: string, detail?: unknown): void {
@@ -158,11 +167,25 @@ function withElevenLabsReprovisionWhenTaskEditorPromptChanged(
   return { ...iaRuntime, elevenLabsNeedsReprovision: true };
 }
 
+/** Esito generazione lista use case (full replace o aggiunta). */
+export interface GenerateUseCaseBundleOutcome {
+  useCases: readonly AIAgentUseCase[];
+  mode: 'replace' | 'extend';
+  /** Nuovi in questo batch (per messaggio UI). */
+  addedCount: number;
+  /** Id da evidenziare nel composer. */
+  highlightIds: readonly string[];
+}
+
 export interface UseAIAgentEditorControllerParams {
   instanceId: string | undefined;
   projectId: string | undefined;
   provider: string;
   model: string;
+  /**
+   * Passo 1 wizard: niente messaggi assistente su bundle/create (letto al momento dell’azione).
+   */
+  getDeferAgentMessages?: () => boolean;
 }
 
 export function useAIAgentEditorController({
@@ -170,6 +193,7 @@ export function useAIAgentEditorController({
   projectId,
   provider,
   model,
+  getDeferAgentMessages,
 }: UseAIAgentEditorControllerParams) {
   const { data: projectData } = useProjectData();
   const manualCatalogBackendTaskIds = React.useMemo(
@@ -197,6 +221,10 @@ export function useAIAgentEditorController({
   const [committedDesignDescription, setCommittedDesignDescription] = React.useState('');
   const [logicalSteps, setLogicalSteps] = React.useState<AIAgentLogicalStep[]>([]);
   const [useCases, setUseCases] = React.useState<AIAgentUseCase[]>([]);
+  /** Ref: letto da setter senza dipendenze stale; default ordine dialogo (non alfabetico). */
+  const useCaseSiblingSortModeRef = React.useRef<UseCaseSiblingSortMode>('logical');
+  const [useCaseSiblingSortMode, setUseCaseSiblingSortModeState] =
+    React.useState<UseCaseSiblingSortMode>('logical');
   const [useCaseGlobalStyleId, setUseCaseGlobalStyleIdState] = React.useState<string>(
     DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID
   );
@@ -346,10 +374,20 @@ export function useAIAgentEditorController({
     [structuredRev, markPromptFinalMisaligned]
   );
 
+  const setUseCaseSiblingSortMode = React.useCallback((mode: UseCaseSiblingSortMode) => {
+    useCaseSiblingSortModeRef.current = mode;
+    setUseCaseSiblingSortModeState(mode);
+    setUseCases((prev) => normalizeUseCaseSiblingOrder(prev, mode));
+    setDirty(true);
+  }, []);
+
   const setUseCasesUser = React.useCallback((v: React.SetStateAction<AIAgentUseCase[]>) => {
     setDirty(true);
     setUseCases((prev) =>
-      normalizeUseCaseSortOrderAlphabetically(typeof v === 'function' ? v(prev) : v)
+      normalizeUseCaseSiblingOrder(
+        typeof v === 'function' ? v(prev) : v,
+        useCaseSiblingSortModeRef.current
+      )
     );
   }, []);
 
@@ -366,14 +404,15 @@ export function useAIAgentEditorController({
     setDirty(true);
     setUseCaseGlobalStyleIdState(id);
     setUseCases((prev) =>
-      normalizeUseCaseSortOrderAlphabetically(
+      normalizeUseCaseSiblingOrder(
         prev.map((uc) => ({
           ...uc,
           notes: {
             ...uc.notes,
             tone: selected.contract,
           },
-        }))
+        })),
+        useCaseSiblingSortModeRef.current
       )
     );
   }, []);
@@ -502,7 +541,9 @@ export function useAIAgentEditorController({
     setHasAgentGeneration(hasGen);
     setAgentImmediateStartState(b.agentImmediateStart);
     setLogicalSteps(b.logicalSteps);
-    setUseCases(normalizeUseCaseSortOrderAlphabetically(b.useCases));
+    useCaseSiblingSortModeRef.current = 'logical';
+    setUseCaseSiblingSortModeState('logical');
+    setUseCases(normalizeUseCaseSiblingOrder(b.useCases, 'logical'));
     const storedStyle = String(b.agentUseCaseGlobalStyleId || '').trim();
     setUseCaseGlobalStyleIdState(
       AI_AGENT_GLOBAL_USE_CASE_STYLES.some((x) => x.id === storedStyle)
@@ -1009,7 +1050,9 @@ export function useAIAgentEditorController({
 
   const clearUseCaseComposerError = React.useCallback(() => setUseCaseComposerError(null), []);
 
-  const handleGenerateUseCaseBundle = React.useCallback(async () => {
+  const handleGenerateUseCaseBundle = React.useCallback(async (): Promise<
+    GenerateUseCaseBundleOutcome | null
+  > => {
     const userDesc = hasAgentGeneration
       ? `${designDescription.trim()}\n\n---\n\n${buildRefineUserDescFromSections(structuredRev.effectiveBySection).trim()}`.trim()
       : designDescription.trim();
@@ -1017,12 +1060,48 @@ export function useAIAgentEditorController({
       setUseCaseComposerError(
         `Inserisci almeno ${AI_AGENT_MIN_INPUT_CHARS} caratteri nella descrizione (o nelle sezioni strutturate dopo la prima generazione).`
       );
-      return;
+      return null;
     }
     setUseCaseComposerError(null);
     setUseCaseComposerBusy(true);
     try {
       const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
+      const extendMode = useCases.length > 0;
+
+      if (extendMode) {
+        const { useCases: ucsNew } = await generateAIAgentUseCases({
+          userDesc,
+          provider,
+          model,
+          runtimeContext: agentPrompt.trim(),
+          outputLanguage,
+          globalStyleContract,
+          globalStyleId: useCaseGlobalStyleId,
+          extendFrom: { logicalSteps, useCases },
+        });
+        let newOnes = normalizeUseCaseSiblingOrder(ucsNew, useCaseSiblingSortModeRef.current);
+        if (getDeferAgentMessages?.()) {
+          newOnes = normalizeUseCaseSiblingOrder(
+            stripAssistantTurnsFromUseCases(newOnes),
+            useCaseSiblingSortModeRef.current
+          );
+        }
+        newOnes = remapExtendUseCaseIds(newOnes);
+        const merged = normalizeUseCaseSiblingOrder(
+          [...useCases, ...newOnes],
+          useCaseSiblingSortModeRef.current
+        );
+        setUseCases(merged);
+        setDirty(true);
+        const ids = newOnes.map((u) => u.id);
+        return {
+          useCases: merged,
+          mode: 'extend',
+          addedCount: newOnes.length,
+          highlightIds: ids,
+        };
+      }
+
       const { logicalSteps: ls, useCases: ucs } = await generateAIAgentUseCases({
         userDesc,
         provider,
@@ -1033,10 +1112,25 @@ export function useAIAgentEditorController({
         globalStyleId: useCaseGlobalStyleId,
       });
       setLogicalSteps(ls);
-      setUseCases(normalizeUseCaseSortOrderAlphabetically(ucs));
+      let normalized = normalizeUseCaseSiblingOrder(ucs, useCaseSiblingSortModeRef.current);
+      if (getDeferAgentMessages?.()) {
+        normalized = normalizeUseCaseSiblingOrder(
+          stripAssistantTurnsFromUseCases(normalized),
+          useCaseSiblingSortModeRef.current
+        );
+      }
+      setUseCases(normalized);
       setDirty(true);
+      const ids = normalized.map((u) => u.id);
+      return {
+        useCases: normalized,
+        mode: 'replace',
+        addedCount: normalized.length,
+        highlightIds: ids,
+      };
     } catch (e) {
       setUseCaseComposerError(e instanceof Error ? e.message : String(e));
+      return null;
     } finally {
       setUseCaseComposerBusy(false);
     }
@@ -1049,6 +1143,9 @@ export function useAIAgentEditorController({
     model,
     globalStyleContract,
     useCaseGlobalStyleId,
+    getDeferAgentMessages,
+    useCases,
+    logicalSteps,
   ]);
 
   const handleRegenerateUseCase = React.useCallback(
@@ -1081,13 +1178,17 @@ export function useAIAgentEditorController({
             t.role === 'assistant' ? { ...t, motor_snapshot: undefined } : t
           ),
         };
+        const toStore = getDeferAgentMessages?.()
+          ? stripAssistantTurnsFromUseCase(merged)
+          : merged;
         setUseCases((prev) =>
-          normalizeUseCaseSortOrderAlphabetically(
-            prev.map((u) => (u.id === useCaseId ? merged : u))
+          normalizeUseCaseSiblingOrder(
+            prev.map((u) => (u.id === useCaseId ? toStore : u)),
+            useCaseSiblingSortModeRef.current
           )
         );
         setDirty(true);
-        return merged;
+        return toStore;
       } catch (e) {
         setUseCaseComposerError(e instanceof Error ? e.message : String(e));
         return null;
@@ -1095,18 +1196,26 @@ export function useAIAgentEditorController({
         setUseCaseComposerBusy(false);
       }
     },
-    [useCases, logicalSteps, provider, model, globalStyleContract, useCaseGlobalStyleId]
+    [
+      useCases,
+      logicalSteps,
+      provider,
+      model,
+      globalStyleContract,
+      useCaseGlobalStyleId,
+      getDeferAgentMessages,
+    ]
   );
 
   /**
    * Regenerate a single assistant dialogue turn (e.g. empty after failed create); adds an assistant shell if missing.
    */
   const handleRegenerateAgentMessage = React.useCallback(
-    async (useCaseId: string): Promise<void> => {
+    async (useCaseId: string): Promise<string | null> => {
       const uc = useCases.find((u) => u.id === useCaseId);
       if (!uc) {
         setUseCaseComposerError('Use case non trovato.');
-        return;
+        return null;
       }
       let turnId = uc.dialogue.find((t) => t.role === 'assistant')?.turn_id;
       let snapshot: AIAgentUseCase = uc;
@@ -1153,8 +1262,10 @@ export function useAIAgentEditorController({
           })
         );
         setDirty(true);
+        return typeof turn.content === 'string' ? turn.content : null;
       } catch (e) {
         setUseCaseComposerError(e instanceof Error ? e.message : String(e));
+        return null;
       } finally {
         setUseCaseComposerBusy(false);
       }
@@ -1329,7 +1440,9 @@ export function useAIAgentEditorController({
           : LABEL_CREATING_ONE_USE_CASE
       );
       setUseCaseComposerBusy(true);
-      setUseCases((prev) => normalizeUseCaseSortOrderAlphabetically([...prev, placeholder]));
+      setUseCases((prev) =>
+        normalizeUseCaseSiblingOrder([...prev, placeholder], useCaseSiblingSortModeRef.current)
+      );
       setDirty(true);
 
       try {
@@ -1357,15 +1470,23 @@ export function useAIAgentEditorController({
           id: newUseCaseId,
           parent_id: parentId,
         };
+        const mergedForList = getDeferAgentMessages?.()
+          ? stripAssistantTurnsFromUseCase(mergedCreated)
+          : mergedCreated;
         setUseCases((prev) =>
-          normalizeUseCaseSortOrderAlphabetically(
-            prev.map((item) => (item.id === newUseCaseId ? mergedCreated : item))
+          normalizeUseCaseSiblingOrder(
+            prev.map((item) => (item.id === newUseCaseId ? mergedForList : item)),
+            useCaseSiblingSortModeRef.current
           )
         );
         setDirty(true);
         const assistantAfterCreate = mergedCreated.dialogue.find((t) => t.role === 'assistant');
         const assistantTurnId = assistantAfterCreate?.turn_id;
-        if (assistantAfterCreate?.content?.trim() && assistantTurnId) {
+        if (
+          !getDeferAgentMessages?.() &&
+          assistantAfterCreate?.content?.trim() &&
+          assistantTurnId
+        ) {
           try {
             const { content: annotated, motor } = await annotateAIAgentAssistantMessageForJsonApi({
               useCase: mergedCreated,
@@ -1376,7 +1497,7 @@ export function useAIAgentEditorController({
               globalStyleContract,
             });
             setUseCases((prev) =>
-              normalizeUseCaseSortOrderAlphabetically(
+              normalizeUseCaseSiblingOrder(
                 prev.map((item) =>
                   item.id === newUseCaseId
                     ? {
@@ -1395,7 +1516,8 @@ export function useAIAgentEditorController({
                         ),
                       }
                     : item
-                )
+                ),
+                useCaseSiblingSortModeRef.current
               )
             );
             setDirty(true);
@@ -1418,7 +1540,7 @@ export function useAIAgentEditorController({
         logUseCaseRootBatch('controller_handleCreateUseCase_finally', { newUseCaseId });
       }
     },
-    [useCases, logicalSteps, provider, model, globalStyleContract, useCaseGlobalStyleId]
+    [useCases, logicalSteps, provider, model, globalStyleContract, useCaseGlobalStyleId, getDeferAgentMessages]
   );
 
   persistInputsRef.current = {
@@ -1562,6 +1684,8 @@ export function useAIAgentEditorController({
     handleRegenerateAgentMessage,
     handleAnnotateAgentMessageForJson,
     handleDeleteUseCase,
+    useCaseSiblingSortMode,
+    setUseCaseSiblingSortMode,
     backendPlaceholders,
     insertBackendPathAtSection,
     insertBackendPathInDesign,

@@ -7,6 +7,8 @@ import type { IDockviewPanelProps } from 'dockview';
 import { AIAgentUnifiedPromptField } from './AIAgentUnifiedPromptField';
 import { AIAgentProposedFieldsTable } from './AIAgentProposedFieldsTable';
 import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
+import { ViewSkaGenerator } from './useCaseGeneratorWizard/ViewSkaGenerator';
+import { UseCaseWizardListToolbarProvider } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
@@ -133,33 +135,64 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
     showRightPanel,
     generating,
     onGenerateUseCaseBundle,
+    useCaseGeneratorWizard,
+    useCaseBundleFeedback,
+    onDismissUseCaseBundleFeedback,
+    useCaseHighlightIds,
+    onClearUseCaseHighlight,
   } = useAIAgentEditorDock();
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
+  const useWizardShell = Boolean(hasAgentGeneration && showRightPanel && useCaseGeneratorWizard);
 
-  return (
-    <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-950/80">
-      <AIAgentUseCaseComposer
-        editorTaskInstanceId={instanceId}
-        logicalSteps={logicalSteps}
-        useCases={useCases}
-        setUseCases={setUseCases}
-        busy={useCaseComposerBusy}
-        creationMessage={useCaseCreationMessage}
-        error={useCaseComposerError}
-        onDismissError={onClearUseCaseComposerError}
-        onCreateUseCase={onCreateUseCase}
-        onRegenerateUseCase={onRegenerateUseCase}
-        onRegenerateAgentMessage={onRegenerateAgentMessage}
-        onAnnotateAgentMessageForJson={onAnnotateAgentMessageForJson}
-        onDeleteUseCase={onDeleteUseCase}
-        useCaseGlobalStyleId={useCaseGlobalStyleId}
-        onUseCaseGlobalStyleIdChange={setUseCaseGlobalStyleId}
-        previewStyleId={previewStyleId}
-        onPreviewStyleIdChange={setPreviewStyleId}
-        onGenerateUseCaseBundle={showGenerateCta ? onGenerateUseCaseBundle : undefined}
-        generating={generating}
-      />
-    </div>
+  const composer = (
+    <AIAgentUseCaseComposer
+      editorTaskInstanceId={instanceId}
+      logicalSteps={logicalSteps}
+      useCases={useCases}
+      setUseCases={setUseCases}
+      busy={useCaseComposerBusy}
+      creationMessage={useCaseCreationMessage}
+      error={useCaseComposerError}
+      onDismissError={onClearUseCaseComposerError}
+      onCreateUseCase={onCreateUseCase}
+      onRegenerateUseCase={onRegenerateUseCase}
+      onRegenerateAgentMessage={onRegenerateAgentMessage}
+      onAnnotateAgentMessageForJson={onAnnotateAgentMessageForJson}
+      onDeleteUseCase={onDeleteUseCase}
+      useCaseGlobalStyleId={useCaseGlobalStyleId}
+      onUseCaseGlobalStyleIdChange={setUseCaseGlobalStyleId}
+      previewStyleId={previewStyleId}
+      onPreviewStyleIdChange={setPreviewStyleId}
+      onGenerateUseCaseBundle={
+        useWizardShell ? undefined : showGenerateCta ? onGenerateUseCaseBundle : undefined
+      }
+      generating={generating}
+      primaryGenerateOnRightOnly={useWizardShell}
+      highlightIds={useCaseHighlightIds}
+      onClearUseCaseHighlight={onClearUseCaseHighlight}
+    />
   );
+
+  if (useWizardShell && useCaseGeneratorWizard) {
+    return (
+      <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-950/80">
+        <UseCaseWizardListToolbarProvider>
+          <ViewSkaGenerator
+            wizard={useCaseGeneratorWizard}
+            leftPanel={composer}
+            onGenerateUseCaseBundle={showGenerateCta ? onGenerateUseCaseBundle : undefined}
+            generateBusy={useCaseComposerBusy || generating}
+            showStepOneListToolbar={useCases.length > 0}
+            useCaseCount={useCases.length}
+            onAdvanceWizardStep={() => useCaseGeneratorWizard.advanceToNextStep()}
+            bundleFeedback={useCaseBundleFeedback}
+            onDismissBundleFeedback={onDismissUseCaseBundleFeedback}
+          />
+        </UseCaseWizardListToolbarProvider>
+      </div>
+    );
+  }
+
+  return <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-950/80">{composer}</div>;
 }

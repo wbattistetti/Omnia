@@ -29,7 +29,7 @@ export interface AIAgentRightPanelProps {
     creationScope?: 'single' | 'batch';
   }) => Promise<string>;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
-  onRegenerateAgentMessage: (useCaseId: string) => void | Promise<void>;
+  onRegenerateAgentMessage: (useCaseId: string) => void | Promise<string | null | void>;
   onAnnotateAgentMessageForJson: (
     useCaseId: string,
     assistantContentFromEditor?: string
