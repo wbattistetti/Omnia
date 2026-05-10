@@ -23,6 +23,8 @@ export interface AIAgentPersistState {
   hasAgentGeneration: boolean;
   agentLogicalStepsJson: string;
   agentUseCasesJson: string;
+  /** JSON wizard pipeline + baseline (use case guided generator). */
+  agentUseCaseWizardStateJson: string;
   agentIaRuntimeOverrideJson: string;
   agentImmediateStart: boolean;
 }
@@ -50,6 +52,7 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentDesignHasGeneration: state.hasAgentGeneration,
     agentLogicalStepsJson: state.agentLogicalStepsJson,
     agentUseCasesJson: state.agentUseCasesJson,
+    agentUseCaseWizardStateJson: state.agentUseCaseWizardStateJson,
     agentIaRuntimeOverrideJson: state.agentIaRuntimeOverrideJson,
     agentImmediateStart: state.agentImmediateStart,
   };

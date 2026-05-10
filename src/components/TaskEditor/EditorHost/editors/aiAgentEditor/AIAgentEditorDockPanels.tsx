@@ -119,6 +119,8 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
     useCases,
     setUseCases,
     useCaseComposerBusy,
+    useCaseBundleGenerationBusy,
+    useCasePhraseStylePropagationBusy,
     useCaseCreationMessage,
     useCaseComposerError,
     onClearUseCaseComposerError,
@@ -140,10 +142,18 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
     onDismissUseCaseBundleFeedback,
     useCaseHighlightIds,
     onClearUseCaseHighlight,
+    onPropagateExamplePhraseStyle,
+    assistantPhraseStyleNewIds,
+    onAssistantPhraseDraftChange,
   } = useAIAgentEditorDock();
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
   const useWizardShell = Boolean(hasAgentGeneration && showRightPanel && useCaseGeneratorWizard);
+
+  const useCaseComposerBlockingBusy =
+    useCaseComposerBusy ||
+    useCaseBundleGenerationBusy ||
+    useCasePhraseStylePropagationBusy;
 
   const composer = (
     <AIAgentUseCaseComposer
@@ -151,7 +161,7 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
       logicalSteps={logicalSteps}
       useCases={useCases}
       setUseCases={setUseCases}
-      busy={useCaseComposerBusy}
+      busy={useCaseComposerBlockingBusy}
       creationMessage={useCaseCreationMessage}
       error={useCaseComposerError}
       onDismissError={onClearUseCaseComposerError}
@@ -171,6 +181,8 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
       primaryGenerateOnRightOnly={useWizardShell}
       highlightIds={useCaseHighlightIds}
       onClearUseCaseHighlight={onClearUseCaseHighlight}
+      assistantPhraseStyleNewIds={assistantPhraseStyleNewIds}
+      onAssistantPhraseDraftChange={onAssistantPhraseDraftChange}
     />
   );
 
@@ -182,12 +194,14 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
             wizard={useCaseGeneratorWizard}
             leftPanel={composer}
             onGenerateUseCaseBundle={showGenerateCta ? onGenerateUseCaseBundle : undefined}
-            generateBusy={useCaseComposerBusy || generating}
+            generateBusy={useCaseBundleGenerationBusy || generating}
             showStepOneListToolbar={useCases.length > 0}
             useCaseCount={useCases.length}
             onAdvanceWizardStep={() => useCaseGeneratorWizard.advanceToNextStep()}
             bundleFeedback={useCaseBundleFeedback}
             onDismissBundleFeedback={onDismissUseCaseBundleFeedback}
+            onApplyExamplePhraseStyle={onPropagateExamplePhraseStyle}
+            examplePhraseStyleBusy={useCasePhraseStylePropagationBusy}
           />
         </UseCaseWizardListToolbarProvider>
       </div>

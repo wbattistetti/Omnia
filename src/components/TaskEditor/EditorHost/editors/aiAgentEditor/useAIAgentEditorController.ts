@@ -21,6 +21,7 @@ import {
   generateAIAgentDesign,
   generateAIAgentUseCases,
   annotateAIAgentAssistantMessageForJsonApi,
+  propagateExamplePhraseStyleApi,
   regenerateAIAgentUseCaseApi,
   regenerateAIAgentUseCaseTurnApi,
 } from '@services/aiAgentDesignApi';
@@ -229,12 +230,19 @@ export function useAIAgentEditorController({
     DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID
   );
   const [useCaseComposerBusy, setUseCaseComposerBusy] = React.useState(false);
+  /** Solo generazione bundle use case (wizard): non propagare agli altri pulsanti del pannello DX. */
+  const [useCaseBundleGenerationBusy, setUseCaseBundleGenerationBusy] = React.useState(false);
+  /** Solo propagazione stile frasi esempio (LLM): indipendente da {@link useCaseBundleGenerationBusy}. */
+  const [useCasePhraseStylePropagationBusy, setUseCasePhraseStylePropagationBusy] =
+    React.useState(false);
   const [useCaseComposerError, setUseCaseComposerError] = React.useState<string | null>(null);
   const [useCaseCreationMessage, setUseCaseCreationMessage] = React.useState<string | null>(null);
   const [backendPlaceholders, setBackendPlaceholders] = React.useState<BackendPlaceholderInstance[]>([]);
   const [agentPromptTargetPlatform, setAgentPromptTargetPlatformState] =
     React.useState<AgentPromptPlatformId>(() => normalizeAgentPromptPlatformId(undefined));
   const [agentImmediateStart, setAgentImmediateStartState] = React.useState(false);
+  /** JSON wizard use case: passo pipeline + baseline IA (Task.agentUseCaseWizardStateJson). */
+  const [agentUseCaseWizardStateJson, setAgentUseCaseWizardStateJson] = React.useState('');
 
   const [iaRuntimeConfig, setIaRuntimeConfigState] = React.useState<IAAgentConfig>(() =>
     loadGlobalIaAgentConfig()
@@ -540,6 +548,7 @@ export function useAIAgentEditorController({
     const hasGen = resolveHasAgentGeneration(b);
     setHasAgentGeneration(hasGen);
     setAgentImmediateStartState(b.agentImmediateStart);
+    setAgentUseCaseWizardStateJson(b.agentUseCaseWizardStateJson);
     setLogicalSteps(b.logicalSteps);
     useCaseSiblingSortModeRef.current = 'logical';
     setUseCaseSiblingSortModeState('logical');
@@ -639,6 +648,7 @@ export function useAIAgentEditorController({
       hasAgentGeneration,
       agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
       agentUseCasesJson,
+      agentUseCaseWizardStateJson,
       agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(iaRuntimeForPersist),
       agentImmediateStart,
     }) as Record<string, unknown>;
@@ -681,7 +691,13 @@ export function useAIAgentEditorController({
     iaRuntimeConfig,
     agentImmediateStart,
     manualCatalogBackendTaskIds,
+    agentUseCaseWizardStateJson,
   ]);
+
+  const persistAgentUseCaseWizardState = React.useCallback((json: string) => {
+    setAgentUseCaseWizardStateJson(json);
+    setDirty(true);
+  }, []);
 
   /**
    * Persists IA runtime override: parse repo JSON (or global defaults), merge `partial`, normalize twice,
@@ -1063,7 +1079,7 @@ export function useAIAgentEditorController({
       return null;
     }
     setUseCaseComposerError(null);
-    setUseCaseComposerBusy(true);
+    setUseCaseBundleGenerationBusy(true);
     try {
       const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
       const extendMode = useCases.length > 0;
@@ -1132,7 +1148,7 @@ export function useAIAgentEditorController({
       setUseCaseComposerError(e instanceof Error ? e.message : String(e));
       return null;
     } finally {
-      setUseCaseComposerBusy(false);
+      setUseCaseBundleGenerationBusy(false);
     }
   }, [
     hasAgentGeneration,
@@ -1205,6 +1221,68 @@ export function useAIAgentEditorController({
       useCaseGlobalStyleId,
       getDeferAgentMessages,
     ]
+  );
+
+  /**
+   * Wizard passo 2: riscrivi le frasi esempio ancora alla baseline IA usando quelle modificate come riferimento di stile.
+   */
+  const handlePropagateExamplePhraseStyle = React.useCallback(
+    async (params: {
+      styleExampleUseCaseIds: readonly string[];
+      targetUseCaseIds: readonly string[];
+    }): Promise<{ updatedIds: string[]; nextUseCases: AIAgentUseCase[] } | null> => {
+      const { styleExampleUseCaseIds, targetUseCaseIds } = params;
+      if (styleExampleUseCaseIds.length === 0 || targetUseCaseIds.length === 0) return null;
+      setUseCaseComposerError(null);
+      setUseCasePhraseStylePropagationBusy(true);
+      try {
+        const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
+        const res = await propagateExamplePhraseStyleApi({
+          allUseCases: useCases,
+          logicalSteps,
+          styleExampleUseCaseIds: [...styleExampleUseCaseIds],
+          targetUseCaseIds: [...targetUseCaseIds],
+          provider,
+          model,
+          outputLanguage,
+          globalStyleContract,
+          globalStyleId: useCaseGlobalStyleId,
+        });
+        const byContent = new Map(res.updates.map((u) => [u.use_case_id, u.assistant_content]));
+        const nextUseCases = normalizeUseCaseSiblingOrder(
+          useCases.map((u) => {
+            const newContent = byContent.get(u.id);
+            if (newContent === undefined) return u;
+            const turnId = u.dialogue.find((t) => t.role === 'assistant')?.turn_id;
+            if (!turnId) return u;
+            return {
+              ...u,
+              dialogue: u.dialogue.map((t) =>
+                t.turn_id === turnId && t.role === 'assistant'
+                  ? {
+                      ...t,
+                      content: newContent,
+                      motor_snapshot: undefined,
+                    }
+                  : t
+              ),
+              designer_edit_confirmed: true as const,
+            };
+          }),
+          useCaseSiblingSortModeRef.current
+        );
+        const updatedIds = targetUseCaseIds.filter((id) => byContent.has(id));
+        setUseCases(nextUseCases);
+        setDirty(true);
+        return { updatedIds, nextUseCases };
+      } catch (e) {
+        setUseCaseComposerError(e instanceof Error ? e.message : String(e));
+        return null;
+      } finally {
+        setUseCasePhraseStylePropagationBusy(false);
+      }
+    },
+    [useCases, logicalSteps, provider, model, globalStyleContract, useCaseGlobalStyleId]
   );
 
   /**
@@ -1558,6 +1636,7 @@ export function useAIAgentEditorController({
     hasAgentGeneration,
     agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
     agentUseCasesJson: serializeUseCases(useCases),
+    agentUseCaseWizardStateJson,
     agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(
       mergeConvaiAgentIdFromGlobalDefaults(iaRuntimeConfig, loadGlobalIaAgentConfig())
     ),
@@ -1675,12 +1754,17 @@ export function useAIAgentEditorController({
     setLogicalSteps,
     setUseCases: setUseCasesUser,
     useCaseComposerBusy,
+    useCaseBundleGenerationBusy,
+    useCasePhraseStylePropagationBusy,
     useCaseCreationMessage,
     useCaseComposerError,
     clearUseCaseComposerError,
     handleGenerateUseCaseBundle,
     handleCreateUseCase,
     handleRegenerateUseCase,
+    handlePropagateExamplePhraseStyle,
+    persistAgentUseCaseWizardState,
+    agentUseCaseWizardStateJson,
     handleRegenerateAgentMessage,
     handleAnnotateAgentMessageForJson,
     handleDeleteUseCase,

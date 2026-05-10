@@ -12,8 +12,11 @@ import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEdito
 import { AIAgentEditorDockShell } from './aiAgentEditor/AIAgentEditorDockShell';
 import { useAIAgentEditorController } from './aiAgentEditor/useAIAgentEditorController';
 import { useAIAgentToolbarController } from './aiAgentEditor/useAIAgentToolbarController';
+import type { UseCaseGeneratorWizardStepId } from '@domain/useCaseGeneratorWizard/types';
+import { applyAllDesignerVotesUp } from './aiAgentEditor/useCaseComposerDesignerVotes';
 import { normalizeUseCaseSiblingOrder } from './aiAgentEditor/useCaseHierarchy';
 import { useUseCaseGeneratorWizard } from './aiAgentEditor/useCaseGeneratorWizard/useUseCaseGeneratorWizard';
+import { mergeAssistantPhraseDraftIntoUseCases } from './aiAgentEditor/mergeAssistantPhraseDraftIntoUseCases';
 
 export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: EditorProps) {
   const instanceId = task.instanceId || task.id;
@@ -31,9 +34,50 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     getDeferAgentMessages: () => deferAgentMessagesInUseCaseListRef.current,
   });
 
+  const onConfirmAdvanceWithoutEdits = React.useCallback(
+    (stepId: UseCaseGeneratorWizardStepId) => {
+      if (stepId !== 'use_case_list') return;
+      c.setUseCases((prev) => applyAllDesignerVotesUp(prev));
+    },
+    [c.setUseCases]
+  );
+
+  const [assistantPhraseDraftById, setAssistantPhraseDraftById] = React.useState<
+    Record<string, string>
+  >({});
+
+  React.useEffect(() => {
+    setAssistantPhraseDraftById({});
+  }, [c.instanceId]);
+
+  const useCasesForWizardStylePlan = React.useMemo(
+    () => mergeAssistantPhraseDraftIntoUseCases(c.useCases, assistantPhraseDraftById),
+    [c.useCases, assistantPhraseDraftById]
+  );
+
+  const onAssistantPhraseDraftChange = React.useCallback(
+    (useCaseId: string | null, draftText: string | null) => {
+      setAssistantPhraseDraftById((prev) => {
+        if (useCaseId === null && draftText === null) return {};
+        if (useCaseId === null) return prev;
+        if (draftText === null) {
+          if (!(useCaseId in prev)) return prev;
+          const next = { ...prev };
+          delete next[useCaseId];
+          return next;
+        }
+        return { ...prev, [useCaseId]: draftText };
+      });
+    },
+    []
+  );
+
   const useCaseGenWizard = useUseCaseGeneratorWizard({
     instanceId: c.instanceId,
-    useCases: c.useCases,
+    useCases: useCasesForWizardStylePlan,
+    taskPersistedWizardJson: c.agentUseCaseWizardStateJson,
+    onWizardPersist: c.persistAgentUseCaseWizardState,
+    onConfirmAdvanceWithoutEdits,
   });
 
   /** Always keep IA-generated assistant turns: lista use case mostra etichetta + scenario + messaggio. */
@@ -45,6 +89,34 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
   const dismissUseCaseBundleFeedback = React.useCallback(() => setUseCaseBundleFeedback(null), []);
 
+  const [assistantPhraseStyleNewIds, setAssistantPhraseStyleNewIds] = React.useState<readonly string[]>([]);
+
+  React.useEffect(() => {
+    const id = useCaseGenWizard.currentStepId;
+    if (id !== 'example_phrases' && id !== 'use_case_list') {
+      setAssistantPhraseStyleNewIds([]);
+    }
+  }, [useCaseGenWizard.currentStepId]);
+
+  const runPropagateExamplePhraseStyle = React.useCallback(async () => {
+    const plan = useCaseGenWizard.examplePhraseStylePlan;
+    if (!plan.showStyleCta) return;
+    const res = await c.handlePropagateExamplePhraseStyle({
+      styleExampleUseCaseIds: plan.modifiedIds,
+      targetUseCaseIds: plan.targetIds,
+    });
+    if (res) {
+      setAssistantPhraseDraftById({});
+      useCaseGenWizard.captureExamplePhrasesBaseline(res.nextUseCases);
+      setAssistantPhraseStyleNewIds(res.updatedIds);
+      setUseCaseBundleFeedback('Messaggi aggiornati con il nuovo stile.');
+    }
+  }, [
+    c.handlePropagateExamplePhraseStyle,
+    useCaseGenWizard.captureExamplePhrasesBaseline,
+    useCaseGenWizard.examplePhraseStylePlan,
+  ]);
+
   const clearUseCaseHighlight = React.useCallback((useCaseId: string) => {
     setUseCaseHighlightIds((prev) => prev.filter((id) => id !== useCaseId));
   }, []);
@@ -52,6 +124,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const runGenerateUseCaseBundle = React.useCallback(async () => {
     const result = await c.handleGenerateUseCaseBundle();
     if (!result) return;
+    setAssistantPhraseDraftById({});
     captureUseCaseListAiBaseline(result.useCases);
     if (result.mode === 'extend' && result.addedCount > 0) {
       setUseCaseBundleFeedback(`Ho aggiunto ${result.addedCount} use case.`);
@@ -117,6 +190,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     showPrimaryAgentAction: c.showPrimaryAgentAction,
     generating: c.generating,
     useCaseComposerBusy: c.useCaseComposerBusy,
+    useCaseBundleGenerationBusy: c.useCaseBundleGenerationBusy,
+    useCasePhraseStylePropagationBusy: c.useCasePhraseStylePropagationBusy,
     onPrimaryAgentAction,
     onGenerateUseCaseBundle: onGenerateUseCaseBundleAction,
   });
@@ -163,6 +238,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     useCases: c.useCases,
     setUseCases: c.setUseCases,
     useCaseComposerBusy: c.useCaseComposerBusy,
+    useCaseBundleGenerationBusy: c.useCaseBundleGenerationBusy,
+    useCasePhraseStylePropagationBusy: c.useCasePhraseStylePropagationBusy,
     useCaseCreationMessage: c.useCaseCreationMessage,
     useCaseComposerError: c.useCaseComposerError,
     onClearUseCaseComposerError: c.clearUseCaseComposerError,
@@ -209,6 +286,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onDismissUseCaseBundleFeedback: dismissUseCaseBundleFeedback,
     useCaseHighlightIds,
     onClearUseCaseHighlight: clearUseCaseHighlight,
+
+    onPropagateExamplePhraseStyle: runPropagateExamplePhraseStyle,
+    assistantPhraseStyleNewIds,
+    onAssistantPhraseDraftChange,
 
     useCaseSiblingSortMode: c.useCaseSiblingSortMode,
     setUseCaseSiblingSortMode: c.setUseCaseSiblingSortMode,
@@ -257,16 +338,23 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               {c.hasAgentGeneration && showRightPanel ? (
                 <button
                   type="button"
-                  disabled={c.useCaseComposerBusy || c.generating}
+                  disabled={
+                    c.useCaseComposerBusy ||
+                    c.useCaseBundleGenerationBusy ||
+                    c.useCasePhraseStylePropagationBusy ||
+                    c.generating
+                  }
                   onClick={() => void runGenerateUseCaseBundle()}
                   className="inline-flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-3 py-1.5 text-sm font-medium text-white"
                 >
-                  {c.useCaseComposerBusy ? (
+                  {c.useCaseBundleGenerationBusy || c.generating ? (
                     <Loader2 className="animate-spin" size={16} aria-hidden />
                   ) : (
                     <Sparkles size={16} aria-hidden />
                   )}
-                  {LABEL_GENERATE_USE_CASES}
+                  {c.useCaseBundleGenerationBusy || c.generating
+                    ? 'Generando…'
+                    : LABEL_GENERATE_USE_CASES}
                 </button>
               ) : null}
             </div>

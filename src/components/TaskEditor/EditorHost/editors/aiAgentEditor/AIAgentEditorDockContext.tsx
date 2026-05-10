@@ -49,6 +49,10 @@ export interface AIAgentEditorDockContextValue {
   useCases: readonly AIAgentUseCase[];
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
   useCaseComposerBusy: boolean;
+  /** Generazione / estensione lista use case (LLM bundle); separato da propagazione stile. */
+  useCaseBundleGenerationBusy: boolean;
+  /** Propagazione stile frasi esempio (LLM); separato da bundle. */
+  useCasePhraseStylePropagationBusy: boolean;
   useCaseComposerError: string | null;
   onClearUseCaseComposerError: () => void;
   onGenerateUseCaseBundle: () => void | Promise<void>;
@@ -141,6 +145,17 @@ export interface AIAgentEditorDockContextValue {
   /** Id evidenziati nel composer dopo un batch generato. */
   useCaseHighlightIds: readonly string[];
   onClearUseCaseHighlight: (useCaseId: string) => void;
+
+  /** Passo 2 wizard: propaga stile dalle frasi modificate al resto (LLM). */
+  onPropagateExamplePhraseStyle: () => void | Promise<void>;
+  /** Use case il cui messaggio assistente è stato appena aggiornato da «Aggiorna stile». */
+  assistantPhraseStyleNewIds: readonly string[];
+
+  /**
+   * Messaggio assistente ancora in textarea (non committato in useCases): serve al piano stile nel wizard.
+   * `draftText === null` rimuove la bozza per quell’id; `(null, null)` svuota tutto.
+   */
+  onAssistantPhraseDraftChange?: (useCaseId: string | null, draftText: string | null) => void;
 
   /** Ordine tra fratelli: dialogo (default) vs alfabetico (toolbar AB). */
   useCaseSiblingSortMode: UseCaseSiblingSortMode;

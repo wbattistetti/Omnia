@@ -25,7 +25,7 @@ export const USE_CASE_GENERATOR_WIZARD_STEPS: readonly UseCaseGeneratorWizardSte
   {
     id: 'use_case_list',
     title: 'Crea casi d’uso',
-    panelHeading: 'Passo 1°: Creazione dei casi d’uso per il task',
+    panelHeading: 'Passo 1°: Creazione dei casi d’uso',
     instructionLead:
       'Iniziamo generando automaticamente i casi d’uso più frequenti.\n\n' +
       'Il tuo compito sarà quello di controllare la lista proposta. Potrai:',
@@ -38,8 +38,7 @@ export const USE_CASE_GENERATOR_WIZARD_STEPS: readonly UseCaseGeneratorWizardSte
     instructionPlain: '',
     tutorialIfNoChanges:
       'Ho visto che non hai fatto modifiche. Vanno bene, quindi?',
-    confirmNoEditsMessage:
-      'Non risultano modifiche rispetto all’ultima generazione IA della lista use case. Vuoi proseguire comunque?',
+    confirmNoEditsMessage: 'Non hai fatto correzioni. Vuoi proseguire comunque?',
   },
   {
     id: 'example_phrases',

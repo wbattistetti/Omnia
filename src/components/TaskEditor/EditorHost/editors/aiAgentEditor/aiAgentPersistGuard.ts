@@ -35,6 +35,9 @@ export function wouldDowngradeAgentPersistPatch(instanceId: string, patch: Recor
   if (nonEmpty(ex.agentPrompt) && !nonEmpty(patch.agentPrompt)) return true;
   if (nonEmptyJsonish(ex.agentUseCasesJson) && !nonEmptyJsonish(patch.agentUseCasesJson)) return true;
   if (nonEmptyJsonish(ex.agentLogicalStepsJson) && !nonEmptyJsonish(patch.agentLogicalStepsJson)) return true;
+  if (nonEmptyJsonish(ex.agentUseCaseWizardStateJson) && !nonEmptyJsonish(patch.agentUseCaseWizardStateJson)) {
+    return true;
+  }
   if (nonEmptyJsonish(ex.agentStructuredSectionsJson) && !nonEmptyJsonish(patch.agentStructuredSectionsJson)) {
     return true;
   }

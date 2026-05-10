@@ -16,8 +16,6 @@ import {
   deleteConvaiAgentViaOmniaServer,
   listAllConvaiAgentsMatchingTaskGuid,
 } from '@services/convaiProvisionApi';
-import { emitConvaiProvisionPayloadPreview } from '@utils/iaAgentRuntime/convaiPayloadPreviewEvents';
-import { buildUseCaseDialoguesPreviewFromTask } from '@utils/iaAgentRuntime/agentUseCasesProvisionPreviewFormat';
 import {
   buildConvaiProvisionKey,
   conversationConfigForConvaiApi,
@@ -147,9 +145,6 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
 
   const handleProvisionConvaiAgent = React.useCallback(async () => {
     if (!instanceId?.trim()) return;
-    let displayNameForPreview = '';
-    let fragmentForPreview: Record<string, unknown> | undefined;
-    let outboundForPreview: Record<string, unknown> | undefined;
     try {
       const task = taskRepository.getTask(instanceId);
       /** Preferisci lo stato del pannello: evita payload senza `tools` se il repo non è ancora allineato al tick React. */

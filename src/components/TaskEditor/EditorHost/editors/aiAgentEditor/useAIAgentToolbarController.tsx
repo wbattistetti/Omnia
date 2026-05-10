@@ -26,6 +26,10 @@ export interface UseAIAgentToolbarControllerParams {
   showPrimaryAgentAction: boolean;
   generating: boolean;
   useCaseComposerBusy: boolean;
+  /** True mentre gira solo la generazione bundle use case (non altre op.f composer). */
+  useCaseBundleGenerationBusy: boolean;
+  /** True mentre propaga lo stile delle frasi esempio (LLM). */
+  useCasePhraseStylePropagationBusy: boolean;
   /** Create Agent / Refine — same handler as the in-editor primary button. */
   onPrimaryAgentAction: () => void;
   /** IA bundle for use cases — mirrored into tab toolbar when header is hidden. */
@@ -41,6 +45,8 @@ export function useAIAgentToolbarController({
   showPrimaryAgentAction,
   generating,
   useCaseComposerBusy,
+  useCaseBundleGenerationBusy,
+  useCasePhraseStylePropagationBusy,
   onPrimaryAgentAction,
   onGenerateUseCaseBundle,
 }: UseAIAgentToolbarControllerParams) {
@@ -62,10 +68,20 @@ export function useAIAgentToolbarController({
       });
     }
     if (showGenerateUseCaseAction) {
-      const genBusy = useCaseComposerBusy || generating;
+      const genBusy =
+        useCaseBundleGenerationBusy ||
+        generating ||
+        useCaseComposerBusy ||
+        useCasePhraseStylePropagationBusy;
       buttons.push({
-        icon: useCaseComposerBusy ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Sparkles size={16} aria-hidden />,
-        label: useCaseComposerBusy ? 'Generazione scenari…' : LABEL_GENERATE_USE_CASES,
+        icon:
+          useCaseBundleGenerationBusy || generating ? (
+            <Loader2 size={16} className="animate-spin" aria-hidden />
+          ) : (
+            <Sparkles size={16} aria-hidden />
+          ),
+        label:
+          useCaseBundleGenerationBusy || generating ? 'Generando…' : LABEL_GENERATE_USE_CASES,
         onClick: () => void onGenerateUseCaseBundle(),
         disabled: genBusy,
         primary: false,
@@ -78,6 +94,8 @@ export function useAIAgentToolbarController({
     showGenerateUseCaseAction,
     generating,
     useCaseComposerBusy,
+    useCaseBundleGenerationBusy,
+    useCasePhraseStylePropagationBusy,
     primaryAgentActionLabel,
     onPrimaryAgentAction,
     onGenerateUseCaseBundle,

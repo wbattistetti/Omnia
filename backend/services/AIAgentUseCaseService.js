@@ -12,6 +12,8 @@ const GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS = 300000;
 /** Regenerate single scenario / turn: allow more than default 60s provider cap. */
 const REGENERATE_USE_CASE_TIMEOUT_MS = 120000;
 const REGENERATE_TURN_TIMEOUT_MS = 90000;
+/** Batch rewrite assistant example lines to match user-edited style references (wizard passo 2). */
+const PROPAGATE_EXAMPLE_PHRASE_STYLE_TIMEOUT_MS = 120000;
 /** Debugger flow-mode: classify turn vs catalog / suggest new scenario. */
 const ANALYZE_DEBUG_TURN_TIMEOUT_MS = 90000;
 
@@ -607,6 +609,148 @@ async function regenerateTurn({
   return normalized;
 }
 
+const PROPAGATE_EXAMPLE_PHRASE_STYLE_SYSTEM = `You align assistant example lines across use cases for OMNIA design-time.
+STYLE_EXAMPLES are authoritative: copy their tone, register, sentence rhythm, politeness level, and bracket habits for runtime slots.
+TARGETS need NEW assistant example text that fits EACH scenario (label + payoff) while sounding like STYLE_EXAMPLES wrote them.
+Respond with one JSON object only: { "updates": [ { "use_case_id": string, "assistant_content": string } ] }.
+Emit exactly one update per target id in TARGET_IDS_ORDER; never omit an id. Each assistant_content must be non-empty.
+Bracket rules: variable semantic fragments only; in Italian keep articles/prepositions outside brackets (e.g. alle [ora_disponibile], not [alle 14]).`;
+
+/**
+ * @param {string} outputLanguage
+ * @param {object[]} styleExamples — full use case objects (designer-edited lines)
+ * @param {object[]} targets — use cases still at IA baseline; rewrite assistant line only
+ * @param {object[]} logicalSteps
+ * @param {string} [globalStyleContract]
+ * @param {string[]} targetIdsOrder
+ */
+function buildPropagateExamplePhraseStyleUserMessage(
+  outputLanguage,
+  styleExamples,
+  targets,
+  logicalSteps,
+  globalStyleContract,
+  targetIdsOrder
+) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const styleBlock = buildGlobalStyleBlock(globalStyleContract);
+  return `${lang}STYLE_EXAMPLES (authoritative — imitate these assistant lines):\n${JSON.stringify(styleExamples).slice(
+    0,
+    12000
+  )}\n\nTARGETS (rewrite assistant example only; preserve scenario meaning):\n${JSON.stringify(targets).slice(
+    0,
+    12000
+  )}\n\nLogical steps (context):\n${JSON.stringify(logicalSteps || []).slice(0, 4000)}\n${styleBlock}\n\nTARGET_IDS_ORDER (emit updates in this exact order): ${JSON.stringify(
+    targetIdsOrder
+  )}\n\nReturn JSON: { "updates": [ { "use_case_id": "<id>", "assistant_content": "..." }, ... ] }. Valid JSON only.`;
+}
+
+/**
+ * Rigenera solo le righe assistente ancora alla baseline, imitando le frasi modificate dall’utente.
+ * @param {object} params
+ * @param {object[]} params.allUseCases
+ * @param {object[]} params.logicalSteps
+ * @param {string[]} params.styleExampleUseCaseIds
+ * @param {string[]} params.targetUseCaseIds
+ */
+async function propagateExamplePhraseStyle({
+  allUseCases,
+  logicalSteps,
+  styleExampleUseCaseIds,
+  targetUseCaseIds,
+  outputLanguage,
+  globalStyleContract,
+  globalStyleId,
+  provider = 'groq',
+  model,
+  aiProviderService,
+}) {
+  if (!Array.isArray(allUseCases) || allUseCases.length === 0) {
+    throw new Error('allUseCases is required');
+  }
+  if (!Array.isArray(styleExampleUseCaseIds) || styleExampleUseCaseIds.length === 0) {
+    throw new Error('styleExampleUseCaseIds is required');
+  }
+  if (!Array.isArray(targetUseCaseIds) || targetUseCaseIds.length === 0) {
+    throw new Error('targetUseCaseIds is required');
+  }
+  const byId = new Map(allUseCases.map((u) => [u.id, u]));
+  const styleExamples = [];
+  for (const id of styleExampleUseCaseIds) {
+    const u = byId.get(id);
+    if (u) styleExamples.push(normalizeUseCase(u, globalStyleId));
+  }
+  if (styleExamples.length === 0) {
+    throw new Error('No valid style examples');
+  }
+  const targets = [];
+  for (const id of targetUseCaseIds) {
+    const u = byId.get(id);
+    if (u) targets.push(normalizeUseCase(u, globalStyleId));
+  }
+  if (targets.length === 0) {
+    throw new Error('No valid targets');
+  }
+  const messages = [
+    { role: 'system', content: PROPAGATE_EXAMPLE_PHRASE_STYLE_SYSTEM },
+    {
+      role: 'user',
+      content: buildPropagateExamplePhraseStyleUserMessage(
+        outputLanguage,
+        styleExamples,
+        targets,
+        logicalSteps || [],
+        globalStyleContract,
+        targetUseCaseIds
+      ),
+    },
+  ];
+  const maxTokens = provider === 'openai' ? 8192 : 16384;
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.45,
+    maxTokens,
+    timeout: PROPAGATE_EXAMPLE_PHRASE_STYLE_TIMEOUT_MS,
+  });
+  const content = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(content);
+  const parsed = JSON.parse(jsonStr);
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.updates)) {
+    throw new Error('Invalid JSON: expected { updates: [] }');
+  }
+  const want = new Set(targetUseCaseIds.map(String));
+  const out = [];
+  const seen = new Set();
+  for (const row of parsed.updates) {
+    if (!row || typeof row !== 'object') continue;
+    const use_case_id =
+      typeof row.use_case_id === 'string'
+        ? row.use_case_id.trim()
+        : typeof row.useCaseId === 'string'
+          ? row.useCaseId.trim()
+          : '';
+    const assistant_content =
+      typeof row.assistant_content === 'string'
+        ? row.assistant_content.trim()
+        : typeof row.assistantContent === 'string'
+          ? row.assistantContent.trim()
+          : '';
+    if (!use_case_id || !want.has(use_case_id) || seen.has(use_case_id)) continue;
+    if (!assistant_content) continue;
+    seen.add(use_case_id);
+    out.push({ use_case_id, assistant_content });
+  }
+  if (out.length !== targetUseCaseIds.length) {
+    throw new Error(
+      `Expected ${targetUseCaseIds.length} updates, got ${out.length} (ids: ${targetUseCaseIds.join(', ')})`
+    );
+  }
+  return { updates: out };
+}
+
 const ANNOTATE_ASSISTANT_FOR_JSON_TIMEOUT_MS = REGENERATE_TURN_TIMEOUT_MS;
 
 /**
@@ -1089,6 +1233,7 @@ module.exports = {
   createUseCase,
   regenerateUseCase,
   regenerateTurn,
+  propagateExamplePhraseStyle,
   annotateAssistantMessageForJson,
   validateUseCaseBundle,
   analyzeDebuggerTurnUseCase,

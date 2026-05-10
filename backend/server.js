@@ -20,6 +20,7 @@ const {
   createUseCase,
   regenerateUseCase,
   regenerateTurn,
+  propagateExamplePhraseStyle,
   annotateAssistantMessageForJson,
   analyzeDebuggerTurnUseCase,
 } = require('./services/AIAgentUseCaseService');
@@ -6515,6 +6516,34 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         aiProviderService,
       });
       return res.json({ success: true, use_case: created });
+    }
+
+    if (action === 'propagate_example_phrase_style') {
+      const allUseCases = Array.isArray(body.allUseCases) ? body.allUseCases : [];
+      const logicalStepsPh = Array.isArray(body.logicalSteps) ? body.logicalSteps : [];
+      const styleExampleUseCaseIds = Array.isArray(body.styleExampleUseCaseIds)
+        ? body.styleExampleUseCaseIds
+        : [];
+      const targetUseCaseIds = Array.isArray(body.targetUseCaseIds) ? body.targetUseCaseIds : [];
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] propagate_example_phrase_style`, {
+        provider,
+        model,
+        examples: styleExampleUseCaseIds.length,
+        targets: targetUseCaseIds.length,
+      });
+      const result = await propagateExamplePhraseStyle({
+        allUseCases,
+        logicalSteps: logicalStepsPh,
+        styleExampleUseCaseIds,
+        targetUseCaseIds,
+        outputLanguage,
+        globalStyleContract,
+        globalStyleId: globalStyleIdNorm,
+        provider,
+        model,
+        aiProviderService,
+      });
+      return res.json({ success: true, updates: result.updates });
     }
 
     if (action === 'regenerate_turn') {

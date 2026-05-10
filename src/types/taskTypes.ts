@@ -458,6 +458,11 @@ export interface Task {
   agentLogicalStepsJson?: string;
   /** JSON array: use cases tree + dialogue (design-time). */
   agentUseCasesJson?: string;
+  /**
+   * JSON string: stato wizard use case (passo pipeline + baseline IA passo 1/2).
+   * @see `parseUseCaseWizardPersistedState` in `@domain/useCaseGeneratorWizard/useCaseWizardPersistedState`.
+   */
+  agentUseCaseWizardStateJson?: string;
   /** JSON string: full {@link IAAgentConfig} (`types/iaAgentRuntimeSetup`) override for runtime motors (per task). */
   agentIaRuntimeOverrideJson?: string;
   /**

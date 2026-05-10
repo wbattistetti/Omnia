@@ -139,14 +139,14 @@ export function WizardAdvanceDialog({
           className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
           onClick={onCancel}
         >
-          No prima verifico
+          No, verifico
         </button>
         <button
           type="button"
           className="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
           onClick={onConfirm}
         >
-          Sì, proseguo
+          Sì, sono corretti, proseguo
         </button>
       </div>
     </div>,

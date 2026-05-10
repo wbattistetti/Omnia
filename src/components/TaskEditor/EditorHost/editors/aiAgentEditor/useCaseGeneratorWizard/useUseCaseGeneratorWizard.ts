@@ -1,26 +1,52 @@
 /**
  * Lightweight pipeline state for the guided use-case generator: step index, IA baselines, sequential unlock.
+ * Stato pipeline + baseline persistiti sul Task (`agentUseCaseWizardStateJson`).
  */
 
 import React from 'react';
 import { USE_CASE_GENERATOR_WIZARD_STEP_ORDER } from '@domain/useCaseGeneratorWizard/registry';
 import { getUseCaseGeneratorWizardStepConfig } from '@domain/useCaseGeneratorWizard/config';
 import { serializeUseCaseListForWizardBaseline } from '@domain/useCaseGeneratorWizard/useCaseListBaseline';
-import type {
-  UseCaseGeneratorWizardPersistedState,
-  UseCaseGeneratorWizardStepId,
-} from '@domain/useCaseGeneratorWizard/types';
+import {
+  computeExamplePhraseStylePlan,
+  snapshotAssistantContentByUseCaseId,
+  type ExamplePhraseStylePlan,
+} from '@domain/useCaseGeneratorWizard/examplePhraseStyleDiff';
+import {
+  parseUseCaseWizardPersistedState,
+  serializeUseCaseWizardPersistedState,
+  type UseCaseWizardPersistedStateV1,
+} from '@domain/useCaseGeneratorWizard/useCaseWizardPersistedState';
+import type { UseCaseGeneratorWizardStepId } from '@domain/useCaseGeneratorWizard/types';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 
 const LAST_STEP_INDEX = USE_CASE_GENERATOR_WIZARD_STEP_ORDER.length - 1;
+const USE_CASE_LIST_STEP_INDEX = USE_CASE_GENERATOR_WIZARD_STEP_ORDER.indexOf('use_case_list');
+const EXAMPLE_PHRASES_STEP_INDEX = USE_CASE_GENERATOR_WIZARD_STEP_ORDER.indexOf('example_phrases');
+
+/** Passi in cui si confrontano le frasi assistente con la baseline (lista + frasi esempio). */
+function isExamplePhraseStyleStep(stepIndex: number): boolean {
+  return stepIndex === USE_CASE_LIST_STEP_INDEX || stepIndex === EXAMPLE_PHRASES_STEP_INDEX;
+}
+
+const EMPTY_EXAMPLE_PHRASE_PLAN: ExamplePhraseStylePlan = {
+  modifiedIds: [],
+  unmodifiedIds: [],
+  targetIds: [],
+  showStyleCta: false,
+};
 
 export interface UseUseCaseGeneratorWizardParams {
   instanceId: string | undefined;
   useCases: readonly AIAgentUseCase[];
+  /** JSON dal Task — ripristino dopo salvataggio progetto. */
+  taskPersistedWizardJson?: string | null;
+  /** Persistenza sul Task (debounced via controller `dirty`). */
+  onWizardPersist?: (json: string) => void;
+  onConfirmAdvanceWithoutEdits?: (stepId: UseCaseGeneratorWizardStepId) => void;
 }
 
 export interface UseCaseGeneratorWizardModel {
-  /** Sempre true di default; il view generator non richiede opt-in manuale. */
   enabled: boolean;
   setEnabled: (value: boolean) => void;
   stepIndex: number;
@@ -31,7 +57,6 @@ export interface UseCaseGeneratorWizardModel {
   tutorialIfNoChanges: string;
   showNoChangesTutorial: boolean;
   dismissNoChangesTutorial: () => void;
-  /** Indice massimo selezionabile (0–4) in base ai passi completati. */
   unlockedMaxStepIndex: number;
   canSelectStep: (index: number) => boolean;
   selectStep: (index: number) => void;
@@ -41,6 +66,8 @@ export interface UseCaseGeneratorWizardModel {
   canGoNext: boolean;
   hasEditsSinceLastAi: boolean;
   captureUseCaseListAiBaseline: (ucs?: readonly AIAgentUseCase[]) => void;
+  captureExamplePhrasesBaseline: (ucs?: readonly AIAgentUseCase[]) => void;
+  examplePhraseStylePlan: ExamplePhraseStylePlan;
   dialogOpen: boolean;
   dialogMessage: string;
   confirmAdvanceDialog: () => void;
@@ -52,9 +79,31 @@ function storageKeyFor(instanceId: string | undefined): string | null {
   return id ? `omnia.useCaseGeneratorWizard.${id}` : null;
 }
 
+function buildWizardPayload(
+  enabled: boolean,
+  stepIndex: number,
+  unlockedMaxStepIndex: number,
+  baselineRef: React.MutableRefObject<Partial<Record<UseCaseGeneratorWizardStepId, string>>>,
+  phraseBaselineRef: React.MutableRefObject<Record<string, string>>
+): UseCaseWizardPersistedStateV1 {
+  const listBl = baselineRef.current.use_case_list;
+  const phrase = phraseBaselineRef.current;
+  return {
+    schemaVersion: 1,
+    enabled,
+    stepIndex,
+    unlockedMaxStepIndex,
+    ...(listBl !== undefined ? { useCaseListBaseline: listBl } : {}),
+    ...(Object.keys(phrase).length > 0 ? { examplePhraseBaselineById: { ...phrase } } : {}),
+  };
+}
+
 export function useUseCaseGeneratorWizard({
   instanceId,
   useCases,
+  taskPersistedWizardJson,
+  onWizardPersist,
+  onConfirmAdvanceWithoutEdits,
 }: UseUseCaseGeneratorWizardParams): UseCaseGeneratorWizardModel {
   const key = React.useMemo(() => storageKeyFor(instanceId), [instanceId]);
 
@@ -64,61 +113,126 @@ export function useUseCaseGeneratorWizard({
   const [baselineEpoch, setBaselineEpoch] = React.useState(0);
   const [showNoChangesTutorial, setShowNoChangesTutorial] = React.useState(false);
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [examplePhraseBaselineEpoch, setExamplePhraseBaselineEpoch] = React.useState(0);
 
   const baselineRef = React.useRef<Partial<Record<UseCaseGeneratorWizardStepId, string>>>({});
+  const examplePhraseBaselineByIdRef = React.useRef<Record<string, string>>({});
+  const prevStepIndexForPhraseRef = React.useRef<number>(-1);
+  const lastEmittedJsonRef = React.useRef<string>('');
+  const prevInstanceIdRef = React.useRef<string | undefined>(undefined);
 
-  React.useEffect(() => {
+  const applyHydratedParsed = React.useCallback((parsed: UseCaseWizardPersistedStateV1) => {
+    const si = Math.min(Math.max(0, Math.floor(parsed.stepIndex)), LAST_STEP_INDEX);
+    let um =
+      typeof parsed.unlockedMaxStepIndex === 'number'
+        ? Math.floor(parsed.unlockedMaxStepIndex)
+        : si;
+    um = Math.min(Math.max(um, si), LAST_STEP_INDEX);
+    setStepIndex(si);
+    setUnlockedMaxStepIndex(um);
+    if (typeof parsed.enabled === 'boolean') setEnabledState(parsed.enabled);
+    if (parsed.useCaseListBaseline !== undefined) {
+      baselineRef.current.use_case_list = parsed.useCaseListBaseline;
+    }
+    if (parsed.examplePhraseBaselineById && Object.keys(parsed.examplePhraseBaselineById).length > 0) {
+      examplePhraseBaselineByIdRef.current = { ...parsed.examplePhraseBaselineById };
+    }
+    prevStepIndexForPhraseRef.current = si;
+    setBaselineEpoch((n) => n + 1);
+    setExamplePhraseBaselineEpoch((n) => n + 1);
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (prevInstanceIdRef.current !== instanceId) {
+      prevInstanceIdRef.current = instanceId;
+      lastEmittedJsonRef.current = '';
+    }
+
+    const raw = (taskPersistedWizardJson ?? '').trim();
+    if (raw === lastEmittedJsonRef.current && raw !== '') return;
+
+    if (raw) {
+      const parsed = parseUseCaseWizardPersistedState(raw);
+      if (parsed) {
+        applyHydratedParsed(parsed);
+        lastEmittedJsonRef.current = serializeUseCaseWizardPersistedState(
+          buildWizardPayload(
+            typeof parsed.enabled === 'boolean' ? parsed.enabled : true,
+            Math.min(parsed.stepIndex, LAST_STEP_INDEX),
+            Math.min(
+              typeof parsed.unlockedMaxStepIndex === 'number' ? parsed.unlockedMaxStepIndex : parsed.stepIndex,
+              LAST_STEP_INDEX
+            ),
+            baselineRef,
+            examplePhraseBaselineByIdRef
+          )
+        );
+        return;
+      }
+    }
+
     if (!key) return;
     try {
-      const raw = sessionStorage.getItem(key);
-      if (!raw) return;
-      const v = JSON.parse(raw) as UseCaseGeneratorWizardPersistedState;
-      if (typeof v.enabled === 'boolean') setEnabledState(v.enabled);
-      let um =
-        typeof v.unlockedMaxStepIndex === 'number' &&
-        v.unlockedMaxStepIndex >= 0 &&
-        v.unlockedMaxStepIndex <= LAST_STEP_INDEX
-          ? v.unlockedMaxStepIndex
-          : 0;
-      let si =
-        typeof v.stepIndex === 'number' &&
-        v.stepIndex >= 0 &&
-        v.stepIndex < USE_CASE_GENERATOR_WIZARD_STEP_ORDER.length
-          ? v.stepIndex
-          : 0;
-      if (si > um) si = um;
-      setStepIndex(si);
-      setUnlockedMaxStepIndex(um);
+      const legacyRaw = sessionStorage.getItem(key);
+      if (!legacyRaw?.trim()) return;
+      const legacyParsed = parseUseCaseWizardPersistedState(legacyRaw);
+      if (!legacyParsed) return;
+      applyHydratedParsed(legacyParsed);
+      lastEmittedJsonRef.current = serializeUseCaseWizardPersistedState(
+        buildWizardPayload(
+          typeof legacyParsed.enabled === 'boolean' ? legacyParsed.enabled : true,
+          Math.min(legacyParsed.stepIndex, LAST_STEP_INDEX),
+          Math.min(
+            typeof legacyParsed.unlockedMaxStepIndex === 'number'
+              ? legacyParsed.unlockedMaxStepIndex
+              : legacyParsed.stepIndex,
+            LAST_STEP_INDEX
+          ),
+          baselineRef,
+          examplePhraseBaselineByIdRef
+        )
+      );
     } catch {
       /* ignore */
     }
-  }, [key]);
+  }, [instanceId, taskPersistedWizardJson, key, applyHydratedParsed]);
 
   React.useEffect(() => {
-    if (!key) return;
-    try {
-      const payload: UseCaseGeneratorWizardPersistedState = {
-        enabled,
-        stepIndex,
-        unlockedMaxStepIndex,
-      };
-      sessionStorage.setItem(key, JSON.stringify(payload));
-    } catch {
-      /* ignore */
+    if (!onWizardPersist) return;
+    const payload = buildWizardPayload(
+      enabled,
+      stepIndex,
+      unlockedMaxStepIndex,
+      baselineRef,
+      examplePhraseBaselineByIdRef
+    );
+    const json = serializeUseCaseWizardPersistedState(payload);
+    if (json === lastEmittedJsonRef.current) return;
+    lastEmittedJsonRef.current = json;
+    onWizardPersist(json);
+    if (key) {
+      try {
+        sessionStorage.setItem(key, json);
+      } catch {
+        /* ignore */
+      }
     }
-  }, [key, enabled, stepIndex, unlockedMaxStepIndex]);
+  }, [
+    enabled,
+    stepIndex,
+    unlockedMaxStepIndex,
+    baselineEpoch,
+    examplePhraseBaselineEpoch,
+    onWizardPersist,
+    key,
+  ]);
 
-  /** Passo 1 «completato» quando esiste almeno uno use case (creato o generato). */
   React.useEffect(() => {
     if (useCases.length > 0) {
       setUnlockedMaxStepIndex((prev) => Math.min(Math.max(prev, 1), LAST_STEP_INDEX));
     }
   }, [useCases.length]);
 
-  /**
-   * Snapshot lista quando compare il primo use case senza `captureUseCaseListAiBaseline` esplicito
-   * (es. creazione manuale): così «nessuna modifica» vs baseline non è sempre vero.
-   */
   React.useEffect(() => {
     if (useCases.length === 0) return;
     if (baselineRef.current.use_case_list !== undefined) return;
@@ -164,6 +278,43 @@ export function useUseCaseGeneratorWizard({
     setShowNoChangesTutorial(false);
   }, [useCases]);
 
+  const captureExamplePhrasesBaseline = React.useCallback((ucs?: readonly AIAgentUseCase[]) => {
+    const list = ucs ?? useCases;
+    examplePhraseBaselineByIdRef.current = snapshotAssistantContentByUseCaseId(list);
+    setExamplePhraseBaselineEpoch((n) => n + 1);
+  }, [useCases]);
+
+  React.useEffect(() => {
+    const prev = prevStepIndexForPhraseRef.current;
+    if (stepIndex === EXAMPLE_PHRASES_STEP_INDEX && prev !== EXAMPLE_PHRASES_STEP_INDEX) {
+      examplePhraseBaselineByIdRef.current = snapshotAssistantContentByUseCaseId(useCases);
+      setExamplePhraseBaselineEpoch((n) => n + 1);
+    }
+    prevStepIndexForPhraseRef.current = stepIndex;
+  }, [stepIndex, useCases]);
+
+  /** Baseline frase assistente per id mancanti (lista use case o passo frasi): primo snapshot del testo corrente. */
+  React.useEffect(() => {
+    if (!isExamplePhraseStyleStep(stepIndex)) return;
+    let changed = false;
+    const base = examplePhraseBaselineByIdRef.current;
+    for (const u of useCases) {
+      if (base[u.id] === undefined) {
+        const snap = snapshotAssistantContentByUseCaseId([u]);
+        base[u.id] = snap[u.id] ?? '';
+        changed = true;
+      }
+    }
+    if (changed) setExamplePhraseBaselineEpoch((n) => n + 1);
+  }, [stepIndex, useCases]);
+
+  const examplePhraseStylePlan = React.useMemo((): ExamplePhraseStylePlan => {
+    if (!isExamplePhraseStyleStep(stepIndex)) {
+      return EMPTY_EXAMPLE_PHRASE_PLAN;
+    }
+    return computeExamplePhraseStylePlan(useCases, examplePhraseBaselineByIdRef.current);
+  }, [stepIndex, useCases, examplePhraseBaselineEpoch]);
+
   const dismissNoChangesTutorial = React.useCallback(() => setShowNoChangesTutorial(false), []);
 
   const canSelectStep = React.useCallback(
@@ -197,8 +348,9 @@ export function useUseCaseGeneratorWizard({
   }, [advanceStep, hasEditsSinceLastAi, stepIndex]);
 
   const confirmAdvanceDialog = React.useCallback(() => {
+    onConfirmAdvanceWithoutEdits?.(currentStepId);
     advanceStep();
-  }, [advanceStep]);
+  }, [advanceStep, currentStepId, onConfirmAdvanceWithoutEdits]);
 
   const cancelAdvanceDialog = React.useCallback(() => {
     setDialogOpen(false);
@@ -239,6 +391,8 @@ export function useUseCaseGeneratorWizard({
     canGoNext,
     hasEditsSinceLastAi,
     captureUseCaseListAiBaseline,
+    captureExamplePhrasesBaseline,
+    examplePhraseStylePlan,
     dialogOpen,
     dialogMessage: stepCfg.confirmNoEditsMessage,
     confirmAdvanceDialog,

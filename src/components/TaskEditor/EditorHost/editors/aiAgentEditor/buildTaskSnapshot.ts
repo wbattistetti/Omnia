@@ -25,6 +25,7 @@ export interface AIAgentTaskSnapshot {
   agentDesignHasGeneration: boolean | undefined;
   agentLogicalStepsJson: string;
   agentUseCasesJson: string;
+  agentUseCaseWizardStateJson: string;
   agentIaRuntimeOverrideJson: string;
   agentImmediateStart: boolean;
   logicalSteps: AIAgentLogicalStep[];
@@ -59,6 +60,7 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
       typeof r?.agentDesignHasGeneration === 'boolean' ? r.agentDesignHasGeneration : undefined,
     agentLogicalStepsJson: String(r?.agentLogicalStepsJson ?? ''),
     agentUseCasesJson: String(r?.agentUseCasesJson ?? ''),
+    agentUseCaseWizardStateJson: String(r?.agentUseCaseWizardStateJson ?? ''),
     agentIaRuntimeOverrideJson: String(r?.agentIaRuntimeOverrideJson ?? ''),
     agentImmediateStart: r?.agentImmediateStart === true,
     logicalSteps: parseAgentLogicalStepsJson(String(r?.agentLogicalStepsJson ?? '')),

@@ -17,8 +17,6 @@ import {
   Plus,
   RefreshCw,
   Sparkles,
-  ThumbsDown,
-  ThumbsUp,
   Trash2,
   X,
 } from 'lucide-react';
@@ -55,94 +53,29 @@ import {
   serializeVirtualAgentRuntimeCatalog,
 } from '@domain/aiAgentUseCase/virtualAgentRuntimeCatalog';
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
+import {
+  type AiTripletFieldBaseline,
+  UC_USE_CASE_LIST_SCROLL,
+  USE_CASE_PANEL_SHELL,
+  UC_AGENT_ROW_EDIT_BTN,
+  UC_AGENT_VOTE_BTN,
+  UC_CLASSIC_TEXTAREA_AGENT,
+  UC_CLASSIC_TEXTAREA_SCENARIO,
+  UC_HEAD_VOTE_BTN,
+  UC_PILL_AGENT_MSG,
+  UC_PILL_SCENARIO,
+  UC_SCENARIO_ROW_EDIT_BTN,
+  UC_SCENARIO_VOTE_BTN,
+  fieldTextClass,
+} from './useCaseComposerPresentation';
+import {
+  applyDesignerFieldVoteToggle,
+  type DesignerVoteField,
+} from './useCaseComposerDesignerVotes';
+import { useUseCaseFieldBaselineSync } from './useUseCaseFieldBaselineSync';
+import { VoteThumbPair } from './VoteThumbPair';
 
-/** Main panels: slate-800 on near-black reads as broken/missing borders; slightly lighter edge for clarity. */
-const USE_CASE_PANEL_SHELL =
-  'rounded-lg border border-slate-600/65 bg-slate-900/40 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.06)]';
-
-/** Pill testuale; la matita sta in un wrapper `relative` (angolo in alto a destra del contenitore label). */
-const UC_PILL_SCENARIO =
-  'inline-flex shrink-0 select-none items-center rounded-full border border-violet-500/45 bg-violet-950/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-100';
-const UC_PILL_AGENT_MSG =
-  'inline-flex shrink-0 select-none items-center rounded-full border border-emerald-600/50 bg-emerald-950/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-100';
-const UC_CLASSIC_TEXTAREA_SCENARIO =
-  'min-w-0 flex-1 rounded-md border border-violet-500/50 bg-slate-900/95 px-2 py-1.5 text-xs leading-snug text-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 disabled:opacity-60';
-const UC_CLASSIC_TEXTAREA_AGENT =
-  'min-w-0 flex-1 rounded-md border border-emerald-500/50 bg-emerald-950/50 px-2 py-1.5 font-mono text-sm leading-snug text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-emerald-300/45 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-60';
-/** Matita a destra della riga (stesso stile dell’header lista use case: `Pencil` 12px). */
-const UC_SCENARIO_ROW_EDIT_BTN =
-  'shrink-0 rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:text-violet-300 group-hover/payoff-row:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:opacity-40';
-const UC_AGENT_ROW_EDIT_BTN =
-  'shrink-0 rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:text-violet-300 group-hover/agentmsg-row:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 disabled:opacity-40';
-
-/** Triplet IA non modificato (grigio) vs campo editato rispetto all’ultima baseline (verde). */
-export type AiTripletFieldBaseline = {
-  label: string;
-  payoff: string;
-  assistantContent: string;
-};
-
-function aiFieldToneClass(current: string, baseline: string | undefined): string {
-  if (baseline === undefined) return 'text-slate-500';
-  return current === baseline ? 'text-slate-500' : 'text-emerald-400';
-}
-
-/** Colore testo: pollice (verde/rosso) ha priorità su baseline IA. */
-function fieldTextClass(
-  vote: 'up' | 'down' | undefined,
-  current: string,
-  baseline: string | undefined
-): string {
-  if (vote === 'up') return 'text-emerald-400';
-  if (vote === 'down') return 'text-red-400';
-  return aiFieldToneClass(current, baseline);
-}
-
-const UC_HEAD_VOTE_BTN =
-  'shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-slate-800/80 group-hover/uc-head:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/55 disabled:opacity-40';
-const UC_SCENARIO_VOTE_BTN =
-  'shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-slate-800/80 group-hover/payoff-row:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/55 disabled:opacity-40';
-const UC_AGENT_VOTE_BTN =
-  'shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-slate-800/80 group-hover/agentmsg-row:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/55 disabled:opacity-40';
-
-type DesignerVoteField = 'label' | 'payoff' | 'agentMessage';
-
-function VoteThumbPair(props: {
-  vote?: 'up' | 'down';
-  disabled?: boolean;
-  outerBtnClass: string;
-  onVote: (choice: 'up' | 'down') => void;
-}): React.ReactElement {
-  const { vote, disabled, outerBtnClass, onVote } = props;
-  return (
-    <>
-      <button
-        type="button"
-        disabled={disabled}
-        title={vote === 'up' ? 'Rimuovi validazione' : 'Valida (testo verde)'}
-        className={`${outerBtnClass} ${vote === 'up' ? 'text-emerald-400' : 'text-slate-500 hover:text-emerald-300/90'}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onVote('up');
-        }}
-      >
-        <ThumbsUp size={12} aria-hidden />
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        title={vote === 'down' ? 'Rimuovi invalidazione' : 'Invalida (testo rosso)'}
-        className={`${outerBtnClass} ${vote === 'down' ? 'text-red-400' : 'text-slate-500 hover:text-red-300/90'}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onVote('down');
-        }}
-      >
-        <ThumbsDown size={12} aria-hidden />
-      </button>
-    </>
-  );
-}
+export type { AiTripletFieldBaseline } from './useCaseComposerPresentation';
 
 export interface AIAgentUseCaseComposerProps {
   /** When set, selects this use case id once after it appears (e.g. debugger «Aggiungi»). */
@@ -184,6 +117,10 @@ export interface AIAgentUseCaseComposerProps {
   highlightIds?: readonly string[];
   /** Rimuove l’evidenziazione quando l’use case è confermato (edit o cerchio). */
   onClearUseCaseHighlight?: (useCaseId: string) => void;
+  /** Passo 2 wizard: messaggio esempio appena rigenerato da «Aggiorna stile». */
+  assistantPhraseStyleNewIds?: readonly string[];
+  /** Wizard: bozza messaggio assistente → piano stile (testo non ancora committato in useCases). */
+  onAssistantPhraseDraftChange?: (useCaseId: string | null, draftText: string | null) => void;
 }
 
 export function AIAgentUseCaseComposer({
@@ -209,7 +146,10 @@ export function AIAgentUseCaseComposer({
   primaryGenerateOnRightOnly = false,
   highlightIds = [],
   onClearUseCaseHighlight,
+  assistantPhraseStyleNewIds = [],
+  onAssistantPhraseDraftChange,
 }: AIAgentUseCaseComposerProps) {
+  const phraseStyleNewSet = React.useMemo(() => new Set(assistantPhraseStyleNewIds), [assistantPhraseStyleNewIds]);
   const { ordered, depthById } = React.useMemo(() => orderUseCasesWithDepth(useCases), [useCases]);
   const highlightIdSet = React.useMemo(() => new Set(highlightIds), [highlightIds]);
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
@@ -293,29 +233,7 @@ export function AIAgentUseCaseComposer({
     }
   }, [effectiveSelectedId, primaryGenerateOnRightOnly]);
 
-  React.useEffect(() => {
-    setFieldBaselineByUseCaseId((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const u of ordered) {
-        if (next[u.id]) continue;
-        const ast = u.dialogue.find((t) => t.role === 'assistant');
-        next[u.id] = {
-          label: u.label,
-          payoff: u.payoff ?? '',
-          assistantContent: ast?.content ?? '',
-        };
-        changed = true;
-      }
-      for (const id of Object.keys(next)) {
-        if (!ordered.some((u) => u.id === id)) {
-          delete next[id];
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [ordered, useCases]);
+  useUseCaseFieldBaselineSync(ordered, useCases, setFieldBaselineByUseCaseId);
 
   React.useEffect(() => {
     setAgentMsgSelection({ start: 0, end: 0 });
@@ -571,21 +489,7 @@ export function AIAgentUseCaseComposer({
 
   const toggleDesignerFieldVote = React.useCallback(
     (useCaseId: string, field: DesignerVoteField, choice: 'up' | 'down') => {
-      setUseCases((prev) =>
-        prev.map((u) => {
-          if (u.id !== useCaseId) return u;
-          if (field === 'label') {
-            const cur = u.designer_label_vote;
-            return { ...u, designer_label_vote: cur === choice ? undefined : choice };
-          }
-          if (field === 'payoff') {
-            const cur = u.designer_payoff_vote;
-            return { ...u, designer_payoff_vote: cur === choice ? undefined : choice };
-          }
-          const cur = u.designer_agent_message_vote;
-          return { ...u, designer_agent_message_vote: cur === choice ? undefined : choice };
-        })
-      );
+      setUseCases((prev) => applyDesignerFieldVoteToggle(prev, useCaseId, field, choice));
       onClearUseCaseHighlight?.(useCaseId);
     },
     [setUseCases, onClearUseCaseHighlight]
@@ -617,20 +521,28 @@ export function AIAgentUseCaseComposer({
     setPayoffEditUseCaseId(null);
   }, []);
 
-  const beginAgentMsgEdit = React.useCallback((useCaseId: string, turnId: string, current: string) => {
-    setPayoffEditUseCaseId(null);
-    agentMsgEditTurnIdRef.current = turnId;
-    setAgentMsgEditUseCaseId(useCaseId);
-    setAgentMsgEditDraft(current);
-    liveAgentContentByIdRef.current[useCaseId] = current;
-    liveAgentContentRef.current = current;
-  }, []);
+  const beginAgentMsgEdit = React.useCallback(
+    (useCaseId: string, turnId: string, current: string) => {
+      if (onAssistantPhraseDraftChange && agentMsgEditUseCaseId && agentMsgEditUseCaseId !== useCaseId) {
+        onAssistantPhraseDraftChange(agentMsgEditUseCaseId, null);
+      }
+      setPayoffEditUseCaseId(null);
+      agentMsgEditTurnIdRef.current = turnId;
+      setAgentMsgEditUseCaseId(useCaseId);
+      setAgentMsgEditDraft(current);
+      liveAgentContentByIdRef.current[useCaseId] = current;
+      liveAgentContentRef.current = current;
+    },
+    [agentMsgEditUseCaseId, onAssistantPhraseDraftChange]
+  );
 
   const commitAgentMsgEdit = React.useCallback(() => {
     if (!agentMsgEditUseCaseId || !agentMsgEditTurnIdRef.current) return;
     const tid = agentMsgEditTurnIdRef.current;
-    setAssistantTurnContentForUseCase(agentMsgEditUseCaseId, tid, agentMsgEditDraft);
-    liveAgentContentByIdRef.current[agentMsgEditUseCaseId] = agentMsgEditDraft;
+    const ucId = agentMsgEditUseCaseId;
+    onAssistantPhraseDraftChange?.(ucId, null);
+    setAssistantTurnContentForUseCase(ucId, tid, agentMsgEditDraft);
+    liveAgentContentByIdRef.current[ucId] = agentMsgEditDraft;
     setAgentMsgEditUseCaseId(null);
     requestAnimationFrame(() => {
       syncWizardTextareaHeights();
@@ -639,14 +551,18 @@ export function AIAgentUseCaseComposer({
   }, [
     agentMsgEditUseCaseId,
     agentMsgEditDraft,
+    onAssistantPhraseDraftChange,
     setAssistantTurnContentForUseCase,
     syncWizardTextareaHeights,
     syncDetailTextareaHeights,
   ]);
 
   const cancelAgentMsgEdit = React.useCallback(() => {
+    if (agentMsgEditUseCaseId) {
+      onAssistantPhraseDraftChange?.(agentMsgEditUseCaseId, null);
+    }
     setAgentMsgEditUseCaseId(null);
-  }, []);
+  }, [agentMsgEditUseCaseId, onAssistantPhraseDraftChange]);
 
   const setPayoffContent = React.useCallback(
     (value: string) => {
@@ -881,7 +797,7 @@ export function AIAgentUseCaseComposer({
   }, [runtimeCatalogExport.appendix]);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       {!primaryGenerateOnRightOnly ? (
         <div className={`rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL}`}>
           <div className="flex items-center gap-2">
@@ -972,10 +888,10 @@ export function AIAgentUseCaseComposer({
             ordered.length === 0 || primaryGenerateOnRightOnly
               ? 'w-full'
               : 'w-full sm:w-[44%]'
-          } shrink-0 min-h-0 flex-1 flex flex-col self-stretch overflow-hidden min-h-[240px] ${USE_CASE_PANEL_SHELL}`}
+          } flex min-h-0 min-w-0 flex-1 flex-col self-stretch overflow-hidden min-h-[240px] ${USE_CASE_PANEL_SHELL}`}
         >
-          <div className="flex flex-1 min-h-0 flex-col overflow-y-auto overflow-x-hidden">
-              <div className="px-2 pt-2 pb-1 border-b border-slate-700/50 shrink-0 space-y-1">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="shrink-0 border-b border-slate-700/50 px-2 pt-2 pb-1 space-y-1">
                 <textarea
                   ref={rootDraftRef}
                   rows={1}
@@ -1017,7 +933,7 @@ export function AIAgentUseCaseComposer({
                 ) : null}
               </div>
               {ordered.length === 0 ? (
-                <div className="flex-1 min-h-[120px] flex flex-col items-center justify-center gap-4 p-6 text-center overflow-y-auto">
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6 text-center">
                   <p className="text-sm text-slate-500 max-w-md">
                     {onGenerateUseCaseBundle
                       ? 'Nessuno scenario ancora. Puoi generarli con IA usando il pulsante qui sotto.'
@@ -1043,7 +959,14 @@ export function AIAgentUseCaseComposer({
                 </div>
               ) : (
               <>
-              <ul className="flex flex-col gap-1 p-1 pb-2">
+              {/*
+                Contenitore scroll: block layout (non flex) perché in un flex-col i figli
+                hanno flex-shrink:1 e si restringono invece di traboccare → scrollbar inattiva.
+                Con block i <li> crescono liberamente e la scrollbar si attiva.
+              */}
+              <ul
+                className={`min-h-0 flex-1 space-y-1 overflow-x-hidden p-1 pb-2 ${UC_USE_CASE_LIST_SCROLL}`}
+              >
                 {ordered.map((u) => {
                   const rowBaseline = fieldBaselineByUseCaseId[u.id];
                   const depth = depthById[u.id] ?? 0;
@@ -1187,7 +1110,7 @@ export function AIAgentUseCaseComposer({
                             <button
                               type="button"
                               title={descriptionTooltip || undefined}
-                              className={`min-w-0 flex-1 text-left text-sm truncate ${fieldTextClass(
+                              className={`min-w-0 flex flex-1 items-center gap-1 text-left text-sm ${fieldTextClass(
                                 u.designer_label_vote,
                                 u.label ?? '',
                                 fieldBaselineByUseCaseId[u.id]?.label
@@ -1197,7 +1120,15 @@ export function AIAgentUseCaseComposer({
                                 if (u.id !== effectiveSelectedId) setSelectedId(u.id);
                               }}
                             >
-                              {u.label || u.id}
+                              <span className="truncate">{u.label || u.id}</span>
+                              {primaryGenerateOnRightOnly && phraseStyleNewSet.has(u.id) ? (
+                                <span
+                                  className="ml-1 shrink-0 rounded bg-emerald-600/40 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-100"
+                                  title="Messaggio esempio aggiornato con il nuovo stile"
+                                >
+                                  NEW
+                                </span>
+                              ) : null}
                             </button>
                             <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/uc-head:opacity-100 group-focus-within/uc-head:opacity-100">
                               <VoteThumbPair
@@ -1385,6 +1316,7 @@ export function AIAgentUseCaseComposer({
                                           const v = e.target.value;
                                           setAgentMsgEditDraft(v);
                                           liveAgentContentByIdRef.current[u.id] = v;
+                                          onAssistantPhraseDraftChange?.(u.id, v);
                                           requestAnimationFrame(() => syncWizardTextareaHeights());
                                         }}
                                         disabled={busy}
@@ -1610,6 +1542,7 @@ export function AIAgentUseCaseComposer({
                               const v = e.target.value;
                               liveAgentContentRef.current = v;
                               setAgentMsgEditDraft(v);
+                              onAssistantPhraseDraftChange?.(selected.id, v);
                               requestAnimationFrame(() => syncDetailTextareaHeights());
                             }}
                             onMouseUp={syncAgentMsgSelection}

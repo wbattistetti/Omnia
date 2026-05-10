@@ -575,6 +575,108 @@ export async function createAIAgentUseCaseApi(
   }
 }
 
+const PROPAGATE_EXAMPLE_PHRASE_STYLE_TIMEOUT_MS = 300000;
+
+export interface PropagateExamplePhraseStyleParams {
+  allUseCases: readonly AIAgentUseCase[];
+  logicalSteps: readonly AIAgentLogicalStep[];
+  styleExampleUseCaseIds: string[];
+  targetUseCaseIds: string[];
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  globalStyleContract?: string;
+  globalStyleId?: string;
+}
+
+export interface PropagateExamplePhraseStyleResult {
+  updates: { use_case_id: string; assistant_content: string }[];
+}
+
+/**
+ * Passo 2 wizard: riscrivi le frasi esempio ancora alla baseline imitando quelle modificate dall’utente.
+ */
+export async function propagateExamplePhraseStyleApi(
+  params: PropagateExamplePhraseStyleParams
+): Promise<PropagateExamplePhraseStyleResult> {
+  const {
+    allUseCases,
+    logicalSteps,
+    styleExampleUseCaseIds,
+    targetUseCaseIds,
+    provider,
+    model,
+    outputLanguage,
+    globalStyleContract,
+    globalStyleId,
+  } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROPAGATE_EXAMPLE_PHRASE_STYLE_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'propagate_example_phrase_style',
+      allUseCases: [...allUseCases],
+      logicalSteps: [...logicalSteps],
+      styleExampleUseCaseIds,
+      targetUseCaseIds,
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    if (typeof globalStyleId === 'string' && globalStyleId.trim().length > 0) {
+      bodyPayload.globalStyleId = globalStyleId.trim();
+    }
+    const res = await fetch('/design/ai-agent-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as
+      | { success: true; updates: unknown }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const rawUpdates = (body as { updates?: unknown }).updates;
+    if (!Array.isArray(rawUpdates)) {
+      throw new Error('Risposta non valida: updates mancante.');
+    }
+    const updates: PropagateExamplePhraseStyleResult['updates'] = [];
+    for (const row of rawUpdates) {
+      if (!row || typeof row !== 'object') continue;
+      const o = row as Record<string, unknown>;
+      const id =
+        typeof o.use_case_id === 'string'
+          ? o.use_case_id.trim()
+          : typeof o.useCaseId === 'string'
+            ? o.useCaseId.trim()
+            : '';
+      const assistant_content =
+        typeof o.assistant_content === 'string'
+          ? o.assistant_content.trim()
+          : typeof o.assistantContent === 'string'
+            ? o.assistantContent.trim()
+            : '';
+      if (id && assistant_content) updates.push({ use_case_id: id, assistant_content });
+    }
+    if (updates.length === 0) {
+      throw new Error('Risposta non valida: nessun aggiornamento.');
+    }
+    return { updates };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface RegenerateAIAgentUseCaseTurnParams {
   useCase: AIAgentUseCase;
   turnId: string;

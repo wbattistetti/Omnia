@@ -34,6 +34,7 @@ export function summarizeAgentTaskFields(task: Task | null | undefined): Record<
     agentStructuredSectionsJsonLen: String(t.agentStructuredSectionsJson ?? '').length,
     agentUseCasesJsonLen: String(t.agentUseCasesJson ?? '').length,
     agentLogicalStepsJsonLen: String(t.agentLogicalStepsJson ?? '').length,
+    agentUseCaseWizardStateJsonLen: String(t.agentUseCaseWizardStateJson ?? '').length,
     agentProposedFieldsCount: Array.isArray(t.agentProposedFields) ? (t.agentProposedFields as unknown[]).length : 0,
     agentDesignHasGeneration: t.agentDesignHasGeneration,
     agentImmediateStart: t.agentImmediateStart === true,
