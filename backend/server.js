@@ -12,12 +12,15 @@ const { MongoClient, ObjectId } = require('mongodb');
 
 // ✅ ENTERPRISE AI SERVICES
 const AIProviderService = require('./services/AIProviderService');
-const { generateAIAgentDesign } = require('./services/AIAgentDesignService');
+const { generateAIAgentDesign, induceStyleRuleFromCorrection } = require('./services/AIAgentDesignService');
 const { extractStructure, generatePlatformPrompt } = require('./services/StructuredDesignPipelineService');
 const {
   generateUseCaseBundle,
+  createUseCase,
   regenerateUseCase,
   regenerateTurn,
+  annotateAssistantMessageForJson,
+  analyzeDebuggerTurnUseCase,
 } = require('./services/AIAgentUseCaseService');
 const { TemplateIntelligenceOrchestrator } = require('./services/ddt-intelligence');
 const {
@@ -6427,7 +6430,13 @@ app.post('/design/ai-agent-generate', async (req, res) => {
       allUseCases,
       logicalSteps,
       turnId,
+      globalStyleContract,
+      globalStyleId,
+      assistantMessageText,
     } = body;
+
+    const globalStyleIdNorm =
+      typeof globalStyleId === 'string' && globalStyleId.trim() ? globalStyleId.trim() : undefined;
 
     if (action === 'generate_use_cases') {
       console.log(`[AI_AGENT_USE_CASES][${requestId}] generate_use_cases`, { provider, model });
@@ -6435,6 +6444,8 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         userDesc,
         runtimeContext,
         outputLanguage,
+        globalStyleContract,
+        globalStyleId: globalStyleIdNorm,
         provider,
         model,
         aiProviderService,
@@ -6453,11 +6464,29 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         allCases: Array.isArray(allUseCases) ? allUseCases : [],
         logicalSteps: Array.isArray(logicalSteps) ? logicalSteps : [],
         outputLanguage,
+        globalStyleContract,
+        globalStyleId: globalStyleIdNorm,
         provider,
         model,
         aiProviderService,
       });
       return res.json({ success: true, use_case: updated });
+    }
+
+    if (action === 'create_use_case') {
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] create_use_case`, { provider, model });
+      const created = await createUseCase({
+        useCase,
+        allCases: Array.isArray(allUseCases) ? allUseCases : [],
+        logicalSteps: Array.isArray(logicalSteps) ? logicalSteps : [],
+        outputLanguage,
+        globalStyleContract,
+        globalStyleId: globalStyleIdNorm,
+        provider,
+        model,
+        aiProviderService,
+      });
+      return res.json({ success: true, use_case: created });
     }
 
     if (action === 'regenerate_turn') {
@@ -6471,6 +6500,22 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         aiProviderService,
       });
       return res.json({ success: true, turn });
+    }
+
+    if (action === 'annotate_assistant_message_for_json') {
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] annotate_assistant_message_for_json`, { provider, model });
+      const { content, motor } = await annotateAssistantMessageForJson({
+        useCase,
+        turnId,
+        outputLanguage,
+        globalStyleContract,
+        provider,
+        model,
+        aiProviderService,
+        assistantMessageTextOverride:
+          typeof assistantMessageText === 'string' ? assistantMessageText : undefined,
+      });
+      return res.json({ success: true, content, motor });
     }
 
     const sectionN = Array.isArray(sectionRefinements) ? sectionRefinements.length : 0;
@@ -6551,6 +6596,110 @@ app.post('/design/ai-agent-generate', async (req, res) => {
     return res.status(status).json({
       success: false,
       error: error.message || 'AI agent design failed',
+      rawSnippet: error.rawSnippet,
+    });
+  }
+});
+
+/**
+ * Debugger: induce one style rule from wrong vs correct assistant lines (merged into constraints_compact).
+ * Body: { wrongText, correctText, provider?, model?, outputLanguage? }
+ */
+app.post('/design/ai-agent-induce-style-rule', async (req, res) => {
+  const requestId = Date.now();
+  try {
+    const body = req.body || {};
+    const {
+      wrongText,
+      correctText,
+      provider = 'groq',
+      model,
+      outputLanguage,
+    } = body;
+    console.log(`[AI_AGENT_STYLE_RULE][${requestId}] POST /design/ai-agent-induce-style-rule`, {
+      provider,
+      model,
+      wrongLen: typeof wrongText === 'string' ? wrongText.length : 0,
+      correctLen: typeof correctText === 'string' ? correctText.length : 0,
+      outputLanguage: typeof outputLanguage === 'string' ? outputLanguage : '',
+    });
+    const result = await induceStyleRuleFromCorrection({
+      wrongText,
+      correctText,
+      outputLanguage,
+      provider,
+      model,
+      aiProviderService,
+    });
+    return res.json({ success: true, rule_text: result.rule_text });
+  } catch (error) {
+    console.error(`[AI_AGENT_STYLE_RULE][${requestId}] Error:`, error.message);
+    const msg = error.message || 'induce-style-rule failed';
+    const badInput =
+      msg.includes('wrongText') ||
+      msg.includes('correctText') ||
+      msg.includes('at least 3');
+    const status = badInput ? 400 : 502;
+    return res.status(status).json({
+      success: false,
+      error: msg,
+      rawSnippet: error.rawSnippet,
+    });
+  }
+});
+
+/**
+ * Debugger flow-mode: classify user/bot turn vs use case catalog; optional new scenario suggestion.
+ * Body: { userTurn?, assistantTurn, agentUseCasesJson, globalStyleContract?, provider?, model?, outputLanguage? }
+ */
+app.post('/design/ai-agent-analyze-debug-turn', async (req, res) => {
+  const requestId = Date.now();
+  try {
+    const body = req.body || {};
+    const {
+      userTurn,
+      assistantTurn,
+      agentUseCasesJson,
+      globalStyleContract,
+      provider = 'groq',
+      model,
+      outputLanguage,
+    } = body;
+    const assistantTurnStr =
+      typeof assistantTurn === 'string'
+        ? assistantTurn
+        : typeof assistantTurn === 'number'
+          ? String(assistantTurn)
+          : '';
+    console.log(`[AI_AGENT_ANALYZE_DEBUG][${requestId}] POST /design/ai-agent-analyze-debug-turn`, {
+      provider,
+      model,
+      userLen: typeof userTurn === 'string' ? userTurn.length : 0,
+      assistantLen: assistantTurnStr.length,
+      catalogLen: typeof agentUseCasesJson === 'string' ? agentUseCasesJson.length : 0,
+    });
+    if (!assistantTurnStr.trim()) {
+      return res.status(400).json({ success: false, error: 'assistantTurn is required' });
+    }
+    const result = await analyzeDebuggerTurnUseCase({
+      userTurnText: typeof userTurn === 'string' ? userTurn : '',
+      assistantTurnText: assistantTurnStr,
+      agentUseCasesJson:
+        typeof agentUseCasesJson === 'string' ? agentUseCasesJson : JSON.stringify(agentUseCasesJson ?? []),
+      globalStyleContract,
+      outputLanguage,
+      provider,
+      model,
+      aiProviderService,
+    });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error(`[AI_AGENT_ANALYZE_DEBUG][${requestId}] Error:`, error.message);
+    const msg = error.message || 'analyze-debug-turn failed';
+    const status = msg.includes('required') ? 400 : 502;
+    return res.status(status).json({
+      success: false,
+      error: msg,
       rawSnippet: error.rawSnippet,
     });
   }

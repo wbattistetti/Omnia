@@ -344,6 +344,21 @@ Public Class SessionManager
     End Sub
 
     ''' <summary>
+    ''' Payload SSE event <c>message</c>: chiavi camelCase stabili per il frontend (<c>taskId</c>).
+    ''' Evita ambiguità dei tipi anonimi VB con Newtonsoft.
+    ''' </summary>
+    Private Shared Function BuildOrchestratorSseChatMessage(msgId As String, body As String, rowTaskId As String) As Dictionary(Of String, Object)
+        Dim tid = If(String.IsNullOrWhiteSpace(rowTaskId), "", rowTaskId.Trim())
+        Return New Dictionary(Of String, Object) From {
+            {"id", msgId},
+            {"text", body},
+            {"stepType", "message"},
+            {"timestamp", DateTime.UtcNow.ToString("O")},
+            {"taskId", tid}
+        }
+    End Function
+
+    ''' <summary>
     ''' Chiama <see cref="FlowOrchestrator.RegisterSubflowCompilation"/> per ogni entry (dopo creazione orchestrator).
     ''' </summary>
     Private Shared Sub ApplySubflowCompilationsToOrchestrator(
@@ -435,21 +450,15 @@ Public Class SessionManager
 
             ApplySubflowCompilationsToOrchestrator(session.Orchestrator, session.SubflowCompilations)
 
-            AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
+            AddHandler session.Orchestrator.MessageToShow, Sub(sender As Object, evt As MessageEventArgs)
                                                                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                                                                Console.WriteLine($"🔵 [SessionManager] MessageToShow event received for session {sessionId}")
-                                                               Console.WriteLine($"🔵 [SessionManager] Message text: {text}")
-                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] MessageToShow: {text}")
+                                                               Console.WriteLine($"🔵 [SessionManager] Message text: {evt.Message}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] MessageToShow: {evt.Message}")
                                                                Console.Out.Flush()
 
                                                                Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
-                                                               Dim msg = New With {
-                    .id = msgId,
-                    .text = text,
-                    .stepType = "message",
-                    .timestamp = DateTime.UtcNow.ToString("O"),
-                    .taskId = ""
-                }
+                                                               Dim msg = BuildOrchestratorSseChatMessage(msgId, evt.Message, evt.TaskId)
                                                                ' ✅ DEBUG: Log messaggio prima di emettere evento SSE
                                                                Dim msgJson = JsonConvert.SerializeObject(msg)
                                                                Console.WriteLine($"🔵 [SessionManager] Created message object: {msgJson}")
@@ -626,21 +635,15 @@ Public Class SessionManager
             System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] GetSession: Registering handlers")
             Console.Out.Flush()
 
-            AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
+            AddHandler session.Orchestrator.MessageToShow, Sub(sender As Object, evt As MessageEventArgs)
                                                                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                                                                Console.WriteLine($"🔵 [SessionManager] MessageToShow event received for session {sessionId} (from GetSession)")
-                                                               Console.WriteLine($"🔵 [SessionManager] Message text: {text}")
-                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] MessageToShow: {text}")
+                                                               Console.WriteLine($"🔵 [SessionManager] Message text: {evt.Message}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [SessionManager] MessageToShow: {evt.Message}")
                                                                Console.Out.Flush()
 
                                                                Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
-                                                               Dim msg = New With {
-                                                                   .id = msgId,
-                                                                   .text = text,
-                                                                   .stepType = "message",
-                                                                   .timestamp = DateTime.UtcNow.ToString("O"),
-                                                                   .taskId = ""
-                                                               }
+                                                               Dim msg = BuildOrchestratorSseChatMessage(msgId, evt.Message, evt.TaskId)
                                                                ' ✅ DEBUG: Log messaggio prima di emettere evento SSE
                                                                Dim msgJson = JsonConvert.SerializeObject(msg)
                                                                Console.WriteLine($"🔵 [SessionManager] Created message object: {msgJson}")

@@ -94,6 +94,8 @@ export function useFlowModeChat(
     React.useState<OrchestratorSseErrorPayload | null>(null);
   /** Ultimo task orchestrator in attesa input (hint per scope fix ConvAI sul task corretto). */
   const [orchestratorTaskIdHint, setOrchestratorTaskIdHint] = React.useState<string | null>(null);
+  /** Se il payload SSE `message` non include taskId, usiamo l'ultimo waitingForInput (stesso turno AI Agent). */
+  const lastWaitingTaskIdRef = React.useRef<string | null>(null);
   const [isRestarting, setIsRestarting] = React.useState(false);
   const [sessionActive, setSessionActive] = React.useState(false);
   const [currentExecutionLabel, setCurrentExecutionLabel] = React.useState<string>('');
@@ -254,6 +256,7 @@ export function useFlowModeChat(
         textKey?: string;
         stepType?: string;
         taskId?: string;
+        TaskId?: string;
         id?: string;
         compilationFixError?: CompilationError;
         backendInvocations?: Message['backendInvocations'];
@@ -265,12 +268,19 @@ export function useFlowModeChat(
             : `msg_${messageIdCounter.current++}`;
         if (sentMessageIds.current.has(messageId)) return;
         sentMessageIds.current.add(messageId);
+        const rawTid = message.taskId ?? message.TaskId;
+        let tidTrim =
+          typeof rawTid === 'string' && rawTid.trim() && rawTid !== 'SYSTEM' ? rawTid.trim() : '';
+        if (!tidTrim && lastWaitingTaskIdRef.current) {
+          tidTrim = lastWaitingTaskIdRef.current;
+        }
+        const sourceTaskId = tidTrim && tidTrim !== 'SYSTEM' ? tidTrim : undefined;
         debuggerController.onBotMessage({
           messageId,
           text: message.text,
           textKey: message.textKey,
           stepType: message.stepType,
-          taskId: message.taskId,
+          taskId: tidTrim || (typeof rawTid === 'string' ? rawTid : message.taskId),
         });
         const newMessage: Message = {
           id: messageId,
@@ -281,6 +291,7 @@ export function useFlowModeChat(
           compilationFixError: message.compilationFixError,
           backendInvocations: message.backendInvocations,
           convaiWebhookInvocations: message.convaiWebhookInvocations,
+          ...(sourceTaskId ? { sourceTaskId } : {}),
         };
         const currentOnMessage = onMessageRef.current;
         if (currentOnMessage) currentOnMessage(newMessage);
@@ -320,7 +331,10 @@ export function useFlowModeChat(
         nodeLabel?: string;
       }) => {
         const tid = String(data?.taskId ?? '').trim();
-        if (tid) setOrchestratorTaskIdHint(tid);
+        if (tid) {
+          setOrchestratorTaskIdHint(tid);
+          lastWaitingTaskIdRef.current = tid;
+        }
         if (setIsWaitingForInputRef.current) setIsWaitingForInputRef.current(true);
         const flowName = (executionFlowName || 'MAIN').trim() || 'MAIN';
         const taskLabel = toReadableLabel(data?.taskLabel) || resolveTaskLabel(data?.taskId);
@@ -484,6 +498,7 @@ export function useFlowModeChat(
       if (turns.length === 0) return;
 
       sentMessageIds.current.clear();
+      lastWaitingTaskIdRef.current = null;
       resetDebuggerSessionArtifacts();
 
       getFlowFocusManager().setReplayActive(true);
@@ -522,6 +537,7 @@ export function useFlowModeChat(
     if (setErrorRef.current) setErrorRef.current(null);
     setStartAgentRuntimeError(null);
     setOrchestratorTaskIdHint(null);
+    lastWaitingTaskIdRef.current = null;
   }, []);
 
   const clearSession = React.useCallback(async () => {
@@ -538,6 +554,7 @@ export function useFlowModeChat(
     if (setErrorRef.current) setErrorRef.current(null);
     setStartAgentRuntimeError(null);
     setOrchestratorTaskIdHint(null);
+    lastWaitingTaskIdRef.current = null;
     lifecycleRef.current.onOrchestratorEnded?.();
 
     const engine = flowEngineRef.current;
@@ -573,6 +590,7 @@ export function useFlowModeChat(
     if (setErrorRef.current) setErrorRef.current(null);
     setStartAgentRuntimeError(null);
     setOrchestratorTaskIdHint(null);
+    lastWaitingTaskIdRef.current = null;
 
     try {
       const engine = flowEngineRef.current;

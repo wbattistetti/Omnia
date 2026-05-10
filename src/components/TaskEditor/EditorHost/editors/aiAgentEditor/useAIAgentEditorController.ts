@@ -17,13 +17,16 @@ import { taskRepository } from '@services/TaskRepository';
 import { TaskType, type Task } from '@types/taskTypes';
 import {
   extractStructuredDesign,
+  createAIAgentUseCaseApi,
   generateAIAgentDesign,
   generateAIAgentUseCases,
+  annotateAIAgentAssistantMessageForJsonApi,
   regenerateAIAgentUseCaseApi,
+  regenerateAIAgentUseCaseTurnApi,
 } from '@services/aiAgentDesignApi';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
-import { serializeLogicalSteps, serializeUseCases } from '@types/aiAgentUseCases';
+import { newAgentUseCaseTurnId, serializeLogicalSteps, serializeUseCases } from '@types/aiAgentUseCases';
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import {
   AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
@@ -34,7 +37,15 @@ import type { AIAgentPreviewTurn } from '@types/aiAgentPreview';
 import { getActiveFlowCanvasId } from '../../../../../flows/activeFlowCanvas';
 import { buildTaskSnapshotFromRaw, resolveHasAgentGeneration } from './buildTaskSnapshot';
 import { createDefaultAIAgentTaskPayload } from './createDefaultAIAgentTaskPayload';
-import { AI_AGENT_MIN_INPUT_CHARS, EMPTY_OUTPUT_MAPPINGS } from './constants';
+import {
+  AI_AGENT_GLOBAL_USE_CASE_STYLES,
+  AI_AGENT_MIN_INPUT_CHARS,
+  DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID,
+  EMPTY_OUTPUT_MAPPINGS,
+  LABEL_CREATING_MULTIPLE_USE_CASES,
+  LABEL_CREATING_ONE_USE_CASE,
+} from './constants';
+import { logUseCaseRootBatch } from './useCaseRootBatchDebug';
 import { nextMappingsAfterLabelBlur } from './flowVariableMapping';
 import { buildAIAgentTaskPersistPatch, type AIAgentPersistState } from './buildPersistPatch';
 import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
@@ -100,6 +111,8 @@ import { iaConvaiTracePersistTaskRepository } from '@utils/debug/iaConvaiFlowTra
 import { withElevenLabsReprovisionAfterTtsChange } from '@utils/iaAgentRuntime/applyElevenLabsReprovisionFlag';
 import { useProjectData } from '@context/ProjectDataContext';
 import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
+import { collectUseCaseSubtreeIds, normalizeUseCaseSortOrderAlphabetically } from './useCaseHierarchy';
+import { OMNIA_AI_AGENT_REHYDRATE_FROM_REPO } from './aiAgentDockPanelIds';
 
 function logStructuredPipelineAlignment(event: string, detail?: unknown): void {
   if (import.meta.env.DEV) {
@@ -184,8 +197,12 @@ export function useAIAgentEditorController({
   const [committedDesignDescription, setCommittedDesignDescription] = React.useState('');
   const [logicalSteps, setLogicalSteps] = React.useState<AIAgentLogicalStep[]>([]);
   const [useCases, setUseCases] = React.useState<AIAgentUseCase[]>([]);
+  const [useCaseGlobalStyleId, setUseCaseGlobalStyleIdState] = React.useState<string>(
+    DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID
+  );
   const [useCaseComposerBusy, setUseCaseComposerBusy] = React.useState(false);
   const [useCaseComposerError, setUseCaseComposerError] = React.useState<string | null>(null);
+  const [useCaseCreationMessage, setUseCaseCreationMessage] = React.useState<string | null>(null);
   const [backendPlaceholders, setBackendPlaceholders] = React.useState<BackendPlaceholderInstance[]>([]);
   const [agentPromptTargetPlatform, setAgentPromptTargetPlatformState] =
     React.useState<AgentPromptPlatformId>(() => normalizeAgentPromptPlatformId(undefined));
@@ -331,13 +348,40 @@ export function useAIAgentEditorController({
 
   const setUseCasesUser = React.useCallback((v: React.SetStateAction<AIAgentUseCase[]>) => {
     setDirty(true);
-    setUseCases(v);
+    setUseCases((prev) =>
+      normalizeUseCaseSortOrderAlphabetically(typeof v === 'function' ? v(prev) : v)
+    );
   }, []);
 
   const setPreviewStyleId = React.useCallback((id: string) => {
     setDirty(true);
     setPreviewStyleIdState(id);
   }, []);
+
+  const setUseCaseGlobalStyleId = React.useCallback((id: string) => {
+    const selected = AI_AGENT_GLOBAL_USE_CASE_STYLES.find((x) => x.id === id);
+    if (!selected) {
+      throw new Error(`Stile globale non valido: ${id}`);
+    }
+    setDirty(true);
+    setUseCaseGlobalStyleIdState(id);
+    setUseCases((prev) =>
+      normalizeUseCaseSortOrderAlphabetically(
+        prev.map((uc) => ({
+          ...uc,
+          notes: {
+            ...uc.notes,
+            tone: selected.contract,
+          },
+        }))
+      )
+    );
+  }, []);
+
+  const globalStyleContract = React.useMemo(() => {
+    const match = AI_AGENT_GLOBAL_USE_CASE_STYLES.find((x) => x.id === useCaseGlobalStyleId);
+    return match?.contract ?? AI_AGENT_GLOBAL_USE_CASE_STYLES[0].contract;
+  }, [useCaseGlobalStyleId]);
 
   const setAgentPromptTargetPlatform = React.useCallback((v: AgentPromptPlatformId) => {
     setDirty(true);
@@ -458,7 +502,13 @@ export function useAIAgentEditorController({
     setHasAgentGeneration(hasGen);
     setAgentImmediateStartState(b.agentImmediateStart);
     setLogicalSteps(b.logicalSteps);
-    setUseCases(b.useCases);
+    setUseCases(normalizeUseCaseSortOrderAlphabetically(b.useCases));
+    const storedStyle = String(b.agentUseCaseGlobalStyleId || '').trim();
+    setUseCaseGlobalStyleIdState(
+      AI_AGENT_GLOBAL_USE_CASE_STYLES.some((x) => x.id === storedStyle)
+        ? storedStyle
+        : DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID
+    );
     const iaRaw = b.agentIaRuntimeOverrideJson.trim();
     if (iaRaw) {
       try {
@@ -542,6 +592,7 @@ export function useAIAgentEditorController({
       proposedFields,
       previewByStyle,
       previewStyleId,
+      agentUseCaseGlobalStyleId: useCaseGlobalStyleId,
       initialStateTemplateJson,
       agentRuntimeCompactJson,
       hasAgentGeneration,
@@ -580,6 +631,7 @@ export function useAIAgentEditorController({
     proposedFields,
     previewByStyle,
     previewStyleId,
+    useCaseGlobalStyleId,
     initialStateTemplateJson,
     agentRuntimeCompactJson,
     hasAgentGeneration,
@@ -724,6 +776,20 @@ export function useAIAgentEditorController({
     window.addEventListener('tasks:loaded', onTasksLoaded as EventListener);
     return () => window.removeEventListener('tasks:loaded', onTasksLoaded as EventListener);
   }, [instanceId, projectId, loadFromRepository]);
+
+  /** Debugger «Aggiungi use case»: repository updated out-of-band — reload agent* fields for this editor instance. */
+  React.useEffect(() => {
+    if (!instanceId) return;
+    const onRehydrate = (e: Event) => {
+      const d = (e as CustomEvent<{ taskId?: string }>).detail;
+      if (!d?.taskId || d.taskId !== instanceId) return;
+      if (dirtyRef.current) return;
+      loadFromRepository();
+    };
+    document.addEventListener(OMNIA_AI_AGENT_REHYDRATE_FROM_REPO, onRehydrate as EventListener);
+    return () =>
+      document.removeEventListener(OMNIA_AI_AGENT_REHYDRATE_FROM_REPO, onRehydrate as EventListener);
+  }, [instanceId, loadFromRepository]);
 
   /** Debounced persist: only after hydration and only when the user (or explicit actions) marked dirty. */
   React.useEffect(() => {
@@ -963,23 +1029,34 @@ export function useAIAgentEditorController({
         model,
         runtimeContext: agentPrompt.trim(),
         outputLanguage,
+        globalStyleContract,
+        globalStyleId: useCaseGlobalStyleId,
       });
       setLogicalSteps(ls);
-      setUseCases(ucs);
+      setUseCases(normalizeUseCaseSortOrderAlphabetically(ucs));
       setDirty(true);
     } catch (e) {
       setUseCaseComposerError(e instanceof Error ? e.message : String(e));
     } finally {
       setUseCaseComposerBusy(false);
     }
-  }, [hasAgentGeneration, designDescription, structuredRev, agentPrompt, provider, model]);
+  }, [
+    hasAgentGeneration,
+    designDescription,
+    structuredRev,
+    agentPrompt,
+    provider,
+    model,
+    globalStyleContract,
+    useCaseGlobalStyleId,
+  ]);
 
   const handleRegenerateUseCase = React.useCallback(
-    async (useCaseId: string) => {
+    async (useCaseId: string): Promise<AIAgentUseCase | null> => {
       const uc = useCases.find((u) => u.id === useCaseId);
       if (!uc) {
         setUseCaseComposerError('Use case non trovato.');
-        return;
+        return null;
       }
       setUseCaseComposerError(null);
       setUseCaseComposerBusy(true);
@@ -992,18 +1069,88 @@ export function useAIAgentEditorController({
           provider,
           model,
           outputLanguage,
+          globalStyleContract,
+          globalStyleId: useCaseGlobalStyleId,
+        });
+        const merged: AIAgentUseCase = {
+          ...next,
+          id: useCaseId,
+          parent_id: uc.parent_id,
+          sort_order: uc.sort_order,
+          dialogue: next.dialogue.map((t) =>
+            t.role === 'assistant' ? { ...t, motor_snapshot: undefined } : t
+          ),
+        };
+        setUseCases((prev) =>
+          normalizeUseCaseSortOrderAlphabetically(
+            prev.map((u) => (u.id === useCaseId ? merged : u))
+          )
+        );
+        setDirty(true);
+        return merged;
+      } catch (e) {
+        setUseCaseComposerError(e instanceof Error ? e.message : String(e));
+        return null;
+      } finally {
+        setUseCaseComposerBusy(false);
+      }
+    },
+    [useCases, logicalSteps, provider, model, globalStyleContract, useCaseGlobalStyleId]
+  );
+
+  /**
+   * Regenerate a single assistant dialogue turn (e.g. empty after failed create); adds an assistant shell if missing.
+   */
+  const handleRegenerateAgentMessage = React.useCallback(
+    async (useCaseId: string): Promise<void> => {
+      const uc = useCases.find((u) => u.id === useCaseId);
+      if (!uc) {
+        setUseCaseComposerError('Use case non trovato.');
+        return;
+      }
+      let turnId = uc.dialogue.find((t) => t.role === 'assistant')?.turn_id;
+      let snapshot: AIAgentUseCase = uc;
+      if (!turnId) {
+        turnId = newAgentUseCaseTurnId();
+        snapshot = {
+          ...uc,
+          dialogue: [
+            ...uc.dialogue,
+            { turn_id: turnId, role: 'assistant', content: '', editable: true },
+          ],
+        };
+        setUseCases((prev) => prev.map((u) => (u.id === useCaseId ? snapshot : u)));
+      }
+      setUseCaseComposerError(null);
+      setUseCaseComposerBusy(true);
+      try {
+        const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
+        const turn = await regenerateAIAgentUseCaseTurnApi({
+          useCase: snapshot,
+          turnId,
+          provider,
+          model,
+          outputLanguage,
         });
         setUseCases((prev) =>
-          prev.map((u) =>
-            u.id === useCaseId
-              ? {
-                  ...next,
-                  id: useCaseId,
-                  parent_id: u.parent_id,
-                  sort_order: u.sort_order,
-                }
-              : u
-          )
+          prev.map((u) => {
+            if (u.id !== useCaseId) return u;
+            const has = u.dialogue.some((t) => t.turn_id === turnId);
+            const dialogue = has
+              ? u.dialogue.map((t) =>
+                  t.turn_id === turnId
+                    ? {
+                        ...t,
+                        content: turn.content,
+                        role: turn.role,
+                        editable: turn.role === 'assistant',
+                        motor_snapshot: undefined,
+                      }
+                    : t
+                )
+              : [...u.dialogue, { ...turn, editable: turn.role === 'assistant' }];
+            return { ...u, dialogue };
+          })
         );
         setDirty(true);
       } catch (e) {
@@ -1012,7 +1159,266 @@ export function useAIAgentEditorController({
         setUseCaseComposerBusy(false);
       }
     },
-    [useCases, logicalSteps, provider, model]
+    [useCases, provider, model]
+  );
+
+  /**
+   * LLM annotates assistant message with [slot] tokens for motor JSON (explicit designer action).
+   */
+  const handleAnnotateAgentMessageForJson = React.useCallback(
+    async (useCaseId: string, assistantContentFromEditor?: string): Promise<boolean> => {
+      const uc = useCases.find((u) => u.id === useCaseId);
+      if (!uc) {
+        setUseCaseComposerError('Use case non trovato.');
+        return false;
+      }
+      let turnId = uc.dialogue.find((t) => t.role === 'assistant')?.turn_id;
+      let snapshot: AIAgentUseCase = uc;
+      if (!turnId) {
+        turnId = newAgentUseCaseTurnId();
+        snapshot = {
+          ...uc,
+          dialogue: [
+            ...uc.dialogue,
+            { turn_id: turnId, role: 'assistant', content: '', editable: true },
+          ],
+        };
+        setUseCases((prev) => prev.map((u) => (u.id === useCaseId ? snapshot : u)));
+      }
+      /**
+       * Testo letto dalla textarea al click: evita stato React non ancora committato dopo l’ultima modifica.
+       * Allinea anche lo stato così il campo controllato non «salta» alla versione precedente durante busy.
+       */
+      if (typeof assistantContentFromEditor === 'string' && turnId) {
+        snapshot = {
+          ...snapshot,
+          dialogue: snapshot.dialogue.map((t) =>
+            t.turn_id === turnId ? { ...t, content: assistantContentFromEditor, userEdited: true } : t
+          ),
+        };
+        setUseCasesUser((prev) =>
+          prev.map((u) =>
+            u.id !== useCaseId
+              ? u
+              : {
+                  ...u,
+                  dialogue: u.dialogue.map((t) =>
+                    t.turn_id === turnId
+                      ? { ...t, content: assistantContentFromEditor, userEdited: true }
+                      : t
+                  ),
+                }
+          )
+        );
+      }
+      const msgTrim = snapshot.dialogue.find((t) => t.turn_id === turnId)?.content?.trim() ?? '';
+      if (!msgTrim) {
+        setUseCaseComposerError('Scrivi prima un messaggio agente da annotare.');
+        return false;
+      }
+      setUseCaseComposerError(null);
+      setUseCaseComposerBusy(true);
+      try {
+        const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
+        const { content: annotated, motor } = await annotateAIAgentAssistantMessageForJsonApi({
+          useCase: snapshot,
+          turnId,
+          provider,
+          model,
+          outputLanguage,
+          globalStyleContract,
+          ...(typeof assistantContentFromEditor === 'string'
+            ? { assistantMessageText: assistantContentFromEditor }
+            : {}),
+        });
+        setUseCasesUser((prev) =>
+          prev.map((u) => {
+            if (u.id !== useCaseId) return u;
+            return {
+              ...u,
+              dialogue: u.dialogue.map((t) =>
+                t.turn_id === turnId
+                  ? {
+                      ...t,
+                      content: annotated,
+                      userEdited: true,
+                      motor_snapshot: { source_content: annotated, payload: motor },
+                    }
+                  : t
+              ),
+            };
+          })
+        );
+        setDirty(true);
+        return true;
+      } catch (e) {
+        setUseCaseComposerError(e instanceof Error ? e.message : String(e));
+        return false;
+      } finally {
+        setUseCaseComposerBusy(false);
+      }
+    },
+    [useCases, provider, model, globalStyleContract, setUseCasesUser]
+  );
+
+  /**
+   * Removes a use case and all descendants from the hierarchy; re-normalizes sibling order.
+   */
+  const handleDeleteUseCase = React.useCallback(
+    (useCaseId: string) => {
+      if (!useCases.some((u) => u.id === useCaseId)) {
+        setUseCaseComposerError('Use case non trovato.');
+        return;
+      }
+      setUseCaseComposerError(null);
+      setUseCasesUser((prev) => {
+        const removeIds = collectUseCaseSubtreeIds(prev, useCaseId);
+        return prev.filter((u) => !removeIds.has(u.id));
+      });
+    },
+    [useCases, setUseCasesUser]
+  );
+
+  const handleCreateUseCase = React.useCallback(
+    async (params: {
+      label: string;
+      parentId: string | null;
+      /** Root batch: plural progress copy while the LLM runs. */
+      creationScope?: 'single' | 'batch';
+    }): Promise<string> => {
+      const rawLabel = String(params.label || '').trim();
+      logUseCaseRootBatch('controller_handleCreateUseCase_enter', {
+        rawLabelPreview: rawLabel.slice(0, 120),
+        parentId: params.parentId ?? null,
+        existingUseCaseCount: useCases.length,
+      });
+      if (!rawLabel) {
+        throw new Error('Il titolo del use case e obbligatorio.');
+      }
+      const parentId = params.parentId ?? null;
+      const parentExists = parentId === null || useCases.some((x) => x.id === parentId);
+      if (!parentExists) {
+        logUseCaseRootBatch('controller_handleCreateUseCase_invalid_parent', { parentId });
+        throw new Error('Nodo padre non valido per la creazione del use case.');
+      }
+
+      const newUseCaseId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `uc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const placeholder: AIAgentUseCase = {
+        id: newUseCaseId,
+        label: rawLabel,
+        parent_id: parentId,
+        sort_order: 0,
+        refinement_prompt: '',
+        style_id: useCaseGlobalStyleId,
+        payoff: '',
+        dialogue: [],
+        notes: {
+          behavior: rawLabel,
+          tone: globalStyleContract,
+        },
+        bubble_notes: {},
+      };
+
+      setUseCaseComposerError(null);
+      setUseCaseCreationMessage(
+        params.creationScope === 'batch'
+          ? LABEL_CREATING_MULTIPLE_USE_CASES
+          : LABEL_CREATING_ONE_USE_CASE
+      );
+      setUseCaseComposerBusy(true);
+      setUseCases((prev) => normalizeUseCaseSortOrderAlphabetically([...prev, placeholder]));
+      setDirty(true);
+
+      try {
+        logUseCaseRootBatch('controller_createAIAgentUseCaseApi_before', {
+          newUseCaseId,
+          logicalStepsCount: logicalSteps.length,
+        });
+        const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
+        const created = await createAIAgentUseCaseApi({
+          useCase: placeholder,
+          allUseCases: useCases,
+          logicalSteps,
+          provider,
+          model,
+          outputLanguage,
+          globalStyleContract,
+          globalStyleId: useCaseGlobalStyleId,
+        });
+        logUseCaseRootBatch('controller_createAIAgentUseCaseApi_after', {
+          newUseCaseId,
+          createdLabelPreview: String(created.label ?? '').slice(0, 80),
+        });
+        const mergedCreated: AIAgentUseCase = {
+          ...created,
+          id: newUseCaseId,
+          parent_id: parentId,
+        };
+        setUseCases((prev) =>
+          normalizeUseCaseSortOrderAlphabetically(
+            prev.map((item) => (item.id === newUseCaseId ? mergedCreated : item))
+          )
+        );
+        setDirty(true);
+        const assistantAfterCreate = mergedCreated.dialogue.find((t) => t.role === 'assistant');
+        const assistantTurnId = assistantAfterCreate?.turn_id;
+        if (assistantAfterCreate?.content?.trim() && assistantTurnId) {
+          try {
+            const { content: annotated, motor } = await annotateAIAgentAssistantMessageForJsonApi({
+              useCase: mergedCreated,
+              turnId: assistantTurnId,
+              provider,
+              model,
+              outputLanguage,
+              globalStyleContract,
+            });
+            setUseCases((prev) =>
+              normalizeUseCaseSortOrderAlphabetically(
+                prev.map((item) =>
+                  item.id === newUseCaseId
+                    ? {
+                        ...item,
+                        dialogue: item.dialogue.map((t) =>
+                          t.turn_id === assistantTurnId
+                            ? {
+                                ...t,
+                                content: annotated,
+                                motor_snapshot: {
+                                  source_content: annotated,
+                                  payload: motor,
+                                },
+                              }
+                            : t
+                        ),
+                      }
+                    : item
+                )
+              )
+            );
+            setDirty(true);
+          } catch {
+            /* Messaggio creato senza motor snapshot — designer può usare Crea JSON */
+          }
+        }
+        return newUseCaseId;
+      } catch (e) {
+        logUseCaseRootBatch('controller_createAIAgentUseCaseApi_error', {
+          newUseCaseId,
+          message: e instanceof Error ? e.message : String(e),
+        });
+        setUseCases((prev) => prev.filter((item) => item.id !== newUseCaseId));
+        setUseCaseComposerError(e instanceof Error ? e.message : String(e));
+        throw e;
+      } finally {
+        setUseCaseComposerBusy(false);
+        setUseCaseCreationMessage(null);
+        logUseCaseRootBatch('controller_handleCreateUseCase_finally', { newUseCaseId });
+      }
+    },
+    [useCases, logicalSteps, provider, model, globalStyleContract, useCaseGlobalStyleId]
   );
 
   persistInputsRef.current = {
@@ -1024,6 +1430,7 @@ export function useAIAgentEditorController({
     proposedFields,
     previewByStyle,
     previewStyleId,
+    agentUseCaseGlobalStyleId: useCaseGlobalStyleId,
     initialStateTemplateJson,
     agentRuntimeCompactJson,
     hasAgentGeneration,
@@ -1122,6 +1529,8 @@ export function useAIAgentEditorController({
     setPreviewByStyle,
     previewStyleId,
     setPreviewStyleId,
+    useCaseGlobalStyleId,
+    setUseCaseGlobalStyleId,
     initialStateTemplateJson,
     setInitialStateTemplateJson,
     agentRuntimeCompactJson,
@@ -1144,10 +1553,15 @@ export function useAIAgentEditorController({
     setLogicalSteps,
     setUseCases: setUseCasesUser,
     useCaseComposerBusy,
+    useCaseCreationMessage,
     useCaseComposerError,
     clearUseCaseComposerError,
     handleGenerateUseCaseBundle,
+    handleCreateUseCase,
     handleRegenerateUseCase,
+    handleRegenerateAgentMessage,
+    handleAnnotateAgentMessageForJson,
+    handleDeleteUseCase,
     backendPlaceholders,
     insertBackendPathAtSection,
     insertBackendPathInDesign,

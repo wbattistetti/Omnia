@@ -28,10 +28,12 @@ export function previewToUseCaseDialogue(
       typeof t.logicalStepId === 'string' && t.logicalStepId.trim()
         ? t.logicalStepId.trim()
         : p?.turn_id ?? newAgentUseCaseTurnId();
+    const role = t.role === 'user' ? 'user' : 'assistant';
     return {
       turn_id,
-      role: t.role === 'user' ? 'user' : 'assistant',
+      role,
       content: t.content,
+      ...(role === 'assistant' ? { editable: p?.editable ?? true } : { editable: false }),
       userEdited: p?.userEdited,
       locked: p?.locked,
     };

@@ -1,8 +1,8 @@
 import React from 'react';
 import { Plus, Trash2, Play, Pencil, MessageCircle } from 'lucide-react';
 import type { LabelWithPencilEditHandle } from '@components/FlowMappingPanel/LabelWithPencilEdit';
+import type { UseCase } from '../model';
 import { buildUseCaseTree, type UseCaseTreeNode } from '../tree/useCaseTreeModel';
-import { UseCaseTreeContextMenu } from '../tree/UseCaseTreeContextMenu';
 import { UseCaseTreeLabelEditor } from '../tree/UseCaseTreeLabelEditor';
 import { UseCaseNoteEditor } from '../notes/UseCaseNoteEditor';
 
@@ -13,6 +13,7 @@ export function UseCaseTree(props: {
   useCases: UseCase[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onCreateChildUseCase: (parentPath: string, title: string) => Promise<void>;
   onRenameUseCase: (id: string, nextKey: string) => void;
   onRenameFolder: (folderPath: string, nextSegment: string) => void;
   onDeleteNode: (fullPath: string, useCaseId?: string) => void;
@@ -25,45 +26,16 @@ export function UseCaseTree(props: {
 }) {
   const { useCases, selectedId } = props;
   const tree = React.useMemo(() => buildUseCaseTree(useCases), [useCases]);
-  const [openPlusMenuNodeId, setOpenPlusMenuNodeId] = React.useState<string | null>(null);
+  const [creatingChildOnPath, setCreatingChildOnPath] = React.useState<string | null>(null);
+  const [childDraftLabel, setChildDraftLabel] = React.useState('');
   const [draggingUseCaseId, setDraggingUseCaseId] = React.useState<string | null>(null);
   const [openNoteUseCaseId, setOpenNoteUseCaseId] = React.useState<string | null>(null);
   const [noteDraftByUseCaseId, setNoteDraftByUseCaseId] = React.useState<Record<string, string>>({});
   /** Tree node id whose label row is in inline rename — hide row toolbar (✓/✗ stay on the label). */
   const [labelEditingNodeId, setLabelEditingNodeId] = React.useState<string | null>(null);
-  const closeMenuTimerRef = React.useRef<number | null>(null);
   const labelEditRefs = React.useRef<Map<string, LabelWithPencilEditHandle>>(new Map());
 
   const useCaseById = React.useMemo(() => new Map(useCases.map((uc) => [uc.id, uc])), [useCases]);
-
-  const clearCloseMenuTimer = React.useCallback(() => {
-    if (closeMenuTimerRef.current !== null) {
-      window.clearTimeout(closeMenuTimerRef.current);
-      closeMenuTimerRef.current = null;
-    }
-  }, []);
-
-  const openPlusMenu = React.useCallback(
-    (nodeId: string) => {
-      clearCloseMenuTimer();
-      setOpenPlusMenuNodeId(nodeId);
-    },
-    [clearCloseMenuTimer]
-  );
-
-  const schedulePlusMenuClose = React.useCallback(() => {
-    clearCloseMenuTimer();
-    closeMenuTimerRef.current = window.setTimeout(() => {
-      setOpenPlusMenuNodeId(null);
-      closeMenuTimerRef.current = null;
-    }, 160);
-  }, [clearCloseMenuTimer]);
-
-  React.useEffect(() => {
-    return () => {
-      clearCloseMenuTimer();
-    };
-  }, [clearCloseMenuTimer]);
 
   const handleToggleNote = React.useCallback(
     (useCaseId: string) => {
@@ -86,16 +58,24 @@ export function UseCaseTree(props: {
   const renderNode = (node: UseCaseTreeNode, depth: number): React.ReactNode => {
     const nodeHasUseCase = !!node.useCaseId;
     const toneClass = nodeHasUseCase ? 'text-slate-100' : 'text-slate-500';
-    const showToolbar = openPlusMenuNodeId === node.id || !!draggingUseCaseId;
+    const showToolbar = !!draggingUseCaseId;
     const labelEditingHere = labelEditingNodeId === node.id;
+    const isCreatingChild = creatingChildOnPath === node.fullPath;
+
+    const payoffText = node.useCaseId
+      ? (useCaseById.get(node.useCaseId)?.payoff ?? '').trim()
+      : '';
 
     return (
       <React.Fragment key={node.id}>
         <div
+          className="flex flex-col w-full min-w-0"
+          style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        >
+        <div
           className={`group relative flex items-center gap-1 px-1 py-0.5 text-xs rounded ${
             node.useCaseId && !labelEditingHere ? 'cursor-grab active:cursor-grabbing' : ''
           } ${node.useCaseId === selectedId ? 'bg-slate-700' : ''}`}
-          style={{ paddingLeft: `${depth * 12 + 4}px` }}
           title={
             node.useCaseId
               ? labelEditingHere
@@ -226,38 +206,26 @@ export function UseCaseTree(props: {
                 📝
               </span>
             </button>
-            <span className="relative inline-flex shrink-0">
-              <button
-                type="button"
-                onClick={(e) => e.stopPropagation()}
-                onMouseEnter={() => openPlusMenu(node.id)}
-                onMouseLeave={schedulePlusMenuClose}
-                title="Insert relative"
-                className="p-0.5 rounded hover:bg-slate-600/80"
-              >
-                <Plus size={12} className="text-slate-200" />
-              </button>
-              {openPlusMenuNodeId === node.id ? (
-                <UseCaseTreeContextMenu
-                  onMouseEnter={() => openPlusMenu(node.id)}
-                  onMouseLeave={schedulePlusMenuClose}
-                  onBefore={() => {
-                    props.onCreateRelativeUseCase(node.fullPath, 'before');
-                    setOpenPlusMenuNodeId(null);
-                  }}
-                  onAfter={() => {
-                    props.onCreateRelativeUseCase(node.fullPath, 'after');
-                    setOpenPlusMenuNodeId(null);
-                  }}
-                  onChild={() => {
-                    props.onCreateRelativeUseCase(node.fullPath, 'child');
-                    setOpenPlusMenuNodeId(null);
-                  }}
-                />
-              ) : null}
-            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCreatingChildOnPath(node.fullPath);
+                setChildDraftLabel('');
+              }}
+              title="Aggiungi figlio"
+              className="p-0.5 rounded hover:bg-slate-600/80"
+            >
+              <Plus size={12} className="text-slate-200" />
+            </button>
           </div>
           </div>
+        </div>
+        {payoffText ? (
+          <div className="px-1 pb-0.5 pl-4 text-[10px] leading-snug text-slate-500 break-words">
+            {payoffText}
+          </div>
+        ) : null}
         </div>
         {node.useCaseId && openNoteUseCaseId === node.useCaseId ? (
           <div style={{ paddingLeft: `${depth * 12 + 4}px` }} className="pr-1">
@@ -281,6 +249,36 @@ export function UseCaseTree(props: {
                 const saved = useCaseById.get(node.useCaseId!)?.note ?? '';
                 setNoteDraftByUseCaseId((prev) => ({ ...prev, [node.useCaseId!]: saved }));
                 setOpenNoteUseCaseId(null);
+              }}
+            />
+          </div>
+        ) : null}
+        {isCreatingChild ? (
+          <div style={{ paddingLeft: `${depth * 12 + 18}px` }} className="pr-1">
+            <input
+              type="text"
+              autoFocus
+              value={childDraftLabel}
+              onChange={(e) => setChildDraftLabel(e.target.value)}
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+              placeholder="Nuovo figlio... (ENTER conferma, ESC annulla)"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const value = childDraftLabel.trim();
+                  if (!value) return;
+                  void props
+                    .onCreateChildUseCase(node.fullPath, value)
+                    .then(() => {
+                      setCreatingChildOnPath(null);
+                      setChildDraftLabel('');
+                    })
+                    .catch(() => {});
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setCreatingChildOnPath(null);
+                  setChildDraftLabel('');
+                }
               }}
             />
           </div>

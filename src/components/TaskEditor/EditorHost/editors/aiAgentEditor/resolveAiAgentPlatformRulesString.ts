@@ -18,11 +18,19 @@ import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalo
 import { parsePersistedStructuredSectionsJson } from './structuredSectionPersist';
 import { effectiveBySectionFromPersistedStructured } from './structuredSectionsRevisionReducer';
 import { mergeUseCaseExamplesIntoExamplesBody } from '@utils/iaAgentRuntime/agentUseCasesProvisionPreviewFormat';
+import {
+  appendVirtualAgentCatalogToRulesString,
+  buildVirtualAgentRuntimeCatalogFromUseCases,
+} from '@domain/aiAgentUseCase/virtualAgentRuntimeCatalog';
+import { parseAgentUseCasesJson } from '@types/aiAgentUseCases';
 
 export type TaskLikeForPlatformRules = Pick<
   Task,
   'agentStructuredSectionsJson' | 'agentPrompt' | 'agentPromptTargetPlatform'
->;
+> & {
+  /** When set, append constrained use-case catalog (motor schemas) to compiled rules. */
+  agentUseCasesJson?: string | null;
+};
 
 /** Task fields needed to merge use-case dialogues into the ConvAI Examples section. */
 export type TaskLikeForElevenLabsPrompt = TaskLikeForPlatformRules &
@@ -52,7 +60,8 @@ function structuredSectionsToIr(task: TaskLikeForPlatformRules) {
 export function resolveAiAgentPlatformRulesString(task: TaskLikeForPlatformRules): string {
   const ir = structuredSectionsToIr(task);
   const platform = normalizeAgentPromptPlatformId(task.agentPromptTargetPlatform);
-  return compileAgentPromptToPlatform(ir, platform);
+  const base = compileAgentPromptToPlatform(ir, platform);
+  return appendVirtualAgentCatalogToRulesString(base, task.agentUseCasesJson ?? undefined);
 }
 
 export type ResolveElevenLabsAgentPromptOptions = {
@@ -101,7 +110,13 @@ export function resolveElevenLabsAgentPromptFromTask(
   options?: ResolveElevenLabsAgentPromptOptions
 ): string {
   const ir = structuredSectionsToIr(task);
-  const examplesMerged = mergeUseCaseExamplesIntoExamplesBody(ir.examples ?? '', task);
+  const parsedUseCases = parseAgentUseCasesJson(task.agentUseCasesJson);
+  const motorCatalog = buildVirtualAgentRuntimeCatalogFromUseCases(parsedUseCases);
+  /** Evita few-shot narrativo duplicato e in conflitto con il catalogo motor (appendix sotto). */
+  const examplesMerged =
+    motorCatalog.entries.length > 0
+      ? ir.examples ?? ''
+      : mergeUseCaseExamplesIntoExamplesBody(ir.examples ?? '', task);
   const irWithUseCases = { ...ir, examples: examplesMerged };
   const appendix = buildConvaiBackendToolContractAppendix(task, options?.manualCatalogBackendTaskIds);
   const ctxRaw = (ir.context ?? '').trim();
@@ -113,5 +128,6 @@ export function resolveElevenLabsAgentPromptFromTask(
       context = `${ctxRaw}\n\n${appendix}`;
     }
   }
-  return compileAgentPromptToPlatform({ ...irWithUseCases, context }, AgentPlatform.ElevenLabs);
+  const elBase = compileAgentPromptToPlatform({ ...irWithUseCases, context }, AgentPlatform.ElevenLabs);
+  return appendVirtualAgentCatalogToRulesString(elBase, task.agentUseCasesJson ?? undefined);
 }

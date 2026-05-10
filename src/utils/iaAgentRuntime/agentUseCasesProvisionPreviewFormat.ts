@@ -18,7 +18,11 @@ export function formatAgentUseCasesForProvisionModal(useCases: readonly AIAgentU
   const blocks: string[] = [];
   for (const uc of sorted) {
     const title = uc.label?.trim() || uc.id;
-    const lines: string[] = [`• ${title}`, ''];
+    const lines: string[] = [`• ${title}`];
+    if (uc.payoff?.trim()) {
+      lines.push(`  ${uc.payoff.trim()}`);
+    }
+    lines.push('');
     let anyContent = false;
     for (const t of uc.dialogue) {
       const c = (t.content ?? '').trim();

@@ -120,6 +120,8 @@ export interface MinimalAiAgentCompileTaskInput extends AiAgentTaskFieldsForComp
   agentIaRuntimeOverrideJson?: string;
   /** Designer «Avvio immediato»: compiled into VB + ConvAI first_message preview. */
   agentImmediateStart?: boolean;
+  /** Use case bundle JSON — appended to compiled rules as constrained catalog appendix. */
+  agentUseCasesJson?: string | null;
 }
 
 export interface BuildMinimalAiAgentCompileTaskOptions {

@@ -8,6 +8,7 @@ import { NewProjectModal } from './NewProjectModal';
 import Sidebar from './Sidebar/Sidebar';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
+import { useAIProvider } from '../context/AIProviderContext';
 import { useProjectTranslations } from '../context/ProjectTranslationsContext';
 import { Node, Edge } from 'reactflow';
 import { FlowNode, EdgeData } from './Flowchart/types/flowTypes';
@@ -77,6 +78,13 @@ import {
 } from '../features/useCases/tree/useCaseTreeModel';
 import { UseCaseEditorPanel } from '../features/useCases/ui/UseCaseEditorPanel';
 import { UseCaseNoteManager } from '../features/useCases/notes/UseCaseNoteManager';
+import {
+  DEFAULT_USE_CASE_GLOBAL_STYLE_ID,
+  USE_CASE_GLOBAL_STYLES,
+  type UseCaseGlobalStyleId,
+} from '../features/useCases/ui/useCaseGlobalStyles';
+import { createAIAgentUseCaseApi } from '../services/aiAgentDesignApi';
+import type { AIAgentUseCase } from '../types/aiAgentUseCases';
 // ✅ REMOVED: Imports moved to handlers (SIDEBAR_TYPE_COLORS, flowchartVariablesService, getNodesWithFallback)
 // FASE 2: InstanceRepository import removed - using TaskRepository instead
 // TaskRepository automatically syncs with InstanceRepository for backward compatibility
@@ -116,6 +124,112 @@ function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
   }
   const res = f(mapped);
   return res;
+}
+
+function sortUseCasesAlphabetically(useCases: readonly UseCase[]): UseCase[] {
+  return [...useCases].sort((a, b) =>
+    String(a.key || '').localeCompare(String(b.key || ''), undefined, { sensitivity: 'base' })
+  );
+}
+
+function sanitizeUseCaseKeySegment(raw: string): string {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s._-]/g, '')
+    .replace(/\s+/g, '.')
+    .replace(/\.+/g, '.')
+    .replace(/^\.|\.$/g, '');
+}
+
+function ensureUniqueUseCaseKey(existingKeys: Set<string>, baseKey: string): string {
+  const normalizedBase = sanitizeUseCaseKeySegment(baseKey) || 'scenario';
+  let key = normalizedBase;
+  let i = 1;
+  while (existingKeys.has(key)) {
+    key = `${normalizedBase}.${i}`;
+    i += 1;
+  }
+  return key;
+}
+
+function debuggerUseCaseToAIAgentUseCase(
+  useCase: UseCase,
+  sortOrder: number,
+  styleContract: string,
+  styleId: UseCaseGlobalStyleId
+): AIAgentUseCase {
+  const dialogue = useCase.steps.flatMap((step, idx) => {
+    const user = String(step.userUtterance || '').trim();
+    const bot = String(step.botResponse || '').trim();
+    const out: AIAgentUseCase['dialogue'] = [];
+    if (user) {
+      out.push({
+        turn_id: `${useCase.id}-u-${idx}`,
+        role: 'user',
+        content: user,
+        editable: false,
+      });
+    }
+    if (bot) {
+      out.push({
+        turn_id: `${useCase.id}-a-${idx}`,
+        role: 'assistant',
+        content: bot,
+        editable: true,
+      });
+    }
+    return out;
+  });
+  return {
+    id: useCase.id,
+    label: useCase.label || useCase.key,
+    parent_id: null,
+    sort_order: sortOrder,
+    refinement_prompt: '',
+    style_id: styleId,
+    payoff: typeof useCase.payoff === 'string' ? useCase.payoff : '',
+    dialogue,
+    notes: {
+      behavior: useCase.key,
+      tone: styleContract,
+    },
+    bubble_notes: {},
+  };
+}
+
+function aiAgentUseCaseToDebuggerUseCase(
+  source: AIAgentUseCase,
+  fallback: UseCase
+): UseCase {
+  const steps: UseCase['steps'] = [];
+  for (let i = 0; i < source.dialogue.length; i += 1) {
+    const current = source.dialogue[i];
+    if (current.role !== 'user') continue;
+    const nextAssistant = source.dialogue.slice(i + 1).find((turn) => turn.role === 'assistant');
+    steps.push({
+      userUtterance: String(current.content || ''),
+      semanticValue: '',
+      linguisticValue: '',
+      grammarUsed: { type: '', contract: '' },
+      botResponse: String(nextAssistant?.content || ''),
+    });
+  }
+  if (steps.length === 0) {
+    const firstAssistant = source.dialogue.find((x) => x.role === 'assistant');
+    steps.push({
+      userUtterance: fallback.label || fallback.key,
+      semanticValue: '',
+      linguisticValue: '',
+      grammarUsed: { type: '', contract: '' },
+      botResponse: String(firstAssistant?.content || ''),
+    });
+  }
+  return {
+    ...fallback,
+    payoff: typeof source.payoff === 'string' ? source.payoff : fallback.payoff,
+    steps,
+  };
 }
 
 function flowGraphSignature(flow: { id?: string; nodes?: any[]; edges?: any[] } | null | undefined): string {
@@ -991,6 +1105,12 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [selectedUseCaseId, setSelectedUseCaseId] = useState<string | null>(null);
   const [useCaseRunResults, setUseCaseRunResults] = useState<UseCaseRunResult[]>([]);
   const [editIntentUseCaseId, setEditIntentUseCaseId] = useState<string | null>(null);
+  const [useCaseGlobalStyleId, setUseCaseGlobalStyleId] = useState<UseCaseGlobalStyleId>(
+    DEFAULT_USE_CASE_GLOBAL_STYLE_ID
+  );
+  const [isGeneratingUseCaseDialogue, setIsGeneratingUseCaseDialogue] = useState(false);
+  const [useCaseGenerationError, setUseCaseGenerationError] = useState<string | null>(null);
+  const { provider: aiProvider, model: aiModel } = useAIProvider();
 
   React.useEffect(() => {
     debuggerUseCasesRef.current = useCases;
@@ -1116,27 +1236,119 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   /** In-memory only until project save (persisted via project_meta.debuggerRegressionUseCases). */
   const persistUseCases = React.useCallback((next: UseCase[]) => {
-    setUseCases(next);
+    setUseCases(sortUseCasesAlphabetically(next));
   }, []);
 
-  const createEmptyUseCase = React.useCallback(() => {
-    const id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `uc-${Date.now()}`;
-    const keyBase = 'newUseCase';
-    const existingKeys = new Set(useCases.map((x) => x.key));
-    let key = keyBase;
-    let i = 1;
-    while (existingKeys.has(key)) {
-      key = `${keyBase}.${i}`;
-      i += 1;
-    }
-    const uc: UseCase = { id, key, label: `Usecase:${key}`, steps: [] };
-    const next = [...useCases, uc];
-    persistUseCases(next);
-    setSelectedUseCaseId(id);
-    setEditIntentUseCaseId(id);
-  }, [useCases, persistUseCases]);
+  const useCaseGlobalStyleContract = React.useMemo(() => {
+    const selected = USE_CASE_GLOBAL_STYLES.find((x) => x.id === useCaseGlobalStyleId);
+    return selected?.contract ?? USE_CASE_GLOBAL_STYLES[0].contract;
+  }, [useCaseGlobalStyleId]);
+
+  const createUseCaseWithAi = React.useCallback(
+    async (key: string) => {
+      const normalizedKey = String(key || '').trim();
+      if (!normalizedKey) {
+        throw new Error('createUseCaseWithAi: key is required.');
+      }
+      const id =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `uc-${Date.now()}`;
+      const draft: UseCase = {
+        id,
+        key: normalizedKey,
+        label: `Usecase:${normalizedKey}`,
+        payoff: '',
+        note: USE_CASE_GLOBAL_STYLES.find((x) => x.id === useCaseGlobalStyleId)?.label ?? 'Cortese',
+        steps: [],
+      };
+
+      setUseCaseGenerationError(null);
+      setIsGeneratingUseCaseDialogue(true);
+      persistUseCases([...useCases, draft]);
+      setSelectedUseCaseId(id);
+      setEditIntentUseCaseId(id);
+
+      try {
+        const aiContextCases = sortUseCasesAlphabetically(useCases).map((uc, idx) =>
+          debuggerUseCaseToAIAgentUseCase(uc, idx, useCaseGlobalStyleContract, useCaseGlobalStyleId)
+        );
+        const generated = await createAIAgentUseCaseApi({
+          useCase: {
+            id,
+            label: draft.label,
+            parent_id: null,
+            sort_order: aiContextCases.length,
+            refinement_prompt: '',
+            style_id: useCaseGlobalStyleId,
+            dialogue: [],
+            payoff: '',
+            notes: {
+              behavior: draft.key,
+              tone: useCaseGlobalStyleContract,
+            },
+            bubble_notes: {},
+          },
+          allUseCases: aiContextCases,
+          logicalSteps: [],
+          provider: aiProvider,
+          model: aiModel,
+          globalStyleContract: useCaseGlobalStyleContract,
+          globalStyleId: useCaseGlobalStyleId,
+        });
+        const generatedUseCase = aiAgentUseCaseToDebuggerUseCase(generated, draft);
+        persistUseCases(
+          useCases
+            .filter((x) => x.id !== draft.id)
+            .concat(generatedUseCase)
+        );
+        setSelectedUseCaseId(draft.id);
+        setEditIntentUseCaseId(null);
+        return draft.id;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setUseCaseGenerationError(message);
+        persistUseCases(useCases);
+        throw error;
+      } finally {
+        setIsGeneratingUseCaseDialogue(false);
+      }
+    },
+    [
+      aiModel,
+      aiProvider,
+      persistUseCases,
+      useCases,
+      useCaseGlobalStyleContract,
+      useCaseGlobalStyleId,
+    ]
+  );
+
+  const createRootUseCase = React.useCallback(
+    async (title: string) => {
+      const segment = sanitizeUseCaseKeySegment(title);
+      if (!segment) {
+        throw new Error('Titolo use case non valido.');
+      }
+      const key = ensureUniqueUseCaseKey(new Set(useCases.map((x) => x.key)), segment);
+      await createUseCaseWithAi(key);
+    },
+    [useCases, createUseCaseWithAi]
+  );
+
+  const createChildUseCase = React.useCallback(
+    async (parentPath: string, title: string) => {
+      const parent = String(parentPath || '').trim();
+      const leaf = sanitizeUseCaseKeySegment(title);
+      if (!parent || !leaf) {
+        throw new Error('Parent path o titolo figlio non validi.');
+      }
+      const existing = new Set(useCases.map((x) => x.key));
+      const key = ensureUniqueUseCaseKey(existing, `${parent}.${leaf}`);
+      await createUseCaseWithAi(key);
+    },
+    [createUseCaseWithAi, useCases]
+  );
 
   /**
    * Saves current debugger conversation as a new use case: opens panel, appends use case, starts rename edit.
@@ -1263,7 +1475,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   }, [useCases, persistUseCases]);
 
   const createRelativeUseCase = React.useCallback(
-    (targetPath: string, mode: 'before' | 'after' | 'child') => {
+    async (targetPath: string, mode: 'before' | 'after' | 'child') => {
       const normalizedTarget = String(targetPath || '').trim();
       if (!normalizedTarget) return;
       const targetParts = normalizedTarget.split('.').filter(Boolean);
@@ -1280,41 +1492,9 @@ export const AppContent: React.FC<AppContentProps> = ({
         leaf = `${leafBase}${i}`;
         i += 1;
       }
-      const nextKey = composeKey();
-
-      const id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `uc-${Date.now()}`;
-      const created: UseCase = {
-        id,
-        key: nextKey,
-        label: `Usecase:${nextKey}`,
-        steps: [],
-      };
-
-      let insertAt = useCases.length;
-      if (mode !== 'child') {
-        const idxByExact = useCases.findIndex((x) => x.key === normalizedTarget);
-        if (idxByExact >= 0) {
-          insertAt = mode === 'before' ? idxByExact : idxByExact + 1;
-        } else {
-          const siblingPrefix = siblingParent ? `${siblingParent}.` : '';
-          const siblingStart = useCases.findIndex((x) =>
-            siblingPrefix ? x.key.startsWith(siblingPrefix) && x.key.split('.').length === targetParts.length : !x.key.includes('.')
-          );
-          if (siblingStart >= 0) {
-            insertAt = siblingStart;
-          }
-        }
-      }
-
-      const next = [...useCases];
-      next.splice(Math.max(0, Math.min(insertAt, next.length)), 0, created);
-      persistUseCases(next);
-      setSelectedUseCaseId(created.id);
-      setEditIntentUseCaseId(created.id);
+      await createUseCaseWithAi(composeKey());
     },
-    [useCases, persistUseCases]
+    [createUseCaseWithAi, useCases]
   );
 
   // ✅ REMOVED: Duplicate handleTestSingleNode definition - already defined before renderTabContent
@@ -1925,7 +2105,8 @@ export const AppContent: React.FC<AppContentProps> = ({
                             useCases={useCases}
                             selectedUseCaseId={selectedUseCaseId}
                             onSelectUseCase={setSelectedUseCaseId}
-                            onCreateUseCase={createEmptyUseCase}
+                            onCreateRootUseCase={createRootUseCase}
+                            onCreateChildUseCase={createChildUseCase}
                             onRenameUseCase={renameUseCase}
                             onRenameFolder={renameFolder}
                             onDeleteNode={deleteUseCaseNode}
@@ -1938,6 +2119,12 @@ export const AppContent: React.FC<AppContentProps> = ({
                               void runUseCaseById(id);
                             }}
                             runResults={useCaseRunResults}
+                            globalStyleId={useCaseGlobalStyleId}
+                            onGlobalStyleIdChange={setUseCaseGlobalStyleId}
+                            isGenerating={isGeneratingUseCaseDialogue}
+                            generationMessage="Sto creando il dialogo per il nuovo use case…"
+                            generationError={useCaseGenerationError}
+                            onDismissGenerationError={() => setUseCaseGenerationError(null)}
                             onClosePanel={() => setShowUseCasePanel(false)}
                           />
                         </div>

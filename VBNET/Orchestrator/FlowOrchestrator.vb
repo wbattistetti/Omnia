@@ -58,7 +58,7 @@ Public Class FlowOrchestrator
     ' ── Events (per comunicazione con SessionManager / SSE) ──────────────────
 
     ''' <summary>Sollevato quando un messaggio deve essere mostrato all'utente.</summary>
-    Public Event MessageToShow As EventHandler(Of String)
+    Public Event MessageToShow As EventHandler(Of MessageEventArgs)
 
     ''' <summary>Sollevato quando ExecutionState viene aggiornato.</summary>
     Public Event StateUpdated As EventHandler(Of ExecutionState)
@@ -279,7 +279,7 @@ Public Class FlowOrchestrator
             For Each textKey As String In result.Messages
                 Dim resolved = ResolveText(textKey)
                 Console.WriteLine($"[FlowOrchestrator] 💬 Message: '{resolved}'")
-                RaiseEvent MessageToShow(Me, resolved)
+                RaiseEvent MessageToShow(Me, New MessageEventArgs(resolved, rowTask.Id))
             Next
 
             ' Aggiorna stato in base al risultato del turno

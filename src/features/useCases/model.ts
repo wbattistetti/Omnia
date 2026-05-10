@@ -5,6 +5,8 @@ export type UseCase = {
   id: string;
   key: string;
   label: string;
+  /** Narrativa di contesto dello scenario (generata da IA o editabile). */
+  payoff?: string;
   note?: string;
   steps: UseCaseStep[];
 };

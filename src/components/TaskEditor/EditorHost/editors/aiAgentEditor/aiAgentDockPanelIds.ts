@@ -20,6 +20,15 @@ export const OMNIA_ACTIVATE_AI_AGENT_AGENT_SETUP_TAB = 'omnia:activate-ai-agent-
 /** Document event: Fix compile tool/backend → tab Dockview «Backends» (ConvAI tool + SEND). */
 export const OMNIA_ACTIVATE_AI_AGENT_BACKENDS_TAB = 'omnia:activate-ai-agent-backends-tab';
 
+/** Document event: activate Dockview «Use case» panel for the AI Agent editor matching {@link detail.taskInstanceId}. */
+export const OMNIA_ACTIVATE_AI_AGENT_USE_CASES_TAB = 'omnia:activate-ai-agent-use-cases-tab';
+
+/**
+ * Document event: AI Agent editor should reload agent* fields from TaskRepository for one task id
+ * (e.g. debugger appended a use case).
+ */
+export const OMNIA_AI_AGENT_REHYDRATE_FROM_REPO = 'omnia:ai-agent-rehydrate-from-repo';
+
 export interface DockPanelRef {
   readonly id: string;
 }

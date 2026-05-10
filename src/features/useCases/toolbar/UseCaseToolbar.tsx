@@ -1,15 +1,21 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { UseCasesPanelIcon } from '../ui/UseCaseIcons';
+import {
+  type UseCaseGlobalStyleId,
+  USE_CASE_GLOBAL_STYLES,
+} from '../ui/useCaseGlobalStyles';
 
 /**
  * Toolbar for use-case editor panel.
  */
 export function UseCaseToolbar({
-  onCreateUseCase,
+  globalStyleId,
+  onGlobalStyleIdChange,
   onClosePanel,
 }: {
-  onCreateUseCase: () => void;
+  globalStyleId: UseCaseGlobalStyleId;
+  onGlobalStyleIdChange: (styleId: UseCaseGlobalStyleId) => void;
   onClosePanel: () => void;
 }) {
   return (
@@ -19,13 +25,21 @@ export function UseCaseToolbar({
         <span>Usecases</span>
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onCreateUseCase}
-          className="text-xs px-2 py-1 rounded bg-slate-900/80 text-cyan-100 border border-cyan-500/50 hover:bg-slate-800"
+        <label htmlFor="debugger-use-case-global-style" className="text-xs text-cyan-100">
+          Stile globale
+        </label>
+        <select
+          id="debugger-use-case-global-style"
+          value={globalStyleId}
+          onChange={(e) => onGlobalStyleIdChange(e.target.value as UseCaseGlobalStyleId)}
+          className="rounded border border-cyan-500/50 bg-slate-900/80 px-2 py-1 text-xs text-cyan-100"
         >
-          add
-        </button>
+          {USE_CASE_GLOBAL_STYLES.map((style) => (
+            <option key={style.id} value={style.id}>
+              {style.label}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           onClick={onClosePanel}

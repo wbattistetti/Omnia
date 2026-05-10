@@ -590,6 +590,21 @@ export default function DDEBubbleChat({
   // ✅ NEW: In preview mode, use previewMessages instead of SSE
   const displayMessages = mode === 'preview' && previewMessages ? previewMessages : messages;
 
+  /** Flow debugger: user line immediately before each bot bubble (for IA assist). */
+  const priorUserTextByBotMessageId = React.useMemo(() => {
+    const map = new Map<string, string>();
+    if (!isFlowMode) return map;
+    let lastUser = '';
+    for (const msg of displayMessages) {
+      if (msg.type === 'user') {
+        lastUser = String(msg.text ?? '');
+      } else if (msg.type === 'bot') {
+        map.set(msg.id, lastUser);
+      }
+    }
+    return map;
+  }, [displayMessages, isFlowMode]);
+
   // ✅ ARCHITECTURAL: Separate useEffect for preview mode
   React.useEffect(() => {
     if (mode === 'preview') {
@@ -2023,7 +2038,17 @@ export default function DDEBubbleChat({
             );
           }
           if (isFlowMode && m.type === 'bot') {
-            return <FlowBotTurnLabel key={m.id} message={m} onEditTranslation={handleEdit} />;
+            return (
+              <FlowBotTurnLabel
+                key={m.id}
+                message={m}
+                onEditTranslation={handleEdit}
+                projectId={projectId}
+                priorUserTurnText={priorUserTextByBotMessageId.get(m.id) ?? ''}
+                debuggerFlowId={orchestratorCompileRootFlowId ?? null}
+                flowDebuggerScrollParentRef={scrollContainerRef}
+              />
+            );
           }
           if (m.type === 'user') {
             return (

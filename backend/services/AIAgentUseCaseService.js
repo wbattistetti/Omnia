@@ -1,6 +1,7 @@
 // Use case composer: LLM helpers for generate / regenerate (design-time only).
 
 const { extractJsonString } = require('./AIAgentDesignService');
+const { mergeCreateUseCaseWithDraft } = require('./mergeCreateUseCaseDraft');
 
 /**
  * HTTP timeout for the OpenAI/Groq request (BaseProvider.makeRequest).
@@ -11,11 +12,100 @@ const GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS = 300000;
 /** Regenerate single scenario / turn: allow more than default 60s provider cap. */
 const REGENERATE_USE_CASE_TIMEOUT_MS = 120000;
 const REGENERATE_TURN_TIMEOUT_MS = 90000;
+/** Debugger flow-mode: classify turn vs catalog / suggest new scenario. */
+const ANALYZE_DEBUG_TURN_TIMEOUT_MS = 90000;
 
 const UC_SYSTEM = `You are an expert conversational AI designer for OMNIA.
 Respond with a single valid JSON object only (no markdown fences, no commentary).
 Every id and turn_id in the JSON must be a string value (quoted), never a number.
-When OUTPUT_LANGUAGE is set, write every human-readable string in that language.`;
+When OUTPUT_LANGUAGE is set, write every human-readable string in that language.
+Never output "editable" (the platform injects it).
+Each use case must include a clear "payoff" (scenario context narrative) and a single assistant "dialogue" turn — the virtual agent output example only.
+For assistant "content", mark only the **variable semantic fragment** with brackets. In Italian, keep **articles, prepositions, and fixed function words outside** the brackets (e.g. write \`alle [14]\` not \`[alle 14]\`, \`al [mattino]\` not \`[al mattino]\`). Plain text outside brackets is fixed script; bracket inners are runtime-filled slots.`;
+
+/** System prompt for annotate_assistant_message_for_json only — avoids UC_SYSTEM “design full use case” framing. */
+const ANNOTATE_ASSISTANT_FOR_JSON_SYSTEM = `You annotate existing assistant messages for OMNIA runtime JSON templating.
+Respond with a single valid JSON object only (no markdown fences, no commentary).
+The user message contains the authoritative assistant text under "Current assistant message text": preserve that wording exactly except for inserting [slot_id] brackets and optional obvious spelling/typo fixes. Do not paraphrase, rephrase for style, add/remove sentences, or normalize tone.
+When OUTPUT_LANGUAGE is set, slot labels and motor surfaces still follow the scenario language.
+For bracket placement: mark only variable semantic fragments. In Italian, keep articles, prepositions, and fixed function words outside brackets (e.g. \`alle [ora_disponibile]\` not \`[alle 8]\`).`;
+
+const STYLE_IDS = new Set(['cortese', 'ironico', 'formale']);
+
+function makeTurnId() {
+  return `t-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function coerceStyleId(raw) {
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (STYLE_IDS.has(s)) return s;
+  return 'cortese';
+}
+
+/**
+ * @param {unknown} t
+ */
+function normalizeDialogueTurn(t) {
+  if (!t || typeof t !== 'object') return null;
+  const role = t.role === 'user' ? 'user' : 'assistant';
+  const turn_id = typeof t.turn_id === 'string' && t.turn_id.trim() ? t.turn_id.trim() : makeTurnId();
+  const content = typeof t.content === 'string' ? t.content : '';
+  if (role === 'user') {
+    return { turn_id, role: 'user', content, editable: false };
+  }
+  const base = { turn_id, role: 'assistant', content, editable: true };
+  const ms = t.motor_snapshot;
+  if (
+    ms &&
+    typeof ms === 'object' &&
+    typeof ms.source_content === 'string' &&
+    ms.payload &&
+    typeof ms.payload === 'object'
+  ) {
+    base.motor_snapshot = ms;
+  }
+  return base;
+}
+
+/**
+ * Keep only the first assistant turn as the canonical agent output example.
+ * @param {unknown[]} dialogueIn
+ */
+function normalizeDialogueAgentOnly(dialogueIn) {
+  const mapped = Array.isArray(dialogueIn)
+    ? dialogueIn.map((t) => normalizeDialogueTurn(t)).filter(Boolean)
+    : [];
+  const assistant = mapped.find((x) => x.role === 'assistant');
+  if (assistant) {
+    return [{ turn_id: assistant.turn_id, role: 'assistant', content: assistant.content, editable: true }];
+  }
+  return [];
+}
+
+/**
+ * @param {object} uc
+ * @param {string} [globalStyleId]
+ */
+function normalizeUseCase(uc, globalStyleId) {
+  if (!uc || typeof uc !== 'object') return uc;
+  const dialogueIn = Array.isArray(uc.dialogue) ? uc.dialogue : [];
+  const dialogue = normalizeDialogueAgentOnly(dialogueIn);
+  let payoff = '';
+  if (typeof uc.payoff === 'string' && uc.payoff.trim()) payoff = uc.payoff.trim().slice(0, 8000);
+  else if (typeof uc.description === 'string' && uc.description.trim()) payoff = uc.description.trim().slice(0, 8000);
+  const style_id = coerceStyleId(globalStyleId ?? uc.style_id ?? uc.style);
+  const { style: _drop, editable: _e, ...rest } = uc;
+  return { ...rest, dialogue, style_id, payoff };
+}
+
+/**
+ * @param {{ logical_steps: object[], use_cases: object[] }} bundle
+ * @param {string} [globalStyleId]
+ */
+function normalizeUseCaseBundle(bundle, globalStyleId) {
+  const use_cases = bundle.use_cases.map((u) => normalizeUseCase(u, globalStyleId));
+  return { logical_steps: bundle.logical_steps, use_cases };
+}
 
 /**
  * @param {string} outputLanguage
@@ -40,13 +130,14 @@ Produce JSON with exactly:
 1) "logical_steps" — array of { "id": string (snake_case), "description": string } — 4–12 ordered steps the agent follows.
 2) "use_cases" — array of 4–10 objects, each:
    - "id": string (unique among all use_cases)
-   - "label": string
+   - "label": string — short title for this scenario (shown in the UI tree).
+   - "payoff": string — clear narrative of the negotiation/dialog CONTEXT for this scenario (who wants what, what happens). This is NOT the agent script; it explains the situation for designers.
    - "parent_id": string | null — null = root; if a string, it MUST equal the "id" of another object in this same "use_cases" array (no dangling references)
    - "sort_order": number — among siblings (same parent_id), use 0-based integers 0,1,2,... with strictly increasing order (no ties per sibling group)
    - "refinement_prompt": string (may be "")
-   - "dialogue": array of { "turn_id": string, "role": "assistant"|"user", "content": string } — 4–12 turns, realistic; "turn_id" unique within that dialogue and prefer unique across all use_cases in this response (for stable bubble_notes keys)
-   - "notes": { "behavior": string, "tone": string }
-   - "bubble_notes": object map turn_id -> short designer note (may be {})
+   - "dialogue": array containing EXACTLY ONE object: { "turn_id": string, "role": "assistant", "content": string } — the virtual agent spoken output example for this scenario only (concise, follows GLOBAL_STYLE_CONTRACT). No user turns. Do NOT include "editable".
+   - "notes": { "behavior": string, "tone": string } — may summarize payoff briefly in "behavior" if helpful
+   - "bubble_notes": {} (may be empty object)
 
 ID rules:
 - All "id" and "turn_id" values must be non-empty strings in JSON (never numeric types).
@@ -54,11 +145,17 @@ ID rules:
 - "use_cases"[].id must be pairwise distinct from each other and must not collide with any "logical_steps"[].id.
 
 Content rules:
-- Every human-readable string (labels, descriptions, dialogue content, notes, bubble_notes) must strictly relate to the DESIGNER_TASK_DESCRIPTION${ctx ? ' and stay consistent with RUNTIME_PROMPT_OR_SECTIONS when provided above' : ''}.
-- Keep each dialogue "content" concise: prefer 1–2 sentences per turn; use a third sentence only if needed for clarity (e.g. ambiguity or correction scenarios).
+- Every human-readable string must strictly relate to the DESIGNER_TASK_DESCRIPTION${ctx ? ' and stay consistent with RUNTIME_PROMPT_OR_SECTIONS when provided above' : ''}.
+- "payoff" must make the scenario understandable without a multi-turn transcript.
 
 Include at least: happy path, one correction, one ambiguity, one refusal variant (as separate use_cases or children).
 Return valid JSON only.`;
+}
+
+function buildGlobalStyleBlock(globalStyleContract) {
+  const contract = typeof globalStyleContract === 'string' ? globalStyleContract.trim() : '';
+  if (!contract) return '';
+  return `\nGLOBAL_STYLE_CONTRACT:\n${contract}\nApply this style contract consistently to every assistant turn.`;
 }
 
 /**
@@ -93,6 +190,8 @@ async function generateUseCaseBundle({
   userDesc,
   runtimeContext,
   outputLanguage,
+  globalStyleContract,
+  globalStyleId,
   provider = 'groq',
   model,
   aiProviderService,
@@ -104,7 +203,7 @@ async function generateUseCaseBundle({
     { role: 'system', content: UC_SYSTEM },
     {
       role: 'user',
-      content: buildGenerateUseCasesUserMessage(userDesc.trim(), outputLanguage, runtimeContext),
+      content: `${buildGenerateUseCasesUserMessage(userDesc.trim(), outputLanguage, runtimeContext)}${buildGlobalStyleBlock(globalStyleContract)}`,
     },
   ];
   const maxTokens = provider === 'openai' ? 4096 : 8192;
@@ -124,15 +223,17 @@ async function generateUseCaseBundle({
     err.rawSnippet = jsonStr.slice(0, 500);
     throw err;
   }
-  return validateUseCaseBundle(parsed);
+  const bundle = validateUseCaseBundle(parsed);
+  return normalizeUseCaseBundle(bundle, globalStyleId);
 }
 
-function buildRegenerateUseCaseUserMessage(outputLanguage, useCase, allCases, logicalSteps) {
+function buildRegenerateUseCaseUserMessage(outputLanguage, useCase, allCases, logicalSteps, globalStyleContract) {
   const lang =
     typeof outputLanguage === 'string' && outputLanguage.trim()
       ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
       : '';
-  return `${lang}You refine ONE use case. Current use case (JSON):\n${JSON.stringify(useCase)}\n\nAll use cases (context, do not remove others):\n${JSON.stringify(allCases).slice(0, 8000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nReturn JSON with a single key "use_case" containing the full updated use case object (same shape as input). Revise dialogue (and bubble_notes if needed) to match the intent in "notes" (behavior and tone). The field "refinement_prompt" is legacy and may be empty — prefer "notes". Preserve "id" and "parent_id" unless you are explicitly merging — keep the same "id". Valid JSON only.`;
+  const styleBlock = buildGlobalStyleBlock(globalStyleContract);
+  return `${lang}You refine ONE use case. Current use case (JSON):\n${JSON.stringify(useCase)}\n\nAll use cases (context, do not remove others):\n${JSON.stringify(allCases).slice(0, 8000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nReuse tone from existing use cases.${styleBlock}\n\nThe designer may have edited "payoff" (scenario) — if so, you MUST:\n- Update "label" to a short UI title (max ~64 chars) that matches the CURRENT payoff (do not keep an obsolete label).\n- Rewrite "dialogue"[0].content so it fits the scenario and GLOBAL_STYLE_CONTRACT.\n- Bracket only runtime-varying fragments; **Italian:** keep \`al\`, \`alle\`, \`alla\`, … outside brackets (\`alle [8]\` not \`[alle 8]\`).\n- "dialogue" content must be non-empty after refinement.\n\nReturn JSON with a single key "use_case" containing the full updated object. Requirements:\n- "payoff": keep or lightly polish the scenario narrative (respect user edits).\n- "label": short tree title aligned with payoff.\n- "dialogue": exactly ONE assistant turn { turn_id, role "assistant", content } — virtual agent output example only; non-empty content.\n- Do NOT include "editable". Preserve "id" and "parent_id". Valid JSON only.`;
 }
 
 /**
@@ -146,6 +247,8 @@ async function regenerateUseCase({
   allCases,
   logicalSteps,
   outputLanguage,
+  globalStyleContract,
+  globalStyleId,
   provider = 'groq',
   model,
   aiProviderService,
@@ -157,7 +260,13 @@ async function regenerateUseCase({
     { role: 'system', content: UC_SYSTEM },
     {
       role: 'user',
-      content: buildRegenerateUseCaseUserMessage(outputLanguage, useCase, allCases, logicalSteps || []),
+      content: buildRegenerateUseCaseUserMessage(
+        outputLanguage,
+        useCase,
+        allCases,
+        logicalSteps || [],
+        globalStyleContract
+      ),
     },
   ];
   const maxTokens = provider === 'openai' ? 4096 : 8192;
@@ -173,7 +282,71 @@ async function regenerateUseCase({
   if (!parsed || typeof parsed !== 'object' || !parsed.use_case) {
     throw new Error('Invalid JSON: expected { use_case }');
   }
-  return parsed.use_case;
+  return normalizeUseCase(parsed.use_case, globalStyleId);
+}
+
+function buildCreateUseCaseUserMessage(outputLanguage, useCase, allCases, logicalSteps, globalStyleContract) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const styleBlock = buildGlobalStyleBlock(globalStyleContract);
+  return `${lang}Create ONE new use case from this DESIGNER DRAFT (JSON):\n${JSON.stringify(useCase)}\n\nThe draft "label" and/or notes.behavior may be rough notes or a long paragraph — treat them as intent only.\n\nAll existing use cases (context):\n${JSON.stringify(allCases).slice(0, 10000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nYou MUST output:\n- "label": short UI title for the tree (max ~64 characters), polished and specific — NOT a copy-paste of the whole draft.\n- "payoff": expanded, clear scenario narrative (who, goal, constraints, outcome). More explicit and readable than the draft.\n- "dialogue": exactly ONE assistant turn example matching tone from existing use cases.${styleBlock}\n- In assistant "content", bracket only runtime-varying fragments. **Italian:** leave \`al\`, \`alle\`, \`alla\`, \`allo\`, \`ai\`, \`nel\`, \`sul\`, \`del\`, … **outside** brackets — e.g. \`alle [8]\`, \`al [pomeriggio]\`, not \`[alle 8]\` / \`[al pomeriggio]\`.\n- "dialogue"[0].content MUST be non-empty.\n- "notes": { "behavior": string (one-line summary aligned with payoff), "tone": string } — may mirror GLOBAL_STYLE_CONTRACT briefly in "tone" if helpful.\n\n"dialogue" must be exactly ONE object: { turn_id, role "assistant", content }. Do NOT include "editable".\n\nPreserve exactly as in the draft (do not change): "id", "parent_id", "sort_order". You MAY replace "label", "payoff", "refinement_prompt", "notes", "bubble_notes", "dialogue", "style_id".\nReturn JSON with exactly: { "use_case": <full use case object> }.\nValid JSON only.`;
+}
+
+/**
+ * @param {object} params
+ * @param {object} params.useCase
+ * @param {object[]} params.allCases
+ * @param {object[]} params.logicalSteps
+ * @param {string} [params.outputLanguage]
+ * @param {string} [params.globalStyleContract]
+ * @param {string} [params.provider]
+ * @param {string} [params.model]
+ * @param {import('./AIProviderService')} params.aiProviderService
+ */
+async function createUseCase({
+  useCase,
+  allCases,
+  logicalSteps,
+  outputLanguage,
+  globalStyleContract,
+  globalStyleId,
+  provider = 'groq',
+  model,
+  aiProviderService,
+}) {
+  if (!useCase || typeof useCase !== 'object') {
+    throw new Error('useCase is required');
+  }
+  const messages = [
+    { role: 'system', content: UC_SYSTEM },
+    {
+      role: 'user',
+      content: buildCreateUseCaseUserMessage(
+        outputLanguage,
+        useCase,
+        allCases || [],
+        logicalSteps || [],
+        globalStyleContract
+      ),
+    },
+  ];
+  const maxTokens = provider === 'openai' ? 4096 : 8192;
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.35,
+    maxTokens,
+    timeout: REGENERATE_USE_CASE_TIMEOUT_MS,
+  });
+  const content = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(content);
+  const parsed = JSON.parse(jsonStr);
+  if (!parsed || typeof parsed !== 'object' || !parsed.use_case) {
+    throw new Error('Invalid JSON: expected { use_case }');
+  }
+  const normalized = normalizeUseCase(parsed.use_case, globalStyleId);
+  return mergeCreateUseCaseWithDraft(normalized, useCase);
 }
 
 function buildRegenerateTurnUserMessage(outputLanguage, useCase, turnId) {
@@ -181,7 +354,7 @@ function buildRegenerateTurnUserMessage(outputLanguage, useCase, turnId) {
     typeof outputLanguage === 'string' && outputLanguage.trim()
       ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
       : '';
-  return `${lang}Use case (JSON):\n${JSON.stringify(useCase).slice(0, 8000)}\n\nRegenerate ONLY the dialogue turn with turn_id === "${String(turnId)}". Return JSON: { "turn": { "turn_id": same as input, "role": "assistant"|"user", "content": "..." } }. Keep role the same as the current turn. Valid JSON only.`;
+  return `${lang}Use case (JSON):\n${JSON.stringify(useCase).slice(0, 8000)}\n\nRegenerate ONLY the dialogue turn with turn_id === "${String(turnId)}". The message must fit the use case "payoff" and scenario context.\nBracket only variable fragments; in Italian keep \`al\`/\`alle\`/… outside brackets (\`alle [8]\` not \`[alle 8]\`).\nReturn JSON: { "turn": { "turn_id": same as input, "role": "assistant"|"user", "content": "..." } }. Content must be non-empty for assistant turns. Do NOT include "editable". Keep role the same as the current turn. Valid JSON only.`;
 }
 
 /**
@@ -223,12 +396,498 @@ async function regenerateTurn({
   if (!parsed || typeof parsed !== 'object' || !parsed.turn) {
     throw new Error('Invalid JSON: expected { turn }');
   }
-  return parsed.turn;
+  const normalized = normalizeDialogueTurn(parsed.turn);
+  if (!normalized) {
+    throw new Error('Invalid turn payload after normalize');
+  }
+  if (normalized.role === 'assistant' && !(typeof normalized.content === 'string' && normalized.content.trim())) {
+    throw new Error('Model returned empty assistant message content');
+  }
+  return normalized;
+}
+
+const ANNOTATE_ASSISTANT_FOR_JSON_TIMEOUT_MS = REGENERATE_TURN_TIMEOUT_MS;
+
+/**
+ * Same bracket split as `splitAgentMessageTemplate.ts` (design-time motor segments).
+ * @param {string} content
+ */
+function splitAgentMessageBracketsJs(content) {
+  const s = typeof content === 'string' ? content : '';
+  if (!s) return [];
+  const out = [];
+  const re = /\[([^\]]+)\]/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const start = m.index;
+    if (start > last) {
+      out.push({ kind: 'text', text: s.slice(last, start) });
+    }
+    const inner = (m[1] ?? '').trim();
+    out.push({ kind: 'slot', name: inner, raw: m[0] ?? '' });
+    last = start + (m[0]?.length ?? 0);
+  }
+  if (last < s.length) {
+    out.push({ kind: 'text', text: s.slice(last) });
+  }
+  return out;
+}
+
+function dedupeSlotBindingsJs(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const r of rows) {
+    if (!r || typeof r !== 'object') continue;
+    const id = String(r.slot_id ?? '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      slot_id: id,
+      surface: String(r.surface ?? '').trim() || id,
+    });
+  }
+  return out;
+}
+
+function bindingsFallbackFromSegmentsJs(segments) {
+  const names = [...new Set(segments.filter((x) => x.kind === 'slot').map((x) => x.name))];
+  return names.map((slot_id) => ({ slot_id, surface: slot_id }));
+}
+
+/**
+ * New schema: { slot_id, values, pattern?, separator?, last_separator?, period? }.
+ * Legacy: { period, times } → same values list with a derived slot_id.
+ */
+function normalizeMotorGroupsJs(groups) {
+  if (!Array.isArray(groups) || groups.length === 0) return undefined;
+  const out = [];
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    if (!g || typeof g !== 'object') continue;
+
+    let slot_id = typeof g.slot_id === 'string' ? g.slot_id.trim() : '';
+    let values = [];
+    if (Array.isArray(g.values)) {
+      values = g.values.map((t) => String(t ?? '').trim()).filter(Boolean);
+    }
+
+    const legacyTimes = Array.isArray(g.times)
+      ? g.times.map((t) => String(t ?? '').trim()).filter(Boolean)
+      : [];
+    const period = typeof g.period === 'string' ? g.period.trim() : '';
+
+    if (!values.length && legacyTimes.length) {
+      values = legacyTimes;
+      if (!slot_id) {
+        slot_id = period ? `orari_${period}` : `gruppo_${i}`;
+      }
+    }
+
+    if (!slot_id || !values.length) continue;
+
+    const pattern = typeof g.pattern === 'string' && g.pattern.trim() ? g.pattern.trim() : '';
+    const separator = typeof g.separator === 'string' ? g.separator : undefined;
+    const last_separator = typeof g.last_separator === 'string' ? g.last_separator : undefined;
+
+    const row = {
+      slot_id,
+      values,
+      ...(pattern ? { pattern } : {}),
+      ...(separator !== undefined ? { separator } : {}),
+      ...(last_separator !== undefined ? { last_separator } : {}),
+      ...(period ? { period } : {}),
+    };
+    out.push(row);
+  }
+  return out.length ? out : undefined;
+}
+
+/**
+ * @param {string} useCaseId
+ * @param {string} label
+ * @param {string} template
+ * @param {object} [modelMotor]
+ * @param {object[]} [modelMotor.slots]
+ * @param {object[]} [modelMotor.groups]
+ * @param {object[]} [modelMotor.linear_semantic]
+ */
+function buildMotorPayloadFromAnnotatedContent(useCaseId, label, template, modelMotor) {
+  const segments = splitAgentMessageBracketsJs(template);
+  const m = modelMotor && typeof modelMotor === 'object' ? modelMotor : {};
+
+  let slotBindings = [];
+  if (Array.isArray(m.slots) && m.slots.length > 0) {
+    const first = m.slots[0];
+    if (typeof first === 'string') {
+      slotBindings = [];
+    } else {
+      slotBindings = m.slots
+        .map((s) => {
+          if (!s || typeof s !== 'object') return null;
+          const sid = typeof s.slot_id === 'string' ? s.slot_id.trim() : '';
+          if (!sid) return null;
+          const surface = typeof s.surface === 'string' ? s.surface.trim() : '';
+          return { slot_id: sid, surface: surface || sid };
+        })
+        .filter(Boolean);
+    }
+  }
+
+  const slots = dedupeSlotBindingsJs(
+    slotBindings.length ? slotBindings : bindingsFallbackFromSegmentsJs(segments)
+  );
+
+  const motor = {
+    use_case_id: useCaseId,
+    label: label || '',
+    template,
+    segments,
+    slots,
+  };
+
+  const groups = normalizeMotorGroupsJs(m.groups);
+  if (groups) {
+    motor.groups = groups;
+  }
+
+  if (Array.isArray(m.linear_semantic) && m.linear_semantic.length > 0) {
+    motor.linear_semantic = m.linear_semantic
+      .map((row) => {
+        if (!row || typeof row !== 'object') return null;
+        const text = typeof row.text === 'string' ? row.text : '';
+        const slot = typeof row.slot === 'string' ? row.slot.trim() : '';
+        return slot ? { text, slot } : null;
+      })
+      .filter(Boolean);
+  }
+  return motor;
+}
+
+/**
+ * @param {string} outputLanguage
+ * @param {object} useCase
+ * @param {string} turnId
+ * @param {string} [globalStyleContract]
+ */
+function buildAnnotateAssistantForJsonUserMessage(
+  outputLanguage,
+  useCase,
+  turnId,
+  globalStyleContract,
+  assistantMessageTextOverride
+) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const styleBlock = buildGlobalStyleBlock(globalStyleContract);
+  const dialogue = Array.isArray(useCase?.dialogue) ? useCase.dialogue : [];
+  let useCaseForPrompt = useCase;
+  let currentText = '';
+  if (typeof assistantMessageTextOverride === 'string') {
+    currentText = assistantMessageTextOverride;
+    useCaseForPrompt = {
+      ...useCase,
+      dialogue: dialogue.map((t) =>
+        t && t.turn_id === turnId ? { ...t, content: assistantMessageTextOverride } : t
+      ),
+    };
+  } else {
+    const target = dialogue.find((t) => t && t.turn_id === turnId);
+    currentText = typeof target?.content === 'string' ? target.content : '';
+  }
+  return `${lang}You annotate assistant messages for runtime JSON templating. The designer's message is authoritative.
+
+Full use case JSON (context for intent only — do not copy its wording over the current message):
+${JSON.stringify(useCaseForPrompt).slice(0, 14000)}
+
+TARGET assistant turn_id: "${String(turnId)}"
+Current assistant message text (AUTHORITATIVE — annotate THIS text only):
+"""
+${currentText.slice(0, 8000)}
+"""
+
+Task:
+- Preserve the **exact** wording, punctuation, spacing, and line breaks of "Current assistant message text" above.
+- Do **not** paraphrase, rephrase, normalize, add sentences, remove sentences, or swap synonyms.
+- Only insert \`[slot_id]\` markers around runtime-varying fragments; every other character must stay identical unless you fix an **obvious** spelling/typo in-place (optional; if unsure, leave as-is).
+- Build a coherent \`motor\` JSON that matches the bracketed \`slot_id\`s in your \`content\`.
+${styleBlock}
+
+**Bracket notation (semantic slot ids):** Inside \`[ ]\` use **stable snake_case slot_id** labels (e.g. \`data_richiesta\`, \`ora_disponibile\`), **not** the literal spoken value. Fixed script stays outside brackets; **Italian:** leave articles/prepositions outside (\`alle [ora_disponibile]\` not \`[alle 8]\`).
+
+**Patterns:** Detect lists / repetitions / conjunctions (e.g. \`alle [id], alle [id] e alle [id]\`). Do **not** invent a separate slot for each repeated role — one \`slot_id\` per semantic role. Commas and \` e \` belong to the **linguistic pattern**, not to \`slots\`.
+
+**motor.slots:** One object per distinct \`slot_id\`: \`{ "slot_id": string, "surface": string }\` where **surface** is the **original literal** from the current message text for that role (before semantic renaming), e.g. surface \`"sabato 21"\` for \`data_richiesta\`.
+
+**motor.groups:** For repeated same-role items (e.g. multiple times), add one group:
+\`{ "slot_id": "<same as bracket>", "pattern": "alle [ora]" (example), "values": ["8","10","17"], "separator": ", ", "last_separator": " e " }\`
+Order \`values\` as in the sentence. Omit \`groups\` if nothing repeats.
+
+Legacy compatibility: you may still bucket by day-period using \`period\` + \`times\`; prefer the **groups** schema above when the sentence lists hours.
+
+Return a single JSON object with exactly these keys:
+{
+  "content": "<same assistant message as Current assistant message text, with [semantic_slot_id] brackets inserted — no other wording changes except optional obvious typo fixes>",
+  "motor": {
+    "slots": [ { "slot_id": "data_richiesta", "surface": "sabato 21" } ],
+    "groups": [ { "slot_id": "ora_disponibile", "pattern": "alle [ora]", "values": ["8","10"], "separator": ", ", "last_separator": " e " } ],
+    "linear_semantic": [ { "text": "per ", "slot": "data" } ]
+  }
+}
+\`linear_semantic\` is optional. Valid JSON only. No markdown fences.`;
+}
+
+/**
+ * LLM: wrap runtime-varying fragments in [tokens] for motor JSON / slots preview.
+ * @param {object} params
+ * @param {object} params.useCase
+ * @param {string} params.turnId
+ */
+async function annotateAssistantMessageForJson({
+  useCase,
+  turnId,
+  outputLanguage,
+  globalStyleContract,
+  provider = 'groq',
+  model,
+  aiProviderService,
+  assistantMessageTextOverride,
+}) {
+  if (!useCase || typeof useCase !== 'object') {
+    throw new Error('useCase is required');
+  }
+  if (!turnId || typeof turnId !== 'string') {
+    throw new Error('turnId is required');
+  }
+  const messages = [
+    { role: 'system', content: ANNOTATE_ASSISTANT_FOR_JSON_SYSTEM },
+    {
+      role: 'user',
+      content: buildAnnotateAssistantForJsonUserMessage(
+        outputLanguage,
+        useCase,
+        turnId,
+        globalStyleContract,
+        typeof assistantMessageTextOverride === 'string' ? assistantMessageTextOverride : undefined
+      ),
+    },
+  ];
+  const maxTokens = provider === 'openai' ? 3072 : 4096;
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.15,
+    maxTokens,
+    timeout: ANNOTATE_ASSISTANT_FOR_JSON_TIMEOUT_MS,
+  });
+  const rawContent = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(rawContent);
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    const err = new Error(`Model returned non-JSON: ${e.message}`);
+    err.rawSnippet = jsonStr.slice(0, 400);
+    throw err;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid JSON object');
+  }
+  const annotated = typeof parsed.content === 'string' ? parsed.content.trim() : '';
+  if (!annotated) {
+    throw new Error('Model returned empty content');
+  }
+  const label = typeof useCase.label === 'string' ? useCase.label : '';
+  const useCaseId = typeof useCase.id === 'string' ? useCase.id : '';
+  const modelMotor = parsed.motor && typeof parsed.motor === 'object' ? parsed.motor : {};
+  const motor = buildMotorPayloadFromAnnotatedContent(useCaseId, label, annotated, modelMotor);
+  return { content: annotated, motor };
+}
+
+/**
+ * Compact catalog for LLM (ids + labels + example line).
+ * @param {string} agentUseCasesJson
+ */
+function compactUseCasesForAnalyze(agentUseCasesJson) {
+  let arr = [];
+  try {
+    const v =
+      typeof agentUseCasesJson === 'string' && agentUseCasesJson.trim()
+        ? JSON.parse(agentUseCasesJson)
+        : [];
+    arr = Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+  return arr.map((uc) => {
+    const dialogue = Array.isArray(uc?.dialogue) ? uc.dialogue : [];
+    const assistant = dialogue.find((t) => t && t.role === 'assistant');
+    const assistant_example =
+      assistant && typeof assistant.content === 'string' ? assistant.content : '';
+    return {
+      id: typeof uc?.id === 'string' ? uc.id : '',
+      label: typeof uc?.label === 'string' ? uc.label : '',
+      payoff: typeof uc?.payoff === 'string' ? uc.payoff : '',
+      assistant_example,
+    };
+  });
+}
+
+/**
+ * Debugger: compare user + assistant lines against persisted use cases; optional new scenario suggestion.
+ * @param {object} params
+ */
+async function analyzeDebuggerTurnUseCase({
+  userTurnText,
+  assistantTurnText,
+  agentUseCasesJson,
+  globalStyleContract,
+  outputLanguage,
+  provider = 'groq',
+  model,
+  aiProviderService,
+}) {
+  if (!aiProviderService) {
+    throw new Error('aiProviderService is required');
+  }
+  const catalog = compactUseCasesForAnalyze(
+    typeof agentUseCasesJson === 'string' ? agentUseCasesJson : ''
+  );
+  const catalogStr = JSON.stringify(catalog).slice(0, 32000);
+  const ut = typeof userTurnText === 'string' ? userTurnText : '';
+  const at = typeof assistantTurnText === 'string' ? assistantTurnText : '';
+  const gsc =
+    typeof globalStyleContract === 'string' && globalStyleContract.trim()
+      ? globalStyleContract.trim().slice(0, 4000)
+      : '';
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim() ? outputLanguage.trim() : 'it-IT';
+
+  const userMsg = `OUTPUT_LANGUAGE for summary_it: ${lang}
+
+Existing use cases (JSON array; fields: id, label, payoff, assistant_example):
+${catalogStr}
+
+User turn:
+"""${ut.slice(0, 8000)}"""
+
+Assistant reply observed in debugger:
+"""${at.slice(0, 8000)}"""
+
+Global style contract hint (may be empty):
+"""${gsc}"""
+
+Return ONE JSON object only (no markdown, no code fences):
+{
+  "outcome": "use_case_recognized" | "exists_but_not_recognized" | "no_matching_use_case" | "uncertain",
+  "summary_it": "short Italian explanation for the designer",
+  "recognized_use_case_id": "<id from catalog or null>",
+  "recognized_use_case_label": "<human-readable label from catalog for that id, or empty>",
+  "correct_assistant_reply_it": "Italian line the assistant SHOULD have said if the matching catalog use case were applied correctly — natural, concise; use \"\" only if truly impossible",
+  "suggested_use_case": null | {
+    "label": "string",
+    "payoff": "string",
+    "assistant_example_line": "string"
+  }
+}
+
+Rules (debugger does NOT receive runtime agent use-case id yet — classify using catalog + turns only):
+- use_case_recognized: the assistant reply is consistent with ONE catalog use case (same scenario); set recognized_use_case_id and recognized_use_case_label from that row.
+- exists_but_not_recognized: the user intent matches or clearly relates to a catalog use case, but the assistant reply does NOT adequately match that scenario (tone/content wrong); set recognized_* to that catalog row. Do NOT emit runtime_divergence (runtime signal not available).
+- no_matching_use_case: no catalog row adequately covers this user+assistant situation; fill suggested_use_case (label, payoff, assistant_example_line) aligned with global style / existing patterns.
+- uncertain: ambiguous; minimal suggested_use_case if helpful.
+- correct_assistant_reply_it: write in Italian (OUTPUT_LANGUAGE). Whenever you identify a best-matching scenario (recognized row or suggested_use_case), give one ideal assistant utterance for that scenario; may echo assistant_example from catalog when appropriate.
+
+Legacy synonym (accept internally): matched_wrong_response → treat as exists_but_not_recognized.`;
+
+  const messages = [
+    { role: 'system', content: 'You output valid JSON only. No markdown fences or commentary.' },
+    { role: 'user', content: userMsg },
+  ];
+  const maxTokens = provider === 'openai' ? 2048 : 2500;
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.2,
+    maxTokens,
+    timeout: ANALYZE_DEBUG_TURN_TIMEOUT_MS,
+  });
+  const rawContent = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(rawContent);
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    const err = new Error(`Model returned non-JSON: ${e.message}`);
+    err.rawSnippet = jsonStr.slice(0, 400);
+    throw err;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid JSON object');
+  }
+  const rawOc = typeof parsed.outcome === 'string' ? parsed.outcome.trim() : '';
+  const legacyMap = { matched_wrong_response: 'exists_but_not_recognized' };
+  const normalizedOc = legacyMap[rawOc] || rawOc;
+  const outcomes = new Set([
+    'use_case_recognized',
+    'exists_but_not_recognized',
+    'no_matching_use_case',
+    'uncertain',
+  ]);
+  const outcome = outcomes.has(normalizedOc) ? normalizedOc : 'uncertain';
+  const summary_it = typeof parsed.summary_it === 'string' ? parsed.summary_it.trim() : '';
+  let recognized_use_case_id =
+    typeof parsed.recognized_use_case_id === 'string' && parsed.recognized_use_case_id.trim()
+      ? parsed.recognized_use_case_id.trim()
+      : null;
+  if (recognized_use_case_id === '') recognized_use_case_id = null;
+
+  let recognized_use_case_label =
+    typeof parsed.recognized_use_case_label === 'string' && parsed.recognized_use_case_label.trim()
+      ? parsed.recognized_use_case_label.trim()
+      : null;
+  if (recognized_use_case_label === '') recognized_use_case_label = null;
+
+  let correct_assistant_reply_it =
+    typeof parsed.correct_assistant_reply_it === 'string' && parsed.correct_assistant_reply_it.trim()
+      ? parsed.correct_assistant_reply_it.trim()
+      : null;
+  if (correct_assistant_reply_it === '') correct_assistant_reply_it = null;
+
+  let suggested_use_case = null;
+  const s = parsed.suggested_use_case;
+  if (s && typeof s === 'object') {
+    const label = typeof s.label === 'string' ? s.label.trim() : '';
+    const payoff = typeof s.payoff === 'string' ? s.payoff.trim() : '';
+    const assistant_example_line =
+      typeof s.assistant_example_line === 'string'
+        ? s.assistant_example_line.trim()
+        : typeof s.assistant_example === 'string'
+          ? s.assistant_example.trim()
+          : '';
+    if (label || payoff || assistant_example_line) {
+      suggested_use_case = { label, payoff, assistant_example_line };
+    }
+  }
+
+  return {
+    outcome,
+    summary_it,
+    recognized_use_case_id,
+    recognized_use_case_label,
+    correct_assistant_reply_it,
+    suggested_use_case,
+    runtime_agent_use_case_id: null,
+    runtime_agent_use_case_label: null,
+  };
 }
 
 module.exports = {
   generateUseCaseBundle,
+  createUseCase,
   regenerateUseCase,
   regenerateTurn,
+  annotateAssistantMessageForJson,
   validateUseCaseBundle,
+  analyzeDebuggerTurnUseCase,
 };

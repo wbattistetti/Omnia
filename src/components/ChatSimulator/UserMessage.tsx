@@ -30,6 +30,8 @@ export interface Message {
   backendInvocations?: FlowBackendCallInvocation[];
   /** Debugger flusso: tool ConvAI webhook (URL effettivi post-tunnel). */
   convaiWebhookInvocations?: FlowConvaiWebhookDiagnostic[];
+  /** Debugger flusso: task che ha emesso il messaggio bot (SSE orchestrator). */
+  sourceTaskId?: string;
 }
 
 interface UserMessageProps {

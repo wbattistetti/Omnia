@@ -20,9 +20,23 @@ export interface AIAgentRightPanelProps {
   useCases: readonly AIAgentUseCase[];
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
   useCaseComposerBusy: boolean;
+  useCaseCreationMessage?: string | null;
   useCaseComposerError: string | null;
   onClearUseCaseComposerError: () => void;
-  onRegenerateUseCase: (useCaseId: string) => void | Promise<void>;
+  onCreateUseCase: (params: {
+    label: string;
+    parentId: string | null;
+    creationScope?: 'single' | 'batch';
+  }) => Promise<string>;
+  onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
+  onRegenerateAgentMessage: (useCaseId: string) => void | Promise<void>;
+  onAnnotateAgentMessageForJson: (
+    useCaseId: string,
+    assistantContentFromEditor?: string
+  ) => void | Promise<boolean>;
+  onDeleteUseCase: (useCaseId: string) => void;
+  useCaseGlobalStyleId: string;
+  onUseCaseGlobalStyleIdChange: (styleId: string) => void;
   primaryAgentActionLabel: string;
   previewStyleId?: string;
   onPreviewStyleIdChange?: (styleId: string) => void;
@@ -45,9 +59,16 @@ export function AIAgentRightPanel({
   useCases,
   setUseCases,
   useCaseComposerBusy,
+  useCaseCreationMessage = null,
   useCaseComposerError,
   onClearUseCaseComposerError,
+  onCreateUseCase,
   onRegenerateUseCase,
+  onRegenerateAgentMessage,
+  onAnnotateAgentMessageForJson,
+  onDeleteUseCase,
+  useCaseGlobalStyleId,
+  onUseCaseGlobalStyleIdChange,
   previewStyleId = AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
   onPreviewStyleIdChange = () => {},
 }: AIAgentRightPanelProps) {
@@ -74,9 +95,16 @@ export function AIAgentRightPanel({
       useCases={useCases}
       setUseCases={setUseCases}
       busy={useCaseComposerBusy}
+      creationMessage={useCaseCreationMessage}
       error={useCaseComposerError}
       onDismissError={onClearUseCaseComposerError}
+      onCreateUseCase={onCreateUseCase}
       onRegenerateUseCase={onRegenerateUseCase}
+      onRegenerateAgentMessage={onRegenerateAgentMessage}
+      onAnnotateAgentMessageForJson={onAnnotateAgentMessageForJson}
+      onDeleteUseCase={onDeleteUseCase}
+      useCaseGlobalStyleId={useCaseGlobalStyleId}
+      onUseCaseGlobalStyleIdChange={onUseCaseGlobalStyleIdChange}
       previewStyleId={previewStyleId}
       onPreviewStyleIdChange={onPreviewStyleIdChange}
     />

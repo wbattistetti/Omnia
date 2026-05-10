@@ -596,8 +596,105 @@ async function generateAIAgentDesign({
   return validateDesignPayload(parsed);
 }
 
+/**
+ * Debugger workflow: infer one style rule from wrong vs correct assistant lines.
+ * Returns JSON shape { rule_text } from the model.
+ *
+ * @param {object} params
+ * @param {string} params.wrongText
+ * @param {string} params.correctText
+ * @param {string|undefined} params.outputLanguage BCP 47
+ * @param {string} [params.provider]
+ * @param {string} [params.model]
+ * @param {import('./AIProviderService')} params.aiProviderService
+ * @returns {Promise<{ rule_text: string }>}
+ */
+async function induceStyleRuleFromCorrection({
+  wrongText,
+  correctText,
+  outputLanguage,
+  provider = 'groq',
+  model,
+  aiProviderService,
+}) {
+  const w = typeof wrongText === 'string' ? wrongText.trim() : '';
+  const c = typeof correctText === 'string' ? correctText.trim() : '';
+  if (w.length < 3) {
+    throw new Error('wrongText must be at least 3 characters');
+  }
+  if (c.length < 3) {
+    throw new Error('correctText must be at least 3 characters');
+  }
+
+  const lang = sanitizeOutputLanguage(outputLanguage);
+  const langInstr = lang
+    ? `Write rule_text using language tag ${lang} (BCP 47).`
+    : 'Write rule_text in the same language as the correct line when clear; otherwise English.';
+
+  const STYLE_RULE_INDUCTION_SYSTEM = `You infer conversational style rules for the OMNIA dialogue engine.
+
+Respond with one JSON object only (no markdown fences, no text outside JSON).
+Schema: { "rule_text": string }
+
+Requirements for rule_text:
+- Clear, formal, generally applicable (not only this pair).
+- Describe what the assistant MUST follow for wording/format (dates, numbers, repetition, register).
+- Do not repeat or quote the wrong/correct examples verbatim.
+- No markdown headings or bullet markers; plain sentences; aim under 80 words.`;
+
+  const userMsg = `Goal: From a wrong assistant line and a corrected target line, produce one reusable style rule.
+
+Steps:
+1) Read the wrong line.
+2) Read the correct line.
+3) Find stylistic differences (formats, numerals, month repetition, tone).
+4) Emit one explicit rule for future replies.
+
+Context: The rule is merged into constraints_compact for an AI Agent task.
+
+${langInstr}
+
+Wrong line:
+${w}
+
+Correct target line:
+${c}
+
+Return only: { "rule_text": "<rule>" }`;
+
+  const messages = [
+    { role: 'system', content: STYLE_RULE_INDUCTION_SYSTEM },
+    { role: 'user', content: userMsg },
+  ];
+
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.25,
+    maxTokens: provider === 'openai' ? 1024 : 2048,
+  });
+
+  const content = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(content);
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    const err = new Error(`Model returned non-JSON: ${e.message}`);
+    err.rawSnippet = jsonStr.slice(0, 500);
+    throw err;
+  }
+  const ruleText = typeof parsed.rule_text === 'string' ? parsed.rule_text.trim() : '';
+  if (!ruleText) {
+    const err = new Error('Model JSON missing non-empty rule_text');
+    err.rawSnippet = jsonStr.slice(0, 400);
+    throw err;
+  }
+  return { rule_text: ruleText };
+}
+
 module.exports = {
   generateAIAgentDesign,
+  induceStyleRuleFromCorrection,
   buildMetaUserMessage,
   extractJsonString,
   validateDesignPayload,

@@ -88,7 +88,7 @@ describe('resolveElevenLabsAgentPromptFromTask ConvAI appendix', () => {
     expect(out).not.toMatch(/### Context\n\nmissing/m);
   });
 
-  it('includes use case dialogues under Examples in compiled prompt', () => {
+  it('includes use case dialogues under Examples when no motor snapshot (legacy merge)', () => {
     const task = {
       agentStructuredSectionsJson: minimalStructured,
       agentPrompt: '',
@@ -115,5 +115,48 @@ describe('resolveElevenLabsAgentPromptFromTask ConvAI appendix', () => {
     expect(out).toContain('Scenari use case');
     expect(out).toContain('Prenotazione');
     expect(out).toContain('Vorrei un appuntamento');
+  });
+
+  it('skips narrative Examples merge when motor catalog exists (Instructions appendix only)', () => {
+    const task = {
+      agentStructuredSectionsJson: minimalStructured,
+      agentPrompt: '',
+      agentPromptTargetPlatform: 'elevenlabs',
+      agentUseCasesJson: JSON.stringify([
+        {
+          id: 'uc-motor',
+          label: 'Con motor',
+          parent_id: null,
+          sort_order: 0,
+          refinement_prompt: '',
+          payoff: 'Scenario',
+          dialogue: [
+            {
+              turn_id: 'a',
+              role: 'assistant',
+              content: 'Per [slot_x], ok.',
+              editable: true,
+              motor_snapshot: {
+                source_content: 'Per [slot_x], ok.',
+                payload: {
+                  use_case_id: 'uc-motor',
+                  label: 'Con motor',
+                  template: 'Per [slot_x], ok.',
+                  segments: [],
+                  slots: [{ slot_id: 'slot_x', surface: 'a' }],
+                },
+              },
+            },
+          ],
+          notes: { behavior: '', tone: '' },
+          bubble_notes: {},
+        },
+      ]),
+    } as Task;
+
+    const out = resolveElevenLabsAgentPromptFromTask(task);
+    expect(out).toContain('Instructions per Prompt Rendering');
+    expect(out).toContain('### Catalogo Use Cases');
+    expect(out).not.toContain('Scenari use case');
   });
 });

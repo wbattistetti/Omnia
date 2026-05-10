@@ -23,6 +23,7 @@ import {
   AI_AGENT_DOCK_PANEL_IDS as PANEL_IDS,
   OMNIA_ACTIVATE_AI_AGENT_AGENT_SETUP_TAB,
   OMNIA_ACTIVATE_AI_AGENT_BACKENDS_TAB,
+  OMNIA_ACTIVATE_AI_AGENT_USE_CASES_TAB,
 } from './aiAgentDockPanelIds';
 
 const PROMPT_FINALE_PANEL_ID = 'prompt_finale';
@@ -149,6 +150,7 @@ export function AIAgentEditorDockShell({
   generateError,
 }: AIAgentEditorDockShellProps) {
   const dockApiRef = React.useRef<DockviewApi | null>(null);
+  const activeEditorTaskInstanceId = value.instanceId;
 
   const onReady = React.useCallback(
     (event: DockviewReadyEvent) => {
@@ -178,13 +180,26 @@ export function AIAgentEditorDockShell({
       };
     const activateAgentSetupTab = activateTab(PANEL_IDS.iaRuntime);
     const activateBackendsTab = activateTab(PANEL_IDS.backends);
+    const activateUseCasesTabFromEvent = (ev: Event) => {
+      const d = (ev as CustomEvent<{ taskInstanceId?: string }>).detail;
+      if (
+        d?.taskInstanceId &&
+        activeEditorTaskInstanceId &&
+        d.taskInstanceId !== activeEditorTaskInstanceId
+      ) {
+        return;
+      }
+      activateTab(PANEL_IDS.useCases)();
+    };
     document.addEventListener(OMNIA_ACTIVATE_AI_AGENT_AGENT_SETUP_TAB, activateAgentSetupTab, true);
     document.addEventListener(OMNIA_ACTIVATE_AI_AGENT_BACKENDS_TAB, activateBackendsTab, true);
+    document.addEventListener(OMNIA_ACTIVATE_AI_AGENT_USE_CASES_TAB, activateUseCasesTabFromEvent, true);
     return () => {
       document.removeEventListener(OMNIA_ACTIVATE_AI_AGENT_AGENT_SETUP_TAB, activateAgentSetupTab, true);
       document.removeEventListener(OMNIA_ACTIVATE_AI_AGENT_BACKENDS_TAB, activateBackendsTab, true);
+      document.removeEventListener(OMNIA_ACTIVATE_AI_AGENT_USE_CASES_TAB, activateUseCasesTabFromEvent, true);
     };
-  }, []);
+  }, [activeEditorTaskInstanceId]);
 
   return (
     <AIAgentEditorDockProvider value={value}>

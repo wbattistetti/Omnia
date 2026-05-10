@@ -112,13 +112,21 @@ export function EditorDatiPanel(_props: IDockviewPanelProps) {
 
 export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
   const {
+    instanceId,
     logicalSteps,
     useCases,
     setUseCases,
     useCaseComposerBusy,
+    useCaseCreationMessage,
     useCaseComposerError,
     onClearUseCaseComposerError,
+    onCreateUseCase,
     onRegenerateUseCase,
+    onRegenerateAgentMessage,
+    onAnnotateAgentMessageForJson,
+    onDeleteUseCase,
+    useCaseGlobalStyleId,
+    setUseCaseGlobalStyleId,
     previewStyleId,
     setPreviewStyleId,
     hasAgentGeneration,
@@ -132,13 +140,21 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
   return (
     <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-950/80">
       <AIAgentUseCaseComposer
+        editorTaskInstanceId={instanceId}
         logicalSteps={logicalSteps}
         useCases={useCases}
         setUseCases={setUseCases}
         busy={useCaseComposerBusy}
+        creationMessage={useCaseCreationMessage}
         error={useCaseComposerError}
         onDismissError={onClearUseCaseComposerError}
+        onCreateUseCase={onCreateUseCase}
         onRegenerateUseCase={onRegenerateUseCase}
+        onRegenerateAgentMessage={onRegenerateAgentMessage}
+        onAnnotateAgentMessageForJson={onAnnotateAgentMessageForJson}
+        onDeleteUseCase={onDeleteUseCase}
+        useCaseGlobalStyleId={useCaseGlobalStyleId}
+        onUseCaseGlobalStyleIdChange={setUseCaseGlobalStyleId}
         previewStyleId={previewStyleId}
         onPreviewStyleIdChange={setPreviewStyleId}
         onGenerateUseCaseBundle={showGenerateCta ? onGenerateUseCaseBundle : undefined}

@@ -19,6 +19,7 @@ export interface AIAgentPersistState {
   initialStateTemplateJson: string;
   /** JSON string: design-time compact runtime (`runtime_compact` from generate API). */
   agentRuntimeCompactJson: string;
+  agentUseCaseGlobalStyleId: string;
   hasAgentGeneration: boolean;
   agentLogicalStepsJson: string;
   agentUseCasesJson: string;
@@ -43,6 +44,7 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentSampleDialogue: previewTurnsToLegacySample(turns),
     agentInitialStateTemplateJson: state.initialStateTemplateJson,
     agentRuntimeCompactJson: state.agentRuntimeCompactJson,
+    agentUseCaseGlobalStyleId: state.agentUseCaseGlobalStyleId,
     /** Implement/freeze removed from UX; always false so old tasks unlock on next save. */
     agentDesignFrozen: false,
     agentDesignHasGeneration: state.hasAgentGeneration,

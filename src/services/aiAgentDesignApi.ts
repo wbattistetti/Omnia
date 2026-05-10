@@ -9,6 +9,11 @@ import type {
   AIAgentUseCaseTurn,
 } from '@types/aiAgentUseCases';
 import {
+  normalizeAnalyzeDebuggerTurnUseCaseResult,
+  type AnalyzeDebuggerTurnUseCaseResult,
+} from '@domain/aiAgentDebugger/analyzeDebuggerTurnUseCaseResult';
+import type { AgentMessageMotorPayload } from '@domain/aiAgentUseCase/splitAgentMessageTemplate';
+import {
   parseAgentLogicalStepsFromApi,
   parseAgentUseCasesFromApi,
   parseOneUseCaseFromApi,
@@ -58,6 +63,9 @@ const DEFAULT_TIMEOUT_MS = 120000;
 
 /** Use case bundle generation can exceed the default design timeout. */
 const GENERATE_USE_CASES_TIMEOUT_MS = 300000;
+
+/** Debugger analyze-turn LLM call (aligned with backend ANALYZE_DEBUG_TURN_TIMEOUT_MS). */
+const ANALYZE_DEBUG_TURN_TIMEOUT_MS = 90000;
 
 /**
  * Phase 1: structured IR extraction from natural language only (POST /design/extract-structure).
@@ -188,6 +196,129 @@ export async function generateAIAgentDesign(
   }
 }
 
+export interface InduceStyleRuleParams {
+  wrongText: string;
+  correctText: string;
+  provider: string;
+  model?: string;
+  outputLanguage?: string;
+}
+
+/**
+ * Debugger: infer one style rule from wrong vs correct assistant lines (POST /design/ai-agent-induce-style-rule).
+ */
+export async function induceStyleRuleFromCorrectionApi(
+  params: InduceStyleRuleParams
+): Promise<{ rule_text: string }> {
+  const { wrongText, correctText, provider, model, outputLanguage } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      wrongText: wrongText.trim(),
+      correctText: correctText.trim(),
+      provider: provider.toLowerCase(),
+    };
+    if (typeof model === 'string' && model.trim().length > 0) {
+      bodyPayload.model = model.trim();
+    }
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    const res = await fetch('/design/ai-agent-induce-style-rule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as { success: true; rule_text: string } | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const ok = body as { success: true; rule_text: string };
+    if (typeof ok.rule_text !== 'string' || !ok.rule_text.trim()) {
+      throw new Error('Risposta induce-style-rule non valida: rule_text mancante.');
+    }
+    return { rule_text: ok.rule_text.trim() };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export type { AnalyzeDebuggerTurnUseCaseResult };
+
+export interface AnalyzeDebuggerTurnUseCaseApiParams {
+  userTurn?: string;
+  assistantTurn: string;
+  agentUseCasesJson: string;
+  globalStyleContract?: string;
+  provider: string;
+  model?: string;
+  outputLanguage?: string;
+}
+
+/**
+ * Debugger flow-mode: classify transcript vs catalog / suggest new scenario (POST /design/ai-agent-analyze-debug-turn).
+ */
+export async function analyzeDebuggerTurnUseCaseApi(
+  params: AnalyzeDebuggerTurnUseCaseApiParams
+): Promise<AnalyzeDebuggerTurnUseCaseResult> {
+  const {
+    userTurn,
+    assistantTurn,
+    agentUseCasesJson,
+    globalStyleContract,
+    provider,
+    model,
+    outputLanguage,
+  } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ANALYZE_DEBUG_TURN_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      assistantTurn: assistantTurn.trim(),
+      agentUseCasesJson:
+        typeof agentUseCasesJson === 'string' ? agentUseCasesJson : JSON.stringify(agentUseCasesJson ?? []),
+      provider: provider.toLowerCase(),
+    };
+    if (typeof userTurn === 'string' && userTurn.length > 0) {
+      bodyPayload.userTurn = userTurn;
+    }
+    if (typeof model === 'string' && model.trim().length > 0) {
+      bodyPayload.model = model.trim();
+    }
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    const res = await fetch('/design/ai-agent-analyze-debug-turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as
+      | ({ success: true } & Record<string, unknown>)
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const ok = body as { success: true } & Record<string, unknown>;
+    const { success: _s, ...rest } = ok;
+    return normalizeAnalyzeDebuggerTurnUseCaseResult(rest);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface GenerateAIAgentUseCasesParams {
   userDesc: string;
   provider: string;
@@ -195,6 +326,9 @@ export interface GenerateAIAgentUseCasesParams {
   /** Runtime prompt / structured sections markdown for context. */
   runtimeContext?: string;
   outputLanguage?: string;
+  globalStyleContract?: string;
+  /** cortese | ironico | formale — persisted as style_id on each use case after normalize. */
+  globalStyleId?: string;
 }
 
 export interface GenerateAIAgentUseCasesResult {
@@ -208,7 +342,8 @@ export interface GenerateAIAgentUseCasesResult {
 export async function generateAIAgentUseCases(
   params: GenerateAIAgentUseCasesParams
 ): Promise<GenerateAIAgentUseCasesResult> {
-  const { userDesc, provider, model, runtimeContext, outputLanguage } = params;
+  const { userDesc, provider, model, runtimeContext, outputLanguage, globalStyleContract, globalStyleId } =
+    params;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GENERATE_USE_CASES_TIMEOUT_MS);
   try {
@@ -223,6 +358,12 @@ export async function generateAIAgentUseCases(
     }
     if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
       bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    if (typeof globalStyleId === 'string' && globalStyleId.trim().length > 0) {
+      bodyPayload.globalStyleId = globalStyleId.trim();
     }
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
@@ -257,6 +398,8 @@ export interface RegenerateAIAgentUseCaseParams {
   provider: string;
   model: string;
   outputLanguage?: string;
+  globalStyleContract?: string;
+  globalStyleId?: string;
 }
 
 /**
@@ -265,7 +408,16 @@ export interface RegenerateAIAgentUseCaseParams {
 export async function regenerateAIAgentUseCaseApi(
   params: RegenerateAIAgentUseCaseParams
 ): Promise<AIAgentUseCase> {
-  const { useCase, allUseCases, logicalSteps, provider, model, outputLanguage } = params;
+  const {
+    useCase,
+    allUseCases,
+    logicalSteps,
+    provider,
+    model,
+    outputLanguage,
+    globalStyleContract,
+    globalStyleId,
+  } = params;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
   try {
@@ -279,6 +431,82 @@ export async function regenerateAIAgentUseCaseApi(
     };
     if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
       bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    if (typeof globalStyleId === 'string' && globalStyleId.trim().length > 0) {
+      bodyPayload.globalStyleId = globalStyleId.trim();
+    }
+    const res = await fetch('/design/ai-agent-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as { success: true; use_case: unknown } | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const next = parseOneUseCaseFromApi(body.use_case);
+    if (!next) {
+      throw new Error('Risposta non valida: use_case mancante o non normalizzabile.');
+    }
+    return next;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export interface CreateAIAgentUseCaseParams {
+  useCase: AIAgentUseCase;
+  allUseCases: AIAgentUseCase[];
+  logicalSteps: AIAgentLogicalStep[];
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  globalStyleContract?: string;
+  globalStyleId?: string;
+}
+
+/**
+ * Create one new use case and auto-generate dialogue from context.
+ */
+export async function createAIAgentUseCaseApi(
+  params: CreateAIAgentUseCaseParams
+): Promise<AIAgentUseCase> {
+  const {
+    useCase,
+    allUseCases,
+    logicalSteps,
+    provider,
+    model,
+    outputLanguage,
+    globalStyleContract,
+    globalStyleId,
+  } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'create_use_case',
+      useCase,
+      allUseCases,
+      logicalSteps,
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    if (typeof globalStyleId === 'string' && globalStyleId.trim().length > 0) {
+      bodyPayload.globalStyleId = globalStyleId.trim();
     }
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
@@ -346,6 +574,79 @@ export async function regenerateAIAgentUseCaseTurnApi(
       throw new Error('Risposta non valida: turn mancante o non normalizzabile.');
     }
     return turn;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export interface AnnotateAIAgentAssistantMessageForJsonParams {
+  useCase: AIAgentUseCase;
+  turnId: string;
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  globalStyleContract?: string;
+  /**
+   * Testo corrente dell’editor (obbligatorio se incollato/… non ancora nello `useCase` serializzato).
+   * Il backend allinea prompt e `use case` JSON così il modello non segue un dialogo obsoleto.
+   */
+  assistantMessageText?: string;
+}
+
+export interface AnnotateAIAgentAssistantMessageForJsonResult {
+  content: string;
+  motor: AgentMessageMotorPayload;
+}
+
+/**
+ * LLM annotates assistant text with [slot] tokens and returns structured motor JSON (groups, segments).
+ */
+export async function annotateAIAgentAssistantMessageForJsonApi(
+  params: AnnotateAIAgentAssistantMessageForJsonParams
+): Promise<AnnotateAIAgentAssistantMessageForJsonResult> {
+  const { useCase, turnId, provider, model, outputLanguage, globalStyleContract, assistantMessageText } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'annotate_assistant_message_for_json',
+      useCase,
+      turnId,
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    if (typeof assistantMessageText === 'string') {
+      bodyPayload.assistantMessageText = assistantMessageText;
+    }
+    const res = await fetch('/design/ai-agent-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as
+      | { success: true; content: string; motor: AgentMessageMotorPayload }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+    if (!content) {
+      throw new Error('Risposta non valida: content vuoto.');
+    }
+    if (!body.motor || typeof body.motor !== 'object') {
+      throw new Error('Risposta non valida: motor mancante.');
+    }
+    return { content, motor: body.motor };
   } finally {
     clearTimeout(timeout);
   }

@@ -50,7 +50,22 @@ export interface AIAgentEditorDockContextValue {
   useCaseComposerError: string | null;
   onClearUseCaseComposerError: () => void;
   onGenerateUseCaseBundle: () => void | Promise<void>;
-  onRegenerateUseCase: (useCaseId: string) => void | Promise<void>;
+  onCreateUseCase: (params: {
+    label: string;
+    parentId: string | null;
+    creationScope?: 'single' | 'batch';
+  }) => Promise<string>;
+  onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
+  onRegenerateAgentMessage: (useCaseId: string) => void | Promise<void>;
+  onAnnotateAgentMessageForJson: (
+    useCaseId: string,
+    assistantContentFromEditor?: string
+  ) => void | Promise<boolean>;
+  onDeleteUseCase: (useCaseId: string) => void;
+  useCaseCreationMessage: string | null;
+  /** Global style contract for all use-case dialogues. */
+  useCaseGlobalStyleId: string;
+  setUseCaseGlobalStyleId: (styleId: string) => void;
   /** Design-time preview style (persisted with task). */
   previewStyleId: string;
   setPreviewStyleId: (styleId: string) => void;
