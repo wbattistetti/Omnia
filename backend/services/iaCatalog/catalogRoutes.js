@@ -280,20 +280,20 @@ function mountIaCatalog(app) {
   });
 
   /**
-   * Modelli LLM per provider (openai | anthropic | google | elevenlabs).
+   * Modelli LLM per provider (openai | groq | anthropic | google | elevenlabs).
    * elevenlabs = ConvAI embedded LLMs da GET /v1/convai/llm/list (sync su server).
    */
   app.get('/api/ia-catalog/ui/models', async (req, res) => {
     try {
       const provider =
         typeof req.query.provider === 'string' ? req.query.provider.trim() : '';
-      const allowed = ['openai', 'anthropic', 'google', 'elevenlabs'];
+      const allowed = ['openai', 'groq', 'anthropic', 'google', 'elevenlabs'];
       if (!provider) {
         return res.status(400).json({
           ok: false,
           code: 'MISSING_PROVIDER',
           message:
-            'Parametro query obbligatorio: provider (openai | anthropic | google | elevenlabs).',
+            'Parametro query obbligatorio: provider (openai | groq | anthropic | google | elevenlabs).',
         });
       }
       if (!allowed.includes(provider)) {
@@ -527,7 +527,7 @@ function mountIaCatalog(app) {
     try {
       const raw =
         typeof req.query.provider === 'string' ? req.query.provider.trim().toLowerCase() : '';
-      const allowed = ['openai', 'anthropic', 'google', 'elevenlabs', 'custom'];
+      const allowed = ['openai', 'groq', 'anthropic', 'google', 'elevenlabs', 'custom'];
       if (!raw || !allowed.includes(raw)) {
         return res.status(400).json({
           ok: false,
@@ -559,6 +559,10 @@ function mountIaCatalog(app) {
         case 'openai':
           apiKeyPresent = envFlag('OPENAI_API_KEY');
           apiBasePresent = envFlag('OPENAI_API_BASE');
+          break;
+        case 'groq':
+          apiKeyPresent = envFlag('GROQ_API_KEY');
+          apiBasePresent = envFlag('GROQ_API_BASE');
           break;
         case 'anthropic':
           apiKeyPresent = envFlag('ANTHROPIC_API_KEY');

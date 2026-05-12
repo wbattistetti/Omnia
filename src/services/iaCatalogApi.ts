@@ -171,8 +171,8 @@ export async function fetchCatalogLanguages(
   return { languages, applicable: true };
 }
 
-/** Modelli LLM per provider (sync OpenAI / Anthropic / Google / ElevenLabs ConvAI sul server). */
-export type LlmCatalogProviderId = 'openai' | 'anthropic' | 'google' | 'elevenlabs';
+/** Modelli LLM per provider (sync OpenAI / Groq / Anthropic / Google / ElevenLabs ConvAI sul server). */
+export type LlmCatalogProviderId = 'openai' | 'groq' | 'anthropic' | 'google' | 'elevenlabs';
 
 export async function fetchCatalogModels(
   provider: LlmCatalogProviderId,

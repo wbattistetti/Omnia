@@ -4,6 +4,7 @@
 
 import React from 'react';
 import {
+  BookOpen,
   Brackets,
   Check,
   ChevronDown,
@@ -13,6 +14,7 @@ import {
   FileJson,
   GitBranch,
   Loader2,
+  MessageSquareText,
   Pencil,
   Plus,
   RefreshCw,
@@ -74,6 +76,7 @@ import {
 } from './useCaseComposerDesignerVotes';
 import { useUseCaseFieldBaselineSync } from './useUseCaseFieldBaselineSync';
 import { VoteThumbPair } from './VoteThumbPair';
+import { TokenizedHighlightedText } from './useCaseGeneratorWizard/TokenizedHighlightedText';
 
 export type { AiTripletFieldBaseline } from './useCaseComposerPresentation';
 
@@ -121,6 +124,32 @@ export interface AIAgentUseCaseComposerProps {
   assistantPhraseStyleNewIds?: readonly string[];
   /** Wizard: bozza messaggio assistente → piano stile (testo non ancora committato in useCases). */
   onAssistantPhraseDraftChange?: (useCaseId: string | null, draftText: string | null) => void;
+  /**
+   * Notifica esterna quando la selezione lista cambia (lift-up). Usato dal wizard per il pannello
+   * «Mostra JSON»: il preview Monaco mostra il JSON dello use case selezionato.
+   * Chiamato anche al primo `effectiveSelectedId` calcolato dopo il mount.
+   */
+  onSelectionChange?: (selectedUseCaseId: string | null) => void;
+  /**
+   * Selezione richiesta dall'esterno (es. frecce ◀ ▶ del pannello DX «Mostra JSON»).
+   * Quando cambia ed è un id valido nel catalogo corrente, l'internal state del composer si
+   * adegua. Pattern «request-based»: serve solo quando il consumer vuole forzare un cambio
+   * di selezione; per la selezione default basta `onSelectionChange`. Idempotente.
+   */
+  controlledSelectionId?: string | null;
+  /**
+   * Wizard «Mostra Tokens»: quando `true` E lo use case ha una versione tokenizzata in
+   * {@link tokenizedByUseCaseId}, il messaggio agente nella riga lista viene reso con
+   * {@link TokenizedHighlightedText} (placeholder `[token]` in giallo) **read-only** —
+   * la matita di edit è nascosta. Quando `false` o senza tokenizzazione disponibile,
+   * resta la frase canonica editabile (comportamento storico).
+   *
+   * Stato condiviso col toggle delle conversazioni (`useCaseGeneratorWizard.showTokenizedInBubbles`),
+   * così l'esperienza è coerente attraversando i passi.
+   */
+  showTokenizedAgentMessage?: boolean;
+  /** Mappa `useCaseId → assistant_example_tokenized` (solo wizard). */
+  tokenizedByUseCaseId?: Readonly<Record<string, string>>;
 }
 
 export function AIAgentUseCaseComposer({
@@ -148,10 +177,43 @@ export function AIAgentUseCaseComposer({
   onClearUseCaseHighlight,
   assistantPhraseStyleNewIds = [],
   onAssistantPhraseDraftChange,
+  onSelectionChange,
+  controlledSelectionId,
+  showTokenizedAgentMessage = false,
+  tokenizedByUseCaseId,
 }: AIAgentUseCaseComposerProps) {
   const phraseStyleNewSet = React.useMemo(() => new Set(assistantPhraseStyleNewIds), [assistantPhraseStyleNewIds]);
   const { ordered, depthById } = React.useMemo(() => orderUseCasesWithDepth(useCases), [useCases]);
   const highlightIdSet = React.useMemo(() => new Set(highlightIds), [highlightIds]);
+  /**
+   * Etichette campo «Scenario» / «Messaggio agente»: in modalità wizard
+   * (`primaryGenerateOnRightOnly`) usiamo **icone-only** colorate con il **colore del font**
+   * usato in `UC_PILL_SCENARIO` (violetto) e `UC_PILL_AGENT_MSG` (emerald), così le righe
+   * dello use case respirano e l'identità del campo resta riconoscibile a colpo d'occhio.
+   * In modalità classica restano le pill testuali (più spazio orizzontale disponibile).
+   */
+  const scenarioFieldLabel: React.ReactNode = primaryGenerateOnRightOnly ? (
+    <span
+      title="Scenario"
+      aria-label="Scenario"
+      className="shrink-0 inline-flex h-5 w-5 items-center justify-center text-violet-300"
+    >
+      <BookOpen size={13} aria-hidden />
+    </span>
+  ) : (
+    <span className={UC_PILL_SCENARIO}>Scenario</span>
+  );
+  const agentMsgFieldLabel: React.ReactNode = primaryGenerateOnRightOnly ? (
+    <span
+      title="Messaggio agente"
+      aria-label="Messaggio agente"
+      className="shrink-0 inline-flex h-5 w-5 items-center justify-center text-emerald-300"
+    >
+      <MessageSquareText size={13} aria-hidden />
+    </span>
+  ) : (
+    <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+  );
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
   const wizardShowScenario =
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenario : true;
@@ -184,6 +246,18 @@ export function AIAgentUseCaseComposer({
       return o[0]?.id ?? null;
     });
   }, [editorTaskInstanceId, useCases]);
+
+  /**
+   * Sincronizza la selezione interna quando il consumer richiede esplicitamente di selezionare
+   * un altro use case (es. frecce ◀ ▶ del pannello DX «Mostra JSON»). No-op se l'id richiesto
+   * coincide con quello già selezionato, così non innesca rerender inutili.
+   */
+  React.useEffect(() => {
+    if (!controlledSelectionId) return;
+    if (controlledSelectionId === selectedId) return;
+    if (!useCases.some((u) => u.id === controlledSelectionId)) return;
+    setSelectedId(controlledSelectionId);
+  }, [controlledSelectionId, selectedId, useCases]);
 
   /** Stable selection while the list is non-empty (avoids empty right pane before effect runs). */
   const effectiveSelectedId = React.useMemo(() => {
@@ -225,6 +299,17 @@ export function AIAgentUseCaseComposer({
   React.useEffect(() => {
     setEditingTitleId(null);
   }, [effectiveSelectedId]);
+
+  /**
+   * Lift-up della selezione lista verso il parent (es. wizard right-panel «Mostra JSON»).
+   * Notifichiamo SOLO quando l'id effettivo cambia: usare `effectiveSelectedId` (che è
+   * `selectedId` reso stabile rispetto al primo elemento ordinato) evita di emettere un
+   * `null` transitorio durante l'effetto di pre-popolamento. Idempotente — il consumer
+   * deve gestire chiamate ripetute con lo stesso id (no-op tipico).
+   */
+  React.useEffect(() => {
+    onSelectionChange?.(effectiveSelectedId);
+  }, [effectiveSelectedId, onSelectionChange]);
 
   React.useEffect(() => {
     if (!primaryGenerateOnRightOnly) {
@@ -1216,7 +1301,7 @@ export function AIAgentUseCaseComposer({
                             <div className="rounded-md ring-1 ring-violet-500/25 bg-slate-950/40 px-2 py-1">
                               {payoffEditUseCaseId === u.id ? (
                                 <div className="flex flex-wrap items-start gap-2">
-                                  <span className={UC_PILL_SCENARIO}>Scenario</span>
+                                  {scenarioFieldLabel}
                                   <textarea
                                     ref={(el) => {
                                       if (el) payoffTextareaRefsById.current.set(u.id, el);
@@ -1266,7 +1351,7 @@ export function AIAgentUseCaseComposer({
                                 </div>
                               ) : (
                                 <div className="group/payoff-row flex w-full min-w-0 items-center gap-x-1 rounded px-0.5 py-0">
-                                  <span className={UC_PILL_SCENARIO}>Scenario</span>
+                                  {scenarioFieldLabel}
                                   <p
                                     className={`min-w-0 flex-1 cursor-default text-xs leading-snug whitespace-pre-wrap ${fieldTextClass(
                                       u.designer_payoff_vote,
@@ -1302,10 +1387,43 @@ export function AIAgentUseCaseComposer({
                           {wizardShowMessage ? (
                             <div className="rounded-md ring-1 ring-emerald-600/35 bg-emerald-950/20 px-2 py-1">
                               {rowAssistant ? (
+                                (() => {
+                                  /**
+                                   * «Mostra Tokens» (Passo 1/3) sostituisce la frase canonica con la
+                                   * versione tokenizzata in giallo, e in tale modalità la riga è
+                                   * read-only: la matita di edit è nascosta. Se non c'è una versione
+                                   * tokenizzata per questo use case (`assistant_example_tokenized`
+                                   * vuoto), si torna al rendering canonico anche col toggle ON —
+                                   * altrimenti il designer si ritroverebbe con una bubble vuota.
+                                   */
+                                  const tokenizedForRow =
+                                    showTokenizedAgentMessage && tokenizedByUseCaseId
+                                      ? tokenizedByUseCaseId[u.id] ?? ''
+                                      : '';
+                                  if (tokenizedForRow.trim().length > 0) {
+                                    return (
+                                      <div className="flex w-full min-w-0 items-center gap-x-1 rounded px-0.5 py-0">
+                                        {agentMsgFieldLabel}
+                                        <TokenizedHighlightedText
+                                          text={tokenizedForRow}
+                                          className="min-w-0 flex-1 font-mono text-sm leading-snug whitespace-pre-wrap text-current"
+                                        />
+                                        <VoteThumbPair
+                                          vote={u.designer_agent_message_vote}
+                                          disabled={busy}
+                                          outerBtnClass={UC_AGENT_VOTE_BTN}
+                                          onVote={(choice) =>
+                                            toggleDesignerFieldVote(u.id, 'agentMessage', choice)
+                                          }
+                                        />
+                                      </div>
+                                    );
+                                  }
+                                  return (
                                 <>
                                   {agentMsgEditUseCaseId === u.id ? (
                                     <div className="flex flex-wrap items-start gap-2">
-                                      <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                                      {agentMsgFieldLabel}
                                       <textarea
                                         ref={(el) => {
                                           if (el) agentTextareaRefsById.current.set(u.id, el);
@@ -1360,7 +1478,7 @@ export function AIAgentUseCaseComposer({
                                     </div>
                                   ) : (
                                     <div className="group/agentmsg-row flex w-full min-w-0 items-center gap-x-1 rounded px-0.5 py-0">
-                                      <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                                      {agentMsgFieldLabel}
                                       <p
                                         className={`min-w-0 flex-1 cursor-default font-mono text-sm leading-snug whitespace-pre-wrap ${fieldTextClass(
                                           u.designer_agent_message_vote,
@@ -1396,9 +1514,11 @@ export function AIAgentUseCaseComposer({
                                     </div>
                                   )}
                                 </>
+                                  );
+                                })()
                               ) : (
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                                  {agentMsgFieldLabel}
                                   <div className="min-w-0 flex-1 space-y-2">
                                     <p className="text-xs text-slate-500">
                                       Nessun turno assistente. Aggiungi un messaggio vuoto per iniziare.
@@ -1434,7 +1554,7 @@ export function AIAgentUseCaseComposer({
                   <div className="rounded-lg ring-1 ring-violet-500/35 bg-slate-950/40 px-2 py-1">
                     {payoffEditUseCaseId === selected.id ? (
                       <div className="flex flex-wrap items-start gap-2">
-                        <span className={UC_PILL_SCENARIO}>Scenario</span>
+                        {scenarioFieldLabel}
                         <textarea
                           ref={payoffTextareaRef}
                           value={payoffEditDraft}
@@ -1481,7 +1601,7 @@ export function AIAgentUseCaseComposer({
                       </div>
                     ) : (
                       <div className="group/payoff-row flex w-full min-w-0 items-center gap-x-1">
-                        <span className={UC_PILL_SCENARIO}>Scenario</span>
+                        {scenarioFieldLabel}
                         <p
                           className={`min-w-0 flex-1 text-xs leading-snug whitespace-pre-wrap ${fieldTextClass(
                             selected.designer_payoff_vote,
@@ -1534,7 +1654,7 @@ export function AIAgentUseCaseComposer({
                     {assistantTurn ? (
                       agentMsgEditUseCaseId === selected.id ? (
                         <div className="flex flex-wrap items-start gap-2">
-                          <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                          {agentMsgFieldLabel}
                           <textarea
                             ref={agentTextareaRef}
                             value={agentMsgEditDraft}
@@ -1589,7 +1709,7 @@ export function AIAgentUseCaseComposer({
                         </div>
                       ) : (
                         <div className="group/agentmsg-row flex w-full min-w-0 items-center gap-x-1">
-                          <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                          {agentMsgFieldLabel}
                           <p
                             className={`min-w-0 flex-1 font-mono text-sm leading-snug whitespace-pre-wrap ${fieldTextClass(
                               selected.designer_agent_message_vote,
@@ -1626,7 +1746,7 @@ export function AIAgentUseCaseComposer({
                       )
                     ) : (
                       <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
-                        <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
+                        {agentMsgFieldLabel}
                         <div className="min-w-0 flex-1 space-y-2 py-0.5">
                           <p className="text-xs text-slate-500">
                             Nessun turno assistente. Rigenera per crearne uno con l&apos;IA oppure aggiungi manualmente un

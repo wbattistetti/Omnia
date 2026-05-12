@@ -8,6 +8,15 @@ import type {
   AIAgentUseCase,
   AIAgentUseCaseTurn,
 } from '@types/aiAgentUseCases';
+import type {
+  UseCaseGeneratorWizardConversation,
+  UseCaseGeneratorWizardConversationOutcome,
+  UseCaseGeneratorWizardTurn,
+  UseCaseGeneratorWizardTurnAgent,
+  UseCaseGeneratorWizardTurnSuggestion,
+  UseCaseGeneratorWizardTurnUser,
+} from '@domain/useCaseGeneratorWizard/types';
+import { isSuggestedUseCaseId } from '@domain/useCaseGeneratorWizard/types';
 import {
   normalizeAnalyzeDebuggerTurnUseCaseResult,
   type AnalyzeDebuggerTurnUseCaseResult,
@@ -796,4 +805,665 @@ export async function annotateAIAgentAssistantMessageForJsonApi(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+const ASSEMBLE_CONVERSATION_TIMEOUT_MS = 300000;
+const PROOFREAD_CONVERSATION_TIMEOUT_MS = 240000;
+const TOKENIZE_USE_CASES_TIMEOUT_MS = 240000;
+
+export interface AssembleAIAgentConversationParams {
+  useCases: readonly AIAgentUseCase[];
+  runtimeContext?: string;
+  outputLanguage?: string;
+  globalStyleContract?: string;
+  /** Conteggio conversazioni già montate: aiuta l'AI a variare il mix (passato come hint). */
+  previousConversationsCount?: number;
+  /** Outcome richiesto dal designer dalla toolbar (radio Positiva/Negativa). */
+  outcome: UseCaseGeneratorWizardConversationOutcome;
+  /** Checkbox toolbar: permette al modello di proporre AL MASSIMO 1 use case emergente (`suggested:xxx`). */
+  allowSuggestedUseCases?: boolean;
+  provider: string;
+  model: string;
+}
+
+function newClientConversationId(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? `conv-${crypto.randomUUID()}`
+    : `conv-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function newClientTurnId(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? `ct-${crypto.randomUUID()}`
+    : `ct-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function parseSuggestionFromApi(raw: unknown): UseCaseGeneratorWizardTurnSuggestion | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const status =
+    o.status === 'pending' || o.status === 'promoted' || o.status === 'rejected' ? o.status : null;
+  if (!status) return null;
+  const proposedLabel = typeof o.proposedLabel === 'string' ? o.proposedLabel : '';
+  return { status, proposedLabel };
+}
+
+function parseConversationTurnFromApi(raw: unknown): UseCaseGeneratorWizardTurn | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const role = o.role === 'agent' ? 'agent' : o.role === 'user' ? 'user' : null;
+  if (!role) return null;
+  /**
+   * `turnId` rigenerato lato client per evitare collisioni se il modello LLM riusa sempre gli stessi id
+   * (`t1`, `t2`, …) tra chiamate diverse: con più conversazioni montate, la chiave baseline
+   * `${conversationId}::${turnId}` deve essere globalmente univoca.
+   */
+  const turnId = newClientTurnId();
+  const text = typeof o.text === 'string' ? o.text : '';
+  if (role === 'user') {
+    const u: UseCaseGeneratorWizardTurnUser = { turnId, role: 'user', text };
+    return u;
+  }
+  const useCaseId = typeof o.useCaseId === 'string' ? o.useCaseId : '';
+  const useCaseLabel = typeof o.useCaseLabel === 'string' ? o.useCaseLabel : '';
+  if (!useCaseId) return null;
+  const suggestionParsed = parseSuggestionFromApi(o.suggestion);
+  /**
+   * Coerenza: se l'id è `suggested:*` ma manca il campo `suggestion`, sintetizziamo lo stato
+   * `pending`. Se invece l'id è reale ma il backend ha incluso un campo `suggestion`, lo ignoriamo
+   * (state inconsistente — la pillola lampadina vale solo per use case emergenti).
+   */
+  const suggestion =
+    suggestionParsed ??
+    (isSuggestedUseCaseId(useCaseId)
+      ? { status: 'pending' as const, proposedLabel: useCaseLabel }
+      : undefined);
+  const a: UseCaseGeneratorWizardTurnAgent = {
+    turnId,
+    role: 'agent',
+    useCaseId,
+    useCaseLabel,
+    text,
+    ...(suggestion ? { suggestion } : {}),
+  };
+  return a;
+}
+
+function parseConversationFromApi(
+  raw: unknown,
+  context: {
+    outcome: UseCaseGeneratorWizardConversationOutcome;
+    allowsSuggestedUseCases: boolean;
+  }
+): UseCaseGeneratorWizardConversation | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  /**
+   * `conversationId` SEMPRE rigenerato lato client. Il modello LLM tende a restituire id deterministici
+   * (es. `conv_1`) tra chiamate diverse — usarlo come identità causerebbe collisioni che il check di
+   * `appendConversation` farebbe rilevare come "già presente". L'id del modello è quindi puramente
+   * decorativo e qui ignorato.
+   */
+  const conversationId = newClientConversationId();
+  const turnsIn = Array.isArray(o.turns) ? o.turns : [];
+  const turns: UseCaseGeneratorWizardTurn[] = [];
+  for (const t of turnsIn) {
+    const parsed = parseConversationTurnFromApi(t);
+    if (parsed) turns.push(parsed);
+  }
+  if (turns.length < 2) return null;
+  /**
+   * Scenario summary opzionale: 1–2 frasi prodotte dall'LLM per orientare il designer.
+   * Tolleranti su tipi non-string (fallback omesso). Slice di sicurezza a 400 char
+   * (il backend già taglia, qui è una difesa in profondità).
+   */
+  const rawSummary = typeof o.scenarioSummary === 'string' ? o.scenarioSummary.trim() : '';
+  const scenarioSummary = rawSummary ? rawSummary.slice(0, 400) : undefined;
+  return {
+    conversationId,
+    turns,
+    outcome: context.outcome,
+    allowsSuggestedUseCases: context.allowsSuggestedUseCases,
+    ...(scenarioSummary ? { scenarioSummary } : {}),
+  };
+}
+
+/**
+ * Passo 2 wizard: monta una conversazione simulata mescolando più use case con outcome esplicito
+ * e ammissione opzionale di use case emergenti (`suggested:*`).
+ */
+export async function assembleAIAgentConversationApi(
+  params: AssembleAIAgentConversationParams
+): Promise<UseCaseGeneratorWizardConversation> {
+  const {
+    useCases,
+    runtimeContext,
+    outputLanguage,
+    globalStyleContract,
+    previousConversationsCount,
+    outcome,
+    allowSuggestedUseCases,
+    provider,
+    model,
+  } = params;
+  if (useCases.length < 2) {
+    throw new Error('Servono almeno 2 use case per montare una conversazione.');
+  }
+  if (outcome !== 'positive' && outcome !== 'negative') {
+    throw new Error('Outcome richiesto: positive | negative.');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ASSEMBLE_CONVERSATION_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'assemble_conversation',
+      useCases: [...useCases],
+      outcome,
+      allowSuggestedUseCases: Boolean(allowSuggestedUseCases),
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof runtimeContext === 'string' && runtimeContext.trim().length > 0) {
+      bodyPayload.runtimeContext = runtimeContext.trim();
+    }
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    if (typeof previousConversationsCount === 'number' && previousConversationsCount > 0) {
+      bodyPayload.previousConversationsCount = previousConversationsCount;
+    }
+    const res = await fetch('/design/ai-agent-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as
+      | { success: true; conversation: unknown }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    /**
+     * Backend usa snake_case (conversation_id, use_case_id). Adattiamo a camelCase per il modello del wizard
+     * tramite un primo passaggio chiave-per-chiave.
+     */
+    const rawConv = body.conversation;
+    const normalizedRaw =
+      rawConv && typeof rawConv === 'object'
+        ? normalizeConversationSnakeToCamel(rawConv as Record<string, unknown>)
+        : null;
+    const conversation = parseConversationFromApi(normalizedRaw, {
+      outcome,
+      allowsSuggestedUseCases: Boolean(allowSuggestedUseCases),
+    });
+    if (!conversation) {
+      throw new Error('Risposta non valida: conversation incompleta.');
+    }
+    return conversation;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeConversationSnakeToCamel(raw: Record<string, unknown>): Record<string, unknown> {
+  const conversationId =
+    typeof raw.conversationId === 'string' && raw.conversationId.trim()
+      ? raw.conversationId
+      : typeof raw.conversation_id === 'string'
+        ? raw.conversation_id
+        : '';
+  /** Backend usa snake_case (`scenario_summary`); il backend post-refactor lo emette già camelCase. Accettiamo entrambi. */
+  const scenarioSummary =
+    typeof raw.scenarioSummary === 'string'
+      ? raw.scenarioSummary
+      : typeof raw.scenario_summary === 'string'
+        ? raw.scenario_summary
+        : undefined;
+  const turnsIn = Array.isArray(raw.turns) ? raw.turns : [];
+  const turns = turnsIn.map((t) => {
+    if (!t || typeof t !== 'object') return t;
+    const obj = t as Record<string, unknown>;
+    return {
+      turnId:
+        typeof obj.turnId === 'string'
+          ? obj.turnId
+          : typeof obj.turn_id === 'string'
+            ? obj.turn_id
+            : '',
+      role: obj.role,
+      text: typeof obj.text === 'string' ? obj.text : '',
+      useCaseId:
+        typeof obj.useCaseId === 'string'
+          ? obj.useCaseId
+          : typeof obj.use_case_id === 'string'
+            ? obj.use_case_id
+            : undefined,
+      useCaseLabel:
+        typeof obj.useCaseLabel === 'string'
+          ? obj.useCaseLabel
+          : typeof obj.use_case_label === 'string'
+            ? obj.use_case_label
+            : undefined,
+      suggestion: obj.suggestion,
+    };
+  });
+  return {
+    conversationId,
+    turns,
+    ...(scenarioSummary !== undefined ? { scenarioSummary } : {}),
+  };
+}
+
+export interface ProofreadConversationAgentTurnsParams {
+  conversation: UseCaseGeneratorWizardConversation;
+  modifiedAgentTurns: Array<{
+    turnId: string;
+    useCaseId: string;
+    currentText: string;
+    baselineText: string;
+  }>;
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+}
+
+export interface ProofreadConversationAgentTurnsResult {
+  updates: Array<{ turnId: string; text: string }>;
+}
+
+/**
+ * Passo 2 wizard: corregge SOLO ortografia/punteggiatura/capitalizzazione/spazi nelle bubble
+ * agente modificate dal designer. Non riformula, non cambia tono, non sostituisce sinonimi.
+ *
+ * Sostituisce la vecchia `homogenize*` (che riscriveva il testo). Il backend accetta entrambi
+ * gli action name per compatibilità ed esegue sempre il prompt proofread (temperatura 0.1).
+ */
+export async function proofreadAIAgentConversationAgentTurnsApi(
+  params: ProofreadConversationAgentTurnsParams
+): Promise<ProofreadConversationAgentTurnsResult> {
+  const { conversation, modifiedAgentTurns, provider, model, outputLanguage } = params;
+  if (modifiedAgentTurns.length === 0) {
+    throw new Error('Nessuna bubble agente modificata da correggere.');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROOFREAD_CONVERSATION_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'proofread_conversation_agent_turns',
+      conversation,
+      modifiedAgentTurns,
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    const res = await fetch('/design/ai-agent-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as
+      | { success: true; updates: unknown }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const rawUpdates = (body as { updates?: unknown }).updates;
+    if (!Array.isArray(rawUpdates)) {
+      throw new Error('Risposta non valida: updates mancante.');
+    }
+    const updates: ProofreadConversationAgentTurnsResult['updates'] = [];
+    for (const row of rawUpdates) {
+      if (!row || typeof row !== 'object') continue;
+      const o = row as Record<string, unknown>;
+      const turnId =
+        typeof o.turnId === 'string'
+          ? o.turnId.trim()
+          : typeof o.turn_id === 'string'
+            ? o.turn_id.trim()
+            : '';
+      const text = typeof o.text === 'string' ? o.text.trim() : '';
+      if (turnId && text) updates.push({ turnId, text });
+    }
+    if (updates.length === 0) {
+      throw new Error('Risposta non valida: nessun aggiornamento.');
+    }
+    return { updates };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export interface TokenizeAIAgentUseCasesParams {
+  useCases: readonly AIAgentUseCase[];
+  outputLanguage?: string;
+  provider: string;
+  model: string;
+}
+
+export interface TokenizeAIAgentUseCasesResult {
+  /** Una entry per ogni use case ammesso dal backend (id presente nel catalogo + frase non vuota). */
+  updates: Array<{ useCaseId: string; tokenizedText: string }>;
+}
+
+/**
+ * Passo 3 wizard: chiede all'AI di produrre la versione tokenizzata della frase canonica
+ * assistente di ciascuno use case (placeholder tra parentesi quadre, es. `[data]`, `[ora1]`).
+ * Frasi senza parti variabili vengono restituite invariate.
+ */
+export async function tokenizeAIAgentUseCasesApi(
+  params: TokenizeAIAgentUseCasesParams
+): Promise<TokenizeAIAgentUseCasesResult> {
+  const { useCases, outputLanguage, provider, model } = params;
+  if (!useCases || useCases.length === 0) {
+    throw new Error('Serve almeno 1 use case per la tokenizzazione.');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TOKENIZE_USE_CASES_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'tokenize_use_cases',
+      useCases: [...useCases],
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    const res = await fetch('/design/ai-agent-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as
+      | { success: true; updates: unknown }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const rawUpdates = (body as { updates?: unknown }).updates;
+    if (!Array.isArray(rawUpdates)) {
+      throw new Error('Risposta non valida: updates mancante.');
+    }
+    const updates: TokenizeAIAgentUseCasesResult['updates'] = [];
+    for (const row of rawUpdates) {
+      if (!row || typeof row !== 'object') continue;
+      const o = row as Record<string, unknown>;
+      const useCaseId =
+        typeof o.useCaseId === 'string'
+          ? o.useCaseId.trim()
+          : typeof o.use_case_id === 'string'
+            ? o.use_case_id.trim()
+            : '';
+      const tokenizedText =
+        typeof o.tokenizedText === 'string'
+          ? o.tokenizedText
+          : typeof o.tokenized_text === 'string'
+            ? o.tokenized_text
+            : '';
+      if (useCaseId && tokenizedText) {
+        updates.push({ useCaseId, tokenizedText });
+      }
+    }
+    if (updates.length === 0) {
+      throw new Error('Risposta non valida: nessuna tokenizzazione utile.');
+    }
+    return { updates };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Feature «LLM manual handoff»: prompt preview senza chiamata LLM.
+ * Il backend usa i medesimi builder usati dalle chiamate interne, quindi il prompt mostrato al
+ * designer (per copia verso ChatGPT/Claude esterno) è identico a quello effettivamente inviato.
+ *
+ * Target supportati:
+ * - `generate_use_cases`: prompt per creare o estendere la lista use case (Passo 1).
+ * - `assemble_conversation`: prompt per montare una conversazione simulata (Passo 2).
+ *
+ * Restituisce sempre `{ system, user }` come stringhe, oltre a metadati informativi.
+ */
+export type AIAgentPromptPreviewTarget = 'generate_use_cases' | 'assemble_conversation';
+
+export interface BuildAIAgentPromptPreviewParams {
+  target: AIAgentPromptPreviewTarget;
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  globalStyleContract?: string;
+  /** Solo per `generate_use_cases`. */
+  userDesc?: string;
+  runtimeContext?: string;
+  globalStyleId?: string;
+  extendFrom?: {
+    logicalSteps: readonly AIAgentLogicalStep[];
+    useCases: readonly AIAgentUseCase[];
+  };
+  /** Solo per `assemble_conversation`. */
+  useCases?: readonly AIAgentUseCase[];
+  previousConversationsCount?: number;
+  outcome?: 'positive' | 'negative';
+  allowSuggestedUseCases?: boolean;
+}
+
+export interface BuildAIAgentPromptPreviewResult {
+  target: AIAgentPromptPreviewTarget;
+  system: string;
+  user: string;
+  /** Solo `generate_use_cases`: true se la richiesta è in modalità extend (esistono già use case). */
+  extendMode?: boolean;
+  /** Solo `assemble_conversation`. */
+  outcome?: 'positive' | 'negative';
+  allowSuggestedUseCases?: boolean;
+}
+
+const BUILD_PROMPT_PREVIEW_TIMEOUT_MS = 20000;
+
+export async function buildAIAgentPromptPreviewApi(
+  params: BuildAIAgentPromptPreviewParams
+): Promise<BuildAIAgentPromptPreviewResult> {
+  const { target, provider, model, outputLanguage, globalStyleContract } = params;
+  if (target !== 'generate_use_cases' && target !== 'assemble_conversation') {
+    throw new Error(`buildAIAgentPromptPreview: target non supportato (${String(target)}).`);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), BUILD_PROMPT_PREVIEW_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'build_prompt_preview',
+      target,
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    if (target === 'generate_use_cases') {
+      if (typeof params.userDesc !== 'string' || params.userDesc.trim().length < 8) {
+        throw new Error('userDesc richiesto (≥ 8 caratteri) per prompt preview generate_use_cases.');
+      }
+      bodyPayload.userDesc = params.userDesc;
+      const extend =
+        params.extendFrom &&
+        Array.isArray(params.extendFrom.useCases) &&
+        params.extendFrom.useCases.length > 0 &&
+        Array.isArray(params.extendFrom.logicalSteps);
+      if (extend) {
+        bodyPayload.extendExisting = true;
+        bodyPayload.existingUseCases = params.extendFrom!.useCases;
+        bodyPayload.existingLogicalSteps = params.extendFrom!.logicalSteps;
+      }
+      if (typeof params.runtimeContext === 'string' && params.runtimeContext.trim().length > 0) {
+        bodyPayload.runtimeContext = params.runtimeContext.trim();
+      }
+      if (typeof params.globalStyleId === 'string' && params.globalStyleId.trim().length > 0) {
+        bodyPayload.globalStyleId = params.globalStyleId.trim();
+      }
+    } else {
+      if (!Array.isArray(params.useCases) || params.useCases.length < 2) {
+        throw new Error('Servono almeno 2 use case per prompt preview assemble_conversation.');
+      }
+      bodyPayload.useCases = [...params.useCases];
+      if (params.outcome !== 'positive' && params.outcome !== 'negative') {
+        throw new Error('outcome richiesto: positive | negative.');
+      }
+      bodyPayload.outcome = params.outcome;
+      bodyPayload.allowSuggestedUseCases = Boolean(params.allowSuggestedUseCases);
+      if (typeof params.runtimeContext === 'string' && params.runtimeContext.trim().length > 0) {
+        bodyPayload.runtimeContext = params.runtimeContext.trim();
+      }
+      if (
+        typeof params.previousConversationsCount === 'number' &&
+        params.previousConversationsCount > 0
+      ) {
+        bodyPayload.previousConversationsCount = params.previousConversationsCount;
+      }
+    }
+    const res = await fetch('/design/ai-agent-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as
+      | ({
+          success: true;
+          target?: string;
+          system?: string;
+          user?: string;
+          extend_mode?: boolean;
+          outcome?: string;
+          allow_suggested_use_cases?: boolean;
+        })
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const ok = body as { success: true } & Record<string, unknown>;
+    const system = typeof ok.system === 'string' ? ok.system : '';
+    const user = typeof ok.user === 'string' ? ok.user : '';
+    if (!system.trim() || !user.trim()) {
+      throw new Error('Risposta build_prompt_preview non valida: system/user mancanti.');
+    }
+    if (target === 'generate_use_cases') {
+      return {
+        target,
+        system,
+        user,
+        extendMode: Boolean(ok.extend_mode),
+      };
+    }
+    return {
+      target,
+      system,
+      user,
+      outcome:
+        ok.outcome === 'negative' || ok.outcome === 'positive'
+          ? (ok.outcome as 'positive' | 'negative')
+          : undefined,
+      allowSuggestedUseCases: Boolean(ok.allow_suggested_use_cases),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Parser «handoff»: dato il JSON incollato dall'utente (proveniente da un motore esterno),
+ * applica i parser interni esistenti per produrre lo stesso risultato di una chiamata diretta.
+ *
+ * Per `generate_use_cases`: ritorna `{ useCases, logicalSteps }` (logicalSteps `null` in extend mode).
+ * Per `assemble_conversation`: ritorna una `UseCaseGeneratorWizardConversation` normalizzata.
+ *
+ * Throws con messaggio chiaro su JSON non valido o forma sbagliata (no fallback silenzioso).
+ */
+export interface ExternalGenerateUseCasesPayload {
+  useCases: AIAgentUseCase[];
+  logicalSteps: AIAgentLogicalStep[] | null;
+}
+
+export function parseExternalGenerateUseCasesJson(
+  rawJson: string,
+  options?: { extendMode?: boolean }
+): ExternalGenerateUseCasesPayload {
+  const text = String(rawJson ?? '').trim();
+  if (!text) throw new Error('Risposta vuota: nessun JSON fornito.');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`JSON non valido: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('JSON non valido: ci si aspetta un oggetto al livello superiore.');
+  }
+  const obj = parsed as Record<string, unknown>;
+  const useCases = parseAgentUseCasesFromApi(obj.use_cases ?? obj.useCases);
+  if (useCases.length === 0) {
+    throw new Error('Risposta non valida: use_cases vuoti dopo la normalizzazione.');
+  }
+  if (options?.extendMode) {
+    return { useCases, logicalSteps: null };
+  }
+  const logicalSteps = parseAgentLogicalStepsFromApi(obj.logical_steps ?? obj.logicalSteps);
+  if (logicalSteps.length === 0) {
+    throw new Error('Risposta non valida: logical_steps vuoti dopo la normalizzazione.');
+  }
+  return { useCases, logicalSteps };
+}
+
+export function parseExternalAssembleConversationJson(
+  rawJson: string,
+  context: {
+    outcome: 'positive' | 'negative';
+    allowsSuggestedUseCases: boolean;
+  }
+): UseCaseGeneratorWizardConversation {
+  const text = String(rawJson ?? '').trim();
+  if (!text) throw new Error('Risposta vuota: nessun JSON fornito.');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`JSON non valido: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('JSON non valido: ci si aspetta un oggetto al livello superiore.');
+  }
+  /** Il motore esterno può ritornare già la `conversation` annidata oppure il payload root. */
+  const obj = parsed as Record<string, unknown>;
+  const rawConv =
+    obj && typeof obj === 'object' && obj.conversation && typeof obj.conversation === 'object'
+      ? (obj.conversation as Record<string, unknown>)
+      : obj;
+  const normalized = normalizeConversationSnakeToCamel(rawConv);
+  const conversation = parseConversationFromApi(normalized, context);
+  if (!conversation) {
+    throw new Error('Risposta non valida: conversation incompleta dopo la normalizzazione.');
+  }
+  return conversation;
 }

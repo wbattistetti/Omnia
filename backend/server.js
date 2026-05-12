@@ -23,7 +23,25 @@ const {
   propagateExamplePhraseStyle,
   annotateAssistantMessageForJson,
   analyzeDebuggerTurnUseCase,
+  UC_SYSTEM,
+  buildGenerateUseCasesUserMessage,
+  buildExtendUseCasesUserMessage,
+  buildGlobalStyleBlock,
+  pickBundleScenarioTargetBand,
+  pickExtendNewScenarioTargetBand,
 } = require('./services/AIAgentUseCaseService');
+const {
+  assembleConversation,
+  homogenizeConversationAgentTurns,
+  proofreadConversationAgentTurns,
+  ASSEMBLE_CONVERSATION_SYSTEM,
+  buildAssembleConversationUserMessage,
+} = require('./services/AIAgentConversationService');
+const { tokenizeUseCases } = require('./services/AIAgentTokenizationService');
+const {
+  assertAiCallContract,
+  aiCallContractErrorResponse,
+} = require('./services/aiCallContract');
 const { TemplateIntelligenceOrchestrator } = require('./services/ddt-intelligence');
 const {
   buildInstanceTaskDocument,
@@ -40,6 +58,9 @@ const RateLimiter = require('./middleware/RateLimiter');
 const { bookFromAgendaRuntimeTrace } = require('./middleware/bookFromAgendaRuntimeTrace');
 const AIHealthChecker = require('./health/AIHealthChecker');
 const { mountIaCatalog, runStartupIaCatalogSync } = require('./services/iaCatalog/catalogRoutes');
+const { mountAiCostRoutes } = require('./services/aiCost/aiCostRoutes');
+const { syncPricingFromOpenRouter } = require('./services/aiCost/pricingSync');
+const { getUsdToEur } = require('./services/aiCost/exchangeRateSync');
 
 console.log('>>> SERVER.JS AVVIATO <<<');
 
@@ -71,6 +92,24 @@ app.use(express.urlencoded({ limit: '200mb', extended: true }));
 app.use(bookFromAgendaRuntimeTrace);
 
 mountIaCatalog(app);
+mountAiCostRoutes(app);
+
+// AI cost catalog: best-effort prefetch on startup (pricing from OpenRouter, USD->EUR from frankfurter.dev).
+// Failures are non-fatal: the cost calculator still records calls with costUsd=0 when pricing is missing.
+(async () => {
+  try {
+    const result = await syncPricingFromOpenRouter();
+    console.log(`[aiCost:startup] pricing prefetched (${result.items.length} models)`);
+  } catch (e) {
+    console.warn('[aiCost:startup] pricing prefetch failed:', e.message);
+  }
+  try {
+    const rate = await getUsdToEur();
+    console.log(`[aiCost:startup] USD->EUR rate: ${rate ?? 'n/a'}`);
+  } catch (e) {
+    console.warn('[aiCost:startup] FX prefetch failed:', e.message);
+  }
+})();
 
 const { mountBackendCallTestProxy } = require('./designer/backendCallTestProxyRoute');
 mountBackendCallTestProxy(app);
@@ -5176,6 +5215,23 @@ app.post('/api/factory/generate-template-translations', async (req, res) => {
       return res.status(400).json({ error: 'Invalid sourceLanguage. Must be it, en, or pt' });
     }
 
+    // Single source of truth: provider + model from designer Omnia Tutor selection.
+    let translationProvider;
+    let translationModel;
+    try {
+      const c = assertAiCallContract({
+        provider: req.body.provider,
+        model: req.body.model,
+        action: 'Generate template translations',
+      });
+      translationProvider = c.provider;
+      translationModel = c.model;
+    } catch (err) {
+      const contractRes = aiCallContractErrorResponse(err);
+      if (contractRes) return res.status(contractRes.status).json(contractRes.body);
+      throw err;
+    }
+
     const db = client.db(dbFactory);
     const translationsColl = db.collection('Translations');
 
@@ -5215,11 +5271,10 @@ Text to translate: "${sourceTrans.text}"
 
 Translation:`;
 
-        // Call AI (use OpenAI by default, fallback to Groq)
-        const aiResponse = await aiService.callAI('openai', [
+        const aiResponse = await aiService.callAI(translationProvider, [
           { role: 'system', content: 'You are a professional translator. Return only the translated text, nothing else.' },
           { role: 'user', content: prompt },
-        ], { model: 'gpt-4o-mini' });
+        ], { model: translationModel });
 
         const translatedText = (aiResponse || '').trim().replace(/^["']|["']$/g, ''); // Remove quotes if present
 
@@ -6421,8 +6476,8 @@ app.post('/design/ai-agent-generate', async (req, res) => {
     const {
       action,
       userDesc,
-      provider = 'groq',
-      model,
+      provider: providerInput,
+      model: modelInput,
       refinementPatch,
       baseText,
       outputLanguage,
@@ -6436,6 +6491,23 @@ app.post('/design/ai-agent-generate', async (req, res) => {
       globalStyleId,
       assistantMessageText,
     } = body;
+
+    /**
+     * `build_prompt_preview` is deterministic (no LLM call) so it does not require a model;
+     * every other action issues an LLM request and MUST carry a valid (provider, model) pair
+     * coming from Settings -> Omnia Tutor. No hardcoded fallback.
+     */
+    const isLLMCall = action !== 'build_prompt_preview';
+    const { provider, model } = isLLMCall
+      ? assertAiCallContract({
+          provider: providerInput,
+          model: modelInput,
+          action: `AI Agent ${action || 'generate'}`,
+        })
+      : {
+          provider: typeof providerInput === 'string' ? providerInput.trim() || null : null,
+          model: typeof modelInput === 'string' ? modelInput.trim() || null : null,
+        };
 
     const globalStyleIdNorm =
       typeof globalStyleId === 'string' && globalStyleId.trim() ? globalStyleId.trim() : undefined;
@@ -6461,6 +6533,7 @@ app.post('/design/ai-agent-generate', async (req, res) => {
           existingLogicalSteps,
           provider,
           model,
+          purpose: typeof body.purpose === 'string' ? body.purpose : 'USE_CASE_GENERATE_MORE',
           aiProviderService,
         });
         return res.json({
@@ -6477,6 +6550,7 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         globalStyleId: globalStyleIdNorm,
         provider,
         model,
+        purpose: typeof body.purpose === 'string' ? body.purpose : 'USE_CASE_BUNDLE_INITIAL',
         aiProviderService,
       });
       return res.json({
@@ -6513,6 +6587,7 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         globalStyleId: globalStyleIdNorm,
         provider,
         model,
+        purpose: typeof body.purpose === 'string' ? body.purpose : 'USE_CASE_DIALOGUE_CREATE',
         aiProviderService,
       });
       return res.json({ success: true, use_case: created });
@@ -6557,6 +6632,166 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         aiProviderService,
       });
       return res.json({ success: true, turn });
+    }
+
+    if (action === 'assemble_conversation') {
+      const ucForConv = Array.isArray(body.useCases) ? body.useCases : [];
+      const previousConversationsCount =
+        typeof body.previousConversationsCount === 'number'
+          ? body.previousConversationsCount
+          : 0;
+      const outcome = body.outcome === 'negative' ? 'negative' : 'positive';
+      const allowSuggestedUseCases = Boolean(body.allowSuggestedUseCases);
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] assemble_conversation`, {
+        provider,
+        model,
+        useCasesCount: ucForConv.length,
+        previousConversationsCount,
+        outcome,
+        allowSuggestedUseCases,
+      });
+      const conversation = await assembleConversation({
+        useCases: ucForConv,
+        runtimeContext,
+        outputLanguage,
+        globalStyleContract,
+        previousConversationsCount,
+        outcome,
+        allowSuggestedUseCases,
+        provider,
+        model,
+        purpose:
+          typeof body.purpose === 'string'
+            ? body.purpose
+            : allowSuggestedUseCases
+              ? 'CONVERSATION_SUGGESTED'
+              : outcome === 'negative'
+                ? 'CONVERSATION_NEGATIVE'
+                : 'CONVERSATION_POSITIVE',
+        aiProviderService,
+      });
+      return res.json({ success: true, conversation });
+    }
+
+    /**
+     * Alias retro-compatibile: la vecchia action `homogenize_conversation_agent_turns` ora esegue
+     * il proofread (solo ortografia/punteggiatura). Il client preferisce la nuova action.
+     */
+    if (
+      action === 'proofread_conversation_agent_turns' ||
+      action === 'homogenize_conversation_agent_turns'
+    ) {
+      const convoIn = body.conversation;
+      const targets = Array.isArray(body.modifiedAgentTurns) ? body.modifiedAgentTurns : [];
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] proofread_conversation_agent_turns`, {
+        provider,
+        model,
+        targets: targets.length,
+      });
+      const result = await proofreadConversationAgentTurns({
+        conversation: convoIn,
+        modifiedAgentTurns: targets,
+        outputLanguage,
+        provider,
+        model,
+        purpose: typeof body.purpose === 'string' ? body.purpose : 'CONVERSATION_PROOFREAD',
+        aiProviderService,
+      });
+      return res.json({ success: true, updates: result.updates });
+    }
+
+    /**
+     * Feature «LLM manual handoff»: ritorna `system` + `user` per il target indicato senza
+     * chiamare l'LLM. Il client mostra il payload in un modale, l'utente lo copia verso un
+     * motore esterno e poi incolla la risposta JSON che entra negli stessi parser delle
+     * action interne (`generate_use_cases`, `assemble_conversation`).
+     *
+     * Single source of truth: i builder esposti dai service garantiscono che il prompt
+     * preview sia identico a quello effettivamente inviato al provider.
+     */
+    if (action === 'build_prompt_preview') {
+      const target = typeof body.target === 'string' ? body.target.trim() : '';
+      if (target === 'generate_use_cases') {
+        const extendExisting = body.extendExisting === true;
+        const existingUseCases = Array.isArray(body.existingUseCases) ? body.existingUseCases : [];
+        const existingLogicalSteps = Array.isArray(body.existingLogicalSteps) ? body.existingLogicalSteps : [];
+        const styleBlock = buildGlobalStyleBlock(globalStyleContract);
+        let userMessage;
+        if (extendExisting && existingUseCases.length > 0) {
+          const band = pickExtendNewScenarioTargetBand();
+          userMessage = `${buildExtendUseCasesUserMessage(
+            String(userDesc || '').trim(),
+            outputLanguage,
+            runtimeContext,
+            existingUseCases,
+            existingLogicalSteps,
+            band
+          )}${styleBlock}`;
+        } else {
+          const band = pickBundleScenarioTargetBand();
+          userMessage = `${buildGenerateUseCasesUserMessage(
+            String(userDesc || '').trim(),
+            outputLanguage,
+            runtimeContext,
+            band
+          )}${styleBlock}`;
+        }
+        return res.json({
+          success: true,
+          target: 'generate_use_cases',
+          extend_mode: Boolean(extendExisting && existingUseCases.length > 0),
+          system: UC_SYSTEM,
+          user: userMessage,
+        });
+      }
+      if (target === 'assemble_conversation') {
+        const ucForConv = Array.isArray(body.useCases) ? body.useCases : [];
+        if (ucForConv.length < 2) {
+          throw new Error('build_prompt_preview/assemble_conversation: at least 2 use cases required');
+        }
+        const previousConversationsCount =
+          typeof body.previousConversationsCount === 'number'
+            ? body.previousConversationsCount
+            : 0;
+        const outcome = body.outcome === 'negative' ? 'negative' : 'positive';
+        const allowSuggestedUseCases = Boolean(body.allowSuggestedUseCases);
+        const userMessage = buildAssembleConversationUserMessage({
+          useCases: ucForConv,
+          outputLanguage,
+          runtimeContext,
+          globalStyleContract,
+          previousConversationsCount,
+          outcome,
+          allowSuggestedUseCases,
+        });
+        return res.json({
+          success: true,
+          target: 'assemble_conversation',
+          outcome,
+          allow_suggested_use_cases: allowSuggestedUseCases,
+          system: ASSEMBLE_CONVERSATION_SYSTEM,
+          user: userMessage,
+        });
+      }
+      throw new Error(`Unsupported build_prompt_preview target: ${target || '(empty)'}`);
+    }
+
+    if (action === 'tokenize_use_cases') {
+      const ucForTokens = Array.isArray(body.useCases) ? body.useCases : [];
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] tokenize_use_cases`, {
+        provider,
+        model,
+        useCasesCount: ucForTokens.length,
+      });
+      const result = await tokenizeUseCases({
+        useCases: ucForTokens,
+        outputLanguage,
+        provider,
+        model,
+        purpose: typeof body.purpose === 'string' ? body.purpose : 'USE_CASE_TOKENIZE',
+        aiProviderService,
+      });
+      return res.json({ success: true, updates: result.updates });
     }
 
     if (action === 'annotate_assistant_message_for_json') {
@@ -6649,6 +6884,10 @@ app.post('/design/ai-agent-generate', async (req, res) => {
     return res.json({ success: true, design });
   } catch (error) {
     console.error(`[AI_AGENT_DESIGN][${requestId}] Error:`, error.message);
+    const contractRes = aiCallContractErrorResponse(error);
+    if (contractRes) {
+      return res.status(contractRes.status).json(contractRes.body);
+    }
     const status = error.message && error.message.includes('userDesc') ? 400 : 502;
     return res.status(status).json({
       success: false,
@@ -6669,10 +6908,15 @@ app.post('/design/ai-agent-induce-style-rule', async (req, res) => {
     const {
       wrongText,
       correctText,
-      provider = 'groq',
-      model,
+      provider: providerInput,
+      model: modelInput,
       outputLanguage,
     } = body;
+    const { provider, model } = assertAiCallContract({
+      provider: providerInput,
+      model: modelInput,
+      action: 'Induce style rule (debugger)',
+    });
     console.log(`[AI_AGENT_STYLE_RULE][${requestId}] POST /design/ai-agent-induce-style-rule`, {
       provider,
       model,
@@ -6691,6 +6935,10 @@ app.post('/design/ai-agent-induce-style-rule', async (req, res) => {
     return res.json({ success: true, rule_text: result.rule_text });
   } catch (error) {
     console.error(`[AI_AGENT_STYLE_RULE][${requestId}] Error:`, error.message);
+    const contractRes = aiCallContractErrorResponse(error);
+    if (contractRes) {
+      return res.status(contractRes.status).json(contractRes.body);
+    }
     const msg = error.message || 'induce-style-rule failed';
     const badInput =
       msg.includes('wrongText') ||
@@ -6718,10 +6966,15 @@ app.post('/design/ai-agent-analyze-debug-turn', async (req, res) => {
       assistantTurn,
       agentUseCasesJson,
       globalStyleContract,
-      provider = 'groq',
-      model,
+      provider: providerInput,
+      model: modelInput,
       outputLanguage,
     } = body;
+    const { provider, model } = assertAiCallContract({
+      provider: providerInput,
+      model: modelInput,
+      action: 'Analyze debug turn',
+    });
     const assistantTurnStr =
       typeof assistantTurn === 'string'
         ? assistantTurn
@@ -6752,6 +7005,10 @@ app.post('/design/ai-agent-analyze-debug-turn', async (req, res) => {
     return res.json({ success: true, ...result });
   } catch (error) {
     console.error(`[AI_AGENT_ANALYZE_DEBUG][${requestId}] Error:`, error.message);
+    const contractRes = aiCallContractErrorResponse(error);
+    if (contractRes) {
+      return res.status(contractRes.status).json(contractRes.body);
+    }
     const msg = error.message || 'analyze-debug-turn failed';
     const status = msg.includes('required') ? 400 : 502;
     return res.status(status).json({
@@ -6771,7 +7028,12 @@ app.post('/design/extract-structure', async (req, res) => {
   try {
     const body = req.body || {};
     const description = body.description ?? body.userDesc;
-    const { provider = 'groq', model, outputLanguage } = body;
+    const { provider, model } = assertAiCallContract({
+      provider: body.provider,
+      model: body.model,
+      action: 'Create Agent (extract structure)',
+    });
+    const outputLanguage = body.outputLanguage;
     console.log(`[STRUCT_DESIGN][${requestId}] POST /design/extract-structure`, {
       provider,
       model,
@@ -6787,6 +7049,10 @@ app.post('/design/extract-structure', async (req, res) => {
     return res.json({ success: true, structured_design });
   } catch (error) {
     console.error(`[STRUCT_DESIGN][${requestId}] extract-structure:`, error.message);
+    const contractRes = aiCallContractErrorResponse(error);
+    if (contractRes) {
+      return res.status(contractRes.status).json(contractRes.body);
+    }
     const status =
       error.message && (error.message.includes('description') || error.message.includes('must be'))
         ? 400
@@ -6812,10 +7078,15 @@ app.post('/design/advancement-dsl-translate', async (req, res) => {
       targetParam,
       targetType,
       signature,
-      provider = 'groq',
-      model,
+      provider: providerInput,
+      model: modelInput,
       mode,
     } = body;
+    const { provider, model } = assertAiCallContract({
+      provider: providerInput,
+      model: modelInput,
+      action: 'Advancement DSL translate',
+    });
     console.log(`[ADVANCEMENT_DSL][${requestId}] POST /design/advancement-dsl-translate`, {
       targetParam,
       targetType,
@@ -6841,6 +7112,10 @@ app.post('/design/advancement-dsl-translate', async (req, res) => {
     });
   } catch (error) {
     console.error(`[ADVANCEMENT_DSL][${requestId}]`, error.message);
+    const contractRes = aiCallContractErrorResponse(error);
+    if (contractRes) {
+      return res.status(contractRes.status).json(contractRes.body);
+    }
     const status = error.statusCode && Number.isInteger(error.statusCode) ? error.statusCode : 502;
     return res.status(status).json({
       success: false,
@@ -6868,7 +7143,7 @@ app.post('/design/generate-platform-prompt', async (req, res) => {
   const requestId = Date.now();
   try {
     const body = req.body || {};
-    const { platform, structured_design, mode = 'deterministic', provider = 'groq', model } = body;
+    const { platform, structured_design, mode = 'deterministic' } = body;
     if (mode === 'llm_compiled') {
       return res.status(400).json({
         success: false,
@@ -6885,11 +7160,13 @@ app.post('/design/generate-platform-prompt', async (req, res) => {
       platform,
       mode: 'deterministic',
     });
+    /**
+     * Deterministic Phase 2 compile does not invoke any LLM, so it does NOT require a model
+     * (no AIConfig / AIProvider involvement here).
+     */
     const { platform: normalized, system_prompt } = await generatePlatformPrompt(platform, structured_design, {
       mode: 'deterministic',
       aiProviderService,
-      provider,
-      model,
     });
     return res.json({ success: true, platform: normalized, system_prompt });
   } catch (error) {
@@ -7223,13 +7500,27 @@ app.post('/api/intents/generate-training-phrases', async (req, res) => {
     return res.status(400).json({ error: 'intentName_required' });
   }
   const n = Math.min(24, Math.max(1, parseInt(String(count), 10) || 8));
-  const available = aiProviderService.getAvailableProviders();
-  let provider = req.body?.provider;
-  if (!provider || !available.includes(provider)) {
-    provider = available.includes('groq') ? 'groq' : available.includes('openai') ? 'openai' : available[0];
+  let providerNorm;
+  let modelNorm;
+  try {
+    const c = assertAiCallContract({
+      provider: req.body?.provider,
+      model: req.body?.model,
+      action: 'Generate intent training phrases',
+    });
+    providerNorm = c.provider;
+    modelNorm = c.model;
+  } catch (err) {
+    const contractRes = aiCallContractErrorResponse(err);
+    if (contractRes) return res.status(contractRes.status).json(contractRes.body);
+    throw err;
   }
-  if (!provider) {
-    return res.status(503).json({ error: 'no_ai_provider_configured' });
+  const available = aiProviderService.getAvailableProviders();
+  if (!available.includes(providerNorm)) {
+    return res.status(503).json({
+      error: `provider_unavailable: ${providerNorm}`,
+      available,
+    });
   }
   const system =
     'You respond with valid JSON only. No markdown, no commentary.';
@@ -7247,7 +7538,8 @@ app.post('/api/intents/generate-training-phrases', async (req, res) => {
     { role: 'user', content: user },
   ];
   try {
-    const raw = await aiProviderService.callAI(provider, messages, {
+    const raw = await aiProviderService.callAI(providerNorm, messages, {
+      model: modelNorm,
       maxTokens: 3000,
       temperature: 0.72,
     });
@@ -7259,9 +7551,11 @@ app.post('/api/intents/generate-training-phrases', async (req, res) => {
     const phrases = Array.isArray(parsed.phrases)
       ? parsed.phrases.filter((s) => typeof s === 'string' && s.trim())
       : [];
-    return res.json({ phrases, provider });
+    return res.json({ phrases, provider: providerNorm, model: modelNorm });
   } catch (err) {
     console.error('[api/intents/generate-training-phrases]', err?.message || err);
+    const contractRes = aiCallContractErrorResponse(err);
+    if (contractRes) return res.status(contractRes.status).json(contractRes.body);
     return res.status(500).json({ error: err?.message || 'generation_failed' });
   }
 });

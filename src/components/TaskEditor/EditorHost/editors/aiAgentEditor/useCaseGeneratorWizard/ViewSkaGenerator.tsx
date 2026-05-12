@@ -1,23 +1,85 @@
 /**
- * ViewSkaGenerator: shell con toolbar multiriga (stepper + barra lista use case al passo 1), pannello SX solo lavoro, DX tutorial + azioni.
+ * ViewSkaGenerator: shell con toolbar multi-riga (stepper + Riga 2 contestuale + Riga 3 al passo 2),
+ * pannello SX solo lavoro, DX tutorial + azioni del passo.
  */
 
 import React from 'react';
-import { ChevronRight, GraduationCap, Loader2, Sparkles, X } from 'lucide-react';
+import { FileText, GraduationCap, Loader2, Sparkles, Trash2, X } from 'lucide-react';
 import { getUseCaseGeneratorWizardStepConfig, USE_CASE_GENERATOR_WIZARD_STEPS } from '@domain/useCaseGeneratorWizard/config';
-import { USE_CASE_GENERATOR_WIZARD_STEP_ORDER } from '@domain/useCaseGeneratorWizard/registry';
 import type { UseCaseGeneratorWizardStepId } from '@domain/useCaseGeneratorWizard/types';
+import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
+import { MissingAiModelToast } from '@components/common/MissingAiModelToast';
+import { LastAiCostBadge } from '@components/common/LastAiCostBadge';
+import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { LABEL_GENERATE_USE_CASES } from '../constants';
 import type { UseCaseGeneratorWizardModel } from './useUseCaseGeneratorWizard';
-import { ExamplePhraseStyleCallout } from './ExamplePhraseStyleCallout';
 import { UseCaseListStepReviewCard } from './UseCaseListStepReviewCard';
+import {
+  ConversationsStepReviewCard,
+  type AssembleConversationInvocation,
+} from './ConversationsStepReviewCard';
 import { WizardAdvanceDialog } from './WizardAdvanceDialog';
-import { useUseCaseWizardListToolbarOptional } from './UseCaseWizardListToolbarContext';
-import { useOptionalAIAgentEditorDock } from '../AIAgentEditorDockContext';
+import {
+  WizardShowTokensToggle,
+  WizardStepOneListToolbarControls,
+} from './WizardStepOneListToolbar';
+import { WizardConversationsTabsControls } from './WizardConversationsToolbarRows';
+import { ClearAllWizardOutputDialog } from './ClearAllWizardOutputDialog';
+import { ConversationalJsonPanel } from './ConversationalJsonPanel';
+import { ConversationalPromptDialog } from './ConversationalPromptDialog';
+import { areAllUseCasesProjectable } from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
+import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'omnia.aiAgent.useCaseWizard.rightPanelWidthPx';
 const RIGHT_PANEL_MIN_PX = 250;
 const RIGHT_PANEL_MAX_VIEWPORT_FRAC = 0.6;
+
+type ClearWizardScope = 'use_case_list' | 'conversations' | 'tokenization';
+
+const STEP_COLOR_THEME: Record<
+  UseCaseGeneratorWizardStepId,
+  {
+    active: string;
+    inactiveHover: string;
+    workspace: string;
+  }
+> = {
+  use_case_list: {
+    active:
+      'border-violet-400/95 bg-violet-950/55 text-amber-100 shadow-[0_0_22px_rgba(139,92,246,0.32)] ring-1 ring-inset ring-violet-300/25',
+    inactiveHover: 'hover:border-violet-500/50 hover:bg-violet-950/25',
+    workspace: 'bg-gradient-to-br from-violet-950/12 via-slate-950 to-slate-950',
+  },
+  conversations: {
+    active:
+      'border-sky-400/95 bg-sky-950/50 text-sky-50 shadow-[0_0_22px_rgba(56,189,248,0.30)] ring-1 ring-inset ring-sky-300/25',
+    inactiveHover: 'hover:border-sky-500/50 hover:bg-sky-950/25',
+    workspace: 'bg-gradient-to-br from-sky-950/12 via-slate-950 to-slate-950',
+  },
+  tokenization: {
+    active:
+      'border-amber-400/95 bg-amber-950/40 text-amber-50 shadow-[0_0_22px_rgba(245,158,11,0.28)] ring-1 ring-inset ring-amber-300/25',
+    inactiveHover: 'hover:border-amber-500/45 hover:bg-amber-950/20',
+    workspace: 'bg-gradient-to-br from-amber-950/10 via-slate-950 to-slate-950',
+  },
+};
+
+/**
+ * Altezza fissa dei pill dello stepper. Pre-allocata all'altezza del pill **più alto**
+ * fra quelli espansi: il Passo 2 «Conversazioni», che contiene i cluster outcome
+ * (`px-1.5 py-1` + bordo) con dentro le `ConversationTabButton` (`text-[11px] px-2 py-1`).
+ * Misura: button ~27px → cluster 27 + py-1 (8px) + bordo (2px) = 37px → pill 37 +
+ * py-1.5 (12px) + bordo (2px) = 51px. Arrotondiamo a **52px** per stabilità sub-pixel.
+ *
+ * Tutti i pill (collassati e attivi di qualunque passo) partono quindi con
+ * `min-h-[52px]`: il click su un passo non causa **mai** un salto verticale, anche se
+ * il passo selezionato è quello con i cluster.
+ *
+ * Per tutelare la garanzia anche sotto viewport stretti, l'active pill usa
+ * `flex-nowrap` sui propri controlli (vedi sotto): se la barra non sta in larghezza,
+ * a wrappare è il pill **intero** dentro il container (`gap-y-2`), non i suoi controlli.
+ */
+const STEP_PILL_MIN_HEIGHT = 'min-h-[52px]';
 
 function clampRightAsideWidth(px: number, viewportWidth: number): number {
   const max = Math.max(
@@ -60,131 +122,66 @@ export interface ViewSkaGeneratorProps {
   /** Messaggio dopo generazione batch (es. «Ho aggiunto N use case»). */
   bundleFeedback?: string | null;
   onDismissBundleFeedback?: () => void;
-  /** Passo 2: applica stile dalle frasi modificate. */
+  /** Passo 1: applica stile dalle frasi modificate (omogeneizza messaggi). */
   onApplyExamplePhraseStyle?: () => void | Promise<void>;
   examplePhraseStyleBusy?: boolean;
-}
-
-/** Toolbar seconda riga: conteggio + Usecases / Mostra + pulsanti toggle (context dal Provider). */
-function WizardStepOneListToolbar({
-  visible,
-  useCaseCount = 0,
-}: {
-  visible: boolean;
-  /** Mostrato davanti a «Usecases:» (passo 1 wizard). */
-  useCaseCount?: number;
-}): React.ReactElement | null {
-  const ctx = useUseCaseWizardListToolbarOptional();
-  const dock = useOptionalAIAgentEditorDock();
-  if (!visible || !ctx) return null;
-  const {
-    bulkFold,
-    showScenario,
-    showMessage,
-    toggleScenario,
-    toggleMessage,
-    triggerExpandAll,
-    triggerCollapseAll,
-  } = ctx;
-
-  const btn =
-    'px-2.5 py-1 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/80';
-  const on = 'bg-violet-600/40 text-amber-100';
-  const off = 'bg-slate-900/90 text-slate-400 hover:bg-slate-800 hover:text-slate-200';
-
-  return (
-    <div
-      className="flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-violet-500/20 bg-slate-950/50 px-3 py-2"
-      role="toolbar"
-      aria-label="Controlli lista use case"
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-medium tracking-wide text-slate-500">
-          <span className="tabular-nums font-semibold text-amber-100/90">{useCaseCount}</span>{' '}
-          Usecases:
-        </span>
-        <div className="inline-flex items-center overflow-hidden rounded-md border border-slate-600/90 bg-slate-900/80">
-          <button
-            type="button"
-            aria-pressed={bulkFold === 'expanded'}
-            className={`${btn} ${bulkFold === 'expanded' ? on : off}`}
-            onClick={triggerExpandAll}
-          >
-            espandi
-          </button>
-          <span className="select-none px-0.5 text-slate-600" aria-hidden>
-            |
-          </span>
-          <button
-            type="button"
-            aria-pressed={bulkFold === 'collapsed'}
-            className={`${btn} ${bulkFold === 'collapsed' ? on : off}`}
-            onClick={triggerCollapseAll}
-          >
-            collassa
-          </button>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-medium tracking-wide text-slate-500">Mostra:</span>
-        <div className="inline-flex items-center overflow-hidden rounded-md border border-slate-600/90 bg-slate-900/80">
-          <button
-            type="button"
-            aria-pressed={showScenario}
-            className={`${btn} ${showScenario ? on : off}`}
-            onClick={toggleScenario}
-          >
-            scenario
-          </button>
-          <span className="select-none px-0.5 text-slate-600" aria-hidden>
-            |
-          </span>
-          <button
-            type="button"
-            aria-pressed={showMessage}
-            className={`${btn} ${showMessage ? on : off}`}
-            onClick={toggleMessage}
-          >
-            messaggi
-          </button>
-        </div>
-      </div>
-      {dock ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-medium tracking-wide text-slate-500">Ordine:</span>
-          <button
-            type="button"
-            aria-pressed={dock.useCaseSiblingSortMode === 'alphabetical'}
-            title={
-              dock.useCaseSiblingSortMode === 'alphabetical'
-                ? 'Ordine alfabetico tra fratelli — clic per ordine dialogo (come generato/unione)'
-                : 'Ordine dialogo (lista/API) — clic per alfabetico tra fratelli'
-            }
-            className={`${btn} ${dock.useCaseSiblingSortMode === 'alphabetical' ? on : off}`}
-            onClick={() =>
-              dock.setUseCaseSiblingSortMode(
-                dock.useCaseSiblingSortMode === 'alphabetical' ? 'logical' : 'alphabetical'
-              )
-            }
-          >
-            AB
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function StepConnector(): React.ReactElement {
-  return (
-    <div
-      className="flex shrink-0 items-center gap-0 px-0.5 text-violet-400/55"
-      aria-hidden
-    >
-      <span className="h-[2px] w-5 bg-gradient-to-r from-violet-600/75 via-violet-500/45 to-transparent rounded-full" />
-      <ChevronRight strokeWidth={2.5} className="h-4 w-4 -ml-0.5 text-violet-400/90" />
-    </div>
-  );
+  /** Avanzamento omogeneizzazione (current/total use case). */
+  examplePhraseStyleBatchProgress?: { current: number; total: number } | null;
+  /**
+   * Passo 2 — Crea/aggiunge una conversazione (l'AI sceglie il mix di use case e i turni).
+   * I parametri vengono dal pulsante cliccato nel pannello DX (pollice su/giù/lampadina).
+   */
+  onCreateConversation?: (params: AssembleConversationInvocation) => void | Promise<void>;
+  createConversationBusy?: boolean;
+  /** Passo 2 — Proofread (solo ortografia) sulle bubble agente modificate manualmente. */
+  onProofreadConversationAgentTurns?: () => void | Promise<void>;
+  proofreadConversationBusy?: boolean;
+  /** @deprecated Tokenizzazione manuale rimossa: la compilazione avviene on-demand dal canonico. */
+  onTokenizeUseCases?: () => void | Promise<void>;
+  tokenizeUseCasesBusy?: boolean;
+  /** @deprecated Mantenuto per compatibilità con vecchi caller. */
+  tokenizedUseCaseCount?: number;
+  /** @deprecated Mantenuto per compatibilità con vecchi caller. */
+  tokenizationHasManualEdits?: boolean;
+  /**
+   * Pref globale «LLM manual handoff»: quando true, i pulsanti AI del wizard (generate use
+   * cases / assemble conversation) aprono un modale di handoff verso un motore esterno
+   * invece di chiamare l'LLM interno. La pref vive in `localStorage`.
+   */
+  externalLLMHandoffEnabled?: boolean;
+  onToggleExternalLLMHandoff?: () => void;
+  /** Reset «Pulisci tutto» — apre conferma modale e poi azzera l'output del wizard. */
+  onClearAllWizardOutput?: () => void;
+  /** Reset contestuale Passo 2: elimina solo conversazioni/baseline conversazioni. */
+  onClearWizardConversations?: () => void;
+  /** @deprecated Non più esposto in UI: la tokenizzazione è derivata dal testo canonico. */
+  onClearWizardTokenization?: () => void;
+  /**
+   * Use case attualmente selezionato nella lista del Passo 1. Necessario per il preview JSON
+   * conversazionale (`wizard.showJsonPanel === true`). Risolto dal parent leggendo l'evento
+   * `onSelectionChange` del composer.
+   */
+  selectedUseCase?: AIAgentUseCase | null;
+  /**
+   * Richiesta dal pannello DX «Mostra JSON» di selezionare un altro use case (frecce ◀ ▶ del
+   * mini-header). Il parent deve aggiornare la selezione master della lista SX in modo che il
+   * pannello DX e la lista restino sincronizzati.
+   */
+  onSelectUseCaseRequest?: (useCaseId: string) => void;
+  /**
+   * Lista use case del catalogo — necessaria per:
+   *  1. abilitare il bottone «Crea prompt conversazionale» solo quando TUTTI sono compilabili
+   *  2. passare la lista a {@link ConversationalPromptDialog} che costruisce il prompt
+   *  3. permettere al pannello DX «Mostra JSON» di navigare tra gli use case proiettabili
+   * Default: array vuoto (il bottone resta nascosto, le frecce DX nascoste).
+   */
+  useCases?: readonly AIAgentUseCase[];
+  /**
+   * Slot per overlay confinati al pannello wizard (es. {@link ExternalLLMHandoffDialog}).
+   * Il caller costruisce il nodo e lo passa qui; il root del wizard è `relative` per ancorarli
+   * con `absolute inset-0`. Così il modale oscura solo il rettangolo del wizard, non l'editor.
+   */
+  overlay?: React.ReactNode;
 }
 
 function TutorialAsideBody(props: { stepId: UseCaseGeneratorWizardStepId }): React.ReactElement {
@@ -232,31 +229,107 @@ export function ViewSkaGenerator({
   onDismissBundleFeedback,
   onApplyExamplePhraseStyle,
   examplePhraseStyleBusy = false,
+  examplePhraseStyleBatchProgress = null,
+  onCreateConversation,
+  createConversationBusy = false,
+  onProofreadConversationAgentTurns,
+  proofreadConversationBusy = false,
+  externalLLMHandoffEnabled = false,
+  onToggleExternalLLMHandoff,
+  onClearAllWizardOutput,
+  onClearWizardConversations,
+  onClearWizardTokenization,
+  selectedUseCase = null,
+  onSelectUseCaseRequest,
+  useCases,
+  overlay,
 }: ViewSkaGeneratorProps) {
-  const stepCount = USE_CASE_GENERATOR_WIZARD_STEP_ORDER.length;
+  const [clearScope, setClearScope] = React.useState<ClearWizardScope | null>(null);
+  const clearUseCasesAnchorRef = React.useRef<HTMLButtonElement>(null);
+  const clearConversationsAnchorRef = React.useRef<HTMLButtonElement>(null);
+  const clearTokenizationAnchorRef = React.useRef<HTMLButtonElement>(null);
+  /**
+   * Apertura dialog «Crea prompt conversazionale»: stato locale (transitorio, non persiste
+   * tra sessioni). La pre-condizione di apertura (tutti compilabili) è gestita prima — qui
+   * solo on/off del modale.
+   */
+  const [conversationalPromptDialogOpen, setConversationalPromptDialogOpen] =
+    React.useState(false);
+  const canCreateConversationalPrompt = React.useMemo(
+    () => Array.isArray(useCases) && areAllUseCasesProjectable(useCases),
+    [useCases]
+  );
+  const handleClearConfirm = React.useCallback(() => {
+    const scope = clearScope;
+    setClearScope(null);
+    if (scope === 'use_case_list') onClearAllWizardOutput?.();
+    if (scope === 'conversations') onClearWizardConversations?.();
+    if (scope === 'tokenization') onClearWizardTokenization?.();
+  }, [
+    clearScope,
+    onClearAllWizardOutput,
+    onClearWizardConversations,
+    onClearWizardTokenization,
+  ]);
+  const handleClearCancel = React.useCallback(() => setClearScope(null), []);
+  const examplePhraseStyleBusyLabel =
+    examplePhraseStyleBusy &&
+    examplePhraseStyleBatchProgress &&
+    examplePhraseStyleBatchProgress.total > 1
+      ? `Omogeneizzando… use case ${examplePhraseStyleBatchProgress.current}/${examplePhraseStyleBatchProgress.total}`
+      : undefined;
+
   const stepCfg = getUseCaseGeneratorWizardStepConfig(wizard.currentStepId);
-  const stepOneHasUseCases = wizard.stepIndex === 0 && useCaseCount > 0;
-  const showStepOneInitialTutorial =
-    wizard.stepIndex === 0 && wizard.currentStepId === 'use_case_list' && !stepOneHasUseCases;
+  const isStepOne = wizard.currentStepId === 'use_case_list';
+  const isStepConversations = wizard.currentStepId === 'conversations';
+  const isStepTokenization = wizard.currentStepId === 'tokenization';
+  const stepOneHasUseCases = isStepOne && useCaseCount > 0;
+  const showStepOneInitialTutorial = isStepOne && !stepOneHasUseCases;
   const showFooterGenerateInitial =
-    wizard.stepIndex === 0 &&
+    isStepOne &&
     typeof onGenerateUseCaseBundle === 'function' &&
     !stepOneHasUseCases;
+  /**
+   * Passo 3 riusa la stessa toolbar Riga 2 del Passo 1 (`espandi/collassa` + `Mostra scenario/frase`):
+   * la lista accordion del Passo 3 è gestita dallo stesso `UseCaseWizardListToolbarContext`.
+   */
   const showListToolbarRow =
-    wizard.stepIndex === 0 && showStepOneListToolbar;
-
-  const showExamplePhraseStyleCallout =
-    (wizard.currentStepId === 'example_phrases' || wizard.currentStepId === 'use_case_list') &&
-    wizard.examplePhraseStylePlan.showStyleCta;
+    (isStepOne && showStepOneListToolbar) || (isStepTokenization && useCaseCount > 0);
 
   /** Passo 1 con lista: tutto in {@link UseCaseListStepReviewCard} (stile incluso). */
-  const unifiedUseCaseListReview =
-    wizard.stepIndex === 0 && wizard.currentStepId === 'use_case_list' && stepOneHasUseCases;
+  const unifiedUseCaseListReview = isStepOne && stepOneHasUseCases;
+  /** Passo 2: review-card dedicata (istruzione + 3 pulsanti contestuali). */
+  const unifiedConversationsReview = isStepConversations;
+  /** Passo 3: non ha più una review-card di tokenizzazione; il pannello DX mostra il nastro JSON. */
+  const unifiedTokenizationReview = false;
 
-  const showExamplePhraseStyleCalloutStandalone =
-    showExamplePhraseStyleCallout &&
-    wizard.currentStepId === 'example_phrases' &&
-    typeof onApplyExamplePhraseStyle === 'function';
+  /**
+   * Toggle JSON nel pannello DX:
+   *  - Passo 1: on-demand tramite toggle nella toolbar.
+   *  - Passo 3: sempre visibile, perché è la fase di verifica/compilazione del prompt.
+   */
+  const canShowJsonToggle = (isStepOne || isStepTokenization) && useCaseCount > 0;
+  const showJsonRightPanel =
+    (isStepTokenization && useCaseCount > 0) || (canShowJsonToggle && wizard.showJsonPanel);
+  const stepTheme = STEP_COLOR_THEME[wizard.currentStepId];
+  const clearDialogAnchorRef =
+    clearScope === 'conversations'
+      ? clearConversationsAnchorRef
+      : clearScope === 'tokenization'
+        ? clearTokenizationAnchorRef
+        : clearUseCasesAnchorRef;
+  const clearDialogMessage =
+    clearScope === 'conversations'
+      ? 'Confermi di voler eliminare solo le conversazioni montate e le loro baseline? Use case e compilazione JSON restano derivabili.'
+      : clearScope === 'tokenization'
+        ? 'Confermi di voler ripulire lo stato legacy di tokenizzazione? Use case e conversazioni restano invariati.'
+        : 'Confermi di voler eliminare use case, conversazioni e dati generati?';
+  const clearDialogConfirmLabel =
+    clearScope === 'conversations'
+      ? 'Pulisci conversazioni'
+      : clearScope === 'tokenization'
+        ? 'Pulisci tokenizzazione'
+        : 'Pulisci casi d’uso';
 
   const advanceStepAnchorRef = React.useRef<HTMLButtonElement>(null);
 
@@ -329,54 +402,159 @@ export function ViewSkaGenerator({
         onCancel={wizard.cancelAdvanceDialog}
         anchorRef={advanceStepAnchorRef}
       />
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-950/90">
-        <div className="shrink-0 border-b border-violet-500/35 bg-gradient-to-b from-slate-900/95 to-slate-950/90">
-          <div className="flex flex-wrap items-center gap-y-2 px-2 py-2.5">
+      <ClearAllWizardOutputDialog
+        open={clearScope !== null}
+        onConfirm={handleClearConfirm}
+        onCancel={handleClearCancel}
+        anchorRef={clearDialogAnchorRef}
+        message={clearDialogMessage}
+        confirmLabel={clearDialogConfirmLabel}
+      />
+      <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${stepTheme.workspace}`}>
+        <div className="shrink-0 border-b border-slate-700/65 bg-gradient-to-b from-slate-900/95 to-slate-950/90">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-2 py-2.5">
             <div
-              className="flex min-w-0 flex-1 flex-wrap items-center gap-x-0 gap-y-2"
+              className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-2"
               role="tablist"
               aria-label="Passi generatore use case"
             >
               {USE_CASE_GENERATOR_WIZARD_STEPS.map((step, index) => {
                 const active = index === wizard.stepIndex;
                 const selectable = wizard.canSelectStep(index);
+                const theme = STEP_COLOR_THEME[step.id];
+                const clearRef =
+                  step.id === 'conversations'
+                    ? clearConversationsAnchorRef
+                    : step.id === 'tokenization'
+                      ? clearTokenizationAnchorRef
+                      : clearUseCasesAnchorRef;
+                const canClear =
+                  step.id === 'use_case_list'
+                    ? typeof onClearAllWizardOutput === 'function' && useCaseCount > 0
+                    : step.id === 'conversations'
+                      ? typeof onClearWizardConversations === 'function' &&
+                        wizard.conversations.length > 0
+                      : false;
+                /**
+                 * Counter inline al titolo del passo (assorbe la vecchia label «N Usecases:»
+                 * / «N Conversazioni» che erano duplicate nella riga 2).
+                 * `null` quando il dato non è ancora disponibile → la pill resta solo «titolo».
+                 */
+                const stepCountBadge =
+                  step.id === 'use_case_list'
+                    ? useCaseCount > 0
+                      ? String(useCaseCount)
+                      : null
+                    : step.id === 'conversations'
+                      ? wizard.conversations.length > 0
+                        ? String(wizard.conversations.length)
+                        : null
+                      : useCaseCount > 0
+                        ? String(useCaseCount)
+                        : null;
                 return (
                   <React.Fragment key={step.id}>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      aria-disabled={!selectable}
-                      disabled={!selectable}
-                      title={
-                        selectable
-                          ? step.title
-                          : 'Completa il passo precedente per sbloccare questo punto della pipeline.'
-                      }
-                      onClick={() => wizard.selectStep(index)}
-                      className={[
-                        'rounded-lg px-3 py-2 text-left text-[11px] font-semibold tracking-wide transition-all min-h-[40px] flex items-center max-w-[160px] border',
-                        selectable
-                          ? 'cursor-pointer'
-                          : 'cursor-not-allowed opacity-45 grayscale-[0.35]',
-                        active
-                          ? 'border-violet-400/70 bg-violet-600/35 text-amber-100 shadow-[0_0_20px_rgba(139,92,246,0.25)]'
-                          : selectable
-                            ? 'border-slate-600/80 bg-slate-900/90 text-amber-100/85 hover:border-violet-500/50 hover:bg-slate-800/90'
-                            : 'border-slate-700/60 bg-slate-950/80 text-slate-500',
-                      ].join(' ')}
-                    >
-                      <span className="tabular-nums text-violet-300/95">{index + 1}.</span>
-                      <span className="ml-1 leading-tight">{step.title}</span>
-                    </button>
-                    {index < stepCount - 1 ? <StepConnector /> : null}
+                    {active ? (
+                      <div
+                        className={[
+                          'flex max-w-full flex-nowrap items-center gap-x-3 rounded-lg border px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-all',
+                          STEP_PILL_MIN_HEIGHT,
+                          theme.active,
+                        ].join(' ')}
+                      >
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected
+                          title={step.title}
+                          onClick={() => wizard.selectStep(index)}
+                          className="inline-flex shrink-0 items-center rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/80"
+                        >
+                          <span className="tabular-nums opacity-90">{index + 1}.</span>
+                          <span className="ml-1 leading-tight">{step.title}</span>
+                          {stepCountBadge ? (
+                            <span className="ml-1.5 tabular-nums opacity-75">
+                              ({stepCountBadge})
+                            </span>
+                          ) : null}
+                        </button>
+                        <ActiveStepInlineControls
+                          stepId={step.id}
+                          wizard={wizard}
+                          showListControls={showListToolbarRow}
+                          canShowJsonToggle={canShowJsonToggle}
+                        />
+                        {canClear ? (
+                          <StepClearButton
+                            ref={clearRef}
+                            scope={step.id}
+                            expanded={clearScope === step.id}
+                            onClick={() => setClearScope((prev) => (prev === step.id ? null : step.id))}
+                          />
+                        ) : null}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={false}
+                        aria-disabled={!selectable}
+                        disabled={!selectable}
+                        title={
+                          selectable
+                            ? step.title
+                            : 'Completa il passo precedente per sbloccare questo punto della pipeline.'
+                        }
+                        onClick={() => wizard.selectStep(index)}
+                        className={[
+                          'flex max-w-[180px] items-center rounded-lg border px-3 py-1.5 text-left text-[11px] font-semibold tracking-wide transition-all',
+                          STEP_PILL_MIN_HEIGHT,
+                          selectable
+                            ? `cursor-pointer border-slate-600/80 bg-slate-900/90 text-amber-100/85 ${theme.inactiveHover}`
+                            : 'cursor-not-allowed border-slate-700/60 bg-slate-950/80 text-slate-500 opacity-45 grayscale-[0.35]',
+                        ].join(' ')}
+                      >
+                        <span className="tabular-nums text-violet-300/95">{index + 1}.</span>
+                        <span className="ml-1 leading-tight">{step.title}</span>
+                        {stepCountBadge ? (
+                          <span className="ml-1.5 tabular-nums opacity-70">
+                            ({stepCountBadge})
+                          </span>
+                        ) : null}
+                      </button>
+                    )}
                   </React.Fragment>
                 );
               })}
             </div>
+            <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+              {canCreateConversationalPrompt ? (
+                <button
+                  type="button"
+                  onClick={() => setConversationalPromptDialogOpen(true)}
+                  title="Genera il prompt unico da incollare nel tuo motore esterno (ChatGPT, …): istruzioni + catalogo JSON compilato dagli use case."
+                  className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/55 bg-violet-600/80 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-violet-500"
+                >
+                  <FileText size={13} aria-hidden />
+                  Crea prompt conversazionale
+                </button>
+              ) : null}
+              {typeof onToggleExternalLLMHandoff === 'function' ? (
+                <label
+                  className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md border border-slate-600/80 bg-slate-900/90 px-2.5 py-1 text-[11px] font-semibold text-slate-100 hover:bg-slate-800/80"
+                  title="Quando attivo, i pulsanti AI aprono un modale per copiare il prompt verso un motore esterno (es. ChatGPT-5) e incollare la risposta JSON."
+                >
+                  <input
+                    type="checkbox"
+                    checked={externalLLMHandoffEnabled}
+                    onChange={() => onToggleExternalLLMHandoff()}
+                    className="h-3.5 w-3.5 accent-violet-500"
+                  />
+                  LLM manual handoff
+                </label>
+              ) : null}
+            </div>
           </div>
-
-          <WizardStepOneListToolbar visible={showListToolbarRow} useCaseCount={useCaseCount} />
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-0 lg:flex-row">
@@ -406,9 +584,21 @@ export function ViewSkaGenerator({
           <aside
             className="flex w-full min-w-0 shrink-0 flex-col border-slate-800 bg-gradient-to-b from-slate-900/55 to-slate-950/90 lg:w-auto lg:max-w-[60vw] lg:min-w-[250px]"
             style={isLgViewport ? { width: rightAsideWidthPx } : undefined}
-            aria-label="Tutorial e azioni del passo"
+            aria-label={
+              showJsonRightPanel
+                ? 'Anteprima JSON conversazionale dello use case selezionato'
+                : 'Tutorial e azioni del passo'
+            }
           >
-            {!unifiedUseCaseListReview ? (
+            {showJsonRightPanel ? (
+              <ConversationalJsonRightPanel
+                selectedUseCase={selectedUseCase}
+                useCases={useCases ?? []}
+                onSelectUseCase={onSelectUseCaseRequest}
+              />
+            ) : (
+              <>
+            {!unifiedUseCaseListReview && !unifiedConversationsReview && !unifiedTokenizationReview ? (
               <div className="shrink-0 border-b border-violet-400/35 bg-gradient-to-br from-violet-950/95 via-slate-900/95 to-slate-950 px-4 py-4 shadow-[inset_0_1px_0_rgba(167,139,250,0.12)]">
                 <div className="flex items-start gap-4">
                   <span
@@ -443,12 +633,40 @@ export function ViewSkaGenerator({
                         typeof onApplyExamplePhraseStyle === 'function'
                     )}
                     styleBusy={examplePhraseStyleBusy}
+                    styleBusyLabel={examplePhraseStyleBusyLabel}
                     onApplyStyle={onApplyExamplePhraseStyle}
                     bundleFeedback={bundleFeedback}
                     onDismissBundleFeedback={onDismissBundleFeedback}
                     generateBusy={generateBusy}
                     onGenerateMore={onGenerateUseCaseBundle}
                     canGenerateMore={typeof onGenerateUseCaseBundle === 'function'}
+                    onAdvanceStep={onAdvanceWizardStep}
+                    canAdvanceStep={typeof onAdvanceWizardStep === 'function'}
+                    advanceStepAnchorRef={advanceStepAnchorRef}
+                  />
+                  {wizard.showNoChangesTutorial ? (
+                    <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-950/35 p-2 text-xs text-amber-100">
+                      <p className="leading-relaxed">{wizard.tutorialIfNoChanges}</p>
+                      <button
+                        type="button"
+                        className="mt-2 text-[11px] text-amber-200 underline hover:text-amber-50"
+                        onClick={wizard.dismissNoChangesTutorial}
+                      >
+                        Chiudi
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              ) : unifiedConversationsReview ? (
+                <>
+                  <ConversationsStepReviewCard
+                    panelHeading={stepCfg.panelHeading}
+                    conversationsCount={wizard.conversations.length}
+                    createBusy={createConversationBusy}
+                    onCreateConversation={onCreateConversation}
+                    showProofreadCta={wizard.conversationStylePlan.showProofreadCta}
+                    proofreadBusy={proofreadConversationBusy}
+                    onProofread={onProofreadConversationAgentTurns}
                     onAdvanceStep={onAdvanceWizardStep}
                     canAdvanceStep={typeof onAdvanceWizardStep === 'function'}
                     advanceStepAnchorRef={advanceStepAnchorRef}
@@ -483,11 +701,6 @@ export function ViewSkaGenerator({
                       ) : null}
                     </div>
                   ) : null}
-                  <ExamplePhraseStyleCallout
-                    visible={Boolean(showExamplePhraseStyleCalloutStandalone)}
-                    busy={examplePhraseStyleBusy}
-                    onApply={() => void onApplyExamplePhraseStyle?.()}
-                  />
                   {showStepOneInitialTutorial ? (
                     <TutorialAsideBody stepId="use_case_list" />
                   ) : (
@@ -511,24 +724,200 @@ export function ViewSkaGenerator({
 
             {showFooterGenerateInitial ? (
               <div className="shrink-0 border-t border-violet-500/25 bg-slate-950/80 px-3 py-3">
-                <button
-                  type="button"
-                  disabled={generateBusy}
-                  onClick={() => void onGenerateUseCaseBundle?.()}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
-                >
-                  {generateBusy ? (
-                    <Loader2 className="animate-spin" size={18} aria-hidden />
-                  ) : (
-                    <Sparkles size={18} aria-hidden />
-                  )}
-                  {generateBusy ? 'Generando…' : LABEL_GENERATE_USE_CASES}
-                </button>
+                <ViewSkaGenerateButton
+                  generateBusy={generateBusy}
+                  onGenerateUseCaseBundle={onGenerateUseCaseBundle}
+                />
               </div>
             ) : null}
+              </>
+            )}
           </aside>
         </div>
+        <ConversationalPromptDialog
+          open={conversationalPromptDialogOpen}
+          useCases={useCases ?? []}
+          onClose={() => setConversationalPromptDialogOpen(false)}
+        />
+        {overlay}
       </div>
+    </>
+  );
+}
+
+/**
+ * Controlli inline nel pill **attivo** dello stepper. Layout v9:
+ * - `use_case_list`: griglia 2×2 (espandi/collassa + scenario/messaggio) + AB + JSON +
+ *   toggle «Mostra Tokens» (vedi {@link WizardShowTokensToggle}).
+ * - `conversations`: cluster outcome (pills positive/negative) + «Mostra Tokens» (interno
+ *   alla {@link WizardConversationsTabsControls}).
+ * - `tokenization`: SOLO «Mostra Tokens». Niente 2×2: il Passo 3 non possiede più un
+ *   pannello dedicato (vedi commento v8 in `AIAgentEditorDockPanels.tsx`); espandi/
+ *   collassa e scenario/frasi appartengono al pill «Casi d'uso», ripeterli qui era
+ *   ridondante. La compilazione prompt/JSON vive nel pannello DX ed è derivata dagli use case.
+ *
+ * Il conteggio totale (use case / conversazioni) è stato spostato nel label
+ * del pill (es. `1. Casi d'uso (4)`), quindi qui NON è più ripetuto.
+ */
+function ActiveStepInlineControls({
+  stepId,
+  wizard,
+  showListControls,
+  canShowJsonToggle,
+}: {
+  stepId: UseCaseGeneratorWizardStepId;
+  wizard: UseCaseGeneratorWizardModel;
+  showListControls: boolean;
+  canShowJsonToggle: boolean;
+}): React.ReactElement | null {
+  if (stepId === 'conversations') {
+    return (
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <WizardConversationsTabsControls wizard={wizard} />
+      </div>
+    );
+  }
+
+  if (stepId === 'use_case_list') {
+    if (!showListControls) return null;
+    return (
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
+        <WizardStepOneListToolbarControls
+          wizard={wizard}
+          canShowJsonToggle={canShowJsonToggle}
+          expandTheme="violet"
+        />
+      </div>
+    );
+  }
+
+  if (stepId === 'tokenization') {
+    if (!showListControls) return null;
+    return (
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
+        <WizardShowTokensToggle wizard={wizard} />
+      </div>
+    );
+  }
+
+  return null;
+}
+
+const StepClearButton = React.forwardRef<
+  HTMLButtonElement,
+  {
+    scope: ClearWizardScope;
+    expanded: boolean;
+    onClick: () => void;
+  }
+>(function StepClearButton({ scope, expanded, onClick }, ref) {
+  const title =
+    scope === 'use_case_list'
+      ? 'Pulisci casi d’uso e dati derivati'
+      : scope === 'conversations'
+        ? 'Pulisci conversazioni'
+      : 'Pulisci stato legacy';
+  return (
+    <button
+      ref={ref}
+      type="button"
+      aria-haspopup="dialog"
+      aria-expanded={expanded}
+      aria-label={title}
+      title={title}
+      onClick={onClick}
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-rose-500/45 bg-rose-950/25 text-rose-200 transition-colors hover:border-rose-400/65 hover:bg-rose-900/45 hover:text-rose-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/80"
+    >
+      <Trash2 size={13} aria-hidden />
+    </button>
+  );
+});
+
+/**
+ * Sub-pannello destro on-demand «Mostra JSON» (Passo 1): header coerente con il resto del
+ * wizard + Monaco read-only ({@link ConversationalJsonPanel}).
+ *
+ * Estratto come componente locale per non ingrossare il blocco JSX principale di
+ * {@link ViewSkaGenerator}; non è esportato perché vive solo come overlay del Passo 1.
+ */
+function ConversationalJsonRightPanel({
+  selectedUseCase,
+  useCases,
+  onSelectUseCase,
+}: {
+  selectedUseCase: AIAgentUseCase | null;
+  useCases: readonly AIAgentUseCase[];
+  onSelectUseCase?: (useCaseId: string) => void;
+}): React.ReactElement {
+  return (
+    <>
+      <div className="shrink-0 border-b border-violet-500/25 bg-slate-950/90 px-4 py-2.5">
+        <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-violet-400/85">
+          <GraduationCap className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
+          <span>Anteprima JSON</span>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-hidden px-3 py-3">
+        <ConversationalJsonPanel
+          selectedUseCase={selectedUseCase}
+          useCases={useCases}
+          onSelectUseCase={onSelectUseCase}
+        />
+      </div>
+    </>
+  );
+}
+
+/**
+ * CTA "Genera use case" del footer (prima generazione bundle): guard sul modello globale +
+ * etichetta in gerundio con il modello in uso ("Creando use case (gpt-5)...").
+ * Estratto come sub-componente per isolare lo stato locale del toast (single responsibility).
+ */
+function ViewSkaGenerateButton({
+  generateBusy,
+  onGenerateUseCaseBundle,
+}: {
+  generateBusy: boolean;
+  onGenerateUseCaseBundle?: () => void | Promise<void>;
+}): React.ReactElement {
+  const { busyLabel, hasModel } = useAiBusyLabel();
+  const [showNoModelToast, setShowNoModelToast] = React.useState(false);
+
+  React.useEffect(() => {
+    if (hasModel && showNoModelToast) {
+      setShowNoModelToast(false);
+    }
+  }, [hasModel, showNoModelToast]);
+
+  const handleClick = (): void => {
+    if (!hasModel) {
+      setShowNoModelToast(true);
+      return;
+    }
+    void onGenerateUseCaseBundle?.();
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        disabled={generateBusy}
+        onClick={handleClick}
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+      >
+        {generateBusy ? (
+          <Loader2 className="animate-spin" size={18} aria-hidden />
+        ) : (
+          <Sparkles size={18} aria-hidden />
+        )}
+        {generateBusy ? busyLabel('Creando use case') : LABEL_GENERATE_USE_CASES}
+        {!generateBusy ? (
+          <LastAiCostBadge purpose={AI_CALL_PURPOSE.USE_CASE_BUNDLE_INITIAL} />
+        ) : null}
+      </button>
+      {showNoModelToast ? (
+        <MissingAiModelToast onDismiss={() => setShowNoModelToast(false)} />
+      ) : null}
     </>
   );
 }

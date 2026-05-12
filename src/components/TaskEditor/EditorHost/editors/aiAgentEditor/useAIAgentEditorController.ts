@@ -235,6 +235,11 @@ export function useAIAgentEditorController({
   /** Solo propagazione stile frasi esempio (LLM): indipendente da {@link useCaseBundleGenerationBusy}. */
   const [useCasePhraseStylePropagationBusy, setUseCasePhraseStylePropagationBusy] =
     React.useState(false);
+  /** Progresso batch omogeneizzazione (use case per use case); null se idle. */
+  const [useCasePhraseStyleBatchProgress, setUseCasePhraseStyleBatchProgress] = React.useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [useCaseComposerError, setUseCaseComposerError] = React.useState<string | null>(null);
   const [useCaseCreationMessage, setUseCaseCreationMessage] = React.useState<string | null>(null);
   const [backendPlaceholders, setBackendPlaceholders] = React.useState<BackendPlaceholderInstance[]>([]);
@@ -700,6 +705,35 @@ export function useAIAgentEditorController({
   }, []);
 
   /**
+   * «Pulisci tutto» (wizard toolbar): azzera la sola famiglia di dati «output del wizard»,
+   * mantenendo intatti input/setup del task (descrizione, sezioni IR, proposed fields,
+   * initial state, runtime IA config, preview e stile globale use case).
+   *
+   * Dati cancellati:
+   * - `logicalSteps`, `useCases` (con dialogue, motor_snapshot, tokenization, voti)
+   * - `agentRuntimeCompactJson` (compact runtime)
+   * - `agentUseCaseWizardStateJson` (intero stato wizard: step, baselines, conversazioni)
+   *
+   * Conseguenze automatiche via dependency:
+   * - lo hook `useUseCaseGeneratorWizard` riceve `taskPersistedWizardJson=''` ma deve essere
+   *   anche resettato in memoria dal chiamante (non solo dal prop, perché il sub-hook tiene
+   *   ref interni e sessionStorage può contenere copie del payload precedente — vedi
+   *   {@link UseCaseGeneratorWizardModel.resetAll}).
+   *
+   * NON tocca: `designDescription`, `structuredSectionsState`, `proposedFields`,
+   * `initialStateTemplateJson`, `iaRuntimeConfig`, `previewByStyle`, `useCaseGlobalStyleId`.
+   */
+  const handleClearWizardOutput = React.useCallback(() => {
+    setLogicalSteps([]);
+    setUseCases([]);
+    setAgentRuntimeCompactJson('');
+    setAgentUseCaseWizardStateJson('');
+    setUseCaseComposerError(null);
+    setUseCaseCreationMessage(null);
+    setDirty(true);
+  }, []);
+
+  /**
    * Persists IA runtime override: parse repo JSON (or global defaults), merge `partial`, normalize twice,
    * write only `agentIaRuntimeOverrideJson`. TaskRepository is the source of truth; no hydrated gate.
    */
@@ -1066,6 +1100,34 @@ export function useAIAgentEditorController({
 
   const clearUseCaseComposerError = React.useCallback(() => setUseCaseComposerError(null), []);
 
+  /**
+   * Calcola gli input per la chiamata `generate_use_cases` (`userDesc` + flag extend) usando la
+   * stessa logica di {@link handleGenerateUseCaseBundle}, **senza** chiamare l'LLM. Serve alla
+   * feature «LLM manual handoff» che mostra il prompt all'utente per il copia/incolla verso un
+   * motore esterno. Single source of truth col path standard: cambi futuri nella composizione
+   * di `userDesc` (es. inclusione sezioni IR) riflessi su entrambi gli scenari.
+   *
+   * Throws su input troppo corto: il caller deve mostrare l'errore (come per il path standard).
+   */
+  const computeGenerateUseCasesPromptInputs = React.useCallback((): {
+    userDesc: string;
+    extendFrom: { logicalSteps: AIAgentLogicalStep[]; useCases: AIAgentUseCase[] } | null;
+  } => {
+    const userDesc = hasAgentGeneration
+      ? `${designDescription.trim()}\n\n---\n\n${buildRefineUserDescFromSections(structuredRev.effectiveBySection).trim()}`.trim()
+      : designDescription.trim();
+    if (userDesc.length < AI_AGENT_MIN_INPUT_CHARS) {
+      throw new Error(
+        `Inserisci almeno ${AI_AGENT_MIN_INPUT_CHARS} caratteri nella descrizione (o nelle sezioni strutturate dopo la prima generazione).`
+      );
+    }
+    const extendMode = useCases.length > 0;
+    return {
+      userDesc,
+      extendFrom: extendMode ? { logicalSteps: [...logicalSteps], useCases: [...useCases] } : null,
+    };
+  }, [hasAgentGeneration, designDescription, structuredRev, useCases, logicalSteps]);
+
   const handleGenerateUseCaseBundle = React.useCallback(async (): Promise<
     GenerateUseCaseBundleOutcome | null
   > => {
@@ -1164,6 +1226,83 @@ export function useAIAgentEditorController({
     logicalSteps,
   ]);
 
+  /**
+   * Applica un bundle use case prodotto da un motore esterno (feature «LLM manual handoff»).
+   * Single source of truth con {@link handleGenerateUseCaseBundle}: gli input arrivano già
+   * parsati dai parser interni — qui replichiamo solo la fase di merge + persistenza, senza
+   * chiamare l'LLM.
+   *
+   * Modalità:
+   * - `replace`: `logicalSteps` valorizzato → sostituisce tutto (primo bundle).
+   * - `extend`: `logicalSteps` null → merge come {@link handleGenerateUseCaseBundle} extend branch.
+   *
+   * Fail-early: lancia su input vuoto (`useCases.length === 0`) o su extend senza catalog
+   * esistente — l'UI a monte deve garantire i pre-requisiti.
+   */
+  const handleApplyExternalGeneratedUseCases = React.useCallback(
+    (input: {
+      useCases: readonly AIAgentUseCase[];
+      logicalSteps: readonly AIAgentLogicalStep[] | null;
+    }): GenerateUseCaseBundleOutcome => {
+      if (!Array.isArray(input.useCases) || input.useCases.length === 0) {
+        throw new Error('applyExternalGeneratedUseCases: useCases vuoti.');
+      }
+      const replaceMode = Array.isArray(input.logicalSteps);
+      if (replaceMode) {
+        setLogicalSteps([...(input.logicalSteps as AIAgentLogicalStep[])]);
+        let normalized = normalizeUseCaseSiblingOrder(
+          [...input.useCases],
+          useCaseSiblingSortModeRef.current
+        );
+        if (getDeferAgentMessages?.()) {
+          normalized = normalizeUseCaseSiblingOrder(
+            stripAssistantTurnsFromUseCases(normalized),
+            useCaseSiblingSortModeRef.current
+          );
+        }
+        setUseCases(normalized);
+        setDirty(true);
+        const ids = normalized.map((u) => u.id);
+        return {
+          useCases: normalized,
+          mode: 'replace',
+          addedCount: normalized.length,
+          highlightIds: ids,
+        };
+      }
+      if (useCases.length === 0) {
+        throw new Error(
+          'applyExternalGeneratedUseCases: extend mode richiede use case esistenti nel catalogo.'
+        );
+      }
+      let newOnes = normalizeUseCaseSiblingOrder(
+        [...input.useCases],
+        useCaseSiblingSortModeRef.current
+      );
+      if (getDeferAgentMessages?.()) {
+        newOnes = normalizeUseCaseSiblingOrder(
+          stripAssistantTurnsFromUseCases(newOnes),
+          useCaseSiblingSortModeRef.current
+        );
+      }
+      newOnes = remapExtendUseCaseIds(newOnes);
+      const merged = normalizeUseCaseSiblingOrder(
+        [...useCases, ...newOnes],
+        useCaseSiblingSortModeRef.current
+      );
+      setUseCases(merged);
+      setDirty(true);
+      const ids = newOnes.map((u) => u.id);
+      return {
+        useCases: merged,
+        mode: 'extend',
+        addedCount: newOnes.length,
+        highlightIds: ids,
+      };
+    },
+    [useCases, getDeferAgentMessages]
+  );
+
   const handleRegenerateUseCase = React.useCallback(
     async (useCaseId: string): Promise<AIAgentUseCase | null> => {
       const uc = useCases.find((u) => u.id === useCaseId);
@@ -1235,20 +1374,29 @@ export function useAIAgentEditorController({
       if (styleExampleUseCaseIds.length === 0 || targetUseCaseIds.length === 0) return null;
       setUseCaseComposerError(null);
       setUseCasePhraseStylePropagationBusy(true);
+      const targets = [...targetUseCaseIds];
+      const total = targets.length;
+      setUseCasePhraseStyleBatchProgress(total > 0 ? { current: 1, total } : null);
       try {
         const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
-        const res = await propagateExamplePhraseStyleApi({
-          allUseCases: useCases,
-          logicalSteps,
-          styleExampleUseCaseIds: [...styleExampleUseCaseIds],
-          targetUseCaseIds: [...targetUseCaseIds],
-          provider,
-          model,
-          outputLanguage,
-          globalStyleContract,
-          globalStyleId: useCaseGlobalStyleId,
-        });
-        const byContent = new Map(res.updates.map((u) => [u.use_case_id, u.assistant_content]));
+        const byContent = new Map<string, string>();
+        for (let i = 0; i < targets.length; i += 1) {
+          setUseCasePhraseStyleBatchProgress({ current: i + 1, total });
+          const res = await propagateExamplePhraseStyleApi({
+            allUseCases: useCases,
+            logicalSteps,
+            styleExampleUseCaseIds: [...styleExampleUseCaseIds],
+            targetUseCaseIds: [targets[i]],
+            provider,
+            model,
+            outputLanguage,
+            globalStyleContract,
+            globalStyleId: useCaseGlobalStyleId,
+          });
+          for (const row of res.updates) {
+            byContent.set(row.use_case_id, row.assistant_content);
+          }
+        }
         const nextUseCases = normalizeUseCaseSiblingOrder(
           useCases.map((u) => {
             const newContent = byContent.get(u.id);
@@ -1271,7 +1419,7 @@ export function useAIAgentEditorController({
           }),
           useCaseSiblingSortModeRef.current
         );
-        const updatedIds = targetUseCaseIds.filter((id) => byContent.has(id));
+        const updatedIds = targets.filter((id) => byContent.has(id));
         setUseCases(nextUseCases);
         setDirty(true);
         return { updatedIds, nextUseCases };
@@ -1280,6 +1428,7 @@ export function useAIAgentEditorController({
         return null;
       } finally {
         setUseCasePhraseStylePropagationBusy(false);
+        setUseCasePhraseStyleBatchProgress(null);
       }
     },
     [useCases, logicalSteps, provider, model, globalStyleContract, useCaseGlobalStyleId]
@@ -1756,15 +1905,20 @@ export function useAIAgentEditorController({
     useCaseComposerBusy,
     useCaseBundleGenerationBusy,
     useCasePhraseStylePropagationBusy,
+    useCasePhraseStyleBatchProgress,
     useCaseCreationMessage,
     useCaseComposerError,
     clearUseCaseComposerError,
     handleGenerateUseCaseBundle,
+    handleApplyExternalGeneratedUseCases,
+    computeGenerateUseCasesPromptInputs,
     handleCreateUseCase,
     handleRegenerateUseCase,
     handlePropagateExamplePhraseStyle,
+    globalStyleContract,
     persistAgentUseCaseWizardState,
     agentUseCaseWizardStateJson,
+    handleClearWizardOutput,
     handleRegenerateAgentMessage,
     handleAnnotateAgentMessageForJson,
     handleDeleteUseCase,

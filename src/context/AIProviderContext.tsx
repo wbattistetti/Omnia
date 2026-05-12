@@ -1,45 +1,30 @@
+/**
+ * Global AI provider + model selection (designer-side LLM).
+ *
+ * Single source of truth: the model id is stored verbatim in `localStorage` and exposed via
+ * `useAIProvider().model`. The list of valid models is fetched live from the backend catalog
+ * (`/api/ia-catalog/ui/models`) and consumed by `OmniaTutorSetup` — this context purposely does
+ * NOT keep a hardcoded model whitelist anymore (the previous validation effect was silently
+ * overwriting user picks like `gpt-5` because they weren't in the legacy table).
+ *
+ * Consumers that need to disable an AI button when no model is configured should check
+ * `useAiBusyLabel().hasModel` (true when `model !== ''`).
+ */
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 export type AIProvider = 'groq' | 'openai';
 export type AIModel = string;
 
-export interface AIModelConfig {
-  id: string;
-  label: string;
-  description?: string;
-}
-
 export interface AIProviderConfig {
   id: AIProvider;
   label: string;
-  models: AIModelConfig[];
-  defaultModel: string;
 }
 
-// Available providers and their models
+/** Provider metadata only (label for UI). No model whitelist, no default — those are dynamic. */
 export const AI_PROVIDERS: Record<AIProvider, AIProviderConfig> = {
-  groq: {
-    id: 'groq',
-    label: 'Groq (Llama)',
-    models: [
-      { id: 'llama-3.1-70b-instruct', label: 'Llama 3.1 70B', description: 'High performance - 70B parameters' },
-      { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant', description: 'Fast - 8B parameters' },
-      { id: 'llama3-70b-8192', label: 'Llama3 70B (8192)', description: 'Legacy 70B model with 8K context' },
-      { id: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B', description: 'Mixtral model with 32K context' },
-      { id: 'gemma-7b-it', label: 'Gemma 7B IT', description: 'Gemma 7B instruction-tuned' },
-    ],
-    defaultModel: 'llama-3.1-70b-instruct',
-  },
-  openai: {
-    id: 'openai',
-    label: 'OpenAI',
-    models: [
-      { id: 'gpt-4-turbo-preview', label: 'GPT-4 Turbo', description: 'Most capable model' },
-      { id: 'gpt-4', label: 'GPT-4', description: 'High quality' },
-      { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', description: 'Fast and efficient' },
-    ],
-    defaultModel: 'gpt-4-turbo-preview',
-  },
+  groq: { id: 'groq', label: 'Groq (Llama)' },
+  openai: { id: 'openai', label: 'OpenAI' },
 };
 
 interface AIProviderContextType {
@@ -48,7 +33,6 @@ interface AIProviderContextType {
   setProvider: (provider: AIProvider) => void;
   setModel: (model: AIModel) => void;
   providerConfig: AIProviderConfig;
-  availableModels: AIModelConfig[];
 }
 
 const AIProviderContext = createContext<AIProviderContextType | undefined>(undefined);
@@ -56,91 +40,68 @@ const AIProviderContext = createContext<AIProviderContextType | undefined>(undef
 const STORAGE_KEY_PROVIDER = 'omnia.aiProvider';
 const STORAGE_KEY_MODEL = 'omnia.aiModel';
 
+function readStoredProvider(): AIProvider {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_PROVIDER);
+    return stored === 'openai' || stored === 'groq' ? stored : 'groq';
+  } catch {
+    return 'groq';
+  }
+}
+
+function readStoredModel(): AIModel {
+  try {
+    return localStorage.getItem(STORAGE_KEY_MODEL) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export function AIProviderProvider({ children }: { children: ReactNode }) {
-  // Load from localStorage or use defaults
-  const [provider, setProviderState] = useState<AIProvider>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_PROVIDER);
-      return (stored as AIProvider) || 'groq';
-    } catch {
-      return 'groq';
-    }
-  });
+  const [provider, setProviderState] = useState<AIProvider>(readStoredProvider);
+  const [model, setModelState] = useState<AIModel>(readStoredModel);
 
-  const [model, setModelState] = useState<AIModel>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_MODEL);
-      if (stored) return stored;
-      // If no stored model, use default for current provider
-      return AI_PROVIDERS[provider].defaultModel;
-    } catch {
-      return AI_PROVIDERS[provider].defaultModel;
-    }
-  });
-
-  // Ensure model is valid for current provider, reset to default if not
-  useEffect(() => {
-    const providerConfig = AI_PROVIDERS[provider];
-    const isValidModel = providerConfig.models.some(m => m.id === model);
-    if (!isValidModel) {
-      setModelState(providerConfig.defaultModel);
-      try {
-        localStorage.setItem(STORAGE_KEY_MODEL, providerConfig.defaultModel);
-      } catch {}
-    }
-  }, [provider, model]);
-
-  const setProvider = (newProvider: AIProvider) => {
+  const setProvider = (newProvider: AIProvider): void => {
     setProviderState(newProvider);
-    // Reset model to default for new provider
-    const newModel = AI_PROVIDERS[newProvider].defaultModel;
-    setModelState(newModel);
     try {
       localStorage.setItem(STORAGE_KEY_PROVIDER, newProvider);
-      localStorage.setItem(STORAGE_KEY_MODEL, newModel);
-      // Also set global window variable for backward compatibility
-      (window as any).__AI_PROVIDER = newProvider;
-    } catch {}
+    } catch {
+      // localStorage may be unavailable in private mode; selection still applies for the session.
+    }
   };
 
-  const setModel = (newModel: AIModel) => {
+  const setModel = (newModel: AIModel): void => {
     setModelState(newModel);
     try {
-      localStorage.setItem(STORAGE_KEY_MODEL, newModel);
-    } catch {}
+      localStorage.setItem(STORAGE_KEY_MODEL, newModel ?? '');
+    } catch {
+      // see setProvider note above
+    }
   };
 
-  // Sync window variable for backward compatibility
   useEffect(() => {
     try {
-      (window as any).__AI_PROVIDER = provider;
-    } catch {}
+      (window as unknown as { __AI_PROVIDER?: AIProvider }).__AI_PROVIDER = provider;
+    } catch {
+      // window globals are best-effort backwards compatibility for legacy callers
+    }
   }, [provider]);
 
   const providerConfig = AI_PROVIDERS[provider];
-  const availableModels = providerConfig.models;
 
   return (
     <AIProviderContext.Provider
-      value={{
-        provider,
-        model,
-        setProvider,
-        setModel,
-        providerConfig,
-        availableModels,
-      }}
+      value={{ provider, model, setProvider, setModel, providerConfig }}
     >
       {children}
     </AIProviderContext.Provider>
   );
 }
 
-export function useAIProvider() {
+export function useAIProvider(): AIProviderContextType {
   const context = useContext(AIProviderContext);
   if (context === undefined) {
     throw new Error('useAIProvider must be used within AIProviderProvider');
   }
   return context;
 }
-

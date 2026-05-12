@@ -1,0 +1,52 @@
+/**
+ * Classi inline applicate dal Monaco JSON del pannello «Compilazione conversazionale»
+ * (`computeSemanticJsonDecorations`). Una classe per chiave semantica per il key, una per il
+ * valore — colore coordinato con il linguaggio Monarch del prompt completo.
+ *
+ * Palette identica a quella in conversationalMonaco.ts (token Monarch).
+ */
+
+.omnia-key-useCaseId {
+  color: #c4b5fd !important; /* violet-300 */
+  font-weight: 600;
+}
+
+.omnia-value-useCaseId {
+  color: #ddd6fe !important; /* violet-200 */
+}
+
+.omnia-key-label {
+  color: #67e8f9 !important; /* cyan-300 */
+  font-weight: 600;
+}
+
+.omnia-value-label {
+  color: #cffafe !important; /* cyan-100 */
+}
+
+.omnia-key-scenario {
+  color: #6ee7b7 !important; /* emerald-300 */
+  font-weight: 600;
+}
+
+.omnia-value-scenario {
+  color: #d1fae5 !important; /* emerald-100 */
+}
+
+.omnia-key-tokenizedExample {
+  color: #fcd34d !important; /* amber-300 */
+  font-weight: 600;
+}
+
+.omnia-value-tokenizedExample {
+  color: #fde68a !important; /* amber-200 */
+}
+
+.omnia-key-tokens {
+  color: #f9a8d4 !important; /* pink-300 */
+  font-weight: 600;
+}
+
+.omnia-value-tokens {
+  color: #fbcfe8 !important; /* pink-200 */
+}

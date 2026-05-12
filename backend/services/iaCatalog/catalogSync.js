@@ -216,35 +216,76 @@ async function syncLanguages() {
   return { ok: true, count: langs.length };
 }
 
-async function fetchOpenAIModels() {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return [];
-  const res = await fetch('https://api.openai.com/v1/models', {
-    headers: { Authorization: `Bearer ${key}` },
+/**
+ * Fetch /v1/models da una qualsiasi backend OpenAI-compatible (OpenAI, Groq, Together, …).
+ * Risponde con righe normalizzate per `ia_catalog_model`. Filtra modelli con `active === false`
+ * (Groq), riporta `context_window`/`max_completion_tokens` se forniti dal provider.
+ */
+async function fetchOpenAICompatibleModels({ baseUrl, apiKey, providerTag }) {
+  if (!apiKey) return [];
+  const res = await fetch(`${baseUrl}/models`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
   });
-  if (!res.ok) throw new Error(`OpenAI models ${res.status}`);
+  if (!res.ok) {
+    throw new Error(`${providerTag} models HTTP ${res.status}`);
+  }
   const data = await res.json();
+  const list = Array.isArray(data?.data) ? data.data : [];
   const rows = [];
-  for (const m of data.data || []) {
-    if (!m.id) continue;
-    const id = m.id;
-    const isNew = id.includes('preview') || id.includes('gpt-5');
+  for (const m of list) {
+    const id = typeof m?.id === 'string' ? m.id : '';
+    if (!id) continue;
+    if (m.active === false) continue;
+
+    const capabilities = {};
+    if (typeof m.context_window === 'number') {
+      capabilities.context_window = m.context_window;
+    }
+    if (typeof m.max_completion_tokens === 'number') {
+      capabilities.max_completion_tokens = m.max_completion_tokens;
+    }
+
+    const isPreview = id.includes('preview');
+    const isFresh =
+      id.includes('gpt-5') ||
+      id.includes('2025') ||
+      id.includes('4.1') ||
+      id.includes('llama-3.3') ||
+      id.includes('llama-4');
     const tagList = [];
-    if (isNew) tagList.push('preview');
-    if (id.includes('gpt-5') || id.includes('2025') || id.includes('4.1')) tagList.push('new');
+    if (isPreview) tagList.push('preview');
+    if (isFresh) tagList.push('new');
+
     rows.push({
       model_id: id,
       name: id,
       latency_ms: null,
-      cost_hint: id.includes('gpt-4') || id.includes('o1') ? '$$$' : '$',
-      capabilities: {},
+      cost_hint:
+        id.includes('gpt-4') || id.includes('o1') || id.includes('gpt-5') ? '$$$' : '$',
+      capabilities,
       tags: tagList,
-      notes: isNew ? 'Preview / check provider' : null,
+      notes: isPreview ? 'Preview / check provider' : null,
       raw: m,
     });
   }
   rows.sort((a, b) => a.model_id.localeCompare(b.model_id));
   return rows;
+}
+
+async function fetchOpenAIModels() {
+  return fetchOpenAICompatibleModels({
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: process.env.OPENAI_API_KEY,
+    providerTag: 'OpenAI',
+  });
+}
+
+async function fetchGroqModels() {
+  return fetchOpenAICompatibleModels({
+    baseUrl: 'https://api.groq.com/openai/v1',
+    apiKey: process.env.GROQ_API_KEY,
+    providerTag: 'Groq',
+  });
 }
 
 async function fetchAnthropicModels() {
@@ -455,11 +496,13 @@ async function fetchElevenLabsConvaiLlms() {
 
 async function syncModelsLLM() {
   const openai = await fetchOpenAIModels();
+  const groq = await fetchGroqModels();
   const anthropic = await fetchAnthropicModels();
   const google = await fetchGoogleModels();
   const elevenlabs = await fetchElevenLabsConvaiLlms();
 
   await pg.upsertModels('openai', openai);
+  await pg.upsertModels('groq', groq);
   await pg.upsertModels('anthropic', anthropic);
   await pg.upsertModels('google', google);
   await pg.upsertModels('elevenlabs', elevenlabs);
@@ -467,6 +510,7 @@ async function syncModelsLLM() {
   const c = readCache();
   c.modelsByProvider = {
     openai,
+    groq,
     anthropic,
     google,
     elevenlabs,
@@ -479,6 +523,7 @@ async function syncModelsLLM() {
     ok: true,
     counts: {
       openai: openai.length,
+      groq: groq.length,
       anthropic: anthropic.length,
       google: google.length,
       elevenlabs: elevenlabs.length,
@@ -523,5 +568,9 @@ module.exports = {
   syncAll,
   deriveLanguagesFromVoices,
   filterList,
+  fetchOpenAIModels,
+  fetchGroqModels,
+  fetchAnthropicModels,
+  fetchGoogleModels,
   fetchElevenLabsConvaiLlms,
 };

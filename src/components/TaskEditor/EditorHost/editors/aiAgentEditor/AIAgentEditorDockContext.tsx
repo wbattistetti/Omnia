@@ -53,6 +53,8 @@ export interface AIAgentEditorDockContextValue {
   useCaseBundleGenerationBusy: boolean;
   /** Propagazione stile frasi esempio (LLM); separato da bundle. */
   useCasePhraseStylePropagationBusy: boolean;
+  /** Avanzamento batch (un use case per chiamata); null se non in corso. */
+  useCasePhraseStyleBatchProgress: { current: number; total: number } | null;
   useCaseComposerError: string | null;
   onClearUseCaseComposerError: () => void;
   onGenerateUseCaseBundle: () => void | Promise<void>;
@@ -160,6 +162,61 @@ export interface AIAgentEditorDockContextValue {
   /** Ordine tra fratelli: dialogo (default) vs alfabetico (toolbar AB). */
   useCaseSiblingSortMode: UseCaseSiblingSortMode;
   setUseCaseSiblingSortMode: (mode: UseCaseSiblingSortMode) => void;
+
+  /**
+   * Passo 2 wizard — Crea/aggiunge una conversazione simulata mescolando use case (LLM).
+   * I parametri arrivano dai pulsanti contestuali del pannello DX (pollice su / pollice giù / lampadina):
+   *   - pollice su → { outcome: 'positive', allowSuggestedUseCases: false }
+   *   - pollice giù → { outcome: 'negative', allowSuggestedUseCases: false }
+   *   - lampadina → { outcome: 'positive', allowSuggestedUseCases: true }
+   */
+  onAssembleConversation: (params: {
+    outcome: 'positive' | 'negative';
+    allowSuggestedUseCases: boolean;
+  }) => void | Promise<void>;
+  assembleConversationBusy: boolean;
+  /**
+   * Passo 2 wizard — Proofread (solo ortografia/punteggiatura) delle bubble agente modificate
+   * manualmente nella conversazione attiva. Sostituisce la vecchia funzione «omogeneizza» (più ampia).
+   */
+  onProofreadConversationAgentTurns: () => void | Promise<void>;
+  proofreadConversationBusy: boolean;
+  /**
+   * Passo 2 wizard — Promuove uno use case emergente (suggestion `pending`) a use case reale
+   * nel catalogo. Crea il nuovo use case con la frase agente della bubble come canonical e collega
+   * la bubble al nuovo id.
+   */
+  onPromoteSuggestionToCatalog: (conversationId: string, turnId: string) => void | Promise<void>;
+  /** Passo 2 wizard — Scarta uno use case emergente (suggestion → `rejected`). */
+  onRejectSuggestion: (conversationId: string, turnId: string) => void;
+  /**
+   * Passo 3 wizard — Tokenizza con l'AI le frasi canoniche degli use case correnti. A successo,
+   * imposta `assistant_example_tokenized` su ciascun use case e cattura la baseline AI.
+   */
+  onTokenizeUseCases: () => void | Promise<void>;
+  tokenizeUseCasesBusy: boolean;
+  /** Mappa derivata `useCaseId → assistant_example_tokenized` per le bubble Passo 2 (anteprima). */
+  tokenizedByUseCaseId: Readonly<Record<string, string>>;
+  /**
+   * Pref globale «LLM manual handoff»: i pulsanti AI del wizard aprono il modale handoff
+   * (copia prompt verso motore esterno + incolla risposta JSON) invece di chiamare l'LLM
+   * interno. La pref vive in `localStorage` per istanza utente.
+   */
+  externalLLMHandoffEnabled: boolean;
+  onToggleExternalLLMHandoff: () => void;
+  /** «Pulisci tutto»: azzera solo l'output del wizard (use case, conversazioni, JSON, baselines). */
+  onClearAllWizardOutput: () => void;
+  /** Reset contestuale Passo 2: elimina solo conversazioni e baseline conversazioni. */
+  onClearWizardConversations: () => void;
+  /** Reset contestuale Passo 3: elimina solo tokenizzazione e baseline tokenizzazione. */
+  onClearWizardTokenization: () => void;
+  /**
+   * Overlay confinato al pannello use case del wizard (rettangolo del pannello, non viewport).
+   * Tipicamente il modale «LLM manual handoff». Il caller costruisce il ReactNode con i
+   * callback corretti; {@link ViewSkaGenerator} lo renderizza come `absolute inset-0` dentro
+   * il proprio root (che è `relative`), così il backdrop oscura solo il wizard.
+   */
+  wizardOverlay?: React.ReactNode;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

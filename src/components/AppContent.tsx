@@ -9,6 +9,7 @@ import Sidebar from './Sidebar/Sidebar';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
 import { useAIProvider } from '../context/AIProviderContext';
+import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
 import { useProjectTranslations } from '../context/ProjectTranslationsContext';
 import { Node, Edge } from 'reactflow';
 import { FlowNode, EdgeData } from './Flowchart/types/flowTypes';
@@ -1111,6 +1112,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [isGeneratingUseCaseDialogue, setIsGeneratingUseCaseDialogue] = useState(false);
   const [useCaseGenerationError, setUseCaseGenerationError] = useState<string | null>(null);
   const { provider: aiProvider, model: aiModel } = useAIProvider();
+  const { busyLabel: aiBusyLabel } = useAiBusyLabel();
 
   React.useEffect(() => {
     debuggerUseCasesRef.current = useCases;
@@ -2122,7 +2124,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                             globalStyleId={useCaseGlobalStyleId}
                             onGlobalStyleIdChange={setUseCaseGlobalStyleId}
                             isGenerating={isGeneratingUseCaseDialogue}
-                            generationMessage="Sto creando il dialogo per il nuovo use case…"
+                            generationMessage={aiBusyLabel('Sto creando il dialogo per il nuovo use case')}
                             generationError={useCaseGenerationError}
                             onDismissGenerationError={() => setUseCaseGenerationError(null)}
                             onClosePanel={() => setShowUseCasePanel(false)}

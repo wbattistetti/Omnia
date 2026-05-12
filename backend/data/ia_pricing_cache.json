@@ -1,0 +1,1675 @@
+{
+  "items": [
+    {
+      "providerId": "google",
+      "modelId": "gemini-3.1-flash-lite",
+      "inputUsdPer1M": 0.25,
+      "outputUsdPer1M": 1.5,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-3.1-flash-lite"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-chat-latest",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 30,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-chat-latest"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.5-pro",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 180,
+      "contextLength": 1050000,
+      "rawId": "openai/gpt-5.5-pro"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.5",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 30,
+      "contextLength": 1050000,
+      "rawId": "openai/gpt-5.5"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.4-image-2",
+      "inputUsdPer1M": 8,
+      "outputUsdPer1M": 15,
+      "contextLength": 272000,
+      "rawId": "openai/gpt-5.4-image-2"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.7",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 25,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-opus-4.7"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.6-fast",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 150,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-opus-4.6-fast"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemma-4-26b-a4b-it:free",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 262144,
+      "rawId": "google/gemma-4-26b-a4b-it:free"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemma-4-26b-a4b-it",
+      "inputUsdPer1M": 0.06,
+      "outputUsdPer1M": 0.33,
+      "contextLength": 262144,
+      "rawId": "google/gemma-4-26b-a4b-it"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemma-4-31b-it:free",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 262144,
+      "rawId": "google/gemma-4-31b-it:free"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemma-4-31b-it",
+      "inputUsdPer1M": 0.12,
+      "outputUsdPer1M": 0.37,
+      "contextLength": 262144,
+      "rawId": "google/gemma-4-31b-it"
+    },
+    {
+      "providerId": "google",
+      "modelId": "lyria-3-pro-preview",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 1048576,
+      "rawId": "google/lyria-3-pro-preview"
+    },
+    {
+      "providerId": "google",
+      "modelId": "lyria-3-clip-preview",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 1048576,
+      "rawId": "google/lyria-3-clip-preview"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.4-nano",
+      "inputUsdPer1M": 0.19999999999999998,
+      "outputUsdPer1M": 1.25,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.4-nano"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.4-mini",
+      "inputUsdPer1M": 0.75,
+      "outputUsdPer1M": 4.5,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.4-mini"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.4-pro",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 180,
+      "contextLength": 1050000,
+      "rawId": "openai/gpt-5.4-pro"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.4",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 15,
+      "contextLength": 1050000,
+      "rawId": "openai/gpt-5.4"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.3-chat",
+      "inputUsdPer1M": 1.75,
+      "outputUsdPer1M": 14,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-5.3-chat"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-3.1-flash-lite-preview",
+      "inputUsdPer1M": 0.25,
+      "outputUsdPer1M": 1.5,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-3.1-flash-lite-preview"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-3.1-flash-image-preview",
+      "inputUsdPer1M": 0.5,
+      "outputUsdPer1M": 3,
+      "contextLength": 65536,
+      "rawId": "google/gemini-3.1-flash-image-preview"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-3.1-pro-preview-customtools",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 12,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-3.1-pro-preview-customtools"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.3-codex",
+      "inputUsdPer1M": 1.75,
+      "outputUsdPer1M": 14,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.3-codex"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-3.1-pro-preview",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 12,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-3.1-pro-preview"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-4.6",
+      "inputUsdPer1M": 3,
+      "outputUsdPer1M": 15,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-sonnet-4.6"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.6",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 25,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-opus-4.6"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-audio",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-audio"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-audio-mini",
+      "inputUsdPer1M": 0.6,
+      "outputUsdPer1M": 2.4,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-audio-mini"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.2-codex",
+      "inputUsdPer1M": 1.75,
+      "outputUsdPer1M": 14,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.2-codex"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-3-flash-preview",
+      "inputUsdPer1M": 0.5,
+      "outputUsdPer1M": 3,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-3-flash-preview"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.2-chat",
+      "inputUsdPer1M": 1.75,
+      "outputUsdPer1M": 14,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-5.2-chat"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.2-pro",
+      "inputUsdPer1M": 21,
+      "outputUsdPer1M": 168,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.2-pro"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.2",
+      "inputUsdPer1M": 1.75,
+      "outputUsdPer1M": 14,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.2"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.1-codex-max",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.1-codex-max"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.5",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 25,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-opus-4.5"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-3-pro-image-preview",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 12,
+      "contextLength": 65536,
+      "rawId": "google/gemini-3-pro-image-preview"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.1",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.1"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.1-chat",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-5.1-chat"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.1-codex",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.1-codex"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.1-codex-mini",
+      "inputUsdPer1M": 0.25,
+      "outputUsdPer1M": 2,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.1-codex-mini"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-oss-safeguard-20b",
+      "inputUsdPer1M": 0.075,
+      "outputUsdPer1M": 0.3,
+      "contextLength": 131072,
+      "rawId": "openai/gpt-oss-safeguard-20b"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5-image-mini",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 2,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-image-mini"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-haiku-4.5",
+      "inputUsdPer1M": 1,
+      "outputUsdPer1M": 5,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-haiku-4.5"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5-image",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-image"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o3-deep-research",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 40,
+      "contextLength": 200000,
+      "rawId": "openai/o3-deep-research"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o4-mini-deep-research",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 8,
+      "contextLength": 200000,
+      "rawId": "openai/o4-mini-deep-research"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.5-flash-image",
+      "inputUsdPer1M": 0.3,
+      "outputUsdPer1M": 2.5,
+      "contextLength": 32768,
+      "rawId": "google/gemini-2.5-flash-image"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5-pro",
+      "inputUsdPer1M": 15,
+      "outputUsdPer1M": 120,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-pro"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-4.5",
+      "inputUsdPer1M": 3,
+      "outputUsdPer1M": 15,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-sonnet-4.5"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.5-flash-lite-preview-09-2025",
+      "inputUsdPer1M": 0.09999999999999999,
+      "outputUsdPer1M": 0.39999999999999997,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-flash-lite-preview-09-2025"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5-codex",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-codex"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-audio-preview",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-audio-preview"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5-chat",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-5-chat"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "inputUsdPer1M": 0.25,
+      "outputUsdPer1M": 2,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-mini"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5-nano",
+      "inputUsdPer1M": 0.049999999999999996,
+      "outputUsdPer1M": 0.39999999999999997,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-nano"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-oss-120b:free",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 131072,
+      "rawId": "openai/gpt-oss-120b:free"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-oss-120b",
+      "inputUsdPer1M": 0.039,
+      "outputUsdPer1M": 0.18,
+      "contextLength": 131072,
+      "rawId": "openai/gpt-oss-120b"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-oss-20b:free",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 131072,
+      "rawId": "openai/gpt-oss-20b:free"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-oss-20b",
+      "inputUsdPer1M": 0.03,
+      "outputUsdPer1M": 0.14,
+      "contextLength": 131072,
+      "rawId": "openai/gpt-oss-20b"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.1",
+      "inputUsdPer1M": 15,
+      "outputUsdPer1M": 75,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-opus-4.1"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.5-flash-lite",
+      "inputUsdPer1M": 0.09999999999999999,
+      "outputUsdPer1M": 0.39999999999999997,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-flash-lite"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.5-flash",
+      "inputUsdPer1M": 0.3,
+      "outputUsdPer1M": 2.5,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-flash"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.5-pro",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-pro"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o3-pro",
+      "inputUsdPer1M": 20,
+      "outputUsdPer1M": 80,
+      "contextLength": 200000,
+      "rawId": "openai/o3-pro"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.5-pro-preview",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-pro-preview"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4",
+      "inputUsdPer1M": 15,
+      "outputUsdPer1M": 75,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-opus-4"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-4",
+      "inputUsdPer1M": 3,
+      "outputUsdPer1M": 15,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-sonnet-4"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemma-3n-e4b-it",
+      "inputUsdPer1M": 0.06,
+      "outputUsdPer1M": 0.12,
+      "contextLength": 32768,
+      "rawId": "google/gemma-3n-e4b-it"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.5-pro-preview-05-06",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-pro-preview-05-06"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o4-mini-high",
+      "inputUsdPer1M": 1.1,
+      "outputUsdPer1M": 4.4,
+      "contextLength": 200000,
+      "rawId": "openai/o4-mini-high"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o3",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 8,
+      "contextLength": 200000,
+      "rawId": "openai/o3"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o4-mini",
+      "inputUsdPer1M": 1.1,
+      "outputUsdPer1M": 4.4,
+      "contextLength": 200000,
+      "rawId": "openai/o4-mini"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4.1",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 8,
+      "contextLength": 1047576,
+      "rawId": "openai/gpt-4.1"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4.1-mini",
+      "inputUsdPer1M": 0.39999999999999997,
+      "outputUsdPer1M": 1.5999999999999999,
+      "contextLength": 1047576,
+      "rawId": "openai/gpt-4.1-mini"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4.1-nano",
+      "inputUsdPer1M": 0.09999999999999999,
+      "outputUsdPer1M": 0.39999999999999997,
+      "contextLength": 1047576,
+      "rawId": "openai/gpt-4.1-nano"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o1-pro",
+      "inputUsdPer1M": 150,
+      "outputUsdPer1M": 600,
+      "contextLength": 200000,
+      "rawId": "openai/o1-pro"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemma-3-4b-it",
+      "inputUsdPer1M": 0.04,
+      "outputUsdPer1M": 0.08,
+      "contextLength": 131072,
+      "rawId": "google/gemma-3-4b-it"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemma-3-12b-it",
+      "inputUsdPer1M": 0.04,
+      "outputUsdPer1M": 0.13,
+      "contextLength": 131072,
+      "rawId": "google/gemma-3-12b-it"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-mini-search-preview",
+      "inputUsdPer1M": 0.15,
+      "outputUsdPer1M": 0.6,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-mini-search-preview"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-search-preview",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-search-preview"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemma-3-27b-it",
+      "inputUsdPer1M": 0.08,
+      "outputUsdPer1M": 0.16,
+      "contextLength": 131072,
+      "rawId": "google/gemma-3-27b-it"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.0-flash-lite-001",
+      "inputUsdPer1M": 0.075,
+      "outputUsdPer1M": 0.3,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.0-flash-lite-001"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o3-mini-high",
+      "inputUsdPer1M": 1.1,
+      "outputUsdPer1M": 4.4,
+      "contextLength": 200000,
+      "rawId": "openai/o3-mini-high"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.0-flash-001",
+      "inputUsdPer1M": 0.09999999999999999,
+      "outputUsdPer1M": 0.39999999999999997,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.0-flash-001"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o3-mini",
+      "inputUsdPer1M": 1.1,
+      "outputUsdPer1M": 4.4,
+      "contextLength": 200000,
+      "rawId": "openai/o3-mini"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o1",
+      "inputUsdPer1M": 15,
+      "outputUsdPer1M": 60,
+      "contextLength": 200000,
+      "rawId": "openai/o1"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-2024-11-20",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-2024-11-20"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-3.5-haiku",
+      "inputUsdPer1M": 0.7999999999999999,
+      "outputUsdPer1M": 4,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-3.5-haiku"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-2024-08-06",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-2024-08-06"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-mini-2024-07-18",
+      "inputUsdPer1M": 0.15,
+      "outputUsdPer1M": 0.6,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-mini-2024-07-18"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-mini",
+      "inputUsdPer1M": 0.15,
+      "outputUsdPer1M": 0.6,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-mini"
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemma-2-27b-it",
+      "inputUsdPer1M": 0.65,
+      "outputUsdPer1M": 0.65,
+      "contextLength": 8192,
+      "rawId": "google/gemma-2-27b-it"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-2024-05-13",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 15,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-2024-05-13"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4-turbo",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 30,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4-turbo"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-3-haiku",
+      "inputUsdPer1M": 0.25,
+      "outputUsdPer1M": 1.25,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-3-haiku"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo-0613",
+      "inputUsdPer1M": 1,
+      "outputUsdPer1M": 2,
+      "contextLength": 4095,
+      "rawId": "openai/gpt-3.5-turbo-0613"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4-turbo-preview",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 30,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4-turbo-preview"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4-1106-preview",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 30,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4-1106-preview"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo-instruct",
+      "inputUsdPer1M": 1.5,
+      "outputUsdPer1M": 2,
+      "contextLength": 4095,
+      "rawId": "openai/gpt-3.5-turbo-instruct"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo-16k",
+      "inputUsdPer1M": 3,
+      "outputUsdPer1M": 4,
+      "contextLength": 16385,
+      "rawId": "openai/gpt-3.5-turbo-16k"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 60,
+      "contextLength": 8191,
+      "rawId": "openai/gpt-4"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo",
+      "inputUsdPer1M": 0.5,
+      "outputUsdPer1M": 1.5,
+      "contextLength": 16385,
+      "rawId": "openai/gpt-3.5-turbo"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4-0314",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 60,
+      "contextLength": 8191,
+      "rawId": "openai/gpt-4-0314"
+    }
+  ],
+  "byKey": {
+    "google::gemini-3.1-flash-lite": {
+      "providerId": "google",
+      "modelId": "gemini-3.1-flash-lite",
+      "inputUsdPer1M": 0.25,
+      "outputUsdPer1M": 1.5,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-3.1-flash-lite"
+    },
+    "openai::gpt-chat-latest": {
+      "providerId": "openai",
+      "modelId": "gpt-chat-latest",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 30,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-chat-latest"
+    },
+    "openai::gpt-5.5-pro": {
+      "providerId": "openai",
+      "modelId": "gpt-5.5-pro",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 180,
+      "contextLength": 1050000,
+      "rawId": "openai/gpt-5.5-pro"
+    },
+    "openai::gpt-5.5": {
+      "providerId": "openai",
+      "modelId": "gpt-5.5",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 30,
+      "contextLength": 1050000,
+      "rawId": "openai/gpt-5.5"
+    },
+    "openai::gpt-5.4-image-2": {
+      "providerId": "openai",
+      "modelId": "gpt-5.4-image-2",
+      "inputUsdPer1M": 8,
+      "outputUsdPer1M": 15,
+      "contextLength": 272000,
+      "rawId": "openai/gpt-5.4-image-2"
+    },
+    "anthropic::claude-opus-4.7": {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.7",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 25,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-opus-4.7"
+    },
+    "anthropic::claude-opus-4.6-fast": {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.6-fast",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 150,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-opus-4.6-fast"
+    },
+    "google::gemma-4-26b-a4b-it:free": {
+      "providerId": "google",
+      "modelId": "gemma-4-26b-a4b-it:free",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 262144,
+      "rawId": "google/gemma-4-26b-a4b-it:free"
+    },
+    "google::gemma-4-26b-a4b-it": {
+      "providerId": "google",
+      "modelId": "gemma-4-26b-a4b-it",
+      "inputUsdPer1M": 0.06,
+      "outputUsdPer1M": 0.33,
+      "contextLength": 262144,
+      "rawId": "google/gemma-4-26b-a4b-it"
+    },
+    "google::gemma-4-31b-it:free": {
+      "providerId": "google",
+      "modelId": "gemma-4-31b-it:free",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 262144,
+      "rawId": "google/gemma-4-31b-it:free"
+    },
+    "google::gemma-4-31b-it": {
+      "providerId": "google",
+      "modelId": "gemma-4-31b-it",
+      "inputUsdPer1M": 0.12,
+      "outputUsdPer1M": 0.37,
+      "contextLength": 262144,
+      "rawId": "google/gemma-4-31b-it"
+    },
+    "google::lyria-3-pro-preview": {
+      "providerId": "google",
+      "modelId": "lyria-3-pro-preview",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 1048576,
+      "rawId": "google/lyria-3-pro-preview"
+    },
+    "google::lyria-3-clip-preview": {
+      "providerId": "google",
+      "modelId": "lyria-3-clip-preview",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 1048576,
+      "rawId": "google/lyria-3-clip-preview"
+    },
+    "openai::gpt-5.4-nano": {
+      "providerId": "openai",
+      "modelId": "gpt-5.4-nano",
+      "inputUsdPer1M": 0.19999999999999998,
+      "outputUsdPer1M": 1.25,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.4-nano"
+    },
+    "openai::gpt-5.4-mini": {
+      "providerId": "openai",
+      "modelId": "gpt-5.4-mini",
+      "inputUsdPer1M": 0.75,
+      "outputUsdPer1M": 4.5,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.4-mini"
+    },
+    "openai::gpt-5.4-pro": {
+      "providerId": "openai",
+      "modelId": "gpt-5.4-pro",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 180,
+      "contextLength": 1050000,
+      "rawId": "openai/gpt-5.4-pro"
+    },
+    "openai::gpt-5.4": {
+      "providerId": "openai",
+      "modelId": "gpt-5.4",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 15,
+      "contextLength": 1050000,
+      "rawId": "openai/gpt-5.4"
+    },
+    "openai::gpt-5.3-chat": {
+      "providerId": "openai",
+      "modelId": "gpt-5.3-chat",
+      "inputUsdPer1M": 1.75,
+      "outputUsdPer1M": 14,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-5.3-chat"
+    },
+    "google::gemini-3.1-flash-lite-preview": {
+      "providerId": "google",
+      "modelId": "gemini-3.1-flash-lite-preview",
+      "inputUsdPer1M": 0.25,
+      "outputUsdPer1M": 1.5,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-3.1-flash-lite-preview"
+    },
+    "google::gemini-3.1-flash-image-preview": {
+      "providerId": "google",
+      "modelId": "gemini-3.1-flash-image-preview",
+      "inputUsdPer1M": 0.5,
+      "outputUsdPer1M": 3,
+      "contextLength": 65536,
+      "rawId": "google/gemini-3.1-flash-image-preview"
+    },
+    "google::gemini-3.1-pro-preview-customtools": {
+      "providerId": "google",
+      "modelId": "gemini-3.1-pro-preview-customtools",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 12,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-3.1-pro-preview-customtools"
+    },
+    "openai::gpt-5.3-codex": {
+      "providerId": "openai",
+      "modelId": "gpt-5.3-codex",
+      "inputUsdPer1M": 1.75,
+      "outputUsdPer1M": 14,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.3-codex"
+    },
+    "google::gemini-3.1-pro-preview": {
+      "providerId": "google",
+      "modelId": "gemini-3.1-pro-preview",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 12,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-3.1-pro-preview"
+    },
+    "anthropic::claude-sonnet-4.6": {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-4.6",
+      "inputUsdPer1M": 3,
+      "outputUsdPer1M": 15,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-sonnet-4.6"
+    },
+    "anthropic::claude-opus-4.6": {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.6",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 25,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-opus-4.6"
+    },
+    "openai::gpt-audio": {
+      "providerId": "openai",
+      "modelId": "gpt-audio",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-audio"
+    },
+    "openai::gpt-audio-mini": {
+      "providerId": "openai",
+      "modelId": "gpt-audio-mini",
+      "inputUsdPer1M": 0.6,
+      "outputUsdPer1M": 2.4,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-audio-mini"
+    },
+    "openai::gpt-5.2-codex": {
+      "providerId": "openai",
+      "modelId": "gpt-5.2-codex",
+      "inputUsdPer1M": 1.75,
+      "outputUsdPer1M": 14,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.2-codex"
+    },
+    "google::gemini-3-flash-preview": {
+      "providerId": "google",
+      "modelId": "gemini-3-flash-preview",
+      "inputUsdPer1M": 0.5,
+      "outputUsdPer1M": 3,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-3-flash-preview"
+    },
+    "openai::gpt-5.2-chat": {
+      "providerId": "openai",
+      "modelId": "gpt-5.2-chat",
+      "inputUsdPer1M": 1.75,
+      "outputUsdPer1M": 14,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-5.2-chat"
+    },
+    "openai::gpt-5.2-pro": {
+      "providerId": "openai",
+      "modelId": "gpt-5.2-pro",
+      "inputUsdPer1M": 21,
+      "outputUsdPer1M": 168,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.2-pro"
+    },
+    "openai::gpt-5.2": {
+      "providerId": "openai",
+      "modelId": "gpt-5.2",
+      "inputUsdPer1M": 1.75,
+      "outputUsdPer1M": 14,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.2"
+    },
+    "openai::gpt-5.1-codex-max": {
+      "providerId": "openai",
+      "modelId": "gpt-5.1-codex-max",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.1-codex-max"
+    },
+    "anthropic::claude-opus-4.5": {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.5",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 25,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-opus-4.5"
+    },
+    "google::gemini-3-pro-image-preview": {
+      "providerId": "google",
+      "modelId": "gemini-3-pro-image-preview",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 12,
+      "contextLength": 65536,
+      "rawId": "google/gemini-3-pro-image-preview"
+    },
+    "openai::gpt-5.1": {
+      "providerId": "openai",
+      "modelId": "gpt-5.1",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.1"
+    },
+    "openai::gpt-5.1-chat": {
+      "providerId": "openai",
+      "modelId": "gpt-5.1-chat",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-5.1-chat"
+    },
+    "openai::gpt-5.1-codex": {
+      "providerId": "openai",
+      "modelId": "gpt-5.1-codex",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.1-codex"
+    },
+    "openai::gpt-5.1-codex-mini": {
+      "providerId": "openai",
+      "modelId": "gpt-5.1-codex-mini",
+      "inputUsdPer1M": 0.25,
+      "outputUsdPer1M": 2,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5.1-codex-mini"
+    },
+    "openai::gpt-oss-safeguard-20b": {
+      "providerId": "openai",
+      "modelId": "gpt-oss-safeguard-20b",
+      "inputUsdPer1M": 0.075,
+      "outputUsdPer1M": 0.3,
+      "contextLength": 131072,
+      "rawId": "openai/gpt-oss-safeguard-20b"
+    },
+    "openai::gpt-5-image-mini": {
+      "providerId": "openai",
+      "modelId": "gpt-5-image-mini",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 2,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-image-mini"
+    },
+    "anthropic::claude-haiku-4.5": {
+      "providerId": "anthropic",
+      "modelId": "claude-haiku-4.5",
+      "inputUsdPer1M": 1,
+      "outputUsdPer1M": 5,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-haiku-4.5"
+    },
+    "openai::gpt-5-image": {
+      "providerId": "openai",
+      "modelId": "gpt-5-image",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-image"
+    },
+    "openai::o3-deep-research": {
+      "providerId": "openai",
+      "modelId": "o3-deep-research",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 40,
+      "contextLength": 200000,
+      "rawId": "openai/o3-deep-research"
+    },
+    "openai::o4-mini-deep-research": {
+      "providerId": "openai",
+      "modelId": "o4-mini-deep-research",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 8,
+      "contextLength": 200000,
+      "rawId": "openai/o4-mini-deep-research"
+    },
+    "google::gemini-2.5-flash-image": {
+      "providerId": "google",
+      "modelId": "gemini-2.5-flash-image",
+      "inputUsdPer1M": 0.3,
+      "outputUsdPer1M": 2.5,
+      "contextLength": 32768,
+      "rawId": "google/gemini-2.5-flash-image"
+    },
+    "openai::gpt-5-pro": {
+      "providerId": "openai",
+      "modelId": "gpt-5-pro",
+      "inputUsdPer1M": 15,
+      "outputUsdPer1M": 120,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-pro"
+    },
+    "anthropic::claude-sonnet-4.5": {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-4.5",
+      "inputUsdPer1M": 3,
+      "outputUsdPer1M": 15,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-sonnet-4.5"
+    },
+    "google::gemini-2.5-flash-lite-preview-09-2025": {
+      "providerId": "google",
+      "modelId": "gemini-2.5-flash-lite-preview-09-2025",
+      "inputUsdPer1M": 0.09999999999999999,
+      "outputUsdPer1M": 0.39999999999999997,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-flash-lite-preview-09-2025"
+    },
+    "openai::gpt-5-codex": {
+      "providerId": "openai",
+      "modelId": "gpt-5-codex",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-codex"
+    },
+    "openai::gpt-4o-audio-preview": {
+      "providerId": "openai",
+      "modelId": "gpt-4o-audio-preview",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-audio-preview"
+    },
+    "openai::gpt-5-chat": {
+      "providerId": "openai",
+      "modelId": "gpt-5-chat",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-5-chat"
+    },
+    "openai::gpt-5": {
+      "providerId": "openai",
+      "modelId": "gpt-5",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5"
+    },
+    "openai::gpt-5-mini": {
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "inputUsdPer1M": 0.25,
+      "outputUsdPer1M": 2,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-mini"
+    },
+    "openai::gpt-5-nano": {
+      "providerId": "openai",
+      "modelId": "gpt-5-nano",
+      "inputUsdPer1M": 0.049999999999999996,
+      "outputUsdPer1M": 0.39999999999999997,
+      "contextLength": 400000,
+      "rawId": "openai/gpt-5-nano"
+    },
+    "openai::gpt-oss-120b:free": {
+      "providerId": "openai",
+      "modelId": "gpt-oss-120b:free",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 131072,
+      "rawId": "openai/gpt-oss-120b:free"
+    },
+    "openai::gpt-oss-120b": {
+      "providerId": "openai",
+      "modelId": "gpt-oss-120b",
+      "inputUsdPer1M": 0.039,
+      "outputUsdPer1M": 0.18,
+      "contextLength": 131072,
+      "rawId": "openai/gpt-oss-120b"
+    },
+    "openai::gpt-oss-20b:free": {
+      "providerId": "openai",
+      "modelId": "gpt-oss-20b:free",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "contextLength": 131072,
+      "rawId": "openai/gpt-oss-20b:free"
+    },
+    "openai::gpt-oss-20b": {
+      "providerId": "openai",
+      "modelId": "gpt-oss-20b",
+      "inputUsdPer1M": 0.03,
+      "outputUsdPer1M": 0.14,
+      "contextLength": 131072,
+      "rawId": "openai/gpt-oss-20b"
+    },
+    "anthropic::claude-opus-4.1": {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.1",
+      "inputUsdPer1M": 15,
+      "outputUsdPer1M": 75,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-opus-4.1"
+    },
+    "google::gemini-2.5-flash-lite": {
+      "providerId": "google",
+      "modelId": "gemini-2.5-flash-lite",
+      "inputUsdPer1M": 0.09999999999999999,
+      "outputUsdPer1M": 0.39999999999999997,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-flash-lite"
+    },
+    "google::gemini-2.5-flash": {
+      "providerId": "google",
+      "modelId": "gemini-2.5-flash",
+      "inputUsdPer1M": 0.3,
+      "outputUsdPer1M": 2.5,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-flash"
+    },
+    "google::gemini-2.5-pro": {
+      "providerId": "google",
+      "modelId": "gemini-2.5-pro",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-pro"
+    },
+    "openai::o3-pro": {
+      "providerId": "openai",
+      "modelId": "o3-pro",
+      "inputUsdPer1M": 20,
+      "outputUsdPer1M": 80,
+      "contextLength": 200000,
+      "rawId": "openai/o3-pro"
+    },
+    "google::gemini-2.5-pro-preview": {
+      "providerId": "google",
+      "modelId": "gemini-2.5-pro-preview",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-pro-preview"
+    },
+    "anthropic::claude-opus-4": {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4",
+      "inputUsdPer1M": 15,
+      "outputUsdPer1M": 75,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-opus-4"
+    },
+    "anthropic::claude-sonnet-4": {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-4",
+      "inputUsdPer1M": 3,
+      "outputUsdPer1M": 15,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-sonnet-4"
+    },
+    "google::gemma-3n-e4b-it": {
+      "providerId": "google",
+      "modelId": "gemma-3n-e4b-it",
+      "inputUsdPer1M": 0.06,
+      "outputUsdPer1M": 0.12,
+      "contextLength": 32768,
+      "rawId": "google/gemma-3n-e4b-it"
+    },
+    "google::gemini-2.5-pro-preview-05-06": {
+      "providerId": "google",
+      "modelId": "gemini-2.5-pro-preview-05-06",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 10,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.5-pro-preview-05-06"
+    },
+    "openai::o4-mini-high": {
+      "providerId": "openai",
+      "modelId": "o4-mini-high",
+      "inputUsdPer1M": 1.1,
+      "outputUsdPer1M": 4.4,
+      "contextLength": 200000,
+      "rawId": "openai/o4-mini-high"
+    },
+    "openai::o3": {
+      "providerId": "openai",
+      "modelId": "o3",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 8,
+      "contextLength": 200000,
+      "rawId": "openai/o3"
+    },
+    "openai::o4-mini": {
+      "providerId": "openai",
+      "modelId": "o4-mini",
+      "inputUsdPer1M": 1.1,
+      "outputUsdPer1M": 4.4,
+      "contextLength": 200000,
+      "rawId": "openai/o4-mini"
+    },
+    "openai::gpt-4.1": {
+      "providerId": "openai",
+      "modelId": "gpt-4.1",
+      "inputUsdPer1M": 2,
+      "outputUsdPer1M": 8,
+      "contextLength": 1047576,
+      "rawId": "openai/gpt-4.1"
+    },
+    "openai::gpt-4.1-mini": {
+      "providerId": "openai",
+      "modelId": "gpt-4.1-mini",
+      "inputUsdPer1M": 0.39999999999999997,
+      "outputUsdPer1M": 1.5999999999999999,
+      "contextLength": 1047576,
+      "rawId": "openai/gpt-4.1-mini"
+    },
+    "openai::gpt-4.1-nano": {
+      "providerId": "openai",
+      "modelId": "gpt-4.1-nano",
+      "inputUsdPer1M": 0.09999999999999999,
+      "outputUsdPer1M": 0.39999999999999997,
+      "contextLength": 1047576,
+      "rawId": "openai/gpt-4.1-nano"
+    },
+    "openai::o1-pro": {
+      "providerId": "openai",
+      "modelId": "o1-pro",
+      "inputUsdPer1M": 150,
+      "outputUsdPer1M": 600,
+      "contextLength": 200000,
+      "rawId": "openai/o1-pro"
+    },
+    "google::gemma-3-4b-it": {
+      "providerId": "google",
+      "modelId": "gemma-3-4b-it",
+      "inputUsdPer1M": 0.04,
+      "outputUsdPer1M": 0.08,
+      "contextLength": 131072,
+      "rawId": "google/gemma-3-4b-it"
+    },
+    "google::gemma-3-12b-it": {
+      "providerId": "google",
+      "modelId": "gemma-3-12b-it",
+      "inputUsdPer1M": 0.04,
+      "outputUsdPer1M": 0.13,
+      "contextLength": 131072,
+      "rawId": "google/gemma-3-12b-it"
+    },
+    "openai::gpt-4o-mini-search-preview": {
+      "providerId": "openai",
+      "modelId": "gpt-4o-mini-search-preview",
+      "inputUsdPer1M": 0.15,
+      "outputUsdPer1M": 0.6,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-mini-search-preview"
+    },
+    "openai::gpt-4o-search-preview": {
+      "providerId": "openai",
+      "modelId": "gpt-4o-search-preview",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-search-preview"
+    },
+    "google::gemma-3-27b-it": {
+      "providerId": "google",
+      "modelId": "gemma-3-27b-it",
+      "inputUsdPer1M": 0.08,
+      "outputUsdPer1M": 0.16,
+      "contextLength": 131072,
+      "rawId": "google/gemma-3-27b-it"
+    },
+    "google::gemini-2.0-flash-lite-001": {
+      "providerId": "google",
+      "modelId": "gemini-2.0-flash-lite-001",
+      "inputUsdPer1M": 0.075,
+      "outputUsdPer1M": 0.3,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.0-flash-lite-001"
+    },
+    "openai::o3-mini-high": {
+      "providerId": "openai",
+      "modelId": "o3-mini-high",
+      "inputUsdPer1M": 1.1,
+      "outputUsdPer1M": 4.4,
+      "contextLength": 200000,
+      "rawId": "openai/o3-mini-high"
+    },
+    "google::gemini-2.0-flash-001": {
+      "providerId": "google",
+      "modelId": "gemini-2.0-flash-001",
+      "inputUsdPer1M": 0.09999999999999999,
+      "outputUsdPer1M": 0.39999999999999997,
+      "contextLength": 1048576,
+      "rawId": "google/gemini-2.0-flash-001"
+    },
+    "openai::o3-mini": {
+      "providerId": "openai",
+      "modelId": "o3-mini",
+      "inputUsdPer1M": 1.1,
+      "outputUsdPer1M": 4.4,
+      "contextLength": 200000,
+      "rawId": "openai/o3-mini"
+    },
+    "openai::o1": {
+      "providerId": "openai",
+      "modelId": "o1",
+      "inputUsdPer1M": 15,
+      "outputUsdPer1M": 60,
+      "contextLength": 200000,
+      "rawId": "openai/o1"
+    },
+    "openai::gpt-4o-2024-11-20": {
+      "providerId": "openai",
+      "modelId": "gpt-4o-2024-11-20",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-2024-11-20"
+    },
+    "anthropic::claude-3.5-haiku": {
+      "providerId": "anthropic",
+      "modelId": "claude-3.5-haiku",
+      "inputUsdPer1M": 0.7999999999999999,
+      "outputUsdPer1M": 4,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-3.5-haiku"
+    },
+    "openai::gpt-4o-2024-08-06": {
+      "providerId": "openai",
+      "modelId": "gpt-4o-2024-08-06",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-2024-08-06"
+    },
+    "openai::gpt-4o-mini-2024-07-18": {
+      "providerId": "openai",
+      "modelId": "gpt-4o-mini-2024-07-18",
+      "inputUsdPer1M": 0.15,
+      "outputUsdPer1M": 0.6,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-mini-2024-07-18"
+    },
+    "openai::gpt-4o-mini": {
+      "providerId": "openai",
+      "modelId": "gpt-4o-mini",
+      "inputUsdPer1M": 0.15,
+      "outputUsdPer1M": 0.6,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-mini"
+    },
+    "google::gemma-2-27b-it": {
+      "providerId": "google",
+      "modelId": "gemma-2-27b-it",
+      "inputUsdPer1M": 0.65,
+      "outputUsdPer1M": 0.65,
+      "contextLength": 8192,
+      "rawId": "google/gemma-2-27b-it"
+    },
+    "openai::gpt-4o-2024-05-13": {
+      "providerId": "openai",
+      "modelId": "gpt-4o-2024-05-13",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 15,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-2024-05-13"
+    },
+    "openai::gpt-4o": {
+      "providerId": "openai",
+      "modelId": "gpt-4o",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o"
+    },
+    "openai::gpt-4-turbo": {
+      "providerId": "openai",
+      "modelId": "gpt-4-turbo",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 30,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4-turbo"
+    },
+    "anthropic::claude-3-haiku": {
+      "providerId": "anthropic",
+      "modelId": "claude-3-haiku",
+      "inputUsdPer1M": 0.25,
+      "outputUsdPer1M": 1.25,
+      "contextLength": 200000,
+      "rawId": "anthropic/claude-3-haiku"
+    },
+    "openai::gpt-3.5-turbo-0613": {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo-0613",
+      "inputUsdPer1M": 1,
+      "outputUsdPer1M": 2,
+      "contextLength": 4095,
+      "rawId": "openai/gpt-3.5-turbo-0613"
+    },
+    "openai::gpt-4-turbo-preview": {
+      "providerId": "openai",
+      "modelId": "gpt-4-turbo-preview",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 30,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4-turbo-preview"
+    },
+    "openai::gpt-4-1106-preview": {
+      "providerId": "openai",
+      "modelId": "gpt-4-1106-preview",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 30,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4-1106-preview"
+    },
+    "openai::gpt-3.5-turbo-instruct": {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo-instruct",
+      "inputUsdPer1M": 1.5,
+      "outputUsdPer1M": 2,
+      "contextLength": 4095,
+      "rawId": "openai/gpt-3.5-turbo-instruct"
+    },
+    "openai::gpt-3.5-turbo-16k": {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo-16k",
+      "inputUsdPer1M": 3,
+      "outputUsdPer1M": 4,
+      "contextLength": 16385,
+      "rawId": "openai/gpt-3.5-turbo-16k"
+    },
+    "openai::gpt-4": {
+      "providerId": "openai",
+      "modelId": "gpt-4",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 60,
+      "contextLength": 8191,
+      "rawId": "openai/gpt-4"
+    },
+    "openai::gpt-3.5-turbo": {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo",
+      "inputUsdPer1M": 0.5,
+      "outputUsdPer1M": 1.5,
+      "contextLength": 16385,
+      "rawId": "openai/gpt-3.5-turbo"
+    },
+    "openai::gpt-4-0314": {
+      "providerId": "openai",
+      "modelId": "gpt-4-0314",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 60,
+      "contextLength": 8191,
+      "rawId": "openai/gpt-4-0314"
+    }
+  },
+  "meta": {
+    "source": "openrouter",
+    "count": 104,
+    "updatedAt": "2026-05-12T15:07:51.792Z"
+  }
+}

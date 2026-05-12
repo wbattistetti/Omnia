@@ -7,6 +7,8 @@
  * Application code only concatenates compact text fields into one rules string (no stylistic rewrite).
  */
 
+const { assertAiCallContract } = require('./aiCallContract');
+
 const META_SYSTEM = `You are an expert AI agent designer for the OMNIA dialogue engine.
 
 ARCHITECTURE (non-negotiable):
@@ -222,21 +224,77 @@ function sanitizeOutputLanguage(raw) {
 }
 
 /**
- * Strip markdown code fences and trim content for JSON.parse.
- * @param {string} raw
+ * Coerce a chat completion `message.content` value into a plain string. Modern OpenAI / Anthropic
+ * SDKs sometimes return `content` as an array of content parts (`[{ type: 'text', text: '...' }]`);
+ * left untouched, that array reaches the JSON parser as a non-string and the user sees
+ * `"Empty model response"` even though the textual answer is right there.
+ *
+ * @param {unknown} raw
+ * @returns {string}
+ */
+function coerceModelContentToText(raw) {
+  if (typeof raw === 'string') return raw;
+  if (!Array.isArray(raw)) return '';
+  let out = '';
+  for (const part of raw) {
+    if (!part || typeof part !== 'object') continue;
+    if (typeof part.text === 'string') {
+      out += part.text;
+      continue;
+    }
+    if (part.type === 'text' && typeof part.content === 'string') {
+      out += part.content;
+    }
+  }
+  return out;
+}
+
+/**
+ * One-line diagnostic of the raw `message.content` value, suitable for embedding in error
+ * messages. Trims arbitrarily large strings to keep the log readable while still pinpointing
+ * the actual shape OpenAI returned.
+ *
+ * @param {unknown} raw
+ * @returns {string}
+ */
+function describeRawModelContent(raw) {
+  if (raw === null) return 'null';
+  if (raw === undefined) return 'undefined';
+  if (typeof raw === 'string') {
+    const preview = raw.length > 80 ? `${raw.slice(0, 80)}...` : raw;
+    return `string(len=${raw.length}, preview=${JSON.stringify(preview)})`;
+  }
+  if (Array.isArray(raw)) {
+    const types = raw.map((p) => (p && typeof p === 'object' ? p.type || 'unknown' : typeof p));
+    return `array(parts=${raw.length}, types=[${types.join(',')}])`;
+  }
+  return `${typeof raw}`;
+}
+
+/**
+ * Strip markdown code fences and trim model content for JSON.parse. Accepts either a plain
+ * string or a content-parts array (see {@link coerceModelContentToText}). Throws fail-loud with a
+ * distinct message when the content is unusable, so callers can tell empty vs malformed apart.
+ *
+ * @param {unknown} raw
  * @returns {string}
  */
 function extractJsonString(raw) {
-  if (!raw || typeof raw !== 'string') {
-    throw new Error('Empty model response');
+  if (raw === null || raw === undefined) {
+    throw new Error(`Empty model response (raw=${describeRawModelContent(raw)})`);
   }
-  let s = raw.trim();
+  if (typeof raw !== 'string' && !Array.isArray(raw)) {
+    throw new Error(
+      `Model response content is not textual (got ${typeof raw}); expected string or content-parts array.`
+    );
+  }
+  const text = coerceModelContentToText(raw).trim();
+  if (!text) {
+    throw new Error(`Empty model response (raw=${describeRawModelContent(raw)})`);
+  }
   const fence = /^```(?:json)?\s*([\s\S]*?)```$/im;
-  const m = s.match(fence);
-  if (m) {
-    s = m[1].trim();
-  }
-  return s;
+  const m = text.match(fence);
+  return m ? m[1].trim() : text;
 }
 
 /**
@@ -548,7 +606,7 @@ function validateDesignPayload(parsed) {
  */
 async function generateAIAgentDesign({
   userDesc,
-  provider = 'groq',
+  provider,
   model,
   aiProviderService,
   refinementPatch,
@@ -559,6 +617,9 @@ async function generateAIAgentDesign({
   if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
     throw new Error('userDesc must be a non-empty string (at least 8 characters)');
   }
+
+  // Fail-loud: provider+model must come from the designer Omnia Tutor selection (no hardcoded fallback).
+  const contract = assertAiCallContract({ provider, model, action: 'Create / Refine Agent' });
 
   const lang = sanitizeOutputLanguage(outputLanguage);
 
@@ -574,10 +635,10 @@ async function generateAIAgentDesign({
     },
   ];
 
-  const maxTokens = provider === 'openai' ? 4096 : 8192;
+  const maxTokens = contract.provider === 'openai' ? 4096 : 8192;
 
-  const response = await aiProviderService.callAI(provider, messages, {
-    model: model || undefined,
+  const response = await aiProviderService.callAI(contract.provider, messages, {
+    model: contract.model,
     temperature: 0.35,
     maxTokens,
   });
@@ -613,7 +674,7 @@ async function induceStyleRuleFromCorrection({
   wrongText,
   correctText,
   outputLanguage,
-  provider = 'groq',
+  provider,
   model,
   aiProviderService,
 }) {
@@ -625,6 +686,11 @@ async function induceStyleRuleFromCorrection({
   if (c.length < 3) {
     throw new Error('correctText must be at least 3 characters');
   }
+  const contract = assertAiCallContract({
+    provider,
+    model,
+    action: 'Induce style rule (debugger)',
+  });
 
   const lang = sanitizeOutputLanguage(outputLanguage);
   const langInstr = lang
@@ -667,10 +733,10 @@ Return only: { "rule_text": "<rule>" }`;
     { role: 'user', content: userMsg },
   ];
 
-  const response = await aiProviderService.callAI(provider, messages, {
-    model: model || undefined,
+  const response = await aiProviderService.callAI(contract.provider, messages, {
+    model: contract.model,
     temperature: 0.25,
-    maxTokens: provider === 'openai' ? 1024 : 2048,
+    maxTokens: contract.provider === 'openai' ? 1024 : 2048,
   });
 
   const content = response?.choices?.[0]?.message?.content;
@@ -697,6 +763,7 @@ module.exports = {
   induceStyleRuleFromCorrection,
   buildMetaUserMessage,
   extractJsonString,
+  coerceModelContentToText,
   validateDesignPayload,
   coerceEntityType,
   ENTITY_TYPES,

@@ -11,8 +11,18 @@ export type StepKey =
 /** Evento document: apre Impostazioni Omnia (Studio) e opzionalmente la sezione indicata in `detail.step`. */
 export const OMNIA_OPEN_STUDIO_SETTINGS_EVENT = 'omnia:open-studio-settings';
 
+/**
+ * Reason that triggered the open: when set, the target page should display a contextual
+ * banner / call-to-action instead of just opening silently.
+ *
+ * - `missing-ai-model`: user attempted an AI action without selecting a model in Omnia Tutor.
+ *   The page must show a top banner like "Devi scegliere il modello LLM prima di proseguire".
+ */
+export type OmniaOpenStudioSettingsReason = 'missing-ai-model';
+
 export type OmniaOpenStudioSettingsEventDetail = {
   step?: StepKey;
+  reason?: OmniaOpenStudioSettingsReason;
 };
 
 export type ChatMessage = {

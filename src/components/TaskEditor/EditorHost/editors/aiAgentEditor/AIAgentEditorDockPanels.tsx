@@ -3,18 +3,18 @@
  */
 
 import React from 'react';
-import type { IDockviewPanelProps } from 'dockview';
 import { AIAgentUnifiedPromptField } from './AIAgentUnifiedPromptField';
 import { AIAgentProposedFieldsTable } from './AIAgentProposedFieldsTable';
 import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
 import { ViewSkaGenerator } from './useCaseGeneratorWizard/ViewSkaGenerator';
+import { ConversationsBubbleView } from './useCaseGeneratorWizard/ConversationsBubbleView';
 import { UseCaseWizardListToolbarProvider } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
 
-export function EditorUnifiedDescriptionPanel(_props: IDockviewPanelProps) {
+export function EditorUnifiedDescriptionPanel() {
   const {
     instanceId,
     designDescription,
@@ -43,7 +43,7 @@ export function EditorUnifiedDescriptionPanel(_props: IDockviewPanelProps) {
   );
 }
 
-export function EditorTaskDescriptionPanel(_props: IDockviewPanelProps) {
+export function EditorTaskDescriptionPanel() {
   const { designDescription, setDesignDescription, generating, insertBackendPathInDesign } =
     useAIAgentEditorDock();
   const descRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -80,7 +80,7 @@ export function EditorTaskDescriptionPanel(_props: IDockviewPanelProps) {
   );
 }
 
-export function EditorDatiPanel(_props: IDockviewPanelProps) {
+export function EditorDatiPanel() {
   const {
     primaryAgentActionLabel,
     proposedFields,
@@ -112,7 +112,7 @@ export function EditorDatiPanel(_props: IDockviewPanelProps) {
   );
 }
 
-export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
+export function EditorUseCasesPanel() {
   const {
     instanceId,
     logicalSteps,
@@ -121,6 +121,7 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
     useCaseComposerBusy,
     useCaseBundleGenerationBusy,
     useCasePhraseStylePropagationBusy,
+    useCasePhraseStyleBatchProgress,
     useCaseCreationMessage,
     useCaseComposerError,
     onClearUseCaseComposerError,
@@ -145,6 +146,21 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
     onPropagateExamplePhraseStyle,
     assistantPhraseStyleNewIds,
     onAssistantPhraseDraftChange,
+    onAssembleConversation,
+    assembleConversationBusy,
+    onProofreadConversationAgentTurns,
+    proofreadConversationBusy,
+    onPromoteSuggestionToCatalog,
+    onRejectSuggestion,
+    onTokenizeUseCases,
+    tokenizeUseCasesBusy,
+    tokenizedByUseCaseId,
+    externalLLMHandoffEnabled,
+    onToggleExternalLLMHandoff,
+    onClearAllWizardOutput,
+    onClearWizardConversations,
+    onClearWizardTokenization,
+    wizardOverlay,
   } = useAIAgentEditorDock();
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
@@ -154,6 +170,18 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
     useCaseComposerBusy ||
     useCaseBundleGenerationBusy ||
     useCasePhraseStylePropagationBusy;
+
+  /**
+   * Lift-up della selezione lista del composer: serve al pannello DX «Mostra JSON» per
+   * proiettare in Monaco il JSON conversazionale dello use case attivo. Stato in memoria,
+   * non persistito (la persistenza della selezione resta dentro il composer via
+   * `sessionStorage`-based pending mechanism).
+   */
+  const [selectedUseCaseId, setSelectedUseCaseId] = React.useState<string | null>(null);
+  const selectedUseCase = React.useMemo(
+    () => useCases.find((u) => u.id === selectedUseCaseId) ?? null,
+    [useCases, selectedUseCaseId]
+  );
 
   const composer = (
     <AIAgentUseCaseComposer
@@ -183,16 +211,65 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
       onClearUseCaseHighlight={onClearUseCaseHighlight}
       assistantPhraseStyleNewIds={assistantPhraseStyleNewIds}
       onAssistantPhraseDraftChange={onAssistantPhraseDraftChange}
+      onSelectionChange={setSelectedUseCaseId}
+      controlledSelectionId={selectedUseCaseId}
+      showTokenizedAgentMessage={Boolean(useCaseGeneratorWizard?.showTokenizedInBubbles)}
+      tokenizedByUseCaseId={tokenizedByUseCaseId}
     />
   );
 
   if (useWizardShell && useCaseGeneratorWizard) {
+    const currentStepId = useCaseGeneratorWizard.currentStepId;
+    const isStepConversations = currentStepId === 'conversations';
+    /**
+     * v8: rimossa la vista dedicata «TokenizationListView» nel pannello SX al Passo 3.
+     * Razionale: la tokenizzazione è già visibile (a) nelle bubble del Passo 2 col toggle
+     * «Mostra Tokens», (b) come overlay implicito del messaggio canonico nello use case
+     * body (l'AI ri-tokenizza la frase canonica). Al Passo 3 quindi il pannello SX resta
+     * il composer (stesso del Passo 1) e l'azione «Tokenizza» vive solo nel pannello DX
+     * tutorial (TokenizationStepReviewCard). Riduce ridondanza percepita e mantiene la
+     * lista canonica sempre accessibile durante la pipeline.
+     *
+     * v6: rimosso il toggle Riga 2 «usecases / conversazioni». Al Passo 2 la vista è
+     * sempre la bubble chat. Se il designer vuole rivedere la lista canonica, clicca
+     * sullo step 1 della pipeline.
+     */
+    const showBubbleView = isStepConversations;
+
+    const leftPanel: React.ReactNode = showBubbleView ? (
+      <ConversationsBubbleView
+        conversations={useCaseGeneratorWizard.conversations}
+        activeConversationId={useCaseGeneratorWizard.activeConversationId}
+        onUpdateTurnText={useCaseGeneratorWizard.updateConversationTurnText}
+        modifiedAgentTurnKeysByConversation={
+          useCaseGeneratorWizard.conversationStylePlan.modifiedByConversation
+        }
+        onPromoteSuggestion={onPromoteSuggestionToCatalog}
+        onRejectSuggestion={onRejectSuggestion}
+        showTokenized={useCaseGeneratorWizard.showTokenizedInBubbles}
+        tokenizedByUseCaseId={tokenizedByUseCaseId}
+      />
+    ) : (
+      composer
+    );
+
+    const tokenizedUseCaseCount = useCases.reduce(
+      (n, u) =>
+        typeof u.assistant_example_tokenized === 'string' && u.assistant_example_tokenized
+          ? n + 1
+          : n,
+      0
+    );
+    const tokenizationHasManualEdits = Object.values(
+      useCaseGeneratorWizard.tokenizationDiffByUseCaseId
+    ).some(Boolean);
+
     return (
       <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-950/80">
         <UseCaseWizardListToolbarProvider>
           <ViewSkaGenerator
             wizard={useCaseGeneratorWizard}
-            leftPanel={composer}
+            leftPanel={leftPanel}
             onGenerateUseCaseBundle={showGenerateCta ? onGenerateUseCaseBundle : undefined}
             generateBusy={useCaseBundleGenerationBusy || generating}
             showStepOneListToolbar={useCases.length > 0}
@@ -202,6 +279,24 @@ export function EditorUseCasesPanel(_props: IDockviewPanelProps) {
             onDismissBundleFeedback={onDismissUseCaseBundleFeedback}
             onApplyExamplePhraseStyle={onPropagateExamplePhraseStyle}
             examplePhraseStyleBusy={useCasePhraseStylePropagationBusy}
+            examplePhraseStyleBatchProgress={useCasePhraseStyleBatchProgress}
+            onCreateConversation={onAssembleConversation}
+            createConversationBusy={assembleConversationBusy}
+            onProofreadConversationAgentTurns={onProofreadConversationAgentTurns}
+            proofreadConversationBusy={proofreadConversationBusy}
+            onTokenizeUseCases={onTokenizeUseCases}
+            tokenizeUseCasesBusy={tokenizeUseCasesBusy}
+            tokenizedUseCaseCount={tokenizedUseCaseCount}
+            tokenizationHasManualEdits={tokenizationHasManualEdits}
+            externalLLMHandoffEnabled={externalLLMHandoffEnabled}
+            onToggleExternalLLMHandoff={onToggleExternalLLMHandoff}
+            onClearAllWizardOutput={onClearAllWizardOutput}
+            onClearWizardConversations={onClearWizardConversations}
+            onClearWizardTokenization={onClearWizardTokenization}
+            selectedUseCase={selectedUseCase}
+            onSelectUseCaseRequest={setSelectedUseCaseId}
+            useCases={useCases}
+            overlay={wizardOverlay}
           />
         </UseCaseWizardListToolbarProvider>
       </div>

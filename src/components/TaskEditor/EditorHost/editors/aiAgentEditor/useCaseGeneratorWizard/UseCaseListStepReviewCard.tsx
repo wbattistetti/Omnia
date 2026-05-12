@@ -4,6 +4,11 @@
 
 import React from 'react';
 import { Loader2, X } from 'lucide-react';
+import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
+import { MissingAiModelToast } from '@components/common/MissingAiModelToast';
+import { LastAiCostBadge } from '@components/common/LastAiCostBadge';
+import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
+import { wizardTutorialHeadingPill } from './wizardCardStyles';
 
 export interface UseCaseListStepReviewCardProps {
   useCaseCount: number;
@@ -11,6 +16,8 @@ export interface UseCaseListStepReviewCardProps {
   /** Mostra voce 💬 + pulsante «Omogeneizza messaggi». */
   showStyleHint: boolean;
   styleBusy: boolean;
+  /** Testo pulsante durante loading (es. progress batch); default «Omogeneizzando…». */
+  styleBusyLabel?: string;
   onApplyStyle?: () => void | Promise<void>;
   bundleFeedback: string | null;
   onDismissBundleFeedback?: () => void;
@@ -30,6 +37,7 @@ export function UseCaseListStepReviewCard({
   panelHeading,
   showStyleHint,
   styleBusy,
+  styleBusyLabel,
   onApplyStyle,
   bundleFeedback,
   onDismissBundleFeedback,
@@ -52,7 +60,7 @@ export function UseCaseListStepReviewCard({
   return (
     <div className="rounded-xl border border-violet-500/35 bg-slate-900/55 shadow-[inset_0_1px_0_rgba(167,139,250,0.08)]">
       <div className="space-y-4 p-4">
-        <h3 className="text-sm font-semibold leading-snug text-amber-100">{panelHeading}</h3>
+        <h3 className={wizardTutorialHeadingPill('use_case_list')}>{panelHeading}</h3>
 
         {bundleFeedback ? (
           <div className="flex items-start gap-2 rounded-lg border border-emerald-500/35 bg-emerald-950/40 px-3 py-2 text-xs leading-snug text-emerald-50">
@@ -100,22 +108,10 @@ export function UseCaseListStepReviewCard({
 
         <div className="flex flex-col gap-2 border-t border-slate-700/55 pt-4">
           {canGenerateMore ? (
-            <button
-              type="button"
-              aria-busy={generateBusy}
-              disabled={generateBusy || typeof onGenerateMore !== 'function'}
-              onClick={() => void onGenerateMore?.()}
-              className={BTN_UNIFORM}
-            >
-              <span className="flex min-h-[1.25rem] w-full flex-col items-center justify-center gap-1">
-                <span className="flex items-center justify-center gap-2">
-                  {generateBusy ? (
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                  ) : null}
-                  <span>{generateBusy ? 'Generando…' : 'Crea altri use case'}</span>
-                </span>
-              </span>
-            </button>
+            <UseCaseListGenerateButton
+              generateBusy={generateBusy}
+              onGenerateMore={onGenerateMore}
+            />
           ) : null}
 
           {showStyleHint && typeof onApplyStyle === 'function' ? (
@@ -131,7 +127,9 @@ export function UseCaseListStepReviewCard({
                   {styleBusy ? (
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
                   ) : null}
-                  <span>{styleBusy ? 'Omogeneizzando…' : 'Omogeneizza messaggi'}</span>
+                  <span>
+                    {styleBusy ? styleBusyLabel ?? 'Omogeneizzando…' : 'Omogeneizza messaggi'}
+                  </span>
                 </span>
               </span>
             </button>
@@ -151,5 +149,61 @@ export function UseCaseListStepReviewCard({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * CTA "Crea altri use case" con guard sul modello globale.
+ * Estratto come sub-componente per isolare lo stato locale del toast (single responsibility).
+ */
+function UseCaseListGenerateButton({
+  generateBusy,
+  onGenerateMore,
+}: {
+  generateBusy: boolean;
+  onGenerateMore?: () => void | Promise<void>;
+}): React.ReactElement {
+  const { busyLabel, hasModel } = useAiBusyLabel();
+  const [showNoModelToast, setShowNoModelToast] = React.useState(false);
+
+  React.useEffect(() => {
+    if (hasModel && showNoModelToast) {
+      setShowNoModelToast(false);
+    }
+  }, [hasModel, showNoModelToast]);
+
+  const handleClick = (): void => {
+    if (!hasModel) {
+      setShowNoModelToast(true);
+      return;
+    }
+    void onGenerateMore?.();
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-busy={generateBusy}
+        disabled={generateBusy || typeof onGenerateMore !== 'function'}
+        onClick={handleClick}
+        className={BTN_UNIFORM}
+      >
+        <span className="flex min-h-[1.25rem] w-full flex-col items-center justify-center gap-1">
+          <span className="flex items-center justify-center gap-2">
+            {generateBusy ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+            ) : null}
+            <span>{generateBusy ? busyLabel('Creando use case') : 'Crea altri use case'}</span>
+            {!generateBusy ? (
+              <LastAiCostBadge purpose={AI_CALL_PURPOSE.USE_CASE_GENERATE_MORE} />
+            ) : null}
+          </span>
+        </span>
+      </button>
+      {showNoModelToast ? (
+        <MissingAiModelToast onDismiss={() => setShowNoModelToast(false)} />
+      ) : null}
+    </>
   );
 }

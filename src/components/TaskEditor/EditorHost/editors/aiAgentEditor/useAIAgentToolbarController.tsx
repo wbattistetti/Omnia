@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Bot, Loader2, Sparkles } from 'lucide-react';
+import { Bot, Loader2, Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import type { ToolbarButton } from '../../../../../dock/types';
 import type { EditorProps } from '../../types';
 import { useHeaderToolbarContext } from '../../../ResponseEditor/context/HeaderToolbarContext';
@@ -34,6 +34,10 @@ export interface UseAIAgentToolbarControllerParams {
   onPrimaryAgentAction: () => void;
   /** IA bundle for use cases — mirrored into tab toolbar when header is hidden. */
   onGenerateUseCaseBundle: () => void | Promise<void>;
+  /** Stato del toggle «espandi a tutto schermo» dell'AI Agent editor. */
+  isExpanded: boolean;
+  /** Toggle espandi/riduci dell'AI Agent editor. */
+  onToggleExpanded: () => void;
 }
 
 export function useAIAgentToolbarController({
@@ -49,6 +53,8 @@ export function useAIAgentToolbarController({
   useCasePhraseStylePropagationBusy,
   onPrimaryAgentAction,
   onGenerateUseCaseBundle,
+  isExpanded,
+  onToggleExpanded,
 }: UseAIAgentToolbarControllerParams) {
   const headerColor = AI_AGENT_HEADER_COLOR;
   const primaryAgentActionLabel = hasAgentGeneration ? LABEL_REFINE_AGENT : LABEL_CREATE_AGENT;
@@ -88,6 +94,21 @@ export function useAIAgentToolbarController({
         title: LABEL_GENERATE_USE_CASES,
       });
     }
+    /**
+     * Toggle «espandi a tutto schermo». Sempre in coda, icona-only, label vuota per non
+     * occupare spazio orizzontale nella toolbar globale. L'etichetta accessibile è in `title`.
+     */
+    buttons.push({
+      icon: isExpanded ? (
+        <Minimize2 size={16} aria-hidden />
+      ) : (
+        <Maximize2 size={16} aria-hidden />
+      ),
+      label: '',
+      onClick: () => onToggleExpanded(),
+      title: isExpanded ? 'Riduci editor' : 'Espandi editor a tutto schermo',
+      primary: false,
+    });
     return buttons;
   }, [
     showPrimaryAgentAction,
@@ -99,6 +120,8 @@ export function useAIAgentToolbarController({
     primaryAgentActionLabel,
     onPrimaryAgentAction,
     onGenerateUseCaseBundle,
+    isExpanded,
+    onToggleExpanded,
   ]);
 
   React.useEffect(() => {

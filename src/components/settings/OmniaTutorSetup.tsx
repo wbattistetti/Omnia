@@ -1,26 +1,42 @@
 /**
  * Designer-only Omnia Tutor LLM settings (templates, reasoning, prompts). Not for runtime agents.
+ *
+ * La tendina dei modelli e popolata dinamicamente dal catalogo backend
+ * (`/api/ia-catalog/ui/models?provider=...`): nessuna lista hardcoded di modelli.
  */
 
 import React from 'react';
+import { AlertTriangle } from 'lucide-react';
 import type { OmniaTutorConfig } from 'types/omniaTutorTypes';
-import { AI_PROVIDERS, type AIProvider, useAIProvider } from '@context/AIProviderContext';
+import { type AIProvider, useAIProvider } from '@context/AIProviderContext';
 import {
   loadOmniaTutorConfig,
   saveOmniaTutorConfig,
 } from '@utils/omniaTutor/omniaTutorPersistence';
+import {
+  useAvailableLlmModels,
+  type AvailableLlmProviderSpec,
+} from '@hooks/useAvailableLlmModels';
+import type { LlmCatalogProviderId } from '@services/iaCatalogApi';
+import { ModelTreePicker } from '@components/common/ModelTreePicker';
+import { consumeMissingAiModelReason } from '@utils/aiModelGuard';
 
 const REASONING_LEVELS: OmniaTutorConfig['reasoning'][] = ['none', 'low', 'medium', 'high'];
 
-function buildModelOptions(): Array<{ id: string; label: string; provider: AIProvider }> {
-  const out: Array<{ id: string; label: string; provider: AIProvider }> = [];
-  for (const m of AI_PROVIDERS.groq.models) {
-    out.push({ id: m.id, label: `[Groq] ${m.label}`, provider: 'groq' });
-  }
-  for (const m of AI_PROVIDERS.openai.models) {
-    out.push({ id: m.id, label: `[OpenAI] ${m.label}`, provider: 'openai' });
-  }
-  return out;
+/**
+ * Provider esposti nella tendina del Tutor. L'id del catalogo backend (`LlmCatalogProviderId`)
+ * deve corrispondere a un `AIProvider` selezionabile dal context globale.
+ */
+const TUTOR_PROVIDERS: ReadonlyArray<
+  AvailableLlmProviderSpec & { contextProvider: AIProvider }
+> = [
+  { id: 'groq', displayLabel: 'Groq', contextProvider: 'groq' },
+  { id: 'openai', displayLabel: 'OpenAI', contextProvider: 'openai' },
+];
+
+function contextProviderFor(catalogProvider: LlmCatalogProviderId): AIProvider | null {
+  const match = TUTOR_PROVIDERS.find((p) => p.id === catalogProvider);
+  return match ? match.contextProvider : null;
 }
 
 function safetyToRows(safety: Record<string, unknown>): Array<{ key: string; value: string }> {
@@ -111,14 +127,30 @@ function SafetyEditor({
 
 export function OmniaTutorSetup() {
   const { setProvider, setModel } = useAIProvider();
-  const modelOptions = React.useMemo(() => buildModelOptions(), []);
+  const providerSpecs = React.useMemo(
+    () => TUTOR_PROVIDERS.map(({ id, displayLabel }) => ({ id, displayLabel })),
+    []
+  );
+  const { items: modelOptions, loading: modelsLoading, errors: modelErrors, reload: reloadModels } =
+    useAvailableLlmModels(providerSpecs);
 
   const [config, setConfig] = React.useState<OmniaTutorConfig>(() => loadOmniaTutorConfig());
+
+  /**
+   * Banner shown when the user landed here from an AI CTA that was blocked because no model
+   * was selected. The flag is consumed exactly once (read on mount) so navigating away and
+   * back will not redisplay it spuriously. The banner stays visible until the user picks a
+   * valid model from the catalog.
+   */
+  const [missingModelBanner, setMissingModelBanner] = React.useState<boolean>(() =>
+    consumeMissingAiModelReason()
+  );
 
   React.useEffect(() => {
     const opt = modelOptions.find((o) => o.id === config.model);
     if (opt) {
-      setProvider(opt.provider);
+      const ctxProvider = contextProviderFor(opt.provider);
+      if (ctxProvider) setProvider(ctxProvider);
       setModel(config.model);
     } else {
       setModel(config.model);
@@ -130,8 +162,41 @@ export function OmniaTutorSetup() {
     saveOmniaTutorConfig(next);
   }, []);
 
+  const hasValidSelection = React.useMemo(() => {
+    const selected = typeof config.model === 'string' ? config.model.trim() : '';
+    if (!selected) return false;
+    return modelOptions.some((o) => o.id === selected);
+  }, [config.model, modelOptions]);
+
+  React.useEffect(() => {
+    if (missingModelBanner && hasValidSelection) {
+      setMissingModelBanner(false);
+    }
+  }, [missingModelBanner, hasValidSelection]);
+
+  const hasModelOptions = modelOptions.length > 0;
+  const errorSummary = modelErrors.length
+    ? modelErrors.map((e) => `${e.provider}: ${e.message}`).join(' | ')
+    : null;
+
   return (
     <div className="space-y-6 max-w-2xl text-slate-100">
+      {missingModelBanner ? (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="flex items-start gap-3 rounded-lg border border-red-500/55 bg-red-950/55 px-4 py-3 text-sm text-red-50 shadow-lg"
+        >
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-300" aria-hidden />
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="font-semibold text-red-100">Devi scegliere il modello LLM</div>
+            <div className="text-xs leading-snug text-red-100/85">
+              Hai avviato un’azione IA senza aver selezionato il modello dell’Omnia Tutor.
+              Scegli un provider e un modello qui sotto e poi torna al task per riprovare.
+            </div>
+          </div>
+        </div>
+      ) : null}
       <p className="text-sm text-slate-400">
         Configurazione dell’LLM interno del designer (template, assistenza, prompt). Non usata per agenti
         runtime o utenti finali.
@@ -139,21 +204,48 @@ export function OmniaTutorSetup() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
         <label className="space-y-1 sm:col-span-6">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Modello</span>
-          <select
-            className="w-full rounded-md border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm"
+          <span className="flex items-center justify-between text-xs font-medium uppercase tracking-wide text-slate-500">
+            <span>Modello {hasModelOptions ? `(${modelOptions.length})` : ''}</span>
+            <button
+              type="button"
+              onClick={reloadModels}
+              className="rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-[10px] text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+              disabled={modelsLoading}
+              title="Ricarica la lista live dal catalogo backend"
+            >
+              {modelsLoading ? 'Caricamento…' : 'Ricarica'}
+            </button>
+          </span>
+          <ModelTreePicker
             value={config.model}
-            onChange={(e) => persist({ ...config, model: e.target.value })}
-          >
-            {!modelOptions.some((o) => o.id === config.model) ? (
-              <option value={config.model}>{config.model}</option>
-            ) : null}
-            {modelOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+            options={modelOptions}
+            providers={providerSpecs.map((p) => ({ id: p.id, label: p.displayLabel }))}
+            disabled={modelsLoading && !hasModelOptions}
+            placeholder={
+              modelsLoading && !hasModelOptions
+                ? 'Caricamento modelli disponibili…'
+                : 'Scegli un modello'
+            }
+            onChange={(modelId) => persist({ ...config, model: modelId })}
+          />
+          {config.model && !modelOptions.some((o) => o.id === config.model) ? (
+            <span className="block text-[10px] leading-tight text-amber-300">
+              Modello salvato {`"${config.model}"`} non presente nel catalogo live (potrebbe essere
+              deprecato o la chiave API non lo espone). Selezionane uno disponibile.
+            </span>
+          ) : null}
+          {errorSummary ? (
+            <span className="block text-[10px] leading-tight text-red-300">
+              Catalogo modelli non completo — {errorSummary}. Verifica le API key e fai un POST su
+              <code className="mx-1 rounded bg-slate-800 px-1 py-0.5">/api/ia-catalog/refresh</code>.
+            </span>
+          ) : null}
+          {!modelsLoading && !hasModelOptions && !errorSummary ? (
+            <span className="block text-[10px] leading-tight text-amber-300">
+              Catalogo vuoto. Imposta <code>OPENAI_API_KEY</code> e/o <code>GROQ_API_KEY</code> sul backend e
+              fai un POST su <code>/api/ia-catalog/sync/models</code>.
+            </span>
+          ) : null}
         </label>
         <label className="space-y-1 sm:col-span-3">
           <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Reasoning</span>

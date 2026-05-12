@@ -9,6 +9,7 @@
 
 const util = require('util');
 const { extractJsonString } = require('./AIAgentDesignService');
+const { assertAiCallContract } = require('./aiCallContract');
 
 const LOG_PREFIX = '[StructuredPipeline]';
 
@@ -348,7 +349,7 @@ async function extractStructure(description, provider, model, aiProviderService,
         description: typeof description === 'string' ? description : '(non-string)',
         description_trimmed: desc,
         description_trimmed_length: desc.length,
-        provider: provider || 'groq',
+        provider: provider || null,
         model: model || null,
       });
       pipelineLog('Phase1', 'PARSED_JSON', {
@@ -358,23 +359,33 @@ async function extractStructure(description, provider, model, aiProviderService,
       });
       throw errEarly;
     }
+    /**
+     * Fail-loud: Omnia Tutor selection is the single source of truth. No silent fallback to a
+     * hardcoded provider/model — if either is missing the request is rejected with a 400
+     * (the UI then routes the designer to Settings -> Omnia Tutor with a banner).
+     */
+    const contract = assertAiCallContract({
+      provider,
+      model,
+      action: 'Extract structured design (Phase 1)',
+    });
     const langSuffix = buildOutputLanguageInstruction(outputLanguage);
     const userContent = `NATURAL_LANGUAGE_DESCRIPTION:\n"""\n${desc}\n"""\n\nReturn ONLY the JSON object with the required keys.${langSuffix}`;
     const messages = [{ role: 'system', content: EXTRACT_SYSTEM }, { role: 'user', content: userContent }];
-    const maxTokens = provider === 'openai' ? 4096 : 8192;
+    const maxTokens = contract.provider === 'openai' ? 4096 : 8192;
     const callOptions = {
-      model: model || undefined,
+      model: contract.model,
       temperature: 0.15,
       maxTokens,
     };
-    const prov = provider || 'groq';
+    const prov = contract.provider;
 
     pipelineLog('Phase1', 'INPUT', {
       description: typeof description === 'string' ? description : '(non-string)',
       description_trimmed: desc,
       description_trimmed_length: desc.length,
       provider: prov,
-      model: model || null,
+      model: contract.model,
       outputLanguage: typeof outputLanguage === 'string' ? outputLanguage : null,
       messages_full_json: messages,
       call_options_passed_to_callAI: callOptions,

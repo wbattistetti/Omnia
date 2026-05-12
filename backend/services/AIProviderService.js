@@ -5,6 +5,8 @@ const OpenAIProvider = require('../providers/OpenAIProvider');
 const GroqProvider = require('../providers/GroqProvider');
 const AIConfig = require('../config/AIConfig');
 const MetricsCollector = require('./MetricsCollector');
+const { computeCallCost } = require('./aiCost/AICostCalculator');
+const { appendCall } = require('./aiCost/AICallLogService');
 
 /**
  * AI Provider Service - Enterprise Orchestrator
@@ -76,8 +78,8 @@ class AIProviderService {
 
       // Get provider configuration
       const providerConfig = await this.config.getProviderConfig(provider);
-      // Get default model
-      const defaultModel = await this.config.getDefaultModel(provider);
+      // Optional opt-in default model from env (`OPENAI_MODEL` / `GROQ_MODEL`); null when not set.
+      const optInDefaultModel = await this.config.getDefaultModel(provider);
       // Merge options: spread options first, then apply defaults only for missing values
       const mergedOptions = {
         timeout: options.timeout || providerConfig.timeout,
@@ -85,19 +87,57 @@ class AIProviderService {
         maxTokens: options.maxTokens || providerConfig.maxTokens,
         ...options, // Spread options to preserve all explicitly passed values (including model if provided)
       };
-      // Apply default model only if not explicitly provided
+      // Use opt-in env default ONLY if caller didn't pass a model. Never assume a hardcoded model.
+      const callerModel =
+        typeof mergedOptions.model === 'string' && mergedOptions.model.trim()
+          ? mergedOptions.model.trim()
+          : null;
+      mergedOptions.model = callerModel || optInDefaultModel;
+
+      /**
+       * Single source of truth for the AI model: the value comes from the designer's
+       * Omnia Tutor selection (`localStorage('omnia.aiModel')`) and is propagated end-to-end.
+       * If both the caller and the env opt-in are missing, fail-loud — the UI will route
+       * the designer to Settings -> Omnia Tutor with a banner.
+       */
       if (!mergedOptions.model) {
-        mergedOptions.model = defaultModel;
+        const err = new Error(
+          `AI model not selected for provider "${provider}". ` +
+            'Configure one in Settings -> Omnia Tutor (designer LLM) before calling the AI.'
+        );
+        err.code = 'AI_MODEL_REQUIRED';
+        err.statusCode = 400;
+        throw err;
       }
 
       console.log(`[AI_PROVIDER] 🚀 Calling ${provider} with model: ${mergedOptions.model}`);
 
-      // Make the call
       const result = await providerInstance.call(messages, mergedOptions);
 
-      // Record success metrics
       const latency = Date.now() - startTime;
       this.metrics.recordSuccess(provider, latency);
+
+      try {
+        const costRecord = computeCallCost({
+          providerId: provider,
+          modelId: mergedOptions.model,
+          response: result,
+        });
+        appendCall({
+          providerId: provider,
+          modelId: mergedOptions.model,
+          purpose: options.purpose,
+          inputTokens: costRecord.inputTokens,
+          outputTokens: costRecord.outputTokens,
+          totalTokens: costRecord.totalTokens,
+          costUsd: costRecord.costUsd,
+          costEur: costRecord.costEur,
+          durationMs: latency,
+          pricingFound: costRecord.pricingFound,
+        });
+      } catch (logErr) {
+        console.warn('[AI_PROVIDER] cost log failed:', logErr.message);
+      }
 
       console.log(`[AI_PROVIDER] ✅ ${provider} call successful (${latency}ms)`);
       return result;
@@ -105,6 +145,24 @@ class AIProviderService {
     } catch (error) {
       const latency = Date.now() - startTime;
       this.metrics.recordError(provider, error, latency);
+
+      try {
+        appendCall({
+          providerId: provider,
+          modelId: options.model || null,
+          purpose: options.purpose,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+          costEur: null,
+          durationMs: latency,
+          pricingFound: false,
+          error: error.message,
+        });
+      } catch (logErr) {
+        console.warn('[AI_PROVIDER] cost log (error path) failed:', logErr.message);
+      }
 
       console.error(`[AI_PROVIDER] ❌ ${provider} call failed:`, error.message);
       throw error;

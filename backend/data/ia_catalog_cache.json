@@ -4093,13 +4093,12 @@
         "model_id": "gpt-5",
         "name": "gpt-5",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5",
           "object": "model",
@@ -4111,13 +4110,12 @@
         "model_id": "gpt-5-2025-08-07",
         "name": "gpt-5-2025-08-07",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-2025-08-07",
           "object": "model",
@@ -4129,13 +4127,12 @@
         "model_id": "gpt-5-chat-latest",
         "name": "gpt-5-chat-latest",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-chat-latest",
           "object": "model",
@@ -4147,13 +4144,12 @@
         "model_id": "gpt-5-codex",
         "name": "gpt-5-codex",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-codex",
           "object": "model",
@@ -4165,13 +4161,12 @@
         "model_id": "gpt-5-mini",
         "name": "gpt-5-mini",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-mini",
           "object": "model",
@@ -4183,13 +4178,12 @@
         "model_id": "gpt-5-mini-2025-08-07",
         "name": "gpt-5-mini-2025-08-07",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-mini-2025-08-07",
           "object": "model",
@@ -4201,13 +4195,12 @@
         "model_id": "gpt-5-nano",
         "name": "gpt-5-nano",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-nano",
           "object": "model",
@@ -4219,13 +4212,12 @@
         "model_id": "gpt-5-nano-2025-08-07",
         "name": "gpt-5-nano-2025-08-07",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-nano-2025-08-07",
           "object": "model",
@@ -4237,13 +4229,12 @@
         "model_id": "gpt-5-pro",
         "name": "gpt-5-pro",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-pro",
           "object": "model",
@@ -4255,13 +4246,12 @@
         "model_id": "gpt-5-pro-2025-10-06",
         "name": "gpt-5-pro-2025-10-06",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-pro-2025-10-06",
           "object": "model",
@@ -4273,13 +4263,12 @@
         "model_id": "gpt-5-search-api",
         "name": "gpt-5-search-api",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-search-api",
           "object": "model",
@@ -4291,13 +4280,12 @@
         "model_id": "gpt-5-search-api-2025-10-14",
         "name": "gpt-5-search-api-2025-10-14",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5-search-api-2025-10-14",
           "object": "model",
@@ -4309,13 +4297,12 @@
         "model_id": "gpt-5.1",
         "name": "gpt-5.1",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.1",
           "object": "model",
@@ -4327,13 +4314,12 @@
         "model_id": "gpt-5.1-2025-11-13",
         "name": "gpt-5.1-2025-11-13",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.1-2025-11-13",
           "object": "model",
@@ -4345,13 +4331,12 @@
         "model_id": "gpt-5.1-chat-latest",
         "name": "gpt-5.1-chat-latest",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.1-chat-latest",
           "object": "model",
@@ -4363,13 +4348,12 @@
         "model_id": "gpt-5.1-codex",
         "name": "gpt-5.1-codex",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.1-codex",
           "object": "model",
@@ -4381,13 +4365,12 @@
         "model_id": "gpt-5.1-codex-max",
         "name": "gpt-5.1-codex-max",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.1-codex-max",
           "object": "model",
@@ -4399,13 +4382,12 @@
         "model_id": "gpt-5.1-codex-mini",
         "name": "gpt-5.1-codex-mini",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.1-codex-mini",
           "object": "model",
@@ -4417,13 +4399,12 @@
         "model_id": "gpt-5.2",
         "name": "gpt-5.2",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.2",
           "object": "model",
@@ -4435,13 +4416,12 @@
         "model_id": "gpt-5.2-2025-12-11",
         "name": "gpt-5.2-2025-12-11",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.2-2025-12-11",
           "object": "model",
@@ -4453,13 +4433,12 @@
         "model_id": "gpt-5.2-chat-latest",
         "name": "gpt-5.2-chat-latest",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.2-chat-latest",
           "object": "model",
@@ -4471,13 +4450,12 @@
         "model_id": "gpt-5.2-codex",
         "name": "gpt-5.2-codex",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.2-codex",
           "object": "model",
@@ -4489,13 +4467,12 @@
         "model_id": "gpt-5.2-pro",
         "name": "gpt-5.2-pro",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.2-pro",
           "object": "model",
@@ -4507,13 +4484,12 @@
         "model_id": "gpt-5.2-pro-2025-12-11",
         "name": "gpt-5.2-pro-2025-12-11",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.2-pro-2025-12-11",
           "object": "model",
@@ -4525,13 +4501,12 @@
         "model_id": "gpt-5.3-chat-latest",
         "name": "gpt-5.3-chat-latest",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.3-chat-latest",
           "object": "model",
@@ -4543,13 +4518,12 @@
         "model_id": "gpt-5.3-codex",
         "name": "gpt-5.3-codex",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.3-codex",
           "object": "model",
@@ -4561,13 +4535,12 @@
         "model_id": "gpt-5.4",
         "name": "gpt-5.4",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.4",
           "object": "model",
@@ -4579,13 +4552,12 @@
         "model_id": "gpt-5.4-2026-03-05",
         "name": "gpt-5.4-2026-03-05",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.4-2026-03-05",
           "object": "model",
@@ -4597,13 +4569,12 @@
         "model_id": "gpt-5.4-mini",
         "name": "gpt-5.4-mini",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.4-mini",
           "object": "model",
@@ -4615,13 +4586,12 @@
         "model_id": "gpt-5.4-mini-2026-03-17",
         "name": "gpt-5.4-mini-2026-03-17",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.4-mini-2026-03-17",
           "object": "model",
@@ -4633,13 +4603,12 @@
         "model_id": "gpt-5.4-nano",
         "name": "gpt-5.4-nano",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.4-nano",
           "object": "model",
@@ -4651,13 +4620,12 @@
         "model_id": "gpt-5.4-nano-2026-03-17",
         "name": "gpt-5.4-nano-2026-03-17",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.4-nano-2026-03-17",
           "object": "model",
@@ -4669,13 +4637,12 @@
         "model_id": "gpt-5.4-pro",
         "name": "gpt-5.4-pro",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.4-pro",
           "object": "model",
@@ -4687,13 +4654,12 @@
         "model_id": "gpt-5.4-pro-2026-03-05",
         "name": "gpt-5.4-pro-2026-03-05",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.4-pro-2026-03-05",
           "object": "model",
@@ -4705,13 +4671,12 @@
         "model_id": "gpt-5.5",
         "name": "gpt-5.5",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.5",
           "object": "model",
@@ -4723,13 +4688,12 @@
         "model_id": "gpt-5.5-2026-04-23",
         "name": "gpt-5.5-2026-04-23",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.5-2026-04-23",
           "object": "model",
@@ -4741,13 +4705,12 @@
         "model_id": "gpt-5.5-pro",
         "name": "gpt-5.5-pro",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.5-pro",
           "object": "model",
@@ -4759,13 +4722,12 @@
         "model_id": "gpt-5.5-pro-2026-04-23",
         "name": "gpt-5.5-pro-2026-04-23",
         "latency_ms": null,
-        "cost_hint": "$",
+        "cost_hint": "$$$",
         "capabilities": {},
         "tags": [
-          "preview",
           "new"
         ],
-        "notes": "Preview / check provider",
+        "notes": null,
         "raw": {
           "id": "gpt-5.5-pro-2026-04-23",
           "object": "model",
@@ -5520,6 +5482,364 @@
         }
       }
     ],
+    "groq": [
+      {
+        "model_id": "allam-2-7b",
+        "name": "allam-2-7b",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 4096,
+          "max_completion_tokens": 4096
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "allam-2-7b",
+          "object": "model",
+          "created": 1737672203,
+          "owned_by": "SDAIA",
+          "active": true,
+          "context_window": 4096,
+          "public_apps": null,
+          "max_completion_tokens": 4096
+        }
+      },
+      {
+        "model_id": "canopylabs/orpheus-arabic-saudi",
+        "name": "canopylabs/orpheus-arabic-saudi",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 4000,
+          "max_completion_tokens": 50000
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "canopylabs/orpheus-arabic-saudi",
+          "object": "model",
+          "created": 1765926439,
+          "owned_by": "Canopy Labs",
+          "active": true,
+          "context_window": 4000,
+          "public_apps": null,
+          "max_completion_tokens": 50000
+        }
+      },
+      {
+        "model_id": "canopylabs/orpheus-v1-english",
+        "name": "canopylabs/orpheus-v1-english",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 4000,
+          "max_completion_tokens": 50000
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "canopylabs/orpheus-v1-english",
+          "object": "model",
+          "created": 1766186316,
+          "owned_by": "Canopy Labs",
+          "active": true,
+          "context_window": 4000,
+          "public_apps": null,
+          "max_completion_tokens": 50000
+        }
+      },
+      {
+        "model_id": "groq/compound",
+        "name": "groq/compound",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 131072,
+          "max_completion_tokens": 8192
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "groq/compound",
+          "object": "model",
+          "created": 1756949530,
+          "owned_by": "Groq",
+          "active": true,
+          "context_window": 131072,
+          "public_apps": null,
+          "max_completion_tokens": 8192
+        }
+      },
+      {
+        "model_id": "groq/compound-mini",
+        "name": "groq/compound-mini",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 131072,
+          "max_completion_tokens": 8192
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "groq/compound-mini",
+          "object": "model",
+          "created": 1756949707,
+          "owned_by": "Groq",
+          "active": true,
+          "context_window": 131072,
+          "public_apps": null,
+          "max_completion_tokens": 8192
+        }
+      },
+      {
+        "model_id": "llama-3.1-8b-instant",
+        "name": "llama-3.1-8b-instant",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 131072,
+          "max_completion_tokens": 131072
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "llama-3.1-8b-instant",
+          "object": "model",
+          "created": 1693721698,
+          "owned_by": "Meta",
+          "active": true,
+          "context_window": 131072,
+          "public_apps": null,
+          "max_completion_tokens": 131072
+        }
+      },
+      {
+        "model_id": "llama-3.3-70b-versatile",
+        "name": "llama-3.3-70b-versatile",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 131072,
+          "max_completion_tokens": 32768
+        },
+        "tags": [
+          "new"
+        ],
+        "notes": null,
+        "raw": {
+          "id": "llama-3.3-70b-versatile",
+          "object": "model",
+          "created": 1733447754,
+          "owned_by": "Meta",
+          "active": true,
+          "context_window": 131072,
+          "public_apps": null,
+          "max_completion_tokens": 32768
+        }
+      },
+      {
+        "model_id": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "name": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 131072,
+          "max_completion_tokens": 8192
+        },
+        "tags": [
+          "new"
+        ],
+        "notes": null,
+        "raw": {
+          "id": "meta-llama/llama-4-scout-17b-16e-instruct",
+          "object": "model",
+          "created": 1743874824,
+          "owned_by": "Meta",
+          "active": true,
+          "context_window": 131072,
+          "public_apps": null,
+          "max_completion_tokens": 8192
+        }
+      },
+      {
+        "model_id": "meta-llama/llama-prompt-guard-2-22m",
+        "name": "meta-llama/llama-prompt-guard-2-22m",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 512,
+          "max_completion_tokens": 512
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "meta-llama/llama-prompt-guard-2-22m",
+          "object": "model",
+          "created": 1748632101,
+          "owned_by": "Meta",
+          "active": true,
+          "context_window": 512,
+          "public_apps": null,
+          "max_completion_tokens": 512
+        }
+      },
+      {
+        "model_id": "meta-llama/llama-prompt-guard-2-86m",
+        "name": "meta-llama/llama-prompt-guard-2-86m",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 512,
+          "max_completion_tokens": 512
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "meta-llama/llama-prompt-guard-2-86m",
+          "object": "model",
+          "created": 1748632165,
+          "owned_by": "Meta",
+          "active": true,
+          "context_window": 512,
+          "public_apps": null,
+          "max_completion_tokens": 512
+        }
+      },
+      {
+        "model_id": "openai/gpt-oss-120b",
+        "name": "openai/gpt-oss-120b",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 131072,
+          "max_completion_tokens": 65536
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "openai/gpt-oss-120b",
+          "object": "model",
+          "created": 1754408224,
+          "owned_by": "OpenAI",
+          "active": true,
+          "context_window": 131072,
+          "public_apps": null,
+          "max_completion_tokens": 65536
+        }
+      },
+      {
+        "model_id": "openai/gpt-oss-20b",
+        "name": "openai/gpt-oss-20b",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 131072,
+          "max_completion_tokens": 65536
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "openai/gpt-oss-20b",
+          "object": "model",
+          "created": 1754407957,
+          "owned_by": "OpenAI",
+          "active": true,
+          "context_window": 131072,
+          "public_apps": null,
+          "max_completion_tokens": 65536
+        }
+      },
+      {
+        "model_id": "openai/gpt-oss-safeguard-20b",
+        "name": "openai/gpt-oss-safeguard-20b",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 131072,
+          "max_completion_tokens": 65536
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "openai/gpt-oss-safeguard-20b",
+          "object": "model",
+          "created": 1761708789,
+          "owned_by": "OpenAI",
+          "active": true,
+          "context_window": 131072,
+          "public_apps": null,
+          "max_completion_tokens": 65536
+        }
+      },
+      {
+        "model_id": "qwen/qwen3-32b",
+        "name": "qwen/qwen3-32b",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 131072,
+          "max_completion_tokens": 40960
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "qwen/qwen3-32b",
+          "object": "model",
+          "created": 1748396646,
+          "owned_by": "Alibaba Cloud",
+          "active": true,
+          "context_window": 131072,
+          "public_apps": null,
+          "max_completion_tokens": 40960
+        }
+      },
+      {
+        "model_id": "whisper-large-v3",
+        "name": "whisper-large-v3",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 448,
+          "max_completion_tokens": 448
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "whisper-large-v3",
+          "object": "model",
+          "created": 1693721698,
+          "owned_by": "OpenAI",
+          "active": true,
+          "context_window": 448,
+          "public_apps": null,
+          "max_completion_tokens": 448
+        }
+      },
+      {
+        "model_id": "whisper-large-v3-turbo",
+        "name": "whisper-large-v3-turbo",
+        "latency_ms": null,
+        "cost_hint": "$",
+        "capabilities": {
+          "context_window": 448,
+          "max_completion_tokens": 448
+        },
+        "tags": [],
+        "notes": null,
+        "raw": {
+          "id": "whisper-large-v3-turbo",
+          "object": "model",
+          "created": 1728413088,
+          "owned_by": "OpenAI",
+          "active": true,
+          "context_window": 448,
+          "public_apps": null,
+          "max_completion_tokens": 448
+        }
+      }
+    ],
     "anthropic": [],
     "google": [],
     "elevenlabs": [
@@ -5556,7 +5876,8 @@
             "provider_deprecation_date": "2026-02-19T00:00:00Z",
             "replacement_model": "claude-3-7-sonnet",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5592,7 +5913,8 @@
             "provider_deprecation_date": "2026-02-19T00:00:00Z",
             "replacement_model": "claude-3-7-sonnet",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5628,7 +5950,8 @@
             "provider_deprecation_date": "2026-02-19T00:00:00Z",
             "replacement_model": "claude-3-7-sonnet",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5655,7 +5978,8 @@
           "supports_document_input": false,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5682,7 +6006,8 @@
           "supports_document_input": false,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5718,7 +6043,8 @@
             "provider_deprecation_date": "2026-08-23T00:00:00Z",
             "replacement_model": "claude-haiku-4-5",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5754,7 +6080,8 @@
             "provider_deprecation_date": "2026-08-23T00:00:00Z",
             "replacement_model": "claude-haiku-4-5",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5781,7 +6108,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5808,7 +6136,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5840,7 +6169,8 @@
             "high",
             "xhigh"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5876,7 +6206,8 @@
             "provider_deprecation_date": "2026-09-13T00:00:00Z",
             "replacement_model": "claude-sonnet-4-5",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5903,7 +6234,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5930,7 +6262,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5957,7 +6290,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -5993,7 +6327,8 @@
             "provider_deprecation_date": "2026-09-13T00:00:00Z",
             "replacement_model": "claude-sonnet-4-5",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6027,7 +6362,8 @@
             "high",
             "xhigh"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6063,7 +6399,8 @@
             "provider_deprecation_date": "2026-03-31T00:00:00Z",
             "replacement_model": "gemini-2.5-flash",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6099,7 +6436,8 @@
             "provider_deprecation_date": "2026-03-31T00:00:00Z",
             "replacement_model": "gemini-2.5-flash",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6135,7 +6473,8 @@
             "provider_deprecation_date": "2026-03-31T00:00:00Z",
             "replacement_model": "gemini-2.5-flash-lite",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6171,7 +6510,8 @@
             "provider_deprecation_date": "2026-03-31T00:00:00Z",
             "replacement_model": "gemini-2.5-flash-lite",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6198,7 +6538,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6225,7 +6566,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6257,7 +6599,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6284,7 +6627,8 @@
           "supports_document_input": false,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6311,7 +6655,8 @@
           "supports_document_input": false,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6338,7 +6683,8 @@
           "supports_document_input": false,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6365,7 +6711,8 @@
           "supports_document_input": false,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6392,7 +6739,8 @@
           "supports_document_input": false,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6419,7 +6767,8 @@
           "supports_document_input": false,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6446,7 +6795,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6473,7 +6823,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6500,7 +6851,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6527,7 +6879,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6554,7 +6907,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6581,7 +6935,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6608,7 +6963,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6635,7 +6991,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6662,7 +7019,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6689,7 +7047,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6716,7 +7075,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6743,7 +7103,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6770,7 +7131,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6797,7 +7159,8 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": true,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6829,7 +7192,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6861,7 +7225,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6893,7 +7258,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6925,7 +7291,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6957,7 +7324,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -6989,7 +7357,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -7021,7 +7390,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -7053,7 +7423,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -7085,7 +7456,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -7117,7 +7489,8 @@
             "medium",
             "high"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -7146,7 +7519,296 @@
           "available_reasoning_efforts": [
             "medium"
           ],
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
+        }
+      },
+      {
+        "model_id": "gpt-5.4",
+        "name": "gpt-5.4",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {
+          "max_tokens_limit": 128000,
+          "max_context_limit": 272000,
+          "supports_image_input": true,
+          "supports_document_input": true
+        },
+        "tags": [
+          "convai"
+        ],
+        "notes": "ElevenLabs ConvAI",
+        "raw": {
+          "llm": "gpt-5.4",
+          "is_checkpoint": false,
+          "max_tokens_limit": 128000,
+          "max_context_limit": 272000,
+          "supports_image_input": true,
+          "supports_document_input": true,
+          "supports_parallel_tool_calls": true,
+          "available_reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "deprecation_info": null,
+          "regional_processing_surcharge": {
+            "multiplier": 1.1
+          }
+        }
+      },
+      {
+        "model_id": "gpt-5.4-2026-03-05",
+        "name": "gpt-5.4-2026-03-05",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {
+          "max_tokens_limit": 128000,
+          "max_context_limit": 272000,
+          "supports_image_input": true,
+          "supports_document_input": true
+        },
+        "tags": [
+          "convai"
+        ],
+        "notes": "ElevenLabs ConvAI",
+        "raw": {
+          "llm": "gpt-5.4-2026-03-05",
+          "is_checkpoint": true,
+          "max_tokens_limit": 128000,
+          "max_context_limit": 272000,
+          "supports_image_input": true,
+          "supports_document_input": true,
+          "supports_parallel_tool_calls": true,
+          "available_reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "deprecation_info": null,
+          "regional_processing_surcharge": {
+            "multiplier": 1.1
+          }
+        }
+      },
+      {
+        "model_id": "gpt-5.4-mini",
+        "name": "gpt-5.4-mini",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {
+          "max_tokens_limit": 128000,
+          "max_context_limit": 400000,
+          "supports_image_input": true,
+          "supports_document_input": true
+        },
+        "tags": [
+          "convai"
+        ],
+        "notes": "ElevenLabs ConvAI",
+        "raw": {
+          "llm": "gpt-5.4-mini",
+          "is_checkpoint": false,
+          "max_tokens_limit": 128000,
+          "max_context_limit": 400000,
+          "supports_image_input": true,
+          "supports_document_input": true,
+          "supports_parallel_tool_calls": true,
+          "available_reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "deprecation_info": null,
+          "regional_processing_surcharge": {
+            "multiplier": 1.1
+          }
+        }
+      },
+      {
+        "model_id": "gpt-5.4-mini-2026-03-17",
+        "name": "gpt-5.4-mini-2026-03-17",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {
+          "max_tokens_limit": 128000,
+          "max_context_limit": 400000,
+          "supports_image_input": true,
+          "supports_document_input": true
+        },
+        "tags": [
+          "convai"
+        ],
+        "notes": "ElevenLabs ConvAI",
+        "raw": {
+          "llm": "gpt-5.4-mini-2026-03-17",
+          "is_checkpoint": true,
+          "max_tokens_limit": 128000,
+          "max_context_limit": 400000,
+          "supports_image_input": true,
+          "supports_document_input": true,
+          "supports_parallel_tool_calls": true,
+          "available_reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "deprecation_info": null,
+          "regional_processing_surcharge": {
+            "multiplier": 1.1
+          }
+        }
+      },
+      {
+        "model_id": "gpt-5.4-nano",
+        "name": "gpt-5.4-nano",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {
+          "max_tokens_limit": 128000,
+          "max_context_limit": 400000,
+          "supports_image_input": true,
+          "supports_document_input": true
+        },
+        "tags": [
+          "convai"
+        ],
+        "notes": "ElevenLabs ConvAI",
+        "raw": {
+          "llm": "gpt-5.4-nano",
+          "is_checkpoint": false,
+          "max_tokens_limit": 128000,
+          "max_context_limit": 400000,
+          "supports_image_input": true,
+          "supports_document_input": true,
+          "supports_parallel_tool_calls": true,
+          "available_reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "deprecation_info": null,
+          "regional_processing_surcharge": {
+            "multiplier": 1.1
+          }
+        }
+      },
+      {
+        "model_id": "gpt-5.4-nano-2026-03-17",
+        "name": "gpt-5.4-nano-2026-03-17",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {
+          "max_tokens_limit": 128000,
+          "max_context_limit": 400000,
+          "supports_image_input": true,
+          "supports_document_input": true
+        },
+        "tags": [
+          "convai"
+        ],
+        "notes": "ElevenLabs ConvAI",
+        "raw": {
+          "llm": "gpt-5.4-nano-2026-03-17",
+          "is_checkpoint": true,
+          "max_tokens_limit": 128000,
+          "max_context_limit": 400000,
+          "supports_image_input": true,
+          "supports_document_input": true,
+          "supports_parallel_tool_calls": true,
+          "available_reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "deprecation_info": null,
+          "regional_processing_surcharge": {
+            "multiplier": 1.1
+          }
+        }
+      },
+      {
+        "model_id": "gpt-5.5",
+        "name": "gpt-5.5",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {
+          "max_tokens_limit": 128000,
+          "max_context_limit": 272000,
+          "supports_image_input": true,
+          "supports_document_input": true
+        },
+        "tags": [
+          "convai"
+        ],
+        "notes": "ElevenLabs ConvAI",
+        "raw": {
+          "llm": "gpt-5.5",
+          "is_checkpoint": false,
+          "max_tokens_limit": 128000,
+          "max_context_limit": 272000,
+          "supports_image_input": true,
+          "supports_document_input": true,
+          "supports_parallel_tool_calls": true,
+          "available_reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "deprecation_info": null,
+          "regional_processing_surcharge": {
+            "multiplier": 1.1
+          }
+        }
+      },
+      {
+        "model_id": "gpt-5.5-2026-04-23",
+        "name": "gpt-5.5-2026-04-23",
+        "latency_ms": null,
+        "cost_hint": null,
+        "capabilities": {
+          "max_tokens_limit": 128000,
+          "max_context_limit": 272000,
+          "supports_image_input": true,
+          "supports_document_input": true
+        },
+        "tags": [
+          "convai"
+        ],
+        "notes": "ElevenLabs ConvAI",
+        "raw": {
+          "llm": "gpt-5.5-2026-04-23",
+          "is_checkpoint": true,
+          "max_tokens_limit": 128000,
+          "max_context_limit": 272000,
+          "supports_image_input": true,
+          "supports_document_input": true,
+          "supports_parallel_tool_calls": true,
+          "available_reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "deprecation_info": null,
+          "regional_processing_surcharge": {
+            "multiplier": 1.1
+          }
         }
       },
       {
@@ -7173,7 +7835,8 @@
           "supports_document_input": false,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -7200,7 +7863,8 @@
           "supports_document_input": false,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": null,
-          "deprecation_info": null
+          "deprecation_info": null,
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -7236,7 +7900,8 @@
             "provider_deprecation_date": null,
             "replacement_model": "gemini-2.5-flash",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       },
       {
@@ -7272,18 +7937,19 @@
             "provider_deprecation_date": null,
             "replacement_model": "gemini-2.5-flash",
             "deprecation_config": null
-          }
+          },
+          "regional_processing_surcharge": null
         }
       }
     ]
   },
   "meta": {
-    "updatedAt": "2026-05-10T17:03:42.458Z",
-    "lastLanguagesSync": "2026-05-10T17:03:41.192Z",
-    "lastModelsSync": "2026-05-10T17:03:42.458Z",
+    "updatedAt": "2026-05-12T15:07:57.638Z",
+    "lastLanguagesSync": "2026-05-12T15:07:56.048Z",
+    "lastModelsSync": "2026-05-12T15:07:57.638Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-05-10T17:03:41.168Z",
+      "at": "2026-05-12T15:07:56.019Z",
       "apiVoiceCount": 26,
       "mappedCount": 26,
       "emptyApiList": false

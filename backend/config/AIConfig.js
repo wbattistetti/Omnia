@@ -37,12 +37,20 @@ class AIConfig {
       NODE_ENV: process.env.NODE_ENV || 'undefined'
     });
 
+    /**
+     * No hardcoded model fallback. The model MUST come from the designer setup
+     * (Omnia Tutor, persisted in `localStorage('omnia.aiModel')`) and reach the backend
+     * in every AI call payload. If a caller forgets it, downstream code fails loudly
+     * (see {@link AIProviderService#callAI}) instead of silently picking a default.
+     * `OPENAI_MODEL` / `GROQ_MODEL` env vars remain available only as opt-in overrides
+     * for headless / scripted scenarios.
+     */
     this.config = {
       providers: {
         openai: {
           enabled: process.env.OPENAI_ENABLED !== 'false',
           apiKey: openaiKey,
-          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+          model: process.env.OPENAI_MODEL || null,
           timeout: parseInt(process.env.OPENAI_TIMEOUT) || 60000,
           maxRetries: parseInt(process.env.OPENAI_MAX_RETRIES) || 3,
           temperature: parseFloat(process.env.OPENAI_TEMPERATURE) || 0.1,
@@ -52,7 +60,7 @@ class AIConfig {
         groq: {
           enabled: process.env.GROQ_ENABLED !== 'false',
           apiKey: groqKey,
-          model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+          model: process.env.GROQ_MODEL || null,
           timeout: parseInt(process.env.GROQ_TIMEOUT) || 60000,
           maxRetries: parseInt(process.env.GROQ_MAX_RETRIES) || 3,
           temperature: parseFloat(process.env.GROQ_TEMPERATURE) || 0.1,
@@ -145,14 +153,20 @@ class AIConfig {
   }
 
   /**
-   * Get default model for provider
-   * @param {string} provider - Provider name
-   * @returns {string} Default model name
+   * Optional opt-in default model for provider (only set via env vars `OPENAI_MODEL` /
+   * `GROQ_MODEL`). Returns `null` when no env override is configured: callers MUST treat
+   * this as "no model selected" and fail-loud rather than silently picking one.
+   *
+   * @param {string} provider
+   * @returns {Promise<string|null>}
    */
   async getDefaultModel(provider) {
     await this.initializeConfig();
     const config = this.config.providers[provider];
-    return config ? config.model : 'gpt-4o-mini';
+    if (!config) {
+      return null;
+    }
+    return typeof config.model === 'string' && config.model.trim() ? config.model.trim() : null;
   }
 }
 

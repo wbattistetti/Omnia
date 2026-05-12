@@ -13,6 +13,7 @@ import { ThemeProvider } from '../theme/components/ThemeProvider';
 import { TaskEditorProvider } from './TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, ActEditorProvider → TaskEditorProvider
 import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
 import { AIProviderProvider } from '../context/AIProviderContext';
+import { AiCallLogProvider } from '../context/AiCallLogContext';
 import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext';
 import { CompilationErrorsProvider } from '../context/CompilationErrorsContext';
 import { ErrorReportFocusProvider } from '../context/ErrorReportFocusContext';
@@ -163,6 +164,7 @@ export default function App() {
       <ProjectDataProvider>
         <ProjectTranslationsProvider>
           <AIProviderProvider>
+            <AiCallLogProvider>
             <DndProvider backend={HTML5Backend}>
               <SpeechRecognitionProvider>
                   <TaskTreeProvider>
@@ -182,6 +184,7 @@ export default function App() {
                   </TaskTreeProvider>
               </SpeechRecognitionProvider>
             </DndProvider>
+            </AiCallLogProvider>
         </AIProviderProvider>
         </ProjectTranslationsProvider>
       </ProjectDataProvider>

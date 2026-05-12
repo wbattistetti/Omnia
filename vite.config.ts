@@ -97,6 +97,9 @@ export default defineConfig({
       // Express IA catalog (Postgres + sync) — before catch-all /api
       '/api/ia-catalog': { target: 'http://localhost:3100', changeOrigin: true },
 
+      // Express AI cost tracker — before catch-all /api → FastAPI
+      '/api/ai-calls': { target: 'http://localhost:3100', changeOrigin: true },
+
       /** Dev tunnel ngrok (Express) — before catch-all /api → FastAPI */
       '/api/dev-tunnel': { target: 'http://localhost:3100', changeOrigin: true },
 
@@ -108,6 +111,7 @@ export default defineConfig({
     proxy: {
       '/api/designer': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/dev-tunnel': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/ai-calls': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/runtime/ai-agent': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/runtime/scheduling': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/runtime/bookfromagenda': { target: 'http://localhost:3100', changeOrigin: true },

@@ -53,6 +53,38 @@ export interface AIAgentUseCase {
   designer_label_vote?: 'up' | 'down';
   designer_payoff_vote?: 'up' | 'down';
   designer_agent_message_vote?: 'up' | 'down';
+  /**
+   * Wizard passo 3 «Tokenizzazione»: versione della frase canonica assistente con le parti
+   * variabili sostituite da placeholder tra parentesi quadre (es. `[data]`, `[ora1]`, `[nome]`).
+   * Vive QUI come campo top-level dello use case (non dentro il `dialogue` turn) perché
+   * concettualmente è una proprietà della frase canonica del caso d'uso, non di un singolo turno
+   * del dialogo di esempio.
+   *
+   * Token semantica:
+   * - i token sono interni alla gente virtuale (es. ElevenLabs); NON mappano a variabili Omnia,
+   *   non hanno GUID e non influenzano il flow;
+   * - una frase senza parti variabili resta IDENTICA all'originale (non si tokenizza forzatamente);
+   * - gli indici numerici (`[data1]`, `[ora2]`) sono usati SOLO quando lo stesso tipo compare più
+   *   volte nella stessa frase per disambiguare.
+   *
+   * Vita del campo:
+   * - assente / stringa vuota = frase non ancora tokenizzata;
+   * - presente = ultima tokenizzazione (AI o manuale).
+   *
+   * Staleness (vedi {@link assistant_example_tokenized_source}): se il canonico viene modificato
+   * dopo la tokenizzazione, il valore resta ma è considerato «da ritokenizzare» finché il
+   * designer non lo aggiorna a mano o non ri-genera con l'AI.
+   */
+  assistant_example_tokenized?: string;
+  /**
+   * Snapshot del canonico assistente (`dialogue` assistant turn `content`) al momento in cui
+   * `assistant_example_tokenized` è stato prodotto. Confrontato col canonico corrente per
+   * derivare lo stato «stale» senza dover invalidare attivamente in ogni punto di edit.
+   *
+   * Convenzione: se `assistant_example_tokenized` è valorizzato e questo source è diverso dal
+   * `content` corrente dell'assistente, la UI mostra l'avviso «da ritokenizzare».
+   */
+  assistant_example_tokenized_source?: string;
 }
 
 /** Stable id for a dialogue turn (exported for UI bridge). */
@@ -60,6 +92,39 @@ export function newAgentUseCaseTurnId(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
     : `t-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Restituisce il `content` del primo turno assistant del `dialogue` (frase canonica del use case),
+ * oppure stringa vuota se assente. Utility centralizzata per evitare scan ripetuti dello stesso
+ * pattern in più punti (wizard tokenizzazione, bubble Passo 2, baseline diff, ecc.).
+ */
+export function getAssistantExample(useCase: AIAgentUseCase): string {
+  const dialogue = Array.isArray(useCase?.dialogue) ? useCase.dialogue : [];
+  const assistant = dialogue.find((t) => t && t.role === 'assistant');
+  return assistant && typeof assistant.content === 'string' ? assistant.content : '';
+}
+
+/**
+ * True quando lo use case ha già una tokenizzazione registrata MA il canonico corrente è cambiato
+ * rispetto allo snapshot al momento della tokenizzazione (`assistant_example_tokenized_source`).
+ * Pattern alternativo al «clear-on-edit»: non serve invalidare attivamente in ogni call site di
+ * modifica del canonico, perché la staleness è derivata dal confronto strutturale.
+ *
+ * Casi:
+ * - nessuna tokenizzazione presente → false (non c'è nulla di stale, è semplicemente «vuoto»);
+ * - tokenizzazione presente senza source registrato (legacy) → considerata stale, così la UI
+ *   invita a rigenerare/aggiornare;
+ * - tokenizzazione presente, source = canonico corrente → fresh;
+ * - tokenizzazione presente, source ≠ canonico corrente → stale.
+ */
+export function isAssistantExampleTokenizationStale(useCase: AIAgentUseCase): boolean {
+  const tokenized = useCase?.assistant_example_tokenized;
+  if (typeof tokenized !== 'string' || !tokenized) return false;
+  const currentCanonical = getAssistantExample(useCase);
+  const source = useCase?.assistant_example_tokenized_source;
+  if (typeof source !== 'string') return true;
+  return source !== currentCanonical;
 }
 
 function newTurnId(): string {
@@ -216,6 +281,14 @@ export function parseAgentUseCasesJson(raw: string | undefined): AIAgentUseCase[
         o.designer_agent_message_vote === 'up' || o.designer_agent_message_vote === 'down'
           ? o.designer_agent_message_vote
           : undefined;
+      const assistant_example_tokenized =
+        typeof o.assistant_example_tokenized === 'string'
+          ? o.assistant_example_tokenized
+          : undefined;
+      const assistant_example_tokenized_source =
+        typeof o.assistant_example_tokenized_source === 'string'
+          ? o.assistant_example_tokenized_source
+          : undefined;
       out.push({
         id,
         label,
@@ -232,6 +305,12 @@ export function parseAgentUseCasesJson(raw: string | undefined): AIAgentUseCase[
         ...(designer_label_vote ? { designer_label_vote } : {}),
         ...(designer_payoff_vote ? { designer_payoff_vote } : {}),
         ...(designer_agent_message_vote ? { designer_agent_message_vote } : {}),
+        ...(assistant_example_tokenized !== undefined
+          ? { assistant_example_tokenized }
+          : {}),
+        ...(assistant_example_tokenized_source !== undefined
+          ? { assistant_example_tokenized_source }
+          : {}),
       });
     }
     return out;

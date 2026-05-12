@@ -176,11 +176,13 @@ export async function generateStructureFromAI(
   // Usa callAIInference esistente
   const { callAIInference } = await import('../components/TaskEditor/ResponseEditor/hooks/helpers/aiInference');
 
-  const defaultModel = provider === 'groq'
-    ? 'llama-3.1-70b-versatile'
-    : 'gpt-4-turbo-preview';
+  if (!model) {
+    throw new Error(
+      '[taskOrchestrator] Modello LLM non configurato: impostane uno in Settings > Omnia Tutor.'
+    );
+  }
 
-  const result = await callAIInference(label, provider, model || defaultModel);
+  const result = await callAIInference(label, provider, model);
 
   if (!result) {
     throw new Error('[taskOrchestrator] AI call failed o restituito null');

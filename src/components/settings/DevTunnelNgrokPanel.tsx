@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import {
   fetchNgrokTunnelStatus,
   startNgrokTunnels,
@@ -111,6 +112,7 @@ export function DevTunnelNgrokPanel(props: DevTunnelNgrokPanelProps = {}) {
   const { projectId, iaAgentConfig } = props;
   const [rows, setRows] = React.useState<TunnelRow[]>(() => loadRows());
   const [authtoken, setAuthtoken] = React.useState<string>(() => loadToken());
+  const [showAuthtoken, setShowAuthtoken] = React.useState(false);
   const [compileTunnel, setCompileTunnel] = React.useState<boolean>(() => getCompileUseDevTunnel());
   const [discoveredPorts, setDiscoveredPorts] = React.useState<number[]>([]);
   const [taskFetchWarning, setTaskFetchWarning] = React.useState<string | null>(null);
@@ -309,24 +311,63 @@ export function DevTunnelNgrokPanel(props: DevTunnelNgrokPanelProps = {}) {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 180px' }}>
           <span style={{ color: '#94a3b8', whiteSpace: 'nowrap' }}>Authtoken</span>
-          <input
-            type="password"
-            autoComplete="off"
-            value={authtoken}
-            onChange={(e) => setAuthtoken(e.target.value)}
-            onBlur={persistToken}
-            placeholder="ngrok o .env NGROK_AUTHTOKEN"
+          <div
             style={{
+              display: 'flex',
               flex: 1,
               minWidth: 120,
-              padding: '4px 8px',
+              alignItems: 'center',
+              gap: 4,
               borderRadius: 4,
               border: '1px solid #475569',
               background: '#020617',
-              color: '#f8fafc',
-              fontSize: 11,
+              paddingRight: 2,
             }}
-          />
+          >
+            <input
+              type={showAuthtoken ? 'text' : 'password'}
+              autoComplete="off"
+              value={authtoken}
+              onChange={(e) => setAuthtoken(e.target.value)}
+              onBlur={persistToken}
+              placeholder="ngrok o .env NGROK_AUTHTOKEN"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: '4px 8px',
+                border: 'none',
+                borderRadius: 4,
+                background: 'transparent',
+                color: '#f8fafc',
+                fontSize: 11,
+                outline: 'none',
+              }}
+            />
+            <button
+              type="button"
+              tabIndex={0}
+              aria-label={showAuthtoken ? 'Nascondi token ngrok' : 'Mostra token ngrok'}
+              aria-pressed={showAuthtoken}
+              onClick={() => setShowAuthtoken((v) => !v)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                width: 28,
+                height: 28,
+                padding: 0,
+                border: 'none',
+                borderRadius: 4,
+                background: 'transparent',
+                color: '#94a3b8',
+                cursor: 'pointer',
+              }}
+              title={showAuthtoken ? 'Nascondi' : 'Mostra'}
+            >
+              {showAuthtoken ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
+            </button>
+          </div>
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none' }}>
           <input

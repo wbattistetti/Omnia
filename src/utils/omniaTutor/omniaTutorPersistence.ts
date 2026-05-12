@@ -3,13 +3,18 @@
  */
 
 import type { OmniaTutorConfig } from 'types/omniaTutorTypes';
-import { AI_PROVIDERS, type AIProvider } from '@context/AIProviderContext';
+import type { AIProvider } from '@context/AIProviderContext';
 
 const STORAGE_KEY = 'omnia.omniaTutor.v1';
 
+/**
+ * Default config: model intentionally empty so the user must pick one in `OmniaTutorSetup`.
+ * The per-button "Nessun modello IA definito" toast guides them there. Any hardcoded default
+ * would silently outdate (last incident: `gpt-5` getting reset to `gpt-4-turbo-preview`).
+ */
 function createDefaultOmniaTutorConfig(): OmniaTutorConfig {
   return {
-    model: AI_PROVIDERS.groq.defaultModel,
+    model: '',
     temperature: 0.3,
     maxTokens: 8192,
     reasoning: 'medium',

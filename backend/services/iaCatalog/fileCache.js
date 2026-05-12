@@ -12,11 +12,23 @@ function ensureDir() {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
+const EMPTY_MODELS_BY_PROVIDER = Object.freeze({
+  openai: [],
+  groq: [],
+  anthropic: [],
+  google: [],
+  elevenlabs: [],
+});
+
+function freshModelsByProvider() {
+  return { ...EMPTY_MODELS_BY_PROVIDER };
+}
+
 function emptyCache() {
   return {
     voices: [],
     languages: [],
-    modelsByProvider: { openai: [], anthropic: [], google: [], elevenlabs: [] },
+    modelsByProvider: freshModelsByProvider(),
     meta: { updatedAt: null },
   };
 }
@@ -26,13 +38,14 @@ function readCache() {
     if (!fs.existsSync(CACHE_PATH)) return emptyCache();
     const raw = fs.readFileSync(CACHE_PATH, 'utf8');
     const j = JSON.parse(raw);
+    const modelsByProvider =
+      j.modelsByProvider && typeof j.modelsByProvider === 'object'
+        ? { ...freshModelsByProvider(), ...j.modelsByProvider }
+        : freshModelsByProvider();
     return {
       voices: Array.isArray(j.voices) ? j.voices : [],
       languages: Array.isArray(j.languages) ? j.languages : [],
-      modelsByProvider:
-        j.modelsByProvider && typeof j.modelsByProvider === 'object'
-          ? j.modelsByProvider
-          : { openai: [], anthropic: [], google: [], elevenlabs: [] },
+      modelsByProvider,
       meta: j.meta && typeof j.meta === 'object' ? j.meta : { updatedAt: null },
     };
   } catch {
@@ -45,11 +58,9 @@ function writeCache(data) {
   const payload = {
     voices: data.voices ?? [],
     languages: data.languages ?? [],
-    modelsByProvider: data.modelsByProvider ?? {
-      openai: [],
-      anthropic: [],
-      google: [],
-      elevenlabs: [],
+    modelsByProvider: {
+      ...freshModelsByProvider(),
+      ...(data.modelsByProvider ?? {}),
     },
     meta: {
       ...data.meta,

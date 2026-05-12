@@ -7,6 +7,7 @@ import { useFlowchartState } from '../context/FlowchartStateContext';
 import { VersionInput } from './common/VersionInput';
 import { isValidVersion, getNextMinor, getNextMajor } from '../utils/versionUtils';
 import { catalogToExistingEntries, validateSaveAs, type ExistingVersionEntry, type ValidateSaveAsResult } from '../utils/saveAsValidation';
+import { AiCostDollarButton } from './common/AiCostDollarButton';
 
 const BTN_BASE = 'flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200';
 const BTN_SECONDARY = 'bg-slate-700 hover:bg-slate-600 text-slate-200';
@@ -193,7 +194,15 @@ export function Toolbar({
   };
 
   return (
-    <div className="bg-slate-800 border-b border-slate-700 px-4 py-2 flex items-center gap-3 min-w-0">
+    <div
+      /**
+       * Marker DOM: usato dalle modalità «fullscreen editor» (es. AI Agent editor) per misurare
+       * la coordinata `bottom` della toolbar globale e posizionare il proprio portal subito sotto,
+       * senza coprirla. Vedi `useAppToolbarBottom`.
+       */
+      data-omnia-app-toolbar
+      className="bg-slate-800 border-b border-slate-700 px-4 py-2 flex items-center gap-3 min-w-0"
+    >
       {/* Sinistra: Home + label progetto + Chiudi + Salva (icona dischetto) */}
       <div className="flex items-center gap-2 flex-1 min-w-0">
         <button
@@ -371,6 +380,7 @@ export function Toolbar({
             <span>Deployment</span>
           </button>
         )}
+        <AiCostDollarButton className="h-10 w-10 rounded-lg" />
         <button
           type="button"
           onClick={() => onSettings()}

@@ -112,6 +112,61 @@ function normalizeUseCaseBundle(bundle, globalStyleId) {
 }
 
 /**
+ * Build a one-line summary of the assistant `dialogue` shape for each parsed use case, used to
+ * diagnose silent regressions (e.g. reasoning models that return `dialogue: []` or
+ * `content: ""` despite the prompt requiring a non-empty agent line). Returns an array of strings
+ * in the form `<idx>:role=...|contentLen=N|fields=[...]`, where `fields` lists alternative keys
+ * the model may have used for the assistant text (`assistant_message`, `agent_text`, ...).
+ *
+ * @param {object[]} useCases
+ * @returns {string[]}
+ */
+function summarizeUseCaseDialogueShapes(useCases) {
+  if (!Array.isArray(useCases)) return [];
+  const ALT_KEYS = ['assistant_message', 'assistant_text', 'agent_text', 'agent_message', 'message', 'example', 'example_message'];
+  return useCases.map((uc, idx) => {
+    if (!uc || typeof uc !== 'object') return `${idx}:non-object`;
+    const dialogue = Array.isArray(uc.dialogue) ? uc.dialogue : null;
+    let part;
+    if (!dialogue) {
+      part = 'dialogue=missing';
+    } else if (dialogue.length === 0) {
+      part = 'dialogue=empty';
+    } else {
+      const first = dialogue.find((t) => t && typeof t === 'object' && t.role === 'assistant') || dialogue[0];
+      const role = first && typeof first === 'object' ? first.role : 'n/a';
+      const content = first && typeof first === 'object' ? first.content : undefined;
+      const contentLen = typeof content === 'string' ? content.length : -1;
+      part = `dialogue.role=${role}|contentLen=${contentLen}`;
+    }
+    const altPresent = ALT_KEYS.filter((k) => typeof uc[k] === 'string' && uc[k].trim());
+    const altPart = altPresent.length ? `|altKeys=[${altPresent.join(',')}]` : '';
+    const id = typeof uc.id === 'string' ? uc.id : 'n/a';
+    return `${idx}(id=${id}):${part}${altPart}`;
+  });
+}
+
+/**
+ * Log a compact summary of the assistant dialogue shape returned by the LLM, plus the count of
+ * use cases whose canonical assistant `content` is empty after parsing — that count is the
+ * direct upstream cause of the empty bubble the designer sees in the UI.
+ *
+ * @param {string} stage e.g. 'bundle' or 'extend'
+ * @param {string|undefined} model
+ * @param {object[]} useCases
+ */
+function logUseCaseDialogueDiagnostics(stage, model, useCases) {
+  const shapes = summarizeUseCaseDialogueShapes(useCases);
+  const emptyContentCount = shapes.filter((s) => /contentLen=0(\D|$)/.test(s) || /contentLen=-1(\D|$)/.test(s) || /dialogue=(empty|missing)/.test(s)).length;
+  console.log(
+    `[useCases:${stage}] model=${model || 'n/a'} count=${useCases.length} emptyAssistantContent=${emptyContentCount}`
+  );
+  if (emptyContentCount > 0) {
+    console.warn(`[useCases:${stage}] dialogue shapes:`, shapes.slice(0, 12));
+  }
+}
+
+/**
  * Random band per HTTP request so the model cannot settle on a ritual count (e.g. four).
  * @returns {{ lo: number, hi: number }}
  */
@@ -329,6 +384,7 @@ async function generateUseCaseBundleExtend({
   existingLogicalSteps,
   provider = 'groq',
   model,
+  purpose,
   aiProviderService,
 }) {
   if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
@@ -352,12 +408,13 @@ async function generateUseCaseBundleExtend({
       )}${buildGlobalStyleBlock(globalStyleContract)}`,
     },
   ];
-  const maxTokens = provider === 'openai' ? 4096 : 8192;
+  const maxTokens = provider === 'openai' ? 32768 : 8192;
   const response = await aiProviderService.callAI(provider, messages, {
     model: model || undefined,
     temperature: 0.52,
     maxTokens,
     timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
+    purpose,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -370,6 +427,7 @@ async function generateUseCaseBundleExtend({
     throw err;
   }
   const ext = validateExtendUseCases(parsed);
+  logUseCaseDialogueDiagnostics('extend', model, ext.use_cases);
   const use_cases = ext.use_cases.map((u) => normalizeUseCase(u, globalStyleId));
   return { use_cases };
 }
@@ -391,6 +449,7 @@ async function generateUseCaseBundle({
   globalStyleId,
   provider = 'groq',
   model,
+  purpose,
   aiProviderService,
 }) {
   if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
@@ -409,12 +468,13 @@ async function generateUseCaseBundle({
       )}${buildGlobalStyleBlock(globalStyleContract)}`,
     },
   ];
-  const maxTokens = provider === 'openai' ? 4096 : 8192;
+  const maxTokens = provider === 'openai' ? 32768 : 8192;
   const response = await aiProviderService.callAI(provider, messages, {
     model: model || undefined,
     temperature: 0.62,
     maxTokens,
     timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
+    purpose,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -427,6 +487,7 @@ async function generateUseCaseBundle({
     throw err;
   }
   const bundle = validateUseCaseBundle(parsed);
+  logUseCaseDialogueDiagnostics('bundle', model, bundle.use_cases);
   return normalizeUseCaseBundle(bundle, globalStyleId);
 }
 
@@ -517,6 +578,7 @@ async function createUseCase({
   globalStyleId,
   provider = 'groq',
   model,
+  purpose,
   aiProviderService,
 }) {
   if (!useCase || typeof useCase !== 'object') {
@@ -541,6 +603,7 @@ async function createUseCase({
     temperature: 0.35,
     maxTokens,
     timeout: REGENERATE_USE_CASE_TIMEOUT_MS,
+    purpose,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -637,6 +700,10 @@ function buildPropagateExamplePhraseStyleUserMessage(
       ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
       : '';
   const styleBlock = buildGlobalStyleBlock(globalStyleContract);
+  const singleHint =
+    Array.isArray(targetIdsOrder) && targetIdsOrder.length === 1
+      ? '\n\nThere is exactly one target id in TARGET_IDS_ORDER — emit exactly one object in "updates" for that id.\n'
+      : '';
   return `${lang}STYLE_EXAMPLES (authoritative — imitate these assistant lines):\n${JSON.stringify(styleExamples).slice(
     0,
     12000
@@ -645,54 +712,39 @@ function buildPropagateExamplePhraseStyleUserMessage(
     12000
   )}\n\nLogical steps (context):\n${JSON.stringify(logicalSteps || []).slice(0, 4000)}\n${styleBlock}\n\nTARGET_IDS_ORDER (emit updates in this exact order): ${JSON.stringify(
     targetIdsOrder
-  )}\n\nReturn JSON: { "updates": [ { "use_case_id": "<id>", "assistant_content": "..." }, ... ] }. Valid JSON only.`;
+  )}\n${singleHint}\nReturn JSON: { "updates": [ { "use_case_id": "<id>", "assistant_content": "..." }, ... ] }. Valid JSON only.`;
 }
 
+/** OpenAI completion ceiling for models capped at 4096 output tokens (e.g. gpt-4 class). */
+const PROPAGATE_STYLE_OPENAI_MAX_TOKENS = 4096;
+const PROPAGATE_STYLE_RETRY_PER_TARGET = 3;
+
 /**
- * Rigenera solo le righe assistente ancora alla baseline, imitando le frasi modificate dall’utente.
+ * One LLM call: STYLE_EXAMPLES + contesto + subset di target (di solito uno).
  * @param {object} params
- * @param {object[]} params.allUseCases
- * @param {object[]} params.logicalSteps
- * @param {string[]} params.styleExampleUseCaseIds
- * @param {string[]} params.targetUseCaseIds
+ * @param {object[]} params.styleExamples — già normalizzati
+ * @param {string[]} params.targetUseCaseIds — ordine emissione atteso
  */
-async function propagateExamplePhraseStyle({
+async function propagateExamplePhraseStyleOneShot({
+  styleExamples,
+  targetUseCaseIds,
   allUseCases,
   logicalSteps,
-  styleExampleUseCaseIds,
-  targetUseCaseIds,
   outputLanguage,
   globalStyleContract,
   globalStyleId,
-  provider = 'groq',
+  provider,
   model,
   aiProviderService,
 }) {
-  if (!Array.isArray(allUseCases) || allUseCases.length === 0) {
-    throw new Error('allUseCases is required');
-  }
-  if (!Array.isArray(styleExampleUseCaseIds) || styleExampleUseCaseIds.length === 0) {
-    throw new Error('styleExampleUseCaseIds is required');
-  }
-  if (!Array.isArray(targetUseCaseIds) || targetUseCaseIds.length === 0) {
-    throw new Error('targetUseCaseIds is required');
-  }
   const byId = new Map(allUseCases.map((u) => [u.id, u]));
-  const styleExamples = [];
-  for (const id of styleExampleUseCaseIds) {
-    const u = byId.get(id);
-    if (u) styleExamples.push(normalizeUseCase(u, globalStyleId));
-  }
-  if (styleExamples.length === 0) {
-    throw new Error('No valid style examples');
-  }
   const targets = [];
   for (const id of targetUseCaseIds) {
     const u = byId.get(id);
     if (u) targets.push(normalizeUseCase(u, globalStyleId));
   }
-  if (targets.length === 0) {
-    throw new Error('No valid targets');
+  if (targets.length === 0 || targets.length !== targetUseCaseIds.length) {
+    throw new Error('Missing or invalid target use case(s) for propagate style');
   }
   const messages = [
     { role: 'system', content: PROPAGATE_EXAMPLE_PHRASE_STYLE_SYSTEM },
@@ -708,7 +760,7 @@ async function propagateExamplePhraseStyle({
       ),
     },
   ];
-  const maxTokens = provider === 'openai' ? 8192 : 16384;
+  const maxTokens = provider === 'openai' ? PROPAGATE_STYLE_OPENAI_MAX_TOKENS : 16384;
   const response = await aiProviderService.callAI(provider, messages, {
     model: model || undefined,
     temperature: 0.45,
@@ -749,6 +801,81 @@ async function propagateExamplePhraseStyle({
     );
   }
   return { updates: out };
+}
+
+/**
+ * Rigenera solo le righe assistente ancora alla baseline, imitando le frasi modificate dall’utente.
+ * @param {object} params
+ * @param {object[]} params.allUseCases
+ * @param {object[]} params.logicalSteps
+ * @param {string[]} params.styleExampleUseCaseIds
+ * @param {string[]} params.targetUseCaseIds
+ */
+async function propagateExamplePhraseStyle({
+  allUseCases,
+  logicalSteps,
+  styleExampleUseCaseIds,
+  targetUseCaseIds,
+  outputLanguage,
+  globalStyleContract,
+  globalStyleId,
+  provider = 'groq',
+  model,
+  aiProviderService,
+}) {
+  if (!Array.isArray(allUseCases) || allUseCases.length === 0) {
+    throw new Error('allUseCases is required');
+  }
+  if (!Array.isArray(styleExampleUseCaseIds) || styleExampleUseCaseIds.length === 0) {
+    throw new Error('styleExampleUseCaseIds is required');
+  }
+  if (!Array.isArray(targetUseCaseIds) || targetUseCaseIds.length === 0) {
+    throw new Error('targetUseCaseIds is required');
+  }
+  const byId = new Map(allUseCases.map((u) => [u.id, u]));
+  const styleExamples = [];
+  for (const id of styleExampleUseCaseIds) {
+    const u = byId.get(id);
+    if (u) styleExamples.push(normalizeUseCase(u, globalStyleId));
+  }
+  if (styleExamples.length === 0) {
+    throw new Error('No valid style examples');
+  }
+  const order = targetUseCaseIds.map(String);
+  const merged = [];
+  for (const id of order) {
+    let lastErr = null;
+    let batch = null;
+    for (let attempt = 1; attempt <= PROPAGATE_STYLE_RETRY_PER_TARGET; attempt += 1) {
+      try {
+        batch = await propagateExamplePhraseStyleOneShot({
+          styleExamples,
+          targetUseCaseIds: [id],
+          allUseCases,
+          logicalSteps,
+          outputLanguage,
+          globalStyleContract,
+          globalStyleId,
+          provider,
+          model,
+          aiProviderService,
+        });
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (attempt === PROPAGATE_STYLE_RETRY_PER_TARGET) {
+          throw new Error(
+            `propagateExamplePhraseStyle failed for use_case_id=${id} after ${PROPAGATE_STYLE_RETRY_PER_TARGET} attempts: ${lastErr?.message || lastErr}`
+          );
+        }
+      }
+    }
+    if (!batch || !Array.isArray(batch.updates) || batch.updates.length !== 1) {
+      throw new Error(`propagateExamplePhraseStyle: invalid batch for id=${id}`);
+    }
+    merged.push(batch.updates[0]);
+  }
+  return { updates: merged };
 }
 
 const ANNOTATE_ASSISTANT_FOR_JSON_TIMEOUT_MS = REGENERATE_TURN_TIMEOUT_MS;
@@ -1237,4 +1364,17 @@ module.exports = {
   annotateAssistantMessageForJson,
   validateUseCaseBundle,
   analyzeDebuggerTurnUseCase,
+  /**
+   * Esposizione dei prompt builder per la feature «LLM manual handoff»: il client costruisce
+   * lo stesso prompt che useremmo per la chiamata LLM e lo copia verso un motore esterno.
+   * Re-export dei builder esistenti — UNICA fonte di verità: cambi al prompt riflessi su
+   * entrambi i path (chiamata interna e handoff).
+   */
+  UC_SYSTEM,
+  buildGenerateUseCasesUserMessage,
+  buildExtendUseCasesUserMessage,
+  buildGlobalStyleBlock,
+  pickBundleScenarioTargetBand,
+  pickExtendNewScenarioTargetBand,
+  summarizeExistingUseCasesForPrompt,
 };
