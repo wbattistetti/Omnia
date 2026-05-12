@@ -69,6 +69,7 @@ import {
   UC_SCENARIO_ROW_EDIT_BTN,
   UC_SCENARIO_VOTE_BTN,
   fieldTextClass,
+  useCaseHeaderBgClass,
 } from './useCaseComposerPresentation';
 import {
   applyDesignerFieldVoteToggle,
@@ -580,6 +581,30 @@ export function AIAgentUseCaseComposer({
     [setUseCases, onClearUseCaseHighlight]
   );
 
+  /**
+   * Voto «di validazione» sull'intero use case, applicato dal pollice nell'header della
+   * lista. Tre effetti coordinati:
+   *  1. Aggiorna `designer_label_vote` con la stessa logica del toggle generico (un secondo
+   *     click sulla stessa scelta rimuove il voto).
+   *  2. Collassa l'accordion del use case (in modalità wizard): il designer ha appena
+   *     espresso un giudizio, non ha più bisogno di vedere scenario / messaggio aperti.
+   *  3. Notifica la toolbar wizard del cambio espansione (per aggiornare il contatore
+   *     «X di Y aperti»).
+   * Il colore di sfondo dell'header è derivato in render dal voto risultante: verde su
+   * `'up'`, rosso su `'down'`, neutro altrimenti — vedi `headerBgClass` più sotto.
+   */
+  const validateUseCaseFromHeader = React.useCallback(
+    (useCaseId: string, choice: 'up' | 'down') => {
+      setUseCases((prev) => applyDesignerFieldVoteToggle(prev, useCaseId, 'label', choice));
+      onClearUseCaseHighlight?.(useCaseId);
+      if (primaryGenerateOnRightOnly) {
+        setCardExpandedById((prev) => ({ ...prev, [useCaseId]: false }));
+        listToolbarCtx?.notifyCardToggle();
+      }
+    },
+    [setUseCases, onClearUseCaseHighlight, primaryGenerateOnRightOnly, listToolbarCtx]
+  );
+
   const beginPayoffEdit = React.useCallback((useCaseId: string, current: string) => {
     setAgentMsgEditUseCaseId(null);
     setPayoffEditUseCaseId(useCaseId);
@@ -1088,12 +1113,13 @@ export function AIAgentUseCaseComposer({
                         onClick={() => {
                           if (u.id !== effectiveSelectedId) setSelectedId(u.id);
                         }}
-                        className={`group/uc-head flex cursor-pointer items-center gap-1 pl-1.5 pr-2 py-1 ${
-                          active ? 'bg-violet-900/40' : 'hover:bg-slate-800/80'
-                        }`}
+                        className={`group/uc-head flex cursor-pointer items-start gap-1 pl-1.5 pr-2 py-1 ${useCaseHeaderBgClass(
+                          u.designer_label_vote,
+                          active
+                        )}`}
                         style={{ paddingLeft: `${4 + depth * 8}px` }}
                       >
-                        <div className="flex w-5 shrink-0 items-center justify-center">
+                        <div className="mt-[2px] flex w-5 shrink-0 items-center justify-center">
                           {reviewed ? (
                             <Check
                               size={14}
@@ -1118,7 +1144,7 @@ export function AIAgentUseCaseComposer({
                         {primaryGenerateOnRightOnly ? (
                           <button
                             type="button"
-                            className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800/90 hover:text-slate-100"
+                            className="mt-[1px] shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800/90 hover:text-slate-100"
                             title={cardExpanded ? 'Collassa' : 'Espandi'}
                             aria-expanded={cardExpanded}
                             onClick={(e) => {
@@ -1137,7 +1163,7 @@ export function AIAgentUseCaseComposer({
                             )}
                           </button>
                         ) : null}
-                        <GitBranch size={12} className="shrink-0 opacity-60 text-slate-400" aria-hidden />
+                        <GitBranch size={12} className="mt-[4px] shrink-0 opacity-60 text-slate-400" aria-hidden />
                         {editingTitle ? (
                           <div
                             className="flex min-w-0 flex-1 items-center gap-1"
@@ -1195,7 +1221,7 @@ export function AIAgentUseCaseComposer({
                             <button
                               type="button"
                               title={descriptionTooltip || undefined}
-                              className={`min-w-0 flex flex-1 items-center gap-1 text-left text-sm ${fieldTextClass(
+                              className={`min-w-0 flex flex-1 flex-wrap items-start gap-x-1 gap-y-0.5 text-left text-sm leading-snug ${fieldTextClass(
                                 u.designer_label_vote,
                                 u.label ?? '',
                                 fieldBaselineByUseCaseId[u.id]?.label
@@ -1205,7 +1231,7 @@ export function AIAgentUseCaseComposer({
                                 if (u.id !== effectiveSelectedId) setSelectedId(u.id);
                               }}
                             >
-                              <span className="truncate">{u.label || u.id}</span>
+                              <span className="min-w-0 break-words whitespace-normal">{u.label || u.id}</span>
                               {primaryGenerateOnRightOnly && phraseStyleNewSet.has(u.id) ? (
                                 <span
                                   className="ml-1 shrink-0 rounded bg-emerald-600/40 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-100"
@@ -1215,12 +1241,22 @@ export function AIAgentUseCaseComposer({
                                 </span>
                               ) : null}
                             </button>
-                            <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/uc-head:opacity-100 group-focus-within/uc-head:opacity-100">
+                            {/*
+                              Cluster destro: pollici di validazione + matita modifica etichetta.
+                              Quando il use case è già validato/invalidato il cluster resta SEMPRE
+                              visibile (`opacity-100`) — il pollice diventa indicatore di stato.
+                              Senza voto, fade-in solo su hover/focus per non rumorire la lista.
+                            */}
+                            <div
+                              className={`ml-auto mt-[1px] flex shrink-0 items-center gap-0.5 transition-opacity group-hover/uc-head:opacity-100 group-focus-within/uc-head:opacity-100 ${
+                                u.designer_label_vote === undefined ? 'opacity-0' : 'opacity-100'
+                              }`}
+                            >
                               <VoteThumbPair
                                 vote={u.designer_label_vote}
                                 disabled={busy}
                                 outerBtnClass={UC_HEAD_VOTE_BTN}
-                                onVote={(choice) => toggleDesignerFieldVote(u.id, 'label', choice)}
+                                onVote={(choice) => validateUseCaseFromHeader(u.id, choice)}
                               />
                               <button
                                 type="button"

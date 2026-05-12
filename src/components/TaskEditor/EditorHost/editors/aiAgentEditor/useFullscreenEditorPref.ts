@@ -4,8 +4,7 @@
  * nascondendo TaskTree, dock pannelli laterali e qualsiasi altra chrome circostante.
  *
  * Granularità: per istanza utente (browser tab), non per task. È una modalità di lavoro del
- * designer, non un attributo del task. Vive in `localStorage` con una chiave dedicata, in
- * analogia con {@link useExternalLLMHandoffPref}.
+ * designer, non un attributo del task. Vive in `localStorage` con una chiave dedicata.
  *
  * Default: OFF. La preferenza è persistita anche a chiusura della pagina, così l'utente che
  * lavora abitualmente in fullscreen non deve riattivarla a ogni sessione.

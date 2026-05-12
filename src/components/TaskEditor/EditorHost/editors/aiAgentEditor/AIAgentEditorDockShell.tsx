@@ -5,12 +5,22 @@
  */
 
 import React from 'react';
-import { DockviewReact, type DockviewApi, type DockviewReadyEvent } from 'dockview';
+import {
+  DockviewReact,
+  type DockviewApi,
+  type DockviewReadyEvent,
+  type IDockviewHeaderActionsProps,
+} from 'dockview';
 import 'dockview/dist/styles/dockview.css';
+import { FileText } from 'lucide-react';
 import { AIAgentNonClosableDockTab } from './AIAgentNonClosableDockTab';
 import { AGENT_STRUCTURED_DOCK_TAB_IDS, AGENT_STRUCTURED_SECTION_LABELS } from './agentStructuredSectionIds';
 import { AgentSectionDockPanel, PromptFinaleDockPanel } from './AIAgentStructuredSectionsDockPanels';
-import { AIAgentEditorDockProvider, type AIAgentEditorDockContextValue } from './AIAgentEditorDockContext';
+import {
+  AIAgentEditorDockProvider,
+  useAIAgentEditorDock,
+  type AIAgentEditorDockContextValue,
+} from './AIAgentEditorDockContext';
 import {
   EditorDatiPanel,
   EditorTaskDescriptionPanel,
@@ -30,6 +40,61 @@ const PROMPT_FINALE_PANEL_ID = 'prompt_finale';
 
 /** Tab title for the task description field. */
 const DESIGNER_DESC_TAB_TITLE = 'Descrizione';
+
+/**
+ * Set di id pannelli che identificano il *gruppo destro* del dock (Dati / Use case / Agent
+ * setup / Backends). Lo usiamo per mostrare il bottone «Crea prompt conversazionale» SOLO
+ * sulla strip di quel gruppo, non sul gruppo sinistro (descrizione + sezioni + prompt finale).
+ *
+ * `rightHeaderActionsComponent` di Dockview viene istanziato per OGNI gruppo: facciamo
+ * gating in render verificando che almeno un panel del gruppo appartenga a questo set.
+ */
+const RIGHT_GROUP_PANEL_IDS: ReadonlySet<string> = new Set([
+  PANEL_IDS.dati,
+  PANEL_IDS.useCases,
+  PANEL_IDS.iaRuntime,
+  PANEL_IDS.backends,
+]);
+
+/**
+ * Bottone «Crea prompt conversazionale» allineato a destra della tab strip del gruppo destro
+ * (Dati / Use case / Agent setup / Backends). Disabilitato se non tutti gli use case sono
+ * compilabili dal builder deterministico (single source of truth: `dialogue` del catalogo).
+ *
+ * Vive in Dockview tramite `rightHeaderActionsComponent`: il componente è renderizzato per
+ * ogni gruppo, quindi facciamo gating sul set degli id panel del gruppo. Sui gruppi non
+ * pertinenti (gruppo sinistro) ritorniamo `null` — Dockview non occupa spazio.
+ */
+function ConversationalPromptDockHeaderAction(
+  props: IDockviewHeaderActionsProps
+): React.ReactElement | null {
+  const { panels } = props;
+  const isRightGroup = panels.some((p) => RIGHT_GROUP_PANEL_IDS.has(p.id));
+  const dock = useAIAgentEditorDock();
+  if (!isRightGroup) return null;
+  const enabled = dock.canCreateConversationalPrompt;
+  return (
+    <div className="flex h-full items-center pr-2">
+      <button
+        type="button"
+        disabled={!enabled}
+        onClick={(e) => {
+          e.stopPropagation();
+          dock.onOpenConversationalPromptDialog();
+        }}
+        title={
+          enabled
+            ? 'Genera il prompt unico da incollare nel tuo motore esterno (ChatGPT, …): istruzioni + catalogo JSON compilato dagli use case.'
+            : 'Disponibile quando tutti gli use case hanno una frase canonica compilabile.'
+        }
+        className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/55 bg-violet-600/85 px-2 py-1 text-[11px] font-semibold text-white hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <FileText size={12} aria-hidden />
+        Crea prompt conversazionale
+      </button>
+    </div>
+  );
+}
 
 const UNIFIED_DOCK_COMPONENTS = {
   editorUnifiedDescription: EditorUnifiedDescriptionPanel,
@@ -218,6 +283,7 @@ export function AIAgentEditorDockShell({
             className="flex-1 min-h-0 h-full"
             components={UNIFIED_DOCK_COMPONENTS}
             defaultTabComponent={AIAgentNonClosableDockTab}
+            rightHeaderActionsComponent={ConversationalPromptDockHeaderAction}
             onReady={onReady}
           />
         </div>

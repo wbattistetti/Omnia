@@ -197,13 +197,6 @@ export interface AIAgentEditorDockContextValue {
   tokenizeUseCasesBusy: boolean;
   /** Mappa derivata `useCaseId → assistant_example_tokenized` per le bubble Passo 2 (anteprima). */
   tokenizedByUseCaseId: Readonly<Record<string, string>>;
-  /**
-   * Pref globale «LLM manual handoff»: i pulsanti AI del wizard aprono il modale handoff
-   * (copia prompt verso motore esterno + incolla risposta JSON) invece di chiamare l'LLM
-   * interno. La pref vive in `localStorage` per istanza utente.
-   */
-  externalLLMHandoffEnabled: boolean;
-  onToggleExternalLLMHandoff: () => void;
   /** «Pulisci tutto»: azzera solo l'output del wizard (use case, conversazioni, JSON, baselines). */
   onClearAllWizardOutput: () => void;
   /** Reset contestuale Passo 2: elimina solo conversazioni e baseline conversazioni. */
@@ -211,12 +204,16 @@ export interface AIAgentEditorDockContextValue {
   /** Reset contestuale Passo 3: elimina solo tokenizzazione e baseline tokenizzazione. */
   onClearWizardTokenization: () => void;
   /**
-   * Overlay confinato al pannello use case del wizard (rettangolo del pannello, non viewport).
-   * Tipicamente il modale «LLM manual handoff». Il caller costruisce il ReactNode con i
-   * callback corretti; {@link ViewSkaGenerator} lo renderizza come `absolute inset-0` dentro
-   * il proprio root (che è `relative`), così il backdrop oscura solo il wizard.
+   * Bottone «Crea prompt conversazionale»: vive nella tab strip Dockview (right header
+   * actions) del gruppo di destra (Dati / Use case / Agent setup / Backends), allineato a
+   * destra. Lo state apertura del dialog è gestito dal parent ({@link AIAgentEditor}); il
+   * dialog è renderizzato lì. Qui esponiamo:
+   *  - `canCreateConversationalPrompt`: tutti gli use case sono compilabili
+   *    ({@link areAllUseCasesProjectable}). Se false, il bottone è disabilitato.
+   *  - `onOpenConversationalPromptDialog`: apre il dialog se le condizioni sono OK.
    */
-  wizardOverlay?: React.ReactNode;
+  canCreateConversationalPrompt: boolean;
+  onOpenConversationalPromptDialog: () => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

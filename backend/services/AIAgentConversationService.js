@@ -595,10 +595,4 @@ module.exports = {
   proofreadConversationAgentTurns,
   /** Alias retro-compatibile: la route legacy continua a funzionare con il nuovo prompt proofread. */
   homogenizeConversationAgentTurns: proofreadConversationAgentTurns,
-  /**
-   * Re-export dei builder per la feature «LLM manual handoff» (preview prompt senza chiamata LLM).
-   * Single source of truth: identico al path di chiamata interna ad `assembleConversation`.
-   */
-  ASSEMBLE_CONVERSATION_SYSTEM,
-  buildAssembleConversationUserMessage,
 };

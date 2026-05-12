@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { FileText, GraduationCap, Loader2, Sparkles, Trash2, X } from 'lucide-react';
+import { GraduationCap, Loader2, Sparkles, Trash2, X } from 'lucide-react';
 import { getUseCaseGeneratorWizardStepConfig, USE_CASE_GENERATOR_WIZARD_STEPS } from '@domain/useCaseGeneratorWizard/config';
 import type { UseCaseGeneratorWizardStepId } from '@domain/useCaseGeneratorWizard/types';
 import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
@@ -26,8 +26,6 @@ import {
 import { WizardConversationsTabsControls } from './WizardConversationsToolbarRows';
 import { ClearAllWizardOutputDialog } from './ClearAllWizardOutputDialog';
 import { ConversationalJsonPanel } from './ConversationalJsonPanel';
-import { ConversationalPromptDialog } from './ConversationalPromptDialog';
-import { areAllUseCasesProjectable } from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'omnia.aiAgent.useCaseWizard.rightPanelWidthPx';
@@ -143,13 +141,6 @@ export interface ViewSkaGeneratorProps {
   tokenizedUseCaseCount?: number;
   /** @deprecated Mantenuto per compatibilità con vecchi caller. */
   tokenizationHasManualEdits?: boolean;
-  /**
-   * Pref globale «LLM manual handoff»: quando true, i pulsanti AI del wizard (generate use
-   * cases / assemble conversation) aprono un modale di handoff verso un motore esterno
-   * invece di chiamare l'LLM interno. La pref vive in `localStorage`.
-   */
-  externalLLMHandoffEnabled?: boolean;
-  onToggleExternalLLMHandoff?: () => void;
   /** Reset «Pulisci tutto» — apre conferma modale e poi azzera l'output del wizard. */
   onClearAllWizardOutput?: () => void;
   /** Reset contestuale Passo 2: elimina solo conversazioni/baseline conversazioni. */
@@ -176,12 +167,6 @@ export interface ViewSkaGeneratorProps {
    * Default: array vuoto (il bottone resta nascosto, le frecce DX nascoste).
    */
   useCases?: readonly AIAgentUseCase[];
-  /**
-   * Slot per overlay confinati al pannello wizard (es. {@link ExternalLLMHandoffDialog}).
-   * Il caller costruisce il nodo e lo passa qui; il root del wizard è `relative` per ancorarli
-   * con `absolute inset-0`. Così il modale oscura solo il rettangolo del wizard, non l'editor.
-   */
-  overlay?: React.ReactNode;
 }
 
 function TutorialAsideBody(props: { stepId: UseCaseGeneratorWizardStepId }): React.ReactElement {
@@ -234,31 +219,24 @@ export function ViewSkaGenerator({
   createConversationBusy = false,
   onProofreadConversationAgentTurns,
   proofreadConversationBusy = false,
-  externalLLMHandoffEnabled = false,
-  onToggleExternalLLMHandoff,
   onClearAllWizardOutput,
   onClearWizardConversations,
   onClearWizardTokenization,
   selectedUseCase = null,
   onSelectUseCaseRequest,
   useCases,
-  overlay,
 }: ViewSkaGeneratorProps) {
   const [clearScope, setClearScope] = React.useState<ClearWizardScope | null>(null);
   const clearUseCasesAnchorRef = React.useRef<HTMLButtonElement>(null);
   const clearConversationsAnchorRef = React.useRef<HTMLButtonElement>(null);
   const clearTokenizationAnchorRef = React.useRef<HTMLButtonElement>(null);
   /**
-   * Apertura dialog «Crea prompt conversazionale»: stato locale (transitorio, non persiste
-   * tra sessioni). La pre-condizione di apertura (tutti compilabili) è gestita prima — qui
-   * solo on/off del modale.
+   * NB: il dialog «Crea prompt conversazionale» è ora montato dal parent
+   * ({@link AIAgentEditor} insieme alla tab strip Dockview): vedi
+   * `AIAgentEditorDockContext` (`createConversationalPromptDialog*`).
+   * Qui non c'è più state locale, e l'azione di apertura è esposta via context.
    */
-  const [conversationalPromptDialogOpen, setConversationalPromptDialogOpen] =
-    React.useState(false);
-  const canCreateConversationalPrompt = React.useMemo(
-    () => Array.isArray(useCases) && areAllUseCasesProjectable(useCases),
-    [useCases]
-  );
+
   const handleClearConfirm = React.useCallback(() => {
     const scope = clearScope;
     setClearScope(null);
@@ -528,31 +506,12 @@ export function ViewSkaGenerator({
               })}
             </div>
             <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
-              {canCreateConversationalPrompt ? (
-                <button
-                  type="button"
-                  onClick={() => setConversationalPromptDialogOpen(true)}
-                  title="Genera il prompt unico da incollare nel tuo motore esterno (ChatGPT, …): istruzioni + catalogo JSON compilato dagli use case."
-                  className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/55 bg-violet-600/80 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-violet-500"
-                >
-                  <FileText size={13} aria-hidden />
-                  Crea prompt conversazionale
-                </button>
-              ) : null}
-              {typeof onToggleExternalLLMHandoff === 'function' ? (
-                <label
-                  className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md border border-slate-600/80 bg-slate-900/90 px-2.5 py-1 text-[11px] font-semibold text-slate-100 hover:bg-slate-800/80"
-                  title="Quando attivo, i pulsanti AI aprono un modale per copiare il prompt verso un motore esterno (es. ChatGPT-5) e incollare la risposta JSON."
-                >
-                  <input
-                    type="checkbox"
-                    checked={externalLLMHandoffEnabled}
-                    onChange={() => onToggleExternalLLMHandoff()}
-                    className="h-3.5 w-3.5 accent-violet-500"
-                  />
-                  LLM manual handoff
-                </label>
-              ) : null}
+              {/*
+                NB: il pulsante «Crea prompt conversazionale» è stato spostato nella tab strip
+                Dockview (vedi `AIAgentNonClosableDockTab`) per essere accessibile da qualunque
+                tab attivo, non solo dal pannello «Use case». Questa toolbar resta dedicata allo
+                stepper del wizard.
+              */}
             </div>
           </div>
         </div>
@@ -734,12 +693,6 @@ export function ViewSkaGenerator({
             )}
           </aside>
         </div>
-        <ConversationalPromptDialog
-          open={conversationalPromptDialogOpen}
-          useCases={useCases ?? []}
-          onClose={() => setConversationalPromptDialogOpen(false)}
-        />
-        {overlay}
       </div>
     </>
   );

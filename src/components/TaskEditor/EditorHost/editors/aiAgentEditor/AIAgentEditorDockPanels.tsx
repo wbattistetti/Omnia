@@ -155,12 +155,9 @@ export function EditorUseCasesPanel() {
     onTokenizeUseCases,
     tokenizeUseCasesBusy,
     tokenizedByUseCaseId,
-    externalLLMHandoffEnabled,
-    onToggleExternalLLMHandoff,
     onClearAllWizardOutput,
     onClearWizardConversations,
     onClearWizardTokenization,
-    wizardOverlay,
   } = useAIAgentEditorDock();
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
@@ -288,15 +285,12 @@ export function EditorUseCasesPanel() {
             tokenizeUseCasesBusy={tokenizeUseCasesBusy}
             tokenizedUseCaseCount={tokenizedUseCaseCount}
             tokenizationHasManualEdits={tokenizationHasManualEdits}
-            externalLLMHandoffEnabled={externalLLMHandoffEnabled}
-            onToggleExternalLLMHandoff={onToggleExternalLLMHandoff}
             onClearAllWizardOutput={onClearAllWizardOutput}
             onClearWizardConversations={onClearWizardConversations}
             onClearWizardTokenization={onClearWizardTokenization}
             selectedUseCase={selectedUseCase}
             onSelectUseCaseRequest={setSelectedUseCaseId}
             useCases={useCases}
-            overlay={wizardOverlay}
           />
         </UseCaseWizardListToolbarProvider>
       </div>

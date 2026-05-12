@@ -1,10 +1,9 @@
 /**
  * Dialog «Crea prompt conversazionale» del wizard use case.
  *
- * Apre un overlay confinato al pannello del wizard (stesso pattern di {@link
- * ExternalLLMHandoffDialog}) che mostra in sola lettura il prompt conversazionale composto
- * da {@link buildConversationalPrompt}: istruzioni IT iniziali + catalogo JSON compilato
- * on-demand dagli use case.
+ * Apre un overlay confinato al pannello dell'editor che mostra in sola lettura il prompt
+ * conversazionale composto da {@link buildConversationalPrompt}: istruzioni IT iniziali +
+ * catalogo JSON compilato on-demand dagli use case.
  *
  * Workflow:
  *  1. Il designer clicca «Crea prompt conversazionale» nella toolbar.
@@ -24,7 +23,7 @@
 
 import React from 'react';
 import MonacoEditor from 'react-monaco-editor';
-import * as monaco from 'monaco-editor';
+import type { editor as monacoEditorNs } from 'monaco-editor';
 import { Clipboard, ClipboardCheck, Sparkles, X } from 'lucide-react';
 import { buildConversationalPrompt } from '@domain/useCaseGeneratorWizard/buildConversationalPrompt';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
@@ -117,10 +116,32 @@ export function ConversationalPromptDialog({
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  React.useEffect(() => {
-    if (!open) return;
-    ensureConversationalPromptLanguage(monaco);
-  }, [open]);
+  /**
+   * Registra lingua + tema *prima* dell'istanziazione di Monaco (callback `editorWillMount`).
+   * Senza questo, il componente Monaco veniva creato col `language` e `theme` referenziati ma
+   * non ancora dichiarati: l'editor cadeva sul fallback plain-text e il designer NON vedeva la
+   * coloritura. `editorWillMount` riceve l'istanza globale `monaco` realmente usata
+   * dall'editor (quella di `react-monaco-editor`), evitando il rischio di doppia copia con
+   * `import * as monaco from 'monaco-editor'` in moduli paralleli.
+   */
+  const handleEditorWillMount = React.useCallback((monacoInstance: typeof import('monaco-editor')) => {
+    ensureConversationalPromptLanguage(monacoInstance);
+  }, []);
+
+  /**
+   * Forza l'applicazione del tema all'istanza dell'editor anche dopo che il valore cambia
+   * (defensive: alcune versioni di react-monaco-editor non rieseguono setTheme su prop change).
+   */
+  const handleEditorDidMount = React.useCallback(
+    (
+      _editor: monacoEditorNs.IStandaloneCodeEditor,
+      monacoInstance: typeof import('monaco-editor')
+    ) => {
+      ensureConversationalPromptLanguage(monacoInstance);
+      monacoInstance.editor.setTheme(getConversationalPromptThemeId());
+    },
+    []
+  );
 
   if (!open) return null;
 
@@ -195,6 +216,8 @@ export function ConversationalPromptDialog({
               theme={getConversationalPromptThemeId()}
               value={promptResult.value}
               options={MONACO_PROMPT_OPTIONS}
+              editorWillMount={handleEditorWillMount}
+              editorDidMount={handleEditorDidMount}
             />
           </div>
         </div>

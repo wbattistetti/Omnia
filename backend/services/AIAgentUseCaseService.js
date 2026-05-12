@@ -1364,17 +1364,5 @@ module.exports = {
   annotateAssistantMessageForJson,
   validateUseCaseBundle,
   analyzeDebuggerTurnUseCase,
-  /**
-   * Esposizione dei prompt builder per la feature «LLM manual handoff»: il client costruisce
-   * lo stesso prompt che useremmo per la chiamata LLM e lo copia verso un motore esterno.
-   * Re-export dei builder esistenti — UNICA fonte di verità: cambi al prompt riflessi su
-   * entrambi i path (chiamata interna e handoff).
-   */
-  UC_SYSTEM,
-  buildGenerateUseCasesUserMessage,
-  buildExtendUseCasesUserMessage,
-  buildGlobalStyleBlock,
-  pickBundleScenarioTargetBand,
-  pickExtendNewScenarioTargetBand,
   summarizeExistingUseCasesForPrompt,
 };

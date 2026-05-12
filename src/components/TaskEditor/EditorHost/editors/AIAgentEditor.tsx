@@ -10,7 +10,10 @@ import { Bot, Loader2, Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES, LABEL_GENERATING_IA_AGENT } from './aiAgentEditor/constants';
 import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEditorDockContext';
 import { AIAgentEditorDockShell } from './aiAgentEditor/AIAgentEditorDockShell';
-import { useAIAgentEditorController } from './aiAgentEditor/useAIAgentEditorController';
+import {
+  useAIAgentEditorController,
+  type GenerateUseCaseBundleOutcome,
+} from './aiAgentEditor/useAIAgentEditorController';
 import { useAIAgentToolbarController } from './aiAgentEditor/useAIAgentToolbarController';
 import type {
   UseCaseGeneratorWizardConversation,
@@ -23,22 +26,12 @@ import { useUseCaseGeneratorWizard } from './aiAgentEditor/useCaseGeneratorWizar
 import { USE_CASE_GENERATOR_WIZARD_MAX_CONVERSATIONS } from '@domain/useCaseGeneratorWizard/registry';
 import { mergeAssistantPhraseDraftIntoUseCases } from './aiAgentEditor/mergeAssistantPhraseDraftIntoUseCases';
 import { useAIAgentConversationActions } from './aiAgentEditor/useAIAgentConversationActions';
-import {
-  tokenizeAIAgentUseCasesApi,
-  parseExternalGenerateUseCasesJson,
-  parseExternalAssembleConversationJson,
-  type BuildAIAgentPromptPreviewParams,
-} from '@services/aiAgentDesignApi';
-import {
-  getAssistantExample,
-  type AIAgentLogicalStep,
-  type AIAgentUseCase,
-} from '@types/aiAgentUseCases';
-import { useExternalLLMHandoffPref } from './aiAgentEditor/useExternalLLMHandoffPref';
+import { tokenizeAIAgentUseCasesApi } from '@services/aiAgentDesignApi';
+import { getAssistantExample } from '@types/aiAgentUseCases';
 import { useFullscreenEditorPref } from './aiAgentEditor/useFullscreenEditorPref';
 import { useAppToolbarBottom } from './aiAgentEditor/useAppToolbarBottom';
-import { ExternalLLMHandoffDialog } from './aiAgentEditor/useCaseGeneratorWizard/ExternalLLMHandoffDialog';
-import { resolveAiAgentOutputLanguage } from './aiAgentEditor/resolveAiAgentOutputLanguage';
+import { areAllUseCasesProjectable } from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
+import { ConversationalPromptDialog } from './aiAgentEditor/useCaseGeneratorWizard/ConversationalPromptDialog';
 import { createPortal } from 'react-dom';
 import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
 import { MissingAiModelToast } from '@components/common/MissingAiModelToast';
@@ -148,6 +141,32 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onUseCaseTokenizedTextChange: onUseCaseTokenizedTextChangeStable,
   });
 
+  /**
+   * Sync canonico → bubble (composer Passo 1 → bolle conversazioni Passo 2).
+   *
+   * La filosofia del wizard è «bubble = vista del canonico» quando lo use case è reale: ogni
+   * edit del messaggio agente in un posto deve riflettersi nell'altro. Il path bubble →
+   * canonico è già implementato (`handleAgentCanonicalTextChange` sopra). Qui chiudiamo il
+   * cerchio nell'altro verso: ogni volta che la mappa `useCaseId → assistant.content`
+   * cambia (edit nel composer, regen, propaga stile, …) propaghiamo il nuovo testo a
+   * tutte le bolle agente con quell'id, allineando anche la baseline diff.
+   *
+   * `syncBubblesToCanonicalText` è idempotente (no-op se ogni bubble è già allineata) e non
+   * tocca le suggestion `pending`, quindi non c'è rischio di loop col path inverso.
+   */
+  const canonicalByUseCaseId = React.useMemo<Readonly<Record<string, string>>>(() => {
+    const map: Record<string, string> = {};
+    for (const u of c.useCases) {
+      map[u.id] = getAssistantExample(u);
+    }
+    return map;
+  }, [c.useCases]);
+
+  const syncBubblesToCanonicalText = useCaseGenWizard.syncBubblesToCanonicalText;
+  React.useEffect(() => {
+    syncBubblesToCanonicalText(canonicalByUseCaseId);
+  }, [canonicalByUseCaseId, syncBubblesToCanonicalText]);
+
   /** Always keep IA-generated assistant turns: lista use case mostra etichetta + scenario + messaggio. */
   deferAgentMessagesInUseCaseListRef.current = false;
   const captureUseCaseListAiBaseline = useCaseGenWizard.captureUseCaseListAiBaseline;
@@ -189,7 +208,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setUseCaseHighlightIds((prev) => prev.filter((id) => id !== useCaseId));
   }, []);
 
-  const externalLLMHandoff = useExternalLLMHandoffPref();
   /**
    * Fullscreen mode: l'AI Agent editor occupa tutta l'area dell'app sotto la toolbar globale,
    * nascondendo TaskTree e ogni altra chrome circostante. Preferenza persistita in `localStorage`
@@ -200,32 +218,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const appToolbarBottom = useAppToolbarBottom();
 
   /**
-   * Tipologie di modale handoff: una per target. Il modale vive in {@link AIAgentEditor} così
-   * lo stato è condiviso tra header e wizard (il pulsante può essere cliccato da entrambi).
-   */
-  type HandoffStateGenerate = {
-    kind: 'generate_use_cases';
-    promptRequest: BuildAIAgentPromptPreviewParams;
-    /** Modalità extend (mantiene catalog esistente) vs replace (nuovo bundle). */
-    extendMode: boolean;
-  };
-  type HandoffStateAssemble = {
-    kind: 'assemble_conversation';
-    promptRequest: BuildAIAgentPromptPreviewParams;
-    outcome: 'positive' | 'negative';
-    allowSuggestedUseCases: boolean;
-  };
-  type HandoffState = HandoffStateGenerate | HandoffStateAssemble;
-
-  const [handoffState, setHandoffState] = React.useState<HandoffState | null>(null);
-  const closeHandoff = React.useCallback(() => setHandoffState(null), []);
-
-  /**
-   * Side-effect post-apply per il bundle use case (replace o extend): replica la fine di
-   * {@link runGenerateUseCaseBundle} (drafts, baseline, feedback, highlight).
+   * Side-effect post-apply per il bundle use case (replace o extend): drafts, baseline,
+   * feedback, highlight dopo che il controller ha applicato il bundle generato dall'LLM.
    */
   const applyUseCaseBundleOutcome = React.useCallback(
-    (result: ReturnType<typeof c.handleApplyExternalGeneratedUseCases>) => {
+    (result: GenerateUseCaseBundleOutcome) => {
       setAssistantPhraseDraftById({});
       captureUseCaseListAiBaseline(result.useCases);
       if (result.mode === 'extend' && result.addedCount > 0) {
@@ -237,49 +234,14 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       }
       setUseCaseHighlightIds(result.highlightIds);
     },
-    [c.handleApplyExternalGeneratedUseCases, captureUseCaseListAiBaseline]
+    [captureUseCaseListAiBaseline]
   );
 
   const runGenerateUseCaseBundle = React.useCallback(async () => {
-    if (externalLLMHandoff.enabled) {
-      try {
-        const { userDesc, extendFrom } = c.computeGenerateUseCasesPromptInputs();
-        const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
-        const promptRequest: BuildAIAgentPromptPreviewParams = {
-          target: 'generate_use_cases',
-          provider,
-          model,
-          outputLanguage,
-          userDesc,
-          runtimeContext: c.agentPrompt.trim() || undefined,
-          globalStyleContract: c.globalStyleContract,
-          globalStyleId: c.useCaseGlobalStyleId,
-          ...(extendFrom ? { extendFrom } : {}),
-        };
-        setHandoffState({
-          kind: 'generate_use_cases',
-          promptRequest,
-          extendMode: Boolean(extendFrom),
-        });
-      } catch (err) {
-        setUseCaseBundleFeedback(err instanceof Error ? err.message : String(err));
-      }
-      return;
-    }
     const result = await c.handleGenerateUseCaseBundle();
     if (!result) return;
     applyUseCaseBundleOutcome(result);
-  }, [
-    externalLLMHandoff.enabled,
-    c.computeGenerateUseCasesPromptInputs,
-    c.handleGenerateUseCaseBundle,
-    c.agentPrompt,
-    c.globalStyleContract,
-    c.useCaseGlobalStyleId,
-    provider,
-    model,
-    applyUseCaseBundleOutcome,
-  ]);
+  }, [c.handleGenerateUseCaseBundle, applyUseCaseBundleOutcome]);
 
   const runRegenerateUseCase = React.useCallback(
     async (useCaseId: string) => {
@@ -337,33 +299,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       const slotsLeft = USE_CASE_GENERATOR_WIZARD_MAX_CONVERSATIONS - existing.length;
       if (slotsLeft <= 0) return;
 
-      if (externalLLMHandoff.enabled) {
-        if (c.useCases.length < 2) {
-          setUseCaseBundleFeedback('Servono almeno 2 use case per montare una conversazione.');
-          return;
-        }
-        const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
-        const promptRequest: BuildAIAgentPromptPreviewParams = {
-          target: 'assemble_conversation',
-          provider,
-          model,
-          outputLanguage,
-          useCases: c.useCases,
-          runtimeContext: c.agentPrompt.trim() || undefined,
-          globalStyleContract: c.globalStyleContract,
-          previousConversationsCount: existing.length,
-          outcome: params.outcome,
-          allowSuggestedUseCases: params.allowSuggestedUseCases,
-        };
-        setHandoffState({
-          kind: 'assemble_conversation',
-          promptRequest,
-          outcome: params.outcome,
-          allowSuggestedUseCases: params.allowSuggestedUseCases,
-        });
-        return;
-      }
-
       const isSuggestedBatch = params.allowSuggestedUseCases;
       const matchesRequestedType = (
         c: UseCaseGeneratorWizardConversation
@@ -417,42 +352,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       conversationActions,
       useCaseGenWizard,
       c.useCases,
-      c.agentPrompt,
-      c.globalStyleContract,
-      externalLLMHandoff.enabled,
-      provider,
-      model,
     ]
-  );
-
-  /**
-   * Apply post-handoff (handoff → parsed JSON esterno).
-   * - generate_use_cases: applica via {@link c.handleApplyExternalGeneratedUseCases} con la stessa
-   *   logica del path standard.
-   * - assemble_conversation: appende la conversazione + cattura baseline + feedback.
-   */
-  const applyHandoffGenerateUseCases = React.useCallback(
-    (parsed: { useCases: AIAgentUseCase[]; logicalSteps: AIAgentLogicalStep[] | null }) => {
-      const outcome = c.handleApplyExternalGeneratedUseCases(parsed);
-      applyUseCaseBundleOutcome(outcome);
-    },
-    [c.handleApplyExternalGeneratedUseCases, applyUseCaseBundleOutcome]
-  );
-
-  const applyHandoffAssembleConversation = React.useCallback(
-    (parsedConversation: UseCaseGeneratorWizardConversation) => {
-      useCaseGenWizard.appendConversation(parsedConversation);
-      const nextAll = [...useCaseGenWizard.conversations, parsedConversation];
-      useCaseGenWizard.captureConversationsBaseline(nextAll);
-      const outcomeLabel = parsedConversation.outcome === 'positive' ? 'positiva' : 'negativa';
-      const suggestedHint = parsedConversation.allowsSuggestedUseCases
-        ? ' (con use case emergenti ammessi)'
-        : '';
-      setUseCaseBundleFeedback(
-        `Conversazione ${outcomeLabel} ${nextAll.length} montata${suggestedHint}.`
-      );
-    },
-    [useCaseGenWizard]
   );
 
   /**
@@ -467,7 +367,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setAssistantPhraseStyleNewIds([]);
     setUseCaseBundleFeedback(null);
     setUseCaseHighlightIds([]);
-    setHandoffState(null);
   }, [useCaseGenWizard, c.handleClearWizardOutput]);
 
   /**
@@ -477,7 +376,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const runClearWizardConversations = React.useCallback(() => {
     useCaseGenWizard.resetConversations();
     setUseCaseBundleFeedback(null);
-    setHandoffState(null);
   }, [useCaseGenWizard]);
 
   /**
@@ -501,7 +399,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       })
     );
     setUseCaseBundleFeedback(null);
-    setHandoffState(null);
   }, [c.setUseCases, useCaseGenWizard]);
 
   const runProofreadConversationAgentTurns = React.useCallback(async () => {
@@ -760,6 +657,27 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     />
   ) : null;
 
+  /**
+   * Dialog «Crea prompt conversazionale»: state e mount risiedono nel root dell'editor (non
+   * più dentro `ViewSkaGenerator`) così il bottone può vivere nella tab strip Dockview ed
+   * essere accessibile da qualunque tab del gruppo destro (Use case / Dati / Agent setup /
+   * Backends). La pre-condizione (`canCreate*`) è derivata: tutti gli use case devono essere
+   * compilabili dal builder deterministico (`areAllUseCasesProjectable`).
+   */
+  const [conversationalPromptDialogOpen, setConversationalPromptDialogOpen] = React.useState(false);
+  const canCreateConversationalPrompt = React.useMemo(
+    () => Array.isArray(c.useCases) && c.useCases.length > 0 && areAllUseCasesProjectable(c.useCases),
+    [c.useCases]
+  );
+  const onOpenConversationalPromptDialog = React.useCallback(() => {
+    if (!canCreateConversationalPrompt) return;
+    setConversationalPromptDialogOpen(true);
+  }, [canCreateConversationalPrompt]);
+  const onCloseConversationalPromptDialog = React.useCallback(
+    () => setConversationalPromptDialogOpen(false),
+    []
+  );
+
   const dockValue: AIAgentEditorDockContextValue = {
     instanceId: c.instanceId,
     hasAgentGeneration: c.hasAgentGeneration,
@@ -854,45 +772,12 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onTokenizeUseCases: runTokenizeUseCases,
     tokenizeUseCasesBusy,
     tokenizedByUseCaseId,
-    externalLLMHandoffEnabled: externalLLMHandoff.enabled,
-    onToggleExternalLLMHandoff: externalLLMHandoff.toggle,
     onClearAllWizardOutput: runClearAllWizardOutput,
     onClearWizardConversations: runClearWizardConversations,
     onClearWizardTokenization: runClearWizardTokenization,
-    /**
-     * Overlay confinato al pannello use case del wizard: il modale «LLM manual handoff» è
-     * renderizzato DENTRO il rettangolo del wizard (non viewport), così il backdrop oscura
-     * solo quel pannello.
-     */
-    wizardOverlay:
-      handoffState && handoffState.kind === 'generate_use_cases' ? (
-        <ExternalLLMHandoffDialog
-          open
-          title="Genera use case con motore esterno"
-          applyButtonLabel="Genera use case"
-          promptPreviewRequest={handoffState.promptRequest}
-          onParseResponse={(raw) =>
-            parseExternalGenerateUseCasesJson(raw, { extendMode: handoffState.extendMode })
-          }
-          onApply={(parsed) => applyHandoffGenerateUseCases(parsed)}
-          onClose={closeHandoff}
-        />
-      ) : handoffState && handoffState.kind === 'assemble_conversation' ? (
-        <ExternalLLMHandoffDialog
-          open
-          title="Monta una conversazione con motore esterno"
-          applyButtonLabel="Crea conversazione"
-          promptPreviewRequest={handoffState.promptRequest}
-          onParseResponse={(raw) =>
-            parseExternalAssembleConversationJson(raw, {
-              outcome: handoffState.outcome,
-              allowsSuggestedUseCases: handoffState.allowSuggestedUseCases,
-            })
-          }
-          onApply={(parsed) => applyHandoffAssembleConversation(parsed)}
-          onClose={closeHandoff}
-        />
-      ) : null,
+
+    canCreateConversationalPrompt,
+    onOpenConversationalPromptDialog,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;
@@ -997,13 +882,23 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
         </div>
       )}
 
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
         <AIAgentEditorDockShell
           layoutKey={dockLayoutKey}
           hasAgentGeneration={c.hasAgentGeneration}
           showRightPanel={showRightPanel}
           value={dockValue}
           generateError={c.generateError}
+        />
+        {/*
+          Dialog «Crea prompt conversazionale»: confinato al rettangolo dell'editor (non
+          viewport) — sta sopra al dock ma sotto la chrome esterna. Usa portal interno via
+          `absolute inset-0 z-[60]` (vedi `ConversationalPromptDialog`).
+        */}
+        <ConversationalPromptDialog
+          open={conversationalPromptDialogOpen}
+          useCases={c.useCases}
+          onClose={onCloseConversationalPromptDialog}
         />
       </div>
     </div>

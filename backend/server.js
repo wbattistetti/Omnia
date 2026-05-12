@@ -23,19 +23,11 @@ const {
   propagateExamplePhraseStyle,
   annotateAssistantMessageForJson,
   analyzeDebuggerTurnUseCase,
-  UC_SYSTEM,
-  buildGenerateUseCasesUserMessage,
-  buildExtendUseCasesUserMessage,
-  buildGlobalStyleBlock,
-  pickBundleScenarioTargetBand,
-  pickExtendNewScenarioTargetBand,
 } = require('./services/AIAgentUseCaseService');
 const {
   assembleConversation,
   homogenizeConversationAgentTurns,
   proofreadConversationAgentTurns,
-  ASSEMBLE_CONVERSATION_SYSTEM,
-  buildAssembleConversationUserMessage,
 } = require('./services/AIAgentConversationService');
 const { tokenizeUseCases } = require('./services/AIAgentTokenizationService');
 const {
@@ -6493,21 +6485,16 @@ app.post('/design/ai-agent-generate', async (req, res) => {
     } = body;
 
     /**
-     * `build_prompt_preview` is deterministic (no LLM call) so it does not require a model;
-     * every other action issues an LLM request and MUST carry a valid (provider, model) pair
-     * coming from Settings -> Omnia Tutor. No hardcoded fallback.
+     * Every action under this route issues an LLM request and MUST carry a valid
+     * (provider, model) pair coming from Settings -> Omnia Tutor. No hardcoded fallback.
+     * The deprecated deterministic action `build_prompt_preview` (LLM manual handoff)
+     * has been removed end-to-end.
      */
-    const isLLMCall = action !== 'build_prompt_preview';
-    const { provider, model } = isLLMCall
-      ? assertAiCallContract({
-          provider: providerInput,
-          model: modelInput,
-          action: `AI Agent ${action || 'generate'}`,
-        })
-      : {
-          provider: typeof providerInput === 'string' ? providerInput.trim() || null : null,
-          model: typeof modelInput === 'string' ? modelInput.trim() || null : null,
-        };
+    const { provider, model } = assertAiCallContract({
+      provider: providerInput,
+      model: modelInput,
+      action: `AI Agent ${action || 'generate'}`,
+    });
 
     const globalStyleIdNorm =
       typeof globalStyleId === 'string' && globalStyleId.trim() ? globalStyleId.trim() : undefined;
@@ -6698,82 +6685,6 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         aiProviderService,
       });
       return res.json({ success: true, updates: result.updates });
-    }
-
-    /**
-     * Feature «LLM manual handoff»: ritorna `system` + `user` per il target indicato senza
-     * chiamare l'LLM. Il client mostra il payload in un modale, l'utente lo copia verso un
-     * motore esterno e poi incolla la risposta JSON che entra negli stessi parser delle
-     * action interne (`generate_use_cases`, `assemble_conversation`).
-     *
-     * Single source of truth: i builder esposti dai service garantiscono che il prompt
-     * preview sia identico a quello effettivamente inviato al provider.
-     */
-    if (action === 'build_prompt_preview') {
-      const target = typeof body.target === 'string' ? body.target.trim() : '';
-      if (target === 'generate_use_cases') {
-        const extendExisting = body.extendExisting === true;
-        const existingUseCases = Array.isArray(body.existingUseCases) ? body.existingUseCases : [];
-        const existingLogicalSteps = Array.isArray(body.existingLogicalSteps) ? body.existingLogicalSteps : [];
-        const styleBlock = buildGlobalStyleBlock(globalStyleContract);
-        let userMessage;
-        if (extendExisting && existingUseCases.length > 0) {
-          const band = pickExtendNewScenarioTargetBand();
-          userMessage = `${buildExtendUseCasesUserMessage(
-            String(userDesc || '').trim(),
-            outputLanguage,
-            runtimeContext,
-            existingUseCases,
-            existingLogicalSteps,
-            band
-          )}${styleBlock}`;
-        } else {
-          const band = pickBundleScenarioTargetBand();
-          userMessage = `${buildGenerateUseCasesUserMessage(
-            String(userDesc || '').trim(),
-            outputLanguage,
-            runtimeContext,
-            band
-          )}${styleBlock}`;
-        }
-        return res.json({
-          success: true,
-          target: 'generate_use_cases',
-          extend_mode: Boolean(extendExisting && existingUseCases.length > 0),
-          system: UC_SYSTEM,
-          user: userMessage,
-        });
-      }
-      if (target === 'assemble_conversation') {
-        const ucForConv = Array.isArray(body.useCases) ? body.useCases : [];
-        if (ucForConv.length < 2) {
-          throw new Error('build_prompt_preview/assemble_conversation: at least 2 use cases required');
-        }
-        const previousConversationsCount =
-          typeof body.previousConversationsCount === 'number'
-            ? body.previousConversationsCount
-            : 0;
-        const outcome = body.outcome === 'negative' ? 'negative' : 'positive';
-        const allowSuggestedUseCases = Boolean(body.allowSuggestedUseCases);
-        const userMessage = buildAssembleConversationUserMessage({
-          useCases: ucForConv,
-          outputLanguage,
-          runtimeContext,
-          globalStyleContract,
-          previousConversationsCount,
-          outcome,
-          allowSuggestedUseCases,
-        });
-        return res.json({
-          success: true,
-          target: 'assemble_conversation',
-          outcome,
-          allow_suggested_use_cases: allowSuggestedUseCases,
-          system: ASSEMBLE_CONVERSATION_SYSTEM,
-          user: userMessage,
-        });
-      }
-      throw new Error(`Unsupported build_prompt_preview target: ${target || '(empty)'}`);
     }
 
     if (action === 'tokenize_use_cases') {

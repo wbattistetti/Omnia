@@ -52,3 +52,32 @@ export function fieldTextClass(
   if (vote === 'down') return 'text-red-400';
   return aiFieldToneClass(current, baseline);
 }
+
+/**
+ * Background della barra header del use case nella lista, derivato dal voto «di validazione»
+ * (single source of truth: `designer_label_vote`). Tre stati visivi:
+ *
+ *  - `'up'`   → tonalità verde (use case validato);
+ *  - `'down'` → tonalità rossa (use case invalidato);
+ *  - `undefined` → comportamento neutro precedente (violet su selezione, slate hover).
+ *
+ * La selezione attiva (`active`) influisce sull'opacità del background per restare
+ * distinguibile rispetto al hover. Volutamente non mostriamo un terzo «strato» quando il
+ * voto è espresso *e* la riga è attiva: il colore di voto è semanticamente prioritario.
+ */
+export function useCaseHeaderBgClass(
+  vote: 'up' | 'down' | undefined,
+  active: boolean
+): string {
+  if (vote === 'up') {
+    return active
+      ? 'bg-emerald-900/55 hover:bg-emerald-900/65'
+      : 'bg-emerald-950/40 hover:bg-emerald-900/45';
+  }
+  if (vote === 'down') {
+    return active
+      ? 'bg-rose-900/55 hover:bg-rose-900/65'
+      : 'bg-rose-950/40 hover:bg-rose-900/45';
+  }
+  return active ? 'bg-violet-900/40' : 'hover:bg-slate-800/80';
+}
