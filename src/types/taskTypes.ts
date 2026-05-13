@@ -532,11 +532,12 @@ export interface Task {
   /**
    * **Logga Use Case**: quando `true`, il compilatore del prompt di deploy:
    *  1. Aggiunge a ogni elemento di `UseCaseConversationalJson` il campo
-   *     `log: "Usecase: <label>"` — l'agente runtime lo concatena alla risposta.
+   *     `log: "USECASE: \"<NOME>\""` (MAIUSCOLO, virgolette doppie) — l'agente runtime
+   *     lo concatena alla risposta.
    *  2. Antepone in testa al blocco use cases del system prompt un'istruzione
    *     testuale che spiega come gestire il caso "non riconosciuto":
-   *     classificare l'input, dare un titolo breve, scrivere
-   *     `Usecase: nuovo_<titolo>` in coda alla risposta.
+   *     classificare l'input, dare un titolo breve in SNAKE_CASE MAIUSCOLO, scrivere
+   *     `USECASE: "NUOVO_<TITOLO>"` in coda alla risposta.
    *
    * Quando `false` o assente, JSON e prompt restano identici a prima — utile per
    * non disturbare task già pubblicati che non vogliono il trace nelle risposte.

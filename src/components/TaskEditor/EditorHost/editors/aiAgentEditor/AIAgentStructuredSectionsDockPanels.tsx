@@ -8,6 +8,8 @@ import { AIAgentRevisionEditorShell } from './AIAgentRevisionEditorShell';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useAgentStructuredDockSlice } from './useAgentStructuredDockSlice';
+import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
+import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { parseAgentRuntimeCompactJson } from './composeRuntimeRulesFromCompact';
 import {
   buildAiAgentRuntimeExperimentPayload,
@@ -15,6 +17,65 @@ import {
 } from './aiAgentRuntimeExperimentJson';
 import { PlatformEditorView, ReadOnlyPlatformBanner } from '@components/platform-editors';
 import { normalizeAgentPromptPlatformId } from '@domain/agentPrompt';
+
+/**
+ * Dock panel "Descrizione" (prima tab del dock strutturato): textarea libera in
+ * linguaggio naturale che alimenta sia la creazione che il refine dell'agente.
+ *
+ * Reads/writes da `AIAgentEditorDockContext` (`designDescription`,
+ * `setDesignDescription`, `generating`, `insertBackendPathInDesign`).
+ *
+ * Pre-Crea Agente è l'unica tab visibile nel dock; post-Crea Agente convive a
+ * sinistra di Scopo / Sequenza / Contesto / ... e l'utente vede sempre un
+ * singolo pannello attivo alla volta.
+ */
+export function AIAgentDescriptionDockPanel(_props: IDockviewPanelProps) {
+  const editorCtx = useOptionalAIAgentEditorDock();
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+
+  const insertBackendPathInDesign = editorCtx?.insertBackendPathInDesign;
+  const readOnly = editorCtx?.generating ?? false;
+
+  const onInsert = React.useCallback(
+    (path: string, s: number, e: number) => {
+      insertBackendPathInDesign?.(path, s, e);
+    },
+    [insertBackendPathInDesign]
+  );
+
+  const { onContextMenu, backendPathMenu } = useBackendPathInsertMenu({
+    enabled: Boolean(insertBackendPathInDesign),
+    readOnly,
+    inputRef: textareaRef,
+    onInsert,
+  });
+
+  if (!editorCtx) {
+    return (
+      <div className="p-3 text-sm text-red-300">
+        Pannello Descrizione: AIAgentEditorDockProvider mancante.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-slate-950/80 p-2 pt-1">
+      <textarea
+        ref={textareaRef}
+        className="w-full min-h-0 flex-1 resize-none rounded-md border border-slate-700 bg-slate-900 p-3 text-sm font-mono text-slate-200 focus:border-transparent focus:ring-2 focus:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+        placeholder={AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER}
+        aria-label="Descrizione"
+        value={editorCtx.designDescription}
+        onChange={(e) => editorCtx.setDesignDescription(e.target.value)}
+        readOnly={readOnly}
+        spellCheck
+        onContextMenu={onContextMenu}
+      />
+      {backendPathMenu}
+    </div>
+  );
+}
+
 export function AgentSectionDockPanel(
   props: IDockviewPanelProps<{ sectionId?: AgentStructuredSectionId }>
 ) {

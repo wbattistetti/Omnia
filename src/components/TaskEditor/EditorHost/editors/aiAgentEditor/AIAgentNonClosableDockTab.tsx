@@ -6,47 +6,13 @@
 import React from 'react';
 import { DockviewDefaultTab, type IDockviewDefaultTabProps } from 'dockview';
 import { Plus } from 'lucide-react';
-import {
-  AGENT_PROMPT_PLATFORM_SELECT_SEPARATOR_VALUE,
-  getAgentPromptPlatformSelectOptions,
-  normalizeAgentPromptPlatformId,
-} from '@domain/agentPrompt';
 import { getAiAgentDockTabPresentation } from './aiAgentDockTabIcons';
 import { AGENT_STRUCTURED_DOCK_TAB_IDS } from './agentStructuredSectionIds';
 import { isAiAgentDockPanelContentFilled } from './aiAgentDockTabFillState';
-import {
-  useOptionalAIAgentEditorDock,
-  type AIAgentEditorDockContextValue,
-} from './AIAgentEditorDockContext';
+import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { AI_AGENT_DOCK_PANEL_IDS } from './aiAgentDockPanelIds';
 
 const PROMPT_FINALE_PANEL_ID = 'prompt_finale';
-
-const IMMEDIATE_START_TOOLTIP =
-  'Se attivo, l’agente inizia a parlare subito senza aspettare un messaggio dell’utente.';
-
-/** Avvio immediato: solo nella riga «Prompt per … / JS» (tab Prompt finale). */
-function ImmediateStartTabToggle({ dockCtx }: { dockCtx: AIAgentEditorDockContextValue }) {
-  return (
-    <label
-      className="inline-flex max-w-[118px] cursor-pointer items-center gap-0.5 shrink-0 rounded border border-slate-600/55 bg-slate-900/85 px-1 py-0.5"
-      title={IMMEDIATE_START_TOOLTIP}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <input
-        type="checkbox"
-        className="h-3 w-3 shrink-0 rounded border-slate-500"
-        checked={dockCtx.agentImmediateStart}
-        disabled={dockCtx.generating}
-        onChange={(e) => dockCtx.setAgentImmediateStart(e.target.checked)}
-        onPointerDown={(e) => e.stopPropagation()}
-        aria-label="Avvio immediato"
-      />
-      <span className="text-[9px] leading-tight text-slate-300 select-none">Avvio immediato</span>
-    </label>
-  );
-}
 
 const STRUCTURED_DOCK_TAB_ID_SET = new Set<string>(AGENT_STRUCTURED_DOCK_TAB_IDS);
 
@@ -168,28 +134,7 @@ export function AIAgentNonClosableDockTab(props: IDockviewDefaultTabProps) {
           {presentation.icon}
           {platformInTab ? (
             <>
-              <span className={`shrink-0 whitespace-nowrap text-[11px] leading-none ${presentation.titleClassName}`}>
-                Prompt per
-              </span>
-              <select
-                value={normalizeAgentPromptPlatformId(dockCtx.agentPromptTargetPlatform)}
-                title={presentation.nativeTitle}
-                aria-label="Piattaforma destinazione prompt"
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === AGENT_PROMPT_PLATFORM_SELECT_SEPARATOR_VALUE) return;
-                  dockCtx.setAgentPromptTargetPlatform(normalizeAgentPromptPlatformId(v));
-                }}
-                onClick={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
-                className="ai-agent-prompt-platform-select shrink-0 rounded border border-emerald-600/50 bg-slate-900/95 px-1.5 py-0.5 text-[10px] leading-tight text-slate-100 outline-none focus:ring-1 focus:ring-emerald-500/40"
-              >
-                {getAgentPromptPlatformSelectOptions().map((opt) => (
-                  <option key={opt.value} value={opt.value} disabled={opt.disabled}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <span className={`whitespace-nowrap ${presentation.titleClassName}`}>{title}</span>
               <button
                 type="button"
                 title="Mostra payload JSON runtime (solo lettura) al posto dell’anteprima testuale"
@@ -208,7 +153,6 @@ export function AIAgentNonClosableDockTab(props: IDockviewDefaultTabProps) {
               >
                 JS
               </button>
-              <ImmediateStartTabToggle dockCtx={dockCtx} />
             </>
           ) : backendsTabActions ? (
             <>

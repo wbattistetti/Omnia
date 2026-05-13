@@ -246,7 +246,7 @@ export interface AIAgentEditorDockContextValue {
   setAgentConversationDeployStyleId: (next: string | null) => void;
   /**
    * Toggle "Logga Use Case" del deploy menu (vedi `Task.agentLogUseCase`). Quando true,
-   * il compilatore di prompt aggiunge il campo `log: "Usecase: <label>"` a ogni elemento
+   * il compilatore di prompt aggiunge il campo `log: "USECASE: \"<NOME>\""` a ogni elemento
    * di `UseCaseConversationalJson` e antepone l'istruzione testuale "non riconosciuto"
    * in testa al blocco use cases del system prompt.
    */

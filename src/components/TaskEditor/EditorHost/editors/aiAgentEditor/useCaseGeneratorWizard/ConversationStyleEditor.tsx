@@ -405,14 +405,29 @@ export function ConversationStyleEditor({
         })}
       </div>
 
+      {/* Toggle globale subito dopo la toolbar stili: se attivo, l'editor testuale resta nascosto. */}
+      <div className="shrink-0 border-b border-sky-500/20 px-3 py-2">
+        <label className="inline-flex cursor-pointer items-center gap-2 text-[12px] text-slate-300">
+          <input
+            type="checkbox"
+            checked={auto}
+            onChange={(e) => onAutoChange(e.target.checked)}
+            className="h-3.5 w-3.5 cursor-pointer accent-sky-500"
+            aria-label="Lascia che Omnia scelga uno stile"
+          />
+          <span>Lascia che Omnia scelga uno stile</span>
+        </label>
+      </div>
+
       {/*
         Pannello editor della pill selezionata. Usa `flex-col` con `min-h-0` per consentire
         alla textarea «Esempi di dialogo» (l'unico blocco `flex-1`) di assorbire tutto lo
         spazio verticale rimanente fino al footer. La descrizione resta a dimensione fissa
         (`shrink-0`) — micro-variazioni di registro tipicamente sono brevi.
       */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-3 py-3">
-        {selectedStyle && selectedEntry ? (
+      {!auto ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-3 py-3">
+          {selectedStyle && selectedEntry ? (
           <>
             <div className="shrink-0">
               <label
@@ -463,31 +478,15 @@ export function ConversationStyleEditor({
               ) : null}
             </div>
           </>
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-center text-[12px] italic text-slate-500">
-              Clicca uno stile sopra per configurarlo.
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Footer: checkbox auto globale. */}
-      <div className="shrink-0 border-t border-sky-500/20 px-3 py-2">
-        <label className="inline-flex cursor-pointer items-center gap-2 text-[12px] text-slate-300">
-          <input
-            type="checkbox"
-            checked={auto}
-            onChange={(e) => onAutoChange(e.target.checked)}
-            className="h-3.5 w-3.5 cursor-pointer accent-sky-500"
-            aria-label="Lascia che Omnia scelga uno stile"
-          />
-          <span>Lascia che Omnia scelga uno stile</span>
-          <span className="ml-1 text-[10px] text-slate-500">
-            (gli esempi diventano opzionali per ogni stile checkato)
-          </span>
-        </label>
-      </div>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-center text-[12px] italic text-slate-500">
+                Clicca uno stile sopra per configurarlo.
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -641,9 +640,6 @@ export function InlineStylePillEditor({
           aria-label="Lascia che Omnia scelga uno stile"
         />
         <span>Lascia che Omnia scelga uno stile</span>
-        <span className="ml-1 text-[10px] text-slate-500">
-          (gli esempi diventano opzionali per ogni stile checkato)
-        </span>
       </label>
     </div>
   );

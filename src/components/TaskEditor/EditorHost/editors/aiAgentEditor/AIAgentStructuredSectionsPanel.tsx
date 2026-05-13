@@ -31,6 +31,19 @@ export interface AIAgentStructuredSectionsPanelProps {
   headerAction?: React.ReactNode;
   /** When true, inner Dockview fills the parent panel instead of a fixed viewport height. */
   embeddedDock?: boolean;
+  /**
+   * Wizard step 1: insert a leading "Descrizione" tab (free-form textarea bound
+   * to `designDescription` via `AIAgentEditorDockContext`). The Dockview shows
+   * one panel at a time, so the description naturally coexists with the
+   * structured sections without splitting the screen.
+   */
+  includeDescriptionLeadingTab?: boolean;
+  /**
+   * Pre-Crea Agente: hide structured sections (Scopo, Sequenza, …) and the
+   * Prompt Finale tab. Combined with {@link includeDescriptionLeadingTab} this
+   * leaves "Descrizione" as the only visible tab.
+   */
+  omitStructuredSections?: boolean;
 }
 
 export function AIAgentStructuredSectionsPanel({
@@ -47,6 +60,8 @@ export function AIAgentStructuredSectionsPanel({
   onDismissIaRevisionForSection,
   headerAction,
   embeddedDock = false,
+  includeDescriptionLeadingTab = false,
+  omitStructuredSections = false,
 }: AIAgentStructuredSectionsPanelProps) {
   const suffix = instanceId || 'default';
   const onApplyOtCommit = onApplyOtCommitProp ?? (() => {});
@@ -93,14 +108,22 @@ export function AIAgentStructuredSectionsPanel({
     >
       {headerAction ? <div className="flex flex-wrap justify-end shrink-0">{headerAction}</div> : null}
 
-      <p className="text-xs text-slate-500 shrink-0">
-        Sezioni <strong className="text-slate-400">Behavior</strong>, <strong className="text-slate-400">vincoli</strong>
-        , ecc.: trascina le schede o i gruppi per affiancarli, staccarli o ridisporli (layout dockabile).
-      </p>
+      {!omitStructuredSections ? (
+        <p className="text-xs text-slate-500 shrink-0">
+          Sezioni <strong className="text-slate-400">Behavior</strong>,{' '}
+          <strong className="text-slate-400">vincoli</strong>, ecc.: trascina le schede o i gruppi per
+          affiancarli, staccarli o ridisporli (layout dockabile).
+        </p>
+      ) : null}
 
       <div className={embeddedDock ? 'flex-1 min-h-0 flex flex-col' : ''}>
         <AIAgentStructuredSectionsDockProvider value={dockValue}>
-          <AIAgentStructuredSectionsDockview layoutKey={suffix} embedded={embeddedDock} />
+          <AIAgentStructuredSectionsDockview
+            layoutKey={suffix}
+            embedded={embeddedDock}
+            includeDescriptionLeadingTab={includeDescriptionLeadingTab}
+            omitStructuredSections={omitStructuredSections}
+          />
         </AIAgentStructuredSectionsDockProvider>
       </div>
     </div>

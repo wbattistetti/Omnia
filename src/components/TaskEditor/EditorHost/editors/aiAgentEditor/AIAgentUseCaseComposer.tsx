@@ -79,6 +79,10 @@ import {
 import { useUseCaseFieldBaselineSync } from './useUseCaseFieldBaselineSync';
 import { VoteThumbPair } from './VoteThumbPair';
 import { TokenizedHighlightedText } from './useCaseGeneratorWizard/TokenizedHighlightedText';
+import {
+  BracketTokenHighlightedText,
+  BracketTokenHighlightedTextarea,
+} from './BracketTokenHighlightedTextarea';
 import { SeedHighlightedText } from '@components/common/SeedHighlightedText';
 
 export type { AiTripletFieldBaseline } from './useCaseComposerPresentation';
@@ -1108,7 +1112,16 @@ export function AIAgentUseCaseComposer({
                     {onGenerateUseCaseBundle
                       ? 'Nessuno scenario ancora. Puoi generarli con IA usando il pulsante qui sotto.'
                       : primaryGenerateOnRightOnly
-                        ? 'Nessuno scenario ancora. Usa la bozza sopra (INVIO per creare in batch) oppure il pulsante «Genera use case» nel pannello Tutorial a destra.'
+                        ? (
+                          <>
+                            Nessuno use case ancora.
+                            <br />
+                            <br />
+                            1) Se hai gia un insieme di usecase definiti incollali nella text box sopra e premi enter
+                            <br />
+                            2) altrimenti clicca sul pulsante in basso nel pannello di destra "genera use case"
+                          </>
+                        )
                         : 'Nessuno scenario. Genera con IA o crea il design agent prima.'}
                   </p>
                   {onGenerateUseCaseBundle ? (
@@ -1556,7 +1569,7 @@ export function AIAgentUseCaseComposer({
                                   {agentMsgEditUseCaseId === u.id ? (
                                     <div className="flex flex-wrap items-start gap-2">
                                       {agentMsgFieldLabel}
-                                      <textarea
+                                      <BracketTokenHighlightedTextarea
                                         ref={(el) => {
                                           if (el) agentTextareaRefsById.current.set(u.id, el);
                                           else agentTextareaRefsById.current.delete(u.id);
@@ -1575,7 +1588,7 @@ export function AIAgentUseCaseComposer({
                                         spellCheck={false}
                                         aria-label="Messaggio agente"
                                         placeholder="Testo esempio per il messaggio agente…"
-                                        className={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
+                                        containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Escape') {
                                             e.preventDefault();
@@ -1619,10 +1632,14 @@ export function AIAgentUseCaseComposer({
                                         )}`}
                                       >
                                         {rowAssistant.content.trim() ? (
-                                          <SeedHighlightedText
-                                            text={rowAssistant.content}
-                                            seed={wizardSearchSeed}
-                                          />
+                                          wizardSearchSeed.trim() ? (
+                                            <SeedHighlightedText
+                                              text={rowAssistant.content}
+                                              seed={wizardSearchSeed}
+                                            />
+                                          ) : (
+                                            <BracketTokenHighlightedText text={rowAssistant.content} />
+                                          )
                                         ) : (
                                           <span className="text-slate-500">— passa il mouse e usa la matita a destra</span>
                                         )}
@@ -1790,7 +1807,7 @@ export function AIAgentUseCaseComposer({
                       agentMsgEditUseCaseId === selected.id ? (
                         <div className="flex flex-wrap items-start gap-2">
                           {agentMsgFieldLabel}
-                          <textarea
+                          <BracketTokenHighlightedTextarea
                             ref={agentTextareaRef}
                             value={agentMsgEditDraft}
                             onChange={(e) => {
@@ -1809,7 +1826,7 @@ export function AIAgentUseCaseComposer({
                             spellCheck={false}
                             aria-label="Messaggio agente"
                             placeholder="Seleziona testo e usa Token per creare [slot]. Senza quadre rimuove il markup."
-                            className={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
+                            containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
                             onKeyDown={(e) => {
                               if (e.key === 'Escape') {
                                 e.preventDefault();
@@ -1853,7 +1870,7 @@ export function AIAgentUseCaseComposer({
                             )}`}
                           >
                             {assistantTurn.content.trim() ? (
-                              assistantTurn.content
+                              <BracketTokenHighlightedText text={assistantTurn.content} />
                             ) : (
                               <span className="text-slate-500">— passa il mouse sulla riga e usa la matita a destra</span>
                             )}

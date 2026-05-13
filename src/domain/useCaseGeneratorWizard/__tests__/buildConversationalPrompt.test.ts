@@ -108,18 +108,18 @@ describe('buildConversationalPrompt', () => {
       ]);
       expect(prompt).not.toContain('Logging use case');
       expect(prompt).not.toContain('"log"');
-      expect(prompt).not.toContain('Usecase: ');
+      expect(prompt).not.toContain('USECASE:');
     });
 
-    it("with includeLog=true: each JSON entry has 'log: \"Usecase: <label>\"'", () => {
+    it("with includeLog=true: each JSON entry has 'log' with USECASE: \"<NOME>\" upper-cased", () => {
       const prompt = buildConversationalPrompt(
         [makeUseCase({ id: 'uc-a', label: 'Saluto cliente' })],
         { includeLog: true }
       );
-      expect(prompt).toContain('"log": "Usecase: Saluto cliente"');
+      expect(prompt).toContain('"log": "USECASE: \\"SALUTO CLIENTE\\""');
     });
 
-    it("with includeLog=true: textual instruction is injected in front of the catalog blocks (not the global header)", () => {
+    it('with includeLog=true: textual instruction is injected in front of the catalog blocks (not the global header)', () => {
       const prompt = buildConversationalPrompt(
         [makeUseCase({ id: 'uc-a', label: 'Saluto' })],
         { includeLog: true }
@@ -132,9 +132,10 @@ describe('buildConversationalPrompt', () => {
       expect(firstBlockIdx).toBeGreaterThan(instructionIdx);
       /**
        * Lo snippet di esempio per il caso "non riconosciuto" deve usare il prefisso
-       * `nuovo_` per essere distinguibile a colpo d'occhio dai trace dei use case censiti.
+       * `NUOVO_` (MAIUSCOLO) per essere distinguibile a colpo d'occhio dai trace dei
+       * use case censiti, e racchiudere il nome in virgolette doppie.
        */
-      expect(prompt).toMatch(/Usecase:\s*nuovo_/);
+      expect(prompt).toMatch(/USECASE:\s*"NUOVO_/);
     });
 
     it('is deterministic also with includeLog=true', () => {

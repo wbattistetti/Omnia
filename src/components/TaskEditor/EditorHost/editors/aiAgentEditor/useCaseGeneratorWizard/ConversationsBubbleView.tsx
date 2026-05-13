@@ -29,6 +29,10 @@ import type {
   UseCaseGeneratorWizardTurnAgent,
 } from '@domain/useCaseGeneratorWizard/types';
 import { TokenizedHighlightedText } from './TokenizedHighlightedText';
+import {
+  BracketTokenHighlightedText,
+  BracketTokenHighlightedTextarea,
+} from '../BracketTokenHighlightedTextarea';
 
 export interface ConversationsBubbleViewProps {
   /** Lista completa per indicizzare l'attiva. */
@@ -515,7 +519,7 @@ function BubbleEditor({
           ].join(' ')}
           aria-label={ariaLabel}
         >
-          {text}
+          <BracketTokenHighlightedText text={text} />
         </p>
         {!readOnly ? (
           <button
@@ -535,7 +539,7 @@ function BubbleEditor({
   const hasChanged = draft !== text;
   return (
     <div className="flex w-full items-start gap-1">
-      <textarea
+      <BracketTokenHighlightedTextarea
         ref={ref}
         value={draft}
         aria-label={ariaLabel}
@@ -553,7 +557,7 @@ function BubbleEditor({
             cancelEdit();
           }
         }}
-        className={[
+        containerClassName={[
           'block w-full resize-none rounded-md border border-violet-500/45 bg-slate-950/55 px-1.5 py-0.5 text-xs leading-snug text-current focus:outline-none focus:ring-1 focus:ring-violet-500/70 m-0 align-middle',
           strike ? 'line-through' : '',
         ].join(' ')}

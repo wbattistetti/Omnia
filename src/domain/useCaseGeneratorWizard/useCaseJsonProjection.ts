@@ -62,16 +62,18 @@ export interface UseCaseConversationalJson {
    * Marker di "log use case" che l'agente runtime deve appendere alla risposta quando
    * questo use case è stato applicato. Serializzato **solo** quando il task ha
    * `agentLogUseCase === true` (toggle nel `AIAgentDeployMenu`). Quando assente, il
-   * comportamento runtime è invariato rispetto al passato. Formato fisso: `Usecase: <label>`
-   * (label umana, non GUID, per leggibilità del trace lato designer).
+   * comportamento runtime è invariato rispetto al passato. Formato fisso:
+   * `USECASE: "<NOME>"` — `USECASE` in MAIUSCOLO, label in MAIUSCOLO racchiusa in virgolette
+   * doppie per renderla riconoscibile a colpo d'occhio nel trace e parsabile via regex
+   * (`/USECASE:\s*"([^"]+)"/`).
    */
   log?: string;
 }
 
 /**
  * Opzioni del proiettore. `includeLog: true` aggiunge il campo `log` nel JSON con il
- * formato `Usecase: <label>` — vedi `Task.agentLogUseCase` e
- * {@link UseCaseConversationalJson.log}. Default: `false` (back-compat).
+ * formato `USECASE: "<NOME>"` (label MAIUSCOLA, virgolette doppie) — vedi
+ * `Task.agentLogUseCase` e {@link UseCaseConversationalJson.log}. Default: `false` (back-compat).
  */
 export interface ProjectUseCaseOptions {
   readonly includeLog?: boolean;
@@ -82,9 +84,14 @@ export interface ProjectUseCaseOptions {
  * perché il compositore del system prompt — quando inietta l'istruzione "non riconosciuto"
  * — deve mostrare lo stesso formato come esempio inline: tenerlo qui evita drift tra il
  * JSON e la documentazione testuale.
+ *
+ * Formato: `USECASE: "<NOME>"`. Sia `USECASE` sia il nome sono in MAIUSCOLO; il nome è
+ * racchiuso in virgolette doppie. Il `toLocaleUpperCase()` (senza locale esplicita) usa
+ * la locale di default del runtime; per Omnia il prompt è in italiano e la upper-case
+ * standard ECMA è già corretta per i caratteri latini IT.
  */
 export function buildUseCaseLogValue(label: string): string {
-  return `Usecase: ${label.trim()}`;
+  return `USECASE: "${label.trim().toLocaleUpperCase()}"`;
 }
 
 export interface UseCaseConversationalCompilation {

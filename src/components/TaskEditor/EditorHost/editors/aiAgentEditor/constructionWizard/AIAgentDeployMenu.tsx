@@ -1,12 +1,16 @@
 /**
  * Dropdown «Deploy» dello stepper del wizard di costruzione AI Agent.
  *
- * Visibile SOLO quando tutti i 5 step ufficiali sono completati (gating fatto dal parent).
+ * Visibile appena gli use case sono pronti/compilabili (gating fatto dal parent: vedi
+ * `canCreateConversationalPrompt`). Le conversazioni NON sono prerequisito di Upload.
  *
- * Layout (tre sezioni separate da divider, sotto un titolo «UPLOAD TO PLATFORM»):
+ * Layout (sezioni separate da divider, sotto un titolo «UPLOAD TO PLATFORM»):
  *   ─── UPLOAD TO PLATFORM ────────────
- *   ▸ STILE  (header non cliccabile)
- *       [Cortese (2)] [Ironico (1)]      ← pill di selezione (single)
+ *   ☐ Avvio immediato         ← runtime toggle (persistito sul Task)
+ *   ☐ Logga Use Case          ← prompt-shaping toggle (persistito sul Task)
+ *   ─────────────────────────────────────
+ *   ▸ STILE  (opzionale; pill solo se l'utente ne ha checkati nel gate)
+ *       [Cortese (2)] [Ironico (1)]
  *   ─────────────────────────────────────
  *   ▸ PLATFORM  (header non cliccabile)
  *       • Anthropic     Manca la voce  [Fix]
@@ -21,9 +25,8 @@
  * `globale → override del task` (vedi `globalVoiceByPlatform.ts`). Questo componente
  * non conosce la regola: si limita a renderizzare cosa gli viene passato.
  *
- * **Fix**: se la voce è `null`, il bottone Fix è ATTIVO anche con stile non selezionato
- * (configurare la voce è prerequisito ortogonale alla scelta dello stile di deploy).
- * L'Upload, invece, richiede stile selezionato AND voce presente.
+ * **Fix**: se la voce è `null`, il bottone Fix è ATTIVO. L'Upload richiede solo che la
+ * voce sia configurata; lo stile è opzionale (se selezionato viene propagato).
  *
  * **Copy system prompt**: apre il dialog «Crea prompt conversazionale» esistente per
  * portare il system prompt negli appunti. Sempre disponibile (gating leggero su
@@ -33,7 +36,7 @@
  */
 
 import React from 'react';
-import { ChevronDown, FileText, Rocket, ScrollText, Wrench } from 'lucide-react';
+import { ChevronDown, FileText, PlayCircle, Rocket, ScrollText, Wrench } from 'lucide-react';
 import type { IAAgentPlatform, IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
 import {
   AGENT_PLATFORM_DISPLAY_LABEL,
@@ -75,26 +78,33 @@ export interface AIAgentDeployMenuProps extends DeployHandlers {
   /** Mappa platform → voce di default globale (caricata dal parent). Manca = «non configurata». */
   voicesByPlatform: GlobalVoiceByPlatformMap;
   /**
-   * **v2 multi-stile**: id degli stili che hanno almeno una conversazione generata
-   * (output di `listGeneratedStyleIds`). Solo questi sono pubblicabili. Se vuoto,
-   * il picker mostra un placeholder "Genera prima una conversazione" e tutti gli
-   * Upload sono disabilitati.
+   * Stili attivi nel gate conversazionale (output di `listCheckedStyleIds`). Sono
+   * solo informativi/opzionali: l'Upload non li richiede. Se vuoto, la sezione Stile
+   * non viene mostrata e l'Upload resta comunque abilitato per ogni Platform con voce.
    */
   availableStyleIds: readonly string[];
-  /** Counter conversazioni per stile (per badge nel picker). */
+  /** Counter conversazioni per stile (per badge nel picker), può essere vuoto. */
   countByStyleId?: Readonly<Record<string, number>>;
-  /** Stile target di Upload (single per ora). `null` = nessuno scelto → Upload disabled. */
+  /** Stile target di Upload (single per ora). `null` = nessuno scelto, opzionale. */
   deployStyleId: string | null;
   onDeployStyleIdChange: (next: string | null) => void;
   /**
    * Toggle "Logga Use Case" (vedi `Task.agentLogUseCase`). Quando true, il compilatore di
-   * prompt aggiunge il campo `log: "Usecase: <label>"` nel JSON di ogni use case e
+   * prompt aggiunge il campo `log: "USECASE: \"<NOME>\""` nel JSON di ogni use case e
    * antepone in testa al blocco use cases l'istruzione testuale per il caso "non
    * riconosciuto" (l'agente runtime classifica e marca la risposta con
-   * `Usecase: nuovo_<titolo>`). Persistito sul Task.
+   * `USECASE: "NUOVO_<TITOLO>"`). Persistito sul Task.
    */
   logUseCaseEnabled: boolean;
   onToggleLogUseCase: (next: boolean) => void;
+  /**
+   * Toggle "Avvio immediato" (vedi `Task.agentImmediateStart`). Quando true, l'orchestrator
+   * runtime inietta un primo turno utente sintetico così l'agente apre il dialogo senza
+   * attendere il primo messaggio dell'utente. Spostato qui dal tab "Prompt Finale": è una
+   * proprietà di deploy/runtime, naturale vicino agli altri toggle di pubblicazione.
+   */
+  immediateStartEnabled: boolean;
+  onToggleImmediateStart: (next: boolean) => void;
 }
 
 export function AIAgentDeployMenu({
@@ -110,6 +120,8 @@ export function AIAgentDeployMenu({
   onDeployStyleIdChange,
   logUseCaseEnabled,
   onToggleLogUseCase,
+  immediateStartEnabled,
+  onToggleImmediateStart,
 }: AIAgentDeployMenuProps): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -168,64 +180,73 @@ export function AIAgentDeployMenu({
           </div>
 
           {/*
-            ── PRIMA voce: toggle «Logga Use Case» ─────────────────────────────────────
+            ── Toggle 1: «Avvio immediato» ─────────────────────────────────────────────
 
-            Volutamente come prima voce del pannellino (richiesta esplicita designer):
-            è una decisione che CAMBIA il system prompt e il JSON che vengono inviati con
-            l'Upload, quindi va valutata PRIMA di scegliere stile/voci.
+            Spostato qui dal tab "Prompt Finale" (single-pane wizard step 1): è una
+            proprietà di runtime/deploy. Persistita su `Task.agentImmediateStart`.
 
-            Pattern UI: <label> intera cliccabile (input + testo): il click ovunque sulla
-            riga toggla la checkbox. Niente `onClick` sull'`onChange` per non duplicare
-            l'evento. Mantengo il dropdown aperto (no setOpen(false)) perché l'utente in
-            genere vuole continuare a configurare stile/upload subito dopo.
+            ── Toggle 2: «Logga Use Case» ─────────────────────────────────────────────
+
+            Decisione che CAMBIA il system prompt e il JSON inviati con l'Upload, quindi
+            va valutata PRIMA di scegliere stile/voci.
+
+            Pattern UI condiviso: <label> intera cliccabile (input + testo): il click
+            ovunque sulla riga toggla la checkbox. Niente `onClick` su `onChange` per
+            evitare doppio fire. Manteniamo il dropdown aperto (no setOpen(false)) così
+            l'utente continua a configurare stile/upload subito dopo.
           */}
           <div className="border-t border-slate-700 bg-slate-950">
             <label
               role="menuitemcheckbox"
+              aria-checked={immediateStartEnabled}
+              title="Quando attivo, l'orchestrator runtime inietta un primo turno utente sintetico: l'agente parte a parlare subito senza aspettare l'utente."
+              className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800"
+            >
+              <input
+                type="checkbox"
+                checked={immediateStartEnabled}
+                onChange={(e) => onToggleImmediateStart(e.target.checked)}
+                className="h-3.5 w-3.5 cursor-pointer accent-amber-500"
+              />
+              <PlayCircle size={12} aria-hidden className="shrink-0 text-amber-300" />
+              <span className="flex-1">Avvio immediato</span>
+            </label>
+            <label
+              role="menuitemcheckbox"
               aria-checked={logUseCaseEnabled}
-              title="Quando attivo, ogni risposta dell'agente include in coda «Usecase: <nome>». Per input non classificabili, l'agente assegna un nome nuovo e logga «Usecase: nuovo_<titolo>»."
-              className="flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800"
+              title={'Quando attivo, ogni risposta dell\'agente include in coda «USECASE: "<NOME>"» (MAIUSCOLO). Per input non classificabili, l\'agente assegna un nome nuovo e logga «USECASE: "NUOVO_<TITOLO>"».'}
+              className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800"
             >
               <input
                 type="checkbox"
                 checked={logUseCaseEnabled}
                 onChange={(e) => onToggleLogUseCase(e.target.checked)}
-                className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-amber-500"
+                className="h-3.5 w-3.5 cursor-pointer accent-amber-500"
               />
-              <ScrollText size={12} aria-hidden className="mt-0.5 shrink-0 text-amber-300" />
-              <span className="flex-1">
-                Logga Use Case
-                <span className="mt-0.5 block text-[10px] font-normal leading-snug text-slate-400">
-                  Aggiunge un trace «Usecase: …» in coda a ogni risposta. Use case non
-                  riconosciuti vengono auto-classificati dall'agente.
-                </span>
-              </span>
+              <ScrollText size={12} aria-hidden className="shrink-0 text-amber-300" />
+              <span className="flex-1">Logga Use Case</span>
             </label>
           </div>
 
-          {/* ── Sezione STILE: header non cliccabile + pill indentate ──────────────── */}
-          <div className="border-t border-slate-700 bg-slate-950 px-3 py-2">
-            <div
-              className="text-[10px] font-semibold uppercase tracking-wide text-slate-400"
-              role="presentation"
-            >
-              Stile
-            </div>
-            <div className="mt-1.5 pl-3">
-              {availableStyleIds.length > 0 ? (
+          {/* ── Sezione STILE: opzionale, mostrata solo se l'utente ha checkato stili ── */}
+          {availableStyleIds.length > 0 ? (
+            <div className="border-t border-slate-700 bg-slate-950 px-3 py-2">
+              <div
+                className="text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+                role="presentation"
+              >
+                Stile (opzionale)
+              </div>
+              <div className="mt-1.5 pl-3">
                 <ConversationStyleSelector
                   value={deployStyleId}
                   onChange={onDeployStyleIdChange}
                   availableStyleIds={availableStyleIds}
                   countByStyleId={countByStyleId}
                 />
-              ) : (
-                <p className="text-[11px] italic text-slate-500">
-                  Genera almeno una conversazione per poter pubblicare.
-                </p>
-              )}
+              </div>
             </div>
-          </div>
+          ) : null}
 
           {/* ── Sezione PLATFORM: header non cliccabile + voci indentate ───────────── */}
           <div className="border-t border-slate-700 bg-slate-950 px-3 py-2">
@@ -239,21 +260,19 @@ export function AIAgentDeployMenu({
               {DROPDOWN_PLATFORMS.map((platform) => {
                 const voice = voicesByPlatform[platform] ?? null;
                 const label = AGENT_PLATFORM_DISPLAY_LABEL[platform];
-                const styleSelected = deployStyleId !== null;
-                const uploadEnabled = styleSelected && voice !== null;
                 /**
-                 * Riga sempre cliccabile se manca la voce (Fix è ortogonale allo stile).
-                 * Disabilitata SOLO se la voce è presente ma manca lo stile (Upload bloccato).
+                 * Voce presente → Upload diretto (lo stile è opzionale e, se settato,
+                 * viene comunque propagato dal compilatore a monte).
+                 * Voce assente   → Fix: apre il pannello voci della platform.
+                 * La riga è SEMPRE cliccabile.
                  */
-                const itemDisabled = voice !== null && !styleSelected;
+                const uploadEnabled = voice !== null;
                 return (
                   <li key={platform}>
                     <button
                       type="button"
                       role="menuitem"
-                      disabled={itemDisabled}
                       onClick={() => {
-                        if (itemDisabled) return;
                         setOpen(false);
                         if (uploadEnabled && voice) {
                           onUploadToPlatform(platform, voice);
@@ -262,13 +281,13 @@ export function AIAgentDeployMenu({
                         }
                       }}
                       title={
-                        itemDisabled
-                          ? 'Seleziona prima uno stile sopra per pubblicare'
-                          : voice
-                          ? `Pubblica l'agente su ${label} usando la voce «${describeVoice(voice)}» nello stile selezionato`
+                        voice
+                          ? `Pubblica l'agente su ${label} usando la voce «${describeVoice(voice)}»${
+                              deployStyleId ? ' nello stile selezionato' : ''
+                            }`
                           : `Voce non configurata per ${label}: clicca per aprire il pannello e sceglierla`
                       }
-                      className="flex w-full items-center justify-between gap-3 rounded px-2 py-1 text-left text-xs text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
+                      className="flex w-full items-center justify-between gap-3 rounded px-2 py-1 text-left text-xs text-slate-100 hover:bg-slate-800"
                     >
                       <span className="font-medium">{label}</span>
                       {voice ? (

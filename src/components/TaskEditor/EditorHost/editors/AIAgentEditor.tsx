@@ -26,7 +26,6 @@ import { USE_CASE_GENERATOR_WIZARD_MAX_CONVERSATIONS } from '@domain/useCaseGene
 import {
   countConversationsByStyleId,
   listCheckedStyleIds,
-  listGeneratedStyleIds,
 } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import { mergeAssistantPhraseDraftIntoUseCases } from './aiAgentEditor/mergeAssistantPhraseDraftIntoUseCases';
 import { useAIAgentConversationActions } from './aiAgentEditor/useAIAgentConversationActions';
@@ -51,7 +50,6 @@ import {
   type AgentWizardStepIndex,
 } from '@domain/aiAgentConstruction/agentConstructionPhase';
 import {
-  areAllAgentWizardStepsComplete,
   evaluateAgentWizardCompletion,
 } from '@domain/aiAgentConstruction/agentWizardStepCompletion';
 import {
@@ -788,16 +786,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       }),
     [c.designDescription, c.useCases.length, useCaseGenWizard.conversations.length]
   );
-  const allWizardStepsComplete = React.useMemo(
-    () =>
-      areAllAgentWizardStepsComplete({
-        descriptionTrimmed: c.designDescription.trim(),
-        useCaseCount: c.useCases.length,
-        conversationCount: useCaseGenWizard.conversations.length,
-      }),
-    [c.designDescription, c.useCases.length, useCaseGenWizard.conversations.length]
-  );
-
   /**
    * Schermata Tutor: si mostra solo se l'utente non ha ancora cliccato «Cominciamo».
    * `agentWizardTutorAcknowledged` per i task legacy è già forzato a `true` dallo
@@ -995,19 +983,20 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   );
 
   /**
-   * Slot del dropdown «Deploy» nello stepper: presente SOLO quando tutti i 5 step ufficiali
-   * sono completati (`allWizardStepsComplete`). Il flag `costsActive` non lo nasconde —
-   * resta accessibile anche dalla vista Costi del wizard. Disabilitato `Copy system prompt`
-   * se gli use case non sono ancora compilabili (fail-loud sul tooltip, no silent click).
+   * Slot del dropdown «Deploy» nello stepper: presente appena gli use case sono pronti
+   * (compilabili dal builder deterministico, vedi `canCreateConversationalPrompt`).
+   * Le conversazioni NON sono prerequisito di Upload: l'Upload pubblica il prompt
+   * runtime dell'agente; le conversazioni restano un artefatto di review opzionale.
+   * Il flag `costsActive` non lo nasconde — resta accessibile anche dalla vista Costi.
    */
   /**
-   * Set degli styleId pubblicabili = stili che hanno almeno una conversazione generata
-   * (vedi `listGeneratedStyleIds`). Memo per evitare ricalcolo a ogni render del wizard.
-   * Counter per badge `Cortese (3)` nel picker del menu Deploy.
+   * Stili disponibili nel menu Deploy = stili checkati nel gate conversazionale.
+   * Sono solo informativi/opzionali: non bloccano l'Upload (vedi `AIAgentDeployMenu`).
+   * I badge mostrano quante conversazioni esistono per quello stile, se presenti.
    */
   const deployAvailableStyleIds = React.useMemo(
-    () => listGeneratedStyleIds(useCaseGenWizard.conversations),
-    [useCaseGenWizard.conversations]
+    () => listCheckedStyleIds(c.agentConversationStyleSelections),
+    [c.agentConversationStyleSelections]
   );
   const deployCountByStyleId = React.useMemo(
     () => countConversationsByStyleId(useCaseGenWizard.conversations),
@@ -1015,9 +1004,9 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   );
 
   /**
-   * Auto-reset del `deployStyleId` quando lo stile selezionato non ha più conversazioni
-   * (es. l'utente ha cancellato tutte le conv di quel stile). Evita di mostrare nel
-   * dropdown Upload uno stile target che non corrisponde a nulla di pubblicabile.
+   * Auto-reset del `deployStyleId` quando lo stile selezionato non è più checkato.
+   * Le conversazioni non sono più un prerequisito di Upload, quindi il check è solo
+   * sulla coerenza con la lista degli stili attivi nel gate.
    * Idempotente: niente effetto se `deployStyleId` è già valido o `null`.
    */
   React.useEffect(() => {
@@ -1031,7 +1020,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     c.setAgentConversationDeployStyleId,
   ]);
 
-  const deploySlot: React.ReactNode = allWizardStepsComplete ? (
+  const deploySlot: React.ReactNode = canCreateConversationalPrompt ? (
     <AIAgentDeployMenu
       voicesByPlatform={voicesByPlatform}
       onUploadToPlatform={(platform, voice) => {
@@ -1047,6 +1036,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       onDeployStyleIdChange={c.setAgentConversationDeployStyleId}
       logUseCaseEnabled={c.agentLogUseCase}
       onToggleLogUseCase={c.setAgentLogUseCase}
+      immediateStartEnabled={c.agentImmediateStart}
+      onToggleImmediateStart={c.setAgentImmediateStart}
     />
   ) : null;
 

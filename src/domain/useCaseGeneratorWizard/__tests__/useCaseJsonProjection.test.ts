@@ -244,9 +244,22 @@ describe('stringifyUseCaseConversationalJson', () => {
 });
 
 describe('buildUseCaseLogValue', () => {
-  it('formats label as "Usecase: <label>" with trim difensivo', () => {
-    expect(buildUseCaseLogValue('Saluto')).toBe('Usecase: Saluto');
-    expect(buildUseCaseLogValue('  Spazi  ')).toBe('Usecase: Spazi');
+  it('formats label as `USECASE: "<NOME>"` (MAIUSCOLO, virgolette doppie)', () => {
+    expect(buildUseCaseLogValue('Saluto')).toBe('USECASE: "SALUTO"');
+    expect(buildUseCaseLogValue('saluto cliente')).toBe('USECASE: "SALUTO CLIENTE"');
+  });
+
+  it('trims whitespace before applying upper-case', () => {
+    expect(buildUseCaseLogValue('  Spazi  ')).toBe('USECASE: "SPAZI"');
+  });
+
+  it('preserves accented italian characters in upper-case', () => {
+    /**
+     * `toLocaleUpperCase()` standard ECMA su latin-1 non normalizza «più» → «PIÙ» con
+     * accento? Sì, lo fa: le maiuscole accentate sono punti codice distinti. Importante
+     * per non perdere informazione su label come «Più informazioni».
+     */
+    expect(buildUseCaseLogValue('Più informazioni')).toBe('USECASE: "PIÙ INFORMAZIONI"');
   });
 });
 
@@ -262,20 +275,20 @@ describe('projectUseCaseToConversationalJson — log field', () => {
     expect(out!).not.toHaveProperty('log');
   });
 
-  it("with includeLog=true: 'log' is 'Usecase: <label>' (not GUID)", () => {
+  it("with includeLog=true: 'log' is `USECASE: \"<NOME>\"` (label upper-cased, not GUID)", () => {
     const out = projectUseCaseToConversationalJson(
       makeUseCase({ id: 'uc-guid-xyz', label: 'Saluto cliente' }),
       { includeLog: true }
     );
-    expect(out!.log).toBe('Usecase: Saluto cliente');
+    expect(out!.log).toBe('USECASE: "SALUTO CLIENTE"');
   });
 
-  it("trims label whitespace before composing the log value", () => {
+  it('trims label whitespace before composing the log value', () => {
     const out = projectUseCaseToConversationalJson(
       makeUseCase({ label: '  Padded  ' }),
       { includeLog: true }
     );
-    expect(out!.log).toBe('Usecase: Padded');
+    expect(out!.log).toBe('USECASE: "PADDED"');
   });
 });
 
@@ -286,7 +299,10 @@ describe('projectAllUseCasesToConversationalJson — log field', () => {
       makeUseCase({ id: 'uc-b', label: 'Beta', sort_order: 2 }),
     ];
     const withLog = projectAllUseCasesToConversationalJson(ucs, { includeLog: true });
-    expect(withLog.map((o) => o.log)).toEqual(['Usecase: Alpha', 'Usecase: Beta']);
+    expect(withLog.map((o) => o.log)).toEqual([
+      'USECASE: "ALPHA"',
+      'USECASE: "BETA"',
+    ]);
     const withoutLog = projectAllUseCasesToConversationalJson(ucs);
     expect(withoutLog.every((o) => !('log' in o))).toBe(true);
   });

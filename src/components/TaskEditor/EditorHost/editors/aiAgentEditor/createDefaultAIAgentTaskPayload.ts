@@ -46,7 +46,7 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentConversationDeployStyleId: null,
     /**
      * "Logga Use Case": OFF di default. Il designer può abilitarlo dalla dropdown
-     * `AIAgentDeployMenu` quando vuole il trace `Usecase: <label>` in coda alle
+     * `AIAgentDeployMenu` quando vuole il trace `USECASE: "<NOME>"` in coda alle
      * risposte runtime.
      */
     agentLogUseCase: false,

@@ -306,7 +306,7 @@ export function useAIAgentEditorController({
 
   /**
    * Toggle "Logga Use Case" del deploy menu. Quando true, il compilatore di prompt:
-   *  1. Aggiunge `log: "Usecase: <label>"` a ogni elemento di `UseCaseConversationalJson`.
+   *  1. Aggiunge `log: "USECASE: \"<NOME>\""` a ogni elemento di `UseCaseConversationalJson`.
    *  2. Antepone in testa al blocco use cases l'istruzione testuale per il caso
    *     "non riconosciuto" (vedi `Task.agentLogUseCase`).
    *

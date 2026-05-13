@@ -32,11 +32,11 @@ import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 
 /**
  * Opzioni di build del prompt finale. `includeLog`:
- *  - inietta nel JSON di ogni use case il campo `log: "Usecase: <label>"` (vedi
+ *  - inietta nel JSON di ogni use case il campo `log: "USECASE: \"<NOME>\""` (vedi
  *    {@link projectAllUseCasesToConversationalJson});
  *  - antepone in testa al blocco "Catalogo use case" un'istruzione testuale che spiega
  *    al motore esterno come gestire il caso "input non riconosciuto" — classificarlo,
- *    inventare un titolo breve, restituire `Usecase: nuovo_<titolo>` come trace.
+ *    inventare un titolo breve, restituire `USECASE: "NUOVO_<TITOLO>"` come trace.
  *
  * Default `false` (back-compat): i task gi\u00e0 pubblicati continuano a generare lo stesso
  * prompt di prima finch\u00e9 il designer non attiva il toggle "Logga Use Case" dal menu Upload.
@@ -50,14 +50,16 @@ export interface BuildConversationalPromptOptions {
  * `includeLog` è `true`. Tenuta come template costante, in italiano, coerente per stile
  * e tono con {@link PROMPT_HEADER_IT} (lo stesso motore esterno legge entrambi).
  *
- * Formato del trace nuovo intenzionalmente diverso da `Usecase: <label>`: il prefisso
- * `nuovo_` permette al designer (che vede i log runtime) di riconoscere a colpo d'occhio
- * gli use case "non in catalogo" da promuovere in design-time.
+ * Formato del trace nuovo intenzionalmente diverso dallo standard `USECASE: "<NOME>"`:
+ * il prefisso `NUOVO_` permette al designer (che vede i log runtime) di riconoscere a
+ * colpo d'occhio gli use case "non in catalogo" da promuovere in design-time. Tutto in
+ * MAIUSCOLO e il nome tra virgolette doppie, allineato al formato del campo `log` nel
+ * JSON ({@link buildUseCaseLogValue}).
  */
 const PROMPT_LOG_INSTRUCTION_IT = `Logging use case
 Per ogni risposta, alla fine del testo restituisci anche il marker dello use case applicato:
-- Se hai riconosciuto uno dei casi del catalogo qui sotto, copia letteralmente il valore del campo \`log\` di quello use case (formato: \`Usecase: <nome>\`).
-- Se NESSUN use case del catalogo si applica all'input dell'utente, classificalo tu: scegli un titolo breve in snake_case che descriva l'intento, e termina la risposta con \`Usecase: nuovo_<titolo>\` (esempio: \`Usecase: nuovo_richiesta_rimborso\`).
+- Se hai riconosciuto uno dei casi del catalogo qui sotto, copia letteralmente il valore del campo \`log\` di quello use case (formato: \`USECASE: "<NOME>"\`, tutto MAIUSCOLO, nome tra virgolette doppie).
+- Se NESSUN use case del catalogo si applica all'input dell'utente, classificalo tu: scegli un titolo breve in SNAKE_CASE MAIUSCOLO che descriva l'intento, e termina la risposta con \`USECASE: "NUOVO_<TITOLO>"\` (esempio: \`USECASE: "NUOVO_RICHIESTA_RIMBORSO"\`).
 - Il marker va sempre alla fine, su nuova riga, senza altre parole prima o dopo.`;
 
 /**

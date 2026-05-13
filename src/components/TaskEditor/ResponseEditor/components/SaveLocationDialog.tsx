@@ -2,9 +2,13 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import React, { useState, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { useWizardContext } from '@responseEditor/context/WizardContext';
+
+const SAVE_LOCATION_BACKDROP_Z = 99998;
+const SAVE_LOCATION_POPOVER_Z = 99999;
 
 interface SaveLocationDialogProps {
   isOpen: boolean;
@@ -124,27 +128,31 @@ export function SaveLocationDialog({
   }
 
 
-  return (
+  const popover = (
     <>
       {/* Backdrop - only for click outside detection, not fullscreen */}
       <div
-        className="fixed inset-0 z-40"
+        className="fixed inset-0"
+        style={{
+          zIndex: SAVE_LOCATION_BACKDROP_Z,
+          pointerEvents: isOpen ? 'auto' : 'none',
+        }}
         onClick={(e) => {
           // Close on backdrop click, but allow clicks inside popover
           if (e.target === e.currentTarget) {
             onCancel();
           }
         }}
-        style={{ pointerEvents: isOpen ? 'auto' : 'none' }}
       />
 
       {/* Popover positioned below button */}
       <div
         ref={popoverRef}
-        className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200"
+        className="fixed bg-white rounded-lg shadow-xl border border-gray-200"
         style={{
           top: `${position.top}px`,
           left: `${position.left}px`,
+          zIndex: SAVE_LOCATION_POPOVER_Z,
           width: '400px',
           maxHeight: '500px',
           display: 'flex',
@@ -225,4 +233,6 @@ export function SaveLocationDialog({
       </div>
     </>
   );
+
+  return createPortal(popover, document.body);
 }

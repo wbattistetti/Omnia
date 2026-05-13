@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { AIAgentUnifiedPromptField } from './AIAgentUnifiedPromptField';
+import { AIAgentStructuredSectionsPanel } from './AIAgentStructuredSectionsPanel';
 import { AIAgentProposedFieldsTable } from './AIAgentProposedFieldsTable';
 import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
 import { ViewSkaGenerator } from './useCaseGeneratorWizard/ViewSkaGenerator';
@@ -30,30 +30,52 @@ import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
 
+/**
+ * Wizard step 1 — un singolo Dockview (single-pane) le cui tab sono:
+ *   - "Descrizione" (sempre): textarea libera in linguaggio naturale.
+ *   - Tab strutturate (solo dopo Crea Agente): Scopo, Sequenza, Contesto,
+ *     Vincoli, Personalità, Tono, Esempi, … + Prompt Finale.
+ *
+ * Pre-Crea Agente la lista è ridotta a una sola tab ("Descrizione"), così
+ * l'utente parte dalla forma libera. Dopo la creazione l'AI scompone la
+ * descrizione nelle sezioni e il dock fa apparire alla destra di "Descrizione"
+ * tutte le tab strutturate. L'utente vede sempre **una tab attiva alla volta**
+ * (no split visibile imposto), mantenendo continuità con il vecchio layout
+ * `AIAgentLeftColumn`.
+ */
 export function EditorUnifiedDescriptionPanel() {
   const {
     instanceId,
-    designDescription,
-    setDesignDescription,
     generating,
-    insertBackendPathInDesign,
+    hasAgentGeneration,
+    composedRuntimeMarkdown,
+    structuredSectionsState,
+    onApplyRevisionOps,
+    onApplyOtCommit,
+    onUndoSection,
+    onRedoSection,
+    structuredOtEnabled,
+    iaRevisionDiffBySection,
+    onDismissIaRevisionForSection,
   } = useAIAgentEditorDock();
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto p-3 space-y-3 bg-teal-950/25 border-l-4 border-teal-500/55">
-      <AIAgentUnifiedPromptField
-        mode="description"
-        value={designDescription}
-        onChange={setDesignDescription}
-        readOnly={generating}
-        insertBackendPathInDesign={insertBackendPathInDesign}
+    <div className="flex h-full min-h-0 flex-col overflow-hidden p-3 bg-teal-950/25 border-l-4 border-teal-500/55">
+      <AIAgentStructuredSectionsPanel
         instanceId={instanceId}
-        iaRevisionDiff={null}
-        onDismissIaRevisionDiff={() => {}}
-        promptBaseText=""
-        deletedMask={[]}
-        inserts={[]}
-        onApplyRevisionOps={() => {}}
+        runtimeMarkdown={composedRuntimeMarkdown}
+        sectionsState={structuredSectionsState}
+        readOnly={generating}
+        onApplyRevisionOps={onApplyRevisionOps}
+        onApplyOtCommit={onApplyOtCommit}
+        onUndoSection={onUndoSection}
+        onRedoSection={onRedoSection}
+        structuredOtEnabled={structuredOtEnabled}
+        iaRevisionDiffBySection={iaRevisionDiffBySection}
+        onDismissIaRevisionForSection={onDismissIaRevisionForSection}
+        embeddedDock
+        includeDescriptionLeadingTab
+        omitStructuredSections={!hasAgentGeneration}
       />
     </div>
   );
