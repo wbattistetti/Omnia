@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { DockNode, DockRegion, DockTab, DockTabFlow, DockTabResponseEditor, DockTabNonInteractive, DockTabConditionEditor, DockTabTaskEditor, isLockedMainFlowTab } from '../../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { splitWithTab, addTabCenter, closeTab, activateTab, moveTab, getTab, removeTab } from '../../dock/ops';
 import { Workflow, FileText, Code2, GitBranch, MessageSquare, Waypoints } from 'lucide-react';
+import { getTaskVisualsByType } from '../Flowchart/utils/taskVisuals';
 import SmartTooltip from '../SmartTooltip';
 
 // Helper to map over dock tree nodes
@@ -33,7 +34,11 @@ function getTabIcon(tab: DockTab) {
   switch (tab.type) {
     case 'flow': return <Workflow size={14} color="#0c4a6e" />;
     case 'responseEditor': return <FileText size={14} color="#7c3aed" />;
-    case 'taskEditor': return <FileText size={14} color="#94a3b8" />; // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
+    case 'taskEditor': {
+      const visuals = getTaskVisualsByType((tab as DockTabTaskEditor).task.type, true);
+      const Icon = visuals.Icon;
+      return <Icon size={14} color={visuals.iconColor} aria-hidden />;
+    }
     case 'nonInteractive': return <FileText size={14} color="#059669" />;
     case 'conditionEditor': return <Code2 size={14} color="#dc2626" />;
     case 'chat': return <MessageSquare size={14} color="#10b981" />;
