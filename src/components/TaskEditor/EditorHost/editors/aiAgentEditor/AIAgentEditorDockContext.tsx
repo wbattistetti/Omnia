@@ -6,6 +6,7 @@ import React from 'react';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { AIAgentPreviewTurn } from '@types/aiAgentPreview';
+import type { ConversationStyleSelections } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import type { OtOp } from './otTypes';
 import type { StructuredSectionsRevisionState } from './structuredSectionsRevisionReducer';
@@ -216,22 +217,33 @@ export interface AIAgentEditorDockContextValue {
   onOpenConversationalPromptDialog: () => void;
 
   /**
-   * **Gate di stile** del passo «Conversazione» (persistito sul task).
+   * **Gate di stile v2 multi-pill** del passo «Conversazione» (persistito sul task).
    *
-   * Disgiunzione semantica: la generazione di una nuova conversazione richiede che
-   * **almeno una** delle due sia "valorizzata":
-   * - `agentConversationStyleExample` non vuoto (testo libero, esempio dialogo) — vince
-   *   sull'auto se entrambe sono valorizzate (l'esempio è il più specifico).
-   * - `agentConversationStyleAuto === true` (delega all'AI la scelta dello stile).
+   * - `agentConversationStyleAuto`: checkbox **GLOBALE** «Lascia che Omnia scelga uno stile».
+   *   Quando true, gli esempi di dialogo sono opzionali; l'AI inventa frasi nello stile
+   *   descritto dalla `description` di ogni stile checkato.
+   * - `agentConversationStyleSelections`: mappa `styleId → { checked, description, example }`.
+   *   Il batch di generazione produce 1 conversazione PER OGNI styleId con `checked = true`
+   *   (chiamate parallele via `Promise.all`).
+   * - `agentConversationDeployStyleId`: stile target di Upload (singolo per ora). `null` =
+   *   Upload disabilitato; il picker mostra solo stili che hanno almeno 1 conversazione
+   *   generata (vedi `listGeneratedStyleIds`).
    *
-   * UI: empty state mostra una card con textarea + checkbox; se l'utente clicca
-   * un pulsante di generazione senza aver definito lo stile, il pannello SX lampeggia
-   * e appare un payoff inline ("Devi prima scegliere uno stile a sinistra").
+   * Il vecchio `agentConversationStyleExample` resta esposto per compat ma è readonly:
+   * la migrazione verso `selections` avviene in `buildTaskSnapshotFromRaw`.
    */
   agentConversationStyleExample: string;
   setAgentConversationStyleExample: (next: string) => void;
   agentConversationStyleAuto: boolean;
   setAgentConversationStyleAuto: (next: boolean) => void;
+  agentConversationStyleSelections: ConversationStyleSelections;
+  setAgentConversationStyleSelections: (
+    next:
+      | ConversationStyleSelections
+      | ((prev: ConversationStyleSelections) => ConversationStyleSelections)
+  ) => void;
+  agentConversationDeployStyleId: string | null;
+  setAgentConversationDeployStyleId: (next: string | null) => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

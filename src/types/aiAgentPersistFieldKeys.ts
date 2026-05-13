@@ -28,4 +28,6 @@ export const AI_AGENT_PERSIST_FIELD_KEYS: readonly string[] = [
   'agentWizardTutorAcknowledged',
   'agentConversationStyleExample',
   'agentConversationStyleAuto',
+  'agentConversationStyleSelections',
+  'agentConversationDeployStyleId',
 ];

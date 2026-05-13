@@ -23,6 +23,11 @@ import { applyAllDesignerVotesUp } from './aiAgentEditor/useCaseComposerDesigner
 import { normalizeUseCaseSiblingOrder } from './aiAgentEditor/useCaseHierarchy';
 import { useUseCaseGeneratorWizard } from './aiAgentEditor/useCaseGeneratorWizard/useUseCaseGeneratorWizard';
 import { USE_CASE_GENERATOR_WIZARD_MAX_CONVERSATIONS } from '@domain/useCaseGeneratorWizard/registry';
+import {
+  countConversationsByStyleId,
+  listCheckedStyleIds,
+  listGeneratedStyleIds,
+} from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import { mergeAssistantPhraseDraftIntoUseCases } from './aiAgentEditor/mergeAssistantPhraseDraftIntoUseCases';
 import { useAIAgentConversationActions } from './aiAgentEditor/useAIAgentConversationActions';
 import { tokenizeAIAgentUseCasesApi } from '@services/aiAgentDesignApi';
@@ -328,67 +333,92 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       const slotsLeft = USE_CASE_GENERATOR_WIZARD_MAX_CONVERSATIONS - existing.length;
       if (slotsLeft <= 0) return;
 
-      const isSuggestedBatch = params.allowSuggestedUseCases;
-      const matchesRequestedType = (
-        c: UseCaseGeneratorWizardConversation
-      ): boolean => {
-        if (isSuggestedBatch) {
-          return c.turns.some(
-            (t) =>
-              t.role === 'agent' &&
-              t.suggestion !== undefined &&
-              t.suggestion.status !== 'rejected'
-          );
-        }
-        return c.outcome === params.outcome;
-      };
-      const sameTypeCount = existing.filter(matchesRequestedType).length;
-
-      const catalogTarget = isSuggestedBatch
-        ? 2
-        : Math.min(4, Math.max(2, Math.ceil(c.useCases.length / 3)));
-      const desiredDelta = Math.max(0, catalogTarget - sameTypeCount);
-      /** Se l'utente ha già raggiunto l'obiettivo e riclicca: aggiungiamo comunque 1. */
-      const batchSize = Math.min(slotsLeft, Math.max(1, desiredDelta));
+      /**
+       * Gate v2 multi-stile: il batch genera UNA conversazione PER OGNI stile checkato,
+       * in parallelo (`Promise.all`). Il gate visivo lato pannello (`wrappedAssembleConversation`
+       * in `AIAgentEditorDockPanels`) ha già garantito che `checkedStyleIds.length >= 1` e
+       * che ogni entry checkata sia valida; qui difendiamo comunque con un early-return.
+       *
+       * NB: il "batchSize per stile" del gate v1 (2–4 per outcome a saturazione) NON viene
+       * più applicato — multi-stile produce naturalmente più conversazioni e l'utente è
+       * già in modalità "multi-output" esplicito. Per ri-cliccare sullo stesso stile basta
+       * un secondo click sul pulsante.
+       */
+      const checkedStyleIds = listCheckedStyleIds(c.agentConversationStyleSelections);
+      if (checkedStyleIds.length === 0) {
+        // Gate visuale dovrebbe averlo già bloccato; difensivo.
+        return;
+      }
+      const stylesToRun = checkedStyleIds.slice(0, slotsLeft);
 
       const { outcome, allowSuggestedUseCases } = params;
+      const baseCount = existing.length;
+      const auto = c.agentConversationStyleAuto === true;
 
+      /**
+       * Lancio parallelo: per ogni styleId costruiamo il payload e invochiamo
+       * `handleAssembleConversation`. `previousConversationsCount` cresce con `baseCount + index`
+       * per dare al backend un hint di variazione mix anche se le call sono concorrenti.
+       */
+      const tasks = stylesToRun.map((styleId, index) => {
+        const entry = c.agentConversationStyleSelections[styleId];
+        return conversationActions
+          .handleAssembleConversation({
+            previousConversationsCount: baseCount + index,
+            outcome,
+            allowSuggestedUseCases,
+            stylePayload: {
+              id: styleId,
+              description: entry?.description ?? '',
+              example: entry?.example ?? '',
+              auto,
+            },
+          })
+          .then(
+            (conv) => (conv ? { styleId, conv } : null),
+            // handleAssembleConversation gestisce già fail() interno; qui isoliamo il reject.
+            () => null
+          );
+      });
+
+      const results = (await Promise.all(tasks)).filter(
+        (x): x is { styleId: string; conv: UseCaseGeneratorWizardConversation } => x !== null
+      );
+
+      if (results.length === 0) return;
+
+      /**
+       * Tagging client-side dello `styleId` sulla conversazione (anche se il backend lo
+       * include, ridichiariamo qui per consistenza: il payload conosce il target). Inoltre
+       * aggregiamo l'append + baseline in un solo passaggio ordinato per stabilità UI.
+       */
       let accumulated = [...existing];
-      let created = 0;
-      for (let i = 0; i < batchSize; i++) {
-        const conv = await conversationActions.handleAssembleConversation({
-          previousConversationsCount: accumulated.length,
-          outcome,
-          allowSuggestedUseCases,
-          /**
-           * Style hint: passa l'esempio testuale del designer SOLO se è valorizzato.
-           * Quando il designer ha invece spuntato «Lascia che Omnia scelga uno stile»
-           * l'esempio è omesso (il campo `agentConversationStyleExample` è tipicamente
-           * vuoto in quel caso) e l'AI sceglie liberamente.
-           */
-          stylePromptHint: c.agentConversationStyleExample,
-        });
-        if (!conv) break;
-        useCaseGenWizard.appendConversation(conv);
-        accumulated = [...accumulated, conv];
-        useCaseGenWizard.captureConversationsBaseline(accumulated);
-        created += 1;
+      const perStyleCount: Record<string, number> = {};
+      for (const { styleId, conv } of results) {
+        const tagged: UseCaseGeneratorWizardConversation = { ...conv, styleId };
+        useCaseGenWizard.appendConversation(tagged);
+        accumulated = [...accumulated, tagged];
+        perStyleCount[styleId] = (perStyleCount[styleId] ?? 0) + 1;
       }
+      useCaseGenWizard.captureConversationsBaseline(accumulated);
 
-      if (created === 0) return;
+      const created = results.length;
       const outcomeLabel = outcome === 'positive' ? 'positiva' : 'negativa';
       const suggestedHint = allowSuggestedUseCases ? ' (con use case emergenti ammessi)' : '';
+      const breakdown = Object.entries(perStyleCount)
+        .map(([id, n]) => `${n} ${id}`)
+        .join(', ');
       setUseCaseBundleFeedback(
         created > 1
-          ? `Montate ${created} conversazioni ${outcomeLabel}${suggestedHint}. Usa i tab numerati sotto l'area di lavoro per passare dall'una all'altra.`
-          : `Conversazione ${outcomeLabel} ${accumulated.length} montata${suggestedHint}.`
+          ? `Montate ${created} conversazioni ${outcomeLabel}${suggestedHint} (${breakdown}). Usa i tab numerati sotto l'area di lavoro per passare dall'una all'altra.`
+          : `Conversazione ${outcomeLabel} ${accumulated.length} montata${suggestedHint} (${breakdown}).`
       );
     },
     [
       conversationActions,
       useCaseGenWizard,
-      c.useCases,
-      c.agentConversationStyleExample,
+      c.agentConversationStyleSelections,
+      c.agentConversationStyleAuto,
     ]
   );
 
@@ -951,6 +981,37 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    * resta accessibile anche dalla vista Costi del wizard. Disabilitato `Copy system prompt`
    * se gli use case non sono ancora compilabili (fail-loud sul tooltip, no silent click).
    */
+  /**
+   * Set degli styleId pubblicabili = stili che hanno almeno una conversazione generata
+   * (vedi `listGeneratedStyleIds`). Memo per evitare ricalcolo a ogni render del wizard.
+   * Counter per badge `Cortese (3)` nel picker del menu Deploy.
+   */
+  const deployAvailableStyleIds = React.useMemo(
+    () => listGeneratedStyleIds(useCaseGenWizard.conversations),
+    [useCaseGenWizard.conversations]
+  );
+  const deployCountByStyleId = React.useMemo(
+    () => countConversationsByStyleId(useCaseGenWizard.conversations),
+    [useCaseGenWizard.conversations]
+  );
+
+  /**
+   * Auto-reset del `deployStyleId` quando lo stile selezionato non ha più conversazioni
+   * (es. l'utente ha cancellato tutte le conv di quel stile). Evita di mostrare nel
+   * dropdown Upload uno stile target che non corrisponde a nulla di pubblicabile.
+   * Idempotente: niente effetto se `deployStyleId` è già valido o `null`.
+   */
+  React.useEffect(() => {
+    const current = c.agentConversationDeployStyleId;
+    if (current && !deployAvailableStyleIds.includes(current)) {
+      c.setAgentConversationDeployStyleId(null);
+    }
+  }, [
+    deployAvailableStyleIds,
+    c.agentConversationDeployStyleId,
+    c.setAgentConversationDeployStyleId,
+  ]);
+
   const deploySlot: React.ReactNode = allWizardStepsComplete ? (
     <AIAgentDeployMenu
       voicesByPlatform={voicesByPlatform}
@@ -961,6 +1022,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       onCopySystemPrompt={onOpenConversationalPromptDialog}
       copySystemPromptDisabled={!canCreateConversationalPrompt}
       copySystemPromptDisabledReason="Disponibile quando tutti gli use case sono compilabili (frase canonica presente)."
+      availableStyleIds={deployAvailableStyleIds}
+      countByStyleId={deployCountByStyleId}
+      deployStyleId={c.agentConversationDeployStyleId}
+      onDeployStyleIdChange={c.setAgentConversationDeployStyleId}
     />
   ) : null;
 
@@ -1069,6 +1134,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setAgentConversationStyleExample: c.setAgentConversationStyleExample,
     agentConversationStyleAuto: c.agentConversationStyleAuto,
     setAgentConversationStyleAuto: c.setAgentConversationStyleAuto,
+    agentConversationStyleSelections: c.agentConversationStyleSelections,
+    setAgentConversationStyleSelections: c.setAgentConversationStyleSelections,
+    agentConversationDeployStyleId: c.agentConversationDeployStyleId,
+    setAgentConversationDeployStyleId: c.setAgentConversationDeployStyleId,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;

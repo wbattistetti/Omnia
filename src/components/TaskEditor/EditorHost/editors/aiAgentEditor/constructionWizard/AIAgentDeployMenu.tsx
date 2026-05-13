@@ -30,6 +30,7 @@ import {
   describeVoice,
   type GlobalVoiceByPlatformMap,
 } from '@utils/iaAgentRuntime/globalVoiceByPlatform';
+import { ConversationStyleSelector } from '../useCaseGeneratorWizard/ConversationStyleSelector';
 
 /** Piattaforme effettivamente esposte nel dropdown (ordine alfabetico per UX). */
 const DROPDOWN_PLATFORMS: readonly IAAgentPlatform[] = SUPPORTED_AGENT_PLATFORMS.filter(
@@ -62,6 +63,18 @@ export interface DeployHandlers {
 export interface AIAgentDeployMenuProps extends DeployHandlers {
   /** Mappa platform → voce di default globale (caricata dal parent). Manca = «non configurata». */
   voicesByPlatform: GlobalVoiceByPlatformMap;
+  /**
+   * **v2 multi-stile**: id degli stili che hanno almeno una conversazione generata
+   * (output di `listGeneratedStyleIds`). Solo questi sono pubblicabili. Se vuoto,
+   * il picker mostra un placeholder "Genera prima una conversazione" e tutti gli
+   * Upload sono disabilitati.
+   */
+  availableStyleIds: readonly string[];
+  /** Counter conversazioni per stile (per badge nel picker). */
+  countByStyleId?: Readonly<Record<string, number>>;
+  /** Stile target di Upload (single per ora). `null` = nessuno scelto → Upload disabled. */
+  deployStyleId: string | null;
+  onDeployStyleIdChange: (next: string | null) => void;
 }
 
 export function AIAgentDeployMenu({
@@ -71,6 +84,10 @@ export function AIAgentDeployMenu({
   onCopySystemPrompt,
   copySystemPromptDisabled = false,
   copySystemPromptDisabledReason,
+  availableStyleIds,
+  countByStyleId,
+  deployStyleId,
+  onDeployStyleIdChange,
 }: AIAgentDeployMenuProps): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -121,34 +138,62 @@ export function AIAgentDeployMenu({
         <div
           role="menu"
           aria-label="Azioni di deploy"
-          className="absolute right-0 z-50 mt-1 w-72 overflow-hidden rounded-md border border-slate-700 bg-slate-950/98 shadow-xl"
+          className="absolute right-0 z-50 mt-1 w-80 overflow-hidden rounded-md border border-slate-700 bg-slate-950/98 shadow-xl"
         >
           <div className="border-b border-slate-800 bg-slate-900/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Upload to Platform
+          </div>
+          {/*
+            Picker stile target di Upload (v2 multi-stile). Se non c'è alcuno styleId
+            disponibile (nessuna conversazione generata) mostriamo un placeholder e
+            disabilitiamo gli Upload. Se l'utente seleziona uno stile, gli item
+            platform diventano cliccabili (subordinati alla disponibilità della voce).
+          */}
+          <div className="border-b border-slate-800 bg-slate-900/40 px-3 py-2">
+            {availableStyleIds.length > 0 ? (
+              <ConversationStyleSelector
+                label="Stile:"
+                value={deployStyleId}
+                onChange={onDeployStyleIdChange}
+                availableStyleIds={availableStyleIds}
+                countByStyleId={countByStyleId}
+              />
+            ) : (
+              <p className="text-[11px] italic text-slate-500">
+                Genera almeno una conversazione per poter pubblicare.
+              </p>
+            )}
           </div>
           <ul className="py-1">
             {DROPDOWN_PLATFORMS.map((platform) => {
               const voice = voicesByPlatform[platform] ?? null;
               const label = AGENT_PLATFORM_DISPLAY_LABEL[platform];
+              const styleSelected = deployStyleId !== null;
+              const uploadEnabled = styleSelected && voice !== null;
+              const itemDisabled = !styleSelected;
               return (
                 <li key={platform}>
                   <button
                     type="button"
                     role="menuitem"
+                    disabled={itemDisabled}
                     onClick={() => {
+                      if (itemDisabled) return;
                       setOpen(false);
-                      if (voice) {
+                      if (uploadEnabled && voice) {
                         onUploadToPlatform(platform, voice);
                       } else {
                         onFixVoice(platform);
                       }
                     }}
                     title={
-                      voice
-                        ? `Pubblica l'agente su ${label} usando la voce «${describeVoice(voice)}»`
+                      !styleSelected
+                        ? 'Seleziona prima uno stile sopra'
+                        : voice
+                        ? `Pubblica l'agente su ${label} usando la voce «${describeVoice(voice)}» nello stile selezionato`
                         : `Voce non configurata per ${label}: clicca per aprire il pannello e sceglierla`
                     }
-                    className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-xs text-slate-100 hover:bg-slate-800/90"
+                    className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-xs text-slate-100 hover:bg-slate-800/90 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
                   >
                     <span className="font-medium">{label}</span>
                     {voice ? (

@@ -169,31 +169,60 @@ export function ConversationsStyleBand({
 }
 
 /**
- * Hook utility per gestire il flash temporaneo del pannello SX e il payoff inline
- * sotto il pulsante che ha tentato la generazione senza stile definito.
+ * Hook utility per gestire il flash temporaneo del gate di stile e il payoff inline
+ * sotto i pulsanti di generazione conversazione.
  *
- * Ritorna:
- *  - `flashing`: booleano per il pannello SX (collega a `ConversationsStyleGate.flashing`).
- *  - `payoffMessage`: stringa o null. Quando non null, il chiamante mostra il payoff
- *    sotto al pulsante che ha attivato il flash.
- *  - `triggerFlash(buttonLabel)`: avvia un'animazione di ~800ms e mostra il payoff per
- *    ~3.5s (poi si autosvuota).
- *  - `clearFlash()`: chiamabile manualmente, es. quando lo stile viene definito.
+ * Supporta DUE modalità (mutuamente esclusive in pratica, ma esposte insieme per non
+ * forzare due hook separati al chiamante):
+ *
+ * 1. **Flash globale** (legacy v1): `flashing: boolean` + `payoffMessage: string | null`.
+ *    Il pannello SX intero lampeggia. Usato dal vecchio `ConversationsStyleGate`.
+ *
+ * 2. **Flash per-pill** (v2): `flashingStyleId: string | null` + `payoffByStyleId`.
+ *    Solo la pill colpevole lampeggia, con un payoff localizzato sotto il suo editor.
+ *    Usato da `ConversationStyleEditor`. Più stili in errore → la chiamata può passare
+ *    una mappa di payoff per styleId; il `flashingStyleId` è il PRIMO problema (per
+ *    convenzione: l'ordine di registry è deterministico).
+ *
+ * `triggerFlash(...)` accetta un opzionale `targetStyleId` e/o un override del messaggio
+ * payoff. Se omesso, attiva la modalità globale con il messaggio default.
  *
  * Garanzie:
- *  - Idempotente: trigger ripetuti durante un flash attivo *resettano* il timer (animazione
+ *  - Idempotente: trigger ripetuti durante un flash attivo resettano il timer (animazione
  *    riparte) — utile se l'utente clicca più pulsanti in sequenza.
  *  - Cleanup su unmount: nessun timer pendente lascia setState dopo unmount.
- *  - Auto-clear se lo stile diventa definito durante il flash (chiamare `clearFlash()`).
+ *  - `clearFlash()` rimuove sia stato globale sia per-pill.
  */
-export function useStyleGateFlash(): {
-  flashing: boolean;
-  payoffMessage: string | null;
-  triggerFlash: () => void;
+export interface StyleGateFlashApi {
+  /** Modalità globale (legacy v1). */
+  readonly flashing: boolean;
+  readonly payoffMessage: string | null;
+  /** Modalità per-pill (v2). */
+  readonly flashingStyleId: string | null;
+  readonly payoffByStyleId: Readonly<Record<string, string | null>>;
+  /**
+   * Avvia il flash. Senza argomenti: modalità globale, payoff default.
+   * Con `targetStyleId`: modalità per-pill, payoff per quella pill.
+   * Con `payoffByStyleId`: imposta più payoff in una sola chiamata (il primo del map è
+   * usato per `flashingStyleId` se `targetStyleId` non è passato — utile in batch invalidi).
+   */
+  triggerFlash: (params?: {
+    targetStyleId?: string | null;
+    message?: string;
+    payoffByStyleId?: Record<string, string>;
+  }) => void;
   clearFlash: () => void;
-} {
+}
+
+const DEFAULT_PAYOFF = 'Devi prima scegliere uno stile a sinistra';
+
+export function useStyleGateFlash(): StyleGateFlashApi {
   const [flashing, setFlashing] = React.useState(false);
   const [payoffMessage, setPayoffMessage] = React.useState<string | null>(null);
+  const [flashingStyleId, setFlashingStyleId] = React.useState<string | null>(null);
+  const [payoffByStyleId, setPayoffByStyleId] = React.useState<Record<string, string | null>>(
+    {}
+  );
   const flashTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const payoffTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -208,22 +237,56 @@ export function useStyleGateFlash(): {
     }
     setFlashing(false);
     setPayoffMessage(null);
+    setFlashingStyleId(null);
+    setPayoffByStyleId({});
   }, []);
 
-  const triggerFlash = React.useCallback(() => {
-    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-    if (payoffTimerRef.current) clearTimeout(payoffTimerRef.current);
-    setFlashing(true);
-    setPayoffMessage('Devi prima scegliere uno stile a sinistra');
-    flashTimerRef.current = setTimeout(() => {
-      setFlashing(false);
-      flashTimerRef.current = null;
-    }, 800);
-    payoffTimerRef.current = setTimeout(() => {
-      setPayoffMessage(null);
-      payoffTimerRef.current = null;
-    }, 3500);
-  }, []);
+  const triggerFlash = React.useCallback(
+    (params?: {
+      targetStyleId?: string | null;
+      message?: string;
+      payoffByStyleId?: Record<string, string>;
+    }) => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      if (payoffTimerRef.current) clearTimeout(payoffTimerRef.current);
+
+      const targetStyleId = params?.targetStyleId ?? null;
+      const explicitMap = params?.payoffByStyleId ?? null;
+      const messageOverride = params?.message ?? null;
+
+      if (targetStyleId || explicitMap) {
+        // Modalità per-pill (v2).
+        setFlashing(false);
+        setPayoffMessage(null);
+        const nextMap: Record<string, string | null> = explicitMap ? { ...explicitMap } : {};
+        if (targetStyleId && messageOverride && !(targetStyleId in nextMap)) {
+          nextMap[targetStyleId] = messageOverride;
+        }
+        setPayoffByStyleId(nextMap);
+        // `flashingStyleId` è il target esplicito o, in mancanza, la prima chiave del map.
+        const firstKey = Object.keys(nextMap)[0] ?? null;
+        setFlashingStyleId(targetStyleId ?? firstKey);
+      } else {
+        // Modalità globale (v1).
+        setFlashingStyleId(null);
+        setPayoffByStyleId({});
+        setFlashing(true);
+        setPayoffMessage(messageOverride ?? DEFAULT_PAYOFF);
+      }
+
+      flashTimerRef.current = setTimeout(() => {
+        setFlashing(false);
+        setFlashingStyleId(null);
+        flashTimerRef.current = null;
+      }, 800);
+      payoffTimerRef.current = setTimeout(() => {
+        setPayoffMessage(null);
+        setPayoffByStyleId({});
+        payoffTimerRef.current = null;
+      }, 3500);
+    },
+    []
+  );
 
   React.useEffect(() => {
     return () => {
@@ -232,5 +295,12 @@ export function useStyleGateFlash(): {
     };
   }, []);
 
-  return { flashing, payoffMessage, triggerFlash, clearFlash };
+  return {
+    flashing,
+    payoffMessage,
+    flashingStyleId,
+    payoffByStyleId,
+    triggerFlash,
+    clearFlash,
+  };
 }

@@ -67,6 +67,8 @@ describe('agentConversationStyle{Example,Auto} — persist roundtrip', () => {
       agentWizardTutorAcknowledged: false,
       agentConversationStyleExample: '',
       agentConversationStyleAuto: false,
+      agentConversationStyleSelections: {},
+      agentConversationDeployStyleId: null,
       ...overrides,
     };
   }
@@ -95,5 +97,74 @@ describe('agentConversationStyle{Example,Auto} — persist roundtrip', () => {
     const snap = buildTaskSnapshotFromRaw({ id: 'x' });
     expect(snap.agentConversationStyleExample).toBe('');
     expect(snap.agentConversationStyleAuto).toBe(false);
+    expect(snap.agentConversationStyleSelections).toEqual({});
+    expect(snap.agentConversationDeployStyleId).toBeNull();
+  });
+});
+
+describe('agentConversationStyleSelections / DeployStyleId — persist roundtrip', () => {
+  function makeMinimalState(overrides: Partial<Parameters<typeof buildAIAgentTaskPersistPatch>[0]>) {
+    return {
+      designDescription: '',
+      agentPrompt: '',
+      agentPromptTargetPlatform: '',
+      agentStructuredSectionsJson: '',
+      outputVariableMappings: {},
+      proposedFields: [],
+      previewByStyle: {},
+      previewStyleId: '',
+      initialStateTemplateJson: '{}',
+      agentRuntimeCompactJson: '',
+      agentUseCaseGlobalStyleId: '',
+      hasAgentGeneration: false,
+      agentLogicalStepsJson: '',
+      agentUseCasesJson: '',
+      agentUseCaseWizardStateJson: '',
+      agentIaRuntimeOverrideJson: '',
+      agentImmediateStart: false,
+      agentConstructionPhase: 'wizard' as const,
+      agentWizardCurrentStep: 0 as const,
+      agentWizardTutorAcknowledged: false,
+      agentConversationStyleExample: '',
+      agentConversationStyleAuto: false,
+      agentConversationStyleSelections: {},
+      agentConversationDeployStyleId: null,
+      ...overrides,
+    };
+  }
+
+  it('preserves multi-style selections through patch → snapshot', () => {
+    const state = makeMinimalState({
+      agentConversationStyleSelections: {
+        cortese: { checked: true, description: 'desc cortese', example: 'utente: a' },
+        ironico: { checked: false, description: 'desc ironico', example: '' },
+      },
+      agentConversationDeployStyleId: 'cortese',
+    });
+    const patch = buildAIAgentTaskPersistPatch(state);
+    const snap = buildTaskSnapshotFromRaw(patch);
+    expect(snap.agentConversationStyleSelections.cortese?.checked).toBe(true);
+    expect(snap.agentConversationStyleSelections.cortese?.example).toBe('utente: a');
+    expect(snap.agentConversationStyleSelections.ironico?.checked).toBe(false);
+    expect(snap.agentConversationDeployStyleId).toBe('cortese');
+  });
+
+  it('lazy-migrates legacy example when selections are absent on load', () => {
+    /**
+     * Simula un task v1 persistito: solo `agentConversationStyleExample` valorizzato,
+     * `agentConversationStyleSelections` assente. Il loader (via
+     * `buildTaskSnapshotFromRaw → migrateLegacyStyleExample`) deve seedare lo stile
+     * default come checked con l'esempio legacy.
+     */
+    const snap = buildTaskSnapshotFromRaw({
+      id: 't',
+      agentConversationStyleExample: 'utente: legacy\nagente: ok',
+    });
+    const seedId = Object.keys(snap.agentConversationStyleSelections)[0];
+    expect(seedId).toBeTruthy();
+    expect(snap.agentConversationStyleSelections[seedId!].checked).toBe(true);
+    expect(snap.agentConversationStyleSelections[seedId!].example).toBe(
+      'utente: legacy\nagente: ok'
+    );
   });
 });

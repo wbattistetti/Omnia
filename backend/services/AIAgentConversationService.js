@@ -135,6 +135,7 @@ function buildAssembleConversationUserMessage({
   outcome,
   allowSuggestedUseCases,
   stylePromptHint,
+  stylePayload,
 }) {
   const lang =
     typeof outputLanguage === 'string' && outputLanguage.trim()
@@ -163,6 +164,51 @@ function buildAssembleConversationUserMessage({
     typeof stylePromptHint === 'string' && stylePromptHint.trim()
       ? `\nDESIGNER_STYLE_EXAMPLE (mimic the REGISTER, TONE and RHYTHM of this dialogue when writing USER turns; keep AGENT turns verbatim from the canonical assistant_example):\n"""\n${stylePromptHint.trim().slice(0, 4000)}\n"""\n`
       : '';
+  /**
+   * **v2 multi-stile**: payload strutturato per QUESTA conversazione. Quando presente,
+   * sovrascrive (in importanza) `stylePromptHint` legacy: contiene id, descrizione e
+   * (opzionale, solo se `auto=false`) esempi. Il prompt fornisce indicazioni esplicite
+   * al modello per:
+   *  - imitare il registro/tono descritto;
+   *  - se `auto=true`, inventare frasi nello stile descritto (gli esempi sono ignorati);
+   *  - se `auto=false`, mimare il REGISTRO/TONO/RITMO degli esempi sui turni USER (gli
+   *    AGENT restano verbatim dal canonico).
+   *
+   * Validazione difensiva: `stylePayload?.id` deve essere stringa non vuota; descrizione
+   * ed esempio sono già trim+slice in `server.js` ma manteniamo difesa in profondità.
+   */
+  const stylePayloadBlock = (() => {
+    if (!stylePayload || typeof stylePayload !== 'object' || !stylePayload.id) return '';
+    const id = String(stylePayload.id).trim();
+    const description =
+      typeof stylePayload.description === 'string'
+        ? stylePayload.description.trim().slice(0, 4000)
+        : '';
+    const example =
+      typeof stylePayload.example === 'string'
+        ? stylePayload.example.trim().slice(0, 4000)
+        : '';
+    const auto = stylePayload.auto === true;
+
+    const lines = [`\nDESIGNER_STYLE (target style for THIS conversation):`];
+    lines.push(`STYLE_ID: ${id}`);
+    if (description) {
+      lines.push(`STYLE_DESCRIPTION (register, tone, rhythm; apply to USER turns only):\n"""\n${description}\n"""`);
+    }
+    if (auto) {
+      lines.push(
+        'STYLE_MODE: AUTO — the designer has delegated phrasing to you. INVENT realistic USER turns that match STYLE_DESCRIPTION. Ignore any STYLE_EXAMPLES if present.'
+      );
+    } else if (example) {
+      lines.push(
+        `STYLE_EXAMPLES (mimic the REGISTER, TONE and RHYTHM of this dialogue when writing USER turns; keep AGENT turns verbatim from the canonical assistant_example):\n"""\n${example}\n"""`
+      );
+    }
+    lines.push(
+      'IMPORTANT: include the field "style_id" in the JSON output, with value EQUAL to STYLE_ID above.'
+    );
+    return lines.join('\n') + '\n';
+  })();
   const { targetTurns, minMix, maxMix } = computeConversationLengthHints(useCases.length);
   const outcomeInfo = describeOutcome(outcome);
   const compact = JSON.stringify(summarizeUseCasesForConversationPrompt(useCases)).slice(0, 16000);
@@ -194,7 +240,7 @@ USE_CASE_MIX: pick between ${minMix} and ${maxMix} distinct use cases from the c
 
 AVAILABLE_USE_CASES (id, label, payoff, assistant_example):
 ${compact}
-${ctx}${style}${styleHint}${previousHint}
+${ctx}${style}${styleHint}${stylePayloadBlock}${previousHint}
 
 Task: build ONE simulated conversation between a USER and an AGENT with a COMPLETE NARRATIVE ARC.
 
@@ -336,6 +382,7 @@ async function assembleConversation({
   outcome,
   allowSuggestedUseCases,
   stylePromptHint,
+  stylePayload,
   provider = 'groq',
   model,
   purpose,
@@ -361,6 +408,7 @@ async function assembleConversation({
         outcome: normalizedOutcome,
         allowSuggestedUseCases: allowSuggested,
         stylePromptHint,
+        stylePayload,
       }),
     },
   ];
@@ -387,6 +435,7 @@ async function assembleConversation({
   return normalizeAssembledConversation(parsed, useCases, {
     outcome: normalizedOutcome,
     allowSuggestedUseCases: allowSuggested,
+    stylePayload,
   });
 }
 
@@ -494,10 +543,22 @@ function normalizeAssembledConversation(raw, useCases, options) {
   const rawSummary =
     typeof raw.scenario_summary === 'string' ? raw.scenario_summary.trim() : '';
   const scenarioSummary = rawSummary ? rawSummary.slice(0, 400) : '';
+  /**
+   * `styleId` (v2 multi-stile): preferiamo l'id del payload del designer (autoritativo),
+   * con fallback sul `style_id` che il modello potrebbe aver echo'd nel JSON. Se nessuno
+   * dei due è disponibile, omettiamo il campo (legacy/auto senza payload).
+   */
+  const styleIdFromPayload =
+    options?.stylePayload && typeof options.stylePayload.id === 'string' && options.stylePayload.id.trim()
+      ? options.stylePayload.id.trim()
+      : '';
+  const styleIdFromModel = typeof raw.style_id === 'string' ? raw.style_id.trim() : '';
+  const styleId = styleIdFromPayload || styleIdFromModel || '';
   return {
     conversationId,
     turns,
     ...(scenarioSummary ? { scenarioSummary } : {}),
+    ...(styleId ? { styleId } : {}),
   };
 }
 

@@ -6667,6 +6667,25 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         ? body.stylePromptHint.trim()
         : '';
       const stylePromptHint = stylePromptHintRaw ? stylePromptHintRaw.slice(0, 4000) : '';
+      /**
+       * `stylePayload` v2 multi-stile: payload completo dello stile target di QUESTA
+       * conversazione (id + description + example + auto). Quando presente, il backend lo
+       * passa al builder del prompt che genera un blocco DESIGNER_STYLE strutturato e
+       * marca la conversazione di ritorno con `style_id` coerente. Validazione difensiva
+       * contro client malformati: se `id` non è una stringa non vuota, ignoriamo l'intero
+       * payload (no-op silenzioso lato prompt; nessuna fail-loud perché il client v1 può
+       * comunque chiamarci senza payload — modalità "auto" libera).
+       */
+      const stylePayload = (() => {
+        const sp = body.stylePayload;
+        if (!sp || typeof sp !== 'object') return null;
+        const id = typeof sp.id === 'string' ? sp.id.trim() : '';
+        if (!id) return null;
+        const description = typeof sp.description === 'string' ? sp.description.trim().slice(0, 4000) : '';
+        const example = typeof sp.example === 'string' ? sp.example.trim().slice(0, 4000) : '';
+        const auto = sp.auto === true;
+        return { id, description, example, auto };
+      })();
       console.log(`[AI_AGENT_USE_CASES][${requestId}] assemble_conversation`, {
         provider,
         model,
@@ -6675,6 +6694,8 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         outcome,
         allowSuggestedUseCases,
         styleHintChars: stylePromptHint.length,
+        stylePayloadId: stylePayload?.id ?? null,
+        stylePayloadAuto: stylePayload?.auto ?? null,
       });
       const conversation = await assembleConversation({
         useCases: ucForConv,
@@ -6685,6 +6706,7 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         outcome,
         allowSuggestedUseCases,
         stylePromptHint,
+        stylePayload,
         provider,
         model,
         purpose:

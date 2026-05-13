@@ -88,7 +88,20 @@ export interface UseCaseGeneratorWizardConversation {
    * Opzionale per non rompere conversazioni già persistite senza summary.
    */
   scenarioSummary?: string;
+  /**
+   * Identificativo dello stile di registro/tono usato per generare questa conversazione
+   * (chiave in `AI_AGENT_GLOBAL_USE_CASE_STYLES`, es. `cortese`, `ironico`, `formale`).
+   *
+   * - **Obbligatorio** per le conversazioni create dalla v2 del gate (multi-stile).
+   * - **Opzionale** per backward-compat: conversazioni persistite prima dell'introduzione
+   *   del campo non hanno `styleId` e finiscono in un gruppo «—» nel selettore di filtro
+   *   sopra le bubble (vedi `ConversationStyleSelector`).
+   */
+  styleId?: string;
 }
+
+/** Sentinel per le conversazioni legacy senza `styleId` nel selettore di filtro. */
+export const CONVERSATION_LEGACY_STYLE_ID = '__legacy__' as const;
 
 export interface UseCaseGeneratorWizardPersistedState {
   /** Default true: modalità guidata sempre disponibile nel view generator. */

@@ -14,6 +14,10 @@ import {
   resolveAgentConstructionPhase,
   resolveAgentWizardCurrentStep,
 } from '@domain/aiAgentConstruction/agentConstructionPhase';
+import {
+  type ConversationStyleSelections,
+  migrateLegacyStyleExample,
+} from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import { EMPTY_OUTPUT_MAPPINGS } from './constants';
 
 export interface AIAgentTaskSnapshot {
@@ -54,15 +58,26 @@ export interface AIAgentTaskSnapshot {
    */
   agentWizardTutorAcknowledged: boolean;
   /**
-   * Esempio di stile conversazionale fornito dal designer (vuoto = nessun esempio).
-   * Vedi gate di stile nel passo «Conversazione».
+   * **DEPRECATED** (v1 single-style): mantenuto solo come sorgente per la migrazione lazy
+   * verso `agentConversationStyleSelections`. Le nuove call non lo scrivono più.
    */
   agentConversationStyleExample: string;
   /**
-   * `true` quando il designer delega all'AI la scelta dello stile (checkbox
-   * «Lascia che Omnia scelga uno stile» nel passo «Conversazione»).
+   * Checkbox **GLOBALE** «Lascia che Omnia scelga uno stile» — vive accanto alle pill
+   * nel `ConversationStyleEditor`. Quando true, gli esempi sono opzionali per ogni
+   * stile checkato (l'AI inventa frasi nello stile descritto).
    */
   agentConversationStyleAuto: boolean;
+  /**
+   * v2 multi-stile: una entry per ogni stile attivato dal designer (con override
+   * descrizione e esempio). Caricata con migrazione lazy: se assente ma il vecchio
+   * `agentConversationStyleExample` non è vuoto, seedata con `cortese` checkato.
+   */
+  agentConversationStyleSelections: ConversationStyleSelections;
+  /**
+   * Stile target di Upload (single per ora). `null` se non scelto → Upload disabilitato.
+   */
+  agentConversationDeployStyleId: string | null;
 }
 
 /**
@@ -118,6 +133,16 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
         ? r.agentConversationStyleExample
         : '',
     agentConversationStyleAuto: r?.agentConversationStyleAuto === true,
+    agentConversationStyleSelections: migrateLegacyStyleExample(
+      r?.agentConversationStyleSelections as ConversationStyleSelections | undefined,
+      typeof r?.agentConversationStyleExample === 'string'
+        ? r.agentConversationStyleExample
+        : null
+    ),
+    agentConversationDeployStyleId:
+      typeof r?.agentConversationDeployStyleId === 'string'
+        ? r.agentConversationDeployStyleId
+        : null,
   };
 }
 

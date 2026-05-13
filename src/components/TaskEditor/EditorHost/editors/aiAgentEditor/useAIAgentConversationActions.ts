@@ -34,10 +34,26 @@ export interface AssembleConversationParams {
   /** Checkbox toolbar: lascia all'AI la facoltà di proporre AL MASSIMO 1 use case emergente. */
   allowSuggestedUseCases: boolean;
   /**
-   * Esempio di stile (textarea «Imita questo stile» del passo «Conversazione»). Se vuoto/omesso
-   * l'AI sceglie liberamente lo stile (modalità "auto" del designer).
+   * **DEPRECATED** (gate v1, single-style): mantenuto per backward-compat. v2 usa `stylePayload`.
    */
   stylePromptHint?: string;
+  /**
+   * **v2 multi-stile**: payload completo dello stile target di QUESTA chiamata. Se passato,
+   * il backend genera la conversazione nello stile descritto e marca `conversation.styleId`
+   * coerentemente al payload. Il chiamante orchestra la generazione parallela invocando
+   * `handleAssembleConversation` N volte (una per ogni stile checkato), variando solo
+   * questo campo.
+   *
+   * Quando `stylePayload.auto === true` gli esempi sono opzionali (l'AI inventa frasi nello
+   * stile descritto). Quando `false`, `example` deve essere non vuoto (validato a monte
+   * dal `firstInvalidCheckedStyle` lato pannello).
+   */
+  stylePayload?: {
+    readonly id: string;
+    readonly description: string;
+    readonly example: string;
+    readonly auto: boolean;
+  };
 }
 
 export interface ProofreadConversationAgentTurnsParams {
@@ -105,6 +121,7 @@ export function useAIAgentConversationActions({
       outcome,
       allowSuggestedUseCases,
       stylePromptHint,
+      stylePayload,
     }: AssembleConversationParams): Promise<UseCaseGeneratorWizardConversation | null> => {
       /**
        * Filtro inclusione: passiamo all'IA SOLO gli use case con `included_in_conversations !==
@@ -138,6 +155,7 @@ export function useAIAgentConversationActions({
           ...(typeof stylePromptHint === 'string' && stylePromptHint.trim().length > 0
             ? { stylePromptHint: stylePromptHint.trim() }
             : {}),
+          ...(stylePayload && stylePayload.id ? { stylePayload } : {}),
           ...(buildCallMeta
             ? {
                 callMeta: buildCallMeta(

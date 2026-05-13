@@ -9,6 +9,7 @@ import type {
   AgentConstructionPhase,
   AgentWizardStepIndex,
 } from '@domain/aiAgentConstruction/agentConstructionPhase';
+import type { ConversationStyleSelections } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 
 export interface AIAgentPersistState {
   designDescription: string;
@@ -37,10 +38,14 @@ export interface AIAgentPersistState {
   agentWizardCurrentStep: AgentWizardStepIndex;
   /** True dopo il primo click «Cominciamo» nella schermata Tutor del wizard. */
   agentWizardTutorAcknowledged: boolean;
-  /** Esempio di stile conversazionale (multilinea) — gate del passo «Conversazione». */
+  /** **DEPRECATED** v1: ancora scritto a `''` per non rompere chi legge legacy; v2 usa selections. */
   agentConversationStyleExample: string;
-  /** Checkbox «Lascia che Omnia scelga uno stile» — gate del passo «Conversazione». */
+  /** Checkbox **GLOBALE** «Lascia che Omnia scelga uno stile» — gate v2 multi-stile. */
   agentConversationStyleAuto: boolean;
+  /** v2 multi-stile: mappa `styleId → { checked, description, example }`. */
+  agentConversationStyleSelections: ConversationStyleSelections;
+  /** Stile target di Upload (single per ora). */
+  agentConversationDeployStyleId: string | null;
 }
 
 /**
@@ -74,5 +79,7 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentWizardTutorAcknowledged: state.agentWizardTutorAcknowledged,
     agentConversationStyleExample: state.agentConversationStyleExample,
     agentConversationStyleAuto: state.agentConversationStyleAuto,
+    agentConversationStyleSelections: state.agentConversationStyleSelections,
+    agentConversationDeployStyleId: state.agentConversationDeployStyleId,
   };
 }

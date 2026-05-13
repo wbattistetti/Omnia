@@ -327,13 +327,27 @@ export function AIAgentUseCaseComposer({
   }, [effectiveSelectedId]);
 
   React.useEffect(() => {
+    /**
+     * Sync della mappa espansione card con la lista ordinata: aggiunge entry mancanti
+     * (default = espanso) e rimuove orfane. **Idempotente**: se non ci sono variazioni
+     * effettive (es. l'utente sta solo togliendo la spunta «incluso»), restituiamo il
+     * `prev` originale per evitare un rerender inutile dell'intera lista (ogni nuovo
+     * oggetto stato innesca re-render di tutti gli `<li>` figli).
+     */
     setCardExpandedById((prev) => {
-      const next = { ...prev };
+      const orderedIds = new Set(ordered.map((u) => u.id));
+      let added = 0;
       for (const u of ordered) {
-        if (!(u.id in next)) next[u.id] = true;
+        if (!(u.id in prev)) added += 1;
       }
-      for (const id of Object.keys(next)) {
-        if (!ordered.some((u) => u.id === id)) delete next[id];
+      let removed = 0;
+      for (const id of Object.keys(prev)) {
+        if (!orderedIds.has(id)) removed += 1;
+      }
+      if (added === 0 && removed === 0) return prev;
+      const next: Record<string, boolean> = {};
+      for (const u of ordered) {
+        next[u.id] = u.id in prev ? prev[u.id] : true;
       }
       return next;
     });

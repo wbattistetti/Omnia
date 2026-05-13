@@ -71,6 +71,8 @@ const AI_AGENT_INSTANCE_FIELD_KEYS = [
   'agentWizardTutorAcknowledged',
   'agentConversationStyleExample',
   'agentConversationStyleAuto',
+  'agentConversationStyleSelections',
+  'agentConversationDeployStyleId',
 ];
 
 /**

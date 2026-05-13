@@ -490,20 +490,44 @@ export interface Task {
   agentWizardTutorAcknowledged?: boolean;
 
   /**
-   * Esempio di stile conversazionale fornito dal designer nel passo «Conversazione» del
-   * wizard. Stringa libera (multilinea) che diventa parte del prompt LLM quando si genera
-   * una conversazione. Vuoto = nessun esempio fornito. Vedi `agentConversationStyleAuto`
-   * per il caso "delega all'AI".
+   * **DEPRECATED**: usato dalla v1 del gate di stile (textarea unica). Mantenuto solo per
+   * migrazione lazy → nella v2 (multi-stile) il valore non vuoto viene seedato come
+   * `agentConversationStyleSelections['cortese'].example` al primo `loadFromRepository`,
+   * poi mai più scritto. Da rimuovere in una PR successiva.
    */
   agentConversationStyleExample?: string;
   /**
-   * `true` quando il designer ha spuntato la checkbox «Lascia che Omnia scelga uno stile»
-   * nel passo «Conversazione». Disgiunzione semantica con `agentConversationStyleExample`:
-   * almeno una delle due deve essere "valorizzata" (esempio non vuoto OPPURE flag a true)
-   * perché la generazione conversazione sia abilitata. Vedi gate di stile in
-   * `AIAgentEditorDockPanels.tsx`.
+   * Checkbox **GLOBALE** «Lascia che Omnia scelga uno stile». Vive accanto alle pill nel
+   * `ConversationStyleEditor`. Quando true, il payload di generazione per ogni stile
+   * checkato omette gli esempi (l'AI inventa frasi nello stile descritto). Quando false,
+   * gli esempi sono **obbligatori** per ogni stile checkato (gate per-pill).
    */
   agentConversationStyleAuto?: boolean;
+  /**
+   * Mappa `styleId → { checked, description, example }` con gli stili attivati e i loro
+   * override testuali. Chiave = id da `AI_AGENT_GLOBAL_USE_CASE_STYLES` (es. `cortese`,
+   * `ironico`, `formale`). Le entry persistono anche se `checked=false` così uncheck/recheck
+   * non fa perdere descrizione/esempio già scritti dal designer.
+   *
+   * Generazione conversazione: per ogni `(styleId, entry)` con `entry.checked === true`
+   * viene generata UNA conversazione (chiamate parallele via `Promise.all`). La
+   * conversazione risultante porta `styleId` per consentire filtro nelle bubble e
+   * scelta dello stile target di Upload.
+   */
+  agentConversationStyleSelections?: Record<
+    string,
+    {
+      checked: boolean;
+      description: string;
+      example: string;
+    }
+  >;
+  /**
+   * Stile target di Upload (single-select per ora; in futuro multi per agenti adattativi).
+   * `null`/assente = Upload disabilitato. La picker mostra solo stili che hanno almeno 1
+   * conversazione generata (vedi `listGeneratedStyleIds`).
+   */
+  agentConversationDeployStyleId?: string | null;
 
   /** Client-only: last IA provisioning failure for this row (never persisted). */
   provisioningError?: NormalizedIaProviderError;

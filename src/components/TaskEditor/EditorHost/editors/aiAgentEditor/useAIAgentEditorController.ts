@@ -15,6 +15,7 @@
 import React from 'react';
 import { taskRepository } from '@services/TaskRepository';
 import { TaskType, type Task } from '@types/taskTypes';
+import type { ConversationStyleSelections } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import {
   extractStructuredDesign,
   createAIAgentUseCaseApi,
@@ -281,14 +282,27 @@ export function useAIAgentEditorController({
     React.useState(false);
 
   /**
-   * Stato del **gate di stile** del passo «Conversazione». Almeno una delle due deve essere
-   * "valorizzata" per abilitare la generazione di nuove conversazioni:
-   * - `agentConversationStyleExample`: testo libero (esempio di dialogo nello stile desiderato).
-   * - `agentConversationStyleAuto`: checkbox «Lascia che Omnia scelga uno stile».
+   * Stato del **gate di stile v2 multi-pill** del passo «Conversazione».
+   *
+   * - `agentConversationStyleAuto`: checkbox **GLOBALE** «Lascia che Omnia scelga uno stile».
+   *   Quando true, gli esempi non sono richiesti per nessuno stile checkato.
+   * - `agentConversationStyleSelections`: mappa `styleId → { checked, description, example }`.
+   *   Una entry per ogni stile attivato dal designer (con override testuali). Persiste anche
+   *   se `checked=false` per non perdere le modifiche al toggle.
+   * - `agentConversationDeployStyleId`: stile target di Upload (singolo per ora).
+   *
+   * Il vecchio `agentConversationStyleExample` viene mantenuto in stato per sopravvivere a un
+   * load → save senza perdere il dato legacy, ma non viene più scritto dai setter (vedi
+   * migrazione lazy in `buildTaskSnapshotFromRaw` → `migrateLegacyStyleExample`).
    */
   const [agentConversationStyleExample, setAgentConversationStyleExampleState] =
     React.useState('');
   const [agentConversationStyleAuto, setAgentConversationStyleAutoState] = React.useState(false);
+  const [agentConversationStyleSelections, setAgentConversationStyleSelectionsState] =
+    React.useState<ConversationStyleSelections>({});
+  const [agentConversationDeployStyleId, setAgentConversationDeployStyleIdState] = React.useState<
+    string | null
+  >(null);
 
   const [iaRuntimeConfig, setIaRuntimeConfigState] = React.useState<IAAgentConfig>(() =>
     loadGlobalIaAgentConfig()
@@ -565,6 +579,40 @@ export function useAIAgentEditorController({
     });
   }, []);
 
+  /**
+   * Setter generico per le selezioni stile (v2). Accetta sia l'oggetto completo sia una
+   * funzione updater (stile React). Marca dirty solo se il riferimento cambia (no-op idempotente).
+   *
+   * Esempio uso (toggle checked di una pill):
+   *   setAgentConversationStyleSelections(prev => ({
+   *     ...prev,
+   *     cortese: { ...(prev.cortese ?? defaultStyleEntryForRegistryId('cortese')), checked: true }
+   *   }));
+   */
+  const setAgentConversationStyleSelections = React.useCallback(
+    (
+      next:
+        | ConversationStyleSelections
+        | ((prev: ConversationStyleSelections) => ConversationStyleSelections)
+    ) => {
+      setAgentConversationStyleSelectionsState((prev) => {
+        const computed = typeof next === 'function' ? next(prev) : next;
+        if (computed === prev) return prev;
+        setDirty(true);
+        return computed;
+      });
+    },
+    []
+  );
+
+  const setAgentConversationDeployStyleId = React.useCallback((next: string | null) => {
+    setAgentConversationDeployStyleIdState((prev) => {
+      if (prev === next) return prev;
+      setDirty(true);
+      return next;
+    });
+  }, []);
+
   const hydratedRef = React.useRef(false);
   React.useEffect(() => {
     hydratedRef.current = hydrated;
@@ -678,6 +726,8 @@ export function useAIAgentEditorController({
     setAgentWizardTutorAcknowledgedState(b.agentWizardTutorAcknowledged);
     setAgentConversationStyleExampleState(b.agentConversationStyleExample);
     setAgentConversationStyleAutoState(b.agentConversationStyleAuto);
+    setAgentConversationStyleSelectionsState(b.agentConversationStyleSelections);
+    setAgentConversationDeployStyleIdState(b.agentConversationDeployStyleId);
     setLogicalSteps(b.logicalSteps);
     useCaseSiblingSortModeRef.current = 'logical';
     setUseCaseSiblingSortModeState('logical');
@@ -785,6 +835,8 @@ export function useAIAgentEditorController({
       agentWizardTutorAcknowledged,
       agentConversationStyleExample,
       agentConversationStyleAuto,
+      agentConversationStyleSelections,
+      agentConversationDeployStyleId,
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -831,6 +883,8 @@ export function useAIAgentEditorController({
     agentWizardTutorAcknowledged,
     agentConversationStyleExample,
     agentConversationStyleAuto,
+    agentConversationStyleSelections,
+    agentConversationDeployStyleId,
   ]);
 
   const persistAgentUseCaseWizardState = React.useCallback((json: string) => {
@@ -1836,6 +1890,8 @@ export function useAIAgentEditorController({
     agentWizardTutorAcknowledged,
     agentConversationStyleExample,
     agentConversationStyleAuto,
+    agentConversationStyleSelections,
+    agentConversationDeployStyleId,
   };
 
   const ensurePromptFinalDeterministicCompileSync = React.useCallback((reason: string) => {
@@ -1993,5 +2049,9 @@ export function useAIAgentEditorController({
     setAgentConversationStyleExample,
     agentConversationStyleAuto,
     setAgentConversationStyleAuto,
+    agentConversationStyleSelections,
+    setAgentConversationStyleSelections,
+    agentConversationDeployStyleId,
+    setAgentConversationDeployStyleId,
   };
 }

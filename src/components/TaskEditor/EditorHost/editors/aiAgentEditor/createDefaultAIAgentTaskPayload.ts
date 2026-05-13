@@ -36,8 +36,13 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentWizardCurrentStep: AGENT_WIZARD_FIRST_STEP_INDEX,
     /** Tutor mai vista per task vergini: la prima apertura mostra la schermata di benvenuto. */
     agentWizardTutorAcknowledged: false,
-    /** Gate di stile «Imita questo stile»: vuoto/false di default — costringe il designer a definirlo. */
+    /** v1 deprecato: vuoto. v2 usa `agentConversationStyleSelections`. */
     agentConversationStyleExample: '',
+    /** Checkbox globale «Lascia che Omnia scelga uno stile» — default OFF (esempi obbligatori). */
     agentConversationStyleAuto: false,
+    /** v2 multi-stile: nessuna entry attivata → costringe il designer a sceglierne almeno una. */
+    agentConversationStyleSelections: {},
+    /** Upload disabilitato di default finché il designer non sceglie uno stile target. */
+    agentConversationDeployStyleId: null,
   };
 }

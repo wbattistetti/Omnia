@@ -875,11 +875,31 @@ export interface AssembleAIAgentConversationParams {
   model: string;
   callMeta?: AiCallMeta;
   /**
-   * Esempio di stile fornito dal designer nel passo «Conversazione» (textarea libera).
-   * Quando presente, viene incorporato nel prompt LLM con istruzione esplicita di imitare
-   * lo stile. Se vuoto/omesso, l'AI sceglie liberamente lo stile (gate "auto" del designer).
+   * **DEPRECATED**: usato dalla v1 del gate (singolo esempio testuale). Mantenuto per
+   * backward-compat; le call v2 usano `stylePayload`.
    */
   stylePromptHint?: string;
+  /**
+   * **v2 multi-stile**: payload completo dello stile target di QUESTA chiamata.
+   *
+   * Una conversazione = uno styleId. Per generare N conversazioni in N stili diversi
+   * il chiamante invoca `assembleAIAgentConversationApi` N volte (o in `Promise.all`),
+   * variando solo `stylePayload`. Il backend restituirà la conversazione con `style_id`
+   * coerente al payload (così il client può taggarla senza ulteriore round-trip).
+   *
+   * Semantica:
+   * - `id` → identifica lo stile (es. `cortese`); diventa `conversation.styleId`.
+   * - `description` → registro/tono; sempre incluso nel prompt.
+   * - `example` → esempi di dialogo nello stile; incluso solo se non vuoto E `auto=false`.
+   * - `auto` → quando true il prompt istruisce l'AI a inventare frasi nello stile descritto
+   *   (esempi opzionali / ignorati).
+   */
+  stylePayload?: {
+    readonly id: string;
+    readonly description: string;
+    readonly example: string;
+    readonly auto: boolean;
+  };
 }
 
 function newClientConversationId(): string {
@@ -1039,6 +1059,20 @@ export async function assembleAIAgentConversationApi(
      */
     if (typeof params.stylePromptHint === 'string' && params.stylePromptHint.trim().length > 0) {
       bodyPayload.stylePromptHint = params.stylePromptHint.trim();
+    }
+    /**
+     * v2 multi-stile: payload completo dello stile target. Trim+slice difensivi per
+     * evitare prompt giganteschi (cap 4000 char per `description` e `example`). `id`
+     * passa as-is (deve coincidere con un id di registry o essere accettato dal backend).
+     */
+    if (params.stylePayload && params.stylePayload.id) {
+      const sp = params.stylePayload;
+      bodyPayload.stylePayload = {
+        id: sp.id,
+        description: typeof sp.description === 'string' ? sp.description.trim().slice(0, 4000) : '',
+        example: typeof sp.example === 'string' ? sp.example.trim().slice(0, 4000) : '',
+        auto: sp.auto === true,
+      };
     }
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',

@@ -11,12 +11,15 @@ import { AIAgentProposedFieldsTable } from './AIAgentProposedFieldsTable';
 import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
 import { ViewSkaGenerator } from './useCaseGeneratorWizard/ViewSkaGenerator';
 import { ConversationsBubbleView } from './useCaseGeneratorWizard/ConversationsBubbleView';
+import { useStyleGateFlash } from './useCaseGeneratorWizard/ConversationsStyleGate';
+import { ConversationStyleEditor } from './useCaseGeneratorWizard/ConversationStyleEditor';
+import { ConversationStyleSelector } from './useCaseGeneratorWizard/ConversationStyleSelector';
 import {
-  ConversationsStyleGate,
-  ConversationsStyleBand,
-  isStyleDefined,
-  useStyleGateFlash,
-} from './useCaseGeneratorWizard/ConversationsStyleGate';
+  countConversationsByStyleId,
+  firstInvalidCheckedStyle,
+  hasAnyCheckedStyle,
+  listGeneratedStyleIds,
+} from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import { UseCaseWizardListToolbarProvider } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
@@ -167,10 +170,10 @@ export function EditorUseCasesPanel() {
     onClearAllWizardOutput,
     onClearWizardConversations,
     onClearWizardTokenization,
-    agentConversationStyleExample,
-    setAgentConversationStyleExample,
     agentConversationStyleAuto,
     setAgentConversationStyleAuto,
+    agentConversationStyleSelections,
+    setAgentConversationStyleSelections,
   } = useAIAgentEditorDock();
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
@@ -242,39 +245,73 @@ export function EditorUseCasesPanel() {
   );
 
   /**
-   * Gate di stile (passo «Conversazione»):
-   *  - `flashing` → applicato al pannello SX quando l'utente clicca uno dei 3 pulsanti
-   *    di generazione SENZA aver definito uno stile (lampeggio ambra ~800ms).
-   *  - `payoffMessage` → mostrato in rosso sotto i 3 pulsanti per indicare cosa fare.
-   *  - `triggerFlash()` invocato dal wrapper `wrappedAssembleConversation` quando il gate è chiuso.
-   *  - `clearFlash()` invocato in effetto quando lo stile diventa definito (auto-dismiss).
+   * **Gate di stile v2 (multi-pill)** — passo «Conversazione»:
+   *  - `firstInvalidCheckedStyle` identifica la prima pill con problemi (descrizione vuota
+   *    o esempio mancante con auto OFF). Se nessuna è checkata, `null`.
+   *  - Click sui pulsanti di generazione: il wrapper qui sotto blocca la chiamata se il gate
+   *    è chiuso (nessuna pill checkata OPPURE almeno una pill checkata invalida) e attiva il
+   *    flash mirato sulla pill colpevole.
+   *  - `clearFlash()` in effetto: se le selezioni cambiano e il gate torna OK, il flash
+   *    viene resettato.
    */
-  const styleDefined = isStyleDefined(agentConversationStyleExample, agentConversationStyleAuto);
   const styleFlash = useStyleGateFlash();
+  const styleHasCandidates = hasAnyCheckedStyle(agentConversationStyleSelections);
+  const firstInvalidStyleId = firstInvalidCheckedStyle(
+    agentConversationStyleSelections,
+    agentConversationStyleAuto
+  );
+  const styleGateOpen = styleHasCandidates && firstInvalidStyleId === null;
   React.useEffect(() => {
-    if (styleDefined) {
+    if (styleGateOpen) {
       styleFlash.clearFlash();
     }
-  }, [styleDefined, styleFlash]);
+  }, [styleGateOpen, styleFlash]);
 
   /**
-   * Wrapper del callback di creazione conversazione: rispetta il gate di stile.
-   * Se lo stile non è definito → trigger flash + payoff (NO chiamata backend).
-   * Se definito → delega all'originale.
+   * Wrapper del callback di creazione conversazione: rispetta il gate v2 multi-stile.
    *
-   * Memo: deps cambiano solo se cambia il gate o il callback originale; altrimenti il
-   * `ConversationsStepReviewCard` non si re-renderizza.
+   * - Se nessuna pill è checkata → flash globale + payoff "Devi prima scegliere uno stile…".
+   * - Se almeno una pill checkata è invalida → flash mirato sulla pill colpevole (la PRIMA
+   *   in ordine registry) + payoff localizzato sul suo editor.
+   * - Altrimenti → delega all'originale, che farà N chiamate parallele (vedi
+   *   `runAssembleConversation` in `AIAgentEditor.tsx`).
    */
   const wrappedAssembleConversation = React.useCallback(
     (params: { outcome: 'positive' | 'negative'; allowSuggestedUseCases: boolean }) => {
-      if (!styleDefined) {
-        styleFlash.triggerFlash();
+      if (!styleHasCandidates) {
+        styleFlash.triggerFlash({
+          message: 'Spunta almeno uno stile a sinistra prima di generare.',
+        });
+        return;
+      }
+      if (firstInvalidStyleId) {
+        const isAuto = agentConversationStyleAuto;
+        const message = isAuto
+          ? 'Compila la descrizione dello stile prima di generare.'
+          : 'Inserisci almeno un esempio di dialogo per questo stile.';
+        styleFlash.triggerFlash({ targetStyleId: firstInvalidStyleId, message });
         return;
       }
       return onAssembleConversation(params);
     },
-    [styleDefined, styleFlash, onAssembleConversation]
+    [
+      styleHasCandidates,
+      firstInvalidStyleId,
+      agentConversationStyleAuto,
+      styleFlash,
+      onAssembleConversation,
+    ]
   );
+
+  /**
+   * Filtro vista sopra le bubble: stile selezionato (locale, non persistito).
+   * Default `null` = mostra «Tutti» — coerente con la lista di stili oggi presente.
+   * Se il selettore mostra un solo stile, la sua selezione è implicita ma il filtro
+   * resta `null` per non confondere il designer.
+   */
+  const [conversationsFilterStyleId, setConversationsFilterStyleId] = React.useState<
+    string | null
+  >(null);
 
   if (useWizardShell && useCaseGeneratorWizard) {
     const currentStepId = useCaseGeneratorWizard.currentStepId;
@@ -296,51 +333,79 @@ export function EditorUseCasesPanel() {
     const conversationsCount = useCaseGeneratorWizard.conversations.length;
 
     /**
-     * Costruzione del leftPanel — passo «Conversazione» (3 stati):
+     * Costruzione del leftPanel — passo «Conversazione» (gate v2 multi-stile):
      *
-     * 1. **Empty + style non definito**: gate di stile (textarea + checkbox auto).
-     *    Costringe il designer a fornire uno stile prima di generare.
-     * 2. **Empty + style definito**: empty-state minimal con band + invito a cliccare i 3
-     *    pulsanti DX. La band è espansa di default così l'utente vede il proprio input.
-     * 3. **Con conversazioni**: band compatta (collassata di default) + bubble view.
+     * - **Empty (no conversations)**: `ConversationStyleEditor` occupa TUTTO il pannello
+     *   (full height, niente split, niente placeholder). Il pannello DX guida già il
+     *   designer con la "Guida rapida" + i 3 pulsanti di generazione.
+     * - **Con conversazioni**: split verticale — editor stili sopra (compatto, ~40%)
+     *   con eventuale `ConversationStyleSelector` (filtro vista) + bubble sotto (~60%).
      *
      * Negli altri passi: composer (lista use case), come prima.
      */
     let leftPanel: React.ReactNode;
     if (showBubbleView) {
+      const generatedStyleIds = listGeneratedStyleIds(useCaseGeneratorWizard.conversations);
+      const countByStyleId = countConversationsByStyleId(useCaseGeneratorWizard.conversations);
+      const filteredConversations = conversationsFilterStyleId
+        ? useCaseGeneratorWizard.conversations.filter(
+            (c) =>
+              c.styleId === conversationsFilterStyleId ||
+              (conversationsFilterStyleId === '__legacy__' && !c.styleId)
+          )
+        : useCaseGeneratorWizard.conversations;
+
+      const styleEditorNode = (
+        <ConversationStyleEditor
+          selections={agentConversationStyleSelections}
+          onSelectionsChange={setAgentConversationStyleSelections}
+          auto={agentConversationStyleAuto}
+          onAutoChange={setAgentConversationStyleAuto}
+          flashingStyleId={styleFlash.flashingStyleId}
+          payoffMessageByStyleId={styleFlash.payoffByStyleId}
+        />
+      );
+
       if (conversationsCount === 0) {
         leftPanel = (
-          <ConversationsStyleGate
-            styleExample={agentConversationStyleExample}
-            onStyleExampleChange={setAgentConversationStyleExample}
-            styleAuto={agentConversationStyleAuto}
-            onStyleAutoChange={setAgentConversationStyleAuto}
-            flashing={styleFlash.flashing}
-          />
+          <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+            {styleEditorNode}
+          </div>
         );
       } else {
         leftPanel = (
           <div className="flex h-full min-h-0 flex-1 flex-col">
-            <ConversationsStyleBand
-              styleExample={agentConversationStyleExample}
-              onStyleExampleChange={setAgentConversationStyleExample}
-              styleAuto={agentConversationStyleAuto}
-              onStyleAutoChange={setAgentConversationStyleAuto}
-            />
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <ConversationsBubbleView
-                conversations={useCaseGeneratorWizard.conversations}
-                activeConversationId={useCaseGeneratorWizard.activeConversationId}
-                onUpdateTurnText={useCaseGeneratorWizard.updateConversationTurnText}
-                modifiedAgentTurnKeysByConversation={
-                  useCaseGeneratorWizard.conversationStylePlan.modifiedByConversation
-                }
-                onPromoteSuggestion={onPromoteSuggestionToCatalog}
-                onRejectSuggestion={onRejectSuggestion}
-                showTokenized={useCaseGeneratorWizard.showTokenizedInBubbles}
-                tokenizedByUseCaseId={tokenizedByUseCaseId}
-                excludedUseCaseIds={excludedUseCaseIds}
-              />
+            <div className="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-sky-500/15">
+              {styleEditorNode}
+            </div>
+            <div className="flex min-h-0 flex-[3] flex-col overflow-hidden">
+              {generatedStyleIds.length > 1 ? (
+                <div className="shrink-0 border-b border-sky-500/15 bg-slate-950/50 px-3 py-1.5">
+                  <ConversationStyleSelector
+                    label="Mostra:"
+                    value={conversationsFilterStyleId}
+                    onChange={setConversationsFilterStyleId}
+                    availableStyleIds={generatedStyleIds}
+                    countByStyleId={countByStyleId}
+                    includeAllOption
+                  />
+                </div>
+              ) : null}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <ConversationsBubbleView
+                  conversations={filteredConversations}
+                  activeConversationId={useCaseGeneratorWizard.activeConversationId}
+                  onUpdateTurnText={useCaseGeneratorWizard.updateConversationTurnText}
+                  modifiedAgentTurnKeysByConversation={
+                    useCaseGeneratorWizard.conversationStylePlan.modifiedByConversation
+                  }
+                  onPromoteSuggestion={onPromoteSuggestionToCatalog}
+                  onRejectSuggestion={onRejectSuggestion}
+                  showTokenized={useCaseGeneratorWizard.showTokenizedInBubbles}
+                  tokenizedByUseCaseId={tokenizedByUseCaseId}
+                  excludedUseCaseIds={excludedUseCaseIds}
+                />
+              </div>
             </div>
           </div>
         );
