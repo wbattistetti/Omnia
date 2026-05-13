@@ -200,6 +200,12 @@ async function runAIAgentRuntimeStep(body, aiProviderService) {
     temperature: 0.3,
     maxTokens,
     timeout: DEFAULT_TIMEOUT_MS,
+    /**
+     * Esecuzione runtime di un agente (state-machine bridge): \u00e8 una call globale per natura
+     * (\u00e8 il motore che chiama il modello in produzione, non un'azione di design del task).
+     * Resta sotto "Globale (senza task)" nel report. Il purpose la categorizza chiaramente.
+     */
+    purpose: 'AGENT_RUNTIME_BRIDGE',
   });
 
   const content = response?.choices?.[0]?.message?.content;

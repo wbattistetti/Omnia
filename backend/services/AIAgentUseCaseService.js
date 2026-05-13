@@ -385,6 +385,8 @@ async function generateUseCaseBundleExtend({
   provider = 'groq',
   model,
   purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
@@ -415,6 +417,8 @@ async function generateUseCaseBundleExtend({
     maxTokens,
     timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
     purpose,
+    taskId,
+    taskLabel,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -450,6 +454,8 @@ async function generateUseCaseBundle({
   provider = 'groq',
   model,
   purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
@@ -475,6 +481,8 @@ async function generateUseCaseBundle({
     maxTokens,
     timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
     purpose,
+    taskId,
+    taskLabel,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -515,6 +523,9 @@ async function regenerateUseCase({
   globalStyleId,
   provider = 'groq',
   model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   if (!useCase || typeof useCase !== 'object') {
@@ -539,6 +550,9 @@ async function regenerateUseCase({
     temperature: 0.35,
     maxTokens,
     timeout: REGENERATE_USE_CASE_TIMEOUT_MS,
+    purpose,
+    taskId,
+    taskLabel,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -579,6 +593,8 @@ async function createUseCase({
   provider = 'groq',
   model,
   purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   if (!useCase || typeof useCase !== 'object') {
@@ -604,6 +620,8 @@ async function createUseCase({
     maxTokens,
     timeout: REGENERATE_USE_CASE_TIMEOUT_MS,
     purpose,
+    taskId,
+    taskLabel,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -634,6 +652,9 @@ async function regenerateTurn({
   outputLanguage,
   provider = 'groq',
   model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   if (!useCase || typeof useCase !== 'object') {
@@ -655,6 +676,9 @@ async function regenerateTurn({
     temperature: 0.35,
     maxTokens,
     timeout: REGENERATE_TURN_TIMEOUT_MS,
+    purpose,
+    taskId,
+    taskLabel,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -735,6 +759,9 @@ async function propagateExamplePhraseStyleOneShot({
   globalStyleId,
   provider,
   model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   const byId = new Map(allUseCases.map((u) => [u.id, u]));
@@ -766,6 +793,9 @@ async function propagateExamplePhraseStyleOneShot({
     temperature: 0.45,
     maxTokens,
     timeout: PROPAGATE_EXAMPLE_PHRASE_STYLE_TIMEOUT_MS,
+    purpose,
+    taskId,
+    taskLabel,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -821,6 +851,9 @@ async function propagateExamplePhraseStyle({
   globalStyleId,
   provider = 'groq',
   model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   if (!Array.isArray(allUseCases) || allUseCases.length === 0) {
@@ -858,6 +891,9 @@ async function propagateExamplePhraseStyle({
           globalStyleId,
           provider,
           model,
+          purpose,
+          taskId,
+          taskLabel,
           aiProviderService,
         });
         break;
@@ -1124,6 +1160,9 @@ async function annotateAssistantMessageForJson({
   globalStyleContract,
   provider = 'groq',
   model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
   assistantMessageTextOverride,
 }) {
@@ -1152,6 +1191,9 @@ async function annotateAssistantMessageForJson({
     temperature: 0.15,
     maxTokens,
     timeout: ANNOTATE_ASSISTANT_FOR_JSON_TIMEOUT_MS,
+    purpose,
+    taskId,
+    taskLabel,
   });
   const rawContent = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(rawContent);
@@ -1218,6 +1260,9 @@ async function analyzeDebuggerTurnUseCase({
   outputLanguage,
   provider = 'groq',
   model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   if (!aiProviderService) {
@@ -1283,6 +1328,9 @@ Legacy synonym (accept internally): matched_wrong_response → treat as exists_b
     temperature: 0.2,
     maxTokens,
     timeout: ANALYZE_DEBUG_TURN_TIMEOUT_MS,
+    purpose: purpose || 'DEBUGGER_ANALYZE_TURN',
+    taskId,
+    taskLabel,
   });
   const rawContent = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(rawContent);

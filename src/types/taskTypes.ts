@@ -469,6 +469,25 @@ export interface Task {
    * When true, runtime starts the agent turn without waiting for real user input (orchestrator injects synthetic utterance).
    */
   agentImmediateStart?: boolean;
+  /**
+   * Phase machine top-level del Task Editor AI Agent: 'wizard' (costruzione iniziale guidata in
+   * 5 step) oppure 'edit' (refinement libero post-completamento). Quando assente, il loader
+   * usa `agentDesignHasGeneration` per decidere (vedi `resolveAgentConstructionPhase`).
+   * @see `@domain/aiAgentConstruction/agentConstructionPhase`
+   */
+  agentConstructionPhase?: 'wizard' | 'edit';
+  /**
+   * Indice (0-based) dello step corrente del wizard di costruzione (0..4). Usato per
+   * riprendere il flusso dal punto lasciato se l'utente chiude l'editor a metà.
+   * Ignorato se `agentConstructionPhase === 'edit'`.
+   */
+  agentWizardCurrentStep?: number;
+  /**
+   * True dopo che l'utente ha cliccato «Cominciamo» nella schermata Tutor di benvenuto del
+   * wizard. La Tutor è didattica e va vista UNA volta sola: dopo l'acknowledge, le successive
+   * riaperture del task in fase wizard saltano direttamente allo Stepper + step corrente.
+   */
+  agentWizardTutorAcknowledged?: boolean;
 
   /** Client-only: last IA provisioning failure for this row (never persisted). */
   provisioningError?: NormalizedIaProviderError;

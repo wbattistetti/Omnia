@@ -76,6 +76,29 @@ class AIProviderService {
         throw new Error(`Unsupported AI provider: ${provider}. Available: ${Object.keys(this.providers).join(', ')}`);
       }
 
+      /**
+       * Fail-loud sul `purpose`. Tutte le chiamate produttive devono dichiarare uno scopo
+       * (label dell'azione: `USE_CASE_BUNDLE_INITIAL`, `AGENT_CREATE`, `INTENT_TRAINING_PHRASES`,
+       * ecc.) — \u00e8 quello che il report storico usa come categoria. Un fallback silenzioso
+       * "Chiamata IA non categorizzata" mascherava bug a monte e rendeva inutilizzabile il
+       * report. L'unica eccezione \u00e8 `internal: true` (health-check, self-test).
+       */
+      const isInternal = options.internal === true;
+      if (!isInternal) {
+        const purposeRaw = typeof options.purpose === 'string' ? options.purpose.trim() : '';
+        if (!purposeRaw) {
+          const err = new Error(
+            `AI call is missing the mandatory "purpose" tag. Every callAI() invocation must ` +
+              `declare its scope (e.g. USE_CASE_BUNDLE_INITIAL, AGENT_CREATE, INTENT_TRAINING_PHRASES). ` +
+              `Provider="${provider}", model="${options.model || '(unset)'}". This is a coding bug, ` +
+              `not a runtime failure: add { purpose, taskId?, taskLabel? } to the call site.`
+          );
+          err.code = 'AI_PURPOSE_REQUIRED';
+          err.statusCode = 500;
+          throw err;
+        }
+      }
+
       // Get provider configuration
       const providerConfig = await this.config.getProviderConfig(provider);
       // Optional opt-in default model from env (`OPENAI_MODEL` / `GROQ_MODEL`); null when not set.
@@ -134,6 +157,8 @@ class AIProviderService {
           costEur: costRecord.costEur,
           durationMs: latency,
           pricingFound: costRecord.pricingFound,
+          taskId: options.taskId,
+          taskLabel: options.taskLabel,
         });
       } catch (logErr) {
         console.warn('[AI_PROVIDER] cost log failed:', logErr.message);
@@ -159,6 +184,8 @@ class AIProviderService {
           durationMs: latency,
           pricingFound: false,
           error: error.message,
+          taskId: options.taskId,
+          taskLabel: options.taskLabel,
         });
       } catch (logErr) {
         console.warn('[AI_PROVIDER] cost log (error path) failed:', logErr.message);
@@ -245,7 +272,7 @@ class AIProviderService {
         const testMessages = [{ role: 'user', content: 'health check' }];
         const startTime = Date.now();
 
-        await this.callAI(provider, testMessages, { timeout: 5000 });
+        await this.callAI(provider, testMessages, { timeout: 5000, internal: true });
 
         health.providers[provider] = {
           status: 'healthy',

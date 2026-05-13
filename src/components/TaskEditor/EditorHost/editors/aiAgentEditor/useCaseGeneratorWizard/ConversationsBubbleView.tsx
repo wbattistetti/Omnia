@@ -51,6 +51,14 @@ export interface ConversationsBubbleViewProps {
   showTokenized?: boolean;
   /** Mappa `useCaseId → assistant_example_tokenized` per le bubble agente. */
   tokenizedByUseCaseId?: Readonly<Record<string, string>>;
+  /**
+   * Set degli `useCaseId` che il designer ha **escluso** dalle conversazioni (toggle nell'header
+   * della lista use case). Le bubble agente di questi use case vengono **nascoste dalla vista**
+   * (i turni restano per\u00f2 in storage: se il use case viene re-incluso, riappaiono). I turni
+   * `user` non vengono filtrati \u2014 non hanno appartenenza univoca a un use case e rimuoverli
+   * complicherebbe il rendering senza valore aggiunto. Vuoto / undefined = nessun filtro.
+   */
+  excludedUseCaseIds?: ReadonlySet<string>;
 }
 
 export function ConversationsBubbleView({
@@ -62,6 +70,7 @@ export function ConversationsBubbleView({
   onRejectSuggestion,
   showTokenized = false,
   tokenizedByUseCaseId,
+  excludedUseCaseIds,
 }: ConversationsBubbleViewProps): React.ReactElement {
   const active = React.useMemo(() => {
     if (!activeConversationId) return conversations[0] ?? null;
@@ -151,31 +160,45 @@ export function ConversationsBubbleView({
             La conversazione è vuota: l&apos;AI non ha prodotto turni. Riprova la generazione.
           </p>
         ) : (
-          active.turns.map((t) => {
-            const tokenized =
-              showTokenized && t.role === 'agent' && tokenizedByUseCaseId
-                ? tokenizedByUseCaseId[(t as UseCaseGeneratorWizardTurnAgent).useCaseId] ?? ''
-                : '';
-            return (
-              <BubbleRow
-                key={t.turnId}
-                turn={t}
-                isModified={t.role === 'agent' && modifiedTurnIds.has(t.turnId)}
-                tokenizedText={tokenized || undefined}
-                onChangeText={(text) => onUpdateTurnText(active.conversationId, t.turnId, text)}
-                onPromote={
-                  onPromoteSuggestion
-                    ? () => void onPromoteSuggestion(active.conversationId, t.turnId)
-                    : undefined
-                }
-                onReject={
-                  onRejectSuggestion
-                    ? () => onRejectSuggestion(active.conversationId, t.turnId)
-                    : undefined
-                }
-              />
-            );
-          })
+          active.turns
+            .filter((t) => {
+              /*
+                Filtro inclusione: nascondi le bubble agente di use case esclusi (i turni
+                user non hanno appartenenza univoca, restano sempre visibili). Vedi
+                {@link AIAgentUseCase.included_in_conversations}.
+              */
+              if (!excludedUseCaseIds || excludedUseCaseIds.size === 0) return true;
+              if (t.role !== 'agent') return true;
+              const ucId = (t as UseCaseGeneratorWizardTurnAgent).useCaseId;
+              return !excludedUseCaseIds.has(ucId);
+            })
+            .map((t) => {
+              const tokenized =
+                showTokenized && t.role === 'agent' && tokenizedByUseCaseId
+                  ? tokenizedByUseCaseId[(t as UseCaseGeneratorWizardTurnAgent).useCaseId] ?? ''
+                  : '';
+              return (
+                <BubbleRow
+                  key={t.turnId}
+                  turn={t}
+                  isModified={t.role === 'agent' && modifiedTurnIds.has(t.turnId)}
+                  tokenizedText={tokenized || undefined}
+                  onChangeText={(text) =>
+                    onUpdateTurnText(active.conversationId, t.turnId, text)
+                  }
+                  onPromote={
+                    onPromoteSuggestion
+                      ? () => void onPromoteSuggestion(active.conversationId, t.turnId)
+                      : undefined
+                  }
+                  onReject={
+                    onRejectSuggestion
+                      ? () => onRejectSuggestion(active.conversationId, t.turnId)
+                      : undefined
+                  }
+                />
+              );
+            })
         )}
       </div>
     </div>

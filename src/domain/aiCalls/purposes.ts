@@ -16,6 +16,8 @@
  */
 
 export const AI_CALL_PURPOSE = {
+  AGENT_CREATE: 'AGENT_CREATE',
+  AGENT_REFINE: 'AGENT_REFINE',
   USE_CASE_BUNDLE_INITIAL: 'USE_CASE_BUNDLE_INITIAL',
   USE_CASE_GENERATE_MORE: 'USE_CASE_GENERATE_MORE',
   USE_CASE_DIALOGUE_CREATE: 'USE_CASE_DIALOGUE_CREATE',
@@ -31,6 +33,8 @@ export const AI_CALL_PURPOSE = {
 export type AiCallPurposeId = (typeof AI_CALL_PURPOSE)[keyof typeof AI_CALL_PURPOSE];
 
 const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
+  [AI_CALL_PURPOSE.AGENT_CREATE]: 'Creazione agente (estrazione struttura dal task)',
+  [AI_CALL_PURPOSE.AGENT_REFINE]: 'Raffinamento agente (rigenerazione su descrizione modificata)',
   [AI_CALL_PURPOSE.USE_CASE_BUNDLE_INITIAL]: 'Generazione iniziale use case bundle',
   [AI_CALL_PURPOSE.USE_CASE_GENERATE_MORE]: 'Generazione altri use case',
   [AI_CALL_PURPOSE.USE_CASE_DIALOGUE_CREATE]: 'Creazione dialogo per nuovo use case',

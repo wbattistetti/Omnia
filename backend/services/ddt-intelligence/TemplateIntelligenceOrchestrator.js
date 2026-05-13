@@ -122,7 +122,9 @@ class TemplateIntelligenceOrchestrator {
       console.log(`[TemplateIntelligence] Calling AI with model: ${validModel}`);
 
       const response = await this.aiProvider.callAI(provider, messages, {
-        model: validModel
+        model: validModel,
+        /** DDT intelligence orchestrator — analisi globale dei template (non per-task). */
+        purpose: 'TEMPLATE_INTELLIGENCE_ANALYSIS',
       });
 
       const rawResponse = response.choices[0].message.content;

@@ -67,6 +67,8 @@ function writeLog(payload) {
  * @param {number} entry.durationMs
  * @param {boolean} entry.pricingFound
  * @param {string|null} [entry.error]
+ * @param {string|null} [entry.taskId]        task instance id originating the call (null per chiamate globali)
+ * @param {string|null} [entry.taskLabel]     snapshot della label del task al momento della call
  */
 function appendCall(entry) {
   try {
@@ -88,6 +90,12 @@ function appendCall(entry) {
       durationMs: Number.isFinite(entry.durationMs) ? entry.durationMs : 0,
       pricingFound: Boolean(entry.pricingFound),
       error: typeof entry.error === 'string' ? entry.error : null,
+      taskId:
+        typeof entry.taskId === 'string' && entry.taskId.trim() ? entry.taskId.trim() : null,
+      taskLabel:
+        typeof entry.taskLabel === 'string' && entry.taskLabel.trim()
+          ? entry.taskLabel.trim()
+          : null,
     };
     const next = [record, ...log.records].slice(0, MAX_RECORDS);
     writeLog({ records: next });

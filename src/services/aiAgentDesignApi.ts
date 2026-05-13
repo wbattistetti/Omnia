@@ -2,6 +2,43 @@
  * Client for design-time AI Agent generation (Node backend /design/ai-agent-generate).
  */
 
+/**
+ * Cost-tracking metadata propagati end-to-end FE -> BE -> log per ogni chiamata IA del task
+ * editor. La triade `(purpose, taskId, taskLabel)` permette al report ad albero di raggruppare
+ * tutte le chiamate originate da uno specifico task instance ("macro-task"). Per chiamate
+ * globali non legate a un task (es. traduzioni dalla UI globale) `taskId/taskLabel` restano
+ * undefined e i record finiscono sotto il nodo "Globale (senza task)" del report.
+ */
+export interface AiCallMeta {
+  /** AI_CALL_PURPOSE id (vedi {@link import('../domain/aiCalls/purposes').AiCallPurposeId}). */
+  readonly purpose?: string;
+  /** TaskTreeNode.taskId del task originante (snapshot al momento della call). */
+  readonly taskId?: string;
+  /** Snapshot della label del task al momento della call (per fedelt\u00e0 storica del report). */
+  readonly taskLabel?: string;
+}
+
+/**
+ * Inietta selettivamente i campi non-vuoti di `callMeta` nel body di una request /design/*.
+ * Mutates and returns `bodyPayload` for chained build patterns.
+ */
+function applyCallMetaToBody(
+  bodyPayload: Record<string, unknown>,
+  callMeta: AiCallMeta | undefined
+): Record<string, unknown> {
+  if (!callMeta) return bodyPayload;
+  if (typeof callMeta.purpose === 'string' && callMeta.purpose.trim()) {
+    bodyPayload.purpose = callMeta.purpose.trim();
+  }
+  if (typeof callMeta.taskId === 'string' && callMeta.taskId.trim()) {
+    bodyPayload.taskId = callMeta.taskId.trim();
+  }
+  if (typeof callMeta.taskLabel === 'string' && callMeta.taskLabel.trim()) {
+    bodyPayload.taskLabel = callMeta.taskLabel.trim();
+  }
+  return bodyPayload;
+}
+
 import type { AIAgentDesignApiError, AIAgentDesignApiSuccess, AIAgentDesignPayload } from '@types/aiAgentDesign';
 import type {
   AIAgentLogicalStep,
@@ -61,6 +98,8 @@ export interface GenerateAIAgentDesignParams {
   structuredDesignForPhase3?: Record<string, unknown>;
   /** Target platform id for Phase 3 shadow / sections_only (e.g. openai, omnia). */
   compilePlatform?: string;
+  /** Cost-tracking metadata; default purpose `AGENT_REFINE` lato backend se omesso. */
+  callMeta?: AiCallMeta;
 }
 
 /** Discriminated result: full design payload vs sections-only platform compile. */
@@ -85,22 +124,25 @@ export async function extractStructuredDesign(params: {
   model: string;
   /** BCP 47 tag (e.g. it-IT); all IR string fields should be written in this language. */
   outputLanguage?: string;
+  /** Cost-tracking metadata; default purpose `AGENT_CREATE` lato backend se omesso. */
+  callMeta?: AiCallMeta;
 }): Promise<unknown> {
   const { description, provider, model, outputLanguage } = params;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
   try {
+    const bodyPayload: Record<string, unknown> = {
+      description: description.trim(),
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
     const res = await fetch('/design/extract-structure', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        description: description.trim(),
-        provider: provider.toLowerCase(),
-        model,
-        ...(typeof outputLanguage === 'string' && outputLanguage.trim().length > 0
-          ? { outputLanguage: outputLanguage.trim() }
-          : {}),
-      }),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as
@@ -166,7 +208,7 @@ export async function generateAIAgentDesign(
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as
@@ -211,6 +253,7 @@ export interface InduceStyleRuleParams {
   provider: string;
   model?: string;
   outputLanguage?: string;
+  callMeta?: AiCallMeta;
 }
 
 /**
@@ -237,7 +280,7 @@ export async function induceStyleRuleFromCorrectionApi(
     const res = await fetch('/design/ai-agent-induce-style-rule', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as { success: true; rule_text: string } | AIAgentDesignApiError;
@@ -308,7 +351,7 @@ export async function analyzeDebuggerTurnUseCaseApi(
     const res = await fetch('/design/ai-agent-analyze-debug-turn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as
@@ -346,6 +389,7 @@ export interface GenerateAIAgentUseCasesParams {
     logicalSteps: readonly AIAgentLogicalStep[];
     useCases: readonly AIAgentUseCase[];
   };
+  callMeta?: AiCallMeta;
 }
 
 export interface GenerateAIAgentUseCasesResult {
@@ -404,7 +448,7 @@ export async function generateAIAgentUseCases(
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as
@@ -453,6 +497,7 @@ export interface RegenerateAIAgentUseCaseParams {
   outputLanguage?: string;
   globalStyleContract?: string;
   globalStyleId?: string;
+  callMeta?: AiCallMeta;
 }
 
 /**
@@ -494,7 +539,7 @@ export async function regenerateAIAgentUseCaseApi(
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as { success: true; use_case: unknown } | AIAgentDesignApiError;
@@ -523,6 +568,7 @@ export interface CreateAIAgentUseCaseParams {
   outputLanguage?: string;
   globalStyleContract?: string;
   globalStyleId?: string;
+  callMeta?: AiCallMeta;
 }
 
 /**
@@ -564,7 +610,7 @@ export async function createAIAgentUseCaseApi(
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as { success: true; use_case: unknown } | AIAgentDesignApiError;
@@ -596,6 +642,7 @@ export interface PropagateExamplePhraseStyleParams {
   outputLanguage?: string;
   globalStyleContract?: string;
   globalStyleId?: string;
+  callMeta?: AiCallMeta;
 }
 
 export interface PropagateExamplePhraseStyleResult {
@@ -643,7 +690,7 @@ export async function propagateExamplePhraseStyleApi(
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as
@@ -692,6 +739,7 @@ export interface RegenerateAIAgentUseCaseTurnParams {
   provider: string;
   model: string;
   outputLanguage?: string;
+  callMeta?: AiCallMeta;
 }
 
 export async function regenerateAIAgentUseCaseTurnApi(
@@ -714,7 +762,7 @@ export async function regenerateAIAgentUseCaseTurnApi(
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as { success: true; turn: unknown } | AIAgentDesignApiError;
@@ -746,6 +794,7 @@ export interface AnnotateAIAgentAssistantMessageForJsonParams {
    * Il backend allinea prompt e `use case` JSON così il modello non segue un dialogo obsoleto.
    */
   assistantMessageText?: string;
+  callMeta?: AiCallMeta;
 }
 
 export interface AnnotateAIAgentAssistantMessageForJsonResult {
@@ -782,7 +831,7 @@ export async function annotateAIAgentAssistantMessageForJsonApi(
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as
@@ -824,6 +873,7 @@ export interface AssembleAIAgentConversationParams {
   allowSuggestedUseCases?: boolean;
   provider: string;
   model: string;
+  callMeta?: AiCallMeta;
 }
 
 function newClientConversationId(): string {
@@ -978,7 +1028,7 @@ export async function assembleAIAgentConversationApi(
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as
@@ -1072,6 +1122,7 @@ export interface ProofreadConversationAgentTurnsParams {
   provider: string;
   model: string;
   outputLanguage?: string;
+  callMeta?: AiCallMeta;
 }
 
 export interface ProofreadConversationAgentTurnsResult {
@@ -1108,7 +1159,7 @@ export async function proofreadAIAgentConversationAgentTurnsApi(
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as
@@ -1151,6 +1202,7 @@ export interface TokenizeAIAgentUseCasesParams {
   outputLanguage?: string;
   provider: string;
   model: string;
+  callMeta?: AiCallMeta;
 }
 
 export interface TokenizeAIAgentUseCasesResult {
@@ -1185,7 +1237,7 @@ export async function tokenizeAIAgentUseCasesApi(
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
     const body = (await res.json()) as

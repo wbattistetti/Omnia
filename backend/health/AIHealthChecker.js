@@ -79,7 +79,7 @@ class AIHealthChecker {
         try {
             // Test with minimal request
             const testMessages = [{ role: 'user', content: 'health check' }];
-            await this.aiProvider.callAI(provider, testMessages, { timeout: 5000 });
+            await this.aiProvider.callAI(provider, testMessages, { timeout: 5000, internal: true });
 
             const latency = Date.now() - startTime;
             const metrics = this.aiProvider.getProviderMetrics(provider);

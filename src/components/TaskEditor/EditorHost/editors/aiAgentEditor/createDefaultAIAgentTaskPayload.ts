@@ -5,6 +5,7 @@
 
 import { DEFAULT_AGENT_PROMPT_PLATFORM } from '@domain/agentPrompt';
 import { AI_AGENT_DEFAULT_PREVIEW_STYLE_ID } from '@types/aiAgentPreview';
+import { AGENT_WIZARD_FIRST_STEP_INDEX } from '@domain/aiAgentConstruction/agentConstructionPhase';
 import { EMPTY_OUTPUT_MAPPINGS } from './constants';
 
 /**
@@ -30,5 +31,10 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentPromptTargetPlatform: DEFAULT_AGENT_PROMPT_PLATFORM,
     agentIaRuntimeOverrideJson: '',
     agentImmediateStart: false,
+    /** Nuovi task partono in modalità wizard di costruzione, dal primo step. */
+    agentConstructionPhase: 'wizard',
+    agentWizardCurrentStep: AGENT_WIZARD_FIRST_STEP_INDEX,
+    /** Tutor mai vista per task vergini: la prima apertura mostra la schermata di benvenuto. */
+    agentWizardTutorAcknowledged: false,
   };
 }

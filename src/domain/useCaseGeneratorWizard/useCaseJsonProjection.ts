@@ -26,7 +26,11 @@
 
 import { extractTokenNames } from './tokenizedText';
 import { autoTokenizeAnnotated, type AutoTokenizeBracket } from './tokenTypeInference';
-import { getAssistantExample, type AIAgentUseCase } from '@types/aiAgentUseCases';
+import {
+  getAssistantExample,
+  isUseCaseIncludedInConversations,
+  type AIAgentUseCase,
+} from '@types/aiAgentUseCases';
 
 /**
  * Forma JSON di un singolo use case nel «prompt conversazionale» esposto al motore esterno.
@@ -172,14 +176,21 @@ export function projectUseCaseToConversationalJson(
  * crescente, fallback su label per stabilità). Use case non proiettabili sono saltati. Per il
  * pulsante «Crea prompt conversazionale» il chiamante deve verificare separatamente che TUTTI
  * gli use case siano proiettabili (vedi {@link areAllUseCasesProjectable}).
+ *
+ * **Filtro inclusione**: gli use case con `included_in_conversations === false` (toggle nell'header
+ * della lista) vengono esclusi dalla proiezione. Il motore esterno non deve vederli n\u00e9
+ * applicarli, restano per\u00f2 nel catalogo design-time per non essere ri-proposti come duplicati
+ * dall'IA. Vedi {@link isUseCaseIncludedInConversations}.
  */
 export function projectAllUseCasesToConversationalJson(
   useCases: readonly AIAgentUseCase[]
 ): UseCaseConversationalJson[] {
-  const sorted = [...useCases].sort((a, b) => {
-    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-    return (a.label ?? '').localeCompare(b.label ?? '', undefined, { sensitivity: 'base' });
-  });
+  const sorted = [...useCases]
+    .filter(isUseCaseIncludedInConversations)
+    .sort((a, b) => {
+      if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+      return (a.label ?? '').localeCompare(b.label ?? '', undefined, { sensitivity: 'base' });
+    });
   const out: UseCaseConversationalJson[] = [];
   for (const uc of sorted) {
     const projected = projectUseCaseToConversationalJson(uc);
@@ -189,13 +200,15 @@ export function projectAllUseCasesToConversationalJson(
 }
 
 /**
- * True solo se TUTTI gli use case del catalogo (≥1 e tutti proiettabili). Usato per la
- * visibilità del pulsante «Crea prompt conversazionale» in toolbar: il prompt deve essere
- * completo per essere utile al motore esterno.
+ * True solo se TUTTI gli use case **inclusi** del catalogo sono proiettabili (e ce n'\u00e8 almeno
+ * uno incluso). Usato per la visibilit\u00e0 del pulsante «Crea prompt conversazionale» in toolbar:
+ * il prompt deve essere completo per essere utile al motore esterno. Use case esclusi non
+ * partecipano alla validazione (l'utente li ha tolti consapevolmente di mezzo).
  */
 export function areAllUseCasesProjectable(useCases: readonly AIAgentUseCase[]): boolean {
-  if (useCases.length === 0) return false;
-  for (const uc of useCases) {
+  const included = useCases.filter(isUseCaseIncludedInConversations);
+  if (included.length === 0) return false;
+  for (const uc of included) {
     if (!isUseCaseProjectable(uc)) return false;
   }
   return true;

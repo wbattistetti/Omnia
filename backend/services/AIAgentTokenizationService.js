@@ -119,6 +119,8 @@ async function tokenizeUseCases({
   provider = 'groq',
   model,
   purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   if (!Array.isArray(useCases) || useCases.length === 0) {
@@ -158,6 +160,8 @@ async function tokenizeUseCases({
     maxTokens,
     timeout: TOKENIZE_USE_CASES_TIMEOUT_MS,
     purpose,
+    taskId,
+    taskLabel,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);

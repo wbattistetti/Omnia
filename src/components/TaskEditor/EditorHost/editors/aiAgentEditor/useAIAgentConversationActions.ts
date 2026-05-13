@@ -12,9 +12,14 @@ import React from 'react';
 import {
   assembleAIAgentConversationApi,
   proofreadAIAgentConversationAgentTurnsApi,
+  type AiCallMeta,
 } from '@services/aiAgentDesignApi';
+import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
-import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import {
+  isUseCaseIncludedInConversations,
+  type AIAgentUseCase,
+} from '@types/aiAgentUseCases';
 import type {
   UseCaseGeneratorWizardConversation,
   UseCaseGeneratorWizardConversationOutcome,
@@ -49,6 +54,12 @@ export interface UseAIAgentConversationActionsParams {
   /** Runtime context concat passato al prompt AI. */
   runtimeContext: string;
   globalStyleContract: string;
+  /**
+   * Helper opzionale per costruire i metadati di tracing/cost-log delle chiamate IA. Se omesso,
+   * le chiamate vengono loggate senza `taskId/taskLabel` e finiscono sotto "Globale (senza task)"
+   * nel report ad albero.
+   */
+  buildCallMeta?: (purpose: string) => AiCallMeta;
   onError?: (message: string) => void;
 }
 
@@ -71,6 +82,7 @@ export function useAIAgentConversationActions({
   useCases,
   runtimeContext,
   globalStyleContract,
+  buildCallMeta,
   onError,
 }: UseAIAgentConversationActionsParams): AIAgentConversationActionsModel {
   const [assembleConversationBusy, setAssembleConversationBusy] = React.useState(false);
@@ -88,15 +100,27 @@ export function useAIAgentConversationActions({
       outcome,
       allowSuggestedUseCases,
     }: AssembleConversationParams): Promise<UseCaseGeneratorWizardConversation | null> => {
-      if (useCases.length < 2) {
-        fail('Servono almeno 2 use case per montare una conversazione.');
+      /**
+       * Filtro inclusione: passiamo all'IA SOLO gli use case con `included_in_conversations !==
+       * false` (toggle nell'header della lista). Quelli esclusi non devono comparire come
+       * sorgente nelle conversazioni n\u00e9 nel system prompt finale. Restano comunque nel catalogo
+       * lato UI per non essere ri-proposti come duplicati. Vedi
+       * {@link isUseCaseIncludedInConversations}.
+       */
+      const includedUseCases = useCases.filter(isUseCaseIncludedInConversations);
+      if (includedUseCases.length < 2) {
+        fail(
+          useCases.length < 2
+            ? 'Servono almeno 2 use case per montare una conversazione.'
+            : 'Servono almeno 2 use case INCLUSI per montare una conversazione (rimuovi qualche esclusione).'
+        );
         return null;
       }
       setAssembleConversationBusy(true);
       try {
         const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
         const conversation = await assembleAIAgentConversationApi({
-          useCases,
+          useCases: includedUseCases,
           runtimeContext,
           outputLanguage,
           globalStyleContract,
@@ -105,6 +129,17 @@ export function useAIAgentConversationActions({
           allowSuggestedUseCases,
           provider,
           model,
+          ...(buildCallMeta
+            ? {
+                callMeta: buildCallMeta(
+                  allowSuggestedUseCases
+                    ? AI_CALL_PURPOSE.CONVERSATION_SUGGESTED
+                    : outcome === 'negative'
+                      ? AI_CALL_PURPOSE.CONVERSATION_NEGATIVE
+                      : AI_CALL_PURPOSE.CONVERSATION_POSITIVE
+                ),
+              }
+            : {}),
         });
         return conversation;
       } catch (e) {
@@ -114,7 +149,7 @@ export function useAIAgentConversationActions({
         setAssembleConversationBusy(false);
       }
     },
-    [useCases, runtimeContext, globalStyleContract, provider, model, fail]
+    [useCases, runtimeContext, globalStyleContract, provider, model, buildCallMeta, fail]
   );
 
   const handleProofreadConversationAgentTurns = React.useCallback(
@@ -122,8 +157,23 @@ export function useAIAgentConversationActions({
       conversation,
       modifiedAgentTurns,
     }: ProofreadConversationAgentTurnsParams): Promise<UseCaseGeneratorWizardConversation | null> => {
-      if (modifiedAgentTurns.length === 0) {
-        fail('Nessuna bubble agente modificata da correggere.');
+      /**
+       * Filtro inclusione: scartiamo i turni il cui use case sorgente \u00e8 stato escluso. Il
+       * proofread non deve riformulare bubble di use case che il designer non considera pi\u00f9
+       * parte della conversazione (anche se la bubble \u00e8 ancora in storage).
+       */
+      const excludedUseCaseIds = new Set(
+        useCases.filter((u) => !isUseCaseIncludedInConversations(u)).map((u) => u.id)
+      );
+      const filteredAgentTurns = modifiedAgentTurns.filter(
+        (t) => !excludedUseCaseIds.has(t.useCaseId)
+      );
+      if (filteredAgentTurns.length === 0) {
+        fail(
+          modifiedAgentTurns.length === 0
+            ? 'Nessuna bubble agente modificata da correggere.'
+            : 'Le bubble modificate appartengono a use case esclusi: niente da proofreaded.'
+        );
         return null;
       }
       setProofreadConversationBusy(true);
@@ -131,10 +181,13 @@ export function useAIAgentConversationActions({
         const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
         const { updates } = await proofreadAIAgentConversationAgentTurnsApi({
           conversation,
-          modifiedAgentTurns,
+          modifiedAgentTurns: filteredAgentTurns,
           provider,
           model,
           outputLanguage,
+          ...(buildCallMeta
+            ? { callMeta: buildCallMeta(AI_CALL_PURPOSE.CONVERSATION_PROOFREAD) }
+            : {}),
         });
         const byTurnId = new Map(updates.map((u) => [u.turnId, u.text]));
         const nextTurns = conversation.turns.map((t) => {
@@ -155,7 +208,7 @@ export function useAIAgentConversationActions({
         setProofreadConversationBusy(false);
       }
     },
-    [provider, model, fail]
+    [provider, model, useCases, buildCallMeta, fail]
   );
 
   return {

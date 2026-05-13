@@ -325,6 +325,8 @@ async function assembleConversation({
   provider = 'groq',
   model,
   purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   if (!Array.isArray(useCases) || useCases.length < 2) {
@@ -354,6 +356,8 @@ async function assembleConversation({
     maxTokens,
     timeout: ASSEMBLE_CONVERSATION_TIMEOUT_MS,
     purpose,
+    taskId,
+    taskLabel,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);
@@ -533,6 +537,8 @@ async function proofreadConversationAgentTurns({
   provider = 'groq',
   model,
   purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   if (!conversation || typeof conversation !== 'object' || !Array.isArray(conversation.turns)) {
@@ -556,6 +562,8 @@ async function proofreadConversationAgentTurns({
     maxTokens,
     timeout: PROOFREAD_CONVERSATION_TIMEOUT_MS,
     purpose,
+    taskId,
+    taskLabel,
   });
   const content = response?.choices?.[0]?.message?.content;
   const jsonStr = extractJsonString(content);

@@ -8,6 +8,12 @@ import {
   parseAgentLogicalStepsJson,
   parseAgentUseCasesJson,
 } from '@types/aiAgentUseCases';
+import {
+  type AgentConstructionPhase,
+  type AgentWizardStepIndex,
+  resolveAgentConstructionPhase,
+  resolveAgentWizardCurrentStep,
+} from '@domain/aiAgentConstruction/agentConstructionPhase';
 import { EMPTY_OUTPUT_MAPPINGS } from './constants';
 
 export interface AIAgentTaskSnapshot {
@@ -30,6 +36,23 @@ export interface AIAgentTaskSnapshot {
   agentImmediateStart: boolean;
   logicalSteps: AIAgentLogicalStep[];
   useCases: AIAgentUseCase[];
+  /**
+   * Phase machine top-level del Task Editor AI Agent. Risolta a partire dal campo persistito
+   * `agentConstructionPhase` con fallback intelligente al vecchio flag `agentDesignHasGeneration`
+   * (vedi `resolveAgentConstructionPhase`): backward-compat per task pre-feature.
+   */
+  agentConstructionPhase: AgentConstructionPhase;
+  /**
+   * Indice (0-based) dello step corrente del wizard di costruzione (0..4).
+   * Quando la phase è `edit`, è solo un valore di partenza per la barra di navigazione rapida.
+   */
+  agentWizardCurrentStep: AgentWizardStepIndex;
+  /**
+   * Acknowledgement della schermata Tutor di benvenuto. True dopo il primo click su
+   * «Cominciamo». Se la phase è `edit` o se il task è gi\u00e0 generato (legacy), forziamo true
+   * (non ha senso mostrare la Tutor a chi ha gi\u00e0 superato la fase di costruzione).
+   */
+  agentWizardTutorAcknowledged: boolean;
 }
 
 /**
@@ -38,6 +61,8 @@ export interface AIAgentTaskSnapshot {
 export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
   const r = raw as Record<string, unknown> | null | undefined;
   const mappings = r?.outputVariableMappings;
+  const persistedHasGen =
+    typeof r?.agentDesignHasGeneration === 'boolean' ? r.agentDesignHasGeneration : false;
   return {
     agentDesignDescription: String(r?.agentDesignDescription ?? ''),
     agentPrompt: String(r?.agentPrompt ?? ''),
@@ -65,6 +90,19 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
     agentImmediateStart: r?.agentImmediateStart === true,
     logicalSteps: parseAgentLogicalStepsJson(String(r?.agentLogicalStepsJson ?? '')),
     useCases: parseAgentUseCasesJson(String(r?.agentUseCasesJson ?? '')),
+    agentConstructionPhase: resolveAgentConstructionPhase(
+      r?.agentConstructionPhase,
+      persistedHasGen
+    ),
+    agentWizardCurrentStep: resolveAgentWizardCurrentStep(r?.agentWizardCurrentStep),
+    /**
+     * Backward-compat: per task gi\u00e0 generati (`agentDesignHasGeneration === true`)
+     * forziamo `tutorAcknowledged = true` cos\u00ec se per qualche motivo torniamo in fase
+     * wizard non vediamo la Tutor di benvenuto inopportuna. Per task vergini rispettiamo
+     * il valore persistito (default false).
+     */
+    agentWizardTutorAcknowledged:
+      r?.agentWizardTutorAcknowledged === true || persistedHasGen === true,
   };
 }
 

@@ -9,7 +9,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Circle,
   Copy,
   FileJson,
   GitBranch,
@@ -24,6 +23,7 @@ import {
 } from 'lucide-react';
 import {
   newAgentUseCaseTurnId,
+  isUseCaseIncludedInConversations,
   type AIAgentLogicalStep,
   type AIAgentUseCase,
 } from '@types/aiAgentUseCases';
@@ -73,6 +73,7 @@ import {
 } from './useCaseComposerPresentation';
 import {
   applyDesignerFieldVoteToggle,
+  applyUseCaseHeaderVoteToggle,
   type DesignerVoteField,
 } from './useCaseComposerDesignerVotes';
 import { useUseCaseFieldBaselineSync } from './useUseCaseFieldBaselineSync';
@@ -561,16 +562,28 @@ export function AIAgentUseCaseComposer({
     [setUseCases, onClearUseCaseHighlight]
   );
 
-  const acknowledgeUseCaseReview = React.useCallback(
-    (useCaseId: string) => {
+  /**
+   * Toggle del flag "incluso nelle conversazioni" sul use case.
+   *
+   * Persistenza: scrivo `included_in_conversations` direttamente nel record dello use case.
+   * Backward-compat: assenza del campo == incluso (vedi {@link isUseCaseIncludedInConversations}),
+   * quindi i task storici restano invariati. Quando l'utente toglie la spunta:
+   *  - le conversazioni gi\u00e0 generate per questo use case vengono SOLO nascoste in vista (non
+   *    cancellate dallo storage), e il use case viene escluso dal JSON proiettato per il
+   *    system prompt;
+   *  - resta invece SEMPRE visibile in lista (con dim + badge "Escluso") e continua ad essere
+   *    passato come `existingUseCases` a tutti i contesti dove l'IA propone nuovi use case
+   *    (no duplicati).
+   */
+  const setUseCaseIncludedInConversations = React.useCallback(
+    (useCaseId: string, included: boolean) => {
       setUseCases((prev) =>
         prev.map((u) =>
-          u.id === useCaseId ? { ...u, designer_acknowledged: true as const } : u
+          u.id === useCaseId ? { ...u, included_in_conversations: included } : u
         )
       );
-      onClearUseCaseHighlight?.(useCaseId);
     },
-    [setUseCases, onClearUseCaseHighlight]
+    [setUseCases]
   );
 
   const toggleDesignerFieldVote = React.useCallback(
@@ -585,7 +598,9 @@ export function AIAgentUseCaseComposer({
    * Voto «di validazione» sull'intero use case, applicato dal pollice nell'header della
    * lista. Tre effetti coordinati:
    *  1. Aggiorna `designer_label_vote` con la stessa logica del toggle generico (un secondo
-   *     click sulla stessa scelta rimuove il voto).
+   *     click sulla stessa scelta rimuove il voto). Se il voto risultante è rosso (`down`),
+   *     l'use case viene automaticamente escluso dalle conversazioni (`included=false`);
+   *     verde/neutro torna incluso di default.
    *  2. Collassa l'accordion del use case (in modalità wizard): il designer ha appena
    *     espresso un giudizio, non ha più bisogno di vedere scenario / messaggio aperti.
    *  3. Notifica la toolbar wizard del cambio espansione (per aggiornare il contatore
@@ -595,7 +610,7 @@ export function AIAgentUseCaseComposer({
    */
   const validateUseCaseFromHeader = React.useCallback(
     (useCaseId: string, choice: 'up' | 'down') => {
-      setUseCases((prev) => applyDesignerFieldVoteToggle(prev, useCaseId, 'label', choice));
+      setUseCases((prev) => applyUseCaseHeaderVoteToggle(prev, useCaseId, choice));
       onClearUseCaseHighlight?.(useCaseId);
       if (primaryGenerateOnRightOnly) {
         setCardExpandedById((prev) => ({ ...prev, [useCaseId]: false }));
@@ -1083,7 +1098,6 @@ export function AIAgentUseCaseComposer({
                   const active = u.id === effectiveSelectedId;
                   const editingTitle = editingTitleId === u.id;
                   const creatingChild = creatingChildParentId === u.id;
-                  const reviewed = Boolean(u.designer_edit_confirmed || u.designer_acknowledged);
                   const descriptionTooltip = String(u.notes?.behavior || '').trim();
                   const rowAssistant = u.dialogue.find((t) => t.role === 'assistant');
                   const cardExpanded =
@@ -1092,13 +1106,22 @@ export function AIAgentUseCaseComposer({
                     primaryGenerateOnRightOnly &&
                     cardExpanded &&
                     (wizardShowScenario || wizardShowMessage);
+                  /**
+                   * Quando il use case \u00e8 escluso dalle conversazioni: dim sull'intera card
+                   * (opacity-50) per segnalare visivamente lo stato. La card resta interattiva
+                   * (puoi rimettere la spunta) e l'header non viene compresso \u2014 \u00e8 ben
+                   * differenziato da disabled (cursor-not-allowed) o hidden (display:none).
+                   */
+                  const includedInConv = isUseCaseIncludedInConversations(u);
+                  const dimWhenExcludedClass = includedInConv ? '' : ' opacity-50';
                   return (
                     <li
                       key={u.id}
                       className={
-                        highlightIdSet.has(u.id)
+                        (highlightIdSet.has(u.id)
                           ? 'overflow-hidden rounded-md border border-amber-500/55 bg-amber-950/20 ring-2 ring-amber-400/40'
-                          : 'overflow-hidden rounded-md border border-slate-600/45 bg-slate-950/30'
+                          : 'overflow-hidden rounded-md border border-slate-600/45 bg-slate-950/30') +
+                        dimWhenExcludedClass
                       }
                     >
                       <div
@@ -1119,27 +1142,34 @@ export function AIAgentUseCaseComposer({
                         )}`}
                         style={{ paddingLeft: `${4 + depth * 8}px` }}
                       >
+                        {/*
+                          Checkbox "incluso nelle conversazioni" (sempre presente, default
+                          checked). Posizionato per primo a sinistra perch\u00e9 governa il
+                          *destino* del use case (se partecipa o meno alla generazione delle
+                          conversazioni e al JSON finale del system prompt). Lo stop-propagation
+                          evita che il click sulla checkbox selezioni anche la riga.
+                        */}
                         <div className="mt-[2px] flex w-5 shrink-0 items-center justify-center">
-                          {reviewed ? (
-                            <Check
-                              size={14}
-                              className="shrink-0 text-emerald-400/95"
-                              aria-label="Controllato"
-                            />
-                          ) : (
-                            <button
-                              type="button"
-                              title="Segna come controllato"
-                              aria-label="Segna come controllato"
-                              className="shrink-0 rounded-full p-0.5 text-slate-500 opacity-0 transition-opacity hover:bg-slate-800/90 hover:text-slate-200 group-hover/uc-head:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                acknowledgeUseCaseReview(u.id);
-                              }}
-                            >
-                              <Circle size={14} strokeWidth={2} aria-hidden />
-                            </button>
-                          )}
+                          <input
+                            type="checkbox"
+                            checked={includedInConv}
+                            disabled={busy}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              setUseCaseIncludedInConversations(u.id, e.target.checked);
+                            }}
+                            aria-label={
+                              includedInConv
+                                ? 'Escludi dalle conversazioni e dal prompt finale'
+                                : 'Includi nelle conversazioni e nel prompt finale'
+                            }
+                            title={
+                              includedInConv
+                                ? 'Use case incluso nelle conversazioni e nel prompt finale. Click per escluderlo.'
+                                : 'Use case escluso dalle conversazioni e dal prompt finale. Click per includerlo.'
+                            }
+                            className="h-3.5 w-3.5 cursor-pointer accent-violet-500"
+                          />
                         </div>
                         {primaryGenerateOnRightOnly ? (
                           <button
@@ -1232,6 +1262,14 @@ export function AIAgentUseCaseComposer({
                               }}
                             >
                               <span className="min-w-0 break-words whitespace-normal">{u.label || u.id}</span>
+                              {!includedInConv ? (
+                                <span
+                                  className="ml-1 shrink-0 rounded bg-slate-700/70 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-slate-300"
+                                  title="Questo use case non viene usato nelle conversazioni n\u00e9 nel prompt conversazionale finale (resta in lista per non essere ri-proposto come nuovo dall'IA)"
+                                >
+                                  Escluso
+                                </span>
+                              ) : null}
                               {primaryGenerateOnRightOnly && phraseStyleNewSet.has(u.id) ? (
                                 <span
                                   className="ml-1 shrink-0 rounded bg-emerald-600/40 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-100"

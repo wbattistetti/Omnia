@@ -41,3 +41,30 @@ export function applyDesignerFieldVoteToggle(
     return { ...u, designer_agent_message_vote: cur === choice ? undefined : choice };
   });
 }
+
+/**
+ * Applica il voto di validazione dell'header use case.
+ *
+ * A differenza del voto generico sul campo `label`, questo voto governa anche
+ * l'inclusione nella generazione conversazioni:
+ * - rosso (`down`) => use case escluso (`included_in_conversations=false`);
+ * - verde (`up`) o voto rimosso => torna al default incluso (`true`).
+ *
+ * Manteniamo qui la regola per evitare che UI diverse applichino solo metà
+ * dell'invariante (colore rosso senza esclusione).
+ */
+export function applyUseCaseHeaderVoteToggle(
+  prev: readonly AIAgentUseCase[],
+  useCaseId: string,
+  choice: 'up' | 'down'
+): AIAgentUseCase[] {
+  return prev.map((u) => {
+    if (u.id !== useCaseId) return u;
+    const nextVote = u.designer_label_vote === choice ? undefined : choice;
+    return {
+      ...u,
+      designer_label_vote: nextVote,
+      included_in_conversations: nextVote === 'down' ? false : true,
+    };
+  });
+}

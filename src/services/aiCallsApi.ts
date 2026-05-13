@@ -28,6 +28,18 @@ export interface AiCallRecord {
   durationMs: number;
   pricingFound: boolean;
   error: string | null;
+  /**
+   * Task instance id originating the call. `null` per chiamate globali (es. `TEXT_TRANSLATE`
+   * invocate dalla UI globale) o per record legacy precedenti all'introduzione del campo.
+   * I record con `taskId` non-null finiscono raggruppati per task nel report ad albero.
+   */
+  taskId: string | null;
+  /**
+   * Snapshot della label del task al momento della chiamata. Mostrata come header del nodo
+   * macro-task nel report. Snapshot intenzionale (non lookup live) per fedelt\u00e0 storica anche
+   * dopo rinomine.
+   */
+  taskLabel: string | null;
 }
 
 export interface AiExchangeRate {

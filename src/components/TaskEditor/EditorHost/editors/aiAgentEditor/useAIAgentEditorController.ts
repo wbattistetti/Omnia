@@ -29,6 +29,7 @@ import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
 import { newAgentUseCaseTurnId, serializeLogicalSteps, serializeUseCases } from '@types/aiAgentUseCases';
 import { normalizeEntityType } from '@types/dataEntityTypes';
+import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import {
   stripAssistantTurnsFromUseCase,
   stripAssistantTurnsFromUseCases,
@@ -54,6 +55,13 @@ import {
 import { logUseCaseRootBatch } from './useCaseRootBatchDebug';
 import { nextMappingsAfterLabelBlur } from './flowVariableMapping';
 import { buildAIAgentTaskPersistPatch, type AIAgentPersistState } from './buildPersistPatch';
+import {
+  AGENT_WIZARD_FIRST_STEP_INDEX,
+  AGENT_WIZARD_LAST_STEP_INDEX,
+  type AgentConstructionPhase,
+  type AgentWizardStepIndex,
+  isAgentWizardStepIndex,
+} from '@domain/aiAgentConstruction/agentConstructionPhase';
 import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
 import { buildRefineUserDescFromSections } from './composeRuntimePromptMarkdown';
 import { resolveElevenLabsAgentPromptFromTask } from './resolveAiAgentPlatformRulesString';
@@ -184,6 +192,12 @@ export interface UseAIAgentEditorControllerParams {
   provider: string;
   model: string;
   /**
+   * Snapshot della label del task instance al momento del render. Inviato come `taskLabel`
+   * nel cost log di ogni chiamata IA originata dal task editor: serve come header del nodo
+   * "macro-task" nel report ad albero (vedi {@link import('../../../../services/aiAgentDesignApi').AiCallMeta}).
+   */
+  taskLabel?: string;
+  /**
    * Passo 1 wizard: niente messaggi assistente su bundle/create (letto al momento dell’azione).
    */
   getDeferAgentMessages?: () => boolean;
@@ -194,6 +208,7 @@ export function useAIAgentEditorController({
   projectId,
   provider,
   model,
+  taskLabel,
   getDeferAgentMessages,
 }: UseAIAgentEditorControllerParams) {
   const { data: projectData } = useProjectData();
@@ -248,6 +263,22 @@ export function useAIAgentEditorController({
   const [agentImmediateStart, setAgentImmediateStartState] = React.useState(false);
   /** JSON wizard use case: passo pipeline + baseline IA (Task.agentUseCaseWizardStateJson). */
   const [agentUseCaseWizardStateJson, setAgentUseCaseWizardStateJson] = React.useState('');
+  /**
+   * Phase machine top-level del Task Editor AI Agent. Default difensivo: `'wizard'` per nuovi
+   * task; `loadFromRepository` legge il valore reale (con fallback a `agentDesignHasGeneration`
+   * via `resolveAgentConstructionPhase`).
+   */
+  const [agentConstructionPhase, setAgentConstructionPhaseState] =
+    React.useState<AgentConstructionPhase>('wizard');
+  /** Indice (0-based) dello step corrente del wizard di costruzione (0..4). */
+  const [agentWizardCurrentStep, setAgentWizardCurrentStepState] =
+    React.useState<AgentWizardStepIndex>(AGENT_WIZARD_FIRST_STEP_INDEX);
+  /**
+   * True dopo che l'utente ha cliccato «Cominciamo» nella Tutor di benvenuto.
+   * Default false per nuovi task (mostriamo la Tutor); `loadFromRepository` legge il valore reale.
+   */
+  const [agentWizardTutorAcknowledged, setAgentWizardTutorAcknowledgedState] =
+    React.useState(false);
 
   const [iaRuntimeConfig, setIaRuntimeConfigState] = React.useState<IAAgentConfig>(() =>
     loadGlobalIaAgentConfig()
@@ -255,6 +286,22 @@ export function useAIAgentEditorController({
   /** Set in `loadFromRepository`: task has `agentIaRuntimeOverrideJson` vs copy of global defaults. */
   const [iaRuntimeLoadedFrom, setIaRuntimeLoadedFrom] = React.useState<'saved_override' | 'global_defaults'>(
     'global_defaults'
+  );
+
+  /**
+   * Helper: costruisce l'oggetto `callMeta` con `(purpose, taskId, taskLabel)` per ogni chiamata
+   * IA originata dal task editor. `taskId` \u00e8 sempre l'instance id; `taskLabel` lo snapshot
+   * della label corrente. Le chiamate raggiunte dal report ad albero useranno questa triade per
+   * raggruppare i record sotto il "macro-task" giusto, anche se il task viene rinominato in
+   * seguito (label snapshot \u00e8 fedele al momento storico della call).
+   */
+  const buildCallMeta = React.useCallback(
+    (purpose: string) => ({
+      purpose,
+      taskId: typeof instanceId === 'string' && instanceId ? instanceId : undefined,
+      taskLabel: typeof taskLabel === 'string' && taskLabel ? taskLabel : undefined,
+    }),
+    [instanceId, taskLabel]
   );
 
   /** True only after `loadFromRepository` has applied repo data for this mount / reload. */
@@ -446,6 +493,46 @@ export function useAIAgentEditorController({
     setAgentImmediateStartState(value);
   }, []);
 
+  /**
+   * Sostituisce la phase top-level (wizard ↔ edit). Setter user-driven: marca dirty e
+   * persiste alla prossima flush. NON tocca `hasAgentGeneration` (relazione 1:1 col flag
+   * legacy: la transizione `wizard → edit` viene effettuata altrove quando opportuno —
+   * tipicamente al completamento di tutti gli step del wizard).
+   */
+  const setAgentConstructionPhase = React.useCallback((next: AgentConstructionPhase) => {
+    setDirty(true);
+    setAgentConstructionPhaseState(next);
+  }, []);
+
+  /**
+   * Naviga ad uno step specifico del wizard di costruzione. Fail-loud su input invalidi
+   * (non degrada silenziosamente): un index fuori range è un bug del chiamante, non un caso
+   * legittimo da gestire.
+   */
+  const setAgentWizardCurrentStep = React.useCallback((next: number) => {
+    if (!isAgentWizardStepIndex(next)) {
+      throw new Error(
+        `[useAIAgentEditorController] Invalid wizard step index: ${next}. ` +
+          `Expected integer in [0, ${AGENT_WIZARD_LAST_STEP_INDEX}].`
+      );
+    }
+    setDirty(true);
+    setAgentWizardCurrentStepState(next);
+  }, []);
+
+  /**
+   * Marca la Tutor come «vista». Setter idempotente: chiamarlo pi\u00f9 volte non riporta a
+   * false. Tipicamente invocato una sola volta nella vita del task (al click di
+   * «Cominciamo»). Volutamente solo monodirezionale: non c'\u00e8 «un-acknowledge».
+   */
+  const acknowledgeAgentWizardTutor = React.useCallback(() => {
+    setAgentWizardTutorAcknowledgedState((prev) => {
+      if (prev) return prev;
+      setDirty(true);
+      return true;
+    });
+  }, []);
+
   const hydratedRef = React.useRef(false);
   React.useEffect(() => {
     hydratedRef.current = hydrated;
@@ -554,6 +641,9 @@ export function useAIAgentEditorController({
     setHasAgentGeneration(hasGen);
     setAgentImmediateStartState(b.agentImmediateStart);
     setAgentUseCaseWizardStateJson(b.agentUseCaseWizardStateJson);
+    setAgentConstructionPhaseState(b.agentConstructionPhase);
+    setAgentWizardCurrentStepState(b.agentWizardCurrentStep);
+    setAgentWizardTutorAcknowledgedState(b.agentWizardTutorAcknowledged);
     setLogicalSteps(b.logicalSteps);
     useCaseSiblingSortModeRef.current = 'logical';
     setUseCaseSiblingSortModeState('logical');
@@ -656,6 +746,9 @@ export function useAIAgentEditorController({
       agentUseCaseWizardStateJson,
       agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(iaRuntimeForPersist),
       agentImmediateStart,
+      agentConstructionPhase,
+      agentWizardCurrentStep,
+      agentWizardTutorAcknowledged,
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -697,6 +790,9 @@ export function useAIAgentEditorController({
     agentImmediateStart,
     manualCatalogBackendTaskIds,
     agentUseCaseWizardStateJson,
+    agentConstructionPhase,
+    agentWizardCurrentStep,
+    agentWizardTutorAcknowledged,
   ]);
 
   const persistAgentUseCaseWizardState = React.useCallback((json: string) => {
@@ -995,6 +1091,7 @@ export function useAIAgentEditorController({
           ...(structuredDesignForPhase3Payload
             ? { structuredDesignForPhase3: structuredDesignForPhase3Payload as Record<string, unknown> }
             : {}),
+          callMeta: buildCallMeta(AI_CALL_PURPOSE.AGENT_REFINE),
         });
         if (result.mode !== 'sections_only') {
           throw new Error('Risposta server inattesa: atteso compile sections_only.');
@@ -1014,6 +1111,9 @@ export function useAIAgentEditorController({
         provider,
         model,
         outputLanguage,
+        callMeta: buildCallMeta(
+          hasAgentGeneration ? AI_CALL_PURPOSE.AGENT_REFINE : AI_CALL_PURPOSE.AGENT_CREATE
+        ),
       });
       const ir = parseStructuredDesignIrFromApi(rawIr);
       if (!ir) {
@@ -1128,6 +1228,7 @@ export function useAIAgentEditorController({
           globalStyleContract,
           globalStyleId: useCaseGlobalStyleId,
           extendFrom: { logicalSteps, useCases },
+          callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_GENERATE_MORE),
         });
         let newOnes = normalizeUseCaseSiblingOrder(ucsNew, useCaseSiblingSortModeRef.current);
         if (getDeferAgentMessages?.()) {
@@ -1160,6 +1261,7 @@ export function useAIAgentEditorController({
         outputLanguage,
         globalStyleContract,
         globalStyleId: useCaseGlobalStyleId,
+        callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_BUNDLE_INITIAL),
       });
       setLogicalSteps(ls);
       let normalized = normalizeUseCaseSiblingOrder(ucs, useCaseSiblingSortModeRef.current);
@@ -1218,6 +1320,7 @@ export function useAIAgentEditorController({
           outputLanguage,
           globalStyleContract,
           globalStyleId: useCaseGlobalStyleId,
+          callMeta: buildCallMeta('USE_CASE_REGENERATE'),
         });
         const merged: AIAgentUseCase = {
           ...next,
@@ -1287,6 +1390,7 @@ export function useAIAgentEditorController({
             outputLanguage,
             globalStyleContract,
             globalStyleId: useCaseGlobalStyleId,
+            callMeta: buildCallMeta('USE_CASE_PROPAGATE_STYLE'),
           });
           for (const row of res.updates) {
             byContent.set(row.use_case_id, row.assistant_content);
@@ -1362,6 +1466,7 @@ export function useAIAgentEditorController({
           provider,
           model,
           outputLanguage,
+          callMeta: buildCallMeta('USE_CASE_REGENERATE_TURN'),
         });
         setUseCases((prev) =>
           prev.map((u) => {
@@ -1463,6 +1568,7 @@ export function useAIAgentEditorController({
           ...(typeof assistantContentFromEditor === 'string'
             ? { assistantMessageText: assistantContentFromEditor }
             : {}),
+          callMeta: buildCallMeta('USE_CASE_ANNOTATE'),
         });
         setUseCasesUser((prev) =>
           prev.map((u) => {
@@ -1582,6 +1688,7 @@ export function useAIAgentEditorController({
           outputLanguage,
           globalStyleContract,
           globalStyleId: useCaseGlobalStyleId,
+          callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_DIALOGUE_CREATE),
         });
         logUseCaseRootBatch('controller_createAIAgentUseCaseApi_after', {
           newUseCaseId,
@@ -1617,6 +1724,7 @@ export function useAIAgentEditorController({
               model,
               outputLanguage,
               globalStyleContract,
+              callMeta: buildCallMeta('USE_CASE_ANNOTATE'),
             });
             setUseCases((prev) =>
               normalizeUseCaseSiblingOrder(
@@ -1685,6 +1793,9 @@ export function useAIAgentEditorController({
       mergeConvaiAgentIdFromGlobalDefaults(iaRuntimeConfig, loadGlobalIaAgentConfig())
     ),
     agentImmediateStart,
+    agentConstructionPhase,
+    agentWizardCurrentStep,
+    agentWizardTutorAcknowledged,
   };
 
   const ensurePromptFinalDeterministicCompileSync = React.useCallback((reason: string) => {
@@ -1757,6 +1868,9 @@ export function useAIAgentEditorController({
 
   return {
     instanceId,
+    /** Helper esposto per altri hook locali (es. `useAIAgentConversationActions`) che hanno
+     *  bisogno di costruire il `callMeta` con la stessa snapshot `taskId`/`taskLabel`. */
+    buildCallMeta,
     designDescription,
     setDesignDescription: setDesignDescriptionUser,
     agentPrompt,
@@ -1829,5 +1943,11 @@ export function useAIAgentEditorController({
     iaRuntimeLoadedFrom,
     saveIaRuntimeOverrideToTask,
     persistIaRuntimeOverrideSnapshot,
+    agentConstructionPhase,
+    setAgentConstructionPhase,
+    agentWizardCurrentStep,
+    setAgentWizardCurrentStep,
+    agentWizardTutorAcknowledged,
+    acknowledgeAgentWizardTutor,
   };
 }

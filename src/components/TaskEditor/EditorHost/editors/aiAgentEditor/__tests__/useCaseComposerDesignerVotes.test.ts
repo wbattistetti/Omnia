@@ -4,7 +4,11 @@
 
 import { describe, expect, it } from 'vitest';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
-import { applyAllDesignerVotesUp, applyDesignerFieldVoteToggle } from '../useCaseComposerDesignerVotes';
+import {
+  applyAllDesignerVotesUp,
+  applyDesignerFieldVoteToggle,
+  applyUseCaseHeaderVoteToggle,
+} from '../useCaseComposerDesignerVotes';
 
 function minimalUseCase(id: string): AIAgentUseCase {
   return {
@@ -61,5 +65,34 @@ describe('applyDesignerFieldVoteToggle', () => {
     const next = applyDesignerFieldVoteToggle(prev, 'y', 'payoff', 'down');
     expect(next[0].designer_payoff_vote).toBeUndefined();
     expect(next[1].designer_payoff_vote).toBe('down');
+  });
+});
+
+describe('applyUseCaseHeaderVoteToggle', () => {
+  it('marks a red header vote as excluded from conversations', () => {
+    const prev = [{ ...minimalUseCase('a'), included_in_conversations: true }];
+    const next = applyUseCaseHeaderVoteToggle(prev, 'a', 'down');
+    expect(next[0].designer_label_vote).toBe('down');
+    expect(next[0].included_in_conversations).toBe(false);
+  });
+
+  it('marks a green header vote as included by default', () => {
+    const prev = [{ ...minimalUseCase('a'), included_in_conversations: false }];
+    const next = applyUseCaseHeaderVoteToggle(prev, 'a', 'up');
+    expect(next[0].designer_label_vote).toBe('up');
+    expect(next[0].included_in_conversations).toBe(true);
+  });
+
+  it('clearing a red header vote returns the use case to the included default', () => {
+    const prev = [
+      {
+        ...minimalUseCase('a'),
+        designer_label_vote: 'down' as const,
+        included_in_conversations: false,
+      },
+    ];
+    const next = applyUseCaseHeaderVoteToggle(prev, 'a', 'down');
+    expect(next[0].designer_label_vote).toBeUndefined();
+    expect(next[0].included_in_conversations).toBe(true);
   });
 });

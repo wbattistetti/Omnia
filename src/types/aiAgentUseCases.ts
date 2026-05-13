@@ -85,6 +85,23 @@ export interface AIAgentUseCase {
    * `content` corrente dell'assistente, la UI mostra l'avviso «da ritokenizzare».
    */
   assistant_example_tokenized_source?: string;
+
+  /**
+   * Flag di **inclusione nelle conversazioni**. Quando `false` (l'utente ha tolto la spunta
+   * dall'header del use case), il use case:
+   *   - NON viene mandato al modello quando si genera/proofread le conversazioni di esempio;
+   *   - NON finisce nel JSON proiettato per il system prompt (`projectAllUseCasesToConversationalJson`);
+   *   - NON viene visualizzato come bubble nella conversation view (le bubble eventualmente gi\u00e0
+   *     generate restano in storage e tornano visibili se il use case viene re-incluso).
+   *
+   * Resta invece sempre presente in TUTTI i contesti di "lista esistente" passati all'IA per
+   * proporre nuovi use case (`generateUseCaseBundleExtend.existingUseCases`,
+   * `regenerateUseCase.allCases`, ecc.) — \u00e8 noto al sistema, non va ricreato come duplicato.
+   *
+   * Backward-compat: campo opzionale, default `true` (use case storici senza il campo sono
+   * considerati inclusi). Vedi {@link isUseCaseIncludedInConversations}.
+   */
+  included_in_conversations?: boolean;
 }
 
 /** Stable id for a dialogue turn (exported for UI bridge). */
@@ -103,6 +120,18 @@ export function getAssistantExample(useCase: AIAgentUseCase): string {
   const dialogue = Array.isArray(useCase?.dialogue) ? useCase.dialogue : [];
   const assistant = dialogue.find((t) => t && t.role === 'assistant');
   return assistant && typeof assistant.content === 'string' ? assistant.content : '';
+}
+
+/**
+ * True se lo use case partecipa alla generazione/visualizzazione delle conversazioni e al JSON
+ * del system prompt finale.
+ *
+ * Regola di default: assenza del campo == `true` (inclusion is the default). Solo `false`
+ * esplicito esclude — coerente col fatto che storicamente tutti i use case erano usati e non
+ * vogliamo cambiare il comportamento dei task pre-feature.
+ */
+export function isUseCaseIncludedInConversations(useCase: AIAgentUseCase): boolean {
+  return useCase?.included_in_conversations !== false;
 }
 
 /**

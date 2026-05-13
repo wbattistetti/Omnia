@@ -180,6 +180,19 @@ export function EditorUseCasesPanel() {
     [useCases, selectedUseCaseId]
   );
 
+  /**
+   * Set dei use case **esclusi** dalle conversazioni (toggle nell'header della lista). Filtro
+   * di vista per `ConversationsBubbleView`: nasconde le bubble agent dei use case esclusi senza
+   * cancellarle dallo storage. Memo: ricomputo solo se cambia il flag su qualche use case.
+   */
+  const excludedUseCaseIds = React.useMemo(
+    () =>
+      new Set(
+        useCases.filter((u) => u.included_in_conversations === false).map((u) => u.id)
+      ),
+    [useCases]
+  );
+
   const composer = (
     <AIAgentUseCaseComposer
       editorTaskInstanceId={instanceId}
@@ -245,6 +258,7 @@ export function EditorUseCasesPanel() {
         onRejectSuggestion={onRejectSuggestion}
         showTokenized={useCaseGeneratorWizard.showTokenizedInBubbles}
         tokenizedByUseCaseId={tokenizedByUseCaseId}
+        excludedUseCaseIds={excludedUseCaseIds}
       />
     ) : (
       composer

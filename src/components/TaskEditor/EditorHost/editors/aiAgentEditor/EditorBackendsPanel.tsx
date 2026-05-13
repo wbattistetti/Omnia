@@ -5,7 +5,15 @@
 
 import React from 'react';
 import type { IDockviewPanelProps } from 'dockview';
-import { BookOpen, ChevronDown, ChevronRight, GitBranchPlus, Loader2, Trash2 } from 'lucide-react';
+import {
+  BookOpen,
+  ChevronDown,
+  ChevronRight,
+  GitBranchPlus,
+  Loader2,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { runBackendCallReadApiForTask } from '@services/runBackendCallReadApiForTask';
 import { taskRepository } from '@services/TaskRepository';
 import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
@@ -534,6 +542,30 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
 
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden bg-slate-950/50 p-2">
+      {/*
+        Header in-panel con il pulsante «Aggiungi backend». Coerente sia in modalit\u00e0 wizard
+        di costruzione (PASSO 2/5 — niente tab strip Dockview) sia in modalit\u00e0 editor libero
+        (la tab «Backends» mostra lo stesso pulsante in alto, qui rimane visibile come fallback
+        e per chi naviga da tastiera). Stesso handler di {@link addEmptyBackend} usato dal tab
+        strip — nessuna duplicazione di logica.
+      */}
+      <div className="mb-1.5 flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={addEmptyBackend}
+          aria-label="Aggiungi backend manuale"
+          title="Aggiungi una riga backend manuale in fondo all\u2019elenco"
+          className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-600/70 bg-violet-950/40 px-2 py-0.5 text-[11px] font-semibold text-violet-100 hover:bg-violet-900/55"
+        >
+          <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          Aggiungi backend
+        </button>
+        {manualEntries.length > 0 ? (
+          <span className="text-[10px] tabular-nums text-slate-500">
+            {manualEntries.length} backend manual{manualEntries.length === 1 ? 'e' : 'i'}
+          </span>
+        ) : null}
+      </div>
       <div
         className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5"
         data-ia-runtime-focus="tools"
@@ -551,7 +583,8 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
         ) : null}
         {manualEntries.length === 0 ? (
           <p className="text-[11px] text-slate-600">
-            Nessun backend manuale. Usa «Aggiungi» nella scheda Backends sopra.
+            Nessun backend manuale. Usa il pulsante &laquo;Aggiungi backend&raquo; qui sopra
+            per dichiarare la prima API.
           </p>
         ) : (
           manualEntries.map((e) => {

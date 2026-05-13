@@ -613,6 +613,9 @@ async function generateAIAgentDesign({
   baseText,
   sectionRefinements,
   outputLanguage,
+  purpose,
+  taskId = null,
+  taskLabel = null,
 }) {
   if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
     throw new Error('userDesc must be a non-empty string (at least 8 characters)');
@@ -641,6 +644,9 @@ async function generateAIAgentDesign({
     model: contract.model,
     temperature: 0.35,
     maxTokens,
+    purpose: purpose || 'AGENT_REFINE',
+    taskId,
+    taskLabel,
   });
 
   const content = response?.choices?.[0]?.message?.content;
@@ -676,6 +682,9 @@ async function induceStyleRuleFromCorrection({
   outputLanguage,
   provider,
   model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
   aiProviderService,
 }) {
   const w = typeof wrongText === 'string' ? wrongText.trim() : '';
@@ -737,6 +746,9 @@ Return only: { "rule_text": "<rule>" }`;
     model: contract.model,
     temperature: 0.25,
     maxTokens: contract.provider === 'openai' ? 1024 : 2048,
+    purpose: purpose || 'STYLE_RULE_INDUCTION',
+    taskId,
+    taskLabel,
   });
 
   const content = response?.choices?.[0]?.message?.content;

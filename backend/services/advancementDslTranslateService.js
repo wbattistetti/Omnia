@@ -107,6 +107,8 @@ If a \`Date\` helper returns a number but **targetType is String**, wrap so the 
     model: model || undefined,
     temperature: 0.1,
     maxTokens: 900,
+    /** Traduzione DSL singolo SEND parameter (BackendCall editor). */
+    purpose: 'BACKEND_DSL_TRANSLATE_SINGLE',
   });
 
   const rawText = extractChatText(result);
@@ -214,6 +216,8 @@ No markdown outside the JSON response.`;
     model: model || undefined,
     temperature: 0.1,
     maxTokens: 1400,
+    /** Traduzione DSL "ricalcolo backend" (un solo script per intera call). */
+    purpose: 'BACKEND_DSL_TRANSLATE_BATCH',
   });
 
   const rawText = extractChatText(result);

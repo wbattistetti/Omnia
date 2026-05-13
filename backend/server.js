@@ -33,6 +33,7 @@ const { tokenizeUseCases } = require('./services/AIAgentTokenizationService');
 const {
   assertAiCallContract,
   aiCallContractErrorResponse,
+  readCallMetaFromBody,
 } = require('./services/aiCallContract');
 const { TemplateIntelligenceOrchestrator } = require('./services/ddt-intelligence');
 const {
@@ -5266,7 +5267,11 @@ Translation:`;
         const aiResponse = await aiService.callAI(translationProvider, [
           { role: 'system', content: 'You are a professional translator. Return only the translated text, nothing else.' },
           { role: 'user', content: prompt },
-        ], { model: translationModel });
+        ], {
+          model: translationModel,
+          /** Traduzione testi UI globale. Non legato a un task → resta sotto "Globale". */
+          purpose: 'TEXT_TRANSLATE',
+        });
 
         const translatedText = (aiResponse || '').trim().replace(/^["']|["']$/g, ''); // Remove quotes if present
 
@@ -6496,6 +6501,14 @@ app.post('/design/ai-agent-generate', async (req, res) => {
       action: `AI Agent ${action || 'generate'}`,
     });
 
+    /**
+     * Cost-tracking metadata. Default `purpose` per action: il chiamante FE imposta sempre
+     * un id noto (es. `USE_CASE_BUNDLE_INITIAL`); se assente ricade su quanto specificato a
+     * mano in ciascun branch sotto. `taskId/taskLabel` derivano dal task instance ed entrano
+     * nel raggruppamento "macro-task" del report ad albero.
+     */
+    const callMeta = readCallMetaFromBody(body);
+
     const globalStyleIdNorm =
       typeof globalStyleId === 'string' && globalStyleId.trim() ? globalStyleId.trim() : undefined;
 
@@ -6520,7 +6533,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
           existingLogicalSteps,
           provider,
           model,
-          purpose: typeof body.purpose === 'string' ? body.purpose : 'USE_CASE_GENERATE_MORE',
+          purpose: callMeta.purpose || 'USE_CASE_GENERATE_MORE',
+          taskId: callMeta.taskId,
+          taskLabel: callMeta.taskLabel,
           aiProviderService,
         });
         return res.json({
@@ -6537,7 +6552,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         globalStyleId: globalStyleIdNorm,
         provider,
         model,
-        purpose: typeof body.purpose === 'string' ? body.purpose : 'USE_CASE_BUNDLE_INITIAL',
+        purpose: callMeta.purpose || 'USE_CASE_BUNDLE_INITIAL',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
         aiProviderService,
       });
       return res.json({
@@ -6558,6 +6575,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         globalStyleId: globalStyleIdNorm,
         provider,
         model,
+        purpose: callMeta.purpose || 'USE_CASE_REGENERATE',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
         aiProviderService,
       });
       return res.json({ success: true, use_case: updated });
@@ -6574,7 +6594,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         globalStyleId: globalStyleIdNorm,
         provider,
         model,
-        purpose: typeof body.purpose === 'string' ? body.purpose : 'USE_CASE_DIALOGUE_CREATE',
+        purpose: callMeta.purpose || 'USE_CASE_DIALOGUE_CREATE',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
         aiProviderService,
       });
       return res.json({ success: true, use_case: created });
@@ -6603,6 +6625,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         globalStyleId: globalStyleIdNorm,
         provider,
         model,
+        purpose: callMeta.purpose || 'USE_CASE_PROPAGATE_STYLE',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
         aiProviderService,
       });
       return res.json({ success: true, updates: result.updates });
@@ -6616,6 +6641,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         outputLanguage,
         provider,
         model,
+        purpose: callMeta.purpose || 'USE_CASE_REGENERATE_TURN',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
         aiProviderService,
       });
       return res.json({ success: true, turn });
@@ -6648,13 +6676,14 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         provider,
         model,
         purpose:
-          typeof body.purpose === 'string'
-            ? body.purpose
-            : allowSuggestedUseCases
-              ? 'CONVERSATION_SUGGESTED'
-              : outcome === 'negative'
-                ? 'CONVERSATION_NEGATIVE'
-                : 'CONVERSATION_POSITIVE',
+          callMeta.purpose ||
+          (allowSuggestedUseCases
+            ? 'CONVERSATION_SUGGESTED'
+            : outcome === 'negative'
+              ? 'CONVERSATION_NEGATIVE'
+              : 'CONVERSATION_POSITIVE'),
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
         aiProviderService,
       });
       return res.json({ success: true, conversation });
@@ -6681,7 +6710,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         outputLanguage,
         provider,
         model,
-        purpose: typeof body.purpose === 'string' ? body.purpose : 'CONVERSATION_PROOFREAD',
+        purpose: callMeta.purpose || 'CONVERSATION_PROOFREAD',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
         aiProviderService,
       });
       return res.json({ success: true, updates: result.updates });
@@ -6699,7 +6730,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         outputLanguage,
         provider,
         model,
-        purpose: typeof body.purpose === 'string' ? body.purpose : 'USE_CASE_TOKENIZE',
+        purpose: callMeta.purpose || 'USE_CASE_TOKENIZE',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
         aiProviderService,
       });
       return res.json({ success: true, updates: result.updates });
@@ -6714,6 +6747,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         globalStyleContract,
         provider,
         model,
+        purpose: callMeta.purpose || 'USE_CASE_ANNOTATE',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
         aiProviderService,
         assistantMessageTextOverride:
           typeof assistantMessageText === 'string' ? assistantMessageText : undefined,
@@ -6791,6 +6827,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
       baseText,
       sectionRefinements,
       outputLanguage,
+      purpose: callMeta.purpose || 'AGENT_REFINE',
+      taskId: callMeta.taskId,
+      taskLabel: callMeta.taskLabel,
     });
     return res.json({ success: true, design });
   } catch (error) {
@@ -6828,12 +6867,20 @@ app.post('/design/ai-agent-induce-style-rule', async (req, res) => {
       model: modelInput,
       action: 'Induce style rule (debugger)',
     });
+    /**
+     * `purpose` di default = `STYLE_RULE_INDUCTION`. Il debugger lavora dentro un task editor
+     * AI Agent, quindi `taskId/taskLabel` arrivano nel body via `callMeta` del FE e finiscono
+     * nel report ad albero sotto il macro-task corrente.
+     */
+    const callMeta = readCallMetaFromBody(body, { purpose: 'STYLE_RULE_INDUCTION' });
     console.log(`[AI_AGENT_STYLE_RULE][${requestId}] POST /design/ai-agent-induce-style-rule`, {
       provider,
       model,
       wrongLen: typeof wrongText === 'string' ? wrongText.length : 0,
       correctLen: typeof correctText === 'string' ? correctText.length : 0,
       outputLanguage: typeof outputLanguage === 'string' ? outputLanguage : '',
+      taskId: callMeta.taskId,
+      purpose: callMeta.purpose,
     });
     const result = await induceStyleRuleFromCorrection({
       wrongText,
@@ -6841,6 +6888,9 @@ app.post('/design/ai-agent-induce-style-rule', async (req, res) => {
       outputLanguage,
       provider,
       model,
+      purpose: callMeta.purpose,
+      taskId: callMeta.taskId,
+      taskLabel: callMeta.taskLabel,
       aiProviderService,
     });
     return res.json({ success: true, rule_text: result.rule_text });
@@ -6886,6 +6936,7 @@ app.post('/design/ai-agent-analyze-debug-turn', async (req, res) => {
       model: modelInput,
       action: 'Analyze debug turn',
     });
+    const callMeta = readCallMetaFromBody(body, { purpose: 'DEBUGGER_ANALYZE_TURN' });
     const assistantTurnStr =
       typeof assistantTurn === 'string'
         ? assistantTurn
@@ -6898,6 +6949,8 @@ app.post('/design/ai-agent-analyze-debug-turn', async (req, res) => {
       userLen: typeof userTurn === 'string' ? userTurn.length : 0,
       assistantLen: assistantTurnStr.length,
       catalogLen: typeof agentUseCasesJson === 'string' ? agentUseCasesJson.length : 0,
+      taskId: callMeta.taskId,
+      purpose: callMeta.purpose,
     });
     if (!assistantTurnStr.trim()) {
       return res.status(400).json({ success: false, error: 'assistantTurn is required' });
@@ -6911,6 +6964,9 @@ app.post('/design/ai-agent-analyze-debug-turn', async (req, res) => {
       outputLanguage,
       provider,
       model,
+      purpose: callMeta.purpose,
+      taskId: callMeta.taskId,
+      taskLabel: callMeta.taskLabel,
       aiProviderService,
     });
     return res.json({ success: true, ...result });
@@ -6945,17 +7001,27 @@ app.post('/design/extract-structure', async (req, res) => {
       action: 'Create Agent (extract structure)',
     });
     const outputLanguage = body.outputLanguage;
+    /**
+     * Cost-tracking metadata: legge `purpose` (default `AGENT_CREATE`/`AGENT_REFINE` a discrezione
+     * del FE), `taskId` e `taskLabel` snapshot dal body. Li propaga al service che a sua volta li
+     * include nelle `callOptions` di `aiProviderService.callAI` per il raggruppamento "macro-task"
+     * nel report ad albero.
+     */
+    const callMeta = readCallMetaFromBody(body, { purpose: 'AGENT_CREATE' });
     console.log(`[STRUCT_DESIGN][${requestId}] POST /design/extract-structure`, {
       provider,
       model,
       outputLanguage: typeof outputLanguage === 'string' ? outputLanguage : undefined,
+      taskId: callMeta.taskId,
+      purpose: callMeta.purpose,
     });
     const structured_design = await extractStructure(
       description,
       provider,
       model,
       aiProviderService,
-      typeof outputLanguage === 'string' ? outputLanguage : undefined
+      typeof outputLanguage === 'string' ? outputLanguage : undefined,
+      callMeta
     );
     return res.json({ success: true, structured_design });
   } catch (error) {
@@ -7453,6 +7519,8 @@ app.post('/api/intents/generate-training-phrases', async (req, res) => {
       model: modelNorm,
       maxTokens: 3000,
       temperature: 0.72,
+      /** Generazione training phrases per intent classifier — globale (non per-task). */
+      purpose: 'INTENT_TRAINING_PHRASES',
     });
     const content = raw?.choices?.[0]?.message?.content;
     if (!content || typeof content !== 'string') {

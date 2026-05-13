@@ -5,6 +5,10 @@
 import { previewTurnsToLegacySample } from '@types/aiAgentPreview';
 import type { AIAgentPreviewTurn } from '@types/aiAgentPreview';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
+import type {
+  AgentConstructionPhase,
+  AgentWizardStepIndex,
+} from '@domain/aiAgentConstruction/agentConstructionPhase';
 
 export interface AIAgentPersistState {
   designDescription: string;
@@ -27,6 +31,12 @@ export interface AIAgentPersistState {
   agentUseCaseWizardStateJson: string;
   agentIaRuntimeOverrideJson: string;
   agentImmediateStart: boolean;
+  /** Phase machine top-level del Task Editor AI Agent (vedi `agentConstructionPhase` su Task). */
+  agentConstructionPhase: AgentConstructionPhase;
+  /** Indice (0-based) dello step corrente del wizard di costruzione (0..4). */
+  agentWizardCurrentStep: AgentWizardStepIndex;
+  /** True dopo il primo click «Cominciamo» nella schermata Tutor del wizard. */
+  agentWizardTutorAcknowledged: boolean;
 }
 
 /**
@@ -55,5 +65,8 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentUseCaseWizardStateJson: state.agentUseCaseWizardStateJson,
     agentIaRuntimeOverrideJson: state.agentIaRuntimeOverrideJson,
     agentImmediateStart: state.agentImmediateStart,
+    agentConstructionPhase: state.agentConstructionPhase,
+    agentWizardCurrentStep: state.agentWizardCurrentStep,
+    agentWizardTutorAcknowledged: state.agentWizardTutorAcknowledged,
   };
 }

@@ -339,8 +339,18 @@ function validateStructuredDesign(raw) {
  * @param {string} [model]
  * @param {import('./AIProviderService')} aiProviderService
  * @param {string|undefined} [outputLanguage] BCP 47 tag for all IR string fields
+ * @param {{purpose?: string|null, taskId?: string|null, taskLabel?: string|null}} [callMeta]
+ *   Metadata propagati al cost log: purpose (default `AGENT_CREATE`), taskId/taskLabel snapshot
+ *   del task originante. Necessari per il raggruppamento "macro-task" del report ad albero.
  */
-async function extractStructure(description, provider, model, aiProviderService, outputLanguage) {
+async function extractStructure(
+  description,
+  provider,
+  model,
+  aiProviderService,
+  outputLanguage,
+  callMeta = {}
+) {
   try {
     const desc = typeof description === 'string' ? description.trim() : '';
     if (desc.length < 4) {
@@ -377,6 +387,13 @@ async function extractStructure(description, provider, model, aiProviderService,
       model: contract.model,
       temperature: 0.15,
       maxTokens,
+      purpose:
+        typeof callMeta.purpose === 'string' && callMeta.purpose.trim()
+          ? callMeta.purpose.trim()
+          : 'AGENT_CREATE',
+      taskId: typeof callMeta.taskId === 'string' && callMeta.taskId ? callMeta.taskId : null,
+      taskLabel:
+        typeof callMeta.taskLabel === 'string' && callMeta.taskLabel ? callMeta.taskLabel : null,
     };
     const prov = contract.provider;
 

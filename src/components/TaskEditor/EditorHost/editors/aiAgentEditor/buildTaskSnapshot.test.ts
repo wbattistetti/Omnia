@@ -34,6 +34,9 @@ function baseSnapshot(over: Partial<AIAgentTaskSnapshot>): AIAgentTaskSnapshot {
     agentImmediateStart: false,
     logicalSteps: [],
     useCases: [],
+    agentConstructionPhase: 'wizard',
+    agentWizardCurrentStep: 0,
+    agentWizardTutorAcknowledged: false,
     ...over,
   };
 }

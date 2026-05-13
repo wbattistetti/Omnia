@@ -67,7 +67,9 @@ class TemplateIntelligenceService {
       console.log(`[AI_ANALYSIS] 📋 Available templates:`, Object.keys(templates).length);
 
       const response = await this.aiProvider.callAI(provider, messages, {
-        model: validModel
+        model: validModel,
+        /** Analisi Template per Data Request — globale (cataloghi, non per-task). */
+        purpose: 'TEMPLATE_INTELLIGENCE_ANALYSIS',
       });
 
       console.log(`[AI_ANALYSIS] 🤖 Raw AI response:`, response.choices[0].message.content.substring(0, 200) + '...');

@@ -64,7 +64,7 @@ describe('LastAiCostBadge', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('shows EUR cost in cents notation when below 1 EUR', () => {
+  it('shows EUR cost in cents notation when STRICTLY below 10 cent (= 0.10 EUR)', () => {
     mockedUseLastCallCost.mockReturnValue({
       record: record({ costEur: 0.004, costUsd: 0.0042 }),
       ageMs: 1000,
@@ -73,6 +73,17 @@ describe('LastAiCostBadge', () => {
     setExchangeRate(0.92);
     render(<LastAiCostBadge purpose="CONVERSATION_POSITIVE" />);
     expect(screen.getByText(/Last: 0,40 cent\./)).toBeInTheDocument();
+  });
+
+  it('shows EUR in decimal notation when at or above the 10 cent threshold', () => {
+    mockedUseLastCallCost.mockReturnValue({
+      record: record({ costEur: 0.15, costUsd: 0.16 }),
+      ageMs: 1000,
+      remainingMs: 14000,
+    });
+    setExchangeRate(0.92);
+    render(<LastAiCostBadge purpose="CONVERSATION_POSITIVE" />);
+    expect(screen.getByText(/Last: 0,15/)).toBeInTheDocument();
   });
 
   it('shows EUR with the standard symbol when the cost crosses 1 EUR', () => {

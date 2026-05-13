@@ -168,6 +168,24 @@ describe('projectAllUseCasesToConversationalJson', () => {
     const out = projectAllUseCasesToConversationalJson(ucs);
     expect(out.map((o) => o.useCaseId)).toEqual(['uc-a', 'uc-z']);
   });
+
+  it('excludes use cases with included_in_conversations === false', () => {
+    const ucs: AIAgentUseCase[] = [
+      makeUseCase({ id: 'uc-in', sort_order: 1 }),
+      makeUseCase({ id: 'uc-out', sort_order: 2, included_in_conversations: false }),
+    ];
+    const out = projectAllUseCasesToConversationalJson(ucs);
+    expect(out.map((o) => o.useCaseId)).toEqual(['uc-in']);
+  });
+
+  it('treats missing included_in_conversations as included (backward-compat)', () => {
+    const ucs: AIAgentUseCase[] = [
+      makeUseCase({ id: 'uc-default', sort_order: 1 }),
+      makeUseCase({ id: 'uc-true', sort_order: 2, included_in_conversations: true }),
+    ];
+    const out = projectAllUseCasesToConversationalJson(ucs);
+    expect(out.map((o) => o.useCaseId)).toEqual(['uc-default', 'uc-true']);
+  });
 });
 
 describe('areAllUseCasesProjectable', () => {
@@ -184,6 +202,28 @@ describe('areAllUseCasesProjectable', () => {
       areAllUseCasesProjectable([
         makeUseCase(),
         makeUseCase({ id: 'uc-empty', dialogue: [] }),
+      ])
+    ).toBe(false);
+  });
+
+  it('ignores excluded use cases (included_in_conversations === false) for the check', () => {
+    /**
+     * Un use case escluso con dialogue vuoto NON deve invalidare il check: l'utente l'ha tolto
+     * di mezzo consapevolmente, non partecipa al prompt finale.
+     */
+    expect(
+      areAllUseCasesProjectable([
+        makeUseCase(),
+        makeUseCase({ id: 'uc-broken', dialogue: [], included_in_conversations: false }),
+      ])
+    ).toBe(true);
+  });
+
+  it('returns false when ALL use cases are excluded (nothing left to project)', () => {
+    expect(
+      areAllUseCasesProjectable([
+        makeUseCase({ id: 'uc-1', included_in_conversations: false }),
+        makeUseCase({ id: 'uc-2', included_in_conversations: false }),
       ])
     ).toBe(false);
   });

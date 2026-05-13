@@ -7,7 +7,7 @@ import type { EditorProps } from '../types';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { useAIProvider } from '@context/AIProviderContext';
 import { Bot, Loader2, Maximize2, Minimize2, Sparkles } from 'lucide-react';
-import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES, LABEL_GENERATING_IA_AGENT } from './aiAgentEditor/constants';
+import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES } from './aiAgentEditor/constants';
 import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEditorDockContext';
 import { AIAgentEditorDockShell } from './aiAgentEditor/AIAgentEditorDockShell';
 import {
@@ -27,6 +27,7 @@ import { USE_CASE_GENERATOR_WIZARD_MAX_CONVERSATIONS } from '@domain/useCaseGene
 import { mergeAssistantPhraseDraftIntoUseCases } from './aiAgentEditor/mergeAssistantPhraseDraftIntoUseCases';
 import { useAIAgentConversationActions } from './aiAgentEditor/useAIAgentConversationActions';
 import { tokenizeAIAgentUseCasesApi } from '@services/aiAgentDesignApi';
+import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { getAssistantExample } from '@types/aiAgentUseCases';
 import { useFullscreenEditorPref } from './aiAgentEditor/useFullscreenEditorPref';
 import { useAppToolbarBottom } from './aiAgentEditor/useAppToolbarBottom';
@@ -35,7 +36,34 @@ import { ConversationalPromptDialog } from './aiAgentEditor/useCaseGeneratorWiza
 import { createPortal } from 'react-dom';
 import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
 import { MissingAiModelToast } from '@components/common/MissingAiModelToast';
+import { LastAiCostBadge } from '@components/common/LastAiCostBadge';
 import { openOmniaTutorForMissingModel } from '@utils/aiModelGuard';
+import { AIAgentEditorDockProvider } from './aiAgentEditor/AIAgentEditorDockContext';
+import { AIAgentWelcomeTutor } from './aiAgentEditor/constructionWizard/AIAgentWelcomeTutor';
+import { AIAgentConstructionWizardShell } from './aiAgentEditor/constructionWizard/AIAgentConstructionWizardShell';
+import { AIAgentDeployMenu } from './aiAgentEditor/constructionWizard/AIAgentDeployMenu';
+import {
+  AGENT_WIZARD_FIRST_STEP_INDEX,
+  type AgentWizardStepIndex,
+} from '@domain/aiAgentConstruction/agentConstructionPhase';
+import {
+  areAllAgentWizardStepsComplete,
+  evaluateAgentWizardCompletion,
+} from '@domain/aiAgentConstruction/agentWizardStepCompletion';
+import {
+  AGENT_PLATFORM_DISPLAY_LABEL,
+  loadGlobalVoiceByPlatform,
+} from '@utils/iaAgentRuntime/globalVoiceByPlatform';
+import {
+  conversationConfigForConvaiApi,
+  conversationConfigFragmentFromIaAgentConfig,
+} from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
+import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
+import {
+  loadGlobalIaAgentConfig,
+  saveGlobalIaAgentConfig,
+} from '@utils/iaAgentRuntime/globalIaAgentPersistence';
+import type { IAAgentPlatform, IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
 
 export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: EditorProps) {
   const instanceId = task.instanceId || task.id;
@@ -50,6 +78,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     projectId,
     provider,
     model,
+    taskLabel: typeof task?.label === 'string' ? task.label : undefined,
     getDeferAgentMessages: () => deferAgentMessagesInUseCaseListRef.current,
   });
 
@@ -271,6 +300,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     useCases: c.useCases,
     runtimeContext: c.agentPrompt,
     globalStyleContract: c.globalStyleContract,
+    buildCallMeta: c.buildCallMeta,
     onError: (msg) => setUseCaseBundleFeedback(msg),
   });
 
@@ -547,6 +577,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
         useCases: candidates,
         provider,
         model,
+        callMeta: c.buildCallMeta(AI_CALL_PURPOSE.USE_CASE_TOKENIZE),
       });
       if (res.updates.length === 0) return;
       const byId = new Map(res.updates.map((u) => [u.useCaseId, u.tokenizedText]));
@@ -607,14 +638,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     void c.handleGenerate();
   }, [c.handleGenerate, model]);
 
-  const onGenerateUseCaseBundleAction = React.useCallback(() => {
-    if (!model) {
-      openOmniaTutorForMissingModel();
-      return;
-    }
-    void runGenerateUseCaseBundle();
-  }, [model, runGenerateUseCaseBundle]);
-
   const [promptFinaleJsMode, setPromptFinaleJsMode] = React.useState(false);
 
   const backendsAddManualHandlerRef = React.useRef<(() => void) | null>(null);
@@ -630,32 +653,62 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     c.proposedFields.length > 0 ||
     c.agentPrompt.trim().length > 0;
 
+  /**
+   * In modalit\u00e0 wizard sullo step Task (index 0) il pulsante «Create Agent» va reso
+   * accanto al titolo dello step (vedi `AIAgentConstructionWizardShell`), NON nell'header
+   * globale dell'editor n\u00e9 nella tab toolbar del Response Editor (3 punti potenziali di
+   * rendering — l'header globale, la tab toolbar quando `hideHeader=true`, e l'header dello
+   * step nel wizard). \u00c8 una richiesta UX per avere l'azione vicina al campo descrizione che
+   * la genera. Negli altri step del wizard il pulsante non ha senso. In modalit\u00e0 `edit` il
+   * pulsante torna nell'header globale / tab toolbar come prima.
+   */
+  const isWizardTaskStep =
+    c.agentConstructionPhase === 'wizard' && c.agentWizardCurrentStep === 0;
+
   const { primaryAgentActionLabel } = useAIAgentToolbarController({
     task,
     hideHeader,
     onToolbarUpdate,
     hasAgentGeneration: c.hasAgentGeneration,
-    showRightPanel,
     showPrimaryAgentAction: c.showPrimaryAgentAction,
     generating: c.generating,
-    useCaseComposerBusy: c.useCaseComposerBusy,
-    useCaseBundleGenerationBusy: c.useCaseBundleGenerationBusy,
-    useCasePhraseStylePropagationBusy: c.useCasePhraseStylePropagationBusy,
     onPrimaryAgentAction,
-    onGenerateUseCaseBundle: onGenerateUseCaseBundleAction,
     isExpanded: fullscreenPref.enabled,
     onToggleExpanded: fullscreenPref.toggle,
+    suppressPrimaryAgentActionInToolbar: isWizardTaskStep,
   });
 
   const headerColor = AI_AGENT_HEADER_COLOR;
+
+  /**
+   * Purpose dell'azione primaria — usata sia per la busy label dinamica con modello sia per il
+   * `<LastAiCostBadge>` che viene affiancato al pulsante per ~15s dopo la fine della call.
+   * In modalit\u00e0 wizard step Task il purpose \u00e8 sempre `AGENT_CREATE`. In modalit\u00e0 `edit` il
+   * purpose dipende dal flag legacy `hasAgentGeneration`: se la prima generazione \u00e8 gi\u00e0
+   * avvenuta il pulsante diventa "Refine" e l'azione si traccia come `AGENT_REFINE`.
+   */
+  const primaryAgentActionPurpose = c.hasAgentGeneration ? 'AGENT_REFINE' : 'AGENT_CREATE';
+  /**
+   * Frase gerundio per la busy label, allineata con quanto mostrato dal pulsante in tab toolbar
+   * (vedi `useAIAgentToolbarController` — analoga normalizzazione). Il modello viene aggiunto
+   * automaticamente dall'hook `useAiBusyLabel` in `CreateAgentHeaderButton`.
+   */
+  const primaryAgentActionGerund = c.hasAgentGeneration
+    ? 'Sto raffinando il task'
+    : 'Sto creando il task';
 
   const headerAction = c.showPrimaryAgentAction ? (
     <CreateAgentHeaderButton
       generating={c.generating}
       label={primaryAgentActionLabel}
+      busyGerund={primaryAgentActionGerund}
+      purpose={primaryAgentActionPurpose}
       onPrimaryAction={onPrimaryAgentAction}
     />
   ) : null;
+
+  const globalHeaderAction = isWizardTaskStep ? null : headerAction;
+  const wizardStepHeaderAction = isWizardTaskStep ? headerAction : null;
 
   /**
    * Dialog «Crea prompt conversazionale»: state e mount risiedono nel root dell'editor (non
@@ -677,6 +730,252 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     () => setConversationalPromptDialogOpen(false),
     []
   );
+
+  /**
+   * ───────────────────────────────────────────────────────────────────────────────────────────
+   * Phase machine top-level: Tutor (benvenuto) → Wizard (5 step guidati) → Edit (Dockview).
+   * ───────────────────────────────────────────────────────────────────────────────────────────
+   *
+   * - `agentConstructionPhase` (persisted): 'wizard' | 'edit'.
+   * - `agentWizardCurrentStep` (persisted): 0..4. Permette riprendere dallo step lasciato.
+   * - Schermata Tutor: visibile SOLO se phase === 'wizard' && nessuno step ancora completato
+   *   (cioè descrizione vuota): è un anchor narrativo per il primissimo accesso.
+   * - Auto-transizione `wizard → edit`: scatta quando TUTTI i 5 step sono ✅ (vedi regole D
+   *   in `agentWizardStepCompletion.ts`). Niente bottone «Termina».
+   *
+   * Sincronizziamo `hasAgentGeneration === true` ⇔ `phase === 'edit'` come invariante
+   * (Opzione A del design): l'agente è in edit quando ha generato almeno una volta.
+   */
+  const completion = React.useMemo(
+    () =>
+      evaluateAgentWizardCompletion({
+        descriptionTrimmed: c.designDescription.trim(),
+        useCaseCount: c.useCases.length,
+        conversationCount: useCaseGenWizard.conversations.length,
+      }),
+    [c.designDescription, c.useCases.length, useCaseGenWizard.conversations.length]
+  );
+  const allWizardStepsComplete = React.useMemo(
+    () =>
+      areAllAgentWizardStepsComplete({
+        descriptionTrimmed: c.designDescription.trim(),
+        useCaseCount: c.useCases.length,
+        conversationCount: useCaseGenWizard.conversations.length,
+      }),
+    [c.designDescription, c.useCases.length, useCaseGenWizard.conversations.length]
+  );
+
+  const phaseSetter = c.setAgentConstructionPhase;
+  React.useEffect(() => {
+    if (
+      c.agentConstructionPhase === 'wizard' &&
+      allWizardStepsComplete &&
+      c.hasAgentGeneration
+    ) {
+      phaseSetter('edit');
+    }
+  }, [
+    c.agentConstructionPhase,
+    allWizardStepsComplete,
+    c.hasAgentGeneration,
+    phaseSetter,
+  ]);
+
+  /**
+   * Schermata Tutor di benvenuto: visibile solo per task in fase wizard che non hanno
+   * ancora acknowledgato la Tutor (flag persistito `agentWizardTutorAcknowledged`).
+   * Decisione di prodotto E=2: la Tutor \u00e8 didattica e va vista UNA volta sola; le
+   * riaperture successive saltano direttamente allo Stepper, anche se l'utente non ha
+   * ancora completato alcuno step.
+   */
+  const showWelcomeTutor =
+    c.agentConstructionPhase === 'wizard' && !c.agentWizardTutorAcknowledged;
+
+  const stepSetter = c.setAgentWizardCurrentStep;
+  const ackTutor = c.acknowledgeAgentWizardTutor;
+  /**
+   * Vista "Costi" del task (pulsante separato nello stepper, non gating). \u00c8 uno stato
+   * volatile della sessione (NON persistito): ha senso che ogni nuova apertura del task
+   * riparta dallo step di costruzione, non da una pagina di reportistica. Si attiva/disattiva
+   * cliccando il pulsante "$" oppure cliccando uno qualunque degli step ufficiali (1..5).
+   */
+  const [costsViewActive, setCostsViewActive] = React.useState(false);
+  const onSelectWizardStep = React.useCallback(
+    (next: AgentWizardStepIndex) => {
+      setCostsViewActive(false);
+      stepSetter(next);
+    },
+    [stepSetter]
+  );
+  const onSelectCostsView = React.useCallback(() => {
+    setCostsViewActive(true);
+  }, []);
+  /**
+   * Click di «Cominciamo» nella Tutor:
+   * 1. attiva l'animazione di uscita della Tutor (`tutorExiting=true`, ~400ms);
+   * 2. al termine dell'animazione: marca la Tutor come vista (one-shot, persistito), forza
+   *    l'indice step al primo, attiva il glow viola transitorio sul pulsante Step 1.
+   *
+   * I 400ms sono allineati alla durata della transizione CSS in `AIAgentWelcomeTutor`.
+   */
+  const TUTOR_EXIT_MS = 400;
+  const [tutorExiting, setTutorExiting] = React.useState(false);
+  const [recentlyEnteredWizard, setRecentlyEnteredWizard] = React.useState(false);
+  const tutorExitTimerRef = React.useRef<number | null>(null);
+  const onStartFromTutor = React.useCallback(() => {
+    if (tutorExiting) return;
+    setTutorExiting(true);
+    tutorExitTimerRef.current = window.setTimeout(() => {
+      ackTutor();
+      stepSetter(AGENT_WIZARD_FIRST_STEP_INDEX);
+      setRecentlyEnteredWizard(true);
+      setTutorExiting(false);
+      tutorExitTimerRef.current = null;
+    }, TUTOR_EXIT_MS);
+  }, [ackTutor, stepSetter, tutorExiting]);
+
+  React.useEffect(() => {
+    return () => {
+      if (tutorExitTimerRef.current !== null) {
+        window.clearTimeout(tutorExitTimerRef.current);
+      }
+    };
+  }, []);
+
+  /**
+   * Effetto «glow viola persistente» sul pulsante Step 1 dello Stepper subito dopo l'uscita
+   * dalla Tutor: dura 4 secondi poi si spegne. Non persistito (\u00e8 un effetto puramente
+   * visivo legato alla transizione di sessione). Auto-cleanup al unmount del timer.
+   */
+  React.useEffect(() => {
+    if (!recentlyEnteredWizard) return;
+    const t = window.setTimeout(() => setRecentlyEnteredWizard(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [recentlyEnteredWizard]);
+
+  /**
+   * ─────────────────────────────────────────────────────────────────────────────────────────
+   * Deploy menu (dropdown «Deploy» nello stepper, visibile solo a wizard completato).
+   * ─────────────────────────────────────────────────────────────────────────────────────────
+   *
+   * Strategia: il dropdown è il punto di ingresso per due famiglie di azioni:
+   *  1) «Upload to Platform» → provisioning vero (oggi solo ElevenLabs è cablato; gli altri
+   *     mostrano un alert informativo perché Anthropic / Gemini non hanno un concetto nativo
+   *     di "agent persistente" e OpenAI Assistants non è ancora integrato).
+   *  2) «Copy system prompt» → riusa il dialog «Crea prompt conversazionale» già esistente.
+   *
+   * La mappa voci-per-platform è ricaricata tramite un seed reattivo (`voicesReloadSeed`):
+   * dopo un «Fix» bumpiamo il seed così quando l'utente torna allo stepper la mappa è
+   * aggiornata senza dover montare/smontare il componente.
+   */
+  const [voicesReloadSeed, setVoicesReloadSeed] = React.useState(0);
+  const voicesByPlatform = React.useMemo(
+    () => loadGlobalVoiceByPlatform(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed forza ricalcolo on demand
+    [voicesReloadSeed]
+  );
+
+  /**
+   * «Fix voice» per piattaforma X: imposta `platform=X` sulla config GLOBAL (così il pannello
+   * Settings/IA Runtime mostra i campi giusti, voce inclusa), salta allo step 5 «Voce» del
+   * wizard, e fa scroll-to-focus sull'elemento `[data-ia-runtime-focus="voice"]` con un
+   * piccolo delay per dare tempo al pannello di montare.
+   *
+   * Limit noto: il pannello Voce dello step 5 mostra la platform della config CORRENTE del
+   * task. Cambiamo la platform a livello GLOBAL (non sul task) perché il dropdown Deploy
+   * lavora con le voci default GLOBALI per platform: cambiare la platform del task qui
+   * altererebbe lo stato di design del designer in modo poco prevedibile.
+   */
+  const onFixVoiceForPlatform = React.useCallback(
+    (platform: IAAgentPlatform) => {
+      try {
+        const current = loadGlobalIaAgentConfig();
+        if (current.platform !== platform) {
+          saveGlobalIaAgentConfig({ ...current, platform });
+        }
+      } catch (err) {
+        // Failure to persist the global platform here is recoverable: l'utente vedr\u00e0 il
+        // pannello con la platform precedente e potr\u00e0 cambiarla manualmente. Non rilanciamo
+        // perch\u00e9 il rest del flusso (selezione step, scroll-to-focus) deve comunque procedere.
+        console.warn('Fix voice: cannot persist global platform=', platform, err);
+      }
+      onSelectWizardStep(4 as AgentWizardStepIndex);
+      window.setTimeout(() => {
+        document.dispatchEvent(
+          new CustomEvent('omnia:ia-runtime-focus', {
+            detail: { taskInstanceId: instanceId, focus: 'voice' },
+          })
+        );
+        setVoicesReloadSeed((s) => s + 1);
+      }, 250);
+    },
+    [instanceId, onSelectWizardStep]
+  );
+
+  /**
+   * «Upload to Platform → Platform X». Provisioning reale solo per ElevenLabs (createAgent
+   * ConvAI esistente). Per le altre 3 platform: alert informativo che spiega perché non è
+   * disponibile, evitando false aspettative (regola progetto: fail-loud, no silent fallback).
+   */
+  const onUploadToPlatform = React.useCallback(
+    async (platform: IAAgentPlatform, voice: IAAgentVoiceConfig) => {
+      const platformLabel = AGENT_PLATFORM_DISPLAY_LABEL[platform];
+      if (platform !== 'elevenlabs') {
+        window.alert(
+          `Provisioning verso ${platformLabel} non ancora implementato.\n\n` +
+            (platform === 'openai'
+              ? 'OpenAI Assistants API è prevista come prossima integrazione.'
+              : `${platformLabel} non espone un concetto nativo di "agent persistente": ` +
+                'usa «Copy system prompt» per portare il prompt manualmente nella console.')
+        );
+        return;
+      }
+      try {
+        // Costruisco la conversation_config a partire dall'IAAgentConfig del task corrente,
+        // forzando la voce scelta nel dropdown (single source: la voce è la default GLOBALE
+        // per la platform target, non quella del task — sono concetti separati).
+        const cfgWithVoice = { ...c.iaRuntimeConfig, platform: 'elevenlabs' as const, voice };
+        const fragment = conversationConfigFragmentFromIaAgentConfig(cfgWithVoice);
+        if (!fragment) {
+          throw new Error('IA Runtime config insufficiente per generare il payload ConvAI');
+        }
+        const outbound = conversationConfigForConvaiApi(fragment) ?? fragment;
+        const displayName =
+          (typeof task?.label === 'string' && task.label.trim()) ||
+          `Omnia agent ${instanceId.slice(0, 8)}`;
+        const { agentId } = await createConvaiAgentViaOmniaServer({
+          name: displayName,
+          conversation_config: outbound,
+        });
+        window.alert(
+          `Deploy ${platformLabel} riuscito.\nAgent ID: ${agentId}\nVoce: ${voice.id}`
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        window.alert(`Deploy ${platformLabel} fallito:\n\n${msg}`);
+      }
+    },
+    [c.iaRuntimeConfig, instanceId, task?.label]
+  );
+
+  /**
+   * Slot del dropdown «Deploy» nello stepper: presente SOLO quando tutti i 5 step ufficiali
+   * sono completati (`allWizardStepsComplete`). Il flag `costsActive` non lo nasconde —
+   * resta accessibile anche dalla vista Costi del wizard. Disabilitato `Copy system prompt`
+   * se gli use case non sono ancora compilabili (fail-loud sul tooltip, no silent click).
+   */
+  const deploySlot: React.ReactNode = allWizardStepsComplete ? (
+    <AIAgentDeployMenu
+      voicesByPlatform={voicesByPlatform}
+      onUploadToPlatform={(platform, voice) => {
+        void onUploadToPlatform(platform, voice);
+      }}
+      onFixVoice={onFixVoiceForPlatform}
+      onCopySystemPrompt={onOpenConversationalPromptDialog}
+      copySystemPromptDisabled={!canCreateConversationalPrompt}
+      copySystemPromptDisabledReason="Disponibile quando tutti gli use case sono compilabili (frase canonica presente)."
+    />
+  ) : null;
 
   const dockValue: AIAgentEditorDockContextValue = {
     instanceId: c.instanceId,
@@ -827,7 +1126,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
           <div className="ml-auto flex min-w-0 items-center gap-3">
             <span className="text-xs text-slate-500 truncate">Task {c.instanceId}</span>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-              {headerAction}
+              {globalHeaderAction}
               {c.hasAgentGeneration && showRightPanel ? (
                 <button
                   type="button"
@@ -883,13 +1182,46 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       )}
 
       <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
-        <AIAgentEditorDockShell
-          layoutKey={dockLayoutKey}
-          hasAgentGeneration={c.hasAgentGeneration}
-          showRightPanel={showRightPanel}
-          value={dockValue}
-          generateError={c.generateError}
-        />
+        {/*
+          Phase machine top-level: tre viste mutuamente esclusive.
+          - Tutor di benvenuto: solo per task ancora vergini (descrizione vuota in wizard).
+          - WizardShell: wizard di costruzione 5-step con stepper visivo + gating soft.
+          - DockShell: refinement libero post-completamento (Dockview attuale, intatto).
+          Tutte e tre condividono lo stesso `dockValue` via `AIAgentEditorDockProvider` per
+          riusare i pannelli esistenti senza duplicazioni.
+        */}
+        {showWelcomeTutor || tutorExiting ? (
+          <AIAgentWelcomeTutor onStart={onStartFromTutor} isExiting={tutorExiting} />
+        ) : c.agentConstructionPhase === 'wizard' ? (
+          /*
+            WizardShell renderizza i pannelli esistenti (Editor*Panel) che leggono dal
+            DockProvider; il provider va quindi montato anche qui (non solo dentro il
+            DockShell del ramo `edit`). Stesso `dockValue` usato dal ramo Dockview
+            classic — single source of truth.
+          */
+          <AIAgentEditorDockProvider value={dockValue}>
+            <AIAgentConstructionWizardShell
+              currentStep={c.agentWizardCurrentStep}
+              completion={completion}
+              onSelectStep={onSelectWizardStep}
+              glowStepIndex={recentlyEnteredWizard ? AGENT_WIZARD_FIRST_STEP_INDEX : null}
+              stepHeaderAction={costsViewActive ? null : wizardStepHeaderAction}
+              costsActive={costsViewActive}
+              onSelectCosts={onSelectCostsView}
+              taskId={instanceId}
+              taskLabel={typeof task?.label === 'string' ? task.label : ''}
+              deploySlot={deploySlot}
+            />
+          </AIAgentEditorDockProvider>
+        ) : (
+          <AIAgentEditorDockShell
+            layoutKey={dockLayoutKey}
+            hasAgentGeneration={c.hasAgentGeneration}
+            showRightPanel={showRightPanel}
+            value={dockValue}
+            generateError={c.generateError}
+          />
+        )}
         {/*
           Dialog «Crea prompt conversazionale»: confinato al rettangolo dell'editor (non
           viewport) — sta sopra al dock ma sotto la chrome esterna. Usa portal interno via
@@ -939,13 +1271,19 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 function CreateAgentHeaderButton({
   generating,
   label,
+  busyGerund,
+  purpose,
   onPrimaryAction,
 }: {
   generating: boolean;
   label: string;
+  /** Frase gerundio della busy label (es. `"Sto creando il task"`). */
+  busyGerund: string;
+  /** AI_CALL_PURPOSE id usato sia per la busy label che per il `<LastAiCostBadge>`. */
+  purpose: string;
   onPrimaryAction: () => void;
 }): React.ReactElement {
-  const { hasModel } = useAiBusyLabel();
+  const { hasModel, busyLabel } = useAiBusyLabel();
   const [showNoModelToast, setShowNoModelToast] = React.useState(false);
 
   React.useEffect(() => {
@@ -964,15 +1302,27 @@ function CreateAgentHeaderButton({
 
   return (
     <div className="flex flex-col items-end">
-      <button
-        type="button"
-        disabled={generating}
-        onClick={handleClick}
-        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-sm font-medium"
-      >
-        {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-        {generating ? LABEL_GENERATING_IA_AGENT : label}
-      </button>
+      <div className="flex items-center">
+        <button
+          type="button"
+          disabled={generating}
+          onClick={handleClick}
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-sm font-medium"
+        >
+          {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+          {/*
+            Busy label: durante la generazione mostra il gerundio + modello (es. "Sto creando il
+            task (gpt-5)..."). Fuori dalla generazione mostra la label statica (Create / Refine).
+          */}
+          {generating ? busyLabel(busyGerund) : label}
+        </button>
+        {/*
+          Dopo ogni call, per ~15s (vedi `LastAiCostBadge.WINDOW_MS`), mostra "Last $X.XX" / "EUR Y"
+          accanto al pulsante. Il purpose deve corrispondere al `purpose` propagato in `callMeta`
+          dal `handleGenerate` controller: per Create Agent \u00e8 `AGENT_CREATE`, per Refine `AGENT_REFINE`.
+        */}
+        {!generating ? <LastAiCostBadge purpose={purpose} /> : null}
+      </div>
       {showNoModelToast ? (
         <MissingAiModelToast onDismiss={() => setShowNoModelToast(false)} />
       ) : null}

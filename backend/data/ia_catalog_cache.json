@@ -3288,36 +3288,6 @@
         }
       },
       {
-        "model_id": "dall-e-2",
-        "name": "dall-e-2",
-        "latency_ms": null,
-        "cost_hint": "$",
-        "capabilities": {},
-        "tags": [],
-        "notes": null,
-        "raw": {
-          "id": "dall-e-2",
-          "object": "model",
-          "created": 1698798177,
-          "owned_by": "system"
-        }
-      },
-      {
-        "model_id": "dall-e-3",
-        "name": "dall-e-3",
-        "latency_ms": null,
-        "cost_hint": "$",
-        "capabilities": {},
-        "tags": [],
-        "notes": null,
-        "raw": {
-          "id": "dall-e-3",
-          "object": "model",
-          "created": 1698785189,
-          "owned_by": "system"
-        }
-      },
-      {
         "model_id": "davinci-002",
         "name": "davinci-002",
         "latency_ms": null,
@@ -7944,12 +7914,12 @@
     ]
   },
   "meta": {
-    "updatedAt": "2026-05-12T15:07:57.638Z",
-    "lastLanguagesSync": "2026-05-12T15:07:56.048Z",
-    "lastModelsSync": "2026-05-12T15:07:57.638Z",
+    "updatedAt": "2026-05-13T01:00:22.842Z",
+    "lastLanguagesSync": "2026-05-13T01:00:21.401Z",
+    "lastModelsSync": "2026-05-13T01:00:22.842Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-05-12T15:07:56.019Z",
+      "at": "2026-05-13T01:00:21.376Z",
       "apiVoiceCount": 26,
       "mappedCount": 26,
       "emptyApiList": false

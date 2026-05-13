@@ -66,6 +66,9 @@ const AI_AGENT_INSTANCE_FIELD_KEYS = [
   'agentPromptTargetPlatform',
   'agentIaRuntimeOverrideJson',
   'agentImmediateStart',
+  'agentConstructionPhase',
+  'agentWizardCurrentStep',
+  'agentWizardTutorAcknowledged',
 ];
 
 /**

@@ -85,8 +85,44 @@ function aiCallContractErrorResponse(err) {
   };
 }
 
+/**
+ * Estrae i metadati di tracing/cost-tracking di una chiamata IA dal body di una request HTTP:
+ *   - `purpose`: stringa nota in `AI_CALL_PURPOSE` (vedi FE) — usata per la "Last $X.XX" badge
+ *     e per la label nel report. Se assente, ricade su `defaultPurpose`.
+ *   - `taskId`:  identificativo del task instance (TaskTreeNode.taskId) che ha originato la
+ *     chiamata. Permette il raggruppamento "macro-task" nel report ad albero. `null` per
+ *     chiamate globali (es. traduzioni dalla UI globale).
+ *   - `taskLabel`: snapshot della label del task al momento della chiamata. Single source per
+ *     il label dell'header di gruppo nel report (snapshot fedele anche dopo rinomine).
+ *
+ * Tutti e 3 i campi sono opzionali per backward-compat: chiamate FE pre-feature continuano a
+ * funzionare e finiscono semplicemente sotto "Globale (senza task)" nel report.
+ *
+ * @param {object} body
+ * @param {object} [defaults]
+ * @param {string|null} [defaults.purpose]
+ * @returns {{ purpose: string|null, taskId: string|null, taskLabel: string|null }}
+ */
+function readCallMetaFromBody(body, defaults = {}) {
+  const safe = body && typeof body === 'object' ? body : {};
+  const purposeRaw = typeof safe.purpose === 'string' ? safe.purpose.trim() : '';
+  const taskIdRaw = typeof safe.taskId === 'string' ? safe.taskId.trim() : '';
+  const taskLabelRaw = typeof safe.taskLabel === 'string' ? safe.taskLabel.trim() : '';
+  return {
+    purpose:
+      purposeRaw.length > 0
+        ? purposeRaw
+        : typeof defaults.purpose === 'string' && defaults.purpose
+          ? defaults.purpose
+          : null,
+    taskId: taskIdRaw.length > 0 ? taskIdRaw : null,
+    taskLabel: taskLabelRaw.length > 0 ? taskLabelRaw : null,
+  };
+}
+
 module.exports = {
   assertAiCallContract,
   aiCallContractErrorResponse,
+  readCallMetaFromBody,
   SUPPORTED_PROVIDERS,
 };
